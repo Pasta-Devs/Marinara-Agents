@@ -6,6 +6,7 @@ import {
   prepareNextNoodlerReservePost,
   reconcileNoodlerReserve,
 } from "./noodle-noodler-reserve.operation.js";
+import { tryBackfillNextNoodlerCreatorArtwork } from "./noodle-noodler-artwork.operation.js";
 
 const INITIAL_DELAY_MS = 30_000;
 const POLL_MS = 60_000;
@@ -65,6 +66,11 @@ export function startNoodleAutoPostScheduler(app: FastifyInstance) {
       // rather than materializing both tables once a minute for the server's lifetime.
       const noodle = createNoodleStorage(app.db);
       const settings = await noodle.getSettings();
+      // Artwork is independent of the posting schedule: a creator with no picture needs one even
+      // when automatic posting is off, so this runs before the idle check returns.
+      const artwork = await tryBackfillNextNoodlerCreatorArtwork(app.db);
+      if (artwork !== "idle" && artwork !== "unavailable")
+        logger.info("[noodle-autopost] Filled in a creator %s", artwork);
       if (
         noodlerReservePollIsIdle(settings) &&
         !(await noodle.hasNoodlerPreparedPosts())

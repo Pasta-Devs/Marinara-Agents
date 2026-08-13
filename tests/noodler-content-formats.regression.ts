@@ -15,8 +15,8 @@ assert.match(
   /noodlerContentFormatSchema = z\.enum\(\["caption", "teaser", "announcement", "long_form"\]\)/u,
 );
 assert.match(schema, /DEFAULT_NOODLER_CONTENT_FORMAT = "caption"/u);
-assert.match(schema, /caption: \{ title: "forbidden", targetMin: 40, targetMax: 500 \}/u);
-assert.match(schema, /teaser: \{ title: "forbidden", targetMin: 40, targetMax: 280 \}/u);
+assert.match(schema, /caption: \{ title: "optional", targetMin: 40, targetMax: 500 \}/u);
+assert.match(schema, /teaser: \{ title: "optional", targetMin: 40, targetMax: 280 \}/u);
 assert.match(schema, /announcement: \{ title: "required", targetMin: 80, targetMax: 1000 \}/u);
 assert.match(schema, /long_form: \{ title: "required", targetMin: 500, targetMax: 4000 \}/u);
 assert.match(schema, /Only long_form posts can exceed/u);
@@ -36,13 +36,24 @@ const reserve = readFileSync(
   "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-noodler-reserve.operation.ts",
   "utf8",
 );
+const responseFormat = readFileSync(
+  "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-response-format.ts",
+  "utf8",
+);
 const composer = readFileSync(
   "packages/noodle/src/engine/packages/client/src/components/noodle/NoodlerHome.tsx",
   "utf8",
 );
 
 assert.match(generation, /NOODLER_FORMAT_PROMPTS\[format\]/u);
-assert.match(generation, /const formatUsesTitle = format === "announcement" \|\| format === "long_form"/u);
+// Every generated NoodleR post carries a title, whatever the format.
+assert.match(generation, /noodlerTitleFromContent\(protectedContent\)/u);
+assert.match(generation, /Every post needs a title/u);
+// Images: the model may not opt out of the image prompt when images are enabled.
+assert.match(generation, /imagePrompt is required/u);
+assert.match(responseFormat, /minLength: 1, maxLength: NOODLER_TITLE_HARD_MAX_LENGTH/u);
+assert.match(responseFormat, /Math\.min\(contentMaxLength, NOODLE_POST_HARD_MAX_LENGTH\)/u);
+assert.match(generation, /caption: 320,/u);
 assert.match(generation, /NOODLER_FORMAT_MAX_LENGTH\[format\]/u);
 assert.match(generation, /noodlerContentFormat: input\.request\.format \?\? "caption"/u);
 assert.match(generation, /noodlerLockedFollowUpPostId/u);

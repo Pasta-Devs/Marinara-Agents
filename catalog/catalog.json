@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-12T16:14:18.724Z",
+  "generatedAt": "2026-08-13T05:34:48.379Z",
   "packages": [
     {
       "manifest": {
@@ -996,7 +996,7 @@
         "schemaVersion": 1,
         "id": "noodle",
         "name": "Noodle",
-        "version": "1.0.7",
+        "version": "1.0.8",
         "description": "Explore the Noodle public timeline and the NoodleR creator-and-fan roleplay feed as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
         "localizations": {
           "de": {
@@ -1057,13 +1057,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "846eee3361f28c64b1a8c95bb1567c70ff5f9fa332565b20efbbb2d760dc6ba4",
-            "bytes": 2409660
+            "sha256": "5b3a3a727fc4a3e2da3d9a4b09590e3dd04298f07b471602ce2cc90cb487fa5e",
+            "bytes": 2417467
           },
           {
             "path": "client.js",
-            "sha256": "0f40aeeb42781bb662785e40393994e5e7806e1c02fbd15dcf8ad8736172ca13",
-            "bytes": 2466681
+            "sha256": "9c32e135891720163bb67ff3ecd8deb07aa38a079efed74053326dcda05c1f44",
+            "bytes": 2477705
           },
           {
             "path": "noodle-klusek.png",
@@ -1089,9 +1089,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.0.7.zip",
-        "sha256": "2777c23997fb3d5a7a35c7af0104627278c577acbbe4b06af47f5107c52ad374",
-        "bytes": 1238023
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.0.8.zip",
+        "sha256": "92ac14b82df7928160bb0d4b417745a6509729aa13128b03d63f5b43fed0dd52",
+        "bytes": 1241622
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },

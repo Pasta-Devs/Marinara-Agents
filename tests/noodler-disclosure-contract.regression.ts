@@ -146,4 +146,47 @@ assert.match(generationPrivacy, /source\.scenario/u);
 assert.match(generationPrivacy, /source\.appearance/u);
 assert.match(generationPrivacy, /source\.backstory/u);
 
+// Hinted is an open secret, not a near-secret: the posts tease the other life, the images keep
+// the same appearance, and only the name and handle stay protected.
+assert.match(generationPrivacy, /Disclosure is hinted\. The creator's other public life is an open secret\./u);
+assert.match(generationPrivacy, /Never confirm a guess/u);
+assert.match(generationPrivacy, /mode === "hinted" \? "you-know-who" : "someone"/u);
+
+const imagesPrivacy = readFileSync(
+  "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-noodler-images.service.ts",
+  "utf8",
+);
+assert.match(imagesPrivacy, /input\.disclosureMode !== "secret" &&\s+input\.linkedPublicAccount\?\.kind === "character"/u);
+
+const draftPrivacy = readFileSync(
+  "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-stage-profile-draft.service.ts",
+  "utf8",
+);
+assert.match(draftPrivacy, /# Open-secret inspiration brief/u);
+assert.match(draftPrivacy, /noodlerHintedSourceText\(input\.source\?\.data\)/u);
+// The hinted brief still withholds the canonical story beats.
+assert.doesNotMatch(
+  draftPrivacy.slice(draftPrivacy.indexOf("export function noodlerHintedSourceText"), draftPrivacy.indexOf("export function noodlerSourceText")),
+  /scenario|backstory|source\.name/u,
+);
+
+const artworkPrivacy = readFileSync(
+  "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-public-profiles.service.ts",
+  "utf8",
+);
+// Only an OPEN creator may inherit the literal source photo as its avatar/banner. Hinted must
+// look like the same person through *generated* artwork (see the images-service reference-image
+// gate above), never by copying the actual source image — that photo would identify a hinted
+// creator on sight, defeating the one promise hinted disclosure makes.
+assert.match(artworkPrivacy, /if \(input\.disclosureMode !== "open"\) return \{ avatarUrl: null, bannerUrl: null \};/u);
+
+const fanActivityPrivacy = readFileSync(
+  "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-noodler-fan-activity.service.ts",
+  "utf8",
+);
+// Locked posts are eligible fan-activity targets, but only their title reaches the prompt — a
+// fan reply must never be able to restate paid content it was never shown.
+assert.match(fanActivityPrivacy, /access === "locked" \? \{ id, title, access \} : \{ id, title, content, access \}/u);
+assert.match(fanActivityPrivacy, /Posts marked locked are paid posts\. Only subscribers see them/u);
+
 console.log("NoodleR disclosure contract regressions passed.");

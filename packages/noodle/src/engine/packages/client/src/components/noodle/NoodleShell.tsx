@@ -30,6 +30,7 @@ import type { NoodleAccount } from "@marinara-engine/shared";
 import type { AvatarCrop } from "@marinara-engine/shared";
 import { cn, getAvatarCropStyle } from "../../lib/utils";
 import { useDialogFocusScope } from "../../hooks/use-dialog-focus-scope";
+import { useNoodlerMediaSrc } from "../../hooks/use-noodler-media-src";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
 export const NOODLE_BLUE = "#7EA7FF";
@@ -332,7 +333,10 @@ export function Avatar({
 }) {
   const dimension =
     size === "sm" ? "h-8 w-8" : size === "lg" ? "h-24 w-24" : "h-11 w-11";
-  if (account.avatarUrl) {
+  // NoodleR avatars are served by the package's own route, which a bare <img> cannot
+  // authenticate against; the hook swaps those for a fetched object URL and passes the rest through.
+  const avatarSrc = useNoodlerMediaSrc(account.avatarUrl);
+  if (avatarSrc) {
     return (
       <div
         className={cn(
@@ -340,12 +344,14 @@ export function Avatar({
           "relative aspect-square flex-none overflow-hidden rounded-full border border-[var(--noodle-accent)]/30",
         )}
       >
-        <img
-          src={account.avatarUrl}
-          alt=""
-          className="h-full w-full object-cover"
-          style={getAvatarCropStyle(account.avatarCrop)}
-        />
+        {avatarSrc && (
+          <img
+            src={avatarSrc}
+            alt=""
+            className="h-full w-full object-cover"
+            style={getAvatarCropStyle(account.avatarCrop)}
+          />
+        )}
       </div>
     );
   }

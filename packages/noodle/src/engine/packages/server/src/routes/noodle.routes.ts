@@ -46,6 +46,8 @@ import {
   type NoodlerPostView,
 } from "@marinara-engine/shared";
 import { createCharactersStorage } from "../services/storage/characters.storage.js";
+import { createCharacterGalleryStorage } from "../services/storage/character-gallery.storage.js";
+import { resolveNoodlerCreatorArtwork } from "../services/noodle/noodle-public-profiles.service.js";
 import { createConnectionsStorage } from "../services/storage/connections.storage.js";
 import { createNoodleStorage } from "../services/storage/noodle.storage.js";
 import { settleAgentJobsWithConcurrencyLimit } from "../services/agents/agent-concurrency.js";
@@ -129,6 +131,7 @@ import {
   resolveNoodlerAvatarAbsolutePath,
   stageNoodlerAvatar,
   unlinkNoodlerAvatar,
+  resolveNoodlerBannerAbsolutePath,
 } from "../services/noodle/noodle-noodler-avatar.js";
 import {
   bootstrapVisibleNoodle,
@@ -387,6 +390,7 @@ function sendNoodlerMediaError(reply: FastifyReply, error: unknown) {
 export async function noodleRoutes(app: FastifyInstance) {
   const noodle = createNoodleStorage(app.db);
   const characters = createCharactersStorage(app.db);
+  const characterGallery = createCharacterGalleryStorage(app.db);
   const connections = createConnectionsStorage(app.db);
   const publicGeneration = createPublicNoodleGenerationService(app.db);
   const publicImages = createPublicNoodleImagesService(app.db);
@@ -495,8 +499,31 @@ export async function noodleRoutes(app: FastifyInstance) {
     if (!settings.enableNoodler) return reply.code(404).send({ error: "Not Found" });
     const { id, fileName } = req.params as { id: string; fileName: string };
     const account = await noodle.getNoodlerAccountById(id);
+    const candidates = account
+      ? [
+          resolveNoodlerAvatarAbsolutePath(id, account.avatarUrl),
+          // Banners generated before the banner route existed were stored under this prefix.
+          resolveNoodlerBannerAbsolutePath(id, account.settings.profile.bannerUrl ?? null),
+        ]
+      : [];
+    const absolute = candidates.find(
+      (candidate) => candidate && basename(candidate) === fileName && existsSync(candidate),
+    );
+    if (!absolute) {
+      return reply.code(404).send({ error: "Not Found" });
+    }
+    return reply
+      .header("Cache-Control", "private, no-store")
+      .sendFile(basename(absolute), dirname(absolute));
+  });
+
+  app.get("/noodler/accounts/:id/banner/:fileName", async (req, reply) => {
+    const settings = await noodle.getSettings();
+    if (!settings.enableNoodler) return reply.code(404).send({ error: "Not Found" });
+    const { id, fileName } = req.params as { id: string; fileName: string };
+    const account = await noodle.getNoodlerAccountById(id);
     const absolute = account
-      ? resolveNoodlerAvatarAbsolutePath(id, account.avatarUrl)
+      ? resolveNoodlerBannerAbsolutePath(id, account.settings.profile.bannerUrl ?? null)
       : null;
     if (!absolute || basename(absolute) !== fileName || !existsSync(absolute)) {
       return reply.code(404).send({ error: "Not Found" });
@@ -1376,6 +1403,14 @@ export async function noodleRoutes(app: FastifyInstance) {
       });
     }
     try {
+      const artwork = publicAccount
+        ? await resolveNoodlerCreatorArtwork({
+            characters,
+            characterGallery,
+            publicAccount,
+            disclosureMode: parsed.data.stageProfile.disclosureMode,
+          })
+        : { avatarUrl: null, bannerUrl: null };
       const created = await noodle.createNoodlerAccount(
         id,
         parsed.data.stageProfile,
@@ -1386,7 +1421,8 @@ export async function noodleRoutes(app: FastifyInstance) {
               parsed.data.stageProfile.disclosureMode,
             )
           : undefined,
-        publicAccount?.avatarUrl ?? null,
+        artwork.avatarUrl,
+        artwork.bannerUrl,
       );
       if (!created)
         return reply.code(404).send({ error: "Noodle account not found" });
@@ -1515,6 +1551,12 @@ export async function noodleRoutes(app: FastifyInstance) {
             skipped.push(noodleAccountId);
             return;
           }
+          const artwork = await resolveNoodlerCreatorArtwork({
+            characters,
+            characterGallery,
+            publicAccount,
+            disclosureMode: accountDisclosure,
+          });
           const account = await noodle.createNoodlerAccount(
             noodleAccountId,
             stageProfile,
@@ -1522,7 +1564,8 @@ export async function noodleRoutes(app: FastifyInstance) {
             sourceSnapshot
               ? minimizeNoodlerSourceSnapshot(sourceSnapshot, accountDisclosure)
               : undefined,
-            publicAccount.avatarUrl,
+            artwork.avatarUrl,
+            artwork.bannerUrl,
           );
           if (!account) {
             skipped.push(noodleAccountId);
@@ -1655,10 +1698,11 @@ export async function noodleRoutes(app: FastifyInstance) {
           nextMode: parsed.data.disclosureMode,
           postCount: identifyingPostCount,
           mediaCount: publishedPosts.filter((post) => Boolean(post.imageUrl)).length,
-          // Any avatar must trigger review, including one adopted from the linked
+          // Any avatar/banner must trigger review, including ones adopted from the linked
           // source (whose URL lives outside the NoodleR media namespace, so
-          // readNoodlerAvatarMediaPath would return null and skip the check).
+          // readNoodler*MediaPath would return null and skip the check).
           hasAvatar: Boolean(noodlerAccount.avatarUrl),
+          hasBanner: Boolean(noodlerAccount.settings.profile.bannerUrl),
           preparedPostCount: 0,
         });
         const unresolvedReviewReasons = parsed.data.confirmAvatarReview

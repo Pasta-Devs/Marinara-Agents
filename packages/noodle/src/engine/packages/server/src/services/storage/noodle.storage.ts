@@ -82,7 +82,7 @@ import {
   noodlerReserveState,
   noodlerFanActivityState,
 } from "../../db/schema/index.js";
-import { readNoodlerAvatarMediaPath } from "../noodle/noodle-noodler-avatar.js";
+import { readNoodlerAccountMediaPath, readNoodlerAvatarMediaPath } from "../noodle/noodle-noodler-avatar.js";
 import { newId, now } from "../../utils/id-generator.js";
 import {
   compareMinimizedNoodlerSourceSnapshot,
@@ -517,6 +517,13 @@ function isToggleInteractionType(type: NoodleInteractionType) {
 // all live here so they are visible and editable in NoodleR settings, not hardcoded.
 // Keep in sync with NOODLER_DEFAULT_GENERATION_GUIDANCE in the client NoodleHome.tsx.
 export const NOODLER_DEFAULT_GENERATION_GUIDANCE =
+  "All NoodleR creators and viewers are adults (18+). This is an adult creator page and explicit content is the norm here, not the exception: most posts are lewd — flirty, sexual, suggestive, or openly explicit — and say what the creator is doing, wearing, offering, or thinking about. Tease the locked posts, talk to fans like they are paying for it, and answer horny comments in kind. Keep each creator's personality intact: a shy creator is lewd shyly, a blunt one crudely, a funny one filthily. Ordinary posts (updates, humor, behind the scenes, project news) still appear and keep the page human, but they are the minority. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.";
+
+/**
+ * The pre-1.0.7 default. An install that never edited the guidance stored this string verbatim,
+ * so it is migrated to the current default instead of being kept as if the user had chosen it.
+ */
+const NOODLER_LEGACY_GENERATION_GUIDANCE =
   "All NoodleR creators and viewers are adults (18+). NSFW and explicit content are allowed when appropriate to the creator's personality and current context, but never forced — stay true to each creator's voice rather than making every post sexual. This is an adult creator page: playful, flirty, suggestive teasing that plays to fans and hints at locked content is a normal, frequent part of the voice when it fits the creator. Vary content across teasers, casual updates, behind-the-scenes moments, fan questions, humor, promotion, flirtation, and project updates. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood — let each creator's own personality set the tone.";
 
 export function normalizeNoodleSettings(raw: unknown): NoodleSettings {
@@ -525,10 +532,14 @@ export function normalizeNoodleSettings(raw: unknown): NoodleSettings {
     rawRecord.maxImagesPerRefresh ?? rawRecord.maxImagePromptsPerDay ?? DEFAULT_NOODLE_SETTINGS.maxImagesPerRefresh;
   // Renamed from privateGenerationGuidance; without the alias an existing user's
   // customized guidance would silently revert to the shipped default.
-  const migratedNoodlerGenerationGuidance =
+  const storedNoodlerGenerationGuidance =
     rawRecord.noodlerGenerationGuidance ??
     rawRecord.privateGenerationGuidance ??
     NOODLER_DEFAULT_GENERATION_GUIDANCE;
+  const migratedNoodlerGenerationGuidance =
+    storedNoodlerGenerationGuidance === NOODLER_LEGACY_GENERATION_GUIDANCE
+      ? NOODLER_DEFAULT_GENERATION_GUIDANCE
+      : storedNoodlerGenerationGuidance;
   const migratedImageCaptioningUseConnectionDefault =
     typeof rawRecord.imageCaptioningUseConnectionDefault === "boolean"
       ? rawRecord.imageCaptioningUseConnectionDefault
@@ -1362,6 +1373,7 @@ export function createNoodleStorage(db: DB) {
             bio: account.bio,
             avatarUrl: account.avatarUrl,
             avatarCrop: account.avatarCrop,
+            bannerUrl: account.settings.profile.bannerUrl ?? null,
             disclosureMode,
             stagePersonality: account.settings.privacy.stagePersonality ?? "",
             access: account.settings.privacy.access,
@@ -1393,6 +1405,7 @@ export function createNoodleStorage(db: DB) {
       wizardExecutionId?: string,
       sourceSnapshot?: NoodlerSourceSnapshot,
       avatarUrl?: string | null,
+      bannerUrl?: string | null,
     ): Promise<NoodleAccount | null> {
       const publicAccount = await this.getAccountById(noodleAccountId);
       if (!publicAccount || (publicAccount.kind !== "persona" && publicAccount.kind !== "character")) return null;
@@ -1404,6 +1417,10 @@ export function createNoodleStorage(db: DB) {
         profile: {
           ...(wizardExecutionId && { noodlerWizardExecutionId: wizardExecutionId }),
           ...(sourceSnapshot && { noodlerSourceSnapshot: sourceSnapshot }),
+          // Only an OPEN creator may hold the literal source banner (see
+          // resolveNoodlerCreatorArtwork); callers already gate the value on that, this is
+          // belt-and-suspenders against a future caller passing one for hinted/secret.
+          ...(stageProfile.disclosureMode === "open" && bannerUrl ? { bannerUrl } : {}),
         },
         scheduler: { autoPosting: defaultAutoPostingSettings() },
         privacy: {
@@ -1446,20 +1463,29 @@ export function createNoodleStorage(db: DB) {
         const row = rows[0];
         if (!row) return null;
         const settings = normalizeNoodleAccountSettings(row.settings);
+        // Only OPEN may hold the literal source photo (see resolveNoodlerCreatorArtwork). A
+        // downgrade away from open drops an inherited avatar/banner outright, the same way a
+        // hinted or secret creator never gets one at creation. A NoodleR-owned generated image
+        // (readNoodler*MediaPath resolves it) survives the downgrade — it was never the source's
+        // literal photo, so it carries no identity to strip.
+        const droppingOpen = stageProfile.disclosureMode !== "open";
+        const profile = { ...settings.profile };
+        if (droppingOpen && !readNoodlerAccountMediaPath(id, profile.bannerUrl ?? null)) {
+          delete profile.bannerUrl;
+        }
         await tx
           .update(noodleAccounts)
           .set({
             handle: normalizeHandle(stageProfile.handle, row.entityId),
             displayName: stageProfile.displayName,
             bio: stageProfile.bio,
-            ...(stageProfile.disclosureMode !== "open" &&
-            !readNoodlerAvatarMediaPath(id, row.avatarUrl)
+            ...(droppingOpen && !readNoodlerAvatarMediaPath(id, row.avatarUrl)
               ? { avatarUrl: null }
               : {}),
             settings: JSON.stringify({
               ...settings,
               profile: {
-                ...settings.profile,
+                ...profile,
                 ...(sourceSnapshot && { noodlerSourceSnapshot: sourceSnapshot }),
               },
               privacy: {
@@ -1482,6 +1508,26 @@ export function createNoodleStorage(db: DB) {
         .set({ avatarUrl, avatarCrop: null, updatedAt: now() })
         .where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "noodler")));
       return this.getNoodlerAccountById(id);
+    },
+
+    /** Creator banner lives in settings.profile, which patchAccountSettings keeps closed for noodler rows. */
+    async updateNoodlerBanner(id: string, bannerUrl: string | null): Promise<NoodleAccount | null> {
+      return db.transaction(async (tx) => {
+        const row = (await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id)))[0];
+        if (!row || row.platform !== "noodler") return null;
+        const settings = normalizeNoodleAccountSettings(row.settings);
+        const profile = { ...settings.profile };
+        if (bannerUrl) profile.bannerUrl = bannerUrl;
+        else delete profile.bannerUrl;
+        await tx
+          .update(noodleAccounts)
+          .set({
+            settings: JSON.stringify({ ...settings, profile } satisfies NoodleAccountSettings),
+            updatedAt: now(),
+          })
+          .where(eq(noodleAccounts.id, id));
+        return this.getNoodlerAccountById(id);
+      });
     },
 
     async updateNoodlerSourceSnapshot(
@@ -2275,6 +2321,8 @@ export function createNoodleStorage(db: DB) {
         creators: creators.map((account) => ({
           accountId: account.id,
           nextPreparedAt: prepared.find((item) => item.creatorAccountId === account.id)?.publishAt ?? null,
+          // Settings shows who is holding reserve and how many, so the count travels with the row.
+          preparedCount: prepared.filter((item) => item.creatorAccountId === account.id).length,
         })),
       };
     },

@@ -104,6 +104,8 @@ import {
   useNoodlePostCardController,
 } from "./NoodlePostCard";
 import { LockedNoodlerPostCard, NoodlerPostCard } from "./NoodlerPostCard";
+import { ChatImageLightbox } from "../chat/ChatImageLightbox";
+import { useNoodlerMediaSrc } from "../../hooks/use-noodler-media-src";
 import { summarizeRefreshOutcomes } from "./noodle-auto-post";
 import { NoodlerOnboardingWizard } from "./NoodlerBulkCreatePanel";
 import {
@@ -1146,6 +1148,15 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       onNavigate({ mode: "noodler", view: "profile", accountId: mainAuthorProfile?.id ?? null });
     },
     onOpenSettings: openSettings,
+    // Every NoodleR branch spreads shellProps, so the lightbox mounts once wherever the user is.
+    overlays: postCardController.imageLightbox ? (
+      <ChatImageLightbox
+        image={postCardController.imageLightbox}
+        alt={postCardController.imageLightbox.prompt || "NoodleR image"}
+        pinEnabled={false}
+        onClose={() => postCardController.setImageLightbox(null)}
+      />
+    ) : null,
   } as const;
 
   // Reserve the same rail width as the feed view (see NoodleHome's "settings" rail) so
@@ -2640,6 +2651,7 @@ function StageProfileView({
   onAccessChange: (access: NoodlerManagedStageProfile["access"]) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
+  const bannerSrc = useNoodlerMediaSrc(profile.bannerUrl);
   const [accessSettingsOpen, setAccessSettingsOpen] = useState(false);
   const [automationOpen, setAutomationOpen] = useState(false);
   const updateAutoPosting = useUpdateNoodlerAutoPosting();
@@ -2849,7 +2861,10 @@ function StageProfileView({
             )}
           </>
         }
-        decorativeBanner
+        // A creator inherits a banner from its source at creation (open/hinted only); without
+        // one the shell keeps its plain accent band.
+        banner={bannerSrc ? { url: bannerSrc, canEdit: false, uploadTarget: null } : undefined}
+        decorativeBanner={!bannerSrc}
         leadingActions={
           viewingOwnCreator ? (
             <span className="inline-flex h-9 items-center rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-bold text-[var(--muted-foreground)]">

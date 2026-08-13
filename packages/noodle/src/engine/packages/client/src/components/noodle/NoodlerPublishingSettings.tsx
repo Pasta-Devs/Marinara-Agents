@@ -19,7 +19,11 @@ import { useConnections } from "../../hooks/use-connections";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { Avatar } from "./NoodleShell";
 import { summarizeRefreshOutcomes } from "./noodle-auto-post";
-import type { NoodleSettingsUpdateInput, NoodlerFanArchetypeWeights } from "@marinara-engine/shared";
+import {
+  NOODLER_POSTS_PER_DAY_MAX,
+  type NoodleSettingsUpdateInput,
+  type NoodlerFanArchetypeWeights,
+} from "@marinara-engine/shared";
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -102,6 +106,13 @@ export function NoodlerPublishingSettings({ active, view, onOpenCreator }: Noodl
   const toastToggleFailure = (error: unknown) =>
     toast.error(errorMessage(error, t("ui.noodle.noodlerschedulemanagermodal.couldNotUpdateAutomation")));
   const nextByAccount = new Map(status?.creators.map((entry) => [entry.accountId, entry.nextPreparedAt]) ?? []);
+  const preparedByCreator = (status?.creators ?? [])
+    .filter((entry) => entry.preparedCount > 0)
+    .map((entry) => ({
+      ...entry,
+      name: accounts.find((profile) => profile.id === entry.accountId)?.displayName ?? entry.accountId,
+    }))
+    .sort((left, right) => right.preparedCount - left.preparedCount || left.name.localeCompare(right.name));
 
   return (
     <div className="space-y-4">
@@ -301,7 +312,7 @@ export function NoodlerPublishingSettings({ active, view, onOpenCreator }: Noodl
               {t("ui.noodle.noodlerschedulemanagermodal.automaticPostingSchedule")}
             </span>
             <span className="block text-xs text-[var(--muted-foreground)]">
-              {t("ui.noodle.noodlerschedulemanagermodal.upToPostsPerDay", { count: settings?.postsPerDay ?? 4 })}
+              {t("ui.noodle.noodlerschedulemanagermodal.upToPostsPerDay", { count: settings?.postsPerDay ?? 8 })}
             </span>
             <span className="mt-1 block text-xs leading-5 text-[var(--noodle-accent)]">
               {t("ui.noodle.noodlerschedulemanagermodal.limitsTemporary")}
@@ -325,11 +336,13 @@ export function NoodlerPublishingSettings({ active, view, onOpenCreator }: Noodl
             {t("ui.noodle.noodlerschedulemanagermodal.postsPerDay")}
           </span>
           <BoundedNumberInput
-            value={settings?.postsPerDay ?? 4}
+            value={settings?.postsPerDay ?? 8}
             min={1}
-            max={24}
+            max={NOODLER_POSTS_PER_DAY_MAX}
             onInvalid={() =>
-              toast.error(t("ui.noodle.noodlerfanactivity.boundedValueInvalid", { min: 1, max: 24 }))
+              toast.error(
+                t("ui.noodle.noodlerfanactivity.boundedValueInvalid", { min: 1, max: NOODLER_POSTS_PER_DAY_MAX }),
+              )
             }
             onCommit={(value, revert) =>
               updateSettings.mutate(
@@ -369,7 +382,7 @@ export function NoodlerPublishingSettings({ active, view, onOpenCreator }: Noodl
               <dd className="mt-0.5 font-semibold tabular-nums">
                 {t("ui.noodle.noodlerschedulemanagermodal.providerClaims", {
                   used: status?.textAttemptsUsed ?? 0,
-                  limit: status?.postsPerDay ?? settings?.postsPerDay ?? 4,
+                  limit: status?.postsPerDay ?? settings?.postsPerDay ?? 8,
                 })}
               </dd>
             </div>
@@ -380,7 +393,7 @@ export function NoodlerPublishingSettings({ active, view, onOpenCreator }: Noodl
               <dd className="mt-0.5 font-semibold tabular-nums">
                 {t("ui.noodle.noodlerschedulemanagermodal.providerClaims", {
                   used: status?.imageAttemptsUsed ?? 0,
-                  limit: status?.postsPerDay ?? settings?.postsPerDay ?? 4,
+                  limit: status?.postsPerDay ?? settings?.postsPerDay ?? 8,
                 })}
               </dd>
             </div>
@@ -396,6 +409,17 @@ export function NoodlerPublishingSettings({ active, view, onOpenCreator }: Noodl
                     })
                   : t("ui.noodle.noodlerschedulemanagermodal.reserveEmpty")}
               </dd>
+              {/* Who is holding reserve, and how many each — no post text, this is a settings screen. */}
+              {preparedByCreator.length > 0 && (
+                <dd className="mt-1.5 space-y-0.5">
+                  {preparedByCreator.map((entry) => (
+                    <span key={entry.accountId} className="flex items-baseline justify-between gap-3">
+                      <span className="truncate text-[var(--muted-foreground)]">{entry.name}</span>
+                      <span className="font-semibold tabular-nums">{entry.preparedCount}</span>
+                    </span>
+                  ))}
+                </dd>
+              )}
             </div>
           </dl>
         )}

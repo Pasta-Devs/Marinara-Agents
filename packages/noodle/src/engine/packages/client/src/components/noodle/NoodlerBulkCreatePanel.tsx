@@ -120,9 +120,7 @@ export function NoodlerOnboardingWizard({
   );
   const [step, setStep] = useState<Step>(1);
   const [intro, setIntro] = useState<Intro>(selectionOnly ? null : 0);
-  const [setupLane, setSetupLane] = useState<SetupLane>(
-    selectionOnly ? "customize" : null,
-  );
+  const [setupLane, setSetupLane] = useState<SetupLane>(selectionOnly ? "easy" : null);
   const [postExplored, setPostExplored] = useState(false);
   const [activityChoice, setActivityChoice] =
     useState<ActivityChoice>("lively");
@@ -135,7 +133,10 @@ export function NoodlerOnboardingWizard({
     Record<string, NoodleIdentityDisclosure>
   >({});
   const [autoPostingEnabled, setAutoPostingEnabled] = useState(true);
-  const [postsPerDay, setPostsPerDay] = useState(4);
+  const [postsPerDay, setPostsPerDay] = useState(8);
+  // Typed value kept apart from the committed one: clamping per keystroke made the first digit
+  // of a two-digit pace snap back to 1, and the field impossible to clear.
+  const [postsPerDayDraft, setPostsPerDayDraft] = useState("8");
   const [nightQuiet, setNightQuiet] = useState(true);
   const [imagesEnabled, setImagesEnabled] = useState(false);
   const [generateNow, setGenerateNow] = useState(true);
@@ -174,7 +175,7 @@ export function NoodlerOnboardingWizard({
     if (!open) return;
     setStep(1);
     setIntro(selectionOnly ? null : 0);
-    setSetupLane(selectionOnly ? "customize" : null);
+    setSetupLane(selectionOnly ? "easy" : null);
     setPostExplored(false);
     setActivityChoice("lively");
     setSelected(new Set());
@@ -197,6 +198,7 @@ export function NoodlerOnboardingWizard({
   useEffect(() => {
     if (!open || settingsSeeded || !data?.settings) return;
     setPostsPerDay(data.settings.postsPerDay);
+    setPostsPerDayDraft(String(data.settings.postsPerDay));
     setNightQuiet(data.settings.noodlerNightQuiet);
     setSettingsSeeded(true);
   }, [data?.settings, open, settingsSeeded]);
@@ -243,9 +245,9 @@ export function NoodlerOnboardingWizard({
       return;
     }
     setAutoPostingEnabled(true);
-    setPostsPerDay(
-      choice === "occasional" ? 2 : choice === "veryActive" ? 8 : 4,
-    );
+    const pace = choice === "occasional" ? 2 : choice === "veryActive" ? 8 : 4;
+    setPostsPerDay(pace);
+    setPostsPerDayDraft(String(pace));
   };
   const failedIds = outcomes
     .filter((outcome) => outcome.status !== "generated")
@@ -458,7 +460,7 @@ export function NoodlerOnboardingWizard({
       <div className="flex max-h-[min(78vh,46rem)] min-h-[26rem] flex-col max-sm:min-h-0 max-sm:max-h-none max-sm:flex-1 max-sm:self-stretch">
         {intro !== null && (
           <div
-            className="flex items-center gap-2 border-b border-[var(--border)] pb-3 max-sm:gap-1.5 max-sm:pb-2"
+            className="-mx-5 flex items-center gap-2 border-b border-[var(--noodle-accent)]/25 bg-gradient-to-r from-[var(--noodle-accent)]/20 via-[var(--noodle-accent)]/8 to-transparent px-5 pb-3 pt-2 max-sm:-mx-4 max-sm:gap-1.5 max-sm:px-4 max-sm:pb-2"
             aria-hidden="true"
           >
             {[0, 1, 2, 3].map((dot) => (
@@ -475,7 +477,7 @@ export function NoodlerOnboardingWizard({
           </div>
         )}
         {intro === null && setupLane !== null && step < 5 && (
-          <div className="border-b border-[var(--border)] pb-3 max-sm:pb-1.5">
+          <div className="-mx-5 border-b border-[var(--noodle-accent)]/25 bg-gradient-to-r from-[var(--noodle-accent)]/20 via-[var(--noodle-accent)]/8 to-transparent px-5 pb-3 pt-1.5 max-sm:-mx-4 max-sm:px-4 max-sm:pb-1.5">
             {/* Progress rail: done steps stay reachable, later ones stay locked until you get there. */}
             <ol className="flex gap-1.5">
               {summaries.map((item) => {
@@ -697,7 +699,7 @@ export function NoodlerOnboardingWizard({
                   </button>
                 ))}
               </div>
-              <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-lg border border-[var(--border)] px-3 py-2.5">
+              <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-lg border border-[var(--noodle-accent)]/30 bg-[var(--noodle-accent)]/[0.06] px-3 py-2.5">
                 <label className="flex items-center gap-2 text-sm font-semibold">
                   <input
                     type="checkbox"
@@ -748,7 +750,7 @@ export function NoodlerOnboardingWizard({
                     setSetupLane("easy");
                     setStep(1);
                   }}
-                  className="rounded-lg border border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10 p-4 text-left transition-colors hover:bg-[var(--noodle-accent)]/15"
+                  className="group rounded-xl border border-[var(--noodle-accent)]/60 bg-gradient-to-br from-[var(--noodle-accent)]/22 to-[var(--noodle-accent)]/6 p-5 text-left shadow-sm shadow-[var(--noodle-accent)]/15 transition-[transform,box-shadow,background-color] hover:-translate-y-0.5 hover:shadow-md hover:shadow-[var(--noodle-accent)]/25 motion-reduce:transform-none"
                 >
                   <span className="flex items-center gap-2 text-base font-bold">
                     <Sparkles
@@ -771,7 +773,7 @@ export function NoodlerOnboardingWizard({
                     setSetupLane("customize");
                     setStep(1);
                   }}
-                  className="rounded-lg border border-[var(--border)] p-4 text-left transition-colors hover:bg-[var(--accent)]"
+                  className="group rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/[0.06] p-5 text-left transition-[transform,background-color] hover:-translate-y-0.5 hover:bg-[var(--noodle-accent)]/12 motion-reduce:transform-none"
                 >
                   <span className="flex items-center gap-2 text-base font-bold">
                     <SlidersHorizontal size={17} />
@@ -791,14 +793,34 @@ export function NoodlerOnboardingWizard({
 
           {intro === null && setupLane !== null && step === 1 && (
             <div className="space-y-4">
-              <StepHeading
-                icon={<Users size={18} />}
-                title={t("ui.noodle.noodlerwizard.chooseCharacters")}
-                help={t("ui.noodle.noodlerwizard.selectionRule")}
-              />
+              <div className="flex items-start justify-between gap-3">
+                <StepHeading
+                  icon={<Users size={18} />}
+                  title={t("ui.noodle.noodlerwizard.chooseCharacters")}
+                  help={t("ui.noodle.noodlerwizard.selectionRule")}
+                />
+                {/* The easy lane skips identity/activity/images; this is the way back to them
+                    without putting a decision screen in front of the character list. */}
+                {selectionOnly && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSetupLane(setupLane === "easy" ? "customize" : "easy")
+                    }
+                    className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-[var(--noodle-accent)]/40 px-3 text-xs font-bold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10"
+                  >
+                    <SlidersHorizontal size={13} />
+                    {t(
+                      setupLane === "easy"
+                        ? "ui.noodle.noodlerwizard.handoff.customize.action"
+                        : "ui.noodle.noodlerwizard.handoff.easy.action",
+                    )}
+                  </button>
+                )}
+              </div>
               {accounts.length > 0 && (
-                <div className="sticky top-0 z-10 -mt-1 flex items-center justify-between gap-3 bg-[var(--background)] py-1.5">
-                  <span className="text-xs font-bold text-[var(--muted-foreground)]">
+                <div className="sticky top-0 z-10 -mt-1 flex items-center justify-between gap-3 rounded-lg border border-[var(--noodle-accent)]/25 bg-[color-mix(in_srgb,var(--noodle-accent)_8%,var(--background))] px-3 py-1.5">
+                  <span className="text-xs font-bold text-[var(--noodle-accent)]">
                     {t("ui.noodle.noodlerwizard.selectedCount", {
                       count: selected.size,
                     })}
@@ -860,10 +882,10 @@ export function NoodlerOnboardingWizard({
                       disabled={selectionFull && !selected.has(account.id)}
                       onClick={() => toggleSelected(account.id)}
                       className={cn(
-                        "flex min-h-14 items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors",
+                        "flex min-h-16 items-center gap-3 rounded-xl border px-3 py-2 text-left transition-[transform,background-color,box-shadow] hover:-translate-y-0.5 motion-reduce:transform-none",
                         selected.has(account.id)
-                          ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10 ring-1 ring-[var(--noodle-accent)]/35"
-                          : "border-[var(--border)] hover:bg-[var(--accent)]",
+                          ? "border-[var(--noodle-accent)] bg-gradient-to-r from-[var(--noodle-accent)]/20 to-[var(--noodle-accent)]/5 shadow-sm shadow-[var(--noodle-accent)]/20 ring-1 ring-[var(--noodle-accent)]/35"
+                          : "border-[var(--border)] hover:border-[var(--noodle-accent)]/40 hover:bg-[var(--noodle-accent)]/[0.06]",
                         selectionFull &&
                           !selected.has(account.id) &&
                           "opacity-40",
@@ -958,7 +980,7 @@ export function NoodlerOnboardingWizard({
                   <h4 className="mb-2 text-sm font-bold">
                     {t("ui.noodle.noodlerwizard.exceptions")}
                   </h4>
-                  <div className="divide-y divide-[var(--border)] rounded-md border border-[var(--border)]">
+                  <div className="divide-y divide-[var(--noodle-accent)]/20 rounded-md border border-[var(--noodle-accent)]/30">
                     {accounts
                       .filter((account) => selected.has(account.id))
                       .map((account) => (
@@ -1031,10 +1053,13 @@ export function NoodlerOnboardingWizard({
                         type="number"
                         min={1}
                         max={NOODLER_POSTS_PER_DAY_MAX}
-                        value={postsPerDay}
-                        onChange={(event) =>
-                          setPostsPerDay(clampPostsPerDay(event.target.value))
-                        }
+                        value={postsPerDayDraft}
+                        onChange={(event) => setPostsPerDayDraft(event.target.value)}
+                        onBlur={() => {
+                          const value = clampPostsPerDay(postsPerDayDraft);
+                          setPostsPerDay(value);
+                          setPostsPerDayDraft(String(value));
+                        }}
                         className="mt-2 h-11 w-28 rounded-md border border-[var(--border)] bg-[var(--background)] px-3"
                       />
                     </label>
@@ -1078,28 +1103,26 @@ export function NoodlerOnboardingWizard({
                 }
               />
               {setupLane === "customize" && (
-                <div className="grid grid-cols-2 gap-2">
-                  {[false, true].map((value) => (
-                    <button
-                      key={String(value)}
-                      type="button"
-                      onClick={() => setImagesEnabled(value)}
-                      className={cn(
-                        "min-h-11 rounded-md border text-sm font-bold",
-                        imagesEnabled === value
-                          ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10"
-                          : "border-[var(--border)]",
-                      )}
-                    >
-                      {value
-                        ? t("ui.noodle.noodlerwizard.on")
-                        : t("ui.noodle.noodlerwizard.off")}
-                    </button>
-                  ))}
-                </div>
+                <label className="flex min-h-12 items-center justify-between gap-4 rounded-md border border-[var(--border)] px-3">
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold">
+                      {t("ui.noodle.noodlerwizard.images")}
+                    </span>
+                    <span className="block text-xs leading-5 text-[var(--muted-foreground)]">
+                      {t("ui.noodle.noodlerwizard.imagesHelp")}
+                    </span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    checked={imagesEnabled}
+                    onChange={(event) => setImagesEnabled(event.target.checked)}
+                    className="h-5 w-5 shrink-0 accent-[var(--noodle-accent)]"
+                  />
+                </label>
               )}
               {setupLane === "easy" ? (
-                <div className="divide-y divide-[var(--border)] rounded-lg border border-[var(--border)]">
+                <div className="divide-y divide-[var(--noodle-accent)]/20 rounded-lg border border-[var(--noodle-accent)]/30 bg-[var(--noodle-accent)]/[0.06]">
                   <div className="flex min-h-14 items-center justify-between gap-4 px-3 py-2.5">
                     <span>
                       <span className="block text-sm font-semibold">
@@ -1164,12 +1187,13 @@ export function NoodlerOnboardingWizard({
                             type="number"
                             min={1}
                             max={NOODLER_POSTS_PER_DAY_MAX}
-                            value={postsPerDay}
-                            onChange={(event) =>
-                              setPostsPerDay(
-                                clampPostsPerDay(event.target.value),
-                              )
-                            }
+                            value={postsPerDayDraft}
+                            onChange={(event) => setPostsPerDayDraft(event.target.value)}
+                            onBlur={() => {
+                              const value = clampPostsPerDay(postsPerDayDraft);
+                              setPostsPerDay(value);
+                              setPostsPerDayDraft(String(value));
+                            }}
                             aria-label={t(
                               "ui.noodle.noodlerwizard.postsPerDay",
                             )}
@@ -1208,7 +1232,7 @@ export function NoodlerOnboardingWizard({
                   </label>
                 </div>
               ) : (
-                <div className="divide-y divide-[var(--border)] rounded-lg border border-[var(--border)]">
+                <div className="divide-y divide-[var(--noodle-accent)]/20 rounded-lg border border-[var(--noodle-accent)]/30 bg-[var(--noodle-accent)]/[0.06]">
                   {[
                     [
                       t("ui.noodle.noodlerwizard.characters"),
@@ -1278,7 +1302,7 @@ export function NoodlerOnboardingWizard({
             <div className="flex min-h-[20rem] flex-col items-center justify-center text-center">
               <div
                 className={cn(
-                  "flex h-14 w-14 items-center justify-center rounded-full bg-[var(--noodle-accent)]/12 text-[var(--noodle-accent)]",
+                  "flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-[var(--noodle-accent)] to-[var(--noodle-accent)]/70 text-zinc-950 shadow-lg shadow-[var(--noodle-accent)]/25",
                   completion === "generated" &&
                     "ring-4 ring-[var(--noodle-accent)]/20 transition-shadow duration-500 motion-reduce:transition-none",
                 )}
@@ -1528,7 +1552,7 @@ function StepHeading({
 }) {
   return (
     <div className="flex gap-3 max-sm:gap-2">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--noodle-accent)]/12 text-[var(--noodle-accent)] max-sm:h-8 max-sm:w-8">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[var(--noodle-accent)] to-[var(--noodle-accent)]/70 text-zinc-950 shadow-sm shadow-[var(--noodle-accent)]/30 max-sm:h-8 max-sm:w-8">
         {icon}
       </span>
       <div className="min-w-0">

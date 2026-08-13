@@ -20,8 +20,9 @@ interface NoodleProfileSurfaceProps<TTab extends string = NoodleProfileTab> {
     url: string;
     canEdit: boolean;
     uploadTarget: "avatar" | "banner" | null;
-    fileRef: RefObject<HTMLInputElement | null>;
-    onFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
+    /** Omitted by read-only hosts (NoodleR), which show a banner but never replace it. */
+    fileRef?: RefObject<HTMLInputElement | null>;
+    onFileChange?: (event: ChangeEvent<HTMLInputElement>) => void;
   };
   avatarUpload?: {
     canEdit: boolean;
@@ -103,7 +104,7 @@ export function NoodleProfileSurface<TTab extends string = NoodleProfileTab>({
           <button
             type="button"
             onClick={() => {
-              if (banner.canEdit) banner.fileRef.current?.click();
+              if (banner.canEdit) banner.fileRef?.current?.click();
             }}
             disabled={!banner.canEdit || banner.uploadTarget === "banner"}
             className={cn(
@@ -133,13 +134,15 @@ export function NoodleProfileSurface<TTab extends string = NoodleProfileTab>({
               </span>
             )}
           </button>
-          <input
-            ref={banner.fileRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={banner.onFileChange}
-          />
+          {banner.fileRef && (
+            <input
+              ref={banner.fileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={banner.onFileChange}
+            />
+          )}
         </>
       )}
       {!banner && decorativeBanner && (

@@ -69,17 +69,17 @@ type FormattedNoodlerGenerationRequest = NoodlerGenerationRequest & {
 
 const NOODLER_FORMAT_PROMPTS: Record<NoodlerContentFormat, string> = {
   caption:
-    "Format: caption. Return title as null. Target 40-500 characters in one short creator-feed caption.",
+    "Format: caption. Target 40-220 characters in one short creator-feed caption. Hard limit 320 characters: never write more, and never write several paragraphs.",
   teaser:
-    "Format: teaser. Return title as null. Target 40-280 characters. Make the public text useful but leave a clear reason to open the linked locked follow-up.",
+    "Format: teaser. Target 40-220 characters. Hard limit 280 characters. Make the public text useful but leave a clear reason to open the linked locked follow-up.",
   announcement:
-    "Format: announcement. Return a clear title. Target 80-1000 body characters with the important news first.",
+    "Format: announcement. Target 80-600 body characters with the important news first. Hard limit 1000 characters.",
   long_form:
-    "Format: long_form. Return a clear title. Target 500-4000 body characters with readable paragraphs. Only this format can use long text.",
+    "Format: long_form. Target 500-2000 body characters with readable paragraphs. Only this format can use long text.",
 };
 
 const NOODLER_FORMAT_MAX_LENGTH: Record<NoodlerContentFormat, number> = {
-  caption: 500,
+  caption: 320,
   teaser: 280,
   announcement: 1000,
   long_form: NOODLER_POST_CONTENT_MAX_LENGTH,
@@ -122,7 +122,11 @@ export function noodlerIdentityInstruction(
     return `Disclosure is open. The linked public identity ${publicIdentity.displayName} (@${publicIdentity.handle}) may be named.`;
   }
   if (mode === "hinted") {
-    return "Disclosure is hinted. General allusions to another public persona are allowed, but never use its exact name or handle.";
+    return [
+      "Disclosure is hinted. The creator's other public life is an open secret.",
+      "Tease it: allude to that life — the day job, the city, the schedule, the people around it, an event both accounts attended — often enough that a regular follower can put it together.",
+      "Never write the public name or handle. Never confirm a guess and never flatly deny one; deflect, joke, or change the subject.",
+    ].join(" ");
   }
   return "Disclosure is secret. Do not mention, imply, or identify any linked public persona.";
 }
@@ -280,7 +284,8 @@ export function protectNoodlerGeneratedIdentity(
   if (!value?.trim()) return null;
   if (mode === "open" || !publicIdentity) return value.trim();
   const protectedValues = protectedIdentityValues(publicIdentity);
-  const replacement = mode === "hinted" ? "a public persona" : "someone";
+  // A hinted slip is rewritten into something a creator would actually type, not a label.
+  const replacement = mode === "hinted" ? "you-know-who" : "someone";
   return protectedValues
     .reduce(
       (current, identifier) =>
@@ -368,8 +373,9 @@ export function buildNoodlerPostMessages(input: {
     // Tone, mood balance, and the adult flirty lean are supplied by the editable
     // generation guidance (see input.generationGuidance above), not hardcoded here.
     "Recent posts provide continuity. Do not reuse their exact wording.",
+    "Every post needs a title: a short specific headline of at most 80 characters, never a repeat of the body text.",
     input.allowImagePrompt
-      ? "Return one JSON object with title, content, and an optional imagePrompt (a short description of a single image to accompany the post, or null). Do not create a poll."
+      ? "Return one JSON object with title, content, and imagePrompt. imagePrompt is required and must be a concrete visual description of one photo or image the creator would post now (subject, pose, setting, lighting, framing). Never return null or an empty imagePrompt, and never put the post text or field names in it. Do not create a poll."
       : "Return one JSON object with title and content only. Do not create a poll or image prompt.",
     "Return JSON only. No prose outside the JSON object.",
   ].join("\n");
@@ -398,6 +404,20 @@ export function buildNoodlerPostMessages(input: {
     { role: "system", content: system },
     { role: "user", content: user },
   ];
+}
+
+const NOODLER_FALLBACK_TITLE_MAX_LENGTH = 80;
+
+/** Title for posts whose model dropped the field: the first sentence, trimmed to a headline. */
+export function noodlerTitleFromContent(content: string): string {
+  const firstSentence =
+    content.trim().split(/(?<=[.!?])\s|\n/u)[0]?.trim() || content.trim();
+  if (firstSentence.length <= NOODLER_FALLBACK_TITLE_MAX_LENGTH)
+    return firstSentence.replace(/[.!?,;:\s]+$/u, "") || firstSentence;
+  // Leave room for the trailing ellipsis so the result never exceeds the stated max length.
+  const clipped = firstSentence.slice(0, NOODLER_FALLBACK_TITLE_MAX_LENGTH - 1);
+  const lastSpace = clipped.lastIndexOf(" ");
+  return `${(lastSpace > 20 ? clipped.slice(0, lastSpace) : clipped).replace(/[.!?,;:\s]+$/u, "")}…`;
 }
 
 function parseNoodlerPost(content: string) {
@@ -498,7 +518,11 @@ export async function generateNoodlerPost(
     responseFormat: noodleResponseFormat(
       input.connection.model,
       "noodler_post",
-      { allowImagePrompt: imagesEnabled },
+      {
+        allowImagePrompt: imagesEnabled,
+        contentMaxLength:
+          NOODLER_FORMAT_MAX_LENGTH[input.request.format ?? "caption"],
+      },
     ),
   } as const;
 
@@ -520,7 +544,7 @@ export async function generateNoodlerPost(
       {
         role: "user",
         content: imagesEnabled
-          ? "The response was not one valid NoodleR-post JSON object. Return exactly one object with title, content, and an optional imagePrompt. Do not include a poll. Return JSON only."
+          ? "The response was not one valid NoodleR-post JSON object. Return exactly one object with title, content, and imagePrompt. title and imagePrompt must both be non-empty. Do not include a poll. Return JSON only."
           : "The response was not one valid NoodleR-post JSON object. Return exactly one object with title and content only. Do not include a poll or image prompt. Return JSON only.",
       },
     ];
@@ -543,27 +567,26 @@ export async function generateNoodlerPost(
   }
 
   const format = input.request.format ?? "caption";
-  const formatUsesTitle = format === "announcement" || format === "long_form";
-  const protectedGenerated = {
-    title: formatUsesTitle
-      ? protectBoundedNoodlerGeneratedText(
-          generated.title,
-          disclosureMode,
-          publicIdentity,
-          NOODLER_POST_TITLE_MAX_LENGTH,
-        )
-      : null,
-    content: protectBoundedNoodlerGeneratedText(
-      generated.content,
-      disclosureMode,
-      publicIdentity,
-      NOODLER_FORMAT_MAX_LENGTH[format],
-    ),
-  };
-  if (formatUsesTitle && !protectedGenerated.title)
-    throw new Error(`NoodleR ${format} generation returned no usable title.`);
-  if (!protectedGenerated.content)
+  const protectedContent = protectBoundedNoodlerGeneratedText(
+    generated.content,
+    disclosureMode,
+    publicIdentity,
+    NOODLER_FORMAT_MAX_LENGTH[format],
+  );
+  if (!protectedContent)
     throw new Error("NoodleR generation returned no usable post content.");
+  const protectedGenerated = {
+    // Every format shows a title now. Weak models still drop the field, so fall back to the
+    // opening of the post rather than failing a whole generation over a headline.
+    title:
+      protectBoundedNoodlerGeneratedText(
+        generated.title,
+        disclosureMode,
+        publicIdentity,
+        NOODLER_POST_TITLE_MAX_LENGTH,
+      ) ?? noodlerTitleFromContent(protectedContent),
+    content: protectedContent,
+  };
 
   // Identity protection applies to the image prompt too, not only post text.
   const draftImagePrompt = imagesEnabled

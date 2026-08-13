@@ -9,8 +9,8 @@ export const noodlePostAccessSchema = z.enum(["public", "locked"]);
 export const noodlerContentFormatSchema = z.enum(["caption", "teaser", "announcement", "long_form"]);
 export const DEFAULT_NOODLER_CONTENT_FORMAT = "caption";
 export const NOODLER_CONTENT_FORMATS = {
-    caption: { title: "forbidden", targetMin: 40, targetMax: 500 },
-    teaser: { title: "forbidden", targetMin: 40, targetMax: 280 },
+    caption: { title: "optional", targetMin: 40, targetMax: 500 },
+    teaser: { title: "optional", targetMin: 40, targetMax: 280 },
     announcement: { title: "required", targetMin: 80, targetMax: 1000 },
     long_form: { title: "required", targetMin: 500, targetMax: 4000 },
 };
@@ -55,7 +55,7 @@ export const NOODLER_POST_TITLE_MAX_LENGTH = 200;
 export const NOODLER_POST_CONTENT_MAX_LENGTH = 4000;
 export const NOODLER_REPLY_CONTENT_MAX_LENGTH = 2000;
 export const DEFAULT_NOODLER_CREATOR_REPLIES_PER_24_HOURS = 10;
-export const NOODLER_POSTS_PER_DAY_MAX = 24;
+export const NOODLER_POSTS_PER_DAY_MAX = 100;
 /** Per-request cap on bulk creator creation and targeted refresh. The wizard enforces the same
  *  ceiling so a selection larger than this is prevented rather than rejected as a whole request. */
 export const NOODLER_BULK_ACCOUNT_MAX = 100;
@@ -103,7 +103,7 @@ export const DEFAULT_NOODLE_SETTINGS = {
     enableNoodler: false,
     noodlerGenerationGuidance: "All NoodleR creators and viewers are adults (18+). NSFW and explicit content are allowed when appropriate to the creator's personality and current context. Do not force it: stay true to each creator's voice rather than making every post sexual.",
     autoPostingScheduleEnabled: true,
-    postsPerDay: 4,
+    postsPerDay: 8,
     noodlerOnboardingComplete: false,
     noodlerOnboardingState: "incomplete",
     noodlerNightQuiet: true,

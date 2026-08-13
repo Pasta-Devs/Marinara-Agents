@@ -115,14 +115,19 @@ const profilesSchema = {
   additionalProperties: false,
 } as const;
 
-function noodlerPostSchema(allowImagePrompt: boolean) {
+function noodlerPostSchema(allowImagePrompt: boolean, contentMaxLength: number) {
   return {
     type: "object",
     properties: {
-      title: { type: ["string", "null"], maxLength: NOODLER_TITLE_HARD_MAX_LENGTH },
-      content: { type: "string", maxLength: NOODLE_POST_HARD_MAX_LENGTH },
+      // Every NoodleR post carries a title, so the schema requires a non-empty string.
+      title: { type: "string", minLength: 1, maxLength: NOODLER_TITLE_HARD_MAX_LENGTH },
+      content: {
+        type: "string",
+        maxLength: Math.min(contentMaxLength, NOODLE_POST_HARD_MAX_LENGTH),
+      },
+      // With images enabled the prompt is mandatory: a nullable field made models skip images.
       ...(allowImagePrompt
-        ? { imagePrompt: { type: ["string", "null"], maxLength: NOODLE_REPLY_HARD_MAX_LENGTH } }
+        ? { imagePrompt: { type: "string", minLength: 1, maxLength: NOODLE_REPLY_HARD_MAX_LENGTH } }
         : {}),
     },
     required: allowImagePrompt
@@ -186,7 +191,7 @@ export function noodleResponseFormat(
     | "noodler_profile"
     | "noodler_reply"
     | "noodler_fan_activity",
-  options: { allowImagePrompt?: boolean } = {},
+  options: { allowImagePrompt?: boolean; contentMaxLength?: number } = {},
 ): { type: string; [key: string]: unknown } {
   if (!isOpenAIGpt56Model(model)) return { type: "json_object" };
   const schema =
@@ -210,7 +215,10 @@ export function noodleResponseFormat(
                   required: ["activities"],
                   additionalProperties: false,
                 }
-              : noodlerPostSchema(options.allowImagePrompt === true);
+              : noodlerPostSchema(
+                  options.allowImagePrompt === true,
+                  options.contentMaxLength ?? NOODLE_POST_HARD_MAX_LENGTH,
+                );
   return {
     type: "json_schema",
     name:

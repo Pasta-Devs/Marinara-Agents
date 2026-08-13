@@ -1,5 +1,9 @@
 import { basename } from "path";
-import { type APIProvider, type NoodleAccount } from "@marinara-engine/shared";
+import {
+  type APIProvider,
+  type NoodleAccount,
+  type NoodleIdentityDisclosure,
+} from "@marinara-engine/shared";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
 import { noodleSamplingOptions } from "./noodle-sampling-options.js";
@@ -37,7 +41,7 @@ function shuffle<T>(items: T[]): T[] {
   return next;
 }
 
-async function pickRandomCharacterBannerUrl(
+export async function pickRandomCharacterBannerUrl(
   characterGallery: ReturnType<typeof createCharacterGalleryStorage>,
   characterId: string,
 ) {
@@ -46,6 +50,34 @@ async function pickRandomCharacterBannerUrl(
   if (!image) return null;
   const filename = basename(image.filePath.replace(/\\/g, "/"));
   return `/api/characters/${encodeURIComponent(characterId)}/gallery/file/${encodeURIComponent(filename)}`;
+}
+
+/**
+ * Only OPEN inherits the literal source photo — the same picture would out a hinted creator on
+ * sight, which is exactly what hinted promises never to do. Hinted and secret both get null here
+ * and pick up freshly generated artwork instead (see backfillNextNoodlerCreatorArtwork): hinted
+ * generates through the appearance-referenced pipeline so it still looks like the same person
+ * without being the same photo, secret gets no reference material at all.
+ */
+export async function resolveNoodlerCreatorArtwork(input: {
+  characters: ReturnType<typeof createCharactersStorage>;
+  characterGallery: ReturnType<typeof createCharacterGalleryStorage>;
+  publicAccount: Pick<NoodleAccount, "kind" | "entityId" | "avatarUrl">;
+  disclosureMode: NoodleIdentityDisclosure;
+}): Promise<{ avatarUrl: string | null; bannerUrl: string | null }> {
+  if (input.disclosureMode !== "open") return { avatarUrl: null, bannerUrl: null };
+  if (input.publicAccount.kind !== "character") {
+    return { avatarUrl: input.publicAccount.avatarUrl ?? null, bannerUrl: null };
+  }
+  const row = await input.characters.getById(input.publicAccount.entityId);
+  return {
+    // The Noodle account rarely carries its own avatar, so the character row is the real source.
+    avatarUrl: input.publicAccount.avatarUrl ?? row?.avatarPath ?? null,
+    bannerUrl: await pickRandomCharacterBannerUrl(
+      input.characterGallery,
+      input.publicAccount.entityId,
+    ),
+  };
 }
 
 function profileSetupMaxTokens(characterCount: number) {
