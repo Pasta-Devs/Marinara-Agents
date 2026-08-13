@@ -160,11 +160,10 @@ export class LongTermMemoryDraftStore {
           },
         });
         await writeJsonAtomic(draftPathForId(draft.id, this.root), draft);
-        let superseded: LtmExtractionDraft[] = [];
         try {
-          superseded = await this.supersedeOlderPendingDrafts(draft);
+          await this.supersedeOlderPendingDrafts(draft);
         } catch (error) {
-          if (error instanceof LtmSupersessionError) superseded = error.superseded;
+          const superseded = error instanceof LtmSupersessionError ? error.superseded : [];
           const rollback = await Promise.allSettled([
             unlink(draftPathForId(draft.id, this.root)),
             ...superseded.map((previous) =>
