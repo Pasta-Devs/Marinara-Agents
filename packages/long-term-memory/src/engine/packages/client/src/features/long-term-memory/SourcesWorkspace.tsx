@@ -133,10 +133,10 @@ function resultTone(
 function resultToneClass(status: string) {
   const tone = resultTone(status);
   return tone === "success"
-    ? "bg-[var(--marinara-editor-accent)]/15"
+    ? "border border-[var(--border)] bg-[var(--marinara-editor-accent)]/15"
     : tone === "warning"
       ? "border border-[var(--marinara-editor-warning)]/40 text-[var(--marinara-editor-warning)]"
-      : "bg-[var(--secondary)]";
+      : "border border-[var(--border)] bg-[var(--secondary)]";
 }
 
 function importStatusLabel(status: string, localizeUi: LtmTranslationFunction) {
@@ -2167,7 +2167,7 @@ export default function SourcesWorkspace({
                         <h3 className="text-sm font-semibold">{row.title}</h3>
                         <span
                           data-ltm-source-status={row.status}
-                          className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-[0.625rem] font-semibold uppercase"
+                          className="rounded-full border border-[var(--border)] bg-[var(--secondary)] px-2 py-0.5 text-[0.625rem] font-semibold uppercase"
                         >
                           {sourceStatusLabel(row, localizeUi)}
                         </span>

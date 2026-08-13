@@ -658,17 +658,30 @@ async function main() {
         ) {
           scopeTargetQueries.push(url.search);
           return send(200, {
-            currentScope: { chatId: "empty-chat", chatIds: ["empty-chat"] },
+            currentScope: { chatId: "desktop-chat", chatIds: ["desktop-chat"] },
             chats: [
+              {
+                id: "desktop-chat",
+                label: "Desktop chat",
+                mode: "conversation",
+                groupId: null,
+                characterIds: ["character-a"],
+              },
               {
                 id: "memory-chat",
                 label: "Memory chat",
                 mode: "roleplay",
-                groupId: null,
+                groupId: "conversation-a",
                 characterIds: ["character-a"],
               },
             ],
-            groups: [],
+            groups: [
+              {
+                id: "conversation-a",
+                label: "Conversation A",
+                chatIds: ["memory-chat"],
+              },
+            ],
             characters: [{ id: "character-a", label: "Character A" }],
             personas: [],
           });
@@ -717,12 +730,35 @@ async function main() {
               updatedAt: "2026-07-30T00:00:00.000Z",
               version: 1,
             },
+            {
+              id: "world_outside_current_chat",
+              title: "Memory outside current chat",
+              type: "world",
+              status: "active",
+              modes: ["roleplay"],
+              scope: { chatId: "memory-chat", chatIds: ["memory-chat"] },
+              tags: [],
+              keywords: [],
+              links: [],
+              sections: {
+                facts: {
+                  text: "This memory belongs to another chat.",
+                  importance: "major",
+                  updatedAt: "2026-07-30T00:00:00.000Z",
+                },
+              },
+              createdAt: "2026-07-30T00:00:00.000Z",
+              updatedAt: "2026-07-30T00:00:00.000Z",
+              version: 1,
+            },
           ];
           return send(
             200,
             url.searchParams.get("scopeCharacterIds") === "character-a"
               ? notes.filter((note) => note.id === "world_second_mobile")
-              : notes,
+              : url.searchParams.get("scopeChatIds") === "desktop-chat"
+                ? notes.filter((note) => note.id !== "world_outside_current_chat")
+                : notes,
           );
         }
         if (
@@ -972,8 +1008,60 @@ async function main() {
       }, packageManifest.version);
       await page.locator('[data-ltm-surface="detail"]').waitFor();
       await page.locator('[data-ltm-browser-controls]').waitFor();
-      await page.waitForFunction(() =>
-        document.body.textContent?.includes("Second mobile review memory"),
+      const memoryScope = page.locator("[data-ltm-memory-scope]");
+      await memoryScope.locator(":scope > summary").waitFor();
+      assert.equal(
+        await memoryScope.locator(":scope > summary").innerText(),
+        "Currently viewing memories in:desktop chat",
+      );
+      assert.equal(
+        await page.getByText("Memory outside current chat").count(),
+        0,
+      );
+      await memoryScope.locator(":scope > summary").click();
+      assert.equal(
+        await memoryScope
+          .locator('[data-ltm-memory-scope-picker="character"]')
+          .getByText("Character A", { exact: true })
+          .count(),
+        1,
+      );
+      assert.equal(
+        await memoryScope
+          .locator('[data-ltm-memory-scope-picker="chat"]')
+          .locator(":scope > summary")
+          .innerText(),
+        "ChatDesktop chat",
+      );
+      assert.equal(
+        await memoryScope
+          .locator('[data-ltm-memory-scope-picker="branch"]')
+          .getByText("All branches", { exact: true })
+          .count(),
+        1,
+      );
+       await memoryScope
+         .locator('[data-ltm-memory-scope-picker="character"] > summary')
+         .click();
+       await page
+         .locator('[data-ltm-memory-scope-target="character:character-a"]')
+         .click();
+       assert.equal(
+         await memoryScope
+           .locator('[data-ltm-memory-scope-picker="character"]')
+           .evaluate((picker) => (picker as HTMLDetailsElement).open),
+         false,
+       );
+       await memoryScope
+         .locator('[data-ltm-memory-scope-picker="character"] > summary')
+         .click();
+       await page
+         .locator('[data-ltm-memory-scope-target="character:all"]')
+         .click();
+      await page.locator('[data-ltm-memory-group="world"] > summary').click();
+      await page.getByText("Memory outside current chat").waitFor();
+      assert.ok(
+        noteQueries.some((query) => !query.includes("scopeChatIds")),
       );
       const setupGuide = page.getByRole("button", { name: "Show setup guide" });
       await setupGuide.click();
@@ -1517,7 +1605,10 @@ async function main() {
       await page.waitForFunction(() =>
         document.body.textContent?.includes("Second mobile review memory"),
       );
-      assert.equal(noteQueries.at(-1), "?&limit=500&offset=0");
+      assert.equal(
+        noteQueries.at(-1),
+        "?scopeChatIds=desktop-chat&includeGlobal=false&limit=500&offset=0",
+      );
       assert.equal(
         await page.locator('[data-ltm-surface="overview"]').count(),
         0,
@@ -1903,11 +1994,20 @@ async function main() {
       );
       await page.locator("[data-ltm-rejected-suggestions] > summary").click();
       await page.getByRole("button", { name: /^Recover suggestion:/u }).click();
-      await page.locator("[data-ltm-note-editor]").waitFor();
-      await page.locator("[data-ltm-details-toggle]").click();
-      await page.waitForFunction(
-        () =>
-          document.querySelectorAll("[data-ltm-workspace-pane-tab]").length ===
+       await page.locator("[data-ltm-note-editor]").waitFor();
+       await page.locator("[data-ltm-details-toggle]").click();
+       await page
+         .locator('[data-ltm-linked-memories] > summary')
+         .click();
+       assert.equal(
+         await page
+           .locator('[data-ltm-linked-memories]')
+           .evaluate((section) => (section as HTMLDetailsElement).open),
+         true,
+       );
+       await page.waitForFunction(
+         () =>
+           document.querySelectorAll("[data-ltm-workspace-pane-tab]").length ===
           0,
       );
       assert.equal(

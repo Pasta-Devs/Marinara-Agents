@@ -7,6 +7,7 @@ import {
   Plus,
   Settings2,
   Sparkles,
+  TriangleAlert,
   Upload,
 } from "lucide-react";
 import type { LtmStatusResponse } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
@@ -862,7 +863,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                     review: pendingDrafts.data?.count,
                   }}
                 />
-                {health !== "healthy" ? (
+                {health !== "healthy" && !needsHealthAttention ? (
                   <div
                     aria-busy={status.isFetching}
                     data-ltm-surface="vault-health-pill"
@@ -884,29 +885,30 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                             )}
                     </span>
                     {needsHealthAttention ? null : (
-                      <InfoPopover
-                        label={localizeUi(
-                          "ui.longTermMemory.longtermmemorydetail.howToRepairVaultHealth",
-                        )}
-                        content={healthInfo}
-                      />
+                    <InfoPopover
+                      label={localizeUi(
+                        "ui.longTermMemory.longtermmemorydetail.howToRepairVaultHealth",
+                      )}
+                      content={healthInfo}
+                      compact
+                    />
                     )}
                   </div>
                 ) : null}
               </div>
-              {needsHealthAttention ? (
-                <StatusSurface
-                  compact
-                  tone={healthNeedsDangerTone ? "danger" : "neutral"}
-                  data-ltm-surface="vault-health-warning"
-                  className="justify-between"
-                >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span
-                      aria-hidden="true"
-                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${healthTone}`}
-                    />
-                    <span className="font-semibold">{healthLabel}</span>
+                {needsHealthAttention ? (
+                  <StatusSurface
+                    tone={healthNeedsDangerTone ? "danger" : "warning"}
+                    data-ltm-surface="vault-health-warning"
+                    className="min-h-12 justify-between px-3 py-2 text-sm font-medium"
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <TriangleAlert
+                        aria-hidden="true"
+                        size="1rem"
+                        className="shrink-0 !text-[var(--marinara-editor-warning)]"
+                      />
+                      <span className="font-semibold">{healthLabel}</span>
                     <span className="hidden truncate sm:inline">
                       {localizeUi(
                         "ui.longTermMemory.longtermmemorydetail.checkSettingsMaintenanceReindexRecallData",
@@ -925,7 +927,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                 data-ltm-destination-content
                 role="region"
                 aria-label={destinationLabel(destination)}
-                className="min-w-0 space-y-5"
+                className="min-w-0 space-y-5 [&>section]:scroll-mt-4"
                 style={{
                   containerName: "ltm-destination",
                   containerType: "inline-size",

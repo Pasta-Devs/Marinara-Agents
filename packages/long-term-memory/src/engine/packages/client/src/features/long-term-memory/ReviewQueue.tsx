@@ -1578,21 +1578,21 @@ export default function ReviewQueue({
               {targetType ? (
                 <span
                   data-ltm-review-type={targetType}
-                  className="rounded-full bg-[var(--secondary)] px-1.5 py-0.5"
+                  className="rounded-full border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5"
                 >
                   {localizedLabel(targetType, localizeUi, labelKeys.noteType)}
                 </span>
               ) : null}
               <span
                 data-ltm-review-disposition={row.disposition}
-                className="rounded-full bg-[var(--secondary)] px-1.5 py-0.5"
+                className="rounded-full border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5"
               >
                 {dispositionLabel}
               </span>
               {mutation.kind !== "create_note" ? (
                 <span
                   data-ltm-review-operation={mutation.kind}
-                  className="rounded-full bg-[var(--secondary)] px-1.5 py-0.5"
+                  className="rounded-full border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5"
                 >
                   {mutationLabel}
                 </span>
@@ -1600,18 +1600,18 @@ export default function ReviewQueue({
               {importance ? (
                 <span
                   data-ltm-review-importance={importance}
-                  className="rounded-full bg-[var(--secondary)] px-1.5 py-0.5"
+                  className="rounded-full border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5"
                 >
                   {localizedLabel(importance, localizeUi, labelKeys.importance)}
                 </span>
               ) : null}
-              <span className="rounded-full bg-[var(--secondary)] px-1.5 py-0.5">
+              <span className="rounded-full border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">
                 {localizedLabel(row.mutation.risk, localizeUi, labelKeys.risk)} /{" "}
                 {Math.round(row.mutation.confidence * 100)}
                 {localizeUi("ui.longTermMemory.reviewqueue.confidence")}
               </span>
               {dependencyCount ? (
-                <span className="rounded-full bg-[var(--secondary)] px-1.5 py-0.5">
+                <span className="rounded-full border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">
                   {localizeUi("ui.longTermMemory.reviewqueue.dependencyHint", {
                     count: dependencyCount,
                     dependency:
