@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-13T12:54:09.003Z",
+  "generatedAt": "2026-08-13T23:12:28.742Z",
   "packages": [
     {
       "manifest": {
@@ -805,7 +805,7 @@
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.2.5",
+        "version": "1.2.6",
         "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
         "engine": {
           "min": "2.4.1",
@@ -837,13 +837,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "352232262380fe48858a9b3fdd5b956101ce4c2b2a28ba9d26744607b88fa787",
-            "bytes": 350120
+            "sha256": "c18893f2498ddba985057f7456bf0f83b1536b72aff89074bcb53fc5015883bc",
+            "bytes": 350743
           },
           {
             "path": "client.js",
-            "sha256": "5880542a7d0473cb3de51eef96c2f6ca432849368d4526341969fda9dffd0170",
-            "bytes": 620611
+            "sha256": "2842e892a0403dbbc4c0f4bb02f2f4df3d3cb9014cb93a09f1862855345ae458",
+            "bytes": 620697
           }
         ],
         "permissions": [
@@ -859,9 +859,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.2.5.zip",
-        "sha256": "66ec739e13527eb6ce4b049887968334344b5e0949a8e1da472f25590f08c27c",
-        "bytes": 264224
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.2.6.zip",
+        "sha256": "1071ba16b3da9b92da354ac6c913ab90539141d144c8084d3630d2beafedfd1f",
+        "bytes": 264433
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },

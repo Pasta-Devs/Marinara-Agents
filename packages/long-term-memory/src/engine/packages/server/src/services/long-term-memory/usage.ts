@@ -30,12 +30,15 @@ export async function recordLongTermMemoryInjection(
   if (!chatId || chunks.length === 0) return null;
   return withLtmVaultLock(root, () => withKeyedLock(usageLocks, longTermMemoryUsagePath(root), async () => {
     const usage = await readLongTermMemoryUsage(root);
-    if (input.accountingId && usage.acceptedReceipts?.[input.accountingId]) return null;
-    const chat = usage.chats[chatId] ?? { chunks: {} };
+    const acceptedReceipts = new Map(Object.entries(usage.acceptedReceipts ?? {}));
+    if (input.accountingId && acceptedReceipts.has(input.accountingId)) return null;
+    const chats = new Map(Object.entries(usage.chats));
+    const chat = chats.get(chatId) ?? { chunks: {} };
+    const chatChunks = new Map(Object.entries(chat.chunks));
     const now = new Date().toISOString();
     for (const item of chunks) {
-      const previous = chat.chunks[item.chunk.id];
-      chat.chunks[item.chunk.id] = {
+      const previous = chatChunks.get(item.chunk.id);
+      chatChunks.set(item.chunk.id, {
         chunkId: item.chunk.id,
         noteId: item.chunk.noteId,
         sectionKey: item.chunk.sectionKey,
@@ -44,11 +47,14 @@ export async function recordLongTermMemoryInjection(
         retrievalCount: (previous?.retrievalCount ?? 0) + 1,
         injectionCount: (previous?.injectionCount ?? 0) + 1,
         totalInjectedTokens: (previous?.totalInjectedTokens ?? 0) + Math.max(0, Math.floor(item.estimatedTokens)),
-      };
+      });
     }
-    usage.chats[chatId] = chat;
+    chat.chunks = Object.fromEntries(chatChunks);
+    chats.set(chatId, chat);
+    usage.chats = Object.fromEntries(chats);
     if (input.accountingId) {
-      usage.acceptedReceipts = { ...(usage.acceptedReceipts ?? {}), [input.accountingId]: now };
+      acceptedReceipts.set(input.accountingId, now);
+      usage.acceptedReceipts = Object.fromEntries(acceptedReceipts);
     }
     await writeJsonAtomic(longTermMemoryUsagePath(root), usage);
     const receipt = {

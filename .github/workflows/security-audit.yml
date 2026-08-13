@@ -4,6 +4,7 @@ on:
   pull_request:
     branches: [staging]
     paths:
+      - .github/workflows/security-audit.yml
       - package.json
       - package-lock.json
   schedule:
@@ -30,4 +31,4 @@ jobs:
           cache: npm
 
       - name: Audit dependencies
-        run: npm audit --audit-level=low
+        run: npm audit --package-lock-only --audit-level=low
