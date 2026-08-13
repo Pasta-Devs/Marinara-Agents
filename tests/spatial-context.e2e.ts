@@ -3885,7 +3885,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
 
     if (mobile) await page.getByRole("button", { name: "hierarchy", exact: true }).click();
 
-    let replaceMap = workspace.getByRole("button", { name: "Replace map or start over" });
+    let replaceMap: Locator;
     if (mobile) {
       const header = workspace.locator(":scope > .mari-editor-header");
       const moreActions = header.getByRole("button", { name: "More map actions" });

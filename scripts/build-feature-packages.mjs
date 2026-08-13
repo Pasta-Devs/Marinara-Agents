@@ -65,10 +65,6 @@ const rebuiltFeatureClients = new Set(
     .filter(Boolean),
 );
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
-const featureSource = (relativePath, buildRoot = sourceRoot) => {
-  const packaged = resolve(buildRoot, relativePath);
-  return existsSync(packaged) ? packaged : resolve(engineRoot, relativePath);
-};
 
 async function prepareFeatureBuildRoot(feature) {
   if (feature.id === "noodle") {
@@ -214,7 +210,7 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.2.5",
+    version: "1.2.6",
     minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",

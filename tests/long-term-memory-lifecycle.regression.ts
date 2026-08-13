@@ -2751,7 +2751,8 @@ async function main() {
         capabilityPackageManager: {
           install(
             id: string,
-            expectedVersion?: string,
+            expectedVersion: string,
+            expectedArtifactSha256: string,
           ): Promise<{ version: string; previousVersion?: string }>;
           uninstall(id: string): Promise<unknown>;
         };
@@ -2761,8 +2762,11 @@ async function main() {
       const { buildApp } = await importEngine<{
         buildApp(): Promise<typeof app>;
       }>("packages/server/src/app.ts");
-      const installed =
-        await capabilityPackageManager.install("long-term-memory");
+      const installed = await capabilityPackageManager.install(
+        "long-term-memory",
+        packageManifest.version,
+        sha256(artifactBytes),
+      );
       assert.equal(installed.version, artifactManifest.version);
       catalogOnline = false;
       app = await buildApp();
@@ -2847,8 +2851,11 @@ async function main() {
       );
       assertSnapshot(durableRoot, afterMigration);
       catalogOnline = true;
-      const reinstalled =
-        await capabilityPackageManager.install("long-term-memory");
+      const reinstalled = await capabilityPackageManager.install(
+        "long-term-memory",
+        packageManifest.version,
+        sha256(artifactBytes),
+      );
       assert.equal(reinstalled.version, artifactManifest.version);
       catalogOnline = false;
       app = await buildApp();

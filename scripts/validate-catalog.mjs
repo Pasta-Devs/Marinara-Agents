@@ -19,6 +19,12 @@ import {
 import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
 import { assertPackagePrivateImportBoundary } from "./package-engine-boundary.mjs";
 import { OFFICIAL_PACKAGE_GUIDANCE, withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
+import {
+  assertPortableFilenameComponent,
+  assertPortableRelativePath,
+  packageArtifactName,
+  resolveContainedPortablePath,
+} from "./catalog-path-safety.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const { catalog, catalogsByMajor, legacyCatalog } = await readCatalogFamily(repoRoot);
@@ -184,7 +190,11 @@ function readZip(args, { packageId, artifactPath, member = null, purpose }) {
 }
 
 async function validateTurnGameRuntime(manifest, packageRoot) {
-  const serverPath = join(packageRoot, manifest.entrypoints.server);
+  const serverPath = await resolveContainedPortablePath(
+    packageRoot,
+    manifest.entrypoints.server,
+    `Server entrypoint for ${manifest.id}`,
+  );
   const runtime = await import(`${pathToFileURL(serverPath).href}?validation=${Date.now()}`);
   if (typeof runtime.activate !== "function") {
     throw new Error(`${manifest.id} server runtime does not export activate()`);
@@ -250,6 +260,23 @@ async function validateTurnGameRuntime(manifest, packageRoot) {
 for (const entry of catalog.packages) {
   const { manifest, category, artifact, iconUrl, documentationUrl } = entry;
   if (!manifest?.id || ids.has(manifest.id)) throw new Error(`Duplicate or missing package id: ${manifest?.id}`);
+  assertPortableFilenameComponent(manifest.id, "Package id");
+  packageArtifactName(manifest.id, manifest.version);
+  if (!Array.isArray(manifest.files)) throw new Error(`Missing file declarations for ${manifest.id}`);
+  const declaredPaths = new Set();
+  for (const [index, declared] of manifest.files.entries()) {
+    const declaredPath = assertPortableRelativePath(
+      declared?.path,
+      `Declared file ${index + 1} for ${manifest.id}`,
+    );
+    if (declaredPaths.has(declaredPath)) {
+      throw new Error(`Duplicate declared file ${declaredPath} for ${manifest.id}`);
+    }
+    declaredPaths.add(declaredPath);
+  }
+  for (const [name, entrypoint] of Object.entries(manifest.entrypoints ?? {})) {
+    if (entrypoint) assertPortableRelativePath(entrypoint, `${name} entrypoint for ${manifest.id}`);
+  }
   if (manifest.id === "about-me-keeper") {
     throw new Error("About Me is a core Conversation feature and must not appear in the agent catalog");
   }
@@ -349,13 +376,17 @@ for (const entry of catalog.packages) {
   if (iconUrl !== catalogArtworkUrl(manifest.id)) {
     throw new Error(`Missing or invalid catalog artwork URL for ${manifest.id}`);
   }
-  const expectedArtifactName = `${manifest.id}-${manifest.version}.zip`;
+  const expectedArtifactName = packageArtifactName(manifest.id, manifest.version);
   const expectedArtifactUrl =
     `https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/${expectedArtifactName}`;
   if (artifact.url !== expectedArtifactUrl) {
     throw new Error(`Artifact URL for ${manifest.id} must be ${expectedArtifactUrl}`);
   }
-  const artworkPath = join(repoRoot, catalogArtworkRelativePath(manifest.id));
+  const artworkPath = await resolveContainedPortablePath(
+    repoRoot,
+    catalogArtworkRelativePath(manifest.id),
+    `Catalog artwork for ${manifest.id}`,
+  );
   const artwork = await readFile(artworkPath);
   const pngSignature = artwork.subarray(0, 8).toString("hex");
   if (pngSignature !== "89504e470d0a1a0a" || artwork.subarray(12, 16).toString("ascii") !== "IHDR") {
@@ -368,12 +399,25 @@ for (const entry of catalog.packages) {
       `Catalog artwork for ${manifest.id} must be ${CATALOG_ARTWORK_SIZE}x${CATALOG_ARTWORK_SIZE}, found ${artworkWidth}x${artworkHeight}`,
     );
   }
-  const packageRoot = join(repoRoot, "packages", manifest.id);
-  const sourceManifest = JSON.parse(await readFile(join(packageRoot, "manifest.json"), "utf8"));
+  const packageRoot = await resolveContainedPortablePath(
+    join(repoRoot, "packages"),
+    manifest.id,
+    `Package directory for ${manifest.id}`,
+  );
+  const sourceManifestPath = await resolveContainedPortablePath(
+    packageRoot,
+    "manifest.json",
+    `Manifest for ${manifest.id}`,
+  );
+  const sourceManifest = JSON.parse(await readFile(sourceManifestPath, "utf8"));
   if (JSON.stringify(sourceManifest) !== JSON.stringify(manifest)) {
     throw new Error(`Catalog manifest does not match packages/${manifest.id}/manifest.json`);
   }
-  const artifactPath = join(repoRoot, "artifacts", expectedArtifactName);
+  const artifactPath = await resolveContainedPortablePath(
+    join(repoRoot, "artifacts"),
+    expectedArtifactName,
+    `Artifact for ${manifest.id}`,
+  );
   const archive = await readFile(artifactPath);
   if (archive.byteLength !== artifact.bytes) throw new Error(`Artifact size mismatch for ${manifest.id}`);
   if (createHash("sha256").update(archive).digest("hex") !== artifact.sha256) {
@@ -384,7 +428,12 @@ for (const entry of catalog.packages) {
     artifactPath,
     purpose: "inspect",
   });
-  const actualFiles = listed.stdout.trim().split("\n").filter(Boolean).sort();
+  const actualFiles = listed.stdout
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((path) => assertPortableRelativePath(path, `Archived file for ${manifest.id}`))
+    .sort();
   const declaredFiles = ["manifest.json", ...manifest.files.map((file) => file.path)].sort();
   if (JSON.stringify(actualFiles) !== JSON.stringify(declaredFiles)) {
     throw new Error(`Artifact file list mismatch for ${manifest.id}`);
@@ -400,7 +449,6 @@ for (const entry of catalog.packages) {
     throw new Error(`Archived manifest does not match the catalog for ${manifest.id}`);
   }
 
-  const declaredPaths = new Set(manifest.files.map((file) => file.path));
   for (const entrypoint of Object.values(manifest.entrypoints)) {
     if (entrypoint && !declaredPaths.has(entrypoint)) {
       throw new Error(`Undeclared entrypoint ${entrypoint} for ${manifest.id}`);
@@ -411,6 +459,7 @@ for (const entry of catalog.packages) {
     throw new Error(`${manifest.id} declares more than two Home browser tab icons`);
   }
   for (const iconPath of browserTabIconPaths) {
+    assertPortableRelativePath(iconPath, `Home browser tab icon for ${manifest.id}`);
     if (!declaredPaths.has(iconPath)) {
       throw new Error(`Undeclared Home browser tab icon ${iconPath} for ${manifest.id}`);
     }
@@ -419,7 +468,9 @@ for (const entry of catalog.packages) {
     }
   }
   for (const declared of manifest.files) {
-    const sourcePayload = await readFile(join(packageRoot, declared.path));
+    const sourcePayload = await readFile(
+      await resolveContainedPortablePath(packageRoot, declared.path, `Declared file for ${manifest.id}`),
+    );
     const archivedPayload = readZip(["-p", artifactPath, declared.path], {
       packageId: manifest.id,
       artifactPath,
@@ -443,7 +494,11 @@ for (const entry of catalog.packages) {
   }
 
   for (const entrypoint of [manifest.entrypoints.server, manifest.entrypoints.client].filter(Boolean)) {
-    const syntax = spawnSync(process.execPath, ["--check", join(packageRoot, entrypoint)], { encoding: "utf8" });
+    const syntax = spawnSync(
+      process.execPath,
+      ["--check", await resolveContainedPortablePath(packageRoot, entrypoint, `Runtime entrypoint for ${manifest.id}`)],
+      { encoding: "utf8" },
+    );
     if (syntax.status !== 0) {
       throw new Error(syntax.stderr || syntax.stdout || `Invalid ${entrypoint} syntax for ${manifest.id}`);
     }
@@ -452,7 +507,14 @@ for (const entry of catalog.packages) {
 
   if (!manifest.entrypoints.agents) throw new Error(`Missing agent definition entrypoint for ${manifest.id}`);
   const agentDefinitions = JSON.parse(
-    await readFile(join(packageRoot, manifest.entrypoints.agents), "utf8"),
+    await readFile(
+      await resolveContainedPortablePath(
+        packageRoot,
+        manifest.entrypoints.agents,
+        `Agent entrypoint for ${manifest.id}`,
+      ),
+      "utf8",
+    ),
   );
   if (!Array.isArray(agentDefinitions) || agentDefinitions.length === 0) {
     throw new Error(`Missing agent definitions for ${manifest.id}`);
@@ -496,7 +558,14 @@ for (const entry of catalog.packages) {
     for (const slot of ["chat-settings", "spatial-workspace", "chat-runtime", "game-world-map"]) {
       if (!slots.has(slot)) throw new Error(`${manifest.id} is missing the ${slot} contribution`);
     }
-    const clientSource = await readFile(join(packageRoot, manifest.entrypoints.client), "utf8");
+    const clientSource = await readFile(
+      await resolveContainedPortablePath(
+        packageRoot,
+        manifest.entrypoints.client,
+        `Client entrypoint for ${manifest.id}`,
+      ),
+      "utf8",
+    );
     if (forbiddenHierarchicalMapsPinkText.test(clientSource)) {
       throw new Error(`${manifest.id} generated client still contains pink-default text styling`);
     }
@@ -531,13 +600,27 @@ for (const entry of catalog.packages) {
       if (!slots.has(slot)) throw new Error(`${manifest.id} is missing the ${slot} contribution`);
     }
     if (manifest.entrypoints?.server) {
-      const serverSource = await readFile(join(packageRoot, manifest.entrypoints.server), "utf8");
+      const serverSource = await readFile(
+        await resolveContainedPortablePath(
+          packageRoot,
+          manifest.entrypoints.server,
+          `Server entrypoint for ${manifest.id}`,
+        ),
+        "utf8",
+      );
       if (serverSource.includes("I lost the thread for a second. Could you repeat that?")) {
         throw new Error(`${manifest.id} server runtime still contains the hardcoded generation fallback`);
       }
     }
     if (manifest.entrypoints?.client) {
-      const clientSource = await readFile(join(packageRoot, manifest.entrypoints.client), "utf8");
+      const clientSource = await readFile(
+        await resolveContainedPortablePath(
+          packageRoot,
+          manifest.entrypoints.client,
+          `Client entrypoint for ${manifest.id}`,
+        ),
+        "utf8",
+      );
       for (const marker of [
         "data-marinara-call-video-fit",
         "data-marinara-call-stage",

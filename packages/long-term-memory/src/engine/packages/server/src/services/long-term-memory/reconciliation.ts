@@ -14,7 +14,7 @@ import {
   projectLtmDraftOntoNotes,
 } from "./draft-projector.js";
 import { LongTermMemoryDraftStore } from "./draft-store.js";
-import { nowIso, uniqueStrings } from "./ltm-utils.js";
+import { nowIso } from "./ltm-utils.js";
 import { logger } from "./package-runtime.js";
 import { rebuildLongTermMemoryIndexes } from "./rebuild.js";
 import { canUpdateLtmScopedTarget } from "./scoped-targets.js";

@@ -345,23 +345,6 @@ function recoveryLabel(
   );
 }
 
-function rejectedCandidateKey(
-  candidate: LtmDraftReviewDraft["candidateRejections"][number],
-) {
-  const normalize = (value: string) => value.trim().replace(/\s+/gu, " ");
-  return JSON.stringify({
-    reason: candidate.reason,
-    message: normalize(candidate.message),
-    snippet: candidate.snippet ? normalize(candidate.snippet) : null,
-    issues: candidate.issues?.map(normalize).sort() ?? [],
-    recovery: {
-      noteType: candidate.recovery?.noteType ?? null,
-      noteId: candidate.recovery?.noteId ?? null,
-      sectionKey: candidate.recovery?.sectionKey ?? null,
-      status: candidate.recovery?.status ?? null,
-    },
-  });
-}
 const rejectionReasonLabels: Partial<Record<LtmExtractionDropReason, string>> =
   {
     invalid_format:
