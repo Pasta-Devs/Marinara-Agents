@@ -170,4 +170,14 @@ assert.doesNotMatch(
   /scenario|backstory|source\.name/u,
 );
 
+const artworkPrivacy = readFileSync(
+  "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-public-profiles.service.ts",
+  "utf8",
+);
+// Only an OPEN creator may inherit the literal source photo as its avatar/banner. Hinted must
+// look like the same person through *generated* artwork (see the images-service reference-image
+// gate above), never by copying the actual source image — that photo would identify a hinted
+// creator on sight, defeating the one promise hinted disclosure makes.
+assert.match(artworkPrivacy, /if \(input\.disclosureMode !== "open"\) return \{ avatarUrl: null, bannerUrl: null \};/u);
+
 console.log("NoodleR disclosure contract regressions passed.");

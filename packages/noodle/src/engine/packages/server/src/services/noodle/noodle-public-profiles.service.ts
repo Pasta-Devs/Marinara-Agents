@@ -52,11 +52,12 @@ export async function pickRandomCharacterBannerUrl(
   return `/api/characters/${encodeURIComponent(characterId)}/gallery/file/${encodeURIComponent(filename)}`;
 }
 
-
 /**
- * Artwork a new NoodleR creator starts with. A secret creator gets none: its whole point is that
- * nothing ties it to the source. Open and hinted creators inherit the source's face and a random
- * gallery image as the banner, because a hinted creator is meant to be recognizable.
+ * Only OPEN inherits the literal source photo — the same picture would out a hinted creator on
+ * sight, which is exactly what hinted promises never to do. Hinted and secret both get null here
+ * and pick up freshly generated artwork instead (see backfillNextNoodlerCreatorArtwork): hinted
+ * generates through the appearance-referenced pipeline so it still looks like the same person
+ * without being the same photo, secret gets no reference material at all.
  */
 export async function resolveNoodlerCreatorArtwork(input: {
   characters: ReturnType<typeof createCharactersStorage>;
@@ -64,7 +65,7 @@ export async function resolveNoodlerCreatorArtwork(input: {
   publicAccount: Pick<NoodleAccount, "kind" | "entityId" | "avatarUrl">;
   disclosureMode: NoodleIdentityDisclosure;
 }): Promise<{ avatarUrl: string | null; bannerUrl: string | null }> {
-  if (input.disclosureMode === "secret") return { avatarUrl: null, bannerUrl: null };
+  if (input.disclosureMode !== "open") return { avatarUrl: null, bannerUrl: null };
   if (input.publicAccount.kind !== "character") {
     return { avatarUrl: input.publicAccount.avatarUrl ?? null, bannerUrl: null };
   }
