@@ -374,10 +374,10 @@ export function NoodlerPublishingSettings({ active, view, onOpenCreator }: Noodl
             {t("ui.noodle.noodlerschedulemanagermodal.loadingStatus")}
           </p>
         ) : (
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-3">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
             <div>
               <dt className="text-[var(--muted-foreground)]">
-                {t("ui.noodle.noodlerschedulemanagermodal.textClaimsLabel")}
+                {t("ui.noodle.noodlerschedulemanagermodal.postsTodayLabel")}
               </dt>
               <dd className="mt-0.5 font-semibold tabular-nums">
                 {t("ui.noodle.noodlerschedulemanagermodal.providerClaims", {
@@ -387,17 +387,6 @@ export function NoodlerPublishingSettings({ active, view, onOpenCreator }: Noodl
               </dd>
             </div>
             <div>
-              <dt className="text-[var(--muted-foreground)]">
-                {t("ui.noodle.noodlerschedulemanagermodal.imageClaimsLabel")}
-              </dt>
-              <dd className="mt-0.5 font-semibold tabular-nums">
-                {t("ui.noodle.noodlerschedulemanagermodal.providerClaims", {
-                  used: status?.imageAttemptsUsed ?? 0,
-                  limit: status?.postsPerDay ?? settings?.postsPerDay ?? 8,
-                })}
-              </dd>
-            </div>
-            <div className="col-span-2 sm:col-span-1">
               <dt className="text-[var(--muted-foreground)]">
                 {t("ui.noodle.noodlerschedulemanagermodal.preparedPostsLabel")}
               </dt>
