@@ -87,6 +87,15 @@ const mapsLocalizationSource = readFileSync(
   ),
   "utf8",
 );
+const mapsEnglishCatalog = JSON.parse(
+  readFileSync(
+    new URL(
+      "../packages/hierarchical-maps/src/engine/packages/client/src/features/spatial-context/locales/en.json",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+);
 const aiDraftSource = readFileSync(
   new URL(
     "../packages/hierarchical-maps/src/engine/packages/server/src/services/spatial-context/ai-draft.ts",
@@ -102,6 +111,17 @@ assert.match(runtimeBarSource, /Step by step/u, "Runtime location controls must 
 assert.match(runtimeBarSource, /Travel now/u, "Runtime location controls must expose immediate travel.");
 assert.match(
   runtimeBarSource,
+  /pendingRoute\?\.steps\[0\]\?\.locationName/u,
+  "Step-by-step status must derive the next stop from the current route.",
+);
+assert.match(
+  runtimeBarSource,
+  /ui\.worldMaps\.runtime\.nextStop[\s\S]*?nextStopName/u,
+  "Step-by-step status must render the next stop beneath the route mode.",
+);
+assert.equal(mapsEnglishCatalog["ui.worldMaps.runtime.nextStop"], "Next stop");
+assert.match(
+  runtimeBarSource,
   /\{enabled && mapAvailable && \(\s*<div data-marinara-maps-runtime-mobile\b[^>]*>/u,
   "The mobile story-map trigger must remain available while a step-by-step move is pending.",
 );
@@ -113,6 +133,7 @@ assert.doesNotMatch(
 assert.doesNotMatch(runtimeBarSource, /Set destination/u, "Runtime location controls must replace the legacy destination-only action.");
 assert.match(builtClient, /Step by step/u, "The built client must include the travel-mode control.");
 assert.match(builtClient, /Travel now/u, "The built client must include the immediate-travel control.");
+assert.match(builtClient, /Next stop/u, "The built client must include the step-by-step next-stop label.");
 assert.match(
   aiBuilderSource,
   /aria-pressed=\{targetLocationCount === option\.targetLocationCount\}[\s\S]*?Custom place target/u,

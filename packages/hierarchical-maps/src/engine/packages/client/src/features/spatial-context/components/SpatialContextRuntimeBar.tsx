@@ -22,6 +22,7 @@ import {
   setPendingSpatialTransitionStatus,
   usePendingSpatialTransition,
 } from "../pending-spatial-transitions";
+import { useSpatialMapTranslation } from "../localization";
 import { findSpatialRoute } from "../spatial-route-plans";
 import { SpatialLocationIcon } from "./SpatialLocationIcon";
 import { useMapConfirmation } from "./use-map-confirmation";
@@ -65,6 +66,13 @@ export function SpatialContextRuntimeBar({
   const pending = usePendingSpatialTransition(chatId);
   const data = spatial.data;
   const { confirmAction, confirmationDialog } = useMapConfirmation();
+  const { t } = useSpatialMapTranslation();
+  const pendingRoute = useMemo(() => {
+    if (!pending?.transition.travelMode || !data?.definition || !data.currentLocationId) return null;
+    return findSpatialRoute(data.definition, data.currentLocationId, pending.transition.destinationId);
+  }, [data?.currentLocationId, data?.definition, pending?.transition.destinationId, pending?.transition.travelMode]);
+  const nextStopName =
+    pending?.transition.travelMode === "step_by_step" ? (pendingRoute?.steps[0]?.locationName ?? null) : null;
 
   useEffect(() => {
     if (!chatId || !data) return;
@@ -74,17 +82,13 @@ export function SpatialContextRuntimeBar({
     );
     const plannedRouteStillAvailable =
       (pending.transition.travelMode === "step_by_step" || pending.transition.travelMode === "travel_now") &&
-      Boolean(
-        data.definition &&
-        data.currentLocationId &&
-        findSpatialRoute(data.definition, data.currentLocationId, pending.transition.destinationId),
-      );
+      Boolean(pendingRoute);
     const isStale =
       data.definition?.revision !== pending.transition.expectedDefinitionRevision ||
       data.currentLocationId !== pending.transition.expectedCurrentLocationId ||
       (!destinationStillAvailable && !plannedRouteStillAvailable);
     if (isStale) setPendingSpatialTransitionStatus(chatId, "needs_review");
-  }, [chatId, data, pending]);
+  }, [chatId, data, pending, pendingRoute]);
 
   const destinationsByRelation = useMemo(() => {
     const result = new Map<SpatialDestinationRelation, SpatialDestination[]>();
@@ -407,6 +411,14 @@ export function SpatialContextRuntimeBar({
                     ? "Travel now · resolves the full route this turn"
                     : "Moves with your next turn"}
             </span>
+            {pending.status === "ready" && nextStopName ? (
+              <span
+                className="block truncate text-[0.625rem] font-medium text-[var(--marinara-chat-chrome-accent)]"
+                title={`${t("ui.worldMaps.runtime.nextStop")}: ${nextStopName}`}
+              >
+                {t("ui.worldMaps.runtime.nextStop")}: {nextStopName}
+              </span>
+            ) : null}
           </span>
           <a
             href={WORLD_MAPS_GUIDE_URL}
