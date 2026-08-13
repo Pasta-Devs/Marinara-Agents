@@ -1069,7 +1069,7 @@ test("global World Maps home activates and opens the current chat map", async ({
     await expect(home.getByRole("heading", { name: "Installed package", exact: true })).toBeVisible();
     await expect(home.getByRole("heading", { name: "Current chat", exact: true })).toBeVisible();
     await expect(home.getByRole("heading", { name: "World Maps", exact: true })).toBeVisible();
-    await expect(home.locator(".mari-editor-header")).toContainText("v1.3.5");
+    await expect(home.locator(".mari-editor-header")).toContainText("v1.3.6");
     await expect(home.getByRole("heading", { name: "Description", exact: true })).toBeVisible();
     await expect(home.getByRole("heading", { name: "Pipeline Phase", exact: true })).toBeVisible();
     await expect(home.getByRole("button", { name: "Pre-Generation", exact: true })).toHaveAttribute(
@@ -5664,8 +5664,8 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     await routeMap.getByRole("button", { name: /Inspect Upper Level/ }).click();
     await expect(routeMap.getByText("Shortest route · 2 hops", { exact: true })).toBeVisible();
     await routeMap.getByRole("button", { name: "Plan route to Upper Level" }).click();
-    await expect(recoveredStoryLocation).toContainText("Route to Upper Level");
-    await expect(recoveredStoryLocation).toContainText("Next step 1 of 2 · Blackglass Lighthouse");
+    await expect(recoveredStoryLocation).toContainText("Upper Level");
+    await expect(recoveredStoryLocation).toContainText("Next stop: Blackglass Lighthouse");
     if (mobileRuntime) {
       const queuedStoryMap = recoveredStoryLocation.getByRole("button", { name: "Open story map" });
       await expectMinimumInteractiveSize(queuedStoryMap, "Queued mobile story-map control");
@@ -5712,7 +5712,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
         }),
       );
     }, chat.id);
-    await expect(recoveredStoryLocation).toContainText("Next step 2 of 2 · Upper Level");
+    await expect(recoveredStoryLocation).toContainText("Next stop: Upper Level");
 
     // Engine acknowledges the committed first command with null after Maps has
     // already queued the second hop. That acknowledgement must only clear the
@@ -5725,7 +5725,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       runtime.capabilityProps = { ...runtime.capabilityProps, pendingTransition: null };
       runtime.dispatchEvent(new CustomEvent("marinara-capability-props"));
     });
-    await expect(recoveredStoryLocation).toContainText("Next step 2 of 2 · Upper Level");
+    await expect(recoveredStoryLocation).toContainText("Next stop: Upper Level");
 
     await page.evaluate((chatId) => {
       const runtime = document.querySelector("marinara-capability-hierarchical-maps[view='runtime']") as
@@ -5751,7 +5751,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     const routeInput = page.locator("textarea.mari-chat-input-textarea");
     await routeInput.fill("I climb to the lantern gallery.");
     await page.locator("button.mari-chat-send-btn").click();
-    await expect(recoveredStoryLocation.getByText("Route to Upper Level", { exact: false })).toHaveCount(0);
+    await expect(recoveredStoryLocation.getByText("Next stop: Upper Level", { exact: false })).toHaveCount(0);
     await expect(recoveredStoryLocation).toContainText("Upper Level");
 
     const currentSpatialResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);

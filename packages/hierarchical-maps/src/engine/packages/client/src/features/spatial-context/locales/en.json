@@ -11,5 +11,6 @@
   "ui.worldMaps.connection.saveError": "The World Maps connection could not be saved.",
   "ui.worldMaps.connection.saving": "Saving…",
   "ui.worldMaps.connection.useChat": "Use chat connection",
-  "ui.worldMaps.connection.useDefault": "Use default connection"
+  "ui.worldMaps.connection.useDefault": "Use default connection",
+  "ui.worldMaps.runtime.nextStop": "Next stop"
 }
