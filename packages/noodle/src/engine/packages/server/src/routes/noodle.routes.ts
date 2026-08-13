@@ -1698,10 +1698,11 @@ export async function noodleRoutes(app: FastifyInstance) {
           nextMode: parsed.data.disclosureMode,
           postCount: identifyingPostCount,
           mediaCount: publishedPosts.filter((post) => Boolean(post.imageUrl)).length,
-          // Any avatar must trigger review, including one adopted from the linked
+          // Any avatar/banner must trigger review, including ones adopted from the linked
           // source (whose URL lives outside the NoodleR media namespace, so
-          // readNoodlerAvatarMediaPath would return null and skip the check).
+          // readNoodler*MediaPath would return null and skip the check).
           hasAvatar: Boolean(noodlerAccount.avatarUrl),
+          hasBanner: Boolean(noodlerAccount.settings.profile.bannerUrl),
           preparedPostCount: 0,
         });
         const unresolvedReviewReasons = parsed.data.confirmAvatarReview

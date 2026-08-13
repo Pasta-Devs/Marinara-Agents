@@ -82,7 +82,7 @@ import {
   noodlerReserveState,
   noodlerFanActivityState,
 } from "../../db/schema/index.js";
-import { readNoodlerAvatarMediaPath } from "../noodle/noodle-noodler-avatar.js";
+import { readNoodlerAccountMediaPath, readNoodlerAvatarMediaPath } from "../noodle/noodle-noodler-avatar.js";
 import { newId, now } from "../../utils/id-generator.js";
 import {
   compareMinimizedNoodlerSourceSnapshot,
@@ -1417,9 +1417,10 @@ export function createNoodleStorage(db: DB) {
         profile: {
           ...(wizardExecutionId && { noodlerWizardExecutionId: wizardExecutionId }),
           ...(sourceSnapshot && { noodlerSourceSnapshot: sourceSnapshot }),
-          // A secret creator shares no artwork with its source; open and hinted both do,
-          // because a hinted creator is recognizable on purpose.
-          ...(stageProfile.disclosureMode !== "secret" && bannerUrl ? { bannerUrl } : {}),
+          // Only an OPEN creator may hold the literal source banner (see
+          // resolveNoodlerCreatorArtwork); callers already gate the value on that, this is
+          // belt-and-suspenders against a future caller passing one for hinted/secret.
+          ...(stageProfile.disclosureMode === "open" && bannerUrl ? { bannerUrl } : {}),
         },
         scheduler: { autoPosting: defaultAutoPostingSettings() },
         privacy: {
@@ -1435,7 +1436,7 @@ export function createNoodleStorage(db: DB) {
         handle: normalizeHandle(stageProfile.handle, publicAccount.entityId),
         displayName: stageProfile.displayName,
         bio: stageProfile.bio,
-        avatarUrl: stageProfile.disclosureMode === "secret" ? null : (avatarUrl ?? null),
+        avatarUrl: stageProfile.disclosureMode === "open" ? (avatarUrl ?? null) : null,
         invited: "false",
         settings: JSON.stringify(accountSettings),
         platform: "noodler",
@@ -1462,20 +1463,29 @@ export function createNoodleStorage(db: DB) {
         const row = rows[0];
         if (!row) return null;
         const settings = normalizeNoodleAccountSettings(row.settings);
+        // Only OPEN may hold the literal source photo (see resolveNoodlerCreatorArtwork). A
+        // downgrade away from open drops an inherited avatar/banner outright, the same way a
+        // hinted or secret creator never gets one at creation. A NoodleR-owned generated image
+        // (readNoodler*MediaPath resolves it) survives the downgrade — it was never the source's
+        // literal photo, so it carries no identity to strip.
+        const droppingOpen = stageProfile.disclosureMode !== "open";
+        const profile = { ...settings.profile };
+        if (droppingOpen && !readNoodlerAccountMediaPath(id, profile.bannerUrl ?? null)) {
+          delete profile.bannerUrl;
+        }
         await tx
           .update(noodleAccounts)
           .set({
             handle: normalizeHandle(stageProfile.handle, row.entityId),
             displayName: stageProfile.displayName,
             bio: stageProfile.bio,
-            ...(stageProfile.disclosureMode !== "open" &&
-            !readNoodlerAvatarMediaPath(id, row.avatarUrl)
+            ...(droppingOpen && !readNoodlerAvatarMediaPath(id, row.avatarUrl)
               ? { avatarUrl: null }
               : {}),
             settings: JSON.stringify({
               ...settings,
               profile: {
-                ...settings.profile,
+                ...profile,
                 ...(sourceSnapshot && { noodlerSourceSnapshot: sourceSnapshot }),
               },
               privacy: {

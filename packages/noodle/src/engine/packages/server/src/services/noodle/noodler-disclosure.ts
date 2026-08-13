@@ -54,7 +54,7 @@ export function projectNoodlerAudienceProfile(
 
 export type NoodlerDisclosureReviewReason = {
   // Stable code so callers can match a reason without parsing its English label.
-  code: "published_posts" | "published_media" | "creator_avatar" | "prepared_posts";
+  code: "published_posts" | "published_media" | "creator_avatar" | "creator_banner" | "prepared_posts";
   count: number;
   label: string;
 };
@@ -65,6 +65,7 @@ export function noodlerDisclosureReviewReasons(input: {
   postCount: number;
   mediaCount: number;
   hasAvatar: boolean;
+  hasBanner: boolean;
   preparedPostCount: number;
 }): NoodlerDisclosureReviewReason[] {
   if (!isNoodlerDisclosureDowngrade(input.currentMode, input.nextMode)) return [];
@@ -86,6 +87,9 @@ export function noodlerDisclosureReviewReasons(input: {
       : []),
     ...(input.hasAvatar
       ? [{ code: "creator_avatar" as const, count: 1, label: "the current creator avatar" }]
+      : []),
+    ...(input.hasBanner
+      ? [{ code: "creator_banner" as const, count: 1, label: "the current creator banner" }]
       : []),
     ...(input.preparedPostCount > 0
       ? [{

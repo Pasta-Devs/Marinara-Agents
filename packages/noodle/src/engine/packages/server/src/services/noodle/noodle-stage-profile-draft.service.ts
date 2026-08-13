@@ -263,7 +263,7 @@ export async function generateNoodlerStageProfileDraft(
       : "",
     category: "main",
   });
-  const response = await provider.chatComplete(messages, {
+  const completionOptions = {
     model: input.connection.model,
     maxTokens: clampGenerationMaxOutputTokens({
       provider: input.connection.provider as APIProvider,
@@ -288,13 +288,15 @@ export async function generateNoodlerStageProfileDraft(
       input.connection.model,
       "noodler_profile",
     ),
-  });
+  } as const;
+  const response = await provider.chatComplete(messages, completionOptions);
   let parsedDraft: ReturnType<typeof parseNoodlerStageProfileDraft>;
   try {
     parsedDraft = parseNoodlerStageProfileDraft(response.content ?? "");
   } catch {
-    // One retry with the field names spelled out. Without it a single malformed answer fails
-    // the creator outright, which is what the wizard reported as "creation failed".
+    // One retry with the field names spelled out, same sampling options as the first attempt.
+    // Without the retry a single malformed answer fails the creator outright, which is what the
+    // wizard reported as "creation failed".
     const retry = await provider.chatComplete(
       [
         ...messages,
@@ -305,18 +307,7 @@ export async function generateNoodlerStageProfileDraft(
             "That was not a valid stage profile object. Return exactly one JSON object with the keys displayName, handle, bio, and stagePersonality, all strings. No other keys, no prose.",
         },
       ],
-      {
-        model: input.connection.model,
-        maxTokens: clampGenerationMaxOutputTokens({
-          provider: input.connection.provider as APIProvider,
-          model: input.connection.model,
-          maxTokens: resolveStoredMaxTokens(input.connection.defaultParameters, 1200),
-          maxTokensOverride: input.connection.maxTokensOverride,
-        }),
-        stream: false,
-        debugMode,
-        responseFormat: noodleResponseFormat(input.connection.model, "noodler_profile"),
-      },
+      completionOptions,
     );
     parsedDraft = parseNoodlerStageProfileDraft(retry.content ?? "");
   }

@@ -488,7 +488,14 @@ export function NoodlerPostCard({
   const postImageSrc = useNoodlerMediaSrc(post.imageUrl);
   const displayedImageUrl =
     postImageSrc && postImageSrc !== failedImageUrl ? postImageSrc : null;
-  const editablePost = post.imageUrl && displayedImageUrl ? post : { ...post, imageUrl: null };
+  // Distinct from displayedImageUrl: while postImageSrc is still resolving (the authenticated
+  // fetch hasn't returned yet) there is no evidence the image is broken, so editing must not
+  // drop it. Only a confirmed <img> render failure (postImageSrc resolved and then errored,
+  // recorded in failedImageUrl) strips the image from what gets edited/saved.
+  const editablePost =
+    post.imageUrl && (postImageSrc === null || postImageSrc !== failedImageUrl)
+      ? post
+      : { ...post, imageUrl: null };
   const postInteractions = post.interactions;
   const rootPostInteractions = postInteractions.filter(
     (interaction) => !interaction.parentInteractionId,

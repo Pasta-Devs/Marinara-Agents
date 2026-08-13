@@ -180,4 +180,13 @@ const artworkPrivacy = readFileSync(
 // creator on sight, defeating the one promise hinted disclosure makes.
 assert.match(artworkPrivacy, /if \(input\.disclosureMode !== "open"\) return \{ avatarUrl: null, bannerUrl: null \};/u);
 
+const fanActivityPrivacy = readFileSync(
+  "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-noodler-fan-activity.service.ts",
+  "utf8",
+);
+// Locked posts are eligible fan-activity targets, but only their title reaches the prompt — a
+// fan reply must never be able to restate paid content it was never shown.
+assert.match(fanActivityPrivacy, /access === "locked" \? \{ id, title, access \} : \{ id, title, content, access \}/u);
+assert.match(fanActivityPrivacy, /Posts marked locked are paid posts\. Only subscribers see them/u);
+
 console.log("NoodleR disclosure contract regressions passed.");

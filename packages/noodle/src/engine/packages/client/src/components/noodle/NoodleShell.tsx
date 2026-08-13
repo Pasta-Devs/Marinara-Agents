@@ -336,7 +336,7 @@ export function Avatar({
   // NoodleR avatars are served by the package's own route, which a bare <img> cannot
   // authenticate against; the hook swaps those for a fetched object URL and passes the rest through.
   const avatarSrc = useNoodlerMediaSrc(account.avatarUrl);
-  if (account.avatarUrl) {
+  if (avatarSrc) {
     return (
       <div
         className={cn(

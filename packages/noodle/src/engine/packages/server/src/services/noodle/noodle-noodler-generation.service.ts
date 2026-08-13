@@ -414,7 +414,8 @@ export function noodlerTitleFromContent(content: string): string {
     content.trim().split(/(?<=[.!?])\s|\n/u)[0]?.trim() || content.trim();
   if (firstSentence.length <= NOODLER_FALLBACK_TITLE_MAX_LENGTH)
     return firstSentence.replace(/[.!?,;:\s]+$/u, "") || firstSentence;
-  const clipped = firstSentence.slice(0, NOODLER_FALLBACK_TITLE_MAX_LENGTH);
+  // Leave room for the trailing ellipsis so the result never exceeds the stated max length.
+  const clipped = firstSentence.slice(0, NOODLER_FALLBACK_TITLE_MAX_LENGTH - 1);
   const lastSpace = clipped.lastIndexOf(" ");
   return `${(lastSpace > 20 ? clipped.slice(0, lastSpace) : clipped).replace(/[.!?,;:\s]+$/u, "")}…`;
 }
