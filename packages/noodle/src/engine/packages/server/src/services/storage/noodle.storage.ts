@@ -1912,7 +1912,11 @@ export function createNoodleStorage(db: DB) {
         const cutoffIso = new Date(cutoff).toISOString();
         await tx.delete(noodlerAutomaticAttempts).where(lt(noodlerAutomaticAttempts.claimedAt, cutoffIso));
         const attempts = (await tx.select().from(noodlerAutomaticAttempts)).filter(
-          (row) => row.kind === kind && Date.parse(row.claimedAt) > cutoff,
+          // A failed attempt (provider error, moderation reject, timeout) never produced a
+          // post, so it must not permanently burn a slot out of the rolling-day budget: image
+          // generation fails far more often than text, and without this a handful of image
+          // failures locks out image posting for the rest of the day while text keeps going.
+          (row) => row.kind === kind && row.outcome !== "failed" && Date.parse(row.claimedAt) > cutoff,
         );
         if (attempts.length >= limit) return { status: "exhausted" };
         const claimId = newId();
@@ -2314,8 +2318,12 @@ export function createNoodleStorage(db: DB) {
           (latest, item) => (!latest || item.publishAt > latest ? item.publishAt : latest),
           null,
         ),
-        textAttemptsUsed: attempts.filter((row) => row.kind === "text" && Date.parse(row.claimedAt) > cutoff).length,
-        imageAttemptsUsed: attempts.filter((row) => row.kind === "image" && Date.parse(row.claimedAt) > cutoff).length,
+        textAttemptsUsed: attempts.filter(
+          (row) => row.kind === "text" && row.outcome !== "failed" && Date.parse(row.claimedAt) > cutoff,
+        ).length,
+        imageAttemptsUsed: attempts.filter(
+          (row) => row.kind === "image" && row.outcome !== "failed" && Date.parse(row.claimedAt) > cutoff,
+        ).length,
         postsPerDay: settings.postsPerDay,
         preparationNotBefore: state.preparationNotBefore,
         creators: creators.map((account) => ({

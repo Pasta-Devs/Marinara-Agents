@@ -175,23 +175,13 @@ export async function prepareNextNoodlerReservePost(
               imageConnection,
               db,
               debugMode: false,
-              admissionMode: {
-                kind: "background",
-                beforeAttempt: async () => {
-                  const claim = await noodle.claimNoodlerAutomaticAttempt(
-                    "image",
-                    settings.postsPerDay,
-                    at,
-                  );
-                  if (claim.status !== "claimed")
-                    throw new NoodlerAttemptUnavailableError(claim.status);
-                  return (outcome) =>
-                    noodle.completeNoodlerAutomaticAttempt(
-                      claim.claimId,
-                      outcome,
-                    );
-                },
-              },
+              // An image is part of the post, not a separately-budgeted item: the daily cap
+              // lives on the post (the text claim above) and the schedule already bounds how
+              // many posts a day exist. Booking a second "image" budget only created a phantom
+              // limiter that drained on its own — most visibly when image generation failed —
+              // and made "8 posts/day" secretly mean two pools of 8. Keep background admission
+              // for connection concurrency, but book no separate image quota.
+              admissionMode: { kind: "background" },
             });
             // Promotion is deferred until the prepared row is durably committed below: a file
             // promoted first is owned by nothing if the row never lands, and staged files are

@@ -87,7 +87,7 @@ import {
 import { useActivePersona, useCharacterGroups, usePersonas } from "../../hooks/use-characters";
 import { useConnections } from "../../hooks/use-connections";
 import { ApiError } from "../../lib/api-client";
-import { showConfirmDialog } from "../../lib/app-dialogs";
+import { showAlertDialog, showConfirmDialog } from "../../lib/app-dialogs";
 import { cn } from "../../lib/utils";
 import { useUIStore } from "../../stores/noodle-package.store";
 import {
@@ -1562,8 +1562,26 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
                     onSuccess: ({ outcomes }) => {
                       const summary = summarizeRefreshOutcomes(outcomes);
                       const message = localizeUi(summary.key, summary.params);
-                      if (summary.ok) toast.success(message);
-                      else toast.error(message);
+                      if (!summary.ok) {
+                        toast.error(message);
+                        return;
+                      }
+                      const publishedNames = outcomes
+                        .filter((outcome) => outcome.status === "generated")
+                        .map(
+                          (outcome) =>
+                            accountsQuery.data?.find((profile) => profile.id === outcome.accountId)
+                              ?.displayName ?? outcome.accountId,
+                        );
+                      toast.success(message);
+                      void showAlertDialog({
+                        title: localizeUi("ui.noodle.noodlerhome.refreshComplete"),
+                        message: publishedNames.length
+                          ? localizeUi("ui.noodle.noodlerhome.refreshPublishedFor", {
+                              names: publishedNames.join(", "),
+                            })
+                          : message,
+                      });
                     },
                     onError: (error) =>
                       toast.error(
