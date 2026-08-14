@@ -23,6 +23,9 @@ export async function activate({
   };
   const cleanups = [
     await api.registerPrivilegedRoutes(routes, { prefix: "/api/noodle" }),
+    api.registerService("noodle:backup", {
+      pause: async <T>(run: () => Promise<T>) => run(),
+    }),
     api.registerService("noodle:prompt-context", { build: buildRecentSocialMediaActivityBlock }),
   ];
   const schedulers = [startNoodleRefreshScheduler(app)];
