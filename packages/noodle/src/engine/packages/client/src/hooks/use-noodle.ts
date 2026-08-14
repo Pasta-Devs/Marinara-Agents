@@ -53,7 +53,6 @@ import type {
 } from "@marinara-engine/shared";
 import {
   countNoodlePostsSince,
-  countNoodlerPostsSince,
   mergeNoodlePollVoteInteractions,
 } from "@marinara-engine/shared";
 import type {
@@ -82,6 +81,8 @@ export const noodleKeys = {
   noodlerViewers: () => [...noodleKeys.noodlerRoot(), "viewers"] as const,
   viewer: (personaId: string) =>
     [...noodleKeys.noodlerViewers(), personaId] as const,
+  noodlerUnseenCount: (personaId: string) =>
+    [...noodleKeys.noodlerViewers(), "unseen-count", personaId] as const,
   noodlerReserveStatus: () =>
     [...noodleKeys.noodlerRoot(), "reserve-status"] as const,
   noodlerImageConnections: () =>
@@ -626,9 +627,6 @@ export function useNoodlerViewer(personaId: string | null, enabled = true) {
       ),
     enabled: enabled && Boolean(personaId),
     staleTime: 10_000,
-    // Automatic posts change subscriber-visible projections server-side; poll while visible.
-    refetchInterval: enabled && personaId ? 30_000 : false,
-    refetchIntervalInBackground: false,
   });
 }
 
@@ -650,16 +648,23 @@ export function useNoodleUnseenCount(
   );
 }
 
-/** Unseen-post count for the NoodleR entry point; reuses the viewer-scope query already cached. */
+/** Poll the badge without downloading the complete viewer feed or historical media metadata. */
 export function useNoodlerUnseenCount(
   personaId: string | null,
   enabled = true,
 ) {
-  const { data } = useNoodlerViewer(personaId, enabled);
-  return countNoodlerPostsSince(
-    data,
-    data?.viewer.settings.social.noodlerFeedSeenAt,
-  );
+  const { data } = useQuery({
+    queryKey: noodleKeys.noodlerUnseenCount(personaId ?? "none"),
+    queryFn: () =>
+      api.get<{ count: number }>(
+        `/noodle/noodler/viewer/unseen-count?personaId=${encodeURIComponent(personaId!)}`,
+      ),
+    enabled: enabled && Boolean(personaId),
+    staleTime: 10_000,
+    refetchInterval: enabled && personaId ? 30_000 : false,
+    refetchIntervalInBackground: false,
+  });
+  return Math.max(0, Math.floor(data?.count ?? 0));
 }
 
 export function useToggleNoodlerSubscription() {

@@ -721,6 +721,34 @@ export async function noodleRoutes(app: FastifyInstance) {
     return { viewer, creators };
   }
 
+  app.get("/noodler/viewer/unseen-count", async (req, reply) => {
+    const settings = await noodle.getSettings();
+    if (!settings.enableNoodler)
+      return reply.code(404).send({ error: "Not Found" });
+    const parsed = noodlerViewerPersonaSchema.safeParse(req.query);
+    if (!parsed.success)
+      return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer)
+      return reply.code(404).send({ error: "Noodle persona not found" });
+    const seenAt = viewer.settings.social.noodlerFeedSeenAt;
+    const seen = seenAt ? Date.parse(seenAt) : NaN;
+    if (!Number.isFinite(seen)) return { count: 0 };
+    const accountIds = (await noodle.listNoodlerAccounts())
+      .filter(
+        (account) =>
+          account.noodleAccountId !== viewer.id &&
+          !isNoodlerHiddenFromViewer(account, viewer.id),
+      )
+      .map((account) => account.id);
+    return {
+      count: noodle.countNoodlerPostsByAccountsSince(
+        accountIds,
+        new Date(seen).toISOString(),
+      ),
+    };
+  });
+
   app.get("/noodler/viewer", async (req, reply) => {
     const settings = await noodle.getSettings();
     if (!settings.enableNoodler)
