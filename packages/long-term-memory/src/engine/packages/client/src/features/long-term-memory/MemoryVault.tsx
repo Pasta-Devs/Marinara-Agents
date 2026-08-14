@@ -185,15 +185,17 @@ function ScopeTargetPicker({
   value,
   allLabel,
   searchLabel,
+  searchable = true,
   targets,
   onClear,
   onSelect,
 }: {
-  kind: "character" | "chat" | "branch";
+  kind: "mode" | "character" | "chat" | "branch" | "status" | "sort";
   label: string;
   value: string;
   allLabel: string;
   searchLabel: string;
+  searchable?: boolean;
   targets: Target[];
   onClear: () => void;
   onSelect: (target: Target) => void;
@@ -224,20 +226,22 @@ function ScopeTargetPicker({
         />
       </summary>
       <div className="mt-2 space-y-2">
-        <label className="relative block">
-          <Search
-            aria-hidden="true"
-            size="0.875rem"
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
-          />
-          <input
-            className={`${inputClass} pl-9`}
-            value={query}
-            placeholder={searchLabel}
-            aria-label={searchLabel}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
+        {searchable ? (
+          <label className="relative block">
+            <Search
+              aria-hidden="true"
+              size="0.875rem"
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
+            />
+            <input
+              className={`${inputClass} pl-9`}
+              value={query}
+              placeholder={searchLabel}
+              aria-label={searchLabel}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
+        ) : null}
         <div className="max-h-40 overflow-y-auto rounded-md border border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-control-bg)]">
           <button
             type="button"
@@ -254,12 +258,12 @@ function ScopeTargetPicker({
             <button
               key={target.id}
               type="button"
-            data-ltm-memory-scope-target={target.id}
-            className="mari-editor-action mari-editor-action--compact block min-h-11 w-full rounded-none border-x-0 border-t-0 px-3 py-2 text-left text-xs last:border-b-0"
-            onClick={(event) => {
-              close(event);
-              onSelect(target);
-            }}
+              data-ltm-memory-scope-target={target.id}
+              className="mari-editor-action mari-editor-action--compact block min-h-11 w-full rounded-none border-x-0 border-t-0 px-3 py-2 text-left text-xs last:border-b-0"
+              onClick={(event) => {
+                close(event);
+                onSelect(target);
+              }}
             >
               {target.label}
             </button>
@@ -288,7 +292,6 @@ const sessionTargets = new Map<string, Target>();
 type NavigatorState = {
   search: string;
   statusFilter: LtmStatus | "all";
-  typeFilter: LtmNoteType | "all";
   sourceFilter: boolean;
   sort: "updated" | "title" | "created";
   scrollTop: number;
@@ -778,8 +781,12 @@ function BulkAvailabilityWorkbench({
   action,
   target,
   modes: selectedModes,
+  availabilityTargets,
   localizeUi,
   modeLabel,
+  onActionChange,
+  onModesChange,
+  onTargetChange,
   onApply,
   onCancel,
 }: {
@@ -787,12 +794,28 @@ function BulkAvailabilityWorkbench({
   action: "add" | "remove";
   target: string;
   modes: LtmMode[];
+  availabilityTargets: AvailabilityTargets;
   localizeUi: LtmTranslationFunction;
   modeLabel: (mode: string) => string;
+  onActionChange: (action: "add" | "remove") => void;
+  onModesChange: (modes: LtmMode[]) => void;
+  onTargetChange: (target: string) => void;
   onApply: () => void;
   onCancel: () => void;
 }) {
   const [kind, id] = target.split(":", 2);
+  const selectedIds = new Set<string>();
+  if (target) selectedIds.add(kind === "group" ? `chat:${id}` : target);
+  const selectTarget = (nextKind: "character" | "persona" | "chat" | "branch", nextId: string) => {
+    const chatTarget = nextKind === "chat"
+      ? availabilityTargets.chats.find((candidate) => candidate.id === nextId)
+      : undefined;
+    const scopeKind = nextKind === "chat" && chatTarget?.groupId === chatTarget.id
+      ? "group"
+      : nextKind;
+    const next = `${scopeKind}:${nextId}`;
+    onTargetChange(target === next ? "" : next);
+  };
   const outcomes = notes.map((note) => {
     const places = availabilityEntries(note.scope, [], {
       chat: localizeUi("ui.longTermMemory.memoryvault.unavailableChat"),
@@ -827,6 +850,86 @@ function BulkAvailabilityWorkbench({
           <Button primary disabled={!ready} onClick={onApply}>{localizeUi("ui.longTermMemory.memoryvault.apply")}</Button>
         </div>
       </header>
+      <fieldset className="space-y-2 border-b border-[var(--border)] pb-4">
+        <legend className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memoryvault.availabilityChange")}</legend>
+        <div className="flex flex-wrap gap-2" role="group" aria-label={localizeUi("ui.longTermMemory.memoryvault.availabilityChange")}>
+          <Button aria-pressed={action === "add"} onClick={() => onActionChange("add")} className={action === "add" ? "bg-[var(--accent)]" : ""}>
+            {localizeUi("ui.longTermMemory.memoryvault.addAvailability")}
+          </Button>
+          <Button aria-pressed={action === "remove"} onClick={() => onActionChange("remove")} className={action === "remove" ? "bg-[var(--accent)]" : ""}>
+            {localizeUi("ui.longTermMemory.memoryvault.removeAvailability")}
+          </Button>
+        </div>
+      </fieldset>
+      <fieldset className="space-y-2 border-b border-[var(--border)] pb-4">
+        <legend className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memoryvault.chatModes")}</legend>
+        <p className="text-xs text-[var(--muted-foreground)]">{localizeUi("ui.longTermMemory.memoryvault.modesHelp")}</p>
+        <div className="flex flex-wrap gap-3">
+          {modes.map((mode) => (
+            <label key={mode} className="flex min-h-11 items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={selectedModes.includes(mode)}
+                onChange={() => onModesChange(selectedModes.includes(mode) ? selectedModes.filter((value) => value !== mode) : [...selectedModes, mode])}
+              />
+              {modeLabel(mode)}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <section className="space-y-3">
+        <div>
+          <h3 className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memoryvault.chooseOneAvailabilityPlace")}</h3>
+          <p className="text-xs text-[var(--muted-foreground)]">{localizeUi("ui.longTermMemory.memoryvault.bulkAvailabilityHelp")}</p>
+        </div>
+        <AvailabilityTabRail
+          characters={availabilityTargets.characters}
+          personas={availabilityTargets.personas}
+          chats={availabilityTargets.chats}
+          branches={availabilityTargets.branches}
+          selectedIds={selectedIds}
+          tablistLabel={localizeUi("ui.longTermMemory.memoryvault.bulkMemoryAvailability")}
+          sectionCopy={{
+            character: {
+              label: localizeUi("ui.longTermMemory.memoryvault.character"),
+              searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchCharacters"),
+              emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingCharacters"),
+              accessibleLabel: (count) => localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+                label: localizeUi("ui.longTermMemory.memoryvault.character"),
+                count,
+              }),
+            },
+            persona: {
+              label: localizeUi("ui.longTermMemory.memoryvault.persona"),
+              searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchPersonas"),
+              emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingPersonas"),
+              accessibleLabel: (count) => localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+                label: localizeUi("ui.longTermMemory.memoryvault.persona"),
+                count,
+              }),
+            },
+            chat: {
+              label: localizeUi("ui.longTermMemory.memoryvault.chat"),
+              searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchChats"),
+              emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingChats"),
+              accessibleLabel: (count) => localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+                label: localizeUi("ui.longTermMemory.memoryvault.chat"),
+                count,
+              }),
+            },
+            branch: {
+              label: localizeUi("ui.longTermMemory.memoryvault.branch"),
+              searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchBranches"),
+              emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingBranches"),
+              accessibleLabel: (count) => localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+                label: localizeUi("ui.longTermMemory.memoryvault.branch"),
+                count,
+              }),
+            },
+          }}
+          onToggle={selectTarget}
+        />
+      </section>
       <div className="divide-y divide-[var(--border)] border-y border-[var(--border)]">
         {outcomes.map(({ note, state }) => (
           <div key={note.id} className="flex min-h-11 items-center justify-between gap-3 py-2 text-sm">
@@ -901,7 +1004,6 @@ export default function MemoryVault({
   );
   const targetContextKey = useRef(contextKey);
   const [statusFilter, setStatusFilter] = useState<LtmStatus | "all">(initialNavigatorState?.statusFilter ?? "all");
-  const [typeFilter, setTypeFilter] = useState<LtmNoteType | "all">(initialNavigatorState?.typeFilter ?? "all");
   const [scopeMode, setScopeMode] = useState<LtmMode | "all">(props.chatMode ?? "all");
   const [sourceFilter, setSourceFilter] = useState(initialNavigatorState?.sourceFilter ?? false);
   const [sort, setSort] = useState<"updated" | "title" | "created">(initialNavigatorState?.sort ?? "updated");
@@ -968,18 +1070,16 @@ export default function MemoryVault({
     navigatorStates.set(contextKey, {
       search,
       statusFilter,
-      typeFilter,
       sourceFilter,
       sort,
       scrollTop: navigatorScrollRef.current?.scrollTop ?? initialNavigatorState?.scrollTop ?? 0,
     });
-  }, [contextKey, initialNavigatorState?.scrollTop, search, sort, sourceFilter, statusFilter, typeFilter]);
+  }, [contextKey, initialNavigatorState?.scrollTop, search, sort, sourceFilter, statusFilter]);
   useEffect(() => {
     navigatorContextRef.current = contextKey;
     const state = navigatorStates.get(contextKey) ?? {
       search: "",
       statusFilter: "all" as const,
-      typeFilter: "all" as const,
       sourceFilter: false,
       sort: "updated" as const,
       scrollTop: 0,
@@ -987,7 +1087,6 @@ export default function MemoryVault({
     navigatorStates.set(contextKey, state);
     setSearch(state.search);
     setStatusFilter(state.statusFilter);
-    setTypeFilter(state.typeFilter);
     setSourceFilter(state.sourceFilter);
     setSort(state.sort);
     requestAnimationFrame(() => {
@@ -1159,7 +1258,6 @@ export default function MemoryVault({
   const visible = allNotes.filter(
     (note) =>
       (statusFilter === "all" || note.status === statusFilter) &&
-      (typeFilter === "all" || note.type === typeFilter) &&
       (sourceFilter ? note.type === "source" : note.type !== "source") &&
         (!search.trim() || searchable(note, allNotes, subjectSearchLabel).includes(search.trim().toLocaleLowerCase())),
   ).sort((left, right) =>
@@ -1225,12 +1323,7 @@ export default function MemoryVault({
     })),
     ...(scopeTargets.data?.characters ?? []).map((character) => ({
       id: `character:${character.id}`,
-      label:
-        character.label === character.id
-          ? localizeUi("ui.longTermMemory.memoryvault.character")
-          : localizeUi("ui.longTermMemory.memoryvault.characterWithName", {
-              character: character.label,
-            }),
+      label: character.label,
       scope: { characterIds: [character.id] },
     })),
     ...(scopeTargets.data?.personas ?? []).map((persona) => ({
@@ -1346,6 +1439,24 @@ export default function MemoryVault({
       ...(selectedCharacterId ? { characterIds: [selectedCharacterId] } : {}),
     },
   }));
+  const modeScopeTargets: Target[] = modes.map((mode) => ({
+    id: mode,
+    label: modeLabel(mode),
+  }));
+  const statusScopeTargets: Target[] = statuses.map((status) => ({
+    id: status,
+    label: statusLabel(status),
+  }));
+  const sortScopeTargets: Target[] = [
+    {
+      id: "title",
+      label: localizeUi("ui.longTermMemory.memoryvault.sortTitle"),
+    },
+    {
+      id: "created",
+      label: localizeUi("ui.longTermMemory.memoryvault.sortCreated"),
+    },
+  ];
   const pickerTargets = useMemo<PickerTarget[]>(
     () => [
       ...(scopeTargets.data?.chats ?? []).map((chat) => ({
@@ -2151,12 +2262,6 @@ export default function MemoryVault({
   async function batch(action: "status" | "modes" | "availability" | "remove-availability" | "archive" | "delete") {
     await runBatchForIds([...checked], action);
   }
-  function previewBulkAvailability(action: "add" | "remove") {
-    if (!bulkAvailabilityTarget && !bulkAvailabilityModes.length) return;
-    setBulkAvailabilityAction(action);
-    setAvailabilityOpen("bulk");
-    setMobilePaneAndFocus("workbench");
-  }
   const runNoteAction = async (
     event: { preventDefault: () => void; stopPropagation: () => void },
     note: LtmNote,
@@ -2383,26 +2488,17 @@ export default function MemoryVault({
             />
           </summary>
           <div className="grid gap-2 border-t border-[var(--border)] p-3">
-            <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-              <span>{localizeUi("ui.longTermMemory.memoryvault.chatModes")}</span>
-              <select
-                className={`${inputClass} text-xs`}
-                value={scopeMode}
-                aria-label={localizeUi("ui.longTermMemory.memoryvault.chatModes")}
-                onChange={(event) =>
-                  void changeScopeMode(event.target.value as LtmMode | "all")
-                }
-              >
-                <option value="all">
-                  {localizeUi("ui.longTermMemory.memoryvault.allChatModes")}
-                </option>
-                {modes.map((mode) => (
-                  <option key={mode} value={mode}>
-                    {modeLabel(mode)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <ScopeTargetPicker
+              kind="mode"
+              label={localizeUi("ui.longTermMemory.memoryvault.chatModes")}
+              value={scopeMode === "all" ? localizeUi("ui.longTermMemory.memoryvault.allChatModes") : modeLabel(scopeMode)}
+              allLabel={localizeUi("ui.longTermMemory.memoryvault.allChatModes")}
+              searchLabel={localizeUi("ui.longTermMemory.memoryvault.searchChatModes")}
+              searchable={false}
+              targets={modeScopeTargets}
+              onClear={() => void changeScopeMode("all")}
+              onSelect={(candidate) => void changeScopeMode(candidate.id as LtmMode)}
+            />
             <ScopeTargetPicker
               kind="character"
               label={localizeUi("ui.longTermMemory.memoryvault.character")}
@@ -2488,32 +2584,28 @@ export default function MemoryVault({
             </button>
           ) : null}
         </label>
-        <select className={`${inputClass} text-xs`} value={typeFilter} aria-label={localizeUi("ui.longTermMemory.memoryvault.filterByType")} onChange={(event) => setTypeFilter(event.target.value as LtmNoteType | "all")}>
-          <option value="all">{localizeUi("ui.longTermMemory.memoryvault.allMemoryTypes")}</option>
-          {noteTypes.map((type) => <option key={type} value={type}>{noteTypeLabel(type)}</option>)}
-        </select>
-        <select
-          className={`${inputClass} text-xs`}
-          value={statusFilter}
-          onChange={(event) =>
-            setStatusFilter(event.target.value as LtmStatus | "all")
-          }
-          aria-label={localizeUi(
-            "ui.longTermMemory.memoryvault.filterByStatus",
-          )}
-        >
-          <option value="all">
-            {localizeUi("ui.longTermMemory.memoryvault.allStatuses")}
-          </option>
-          {statuses.map((status) => (
-            <option key={status} value={status}>
-              {statusLabel(status)}
-            </option>
-          ))}
-        </select>
-        <select className={`${inputClass} text-xs`} value={sort} aria-label={localizeUi("ui.longTermMemory.memoryvault.sortMemories")} onChange={(event) => setSort(event.target.value as "updated" | "title" | "created")}>
-          <option value="updated">{localizeUi("ui.longTermMemory.memoryvault.recentlyUpdated")}</option><option value="title">{localizeUi("ui.longTermMemory.memoryvault.sortTitle")}</option><option value="created">{localizeUi("ui.longTermMemory.memoryvault.sortCreated")}</option>
-        </select>
+        <ScopeTargetPicker
+          kind="status"
+          label={localizeUi("ui.longTermMemory.memoryvault.showMemories")}
+          value={statusFilter === "all" ? localizeUi("ui.longTermMemory.memoryvault.allStatuses") : statusLabel(statusFilter)}
+          allLabel={localizeUi("ui.longTermMemory.memoryvault.allStatuses")}
+          searchLabel={localizeUi("ui.longTermMemory.memoryvault.searchStatuses")}
+          searchable={false}
+          targets={statusScopeTargets}
+          onClear={() => setStatusFilter("all")}
+          onSelect={(candidate) => setStatusFilter(candidate.id as LtmStatus)}
+        />
+        <ScopeTargetPicker
+          kind="sort"
+          label={localizeUi("ui.longTermMemory.memoryvault.sortBy")}
+          value={sort === "updated" ? localizeUi("ui.longTermMemory.memoryvault.recentlyUpdated") : sortScopeTargets.find((candidate) => candidate.id === sort)?.label ?? sort}
+          allLabel={localizeUi("ui.longTermMemory.memoryvault.recentlyUpdated")}
+          searchLabel={localizeUi("ui.longTermMemory.memoryvault.searchSortOptions")}
+          searchable={false}
+          targets={sortScopeTargets}
+          onClear={() => setSort("updated")}
+          onSelect={(candidate) => setSort(candidate.id as "title" | "created")}
+        />
         <div className="col-span-2 flex flex-wrap items-center gap-3 border-t border-[var(--border)] pt-2">
           <Button onClick={() => { setSelectMode((value) => !value); setChecked(new Set()); }} data-ltm-select-mode>{selectMode ? localizeUi("ui.longTermMemory.memoryvault.done") : localizeUi("ui.longTermMemory.memoryvault.select")}</Button>
           <Button onClick={() => setSourceFilter((value) => !value)} aria-pressed={sourceFilter} data-ltm-source-filter><FileText aria-hidden="true" size="1rem" className="shrink-0" />{localizeUi("ui.longTermMemory.memoryvault.sources")}</Button>
@@ -2599,54 +2691,17 @@ export default function MemoryVault({
             >
               {localizeUi("ui.longTermMemory.memoryvault.setModes")}
             </Button>
-            <fieldset className="flex flex-wrap items-center gap-2">
-              <legend className="sr-only">
-                {localizeUi("ui.longTermMemory.memoryvault.addAvailability")}
-              </legend>
-              <select
-                className={inputClass}
-                value={bulkAvailabilityTarget}
-                aria-label={localizeUi("ui.longTermMemory.memoryvault.addPlace")}
-                onChange={(event) => setBulkAvailabilityTarget(event.target.value)}
-              >
-                <option value="">
-                  {localizeUi("ui.longTermMemory.memoryvault.addPlace")}
-                </option>
-                {pickerTargets.map((target) => (
-                  <option key={`${target.kind}:${target.id}`} value={`${target.kind}:${target.id}`}>
-                    {target.label}
-                  </option>
-                ))}
-              </select>
-              {modes.map((mode) => (
-                <label key={`availability-${mode}`} className="flex min-h-8 items-center gap-1 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={bulkAvailabilityModes.includes(mode)}
-                    onChange={() =>
-                      setBulkAvailabilityModes((current) =>
-                        current.includes(mode)
-                          ? current.filter((item) => item !== mode)
-                          : [...current, mode],
-                      )
-                    }
-                  />
-                  {modeLabel(mode)}
-                </label>
-              ))}
-              <Button
-                disabled={Boolean(busy) || (!bulkAvailabilityTarget && !bulkAvailabilityModes.length)}
-                onClick={() => previewBulkAvailability("add")}
-              >
-                {localizeUi("ui.longTermMemory.memoryvault.addAvailability")}
-              </Button>
-              <Button
-                disabled={Boolean(busy) || (!bulkAvailabilityTarget && !bulkAvailabilityModes.length)}
-                onClick={() => previewBulkAvailability("remove")}
-              >
-                {localizeUi("ui.longTermMemory.memoryvault.removeAvailability")}
-              </Button>
-            </fieldset>
+            <Button
+              disabled={Boolean(busy)}
+              onClick={() => {
+                setBulkAvailabilityAction("add");
+                setAvailabilityOpen("bulk");
+                setMobilePaneAndFocus("workbench");
+              }}
+              data-ltm-bulk-availability
+            >
+              {localizeUi("ui.longTermMemory.memoryvault.changeAvailability")}
+            </Button>
             <Button
               disabled={Boolean(busy)}
               onClick={() => void batch("archive")}
@@ -2979,8 +3034,12 @@ export default function MemoryVault({
             action={bulkAvailabilityAction}
             target={bulkAvailabilityTarget}
             modes={bulkAvailabilityModes}
+            availabilityTargets={availabilityTargets}
             localizeUi={localizeUi}
             modeLabel={modeLabel}
+            onActionChange={setBulkAvailabilityAction}
+            onModesChange={setBulkAvailabilityModes}
+            onTargetChange={setBulkAvailabilityTarget}
             onApply={() => {
               setAvailabilityOpen(null);
               void batch(bulkAvailabilityAction === "add" ? "availability" : "remove-availability");

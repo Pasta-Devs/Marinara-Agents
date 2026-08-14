@@ -1040,10 +1040,9 @@ async function main() {
       assert.equal(scopeControlStyle.chevronAfterLabel, true);
       assert.equal(
         await memoryScope
-          .locator('[data-ltm-memory-scope-picker="character"]')
-          .getByText("Character A", { exact: true })
-          .count(),
-        1,
+          .locator('[data-ltm-memory-scope-target="character:character-a"]')
+          .textContent(),
+        "Character A",
       );
       assert.equal(
         await memoryScope
