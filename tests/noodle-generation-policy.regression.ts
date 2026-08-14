@@ -1,10 +1,5 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import {
-  noodleTimelineRefreshMaxTokens,
-  noodleTimelinePostTargetInstruction,
-  noodleTimelinePostTargetRange,
-} from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-post-target";
 import { noodleSamplingOptions } from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-sampling-options";
 
 const prompt = readFileSync(
@@ -13,14 +8,6 @@ const prompt = readFileSync(
 );
 const responseFormat = readFileSync(
   "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-response-format.ts",
-  "utf8",
-);
-const publicPrompt = readFileSync(
-  "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-public-prompt.service.ts",
-  "utf8",
-);
-const publicGeneration = readFileSync(
-  "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-public-generation.service.ts",
   "utf8",
 );
 
@@ -37,58 +24,6 @@ assert.match(responseFormat, /: \["title", "content"\]/u);
 assert.match(responseFormat, /NOODLE_POST_HARD_MAX_LENGTH = 4000/u);
 assert.match(responseFormat, /NOODLE_REPLY_HARD_MAX_LENGTH = 2000/u);
 
-assert.deepEqual(noodleTimelinePostTargetRange(19, 25), {
-  minimum: 13,
-  maximum: 19,
-});
-assert.deepEqual(noodleTimelinePostTargetRange(19, 5), {
-  minimum: 4,
-  maximum: 5,
-});
-assert.deepEqual(noodleTimelinePostTargetRange(2, 25), {
-  minimum: 1,
-  maximum: 2,
-});
-assert.deepEqual(noodleTimelinePostTargetRange(19, 0), {
-  minimum: 0,
-  maximum: 0,
-});
-assert.deepEqual(noodleTimelinePostTargetRange(0, 25), {
-  minimum: 0,
-  maximum: 0,
-});
-assert.equal(
-  noodleTimelinePostTargetInstruction(19, 25),
-  "Normal target: aim for 13-19 posts across the selected non-persona accounts, varying naturally within that range. Generate only the interactions that fit current activity. The configured post quota is a hard safety ceiling, not a slot count to fill.",
-);
-assert.equal(
-  noodleTimelinePostTargetInstruction(19, 0),
-  "Normal target: create no new posts. Generate only the interactions that fit current activity. The configured post quota is a hard safety ceiling, not a slot count to fill.",
-);
-assert.match(publicPrompt, /activeCharacters\.length \+ activeRandomUsers\.length/u);
-assert.doesNotMatch(
-  publicPrompt,
-  /Math\.min\(3, input\.settings\.maxGeneratedPostsPerRefresh\)/u,
-);
-
-// A random-user-only roster and a mixed roster receive the same fallback output
-// budget as an equally sized character roster. An explicit stored/connection value
-// is still resolved and clamped by the existing caller after this fallback is chosen.
-assert.equal(noodleTimelineRefreshMaxTokens(100), 106_496);
-assert.equal(noodleTimelineRefreshMaxTokens(67 + 33), 106_496);
-assert.equal(noodleTimelineRefreshMaxTokens(0), 4_096);
-assert.match(
-  publicGeneration,
-  /noodleTimelineRefreshMaxTokens\(selectedParticipants\.length\)/u,
-);
-assert.match(
-  publicGeneration,
-  /resolveStoredMaxTokens\([\s\S]*?noodleTimelineRefreshMaxTokens\(selectedParticipants\.length\)[\s\S]*?maxTokensOverride: input\.connection\.maxTokensOverride/u,
-);
-assert.doesNotMatch(
-  publicGeneration,
-  /selectedParticipants\.filter\(\(account\) => account\.kind === "character"\)/u,
-);
 
 // Sampling precedence: a parameter the user set on the connection wins, and the
 // package default fills only what the user left unset.
