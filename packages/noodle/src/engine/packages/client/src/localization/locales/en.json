@@ -1130,6 +1130,7 @@
   "ui.noodle.socialsettings.creatorProfilesHelp": "Manage every Creator profile and its automatic publishing. Open one for identity, access, posts, and detailed controls.",
   "ui.noodle.socialsettings.creatorProfilesSummary": "{{count}} Creator profiles, {{automating}} publishing automatically",
   "ui.noodle.socialsettings.general": "General",
+  "ui.noodle.socialsettings.images": "Images",
   "ui.noodle.socialsettings.noCreatorProfiles": "No Creator profiles yet. Add one to start publishing.",
   "ui.noodle.socialsettings.noodleTitle": "Noodle settings",
   "ui.noodle.socialsettings.noodlerGeneral": "NoodleR",

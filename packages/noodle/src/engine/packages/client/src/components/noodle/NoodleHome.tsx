@@ -206,6 +206,9 @@ const SOCIAL_SETTINGS_SECTIONS: Record<
   noodle: [
     { id: "general", labelKey: "ui.noodle.socialsettings.general" },
     { id: "timeline", labelKey: "ui.noodle.socialsettings.timeline" },
+    // Every image control lives here. They used to be split between Timeline and Advanced,
+    // which meant hunting two sections to configure one feature.
+    { id: "images", labelKey: "ui.noodle.socialsettings.images" },
     { id: "participants", labelKey: "ui.noodle.socialsettings.participants" },
     { id: "advanced", labelKey: "ui.noodle.socialsettings.advanced" },
   ],
@@ -4630,7 +4633,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
           </Section>
 
           <Section
-            visible={settingsTab === "noodle" && settingsSection === "timeline"}
+            visible={settingsTab === "noodle" && settingsSection === "images"}
             title={localizeUi(
               "ui.noodle.noodlehome.noodleAndNoodlerImageGeneration",
             )}
@@ -4815,7 +4818,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
           </Section>
 
           <Section
-            visible={settingsTab === "noodle" && settingsSection === "advanced"}
+            visible={settingsTab === "noodle" && settingsSection === "images"}
             title={localizeUi("ui.noodle.noodlehome.imageUnderstanding")}
             help={localizeUi(
               "ui.noodle.noodlehome.letsAVisionCapableConnectionDescribeTimelineImagesFor",
