@@ -1,8 +1,25 @@
 {
-  "slurp": {
-    "name": "Slurp",
-    "home": "Creator feed",
-    "emptyTitle": "Start with a fresh Slurp profile",
-    "ownerPreview": "Owner preview"
-  }
+  "slurp.home.tabLabel": "Slurp",
+  "slurp.home.title": "Creator space",
+  "slurp.home.emptyStatus": "Empty",
+  "slurp.home.emptyDescription": "Choose an Engine character or persona as the source for your first Creator profile.",
+  "slurp.home.sourceHeading": "Creator source",
+  "slurp.home.sourceDescription": "Select one direct Engine source. Slurp will keep the Creator identity separate after setup.",
+  "slurp.home.sourceRequired": "Required",
+  "slurp.home.sourceKindLabel": "Source kind",
+  "slurp.home.sourceKinds.character": "Character",
+  "slurp.home.sourceKinds.characterDescription": "Use an Engine character as the source.",
+  "slurp.home.sourceKinds.persona": "Persona",
+  "slurp.home.sourceKinds.personaDescription": "Use an Engine persona as the source.",
+  "slurp.home.sourceEntityIdLabel": "Engine source ID",
+  "slurp.home.sourceEntityIdPlaceholder": "Enter the source entity ID",
+  "slurp.home.sourcePlaceholder": "Source selection is ready for the next Slurp slice.",
+  "slurp.home.createProfile": "Create Creator profile",
+  "slurp.home.previewTitle": "Owner preview",
+  "slurp.home.previewReadOnly": "Read-only owner preview",
+  "slurp.home.previewReadOnlyDescription": "No Engine persona is available. Interactive feed state will stay unavailable until a viewer persona exists.",
+  "slurp.home.previewPersonaAvailable": "Engine persona viewer available",
+  "slurp.home.previewPersonaId": "Viewer persona ID: {{id}}",
+  "slurp.home.profilesTitle": "Creator profiles",
+  "slurp.home.profilesEmptyDescription": "No Creator profiles exist yet. Slurp starts with new package-local state."
 }

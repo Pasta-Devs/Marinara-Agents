@@ -1,79 +1,107 @@
 import { create } from "zustand";
 import type {
   SlurpNavigationState,
-  SlurpSourceReference,
+  SlurpSourceKind,
 } from "../components/slurp/slurp-navigation.types";
 
-const SLURP_STATE_KEY = "marinara:slurp:ui";
+export const SLURP_BROWSER_STATE_KEY = "marinara:slurp:ui";
 
 type PersistedSlurpState = {
   navigation?: SlurpNavigationState;
-  selectedSource?: SlurpSourceReference | null;
+  sourceKind?: SlurpSourceKind | null;
+  sourceEntityId?: string | null;
   viewerPersonaId?: string | null;
 };
 
-type SlurpPackageState = {
+export type SlurpPackageState = {
   navigation: SlurpNavigationState;
-  selectedSource: SlurpSourceReference | null;
+  sourceKind: SlurpSourceKind | null;
+  sourceEntityId: string | null;
+  /** Engine persona ID used for viewer-scoped state. */
   viewerPersonaId: string | null;
   setNavigation: (navigation: SlurpNavigationState) => void;
-  setSelectedSource: (source: SlurpSourceReference | null) => void;
-  setViewerPersonaId: (personaId: string | null) => void;
+  setSourceKind: (sourceKind: SlurpSourceKind | null) => void;
+  setSourceEntityId: (sourceEntityId: string | null) => void;
+  setViewerPersonaId: (viewerPersonaId: string | null) => void;
 };
 
-function readState(): PersistedSlurpState {
-  if (typeof window === "undefined") return {};
+function readRecord(): Record<string, unknown> | null {
   try {
-    const value = JSON.parse(window.localStorage.getItem(SLURP_STATE_KEY) ?? "null") as unknown;
-    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-    const record = value as Record<string, unknown>;
-    const navigation =
-      record.navigation && typeof record.navigation === "object" && !Array.isArray(record.navigation)
-        ? (record.navigation as SlurpNavigationState)
-        : undefined;
-    const selectedSource =
-      record.selectedSource && typeof record.selectedSource === "object" && !Array.isArray(record.selectedSource)
-        ? (record.selectedSource as SlurpSourceReference)
-        : record.selectedSource === null
-          ? null
-          : undefined;
-    return {
-      navigation,
-      selectedSource,
-      viewerPersonaId:
-        typeof record.viewerPersonaId === "string" || record.viewerPersonaId === null
-          ? record.viewerPersonaId
-          : undefined,
-    };
+    const parsed = JSON.parse(
+      window.localStorage.getItem(SLURP_BROWSER_STATE_KEY) ?? "null",
+    ) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
   } catch {
-    return {};
+    return null;
   }
 }
 
-function persist(state: Pick<SlurpPackageState, "navigation" | "selectedSource" | "viewerPersonaId">) {
+function readInitialState(): PersistedSlurpState {
+  const state = readRecord();
+  if (!state) return {};
+
+  return {
+    navigation:
+      state.navigation &&
+      typeof state.navigation === "object" &&
+      !Array.isArray(state.navigation)
+        ? (state.navigation as SlurpNavigationState)
+        : undefined,
+    sourceKind:
+      state.sourceKind === "character" || state.sourceKind === "persona"
+        ? state.sourceKind
+        : null,
+    sourceEntityId:
+      typeof state.sourceEntityId === "string" && state.sourceEntityId.trim()
+        ? state.sourceEntityId
+        : null,
+    viewerPersonaId:
+      typeof state.viewerPersonaId === "string" && state.viewerPersonaId.trim()
+        ? state.viewerPersonaId
+        : null,
+  };
+}
+
+function persistState(state: SlurpPackageState) {
   try {
-    window.localStorage.setItem(SLURP_STATE_KEY, JSON.stringify(state));
+    window.localStorage.setItem(
+      SLURP_BROWSER_STATE_KEY,
+      JSON.stringify({
+        navigation: state.navigation,
+        sourceKind: state.sourceKind,
+        sourceEntityId: state.sourceEntityId,
+        viewerPersonaId: state.viewerPersonaId,
+      } satisfies PersistedSlurpState),
+    );
   } catch {
-    // Storage is optional. The current tab remains usable in memory.
+    // The tab remains usable when browser storage is unavailable.
   }
 }
 
-const initial = readState();
+const initialState =
+  typeof window === "undefined" ? {} : readInitialState();
 
-export const useSlurpPackageStore = create<SlurpPackageState>((set, get) => ({
-  navigation: initial.navigation ?? { view: "home" },
-  selectedSource: initial.selectedSource ?? null,
-  viewerPersonaId: initial.viewerPersonaId ?? null,
+export const useSlurpUIStore = create<SlurpPackageState>((set, get) => ({
+  navigation: initialState.navigation ?? { view: "home" },
+  sourceKind: initialState.sourceKind ?? null,
+  sourceEntityId: initialState.sourceEntityId ?? null,
+  viewerPersonaId: initialState.viewerPersonaId ?? null,
   setNavigation: (navigation) => {
     set({ navigation });
-    persist({ navigation, selectedSource: get().selectedSource, viewerPersonaId: get().viewerPersonaId });
+    persistState(get());
   },
-  setSelectedSource: (selectedSource) => {
-    set({ selectedSource });
-    persist({ navigation: get().navigation, selectedSource, viewerPersonaId: get().viewerPersonaId });
+  setSourceKind: (sourceKind) => {
+    set({ sourceKind, sourceEntityId: null });
+    persistState(get());
+  },
+  setSourceEntityId: (sourceEntityId) => {
+    set({ sourceEntityId });
+    persistState(get());
   },
   setViewerPersonaId: (viewerPersonaId) => {
     set({ viewerPersonaId });
-    persist({ navigation: get().navigation, selectedSource: get().selectedSource, viewerPersonaId });
+    persistState(get());
   },
 }));
