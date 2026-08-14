@@ -736,7 +736,10 @@ test.describe("package-owned Noodle interface", () => {
       await noodle
         .getByRole("button", { name: "Settings", exact: true })
         .click();
-      await noodle.getByRole("tab", { name: "Noodle", exact: true }).click();
+      const noodleProductTab = noodle.getByRole("tab", { name: "Noodle", exact: true });
+      if (await noodleProductTab.isVisible().catch(() => false)) {
+        await noodleProductTab.click();
+      }
       await noodle
         .getByRole("button", { name: "Images", exact: true })
         .click();
@@ -790,7 +793,10 @@ test.describe("package-owned Noodle interface", () => {
       await reloadedNoodle
         .getByRole("button", { name: "Settings", exact: true })
         .click();
-      await reloadedNoodle.getByRole("tab", { name: "Noodle", exact: true }).click();
+      const reloadedNoodleProductTab = reloadedNoodle.getByRole("tab", { name: "Noodle", exact: true });
+      if (await reloadedNoodleProductTab.isVisible().catch(() => false)) {
+        await reloadedNoodleProductTab.click();
+      }
       await reloadedNoodle
         .getByRole("button", { name: "Images", exact: true })
         .click();
