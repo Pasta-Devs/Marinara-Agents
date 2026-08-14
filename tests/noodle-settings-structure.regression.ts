@@ -172,9 +172,10 @@ const schemaKeys = schemaSource
 if (schemaKeys) assert.ok(schemaKeys.length > 40, "schema keys should have parsed");
 else console.warn("  (skipped schema completeness: set MARINARA_ENGINE_ROOT to enable)");
 
+// Sliced on the declarations themselves rather than on comment prose, which moves.
 const mapBlock = defaultsModule.slice(
-  defaultsModule.indexOf("NOODLE_SETTINGS_SECTION_KEYS"),
-  defaultsModule.indexOf("Never restored by a reset"),
+  defaultsModule.indexOf("export const NOODLE_SETTINGS_SECTION_KEYS"),
+  defaultsModule.indexOf("const NOODLE_SETTINGS_RESET_EXCLUDED"),
 );
 const mappedKeys = (mapBlock.match(/"(\w+)"/gu) ?? []).map((q) => q.replaceAll('"', ""));
 
@@ -196,10 +197,32 @@ assert.deepEqual(
   "a setting must belong to exactly one section",
 );
 
-// Onboarding progress records what happened, not a preference. Resetting must never reopen the
-// wizard, so those keys are excluded from both the count and the patch.
-assert.match(defaultsModule, /NOODLE_SETTINGS_RESET_EXCLUDED[\s\S]{0,140}noodlerOnboardingComplete/u);
-assert.match(defaultsModule, /noodlerOnboardingState/u);
+// Setup keys are excluded from both the count and the patch. Their defaults describe an
+// unconfigured profile, not a chosen behaviour, so counting them lit a permanent badge on both
+// General tabs — and resetting Images would have cleared the image connections it needs.
+const excluded = defaultsModule.slice(
+  defaultsModule.indexOf("const NOODLE_SETTINGS_RESET_EXCLUDED"),
+  defaultsModule.indexOf("function isDefault"),
+);
+for (const key of [
+  "generationConnectionId",
+  "imageGenerationConnectionId",
+  "imageCaptioningConnectionId",
+  "enableNoodler",
+  "noodlerOnboardingComplete",
+  "noodlerOnboardingState",
+]) {
+  assert.match(excluded, new RegExp(`"${key}"`, "u"), `${key} must be excluded from count and reset`);
+}
+// Genuine preferences must stay counted, or the badge and reset become useless.
+for (const key of ["refreshesPerDay", "theme", "postsPerDay", "noodlerGenerationGuidance"]) {
+  assert.doesNotMatch(excluded, new RegExp(`"${key}"`, "u"), `${key} is a preference, not setup`);
+}
+// Both the count and the patch must honour the exclusions, not just one of them.
+assert.match(
+  defaultsModule,
+  /return NOODLE_SETTINGS_SECTION_KEYS\[section\]\.filter\(\s*\(key\) => !NOODLE_SETTINGS_RESET_EXCLUDED\.has\(key\) && !isDefault\(settings, key\),\s*\);/u,
+);
 
 // Object-valued settings need a value comparison, or every load reports them as changed.
 assert.match(defaultsModule, /JSON\.stringify\(current\) === JSON\.stringify\(shipped\)/u);

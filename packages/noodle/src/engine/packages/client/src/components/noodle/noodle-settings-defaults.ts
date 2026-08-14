@@ -82,11 +82,25 @@ export const NOODLE_SETTINGS_SECTION_KEYS: Record<
 };
 
 /**
- * Never restored by a reset, whatever section they belong to. These record what the player has
- * already done rather than how they want things to behave.
+ * Setup, not preference. These are excluded from the changed-count and from resets, whatever
+ * section they belong to.
+ *
+ * Their defaults describe an unconfigured profile rather than a chosen behaviour: the connection
+ * IDs all default to null and nothing works until you pick one, and enableNoodler defaults to
+ * false because NoodleR is opt-in. Counting them made both General tabs show a permanent badge
+ * for every user, which tells you nothing — and, worse, a reset of the Images section would have
+ * cleared the image connections it depends on. The onboarding keys are here for the same reason:
+ * a reset must never reopen the wizard.
  */
 const NOODLE_SETTINGS_RESET_EXCLUDED: ReadonlySet<keyof NoodleSettings> =
-  new Set(["noodlerOnboardingComplete", "noodlerOnboardingState"]);
+  new Set([
+    "generationConnectionId",
+    "imageGenerationConnectionId",
+    "imageCaptioningConnectionId",
+    "enableNoodler",
+    "noodlerOnboardingComplete",
+    "noodlerOnboardingState",
+  ]);
 
 function isDefault(settings: NoodleSettings, key: keyof NoodleSettings): boolean {
   const current = settings[key];
