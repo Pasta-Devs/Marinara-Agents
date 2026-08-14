@@ -8,13 +8,22 @@ import { ClaudeSubscriptionProvider } from "./providers/claude-subscription.prov
 import { GrokSubscriptionProvider } from "./providers/grok-subscription.provider.js";
 import { GoogleProvider } from "./providers/google.provider.js";
 import type { BaseLLMProvider } from "./base-provider.js";
+import { withConnectionDefaultParameters } from "./connection-default-provider.js";
+import { withConnectionAdmissionProvider } from "../generation/connection-admission.js";
 
-function normalizeCohereOpenAIBaseUrl(baseUrl: string): string {
+export function normalizeCohereOpenAIBaseUrl(baseUrl: string): string {
   const trimmed = baseUrl.replace(/\/+$/, "");
   const lower = trimmed.toLowerCase();
 
   if (lower.includes("/compatibility/v1")) return trimmed;
-  if (lower === "https://api.cohere.com/v2" || lower === "https://api.cohere.ai/v2") {
+  if (
+    lower === "https://api.cohere.com" ||
+    lower === "https://api.cohere.ai" ||
+    lower === "https://api.cohere.com/v1" ||
+    lower === "https://api.cohere.ai/v1" ||
+    lower === "https://api.cohere.com/v2" ||
+    lower === "https://api.cohere.ai/v2"
+  ) {
     return "https://api.cohere.ai/compatibility/v1";
   }
 
@@ -38,6 +47,10 @@ export function createLLMProvider(
    * not in the OpenAI catalog (suppression bypass). Mirrors the connection's treatAsLocalEndpoint flag.
    */
   treatAsLocalEndpoint?: boolean,
+  /** Stored connection defaults. Custom Parameters are bound to every text request made by this provider. */
+  defaultParameters?: unknown,
+  /** Configured connection ID for direct foreground calls. Fallback wrappers admit their providers separately. */
+  connectionId?: string,
 ): BaseLLMProvider {
   const normalizedMaxContext =
     typeof maxContext === "number" && Number.isFinite(maxContext) && maxContext > 0
@@ -48,13 +61,15 @@ export function createLLMProvider(
       ? Math.floor(maxTokensOverride)
       : undefined;
 
+  let resolved: BaseLLMProvider;
   switch (provider) {
     case "openai":
     case "openrouter":
     case "nanogpt":
     case "xai":
     case "mistral":
-      return new OpenAIProvider(
+    case "arli":
+      resolved = new OpenAIProvider(
         baseUrl,
         apiKey,
         normalizedMaxContext,
@@ -62,8 +77,9 @@ export function createLLMProvider(
         normalizedMaxTokensOverride,
         provider,
       );
+      break;
     case "custom":
-      return new OpenAIProvider(
+      resolved = new OpenAIProvider(
         baseUrl,
         apiKey,
         normalizedMaxContext,
@@ -73,16 +89,18 @@ export function createLLMProvider(
         undefined,
         !(treatAsLocalEndpoint ?? false),
       );
+      break;
     case "openai_chatgpt":
-      return new OpenAIChatGPTProvider(
+      resolved = new OpenAIChatGPTProvider(
         baseUrl,
         apiKey,
         normalizedMaxContext,
         openrouterProvider,
         normalizedMaxTokensOverride,
       );
+      break;
     case "cohere":
-      return new OpenAIProvider(
+      resolved = new OpenAIProvider(
         normalizeCohereOpenAIBaseUrl(baseUrl),
         apiKey,
         normalizedMaxContext,
@@ -90,16 +108,18 @@ export function createLLMProvider(
         normalizedMaxTokensOverride,
         "cohere",
       );
+      break;
     case "anthropic":
-      return new AnthropicProvider(
+      resolved = new AnthropicProvider(
         baseUrl,
         apiKey,
         normalizedMaxContext,
         openrouterProvider,
         normalizedMaxTokensOverride,
       );
+      break;
     case "claude_subscription":
-      return new ClaudeSubscriptionProvider(
+      resolved = new ClaudeSubscriptionProvider(
         baseUrl,
         apiKey,
         normalizedMaxContext,
@@ -107,18 +127,21 @@ export function createLLMProvider(
         normalizedMaxTokensOverride,
         claudeFastMode ?? false,
       );
+      break;
     case "grok_subscription":
-      return new GrokSubscriptionProvider(
+      resolved = new GrokSubscriptionProvider(
         baseUrl,
         apiKey,
         normalizedMaxContext,
         openrouterProvider,
         normalizedMaxTokensOverride,
       );
+      break;
     case "google":
-      return new GoogleProvider(baseUrl, apiKey, normalizedMaxContext, openrouterProvider, normalizedMaxTokensOverride);
+      resolved = new GoogleProvider(baseUrl, apiKey, normalizedMaxContext, openrouterProvider, normalizedMaxTokensOverride);
+      break;
     case "google_vertex":
-      return new GoogleProvider(
+      resolved = new GoogleProvider(
         baseUrl,
         apiKey,
         normalizedMaxContext,
@@ -126,8 +149,9 @@ export function createLLMProvider(
         normalizedMaxTokensOverride,
         "google_vertex",
       );
+      break;
     default:
-      return new OpenAIProvider(
+      resolved = new OpenAIProvider(
         baseUrl,
         apiKey,
         normalizedMaxContext,
@@ -137,5 +161,8 @@ export function createLLMProvider(
         undefined,
         !(treatAsLocalEndpoint ?? false),
       );
+      break;
   }
+  const configured = withConnectionDefaultParameters(resolved, defaultParameters);
+  return connectionId ? withConnectionAdmissionProvider(configured, connectionId) : configured;
 }

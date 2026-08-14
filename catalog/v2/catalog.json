@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-13T23:30:45.112Z",
+  "generatedAt": "2026-08-14T00:51:24.857Z",
   "packages": [
     {
       "manifest": {
@@ -842,8 +842,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "4701edccf12bb982dcfab97523dc2520fea0324aa4f1ee04aa70f7ce388838a6",
-            "bytes": 620695
+            "sha256": "2a546ab12fa0028f43c0960b139c4b32e5c72081a3557cc572204cf1de09f228",
+            "bytes": 620705
           }
         ],
         "permissions": [
@@ -860,8 +860,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.2.6.zip",
-        "sha256": "39912119afefc670086a05ba9425422371084f9753f64c2ec825c38ecf90eed8",
-        "bytes": 264382
+        "sha256": "5f4c8114abb6710111f875cadbdf657443eac0a3cc898460f460867cb29e19ec",
+        "bytes": 264391
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },
@@ -1057,13 +1057,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "94fd1f73b626c66bcc5cfb186aeb76844fb15779c503014a528dca439cb41223",
-            "bytes": 2417336
+            "sha256": "e87731d4a5938954f679321f4c9ac8eb43272b3e0c1bdfd37d799b05d0997f4c",
+            "bytes": 2480233
           },
           {
             "path": "client.js",
-            "sha256": "299d4fd52f7b3803a0e3d0dc5ec5ef3d11e703a4380246d60fa081c75c93183d",
-            "bytes": 2477890
+            "sha256": "7a812830737c90e21e8692bb04cf78cc6c0df898d669f6783936306b46e30939",
+            "bytes": 2543050
           },
           {
             "path": "noodle-klusek.png",
@@ -1090,8 +1090,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.0.9.zip",
-        "sha256": "8a11f620326274b9e014e2404d7af7ca66d464008702a3e6e07d348cc2f31136",
-        "bytes": 1241721
+        "sha256": "63b31fd27cfeb93f09d2fa686ccaea2804d5caab0ad743444d13d7caa0d8818f",
+        "bytes": 1264748
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },
