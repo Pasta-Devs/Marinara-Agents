@@ -29,7 +29,9 @@ assert.match(
   home,
   /const NOODLER_QUIETER_POSTS_PER_DAY = noodlerPostsPerDayForPreset\(\s*NOODLER_QUIETER_ACTIVITY_PRESET,\s*\);/u,
 );
-assert.match(wizard, /const pace = noodlerPostsPerDayForPreset\(choice\);/u);
+assert.match(wizard, /const patch = noodlerActivityPresetPatch\(choice\);/u);
+assert.match(wizard, /setAutoPostingEnabled\(patch\.autoPostingScheduleEnabled\);/u);
+assert.match(wizard, /setPostsPerDay\(patch\.postsPerDay\);/u);
 
 // It only ever steps down to Occasional. It must never write postsPerDay 0 or disable posting.
 assert.match(home, /\{ postsPerDay: NOODLER_QUIETER_POSTS_PER_DAY \}/u);

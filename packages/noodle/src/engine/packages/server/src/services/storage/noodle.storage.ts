@@ -3402,7 +3402,13 @@ export function createNoodleStorage(db: DB) {
       return db.transaction(async (tx) => {
         const postRows = await tx.select().from(noodlePosts).where(eq(noodlePosts.id, postId));
         const postRow = postRows[0];
-        if (!postRow || postRow.access !== "public" || postRow.authorAccountId !== input.creatorAccountId) return null;
+        if (
+          !postRow ||
+          (postRow.access !== "public" && postRow.access !== "locked") ||
+          postRow.authorAccountId !== input.creatorAccountId
+        ) {
+          return null;
+        }
         const creatorRows = await tx
           .select()
           .from(noodleAccounts)

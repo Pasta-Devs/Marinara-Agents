@@ -20,7 +20,9 @@ export type NoodleSettingsSectionId =
   | "images"
   | "participants"
   | "advanced"
-  | "noodler";
+  | "noodlerGeneral"
+  | "noodlerAdvanced"
+  | "noodlerParticipants";
 
 export const NOODLE_SETTINGS_SECTION_KEYS: Record<
   NoodleSettingsSectionId,
@@ -62,22 +64,24 @@ export const NOODLE_SETTINGS_SECTION_KEYS: Record<
     "carryoverHours",
     "carryoverMaxItems",
   ],
-  noodler: [
+  noodlerGeneral: [
     "enableNoodler",
-    "noodlerGenerationGuidance",
     "autoPostingScheduleEnabled",
     "postsPerDay",
     "noodlerNightQuiet",
+    // Onboarding progress, not a preference. Listed so the completeness check passes, but
+    // excluded from resets below: resetting a section must never reopen the wizard.
+    "noodlerOnboardingComplete",
+    "noodlerOnboardingState",
+  ],
+  noodlerAdvanced: ["noodlerGenerationGuidance"],
+  noodlerParticipants: [
     "fanActivityEnabled",
     "fanActivityRunsPerDay",
     "fanLikesPerRefresh",
     "fanRepliesPerRefresh",
     "fanRepostsPerRefresh",
     "fanArchetypeWeights",
-    // Onboarding progress, not a preference. Listed so the completeness check passes, but
-    // excluded from resets below: resetting a section must never reopen the wizard.
-    "noodlerOnboardingComplete",
-    "noodlerOnboardingState",
   ],
 };
 

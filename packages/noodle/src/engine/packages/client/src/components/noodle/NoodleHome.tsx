@@ -1374,15 +1374,16 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     });
   };
 
-  /**
-   * The NoodleR tab's sections are all backed by one "noodler" key group: its settings live in
-   * NoodlerPublishingSettings and the Creator surfaces rather than in per-section blocks here.
-   */
   const settingsKeyGroupFor = (
     tab: SocialSettingsTab,
     section: SocialSettingsSection,
   ): NoodleSettingsSectionId | null => {
-    if (tab === "noodler") return section === "general" ? "noodler" : null;
+    if (tab === "noodler") {
+      if (section === "general") return "noodlerGeneral";
+      if (section === "advanced") return "noodlerAdvanced";
+      if (section === "participants") return "noodlerParticipants";
+      return null;
+    }
     return section === "creators" ? null : (section as NoodleSettingsSectionId);
   };
 

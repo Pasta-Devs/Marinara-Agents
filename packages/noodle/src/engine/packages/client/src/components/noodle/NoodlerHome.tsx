@@ -3280,7 +3280,13 @@ function StageProfileView({
                 {localizeUi("ui.noodle.noodlerfanactivity.creatorMode")}
               </span>
               <select
-                value={profile.fanActivity ? (profile.fanActivity.enabled === false ? "off" : "on") : "inherit"}
+                value={
+                  profile.fanActivity?.enabled === true
+                    ? "on"
+                    : profile.fanActivity?.enabled === false
+                      ? "off"
+                      : "inherit"
+                }
                 onChange={(event) => {
                   const mode = event.target.value;
                   updateFanActivity.mutate(

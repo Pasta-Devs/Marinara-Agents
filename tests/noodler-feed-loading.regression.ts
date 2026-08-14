@@ -65,6 +65,15 @@ assert.match(unseenHook, /refetchInterval: enabled && personaId \? 30_000 : fals
 assert.doesNotMatch(unseenHook, /useNoodlerViewer/u);
 assert.doesNotMatch(unseenHook, /NoodlerViewerScope/u);
 
+const bootstrapHook = hooks.slice(
+  hooks.indexOf("export function useNoodle"),
+  hooks.indexOf("export function useRerollAmbientNoodleProfiles"),
+);
+// The bootstrap request starts only after the first marker response. A failed marker still opens
+// the bootstrap path because React Query settles pending requests on both success and error.
+assert.match(bootstrapHook, /enabled: enabled && !refreshIndicator\.isPending/u);
+assert.match(bootstrapHook, /qc\.invalidateQueries\(\{ queryKey: noodleKeys\.bootstrap\(\) \}\)/u);
+
 const routes = readFileSync(
   "packages/noodle/src/engine/packages/server/src/routes/noodle.routes.ts",
   "utf8",
@@ -120,5 +129,11 @@ const projection = signal.slice(signal.indexOf(".select({"), signal.indexOf(".fr
 assert.match(projection, /id: noodlePosts\.id/u);
 assert.match(projection, /accountId: noodlePosts\.authorAccountId/u);
 assert.doesNotMatch(projection, /content|imageUrl|imagePrompt|metadata|title/u);
+
+const fanInteraction = storage.slice(
+  storage.indexOf("async createNoodlerFanInteraction("),
+  storage.indexOf("async deleteNoodlerInteraction("),
+);
+assert.match(fanInteraction, /postRow\.access !== "public" && postRow\.access !== "locked"/u);
 
 console.log("NoodleR bounded feed and lightweight unseen-count regressions passed.");

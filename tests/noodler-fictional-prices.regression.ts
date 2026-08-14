@@ -41,11 +41,11 @@ assert.doesNotMatch(storage, /wallet: \{ coins: viewer\.settings\.wallet\.coins 
 
 // Subscribing still follows the Creator; that is unrelated to price and must survive.
 const subscribe = storage.slice(
-  storage.indexOf("noodleAccountSubscriptions).values("),
-  storage.indexOf("noodleAccountSubscriptions).values(") + 1200,
+  storage.indexOf("async subscribe("),
+  storage.indexOf("async unsubscribe("),
 );
 assert.ok(subscribe.length > 0);
-assert.match(storage, /followingAccountIds\.includes\(creatorAccountId\)/u);
+assert.match(subscribe, /followingAccountIds\.includes\(creatorAccountId\)/u);
 
 const routes = readFileSync(
   "packages/noodle/src/engine/packages/server/src/routes/noodle.routes.ts",

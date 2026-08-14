@@ -244,6 +244,21 @@ for (const key of [
   assert.equal(typeof enLocale[key], "string", `${key} must exist`);
 }
 assert.match(enLocale["ui.noodle.socialsettings.resetSectionConfirm"], /not touched/iu);
+assert.match(defaultsModule, /noodlerGeneral: \[/u);
+assert.match(defaultsModule, /noodlerAdvanced: \["noodlerGenerationGuidance"\]/u);
+assert.match(defaultsModule, /noodlerParticipants: \[/u);
+assert.match(
+  home,
+  /section === "general"\) return "noodlerGeneral";[\s\S]{0,160}section === "advanced"\) return "noodlerAdvanced";[\s\S]{0,160}section === "participants"\) return "noodlerParticipants";/u,
+  "each NoodleR settings section must reset and count only its rendered preferences",
+);
+
+// A Creator can override only archetype weights while retaining the global activity mode.
+assert.match(
+  noodlerHome,
+  /profile\.fanActivity\?\.enabled === true[\s\S]{0,140}profile\.fanActivity\?\.enabled === false[\s\S]{0,100}: "inherit"/u,
+  "weight-only Creator overrides must retain inherited activity mode",
+);
 
 // --- Publishing folded into NoodleR General ---------------------------------
 // NoodleR General held a single control while Publishing sat in its own tab. An unknown section

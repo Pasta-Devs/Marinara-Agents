@@ -764,7 +764,7 @@
   "ui.noodle.noodlerfanactivity.inheritedValue": "(global)",
   "ui.noodle.noodlerfanactivity.lastRun": "Last audience run: {{status}}",
   "ui.noodle.noodlerfanactivity.likes": "Likes per refresh",
-  "ui.noodle.noodlerfanactivity.noEligiblePosts": "No eligible posts needed audience activity.",
+  "ui.noodle.noodlerfanactivity.noEligiblePosts": "No eligible public or locked posts need audience activity.",
   "ui.noodle.noodlerfanactivity.off": "Off for this creator",
   "ui.noodle.noodlerfanactivity.on": "On for this creator",
   "ui.noodle.noodlerfanactivity.refreshNow": "Run audience activity now",

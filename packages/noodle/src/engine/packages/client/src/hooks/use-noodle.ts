@@ -160,7 +160,9 @@ export function useNoodle(enabled = true) {
   return useQuery({
     queryKey: noodleKeys.bootstrap(),
     queryFn: () => api.get<NoodleBootstrap>("/noodle"),
-    enabled,
+    // Take the first refresh marker before the bootstrap snapshot. This prevents a completed
+    // refresh from becoming the baseline while an older bootstrap response is still in flight.
+    enabled: enabled && !refreshIndicator.isPending,
     staleTime: 10_000,
     structuralSharing: (current, next) =>
       preservePollVotes(

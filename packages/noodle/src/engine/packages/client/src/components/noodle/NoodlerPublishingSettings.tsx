@@ -21,6 +21,7 @@ import { cn } from "../../lib/utils";
 import { Avatar } from "./NoodleShell";
 import {
   NOODLER_ACTIVITY_PRESETS,
+  noodlerActivityPresetPatch,
   noodlerPostsPerDayForPreset,
   type NoodlerActivityPreset,
 } from "./noodler-activity-presets";
@@ -346,18 +347,18 @@ export function NoodlerPublishingSettings({ active, view, onOpenCreator }: Noodl
           <div className="flex flex-wrap gap-2">
             {NOODLER_ACTIVITY_PRESETS.filter((preset) => preset !== "manual").map((preset) => {
               const pace = noodlerPostsPerDayForPreset(preset as Exclude<NoodlerActivityPreset, "manual">);
-              const active = settings?.postsPerDay === pace;
+              const isSelectedPace = settings?.postsPerDay === pace;
               return (
                 <button
                   key={preset}
                   type="button"
                   disabled={updateSettings.isPending || !settings}
                   onClick={() =>
-                    updateSettings.mutate({ postsPerDay: pace }, { onError: toastToggleFailure })
+                    updateSettings.mutate(noodlerActivityPresetPatch(preset), { onError: toastToggleFailure })
                   }
                   className={cn(
                     "min-h-9 rounded-md border px-3 text-xs font-semibold transition-colors disabled:opacity-40",
-                    active
+                    isSelectedPace
                       ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]"
                       : "border-[var(--border)] hover:bg-[var(--accent)]",
                   )}

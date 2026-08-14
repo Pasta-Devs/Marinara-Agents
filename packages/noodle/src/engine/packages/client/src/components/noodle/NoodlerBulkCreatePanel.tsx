@@ -40,7 +40,7 @@ import { Avatar, getNoodleAccentStyle, NOODLE_PINK } from "./NoodleShell";
 import {
   NOODLER_ACTIVITY_PRESETS,
   NOODLER_DEFAULT_ACTIVITY_PRESET,
-  noodlerPostsPerDayForPreset,
+  noodlerActivityPresetPatch,
   type NoodlerActivityPreset,
 } from "./noodler-activity-presets";
 import { LockedNoodlerPostCard } from "./NoodlerPostCard";
@@ -245,14 +245,12 @@ export function NoodlerOnboardingWizard({
   };
   const chooseActivity = (choice: NoodlerActivityPreset) => {
     setActivityChoice(choice);
-    if (choice === "manual") {
-      setAutoPostingEnabled(false);
-      return;
+    const patch = noodlerActivityPresetPatch(choice);
+    setAutoPostingEnabled(patch.autoPostingScheduleEnabled);
+    if (patch.postsPerDay !== undefined) {
+      setPostsPerDay(patch.postsPerDay);
+      setPostsPerDayDraft(String(patch.postsPerDay));
     }
-    setAutoPostingEnabled(true);
-    const pace = noodlerPostsPerDayForPreset(choice);
-    setPostsPerDay(pace);
-    setPostsPerDayDraft(String(pace));
   };
   const failedIds = outcomes
     .filter((outcome) => outcome.status !== "generated")

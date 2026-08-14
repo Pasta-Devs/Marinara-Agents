@@ -785,7 +785,7 @@ export async function noodleRoutes(app: FastifyInstance) {
       interactionsByPostId.set(interaction.postId, existing);
     }
     return new Map(
-      posts.map((post): [string, NoodlerPostView] => {
+      posts.map((post): [string, NoodlerPricedPostView] => {
         const locked = !viewablePostIds.has(post.id);
         const allInteractions = interactionsByPostId.get(post.id) ?? [];
         const visibleInteractions = allInteractions.filter(
