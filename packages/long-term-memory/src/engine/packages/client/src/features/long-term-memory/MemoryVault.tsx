@@ -392,12 +392,16 @@ export default function MemoryVault({
     kind: "chat" | "character" | "group" | "persona",
     id: string,
     targets: ReadonlyArray<{ id: string; label: string }>,
+    fallbackLabels: Partial<
+      Record<"chat" | "character" | "group" | "persona", string>
+    > = {},
   ) =>
     formatScopeTargetLabel(kind, id, targets, {
       chat: localizeUi("ui.longTermMemory.memoryvault.chat"),
       character: localizeUi("ui.longTermMemory.memoryvault.character"),
       group: localizeUi("ui.longTermMemory.memoryvault.branchGroup"),
       persona: localizeUi("ui.longTermMemory.memoryvault.persona"),
+      ...fallbackLabels,
     });
   const client = useQueryClient();
   const statusInputId = useId();
