@@ -737,12 +737,12 @@ test.describe("package-owned Noodle interface", () => {
         .getByRole("button", { name: "Settings", exact: true })
         .click();
       const noodleProductTab = noodle.getByRole("tab", { name: "Noodle", exact: true });
+      const imagesSection = noodle.getByRole("button", { name: "Images", exact: true });
+      await expect(noodleProductTab.or(imagesSection)).toBeVisible();
       if (await noodleProductTab.isVisible().catch(() => false)) {
         await noodleProductTab.click();
       }
-      await noodle
-        .getByRole("button", { name: "Images", exact: true })
-        .click();
+      await imagesSection.click();
 
       const imageLimitInput = noodle
         .locator("label")
@@ -794,12 +794,12 @@ test.describe("package-owned Noodle interface", () => {
         .getByRole("button", { name: "Settings", exact: true })
         .click();
       const reloadedNoodleProductTab = reloadedNoodle.getByRole("tab", { name: "Noodle", exact: true });
+      const reloadedImagesSection = reloadedNoodle.getByRole("button", { name: "Images", exact: true });
+      await expect(reloadedNoodleProductTab.or(reloadedImagesSection)).toBeVisible();
       if (await reloadedNoodleProductTab.isVisible().catch(() => false)) {
         await reloadedNoodleProductTab.click();
       }
-      await reloadedNoodle
-        .getByRole("button", { name: "Images", exact: true })
-        .click();
+      await reloadedImagesSection.click();
       await expect(
         reloadedNoodle
           .locator("label")
