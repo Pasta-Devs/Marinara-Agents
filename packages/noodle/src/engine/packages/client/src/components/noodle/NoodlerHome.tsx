@@ -111,6 +111,15 @@ import { useNoodlerMediaSrc } from "../../hooks/use-noodler-media-src";
 import { summarizeRefreshOutcomes } from "./noodle-auto-post";
 import { NoodlerOnboardingWizard } from "./NoodlerBulkCreatePanel";
 import {
+  NOODLER_QUIETER_ACTIVITY_PRESET,
+  noodlerPostsPerDayForPreset,
+} from "./noodler-activity-presets";
+
+/** Resolved once from the shared preset table so "quieter" means the same thing everywhere. */
+const NOODLER_QUIETER_POSTS_PER_DAY = noodlerPostsPerDayForPreset(
+  NOODLER_QUIETER_ACTIVITY_PRESET,
+);
+import {
   Avatar,
   getNoodleAccentStyle,
   NewSinceLastVisitDivider,
@@ -276,10 +285,6 @@ const DISCLOSURE_OPTIONS: Array<{
     guidance: "The AI receives a reduced, non-identifying inspiration brief and avoids distinctive canonical details.",
   },
 ];
-
-// The Occasional preset from onboarding. Kept in one place so the quieter action and the
-// wizard cannot drift to different definitions of "quieter".
-const NOODLER_OCCASIONAL_POSTS_PER_DAY = 2;
 
 const EMPTY_STAGE_PROFILE: NoodleStageProfileInput = {
   displayName: "",
@@ -822,15 +827,15 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   // silence automatic posting by accident. The ceiling is global, not per Creator, so adding
   // Creators never speeds the feed back up.
   const quieterPending = updateNoodleSettings.isPending;
-  const canQuieten = (data?.settings.postsPerDay ?? 0) > NOODLER_OCCASIONAL_POSTS_PER_DAY;
+  const canQuieten = (data?.settings.postsPerDay ?? 0) > NOODLER_QUIETER_POSTS_PER_DAY;
   const makeQuieter = () =>
     updateNoodleSettings.mutate(
-      { postsPerDay: NOODLER_OCCASIONAL_POSTS_PER_DAY },
+      { postsPerDay: NOODLER_QUIETER_POSTS_PER_DAY },
       {
         onSuccess: () =>
           toast.success(
             localizeUi("ui.noodle.noodlerhome.quieterApplied", {
-              count: NOODLER_OCCASIONAL_POSTS_PER_DAY,
+              count: NOODLER_QUIETER_POSTS_PER_DAY,
             }),
           ),
         onError: (error) =>
@@ -1646,7 +1651,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
                   onClick={makeQuieter}
                   disabled={quieterPending}
                   title={localizeUi("ui.noodle.noodlerhome.makeNoodlerQuieterDetail", {
-                    count: NOODLER_OCCASIONAL_POSTS_PER_DAY,
+                    count: NOODLER_QUIETER_POSTS_PER_DAY,
                   })}
                   className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
                 >

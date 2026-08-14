@@ -21,16 +21,18 @@ const enLocale = JSON.parse(
   ),
 ) as Record<string, string>;
 
-// One definition of "quieter", and it matches the wizard's Occasional preset.
-assert.match(home, /const NOODLER_OCCASIONAL_POSTS_PER_DAY = 2;/u);
+// One definition of "quieter": the pace is resolved from the shared preset table rather than
+// restated here, so this file and the wizard cannot drift apart. The table's own contents are
+// covered by noodle-settings-structure.regression.ts.
+assert.match(home, /from "\.\/noodler-activity-presets"/u);
 assert.match(
-  wizard,
-  /const pace = choice === "occasional" \? 2 : choice === "veryActive" \? 8 : 4;/u,
-  "the wizard's Occasional pace must still be 2",
+  home,
+  /const NOODLER_QUIETER_POSTS_PER_DAY = noodlerPostsPerDayForPreset\(\s*NOODLER_QUIETER_ACTIVITY_PRESET,\s*\);/u,
 );
+assert.match(wizard, /const pace = noodlerPostsPerDayForPreset\(choice\);/u);
 
 // It only ever steps down to Occasional. It must never write postsPerDay 0 or disable posting.
-assert.match(home, /\{ postsPerDay: NOODLER_OCCASIONAL_POSTS_PER_DAY \}/u);
+assert.match(home, /\{ postsPerDay: NOODLER_QUIETER_POSTS_PER_DAY \}/u);
 const quieterBlock = home.slice(
   home.indexOf("const makeQuieter ="),
   home.indexOf("const beginCreate ="),
@@ -38,7 +40,7 @@ const quieterBlock = home.slice(
 assert.doesNotMatch(quieterBlock, /autoPosting|enableNoodler|postsPerDay: 0/u);
 
 // Hidden once the feed is already Occasional or quieter, so it never no-ops.
-assert.match(home, /const canQuieten = \(data\?\.settings\.postsPerDay \?\? 0\) > NOODLER_OCCASIONAL_POSTS_PER_DAY;/u);
+assert.match(home, /const canQuieten = \(data\?\.settings\.postsPerDay \?\? 0\) > NOODLER_QUIETER_POSTS_PER_DAY;/u);
 assert.match(home, /\{canQuieten && \(\s*<button/u);
 
 // A pending save disables it, and a failed one says so rather than pretending it worked.

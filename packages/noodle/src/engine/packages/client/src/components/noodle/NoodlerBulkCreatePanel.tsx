@@ -37,6 +37,12 @@ import {
 import { cn, generateClientId } from "../../lib/utils";
 import { Modal } from "../ui/Modal";
 import { Avatar, getNoodleAccentStyle, NOODLE_PINK } from "./NoodleShell";
+import {
+  NOODLER_ACTIVITY_PRESETS,
+  NOODLER_DEFAULT_ACTIVITY_PRESET,
+  noodlerPostsPerDayForPreset,
+  type NoodlerActivityPreset,
+} from "./noodler-activity-presets";
 import { LockedNoodlerPostCard } from "./NoodlerPostCard";
 
 type Step = 1 | 2 | 3 | 4 | 5;
@@ -45,7 +51,6 @@ type Intro = 0 | 1 | 2 | 3 | null;
 type SetupLane = "easy" | "customize" | null;
 const LAST_INTRO = 3;
 type CompletionKind = NoodlerOnboardingCompletion;
-type ActivityChoice = "manual" | "occasional" | "lively" | "veryActive";
 
 const clampPostsPerDay = (raw: string) =>
   Math.max(
@@ -123,7 +128,7 @@ export function NoodlerOnboardingWizard({
   const [setupLane, setSetupLane] = useState<SetupLane>(selectionOnly ? "easy" : null);
   const [postExplored, setPostExplored] = useState(false);
   const [activityChoice, setActivityChoice] =
-    useState<ActivityChoice>("lively");
+    useState<NoodlerActivityPreset>(NOODLER_DEFAULT_ACTIVITY_PRESET);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectionInitialized, setSelectionInitialized] = useState(false);
   const [settingsSeeded, setSettingsSeeded] = useState(false);
@@ -177,7 +182,7 @@ export function NoodlerOnboardingWizard({
     setIntro(selectionOnly ? null : 0);
     setSetupLane(selectionOnly ? "easy" : null);
     setPostExplored(false);
-    setActivityChoice("lively");
+    setActivityChoice(NOODLER_DEFAULT_ACTIVITY_PRESET);
     setSelected(new Set());
     setSelectionInitialized(false);
     setSettingsSeeded(false);
@@ -238,14 +243,14 @@ export function NoodlerOnboardingWizard({
       return next;
     });
   };
-  const chooseActivity = (choice: ActivityChoice) => {
+  const chooseActivity = (choice: NoodlerActivityPreset) => {
     setActivityChoice(choice);
     if (choice === "manual") {
       setAutoPostingEnabled(false);
       return;
     }
     setAutoPostingEnabled(true);
-    const pace = choice === "occasional" ? 2 : choice === "veryActive" ? 8 : 4;
+    const pace = noodlerPostsPerDayForPreset(choice);
     setPostsPerDay(pace);
     setPostsPerDayDraft(String(pace));
   };
@@ -671,14 +676,7 @@ export function NoodlerOnboardingWizard({
                 help={t("ui.noodle.noodlerwizard.intro.activity.help")}
               />
               <div className="grid gap-2 sm:grid-cols-2">
-                {(
-                  [
-                    "manual",
-                    "occasional",
-                    "lively",
-                    "veryActive",
-                  ] as ActivityChoice[]
-                ).map((choice) => (
+                {NOODLER_ACTIVITY_PRESETS.map((choice) => (
                   <button
                     key={choice}
                     type="button"
