@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { normalizeNoodlerStageProfileDraft } from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodler-stage-profile-normalize";
+import { normalizeNoodlerStageProfileDraft } from "../packages/slurp/src/engine/packages/server/src/services/slurp/noodler-stage-profile-normalize";
 
 // A model that answers with its own field names used to fail the whole creator, which the
 // wizard reported as "creation failed" for every selected character.

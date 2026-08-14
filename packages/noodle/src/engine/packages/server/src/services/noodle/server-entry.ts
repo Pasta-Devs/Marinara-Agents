@@ -16,19 +16,18 @@ export async function activate({
   };
 }) {
   // Capability routes are registered through the host's revocable privileged route slots.
-  // Noodle's existing plugin creates storage adapters while it registers, so
-  // expose only the host database on the otherwise constrained collector.
+  // Noodle exposes only the public timeline capability. Creator routes run in Slurp.
   const routes: FastifyPluginAsync = async (router) => {
     await noodleRoutes(Object.assign(router, { db: app.db }) as FastifyInstance);
   };
   const cleanups = [
     await api.registerPrivilegedRoutes(routes, { prefix: "/api/noodle" }),
-    api.registerService("noodle:backup", {
-      pause: async <T>(run: () => Promise<T>) => run(),
-    }),
+    api.registerService("noodle:backup", { pause: async <T>(run: () => Promise<T>) => run() }),
     api.registerService("noodle:prompt-context", { build: buildRecentSocialMediaActivityBlock }),
   ];
-  const schedulers = [startNoodleRefreshScheduler(app)];
+  const schedulers = [
+    startNoodleRefreshScheduler(app),
+  ];
   active = true;
   return async () => {
     active = false;

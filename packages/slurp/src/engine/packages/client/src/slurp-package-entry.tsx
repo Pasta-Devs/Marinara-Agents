@@ -4,8 +4,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import i18next from "i18next";
 import { I18nextProvider, initReactI18next } from "react-i18next";
 import english from "./localization/locales/en.json";
-import { SlurpHome } from "./components/slurp/SlurpHome";
+import { NoodlerHome } from "./components/slurp/NoodlerHome";
 import { useSlurpUIStore } from "./stores/slurp-package.store";
+import { configureSlurpPackageState } from "./stores/slurp-package.store";
 
 const SLURP_ELEMENT_TAG = "marinara-capability-slurp";
 const SLURP_STYLE_ID = "marinara-capability-slurp-styles";
@@ -67,6 +68,7 @@ function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
   const setNavigation = useSlurpUIStore((state) => state.setNavigation);
 
   useEffect(() => {
+    configureSlurpPackageState(element.capabilityProps ?? {});
     const update = () => redraw((value) => value + 1);
     element.addEventListener("marinara-capability-props", update);
     return () =>
@@ -87,7 +89,7 @@ function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
     <I18nextProvider i18n={localization}>
       <QueryClientProvider client={client}>
         <div className="h-full min-h-0 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
-          <SlurpHome navigation={navigation} onNavigate={setNavigation} />
+          <NoodlerHome navigation={navigation} onNavigate={setNavigation} />
         </div>
       </QueryClientProvider>
     </I18nextProvider>

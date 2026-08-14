@@ -8,11 +8,11 @@ import { readFileSync } from "node:fs";
 // component needs a DOM to render, so this asserts the wiring in source.
 
 const panel = readFileSync(
-  "packages/noodle/src/engine/packages/client/src/components/noodle/NoodlerBulkCreatePanel.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerBulkCreatePanel.tsx",
   "utf8",
 );
 const home = readFileSync(
-  "packages/noodle/src/engine/packages/client/src/components/noodle/NoodlerHome.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerHome.tsx",
   "utf8",
 );
 
@@ -42,7 +42,7 @@ assert.match(panel, /setStep\(setupLane === "easy" \? 1 : \(\(step - 1\) as Step
 
 // The joke card must not read as a real payment.
 const enLocale = readFileSync(
-  "packages/noodle/src/engine/packages/client/src/localization/locales/en.json",
+  "packages/slurp/src/engine/packages/client/src/localization/locales/en.json",
   "utf8",
 );
 assert.match(enLocale, /"ui\.noodle\.agegate\.cardSub": "The card is fake[^"]*Nothing is charged and nothing leaves your computer\."/u);

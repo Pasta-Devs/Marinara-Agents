@@ -7,16 +7,16 @@ import { readFileSync } from "node:fs";
 // character creation rather than being folded back into the bulk list.
 
 const home = readFileSync(
-  "packages/noodle/src/engine/packages/client/src/components/noodle/NoodlerHome.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerHome.tsx",
   "utf8",
 );
 const routes = readFileSync(
-  "packages/noodle/src/engine/packages/server/src/routes/noodle.routes.ts",
+  "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts",
   "utf8",
 );
 const enLocale = JSON.parse(
   readFileSync(
-    "packages/noodle/src/engine/packages/client/src/localization/locales/en.json",
+    "packages/slurp/src/engine/packages/client/src/localization/locales/en.json",
     "utf8",
   ),
 ) as Record<string, string>;
@@ -24,13 +24,13 @@ const enLocale = JSON.parse(
 // The persona's own Creator is found by the link back to its Noodle account, not by name.
 assert.match(
   home,
-  /accountsQuery\.data\?\.find\(\(profile\) => profile\.noodleAccountId === shellPersonaAccount\.id\)/u,
+  /accountsQuery\.data\?\.find\(\(profile\) => profile\.sourceAccountId === shellPersonaAccount\.id\)/u,
 );
 
 // Both destinations reuse navigation targets that already existed: create-profile preselects the
 // source and opens at the disclosure step, so this adds no parallel creation flow.
-assert.match(home, /view: "create-profile",\s*noodleAccountId: shellPersonaAccount\.id,/u);
-assert.match(home, /myCreatorProfile\s*\?\s*\{ mode: "noodler", view: "profile", accountId: myCreatorProfile\.id \}/u);
+assert.match(home, /view: "create-profile",\s*sourceAccountId: shellPersonaAccount\.id,/u);
+assert.match(home, /myCreatorProfile\s*\?\s*\{ mode: "creator", view: "profile", accountId: myCreatorProfile\.id \}/u);
 assert.match(
   home,
   /navigation\.view !== "create-profile"\) return;[\s\S]{0,200}setCreationStep\("disclosure"\)/u,
@@ -63,7 +63,7 @@ assert.match(
 
 // Bulk onboarding stays character-only; this path is what covers personas.
 const bulk = readFileSync(
-  "packages/noodle/src/engine/packages/client/src/components/noodle/NoodlerBulkCreatePanel.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerBulkCreatePanel.tsx",
   "utf8",
 );
 assert.doesNotMatch(bulk, /kind="persona"|"persona"\s*\)/u, "bulk onboarding must not start listing personas");

@@ -1,34 +1,34 @@
 import { create } from "zustand";
-import type {
-  SlurpNavigationState,
-  SlurpSourceKind,
-} from "../components/slurp/slurp-navigation.types";
+import type { SlurpNavigationState } from "../components/slurp/slurp-navigation.types";
 
-export const SLURP_BROWSER_STATE_KEY = "marinara:slurp:ui";
+const PACKAGE_STATE_KEY = "marinara:slurp:ui";
+const LEGACY_UI_STATE_KEY = "marinara:slurp:ui";
 
 type PersistedSlurpState = {
   navigation?: SlurpNavigationState;
-  sourceKind?: SlurpSourceKind | null;
-  sourceEntityId?: string | null;
   viewerPersonaId?: string | null;
 };
 
-export type SlurpPackageState = {
+type SlurpPackageState = {
+  conversationTimeZone: string;
+  debugMode: boolean;
+  reviewImagePromptsBeforeSend: boolean;
   navigation: SlurpNavigationState;
-  sourceKind: SlurpSourceKind | null;
-  sourceEntityId: string | null;
-  /** Engine persona ID used for viewer-scoped state. */
   viewerPersonaId: string | null;
   setNavigation: (navigation: SlurpNavigationState) => void;
-  setSourceKind: (sourceKind: SlurpSourceKind | null) => void;
-  setSourceEntityId: (sourceEntityId: string | null) => void;
-  setViewerPersonaId: (viewerPersonaId: string | null) => void;
+  setViewerPersonaId: (id: string | null) => void;
 };
 
-function readRecord(): Record<string, unknown> | null {
+function isSlurpNavigation(
+  navigation: SlurpNavigationState | undefined,
+): navigation is SlurpNavigationState {
+  return navigation?.mode === "creator" || navigation?.mode === "creator-settings";
+}
+
+function readRecord(key: string): Record<string, unknown> | null {
   try {
     const parsed = JSON.parse(
-      window.localStorage.getItem(SLURP_BROWSER_STATE_KEY) ?? "null",
+      window.localStorage.getItem(key) ?? "null",
     ) as unknown;
     return parsed && typeof parsed === "object" && !Array.isArray(parsed)
       ? (parsed as Record<string, unknown>)
@@ -38,70 +38,87 @@ function readRecord(): Record<string, unknown> | null {
   }
 }
 
-function readInitialState(): PersistedSlurpState {
-  const state = readRecord();
-  if (!state) return {};
-
-  return {
-    navigation:
-      state.navigation &&
-      typeof state.navigation === "object" &&
-      !Array.isArray(state.navigation)
-        ? (state.navigation as SlurpNavigationState)
-        : undefined,
-    sourceKind:
-      state.sourceKind === "character" || state.sourceKind === "persona"
-        ? state.sourceKind
-        : null,
-    sourceEntityId:
-      typeof state.sourceEntityId === "string" && state.sourceEntityId.trim()
-        ? state.sourceEntityId
-        : null,
-    viewerPersonaId:
-      typeof state.viewerPersonaId === "string" && state.viewerPersonaId.trim()
-        ? state.viewerPersonaId
-        : null,
-  };
+function validatedPersistedState(
+  state: Record<string, unknown>,
+): PersistedSlurpState {
+  const validated: PersistedSlurpState = {};
+  if (
+    state.navigation &&
+    typeof state.navigation === "object" &&
+    !Array.isArray(state.navigation)
+  ) {
+    const navigation = state.navigation as SlurpNavigationState;
+    if (isSlurpNavigation(navigation)) {
+      validated.navigation = navigation;
+    }
+  }
+  if (
+    typeof state.viewerPersonaId === "string" ||
+    state.viewerPersonaId === null
+  ) {
+    validated.viewerPersonaId = state.viewerPersonaId;
+  }
+  return validated;
 }
 
-function persistState(state: SlurpPackageState) {
+function readInitialState(): PersistedSlurpState {
+  const packageState = readRecord(PACKAGE_STATE_KEY);
+  if (packageState) return validatedPersistedState(packageState);
+  const legacyEnvelope = readRecord(LEGACY_UI_STATE_KEY);
+  const legacyState = legacyEnvelope?.state;
+  if (
+    !legacyState ||
+    typeof legacyState !== "object" ||
+    Array.isArray(legacyState)
+  )
+    return {};
+  return validatedPersistedState(legacyState as Record<string, unknown>);
+}
+
+function persistSlurpState(
+  state: Pick<
+    SlurpPackageState,
+    "navigation" | "viewerPersonaId"
+  >,
+) {
   try {
-    window.localStorage.setItem(
-      SLURP_BROWSER_STATE_KEY,
-      JSON.stringify({
-        navigation: state.navigation,
-        sourceKind: state.sourceKind,
-        sourceEntityId: state.sourceEntityId,
-        viewerPersonaId: state.viewerPersonaId,
-      } satisfies PersistedSlurpState),
-    );
+    window.localStorage.setItem(PACKAGE_STATE_KEY, JSON.stringify(state));
   } catch {
-    // The tab remains usable when browser storage is unavailable.
+    // Private browsing can refuse storage; the tab remains usable in memory.
   }
 }
 
-const initialState =
-  typeof window === "undefined" ? {} : readInitialState();
+const initialState = typeof window === "undefined" ? {} : readInitialState();
 
 export const useSlurpUIStore = create<SlurpPackageState>((set, get) => ({
-  navigation: initialState.navigation ?? { view: "home" },
-  sourceKind: initialState.sourceKind ?? null,
-  sourceEntityId: initialState.sourceEntityId ?? null,
+  conversationTimeZone: "",
+  debugMode: false,
+  reviewImagePromptsBeforeSend: false,
+  navigation: initialState.navigation ?? { mode: "creator", view: "hub" },
   viewerPersonaId: initialState.viewerPersonaId ?? null,
   setNavigation: (navigation) => {
     set({ navigation });
-    persistState(get());
-  },
-  setSourceKind: (sourceKind) => {
-    set({ sourceKind, sourceEntityId: null });
-    persistState(get());
-  },
-  setSourceEntityId: (sourceEntityId) => {
-    set({ sourceEntityId });
-    persistState(get());
+    persistSlurpState({
+      navigation,
+      viewerPersonaId: get().viewerPersonaId,
+    });
   },
   setViewerPersonaId: (viewerPersonaId) => {
     set({ viewerPersonaId });
-    persistState(get());
+    persistSlurpState({
+      navigation: get().navigation,
+      viewerPersonaId,
+    });
   },
 }));
+
+export function configureSlurpPackageState(props: Record<string, unknown>) {
+  useSlurpUIStore.setState({
+    conversationTimeZone:
+      typeof props.conversationTimeZone === "string"
+        ? props.conversationTimeZone
+        : "",
+    debugMode: props.debugMode === true,
+    reviewImagePromptsBeforeSend: props.reviewImagePromptsBeforeSend === true,
+  });
+}

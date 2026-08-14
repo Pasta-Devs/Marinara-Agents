@@ -1,5 +1,11 @@
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import { slurpRoutes } from "../../routes/slurp.routes.js";
+import { buildRecentSocialMediaActivityBlock } from "./noodle-context.js";
+import { startNoodleRefreshScheduler } from "./noodle-refresh-scheduler.service.js";
+import { startNoodleAutoPostScheduler } from "./noodle-autopost-scheduler.service.js";
+import { startNoodlerFanActivityScheduler } from "./noodle-fan-activity-scheduler.service.js";
+
+let active = false;
 
 export async function activate({
   app,
@@ -7,14 +13,32 @@ export async function activate({
 }: {
   app: FastifyInstance;
   api: {
+    registerService<T>(key: string, service: T): () => void | Promise<void>;
     registerPrivilegedRoutes(routes: FastifyPluginAsync, options: { prefix: string }): Promise<() => void | Promise<void>>;
   };
 }) {
+  // Capability routes are registered through the host's revocable privileged route slots.
+  // Noodle's existing plugin creates storage adapters while it registers, so
+  // expose only the host database on the otherwise constrained collector.
   const routes: FastifyPluginAsync = async (router) => {
     await slurpRoutes(Object.assign(router, { db: app.db }) as FastifyInstance);
   };
-  const release = await api.registerPrivilegedRoutes(routes, { prefix: "/api/slurp" });
-  return async () => release();
+  const cleanups = [
+    await api.registerPrivilegedRoutes(routes, { prefix: "/api/slurp" }),
+    api.registerService("slurp:backup", {
+      pause: async <T>(run: () => Promise<T>) => run(),
+    }),
+    api.registerService("slurp:prompt-context", { build: buildRecentSocialMediaActivityBlock }),
+  ];
+  const schedulers = [startNoodleRefreshScheduler(app), startNoodleAutoPostScheduler(app), startNoodlerFanActivityScheduler(app)];
+  active = true;
+  return async () => {
+    active = false;
+    for (const scheduler of schedulers.reverse()) await scheduler.stop();
+    for (const cleanup of cleanups.reverse()) await cleanup();
+  };
 }
 
-export async function selfCheck() {}
+export async function selfCheck() {
+  if (!active) throw new Error("Noodle routes and schedulers did not activate");
+}

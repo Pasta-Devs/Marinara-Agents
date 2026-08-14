@@ -7,16 +7,16 @@ import { readFileSync } from "node:fs";
 // feed is already quiet and does nothing when pressed.
 
 const home = readFileSync(
-  "packages/noodle/src/engine/packages/client/src/components/noodle/NoodlerHome.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerHome.tsx",
   "utf8",
 );
 const wizard = readFileSync(
-  "packages/noodle/src/engine/packages/client/src/components/noodle/NoodlerBulkCreatePanel.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerBulkCreatePanel.tsx",
   "utf8",
 );
 const enLocale = JSON.parse(
   readFileSync(
-    "packages/noodle/src/engine/packages/client/src/localization/locales/en.json",
+    "packages/slurp/src/engine/packages/client/src/localization/locales/en.json",
     "utf8",
   ),
 ) as Record<string, string>;
