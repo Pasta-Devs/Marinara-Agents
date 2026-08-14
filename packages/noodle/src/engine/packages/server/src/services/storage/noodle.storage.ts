@@ -2,7 +2,18 @@
 // Storage: Noodle Fake Social Media
 // ──────────────────────────────────────────────
 import { existsSync } from "node:fs";
-import { and, desc, eq, gt, inArray, isNull, lt, or } from "../../db/file-query.js";
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  like,
+  lt,
+  or,
+} from "../../db/file-query.js";
 import {
   createNoodlePoll,
   DEFAULT_NOODLER_CREATOR_REPLIES_PER_24_HOURS,
@@ -64,6 +75,7 @@ import {
 import { NOODLER_FAN_IDENTITY_PREFIX } from "../noodle/noodle-fan-identity-provider.js";
 import { canViewNoodlerPost, isNoodlerHiddenFromViewer } from "../noodle/noodler-access.js";
 import {
+  NOODLER_MEDIA_URL_PREFIX,
   noodlerPostMediaUrl,
   resolveNoodlerMediaAbsolutePath,
   unlinkNoodlerMedia,
@@ -99,6 +111,12 @@ import {
   type PersistedNoodleRefreshSchedule,
 } from "../noodle/noodle-refresh-schedule.js";
 import { pruneNoodleRefreshRuns } from "./noodle-refresh-run-retention.js";
+import { normalizeNoodlerSeenAt } from "../noodle/noodler-viewer-unseen.js";
+import {
+  compareNoodlerPostSortKeysDescending,
+  isNoodlerPostAfterCursor,
+  type NoodlerPostSortKey,
+} from "../noodle/noodler-post-page.js";
 
 const NOODLE_SETTINGS_KEY = "noodle.settings";
 const NOODLE_REFRESH_SCHEDULE_KEY = "noodle.refresh-schedule";
@@ -116,6 +134,29 @@ const MANUAL_POST_INVALIDATION_MS = 60 * 60 * 1000;
 const ELAPSED_PREPARED_SLOT_MS = 60 * 60 * 1000;
 /** How long published/discarded prepared rows are kept for crash recovery before pruning. */
 const TERMINAL_PREPARED_POST_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+export type NoodlerPostPageCursor = NoodlerPostSortKey;
+
+export type NoodlerPostPageOptions = {
+  accountIds: string[];
+  /** Creator names/handles that match the current public search term. */
+  creatorSearchAccountIds?: string[];
+  /** Accounts whose post bodies are readable to this viewer. */
+  readableContentAccountIds?: string[];
+  /** Individually unlocked post IDs whose bodies are readable to this viewer. */
+  unlockedPostIds?: string[];
+  search?: string;
+  mediaOnly?: boolean;
+  readableOnly?: boolean;
+  cursor?: NoodlerPostPageCursor | null;
+  limit: number;
+};
+
+export type NoodlerPostPage = {
+  items: NoodlerManagedPost[];
+  total: number;
+  nextCursor: NoodlerPostPageCursor | null;
+};
 
 export type NoodlerPreparedPostPayload = {
   title: string | null;
@@ -771,6 +812,46 @@ function mapRefreshRun(row: RefreshRunRow): NoodleRefreshRun {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+function noodlerReadablePostCondition(options: NoodlerPostPageOptions) {
+  return or(
+    eq(noodlePosts.access, "public"),
+    inArray(
+      noodlePosts.authorAccountId,
+      options.readableContentAccountIds ?? [],
+    ),
+    inArray(noodlePosts.id, options.unlockedPostIds ?? []),
+  );
+}
+
+function noodlerPostPageCondition(
+  options: NoodlerPostPageOptions,
+  includeCursor: boolean,
+) {
+  const readable = noodlerReadablePostCondition(options);
+  return and(
+    inArray(noodlePosts.authorAccountId, options.accountIds),
+    options.mediaOnly
+      ? and(
+          isNotNull(noodlePosts.imageUrl),
+          or(
+            readable,
+            like(noodlePosts.imageUrl, `${NOODLER_MEDIA_URL_PREFIX}%`),
+          ),
+        )
+      : undefined,
+    options.readableOnly ? readable : undefined,
+    includeCursor && options.cursor
+      ? or(
+          lt(noodlePosts.createdAt, options.cursor.createdAt),
+          and(
+            eq(noodlePosts.createdAt, options.cursor.createdAt),
+            lt(noodlePosts.id, options.cursor.id),
+          ),
+        )
+      : undefined,
+  );
 }
 
 export function createNoodleStorage(db: DB) {
@@ -2460,21 +2541,189 @@ export function createNoodleStorage(db: DB) {
       const boundedLimit = Math.max(1, Math.min(50, Math.floor(limit)));
       const result = new Map<string, NoodlerManagedPost[]>();
       if (accountIds.length === 0) return result;
+      // Fan-activity is the remaining bulk caller. One ordered scan is cheaper on the
+      // file-native store than one full-table scan per creator; only bounded groups escape.
       const rows = await db
         .select()
         .from(noodlePosts)
         .where(inArray(noodlePosts.authorAccountId, accountIds))
-        .orderBy(desc(noodlePosts.createdAt));
+        .orderBy(desc(noodlePosts.createdAt), desc(noodlePosts.id));
       for (const row of rows) {
-        const post = mapManagedPost(row);
-        const existing = result.get(post.authorAccountId);
+        const existing = result.get(row.authorAccountId);
         if (existing) {
-          if (existing.length < boundedLimit) existing.push(post);
+          if (existing.length < boundedLimit) existing.push(mapManagedPost(row));
         } else {
-          result.set(post.authorAccountId, [post]);
+          result.set(row.authorAccountId, [mapManagedPost(row)]);
         }
       }
       return result;
+    },
+
+    async listNoodlerPostPage(
+      options: NoodlerPostPageOptions,
+    ): Promise<NoodlerPostPage> {
+      const limit = Math.max(1, Math.min(20, Math.floor(options.limit)));
+      if (options.accountIds.length === 0) {
+        return { items: [], total: 0, nextCursor: null };
+      }
+      const search = options.search?.trim().toLowerCase() ?? "";
+      if (search) {
+        // Search is deliberate user work, so it may scan the matching account rows. Keep the
+        // scan server-side and return only one bounded page. Literal includes() preserves the
+        // previous `%`/`_` semantics, and locked bodies never participate in matching.
+        const creatorMatches = new Set(
+          options.creatorSearchAccountIds ?? [],
+        );
+        const readableAccounts = new Set(
+          options.readableContentAccountIds ?? [],
+        );
+        const unlockedPosts = new Set(options.unlockedPostIds ?? []);
+        const matchingRows = (
+          await db
+            .select()
+            .from(noodlePosts)
+            .where(noodlerPostPageCondition(options, false))
+            .orderBy(desc(noodlePosts.createdAt), desc(noodlePosts.id))
+        ).filter((row) => {
+          const readable =
+            row.access === "public" ||
+            readableAccounts.has(row.authorAccountId) ||
+            unlockedPosts.has(row.id);
+          return (
+            creatorMatches.has(row.authorAccountId) ||
+            (row.title ?? "").toLowerCase().includes(search) ||
+            (readable &&
+              (row.content ?? "").toLowerCase().includes(search))
+          );
+        });
+        const cursorRows = options.cursor
+          ? matchingRows.filter((row) =>
+              isNoodlerPostAfterCursor(row, options.cursor!),
+            )
+          : matchingRows;
+        const pageRows = cursorRows.slice(0, limit);
+        const last = pageRows.at(-1);
+        return {
+          items: pageRows.map(mapManagedPost),
+          total: matchingRows.length,
+          nextCursor:
+            cursorRows.length > limit && last
+              ? { createdAt: last.createdAt, id: last.id }
+              : null,
+        };
+      }
+      const total = db.count(
+        noodlePosts,
+        noodlerPostPageCondition(options, false),
+      );
+      const rows = await db
+        .select()
+        .from(noodlePosts)
+        .where(noodlerPostPageCondition(options, true))
+        .orderBy(desc(noodlePosts.createdAt), desc(noodlePosts.id))
+        .limit(limit + 1);
+      const hasMore = rows.length > limit;
+      const pageRows = rows.slice(0, limit);
+      const last = pageRows.at(-1);
+      return {
+        items: pageRows.map(mapManagedPost),
+        total,
+        nextCursor:
+          hasMore && last
+            ? { createdAt: last.createdAt, id: last.id }
+            : null,
+      };
+    },
+
+    async getNoodlerViewerSignal(
+      visibleAccountIds: string[],
+      unseenAccountIds: string[],
+      seenAt: string | null | undefined,
+    ) {
+      const normalizedSeenAt = normalizeNoodlerSeenAt(seenAt);
+      if (visibleAccountIds.length === 0) {
+        return {
+          count: 0,
+          latestPost: null,
+          latestPostId: null,
+          latestPostAccountId: null,
+          latestPostUpdate: null,
+          updatedPostId: null,
+          updatedPostAccountId: null,
+          latestInteraction: null,
+          interactionPostId: null,
+        };
+      }
+      // One projected post pass supplies the exact badge, newest post/update, and visible IDs
+      // needed for one projected interaction pass. Bodies/media/prompts/metadata never enter
+      // the 30-second signal path or its response.
+      const postRows = await db
+        .select({
+          id: noodlePosts.id,
+          accountId: noodlePosts.authorAccountId,
+          createdAt: noodlePosts.createdAt,
+          updatedAt: noodlePosts.updatedAt,
+        })
+        .from(noodlePosts)
+        .where(inArray(noodlePosts.authorAccountId, visibleAccountIds));
+      const unseenAccounts = new Set(unseenAccountIds);
+      let count = 0;
+      let created: (typeof postRows)[number] | null = null;
+      let updated: (typeof postRows)[number] | null = null;
+      for (const row of postRows) {
+        if (
+          normalizedSeenAt &&
+          unseenAccounts.has(row.accountId) &&
+          row.createdAt > normalizedSeenAt
+        ) {
+          count += 1;
+        }
+        if (
+          !created ||
+          compareNoodlerPostSortKeysDescending(row, created) < 0
+        ) {
+          created = row;
+        }
+        if (
+          !updated ||
+          compareNoodlerPostSortKeysDescending(
+            { createdAt: row.updatedAt, id: row.id },
+            { createdAt: updated.updatedAt, id: updated.id },
+          ) < 0
+        ) {
+          updated = row;
+        }
+      }
+      const postIds = postRows.map((row) => row.id);
+      const latestInteractionRows = await db
+        .select({
+          id: noodleInteractions.id,
+          postId: noodleInteractions.postId,
+          value: noodleInteractions.createdAt,
+        })
+        .from(noodleInteractions)
+        .where(inArray(noodleInteractions.postId, postIds))
+        .orderBy(
+          desc(noodleInteractions.createdAt),
+          desc(noodleInteractions.id),
+        )
+        .limit(1);
+      const interaction = latestInteractionRows[0];
+      return {
+        count,
+        latestPost: created ? `${created.createdAt}:${created.id}` : null,
+        latestPostId: created?.id ?? null,
+        latestPostAccountId: created?.accountId ?? null,
+        latestPostUpdate: updated
+          ? `${updated.updatedAt}:${updated.id}`
+          : null,
+        updatedPostId: updated?.id ?? null,
+        updatedPostAccountId: updated?.accountId ?? null,
+        latestInteraction: interaction
+          ? `${interaction.value}:${interaction.id}`
+          : null,
+        interactionPostId: interaction?.postId ?? null,
+      };
     },
 
     async getNoodlerPostById(id: string): Promise<NoodlerManagedPost | null> {
@@ -3794,6 +4043,53 @@ export function createNoodleStorage(db: DB) {
         .where(eq(noodleAccountSubscriptions.creatorAccountId, creatorAccountId))
         .orderBy(desc(noodleAccountSubscriptions.createdAt));
       return rows.map(mapSubscription);
+    },
+
+    async listSubscriptionsForCreatorPage(
+      creatorAccountId: string,
+      cursor: NoodlerPostPageCursor | null,
+      limit: number,
+    ) {
+      const boundedLimit = Math.max(1, Math.min(20, Math.floor(limit)));
+      const base = eq(
+        noodleAccountSubscriptions.creatorAccountId,
+        creatorAccountId,
+      );
+      const rows = await db
+        .select()
+        .from(noodleAccountSubscriptions)
+        .where(
+          and(
+            base,
+            cursor
+              ? or(
+                  lt(noodleAccountSubscriptions.createdAt, cursor.createdAt),
+                  and(
+                    eq(
+                      noodleAccountSubscriptions.createdAt,
+                      cursor.createdAt,
+                    ),
+                    lt(noodleAccountSubscriptions.id, cursor.id),
+                  ),
+                )
+              : undefined,
+          ),
+        )
+        .orderBy(
+          desc(noodleAccountSubscriptions.createdAt),
+          desc(noodleAccountSubscriptions.id),
+        )
+        .limit(boundedLimit + 1);
+      const pageRows = rows.slice(0, boundedLimit);
+      const last = pageRows.at(-1);
+      return {
+        items: pageRows.map(mapSubscription),
+        total: db.count(noodleAccountSubscriptions, base),
+        nextCursor:
+          rows.length > boundedLimit && last
+            ? { createdAt: last.createdAt, id: last.id }
+            : null,
+      };
     },
 
     async unlockPost(viewerAccountId: string, postId: string): Promise<NoodlePostUnlock | null> {

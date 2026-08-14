@@ -42,6 +42,7 @@ import {
   noodleStageProfileDraftRequestSchema,
   readNoodlePollFromMetadata,
   type NoodleAccount,
+  type NoodlerManagedPost,
   type NoodlerSubscriber,
   type NoodlerPostView,
 } from "@marinara-engine/shared";
@@ -112,6 +113,9 @@ import {
   isNoodlerHiddenFromViewer,
 } from "../services/noodle/noodler-access.js";
 import {
+  noodlerUnseenCreatorAccountIds,
+} from "../services/noodle/noodler-viewer-unseen.js";
+import {
   noodlerDisclosureReviewReasons,
   projectNoodlerAudienceProfile,
 } from "../services/noodle/noodler-disclosure.js";
@@ -176,6 +180,7 @@ const noodleStageProfileUpdateRequestSchema = noodleStageProfileUpdateSchema.ext
 const NOODLE_IDENTITY_LOCK_BUSY =
   "Another Noodle identity operation is already running. Wait for it to finish.";
 const NOODLER_MEDIA_MAX_BYTES = 20 * 1024 * 1024;
+const NOODLER_FEED_PAGE_SIZE = 20;
 const NOODLER_MEDIA_EXTENSIONS = new Set([
   ".jpg",
   ".jpeg",
@@ -184,6 +189,73 @@ const NOODLER_MEDIA_EXTENSIONS = new Set([
   ".webp",
   ".avif",
 ]);
+
+const noodlerPageCursorSchema = z
+  .object({
+    cursorAt: z.string().datetime().optional(),
+    cursorId: z.string().trim().min(1).max(200).optional(),
+  })
+  .refine(
+    (value) => Boolean(value.cursorAt) === Boolean(value.cursorId),
+    "cursorAt and cursorId must be provided together",
+  );
+
+const noodlerViewerFeedQuerySchema = noodlerViewerPersonaSchema
+  .extend({
+    tab: z.enum(["following", "all"]).default("all"),
+    search: z.string().trim().max(200).default(""),
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(NOODLER_FEED_PAGE_SIZE)
+      .default(NOODLER_FEED_PAGE_SIZE),
+    cursorAt: z.string().datetime().optional(),
+    cursorId: z.string().trim().min(1).max(200).optional(),
+  })
+  .refine(
+    (value) => Boolean(value.cursorAt) === Boolean(value.cursorId),
+    "cursorAt and cursorId must be provided together",
+  );
+
+const noodlerProfilePostsQuerySchema = noodlerPageCursorSchema.and(
+  z.object({
+    personaId: z.string().trim().min(1).optional(),
+    filter: z.enum(["posts", "media"]).default("posts"),
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(NOODLER_FEED_PAGE_SIZE)
+      .default(NOODLER_FEED_PAGE_SIZE),
+  }),
+);
+
+const noodlerSubscriberPageQuerySchema = noodlerPageCursorSchema.and(
+  z.object({
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(NOODLER_FEED_PAGE_SIZE)
+      .default(NOODLER_FEED_PAGE_SIZE),
+  }),
+);
+
+type NoodlerViewerSignalResponse = {
+  count: number;
+  revision: {
+    latestPost: string | null;
+    latestPostId: string | null;
+    latestPostAccountId: string | null;
+    latestPostUpdate: string | null;
+    updatedPostId: string | null;
+    updatedPostAccountId: string | null;
+    latestInteraction: string | null;
+    interactionPostId: string | null;
+    latestCreator: string | null;
+  };
+};
 
 class NoodlerMediaRequestError extends Error {
   constructor(
@@ -395,6 +467,10 @@ export async function noodleRoutes(app: FastifyInstance) {
   const publicGeneration = createPublicNoodleGenerationService(app.db);
   const publicImages = createPublicNoodleImagesService(app.db);
   const noodlerImages = createNoodlerNoodleImagesService(app.db);
+  const noodlerViewerSignalCache = new Map<
+    string,
+    { generationKey: string; value: NoodlerViewerSignalResponse }
+  >();
 
   async function resolveNoodlerPublicIdentity(publicAccount: NoodleAccount) {
     const source =
@@ -606,10 +682,7 @@ export async function noodleRoutes(app: FastifyInstance) {
     return account?.platform === "noodle" ? account : null;
   }
 
-  // Shared viewer-scope builder: also returned from the unlock/subscribe mutations so the
-  // client can patch its cache in place instead of refetching the whole feed (avoids the
-  // reload-and-jump when a post is revealed).
-  async function buildViewerScope(
+  async function buildViewerContext(
     viewer: NonNullable<Awaited<ReturnType<typeof resolveViewerPersona>>>,
   ) {
     const [accounts, profiles, subscriptions, unlocks] = await Promise.all([
@@ -636,90 +709,175 @@ export async function noodleRoutes(app: FastifyInstance) {
         account.noodleAccountId === viewer.id ||
         !isNoodlerHiddenFromViewer(account, viewer.id),
     );
-    const postsByAccount = await noodle.listNoodlerPostsByAccounts(
-      visibleAccounts.map((account) => account.id),
-      40,
-    );
-    const viewablePostIds = new Set<string>();
-    for (const account of visibleAccounts) {
-      const ownCreator = account.noodleAccountId === viewer.id;
-      const subscribed = subscribedIds.has(account.id);
-      for (const post of postsByAccount.get(account.id) ?? []) {
-        if (
-          ownCreator ||
-          canViewNoodlerPost({
-            post,
-            subscribed,
-            unlockedPostIds: unlockedIds,
-          })
-        ) {
-          viewablePostIds.add(post.id);
-        }
-      }
-    }
-    // Counts are loaded for every post so locked teasers can show real engagement;
-    // the interaction records themselves stay redacted unless the post is viewable.
-    const allPostIds = [...postsByAccount.values()].flatMap((posts) =>
-      posts.map((post) => post.id),
+    return {
+      viewer,
+      visibleAccounts,
+      accountById: new Map(
+        visibleAccounts.map((account) => [account.id, account]),
+      ),
+      profileById,
+      subscribedIds,
+      followedIds,
+      unlockedIds,
+    };
+  }
+
+  type ViewerContext = Awaited<ReturnType<typeof buildViewerContext>>;
+
+  function buildViewerShell(context: ViewerContext) {
+    return {
+      viewer: context.viewer,
+      creators: context.visibleAccounts.map((account) => ({
+        profile: context.profileById.get(account.id)!,
+        subscribed: context.subscribedIds.has(account.id),
+        followed: context.followedIds.has(account.id),
+        // Feed posts live in a separate keyset-paged query. Keeping this field preserves the
+        // shared Engine contract for older consumers without hydrating any post history here.
+        posts: [] as NoodlerPostView[],
+      })),
+    };
+  }
+
+  async function projectViewerPosts(
+    context: ViewerContext,
+    posts: NoodlerManagedPost[],
+  ): Promise<Map<string, NoodlerPostView>> {
+    const viewablePostIds = new Set(
+      posts
+        .filter((post) => {
+          const account = context.accountById.get(post.authorAccountId);
+          return Boolean(
+            account &&
+              (account.noodleAccountId === context.viewer.id ||
+                canViewNoodlerPost({
+                  post,
+                  subscribed: context.subscribedIds.has(account.id),
+                  unlockedPostIds: context.unlockedIds,
+                })),
+          );
+        })
+        .map((post) => post.id),
     );
     const interactionsByPostId = new Map<
       string,
       NoodlerPostView["interactions"]
     >();
-    for (const interaction of await noodle.listNoodlerInteractions(
-      allPostIds,
-    )) {
+    const interactions =
+      posts.length > 0
+        ? await noodle.listNoodlerInteractions(posts.map((post) => post.id))
+        : [];
+    for (const interaction of interactions) {
       const existing = interactionsByPostId.get(interaction.postId) ?? [];
       existing.push(interaction);
       interactionsByPostId.set(interaction.postId, existing);
     }
-    const creators = visibleAccounts.map((account) => {
-      const subscribed = subscribedIds.has(account.id);
-      const posts = postsByAccount.get(account.id) ?? [];
-      return {
-        profile: profileById.get(account.id)!,
-        subscribed,
-        followed: followedIds.has(account.id),
-        posts: posts.map((post): NoodlerPostView => {
-          const locked = !viewablePostIds.has(post.id);
-          const allInteractions = interactionsByPostId.get(post.id) ?? [];
-          const interactions = allInteractions.filter(
-            (interaction) =>
-              !locked ||
-              !interaction.actorAccountId.startsWith(
-                NOODLER_FAN_IDENTITY_PREFIX,
-              ),
-          );
-          return {
+    return new Map(
+      posts.map((post): [string, NoodlerPostView] => {
+        const locked = !viewablePostIds.has(post.id);
+        const allInteractions = interactionsByPostId.get(post.id) ?? [];
+        const visibleInteractions = allInteractions.filter(
+          (interaction) =>
+            !locked ||
+            !interaction.actorAccountId.startsWith(
+              NOODLER_FAN_IDENTITY_PREFIX,
+            ),
+        );
+        return [
+          post.id,
+          {
             id: post.id,
             authorAccountId: post.authorAccountId,
             access: post.access,
             locked,
-            // Titles and engagement counts are public teaser data.
             title: post.title,
             content: locked ? null : post.content,
-            // Locked posts keep their media URL: the access-checked media route answers a
-            // locked viewer with a server-blurred teaser, never the original bytes. Media
-            // stored outside the NoodleR namespace has no such derivative, so it is withheld.
             hasImage: post.imageUrl !== null,
             imageUrl:
               locked && !post.imageUrl?.startsWith(NOODLER_MEDIA_URL_PREFIX)
                 ? null
-                : noodlerPostMediaUrlForPersona(post.imageUrl, viewer.entityId),
+                : noodlerPostMediaUrlForPersona(
+                    post.imageUrl,
+                    context.viewer.entityId,
+                  ),
             imagePrompt: locked ? null : post.imagePrompt,
             metadata: locked ? null : post.metadata,
             createdAt: post.createdAt,
-            interactions: locked ? [] : interactions,
+            interactions: locked ? [] : visibleInteractions,
             likeCount: allInteractions.filter((item) => item.type === "like")
               .length,
             replyCount: allInteractions.filter((item) => item.type === "reply")
               .length,
-          };
-        }),
-      };
-    });
-    return { viewer, creators };
+          },
+        ];
+      }),
+    );
   }
+
+  app.get("/noodler/viewer/unseen-count", async (req, reply) => {
+    const settings = await noodle.getSettings();
+    if (!settings.enableNoodler)
+      return reply.code(404).send({ error: "Not Found" });
+    const parsed = noodlerViewerPersonaSchema.safeParse(req.query);
+    if (!parsed.success)
+      return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer)
+      return reply.code(404).send({ error: "Noodle persona not found" });
+    const accounts = await noodle.listNoodlerAccounts();
+    const unseenCreatorAccountIds = noodlerUnseenCreatorAccountIds(
+      accounts,
+      viewer.id,
+    );
+    const visibleAccounts = accounts.filter(
+      (account) =>
+        account.noodleAccountId === viewer.id ||
+        !isNoodlerHiddenFromViewer(account, viewer.id),
+    );
+    const visibleAccountIds = visibleAccounts.map((account) => account.id);
+    const generationKey = [
+      app.db._fileStore.getTableWriteGeneration("noodle_posts"),
+      app.db._fileStore.getTableWriteGeneration("noodle_interactions"),
+      app.db._fileStore.getTableWriteGeneration("noodle_accounts"),
+      viewer.settings.social.noodlerFeedSeenAt ?? "never",
+      [...visibleAccountIds].sort().join(","),
+      [...unseenCreatorAccountIds].sort().join(","),
+    ].join("|");
+    const cached = noodlerViewerSignalCache.get(viewer.id);
+    if (cached?.generationKey === generationKey) return cached.value;
+    const signal = await noodle.getNoodlerViewerSignal(
+      visibleAccountIds,
+      unseenCreatorAccountIds,
+      viewer.settings.social.noodlerFeedSeenAt,
+    );
+    const latestCreator = visibleAccounts
+      .sort(
+        (left, right) =>
+          right.updatedAt.localeCompare(left.updatedAt) ||
+          right.id.localeCompare(left.id),
+      )[0];
+    const value: NoodlerViewerSignalResponse = {
+      count: signal.count,
+      revision: {
+        latestPost: signal.latestPost,
+        latestPostId: signal.latestPostId,
+        latestPostAccountId: signal.latestPostAccountId,
+        latestPostUpdate: signal.latestPostUpdate,
+        updatedPostId: signal.updatedPostId,
+        updatedPostAccountId: signal.updatedPostAccountId,
+        latestInteraction: signal.latestInteraction,
+        interactionPostId: signal.interactionPostId,
+        latestCreator: latestCreator
+          ? `${latestCreator.updatedAt}:${latestCreator.id}`
+          : null,
+      },
+    };
+    if (!noodlerViewerSignalCache.has(viewer.id) && noodlerViewerSignalCache.size >= 100) {
+      const oldestKey = noodlerViewerSignalCache.keys().next().value;
+      if (oldestKey) noodlerViewerSignalCache.delete(oldestKey);
+    }
+    noodlerViewerSignalCache.set(viewer.id, { generationKey, value });
+    return value;
+  });
 
   app.get("/noodler/viewer", async (req, reply) => {
     const settings = await noodle.getSettings();
@@ -731,7 +889,66 @@ export async function noodleRoutes(app: FastifyInstance) {
     const viewer = await resolveViewerPersona(parsed.data.personaId);
     if (!viewer)
       return reply.code(404).send({ error: "Noodle persona not found" });
-    return await buildViewerScope(viewer);
+    return buildViewerShell(await buildViewerContext(viewer));
+  });
+
+  app.get("/noodler/viewer/feed", async (req, reply) => {
+    const settings = await noodle.getSettings();
+    if (!settings.enableNoodler)
+      return reply.code(404).send({ error: "Not Found" });
+    const parsed = noodlerViewerFeedQuerySchema.safeParse(req.query);
+    if (!parsed.success)
+      return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await resolveViewerPersona(parsed.data.personaId);
+    if (!viewer)
+      return reply.code(404).send({ error: "Noodle persona not found" });
+    const context = await buildViewerContext(viewer);
+    const accounts = context.visibleAccounts.filter(
+      (account) =>
+        parsed.data.tab === "all" || context.followedIds.has(account.id),
+    );
+    const normalizedSearch = parsed.data.search.toLowerCase();
+    const creatorSearchAccountIds = normalizedSearch
+      ? accounts
+          .filter((account) => {
+            const profile = context.profileById.get(account.id);
+            return Boolean(
+              profile &&
+                (profile.handle.toLowerCase().includes(normalizedSearch) ||
+                  profile.displayName
+                    .toLowerCase()
+                    .includes(normalizedSearch)),
+            );
+          })
+          .map((account) => account.id)
+      : [];
+    const page = await noodle.listNoodlerPostPage({
+      accountIds: accounts.map((account) => account.id),
+      creatorSearchAccountIds,
+      readableContentAccountIds: accounts
+        .filter(
+          (account) =>
+            account.noodleAccountId === viewer.id ||
+            context.subscribedIds.has(account.id),
+        )
+        .map((account) => account.id),
+      unlockedPostIds: [...context.unlockedIds],
+      search: parsed.data.search,
+      cursor:
+        parsed.data.cursorAt && parsed.data.cursorId
+          ? { createdAt: parsed.data.cursorAt, id: parsed.data.cursorId }
+          : null,
+      limit: parsed.data.limit,
+    });
+    const projected = await projectViewerPosts(context, page.items);
+    return {
+      items: page.items.flatMap((post) => {
+        const view = projected.get(post.id);
+        return view ? [{ creatorAccountId: post.authorAccountId, post: view }] : [];
+      }),
+      total: page.total,
+      nextCursor: page.nextCursor,
+    };
   });
 
   async function resolveReadableNoodlerPost(personaId: string, postId: string) {
@@ -1146,7 +1363,13 @@ export async function noodleRoutes(app: FastifyInstance) {
         .code(400)
         .send({ error: "Could not subscribe to this stage profile" });
     const freshViewer = await resolveViewerPersona(parsed.data.personaId);
-    return reply.code(201).send(await buildViewerScope(freshViewer ?? viewer));
+    return reply
+      .code(201)
+      .send(
+        buildViewerShell(
+          await buildViewerContext(freshViewer ?? viewer),
+        ),
+      );
   });
 
   app.delete("/noodler/accounts/:id/subscribe", async (req, reply) => {
@@ -1162,7 +1385,9 @@ export async function noodleRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     await noodle.unsubscribe(viewer.id, id);
     const freshViewer = await resolveViewerPersona(parsed.data.personaId);
-    return await buildViewerScope(freshViewer ?? viewer);
+    return buildViewerShell(
+      await buildViewerContext(freshViewer ?? viewer),
+    );
   });
 
   app.get("/noodler/accounts/:id/subscribers", async (req, reply) => {
@@ -1170,13 +1395,22 @@ export async function noodleRoutes(app: FastifyInstance) {
     if (!settings.enableNoodler)
       return reply.code(404).send({ error: "Not Found" });
     const { id } = req.params as { id: string };
+    const parsed = noodlerSubscriberPageQuerySchema.safeParse(req.query);
+    if (!parsed.success)
+      return reply.code(400).send({ error: parsed.error.flatten() });
     if (!(await noodle.getNoodlerAccountById(id))) {
       return reply.code(404).send({ error: "NoodleR stage profile not found" });
     }
-    const subscriptions = await noodle.listSubscriptionsForCreator(id);
+    const page = await noodle.listSubscriptionsForCreatorPage(
+      id,
+      parsed.data.cursorAt && parsed.data.cursorId
+        ? { createdAt: parsed.data.cursorAt, id: parsed.data.cursorId }
+        : null,
+      parsed.data.limit,
+    );
     const subscribers = (
       await Promise.all(
-        subscriptions.map(
+        page.items.map(
           async (subscription): Promise<NoodlerSubscriber | null> => {
             const account = await noodle.getAccountById(
               subscription.viewerAccountId,
@@ -1201,7 +1435,11 @@ export async function noodleRoutes(app: FastifyInstance) {
     ).filter(
       (subscriber): subscriber is NoodlerSubscriber => subscriber !== null,
     );
-    return subscribers;
+    return {
+      items: subscribers,
+      total: page.total,
+      nextCursor: page.nextCursor,
+    };
   });
 
   app.patch("/noodler/accounts/:id/follow", async (req, reply) => {
@@ -1236,7 +1474,9 @@ export async function noodleRoutes(app: FastifyInstance) {
     if (!updated)
       return reply.code(400).send({ error: "Could not update follow state" });
     const freshViewer = await resolveViewerPersona(body.personaId);
-    return buildViewerScope(freshViewer ?? updated.account);
+    return buildViewerShell(
+      await buildViewerContext(freshViewer ?? updated.account),
+    );
   });
 
   app.post("/noodler/posts/:id/unlock", async (req, reply) => {
@@ -1267,7 +1507,9 @@ export async function noodleRoutes(app: FastifyInstance) {
     const unlock = await noodle.unlockPost(viewer.id, post.id);
     if (!unlock)
       return reply.code(400).send({ error: "Could not unlock this post" });
-    return reply.code(201).send(await buildViewerScope(viewer));
+    return reply
+      .code(201)
+      .send(buildViewerShell(await buildViewerContext(viewer)));
   });
 
   app.get<{
@@ -1916,11 +2158,49 @@ export async function noodleRoutes(app: FastifyInstance) {
     const settings = await noodle.getSettings();
     if (!settings.enableNoodler)
       return reply.code(404).send({ error: "Not Found" });
+    const parsed = noodlerProfilePostsQuerySchema.safeParse(req.query);
+    if (!parsed.success)
+      return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
     if (!(await noodle.getNoodlerAccountById(id))) {
       return reply.code(404).send({ error: "NoodleR stage profile not found" });
     }
-    return noodle.listNoodlerPostsByAccount(id, 40);
+    const viewer = parsed.data.personaId
+      ? await resolveViewerPersona(parsed.data.personaId)
+      : null;
+    if (parsed.data.personaId && !viewer) {
+      return reply.code(404).send({ error: "Noodle persona not found" });
+    }
+    const context = viewer ? await buildViewerContext(viewer) : null;
+    const creatorVisible = Boolean(context?.accountById.has(id));
+    const page = await noodle.listNoodlerPostPage({
+      accountIds: [id],
+      readableContentAccountIds:
+        !context ||
+        context.accountById.get(id)?.noodleAccountId === context.viewer.id ||
+        context.subscribedIds.has(id)
+          ? [id]
+          : [],
+      unlockedPostIds: context ? [...context.unlockedIds] : [],
+      mediaOnly: parsed.data.filter === "media",
+      cursor:
+        parsed.data.cursorAt && parsed.data.cursorId
+          ? { createdAt: parsed.data.cursorAt, id: parsed.data.cursorId }
+          : null,
+      limit: parsed.data.limit,
+    });
+    const projected =
+      context && creatorVisible
+        ? await projectViewerPosts(context, page.items)
+        : new Map<string, NoodlerPostView>();
+    return {
+      items: page.items.map((managed) => ({
+        managed,
+        viewerPost: projected.get(managed.id) ?? null,
+      })),
+      total: page.total,
+      nextCursor: page.nextCursor,
+    };
   });
 
   app.put("/refresh-schedule", async (req, reply) => {

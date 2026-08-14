@@ -44,7 +44,6 @@ import type {
   NoodlerSourceSnapshot,
   Persona,
 } from "@marinara-engine/shared";
-import { countNoodlerPostsSince } from "@marinara-engine/shared";
 import {
   useAdoptNoodlerSourceIdentity,
   useCreateNoodlerPost,
@@ -66,7 +65,9 @@ import {
   useNoodlerPosts,
   useNoodlerSubscribers,
   useNoodleUnseenCount,
+  useNoodlerUnseenCount,
   useNoodlerViewer,
+  useNoodlerViewerFeed,
   usePatchNoodleAccountSettings,
   useRemoveNoodlerInteraction,
   useToggleNoodlerFollow,
@@ -82,6 +83,7 @@ import {
   useUseNoodlerSourceAvatar,
   useRemoveNoodlerAvatar,
   type NoodlerContentFormat,
+  type NoodlerFeedPage,
   type NoodlerPostDraftImage,
 } from "../../hooks/use-noodle";
 import { useActivePersona, useCharacterGroups, usePersonas } from "../../hooks/use-characters";
@@ -129,6 +131,11 @@ import { HelpTooltip } from "../ui/HelpTooltip";
 import { Modal } from "../ui/Modal";
 import type { NoodleNavigationState } from "./noodle-navigation.types";
 import { useTranslation as useUiTranslation } from "react-i18next";
+import {
+  nextNoodlerFeedLimit,
+  NOODLER_CREATOR_PAGE_SIZE,
+  NOODLER_FEED_PAGE_SIZE,
+} from "./noodler-feed-window";
 
 interface NoodlerHomeProps {
   navigation: Extract<NoodleNavigationState, { mode: "noodler" }>;
@@ -318,6 +325,9 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [mobileAccountSwitcherOpen, setMobileAccountSwitcherOpen] = useState(false);
   const [personaAccountLimit, setPersonaAccountLimit] = useState(NOODLE_PERSONA_SWITCHER_PAGE_SIZE);
+  const [stageProfileLimit, setStageProfileLimit] = useState(
+    NOODLER_FEED_PAGE_SIZE,
+  );
   const accountSwitcherRef = useRef<HTMLDivElement | null>(null);
   const visiblePersonaAccounts = viewerAccounts.slice(0, personaAccountLimit);
   const switchViewerPersona = (account: NoodleAccount, mobile: boolean) => {
@@ -331,6 +341,11 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   useEffect(() => {
     if (accountSwitcherOpen) setPersonaAccountLimit(NOODLE_PERSONA_SWITCHER_PAGE_SIZE);
   }, [accountSwitcherOpen]);
+  useEffect(() => {
+    if (navigation.mode === "noodler" && navigation.view === "profiles") {
+      setStageProfileLimit(NOODLER_FEED_PAGE_SIZE);
+    }
+  }, [navigation]);
   useEffect(() => {
     if (!mobileDrawerOpen) {
       setMobileAccountSwitcherOpen(false);
@@ -413,10 +428,32 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     setMobileDrawerOpen(false);
   };
   const [feedSearch, setFeedSearch] = useState("");
+  const [debouncedFeedSearch, setDebouncedFeedSearch] = useState("");
   const discoveryInputRef = useRef<HTMLInputElement | null>(null);
   const [feedTab, setFeedTab] = useState<"following" | "all">("following");
   const [onboardingMode, setOnboardingMode] = useState<"first-run" | null>(null);
   const viewerQuery = useNoodlerViewer(viewerPersonaId, enabled);
+  const noodlerUnseenCount = useNoodlerUnseenCount(
+    viewerPersonaId,
+    enabled,
+  );
+  useEffect(() => {
+    const timeout = window.setTimeout(
+      () => setDebouncedFeedSearch(feedSearch),
+      300,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [feedSearch]);
+  const feedQuery = useNoodlerViewerFeed(
+    viewerPersonaId,
+    navigation.mode === "noodler" && navigation.view === "search"
+      ? "all"
+      : feedTab,
+    debouncedFeedSearch,
+    enabled &&
+      navigation.mode === "noodler" &&
+      (navigation.view === "hub" || navigation.view === "search"),
+  );
   const patchAccountSettings = usePatchNoodleAccountSettings();
   const noodleUnseenCount = useNoodleUnseenCount(shellPersonaAccount, enabled);
   // The stored timestamp advances as soon as the feed is shown, which would erase the divider
@@ -750,7 +787,6 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
       );
     });
   }, [characterGroupsQuery.data, data?.settings.invitedCharacterGroupIds, selectedPublicSource]);
-  const postsQuery = useNoodlerPosts(selectedProfile?.id ?? null);
   const selectedViewerCreator =
     viewerQuery.data?.creators.find((creator) => creator.profile.id === selectedProfile?.id) ?? null;
   const eligibleNoodleAccounts = eligibleAccountsQuery.data?.pages.flatMap((page) => page.items) ?? [];
@@ -1112,10 +1148,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
             ? ("search" as const)
             : ("noodler" as const),
     homeActive: navigation.mode === "noodler" && navigation.view === "hub",
-    noodlerUnseenCount: countNoodlerPostsSince(
-      viewerQuery.data,
-      viewerQuery.data?.viewer.settings.social.noodlerFeedSeenAt,
-    ),
+    noodlerUnseenCount,
     // The Noodle count matters most from here: this is where the user is while the public
     // timeline is the one filling up unwatched.
     noodleUnseenCount,
@@ -1399,7 +1432,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
           <StageProfileView
             key={`${selectedProfile.id}:${shellPersonaAccount?.id ?? "no-viewer"}`}
             profile={selectedProfile}
-            posts={postsQuery.data ?? []}
+            viewerPersonaId={viewerPersonaId}
             viewerCreator={selectedViewerCreator}
             viewerAccount={shellPersonaAccount}
             postCardCtx={postCardCtx}
@@ -1413,9 +1446,6 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
             onDraftChange={(patch) => updateNoodlerPostDraft(selectedProfile.id, patch)}
             onClearDraft={() => clearNoodlerPostDraft(selectedProfile.id)}
             onDiscardDraft={() => clearNoodlerPostDraft(selectedProfile.id)}
-            isLoading={postsQuery.isLoading}
-            isError={postsQuery.isError}
-            onRetry={() => void postsQuery.refetch()}
             onEdit={() => beginEdit(selectedProfile)}
             onRedraft={() => redraftFromSource(selectedProfile)}
             redraftPending={generateProfileDraft.isPending}
@@ -1627,7 +1657,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
               />
             ) : accountsQuery.data && accountsQuery.data.length > 0 ? (
               <div className="divide-y divide-[var(--noodle-divider)]">
-                {accountsQuery.data.map((profile) => (
+                {accountsQuery.data.slice(0, stageProfileLimit).map((profile) => (
                   <button
                     key={profile.id}
                     type="button"
@@ -1656,6 +1686,26 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
                     <ChevronRight size={17} className="shrink-0 text-[var(--muted-foreground)]" />
                   </button>
                 ))}
+                {stageProfileLimit < accountsQuery.data.length && (
+                  <button
+                    data-component="NoodlerHome.LoadMoreStageProfiles"
+                    type="button"
+                    onClick={() =>
+                      setStageProfileLimit((current) =>
+                        nextNoodlerFeedLimit(
+                          current,
+                          accountsQuery.data?.length ?? current,
+                        ),
+                      )
+                    }
+                    className="min-h-11 w-full px-4 py-3 text-sm font-bold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+                  >
+                    {localizeUi("ui.noodle.noodlehome.loadMore", {
+                      visible: Math.min(stageProfileLimit, accountsQuery.data.length),
+                      total: accountsQuery.data.length,
+                    })}
+                  </button>
+                )}
               </div>
             ) : (
               // With no profiles and no eligible sources loaded, the create button is disabled, so a
@@ -1698,13 +1748,29 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
         personasError={personasQuery.isError}
         onRetryPersonas={() => void personasQuery.refetch()}
         scope={viewerQuery.data}
+        feedItems={feedQuery.data?.pages.flatMap((page) => page.items) ?? []}
+        feedTotal={feedQuery.data?.pages[0]?.total ?? 0}
+        feedHasMore={feedQuery.hasNextPage === true}
+        feedLoadingMore={feedQuery.isFetchingNextPage}
+        onLoadMoreFeed={() => void feedQuery.fetchNextPage()}
+        searchPending={feedSearch.trim() !== debouncedFeedSearch.trim()}
         newSinceAt={viewerQuery.data ? (frozenFeedSeenAt[viewerQuery.data.viewer.id] ?? null) : null}
         onFeedShown={markFeedShown}
-        isLoading={viewerQuery.isLoading}
-        isError={viewerQuery.isError}
-        onRetry={() => void viewerQuery.refetch()}
-        onRefresh={() => void viewerQuery.refetch()}
-        isRefreshing={viewerQuery.isFetching}
+        isLoading={
+          viewerQuery.isLoading ||
+          feedQuery.isLoading ||
+          feedSearch.trim() !== debouncedFeedSearch.trim()
+        }
+        isError={viewerQuery.isError || feedQuery.isError}
+        onRetry={() => {
+          void viewerQuery.refetch();
+          void feedQuery.reset();
+        }}
+        onRefresh={() => void feedQuery.reset()}
+        isRefreshing={
+          viewerQuery.isFetching ||
+          (feedQuery.isFetching && !feedQuery.isFetchingNextPage)
+        }
         unlockPending={unlockPost.isPending}
         postCardCtx={postCardCtx}
         onUnlock={(postId) => {
@@ -2327,6 +2393,23 @@ function StageProfileSourcePicker({
   onContinue: () => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
+  const [visibleSourceLimit, setVisibleSourceLimit] = useState(
+    NOODLER_FEED_PAGE_SIZE,
+  );
+  useEffect(() => {
+    setVisibleSourceLimit(NOODLER_FEED_PAGE_SIZE);
+  }, [kind, search]);
+  const visibleAccounts = accounts.slice(0, visibleSourceLimit);
+  const canLoadMore = visibleAccounts.length < accounts.length || hasMore;
+  const loadMore = () => {
+    if (visibleAccounts.length < accounts.length) {
+      setVisibleSourceLimit((current) =>
+        nextNoodlerFeedLimit(current, accounts.length),
+      );
+      return;
+    }
+    onLoadMore();
+  };
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col">
       <div className="px-4 py-5 sm:px-6 @min-[1024px]:py-6">
@@ -2397,7 +2480,7 @@ function StageProfileSourcePicker({
                 {localizeUi("ui.noodle.stageprofilesourcepicker.noEligibleSourceAccountsMatchThatSearch")}
               </p>
             ) : (
-              accounts.map((account) => (
+              visibleAccounts.map((account) => (
                 <button
                   key={account.id}
                   type="button"
@@ -2431,15 +2514,17 @@ function StageProfileSourcePicker({
             )}
           </div>
         )}
-        {!isLoading && !isError && hasMore && (
+        {!isLoading && !isError && canLoadMore && (
           <button
             type="button"
-            onClick={onLoadMore}
-            disabled={isLoadingMore}
+            onClick={loadMore}
+            disabled={isLoadingMore && visibleAccounts.length >= accounts.length}
             className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-[var(--noodle-divider)] text-sm font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
           >
-            {isLoadingMore && <Loader2 size={15} className="animate-spin" />}
-            {isLoadingMore
+            {isLoadingMore && visibleAccounts.length >= accounts.length && (
+              <Loader2 size={15} className="animate-spin" />
+            )}
+            {isLoadingMore && visibleAccounts.length >= accounts.length
               ? localizeUi("ui.noodle.stageprofilesourcepicker.loadingMore")
               : localizeUi("ui.noodle.stageprofilesourcepicker.loadMoreCharacters")}
           </button>
@@ -2591,7 +2676,7 @@ function WizardFooter({
 
 function StageProfileView({
   profile,
-  posts,
+  viewerPersonaId,
   viewerCreator,
   viewerAccount,
   postCardCtx,
@@ -2605,9 +2690,6 @@ function StageProfileView({
   onDraftChange,
   onClearDraft,
   onDiscardDraft,
-  isLoading,
-  isError,
-  onRetry,
   onEdit,
   onRedraft,
   redraftPending,
@@ -2630,7 +2712,7 @@ function StageProfileView({
   onAccessChange,
 }: {
   profile: NoodlerManagedStageProfile;
-  posts: NoodlerManagedPost[];
+  viewerPersonaId: string | null;
   viewerCreator: NonNullable<ReturnType<typeof useNoodlerViewer>["data"]>["creators"][number] | null;
   viewerAccount: NoodleAccount | null;
   postCardCtx: ReturnType<typeof useNoodlePostCardController>["ctx"];
@@ -2644,9 +2726,6 @@ function StageProfileView({
   onDraftChange: (patch: Partial<NoodlerPostDraft>) => void;
   onClearDraft: () => void;
   onDiscardDraft: () => void;
-  isLoading: boolean;
-  isError: boolean;
-  onRetry: () => void;
   onEdit: () => void;
   onRedraft: () => void;
   redraftPending: boolean;
@@ -2679,13 +2758,31 @@ function StageProfileView({
   const globalSettings = useNoodle().data?.settings;
   const autoPosting = profile.autoPosting;
   const [activeTab, setActiveTab] = useState<NoodlerProfileTab>("posts");
+  const postsQuery = useNoodlerPosts(
+    profile.id,
+    viewerPersonaId,
+    activeTab === "media" ? "media" : "posts",
+    activeTab !== "subscribers",
+  );
+  const postEntries =
+    postsQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const posts = postEntries.map((item) => item.managed);
   const [revealedManagedPostIds, setRevealedManagedPostIds] = useState<Set<string>>(() => new Set());
-  const subscribersQuery = useNoodlerSubscribers(profile.id);
+  const subscribersQuery = useNoodlerSubscribers(
+    profile.id,
+    activeTab === "subscribers",
+  );
+  const subscribers =
+    subscribersQuery.data?.pages.flatMap((page) => page.items) ?? [];
   const accent = useNoodleAccent();
   const viewingOwnCreator = Boolean(viewerAccount && profile.noodleAccountId === viewerAccount.id);
   const characterSource = publicSource?.kind === "character" ? publicSource : null;
   const directInvite = characterSource?.invited === true;
-  const viewerPostById = new Map((viewerCreator?.posts ?? []).map((post) => [post.id, post]));
+  const viewerPostById = new Map(
+    postEntries.flatMap((item) =>
+      item.viewerPost ? [[item.viewerPost.id, item.viewerPost] as const] : [],
+    ),
+  );
   const projectedPosts = posts.map((managedPost) => {
     const viewerPost = viewerPostById.get(managedPost.id);
     if (revealedManagedPostIds.has(managedPost.id)) {
@@ -2704,12 +2801,8 @@ function StageProfileView({
       ? { kind: "locked" as const, post: viewerPost }
       : { kind: "card" as const, model: toNoodlePostCardModel(viewerPost, profile) };
   });
-  const visiblePosts = projectedPosts.filter((item) => {
-    if (activeTab === "posts") return true;
-    if (item.kind === "locked" || item.kind === "controller-locked") return false;
-    if (activeTab === "media") return Boolean(item.model.imageUrl);
-    return false;
-  });
+  const visiblePosts = projectedPosts;
+  const pagedVisiblePosts = visiblePosts;
   const cards = (
     <>
       {activeTab === "subscribers" ? (
@@ -2727,9 +2820,9 @@ function StageProfileView({
             action={localizeUi("capabilities.actions.tryAgain")}
             onAction={() => void subscribersQuery.refetch()}
           />
-        ) : (subscribersQuery.data ?? []).length > 0 ? (
+        ) : subscribers.length > 0 ? (
           <div>
-            {(subscribersQuery.data ?? []).map((subscriber) => (
+            {subscribers.map((subscriber) => (
               <div
                 key={subscriber.id}
                 className="flex min-h-16 items-center gap-3 border-b border-[var(--noodle-divider)] px-4 py-3"
@@ -2744,6 +2837,22 @@ function StageProfileView({
                 </time>
               </div>
             ))}
+            {subscribersQuery.hasNextPage && (
+              <button
+                data-component="NoodlerProfile.LoadMoreSubscribers"
+                type="button"
+                onClick={() => void subscribersQuery.fetchNextPage()}
+                disabled={subscribersQuery.isFetchingNextPage}
+                className="min-h-11 w-full border-b border-[var(--noodle-divider)] px-4 py-3 text-sm font-bold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+              >
+                {localizeUi("ui.noodle.noodlehome.loadMore", {
+                  visible: subscribers.length,
+                  total:
+                    subscribersQuery.data?.pages[0]?.total ??
+                    subscribers.length,
+                })}
+              </button>
+            )}
           </div>
         ) : (
           <EmptyState
@@ -2751,7 +2860,7 @@ function StageProfileView({
             detail={localizeUi("ui.noodle.stageprofileview.subscribersEmptyDetail")}
           />
         )
-      ) : viewerIsLoading || isLoading ? (
+      ) : viewerIsLoading || postsQuery.isLoading ? (
         <div className="flex justify-center py-12">
           <Loader2 size={22} className="animate-spin text-[var(--noodle-accent)]" />
         </div>
@@ -2761,15 +2870,16 @@ function StageProfileView({
           action={localizeUi("capabilities.actions.tryAgain")}
           onAction={onRetryViewer}
         />
-      ) : isError ? (
+      ) : postsQuery.isError ? (
         <EmptyState
           title={localizeUi("ui.noodle.stageprofileview.noodlerPostsCouldNotBeLoaded")}
           action={localizeUi("capabilities.actions.tryAgain")}
-          onAction={onRetry}
+          onAction={() => void postsQuery.refetch()}
         />
       ) : visiblePosts.length > 0 ? (
-        visiblePosts.map((item) =>
-          item.kind === "locked" || item.kind === "controller-locked" ? (
+        <>
+          {pagedVisiblePosts.map((item) =>
+            item.kind === "locked" || item.kind === "controller-locked" ? (
             <LockedNoodlerPostCard
               key={item.post.id}
               post={item.post}
@@ -2821,8 +2931,23 @@ function StageProfileView({
                 postManagement: true,
               }}
             />
-          ),
-        )
+            ),
+          )}
+          {postsQuery.hasNextPage && (
+            <button
+              data-component="NoodlerProfile.LoadMorePosts"
+              type="button"
+              onClick={() => void postsQuery.fetchNextPage()}
+              disabled={postsQuery.isFetchingNextPage}
+              className="min-h-11 w-full border-b border-[var(--noodle-divider)] px-4 py-3 text-sm font-bold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+            >
+              {localizeUi("ui.noodle.noodlehome.loadMore", {
+                visible: pagedVisiblePosts.length,
+                total: postsQuery.data?.pages[0]?.total ?? pagedVisiblePosts.length,
+              })}
+            </button>
+          )}
+        </>
       ) : (
         <EmptyState
           title={
@@ -3302,6 +3427,12 @@ function ViewerHub({
   personasError,
   onRetryPersonas,
   scope,
+  feedItems,
+  feedTotal,
+  feedHasMore,
+  feedLoadingMore,
+  onLoadMoreFeed,
+  searchPending,
   isLoading,
   isError,
   onRetry,
@@ -3342,6 +3473,12 @@ function ViewerHub({
   personasError: boolean;
   onRetryPersonas: () => void;
   scope: ReturnType<typeof useNoodlerViewer>["data"];
+  feedItems: NoodlerFeedPage["items"];
+  feedTotal: number;
+  feedHasMore: boolean;
+  feedLoadingMore: boolean;
+  onLoadMoreFeed: () => void;
+  searchPending: boolean;
   /**
    * Frozen at the moment this persona's feed was first shown, so advancing the stored
    * timestamp does not make the divider vanish under the reader while they are still on it.
@@ -3386,6 +3523,13 @@ function ViewerHub({
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
   const setStickyHeader = useHideOnScroll(scroller);
   const [discoverCollapsed, setDiscoverCollapsed] = useState(false);
+  const searchTerm = search.trim().toLowerCase();
+  const [visibleCreatorLimit, setVisibleCreatorLimit] = useState(
+    NOODLER_FEED_PAGE_SIZE,
+  );
+  useEffect(() => {
+    setVisibleCreatorLimit(NOODLER_FEED_PAGE_SIZE);
+  }, [discoveryOpen, scope?.viewer.id, searchTerm]);
   // The visit counts once the feed itself is on screen and loaded — not on app entry, and not
   // while discovery search has replaced it. Declared above the early returns so hook order
   // stays stable across the empty and error states below.
@@ -3417,38 +3561,27 @@ function ViewerHub({
       />
     );
   }
-  const searchTerm = search.trim().toLowerCase();
-  const followedCreatorIds = new Set(scope?.viewer.settings.social.followingAccountIds ?? []);
   const creators = scope?.creators ?? [];
-  const feed = creators
-    .filter((creator) => tab === "all" || followedCreatorIds.has(creator.profile.id))
-    .flatMap((creator) => creator.posts.map((post) => ({ post, creator })))
-    .filter(
-      ({ post, creator }) =>
-        !searchTerm ||
-        (post.title ?? "").toLowerCase().includes(searchTerm) ||
-        (post.content ?? "").toLowerCase().includes(searchTerm) ||
-        creator.profile.handle.toLowerCase().includes(searchTerm) ||
-        creator.profile.displayName.toLowerCase().includes(searchTerm),
-    )
-    .sort((a, b) => new Date(b.post.createdAt).getTime() - new Date(a.post.createdAt).getTime());
-  const searchResults = creators
-    .flatMap((creator) => creator.posts.map((post) => ({ post, creator })))
-    .filter(
-      ({ post, creator }) =>
-        searchTerm &&
-        ((post.title ?? "").toLowerCase().includes(searchTerm) ||
-          (post.content ?? "").toLowerCase().includes(searchTerm) ||
-          creator.profile.handle.toLowerCase().includes(searchTerm) ||
-          creator.profile.displayName.toLowerCase().includes(searchTerm)),
-    )
-    .sort((a, b) => new Date(b.post.createdAt).getTime() - new Date(a.post.createdAt).getTime());
+  const creatorById = new Map(
+    creators.map((creator) => [creator.profile.id, creator]),
+  );
+  const feed = feedItems.flatMap((item) => {
+    const creator = creatorById.get(item.creatorAccountId);
+    return creator ? [{ post: item.post, creator }] : [];
+  });
+  const pagedFeed = feed;
+  const searchResults = searchTerm ? feed : [];
+  const pagedSearchResults = searchResults;
   const discoveredCreators = creators.filter(
     (creator) =>
       creator.profile.id !== authorProfile?.id &&
       (!searchTerm ||
         creator.profile.handle.toLowerCase().includes(searchTerm) ||
         creator.profile.displayName.toLowerCase().includes(searchTerm)),
+  );
+  const pagedDiscoveredCreators = discoveredCreators.slice(
+    0,
+    visibleCreatorLimit,
   );
   // The feed is newest-first, so the divider goes after the *last* new post — the viewer's own
   // posts sitting in that run are not news themselves but must not cut it short. Shown only
@@ -3539,8 +3672,28 @@ function ViewerHub({
                 {localizeUi("ui.noodle.noodlehome.searchResults")}
               </h2>
             </div>
-            {searchResults.length > 0 ? (
-              <div>{searchResults.map(renderFeedPost)}</div>
+            {searchPending ? (
+              <div className="flex justify-center py-10" role="status">
+                <Loader2 size={20} className="animate-spin text-[var(--noodle-accent)]" />
+              </div>
+            ) : searchResults.length > 0 ? (
+              <div>
+                {pagedSearchResults.map(renderFeedPost)}
+                {feedHasMore && (
+                  <button
+                    data-component="NoodlerHome.LoadMoreSearchResults"
+                    type="button"
+                    onClick={onLoadMoreFeed}
+                    disabled={feedLoadingMore}
+                    className="min-h-11 w-full border-b border-[var(--noodle-divider)] px-4 py-3 text-sm font-bold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+                  >
+                    {localizeUi("ui.noodle.noodlehome.loadMore", {
+                      visible: pagedSearchResults.length,
+                      total: feedTotal,
+                    })}
+                  </button>
+                )}
+              </div>
             ) : (
               <p className="px-4 py-6 text-sm text-[var(--muted-foreground)]">
                 {localizeUi("ui.noodle.viewerhub.noSearchResults")}
@@ -3557,7 +3710,7 @@ function ViewerHub({
           </div>
           {discoveredCreators.length > 0 ? (
             <div className="divide-y divide-[var(--noodle-divider)]">
-              {discoveredCreators.map((creator) => (
+              {pagedDiscoveredCreators.map((creator) => (
                 <div key={creator.profile.id} className="flex items-center gap-3 px-4 py-3">
                   <button
                     type="button"
@@ -3599,6 +3752,23 @@ function ViewerHub({
                   </button>
                 </div>
               ))}
+              {pagedDiscoveredCreators.length < discoveredCreators.length && (
+                <button
+                  data-component="NoodlerHome.LoadMoreCreators"
+                  type="button"
+                  onClick={() =>
+                    setVisibleCreatorLimit((current) =>
+                      nextNoodlerFeedLimit(current, discoveredCreators.length),
+                    )
+                  }
+                  className="min-h-11 w-full border-b border-[var(--noodle-divider)] px-4 py-3 text-sm font-bold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+                >
+                  {localizeUi("ui.noodle.noodlehome.loadMore", {
+                    visible: pagedDiscoveredCreators.length,
+                    total: discoveredCreators.length,
+                  })}
+                </button>
+              )}
             </div>
           ) : (
             <p className="px-4 py-6 text-sm text-[var(--muted-foreground)]">
@@ -3759,12 +3929,26 @@ function ViewerHub({
             </p>
           ) : (
             <div>
-              {feed.map((item, index) => (
+              {pagedFeed.map((item, index) => (
                 <Fragment key={item.post.id}>
                   {index === dividerIndex && <NewSinceLastVisitDivider />}
                   {renderFeedPost(item)}
                 </Fragment>
               ))}
+              {feedHasMore && (
+                <button
+                  data-component="NoodlerHome.LoadMoreFeed"
+                  type="button"
+                  onClick={onLoadMoreFeed}
+                  disabled={feedLoadingMore}
+                  className="min-h-11 w-full border-b border-[var(--noodle-divider)] px-4 py-3 text-sm font-bold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+                >
+                  {localizeUi("ui.noodle.noodlehome.loadMore", {
+                    visible: pagedFeed.length,
+                    total: feedTotal,
+                  })}
+                </button>
+              )}
             </div>
           )}
         </>
@@ -4368,6 +4552,24 @@ function SubscriptionSections({
   onToggleCollapsed?: () => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
+  const [visibleCreatorLimit, setVisibleCreatorLimit] = useState(
+    NOODLER_CREATOR_PAGE_SIZE,
+  );
+  const creatorListKey = creators
+    .map((creator) => creator.profile.id)
+    .join("\u0000");
+  useEffect(() => {
+    setVisibleCreatorLimit(NOODLER_CREATOR_PAGE_SIZE);
+  }, [compact, creatorListKey]);
+  const visibleCreators = creators.slice(0, visibleCreatorLimit);
+  const loadMoreCreators = () =>
+    setVisibleCreatorLimit((current) =>
+      nextNoodlerFeedLimit(
+        current,
+        creators.length,
+        NOODLER_CREATOR_PAGE_SIZE,
+      ),
+    );
   if (compact) {
     return (
       <section aria-labelledby="noodler-discover-heading">
@@ -4402,7 +4604,7 @@ function SubscriptionSections({
             id="noodler-discover-list"
             className="flex snap-x gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
-            {creators.map((creator) => {
+            {visibleCreators.map((creator) => {
               const openProfile = onOpenProfile ? () => onOpenProfile(creator.profile.id) : undefined;
               return (
                 <article
@@ -4443,6 +4645,19 @@ function SubscriptionSections({
                 </article>
               );
             })}
+            {visibleCreators.length < creators.length && (
+              <button
+                data-component="SubscriptionSections.LoadMoreCreators"
+                type="button"
+                onClick={loadMoreCreators}
+                className="min-h-11 w-[11.5rem] shrink-0 snap-start rounded-md border border-[var(--noodle-divider)] px-3 text-sm font-bold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10"
+              >
+                {localizeUi("ui.noodle.noodlehome.loadMore", {
+                  visible: visibleCreators.length,
+                  total: creators.length,
+                })}
+              </button>
+            )}
           </div>
         ) : (
           <p className="px-4 text-xs text-[var(--muted-foreground)]">
@@ -4459,7 +4674,7 @@ function SubscriptionSections({
       </div>
       {creators.length > 0 ? (
         <div className="divide-y divide-[var(--noodle-divider)]">
-          {creators.map((creator) => {
+          {visibleCreators.map((creator) => {
             const openProfile = onOpenProfile ? () => onOpenProfile(creator.profile.id) : undefined;
             return (
               <div key={creator.profile.id} className="flex items-center gap-3 px-4 py-3">
@@ -4508,6 +4723,19 @@ function SubscriptionSections({
               </div>
             );
           })}
+          {visibleCreators.length < creators.length && (
+            <button
+              data-component="SubscriptionSections.LoadMoreCreators"
+              type="button"
+              onClick={loadMoreCreators}
+              className="min-h-11 w-full px-4 py-3 text-sm font-bold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+            >
+              {localizeUi("ui.noodle.noodlehome.loadMore", {
+                visible: visibleCreators.length,
+                total: creators.length,
+              })}
+            </button>
+          )}
         </div>
       ) : (
         <p className="px-4 py-5 text-sm text-[var(--muted-foreground)]">
