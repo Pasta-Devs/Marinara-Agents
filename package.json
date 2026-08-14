@@ -10,7 +10,7 @@
     "chess.js": "1.4.0"
   },
   "devDependencies": {
-    "@playwright/test": "1.61.0",
+    "@playwright/test": "1.62.1",
     "tsx": "4.23.12",
     "zod": "3.25.76"
   },
