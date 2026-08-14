@@ -12,6 +12,10 @@ import {
 import type { LtmExtractionDiagnostic } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { noteIdForEvidenceUnit } from "./evidence-unit-validation.js";
 import { uniqueStrings } from "./ltm-utils.js";
+import {
+  getLtmScopeGroupIds,
+  getLtmScopePersonaIds,
+} from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 import { subjectsEqual } from "./subject-identity.js";
 
 type ScopedTargetStorage = {
@@ -198,16 +202,17 @@ function shortScopeHash(scope: LtmScope) {
 }
 
 function scopeIdentitySeed(scope: LtmScope) {
-  const groupId = scope.groupId?.trim();
-  if (groupId) return `ltm_scope_v1:group:${groupId}`;
+  const groupIds = uniqueStrings(getLtmScopeGroupIds(scope)).sort();
+  const personaIds = uniqueStrings(getLtmScopePersonaIds(scope)).sort();
+  if (groupIds.length) return `ltm_scope_v2:group:${groupIds.join(",")}:persona:${personaIds.join(",")}`;
 
   const chatIds = uniqueStrings(getLtmScopeChatIds(scope)).sort();
-  if (chatIds.length > 0) return `ltm_scope_v1:chat:${chatIds.join(",")}`;
+  if (chatIds.length > 0) return `ltm_scope_v2:chat:${chatIds.join(",")}:persona:${personaIds.join(",")}`;
 
   const characterIds = uniqueStrings(scope.characterIds ?? []).sort();
-  if (characterIds.length > 0) return `ltm_scope_v1:character:${characterIds.join(",")}`;
+  if (characterIds.length > 0) return `ltm_scope_v2:character:${characterIds.join(",")}:persona:${personaIds.join(",")}`;
 
-  return "ltm_scope_v1:global";
+  return `ltm_scope_v2:persona:${personaIds.join(",") || "global"}`;
 }
 
 function isSourceOrScene(note: Pick<LtmNote, "type" | "tags">) {

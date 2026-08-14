@@ -14,6 +14,8 @@ import {
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
   getLtmScopeChatIds,
+  getLtmScopeGroupIds,
+  ltmScopesOverlap,
   withMergedLtmScopeLinks,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 import {
@@ -361,19 +363,7 @@ function matchesScope(candidate: Candidate, scope?: LtmScope) {
 
 function matchesImportScope(candidateScope: LtmScope, scope?: LtmScope) {
   if (!scope) return true;
-  const scopeIds = new Set(getLtmScopeChatIds(scope));
-  if (scope.groupId) {
-    if (candidateScope.groupId !== scope.groupId) return false;
-  } else if (scopeIds.size) {
-    const candidateIds = new Set(getLtmScopeChatIds(candidateScope));
-    if (![...candidateIds].some((id) => scopeIds.has(id))) return false;
-  }
-  if (scope.characterIds?.length) {
-    const candidateIds = new Set(candidateScope.characterIds ?? []);
-    if (![...candidateIds].some((id) => scope.characterIds?.includes(id)))
-      return false;
-  }
-  return true;
+  return ltmScopesOverlap(candidateScope, scope, { includeGlobal: false });
 }
 
 function lorebookScope(data: Record<string, unknown>) {
@@ -520,7 +510,8 @@ async function candidates(
       result.push(...book.candidates);
   if (request.source === "chats") {
     const scopeIds = new Set(getLtmScopeChatIds(request.scope));
-    const broaderScope = Boolean(request.scope?.groupId) || scopeIds.size > 1;
+    const scopeGroupIds = new Set(getLtmScopeGroupIds(request.scope));
+    const broaderScope = scopeGroupIds.size > 0 || scopeIds.size > 1;
     for (const chat of await getPackagePersistence().listChats()) {
       if (
         normalizeLtmChatCharacterIds(chat.characterIds).includes(
@@ -531,8 +522,8 @@ async function candidates(
       if (request.chatId && !broaderScope && chat.id !== request.chatId)
         continue;
       if (
-        request.scope?.groupId
-          ? chat.groupId !== request.scope.groupId
+        scopeGroupIds.size
+          ? !chat.groupId || !scopeGroupIds.has(chat.groupId)
           : scopeIds.size && !scopeIds.has(chat.id)
       )
         continue;

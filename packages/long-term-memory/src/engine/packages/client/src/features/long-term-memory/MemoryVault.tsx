@@ -34,6 +34,12 @@ import {
   removeLtmKeyword,
 } from "../../../../shared/src/features/agents/long-term-memory/keywords.js";
 import {
+  getLtmScopeChatIds,
+  getLtmScopeGroupIds,
+  getLtmScopePersonaIds,
+  normalizeLtmScope,
+} from "../../../../shared/src/features/agents/long-term-memory/scope.js";
+import {
   invalidateLtmQueries,
   queryKeys,
   request,
@@ -68,7 +74,13 @@ import {
   deriveScopeConversations,
   type ScopeTargets,
 } from "./scope-targets";
-import { TargetPicker, type PickerTarget } from "./TargetPicker";
+import {
+  AvailabilityTabRail,
+  TargetPicker,
+  type AvailabilityChatTarget,
+  type AvailabilityTarget,
+  type PickerTarget,
+} from "./TargetPicker";
 import { normalizeDetailName } from "./detail-name";
 
 const noteTypes: readonly LtmNoteType[] = [
@@ -161,6 +173,12 @@ const prefixes: Record<LtmNoteType, string> = {
 };
 
 type Target = { id: string; label: string; scope?: LtmScope };
+type AvailabilityTargets = {
+  characters: AvailabilityTarget[];
+  personas: AvailabilityTarget[];
+  chats: AvailabilityChatTarget[];
+  branches: AvailabilityChatTarget[];
+};
 function ScopeTargetPicker({
   kind,
   label,
@@ -191,16 +209,19 @@ function ScopeTargetPicker({
   return (
     <details
       data-ltm-memory-scope-picker={kind}
-      className="group"
+      className="group relative"
     >
-      <summary className="grid min-h-11 cursor-pointer list-none grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 rounded-md border border-[var(--border)] bg-[var(--marinara-editor-control-bg)] px-3 py-2 text-xs font-medium text-[var(--marinara-editor-muted)] hover:bg-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden">
+      <summary className="mari-editor-action flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left text-[var(--marinara-editor-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden">
+        <span className="min-w-0 flex-1">
+          <span className="block text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">{label}</span>
+          <span className="block truncate text-xs font-semibold text-[var(--marinara-editor-text)]" title={value}>{value}</span>
+        </span>
         <ChevronRight
           aria-hidden="true"
           size="0.875rem"
-          className="row-span-2 shrink-0 transition-transform group-open:rotate-90"
+          data-ltm-memory-scope-chevron
+          className="shrink-0 transition-transform"
         />
-        <span>{label}</span>
-        <strong className="min-w-0 truncate text-sm text-[var(--marinara-editor-text)]" title={value}>{value}</strong>
       </summary>
       <div className="mt-2 space-y-2">
         <label className="relative block">
@@ -217,11 +238,11 @@ function ScopeTargetPicker({
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
-        <div className="max-h-40 overflow-y-auto rounded-md border border-[var(--border)] bg-[var(--background)]">
+        <div className="max-h-40 overflow-y-auto rounded-md border border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-control-bg)]">
           <button
             type="button"
             data-ltm-memory-scope-target={`${kind}:all`}
-            className="block min-h-11 w-full border-b border-[var(--border)] px-3 py-2 text-left text-xs hover:bg-[var(--accent)]"
+            className="mari-editor-action mari-editor-action--compact block min-h-11 w-full rounded-none border-x-0 border-t-0 px-3 py-2 text-left text-xs last:border-b-0"
             onClick={(event) => {
               close(event);
               onClear();
@@ -234,7 +255,7 @@ function ScopeTargetPicker({
               key={target.id}
               type="button"
             data-ltm-memory-scope-target={target.id}
-            className="block min-h-11 w-full border-b border-[var(--border)] px-3 py-2 text-left text-xs last:border-b-0 hover:bg-[var(--accent)]"
+            className="mari-editor-action mari-editor-action--compact block min-h-11 w-full rounded-none border-x-0 border-t-0 px-3 py-2 text-left text-xs last:border-b-0"
             onClick={(event) => {
               close(event);
               onSelect(target);
@@ -279,32 +300,29 @@ function fingerprint(note: LtmNote | null) {
 }
 function hasExplicitScope(scope: LtmScope) {
   return Boolean(
-    scope.chatId ||
-    scope.chatIds?.length ||
-    scope.groupId ||
+    getLtmScopeChatIds(scope).length ||
+    getLtmScopeGroupIds(scope).length ||
     scope.characterIds?.length ||
-    scope.personaId,
+    getLtmScopePersonaIds(scope).length,
   );
 }
 function availabilityEntries(
   scope: LtmScope,
   targets: ReadonlyArray<PickerTarget>,
+  fallbackLabels: Partial<Record<PickerTarget["kind"], string>> = {},
 ) {
   const find = (kind: PickerTarget["kind"], id: string) =>
-    targets.find((target) => target.kind === kind && target.id === id)?.label ?? id;
-  const chatIds = new Set([
-    ...(scope.chatId ? [scope.chatId] : []),
-    ...(scope.chatIds ?? []),
-  ]);
+    targets.find((target) => target.kind === kind && target.id === id)?.label ??
+    fallbackLabels[kind] ??
+    humanizeLabel(kind);
+  const chatIds = new Set(getLtmScopeChatIds(scope));
+  const groupIds = getLtmScopeGroupIds(scope);
+  const personaIds = getLtmScopePersonaIds(scope);
   return [
     ...[...chatIds].map((id) => ({ kind: "chat" as const, id, label: find("chat", id) })),
-    ...(scope.groupId
-      ? [{ kind: "group" as const, id: scope.groupId, label: find("group", scope.groupId) }]
-      : []),
+    ...groupIds.map((id) => ({ kind: "group" as const, id, label: find("group", id) })),
     ...(scope.characterIds ?? []).map((id) => ({ kind: "character" as const, id, label: find("character", id) })),
-    ...(scope.personaId
-      ? [{ kind: "persona" as const, id: scope.personaId, label: find("persona", scope.personaId) }]
-      : []),
+    ...personaIds.map((id) => ({ kind: "persona" as const, id, label: find("persona", id) })),
   ];
 }
 function subjectSearchValues(note: LtmNote, subjectLabels: (subject: LtmSubject) => string) {
@@ -478,6 +496,7 @@ function MemoryAvailabilityWorkbench({
   note,
   isNew,
   targets,
+  availabilityTargets,
   localizeUi,
   modeLabel,
   onSave,
@@ -486,6 +505,7 @@ function MemoryAvailabilityWorkbench({
   note: LtmNote;
   isNew: boolean;
   targets: PickerTarget[];
+  availabilityTargets: AvailabilityTargets;
   localizeUi: LtmTranslationFunction;
   modeLabel: (mode: string) => string;
   onSave: (scope: LtmScope, modes: LtmMode[]) => Promise<void>;
@@ -495,41 +515,111 @@ function MemoryAvailabilityWorkbench({
   const [selectedModes, setSelectedModes] = useState<LtmMode[]>(() => [...note.modes]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const entries = availabilityEntries(scope, targets);
-  const selectedIds = new Set(entries.map((entry) => `${entry.kind}:${entry.id}`));
+  const selectedCharacterIds = scope.characterIds ?? [];
+  const selectedPersonaIds = getLtmScopePersonaIds(scope);
+  const selectedGroupIds = getLtmScopeGroupIds(scope);
+  const selectedChatIds = getLtmScopeChatIds(scope);
+  const unavailableLabels = {
+    chat: localizeUi("ui.longTermMemory.memoryvault.unavailableChat"),
+    group: localizeUi("ui.longTermMemory.memoryvault.unavailableChat"),
+    character: localizeUi("ui.longTermMemory.memoryvault.unavailableCharacter"),
+    persona: localizeUi("ui.longTermMemory.memoryvault.unavailablePersona"),
+  };
+  const visibleAvailabilityTargets: AvailabilityTargets = {
+    characters: [
+      ...availabilityTargets.characters,
+      ...selectedCharacterIds
+        .filter((id) => !availabilityTargets.characters.some((target) => target.id === id))
+        .map((id) => ({ id, label: unavailableLabels.character })),
+    ],
+    personas: [
+      ...availabilityTargets.personas,
+      ...selectedPersonaIds
+        .filter((id) => !availabilityTargets.personas.some((target) => target.id === id))
+        .map((id) => ({ id, label: unavailableLabels.persona })),
+    ],
+    chats: [
+      ...availabilityTargets.chats,
+      ...selectedGroupIds
+        .filter((id) => !availabilityTargets.chats.some((target) => target.groupId === id))
+        .map((id) => ({ id, label: unavailableLabels.chat, groupId: id, chatIds: [] })),
+      ...selectedChatIds
+        .filter((id) => !availabilityTargets.chats.some((target) => target.id === id) && !availabilityTargets.branches.some((target) => target.id === id))
+        .map((id) => ({ id, label: unavailableLabels.chat })),
+    ],
+    branches: [
+      ...availabilityTargets.branches,
+    ],
+  };
+  const entries = availabilityEntries(scope, targets, unavailableLabels);
+  const selectedIds = new Set([
+    ...getLtmScopePersonaIds(scope).map((id) => `persona:${id}`),
+    ...(scope.characterIds ?? []).map((id) => `character:${id}`),
+    ...getLtmScopeGroupIds(scope).map((id) => `chat:${id}`),
+    ...getLtmScopeChatIds(scope).map((id) => {
+      const branch = availabilityTargets.branches.find((target) => target.id === id);
+      return `${branch?.groupId ? "branch" : "chat"}:${id}`;
+    }),
+  ]);
   const remove = (kind: PickerTarget["kind"], id: string) => {
     if (entries.length <= 1) {
       setError(localizeUi("ui.longTermMemory.memoryvault.lastPlaceRequired"));
       return;
     }
-    if (kind === "chat") {
-      const chatIds = [...new Set([
-        ...(scope.chatIds ?? []),
-        ...(scope.chatId ? [scope.chatId] : []),
-      ])].filter((value) => value !== id);
-      setScope({
-        ...scope,
-        chatIds: chatIds.length ? chatIds : undefined,
-        chatId: chatIds[0],
-      });
-    } else if (kind === "group") setScope({ ...scope, groupId: undefined });
-    else if (kind === "character") {
+    if (kind === "chat" || kind === "group") {
+      const groupIds = getLtmScopeGroupIds(scope).filter((value) => value !== id);
+      const chatIds = getLtmScopeChatIds(scope).filter((value) => value !== id);
+      setScope(normalizeLtmScope({ ...scope, groupIds, chatIds }));
+    } else if (kind === "character") {
       const characterIds = (scope.characterIds ?? []).filter((value) => value !== id);
-      setScope({ ...scope, characterIds: characterIds.length ? characterIds : undefined });
-    } else setScope({ ...scope, personaId: undefined });
+      setScope(normalizeLtmScope({ ...scope, characterIds }));
+    } else {
+      setScope(normalizeLtmScope({
+        ...scope,
+        personaIds: getLtmScopePersonaIds(scope).filter((value) => value !== id),
+      }));
+    }
     setError("");
   };
-  const select = (target: PickerTarget) => {
-    if (target.kind === "chat")
-      setScope({
-        ...scope,
-        chatIds: [...new Set([...(scope.chatIds ?? []), scope.chatId, target.id].filter(Boolean))],
-        chatId: scope.chatId ?? target.id,
-      });
-    else if (target.kind === "group") setScope({ ...scope, groupId: target.id });
-    else if (target.kind === "character")
-      setScope({ ...scope, characterIds: [...new Set([...(scope.characterIds ?? []), target.id])] });
-    else setScope({ ...scope, personaId: target.id });
+  const toggle = (kind: "character" | "persona" | "chat" | "branch", id: string) => {
+    const next = normalizeLtmScope(scope);
+    if (kind === "character") {
+      const values = new Set(next.characterIds ?? []);
+      values.has(id) ? values.delete(id) : values.add(id);
+      next.characterIds = [...values];
+    } else if (kind === "persona") {
+      const values = new Set(getLtmScopePersonaIds(next));
+      values.has(id) ? values.delete(id) : values.add(id);
+      next.personaIds = [...values];
+    } else if (kind === "chat") {
+      const target = availabilityTargets.chats.find((item) => item.id === id);
+      if (target?.groupId) {
+        const groupIds = new Set(getLtmScopeGroupIds(next));
+        if (groupIds.has(target.groupId)) groupIds.delete(target.groupId);
+        else {
+          groupIds.add(target.groupId);
+          next.chatIds = getLtmScopeChatIds(next).filter(
+            (chatId) => !availabilityTargets.branches.some(
+              (branch) => branch.id === chatId && branch.groupId === target.groupId,
+            ),
+          );
+        }
+        next.groupIds = [...groupIds];
+      } else {
+        const chatIds = new Set(getLtmScopeChatIds(next));
+        chatIds.has(id) ? chatIds.delete(id) : chatIds.add(id);
+        next.chatIds = [...chatIds];
+      }
+    } else {
+      const target = availabilityTargets.branches.find((item) => item.id === id);
+      const chatIds = new Set(getLtmScopeChatIds(next));
+      chatIds.has(id) ? chatIds.delete(id) : chatIds.add(id);
+      next.chatIds = [...chatIds];
+      if (target?.groupId) {
+        next.groupIds = getLtmScopeGroupIds(next).filter((groupId) => groupId !== target.groupId);
+      }
+    }
+    setScope(normalizeLtmScope(next));
     setError("");
   };
   const toggleMode = (mode: LtmMode) => {
@@ -577,6 +667,18 @@ function MemoryAvailabilityWorkbench({
         </div>
       </header>
       {error ? <div role="alert"><StatusSurface tone="danger">{error}</StatusSurface></div> : null}
+      <fieldset className="space-y-2 border-b border-[var(--border)] pb-4">
+        <legend className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memoryvault.chatModes")}</legend>
+        <p className="text-xs text-[var(--muted-foreground)]">{localizeUi("ui.longTermMemory.memoryvault.modesHelp")}</p>
+        <div className="flex flex-wrap gap-3">
+          {modes.map((mode) => (
+            <label key={mode} className="flex min-h-11 items-center gap-2 text-sm">
+              <input type="checkbox" checked={selectedModes.includes(mode)} onChange={() => toggleMode(mode)} />
+              {modeLabel(mode)}
+            </label>
+          ))}
+        </div>
+      </fieldset>
       <section className="space-y-3">
         <div>
           <h3 className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memoryvault.availableIn")}</h3>
@@ -601,34 +703,54 @@ function MemoryAvailabilityWorkbench({
             ))}
           </div>
         )}
-        <TargetPicker
-          targets={targets}
+        <AvailabilityTabRail
+          characters={visibleAvailabilityTargets.characters}
+          personas={visibleAvailabilityTargets.personas}
+          chats={visibleAvailabilityTargets.chats}
+          branches={visibleAvailabilityTargets.branches}
           selectedIds={selectedIds}
-          allowedKinds={new Set(["chat", "group", "character", "persona"])}
-          placeholder={localizeUi("ui.longTermMemory.memoryvault.chooseScope")}
-          emptyLabel={localizeUi("ui.longTermMemory.memoryvault.noScopeTargets")}
-          clearLabel={localizeUi("ui.longTermMemory.memoryvault.clearTargetSearch")}
-          groupLabels={{
-            chat: localizeUi("ui.longTermMemory.memoryvault.chats"),
-            group: localizeUi("ui.longTermMemory.memoryvault.groups"),
-            character: localizeUi("ui.longTermMemory.memoryvault.characters"),
-            persona: localizeUi("ui.longTermMemory.memoryvault.personas"),
+          tablistLabel={localizeUi("ui.longTermMemory.memoryvault.memoryAvailability")}
+          sectionCopy={{
+            character: {
+              label: localizeUi("ui.longTermMemory.memoryvault.character"),
+              searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchCharacters"),
+              emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingCharacters"),
+              accessibleLabel: (count) => localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+                label: localizeUi("ui.longTermMemory.memoryvault.character"),
+                count,
+              }),
+            },
+            persona: {
+              label: localizeUi("ui.longTermMemory.memoryvault.persona"),
+              searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchPersonas"),
+              emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingPersonas"),
+              accessibleLabel: (count) => localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+                label: localizeUi("ui.longTermMemory.memoryvault.persona"),
+                count,
+              }),
+            },
+            chat: {
+              label: localizeUi("ui.longTermMemory.memoryvault.chat"),
+              searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchChats"),
+              emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingChats"),
+              accessibleLabel: (count) => localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+                label: localizeUi("ui.longTermMemory.memoryvault.chat"),
+                count,
+              }),
+            },
+            branch: {
+              label: localizeUi("ui.longTermMemory.memoryvault.branch"),
+              searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchBranches"),
+              emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingBranches"),
+              accessibleLabel: (count) => localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+                label: localizeUi("ui.longTermMemory.memoryvault.branch"),
+                count,
+              }),
+            },
           }}
-          onSelect={select}
+          onToggle={toggle}
         />
       </section>
-      <fieldset className="space-y-2 border-t border-[var(--border)] pt-4">
-        <legend className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memoryvault.chatModes")}</legend>
-        <p className="text-xs text-[var(--muted-foreground)]">{localizeUi("ui.longTermMemory.memoryvault.modesHelp")}</p>
-        <div className="flex flex-wrap gap-3">
-          {modes.map((mode) => (
-            <label key={mode} className="flex min-h-11 items-center gap-2 text-sm">
-              <input type="checkbox" checked={selectedModes.includes(mode)} onChange={() => toggleMode(mode)} />
-              {modeLabel(mode)}
-            </label>
-          ))}
-        </div>
-      </fieldset>
     </section>
   );
 }
@@ -654,7 +776,12 @@ function BulkAvailabilityWorkbench({
 }) {
   const [kind, id] = target.split(":", 2);
   const outcomes = notes.map((note) => {
-    const places = availabilityEntries(note.scope, []);
+    const places = availabilityEntries(note.scope, [], {
+      chat: localizeUi("ui.longTermMemory.memoryvault.unavailableChat"),
+      group: localizeUi("ui.longTermMemory.memoryvault.unavailableChat"),
+      character: localizeUi("ui.longTermMemory.memoryvault.unavailableCharacter"),
+      persona: localizeUi("ui.longTermMemory.memoryvault.unavailablePersona"),
+    });
     const hasPlace = places.some((entry) => entry.kind === kind && entry.id === id);
     const matchingModes = selectedModes.filter((mode) => note.modes.includes(mode));
     const changes = action === "add"
@@ -879,10 +1006,10 @@ export default function MemoryVault({
   });
 
   const scopeTargets = useQuery({
-    queryKey: queryKeys.scopeTargets(props.chatId),
+    queryKey: [...queryKeys.scopeTargets(props.chatId), "all-chats"],
     queryFn: () =>
       request<ScopeTargets>(
-        `/scope-targets${props.chatId ? `?chatId=${encodeURIComponent(props.chatId)}` : ""}`,
+        `/scope-targets?includeAllChats=true${props.chatId ? `&chatId=${encodeURIComponent(props.chatId)}` : ""}`,
       ),
   });
   useEffect(() => {
@@ -1233,6 +1360,66 @@ export default function MemoryVault({
       scopeTargets.data?.personas,
     ],
   );
+  const availabilityTargets = useMemo<AvailabilityTargets>(() => {
+    const chats = scopeTargets.data?.chats ?? [];
+    const groups = scopeTargets.data?.groups ?? [];
+    const byGroup = new Map<string, AvailabilityChatTarget[]>();
+    for (const chat of chats) {
+      if (!chat.groupId) continue;
+      const members = byGroup.get(chat.groupId) ?? [];
+      members.push({
+        id: chat.id,
+        label: chat.label,
+        mode: chat.mode,
+        groupId: chat.groupId,
+        characterIds: chat.characterIds,
+        personaId: chat.personaId,
+      });
+      byGroup.set(chat.groupId, members);
+    }
+    const familyTargets = groups.map((group) => {
+      const members = byGroup.get(group.id) ?? [];
+      return {
+        id: group.id,
+        label: group.label,
+        groupId: group.id,
+        chatIds: group.chatIds,
+        members,
+      } satisfies AvailabilityChatTarget;
+    });
+    const ungroupedTargets = chats
+      .filter((chat) => !chat.groupId)
+      .map((chat) => ({
+        id: chat.id,
+        label: chat.label,
+        mode: chat.mode,
+        characterIds: chat.characterIds,
+        personaId: chat.personaId,
+      } satisfies AvailabilityChatTarget));
+    return {
+      characters: (scopeTargets.data?.characters ?? []).map((character) => ({
+        id: character.id,
+        label: character.label,
+        comment: character.comment,
+      })),
+      personas: (scopeTargets.data?.personas ?? []).map((persona) => ({
+        id: persona.id,
+        label: persona.label,
+        comment: persona.comment,
+      })),
+      chats: [...familyTargets, ...ungroupedTargets],
+      branches: chats
+        .filter((chat) => Boolean(chat.groupId))
+        .map((chat) => ({
+          id: chat.id,
+          label: chat.label,
+          mode: chat.mode,
+          groupId: chat.groupId ?? undefined,
+          characterIds: chat.characterIds,
+          personaId: chat.personaId,
+        } satisfies AvailabilityChatTarget)),
+    };
+  }, [scopeTargets.data?.chats, scopeTargets.data?.characters, scopeTargets.data?.groups, scopeTargets.data?.personas]);
   const subjectLabel = (subject: LtmSubject) => {
     if (subject.ref)
       return scopeTargetLabel(subject.ref.kind, subject.ref.id, pickerTargets, {
@@ -2117,6 +2304,21 @@ export default function MemoryVault({
       className="space-y-4"
       aria-label={localizeUi("ui.longTermMemory.memoryvault.memoryVault")}
     >
+      <style>{`
+        [data-ltm-surface="vault"] [data-ltm-memory-scope] > summary,
+        [data-ltm-surface="vault"] [data-ltm-memory-scope-picker] > summary {
+          display: flex;
+          font-family: inherit;
+        }
+        [data-ltm-surface="vault"] [data-ltm-memory-scope-target] {
+          display: flex;
+          align-items: center;
+          justify-content: flex-start;
+        }
+        [data-ltm-surface="vault"] details[open] > summary [data-ltm-memory-scope-chevron] {
+          transform: rotate(90deg);
+        }
+      `}</style>
       <LtmWorkspace
         activeMobilePane={mobilePane}
         onMobilePaneChange={setMobilePane}
@@ -2143,18 +2345,21 @@ export default function MemoryVault({
           data-ltm-memory-scope
           className="mari-editor-panel mari-editor-panel--soft group col-span-2 rounded-md"
         >
-          <summary className="grid min-h-11 cursor-pointer list-none grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 px-3 py-2 text-xs font-medium text-[var(--marinara-editor-muted)] hover:bg-[var(--accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden">
+          <summary className="mari-editor-action flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left text-[var(--marinara-editor-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden">
+            <span className="min-w-0 flex-1">
+              <span className="block text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
+                {localizeUi("ui.longTermMemory.memoryvault.currentlyViewingMemoriesIn")}
+              </span>
+              <span className="block truncate text-xs font-semibold text-[var(--marinara-editor-text)]">
+                {target?.label ?? localizeUi("ui.longTermMemory.memoryvault.allMemories")}
+              </span>
+            </span>
             <ChevronRight
               aria-hidden="true"
               size="0.875rem"
-              className="row-span-2 shrink-0 transition-transform group-open:rotate-90"
+              data-ltm-memory-scope-chevron
+              className="shrink-0 transition-transform"
             />
-            <span className="text-[var(--muted-foreground)]">
-              {localizeUi("ui.longTermMemory.memoryvault.currentlyViewingMemoriesIn")}
-            </span>
-            <strong className="min-w-0 truncate text-sm text-[var(--marinara-editor-text)]">
-              {target?.label ?? localizeUi("ui.longTermMemory.memoryvault.allMemories")}
-            </strong>
           </summary>
           <div className="grid gap-2 border-t border-[var(--border)] p-3">
             <label className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
@@ -2741,6 +2946,7 @@ export default function MemoryVault({
             note={draft}
             isNew={isNew}
             targets={pickerTargets}
+            availabilityTargets={availabilityTargets}
             localizeUi={localizeUi}
             modeLabel={modeLabel}
             onSave={saveAvailability}
@@ -2854,7 +3060,12 @@ export default function MemoryVault({
                   <p className="mt-1 text-xs text-[var(--muted-foreground)]">
                     {hasExplicitScope(draft.scope)
                       ? localizeUi("ui.longTermMemory.memoryvault.availabilitySummary", {
-                          places: availabilityEntries(draft.scope, pickerTargets).length,
+                           places: availabilityEntries(draft.scope, pickerTargets, {
+                             chat: localizeUi("ui.longTermMemory.memoryvault.unavailableChat"),
+                             group: localizeUi("ui.longTermMemory.memoryvault.unavailableChat"),
+                             character: localizeUi("ui.longTermMemory.memoryvault.unavailableCharacter"),
+                             persona: localizeUi("ui.longTermMemory.memoryvault.unavailablePersona"),
+                           }).length,
                           modes: draft.modes.length,
                         })
                       : localizeUi("ui.longTermMemory.memoryvault.availableEverywhere")}

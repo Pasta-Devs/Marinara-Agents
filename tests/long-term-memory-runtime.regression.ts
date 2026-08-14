@@ -40,6 +40,28 @@ async function main() {
   const { LTM_RECALL_STYLE_WEIGHTS } = await import(
     "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/constants.ts"
   );
+  const { ltmScopesOverlap, normalizeLtmScope } = await import(
+    "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/scope.ts",
+  );
+  assert.deepEqual(
+    normalizeLtmScope({ chatId: "legacy-chat", groupId: "legacy-group", personaId: "legacy-persona" }),
+    {
+      chatId: "legacy-chat",
+      chatIds: ["legacy-chat"],
+      groupId: "legacy-group",
+      groupIds: ["legacy-group"],
+      personaId: "legacy-persona",
+      personaIds: ["legacy-persona"],
+    },
+  );
+  assert.equal(
+    ltmScopesOverlap(
+      { groupIds: ["chat-family-a"], personaIds: ["persona-a"] },
+      { chatId: "branch-a", groupId: "chat-family-a", personaId: "persona-b" },
+      { includeGlobal: false },
+    ),
+    true,
+  );
   const { configurePackageRuntime, getPackageEmbeddingAdapter } = await import(
     `${source}/package-runtime.ts`,
   );
@@ -789,9 +811,11 @@ async function main() {
       characterIds: ["character-a"],
       messages: [{ role: "user", content: scopedRecallText }],
       debugMode: false,
-    });
-    assert.match(newCharacterRecall?.text ?? "", /belongs to character A/);
-    assert.doesNotMatch(newCharacterRecall?.text ?? "", /old-chat-only|belongs to character B|belongs to persona A|belongs to group A/);
+     });
+     assert.match(newCharacterRecall?.text ?? "", /belongs to character A/);
+     assert.match(newCharacterRecall?.text ?? "", /belongs to persona A/);
+     assert.match(newCharacterRecall?.text ?? "", /belongs to group A/);
+     assert.doesNotMatch(newCharacterRecall?.text ?? "", /old-chat-only|belongs to character B/);
     assert.doesNotMatch(
       (await runtime.recall({
         chatId: "chat-other-character",
@@ -808,10 +832,10 @@ async function main() {
       characterIds: ["character-a"],
       messages: [{ role: "user", content: scopedRecallText }],
       debugMode: false,
-    }))?.text ?? "";
-    assert.match(personaCharacterRecall, /belongs to character A/);
-    assert.doesNotMatch(personaCharacterRecall, /belongs to persona A/);
-    assert.doesNotMatch(
+     }))?.text ?? "";
+     assert.match(personaCharacterRecall, /belongs to character A/);
+     assert.match(personaCharacterRecall, /belongs to persona A/);
+     assert.match(
       (await runtime.recall({
         chatId: "chat-other-group",
         chatMode: "roleplay",

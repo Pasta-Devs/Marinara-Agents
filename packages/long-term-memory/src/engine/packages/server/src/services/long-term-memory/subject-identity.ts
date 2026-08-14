@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import {
   getLtmScopeChatIds,
+  getLtmScopeGroupIds,
+  getLtmScopePersonaIds,
   isGlobalLtmScope,
   type LtmEvidenceUnit,
   type LtmExtractionDroppedCandidate,
@@ -304,18 +306,19 @@ export async function loadTrustedLtmSubjectCatalog(
   const persistence = getPackagePersistence();
   const resources = getPackageResources();
   const chatIds = getLtmScopeChatIds(scope);
-  const allChats = chatIds.length === 0 && scope.groupId ? await persistence.listChats() : [];
+  const groupIds = getLtmScopeGroupIds(scope);
+  const allChats = chatIds.length === 0 && groupIds.length ? await persistence.listChats() : [];
   const chats = chatIds.length
     ? (await Promise.all(chatIds.map((id) => persistence.getChat(id)))).filter(
         (chat): chat is NonNullable<typeof chat> => Boolean(chat),
       )
-    : allChats.filter((chat) => chat.groupId === scope.groupId);
+    : allChats.filter((chat) => chat.groupId && groupIds.includes(chat.groupId));
   const characterIds = uniqueStrings([
     ...(scope.characterIds ?? []),
     ...chats.flatMap((chat) => normalizeLtmChatCharacterIds(chat.characterIds)),
   ]);
   const personaIds = uniqueStrings([
-    scope.personaId,
+    ...getLtmScopePersonaIds(scope),
     ...chats.map((chat) => chat.personaId ?? undefined),
   ]);
   const [characterRows, personaRows, notes] = await Promise.all([

@@ -11,6 +11,8 @@ import type {
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
   getLtmScopeChatIds,
+  getLtmScopeGroupIds,
+  getLtmScopePersonaIds,
   isGlobalLtmScope,
   matchesLtmScope,
   withMergedLtmScopeLinks,
@@ -146,11 +148,14 @@ function lineageForNote(notes: LtmNote[], noteId: string) {
 
 function normalizedScopeForComparison(scope: LtmScope | null | undefined) {
   const chatIds = uniqueStrings(getLtmScopeChatIds(scope)).sort();
+  const groupIds = uniqueStrings(getLtmScopeGroupIds(scope)).sort();
   const characterIds = uniqueStrings(scope?.characterIds ?? []).sort();
+  const personaIds = uniqueStrings(getLtmScopePersonaIds(scope)).sort();
   return {
     ...(chatIds.length ? { chatIds, chatId: chatIds[0] } : {}),
-    ...(scope?.groupId ? { groupId: scope.groupId } : {}),
+    ...(groupIds.length ? { groupIds, groupId: groupIds[0] } : {}),
     ...(characterIds.length ? { characterIds } : {}),
+    ...(personaIds.length ? { personaIds, personaId: personaIds[0] } : {}),
   } satisfies LtmScope;
 }
 
@@ -165,18 +170,11 @@ function scopesEqual(
 }
 
 function scopeForCopy(note: LtmNote, destinationScope: LtmScope) {
-  if (
-    note.scope.personaId &&
-    note.scope.personaId !== destinationScope.personaId
-  )
-    throw new LtmNoteTransferError(
-      "Persona-scoped memories cannot be copied to a different persona.",
-      409,
-    );
   return withMergedLtmScopeLinks(note.scope, {
     chatIds: getLtmScopeChatIds(destinationScope),
+    groupIds: getLtmScopeGroupIds(destinationScope),
     characterIds: destinationScope.characterIds,
-    personaId: destinationScope.personaId,
+    personaIds: getLtmScopePersonaIds(destinationScope),
   });
 }
 

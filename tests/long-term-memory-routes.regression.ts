@@ -732,9 +732,10 @@ async function main() {
         status: "active",
         modes: ["roleplay"],
         scope: {
-          chatId: "chat-a",
-          chatIds: ["chat-a"],
-          personaId: "persona-fixture",
+         chatId: "chat-a",
+         chatIds: ["chat-a"],
+         personaId: "persona-fixture",
+         personaIds: ["persona-fixture"],
         },
         tags: ["route_fixture"],
         keywords: [],
@@ -762,11 +763,12 @@ async function main() {
     assert.match(globalizePersonaScoped.json().error, /scope-removal action/);
     assert.deepEqual(
       (await storageService.storage.getNote("world_persona_scoped"))?.scope,
-      {
-        chatId: "chat-a",
-        chatIds: ["chat-a"],
-        personaId: "persona-fixture",
-      },
+       {
+         chatId: "chat-a",
+         chatIds: ["chat-a"],
+         personaId: "persona-fixture",
+         personaIds: ["persona-fixture"],
+       },
     );
     const missingPersonaScope = await app.inject({
       method: "GET",
@@ -777,7 +779,7 @@ async function main() {
       missingPersonaScope
         .json()
         .some((note: any) => note.id === "world_persona_scoped"),
-      false,
+      true,
     );
     const matchingPersonaScope = await app.inject({
       method: "GET",
@@ -804,7 +806,7 @@ async function main() {
     assert.equal(removePersonaChatScope.json().deleted, false);
     assert.deepEqual(
       (await storageService.storage.getNote("world_persona_scoped"))?.scope,
-      { personaId: "persona-fixture" },
+      { personaId: "persona-fixture", personaIds: ["persona-fixture"] },
     );
     const chatOnly = await app.inject({
       method: "POST",
@@ -879,7 +881,7 @@ async function main() {
     assert.deepEqual(
       (await storageService.storage.getNote("world_concurrent_scope_removal"))
         ?.scope,
-      { personaId: "persona-fixture" },
+      { personaId: "persona-fixture", personaIds: ["persona-fixture"] },
     );
     await storageService.storage.createNote({
       id: "world_professor_mari_group",
@@ -1134,7 +1136,8 @@ async function main() {
         "world_scope_branch",
         "world_scope_character",
         "world_scope_chat",
-        "world_scope_group",
+         "world_scope_group",
+         "world_scope_other_character",
       ].sort(),
     );
     await storageService.storage.createNote({
@@ -1210,9 +1213,10 @@ async function main() {
         "world_character_persona_scoped",
         "world_route_fixture",
         "world_scope_branch",
-        "world_scope_character",
-        "world_scope_group",
-      ].sort(),
+         "world_scope_character",
+         "world_scope_group",
+         "world_scope_other_character",
+       ].sort(),
     );
     const selectedBranch = await app.inject({
       method: "GET",
@@ -1222,8 +1226,9 @@ async function main() {
     assert.deepEqual(
       selectedBranch.json().map((note: any) => note.id).sort(),
       [
-        "char_mara",
-        "world_scope_branch",
+         "char_mara",
+         "world_character_persona_scoped",
+         "world_scope_branch",
         "world_scope_character",
         "world_scope_group",
       ].sort(),
@@ -1351,13 +1356,15 @@ async function main() {
         destinationChatId: "chat-persona-b",
       },
     });
-    assert.equal(personaTransfer.statusCode, 409, personaTransfer.body);
+    assert.equal(personaTransfer.statusCode, 200, personaTransfer.body);
     assert.deepEqual(
       (await storageService.storage.getNote("world_persona_transfer")).scope,
       {
         chatId: "chat-persona-a",
-        chatIds: ["chat-persona-a"],
+        chatIds: ["chat-persona-a", "chat-persona-b"],
+        characterIds: ["character-mara"],
         personaId: "persona-a",
+        personaIds: ["persona-a", "persona-b"],
       },
     );
     const extractSource = await app.inject({
@@ -2334,7 +2341,7 @@ async function main() {
           personaIdentityCandidate.canonicalNoteId,
         )
       ).scope,
-      { personaId: "persona-fixture" },
+      { personaId: "persona-fixture", personaIds: ["persona-fixture"] },
     );
     const preview = await app.inject({
       method: "POST",

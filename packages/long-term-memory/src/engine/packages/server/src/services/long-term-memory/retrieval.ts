@@ -77,7 +77,6 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
       .filter((chunk) => input.includeResolved || chunk.status !== "resolved" || chunk.noteType !== "thread")
       .filter((chunk) => !input.mode || chunk.modes?.includes(input.mode))
       .filter((chunk) => {
-        if (chunk.scope.groupId && chunk.scope.groupId !== input.scope?.groupId) return false;
         const hasScope = !isGlobalLtmScope(input.scope) || characterIds.length > 0;
         return matchesLtmScope(
           { id: chunk.noteId, type: chunk.noteType, scope: chunk.scope },

@@ -9,7 +9,7 @@ import {
   type LtmScope,
   type LtmSection,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { getLtmScopeChatIds, withMergedLtmScopeLinks } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
+import { getLtmScopeChatIds, getLtmScopeGroupIds, getLtmScopePersonaIds, withMergedLtmScopeLinks } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 import { uniqueLinks } from "../../../../shared/src/features/agents/long-term-memory/utils.js";
 import { stableStringify } from "./chunking.js";
 import { uniqueStrings } from "./ltm-utils.js";
@@ -209,7 +209,7 @@ function sectionChange(before: LtmNote | null, after: LtmNote, key: string): Ltm
 function textChange(kind: LtmProjectedChange["kind"], before: string | undefined, after: string, key = kind): LtmProjectedChange[] { return before === after ? [] : [{ kind, key, ...(before ? { before } : {}), after }]; }
 function linksEqual(left: LtmLink, right: LtmLink) { return left.target === right.target && left.relation === right.relation && left.aspect === right.aspect; }
 function withSourceLink(noteId: string, links: LtmLink[], sourceId: string | undefined) { return !sourceId || sourceId === noteId ? uniqueLinks(links) : uniqueLinks([...links, { target: sourceId, relation: "extracted_from" }]); }
-function mergeScopes(existing: LtmScope, incoming: LtmScope) { return { ...withMergedLtmScopeLinks(existing, { chatIds: getLtmScopeChatIds(incoming), characterIds: incoming.characterIds ?? [] }), groupId: existing.groupId ?? incoming.groupId }; }
+function mergeScopes(existing: LtmScope, incoming: LtmScope) { return withMergedLtmScopeLinks(existing, { chatIds: getLtmScopeChatIds(incoming), groupIds: getLtmScopeGroupIds(incoming), characterIds: incoming.characterIds ?? [], personaIds: getLtmScopePersonaIds(incoming) }); }
 function uniqueCaseInsensitive(values: string[]) { const seen = new Set<string>(); return values.filter((value) => { const key = value.trim().toLocaleLowerCase(); if (!key || seen.has(key)) return false; seen.add(key); return true; }).map((value) => value.trim()); }
 function uniqueConflicts(values: LtmConflict[]) { const seen = new Set<string>(); return values.filter((value) => { const key = stableStringify(value); if (seen.has(key)) return false; seen.add(key); return true; }); }
 function optionalConflicts(values: LtmConflict[]) { return values.length ? values : undefined; }

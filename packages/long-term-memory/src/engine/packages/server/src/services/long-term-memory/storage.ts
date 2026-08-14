@@ -22,8 +22,11 @@ import {
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
   getLtmScopeChatIds,
+  getLtmScopeGroupIds,
+  getLtmScopePersonaIds,
   isGlobalLtmScope,
   matchesLtmScope,
+  normalizeLtmScope,
   validateLtmExplicitAvailability,
   withMergedLtmScopeLinks,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
@@ -339,9 +342,10 @@ export class LongTermMemoryStorage {
     await this.initializeLtmStore();
     const timestamp = nowIso();
     const draft = ltmDraftNoteInputSchema.parse(input);
+    const scope = normalizeLtmScope(draft.scope);
     if (draft.type !== "source") {
       const availabilityError = validateLtmExplicitAvailability(
-        draft.scope,
+        scope,
         draft.modes,
       );
       if (availabilityError)
@@ -365,6 +369,7 @@ export class LongTermMemoryStorage {
           );
     const note = ltmNoteSchema.parse({
       ...draft,
+      scope,
       ...normalizeLtmKeywordIntent(draft),
       sections,
       createdAt: (draft as any).createdAt ?? timestamp,
@@ -494,6 +499,7 @@ export class LongTermMemoryStorage {
       const next = ltmNoteSchema.parse({
         ...current,
         ...notePatch,
+        ...(notePatch.scope ? { scope: normalizeLtmScope(notePatch.scope) } : {}),
         ...normalizeLtmKeywordIntent({ ...current, ...notePatch }),
         ...(sections ? { sections } : {}),
         id: current.id,
@@ -615,33 +621,30 @@ export class LongTermMemoryStorage {
         const addScope = request.addScope;
         const removeScope = request.removeScope;
         const currentChatIds = getLtmScopeChatIds(current.scope);
+        const currentGroupIds = getLtmScopeGroupIds(current.scope);
+        const currentPersonaIds = getLtmScopePersonaIds(current.scope);
         const removeChatIds = new Set(getLtmScopeChatIds(removeScope));
+        const removeGroupIds = new Set(getLtmScopeGroupIds(removeScope));
+        const removePersonaIds = new Set(getLtmScopePersonaIds(removeScope));
         const nextChatIds = currentChatIds
           .filter((chatId) => !removeChatIds.has(chatId));
         const nextScope = withMergedLtmScopeLinks(
           {
             ...current.scope,
-            ...(removeScope?.groupId === current.scope.groupId ? { groupId: undefined } : {}),
-            ...(removeScope?.personaId === current.scope.personaId ? { personaId: undefined } : {}),
+            chatIds: nextChatIds,
+            groupIds: currentGroupIds.filter((id) => !removeGroupIds.has(id)),
             characterIds: current.scope.characterIds?.filter(
               (id) => !removeScope?.characterIds?.includes(id),
             ),
-            chatIds: nextChatIds,
-            chatId: nextChatIds[0],
+            personaIds: currentPersonaIds.filter((id) => !removePersonaIds.has(id)),
           },
           {
             chatIds: getLtmScopeChatIds(addScope),
+            groupIds: getLtmScopeGroupIds(addScope),
             characterIds: addScope?.characterIds,
-            personaId: addScope?.personaId,
+            personaIds: getLtmScopePersonaIds(addScope),
           },
         );
-        if (addScope?.groupId && current.scope.groupId && addScope.groupId !== current.scope.groupId) {
-          continue;
-        }
-        if (addScope?.personaId && current.scope.personaId && addScope.personaId !== current.scope.personaId) {
-          continue;
-        }
-        if (addScope?.groupId) nextScope.groupId = addScope.groupId;
         const scope = addScope || removeScope ? nextScope : current.scope;
         if (!modes.length || (removeScope && isGlobalLtmScope(scope))) continue;
         const tags =
@@ -1365,32 +1368,34 @@ export class LongTermMemoryStorage {
   }
   async removeNoteFromScope(
     id: string,
-    input: { chatIds?: string[]; groupId?: string; characterIds?: string[] },
+    input: { chatIds?: string[]; groupIds?: string[]; groupId?: string; characterIds?: string[]; personaIds?: string[] },
   ) {
     await this.initializeLtmStore();
     return withLtmVaultLock(this.root, async () => {
        const note = await this.getNote(id);
        if (!note) throw new LtmServiceError(`Long-term memory note not found: ${id}`, 404, "ltm_note_not_found");
       const removedChatIds = new Set(input.chatIds ?? []);
+      const removedGroupIds = new Set([input.groupId, ...(input.groupIds ?? [])].filter(Boolean));
       const removedCharacterIds = new Set(input.characterIds ?? []);
+      const removedPersonaIds = new Set(input.personaIds ?? []);
       const existingChatIds = getLtmScopeChatIds(note.scope);
+      const existingGroupIds = getLtmScopeGroupIds(note.scope);
+      const existingPersonaIds = getLtmScopePersonaIds(note.scope);
       const chatIds = existingChatIds.filter(
         (value) => !removedChatIds.has(value),
       );
       const characterIds = (note.scope.characterIds ?? []).filter(
         (value) => !removedCharacterIds.has(value),
       );
-      const groupId =
-        input.groupId && note.scope.groupId === input.groupId
-          ? undefined
-          : note.scope.groupId;
-      const personaId = note.scope.personaId;
-      const changed =
+       const groupIds = existingGroupIds.filter((value) => !removedGroupIds.has(value));
+       const personaIds = existingPersonaIds.filter((value) => !removedPersonaIds.has(value));
+       const changed =
         chatIds.length !== existingChatIds.length ||
         characterIds.length !== (note.scope.characterIds ?? []).length ||
-        groupId !== note.scope.groupId;
+         groupIds.length !== existingGroupIds.length ||
+         personaIds.length !== existingPersonaIds.length;
       if (!changed) return { note, deleted: false, changed: false };
-      if (!chatIds.length && !characterIds.length && !groupId && !personaId) {
+       if (!chatIds.length && !characterIds.length && !groupIds.length && !personaIds.length) {
         await this.deleteNotesPermanently([id]);
         return { note: null, deleted: true, changed: true };
       }
@@ -1400,8 +1405,8 @@ export class LongTermMemoryStorage {
         scope.chatId = chatIds[0];
       }
       if (characterIds.length) scope.characterIds = characterIds;
-      if (groupId) scope.groupId = groupId;
-      if (personaId) scope.personaId = personaId;
+       if (groupIds.length) scope.groupIds = groupIds;
+       if (personaIds.length) scope.personaIds = personaIds;
       return {
         note: await this.updateNote(id, { scope }),
         deleted: false,

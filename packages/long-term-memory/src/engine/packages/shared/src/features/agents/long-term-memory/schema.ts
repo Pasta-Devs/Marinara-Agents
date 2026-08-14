@@ -694,8 +694,10 @@ export const ltmScopeSchema = z
     chatId: z.string().min(1).max(120).optional(),
     chatIds: z.array(z.string().min(1).max(120)).max(100).optional(),
     groupId: z.string().min(1).max(120).optional(),
+    groupIds: z.array(z.string().min(1).max(120)).max(100).optional(),
     characterIds: z.array(z.string().min(1).max(120)).max(100).optional(),
     personaId: z.string().min(1).max(120).optional(),
+    personaIds: z.array(z.string().min(1).max(120)).max(100).optional(),
   })
   .strict();
 
@@ -1136,8 +1138,10 @@ const ltmAvailabilityScopePatchSchema = ltmScopeSchema.refine(
       scope.chatId ||
         scope.chatIds?.length ||
         scope.groupId ||
+        scope.groupIds?.length ||
         scope.characterIds?.length ||
-        scope.personaId,
+        scope.personaId ||
+        scope.personaIds?.length,
     ),
   "Choose at least one place.",
 );

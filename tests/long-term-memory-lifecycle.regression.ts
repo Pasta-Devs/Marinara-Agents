@@ -274,7 +274,7 @@ async function main() {
           `Generated client retains removed guidance: ${copy}`,
         );
       for (const copy of [
-        "Branch group",
+         "Chat",
         "Persona",
         "Occurred in",
         "Already applicable",
@@ -663,16 +663,18 @@ async function main() {
               {
                 id: "desktop-chat",
                 label: "Desktop chat",
-                mode: "conversation",
-                groupId: null,
-                characterIds: ["character-a"],
+                 mode: "conversation",
+                 groupId: null,
+                 personaId: "persona-a",
+                 characterIds: ["character-a"],
               },
               {
                 id: "memory-chat",
                 label: "Memory chat",
-                mode: "roleplay",
-                groupId: "conversation-a",
-                characterIds: ["character-a"],
+                 mode: "roleplay",
+                 groupId: "conversation-a",
+                 personaId: "persona-a",
+                 characterIds: ["character-a"],
               },
             ],
             groups: [
@@ -683,7 +685,7 @@ async function main() {
               },
             ],
             characters: [{ id: "character-a", label: "Character A" }],
-            personas: [],
+             personas: [{ id: "persona-a", label: "Persona A" }],
           });
         }
         if (request.method === "GET" && url.pathname.endsWith("/notes")) {
@@ -1019,6 +1021,23 @@ async function main() {
         0,
       );
       await memoryScope.locator(":scope > summary").click();
+      const scopeControlStyle = await memoryScope
+        .locator(":scope > summary")
+        .evaluate((element) => {
+          const chevron = element.querySelector<SVGElement>(
+            "[data-ltm-memory-scope-chevron]",
+          );
+          const label = element.querySelector<HTMLElement>("span");
+          const style = getComputedStyle(element);
+          return {
+            display: style.display,
+            fontFamily: style.fontFamily,
+            chevronAfterLabel: Boolean(chevron && label && chevron.getBoundingClientRect().left >= label.getBoundingClientRect().right),
+          };
+        });
+      assert.equal(scopeControlStyle.display, "flex");
+      assert.ok(scopeControlStyle.fontFamily.length > 0);
+      assert.equal(scopeControlStyle.chevronAfterLabel, true);
       assert.equal(
         await memoryScope
           .locator('[data-ltm-memory-scope-picker="character"]')
@@ -1043,6 +1062,26 @@ async function main() {
        await memoryScope
          .locator('[data-ltm-memory-scope-picker="character"] > summary')
          .click();
+       const characterPickerStyle = await memoryScope
+         .locator('[data-ltm-memory-scope-picker="character"]')
+         .evaluate((picker) => {
+           const summary = picker.querySelector<HTMLElement>("summary")!;
+           const chevron = summary.querySelector<SVGElement>(
+             "[data-ltm-memory-scope-chevron]",
+           )!;
+           const target = picker.querySelector<HTMLElement>(
+             '[data-ltm-memory-scope-target="character:character-a"]',
+           )!;
+           const targetStyle = getComputedStyle(target);
+           return {
+             chevronTransform: getComputedStyle(chevron).transform,
+             targetBackground: targetStyle.backgroundColor,
+             targetFontWeight: Number.parseInt(targetStyle.fontWeight, 10),
+           };
+         });
+       assert.notEqual(characterPickerStyle.chevronTransform, "none");
+       assert.notEqual(characterPickerStyle.targetBackground, "rgba(0, 0, 0, 0)");
+       assert.ok(characterPickerStyle.targetFontWeight >= 600);
        await page
          .locator('[data-ltm-memory-scope-target="character:character-a"]')
          .click();
@@ -1489,7 +1528,7 @@ async function main() {
         .locator('[data-ltm-source-tab="lorebooks"][aria-selected="true"]')
         .waitFor();
       await page.locator('[data-ltm-source-tab="chats"]').click();
-      assert.equal(scopeTargetQueries[0], "?chatId=desktop-chat");
+      assert.equal(scopeTargetQueries[0], "?includeAllChats=true&chatId=desktop-chat");
       await page
         .locator(
           '[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]',
@@ -2149,13 +2188,120 @@ async function main() {
           .getAttribute("aria-pressed"),
         "false",
       );
-      assert.equal(
-        await page.locator('[data-ltm-workspace-pane="inspector"]').count(),
-        0,
-      );
-      await page.getByRole("button", { name: "Choose where used" }).click();
-      await page.getByRole("button", { name: "Character A" }).click();
-      await page.getByRole("button", { name: "Save availability" }).click();
+       assert.equal(
+         await page.locator('[data-ltm-workspace-pane="inspector"]').count(),
+         0,
+       );
+       await page.getByRole("button", { name: "Choose where used" }).click();
+       const availabilityTabs = page.locator("[data-ltm-availability-tabs]");
+       await availabilityTabs.waitFor();
+       assert.deepEqual(
+         await availabilityTabs.locator('[role="tab"]').evaluateAll((tabs) =>
+           tabs.map((tab) => ({
+             kind: tab.getAttribute("data-ltm-availability-tab"),
+             selected: tab.getAttribute("aria-selected"),
+             tabIndex: tab.getAttribute("tabindex"),
+             count: tab.querySelector("[data-ltm-availability-count]")?.textContent,
+           })),
+         ),
+         [
+           { kind: "character", selected: "true", tabIndex: "0", count: "0" },
+           { kind: "persona", selected: "false", tabIndex: "-1", count: "0" },
+           { kind: "chat", selected: "false", tabIndex: "-1", count: "0" },
+           { kind: "branch", selected: "false", tabIndex: "-1", count: "0" },
+         ],
+       );
+       const desktopRailLayout = await availabilityTabs.evaluate((rail) => {
+         const tablist = rail.querySelector<HTMLElement>('[role="tablist"]')!;
+         const tabs = [...rail.querySelectorAll<HTMLElement>('[role="tab"]')];
+         const rects = tabs.map((tab) => tab.getBoundingClientRect());
+         const panel = rail.querySelector<HTMLElement>('[role="tabpanel"]')!;
+         const panelRect = panel.getBoundingClientRect();
+         const tablistRect = tablist.getBoundingClientRect();
+         const template = getComputedStyle(tablist).gridTemplateColumns;
+         return {
+           columns: template.startsWith("repeat(4,") ? 4 : template.split(/\s+/u).length,
+           sameRow: rects.every((rect) => Math.abs(rect.top - rects[0]!.top) <= 1),
+           equalWidths: rects.every((rect) => Math.abs(rect.width - rects[0]!.width) <= 1),
+           panelBelowTabs: panelRect.top >= tablistRect.bottom,
+           panelWidth: panelRect.width,
+           tablistWidth: tablistRect.width,
+         };
+       });
+       assert.deepEqual(desktopRailLayout, {
+         columns: 4,
+         sameRow: true,
+         equalWidths: true,
+         panelBelowTabs: true,
+         panelWidth: desktopRailLayout.tablistWidth,
+         tablistWidth: desktopRailLayout.tablistWidth,
+       });
+       const characterTab = availabilityTabs.locator('[data-ltm-availability-tab="character"]');
+       const personaTab = availabilityTabs.locator('[data-ltm-availability-tab="persona"]');
+       await characterTab.press("ArrowRight");
+       assert.equal(await personaTab.getAttribute("aria-selected"), "true");
+       assert.equal(
+         await availabilityTabs.locator('[role="tabpanel"]').getAttribute("aria-labelledby"),
+         await personaTab.getAttribute("id"),
+       );
+       await personaTab.press("Home");
+       assert.equal(await characterTab.getAttribute("aria-selected"), "true");
+       await characterTab.press("End");
+       assert.equal(
+         await availabilityTabs.locator('[data-ltm-availability-tab="branch"]').getAttribute("aria-selected"),
+         "true",
+       );
+       await characterTab.click();
+       await availabilityTabs.locator('[data-ltm-availability-search="character"]').fill("Character");
+       await availabilityTabs.locator('[data-ltm-availability-target="character:character-a"]').click();
+       assert.equal(
+         await availabilityTabs.locator('[data-ltm-availability-target="character:character-a"]').getAttribute("aria-pressed"),
+         "true",
+       );
+       await personaTab.click();
+       assert.equal(await characterTab.getAttribute("aria-selected"), "false");
+       assert.equal(await personaTab.getAttribute("aria-selected"), "true");
+       await characterTab.click();
+       assert.equal(
+         await availabilityTabs.locator('[data-ltm-availability-search="character"]').inputValue(),
+         "Character",
+       );
+       await page.setViewportSize({ width: 320, height: 720 });
+       const mobileRailLayout = await availabilityTabs.evaluate((rail) => {
+         const tablist = rail.querySelector<HTMLElement>('[role="tablist"]')!;
+         const panel = rail.querySelector<HTMLElement>('[role="tabpanel"]')!;
+         const tablistRect = tablist.getBoundingClientRect();
+         const panelRect = panel.getBoundingClientRect();
+         return {
+           columns: getComputedStyle(tablist).gridTemplateColumns.split(/\s+/u).length,
+           panelBelowTabs: panelRect.top >= tablistRect.bottom,
+           pageFits: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+         };
+       });
+       assert.deepEqual(mobileRailLayout, {
+         columns: 4,
+         panelBelowTabs: true,
+         pageFits: true,
+       });
+       await page.setViewportSize({ width: 1280, height: 900 });
+       await personaTab.click();
+       await page
+         .locator('[data-ltm-availability-target="persona:persona-a"]')
+         .click();
+       await page
+         .locator('[data-ltm-availability-tab="chat"]')
+         .click();
+       await page
+         .locator('[data-ltm-availability-target="chat:conversation-a"]')
+         .click();
+       await page
+         .locator('[data-ltm-availability-tab="branch"]')
+         .click();
+       await page
+         .locator('[data-ltm-availability-target="branch:memory-chat"]')
+         .click();
+       assert.equal(await page.getByText("Groups", { exact: true }).count(), 0);
+       await page.getByRole("button", { name: "Save availability" }).click();
       const cleanupRequest = page.waitForRequest(
         (request) =>
           request.method() === "DELETE" &&

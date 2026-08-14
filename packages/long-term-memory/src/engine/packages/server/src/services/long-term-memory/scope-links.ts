@@ -11,7 +11,7 @@ import { withLtmVaultLock } from "./vault-lock.js";
 
 export async function applyLtmScopeLinksToDerivedNotes(
   sourceNoteId:string,
-  links:{chatIds?:string[];characterIds?:string[]},
+  links:{chatIds?:string[];groupIds?:string[];characterIds?:string[];personaIds?:string[]},
   options:{root:string},
 ){
   return withLtmVaultLock(options.root, async () => {

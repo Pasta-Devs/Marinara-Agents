@@ -105,6 +105,8 @@ import {
 } from "./interop.js";
 import {
   getLtmScopeChatIds,
+  getLtmScopeGroupIds,
+  getLtmScopePersonaIds,
   isGlobalLtmScope,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 import {
@@ -164,8 +166,10 @@ const listNotesQuery = z
     tag: ltmIdentifierSchema.optional(),
     scopeChatIds: scopedIds,
     scopeGroupId: z.string().min(1).max(120).optional(),
+    scopeGroupIds: scopedIds,
     scopeCharacterIds: scopedIds,
     scopePersonaId: z.string().min(1).max(120).optional(),
+    scopePersonaIds: scopedIds,
     includeGlobal: queryBoolean,
     offset: z.coerce.number().int().min(0).default(0),
     limit: z.coerce.number().int().min(1).max(500).default(100),
@@ -258,8 +262,10 @@ const createNoteBody = z
       note.scope.chatId ||
       note.scope.chatIds?.length ||
       note.scope.groupId ||
+      note.scope.groupIds?.length ||
       note.scope.characterIds?.length ||
-      note.scope.personaId
+      note.scope.personaId ||
+      note.scope.personaIds?.length
     )
       return;
     ctx.addIssue({
@@ -300,13 +306,15 @@ const removeScopeBody = z
   .object({
     chatIds: z.array(z.string().min(1).max(120)).max(100).optional(),
     groupId: z.string().min(1).max(120).optional(),
+    groupIds: z.array(z.string().min(1).max(120)).max(100).optional(),
     characterIds: z.array(z.string().min(1).max(120)).max(100).optional(),
+    personaIds: z.array(z.string().min(1).max(120)).max(100).optional(),
   })
   .strict()
   .refine(
     (value) =>
       Boolean(
-        value.chatIds?.length || value.groupId || value.characterIds?.length,
+        value.chatIds?.length || value.groupId || value.groupIds?.length || value.characterIds?.length || value.personaIds?.length,
       ),
     "At least one scope link is required.",
   );
@@ -649,19 +657,23 @@ export function createLongTermMemoryRoutes(runtime: {
       const scope =
         query.scopeChatIds?.length ||
         query.scopeGroupId ||
+        query.scopeGroupIds?.length ||
         query.scopeCharacterIds?.length ||
-        query.scopePersonaId
+        query.scopePersonaId ||
+        query.scopePersonaIds?.length
           ? {
               ...(query.scopeChatIds?.length
                 ? { chatIds: query.scopeChatIds, chatId: query.scopeChatIds[0] }
                 : {}),
               ...(query.scopeGroupId ? { groupId: query.scopeGroupId } : {}),
+              ...(query.scopeGroupIds?.length ? { groupIds: query.scopeGroupIds } : {}),
               ...(query.scopeCharacterIds?.length
                 ? { characterIds: query.scopeCharacterIds }
                 : {}),
               ...(query.scopePersonaId
                 ? { personaId: query.scopePersonaId }
                 : {}),
+              ...(query.scopePersonaIds?.length ? { personaIds: query.scopePersonaIds } : {}),
             }
           : undefined;
       const notes = await storage.listNotes({
@@ -729,15 +741,13 @@ export function createLongTermMemoryRoutes(runtime: {
             (characterId) => characterIds.add(characterId),
           );
         }
-        if (
-          note.scope.groupId &&
-          eligibleChats.some((chat) => chat.groupId === note.scope.groupId)
-        )
-          groupIds.add(note.scope.groupId);
+        for (const groupId of getLtmScopeGroupIds(note.scope)) {
+          if (eligibleChats.some((chat) => chat.groupId === groupId)) groupIds.add(groupId);
+        }
         note.scope.characterIds
           ?.filter((id) => id !== PROFESSOR_MARI_CHARACTER_ID)
           .forEach((id) => characterIds.add(id));
-        if (note.scope.personaId) personaIds.add(note.scope.personaId);
+        for (const personaId of getLtmScopePersonaIds(note.scope)) personaIds.add(personaId);
         for (const subject of note.subjects ?? []) {
           if (subject.ref?.kind === "character") characterIds.add(subject.ref.id);
           if (subject.ref?.kind === "persona") personaIds.add(subject.ref.id);
@@ -752,6 +762,7 @@ export function createLongTermMemoryRoutes(runtime: {
             label: chat.name?.trim() || "Untitled chat",
             mode: ltmModeForChatMode(chat.mode),
             groupId: chat.groupId,
+            personaId: chat.personaId,
             characterIds: normalizeLtmChatCharacterIds(chat.characterIds),
           }))
           .sort(
