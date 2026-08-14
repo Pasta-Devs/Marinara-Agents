@@ -37,20 +37,6 @@ export const convoBehaviorConfigSchema = z.object({
     instruction: z.string().default(""),
     insertionStrategy: convoBehaviorInsertionStrategySchema.catch("constant_after").default("constant_after"),
 });
-/** Which sources the AI-write "about me" prompt draws from. Per-character. */
-export const aboutMeSourceConfigSchema = z.object({
-    description: z.boolean().optional(),
-    personality: z.boolean().optional(),
-    scenario: z.boolean().optional(),
-    backstory: z.boolean().optional(),
-    appearance: z.boolean().optional(),
-    convoBehavior: z.boolean().optional(),
-    lorebook: z.boolean().optional(),
-    /** When set, only these linked lorebook entry ids are included; absent → all of them. */
-    lorebookEntryIds: z.array(z.string()).optional(),
-    chatContext: z.boolean().optional(),
-    chatContextLimit: z.number().int().min(1).max(200).optional(),
-});
 export const characterExtensionsSchema = z
     .object({
     talkativeness: z.number().min(0).max(1).default(0.5),
@@ -64,7 +50,6 @@ export const characterExtensionsSchema = z
     convoDisplayNameInCard: z.boolean().optional(),
     aboutMe: z.string().optional(),
     convoBehavior: convoBehaviorConfigSchema.optional(),
-    aboutMeSources: aboutMeSourceConfigSchema.optional(),
 })
     .passthrough();
 export const characterBookEntrySchema = z
@@ -87,7 +72,8 @@ export const characterBookEntrySchema = z
     role: characterBookRoleSchema.optional(),
 })
     .passthrough();
-export const characterBookSchema = z.object({
+export const characterBookSchema = z
+    .object({
     name: z.string().default(""),
     description: z.string().default(""),
     scan_depth: z.number().default(2),
@@ -95,10 +81,11 @@ export const characterBookSchema = z.object({
     recursive_scanning: z.boolean().default(false),
     extensions: z.record(z.unknown()).default({}),
     entries: z.array(characterBookEntrySchema).default([]),
-});
+})
+    .passthrough();
 export const characterDataSchema = z
     .object({
-    name: z.string().min(1),
+    name: z.string().trim().min(1),
     description: z.string().default(""),
     personality: z.string().default(""),
     scenario: z.string().default(""),
@@ -120,43 +107,20 @@ export const characterCardV2Schema = z.object({
     spec_version: z.literal("2.0"),
     data: characterDataSchema,
 });
-/** Default sources when a character has none configured: only the personality field. */
-export const DEFAULT_ABOUT_ME_SOURCES = { personality: true };
-/** Default number of recent messages to include when the chat-context source is on. */
-export const DEFAULT_ABOUT_ME_CHAT_CONTEXT_LIMIT = 20;
-/** Resolve a stored source config, falling back to the default (personality only) when absent. */
-export function resolveAboutMeSources(raw) {
-    if (raw == null)
-        return { ...DEFAULT_ABOUT_ME_SOURCES };
-    const parsed = aboutMeSourceConfigSchema.safeParse(raw);
-    return parsed.success ? parsed.data : { ...DEFAULT_ABOUT_ME_SOURCES };
-}
-/** AI-write of a Convo "about me" from card/persona fields (Conversation mode). */
-export const generateAboutMeSchema = z.object({
-    connectionId: z.string().min(1),
-    kind: z.enum(["character", "persona"]).default("character"),
-    name: z.string().max(200).default(""),
-    description: z.string().max(20000).default(""),
-    personality: z.string().max(20000).default(""),
-    scenario: z.string().max(20000).default(""),
-    backstory: z.string().max(20000).default(""),
-    appearance: z.string().max(20000).default(""),
-    /** Convo behavior directive text (included only when the convoBehavior source is on). */
-    convoBehavior: z.string().max(20000).default(""),
-    /** Which sources to draw from. Absent → default (personality only). */
-    sources: aboutMeSourceConfigSchema.optional(),
-    /** Character id — lets the server pull linked/embedded lorebook entries. */
-    characterId: z.string().optional(),
-    /** Chat id — lets the server pull recent chat context (chat-exclusive about me only). */
-    chatId: z.string().optional(),
-    /** Optional freeform steer from the user (e.g. "keep it one line, chronically online"). */
-    instruction: z.string().max(2000).optional(),
-});
 export const createCharacterSchema = z.object({
     data: characterDataSchema,
 });
+const updateCharacterExtensionsSchema = characterExtensionsSchema.partial().extend({
+    // Zod 3 short-circuits these optional wrappers before applying the nested
+    // schema defaults. Revalidate this omission behavior before upgrading to Zod 4.
+    depth_prompt: depthPromptSchema.partial().optional(),
+    convoBehavior: convoBehaviorConfigSchema.partial().optional(),
+});
 export const updateCharacterSchema = z.object({
-    data: characterDataSchema.partial(),
+    data: characterDataSchema.partial().extend({
+        extensions: updateCharacterExtensionsSchema.optional(),
+        character_book: characterBookSchema.partial().nullable().optional(),
+    }),
 });
 export const createGroupSchema = z.object({
     name: z.string().min(1),

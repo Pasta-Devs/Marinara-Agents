@@ -14,6 +14,7 @@ export const spatialLinkStateSchema = z.enum(["available", "hidden", "blocked"])
 export const spatialMapDraftSizeSchema = z.enum(["small", "medium", "large"]);
 export const spatialMapDraftOperationSchema = z.enum(["create", "replace", "expand"]);
 export const spatialMapGroundingModeSchema = z.enum(["setup", "lore_strict", "lore_expand"]);
+export const spatialTravelModeSchema = z.enum(["step_by_step", "travel_now"]);
 export const spatialLocationPlacementSchema = z
     .object({
     x: z.number().finite().min(0).max(100),
@@ -78,6 +79,7 @@ export const spatialContextDefinitionSchema = z
 export const pendingSpatialTransitionSchema = z
     .object({
     destinationId: spatialIdSchema,
+    travelMode: spatialTravelModeSchema.optional(),
     expectedDefinitionRevision: z.number().int().nonnegative().safe(),
     expectedCurrentLocationId: spatialIdSchema.nullable(),
     commandId: z.string().trim().min(1).max(SPATIAL_CONTEXT_LIMITS.maxCommandIdLength),
@@ -143,7 +145,8 @@ export const generateSpatialMapDraftRequestSchema = z
             path: ["targetLocationId"],
         });
     }
-    if (request.groundingMode === "setup" && (request.sourceLorebookIds.length > 0 || request.sourceEntryIds.length > 0)) {
+    if (request.groundingMode === "setup" &&
+        (request.sourceLorebookIds.length > 0 || request.sourceEntryIds.length > 0)) {
         ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: "Lorebook sources require a lore-grounded map mode.",

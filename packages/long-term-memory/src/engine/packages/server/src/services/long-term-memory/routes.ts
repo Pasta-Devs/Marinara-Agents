@@ -95,6 +95,7 @@ import { isLtmSourceNote } from "./source-extraction.js";
 import { processLongTermMemorySource } from "./source-processing.js";
 import {
   importPackageInterop,
+  PROFESSOR_MARI_CHARACTER_ID,
   previewPackageInterop,
   previewPackageLorebooks,
 } from "./interop.js";
@@ -173,22 +174,53 @@ const scopeTargetsQuery = z
   })
   .strict();
 
-function numberDuplicateLabels<T extends { id: string; label: string }>(
+function numberDuplicateLabels<T extends { id: string; label: string; comment?: string }>(
   items: T[],
 ) {
   const totals = new Map<string, number>();
   const seen = new Map<string, number>();
-  for (const item of items)
-    totals.set(item.label, (totals.get(item.label) ?? 0) + 1);
+  for (const item of items) {
+    const key = `${item.label}\u0000${item.comment ?? ""}`;
+    totals.set(key, (totals.get(key) ?? 0) + 1);
+  }
   return items.map((item) => {
-    if ((totals.get(item.label) ?? 0) < 2) return item;
-    const number = seen.get(item.label) ?? 0;
-    seen.set(item.label, number + 1);
+    const key = `${item.label}\u0000${item.comment ?? ""}`;
+    if ((totals.get(key) ?? 0) < 2) return item;
+    const number = seen.get(key) ?? 0;
+    seen.set(key, number + 1);
     return {
       ...item,
       label: number ? `${item.label} (${number})` : item.label,
     };
   });
+}
+
+function resourceDisplay(resource: { id: string; data: unknown; comment?: unknown }) {
+  const data =
+    typeof resource.data === "string"
+      ? (() => {
+          try {
+            const parsed: unknown = JSON.parse(resource.data);
+            return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+              ? (parsed as Record<string, unknown>)
+              : null;
+          } catch {
+            return null;
+          }
+        })()
+      : resource.data && typeof resource.data === "object" && !Array.isArray(resource.data)
+        ? (resource.data as Record<string, unknown>)
+        : null;
+  return {
+    id: resource.id,
+    label: typeof data?.name === "string" && data.name.trim() ? data.name.trim() : "",
+    comment:
+      typeof resource.comment === "string"
+        ? resource.comment.trim()
+        : typeof data?.comment === "string"
+          ? data.comment.trim()
+          : "",
+  };
 }
 const createNoteBody = z
   .object({
@@ -567,20 +599,40 @@ export function createLongTermMemoryRoutes(runtime: {
       const { chatId, includeAllChats } = scopeTargetsQuery.parse(
         request.query,
       );
-      const [notes, chats, resources] = await Promise.all([
+      const [notes, chats, resources, personas] = await Promise.all([
         storage.listNotes(),
         getPackagePersistence().listChats(),
         getPackageResources().listCharacters(),
+        getPackageResources().listPersonas(),
       ]);
-      const chatById = new Map(chats.map((chat) => [chat.id, chat]));
+      const eligibleChats = chats.filter(
+        (chat) =>
+          !normalizeLtmChatCharacterIds(chat.characterIds).includes(
+            PROFESSOR_MARI_CHARACTER_ID,
+          ),
+      );
+      const eligibleResources = resources.filter(
+        (resource) => resource.id !== PROFESSOR_MARI_CHARACTER_ID,
+      );
+      const chatById = new Map(eligibleChats.map((chat) => [chat.id, chat]));
       const currentChat = chatId ? (chatById.get(chatId) ?? null) : null;
       const chatIds = new Set<string>();
       const groupIds = new Set<string>();
       const characterIds = new Set<string>();
+      const personaIds = new Set<string>();
+      if (currentChat?.personaId) personaIds.add(currentChat.personaId);
+      if (currentChat) {
+        chatIds.add(currentChat.id);
+        if (currentChat.groupId) groupIds.add(currentChat.groupId);
+        normalizeLtmChatCharacterIds(currentChat.characterIds).forEach(
+          (characterId) => characterIds.add(characterId),
+        );
+      }
       if (includeAllChats) {
-        for (const chat of chats) {
+        for (const chat of eligibleChats) {
           chatIds.add(chat.id);
           if (chat.groupId) groupIds.add(chat.groupId);
+          if (chat.personaId) personaIds.add(chat.personaId);
         }
       }
       for (const note of notes) {
@@ -592,8 +644,19 @@ export function createLongTermMemoryRoutes(runtime: {
             (characterId) => characterIds.add(characterId),
           );
         }
-        if (note.scope.groupId) groupIds.add(note.scope.groupId);
-        note.scope.characterIds?.forEach((id) => characterIds.add(id));
+        if (
+          note.scope.groupId &&
+          eligibleChats.some((chat) => chat.groupId === note.scope.groupId)
+        )
+          groupIds.add(note.scope.groupId);
+        note.scope.characterIds
+          ?.filter((id) => id !== PROFESSOR_MARI_CHARACTER_ID)
+          .forEach((id) => characterIds.add(id));
+        if (note.scope.personaId) personaIds.add(note.scope.personaId);
+        for (const subject of note.subjects ?? []) {
+          if (subject.ref?.kind === "character") characterIds.add(subject.ref.id);
+          if (subject.ref?.kind === "persona") personaIds.add(subject.ref.id);
+        }
       }
       const namedChats = numberDuplicateLabels(
         [...chatIds]
@@ -613,40 +676,22 @@ export function createLongTermMemoryRoutes(runtime: {
           ),
       );
       const resourceById = new Map(
-        resources.map((resource) => [resource.id, resource]),
+        eligibleResources.map((resource) => [resource.id, resource]),
       );
       const visibleCharacterIds = includeAllChats
-        ? new Set(resources.map((resource) => resource.id))
+        ? new Set(eligibleResources.map((resource) => resource.id))
         : characterIds;
       const namedCharacters = numberDuplicateLabels(
         [...visibleCharacterIds]
           .map((id) => {
-            const rawData = resourceById.get(id)?.data;
-            let data: Record<string, unknown> | null = null;
-            if (typeof rawData === "string") {
-              try {
-                const parsed = JSON.parse(rawData);
-                if (
-                  parsed &&
-                  typeof parsed === "object" &&
-                  !Array.isArray(parsed)
-                )
-                  data = parsed as Record<string, unknown>;
-              } catch {
-                data = null;
-              }
-            } else if (
-              rawData &&
-              typeof rawData === "object" &&
-              !Array.isArray(rawData)
-            ) {
-              data = rawData as Record<string, unknown>;
-            }
-            const label =
-              data && "name" in data && typeof data.name === "string"
-                ? data.name.trim()
-                : "";
-            return { id, label: label || "Untitled character" };
+            const display = resourceById.get(id)
+              ? resourceDisplay(resourceById.get(id)!)
+              : { id, label: "", comment: "" };
+            return {
+              id,
+              label: display.label || "Untitled character",
+              ...(display.comment ? { comment: display.comment } : {}),
+            };
           })
           .sort(
             (left, right) =>
@@ -660,7 +705,7 @@ export function createLongTermMemoryRoutes(runtime: {
         groups: numberDuplicateLabels(
           [...groupIds]
             .map((id) => {
-              const members = chats.filter(
+              const members = eligibleChats.filter(
                 (chat) =>
                   chat.groupId === id &&
                   (includeAllChats || chatIds.has(chat.id)),
@@ -681,6 +726,22 @@ export function createLongTermMemoryRoutes(runtime: {
             ),
         ),
         characters: namedCharacters,
+        personas: numberDuplicateLabels(
+          [...(includeAllChats ? personas : personas.filter((persona) => personaIds.has(persona.id)))]
+            .filter((persona) => persona.id !== PROFESSOR_MARI_CHARACTER_ID)
+            .map((persona) => {
+              const display = resourceDisplay(persona);
+              return {
+                id: persona.id,
+                label: display.label || "Untitled persona",
+                ...(display.comment ? { comment: display.comment } : {}),
+              };
+            })
+            .sort(
+              (left, right) =>
+                left.label.localeCompare(right.label) || left.id.localeCompare(right.id),
+            ),
+        ),
       };
     });
     app.get<{ Params: { id: string } }>(
@@ -980,13 +1041,22 @@ export function createLongTermMemoryRoutes(runtime: {
       "/notes/:id",
       { bodyLimit: NOTE_BODY_LIMIT_BYTES },
       async (request, reply) => {
-        const id = ltmNoteIdSchema.parse(request.params.id);
+        const parsedId = ltmNoteIdSchema.safeParse(request.params.id);
+        const parsedBody = updateNoteBody.safeParse(request.body);
+        if (!parsedId.success || !parsedBody.success) {
+          const result = routeError(
+            !parsedId.success ? parsedId.error : parsedBody.error,
+            "Invalid note update.",
+          );
+          return reply.status(result.statusCode).send(result.body);
+        }
+        const id = parsedId.data;
         const existing = await storage.getNote(id);
         if (!existing)
           return reply
             .status(404)
             .send({ error: "Long-term memory note not found" });
-        const patch = updateNoteBody.parse(request.body);
+        const patch = parsedBody.data;
         if (existing.type === "source" && patch.sections !== undefined)
           return reply.status(400).send({
             error:
@@ -1005,11 +1075,8 @@ export function createLongTermMemoryRoutes(runtime: {
         try {
           note = await storage.updateNote(id, patch);
         } catch (error) {
-          if (error instanceof LtmServiceError)
-            return reply
-              .status(error.statusCode)
-              .send({ error: error.message, code: error.code });
-          throw error;
+          const result = routeError(error, "Could not update note.");
+          return reply.status(result.statusCode).send(result.body);
         }
         const rebuild = await rebuildAfterMutation();
         return { note, rebuild };

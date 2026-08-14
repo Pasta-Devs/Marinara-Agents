@@ -389,6 +389,74 @@ async function activateHierarchicalMaps(page: Page, chatId: string) {
   expect(response.ok()).toBeTruthy();
 }
 
+type HierarchicalMapsAgentConfig = {
+  id: string;
+  type: string;
+  description: string;
+  phase: "pre_generation" | "parallel" | "post_processing";
+  connectionId: string | null;
+  settings?: unknown;
+};
+
+async function getOrCreateHierarchicalMapsAgentConfig(
+  page: Page,
+): Promise<{ config: HierarchicalMapsAgentConfig; created: boolean }> {
+  const agentsResponse = await page.request.get("/api/agents");
+  expect(agentsResponse.ok(), await agentsResponse.text()).toBeTruthy();
+  const existing = ((await agentsResponse.json()) as HierarchicalMapsAgentConfig[]).find(
+    (agent) => agent.type === "hierarchical-maps",
+  );
+  if (existing) {
+    const settings = (() => {
+      if (typeof existing.settings !== "string") {
+        return existing.settings && typeof existing.settings === "object" && !Array.isArray(existing.settings)
+          ? { ...(existing.settings as Record<string, unknown>) }
+          : {};
+      }
+      try {
+        const parsed = JSON.parse(existing.settings) as unknown;
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+          ? { ...(parsed as Record<string, unknown>) }
+          : {};
+      } catch {
+        return {};
+      }
+    })();
+    if (settings.deletedFromLibrary !== true) return { config: existing, created: false };
+
+    // Built-in agent deletion is a soft delete. Revive a suite-created row for this test,
+    // while retaining cleanup ownership so the original absent state is restored afterward.
+    delete settings.deletedFromLibrary;
+    const reviveAgentResponse = await page.request.patch(`/api/agents/${existing.id}`, {
+      data: { settings },
+    });
+    expect(reviveAgentResponse.ok(), await reviveAgentResponse.text()).toBeTruthy();
+    return {
+      config: (await reviveAgentResponse.json()) as HierarchicalMapsAgentConfig,
+      created: true,
+    };
+  }
+
+  const createAgentResponse = await page.request.post("/api/agents", {
+    data: {
+      type: "hierarchical-maps",
+      name: "World Maps",
+      description:
+        "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, customizable Direct Link lines, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
+      phase: "pre_generation",
+      connectionId: null,
+      imagePath: null,
+      promptTemplate: "",
+      settings: {},
+    },
+  });
+  expect(createAgentResponse.ok(), await createAgentResponse.text()).toBeTruthy();
+  return {
+    config: (await createAgentResponse.json()) as HierarchicalMapsAgentConfig,
+    created: true,
+  };
+}
+
 async function openHierarchicalMapsAgentCategory(page: Page) {
   const drawer = page.locator(".mari-chat-settings-drawer");
   await expect(drawer).toBeVisible();
@@ -706,12 +774,14 @@ async function openGameSetupMapDraftReview(
     const request = route.request().postDataJSON() as {
       operation: string;
       size: string;
+      targetLocationCount?: number;
       connectionId?: string;
       debugMode: boolean;
     };
     expect(request).toMatchObject({
       operation: "create",
       size: "small",
+      targetLocationCount: 8,
       connectionId: connection.id,
       debugMode: false,
     });
@@ -791,6 +861,7 @@ async function openGameSetupMapDraftReview(
   } else {
     await wizard.getByRole("button", { name: /Draft with AI/ }).click();
     await wizard.getByRole("button", { name: /Small About 8 places/ }).click();
+    await expect(wizard.getByLabel("Custom place target")).toHaveValue("8");
   }
   await wizard.getByRole("button", { name: "Next" }).click();
   await expect(wizard.getByRole("heading", { name: "GM", exact: true })).toBeVisible();
@@ -914,15 +985,8 @@ test("global World Maps home activates and opens the current chat map", async ({
   });
   expect(response.ok(), await response.text()).toBeTruthy();
   const chat = (await response.json()) as { id: string };
-  const agentsBeforeResponse = await page.request.get("/api/agents");
-  expect(agentsBeforeResponse.ok(), await agentsBeforeResponse.text()).toBeTruthy();
-  const mapsAgentBefore = ((await agentsBeforeResponse.json()) as Array<{
-    type: string;
-    description: string;
-    phase: "pre_generation" | "parallel" | "post_processing";
-    connectionId: string | null;
-    settings?: unknown;
-  }>).find((agent) => agent.type === "hierarchical-maps");
+  const { config: mapsAgentBefore, created: mapsAgentCreated } =
+    await getOrCreateHierarchicalMapsAgentConfig(page);
   const originalMapsAgentConfig: {
     description: string;
     phase: "pre_generation" | "parallel" | "post_processing";
@@ -954,20 +1018,20 @@ test("global World Maps home activates and opens the current chat map", async ({
   delete isolatedMapsAgentSettings.spatialMapGenerationPromptLibraries;
   delete isolatedMapsAgentSettings.spatialMapTurnPromptTemplates;
   const unavailableConnectionId = `missing-maps-connection-${testInfo.project.name}`;
-  const isolateSettingsResponse = await page.request.patch("/api/agents/type/hierarchical-maps", {
-    data: {
-      connectionId: unavailableConnectionId,
-      settings: isolatedMapsAgentSettings,
-    },
-  });
-  expect(isolateSettingsResponse.ok(), await isolateSettingsResponse.text()).toBeTruthy();
-  const resetMetadata = await page.request.patch(`/api/chats/${chat.id}/metadata`, {
-    data: { enableAgents: false, activeAgentIds: [] },
-  });
-  expect(resetMetadata.ok(), await resetMetadata.text()).toBeTruthy();
   const mobile = testInfo.project.name.includes("mobile");
 
   try {
+    const isolateSettingsResponse = await page.request.patch("/api/agents/type/hierarchical-maps", {
+      data: {
+        connectionId: unavailableConnectionId,
+        settings: isolatedMapsAgentSettings,
+      },
+    });
+    expect(isolateSettingsResponse.ok(), await isolateSettingsResponse.text()).toBeTruthy();
+    const resetMetadata = await page.request.patch(`/api/chats/${chat.id}/metadata`, {
+      data: { enableAgents: false, activeAgentIds: [] },
+    });
+    expect(resetMetadata.ok(), await resetMetadata.text()).toBeTruthy();
     await page.addInitScript((chatId) => {
       localStorage.setItem("marinara-active-chat-id", chatId);
       localStorage.setItem(
@@ -1005,7 +1069,7 @@ test("global World Maps home activates and opens the current chat map", async ({
     await expect(home.getByRole("heading", { name: "Installed package", exact: true })).toBeVisible();
     await expect(home.getByRole("heading", { name: "Current chat", exact: true })).toBeVisible();
     await expect(home.getByRole("heading", { name: "World Maps", exact: true })).toBeVisible();
-    await expect(home.locator(".mari-editor-header")).toContainText("v1.2.2");
+    await expect(home.locator(".mari-editor-header")).toContainText("v1.3.6");
     await expect(home.getByRole("heading", { name: "Description", exact: true })).toBeVisible();
     await expect(home.getByRole("heading", { name: "Pipeline Phase", exact: true })).toBeVisible();
     await expect(home.getByRole("button", { name: "Pre-Generation", exact: true })).toHaveAttribute(
@@ -1441,15 +1505,158 @@ test("global World Maps home activates and opens the current chat map", async ({
       "No map yet. Create one from Agents → World Maps; your message draft is unchanged.",
     );
   } finally {
-    const restoreResponse = await page.request.patch("/api/agents/type/hierarchical-maps", {
+    if (!mapsAgentCreated) {
+      const restoreResponse = await page.request.patch("/api/agents/type/hierarchical-maps", {
+        data: {
+          ...originalMapsAgentConfig,
+          settings: originalMapsAgentSettings,
+        },
+      });
+      expect(restoreResponse.ok(), await restoreResponse.text()).toBeTruthy();
+    }
+    await expectDeletedInOrder(page, [
+      secondaryChat ? `/api/chats/${secondaryChat.id}` : null,
+      `/api/chats/${chat.id}`,
+      mapsAgentCreated ? `/api/agents/${mapsAgentBefore.id}` : null,
+    ]);
+  }
+});
+
+test("World Maps editor changes the AI connection without losing the draft", async ({ page }, testInfo) => {
+  test.setTimeout(60_000);
+  const { config: mapsAgentBefore, created: mapsAgentCreated } =
+    await getOrCreateHierarchicalMapsAgentConfig(page);
+  const originalSettings = (() => {
+    if (typeof mapsAgentBefore.settings === "string") {
+      try {
+        const parsed = JSON.parse(mapsAgentBefore.settings) as unknown;
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+          ? (parsed as Record<string, unknown>)
+          : {};
+      } catch {
+        return {};
+      }
+    }
+    return mapsAgentBefore.settings && typeof mapsAgentBefore.settings === "object"
+      ? (mapsAgentBefore.settings as Record<string, unknown>)
+      : {};
+  })();
+  const originalConfig = {
+    description: mapsAgentBefore.description,
+    phase: mapsAgentBefore.phase,
+    connectionId: mapsAgentBefore.connectionId,
+    settings: originalSettings,
+  };
+  const unavailableConnectionId = `missing-editor-connection-${testInfo.project.name}`;
+  const editorConnection = {
+    id: `maps-editor-connection-${testInfo.project.name}`,
+    name: "Editor Maps",
+    provider: "openai",
+    model: "maps-editor-model",
+  };
+  let chat: { id: string } | null = null;
+
+  try {
+    const chatResponse = await page.request.post("/api/chats", {
       data: {
-        ...originalMapsAgentConfig,
-        settings: originalMapsAgentSettings,
+        name: `Maps Editor Connection ${testInfo.project.name}`,
+        mode: "roleplay",
+        characterIds: [],
       },
     });
-    expect(restoreResponse.ok(), await restoreResponse.text()).toBeTruthy();
-    if (secondaryChat) await expectDeleted(page, `/api/chats/${secondaryChat.id}`);
-    await expectDeleted(page, `/api/chats/${chat.id}`);
+    expect(chatResponse.ok(), await chatResponse.text()).toBeTruthy();
+    chat = (await chatResponse.json()) as { id: string };
+    await activateHierarchicalMaps(page, chat.id);
+    const isolateResponse = await page.request.patch("/api/agents/type/hierarchical-maps", {
+      data: { connectionId: unavailableConnectionId },
+    });
+    expect(isolateResponse.ok(), await isolateResponse.text()).toBeTruthy();
+    await page.route("**/api/connections", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([
+          editorConnection,
+          { id: "image-only", name: "Image only", provider: "image_generation", model: "image-model" },
+        ]),
+      });
+    });
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: { hasCompletedOnboarding: true, rightPanelOpen: false, sidebarOpen: false },
+          version: 75,
+        }),
+      );
+    }, chat.id);
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+    await page.locator('[data-tour="panel-agents"]').click();
+    const agentsPanel = page.locator(
+      testInfo.project.name.includes("mobile")
+        ? '[data-component="RightPanelMobile"]'
+        : '[data-component="RightPanelDesktop"]',
+    );
+    await agentsPanel
+      .locator('[data-agent-name="World Maps"]')
+      .getByText("World Maps", { exact: true })
+      .click();
+
+    const home = page.locator("[data-marinara-maps-home]");
+    await expect(home).toBeVisible();
+    const homeConnectionOverride = home.getByRole("combobox", { name: "Connection Override" });
+    await expect(homeConnectionOverride).toHaveValue(unavailableConnectionId);
+    await expect(
+      homeConnectionOverride.getByRole("option", { name: "Saved connection (unavailable)" }),
+    ).toHaveCount(1);
+    await home.getByRole("button", { name: "Create map", exact: true }).click();
+    await page.getByRole("button", { name: "Draft with AI", exact: true }).click();
+
+    const aiBuilder = page.getByRole("region", { name: "AI map builder" });
+    const editorConnectionOverride = aiBuilder.getByRole("combobox", { name: "AI map connection" });
+    const instructions = aiBuilder.getByLabel("What should this world include?");
+    await instructions.fill("Keep the harbor districts compact.");
+    await expect(editorConnectionOverride).toHaveValue(unavailableConnectionId);
+    await expect(editorConnectionOverride.locator("option")).toHaveText([
+      "Use chat connection",
+      "Saved connection (unavailable)",
+      "Editor Maps · maps-editor-model · openai",
+    ]);
+    await editorConnectionOverride.selectOption(editorConnection.id);
+    await expect(aiBuilder.getByText("Saved", { exact: true })).toBeVisible();
+    await expect(instructions).toHaveValue("Keep the harbor districts compact.");
+    await expect
+      .poll(async () => {
+        const agentsResponse = await page.request.get("/api/agents");
+        const mapsAgent = ((await agentsResponse.json()) as Array<{ type: string; connectionId?: string | null }>).find(
+          (agent) => agent.type === "hierarchical-maps",
+        );
+        return mapsAgent?.connectionId;
+      })
+      .toBe(editorConnection.id);
+
+    await aiBuilder.getByRole("button", { name: "Close AI map builder" }).click();
+    await page.getByRole("button", { name: "Back to chat" }).click();
+    const discardDialog = page.getByRole("dialog", { name: "Discard map changes?" });
+    if (await discardDialog.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      await discardDialog.getByRole("button", { name: "Discard changes", exact: true }).click();
+    }
+    await expect(home).toBeVisible();
+    await expect(homeConnectionOverride).toHaveValue(editorConnection.id);
+  } finally {
+    await page.unroute("**/api/connections");
+    if (!mapsAgentCreated) {
+      const restoreResponse = await page.request.patch("/api/agents/type/hierarchical-maps", {
+        data: originalConfig,
+      });
+      expect(restoreResponse.ok(), await restoreResponse.text()).toBeTruthy();
+    }
+    await expectDeletedInOrder(page, [
+      chat ? `/api/chats/${chat.id}` : null,
+      mapsAgentCreated ? `/api/agents/${mapsAgentBefore.id}` : null,
+    ]);
   }
 });
 
@@ -2045,6 +2252,29 @@ test("Map editor fills missing location artwork with one image per location", as
   expect(chatResponse.ok(), await chatResponse.text()).toBeTruthy();
   const chat = (await chatResponse.json()) as { id: string };
   await activateHierarchicalMaps(page, chat.id);
+  const uploadExistingArtwork = async (name: string) => {
+    const response = await page.request.post(`/api/gallery/${chat.id}/upload`, {
+      multipart: {
+        prompt: `Existing artwork for ${name}.`,
+        provider: "world-map-e2e",
+        model: "fixture",
+        width: "1",
+        height: "1",
+        file: {
+          name: `${name}.png`,
+          mimeType: "image/png",
+          buffer: Buffer.from(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z2SIAAAAASUVORK5CYII=",
+            "base64",
+          ),
+        },
+      },
+    });
+    expect(response.ok(), await response.text()).toBeTruthy();
+    return (await response.json()) as { id: string };
+  };
+  const lighthouseArtwork = await uploadExistingArtwork("lighthouse");
+  const sewersArtwork = await uploadExistingArtwork("sewers");
   const artworkDefinition = {
     ...generatedDefinition,
     enabled: true,
@@ -2053,15 +2283,19 @@ test("Map editor fills missing location artwork with one image per location", as
         return {
           ...location,
           childPresentation: "map" as const,
-          referenceImageId: "existing-lighthouse-art",
+          referenceImageId: lighthouseArtwork.id,
           useReferenceImage: true,
+          mapBackgroundImageId: lighthouseArtwork.id,
+          mapBackgroundPosition: { x: 50, y: 50 },
         };
       }
       if (location.id === "ai_sewers") {
         return {
           ...location,
           childPresentation: "map" as const,
-          mapBackgroundImageId: "existing-sewers-art",
+          referenceImageId: sewersArtwork.id,
+          useReferenceImage: true,
+          mapBackgroundImageId: sewersArtwork.id,
           mapBackgroundPosition: { x: 40, y: 65 },
         };
       }
@@ -2104,7 +2338,25 @@ test("Map editor fills missing location artwork with one image per location", as
       locationPath: string;
     };
   }> = [];
+  let pendingPreviewResponse: { markStarted: () => void; release: Promise<void> } | null = null;
+  const blockNextPreviewResponse = () => {
+    let markStarted = () => {};
+    let releaseResponse = () => {};
+    const started = new Promise<void>((resolve) => {
+      markStarted = () => resolve();
+    });
+    const release = new Promise<void>((resolve) => {
+      releaseResponse = () => resolve();
+    });
+    pendingPreviewResponse = { markStarted, release };
+    return { started, release: releaseResponse };
+  };
+  const packageClientRoute = "**/api/capability-packages/hierarchical-maps/client*";
+  const packageClientSource = await readFile(new URL("../packages/hierarchical-maps/client.js", import.meta.url), "utf8");
   try {
+    await page.route(packageClientRoute, async (route) => {
+      await route.fulfill({ status: 200, contentType: "text/javascript; charset=utf-8", body: packageClientSource });
+    });
     await page.route(`**/api/gallery/${chat.id}/generate-image/preview`, async (route) => {
       const payload = route.request().postDataJSON() as {
         items?: Array<{
@@ -2120,6 +2372,12 @@ test("Map editor fills missing location artwork with one image per location", as
         prompt: typeof item.prompt === "string" ? item.prompt : "",
         mapsArtworkContext: item.mapsArtworkContext,
       }));
+      const blockedResponse = pendingPreviewResponse;
+      pendingPreviewResponse = null;
+      if (blockedResponse) {
+        blockedResponse.markStarted();
+        await blockedResponse.release;
+      }
       previewRequests.push(...items);
       await route.fulfill({
         status: 200,
@@ -2209,9 +2467,9 @@ test("Map editor fills missing location artwork with one image per location", as
     await dismissOnboardingTutorial(page);
 
     const workspace = page.locator("[data-marinara-maps-workspace-root]");
-    const fillArtwork = workspace.getByRole("button", { name: "Review artwork for 4 locations" });
+    const fillArtwork = workspace.getByRole("button", { name: "Review artwork for 2 locations" });
     await expect(workspace.locator("[data-marinara-map-artwork-reminder]")).toHaveCount(0);
-    await expect(fillArtwork).toContainText("2 art requests");
+    await expect(fillArtwork).toContainText("2 incomplete locations");
     await fillArtwork.click();
     await expect(fillArtwork).toHaveCount(0);
     await expect(workspace.getByLabel("Review location artwork image requests")).toBeVisible();
@@ -2266,6 +2524,36 @@ test("Map editor fills missing location artwork with one image per location", as
     await workspace.getByLabel("Positive prompt for Shrouded Coast").fill(editedPositive);
     await workspace.getByLabel("Negative prompt for Shrouded Coast").fill(editedNegative);
 
+    const cancellationValidation = blockNextPreviewResponse();
+    await workspace.locator("[data-marinara-confirm-map-artwork]").click();
+    await cancellationValidation.started;
+    await workspace
+      .getByLabel("Review location artwork image requests")
+      .getByRole("button", { name: "Cancel", exact: true })
+      .click();
+    cancellationValidation.release();
+    const fillArtworkAfterCancellation = workspace.locator("[data-marinara-fill-map-artwork]");
+    await expect(fillArtworkAfterCancellation).toBeEnabled();
+    expect(generatedRequests).toHaveLength(0);
+
+    await fillArtworkAfterCancellation.click();
+    await expect(workspace.getByLabel("Review location artwork image requests")).toBeVisible();
+    const mapEditValidation = blockNextPreviewResponse();
+    await workspace.locator("[data-marinara-confirm-map-artwork]").click();
+    await mapEditValidation.started;
+    const raceDetails = workspace.locator('section[aria-label^="Details for "]:visible');
+    const description = raceDetails.getByLabel("Public description");
+    await description.fill("A coast changed while artwork validation is pending.");
+    mapEditValidation.release();
+    await expect(fillArtworkAfterCancellation).toBeEnabled();
+    expect(generatedRequests).toHaveLength(0);
+
+    await description.fill("A coast hidden beneath sea fog.");
+    await fillArtworkAfterCancellation.click();
+    await expect(workspace.getByLabel("Review location artwork image requests")).toBeVisible();
+    await workspace.getByLabel("Positive prompt for Shrouded Coast").fill(editedPositive);
+    await workspace.getByLabel("Negative prompt for Shrouded Coast").fill(editedNegative);
+
     await workspace.locator("[data-marinara-confirm-map-artwork]").click();
     await expect.poll(() => generatedRequests.length).toBe(2);
     const generatedRequestsByTitle = new Map(generatedRequests.map((request) => [request.title, request]));
@@ -2314,18 +2602,18 @@ test("Map editor fills missing location artwork with one image per location", as
       useReferenceImage: true,
     });
     expect(locations.get("ai_lighthouse")).toMatchObject({
-      referenceImageId: "existing-lighthouse-art",
-      mapBackgroundImageId: "existing-lighthouse-art",
+      referenceImageId: lighthouseArtwork.id,
+      mapBackgroundImageId: lighthouseArtwork.id,
     });
     expect(locations.get("ai_sewers")).toMatchObject({
-      referenceImageId: "existing-sewers-art",
+      referenceImageId: sewersArtwork.id,
       useReferenceImage: true,
-      mapBackgroundImageId: "existing-sewers-art",
+      mapBackgroundImageId: sewersArtwork.id,
     });
 
     const hierarchy = workspace.locator('section[aria-label="Location hierarchy"]:visible');
     await hierarchy.getByRole("button", { name: "Shrouded Coast region" }).click();
-    const details = workspace.locator('section[aria-label="Location details"]:visible');
+    const details = workspace.locator('section[aria-label^="Details for "]:visible');
     const uploadReference = details.getByRole("button", { name: "Upload location reference" });
     await expectMinimumInteractiveSize(uploadReference, "Direct location artwork upload");
     const fileChooserPromise = page.waitForEvent("filechooser");
@@ -2365,6 +2653,7 @@ test("Map editor fills missing location artwork with one image per location", as
       model: "user-upload",
     });
   } finally {
+    await page.unroute(packageClientRoute);
     await page.unroute(`**/api/gallery/${chat.id}/generate-image/preview`);
     await page.unroute(`**/api/gallery/${chat.id}/generate-image`);
     await expectDeleted(page, `/api/chats/${chat.id}`);
@@ -3397,6 +3686,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     const request = route.request().postDataJSON() as {
       operation: string;
       size: string;
+      targetLocationCount?: number;
       instructions?: string;
       debugMode: boolean;
       promptOverride?: { system: string; user: string };
@@ -3404,6 +3694,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     expect(request).toMatchObject({
       operation: "create",
       size: "small",
+      targetLocationCount: 8,
       instructions: "A foggy port with a lighthouse and secret sewers.",
       debugMode: false,
     });
@@ -3464,6 +3755,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
     await expectAiBuilderLayout(page, mobile);
     await page.getByLabel("What should this world include?").fill("A foggy port with a lighthouse and secret sewers.");
     await page.getByRole("button", { name: /Small About 8 places/ }).click();
+    await expect(page.getByLabel("Custom place target")).toHaveValue("8");
     await page.getByRole("button", { name: /^Custom Edit every type/u }).click();
     await page.getByRole("button", { name: "Move Region down" }).click();
     await expect(page.getByLabel("Location type 1 label")).toHaveValue("Settlement");
@@ -3593,7 +3885,7 @@ test("AI map builder previews a validated local draft before save", async ({ pag
 
     if (mobile) await page.getByRole("button", { name: "hierarchy", exact: true }).click();
 
-    let replaceMap = workspace.getByRole("button", { name: "Replace map or start over" });
+    let replaceMap: Locator;
     if (mobile) {
       const header = workspace.locator(":scope > .mari-editor-header");
       const moreActions = header.getByRole("button", { name: "More map actions" });
@@ -3741,6 +4033,233 @@ test("AI map builder previews a validated local draft before save", async ({ pag
         currentMatchesStart: true,
         statuses: ["active"],
       });
+  } finally {
+    await expectDeleted(page, `/api/chats/${chat.id}?force=true`);
+  }
+});
+
+test("reciprocal and incoming Direct Links stay visible from either endpoint", async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  const response = await page.request.post("/api/chats", {
+    data: {
+      name: `Direct Link Endpoint Parity ${testInfo.project.name}`,
+      mode: "roleplay",
+      characterIds: [],
+    },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const chat = (await response.json()) as { id: string };
+  await activateHierarchicalMaps(page, chat.id);
+
+  const definition = {
+    ...generatedDefinition,
+    enabled: true,
+    locations: generatedDefinition.locations.map((location) => {
+      if (location.id === "ai_harbor") {
+        return {
+          ...location,
+          links: [
+            {
+              targetId: "ai_sewers",
+              label: "Dock shuttle",
+              bidirectional: false,
+              state: "available" as const,
+            },
+          ],
+        };
+      }
+      if (location.id === "ai_lighthouse") {
+        return { ...location, parentId: "ai_harbor", placement: undefined, sortOrder: 0 };
+      }
+      if (location.id === "ai_sewers") {
+        return {
+          ...location,
+          links: [
+            {
+              targetId: "ai_lighthouse",
+              label: "Duplicate tunnel",
+              bidirectional: true,
+              state: "available" as const,
+            },
+          ],
+        };
+      }
+      return location;
+    }),
+  };
+  const saveResponse = await page.request.put(`/api/chats/${chat.id}/spatial-context`, {
+    data: {
+      expectedRevision: 0,
+      expectedCurrentLocationId: null,
+      definition,
+    },
+  });
+  expect(saveResponse.ok(), await saveResponse.text()).toBeTruthy();
+
+  try {
+    await page.addInitScript((chatId) => {
+      localStorage.setItem("marinara-active-chat-id", chatId);
+      localStorage.setItem(
+        "marinara-engine-ui",
+        JSON.stringify({
+          state: {
+            hasCompletedOnboarding: true,
+            rightPanelOpen: false,
+            sidebarOpen: false,
+            spatialMapDetailChatId: chatId,
+          },
+          version: 75,
+        }),
+      );
+    }, chat.id);
+    await page.route("**/api/backgrounds/file/Black.jpg", async (route) => {
+      await route.fulfill({ status: 204, body: "" });
+    });
+    await page.goto("/");
+    await dismissOnboardingTutorial(page);
+    await expectWorkspaceFillsOverlay(page);
+
+    const workspace = page.locator("[data-marinara-maps-workspace-overlay]");
+    const hierarchy = workspace.locator('section[aria-label="Location hierarchy"]:visible');
+    await hierarchy.getByRole("button", { name: "Expand Shrouded Coast" }).click();
+    await hierarchy.getByRole("button", { name: /^Old Sewers/u }).click();
+
+    const sewersDetails = workspace.locator('section[aria-label="Details for Old Sewers"]:visible');
+    const reciprocal = sewersDetails.locator(
+      '[data-marinara-direct-link-source="ai_lighthouse"][data-marinara-direct-link-target="ai_sewers"]',
+    );
+    await expect(reciprocal).toHaveCount(1);
+    await expect(reciprocal).toHaveAttribute("data-marinara-direct-link-direction", "both");
+    await expect(reciprocal).toHaveAttribute("data-marinara-direct-link-editable", "true");
+    await expect(reciprocal).toContainText("Both ways");
+    await expect(reciprocal).toContainText("Shrouded Coast > Gloam Harbor > Blackglass Lighthouse");
+    await expect(reciprocal.getByLabel("Direction for Blackglass Lighthouse")).toHaveValue("both");
+
+    const incomingOneWay = sewersDetails.locator(
+      '[data-marinara-direct-link-source="ai_harbor"][data-marinara-direct-link-target="ai_sewers"]',
+    );
+    await expect(incomingOneWay).toHaveAttribute("data-marinara-direct-link-direction", "incoming");
+    await expect(incomingOneWay).toHaveAttribute("data-marinara-direct-link-editable", "false");
+    await expect(incomingOneWay).toContainText("Incoming one-way");
+    await expect(incomingOneWay).toContainText("Dock shuttle");
+    await expect(incomingOneWay).toContainText("Shrouded Coast > Gloam Harbor");
+    await expect(incomingOneWay.getByLabel("Link label for Gloam Harbor")).toHaveCount(0);
+    const linkTargetPicker = sewersDetails.locator("select").filter({
+      has: page.locator('option[value=""]', { hasText: "Choose location" }),
+    });
+    await expect(linkTargetPicker.locator('option[value="ai_lighthouse"]')).toHaveCount(0);
+    await expect(linkTargetPicker.locator('option[value="ai_harbor"]')).toHaveCount(0);
+
+    await reciprocal.getByLabel("Link label for Blackglass Lighthouse").fill("Target-edited tunnel");
+    await reciprocal.getByLabel("Link state for Blackglass Lighthouse").selectOption("available");
+    await reciprocal.getByLabel("Direction for Blackglass Lighthouse").selectOption("outgoing");
+    const outgoingFromSewers = sewersDetails.locator(
+      '[data-marinara-direct-link-source="ai_sewers"][data-marinara-direct-link-target="ai_lighthouse"]',
+    );
+    await expect(outgoingFromSewers).toHaveAttribute("data-marinara-direct-link-direction", "outgoing");
+    await outgoingFromSewers.getByRole("button", { name: "View linked location Blackglass Lighthouse" }).click();
+    const lighthouseDetails = workspace.locator('section[aria-label="Details for Blackglass Lighthouse"]:visible');
+    const incomingAtLighthouse = lighthouseDetails.locator(
+      '[data-marinara-direct-link-source="ai_sewers"][data-marinara-direct-link-target="ai_lighthouse"]',
+    );
+    await expect(incomingAtLighthouse).toHaveAttribute("data-marinara-direct-link-direction", "incoming");
+    await expect(incomingAtLighthouse).toHaveAttribute("data-marinara-direct-link-editable", "false");
+    await incomingAtLighthouse.getByRole("button", { name: "View source Old Sewers" }).click();
+
+    await outgoingFromSewers.getByLabel("Direction for Blackglass Lighthouse").selectOption("both");
+    await expect(outgoingFromSewers).toHaveAttribute("data-marinara-direct-link-direction", "both");
+    await outgoingFromSewers.getByRole("button", { name: "View linked location Blackglass Lighthouse" }).click();
+    const bothAtLighthouse = lighthouseDetails.locator(
+      '[data-marinara-direct-link-source="ai_sewers"][data-marinara-direct-link-target="ai_lighthouse"]',
+    );
+    await expect(bothAtLighthouse).toHaveAttribute("data-marinara-direct-link-direction", "both");
+    await bothAtLighthouse.getByLabel("Direction for Old Sewers").selectOption("outgoing");
+    const outgoingFromLighthouse = lighthouseDetails.locator(
+      '[data-marinara-direct-link-source="ai_lighthouse"][data-marinara-direct-link-target="ai_sewers"]',
+    );
+    await expect(outgoingFromLighthouse).toHaveAttribute("data-marinara-direct-link-direction", "outgoing");
+    await expect(outgoingFromLighthouse.getByLabel("Link label for Old Sewers")).toHaveValue(
+      "Target-edited tunnel",
+    );
+    await outgoingFromLighthouse.getByLabel("Direction for Old Sewers").selectOption("both");
+    await outgoingFromLighthouse.getByRole("button", { name: "View linked location Old Sewers" }).click();
+    const bothAtSewers = sewersDetails.locator(
+      '[data-marinara-direct-link-source="ai_lighthouse"][data-marinara-direct-link-target="ai_sewers"]',
+    );
+    await expect(bothAtSewers).toHaveAttribute("data-marinara-direct-link-direction", "both");
+    await bothAtSewers.getByLabel("Direction for Blackglass Lighthouse").selectOption("incoming");
+    await expect(bothAtSewers).toHaveAttribute("data-marinara-direct-link-direction", "incoming");
+    await expect(bothAtSewers).toHaveAttribute("data-marinara-direct-link-editable", "false");
+
+    await workspace.getByRole("button", { name: "Save", exact: true }).click();
+    await expect
+      .poll(async () => {
+        const storedResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+        const stored = (await storedResponse.json()) as {
+          definition: {
+            locations: Array<{
+              id: string;
+              links: Array<{ targetId: string; label?: string; bidirectional: boolean; state: string }>;
+            }>;
+          };
+        };
+        return stored.definition.locations.flatMap((location) =>
+          location.links
+            .filter(
+              (link) =>
+                (location.id === "ai_lighthouse" && link.targetId === "ai_sewers") ||
+                (location.id === "ai_sewers" && link.targetId === "ai_lighthouse"),
+            )
+            .map((link) => ({ sourceId: location.id, ...link })),
+        );
+      })
+      .toEqual([
+        {
+          sourceId: "ai_lighthouse",
+          targetId: "ai_sewers",
+          label: "Target-edited tunnel",
+          bidirectional: false,
+          state: "available",
+        },
+      ]);
+
+    await bothAtSewers.getByRole("button", { name: "View source Blackglass Lighthouse" }).click();
+    await outgoingFromLighthouse
+      .getByRole("button", { name: "Remove Direct Link with Old Sewers" })
+      .click();
+    await workspace.getByRole("button", { name: "Save", exact: true }).click();
+    await expect
+      .poll(async () => {
+        const storedResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
+        const stored = (await storedResponse.json()) as {
+          definition: { locations: Array<{ id: string; links: Array<{ targetId: string }> }> };
+        };
+        return stored.definition.locations.flatMap((location) =>
+          location.links.filter(
+            (link) =>
+              (location.id === "ai_lighthouse" && link.targetId === "ai_sewers") ||
+              (location.id === "ai_sewers" && link.targetId === "ai_lighthouse"),
+          ),
+        ).length;
+      })
+      .toBe(0);
+    const hierarchyPaneButton = workspace.getByRole("button", { name: "hierarchy", exact: true });
+    if (await hierarchyPaneButton.isVisible()) await hierarchyPaneButton.click();
+    await hierarchy.getByRole("button", { name: /^Old Sewers/u }).click();
+    await expect(bothAtSewers).toHaveCount(0);
+    await expect(incomingOneWay).toBeVisible();
+    await expect(linkTargetPicker.locator('option[value="ai_lighthouse"]')).toHaveCount(1);
+    await expect(linkTargetPicker.locator('option[value="ai_harbor"]')).toHaveCount(0);
+
+    await incomingOneWay.getByRole("button", { name: "View source Gloam Harbor" }).click();
+    const harborDetails = workspace.locator('section[aria-label="Details for Gloam Harbor"]:visible');
+    const outgoing = harborDetails.locator(
+      '[data-marinara-direct-link-source="ai_harbor"][data-marinara-direct-link-target="ai_sewers"]',
+    );
+    await expect(outgoing).toHaveAttribute("data-marinara-direct-link-direction", "outgoing");
+    await expect(outgoing).toHaveAttribute("data-marinara-direct-link-editable", "true");
+    await expect(outgoing).toContainText("Outgoing one-way");
+    await expect(outgoing.getByLabel("Link label for Old Sewers")).toHaveValue("Dock shuttle");
   } finally {
     await expectDeleted(page, `/api/chats/${chat.id}?force=true`);
   }
@@ -4002,13 +4521,47 @@ test("AI map expansion preserves a campaign map and its current location", async
       operation: string;
       targetLocationId?: string;
       size: string;
+      targetLocationCount?: number;
       instructions?: string;
       debugMode: boolean;
+      breakHistoryContinuity?: boolean;
     };
+    if (request.operation === "replace") {
+      expect(request.targetLocationId).toBeUndefined();
+      expect(request.breakHistoryContinuity).toBe(true);
+      expect(request.size).toBe("small");
+      expect(request.targetLocationCount).toBe(10);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          operation: "replace",
+          size: "small",
+          source: "roleplay_setup",
+          generatedLocationCount: 1,
+          definition: {
+            ...generatedDefinition,
+            startingLocationId: "fresh_world",
+            locations: [
+              {
+                ...generatedDefinition.locations[0],
+                id: "fresh_world",
+                name: "Fresh world",
+                parentId: null,
+                kind: "region",
+                links: [],
+              },
+            ],
+          },
+        }),
+      });
+      return;
+    }
     expect(request).toMatchObject({
       operation: "expand",
       targetLocationId: "ai_harbor",
       size: "small",
+      targetLocationCount: 8,
       instructions: "Add a riverside ward with an inn for ferrymen.",
       debugMode: false,
     });
@@ -4299,28 +4852,49 @@ test("AI map expansion preserves a campaign map and its current location", async
     await replaceMap.click();
     const replacePanel = page.getByRole("region", { name: "Replace the current map" });
     await expect(replacePanel).toContainText("6 locations");
+    await replacePanel.getByRole("button", { name: "Create with AI" }).click();
+    const aiStartOverDialog = page.getByRole("dialog", {
+      name: "Break breadcrumb continuity and start a new map?",
+    });
+    await expect(aiStartOverDialog).toContainText("Old messages will remain");
+    await expect(aiStartOverDialog).toContainText("historical map links may no longer resolve");
+    await aiStartOverDialog.getByRole("button", { name: "Start new map", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Replace the map draft with AI" })).toBeVisible();
+    await expect(page.getByLabel("Expand beneath")).toHaveCount(0);
+    await expect(page.getByLabel("Custom place target")).toHaveValue("16");
+    await expect(page.getByText("AI action", { exact: true })).toHaveCount(0);
+    await page.getByLabel("What should this world include?").fill("A fresh map after the old campaign.");
+    await page.getByRole("button", { name: /Small About 8 places/ }).click();
+    await page.getByLabel("Custom place target").fill("10");
+    await page.getByRole("button", { name: "Generate draft" }).click();
+    await expect(page.getByText("Validated", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Discard draft", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "World map" })).toBeVisible();
+    if (mobile) await page.getByRole("button", { name: "More map actions" }).click();
+    await page.getByRole("button", { name: "Replace map or start over" }).click();
     const startBlank = replacePanel.getByRole("button", { name: "Start blank" });
     await startBlank.click();
-    const protectedDeleteDialog = page.getByRole("dialog", { name: "Archive this map and start over?" });
+    const protectedDeleteDialog = page.getByRole("dialog", {
+      name: "Break breadcrumb continuity and start a new map?",
+    });
     await expect(protectedDeleteDialog).toHaveAttribute("data-marinara-maps-confirmation", "true");
     await expect(protectedDeleteDialog).toContainText("Are you sure? This is dangerous.");
-    await expect(protectedDeleteDialog).toContainText("Campaign history uses this map");
-    await expect(protectedDeleteDialog).toContainText("6 saved locations cannot be erased");
-    await expect(protectedDeleteDialog).toContainText("preserve its stable ID for older messages");
+    await expect(protectedDeleteDialog).toContainText("Starting over breaks breadcrumb continuity");
+    await expect(protectedDeleteDialog).toContainText("Old messages remain");
+    await expect(protectedDeleteDialog).toContainText("historical map links may no longer resolve");
     await protectedDeleteDialog.getByRole("button", { name: "Start blank", exact: true }).click();
     await expect(
-      page.getByText("Fresh map started. Previous locations remain archived for campaign history. Review it, then Save."),
+      page.getByText(
+        "Fresh map started. Old messages remain, but previous map locations will not resolve after Save. Review it, then Save.",
+      ),
     ).toBeVisible();
     const hierarchy = page.locator('section[aria-label="Location hierarchy"]:visible');
     await expect(hierarchy.getByRole("button", { name: "New world region" })).toBeVisible();
-    await expect(hierarchy).toContainText("Shrouded Coast");
-    await expect(hierarchy).toContainText("archived");
+    await expect(hierarchy).not.toContainText("Shrouded Coast");
+    await expect(hierarchy).not.toContainText("archived");
 
     const beforeProtectedSave = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
-    expect(
-      ((await beforeProtectedSave.json()) as { definition: { locations: Array<{ status: string }> } }).definition.locations
-        .filter((location) => location.status === "archived"),
-    ).toHaveLength(0);
+    expect(((await beforeProtectedSave.json()) as { definition: { locations: Array<{ status: string }> } }).definition.locations).toHaveLength(6);
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect
       .poll(async () => {
@@ -4345,8 +4919,8 @@ test("AI map expansion preserves a campaign map and its current location", async
       })
       .toEqual({
         history: true,
-        oldIds: ["ai_world", "ai_harbor", "ai_lighthouse", "ai_sewers", "ai_riverside", "ai_minnow"],
-        archivedOldCount: 6,
+        oldIds: [],
+        archivedOldCount: 0,
         activeNames: ["New world"],
         currentMatchesStart: true,
       });
@@ -5090,8 +5664,14 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     await routeMap.getByRole("button", { name: /Inspect Upper Level/ }).click();
     await expect(routeMap.getByText("Shortest route · 2 hops", { exact: true })).toBeVisible();
     await routeMap.getByRole("button", { name: "Plan route to Upper Level" }).click();
-    await expect(recoveredStoryLocation).toContainText("Route to Upper Level");
-    await expect(recoveredStoryLocation).toContainText("Next step 1 of 2 · Blackglass Lighthouse");
+    await expect(recoveredStoryLocation).toContainText("Upper Level");
+    await expect(recoveredStoryLocation).toContainText("Next stop: Blackglass Lighthouse");
+    if (mobileRuntime) {
+      const queuedStoryMap = recoveredStoryLocation.getByRole("button", { name: "Open story map" });
+      await expectMinimumInteractiveSize(queuedStoryMap, "Queued mobile story-map control");
+      await queuedStoryMap.click();
+      await expect(recoveredStoryLocation.getByRole("region", { name: "Hierarchical world map" })).toBeVisible();
+    }
 
     await page.evaluate(() => {
       const runtime = document.querySelector("marinara-capability-hierarchical-maps[view='runtime']") as
@@ -5132,7 +5712,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
         }),
       );
     }, chat.id);
-    await expect(recoveredStoryLocation).toContainText("Next step 2 of 2 · Upper Level");
+    await expect(recoveredStoryLocation).toContainText("Next stop: Upper Level");
 
     // Engine acknowledges the committed first command with null after Maps has
     // already queued the second hop. That acknowledgement must only clear the
@@ -5145,7 +5725,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
       runtime.capabilityProps = { ...runtime.capabilityProps, pendingTransition: null };
       runtime.dispatchEvent(new CustomEvent("marinara-capability-props"));
     });
-    await expect(recoveredStoryLocation).toContainText("Next step 2 of 2 · Upper Level");
+    await expect(recoveredStoryLocation).toContainText("Next stop: Upper Level");
 
     await page.evaluate((chatId) => {
       const runtime = document.querySelector("marinara-capability-hierarchical-maps[view='runtime']") as
@@ -5171,7 +5751,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     const routeInput = page.locator("textarea.mari-chat-input-textarea");
     await routeInput.fill("I climb to the lantern gallery.");
     await page.locator("button.mari-chat-send-btn").click();
-    await expect(recoveredStoryLocation.getByText("Route to Upper Level", { exact: false })).toHaveCount(0);
+    await expect(recoveredStoryLocation.getByText("Next stop: Upper Level", { exact: false })).toHaveCount(0);
     await expect(recoveredStoryLocation).toContainText("Upper Level");
 
     const currentSpatialResponse = await page.request.get(`/api/chats/${chat.id}/spatial-context`);

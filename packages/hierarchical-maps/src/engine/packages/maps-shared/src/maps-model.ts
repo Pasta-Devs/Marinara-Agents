@@ -14,6 +14,7 @@ export const TURN_PROMPT_TEMPLATES_VERSION = 1 as const;
 export const SPATIAL_MAP_TEMPLATE_VERSION = 1 as const;
 export const SPATIAL_SHARED_WORLD_VERSION = 1 as const;
 export const SPATIAL_SHARED_WORLD_LINK_VERSION = 1 as const;
+export const SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT = 40 as const;
 export const GLOBAL_GALLERY_SPATIAL_REFERENCE_PREFIX = "global-gallery:";
 export const DEFAULT_SPATIAL_GENERATION_PROMPT_OPTION_ID = "default";
 export const SPATIAL_GENERATION_PROMPT_LIBRARIES_SETTINGS_KEY = "spatialMapGenerationPromptLibraries";

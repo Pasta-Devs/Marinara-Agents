@@ -30,12 +30,18 @@ import type {
 } from "@marinara-engine/shared";
 import { compareSpatialLocations } from "@marinara-engine/shared";
 import {
+  parseAgentSettings,
   useGenerateSpatialMapDraft,
   useGenerateSpatialMapTemplateDraft,
+  useSpatialAgentConfiguration,
+  useSpatialConnections,
   useSpatialGenerationPromptLibraries,
+  useUpdateSpatialAgentConfiguration,
   type MapsGenerateSpatialMapDraftResponse,
 } from "../../../hooks/use-spatial-context";
 import { cn } from "../package-utils";
+import { useSpatialMapTranslation } from "../localization";
+import { SpatialConnectionOverrideSelect } from "./SpatialConnectionOverrideSelect";
 import { SpatialLocationIcon } from "./SpatialLocationIcon";
 import {
   HIERARCHY_TEMPLATES,
@@ -45,12 +51,14 @@ import {
   moveSpatialHierarchyType,
   normalizeHierarchyProfile,
   profileFromTemplate,
+  SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT,
   type SpatialGenerationPreferences,
   type SpatialHierarchyProfile,
 } from "../../../../../maps-shared/src/maps-model";
 
 interface SpatialMapAiBuilderProps {
   chatId: string;
+  chatConnectionId?: string | null;
   standalone?: boolean;
   ownerMode: SpatialOwnerMode;
   open: boolean;
@@ -65,6 +73,7 @@ interface SpatialMapAiBuilderProps {
   initialSession?: SpatialMapAiBuilderSession | null;
   regenerateRequestId?: number;
   allowDirtyGeneratedReplacement?: boolean;
+  startOver?: boolean;
   setupReview?: boolean;
   lorebooks?: Lorebook[];
   excludedLorebookIds?: string[];
@@ -77,6 +86,7 @@ type SpatialMapAiBuilderRequest = {
   operation: SpatialMapDraftOperation;
   targetLocationId: string;
   size: SpatialMapDraftSize;
+  targetLocationCount?: number;
   instructions: string;
   groundingMode: SpatialMapGroundingMode;
   sourceLorebookIds: string[];
@@ -90,13 +100,26 @@ export type SpatialMapAiBuilderSession = SpatialMapAiBuilderRequest & {
 
 const SIZE_OPTIONS: Array<{
   value: SpatialMapDraftSize;
+  targetLocationCount: number;
   label: string;
   description: string;
 }> = [
-  { value: "small", label: "Small", description: "About 8 places" },
-  { value: "medium", label: "Medium", description: "About 16 places" },
-  { value: "large", label: "Large", description: "About 28 places" },
+  { value: "small", targetLocationCount: 8, label: "Small", description: "About 8 places" },
+  { value: "medium", targetLocationCount: 16, label: "Medium", description: "About 16 places" },
+  { value: "large", targetLocationCount: 28, label: "Large", description: "About 28 places" },
 ];
+
+function sizeForTargetLocationCount(targetLocationCount: number): SpatialMapDraftSize {
+  if (targetLocationCount <= 8) return "small";
+  if (targetLocationCount <= 16) return "medium";
+  return "large";
+}
+
+function normalizedTargetLocationCount(value: string): number | null {
+  const parsed = Number(value);
+  if (!value.trim() || !Number.isInteger(parsed) || !Number.isFinite(parsed)) return null;
+  return Math.max(1, Math.min(SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT, parsed));
+}
 
 function sourceCopy(ownerMode: SpatialOwnerMode, standalone: boolean): string {
   if (standalone) return "Uses only your instructions and any lorebooks you explicitly select. No chat or Game plot is used.";
@@ -159,6 +182,7 @@ function withHierarchyProfile(
 
 export function SpatialMapAiBuilder({
   chatId,
+  chatConnectionId = null,
   standalone = false,
   ownerMode,
   open,
@@ -173,6 +197,7 @@ export function SpatialMapAiBuilder({
   initialSession = null,
   regenerateRequestId = 0,
   allowDirtyGeneratedReplacement = false,
+  startOver = false,
   setupReview = false,
   lorebooks = [],
   excludedLorebookIds = [],
@@ -182,7 +207,11 @@ export function SpatialMapAiBuilder({
 }: SpatialMapAiBuilderProps) {
   const generateDraft = useGenerateSpatialMapDraft();
   const generateTemplateDraft = useGenerateSpatialMapTemplateDraft();
+  const agentConfiguration = useSpatialAgentConfiguration();
+  const connections = useSpatialConnections();
+  const updateAgentConfiguration = useUpdateSpatialAgentConfiguration();
   const promptLibraries = useSpatialGenerationPromptLibraries();
+  const { t } = useSpatialMapTranslation();
   const generationPreferencesOverride = useMemo(
     () =>
       generationPreferencesWithPromptLibrary(
@@ -203,12 +232,20 @@ export function SpatialMapAiBuilder({
         : definition.startingLocationId) ??
     activeLocations[0]?.id ??
     "";
-  const initialOperation = standalone
-    ? "create"
-    : (initialSession?.operation ?? initialResult?.operation ?? (hasLocations ? "expand" : "create"));
+  const initialOperation = startOver
+    ? "replace"
+    : standalone
+      ? "create"
+      : (initialSession?.operation ?? initialResult?.operation ?? (hasLocations ? "expand" : "create"));
   const [operation, setOperation] = useState<SpatialMapDraftOperation>(initialOperation);
   const [targetLocationId, setTargetLocationId] = useState(defaultTargetLocationId);
   const [size, setSize] = useState<SpatialMapDraftSize>(initialSession?.size ?? initialResult?.size ?? "medium");
+  const [targetLocationCount, setTargetLocationCount] = useState(
+    initialSession?.targetLocationCount ??
+      SIZE_OPTIONS.find((option) => option.value === (initialSession?.size ?? initialResult?.size ?? "medium"))!
+        .targetLocationCount,
+  );
+  const [targetLocationCountInput, setTargetLocationCountInput] = useState(() => String(targetLocationCount));
   const [instructions, setInstructions] = useState(initialSession?.instructions ?? "");
   const [result, setResult] = useState<MapsGenerateSpatialMapDraftResponse | null>(() =>
     withHierarchyProfile(initialSession?.result ?? initialResult, hierarchyProfile),
@@ -229,6 +266,9 @@ export function SpatialMapAiBuilder({
   const [selectedPreviewId, setSelectedPreviewId] = useState<string | null>(null);
   const [expandedPreviewIds, setExpandedPreviewIds] = useState<Set<string>>(() => new Set());
   const [previewQuery, setPreviewQuery] = useState("");
+  const [connectionId, setConnectionId] = useState("");
+  const [connectionSaved, setConnectionSaved] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const requestInputRef = useRef<HTMLTextAreaElement>(null);
   const handledRegenerationRef = useRef(0);
   const excludedLorebookIdSet = useMemo(() => new Set(excludedLorebookIds), [excludedLorebookIds]);
@@ -311,15 +351,41 @@ export function SpatialMapAiBuilder({
   const proposedStartingLocation = result?.definition.startingLocationId
     ? (result.definition.locations.find((location) => location.id === result.definition.startingLocationId) ?? null)
     : null;
+  const generationPending = generateDraft.isPending || generateTemplateDraft.isPending;
+
+  useEffect(() => {
+    if (!agentConfiguration.isSuccess || updateAgentConfiguration.isPending) return;
+    setConnectionId(agentConfiguration.data?.connectionId ?? "");
+  }, [agentConfiguration.data, agentConfiguration.isSuccess, updateAgentConfiguration.isPending]);
+
+  useEffect(() => {
+    if (!connectionSaved) return;
+    const timer = window.setTimeout(() => setConnectionSaved(false), 1_800);
+    return () => window.clearTimeout(timer);
+  }, [connectionSaved]);
 
   useEffect(() => {
     if (!open) return;
-    const nextOperation = standalone
-      ? "create"
-      : (initialSession?.operation ?? initialResult?.operation ?? (hasLocations ? "expand" : "create"));
+    const nextOperation = startOver
+      ? "replace"
+      : standalone
+        ? "create"
+        : (initialSession?.operation ?? initialResult?.operation ?? (hasLocations ? "expand" : "create"));
     setOperation(nextOperation);
     setTargetLocationId(initialSession?.targetLocationId ?? initialResult?.targetLocationId ?? defaultTargetLocationId);
     setSize(initialSession?.size ?? initialResult?.size ?? "medium");
+    setTargetLocationCount(
+      initialSession?.targetLocationCount ??
+        SIZE_OPTIONS.find((option) => option.value === (initialSession?.size ?? initialResult?.size ?? "medium"))!
+          .targetLocationCount,
+    );
+    setTargetLocationCountInput(
+      String(
+        initialSession?.targetLocationCount ??
+          SIZE_OPTIONS.find((option) => option.value === (initialSession?.size ?? initialResult?.size ?? "medium"))!
+            .targetLocationCount,
+      ),
+    );
     setInstructions(initialSession?.instructions ?? "");
     setResult(withHierarchyProfile(initialSession?.result ?? initialResult, hierarchyProfile));
     setError(null);
@@ -333,7 +399,17 @@ export function SpatialMapAiBuilder({
     setSelectedPreviewId(null);
     setExpandedPreviewIds(new Set());
     setPreviewQuery("");
-  }, [chatId, defaultTargetLocationId, definition, hasLocations, hierarchyProfile, initialResult, initialSession, open]);
+  }, [
+    chatId,
+    defaultTargetLocationId,
+    definition,
+    hasLocations,
+    hierarchyProfile,
+    initialResult,
+    initialSession,
+    open,
+    startOver,
+  ]);
 
   const runGeneration = useCallback(
     async (request: SpatialMapAiBuilderRequest) => {
@@ -342,6 +418,8 @@ export function SpatialMapAiBuilder({
         const requestInput = {
           operation: standalone ? "create" : request.operation,
           size: request.size,
+          ...(request.targetLocationCount === undefined ? {} : { targetLocationCount: request.targetLocationCount }),
+          ...(startOver ? { breakHistoryContinuity: true as const } : {}),
           ...(!standalone && request.operation === "expand" ? { targetLocationId: request.targetLocationId } : {}),
           instructions: request.instructions.trim() || undefined,
           groundingMode: request.groundingMode,
@@ -360,7 +438,16 @@ export function SpatialMapAiBuilder({
         setError(generationError instanceof Error ? generationError.message : "The map draft could not be generated.");
       }
     },
-    [chatId, debugMode, generateDraft, generateTemplateDraft, generationPreferencesOverride, standalone, workingHierarchyProfile],
+    [
+      chatId,
+      debugMode,
+      generateDraft,
+      generateTemplateDraft,
+      generationPreferencesOverride,
+      standalone,
+      startOver,
+      workingHierarchyProfile,
+    ],
   );
 
   useEffect(() => {
@@ -378,6 +465,7 @@ export function SpatialMapAiBuilder({
       operation: initialSession.operation,
       targetLocationId: initialSession.targetLocationId,
       size: initialSession.size,
+      targetLocationCount: initialSession.targetLocationCount,
       instructions: initialSession.instructions,
       groundingMode: initialSession.groundingMode,
       sourceLorebookIds: initialSession.sourceLorebookIds,
@@ -395,14 +483,41 @@ export function SpatialMapAiBuilder({
   }, [open, previewIds, previewLocations.length, previewRoots, result]);
 
   useEffect(() => {
-    if (!open || !hasCommittedSpatialHistory || operation !== "replace") return;
+    if (!open || startOver || !hasCommittedSpatialHistory || operation !== "replace") return;
     setOperation("expand");
     setTargetLocationId(defaultTargetLocationId);
     setResult(null);
     setError(null);
-  }, [defaultTargetLocationId, hasCommittedSpatialHistory, open, operation]);
+  }, [defaultTargetLocationId, hasCommittedSpatialHistory, open, operation, startOver]);
 
   if (!open) return null;
+
+  const changeConnection = async (nextConnectionId: string) => {
+    const configuration = agentConfiguration.data;
+    if (!configuration || updateAgentConfiguration.isPending || generationPending) return;
+    const previousConnectionId = configuration.connectionId ?? "";
+    const settings = parseAgentSettings(configuration.settings);
+    setConnectionId(nextConnectionId);
+    setConnectionSaved(false);
+    setConnectionError(null);
+    try {
+      const saved = await updateAgentConfiguration.mutateAsync({
+        description: configuration.description,
+        phase: "pre_generation",
+        connectionId: nextConnectionId || null,
+        settings: {
+          author: typeof settings.author === "string" && settings.author.trim() ? settings.author : "Pasta Devs",
+        },
+      });
+      setConnectionId(saved.connectionId ?? "");
+      setConnectionSaved(true);
+    } catch (saveError) {
+      setConnectionId(previousConnectionId);
+      setConnectionError(
+        saveError instanceof Error ? saveError.message : t("ui.worldMaps.connection.saveError"),
+      );
+    }
+  };
 
   const resetResult = () => {
     setResult(null);
@@ -418,6 +533,7 @@ export function SpatialMapAiBuilder({
     operation,
     targetLocationId,
     size,
+    targetLocationCount,
     instructions,
     groundingMode,
     sourceLorebookIds,
@@ -426,6 +542,7 @@ export function SpatialMapAiBuilder({
   };
   const requestInvalid =
     (dirty && !allowDirtyGeneratedReplacement) ||
+    normalizedTargetLocationCount(targetLocationCountInput) === null ||
     (operation === "expand" && targetLocationId.length === 0) ||
     (operation !== "expand" && hierarchyMode === "custom" &&
       (!workingHierarchyProfile.name.trim() || workingHierarchyProfile.types.some((type) => !type.label.trim()))) ||
@@ -433,8 +550,7 @@ export function SpatialMapAiBuilder({
   const resultHierarchyValid = Boolean(
     result && result.hierarchyProfile.types.every((type) => type.label.trim().length > 0),
   );
-  const generationPending = generateDraft.isPending || generateTemplateDraft.isPending;
-  const generationDisabled = generationPending || requestInvalid;
+  const generationDisabled = generationPending || updateAgentConfiguration.isPending || requestInvalid;
   const generate = () => runGeneration(currentRequest);
   const selectedPreviewProvenance = selectedPreviewLocation ? result?.provenance?.[selectedPreviewLocation.id] : null;
   const togglePreviewExpanded = (locationId: string) => {
@@ -540,6 +656,45 @@ export function SpatialMapAiBuilder({
 
       <div className="mari-maps-ai-grid grid min-h-0 gap-px bg-[var(--marinara-editor-divider)]">
         <div className="bg-[var(--marinara-editor-bg)] p-4">
+          <div className="mb-4">
+            <label className="text-xs font-semibold text-[var(--marinara-editor-title)]" htmlFor="spatial-ai-connection">
+              {t("ui.worldMaps.connection.aiLabel")}
+            </label>
+            <SpatialConnectionOverrideSelect
+              id="spatial-ai-connection"
+              ariaLabel={t("ui.worldMaps.connection.aiAriaLabel")}
+              value={connectionId}
+              onChange={(nextConnectionId) => void changeConnection(nextConnectionId)}
+              connections={connections.data ?? []}
+              fallbackConnectionId={standalone ? null : chatConnectionId}
+              fallbackLabel={
+                standalone ? t("ui.worldMaps.connection.useDefault") : t("ui.worldMaps.connection.useChat")
+              }
+              disabled={
+                generationPending ||
+                updateAgentConfiguration.isPending ||
+                !agentConfiguration.isSuccess ||
+                connections.isLoading
+              }
+              className="mt-2 min-h-11 w-full rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-sm outline-none focus:border-[var(--marinara-chat-chrome-button-border-active)] focus:ring-2 focus:ring-[var(--marinara-chat-chrome-highlight-bg)] disabled:opacity-60"
+            />
+            <div className="mt-1 flex min-h-4 items-start justify-between gap-3 text-[0.625rem] text-[var(--marinara-editor-muted)]">
+              <span>{t("ui.worldMaps.connection.help")}</span>
+              <span className="shrink-0" aria-live="polite">
+                {updateAgentConfiguration.isPending
+                  ? t("ui.worldMaps.connection.saving")
+                  : connectionSaved
+                    ? t("ui.worldMaps.connection.saved")
+                    : ""}
+              </span>
+            </div>
+            {connectionError && (
+              <p className="mt-1 text-xs text-[var(--destructive)]" role="alert">
+                {connectionError}
+              </p>
+            )}
+          </div>
+
           {hasLocations && operation === "expand" && (
             <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] px-3 py-2.5">
               <div className="min-w-48 flex-1">
@@ -565,7 +720,7 @@ export function SpatialMapAiBuilder({
             </div>
           )}
 
-          {!standalone && advancedOpen && hasLocations && !hasCommittedSpatialHistory && (
+          {!standalone && !startOver && advancedOpen && hasLocations && !hasCommittedSpatialHistory && (
             <fieldset className="mb-4">
               <legend className="text-xs font-semibold text-[var(--marinara-editor-title)]">AI action</legend>
               <div className="mt-2 grid grid-cols-2 gap-2">
@@ -961,15 +1116,17 @@ export function SpatialMapAiBuilder({
                 <button
                   key={option.value}
                   type="button"
-                  aria-pressed={size === option.value}
+                  aria-pressed={targetLocationCount === option.targetLocationCount}
                   disabled={generationPending}
                   onClick={() => {
                     setSize(option.value);
+                    setTargetLocationCount(option.targetLocationCount);
+                    setTargetLocationCountInput(String(option.targetLocationCount));
                     resetResult();
                   }}
                   className={cn(
                     "min-h-14 rounded-lg border px-2 py-2 text-left transition-colors duration-200 disabled:cursor-wait disabled:opacity-60",
-                    size === option.value
+                    targetLocationCount === option.targetLocationCount
                       ? "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)] text-[var(--marinara-chat-chrome-button-text-active)]"
                       : "border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] text-[var(--marinara-editor-muted)]",
                   )}
@@ -979,6 +1136,40 @@ export function SpatialMapAiBuilder({
                 </button>
               ))}
             </div>
+            <label className="mt-3 block text-xs font-medium text-[var(--marinara-editor-title)]" htmlFor="spatial-ai-target-count">
+              Custom place target
+              <input
+                id="spatial-ai-target-count"
+                type="number"
+                min={1}
+                max={SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT}
+                step={1}
+                value={targetLocationCountInput}
+                disabled={generationPending}
+                onChange={(event) => {
+                  const raw = event.target.value;
+                  setTargetLocationCountInput(raw);
+                  const normalized = normalizedTargetLocationCount(raw);
+                  if (normalized !== null) {
+                    setTargetLocationCount(normalized);
+                    setSize(sizeForTargetLocationCount(normalized));
+                  }
+                  resetResult();
+                }}
+                onBlur={() => {
+                  const normalized = normalizedTargetLocationCount(targetLocationCountInput);
+                  if (normalized !== null) {
+                    setTargetLocationCount(normalized);
+                    setTargetLocationCountInput(String(normalized));
+                    setSize(sizeForTargetLocationCount(normalized));
+                  }
+                }}
+                className="mt-1 min-h-11 w-full rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-sm outline-none focus:border-[var(--marinara-chat-chrome-button-border-active)] focus:ring-2 focus:ring-[var(--marinara-chat-chrome-highlight-bg)] disabled:opacity-60"
+              />
+              <span className="mt-1 block text-[0.625rem] text-[var(--marinara-editor-muted)]">
+                Choose any whole number from 1 to {SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT} places.
+              </span>
+            </label>
           </fieldset>
 
           <p className="mt-4 text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
@@ -991,10 +1182,16 @@ export function SpatialMapAiBuilder({
               Applying changes only the working copy. Enable the map and press Save when you want it to affect turns.
             </p>
           )}
-          {hasCommittedSpatialHistory && (
+          {hasCommittedSpatialHistory && !startOver && (
             <p className="mt-2 flex items-start gap-2 text-xs text-emerald-300">
               <ShieldCheck size="0.75rem" className="mt-0.5 shrink-0" />
               Campaign history is protected. AI can add places, but it cannot replace or remove the current map.
+            </p>
+          )}
+          {hasCommittedSpatialHistory && startOver && (
+            <p className="mt-2 flex items-start gap-2 text-xs text-amber-300">
+              <AlertCircle size="0.75rem" className="mt-0.5 shrink-0" />
+              Saving this replacement starts a new map. Old messages remain, but historical map links may no longer resolve.
             </p>
           )}
           {operation === "replace" && (
@@ -1247,6 +1444,7 @@ export function SpatialMapAiBuilder({
                       operation,
                       targetLocationId,
                       size,
+                      targetLocationCount,
                       instructions,
                       groundingMode,
                       sourceLorebookIds,
@@ -1258,7 +1456,11 @@ export function SpatialMapAiBuilder({
                   className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 px-4 text-xs disabled:opacity-50"
                 >
                   <Check size="0.8125rem" />{" "}
-                  {result.operation === "expand" ? "Add to working map" : hasLocations ? "Replace working draft" : "Continue to editor"}
+                  {result.operation === "expand"
+                    ? "Add to working map"
+                    : startOver || hasLocations
+                      ? "Replace working draft"
+                      : "Continue to editor"}
                 </button>
               </div>
             </div>

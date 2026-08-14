@@ -169,6 +169,10 @@ function extractJsonObject(text: string) {
   return start >= 0 && end > start ? trimmed.slice(start, end + 1) : trimmed;
 }
 
+function isEvidenceUnitResponseObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value) && "units" in value && Array.isArray(value.units));
+}
+
 function isReasoningNoneUnsupportedError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return (
@@ -331,14 +335,20 @@ async function chatCompleteWithReasoningFallback({
   messages,
   chatOptions,
   extractionOptions,
+  fallbackUsed = false,
 }: {
   messages: LanguageModelMessage[];
   chatOptions: LtmEvidenceUnitChatOptions;
   extractionOptions: RunLongTermMemoryEvidenceUnitExtractionOptions;
+  fallbackUsed?: boolean;
 }) {
   try {
     return await extractionOptions.languageModel.chatComplete(messages, chatOptions);
   } catch (err) {
+    if (fallbackUsed) {
+      logger.warn(err, "[ltm] LLM compatibility fallback failed for evidence unit extraction");
+      throw err;
+    }
     if (chatOptions.responseFormat && isResponseFormatUnsupportedError(err)) {
       await recordLtmDebugEvent({
         operationId: extractionOptions.operationId,
@@ -361,6 +371,7 @@ async function chatCompleteWithReasoningFallback({
         messages,
         chatOptions: fallbackChatOptions,
         extractionOptions,
+        fallbackUsed: true,
       });
     }
 
@@ -390,6 +401,7 @@ async function chatCompleteWithReasoningFallback({
         reasoningEffort: DEFAULT_LTM_EXTRACTION_REASONING_EFFORT,
       },
       extractionOptions,
+      fallbackUsed: true,
     });
   }
 }
@@ -974,7 +986,7 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
       root: options.root,
       phase: "llm",
       action: "evidence_unit_response",
-      status: content ? "ok" : "skipped",
+      status: content ? "ok" : "error",
       sourceNoteId: options.sourceNote.id,
       provider: options.languageModel.name,
       model: options.languageModel.model,
@@ -999,15 +1011,22 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
       );
     }
     if (!content) {
-      return {
-        response: ltmEvidenceUnitExtractionResponseSchema.parse({ summary: "", units: [] }),
-        totalCandidates: 0,
-        parserRejections: 0,
-        droppedCandidates: [],
-      };
+      throw new LtmServiceError(
+        "empty_output: extraction model returned no content; the source remains retryable",
+        400,
+        "ltm_model_output_empty",
+      );
     }
     try {
-      const parsed = parseEvidenceUnitPayload(JSON.parse(extractJsonObject(content)), options.sourceHash);
+      const rawPayload = JSON.parse(extractJsonObject(content));
+      if (!isEvidenceUnitResponseObject(rawPayload)) {
+        throw new LtmServiceError(
+          "unusable_output: extraction model returned no evidence-unit response object; the source remains retryable",
+          400,
+          "ltm_model_output_unusable",
+        );
+      }
+      const parsed = parseEvidenceUnitPayload(rawPayload, options.sourceHash);
       await recordLtmDebugEvent({
         operationId: options.operationId,
         root: options.root,
@@ -1025,6 +1044,14 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
       });
       return parsed;
     } catch (parseErr) {
+      const error =
+        parseErr instanceof LtmServiceError
+          ? parseErr
+          : new LtmServiceError(
+              `unusable_output: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}; the source remains retryable`,
+              400,
+              "ltm_model_output_unusable",
+            );
       await recordLtmDebugEvent({
         operationId: options.operationId,
         root: options.root,
@@ -1033,10 +1060,10 @@ export async function runLongTermMemoryEvidenceUnitExtraction(
         status: "error",
         sourceNoteId: options.sourceNote.id,
         counts: { responseChars: content.length },
-        error: parseErr,
+        error,
         details: { responseSnippet: content.slice(0, 1_500) },
       });
-      throw parseErr;
+      throw error;
     }
   } catch (err) {
     logger.error(err, "[ltm] Evidence unit extraction failed for note %s", options.sourceNote.id);

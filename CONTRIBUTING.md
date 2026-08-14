@@ -23,7 +23,7 @@ git pull
 git checkout -b feature/short-description
 ```
 
-Open a draft PR against `staging` as soon as implementation starts, then mark it **Ready for review** after validation and self-review. Draft PRs cannot merge and are intentionally skipped by CodeRabbit. Every ready PR must pass the catalog check and complete CodeRabbit review. PRs from active Pasta-Devs organization members and owners do not require a separate human approval; organization members with repository merge permission may merge internal PRs into `staging` after those gates pass. Outside and first-time contributors require an approving review from repository owner `SpicyMarinara`. Approval from another Pasta-Devs member does not satisfy this gate. Only `SpicyMarinara` may promote this repository's `staging` branch into `main`.
+Open a draft PR against `staging` as soon as implementation starts, then mark it **Ready for review** after validation and self-review. Draft PRs cannot merge and are intentionally skipped by CodeRabbit. Every ready PR must pass the catalog check, CodeQL security analysis, native Code Quality analysis, and CodeRabbit review. Dependency changes must also pass the low-severity dependency audit. PRs from active Pasta-Devs organization members and owners do not require a separate human approval; organization members with repository merge permission may merge internal PRs into `staging` after those gates pass. Outside and first-time contributors require an approving review from repository owner `SpicyMarinara`. Approval from another Pasta-Devs member does not satisfy this gate. Only `SpicyMarinara` may promote this repository's `staging` branch into `main`.
 
 Marinara Engine automatically follows the matching Agent channel: Engine `staging` reads this repository's `staging` catalog and artifacts, while stable Engine builds read `main`. Test package installs and updates from an Engine staging checkout before promotion.
 
@@ -97,11 +97,26 @@ Every pull request must run:
 
 ```bash
 node scripts/test-catalog-lanes.mjs
+node scripts/validate-package-locales.mjs
 node scripts/validate-catalog.mjs
 git diff --check
 ```
 
 Catalog validation verifies every versioned lane and the legacy alias, package count and identity, Engine compatibility, categories, README coverage, package manifests, permissions, entrypoints, declared file hashes and sizes, ZIP checksums and contents, generated JavaScript syntax, runtime registration, and package-specific contracts.
+
+### Localizing package metadata
+
+Each downloadable package owns a canonical `packages/<id>/locales/en.json` catalog for its user-visible package metadata. It includes the package and installed-Agent names and descriptions plus names and descriptions for selectable prompt templates. Model prompt templates are behavior, not interface copy, and must not be translated.
+
+The English catalogs are generated from `manifest.json` and `agents.json`. After changing those source strings, run:
+
+```bash
+node scripts/sync-package-locales.mjs
+```
+
+For a translation, copy the package's English catalog to a BCP 47 locale filename such as `ko.json` or `pt-BR.json`, update `_meta`, and translate only the fields you can maintain. Translated catalogs may be partial; missing fields fall back to English when Engine consumption is implemented. Keep Agent and prompt-template IDs unchanged, preserve the file structure, and run `node scripts/validate-package-locales.mjs` before opening a PR.
+
+These package-adjacent metadata catalogs do not localize executable package interfaces by themselves. Package-owned interfaces keep their own UI catalogs, such as Long-Term Memory's `src/engine/.../locales/en.json`. Loading localized package metadata in **Agents → Download Agents** remains Engine-owned integration work; do not extend the strict Engine manifest or catalog schema from this repository alone.
 
 Also manually install or update affected packages through **Agents → Download Agents** in a compatible Marinara Engine checkout. Verify the supported chat modes, restart behavior, uninstall cleanup, and an offline restart when relevant. Describe exactly what was tested in the PR; do not tick checklist items that were not personally verified.
 

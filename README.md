@@ -4,7 +4,7 @@ Official downloadable agents and capability packages for [Marinara Engine](https
 
 Marinara Engine starts lightweight: a fresh installation contains no optional agents. Open **Agents → Download Agents** on desktop or mobile to browse this catalog, read what each package does, and install only the features you want. Installed packages appear in the normal Agents panel and the chat modes they support. You can update or uninstall them from the same catalog. Restart Marinara Engine when the installer asks you to do so.
 
-Across its Engine compatibility lanes, the catalog currently contains **31 first-party packages**: 6 Writer Agents, 8 Tracker Agents, and 17 Misc Agents. Most packages support **Marinara Engine v2.3.0+**; Storyboard remains available from **v2.3.5**, while World Maps and Long-Term Memory require the stable **v2.4.1** release. Every package accepts compatible Engine v2 and v3 releases below **v4.0.0**. Each Engine release sees only the packages compatible with its major version. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
+Across its Engine compatibility lanes, the catalog currently contains **32 first-party packages**: 6 Writer Agents, 8 Tracker Agents, and 18 Misc Agents. Most packages support **Marinara Engine v2.3.0+**; Long-Term Memory requires **v2.4.1**, while World Maps, Storyboard, and Noodle require **v2.4.2**. Every package accepts compatible Engine v2 and v3 releases below **v4.0.0**. Each Engine release sees only the packages compatible with its major version. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
 
 ## Official catalog
 
@@ -48,6 +48,7 @@ Across its Engine compatibility lanes, the catalog currently contains **31 first
 | Lorebook Keeper | [`lorebook-keeper`](packages/lorebook-keeper/manifest.json) | Creates and updates durable lorebook entries from important story facts. |
 | Long-Term Memory | [`long-term-memory`](packages/long-term-memory/manifest.json) | Extracts durable memories from chat summaries, character records, and lorebooks, with scoped vault browsing, review, source management, recall controls, and preset-marker placement for Roleplay. |
 | Music DJ | [`spotify`](packages/spotify/manifest.json) | Plays scene-matched music through Spotify, YouTube, or local Game Assets. |
+| Noodle | [`noodle`](packages/noodle/manifest.json) | Explore the familiar Noodle and NoodleR social timelines as an optional social world, available after installation from **Home → Noodle**. |
 | Poker | [`poker`](packages/poker/manifest.json) | Adds No-Limit Texas Hold'em for Conversation chats and the `/poker` command. |
 | Rock-Paper-Scissors | [`rock-paper-scissors`](packages/rock-paper-scissors/manifest.json) | Adds best-of-three, five, or seven Conversation matches and the `/rps` command. |
 | Storyboard | [`storyboard`](packages/storyboard/manifest.json) | Plans and generates still or animated Game and Roleplay storyboards with provider-tuned prompt chains. |
@@ -55,6 +56,12 @@ Across its Engine compatibility lanes, the catalog currently contains **31 first
 | UNO | [`uno`](packages/uno/manifest.json) | Adds a complete Conversation-mode UNO table and `/uno` command. |
 
 For complete mode, lifecycle, and settings documentation for every package, see the Engine's [Downloadable Agents Reference](https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md).
+
+### Localization sources
+
+Every downloadable package keeps its canonical user-visible metadata in `packages/<id>/locales/en.json`. These catalogs cover package and Agent names and descriptions plus selectable named prompt options, while deliberately excluding model instructions. Translators can add partial BCP 47 catalogs such as `ko.json`; untranslated fields fall back to English once Engine-side catalog localization support consumes them. See [Contributing](CONTRIBUTING.md#localizing-package-metadata) for the format and validation workflow.
+
+Package-owned interfaces maintain their UI catalogs separately. The metadata catalogs prepared here do not change the Engine's catalog schema or runtime behavior on their own.
 
 ## Package trust and storage
 
@@ -77,10 +84,11 @@ Build the shared package snapshot and all feature bundles from a neighboring Mar
 ```bash
 node scripts/build-agent-catalog.mjs
 node scripts/build-feature-packages.mjs
+node scripts/test-catalog-lanes.mjs
 node scripts/validate-catalog.mjs
 ```
 
-The build records generic Engine source dependencies needed by feature packages under `sources/engine`. Package-owned implementations stay with their package; for example, World Maps and Long-Term Memory source live under their respective `packages/<id>/src/engine/` trees and are overlaid on those generic dependencies during each build.
+The build records generic Engine source dependencies needed by feature packages under `sources/engine`. Package-owned implementations stay with their package; for example, World Maps, Long-Term Memory, and Noodle source live under their respective `packages/<id>/src/engine/` trees and are overlaid on those generic dependencies during each build. Noodle also compiles and embeds the same Engine design utilities used by its former built-in interface, preventing visual drift when it runs as a downloaded Home tab.
 
 ---
 

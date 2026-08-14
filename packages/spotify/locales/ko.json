@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "ko",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "뮤직 DJ (Music DJ)",
+    "description": "서사 분위기를 분석해 Spotify, YouTube 또는 로컬 게임 에셋에서 어울리는 음악을 재생합니다. 설정 → 일반에서 음악 플레이어를 켜세요. 대화·롤플레이·게임 모드에서는 채팅 설정 → 에이전트 → Commands/기타 에이전트/뮤직 DJ에서 Command와 에이전트로 모두 추가하세요."
+  },
+  "agents": {
+    "spotify": {
+      "name": "뮤직 DJ (Music DJ)",
+      "description": "서사 분위기를 분석해 Spotify, YouTube 또는 로컬 게임 에셋에서 어울리는 음악을 재생합니다. 설정 → 일반에서 음악 플레이어를 켜세요. 대화·롤플레이·게임 모드에서는 채팅 설정 → 에이전트 → Commands/기타 에이전트/뮤직 DJ에서 Command와 에이전트로 모두 추가하세요."
+    }
+  }
+}

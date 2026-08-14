@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "id": "noodle",
+  "name": "Noodle",
+  "version": "1.0.9",
+  "description": "Explore the Noodle public timeline and the NoodleR creator-and-fan roleplay feed as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
+  "localizations": {
+    "de": {
+      "name": "Noodle",
+      "description": "Entdecke die öffentliche Noodle-Timeline und den lokalen NoodleR-Rollenspiel-Feed für Kreative und Fans als optionale soziale Welt. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Noodle.",
+      "homeBrowserTab": {
+        "label": "Noodle",
+        "ariaLabel": "Noodle und NoodleR öffnen"
+      }
+    },
+    "ko": {
+      "name": "Noodle",
+      "description": "Noodle 공개 타임라인과 로컬 NoodleR 크리에이터 및 팬 역할극 피드를 선택형 소셜 세계로 만나 보세요. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Noodle을 여세요.",
+      "homeBrowserTab": {
+        "label": "Noodle",
+        "ariaLabel": "Noodle 및 NoodleR 열기"
+      }
+    },
+    "pl": {
+      "name": "Noodle",
+      "description": "Poznaj publiczną oś czasu Noodle oraz lokalny kanał fabularny NoodleR dla twórców i fanów jako opcjonalny świat społecznościowy. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Noodle na stronie głównej.",
+      "homeBrowserTab": {
+        "label": "Noodle",
+        "ariaLabel": "Otwórz Noodle i NoodleR"
+      }
+    }
+  },
+  "engine": {
+    "min": "2.4.2",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "server": "server.mjs",
+    "client": "client.js"
+  },
+  "contributions": {
+    "slots": [
+      "home-browser-tab"
+    ],
+    "homeBrowserTab": {
+      "label": "Noodle",
+      "ariaLabel": "Open Noodle and NoodleR",
+      "iconPaths": [
+        "noodle-klusek.png",
+        "noodler-klusek.png"
+      ]
+    }
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "650529c8995d40249a1870ffcc5f422c3f39cb4d3ec8601c5606c62a86882dfe",
+      "bytes": 634
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "e87731d4a5938954f679321f4c9ac8eb43272b3e0c1bdfd37d799b05d0997f4c",
+      "bytes": 2480233
+    },
+    {
+      "path": "client.js",
+      "sha256": "7a812830737c90e21e8692bb04cf78cc6c0df898d669f6783936306b46e30939",
+      "bytes": 2543050
+    },
+    {
+      "path": "noodle-klusek.png",
+      "sha256": "003236ad2b83c5eb44731a48048c86b07aa8c1f9c411f881c15f7d4af3c68212",
+      "bytes": 28325
+    },
+    {
+      "path": "noodler-klusek.png",
+      "sha256": "f3f0eb142c6ff572dea636aa7ab7d046922aedde2f5425890327e79834bd923e",
+      "bytes": 27664
+    }
+  ],
+  "permissions": [
+    "chat-read",
+    "chat-write",
+    "network",
+    "routes",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": true
+}

@@ -16,13 +16,14 @@ import {
 import {
   GAME_NPC_PORTRAIT,
   GAME_BACKGROUND,
+  MAPS_LOCATION_ARTWORK,
   GAME_SCENE_ILLUSTRATION,
   GAME_NARRATION_SUMMARIZER,
   GAME_IMAGE_PROMPT_DIRECTOR,
-  GAME_STORYBOARD_ILLUSTRATION_DIRECTOR,
   GAME_VIDEO,
 } from "./registry/game-assets.js";
 import { CONVERSATION_SELFIE } from "./registry/conversation.js";
+import { ROLEPLAY_GALLERY_VIDEO_DIRECTOR } from "./registry/roleplay.js";
 import {
   CONVERSATION_CALL_VIDEO_CLIP_INSTRUCTION_BY_KIND,
   CONVERSATION_CALL_VIDEO_CLIP_LABEL_BY_KIND,
@@ -30,7 +31,7 @@ import {
   CONVERSATION_CALL_VIDEO_PROMPT_BY_KIND,
   CONVERSATION_CALL_VIDEO_PROMPTS,
 } from "./registry/conversation-call-videos.js";
-import { NOODLE_IMAGE_POST, NOODLE_TIMELINE_VOICE } from "./registry/noodle.js";
+import { NOODLE_IMAGE_INTERPRET, NOODLE_IMAGE_POST, NOODLE_TIMELINE_BASE, NOODLE_TIMELINE_VOICE } from "./registry/noodle.js";
 
 export const PROMPT_OVERRIDE_REGISTRY = [
   SPRITES_EXPRESSION_SHEET,
@@ -40,15 +41,18 @@ export const PROMPT_OVERRIDE_REGISTRY = [
   SPRITES_FULL_BODY_SHEET,
   GAME_NPC_PORTRAIT,
   GAME_BACKGROUND,
+  MAPS_LOCATION_ARTWORK,
   GAME_SCENE_ILLUSTRATION,
   GAME_NARRATION_SUMMARIZER,
   GAME_IMAGE_PROMPT_DIRECTOR,
-  GAME_STORYBOARD_ILLUSTRATION_DIRECTOR,
   GAME_VIDEO,
+  ROLEPLAY_GALLERY_VIDEO_DIRECTOR,
   ...CONVERSATION_CALL_VIDEO_PROMPTS,
   CONVERSATION_CALL_CUSTOM_VIDEO_PROMPT,
   CONVERSATION_SELFIE,
   NOODLE_IMAGE_POST,
+  NOODLE_IMAGE_INTERPRET,
+  NOODLE_TIMELINE_BASE,
   NOODLE_TIMELINE_VOICE,
 ] as const;
 
@@ -83,11 +87,12 @@ export {
   SPRITES_FULL_BODY_SHEET,
   GAME_NPC_PORTRAIT,
   GAME_BACKGROUND,
+  MAPS_LOCATION_ARTWORK,
   GAME_SCENE_ILLUSTRATION,
   GAME_NARRATION_SUMMARIZER,
   GAME_IMAGE_PROMPT_DIRECTOR,
-  GAME_STORYBOARD_ILLUSTRATION_DIRECTOR,
   GAME_VIDEO,
+  ROLEPLAY_GALLERY_VIDEO_DIRECTOR,
   CONVERSATION_CALL_VIDEO_PROMPTS,
   CONVERSATION_CALL_CUSTOM_VIDEO_PROMPT,
   CONVERSATION_CALL_VIDEO_PROMPT_BY_KIND,
@@ -95,6 +100,8 @@ export {
   CONVERSATION_CALL_VIDEO_CLIP_LABEL_BY_KIND,
   CONVERSATION_SELFIE,
   NOODLE_IMAGE_POST,
+  NOODLE_IMAGE_INTERPRET,
+  NOODLE_TIMELINE_BASE,
   NOODLE_TIMELINE_VOICE,
 };
 export type {
@@ -107,16 +114,17 @@ export type {
 export type {
   GameNpcPortraitCtx,
   GameBackgroundCtx,
+  MapsLocationArtworkCtx,
   GameSceneIllustrationCtx,
   GameNarrationSummarizerCtx,
   GameImagePromptDirectorCtx,
-  GameStoryboardIllustratorCtx,
   GameVideoCtx,
 } from "./registry/game-assets.js";
+export type { RoleplayGalleryVideoDirectorCtx } from "./registry/roleplay.js";
 export type {
   ConversationCallCustomVideoClipCtx,
   ConversationCallVideoClipCtx,
 } from "./registry/conversation-call-videos.js";
 export type { ConversationSelfieCtx } from "./registry/conversation.js";
-export type { NoodleImagePostCtx, NoodleTimelineVoiceCtx } from "./registry/noodle.js";
+export type { NoodleImageInterpretCtx, NoodleImagePostCtx, NoodleTimelineBaseCtx, NoodleTimelineVoiceCtx } from "./registry/noodle.js";
 export type { PromptOverrideKeyDef, PromptVariable } from "./types.js";

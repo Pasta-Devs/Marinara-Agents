@@ -26,7 +26,7 @@ import {
   StatusSurface,
   inputClass,
 } from "./shared-controls";
-import { humanizeLabel } from "./display-labels";
+import { humanizeLabel, labelKeys, localizedLabel } from "./display-labels";
 import type { LongTermMemoryDestinationProps } from "./types";
 import { LastInjectionSummary } from "./LastInjectionSummary";
 import { useLtmTranslation, type LtmTranslationFunction } from "./localization";
@@ -214,19 +214,36 @@ function summarizeCounts(
       counts.set(label, count);
   if (!counts.size) return "";
   const summary: string[] = [];
-  const promptTokens = counts.get("promptTokens");
-  const responseTokens =
-    counts.get("completionTokens") ?? counts.get("responseTokens");
-  if (promptTokens != null)
+  const inputTokens = counts.get("promptTokens") ?? counts.get("inputTokens");
+  const reasoningTokens =
+    counts.get("completionReasoningTokens") ?? counts.get("reasoningTokens");
+  const outputTokens =
+    counts.get("completionTokens") ??
+    counts.get("outputTokens") ??
+    counts.get("responseTokens");
+  const totalTokens = counts.get("totalTokens");
+  if (inputTokens != null)
     summary.push(
-      localizeUi("ui.longTermMemory.activityview.promptTokens", {
-        count: promptTokens.toLocaleString(locale),
+      localizeUi("ui.longTermMemory.activityview.inputTokens", {
+        count: inputTokens.toLocaleString(locale),
       }),
     );
-  if (responseTokens != null)
+  if (reasoningTokens != null)
     summary.push(
-      localizeUi("ui.longTermMemory.activityview.responseTokens", {
-        count: responseTokens.toLocaleString(locale),
+      localizeUi("ui.longTermMemory.activityview.reasoningTokens", {
+        count: reasoningTokens.toLocaleString(locale),
+      }),
+    );
+  if (outputTokens != null)
+    summary.push(
+      localizeUi("ui.longTermMemory.activityview.outputTokens", {
+        count: outputTokens.toLocaleString(locale),
+      }),
+    );
+  if (totalTokens != null)
+    summary.push(
+      localizeUi("ui.longTermMemory.activityview.totalTokens", {
+        count: totalTokens.toLocaleString(locale),
       }),
     );
   summary.push(
@@ -235,10 +252,15 @@ function summarizeCounts(
         ([label]) =>
           !/chars$/i.test(label) &&
           label !== "promptTokens" &&
+          label !== "inputTokens" &&
+          label !== "completionReasoningTokens" &&
+          label !== "reasoningTokens" &&
           label !== "completionTokens" &&
+          label !== "outputTokens" &&
+          label !== "totalTokens" &&
           label !== "responseTokens",
       )
-      .slice(0, 3 - summary.length)
+      .slice(0, Math.max(0, 4 - summary.length))
       .map(([label, count]) =>
         localizeUi("ui.longTermMemory.activityview.countWithLabel", {
           count: count.toLocaleString(locale),
@@ -247,6 +269,16 @@ function summarizeCounts(
       ),
   );
   return summary.join(" | ");
+}
+
+function warningMessages(
+  events: LtmDebugEvent[],
+  debugTextLookup: DebugTextLookup,
+  localizeUi: LtmTranslationFunction,
+) {
+  return events
+    .filter((event) => event.status === "warning")
+    .map((event) => describeEvent(event, debugTextLookup, localizeUi));
 }
 
 function latestRecallEvent(events: LtmDebugEvent[], chatId?: string | null) {
@@ -549,7 +581,7 @@ export default function ActivityView({
           </option>
           {debugPhases.map((phase) => (
             <option key={phase} value={phase}>
-              {humanizeLabel(phase)}
+              {localizedLabel(phase, localizeUi, labelKeys.debugPhase)}
             </option>
           ))}
         </select>
@@ -561,6 +593,7 @@ export default function ActivityView({
           loading={lastInjection.isFetching}
           error={lastInjection.isError}
           onOpenMemory={onOpenMemory}
+          onRetry={() => void lastInjection.refetch()}
         />
       ) : null}
 
@@ -803,10 +836,15 @@ export default function ActivityView({
               localizeUi,
               locale,
             );
+            const warnings = warningMessages(
+              operation.events,
+              debugTextLookup,
+              localizeUi,
+            );
             return (
               <li
                 key={operation.operationId}
-                 className="mari-editor-panel mari-editor-panel--soft"
+                className="mari-editor-panel mari-editor-panel--soft"
               >
                 <details className="group">
                   <summary className="flex min-h-11 cursor-pointer list-none items-start gap-2 p-3 marker:content-none">
@@ -815,7 +853,7 @@ export default function ActivityView({
                       className="mt-0.5 shrink-0 transition-transform group-open:rotate-90"
                       size="1rem"
                     />
-                    <span className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1">
                       <span className="flex flex-wrap items-center justify-between gap-2 text-xs">
                         <span className="font-semibold">
                           {actionLabel(firstEvent.action, localizeUi)}
@@ -859,7 +897,17 @@ export default function ActivityView({
                             )
                           : ""}
                       </span>
-                    </span>
+                      {warnings.length ? (
+                        <ul
+                          className="mt-1 list-disc pl-4 text-[0.6875rem] text-[var(--marinara-editor-warning)]"
+                          data-ltm-activity-warnings
+                        >
+                          {warnings.map((warning, index) => (
+                            <li key={`${warning}-${index}`}>{warning}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
                   </summary>
                   <ol className="space-y-2 border-t border-[var(--border)] px-3 py-3">
                     {operation.events.map((event) => {
@@ -871,8 +919,12 @@ export default function ActivityView({
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <span className="font-medium">
-                              {humanizeLabel(event.phase)} /{" "}
-                              {actionLabel(event.action, localizeUi)}
+                              {localizedLabel(
+                                event.phase,
+                                localizeUi,
+                                labelKeys.debugPhase,
+                              )}{" "}
+                              / {actionLabel(event.action, localizeUi)}
                             </span>
                             <span
                               className={

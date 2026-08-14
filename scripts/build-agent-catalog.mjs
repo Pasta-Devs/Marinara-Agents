@@ -7,6 +7,13 @@ import { fileURLToPath } from "node:url";
 import { catalogArtworkUrl } from "./catalog-artwork.mjs";
 import { readCatalogFamily, writeCatalogFamily } from "./catalog-lanes.mjs";
 import { withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
+import {
+  assertPortableFilenameComponent,
+  assertPortableRelativePath,
+  packageArtifactName,
+  resolveContainedPortablePath,
+} from "./catalog-path-safety.mjs";
+import { writeEnglishPackageLocale } from "./package-locales.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const artifactsDir = join(repoRoot, "artifacts");
@@ -32,11 +39,13 @@ const { catalog } = await readCatalogFamily(repoRoot);
 
 const packageDirectories = (await readdir(packagesDir, { withFileTypes: true }))
   .filter((entry) => entry.isDirectory())
-  .map((entry) => entry.name)
+  .map((entry) => assertPortableFilenameComponent(entry.name, "Package directory id"))
   .filter((id) => !nonDownloadableCoreFeatures.has(id))
   .sort();
 const sourcePackageIds = new Set(packageDirectories);
-const requestedPackageIds = new Set(process.argv.slice(2));
+const requestedPackageIds = new Set(
+  process.argv.slice(2).map((id) => assertPortableFilenameComponent(id, "Requested package id")),
+);
 const selectedPackageDirectories = requestedPackageIds.size > 0
   ? packageDirectories.filter((id) => requestedPackageIds.has(id))
   : packageDirectories;
@@ -48,23 +57,49 @@ const rebuiltIds = new Set();
 const rebuiltPackages = [];
 
 for (const id of selectedPackageDirectories) {
-  const sourceDir = join(packagesDir, id);
+  const sourceDir = await resolveContainedPortablePath(packagesDir, id, `Package directory for ${id}`);
+  let manifestPath;
+  try {
+    manifestPath = await resolveContainedPortablePath(sourceDir, "manifest.json", `Manifest for ${id}`);
+  } catch (error) {
+    if (error?.code === "ENOENT") continue;
+    throw error;
+  }
   let manifest;
   try {
-    manifest = JSON.parse(await readFile(join(sourceDir, "manifest.json"), "utf8"));
-  } catch {
-    continue;
+    manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  } catch (error) {
+    if (error instanceof SyntaxError) continue;
+    throw error;
   }
   // Feature packages own their build in build-feature-packages.mjs.
   if (!manifest.kind?.includes("agent") || manifest.entrypoints?.server) continue;
-  const agentDefinitions = JSON.parse(await readFile(join(sourceDir, manifest.entrypoints.agents), "utf8"));
+  const manifestId = assertPortableFilenameComponent(manifest.id, `Package id in ${id}/manifest.json`);
+  if (manifestId !== id) throw new Error(`Package directory ${id} contains manifest id ${manifestId}`);
+  const artifactName = packageArtifactName(manifestId, manifest.version);
+  const agentsPath = assertPortableRelativePath(
+    manifest.entrypoints?.agents,
+    `Agent entrypoint for ${manifestId}`,
+  );
+  const agentsSourcePath = await resolveContainedPortablePath(
+    sourceDir,
+    agentsPath,
+    `Agent entrypoint for ${manifestId}`,
+  );
+  await resolveContainedPortablePath(
+    sourceDir,
+    "locales/en.json",
+    `English locale output for ${manifestId}`,
+    { allowMissing: true },
+  );
+  const agentDefinitions = JSON.parse(await readFile(agentsSourcePath, "utf8"));
   for (const definition of agentDefinitions) {
     if (definition.id === id) {
       definition.description = withPackageActivationGuidance(id, definition.description);
     }
   }
   const agentsBuffer = Buffer.from(`${JSON.stringify(agentDefinitions, null, 2)}\n`);
-  await writeFile(join(sourceDir, manifest.entrypoints.agents), agentsBuffer);
+  await writeFile(agentsSourcePath, agentsBuffer);
   const category = ["writer", "tracker", "misc"].includes(agentDefinitions[0]?.category)
     ? agentDefinitions[0].category
     : "misc";
@@ -72,23 +107,39 @@ for (const id of selectedPackageDirectories) {
     ...manifest,
     description: withPackageActivationGuidance(id, manifest.description),
     engine: { ...manifest.engine, min: manifest.engine?.min ?? MIN_ENGINE_VERSION },
-    files: [{ path: manifest.entrypoints.agents, sha256: sha256(agentsBuffer), bytes: agentsBuffer.byteLength }],
+    files: [{ path: agentsPath, sha256: sha256(agentsBuffer), bytes: agentsBuffer.byteLength }],
   };
-  await writeFile(join(sourceDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeEnglishPackageLocale(sourceDir, manifest, agentDefinitions);
 
   const temporary = await mkdtemp(join(tmpdir(), `marinara-agent-${id}-`));
   try {
     await writeFile(join(temporary, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
-    await writeFile(join(temporary, manifest.entrypoints.agents), agentsBuffer);
-    for (const artifactFile of ["manifest.json", manifest.entrypoints.agents]) {
-      const artifactSource = join(temporary, artifactFile);
+    const temporaryAgentsPath = await resolveContainedPortablePath(
+      temporary,
+      agentsPath,
+      `Agent entrypoint for ${manifestId}`,
+      { allowMissing: true },
+    );
+    await mkdir(dirname(temporaryAgentsPath), { recursive: true });
+    await writeFile(temporaryAgentsPath, agentsBuffer);
+    for (const artifactFile of ["manifest.json", agentsPath]) {
+      const artifactSource = await resolveContainedPortablePath(
+        temporary,
+        artifactFile,
+        `Artifact member for ${manifestId}`,
+      );
       await chmod(artifactSource, 0o644);
       await utimes(artifactSource, ARTIFACT_MTIME, ARTIFACT_MTIME);
     }
-    const artifactName = `${id}-${manifest.version}.zip`;
-    const artifactPath = join(artifactsDir, artifactName);
+    const artifactPath = await resolveContainedPortablePath(
+      artifactsDir,
+      artifactName,
+      `Artifact for ${manifestId}`,
+      { allowMissing: true },
+    );
     await rm(artifactPath, { force: true });
-    const zipped = spawnSync("zip", ["-X", "-q", artifactPath, "manifest.json", manifest.entrypoints.agents], {
+    const zipped = spawnSync("zip", ["-X", "-q", artifactPath, "manifest.json", agentsPath], {
       cwd: temporary,
       stdio: "inherit",
     });

@@ -37,11 +37,6 @@ export function reciprocalRankFuse(lanes: LtmRankLane[], options: { cooldowns?: 
   for (const lane of lanes) {
     if (lane.weight <= 0) continue;
 
-    const rawScores = lane.items
-      .map((item) => item.rawScore)
-      .filter((score): score is number => typeof score === "number" && Number.isFinite(score) && score > 0);
-    const topRawScore = rawScores.length > 0 ? Math.max(...rawScores) : 0;
-
     lane.items.forEach((item, index) => {
       const rank = index + 1;
       const rawScore = typeof item.rawScore === "number" && Number.isFinite(item.rawScore) ? item.rawScore : 0;

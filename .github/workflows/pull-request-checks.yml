@@ -26,15 +26,28 @@ jobs:
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: 24
+          cache: npm
+
+      - name: Install locked test dependencies
+        run: npm ci
+
+      - name: Test package security invariants
+        run: npm run test:security
 
       - name: Test catalog lane routing and build provenance
         run: node scripts/test-catalog-lanes.mjs
+
+      - name: Validate package localization catalogs
+        run: node scripts/validate-package-locales.mjs
 
       - name: Validate catalogs, packages, artifacts, and README coverage
         run: node scripts/validate-catalog.mjs
 
       - name: Test World Maps UI contracts
         run: node tests/world-maps-ui-contract.regression.mjs
+
+      - name: Test Long-Term Memory feedback clarity UI contracts
+        run: node tests/long-term-memory-feedback-clarity-ui.regression.mjs
 
       - name: Validate pull request gate topology
         run: node scripts/validate-pr-triage.mjs

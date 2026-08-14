@@ -6,6 +6,7 @@ import {
   spatialContextDefinitionSchema,
   type SpatialContextDefinition,
   type SpatialContextSnapshot,
+  type ResolvedSpatialTravel,
   type SpatialLocation,
 } from "@marinara-engine/shared";
 import { getPackagePersistence, logger, newId, newTimeSortableId, now } from "./package-runtime.js";
@@ -23,6 +24,7 @@ export type AssistantSpatialDirective =
       type: "discover";
       name: string;
       relation: "enter" | "link";
+      direction?: "outgoing" | "incoming" | "both";
       description?: string;
     };
 
@@ -44,6 +46,7 @@ export interface ResolveSpatialStateOptions {
   exactAnchor?: SpatialMessageAnchor;
   throughMessageId?: string;
   beforeMessageId?: string;
+  acceptedTravel?: ResolvedSpatialTravel | null;
 }
 
 function normalizedLocationName(value: string): string {
@@ -90,39 +93,64 @@ function addAvailableLink(
   definition: SpatialContextDefinition,
   currentLocationId: string,
   destinationId: string,
+  direction: "outgoing" | "incoming" | "both" = "both",
 ): SpatialContextDefinition | null {
+  if (currentLocationId === destinationId) return null;
   const current = definition.locations.find((location) => location.id === currentLocationId);
-  if (!current) return null;
-  const existing = current.links.find((link) => link.targetId === destinationId);
-  if (!existing && current.links.length >= SPATIAL_CONTEXT_LIMITS.maxLinksPerLocation) return null;
+  const destination = definition.locations.find((location) => location.id === destinationId);
+  if (!current || !destination || current.status !== "active" || destination.status !== "active") return null;
+  const sourceId = direction === "incoming" ? destinationId : currentLocationId;
+  const targetId = direction === "incoming" ? currentLocationId : destinationId;
+  const source = definition.locations.find((location) => location.id === sourceId);
+  if (!source) return null;
+  const pairLinks = definition.locations.flatMap((location) =>
+    location.links
+      .filter(
+        (link) =>
+          (location.id === currentLocationId && link.targetId === destinationId) ||
+          (location.id === destinationId && link.targetId === currentLocationId),
+      )
+      .map((link) => ({ locationId: location.id, link })),
+  );
+  const existingLabel = pairLinks.find(({ link }) => link.label?.trim())?.link.label?.trim();
+  const canonicalLink = {
+    targetId,
+    ...(existingLabel ? { label: existingLabel } : {}),
+    bidirectional: direction === "both",
+    state: "available" as const,
+  };
+  const alreadyCanonical =
+    pairLinks.length === 1 &&
+    pairLinks[0]?.locationId === sourceId &&
+    pairLinks[0].link.targetId === targetId &&
+    pairLinks[0].link.bidirectional === canonicalLink.bidirectional &&
+    pairLinks[0].link.state === "available";
+  if (alreadyCanonical) return definition;
+  const sourceLinksWithoutPair = source.links.filter(
+    (link) => !(sourceId === currentLocationId ? link.targetId === destinationId : link.targetId === currentLocationId),
+  );
+  if (sourceLinksWithoutPair.length >= SPATIAL_CONTEXT_LIMITS.maxLinksPerLocation) return null;
   return {
     ...definition,
     revision: definition.revision + 1,
-    locations: definition.locations.map((location) =>
-      location.id !== currentLocationId
-        ? location
-        : {
-            ...location,
-            links: existing
-              ? location.links.map((link) =>
-                  link.targetId === destinationId
-                    ? {
-                        ...link,
-                        bidirectional: true,
-                        state: "available" as const,
-                      }
-                    : link,
-                )
-              : [
-                  ...location.links,
-                  {
-                    targetId: destinationId,
-                    bidirectional: true,
-                    state: "available" as const,
-                  },
-                ],
-          },
-    ),
+    locations: definition.locations.map((location) => {
+      if (location.id === sourceId)
+        return {
+          ...location,
+          links: [...sourceLinksWithoutPair, canonicalLink],
+        };
+      if (location.id === currentLocationId || location.id === destinationId) {
+        return {
+          ...location,
+          links: location.links.filter(
+            (link) =>
+              !(location.id === currentLocationId && link.targetId === destinationId) &&
+              !(location.id === destinationId && link.targetId === currentLocationId),
+          ),
+        };
+      }
+      return location;
+    }),
   };
 }
 
@@ -139,10 +167,7 @@ function discoverLocation(
   if (reachableMatching.length === 1) {
     return { definition, destinationId: reachableMatching[0]!.id };
   }
-  if (matching.length === 1) {
-    const linked = addAvailableLink(definition, currentLocationId, matching[0]!.id);
-    return linked ? { definition: linked, destinationId: matching[0]!.id } : null;
-  }
+  if (matching.length === 1) return null;
   if (matching.length > 1 || definition.locations.length >= SPATIAL_CONTEXT_LIMITS.maxLocations) return null;
 
   const current = definition.locations.find((location) => location.id === currentLocationId);
@@ -174,10 +199,18 @@ function discoverLocation(
     locations: [...definition.locations, discovered],
   };
   if (directive.relation === "link") {
+    if (!directive.direction) {
+      logger.warn(
+        { currentLocationId, destinationId, directive },
+        "[spatial/assistant] Ignored link discovery without an explicit direction",
+      );
+      return null;
+    }
     const linked = addAvailableLink(
       { ...nextDefinition, revision: definition.revision },
       currentLocationId,
       destinationId,
+      directive.direction,
     );
     if (!linked) return null;
     nextDefinition = linked;
@@ -316,18 +349,7 @@ export async function materializeAssistantSpatialState(input: {
         const destination = definition.locations.find(
           (location) => location.id === requestedDestinationId && location.status === "active",
         );
-        if (destination && destination.id !== state.currentLocationId) {
-          if (!reachable.has(destination.id)) {
-            const linked = addAvailableLink(definition, state.currentLocationId, destination.id);
-            if (linked) definition = linked;
-          }
-        }
-        if (
-          destination &&
-          (destination.id === state.currentLocationId ||
-            reachable.has(destination.id) ||
-            definition !== state.definition)
-        ) {
+        if (destination && (destination.id === state.currentLocationId || reachable.has(destination.id))) {
           destinationId = destination.id;
           transitionApplied = destinationId !== state.currentLocationId;
         }
@@ -345,11 +367,7 @@ export async function materializeAssistantSpatialState(input: {
           const reachable = new Set(
             resolveSpatialDestinations(definition, state.currentLocationId).map((destination) => destination.id),
           );
-          if (!reachable.has(guidedDestinationId)) {
-            const linked = addAvailableLink(definition, state.currentLocationId, guidedDestinationId);
-            if (linked) definition = linked;
-          }
-          if (reachable.has(guidedDestinationId) || definition !== state.definition) {
+          if (reachable.has(guidedDestinationId)) {
             destinationId = guidedDestinationId;
             transitionApplied = true;
           }

@@ -1,15 +1,15 @@
 import type { LtmKeywordIndex, LtmMemoryChunk } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { normalizeKeywordTerms } from "./keyword-extract.js";
 
-function addKeyword(map: Record<string, string[]>, key: string, value: string) {
-  const bucket = map[key] ?? [];
+function addKeyword(map: Map<string, string[]>, key: string, value: string) {
+  const bucket = map.get(key) ?? [];
   bucket.push(value);
-  map[key] = bucket;
+  map.set(key, bucket);
 }
 
 export function buildLtmKeywordIndex(chunks: LtmMemoryChunk[]): LtmKeywordIndex {
-  const byKeyword: Record<string, string[]> = {};
-  const byChunkId: Record<string, string[]> = {};
+  const byKeyword = new Map<string, string[]>();
+  const byChunkId = new Map<string, string[]>();
 
   for (const chunk of chunks.slice().sort((left, right) => left.id.localeCompare(right.id))) {
     const normalized = Array.from(
@@ -20,19 +20,19 @@ export function buildLtmKeywordIndex(chunks: LtmMemoryChunk[]): LtmKeywordIndex 
         }),
       ),
     ).sort((left, right) => left.localeCompare(right));
-    byChunkId[chunk.id] = normalized;
+    byChunkId.set(chunk.id, normalized);
     for (const keyword of normalized) addKeyword(byKeyword, keyword, chunk.id);
   }
 
   return {
     version: 1,
     byKeyword: Object.fromEntries(
-      Object.entries(byKeyword)
+      Array.from(byKeyword.entries())
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([keyword, chunkIds]) => [keyword, chunkIds.sort((left, right) => left.localeCompare(right))]),
     ),
     byChunkId: Object.fromEntries(
-      Object.entries(byChunkId)
+      Array.from(byChunkId.entries())
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([chunkId, keywords]) => [chunkId, keywords]),
     ),
@@ -70,13 +70,25 @@ export function searchLtmKeywordIndex(
     hits.set(chunkId, existing);
   };
 
-  for (const chunkId of (index.byKeyword[normalizedQuery] ?? []).slice(0, maxCandidatesPerKeyword)) {
+  const exactQueryMatches = Object.hasOwn(index.byKeyword, normalizedQuery)
+    ? index.byKeyword[normalizedQuery]
+    : undefined;
+  for (const chunkId of (exactQueryMatches ?? []).slice(
+    0,
+    maxCandidatesPerKeyword,
+  )) {
     add(chunkId, normalizedQuery, 4, `keyword:exact:${normalizedQuery}`);
   }
 
   for (const term of normalizedTerms) {
     if (term === normalizedQuery) continue;
-    for (const chunkId of (index.byKeyword[term] ?? []).slice(0, maxCandidatesPerKeyword)) {
+    const exactTermMatches = Object.hasOwn(index.byKeyword, term)
+      ? index.byKeyword[term]
+      : undefined;
+    for (const chunkId of (exactTermMatches ?? []).slice(
+      0,
+      maxCandidatesPerKeyword,
+    )) {
       add(chunkId, term, 3, `keyword:exact:${term}`);
     }
   }

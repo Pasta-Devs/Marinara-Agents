@@ -18,13 +18,9 @@ const OWNER_SPATIAL_BLOCK_PATTERN =
   /<spatial_context mode="(?:roleplay|game)" authority="application">[\s\S]*?<\/spatial_context>/;
 const LEGACY_GAME_MAP_STATE_PATTERN = /<map_state>([\s\S]*?)<\/map_state>/g;
 const LEGACY_GAME_MAP_UPDATE_PATTERN = /^[ \t]*- \[map_update:[^\r\n]*$/gim;
-const LOCAL_GAME_MAP_UPDATE_INSTRUCTION =
-  `- [map_update: new_location="Location Name" connected_to="Previous Location Name" node_emoji="emoji"] - only to add local/tactical detail inside the current hierarchical location. This may move the legacy Local map marker, but it must never represent or cause travel between hierarchical locations; the application commits world movement.`;
+const LOCAL_GAME_MAP_UPDATE_INSTRUCTION = `- [map_update: new_location="Location Name" connected_to="Previous Location Name" node_emoji="emoji"] - only to add local/tactical detail inside the current hierarchical location. This may move the legacy Local map marker, but it must never represent or cause travel between hierarchical locations; the application commits world movement.`;
 
-function scopeLegacyGameMapPrompt(
-  content: string,
-  role: "system" | "user" | "assistant",
-): string {
+function scopeLegacyGameMapPrompt(content: string, role: "system" | "user" | "assistant"): string {
   if (role === "assistant") return content;
 
   let scoped = content.replace(LEGACY_GAME_MAP_STATE_PATTERN, (_match, state: string) => {
@@ -50,15 +46,18 @@ export async function resolveOwnerSpatialProjection(
   options: ResolveSpatialStateOptions = {},
 ): Promise<ResolvedOwnerSpatialProjection | null> {
   const state = await resolveEffectiveSpatialState(chatId, options);
-  const projection = buildOwnerSpatialProjection(chatId, state.definition, state.currentLocationId);
+  const projection = buildOwnerSpatialProjection(
+    chatId,
+    state.definition,
+    state.currentLocationId,
+    options.acceptedTravel,
+  );
   if (!projection) return null;
   const settings: Record<string, unknown> = await getPackageAgentSettings("hierarchical-maps").catch((error) => {
     logger.warn("Could not read global World Maps turn prompt templates; using built-ins: %s", error);
     return {} as Record<string, unknown>;
   });
-  const templates = normalizeSpatialTurnPromptTemplates(
-    settings[SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY],
-  );
+  const templates = normalizeSpatialTurnPromptTemplates(settings[SPATIAL_TURN_PROMPT_TEMPLATES_SETTINGS_KEY]);
   return {
     ...projection,
     turnPromptTemplate: templates[projection.ownerMode],
@@ -85,10 +84,7 @@ export function injectOwnerSpatialPrompt<T extends { role: "system" | "user" | "
       "Could not render the saved World Maps turn prompt template; using the built-in: %s",
       error instanceof Error ? error.message : String(error),
     );
-    block = formatOwnerSpatialPrompt(
-      projection,
-      defaultSpatialTurnPromptTemplates()[projection.ownerMode],
-    );
+    block = formatOwnerSpatialPrompt(projection, defaultSpatialTurnPromptTemplates()[projection.ownerMode]);
   }
   const existingIndex = next.findIndex(
     (message) => message.role === "system" && OWNER_SPATIAL_BLOCK_PATTERN.test(message.content),

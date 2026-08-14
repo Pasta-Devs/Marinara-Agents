@@ -8,5 +8,16 @@
   },
   "dependencies": {
     "chess.js": "1.4.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.0",
+    "tsx": "4.23.12",
+    "zod": "3.25.76"
+  },
+  "scripts": {
+    "test:browser:noodle": "node scripts/run-package-browser-tests.mjs noodle tests/package-noodle.e2e.ts",
+    "test:noodle:regressions": "sh -c 'for test in tests/noodle*.regression.ts; do tsx \"$test\" || exit 1; done'",
+    "test:noodle:quality": "node scripts/evaluate-noodle-generation.mjs tests/fixtures/noodle-generation-quality.samples.json",
+    "test:security": "node scripts/tests/catalog-path-safety.regression.mjs && tsx tests/long-term-memory-index-keys.regression.ts"
   }
 }

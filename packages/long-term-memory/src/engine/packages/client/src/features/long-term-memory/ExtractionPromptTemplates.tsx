@@ -222,7 +222,7 @@ export function ExtractionPromptTemplates({
                 "ui.longTermMemory.extractionprompttemplates.promptTemplates",
               )}
               content={localizeUi(
-                "ui.longTermMemory.extractionprompttemplates.customTemplatesCanBeActivatedIndependentlyForConversationRoleplay",
+                "ui.longTermMemory.extractionprompttemplates.promptTemplatesHelp",
               )}
             />
           </h4>
@@ -243,9 +243,9 @@ export function ExtractionPromptTemplates({
           >
             <span id={`${id}-${mode}-active-template-label`}>
               <span className="flex items-center gap-1">
-                {localizeUi(modeLabelKeys[mode])}{" "}
                 {localizeUi(
-                  "ui.longTermMemory.extractionprompttemplates.activeTemplate",
+                  "ui.longTermMemory.extractionprompttemplates.value1ActiveTemplate",
+                  { value1: localizeUi(modeLabelKeys[mode]) },
                 )}
                 <InfoPopover
                   label={localizeUi(
@@ -385,7 +385,7 @@ export function ExtractionPromptTemplates({
                 onClick={duplicate}
               >
                 {localizeUi(
-                  "ui.longTermMemory.extractionprompttemplates.duplicate",
+                  "ui.longTermMemory.extractionprompttemplates.copyToEdit",
                 )}
               </Button>
             </div>

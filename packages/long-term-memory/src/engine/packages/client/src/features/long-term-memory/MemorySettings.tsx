@@ -8,7 +8,13 @@ import type {
   LtmIntegrityResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { LTM_RECALL_STYLE_WEIGHTS } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
-import { invalidateLtmQueries, queryKeys, request, requestHost, requestRaw } from "./api";
+import {
+  invalidateLtmQueries,
+  queryKeys,
+  request,
+  requestHost,
+  requestRaw,
+} from "./api";
 import {
   Button,
   InfoPopover,
@@ -20,6 +26,8 @@ import type { LongTermMemoryDestinationProps } from "./types";
 import ActivityView from "./ActivityView";
 import { ExtractionPromptTemplates } from "./ExtractionPromptTemplates";
 import { useLtmTranslation } from "./localization";
+import { labelKeys, localizedLabel } from "./display-labels";
+import { recallStyleDescriptionKey } from "./recall-style";
 
 type GlobalForm = {
   version: 1;
@@ -197,7 +205,7 @@ function extractionForm(settings: LtmExtractionSettingsPatch): ExtractionForm {
   return {
     version: 1,
     connectionId: resolved.connectionId ?? null,
-    reasoningEffort: resolved.reasoningEffort ?? "medium",
+    reasoningEffort: resolved.reasoningEffort ?? "low",
     verbosity: resolved.verbosity ?? "medium",
     maxOutputTokens: resolved.maxOutputTokens ?? 4096,
     temperature: resolved.temperature ?? 0.2,
@@ -443,11 +451,22 @@ export default function MemorySettings({
       }>("/repair", "POST", { actions: selectedActions });
       setMessage(
         result.actions
-          .map(
-            (item) =>
-              `${item.action}: ${item.result}${item.count != null ? ` (${item.count})` : ""}`,
+          .map((item) =>
+            localizeUi("ui.longTermMemory.memorysettings.maintenanceResult", {
+              action: localizedLabel(
+                item.action,
+                localizeUi,
+                labelKeys.maintenanceAction,
+              ),
+              result: localizedLabel(
+                item.result,
+                localizeUi,
+                labelKeys.maintenanceResult,
+              ),
+              count: item.count ?? 0,
+            }),
           )
-          .join(". "),
+          .join(" "),
       );
       setSelectedActions([]);
       await invalidateLtmQueries(queryClient, [
@@ -740,7 +759,11 @@ export default function MemorySettings({
     try {
       const backup = JSON.parse(await file.text());
       const preview = await request<{
-        incoming: { notes: number; drafts: number; rejectedSuggestions: number };
+        incoming: {
+          notes: number;
+          drafts: number;
+          rejectedSuggestions: number;
+        };
         current: { notes: number; drafts: number; rejectedSuggestions: number };
       }>("/backup/preview", "POST", backup);
       setBackupPreview({ ...preview, backup });
@@ -1005,7 +1028,33 @@ export default function MemorySettings({
       aria-labelledby={memorySettingsTitleId}
       data-ltm-surface="memory-settings"
       className="space-y-5"
+      style={{
+        containerName: "ltm-memory-settings",
+        containerType: "inline-size",
+      }}
     >
+      <style>{`
+        [data-ltm-extraction-grid] {
+          display: grid;
+          gap: 0.5rem;
+        }
+        [data-ltm-extraction-grid] > div > :first-child {
+          display: flex;
+          min-height: 2.75rem;
+          align-items: center;
+        }
+        [data-ltm-extraction-grid] .mari-editor-field {
+          min-height: 2.75rem;
+          width: 100%;
+          padding-inline: 0.75rem;
+          font-size: 0.875rem;
+        }
+        @container ltm-memory-settings (min-width: 40rem) {
+          [data-ltm-extraction-grid] {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+      `}</style>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 id={memorySettingsTitleId} className="text-sm font-semibold">
@@ -1054,7 +1103,7 @@ export default function MemorySettings({
             tabIndex={activeTab === tab.id ? 0 : -1}
             onClick={() => setActiveTab(tab.id)}
             onKeyDown={(event) => {
-              let next = index;
+              let next: number;
               if (event.key === "ArrowRight")
                 next = (index + 1) % settingsTabs.length;
               else if (event.key === "ArrowLeft")
@@ -1121,7 +1170,9 @@ export default function MemorySettings({
               <InfoPopover
                 label={localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
                 content={localizeUi(
-                  "ui.longTermMemory.memorysettings.choosesTheOverallMatchingStrategyUsedToFindRelevant",
+                  recallStyleDescriptionKey(
+                    globalForm.longTermMemoryRecallStyle,
+                  ),
                 )}
               />
             </span>
@@ -1343,9 +1394,12 @@ export default function MemorySettings({
             {localizeUi("ui.longTermMemory.memorysettings.extraction")}
           </h3>
         </div>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div data-ltm-extraction-grid>
           <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
-            <span id={extractionConnectionLabelId}>
+            <span
+              id={extractionConnectionLabelId}
+              className="flex min-h-11 items-center"
+            >
               {localizeUi(
                 "ui.longTermMemory.memorysettings.extractionConnection",
               )}
@@ -1632,7 +1686,12 @@ export default function MemorySettings({
           </h3>
           <p className="mt-1 text-xs text-[var(--muted-foreground)]">
             {localizeUi("ui.longTermMemory.memorysettings.integrityState")}{" "}
-            {integrity.data?.health ?? "loading"}.
+            {localizedLabel(
+              integrity.data?.health ?? "loading",
+              localizeUi,
+              labelKeys.integrity,
+            )}
+            .
           </p>
         </div>
         <div className="border-t border-[var(--border)] pt-3">
@@ -1709,9 +1768,14 @@ export default function MemorySettings({
                 {backupPreview.incoming.drafts}{" "}
                 {localizeUi("ui.longTermMemory.memorysettings.drafts")} {" | "}
                 {backupPreview.current.rejectedSuggestions}{" "}
-                {localizeUi("ui.longTermMemory.memorysettings.rejectedSuggestionsCurrent")} {" | "}
+                {localizeUi(
+                  "ui.longTermMemory.memorysettings.rejectedSuggestionsCurrent",
+                )}{" "}
+                {" | "}
                 {backupPreview.incoming.rejectedSuggestions}{" "}
-                {localizeUi("ui.longTermMemory.memorysettings.rejectedSuggestionsIncoming")}
+                {localizeUi(
+                  "ui.longTermMemory.memorysettings.rejectedSuggestionsIncoming",
+                )}
               </p>
               <Button
                 primary

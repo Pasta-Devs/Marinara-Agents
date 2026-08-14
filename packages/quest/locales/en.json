@@ -1,0 +1,39 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "en",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "Quest Tracker",
+    "description": "Manages quest objectives, completion states, and rewards. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode."
+  },
+  "agents": {
+    "quest": {
+      "name": "Quest Tracker",
+      "description": "Manages quest objectives, completion states, and rewards. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+      "promptTemplates": {
+        "epic-campaign": {
+          "name": "Epic Campaign",
+          "description": "No active-quest cap; supports many concurrent, multi-stage questlines for long campaigns."
+        },
+        "real-life-goals": {
+          "name": "Real-Life Goals",
+          "description": "Tracks real-world goals the user has said they want to do. With section injection on, the character can encourage them (breaks the fourth wall); turn injection off to keep the journal private."
+        },
+        "single-focus": {
+          "name": "Single Focus",
+          "description": "Tracks exactly one quest at a time; when it resolves, the next one begins. Minimal and low-token."
+        },
+        "mystery-board": {
+          "name": "Mystery Board",
+          "description": "Investigation-focused: tracks cases with leads, clues, and suspects as objectives. Great for mystery and detective roleplay."
+        },
+        "custom": {
+          "name": "Custom",
+          "description": "A starter you edit in agent settings. Replace the [YOUR INSTRUCTIONS] line with your own rules; keep the output format below so the tracker keeps working."
+        }
+      }
+    }
+  }
+}

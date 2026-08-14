@@ -1,0 +1,15 @@
+Built-in image generation prompt (2026-08-09)
+
+Use case: stylized-concept
+Asset type: square catalog icon for Marinara Engine's Download Agents library, read primarily at 44–72 pixels
+Primary request: Create a new, purpose-built Noodle agent icon featuring Professor Mari clearly presenting the official blue Noodle logo. Make it immediately recognizable as both Professor Mari and Noodle, joyful, polished, and magical.
+Input images: The previous Noodle catalog cover is the exact visual-family reference for finish, dark outline quality, circular medallion framing, and cyan/pink social-world motif. Mari_greet.png is Professor Mari's canonical identity reference; preserve her golden wavy hair, huge light-blue eyes, black rectangular glasses, navy hoodie, charcoal trousers, and friendly adult chibi identity. noodle-klusek.png is the official Noodle logo; preserve its recognizable mirrored bow/noodle silhouette and periwinkle-blue color accurately.
+Scene/backdrop: A clean circular deep-navy medallion with a subtle split cyan Noodle / pink NoodleR glow, a few crisp stars and tiny social notification motifs; plain warm-white corners outside the circle.
+Subject: Exactly one Professor Mari, waist-up and large in frame, smiling warmly while holding one large official Noodle logo between both hands as if presenting a newly discovered magical object.
+Style/medium: Premium wholesome chibi mascot illustration, bold flat colors, thick clean dark outlines, restrained cel shading, same polished visual family as the previous cover.
+Composition/framing: Square, centered, icon-first silhouette, Mari's face and glasses fully visible, logo unobstructed and at least one quarter of the icon width, generous safe margin, no tiny details that disappear at thumbnail size.
+Lighting/mood: Welcoming, inventive, playful laboratory discovery; cyan and pink rim glow with a few warm orange sparks.
+Color palette: Official Noodle periwinkle blue, Noodle cyan, NoodleR hot pink, Marinara orange sparks, deep navy, golden blonde.
+Constraints: Exactly one Professor Mari; exactly one prominent Noodle logo; no title, letters, readable words, watermark, extra people, animal traits, duplicated logo, malformed hands, photorealism, 3D rendering, clutter, or cropped face. Preserve the official logo shape accurately.
+
+Generated at 1254x1254 with the built-in image generation tool and downsampled to the catalog's canonical 512x512 PNG. The full-resolution source is preserved beside this prompt as noodle-agent-icon-imagegen-v2.png.

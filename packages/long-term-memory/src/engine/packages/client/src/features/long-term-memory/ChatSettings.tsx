@@ -10,11 +10,12 @@ import {
   InfoPopover,
   NumberField,
   StatusSurface,
-  inputClass,
+  compactInputClass,
 } from "./shared-controls";
 import type { CapabilityProps } from "./types";
 import { LastInjectionSummary } from "./LastInjectionSummary";
 import { useLtmTranslation } from "./localization";
+import { recallStyleDescriptionKey } from "./recall-style";
 
 export function ChatSettings({ props }: { props: CapabilityProps }) {
   const { t: localizeUi } = useLtmTranslation();
@@ -71,29 +72,42 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
   const maxChunksInherited = settings.longTermMemoryMaxChunks == null;
 
   return (
-    <section data-ltm-surface="chat-settings" className="space-y-2 px-2">
+    <section
+      data-ltm-surface="chat-settings"
+      data-ltm-density="compact"
+      className="space-y-1.5"
+    >
       {readOnly ? (
-        <StatusSurface>
+        <StatusSurface compact>
           {localizeUi(
             "ui.longTermMemory.chatsettings.chatSettingsAreManagedByTheHostAndCannot",
           )}
         </StatusSurface>
       ) : null}
-      <div className="grid gap-2">
-        <div className="space-y-1 text-xs font-medium text-[var(--muted-foreground)]">
+      <div className="grid gap-1.5">
+        <div className="space-y-0.5 px-0.5 text-[0.59375rem] leading-snug text-[var(--muted-foreground)]">
+          <p>{localizeUi("ui.longTermMemory.chatsettings.recallExplanation")}</p>
+          <p>
+            {localizeUi(
+              "ui.longTermMemory.chatsettings.lastInjectionSummaryGuidance",
+            )}
+          </p>
+        </div>
+        <div className="space-y-1 text-[0.625rem] font-medium text-[var(--muted-foreground)]">
           <span id={recallStyleLabelId} className="flex items-center gap-1">
             {localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
             <InfoPopover
               label={localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
               content={localizeUi(
-                "ui.longTermMemory.chatsettings.controlsHowBroadlyThisChatMatchesSavedMemoriesThis",
+                recallStyleDescriptionKey(effectiveStyle),
               )}
+              compact
             />
           </span>
           <select
             aria-labelledby={recallStyleLabelId}
             data-ltm-control="select"
-            className={inputClass}
+            className={compactInputClass}
             disabled={pending || readOnly}
             value={effectiveStyle}
             onChange={(event) =>
@@ -117,7 +131,7 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
             </option>
           </select>
           {styleInherited && globalSettings.data ? (
-            <span className="text-[0.6875rem] text-[var(--muted-foreground)]">
+            <span className="text-[0.5625rem] text-[var(--muted-foreground)]">
               <span className="inline-flex rounded bg-[var(--secondary)] px-1.5 py-0.5">
                 {localizeUi("ui.longTermMemory.chatsettings.globalDefault")}
               </span>
@@ -138,9 +152,10 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
             step={128}
             disabled={pending || readOnly}
             onChange={(value) => update({ longTermMemoryBudgetTokens: value })}
+            compact
           />
           {budgetInherited && globalSettings.data ? (
-            <span className="text-[0.6875rem] text-[var(--muted-foreground)]">
+            <span className="text-[0.5625rem] text-[var(--muted-foreground)]">
               <span className="inline-flex rounded bg-[var(--secondary)] px-1.5 py-0.5">
                 {localizeUi("ui.longTermMemory.chatsettings.globalDefault")}
               </span>
@@ -158,9 +173,10 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
             max={100}
             disabled={pending || readOnly}
             onChange={(value) => update({ longTermMemoryMaxChunks: value })}
+            compact
           />
           {maxChunksInherited && globalSettings.data ? (
-            <span className="text-[0.6875rem] text-[var(--muted-foreground)]">
+            <span className="text-[0.5625rem] text-[var(--muted-foreground)]">
               <span className="inline-flex rounded bg-[var(--secondary)] px-1.5 py-0.5">
                 {localizeUi("ui.longTermMemory.chatsettings.globalDefault")}
               </span>
@@ -172,12 +188,14 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
         data={lastInjection.data}
         loading={lastInjection.isFetching}
         error={lastInjection.isError}
+        onRetry={() => void lastInjection.refetch()}
+        compact
       />
       {props.onOpenAgentSettings ? (
         <button
           type="button"
           onClick={props.onOpenAgentSettings}
-          className="inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] px-3 text-[0.6875rem] font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+          className="inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] px-2.5 text-[0.625rem] font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]"
         >
           <Settings2 aria-hidden="true" size="0.75rem" />
           {localizeUi(
@@ -185,7 +203,11 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
           )}
         </button>
       ) : null}
-      {message ? <StatusSurface tone="danger">{message}</StatusSurface> : null}
+      {message ? (
+        <StatusSurface tone="danger" compact>
+          {message}
+        </StatusSurface>
+      ) : null}
     </section>
   );
 }

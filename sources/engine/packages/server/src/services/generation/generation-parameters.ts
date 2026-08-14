@@ -1,0 +1,122 @@
+import {
+  DEFAULT_AGENT_MAX_TOKENS,
+  MIN_AGENT_MAX_TOKENS,
+  generationParametersSchema,
+  resolveProviderReasoningEffort,
+} from "@marinara-engine/shared";
+import type { BaseLLMProvider, ChatOptions } from "../llm/base-provider.js";
+
+export function normalizeMaxContext(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return undefined;
+  return Math.floor(value);
+}
+
+export function normalizeAgentMaxTokens(value: unknown, fallback = DEFAULT_AGENT_MAX_TOKENS): number {
+  const parsed = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(MIN_AGENT_MAX_TOKENS, Math.trunc(parsed));
+}
+
+export function applyProviderMaxTokensOverride(provider: BaseLLMProvider, maxTokens: number): number {
+  return provider.maxTokensOverrideValue !== null ? Math.min(maxTokens, provider.maxTokensOverrideValue) : maxTokens;
+}
+
+export function resolveStoredMaxTokens(defaultParameters: unknown, calculatedMaxTokens: number): number {
+  let parsed = defaultParameters;
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return calculatedMaxTokens;
+    }
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return calculatedMaxTokens;
+  const source = parsed as Record<string, unknown>;
+  const enabledParameters = generationParametersSchema.shape.enabledParameters.safeParse(source.enabledParameters);
+  if (enabledParameters.success && enabledParameters.data?.maxTokens === false) return calculatedMaxTokens;
+  if (!Object.prototype.hasOwnProperty.call(source, "maxTokens") || source.maxTokens === undefined) {
+    return calculatedMaxTokens;
+  }
+  const maxTokens = generationParametersSchema.shape.maxTokens.safeParse(source.maxTokens);
+  return maxTokens.success ? maxTokens.data : calculatedMaxTokens;
+}
+
+/** Resolve the connection's standard generation defaults for non-preset generation paths. */
+export function resolveStoredChatOptions(
+  defaultParameters: unknown,
+  provider: string,
+  model: string,
+): Partial<ChatOptions> {
+  let parsed = defaultParameters;
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return {};
+    }
+  }
+  const result = generationParametersSchema.partial().safeParse(parsed);
+  if (!result.success) return {};
+  const parameters = result.data;
+  const reasoningEffort = resolveProviderReasoningEffort({
+    provider,
+    model,
+    reasoningEffort: parameters.reasoningEffort,
+  });
+  return {
+    temperature: parameters.temperature,
+    topP: parameters.topP,
+    topK: parameters.topK,
+    minP: parameters.minP,
+    frequencyPenalty: parameters.frequencyPenalty,
+    presencePenalty: parameters.presencePenalty,
+    reasoningEffort:
+      parameters.enabledParameters?.reasoningEffort === false
+        ? undefined
+        : parameters.reasoningEffort === null
+          ? "none"
+          : (reasoningEffort ?? undefined),
+    verbosity: parameters.verbosity ?? undefined,
+    serviceTier: parameters.serviceTier,
+    stop: parameters.stopSequences,
+    customParameters: parameters.customParameters,
+    enabledParameters: parameters.enabledParameters,
+  };
+}
+
+export function minContextLimit(...limits: Array<number | undefined>): number | undefined {
+  let resolved: number | undefined;
+  for (const limit of limits) {
+    if (limit === undefined) continue;
+    resolved = resolved === undefined ? limit : Math.min(resolved, limit);
+  }
+  return resolved;
+}
+
+export function normalizeChatTopP(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  if (value < 0) return undefined;
+  return Math.min(value, 1);
+}
+
+export function readChatCompletionsReasoningMetadata(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const source = value as Record<string, unknown>;
+  const metadata: Record<string, unknown> = {};
+  if (typeof source.reasoning_content === "string" && source.reasoning_content) {
+    metadata.reasoning_content = source.reasoning_content;
+  }
+  if (typeof source.reasoning === "string" && source.reasoning) {
+    metadata.reasoning = source.reasoning;
+  }
+  if (Array.isArray(source.reasoning_details) && source.reasoning_details.length) {
+    metadata.reasoning_details = source.reasoning_details;
+  }
+  return Object.keys(metadata).length ? metadata : undefined;
+}
+
+export function shouldReplayStoredChatCompletionsReasoning(provider: string, model: string): boolean {
+  if (provider !== "openrouter") return true;
+  const normalizedModel = model.toLowerCase();
+  return !normalizedModel.startsWith("google/gemini") && !normalizedModel.includes("/gemini-");
+}

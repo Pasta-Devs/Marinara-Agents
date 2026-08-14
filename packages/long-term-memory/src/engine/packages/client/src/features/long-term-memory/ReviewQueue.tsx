@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronRight, X } from "lucide-react";
+import { Check, ChevronRight, Loader2, X } from "lucide-react";
 import type {
   LtmDraftMutation,
   LtmDraftReviewDraft,
@@ -18,7 +18,11 @@ import {
   request,
   requestAllNotes,
 } from "./api";
-import { humanizeLabel } from "./display-labels";
+import {
+  humanizeLabel,
+  labelKeys,
+  localizedLabel,
+} from "./display-labels";
 import {
   Button,
   IconButton,
@@ -64,6 +68,7 @@ type BatchResult = {
   indexRebuildFailures: string[];
   messages: string[];
   cascadeMutationLabels: string[];
+  savedMemoryIds: string[];
 };
 
 const importanceOptions: LtmImportance[] = [
@@ -144,7 +149,15 @@ function mutationDisplayLabel(
       ? mutation.note
       : noteById.get(mutationTarget(mutation));
   const title = target && "title" in target ? target.title : undefined;
-  return `${humanizeLabel(mutation.kind)}${title ? ` "${title}"` : ""}`;
+  const label = mutationLabels[mutation.kind]
+    ? localizeUi(mutationLabels[mutation.kind])
+    : humanizeLabel(mutation.kind);
+  return title
+    ? localizeUi("ui.longTermMemory.reviewqueue.mutationWithTitle", {
+        mutation: label,
+        title,
+      })
+    : label;
 }
 
 function draftDisplayTitle(
@@ -332,23 +345,6 @@ function recoveryLabel(
   );
 }
 
-function rejectedCandidateKey(
-  candidate: LtmDraftReviewDraft["candidateRejections"][number],
-) {
-  const normalize = (value: string) => value.trim().replace(/\s+/gu, " ");
-  return JSON.stringify({
-    reason: candidate.reason,
-    message: normalize(candidate.message),
-    snippet: candidate.snippet ? normalize(candidate.snippet) : null,
-    issues: candidate.issues?.map(normalize).sort() ?? [],
-    recovery: {
-      noteType: candidate.recovery?.noteType ?? null,
-      noteId: candidate.recovery?.noteId ?? null,
-      sectionKey: candidate.recovery?.sectionKey ?? null,
-      status: candidate.recovery?.status ?? null,
-    },
-  });
-}
 const rejectionReasonLabels: Partial<Record<LtmExtractionDropReason, string>> =
   {
     invalid_format:
@@ -468,7 +464,7 @@ function ImportanceField({
         </option>
         {importanceOptions.map((importance) => (
           <option key={importance} value={importance}>
-            {humanizeLabel(importance)}
+            {localizedLabel(importance, localizeUi, labelKeys.importance)}
           </option>
         ))}
       </select>
@@ -826,6 +822,7 @@ export default function ReviewQueue({
   props,
   onDirtyChange,
   onOpenMemory,
+  onOpenVault,
   onRecoverCandidate,
   reviewSourceNoteId,
 }: LongTermMemoryDestinationProps) {
@@ -924,6 +921,17 @@ export default function ReviewQueue({
     rejectedSuggestions.data?.suggestions.filter(
       (item) => item.source.sourceNoteId === effectiveSourceId,
     ) ?? [];
+  const needsSourceReextraction = Boolean(
+    selectedReviewSource?.drafts.some(
+      (item) =>
+        item.blockReasons.length > 0 ||
+        ["stale", "missing", "invalid", "superseded", "not_pending"].includes(
+          item.freshness,
+        ),
+      ),
+  );
+  const selectedSourceIsExtractable =
+    noteById.get(effectiveSourceId ?? "")?.type === "source";
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editedById, setEditedById] = useState<Map<string, LtmDraftMutation>>(
     new Map(),
@@ -932,6 +940,13 @@ export default function ReviewQueue({
   const [dismissingId, setDismissingId] = useState<string | null>(null);
   const [result, setResult] = useState<BatchResult | null>(null);
   const [deleteSuggestionError, setDeleteSuggestionError] = useState("");
+  const [extractingSourceId, setExtractingSourceId] = useState<string | null>(
+    null,
+  );
+  const [extractionMessage, setExtractionMessage] = useState<{
+    tone: "success" | "danger";
+    text: string;
+  } | null>(null);
   useEffect(() => {
     setSelectedIds(new Set());
     setEditedById(new Map());
@@ -1182,6 +1197,7 @@ export default function ReviewQueue({
           ),
         ],
         cascadeMutationLabels: [],
+        savedMemoryIds: [],
       });
       return;
     }
@@ -1284,6 +1300,17 @@ export default function ReviewQueue({
         indexRebuildFailures,
         messages,
         cascadeMutationLabels: [...cascadeMutationLabels],
+        savedMemoryIds:
+          action === "accept"
+            ? [
+                ...new Set(
+                  [...completedIds].flatMap((id) => {
+                    const row = rowByMutationId.get(id);
+                    return row ? [row.targetId] : [];
+                  }),
+                ),
+              ]
+            : [],
       });
       if (completedIds.size) {
         await invalidateLtmQueries(queryClient, [
@@ -1331,6 +1358,7 @@ export default function ReviewQueue({
           }),
         ],
         cascadeMutationLabels: [],
+        savedMemoryIds: [],
       });
     } finally {
       setDismissingId(null);
@@ -1381,6 +1409,80 @@ export default function ReviewQueue({
     }
   };
 
+  const reextractSource = async () => {
+    if (!effectiveSourceId || extractingSourceId) return;
+    const sourceId = effectiveSourceId;
+    const editedSourceMutationIds = new Set(
+      [...editedById.keys()].filter(
+        (id) => rowByMutationId.get(id)?.sourceNoteId === sourceId,
+      ),
+    );
+    if (editedSourceMutationIds.size) {
+      const action = localizeUi(
+        "ui.longTermMemory.reviewqueue.reExtractSource",
+      );
+      const options = {
+        title: localizeUi(
+          "ui.longTermMemory.longtermmemorydetail.discardUnsavedChanges",
+        ),
+        message: localizeUi(
+          "ui.longTermMemory.memoryvault.changesLostBeforeAction",
+          { action },
+        ),
+        confirmLabel: localizeUi(
+          "ui.longTermMemory.longtermmemorydetail.discardChanges",
+        ),
+        tone: "destructive" as const,
+      };
+      const confirmed = props.confirmAction
+        ? await props.confirmAction(options)
+        : window.confirm(
+            localizeUi(
+              "ui.longTermMemory.longtermmemorydetail.confirmationWithMessage",
+              { title: options.title, message: options.message },
+            ),
+          );
+      if (!confirmed) return;
+    }
+    setExtractingSourceId(sourceId);
+    setExtractionMessage(null);
+    try {
+      await request(
+        `/notes/${encodeURIComponent(sourceId)}/extract`,
+        "POST",
+        {},
+      );
+      await invalidateLtmQueries(queryClient, [
+        queryKeys.review,
+        queryKeys.pendingDrafts,
+        queryKeys.rejectedSuggestions,
+      ]);
+      if (editedSourceMutationIds.size) {
+        setEditedById((current) => {
+          const next = new Map(current);
+          editedSourceMutationIds.forEach((id) => next.delete(id));
+          return next;
+        });
+      }
+      setExtractionMessage({
+        tone: "success",
+        text: localizeUi("ui.longTermMemory.reviewqueue.sourceReextracted"),
+      });
+    } catch (error) {
+      setExtractionMessage({
+        tone: "danger",
+        text:
+          error instanceof Error
+            ? error.message
+            : localizeUi(
+                "ui.longTermMemory.reviewqueue.sourceReextractionFailed",
+              ),
+      });
+    } finally {
+      setExtractingSourceId(null);
+    }
+  };
+
   const renderRow = (row: ReviewRow, projectionStale = false) => {
     const mutation = editedById.get(row.mutation.id) ?? row.mutation;
     const targetExists = noteById.has(row.targetId);
@@ -1410,6 +1512,12 @@ export default function ReviewQueue({
       noteById.get(row.targetId)?.type ??
       row.targetType ??
       (mutation.kind === "create_note" ? mutation.note.type : undefined);
+    const displayTitle =
+      mutation.kind === "create_note" && targetType === "character"
+        ? localizeUi("ui.longTermMemory.reviewqueue.proposedCharacterMemory", {
+            title: targetTitle,
+          })
+        : targetTitle;
     const importance =
       mutation.kind === "create_note"
         ? importanceOptions.find((value) =>
@@ -1434,7 +1542,7 @@ export default function ReviewQueue({
             compact
             label={`${localizeUi("ui.longTermMemory.memoryvault.selectValue1", {
               value1: mutationLabel,
-            })}: ${targetTitle}`}
+            })}: ${displayTitle}`}
             onChange={() => toggleSelection(row.mutation.id)}
           />
           <button
@@ -1458,7 +1566,7 @@ export default function ReviewQueue({
             data-ltm-risk={row.mutation.risk}
             data-ltm-disposition={row.disposition}
           >
-            <span className="block text-sm font-semibold">{targetTitle}</span>
+            <span className="block text-sm font-semibold">{displayTitle}</span>
             {targetBody ? (
               <span className="mt-1 block truncate text-xs text-[var(--muted-foreground)]">
                 {targetBody}
@@ -1470,7 +1578,7 @@ export default function ReviewQueue({
                   data-ltm-review-type={targetType}
                   className="rounded-full bg-[var(--secondary)] px-1.5 py-0.5"
                 >
-                  {humanizeLabel(targetType)}
+                  {localizedLabel(targetType, localizeUi, labelKeys.noteType)}
                 </span>
               ) : null}
               <span
@@ -1492,11 +1600,11 @@ export default function ReviewQueue({
                   data-ltm-review-importance={importance}
                   className="rounded-full bg-[var(--secondary)] px-1.5 py-0.5"
                 >
-                  {humanizeLabel(importance)}
+                  {localizedLabel(importance, localizeUi, labelKeys.importance)}
                 </span>
               ) : null}
               <span className="rounded-full bg-[var(--secondary)] px-1.5 py-0.5">
-                {humanizeLabel(row.mutation.risk)} /{" "}
+                {localizedLabel(row.mutation.risk, localizeUi, labelKeys.risk)} /{" "}
                 {Math.round(row.mutation.confidence * 100)}
                 {localizeUi("ui.longTermMemory.reviewqueue.confidence")}
               </span>
@@ -1529,7 +1637,9 @@ export default function ReviewQueue({
           >
             <IconButton
               icon={Check}
-              label={`${localizeUi("ui.longTermMemory.reviewqueue.accept")} ${targetTitle} (${mutationLabel})`}
+              label={localizeUi("ui.longTermMemory.reviewqueue.acceptAndSave", {
+                title: targetTitle,
+              })}
               iconSize="1rem"
               className="mari-editor-action--primary !h-11 !min-h-11 !w-11 !min-w-11"
               style={{ height: 44, minHeight: 44, width: 44, minWidth: 44 }}
@@ -1540,7 +1650,9 @@ export default function ReviewQueue({
             />
             <IconButton
               icon={X}
-              label={`${localizeUi("ui.longTermMemory.longtermmemorydetail.skip")} ${targetTitle} (${mutationLabel})`}
+              label={localizeUi("ui.longTermMemory.reviewqueue.skipProposalTitle", {
+                title: targetTitle,
+              })}
               iconSize="1rem"
               className="!h-11 !min-h-11 !w-11 !min-w-11"
               style={{ height: 44, minHeight: 44, width: 44, minWidth: 44 }}
@@ -1632,6 +1744,30 @@ export default function ReviewQueue({
                 )}
               </p>
             ) : null}
+            {targetType === "character" &&
+            ((mutation.kind === "create_note" &&
+              Object.prototype.hasOwnProperty.call(
+                mutation.note.sections,
+                "appearance",
+              )) ||
+              ((mutation.kind === "append_section" ||
+                mutation.kind === "update_section") &&
+                mutation.sectionKey === "appearance")) ? (
+              <p className="text-xs text-[var(--muted-foreground)]">
+                {localizeUi(
+                  "ui.longTermMemory.reviewqueue.appearanceProposalHelp",
+                )}
+              </p>
+            ) : null}
+            <p className="text-[var(--muted-foreground)]">
+              {localizeUi(
+                row.disposition === "new"
+                  ? "ui.longTermMemory.reviewqueue.acceptCreatesSavedMemory"
+                  : row.disposition === "merge"
+                    ? "ui.longTermMemory.reviewqueue.acceptAddsToSavedMemory"
+                    : "ui.longTermMemory.reviewqueue.acceptReplacesSavedMemory",
+              )}
+            </p>
             <MutationEditor
               mutation={mutation}
               canEditTitle={canEditTitle}
@@ -1657,6 +1793,11 @@ export default function ReviewQueue({
       aria-label={localizeUi("ui.longTermMemory.reviewqueue.reviewQueue")}
       className="space-y-4"
     >
+      {extractionMessage ? (
+        <StatusSurface tone={extractionMessage.tone}>
+          {extractionMessage.text}
+        </StatusSurface>
+      ) : null}
       {review.isLoading ? (
         <StatusSurface busy>
           {localizeUi(
@@ -1670,7 +1811,15 @@ export default function ReviewQueue({
             ? review.error.message
             : localizeUi(
                 "ui.longTermMemory.reviewqueue.pendingReviewDraftsCouldNotLoad",
-              )}
+              )} {" "}
+          <button
+            type="button"
+            className="underline"
+            disabled={review.isFetching}
+            onClick={() => void review.refetch()}
+          >
+            {localizeUi("ui.longTermMemory.activityview.retry")}
+          </button>
         </StatusSurface>
       ) : null}
       {result ? (
@@ -1743,6 +1892,19 @@ export default function ReviewQueue({
                 },
               )
             : ""}
+          {result.action === "accepted" && result.completed && onOpenVault ? (
+            <Button
+              onClick={() => {
+                const noteId = result.savedMemoryIds.length === 1
+                  ? result.savedMemoryIds[0]
+                  : undefined;
+                if (noteId && onOpenMemory) onOpenMemory(noteId);
+                else onOpenVault();
+              }}
+            >
+              {localizeUi("ui.longTermMemory.reviewqueue.viewSavedMemories")}
+            </Button>
+          ) : null}
         </StatusSurface>
       ) : null}
       {deleteSuggestionError ? (
@@ -1771,7 +1933,15 @@ export default function ReviewQueue({
         <StatusSurface tone="danger">
           {localizeUi(
             "ui.longTermMemory.reviewqueue.rejectedSuggestionsCouldNotLoad",
-          )}
+          )} {" "}
+          <button
+            type="button"
+            className="underline"
+            disabled={rejectedSuggestions.isFetching}
+            onClick={() => void rejectedSuggestions.refetch()}
+          >
+            {localizeUi("ui.longTermMemory.activityview.retry")}
+          </button>
         </StatusSurface>
       ) : null}
       <LtmWorkspace
@@ -1917,10 +2087,13 @@ export default function ReviewQueue({
                     data-ltm-review-draft-title
                     className="truncate text-base font-semibold tracking-tight"
                   >
-                    {noteById.get(effectiveSourceId ?? "")?.title ||
-                      localizeUi(
-                        "ui.longTermMemory.reviewqueue.untitledMemory",
-                      )}
+                    {localizeUi("ui.longTermMemory.reviewqueue.sourceNote", {
+                      title:
+                        noteById.get(effectiveSourceId ?? "")?.title ||
+                        localizeUi(
+                          "ui.longTermMemory.reviewqueue.untitledMemory",
+                        ),
+                    })}
                   </h2>
                   <p className="mt-1 text-xs text-[var(--muted-foreground)]">
                     {selectedDraft
@@ -1932,7 +2105,11 @@ export default function ReviewQueue({
                   {selectedReviewSource ? (
                     <p className="text-xs text-[var(--muted-foreground)]">
                       {localizeUi("ui.longTermMemory.reviewqueue.modes")}{" "}
-                      {selectedReviewSource.modes.map(humanizeLabel).join(", ")}
+                      {selectedReviewSource.modes
+                        .map((mode) =>
+                          localizedLabel(mode, localizeUi, labelKeys.mode),
+                        )
+                        .join(", ")}
                     </p>
                   ) : null}
                 </div>
@@ -1954,6 +2131,25 @@ export default function ReviewQueue({
                   {onOpenMemory && effectiveSourceId ? (
                     <Button onClick={() => onOpenMemory(effectiveSourceId)}>
                       {localizeUi("ui.longTermMemory.reviewqueue.openSource")}
+                    </Button>
+                  ) : null}
+                  {effectiveSourceId &&
+                  selectedSourceIsExtractable &&
+                  needsSourceReextraction ? (
+                    <Button
+                      disabled={extractingSourceId !== null}
+                      onClick={() => void reextractSource()}
+                    >
+                      {extractingSourceId === effectiveSourceId ? (
+                        <Loader2
+                          aria-hidden="true"
+                          size="0.875rem"
+                          className="animate-spin motion-reduce:animate-none"
+                        />
+                      ) : null}
+                      {localizeUi(
+                        "ui.longTermMemory.reviewqueue.reExtractSource",
+                      )}
                     </Button>
                   ) : null}
                 </div>

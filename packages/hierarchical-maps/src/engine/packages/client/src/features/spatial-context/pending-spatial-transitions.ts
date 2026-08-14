@@ -1,5 +1,11 @@
 import { useSyncExternalStore } from "react";
-import type { PendingSpatialTransition, SpatialDestinationRelation } from "@marinara-engine/shared";
+import type {
+  PendingSpatialTransition,
+  ResolvedSpatialTravel,
+  SpatialContextResponse,
+  SpatialDestinationRelation,
+} from "@marinara-engine/shared";
+import { generateClientId } from "./package-utils";
 
 const STORAGE_KEY = "marinara-pending-spatial-transitions";
 
@@ -99,4 +105,46 @@ export function setPendingSpatialTransitionStatus(
   if (status === "ready") delete next.reviewMessage;
   else if (normalizedReviewMessage) next.reviewMessage = normalizedReviewMessage;
   setPendingSpatialTransition(chatId, next);
+}
+
+/**
+ * Advance a step-by-step transition after the host commits one hop. The target
+ * remains the user's original destination, while the command identity and
+ * expected current location move forward for the next turn.
+ */
+export function reconcileCommittedSpatialTravel(
+  chatId: string,
+  spatial: SpatialContextResponse,
+  travel: ResolvedSpatialTravel,
+): void {
+  const pending = getPendingSpatialTransition(chatId);
+  if (!pending || pending.transition.travelMode !== "step_by_step") return;
+  if (travel.mode !== "step_by_step" || travel.complete || travel.remainingLocationIds.length === 0) {
+    clearPendingSpatialTransition(chatId, pending.transition.commandId);
+    return;
+  }
+  const definition = spatial.definition;
+  const target = definition?.locations.find((location) => location.id === travel.targetLocationId);
+  if (!definition || !spatial.currentLocationId || !target) {
+    setPendingSpatialTransitionStatus(chatId, "needs_review", "The next route step is no longer available.");
+    return;
+  }
+  const targetDestination = spatial.destinations.find(
+    (destination) => destination.id === travel.targetLocationId,
+  );
+  const { reviewMessage: _reviewMessage, ...pendingWithoutReview } = pending;
+  setPendingSpatialTransition(chatId, {
+    ...pendingWithoutReview,
+    transition: {
+      ...pending.transition,
+      destinationId: travel.targetLocationId,
+      expectedDefinitionRevision: definition.revision,
+      expectedCurrentLocationId: spatial.currentLocationId,
+      commandId: generateClientId(),
+    },
+    destinationName: target.name,
+    relation: targetDestination?.relation ?? pending.relation,
+    ...(targetDestination?.label ? { label: targetDestination.label } : {}),
+    status: "ready",
+  });
 }
