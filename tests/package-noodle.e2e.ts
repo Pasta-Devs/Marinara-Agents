@@ -371,12 +371,60 @@ test.describe("package-owned Noodle interface", () => {
         activeComment.getByRole("button", { name: "Like comment" }),
       ).toHaveCSS("color", NOODLER_PINK_RGB);
 
+      const scopeResponse = await page.request.get(
+        `/api/noodle/noodler/viewer?personaId=${encodeURIComponent(persona.id)}`,
+      );
+      expect(scopeResponse.ok()).toBe(true);
+      const scope = (await scopeResponse.json()) as {
+        viewer: Record<string, unknown>;
+        creators: Array<{
+          profile: { id: string };
+          subscribed: boolean;
+          followed: boolean;
+          posts: Array<Record<string, unknown> & { id: string }>;
+        }>;
+      };
+      const creator = scope.creators.find(
+        (candidate) => candidate.profile.id === stageProfile.id,
+      );
+      const postView = creator?.posts.find((candidate) => candidate.id === post.id);
+      expect(postView).toBeTruthy();
+      const future = Date.now() + 60_000;
+      const fakeScope = {
+        viewer: scope.viewer,
+        creators: [
+          {
+            ...creator!,
+            posts: Array.from({ length: 45 }, (_, index) => ({
+              ...postView!,
+              id: index === 0 ? post.id : `bounded-noodler-post-${index}`,
+              content: index === 0 ? postView!.content : `Bounded NoodleR post ${index}`,
+              createdAt: new Date(future - index * 1_000).toISOString(),
+              interactions: index === 0 ? postView!.interactions : [],
+            })),
+          },
+        ],
+      };
+      await page.route("**/api/noodle/noodler/viewer?personaId=*", (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(fakeScope),
+        }),
+      );
+
       await setStoredTheme(page, "light");
       await page.reload();
       await openNoodle(page);
       await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
       const lightNoodle = page.locator('[data-component="NoodleView"]');
       await lightNoodle.getByRole("tab", { name: "All creators" }).click();
+      const feedCards = lightNoodle.locator("[data-noodle-post-id]");
+      await expect(feedCards).toHaveCount(20);
+      await lightNoodle
+        .locator('[data-component="NoodlerHome.LoadMoreFeed"]')
+        .click();
+      await expect(feedCards).toHaveCount(40);
       const lightComment = lightNoodle.locator(
         `[data-noodle-interaction-id="${comment.id}"]`,
       );
