@@ -197,7 +197,7 @@ type SocialSettingsSection = NonNullable<
 // Package-owned default for the editable NoodleR generation guidance.
 // Keep in sync with NOODLER_DEFAULT_GENERATION_GUIDANCE in the server noodle.storage.ts.
 const NOODLER_DEFAULT_GENERATION_GUIDANCE =
-  "All NoodleR creators and viewers are adults (18+). This is an adult creator page and explicit content is the norm here, not the exception: most posts are lewd — flirty, sexual, suggestive, or openly explicit — and say what the creator is doing, wearing, offering, or thinking about. Tease the locked posts, talk to fans like they are paying for it, and answer horny comments in kind. Keep each creator's personality intact: a shy creator is lewd shyly, a blunt one crudely, a funny one filthily. Ordinary posts (updates, humor, behind the scenes, project news) still appear and keep the page human, but they are the minority. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.";
+  "All NoodleR creators and viewers are adults (18+). This is an adult creator page: flirty, suggestive, teasing, and sensual posts are common, and explicit posts appear regularly when they suit the creator — but they are not required and need not be the majority. Tease the locked posts and answer flirty comments in kind. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one bluntly, a funny one filthily. Ordinary posts — updates, humor, behind the scenes, project news — matter just as much and keep both the page and the character human. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.";
 
 const SOCIAL_SETTINGS_SECTIONS: Record<
   SocialSettingsTab,

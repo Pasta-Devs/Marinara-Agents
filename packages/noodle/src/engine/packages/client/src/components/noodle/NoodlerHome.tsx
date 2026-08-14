@@ -17,6 +17,7 @@ import {
   Sparkles,
   Trash2,
   Upload,
+  VolumeX,
   UserRound,
   X,
 } from "lucide-react";
@@ -72,6 +73,7 @@ import {
   useToggleNoodlerFollow,
   useToggleNoodlerSubscription,
   useUnlockNoodlerPost,
+  useUpdateNoodleSettings,
   useUpdateNoodlerPost,
   useReplaceNoodlerPostImage,
   useUpdateNoodlerAccess,
@@ -256,15 +258,15 @@ const DISCLOSURE_OPTIONS: Array<{
     value: "open",
     label: "Linked identity",
     shortLabel: "Open",
-    detail: "This stage identity can openly be the same person.",
+    detail: "This Creator may openly use the source identity.",
     guidance: "Names, handles, recognizable details, and continuity may carry over.",
   },
   {
     value: "hinted",
-    label: "Inspired alter ego",
+    label: "Open secret",
     shortLabel: "Hinted",
-    detail: "Familiar themes can remain, without naming the public identity.",
-    guidance: "Exact names and handles are removed, but broad personality and interests may inspire the draft.",
+    detail: "The same person under a stage name. Regulars are meant to work it out.",
+    guidance: "Appearance, interests, routines, selected life details, and enabled source image references may carry over. The exact source name and handle are never written, and a guess is never confirmed. This is not anonymity.",
   },
   {
     value: "secret",
@@ -274,6 +276,10 @@ const DISCLOSURE_OPTIONS: Array<{
     guidance: "The AI receives a reduced, non-identifying inspiration brief and avoids distinctive canonical details.",
   },
 ];
+
+// The Occasional preset from onboarding. Kept in one place so the quieter action and the
+// wizard cannot drift to different definitions of "quieter".
+const NOODLER_OCCASIONAL_POSTS_PER_DAY = 2;
 
 const EMPTY_STAGE_PROFILE: NoodleStageProfileInput = {
   displayName: "",
@@ -316,6 +322,14 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     null;
   const viewerAccounts = (data?.accounts ?? []).filter((account) => account.kind === "persona");
   const shellPersonaAccount = viewerAccounts.find((account) => account.entityId === viewerPersonaId) ?? null;
+  // The active persona's own Creator profile. Bulk onboarding deliberately lists characters only,
+  // so without this the player has no obvious way to act as a Creator themselves — the persona is
+  // buried in the generic source picker among every eligible character. Both destinations already
+  // exist as navigation targets, so this only decides which one the persona currently needs.
+  const myCreatorProfile =
+    (shellPersonaAccount &&
+      accountsQuery.data?.find((profile) => profile.noodleAccountId === shellPersonaAccount.id)) ||
+    null;
   const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [mobileAccountSwitcherOpen, setMobileAccountSwitcherOpen] = useState(false);
@@ -474,6 +488,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   const generatePost = useGenerateNoodlerNoodlePost();
   const confirmImagePrompts = useConfirmNoodlerImagePrompts();
   const runAutoPostNow = useRunNoodlerAutoPostNow();
+  const updateNoodleSettings = useUpdateNoodleSettings();
   const setupAutoPosting = useUpdateNoodlerAutoPosting();
   const refreshAllNow = useRefreshAllNoodlerCreatorsNow();
   const createPost = useCreateNoodlerPost();
@@ -628,7 +643,11 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   };
   const submitReply = async (
     post: NoodlePostCardModel,
-    input: { content: string; parentInteractionId: string | null },
+    input: {
+      content: string;
+      parentInteractionId: string | null;
+      askForReply: boolean;
+    },
   ) => {
     if (!viewerPersonaId) return;
     const viewerReply = await createInteraction.mutateAsync(
@@ -643,6 +662,9 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
         onError: (error) => toast.error(errorMessage(error, localizeUi("ui.noodle.noodlerhome.couldNotPostThisReply"))),
       },
     );
+    // The comment is already posted at this point. Opting out simply stops here, so no provider
+    // request is made and the failure toast below can only ever mean a reply was actually asked for.
+    if (!input.askForReply) return;
     try {
       await triggerCreatorReply.mutateAsync({
         postId: post.id,
@@ -714,6 +736,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     reactToReply,
     voteInPoll,
     submitReply,
+    creatorReplyRequest: true,
     reactionPendingFor: () => false,
     createInteractionPendingFor: (_postId, type) =>
       (type === "reply" && (createInteraction.isPending || triggerCreatorReply.isPending)) ||
@@ -793,6 +816,27 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   useEffect(() => {
     if (data && !enabled && !arrivedFromGate && onboardingMode === null) onNavigate({ mode: "public", view: "home" });
   }, [arrivedFromGate, data, enabled, onboardingMode, onNavigate]);
+
+  // One click from a busy world to a calm one, without learning the scheduler. It only steps
+  // Lively (or faster) down to Occasional; Manual stays in normal settings, so this can never
+  // silence automatic posting by accident. The ceiling is global, not per Creator, so adding
+  // Creators never speeds the feed back up.
+  const quieterPending = updateNoodleSettings.isPending;
+  const canQuieten = (data?.settings.postsPerDay ?? 0) > NOODLER_OCCASIONAL_POSTS_PER_DAY;
+  const makeQuieter = () =>
+    updateNoodleSettings.mutate(
+      { postsPerDay: NOODLER_OCCASIONAL_POSTS_PER_DAY },
+      {
+        onSuccess: () =>
+          toast.success(
+            localizeUi("ui.noodle.noodlerhome.quieterApplied", {
+              count: NOODLER_OCCASIONAL_POSTS_PER_DAY,
+            }),
+          ),
+        onError: (error) =>
+          toast.error(errorMessage(error, localizeUi("ui.noodle.noodlerhome.couldNotMakeNoodlerQuieter"))),
+      },
+    );
 
   const beginCreate = () => {
     invalidateProfileDraftGeneration();
@@ -1596,6 +1640,47 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
                 {refreshAllNow.isPending ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
                 {localizeUi("ui.noodle.noodlerhome.refreshNoodlerNow")}
               </button>
+              {canQuieten && (
+                <button
+                  type="button"
+                  onClick={makeQuieter}
+                  disabled={quieterPending}
+                  title={localizeUi("ui.noodle.noodlerhome.makeNoodlerQuieterDetail", {
+                    count: NOODLER_OCCASIONAL_POSTS_PER_DAY,
+                  })}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {quieterPending ? <Loader2 size={15} className="animate-spin" /> : <VolumeX size={15} />}
+                  {localizeUi("ui.noodle.noodlerhome.makeNoodlerQuieter")}
+                </button>
+              )}
+              {shellPersonaAccount && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onNavigate(
+                      myCreatorProfile
+                        ? { mode: "noodler", view: "profile", accountId: myCreatorProfile.id }
+                        : {
+                            mode: "noodler",
+                            view: "create-profile",
+                            noodleAccountId: shellPersonaAccount.id,
+                          },
+                    )
+                  }
+                  title={localizeUi("ui.noodle.noodlerhome.myCreatorProfileDetail", {
+                    persona: shellPersonaAccount.displayName,
+                  })}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)]"
+                >
+                  <UserRound size={15} />
+                  {localizeUi(
+                    myCreatorProfile
+                      ? "ui.noodle.noodlerhome.myCreatorProfile"
+                      : "ui.noodle.noodlerhome.createMyCreatorProfile",
+                  )}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={beginCreate}

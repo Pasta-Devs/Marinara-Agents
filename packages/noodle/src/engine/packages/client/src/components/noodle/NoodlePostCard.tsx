@@ -748,7 +748,7 @@ export function countInteractions(
 export function createNoodleLightboxImage(
   id: string,
   url: string,
-  prompt = "",
+  _prompt = "",
 ): ChatImage {
   const filename = url.split("?")[0]?.split("/").pop();
   const safeFilename =
@@ -759,7 +759,10 @@ export function createNoodleLightboxImage(
     id,
     chatId: "noodle",
     filePath: safeFilename,
-    prompt,
+    // Noodle image prompts are generation bookkeeping, not user-facing captions. Passing
+    // them to the shared chat lightbox exposed raw prompt/identifier-like text below both
+    // Noodle and NoodleR images.
+    prompt: "",
     provider: "",
     model: "",
     width: null,
@@ -1328,6 +1331,8 @@ export interface NoodlePostCardCtx {
   ) => void;
   clearReplyComposer: () => void;
   submitReply: (post: NoodlePostCardModel) => void;
+  /** Present only when the host enables creatorReplyRequest. */
+  creatorReplyRequest?: { asked: boolean; setAsked: (asked: boolean) => void };
   appendToReply: (text: string) => void;
   reactionPendingFor: (
     postId: string,
@@ -1405,8 +1410,18 @@ interface NoodlePostCardControllerOptions {
   ) => void;
   submitReply: (
     post: NoodlePostCardModel,
-    input: { content: string; parentInteractionId: string | null },
+    input: {
+      content: string;
+      parentInteractionId: string | null;
+      askForReply: boolean;
+    },
   ) => Promise<void>;
+  /**
+   * Show the "Ask for a reply" composer toggle. NoodleR Creators can answer a comment, and that
+   * answer costs a provider request, so the player decides per comment instead of every comment
+   * silently triggering one. Noodle omits this: its authors have no such reply operation.
+   */
+  creatorReplyRequest?: boolean;
   reactionPendingFor: (
     postId: string,
     type: "like" | "repost",
@@ -1559,6 +1574,8 @@ export function useNoodlePostCardController(
   >(null);
   const [replyText, setReplyText] = useState("");
   const [replyHasText, setReplyHasText] = useState(false);
+  // Defaults on: an unanswered comment is the dull case, so opting out is the deliberate act.
+  const [askForReply, setAskForReply] = useState(true);
   const [activeReplyComposerTool, setActiveReplyComposerTool] =
     useState<ReplyComposerTool | null>(null);
   const [mediaPickerTab, setMediaPickerTab] =
@@ -1577,6 +1594,7 @@ export function useNoodlePostCardController(
     replyValueRef.current = "";
     setReplyHasText(false);
     setActiveReplyComposerTool(null);
+    setAskForReply(true);
     if (replyComposerRef.current) replyComposerRef.current.value = "";
   };
   const cancelEditingPost = () => {
@@ -1650,6 +1668,7 @@ export function useNoodlePostCardController(
       .submitReply(post, {
         content,
         parentInteractionId: replyParentInteractionId,
+        askForReply: options.creatorReplyRequest ? askForReply : false,
       })
       .then(clearReplyComposer)
       .catch(() => {});
@@ -1691,6 +1710,9 @@ export function useNoodlePostCardController(
     handleReplyChange,
     clearReplyComposer,
     submitReply,
+    creatorReplyRequest: options.creatorReplyRequest
+      ? { asked: askForReply, setAsked: setAskForReply }
+      : undefined,
     appendToReply,
     reactionPendingFor: options.reactionPendingFor,
     createInteractionPendingFor: options.createInteractionPendingFor,
@@ -2013,6 +2035,19 @@ export function NoodlePostCard({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {ctx.creatorReplyRequest && (
+            <label className="flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]">
+              <input
+                type="checkbox"
+                checked={ctx.creatorReplyRequest.asked}
+                onChange={(event) =>
+                  ctx.creatorReplyRequest?.setAsked(event.target.checked)
+                }
+                className="h-3.5 w-3.5 accent-[var(--noodle-accent)]"
+              />
+              {localizeUi("ui.noodle.noodlepostcard.askForReply")}
+            </label>
+          )}
           <button
             type="button"
             onClick={clearReplyComposer}

@@ -7,6 +7,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { api } from "../lib/api-client";
@@ -68,6 +69,7 @@ export type NoodleRefreshResult = {
 export const noodleKeys = {
   all: ["noodle"] as const,
   bootstrap: () => [...noodleKeys.all, "bootstrap"] as const,
+  refreshIndicator: () => [...noodleKeys.all, "refresh-indicator"] as const,
   noodlerRoot: () => [...noodleKeys.all, "noodler"] as const,
   noodlerAccounts: () => [...noodleKeys.noodlerRoot(), "accounts"] as const,
   noodlerEligibleAccountsRoot: () =>
@@ -130,13 +132,36 @@ function preservePollVotes(
 }
 
 export function useNoodle(enabled = true) {
+  const qc = useQueryClient();
+  const observedMarker = useRef<string | null | undefined>(undefined);
+  const refreshIndicator = useQuery({
+    queryKey: noodleKeys.refreshIndicator(),
+    queryFn: () =>
+      api.get<{ marker: string | null }>("/noodle/refresh-indicator"),
+    enabled,
+    staleTime: 10_000,
+    refetchInterval: enabled ? 30_000 : false,
+    refetchIntervalInBackground: false,
+  });
+
+  useEffect(() => {
+    const marker = refreshIndicator.data?.marker;
+    if (marker === undefined) return;
+    if (observedMarker.current === undefined) {
+      observedMarker.current = marker;
+      return;
+    }
+    if (marker !== observedMarker.current) {
+      observedMarker.current = marker;
+      void qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
+    }
+  }, [qc, refreshIndicator.data?.marker]);
+
   return useQuery({
     queryKey: noodleKeys.bootstrap(),
     queryFn: () => api.get<NoodleBootstrap>("/noodle"),
     enabled,
     staleTime: 10_000,
-    refetchInterval: enabled ? 30_000 : false,
-    refetchIntervalInBackground: false,
     structuralSharing: (current, next) =>
       preservePollVotes(
         current as NoodleBootstrap | undefined,

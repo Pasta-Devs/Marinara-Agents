@@ -443,9 +443,13 @@ export function NoodlerOnboardingWizard({
         ];
 
   return (
+    // Dismissing the modal (Escape, the backdrop, the X) only closes it. Recording the skip is
+    // what writes onboardingState "zero", and that is permanent — the wizard never reopens — so
+    // it stays reserved for the explicit Skip Setup button. An accidental Escape on the intro
+    // screen used to end the teaching flow forever with no confirmation.
     <Modal
       open={open}
-      onClose={selectionOnly || completion ? onClose : () => void skip()}
+      onClose={onClose}
       closeDisabled={pending}
       title={
         selectionOnly

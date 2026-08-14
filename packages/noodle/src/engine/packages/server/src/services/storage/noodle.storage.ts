@@ -56,6 +56,12 @@ import {
 } from "@marinara-engine/shared";
 import type { DB } from "../../db/connection.js";
 import { isFileUniqueConstraintError } from "../../db/file-schema.js";
+export {
+  NOODLER_SUBSCRIPTION_COST,
+  NOODLER_UNLOCK_COST,
+  noodlerUnlockPriceFromMetadata,
+  noodlerUnlockPriceMetadata,
+} from "../noodle/noodler-prices.js";
 import { logger } from "../../lib/logger.js";
 import {
   NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR,
@@ -103,8 +109,6 @@ import { pruneNoodleRefreshRuns } from "./noodle-refresh-run-retention.js";
 const NOODLE_SETTINGS_KEY = "noodle.settings";
 const NOODLE_REFRESH_SCHEDULE_KEY = "noodle.refresh-schedule";
 const NOODLE_CARRYOVER_TARGETS: NoodleCarryoverTarget[] = ["conversation", "roleplay", "game"];
-export const NOODLER_UNLOCK_COST = 1;
-export const NOODLER_SUBSCRIPTION_COST = 5;
 const NOODLER_RESERVE_STATE_ID = "noodler-reserve";
 const ROLLING_DAY_MS = 24 * 60 * 60 * 1000;
 const MANUAL_POST_INVALIDATION_MS = 60 * 60 * 1000;
@@ -517,14 +521,21 @@ function isToggleInteractionType(type: NoodleInteractionType) {
 // all live here so they are visible and editable in NoodleR settings, not hardcoded.
 // Keep in sync with NOODLER_DEFAULT_GENERATION_GUIDANCE in the client NoodleHome.tsx.
 export const NOODLER_DEFAULT_GENERATION_GUIDANCE =
-  "All NoodleR creators and viewers are adults (18+). This is an adult creator page and explicit content is the norm here, not the exception: most posts are lewd — flirty, sexual, suggestive, or openly explicit — and say what the creator is doing, wearing, offering, or thinking about. Tease the locked posts, talk to fans like they are paying for it, and answer horny comments in kind. Keep each creator's personality intact: a shy creator is lewd shyly, a blunt one crudely, a funny one filthily. Ordinary posts (updates, humor, behind the scenes, project news) still appear and keep the page human, but they are the minority. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.";
+  "All NoodleR creators and viewers are adults (18+). This is an adult creator page: flirty, suggestive, teasing, and sensual posts are common, and explicit posts appear regularly when they suit the creator — but they are not required and need not be the majority. Tease the locked posts and answer flirty comments in kind. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one bluntly, a funny one filthily. Ordinary posts — updates, humor, behind the scenes, project news — matter just as much and keep both the page and the character human. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.";
 
 /**
- * The pre-1.0.7 default. An install that never edited the guidance stored this string verbatim,
- * so it is migrated to the current default instead of being kept as if the user had chosen it.
+ * Every previously shipped default, newest first. An install that never edited the guidance
+ * stored one of these strings verbatim, so it is migrated to the current default instead of
+ * being kept as if the user had chosen it. Comparison is exact: an edited string differs by at
+ * least one character and is preserved as the user's own.
  */
-const NOODLER_LEGACY_GENERATION_GUIDANCE =
-  "All NoodleR creators and viewers are adults (18+). NSFW and explicit content are allowed when appropriate to the creator's personality and current context, but never forced — stay true to each creator's voice rather than making every post sexual. This is an adult creator page: playful, flirty, suggestive teasing that plays to fans and hints at locked content is a normal, frequent part of the voice when it fits the creator. Vary content across teasers, casual updates, behind-the-scenes moments, fan questions, humor, promotion, flirtation, and project updates. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood — let each creator's own personality set the tone.";
+const NOODLER_LEGACY_GENERATION_GUIDANCE_DEFAULTS = [
+  // Pre-1.0.11. Explicit-dominant: it made lewd posts the norm and ordinary posts the minority,
+  // which overshot the adult-first *variety* the feature is meant to have.
+  "All NoodleR creators and viewers are adults (18+). This is an adult creator page and explicit content is the norm here, not the exception: most posts are lewd — flirty, sexual, suggestive, or openly explicit — and say what the creator is doing, wearing, offering, or thinking about. Tease the locked posts, talk to fans like they are paying for it, and answer horny comments in kind. Keep each creator's personality intact: a shy creator is lewd shyly, a blunt one crudely, a funny one filthily. Ordinary posts (updates, humor, behind the scenes, project news) still appear and keep the page human, but they are the minority. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.",
+  // Pre-1.0.7.
+  "All NoodleR creators and viewers are adults (18+). NSFW and explicit content are allowed when appropriate to the creator's personality and current context, but never forced — stay true to each creator's voice rather than making every post sexual. This is an adult creator page: playful, flirty, suggestive teasing that plays to fans and hints at locked content is a normal, frequent part of the voice when it fits the creator. Vary content across teasers, casual updates, behind-the-scenes moments, fan questions, humor, promotion, flirtation, and project updates. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood — let each creator's own personality set the tone.",
+] as const;
 
 export function normalizeNoodleSettings(raw: unknown): NoodleSettings {
   const rawRecord = parseRecord(raw);
@@ -537,7 +548,9 @@ export function normalizeNoodleSettings(raw: unknown): NoodleSettings {
     rawRecord.privateGenerationGuidance ??
     NOODLER_DEFAULT_GENERATION_GUIDANCE;
   const migratedNoodlerGenerationGuidance =
-    storedNoodlerGenerationGuidance === NOODLER_LEGACY_GENERATION_GUIDANCE
+    NOODLER_LEGACY_GENERATION_GUIDANCE_DEFAULTS.some(
+      (legacy) => legacy === storedNoodlerGenerationGuidance,
+    )
       ? NOODLER_DEFAULT_GENERATION_GUIDANCE
       : storedNoodlerGenerationGuidance;
   const migratedImageCaptioningUseConnectionDefault =
@@ -3720,7 +3733,6 @@ export function createNoodleStorage(db: DB) {
           }
           return mapSubscription(existing[0]);
         }
-        if (viewer.settings.wallet.coins < NOODLER_SUBSCRIPTION_COST) return null;
         const timestamp = now();
         const followingAccountIds = viewer.settings.social.followingAccountIds ?? [];
         const followingAccountTimestamps = { ...viewer.settings.social.followingAccountTimestamps };
@@ -3734,10 +3746,8 @@ export function createNoodleStorage(db: DB) {
               : [...followingAccountIds, creatorAccountId],
             followingAccountTimestamps,
           },
-          wallet: { coins: viewer.settings.wallet.coins - NOODLER_SUBSCRIPTION_COST },
         };
-        // Insert before debiting: a duplicate row means the subscription already existed,
-        // and that path must stay idempotent rather than charging again or throwing.
+        // A duplicate row means the subscription already existed, so this path stays idempotent.
         try {
           await tx.insert(noodleAccountSubscriptions).values({
             id: newId(),
@@ -3841,13 +3851,8 @@ export function createNoodleStorage(db: DB) {
           .from(noodlePostUnlocks)
           .where(and(eq(noodlePostUnlocks.viewerAccountId, viewerAccountId), eq(noodlePostUnlocks.postId, postId)));
         if (existing[0]) return mapPostUnlock(existing[0]);
-        if (viewer.settings.wallet.coins < NOODLER_UNLOCK_COST) return null;
         const timestamp = now();
-        const nextViewerSettings: NoodleAccountSettings = {
-          ...viewer.settings,
-          wallet: { coins: viewer.settings.wallet.coins - NOODLER_UNLOCK_COST },
-        };
-        // Insert before debiting, so an already-unlocked post stays idempotent and free.
+        // An already-unlocked post stays idempotent.
         try {
           await tx.insert(noodlePostUnlocks).values({ id: newId(), viewerAccountId, postId, createdAt: timestamp });
         } catch (error) {
@@ -3858,10 +3863,7 @@ export function createNoodleStorage(db: DB) {
             .where(and(eq(noodlePostUnlocks.viewerAccountId, viewerAccountId), eq(noodlePostUnlocks.postId, postId)));
           return duplicate[0] ? mapPostUnlock(duplicate[0]) : null;
         }
-        await tx
-          .update(noodleAccounts)
-          .set({ settings: JSON.stringify(nextViewerSettings), updatedAt: timestamp })
-          .where(eq(noodleAccounts.id, viewerAccountId));
+        // Unlocking no longer touches viewer settings at all: there is nothing to debit.
         const rows = await tx
           .select()
           .from(noodlePostUnlocks)
