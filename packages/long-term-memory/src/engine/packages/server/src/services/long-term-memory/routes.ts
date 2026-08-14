@@ -9,7 +9,6 @@ import {
   ltmDraftMutationSchema,
   ltmDraftReviewResponseSchema,
   ltmDraftStatusSchema,
-  ltmEventSchema,
   ltmDebugPhaseSchema,
   ltmDebugStatusSchema,
   ltmExtractSourceNoteRequestSchema,
@@ -42,6 +41,7 @@ import {
   ltmRenameNoteSectionPreviewResponseSchema,
   ltmRenameNoteSectionResponseSchema,
   ltmStatusResponseSchema,
+  ltmWriteScopeSchema,
   ltmScopeSchema,
   ltmSectionKeySchema,
   ltmSectionSchema,
@@ -82,6 +82,7 @@ import {
   rebuildLongTermMemoryIndexes,
 } from "./rebuild.js";
 import { readLtmIndexState, readLtmNoteSummary } from "./index-state.js";
+import { readLtmActivityEvents } from "./activity-index.js";
 import { CURRENT_LTM_CHUNK_FORMAT_VERSION } from "./chunking.js";
 import { retrieveLongTermMemory } from "./retrieval.js";
 import { applyLongTermMemoryDraft } from "./reconciliation.js";
@@ -243,7 +244,7 @@ const createNoteBody = z
     type: ltmNoteTypeSchema.exclude(["source"]),
     status: ltmStatusSchema,
     modes: z.array(ltmModeSchema).min(1).max(8),
-    scope: ltmScopeSchema.default({}),
+    scope: ltmWriteScopeSchema.default({}),
     tags: z.array(ltmIdentifierSchema).max(100).default([]),
     keywords: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
     manualKeywords: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
@@ -279,7 +280,7 @@ const updateNoteBody = z
     title: ltmNoteTitleSchema.optional(),
     status: ltmStatusSchema.optional(),
     modes: z.array(ltmModeSchema).min(1).max(8).optional(),
-    scope: ltmScopeSchema.optional(),
+    scope: ltmWriteScopeSchema.optional(),
     tags: z.array(ltmIdentifierSchema).max(100).optional(),
     keywords: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
     manualKeywords: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
@@ -526,24 +527,13 @@ export function createLongTermMemoryRoutes(runtime: {
       const parsed = noteEventsQuery.safeParse(request.query);
       if (!parsed.success)
         return reply.status(400).send({ error: parsed.error.message });
-      const content = await readFile(getLongTermMemoryDirectories(root).eventLog, "utf8").catch((error) => {
-        if (isEnoent(error)) return "";
-        throw error;
-      });
-      const events = content
-        .split("\n")
-        .filter(Boolean)
-        .flatMap((line) => {
-          try {
-            const event = ltmEventSchema.safeParse(JSON.parse(line));
-            return event.success && event.data.target === parsed.data.noteId ? [event.data] : [];
-          } catch {
-            return [];
-          }
-        })
-        .slice(-parsed.data.limit)
-        .reverse();
-      return { events };
+      return {
+        events: await readLtmActivityEvents(
+          root,
+          parsed.data.noteId,
+          parsed.data.limit,
+        ),
+      };
     });
     app.get("/debug-log/export", async (_request, reply) =>
       reply

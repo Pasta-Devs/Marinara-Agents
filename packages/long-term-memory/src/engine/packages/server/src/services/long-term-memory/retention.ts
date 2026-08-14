@@ -10,6 +10,7 @@ import { isEnoent } from "./ltm-utils.js";
 import { getLongTermMemoryDirectories, getLongTermMemoryRoot, safeJoin } from "./paths.js";
 import { readLongTermMemoryUsage, longTermMemoryUsagePath } from "./usage.js";
 import { withLtmVaultLock } from "./vault-lock.js";
+import { pruneLtmActivityIndex } from "./activity-index.js";
 
 const lastRetentionRun = new Map<string, number>();
 const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -165,6 +166,7 @@ async function runLongTermMemoryRetentionUnsafe({
   for (const eventLogPath of [dirs.eventLog, dirs.debugLog]) {
     eventsRemoved += await pruneEventLog(eventLogPath, eventCutoff);
   }
+  await pruneLtmActivityIndex(root, eventCutoff);
 
   // 5. Incomplete generation receipt cleanup
   const runtimeReceiptsDir = safeJoin(dirs.events, "runtime-receipts");

@@ -16,7 +16,7 @@ export function getLongTermMemoryRoot(dataDir = getPackageDataDir()) { return jo
 export function getLongTermMemoryDirectories(root = getLongTermMemoryRoot()) {
   return {
     root, vault: join(root, LTM_VAULT_DIR), events: join(root, "events"), debug: join(root, "debug"),
-    indexes: join(root, "indexes"), config: join(root, "config"), drafts: join(root, "drafts"),
+    indexes: join(root, "indexes"), activityIndex: join(root, "indexes", "activity"), config: join(root, "config"), drafts: join(root, "drafts"),
     transactions: join(root, "transactions"), receipts: join(root, "events", "receipts"),
     eventLog: join(root, "events", "log.jsonl"), debugLog: join(root, "debug", "log.jsonl"),
   };

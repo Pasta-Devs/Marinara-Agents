@@ -14,6 +14,7 @@ import {
   ltmNoteTypeSchema,
   ltmRetentionConfigSchema,
   ltmSectionKeySchema,
+  ltmScopeAliasConflict,
   type LtmNote,
   type LtmRejectedSuggestion,
   type LtmBulkNoteResult,
@@ -62,6 +63,7 @@ import { LtmServiceError } from "./service-error.js";
 import { quarantineLegacyCapturedTurnSources } from "./legacy-source-quarantine.js";
 import { isAdditiveLtmSection } from "./draft-projector.js";
 import { logger } from "./package-runtime.js";
+import { ensureLtmActivityIndex } from "./activity-index.js";
 import {
   manualContribution,
   renderSectionContributions,
@@ -211,6 +213,30 @@ function rewriteSectionContributionSourceIds(
     ]),
   );
 }
+
+function assertWritableScope(scope: LtmScope | null | undefined) {
+  const conflict = ltmScopeAliasConflict(scope);
+  if (conflict)
+    throw new LtmServiceError(conflict, 400, "ltm_scope_alias_conflict");
+}
+
+function assertWritableSections(
+  sections: Record<string, { text?: string }> | null | undefined,
+) {
+  if (!sections || !Object.keys(sections).length)
+    throw new LtmServiceError(
+      "A memory must include at least one detail.",
+      400,
+      "ltm_empty_sections",
+    );
+  if (Object.values(sections).some((section) => !section.text?.trim()))
+    throw new LtmServiceError(
+      "Every memory detail needs text.",
+      400,
+      "ltm_empty_section_text",
+    );
+}
+
 const initialized = new Set<string>();
 export class LongTermMemoryStorage {
   constructor(readonly root = getLongTermMemoryRoot()) {}
@@ -235,6 +261,7 @@ export class LongTermMemoryStorage {
         ),
       ]);
       await recoverLtmMutations(this.root);
+      await ensureLtmActivityIndex(this.root);
       await quarantineLegacyCapturedTurnSources(this.root);
       await readLtmNoteSummary(this.root);
       const configs = [
@@ -342,6 +369,7 @@ export class LongTermMemoryStorage {
     await this.initializeLtmStore();
     const timestamp = nowIso();
     const draft = ltmDraftNoteInputSchema.parse(input);
+    assertWritableScope(draft.scope);
     const scope = normalizeLtmScope(draft.scope);
     if (draft.type !== "source") {
       const availabilityError = validateLtmExplicitAvailability(
@@ -367,6 +395,7 @@ export class LongTermMemoryStorage {
               )!,
             ]),
           );
+    assertWritableSections(sections);
     const note = ltmNoteSchema.parse({
       ...draft,
       scope,
@@ -418,6 +447,8 @@ export class LongTermMemoryStorage {
       const projected = projector(current);
       if (projected === current)
         return { note: current, created: false, changed: false };
+      assertWritableScope(projected.scope);
+      assertWritableSections(projected.sections);
       const timestamp = nowIso();
       const next = ltmNoteSchema.parse({
         ...projected,
@@ -447,6 +478,7 @@ export class LongTermMemoryStorage {
       const current = await this.getNote(id);
       if (!current) throw new LtmServiceError(`Long-term memory note not found: ${id}`, 404, "ltm_note_not_found");
       const { removedSectionKeys = [], ...notePatch } = patch;
+      assertWritableScope(notePatch.scope);
       if (notePatch.type && notePatch.type !== current.type)
         throw new Error(
           "Changing long-term memory note type is not supported by this package version.",
@@ -468,15 +500,18 @@ export class LongTermMemoryStorage {
         throw new LtmServiceError("Long-term memory section not found.", 404, "ltm_section_not_found");
       if (Object.keys(current.sections).length - removed.size < 1)
         throw new LtmServiceError("A memory must keep at least one detail.", 400, "ltm_last_section");
+      const sectionInput =
+        notePatch.sections !== undefined
+          ? notePatch.sections
+          : removed.size
+            ? Object.fromEntries(
+                Object.entries(current.sections).filter(([key]) => !removed.has(key)),
+              )
+            : undefined;
       const sections =
-        (notePatch.sections || removed.size) && current.type !== "source"
+        sectionInput && current.type !== "source"
           ? Object.fromEntries(
-              Object.entries({
-                ...Object.fromEntries(
-                  Object.entries(current.sections).filter(([key]) => !removed.has(key)),
-                ),
-                ...(notePatch.sections ?? {}),
-              }).map(([key, section]) => {
+              Object.entries(sectionInput).map(([key, section]) => {
                 const previous = current.sections[key];
                 const { contributions: _previousContributions, ...previousFields } =
                   previous ?? {};
@@ -496,6 +531,7 @@ export class LongTermMemoryStorage {
               }),
             )
           : notePatch.sections;
+      assertWritableSections(sections ?? current.sections);
       const next = ltmNoteSchema.parse({
         ...current,
         ...notePatch,
@@ -564,6 +600,8 @@ export class LongTermMemoryStorage {
   async bulkMutateNotes(input: unknown): Promise<LtmBulkNoteResult> {
     await this.initializeLtmStore();
     const request = ltmBulkNoteRequestSchema.parse(input);
+    assertWritableScope(request.addScope);
+    assertWritableScope(request.removeScope);
     return withLtmVaultLock(this.root, async () => {
       const notes = await this.listNotes();
       const notesById = new Map(notes.map((note) => [note.id, note]));
@@ -1184,7 +1222,11 @@ export class LongTermMemoryStorage {
       if (!requestedNotes.length)
         return { deletedIds: [], failedIds, deletedNotes: [], detachedNoteIds: [] };
       const deleted = new Set(requestedNotes.map((note) => note.id));
-      const sourceIds = new Set(requestedNotes.map((note) => note.id));
+      const sourceIds = new Set(
+        requestedNotes
+          .filter((note) => note.type === "source")
+          .map((note) => note.id),
+      );
       const reprojected = new Map<string, LtmNote>();
       const detachedSourceIds = new Map<string, string[]>();
       if (options.retractExtracted && sourceIds.size)

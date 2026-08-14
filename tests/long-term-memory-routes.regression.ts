@@ -475,6 +475,17 @@ async function main() {
       },
     });
     assert.equal(created.statusCode, 201, created.body);
+    const conflictingScope = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes",
+      headers,
+      payload: {
+        ...created.json().note,
+        id: "world_route_scope_conflict",
+        scope: { chatId: "chat-a", chatIds: ["chat-b"] },
+      },
+    });
+    assert.equal(conflictingScope.statusCode, 400, conflictingScope.body);
     const recentEvents = await app.inject({
       method: "GET",
       url: "/api/long-term-memory/events?noteId=world_route_fixture&limit=5",

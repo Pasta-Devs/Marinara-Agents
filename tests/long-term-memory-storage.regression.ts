@@ -98,6 +98,10 @@ async function main() {
     `${source}/index-state.ts`
   );
   const { runLongTermMemoryRetention } = await import(`${source}/retention.ts`);
+  const {
+    rebuildLtmActivityIndex,
+    readLtmActivityEvents,
+  } = await import(`${source}/activity-index.ts`);
   const { renderSectionContributions } = await import(
     `${source}/section-contributions.ts`
   );
@@ -414,6 +418,20 @@ async function main() {
         },
       },
     });
+    assert.throws(
+      () =>
+        parseLongTermMemoryBackup({
+          ...exported,
+          notes: [
+            {
+              ...exported.notes[0]!,
+              scope: { chatId: "chat-a", chatIds: ["chat-b"] },
+            },
+          ],
+        }),
+      /same scope/u,
+      "backups must reject contradictory scalar and array scope aliases",
+    );
     await replaceLongTermMemoryData(legacyBackup, freshRoot);
     const reexportedLegacy = await exportLongTermMemoryData(freshRoot);
     assert.equal("policies" in reexportedLegacy.settings, false);
@@ -496,6 +514,50 @@ async function main() {
       (error: any) => error.code === "ltm_explicit_availability_required",
       "storage must reject new non-source global memories even when callers bypass routes",
     );
+    for (const scope of [
+      { chatId: "chat-a", chatIds: ["chat-b"] },
+      { groupId: "group-a", groupIds: ["group-b"] },
+      { personaId: "persona-a", personaIds: ["persona-b"] },
+    ]) {
+      await assert.rejects(
+        storage.createNote({
+          ...noteInput,
+          id: `world_scope_conflict_${Object.keys(scope)[0]}`,
+          scope,
+        }),
+        /same scope/u,
+      );
+    }
+    const projectScopeTarget = await storage.createNote({
+      ...noteInput,
+      id: "world_scope_update_target",
+    });
+    await assert.rejects(
+      storage.updateNote(projectScopeTarget.id, {
+        scope: { chatId: "chat-a", chatIds: ["chat-b"] },
+      }),
+      (error: any) => error.code === "ltm_scope_alias_conflict",
+    );
+    await assert.rejects(
+      storage.bulkMutateNotes({
+        noteIds: [projectScopeTarget.id],
+        addScope: { groupId: "group-a", groupIds: ["group-b"] },
+      }),
+      /same scope/u,
+    );
+    await assert.rejects(
+      storage.createNote({ ...noteInput, id: "world_empty_storage", sections: {} }),
+      (error: any) => error.code === "ltm_empty_sections",
+    );
+    await assert.rejects(
+      storage.projectNote("world_empty_project", "world", () => ({
+        ...noteInput,
+        id: "world_empty_project",
+        sections: {},
+      })),
+      (error: any) => error.code === "ltm_empty_sections",
+    );
+    assert.equal(await storage.getNote("world_empty_project"), null);
     const keywordIntent = await storage.createNote({
       ...noteInput,
       id: "world_keyword_intent",
@@ -1569,6 +1631,44 @@ async function main() {
       updatedAt: timestamp,
       evidence: [`source_note:${sourceNoteId}`],
     });
+    const nonSourceRoot = await storage.createNote({
+      ...noteInput,
+      id: "world_retract_non_source_root",
+      title: "Non-source retraction root",
+      sections: { facts: { text: "Root fact.", updatedAt: timestamp } },
+    });
+    const nonSourceChild = await storage.projectNote(
+      "world_retract_non_source_child",
+      "world",
+      () => ({
+        ...noteInput,
+        id: "world_retract_non_source_child",
+        title: "Non-source child",
+        status: "active",
+        links: [{ target: nonSourceRoot.id, relation: "extracted_from" }],
+        sections: {
+          facts: renderSectionContributions(
+            [sourceContribution(nonSourceRoot.id, "0".repeat(64), "Child fact.")],
+            true,
+          )!,
+        },
+      }),
+    );
+    const nonSourceDelete = await storage.deleteNotesPermanently(
+      [nonSourceRoot.id],
+      { retractExtracted: true },
+    );
+    assert.deepEqual(nonSourceDelete.deletedIds, [nonSourceRoot.id]);
+    assert.equal(
+      (await storage.getNote(nonSourceChild.note!.id))?.sections.facts.text,
+      "Child fact.",
+      "non-source deletion must not retract descendant content",
+    );
+    assert.deepEqual(
+      (await storage.getNote(nonSourceChild.note!.id))?.links,
+      [],
+      "deletion may detach the missing parent link without retracting content",
+    );
     const sharedFacts = renderSectionContributions(
       [
         sourceContribution(retractSourceA.id, hashA, "Shared durable fact."),
@@ -1888,6 +1988,43 @@ async function main() {
     await assert.rejects(
       storage.updateNote(deletionTarget.id, { removedSectionKeys: ["history"] }),
       (error: any) => error.code === "ltm_last_section",
+    );
+    await assert.rejects(
+      storage.updateNote(deletionTarget.id, { sections: {} }),
+      (error: any) => error.code === "ltm_empty_sections",
+    );
+    assert.deepEqual(Object.keys((await storage.getNote(deletionTarget.id))!.sections), ["history"]);
+
+    const activityRoot = join(dataDir, "activity-index");
+    const activityDirectories = getLongTermMemoryDirectories(activityRoot);
+    await mkdir(activityDirectories.events, { recursive: true });
+    const activityEvents = Array.from({ length: 150 }, (_, index) => ({
+      id: randomUUID(),
+      ts: new Date(Date.parse(timestamp) + index).toISOString(),
+      type: "world.updated",
+      target: "world_activity_target",
+      payload: { index },
+    }));
+    await writeFile(
+      activityDirectories.eventLog,
+      activityEvents.map((event) => JSON.stringify(event)).join("\n") + "\n",
+    );
+    await rebuildLtmActivityIndex(activityRoot);
+    const recentActivity = await readLtmActivityEvents(
+      activityRoot,
+      "world_activity_target",
+      20,
+    );
+    assert.deepEqual(
+      recentActivity.map((event) => event.payload.index),
+      Array.from({ length: 20 }, (_, index) => 149 - index),
+      "activity index must retain the newest events in newest-first order",
+    );
+    await rm(activityDirectories.eventLog, { force: true });
+    assert.equal(
+      (await readLtmActivityEvents(activityRoot, "world_activity_target", 1))[0]?.payload.index,
+      149,
+      "activity reads must not depend on rescanning the full event log",
     );
 
     process.stdout.write(

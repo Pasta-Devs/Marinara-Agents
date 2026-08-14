@@ -701,6 +701,36 @@ export const ltmScopeSchema = z
   })
   .strict();
 
+export function ltmScopeAliasConflict(
+  scope:
+    | {
+        chatId?: string;
+        chatIds?: readonly string[];
+        groupId?: string;
+        groupIds?: readonly string[];
+        personaId?: string;
+        personaIds?: readonly string[];
+      }
+    | null
+    | undefined,
+) {
+  for (const [scalar, values, label] of [
+    [scope?.chatId, scope?.chatIds, "chatId/chatIds"],
+    [scope?.groupId, scope?.groupIds, "groupId/groupIds"],
+    [scope?.personaId, scope?.personaIds, "personaId/personaIds"],
+  ] as const) {
+    if (scalar && values !== undefined && !values.includes(scalar))
+      return `${label} must identify the same scope.`;
+  }
+  return null;
+}
+
+export const ltmWriteScopeSchema = ltmScopeSchema.superRefine((scope, ctx) => {
+  const conflict = ltmScopeAliasConflict(scope);
+  if (conflict)
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["scope"], message: conflict });
+});
+
 /**
  * The context that a source was successfully extracted against. Keep the
  * source material hash separate from the context fields so a stale draft can
@@ -1132,7 +1162,7 @@ export const ltmBulkNoteArchiveActionSchema = z.enum([
   "with_derived",
 ]);
 
-const ltmAvailabilityScopePatchSchema = ltmScopeSchema.refine(
+const ltmAvailabilityScopePatchSchema = ltmWriteScopeSchema.refine(
   (scope) =>
     Boolean(
       scope.chatId ||
@@ -2176,7 +2206,7 @@ export const ltmDraftNoteInputSchema = z
     type: ltmNoteTypeSchema,
     status: ltmStatusSchema.default("active"),
     modes: z.array(ltmModeSchema).min(1).max(8),
-    scope: ltmScopeSchema.default({}),
+    scope: ltmWriteScopeSchema.default({}),
     tags: z.array(ltmIdentifierSchema).max(100).default([]),
     keywords: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
     manualKeywords: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
@@ -3325,6 +3355,17 @@ export const ltmBackupSchema = z
       })
       .strict(),
   })
-  .strict();
+  .strict()
+  .superRefine((backup, ctx) => {
+    for (const [index, note] of backup.notes.entries()) {
+      const conflict = ltmScopeAliasConflict(note.scope);
+      if (!conflict) continue;
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["notes", index, "scope"],
+        message: conflict,
+      });
+    }
+  });
 
 export type LtmBackup = z.infer<typeof ltmBackupSchema>;
