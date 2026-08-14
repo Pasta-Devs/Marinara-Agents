@@ -1,9 +1,6 @@
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import { noodleRoutes } from "../../routes/noodle.routes.js";
-import { startNoodleAutoPostScheduler } from "./noodle-autopost-scheduler.service.js";
-import { withNoodleAutoPostPaused } from "./noodle-autopost-scheduler.service.js";
 import { buildRecentSocialMediaActivityBlock } from "./noodle-context.js";
-import { startNoodlerFanActivityScheduler } from "./noodle-fan-activity-scheduler.service.js";
 import { startNoodleRefreshScheduler } from "./noodle-refresh-scheduler.service.js";
 
 let active = false;
@@ -19,8 +16,6 @@ export async function activate({
   };
 }) {
   // Capability routes are registered through the host's revocable privileged route slots.
-  // This is also the authentication boundary for owner-only NoodleR management paths;
-  // do not register these handlers through an unrestricted route API.
   // Noodle's existing plugin creates storage adapters while it registers, so
   // expose only the host database on the otherwise constrained collector.
   const routes: FastifyPluginAsync = async (router) => {
@@ -28,14 +23,9 @@ export async function activate({
   };
   const cleanups = [
     await api.registerPrivilegedRoutes(routes, { prefix: "/api/noodle" }),
-    api.registerService("noodle:backup", { pause: withNoodleAutoPostPaused }),
     api.registerService("noodle:prompt-context", { build: buildRecentSocialMediaActivityBlock }),
   ];
-  const schedulers = [
-    startNoodleRefreshScheduler(app),
-    startNoodleAutoPostScheduler(app),
-    startNoodlerFanActivityScheduler(app),
-  ];
+  const schedulers = [startNoodleRefreshScheduler(app)];
   active = true;
   return async () => {
     active = false;
