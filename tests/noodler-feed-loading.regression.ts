@@ -35,6 +35,30 @@ assert.match(unseenRoute, /noodlerUnseenCreatorAccountIds/u);
 assert.match(unseenRoute, /getNoodlerViewerSignal/u);
 assert.doesNotMatch(unseenRoute, /buildViewerScope/u);
 assert.doesNotMatch(unseenRoute, /listNoodlerInteractions/u);
+assert.match(routes, /listNoodlerPostPage/u);
+assert.match(routes, /listSubscriptionsForCreatorPage/u);
+
+const storage = readFileSync(
+  "packages/noodle/src/engine/packages/server/src/services/storage/noodle.storage.ts",
+  "utf8",
+);
+assert.match(storage, /async listNoodlerPostPage/u);
+assert.match(storage, /async listSubscriptionsForCreatorPage/u);
+assert.match(storage, /async getNoodlerViewerSignal/u);
+
+const postsHook = hooks.slice(
+  hooks.indexOf("export function useNoodlerPosts"),
+  hooks.indexOf("export function useCreateNoodlerStageProfile"),
+);
+assert.match(postsHook, /page\.items\.map\(\(item\) => item\.managed\)/u);
+assert.match(postsHook, /page\.items/u);
+
+const viewerHook = hooks.slice(
+  hooks.indexOf("export function useNoodlerViewer"),
+  hooks.indexOf("export function useNoodleUnseenCount"),
+);
+assert.match(viewerHook, /noodler\/viewer\/feed/u);
+assert.match(viewerHook, /postsByCreator/u);
 
 const home = readFileSync(
   "packages/noodle/src/engine/packages/client/src/components/noodle/NoodlerHome.tsx",

@@ -243,9 +243,11 @@ export function useNoodlerPosts(accountId: string | null) {
   return useQuery({
     queryKey: noodleKeys.noodlerPosts(accountId ?? "none"),
     queryFn: () =>
-      api.get<NoodlerManagedPost[]>(
+      api.get<{
+        items: Array<{ managed: NoodlerManagedPost }>;
+      }>(
         `/noodle/noodler/accounts/${encodeURIComponent(accountId!)}/posts`,
-      ),
+      ).then((page) => page.items.map((item) => item.managed)),
     enabled: Boolean(accountId),
     staleTime: 10_000,
     // Automatic posts are written server-side without a client mutation; poll while visible.
@@ -258,9 +260,9 @@ export function useNoodlerSubscribers(accountId: string | null) {
   return useQuery({
     queryKey: noodleKeys.noodlerSubscribers(accountId ?? "none"),
     queryFn: () =>
-      api.get<NoodlerSubscriber[]>(
+      api.get<{ items: NoodlerSubscriber[] }>(
         `/noodle/noodler/accounts/${encodeURIComponent(accountId!)}/subscribers`,
-      ),
+      ).then((page) => page.items),
     enabled: Boolean(accountId),
     staleTime: 10_000,
   });
@@ -648,10 +650,36 @@ export function useLoadNoodlerPostImage() {
 export function useNoodlerViewer(personaId: string | null, enabled = true) {
   return useQuery({
     queryKey: noodleKeys.viewer(personaId ?? "none"),
-    queryFn: () =>
-      api.get<NoodlerViewerScope>(
-        `/noodle/noodler/viewer?personaId=${encodeURIComponent(personaId!)}`,
-      ),
+    queryFn: async () => {
+      const encodedPersonaId = encodeURIComponent(personaId!);
+      const [scope, feed] = await Promise.all([
+        api.get<NoodlerViewerScope>(
+          `/noodle/noodler/viewer?personaId=${encodedPersonaId}`,
+        ),
+        api.get<{
+          items: Array<{
+            creatorAccountId: string;
+            post: NoodlerViewerScope["creators"][number]["posts"][number];
+          }>;
+        }>(`/noodle/noodler/viewer/feed?personaId=${encodedPersonaId}&tab=all&limit=20`),
+      ]);
+      const postsByCreator = new Map<
+        string,
+        NoodlerViewerScope["creators"][number]["posts"]
+      >();
+      for (const item of feed.items) {
+        const posts = postsByCreator.get(item.creatorAccountId) ?? [];
+        posts.push(item.post);
+        postsByCreator.set(item.creatorAccountId, posts);
+      }
+      return {
+        ...scope,
+        creators: scope.creators.map((creator) => ({
+          ...creator,
+          posts: postsByCreator.get(creator.profile.id) ?? [],
+        })),
+      };
+    },
     enabled: enabled && Boolean(personaId),
     staleTime: 10_000,
   });
@@ -722,9 +750,12 @@ export function useToggleNoodlerSubscription() {
       // Cancel any in-flight viewer poll first, or it can land after us and restore the stale scope.
       await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
       qc.setQueryData(noodleKeys.viewer(input.personaId), scope);
-      return qc.invalidateQueries({
-        queryKey: noodleKeys.noodlerSubscribers(input.creatorAccountId),
-      });
+      return Promise.all([
+        qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
+        qc.invalidateQueries({
+          queryKey: noodleKeys.noodlerSubscribers(input.creatorAccountId),
+        }),
+      ]);
     },
   });
 }
@@ -751,6 +782,7 @@ export function useToggleNoodlerFollow() {
     onSuccess: async (scope, input) => {
       await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
       qc.setQueryData(noodleKeys.viewer(input.personaId), scope);
+      await qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) });
     },
   });
 }
@@ -773,6 +805,7 @@ export function useUnlockNoodlerPost() {
       // Cancel any in-flight viewer poll first, or it can land after us and restore the locked scope.
       await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
       qc.setQueryData(noodleKeys.viewer(input.personaId), scope);
+      await qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) });
     },
   });
 }
