@@ -218,8 +218,9 @@ const SOCIAL_SETTINGS_SECTIONS: Record<
     { id: "advanced", labelKey: "ui.noodle.socialsettings.advanced" },
   ],
   noodler: [
+    // Publishing folded into General: General held one control, and an unknown section falls back
+    // to General below, so an old `timeline` deep link lands where its content now lives.
     { id: "general", labelKey: "ui.noodle.socialsettings.general" },
-    { id: "timeline", labelKey: "ui.noodle.socialsettings.publishing" },
     { id: "creators", labelKey: "ui.noodle.socialsettings.creatorProfiles" },
     { id: "participants", labelKey: "ui.noodle.socialsettings.audience" },
     { id: "advanced", labelKey: "ui.noodle.socialsettings.advanced" },
@@ -5274,7 +5275,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
           {settings.enableNoodler && (
             <Section
               visible={
-                settingsTab === "noodler" && settingsSection === "timeline"
+                settingsTab === "noodler" && settingsSection === "general"
               }
               accent={NOODLE_PINK}
               title={localizeUi("ui.noodle.socialsettings.publishing")}
@@ -5283,7 +5284,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
               <NoodlerPublishingSettings
                 view="publishing"
                 active={
-                  settingsTab === "noodler" && settingsSection === "timeline"
+                  settingsTab === "noodler" && settingsSection === "general"
                 }
               />
             </Section>

@@ -245,4 +245,26 @@ for (const key of [
 }
 assert.match(enLocale["ui.noodle.socialsettings.resetSectionConfirm"], /not touched/iu);
 
+// --- Publishing folded into NoodleR General ---------------------------------
+// NoodleR General held a single control while Publishing sat in its own tab. An unknown section
+// falls back to General, so an old `timeline` deep link lands where the content now lives.
+const noodlerTabList = home.slice(home.indexOf("  noodler: ["), home.indexOf("};", home.indexOf("  noodler: [")));
+assert.doesNotMatch(noodlerTabList, /id: "timeline"/u, "NoodleR must not offer a Publishing tab");
+assert.match(noodlerTabList, /id: "general"/u);
+assert.match(
+  home,
+  /settingsSection === "general"\s*\}\s*accent=\{NOODLE_PINK\}\s*title=\{localizeUi\("ui\.noodle\.socialsettings\.publishing"\)/u,
+  "the Publishing block must render under General",
+);
+assert.match(
+  home,
+  /view="publishing"\s*active=\{\s*settingsTab === "noodler" && settingsSection === "general"/u,
+  "its active flag must follow it, or the panel stays idle",
+);
+// The fallback is what makes an old deep link safe, so it must stay.
+assert.match(
+  home,
+  /\.some\(\(section\) => section\.id === requestedSettingsSection\)\s*\?\s*requestedSettingsSection\s*:\s*"general";/u,
+);
+
 console.log("Noodle settings structure regressions passed.");
