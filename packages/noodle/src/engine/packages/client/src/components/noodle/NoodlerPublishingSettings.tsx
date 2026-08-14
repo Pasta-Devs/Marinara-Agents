@@ -17,7 +17,14 @@ import {
 } from "../../hooks/use-noodle";
 import { useConnections } from "../../hooks/use-connections";
 import { showConfirmDialog } from "../../lib/app-dialogs";
+import { cn } from "../../lib/utils";
 import { Avatar } from "./NoodleShell";
+import {
+  NOODLER_ACTIVITY_PRESETS,
+  noodlerActivityPresetPatch,
+  noodlerPostsPerDayForPreset,
+  type NoodlerActivityPreset,
+} from "./noodler-activity-presets";
 import { summarizeRefreshOutcomes } from "./noodle-auto-post";
 import {
   NOODLER_POSTS_PER_DAY_MAX,
@@ -331,11 +338,46 @@ export function NoodlerPublishingSettings({ active, view, onOpenCreator }: Noodl
             className="h-5 w-5 accent-[var(--noodle-accent)]"
           />
         </label>
-        <label className="block max-w-40 space-y-1 text-xs font-semibold">
-          <span className="block text-[var(--muted-foreground)]">
-            {t("ui.noodle.noodlerschedulemanagermodal.postsPerDay")}
+        {/* Presets first: they are the vocabulary onboarding teaches and the feed's quieter action
+            uses. The exact number stays reachable for anyone who wants a pace between presets. */}
+        <div className="space-y-2">
+          <span className="block text-xs font-semibold text-[var(--muted-foreground)]">
+            {t("ui.noodle.noodlerschedulemanagermodal.pace")}
           </span>
-          <BoundedNumberInput
+          <div className="flex flex-wrap gap-2">
+            {NOODLER_ACTIVITY_PRESETS.filter((preset) => preset !== "manual").map((preset) => {
+              const pace = noodlerPostsPerDayForPreset(preset as Exclude<NoodlerActivityPreset, "manual">);
+              const isSelectedPace = settings?.postsPerDay === pace;
+              return (
+                <button
+                  key={preset}
+                  type="button"
+                  disabled={updateSettings.isPending || !settings}
+                  onClick={() =>
+                    updateSettings.mutate(noodlerActivityPresetPatch(preset), { onError: toastToggleFailure })
+                  }
+                  className={cn(
+                    "min-h-9 rounded-md border px-3 text-xs font-semibold transition-colors disabled:opacity-40",
+                    isSelectedPace
+                      ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]"
+                      : "border-[var(--border)] hover:bg-[var(--accent)]",
+                  )}
+                >
+                  {t(`ui.noodle.noodlerwizard.activityChoice.${preset}.title`)}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <details className="text-xs">
+          <summary className="cursor-pointer font-semibold text-[var(--muted-foreground)]">
+            {t("ui.noodle.noodlerschedulemanagermodal.exactNumber")}
+          </summary>
+          <label className="mt-2 block max-w-40 space-y-1 text-xs font-semibold">
+            <span className="block text-[var(--muted-foreground)]">
+              {t("ui.noodle.noodlerschedulemanagermodal.postsPerDay")}
+            </span>
+            <BoundedNumberInput
             value={settings?.postsPerDay ?? 8}
             min={1}
             max={NOODLER_POSTS_PER_DAY_MAX}
@@ -355,8 +397,9 @@ export function NoodlerPublishingSettings({ active, view, onOpenCreator }: Noodl
                 },
               )
             }
-          />
-        </label>
+            />
+          </label>
+        </details>
         {/* Counters read as authoritative, so a cold or failed status query must not render as zero. */}
         {statusQuery.isError ? (
           <p className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted-foreground)]">

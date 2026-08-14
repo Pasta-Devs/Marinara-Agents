@@ -42,9 +42,12 @@ export const NOODLER_MEDIA_URL_PREFIX = "/api/noodle/noodler/posts/";
 export function noodlerPostMediaUrlForPersona(
   imageUrl: string | null,
   personaId: string,
+  variant: "locked" | "original",
 ): string | null {
   if (!imageUrl?.startsWith(NOODLER_MEDIA_URL_PREFIX)) return imageUrl;
-  return `${imageUrl}?personaId=${encodeURIComponent(personaId)}`;
+  // `variant` partitions the browser cache only. The media route derives access from the
+  // persona on every request and never trusts this caller-provided label for authorization.
+  return `${imageUrl}?personaId=${encodeURIComponent(personaId)}&variant=${variant}`;
 }
 
 /**

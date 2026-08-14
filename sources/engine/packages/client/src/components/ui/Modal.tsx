@@ -3,7 +3,7 @@
 // Uses CSS animations instead of framer-motion to
 // avoid double-animation under React.StrictMode.
 // ──────────────────────────────────────────────
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type Ref } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode, type Ref } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import {
@@ -28,7 +28,13 @@ interface ModalProps {
   panelClassName?: string;
   /** Optional feature-local style variables applied to the full panel. */
   panelStyle?: CSSProperties;
+  /** Prevent every dismissal path while an action is in progress. */
+  closeDisabled?: boolean;
+  /** Optional classes for the scroll area. */
+  contentClassName?: string;
 }
+
+export const ModalPortalContext = createContext<Element | null>(null);
 
 export function Modal({
   open,
@@ -41,7 +47,10 @@ export function Modal({
   mobileFullscreen = false,
   panelClassName,
   panelStyle,
+  closeDisabled = false,
+  contentClassName,
 }: ModalProps) {
+  const portalContainer = useContext(ModalPortalContext);
   const overlayRef = useRef<HTMLDivElement>(null);
   // Track mounted state separately so we can play the exit animation
   // before actually removing the DOM nodes.
@@ -75,13 +84,13 @@ export function Modal({
 
   // Close on Escape
   useEffect(() => {
-    if (!open) return;
+    if (!open || closeDisabled) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [open, onClose]);
+  }, [closeDisabled, open, onClose]);
 
   // Remove from DOM after exit animation completes
   const handleAnimationEnd = () => {
@@ -127,7 +136,7 @@ export function Modal({
       }}
       onTransitionEnd={handleAnimationEnd}
       onClick={(e) => {
-        if (e.target === overlayRef.current) onClose();
+        if (!closeDisabled && e.target === overlayRef.current) onClose();
       }}
     >
       {/* Backdrop */}
@@ -158,7 +167,10 @@ export function Modal({
           <h2 className={NEUTRAL_PANEL_TITLE}>{title}</h2>
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => {
+              if (!closeDisabled) onClose();
+            }}
+            disabled={closeDisabled}
             className="rounded-lg p-1.5 text-[var(--marinara-chat-chrome-panel-muted)] transition-colors hover:bg-[var(--marinara-chat-chrome-highlight-bg-hover)] hover:text-[var(--marinara-chat-chrome-highlight-text)]"
           >
             <X size="1rem" />
@@ -168,12 +180,12 @@ export function Modal({
         {/* Content */}
         <div
           ref={contentRef}
-          className={`min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 ${NEUTRAL_PANEL_SCROLL_AREA}`}
+          className={`min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 ${NEUTRAL_PANEL_SCROLL_AREA} ${contentClassName ?? ""}`}
         >
           {children}
         </div>
       </div>
     </div>,
-    document.body,
+    portalContainer ?? document.body,
   );
 }

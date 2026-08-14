@@ -323,7 +323,7 @@ export function LockedNoodlerPostCard({
             className="flex min-h-16 w-full items-center gap-3 px-1 py-3 text-left hover:bg-[var(--accent)] disabled:opacity-50"
           >
             <Eye size={20} className="shrink-0 text-[var(--noodle-accent)]" />
-            <span>
+            <span className="min-w-0 flex-1">
               <span className="block text-sm font-bold">
                 {localizeUi("ui.noodle.unlocksheet.unlockThisPost")}
               </span>
@@ -331,6 +331,7 @@ export function LockedNoodlerPostCard({
                 {localizeUi("ui.noodle.unlocksheet.unlockThisPostDetail")}
               </span>
             </span>
+            <NoodlerFictionalPrice amount={noodlerUnlockPriceOf(post)} />
           </button>
           <button
             type="button"
@@ -346,7 +347,7 @@ export function LockedNoodlerPostCard({
             className="flex min-h-16 w-full items-center gap-3 px-1 py-3 text-left hover:bg-[var(--accent)] disabled:opacity-50"
           >
             <Bell size={20} className="shrink-0 text-[var(--noodle-accent)]" />
-            <span>
+            <span className="min-w-0 flex-1">
               <span className="block text-sm font-bold">
                 {localizeUi("ui.noodle.unlocksheet.subscribe")}
               </span>
@@ -354,10 +355,42 @@ export function LockedNoodlerPostCard({
                 {localizeUi("ui.noodle.unlocksheet.subscribeDetail")}
               </span>
             </span>
+            <NoodlerFictionalPrice amount={noodlerSubscriptionPriceOf(profile)} />
           </button>
         </div>
       </Modal>
     </article>
+  );
+}
+
+/**
+ * Fictional prices, presentation only. Nothing is debited, no balance is shown, and access is
+ * never gated on funds — so the label carries its own hint saying exactly that, rather than
+ * letting a currency symbol imply an economy that does not exist.
+ */
+const NOODLER_DEFAULT_UNLOCK_PRICE = 1;
+const NOODLER_DEFAULT_SUBSCRIPTION_PRICE = 5;
+
+/** The server sends these alongside the shared view types, which have no price fields. */
+function noodlerUnlockPriceOf(post: unknown): number {
+  const price = (post as { unlockPrice?: unknown } | null)?.unlockPrice;
+  return typeof price === "number" && price >= 0 ? price : NOODLER_DEFAULT_UNLOCK_PRICE;
+}
+
+function noodlerSubscriptionPriceOf(profile: unknown): number {
+  const price = (profile as { subscriptionPrice?: unknown } | null)?.subscriptionPrice;
+  return typeof price === "number" && price >= 0 ? price : NOODLER_DEFAULT_SUBSCRIPTION_PRICE;
+}
+
+function NoodlerFictionalPrice({ amount }: { amount: number }) {
+  const { t: localizeUi } = useUiTranslation();
+  return (
+    <span
+      title={localizeUi("ui.noodle.unlocksheet.priceHint")}
+      className="shrink-0 cursor-help rounded-full border border-dashed border-[var(--noodle-divider)] px-2 py-0.5 text-xs font-bold text-[var(--muted-foreground)]"
+    >
+      {localizeUi("ui.noodle.unlocksheet.price", { amount })}
+    </span>
   );
 }
 

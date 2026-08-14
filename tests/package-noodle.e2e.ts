@@ -340,37 +340,6 @@ test.describe("package-owned Noodle interface", () => {
           }),
         );
       }, persona.id);
-      await page.goto("/");
-      await openNoodle(page);
-
-      const noodle = page.locator('[data-component="NoodleView"]');
-      await noodle.getByRole("tab", { name: "All creators" }).click();
-      await expect
-        .poll(() =>
-          noodle.evaluate((element) =>
-            getComputedStyle(element)
-              .getPropertyValue("--noodle-accent")
-              .trim(),
-          ),
-        )
-        .toBe("#FF7EC1");
-      const fallback = noodle
-        .locator("[data-noodle-avatar-fallback]:visible")
-        .first();
-      await expect(fallback).toHaveCSS("color", NOODLER_PINK_RGB);
-
-      const activePost = noodle.locator(`[data-noodle-post-id="${post.id}"]`);
-      const activeComment = activePost.locator(
-        `[data-noodle-interaction-id="${comment.id}"]`,
-      );
-      await expect(activeComment).toBeVisible();
-      await expect(
-        activeComment.locator("[data-noodle-comment-metadata]"),
-      ).toHaveCSS("color", NOODLER_PINK_RGB);
-      await expect(
-        activeComment.getByRole("button", { name: "Like comment" }),
-      ).toHaveCSS("color", NOODLER_PINK_RGB);
-
       const scopeResponse = await page.request.get(
         `/api/noodle/noodler/viewer?personaId=${encodeURIComponent(persona.id)}`,
       );
@@ -387,8 +356,36 @@ test.describe("package-owned Noodle interface", () => {
       const creator = scope.creators.find(
         (candidate) => candidate.profile.id === stageProfile.id,
       );
-      const postView = creator?.posts.find((candidate) => candidate.id === post.id);
-      expect(postView).toBeTruthy();
+      expect(creator).toBeTruthy();
+      const postView = {
+        id: post.id,
+        authorAccountId: stageProfile.id,
+        access: "public",
+        locked: false,
+        title: null,
+        content: `NoodleR accent regression post ${Date.now()}`,
+        hasImage: false,
+        imageUrl: null,
+        imagePrompt: null,
+        metadata: null,
+        unlockPrice: null,
+        createdAt: new Date().toISOString(),
+        interactions: [
+          {
+            ...comment,
+            postId: post.id,
+            parentInteractionId: null,
+            actorAccountId: persona.id,
+            type: "reply",
+            content: "NoodleR pink comment controls.",
+            imageUrl: null,
+            actorSnapshot: null,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        likeCount: 0,
+        replyCount: 1,
+      };
       const future = Date.now() + 60_000;
       const fakeScope = {
         viewer: scope.viewer,
@@ -405,12 +402,70 @@ test.describe("package-owned Noodle interface", () => {
           },
         ],
       };
-      await page.route("**/api/noodle/noodler/viewer?personaId=*", (route) =>
+      await page.route("**/api/noodle/noodler/viewer/feed?*", async (route) => {
+        const requestUrl = new URL(route.request().url());
+        if (requestUrl.searchParams.get("personaId") !== persona.id) {
+          await route.continue();
+          return;
+        }
+        const feedItems = fakeScope.creators[0]?.posts.map((post) => ({
+          creatorAccountId: creator!.profile.id,
+          post,
+        })) ?? [];
+        const limit = Number(requestUrl.searchParams.get("limit") ?? "20");
+        const cursorAt = requestUrl.searchParams.get("cursorAt");
+        const cursorId = requestUrl.searchParams.get("cursorId");
+        const start = cursorAt && cursorId
+          ? feedItems.findIndex(
+              (item) => item.post.createdAt === cursorAt && item.post.id === cursorId,
+            ) + 1
+          : 0;
+        const items = feedItems.slice(start, start + limit);
+        const last = items.at(-1);
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            items,
+            total: feedItems.length,
+            nextCursor:
+              start + items.length < feedItems.length && last
+                ? { createdAt: last.post.createdAt, id: last.post.id }
+                : null,
+          }),
+        });
+      });
+      await page.route("**/api/noodle/noodler/viewer?*", (route) =>
         route.fulfill({
           status: 200,
           contentType: "application/json",
           body: JSON.stringify(fakeScope),
         }),
+      );
+
+      await page.goto("/");
+      await openNoodle(page);
+      const noodle = page.locator('[data-component="NoodleView"]');
+      await noodle.getByRole("tab", { name: "All creators" }).click();
+      await expect
+        .poll(() =>
+          noodle.evaluate((element) =>
+            getComputedStyle(element).getPropertyValue("--noodle-accent").trim(),
+          ),
+        )
+        .toBe("#FF7EC1");
+      const fallback = noodle.locator("[data-noodle-avatar-fallback]:visible").first();
+      await expect(fallback).toHaveCSS("color", NOODLER_PINK_RGB);
+      const activePost = noodle.locator(`[data-noodle-post-id="${post.id}"]`);
+      const activeComment = activePost.locator(`[data-noodle-interaction-id="${comment.id}"]`);
+      await expect(activeComment).toBeVisible();
+      await expect(activeComment.locator("[data-noodle-comment-metadata]")).toHaveCSS(
+        "color",
+        NOODLER_PINK_RGB,
+      );
+      await expect(activeComment.getByRole("button", { name: "Like comment" })).toHaveCSS(
+        "color",
+        NOODLER_PINK_RGB,
       );
 
       await setStoredTheme(page, "light");
@@ -694,9 +749,11 @@ test.describe("package-owned Noodle interface", () => {
       await noodle
         .getByRole("button", { name: "Settings", exact: true })
         .click();
-      await noodle
-        .getByRole("button", { name: "Timeline", exact: true })
-        .click();
+      const noodleProductTab = noodle.getByRole("tab", { name: "Noodle", exact: true });
+      await expect(noodleProductTab).toBeVisible();
+      await noodleProductTab.click();
+      const imagesSection = noodle.getByRole("button", { name: "Images", exact: true });
+      await imagesSection.click();
 
       const imageLimitInput = noodle
         .locator("label")
@@ -747,9 +804,11 @@ test.describe("package-owned Noodle interface", () => {
       await reloadedNoodle
         .getByRole("button", { name: "Settings", exact: true })
         .click();
-      await reloadedNoodle
-        .getByRole("button", { name: "Timeline", exact: true })
-        .click();
+      const reloadedNoodleProductTab = reloadedNoodle.getByRole("tab", { name: "Noodle", exact: true });
+      await expect(reloadedNoodleProductTab).toBeVisible();
+      await reloadedNoodleProductTab.click();
+      const reloadedImagesSection = reloadedNoodle.getByRole("button", { name: "Images", exact: true });
+      await reloadedImagesSection.click();
       await expect(
         reloadedNoodle
           .locator("label")
@@ -833,7 +892,8 @@ test.describe("package-owned Noodle interface", () => {
           carryoverMaxItems: initial.settings.carryoverMaxItems,
           refreshesPerDay: initial.settings.refreshesPerDay,
         },
-      });
+        timeout: 5_000,
+      }).catch(() => undefined);
     }
   });
 

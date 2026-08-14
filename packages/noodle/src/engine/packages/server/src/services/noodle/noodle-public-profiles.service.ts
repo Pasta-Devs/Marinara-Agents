@@ -53,9 +53,10 @@ export async function pickRandomCharacterBannerUrl(
 }
 
 /**
- * Only OPEN inherits the literal source photo — the same picture would out a hinted creator on
- * sight, which is exactly what hinted promises never to do. Hinted and secret both get null here
- * and pick up freshly generated artwork instead (see backfillNextNoodlerCreatorArtwork): hinted
+ * Only OPEN inherits the literal source photo — republishing the source's actual image file is a
+ * copy, not a stage presence, and a hinted creator is a separate account keeping up appearances
+ * rather than the same profile twice. Hinted and secret both get null here and pick up freshly
+ * generated artwork instead (see backfillNextNoodlerCreatorArtwork): hinted
  * generates through the appearance-referenced pipeline so it still looks like the same person
  * without being the same photo, secret gets no reference material at all.
  */

@@ -12,6 +12,7 @@ import { logger } from "../../lib/logger.js";
 import { newId } from "../../utils/id-generator.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createNoodleStorage } from "../storage/noodle.storage.js";
+import { noodlerUnlockPriceMetadata } from "./noodler-prices.js";
 import { generateNoodlerPost } from "./noodle-noodler-generation.service.js";
 import type { NoodlerContentFormat } from "./noodle-noodler-generation.service.js";
 import type { ConnectionAdmissionMode } from "../generation/connection-admission.js";
@@ -297,7 +298,10 @@ export async function createNoodlerPost(
                 content: pendingLockedFollowUp.content,
                 source: "manual",
                 access: "locked",
-                metadata: { noodlerContentFormat: "long_form" },
+                metadata: {
+                  noodlerContentFormat: "long_form",
+                  ...noodlerUnlockPriceMetadata(),
+                },
               });
               if (!followUp) return null;
               createdFollowUp = true;
@@ -312,6 +316,8 @@ export async function createNoodlerPost(
               imageUrl: persistedMedia?.imageUrl ?? null,
               metadata: {
                 noodlerContentFormat: input.format ?? "caption",
+                // Stored at creation so an unlock price stays put across refreshes and edits.
+                ...(input.access === "locked" ? noodlerUnlockPriceMetadata() : {}),
                 ...(lockedFollowUpPostId
                   ? { noodlerLockedFollowUpPostId: lockedFollowUpPostId }
                   : {}),
