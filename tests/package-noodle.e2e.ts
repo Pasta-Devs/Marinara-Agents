@@ -1788,7 +1788,6 @@ test.describe("package-owned Noodle interface", () => {
         );
         expect(personaResponse.ok()).toBe(true);
         const createdPersona = (await personaResponse.json()) as { id: string };
-        personaId = createdPersona.id;
         createdPersonaId = createdPersona.id;
         const activateResponse = await page.request.put(
           `/api/characters/personas/${createdPersona.id}/activate`,
