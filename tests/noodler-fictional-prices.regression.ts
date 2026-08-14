@@ -34,6 +34,11 @@ const storage = readFileSync(
   "packages/noodle/src/engine/packages/server/src/services/storage/noodle.storage.ts",
   "utf8",
 );
+const fanInteraction = storage.slice(
+  storage.indexOf("async createNoodlerFanInteraction("),
+  storage.indexOf("async deleteNoodlerInteraction("),
+);
+assert.match(fanInteraction, /postRow\.access !== "public" && postRow\.access !== "locked"/u);
 
 // No affordability gate and no debit on either path.
 assert.doesNotMatch(storage, /wallet\.coins < NOODLER_(UNLOCK|SUBSCRIPTION)_COST/u, "access must never be gated on funds");

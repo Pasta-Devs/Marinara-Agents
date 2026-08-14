@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-14T09:28:43.134Z",
+  "generatedAt": "2026-08-14T15:39:07.688Z",
   "packages": [
     {
       "manifest": {
@@ -996,7 +996,7 @@
         "schemaVersion": 1,
         "id": "noodle",
         "name": "Noodle",
-        "version": "1.0.10",
+        "version": "1.0.13",
         "description": "Explore the Noodle public timeline and the NoodleR creator-and-fan roleplay feed as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
         "localizations": {
           "de": {
@@ -1057,13 +1057,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "33436549df031c3d73a5c40e4d22a456068e1ec05a65e970511358b82dab1727",
-            "bytes": 2481456
+            "sha256": "2b60e3fec4c1dff261bd8d86149c1db91221a8261667da2844fca981dde7952e",
+            "bytes": 2425567
           },
           {
             "path": "client.js",
-            "sha256": "732dabbd4ffa79eed6b222f511ac81aac4bac0675422354b8af71af83bebf11d",
-            "bytes": 2544223
+            "sha256": "ff01677d82261a392374c34a3a47145bd92be65875759fa6de0ac189dc8e584c",
+            "bytes": 2488856
           },
           {
             "path": "noodle-klusek.png",
@@ -1089,9 +1089,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.0.10.zip",
-        "sha256": "988f0178da5d5978dc57b0d1b0402f7a8ff75fcdb6d6863375f4b8fb9096bbb5",
-        "bytes": 1265107
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.0.13.zip",
+        "sha256": "b363ebafbea44c2bc2c7238500e4591b1007e1311b9dc2d6d96935dcc79613ea",
+        "bytes": 1248036
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },
