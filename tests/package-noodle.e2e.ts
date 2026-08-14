@@ -790,7 +790,7 @@ test.describe("package-owned Noodle interface", () => {
         .getByRole("button", { name: "Settings", exact: true })
         .click();
       await reloadedNoodle
-        .getByRole("button", { name: "Timeline", exact: true })
+        .getByRole("button", { name: "Images", exact: true })
         .click();
       await expect(
         reloadedNoodle
@@ -875,7 +875,8 @@ test.describe("package-owned Noodle interface", () => {
           carryoverMaxItems: initial.settings.carryoverMaxItems,
           refreshesPerDay: initial.settings.refreshesPerDay,
         },
-      });
+        timeout: 5_000,
+      }).catch(() => undefined);
     }
   });
 
