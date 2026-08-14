@@ -66,6 +66,23 @@ for (const relativePath of hierarchicalMapsOwnedSourcePaths) {
   }
 }
 
+const slurpOwnedSourcePaths = [
+  "packages/client/src/components/slurp",
+  "packages/client/src/hooks/use-slurp.ts",
+  "packages/client/src/slurp-package-entry.tsx",
+  "packages/client/src/stores/slurp-package.store.ts",
+  "packages/server/src/db/schema/slurp.ts",
+  "packages/server/src/routes/slurp.routes.ts",
+  "packages/server/src/services/slurp",
+  "packages/server/src/services/storage/slurp.storage.ts",
+];
+for (const relativePath of slurpOwnedSourcePaths) {
+  const packageOwnedPath = join(repoRoot, "packages/slurp/src/engine", relativePath);
+  if (!existsSync(packageOwnedPath)) {
+    throw new Error(`Slurp package source is missing: ${relativePath}`);
+  }
+}
+
 const longTermMemorySourceRoot = join(repoRoot, "packages/long-term-memory/src/engine");
 const longTermMemoryBoundary = await assertPackagePrivateImportBoundary({
   sourceRoot: longTermMemorySourceRoot,
@@ -336,6 +353,43 @@ for (const entry of catalog.packages) {
         localization.homeBrowserTab.ariaLabel === manifest.contributions?.homeBrowserTab?.ariaLabel
       ) {
         throw new Error(`Noodle ${locale} must not copy untranslated English display metadata`);
+      }
+    }
+  }
+  if (manifest.id === "slurp") {
+    const expectedLocales = ["de", "ko", "pl"];
+    const actualLocales = Object.keys(manifest.localizations ?? {}).sort();
+    if (JSON.stringify(actualLocales) !== JSON.stringify(expectedLocales)) {
+      throw new Error(`Slurp must provide maintained display metadata for ${expectedLocales.join(", ")}`);
+    }
+    for (const locale of expectedLocales) {
+      const localization = manifest.localizations[locale];
+      if (
+        !localization ||
+        JSON.stringify(Object.keys(localization).sort()) !==
+          JSON.stringify(["description", "homeBrowserTab", "name"])
+      ) {
+        throw new Error(`Slurp ${locale} must contain only package and Home tab display metadata`);
+      }
+      if (
+        JSON.stringify(Object.keys(localization.homeBrowserTab ?? {}).sort()) !==
+        JSON.stringify(["ariaLabel", "label"])
+      ) {
+        throw new Error(`Slurp ${locale} must localize its Home tab label and accessibility label`);
+      }
+      assertLocalizedField(localization.name, 120, `Slurp ${locale} name`);
+      assertLocalizedField(localization.description, 2_000, `Slurp ${locale} description`);
+      assertLocalizedField(localization.homeBrowserTab.label, 40, `Slurp ${locale} Home tab label`);
+      assertLocalizedField(
+        localization.homeBrowserTab.ariaLabel,
+        100,
+        `Slurp ${locale} Home tab accessibility label`,
+      );
+      if (
+        localization.description === manifest.description ||
+        localization.homeBrowserTab.ariaLabel === manifest.contributions?.homeBrowserTab?.ariaLabel
+      ) {
+        throw new Error(`Slurp ${locale} must not copy untranslated English display metadata`);
       }
     }
   }
@@ -641,8 +695,8 @@ if (JSON.stringify(guidanceIds) !== JSON.stringify([...ids].sort())) {
 
 const agentOnly = catalog.packages.filter((entry) => !entry.manifest.entrypoints.server).length;
 const features = catalog.packages.length - agentOnly;
-if (catalog.packages.length !== 32 || agentOnly !== 22 || features !== 10) {
-  throw new Error(`Expected 22 agents and 10 features, found ${agentOnly} and ${features}`);
+if (catalog.packages.length !== 33 || agentOnly !== 22 || features !== 11) {
+  throw new Error(`Expected 22 agents and 11 features, found ${agentOnly} and ${features}`);
 }
 console.log(`Catalog valid: ${catalog.packages.length} packages (${agentOnly} agents, ${features} features).`);
 console.log(
