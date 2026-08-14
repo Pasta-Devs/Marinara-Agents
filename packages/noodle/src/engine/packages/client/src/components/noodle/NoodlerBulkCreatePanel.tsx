@@ -59,6 +59,10 @@ const clampPostsPerDay = (raw: string) =>
   );
 
 const DISCLOSURES: NoodleIdentityDisclosure[] = ["open", "hinted", "secret"];
+const DEFAULT_ACTIVITY_PATCH = noodlerActivityPresetPatch(
+  NOODLER_DEFAULT_ACTIVITY_PRESET,
+);
+const DEFAULT_POSTS_PER_DAY = DEFAULT_ACTIVITY_PATCH.postsPerDay!;
 
 // The intro uses the real locked post card for a staged walkthrough. Mari is demonstrating
 // the interaction, so the example stays independent from the identity choice above.
@@ -138,10 +142,12 @@ export function NoodlerOnboardingWizard({
     Record<string, NoodleIdentityDisclosure>
   >({});
   const [autoPostingEnabled, setAutoPostingEnabled] = useState(true);
-  const [postsPerDay, setPostsPerDay] = useState(8);
+  const [postsPerDay, setPostsPerDay] = useState(DEFAULT_POSTS_PER_DAY);
   // Typed value kept apart from the committed one: clamping per keystroke made the first digit
   // of a two-digit pace snap back to 1, and the field impossible to clear.
-  const [postsPerDayDraft, setPostsPerDayDraft] = useState("8");
+  const [postsPerDayDraft, setPostsPerDayDraft] = useState(
+    String(DEFAULT_POSTS_PER_DAY),
+  );
   const [nightQuiet, setNightQuiet] = useState(true);
   const [imagesEnabled, setImagesEnabled] = useState(false);
   const [generateNow, setGenerateNow] = useState(true);
@@ -183,6 +189,8 @@ export function NoodlerOnboardingWizard({
     setSetupLane(selectionOnly ? "easy" : null);
     setPostExplored(false);
     setActivityChoice(NOODLER_DEFAULT_ACTIVITY_PRESET);
+    setPostsPerDay(DEFAULT_POSTS_PER_DAY);
+    setPostsPerDayDraft(String(DEFAULT_POSTS_PER_DAY));
     setSelected(new Set());
     setSelectionInitialized(false);
     setSettingsSeeded(false);

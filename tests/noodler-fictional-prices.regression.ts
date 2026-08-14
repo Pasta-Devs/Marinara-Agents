@@ -61,7 +61,7 @@ assert.match(routes, /metadata: locked \? null : post\.metadata,/u);
 assert.match(routes, /unlockPrice: locked \? noodlerUnlockPriceFromMetadata\(post\.metadata\) : null,/u);
 assert.match(routes, /subscriptionPrice: NOODLER_SUBSCRIPTION_COST,/u);
 // The unlock route must not start reading the price back and re-deriving a check from it.
-const unlockRoute = routes.slice(routes.indexOf('"/noodler/posts/:postId/unlock"'));
+const unlockRoute = routes.slice(routes.indexOf('"/noodler/posts/:id/unlock"'));
 assert.doesNotMatch(unlockRoute.slice(0, 1500), /unlockPrice|wallet/u);
 
 const card = readFileSync(

@@ -17,8 +17,9 @@ export function isNoodlerPostAfterCursor(
   row: NoodlerPostSortKey,
   cursor: NoodlerPostSortKey,
 ): boolean {
+  const createdAt = row.createdAt.localeCompare(cursor.createdAt);
   return (
-    row.createdAt.localeCompare(cursor.createdAt) < 0 ||
-    (row.createdAt === cursor.createdAt && row.id.localeCompare(cursor.id) < 0)
+    createdAt < 0 ||
+    (createdAt === 0 && row.id.localeCompare(cursor.id) < 0)
   );
 }

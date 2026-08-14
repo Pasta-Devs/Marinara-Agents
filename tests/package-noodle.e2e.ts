@@ -411,14 +411,27 @@ test.describe("package-owned Noodle interface", () => {
         const feedItems = fakeScope.creators[0]?.posts.map((post) => ({
           creatorAccountId: creator!.profile.id,
           post,
-        }));
-        route.fulfill({
+        })) ?? [];
+        const limit = Number(requestUrl.searchParams.get("limit") ?? "20");
+        const cursorAt = requestUrl.searchParams.get("cursorAt");
+        const cursorId = requestUrl.searchParams.get("cursorId");
+        const start = cursorAt && cursorId
+          ? feedItems.findIndex(
+              (item) => item.post.createdAt === cursorAt && item.post.id === cursorId,
+            ) + 1
+          : 0;
+        const items = feedItems.slice(start, start + limit);
+        const last = items.at(-1);
+        await route.fulfill({
           status: 200,
           contentType: "application/json",
           body: JSON.stringify({
-            items: feedItems,
-            total: feedItems?.length ?? 0,
-            nextCursor: null,
+            items,
+            total: feedItems.length,
+            nextCursor:
+              start + items.length < feedItems.length && last
+                ? { createdAt: last.post.createdAt, id: last.post.id }
+                : null,
           }),
         });
       });
@@ -737,11 +750,9 @@ test.describe("package-owned Noodle interface", () => {
         .getByRole("button", { name: "Settings", exact: true })
         .click();
       const noodleProductTab = noodle.getByRole("tab", { name: "Noodle", exact: true });
+      await expect(noodleProductTab).toBeVisible();
+      await noodleProductTab.click();
       const imagesSection = noodle.getByRole("button", { name: "Images", exact: true });
-      await expect(noodleProductTab.or(imagesSection)).toBeVisible();
-      if (await noodleProductTab.isVisible().catch(() => false)) {
-        await noodleProductTab.click();
-      }
       await imagesSection.click();
 
       const imageLimitInput = noodle
@@ -794,11 +805,9 @@ test.describe("package-owned Noodle interface", () => {
         .getByRole("button", { name: "Settings", exact: true })
         .click();
       const reloadedNoodleProductTab = reloadedNoodle.getByRole("tab", { name: "Noodle", exact: true });
+      await expect(reloadedNoodleProductTab).toBeVisible();
+      await reloadedNoodleProductTab.click();
       const reloadedImagesSection = reloadedNoodle.getByRole("button", { name: "Images", exact: true });
-      await expect(reloadedNoodleProductTab.or(reloadedImagesSection)).toBeVisible();
-      if (await reloadedNoodleProductTab.isVisible().catch(() => false)) {
-        await reloadedNoodleProductTab.click();
-      }
       await reloadedImagesSection.click();
       await expect(
         reloadedNoodle

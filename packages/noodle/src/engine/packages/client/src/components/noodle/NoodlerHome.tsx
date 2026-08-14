@@ -256,13 +256,16 @@ function toManagedPostCardModel(post: NoodlerManagedPost, profile: NoodlerStageP
   };
 }
 
-const DISCLOSURE_OPTIONS: Array<{
+type DisclosureOption = {
   value: NoodleIdentityDisclosure;
   label: string;
   shortLabel: string;
   detail: string;
   guidance: string;
-}> = [
+};
+
+function disclosureOptions(t: ReturnType<typeof useUiTranslation>["t"]): DisclosureOption[] {
+  return [
   {
     value: "open",
     label: "Linked identity",
@@ -272,10 +275,10 @@ const DISCLOSURE_OPTIONS: Array<{
   },
   {
     value: "hinted",
-    label: "Open secret",
-    shortLabel: "Hinted",
-    detail: "The same person under a stage name. Regulars are meant to work it out.",
-    guidance: "Appearance, interests, routines, selected life details, and enabled source image references may carry over. The exact source name and handle are never written, and a guess is never confirmed. This is not anonymity.",
+    label: t("ui.noodle.disclosure.hinted.label"),
+    shortLabel: t("ui.noodle.disclosure.hinted.shortLabel"),
+    detail: t("ui.noodle.disclosure.hinted.detail"),
+    guidance: t("ui.noodle.disclosure.hinted.guidance"),
   },
   {
     value: "secret",
@@ -284,7 +287,8 @@ const DISCLOSURE_OPTIONS: Array<{
     detail: "Create a genuinely separate identity with no public connection.",
     guidance: "The AI receives a reduced, non-identifying inspiration brief and avoids distinctive canonical details.",
   },
-];
+  ];
+}
 
 const EMPTY_STAGE_PROFILE: NoodleStageProfileInput = {
   displayName: "",
@@ -1919,6 +1923,7 @@ function StageProfileForm({
   onSave: () => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
+  const disclosureChoices = disclosureOptions(localizeUi);
   const accent = useNoodleAccent();
   const [connectionPickerOpen, setConnectionPickerOpen] = useState(false);
   const [relationshipPickerOpen, setRelationshipPickerOpen] = useState(false);
@@ -1936,7 +1941,7 @@ function StageProfileForm({
     !isGenerating;
   const selectedConnection = connections.find((connection) => connection.id === connectionId) ?? null;
   const selectedDisclosure =
-    DISCLOSURE_OPTIONS.find((option) => option.value === disclosureMode) ?? DISCLOSURE_OPTIONS[0];
+    disclosureChoices.find((option) => option.value === disclosureMode) ?? disclosureChoices[0];
 
   useEffect(() => {
     if (!connectionPickerOpen) return;
@@ -2001,7 +2006,7 @@ function StageProfileForm({
                 : { visibility: "hidden" },
             )}
           >
-            {DISCLOSURE_OPTIONS.map((option) => {
+            {disclosureChoices.map((option) => {
               const isSelected = option.value === disclosureMode;
               return (
                 <button
@@ -2559,6 +2564,7 @@ function DisclosureStep({
   onContinue: () => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
+  const disclosureChoices = disclosureOptions(localizeUi);
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col">
       <div className="px-4 py-5 sm:px-6 @min-[1024px]:py-6">
@@ -2573,7 +2579,7 @@ function DisclosureStep({
           </p>
         )}
         <div className="mt-5 space-y-3">
-          {DISCLOSURE_OPTIONS.map((option) => (
+          {disclosureChoices.map((option) => (
             <button
               key={option.value}
               type="button"
@@ -2771,6 +2777,8 @@ function StageProfileView({
   const [activeTab, setActiveTab] = useState<NoodlerProfileTab>("posts");
   const [revealedManagedPostIds, setRevealedManagedPostIds] = useState<Set<string>>(() => new Set());
   const subscribersQuery = useNoodlerSubscribers(profile.id);
+  const subscribers = subscribersQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const subscriberTotal = subscribersQuery.data?.pages[0]?.total ?? subscribers.length;
   const accent = useNoodleAccent();
   const viewingOwnCreator = Boolean(viewerAccount && profile.noodleAccountId === viewerAccount.id);
   const characterSource = publicSource?.kind === "character" ? publicSource : null;
@@ -2817,9 +2825,9 @@ function StageProfileView({
             action={localizeUi("capabilities.actions.tryAgain")}
             onAction={() => void subscribersQuery.refetch()}
           />
-        ) : (subscribersQuery.data ?? []).length > 0 ? (
+        ) : subscribers.length > 0 ? (
           <div>
-            {(subscribersQuery.data ?? []).map((subscriber) => (
+            {subscribers.map((subscriber) => (
               <div
                 key={subscriber.id}
                 className="flex min-h-16 items-center gap-3 border-b border-[var(--noodle-divider)] px-4 py-3"
@@ -2834,6 +2842,22 @@ function StageProfileView({
                 </time>
               </div>
             ))}
+            {subscribersQuery.hasNextPage && (
+              <div className="flex justify-center p-4">
+                <button
+                  type="button"
+                  onClick={() => void subscribersQuery.fetchNextPage()}
+                  disabled={subscribersQuery.isFetchingNextPage}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--noodle-divider)] px-4 text-sm font-bold hover:bg-[var(--accent)] disabled:opacity-50"
+                >
+                  {subscribersQuery.isFetchingNextPage && <Loader2 size={14} className="animate-spin" />}
+                  {localizeUi("ui.noodle.noodlehome.loadMore", {
+                    visible: subscribers.length,
+                    total: subscriberTotal,
+                  })}
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <EmptyState
@@ -3134,10 +3158,10 @@ function StageProfileView({
           {
             id: "subscribers",
             label: localizeUi("ui.noodle.stageProfile.tabs.subscribers", {
-              count: subscribersQuery.data?.length ?? "…",
+              count: subscribersQuery.data ? subscriberTotal : "…",
             }),
             ariaLabel: localizeUi("ui.noodle.stageProfile.tabs.subscribersAria", {
-              count: subscribersQuery.data?.length ?? localizeUi("ui.noodle.stageProfile.tabs.loading"),
+              count: subscribersQuery.data ? subscriberTotal : localizeUi("ui.noodle.stageProfile.tabs.loading"),
             }),
           },
         ]}

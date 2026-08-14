@@ -97,6 +97,31 @@ export type NoodlerImageConnections = {
   creatorConnectionIds: Record<string, string>;
 };
 
+type NoodlerPageCursor = { createdAt: string; id: string };
+
+function cursorQuery(cursor: NoodlerPageCursor | null): string {
+  return cursor
+    ? `&cursorAt=${encodeURIComponent(cursor.createdAt)}&cursorId=${encodeURIComponent(cursor.id)}`
+    : "";
+}
+
+function mergeNoodlerViewerShell(
+  current: NoodlerViewerScope | undefined,
+  shell: NoodlerViewerScope,
+): NoodlerViewerScope {
+  if (!current) return shell;
+  const currentByCreator = new Map(
+    current.creators.map((creator) => [creator.profile.id, creator]),
+  );
+  return {
+    ...shell,
+    creators: shell.creators.map((creator) => ({
+      ...creator,
+      posts: currentByCreator.get(creator.profile.id)?.posts ?? [],
+    })),
+  };
+}
+
 export function useNoodlerImageConnections(enabled = true) {
   return useQuery({
     queryKey: noodleKeys.noodlerImageConnections(),
@@ -257,12 +282,18 @@ export function useNoodlerPosts(accountId: string | null) {
 }
 
 export function useNoodlerSubscribers(accountId: string | null) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: noodleKeys.noodlerSubscribers(accountId ?? "none"),
-    queryFn: () =>
-      api.get<{ items: NoodlerSubscriber[] }>(
-        `/noodle/noodler/accounts/${encodeURIComponent(accountId!)}/subscribers`,
-      ).then((page) => page.items),
+    initialPageParam: null as NoodlerPageCursor | null,
+    queryFn: ({ pageParam }) =>
+      api.get<{
+        items: NoodlerSubscriber[];
+        total: number;
+        nextCursor: NoodlerPageCursor | null;
+      }>(
+        `/noodle/noodler/accounts/${encodeURIComponent(accountId!)}/subscribers?limit=20${cursorQuery(pageParam)}`,
+      ),
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
     enabled: Boolean(accountId),
     staleTime: 10_000,
   });
@@ -652,22 +683,39 @@ export function useNoodlerViewer(personaId: string | null, enabled = true) {
     queryKey: noodleKeys.viewer(personaId ?? "none"),
     queryFn: async () => {
       const encodedPersonaId = encodeURIComponent(personaId!);
-      const [scope, feed] = await Promise.all([
-        api.get<NoodlerViewerScope>(
-          `/noodle/noodler/viewer?personaId=${encodedPersonaId}`,
-        ),
-        api.get<{
+      type FeedPage = {
+        items: Array<{
+          creatorAccountId: string;
+          post: NoodlerViewerScope["creators"][number]["posts"][number];
+        }>;
+        total: number;
+        nextCursor: NoodlerPageCursor | null;
+      };
+      const scopePromise = api.get<NoodlerViewerScope>(
+        `/noodle/noodler/viewer?personaId=${encodedPersonaId}`,
+      );
+      const feedItems: FeedPage["items"] = [];
+      let cursor: NoodlerPageCursor | null = null;
+      do {
+        const page: FeedPage = await api.get<{
           items: Array<{
             creatorAccountId: string;
             post: NoodlerViewerScope["creators"][number]["posts"][number];
           }>;
-        }>(`/noodle/noodler/viewer/feed?personaId=${encodedPersonaId}&tab=all&limit=20`),
-      ]);
+          total: number;
+          nextCursor: NoodlerPageCursor | null;
+        }>(
+          `/noodle/noodler/viewer/feed?personaId=${encodedPersonaId}&tab=all&limit=20${cursorQuery(cursor)}`,
+        );
+        feedItems.push(...page.items);
+        cursor = page.nextCursor;
+      } while (cursor);
+      const scope = await scopePromise;
       const postsByCreator = new Map<
         string,
         NoodlerViewerScope["creators"][number]["posts"]
       >();
-      for (const item of feed.items) {
+      for (const item of feedItems) {
         const posts = postsByCreator.get(item.creatorAccountId) ?? [];
         posts.push(item.post);
         postsByCreator.set(item.creatorAccountId, posts);
@@ -744,12 +792,14 @@ export function useToggleNoodlerSubscription() {
               personaId,
             },
           ),
-    // Patch the viewer cache with the returned scope instead of refetching the whole feed,
-    // so revealed/re-locked posts flip in place without a reload-and-jump.
+    // The mutation returns a shell without posts. Keep the current feed visible until refetch.
     onSuccess: async (scope, input) => {
       // Cancel any in-flight viewer poll first, or it can land after us and restore the stale scope.
       await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
-      qc.setQueryData(noodleKeys.viewer(input.personaId), scope);
+      qc.setQueryData<NoodlerViewerScope | undefined>(
+        noodleKeys.viewer(input.personaId),
+        (current) => mergeNoodlerViewerShell(current, scope),
+      );
       return Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
         qc.invalidateQueries({
@@ -781,7 +831,10 @@ export function useToggleNoodlerFollow() {
       ),
     onSuccess: async (scope, input) => {
       await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
-      qc.setQueryData(noodleKeys.viewer(input.personaId), scope);
+      qc.setQueryData<NoodlerViewerScope | undefined>(
+        noodleKeys.viewer(input.personaId),
+        (current) => mergeNoodlerViewerShell(current, scope),
+      );
       await qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) });
     },
   });
@@ -804,7 +857,10 @@ export function useUnlockNoodlerPost() {
     onSuccess: async (scope, input) => {
       // Cancel any in-flight viewer poll first, or it can land after us and restore the locked scope.
       await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
-      qc.setQueryData(noodleKeys.viewer(input.personaId), scope);
+      qc.setQueryData<NoodlerViewerScope | undefined>(
+        noodleKeys.viewer(input.personaId),
+        (current) => mergeNoodlerViewerShell(current, scope),
+      );
       await qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) });
     },
   });

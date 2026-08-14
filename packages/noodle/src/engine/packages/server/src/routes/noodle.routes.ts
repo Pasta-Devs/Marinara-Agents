@@ -2212,7 +2212,7 @@ export async function noodleRoutes(app: FastifyInstance) {
     const projected =
       context && creatorVisible
         ? await projectViewerPosts(context, page.items)
-        : new Map<string, NoodlerPostView>();
+        : new Map<string, NoodlerPricedPostView>();
     return {
       items: page.items.map((managed) => ({
         managed,
