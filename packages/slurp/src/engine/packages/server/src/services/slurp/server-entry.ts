@@ -1,14 +1,19 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import { slurpRoutes } from "../../routes/slurp.routes.js";
 
 export async function activate({
+  app,
   api,
 }: {
+  app: FastifyInstance;
   api: {
     registerPrivilegedRoutes(routes: FastifyPluginAsync, options: { prefix: string }): Promise<() => void | Promise<void>>;
   };
 }) {
-  const release = await api.registerPrivilegedRoutes(slurpRoutes, { prefix: "/api/slurp" });
+  const routes: FastifyPluginAsync = async (router) => {
+    await slurpRoutes(Object.assign(router, { db: app.db }) as FastifyInstance);
+  };
+  const release = await api.registerPrivilegedRoutes(routes, { prefix: "/api/slurp" });
   return async () => release();
 }
 
