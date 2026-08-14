@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import {
   NOODLER_ACTIVITY_PRESETS,
   NOODLER_ACTIVITY_PRESET_POSTS_PER_DAY,
@@ -145,5 +145,81 @@ assert.match(home, /ui\.noodle\.socialsettings\.sharedWithNoodle/u);
 assert.match(enLocale["ui.noodle.socialsettings.sharedWithNoodle"], /changes it there too/iu);
 const connectionEdits = home.match(/generationConnectionId: event\.target\.value \|\| null,/gu) ?? [];
 assert.equal(connectionEdits.length, 2, "both tabs still edit the shared connection");
+
+// --- S4: changed-from-default, and reset ------------------------------------
+// The key map is the only place that enumerates settings. If it falls behind the schema, a new
+// setting silently escapes both the changed-count and the reset, which is exactly the drift this
+// check exists to catch. Neither file can be imported for real (@marinara-engine/shared is not
+// installed at the repo root), so both are read as source.
+// The Engine checkout is not part of this repository, so its absence must not fail the suite —
+// it only means the schema half of this check is skipped. MARINARA_ENGINE_ROOT matches the
+// builder's own environment variable.
+const engineRoot = process.env.MARINARA_ENGINE_ROOT ?? "../Marinara-Engine";
+const schemaPath = `${engineRoot}/packages/shared/src/schemas/noodle.schema.ts`;
+const schemaSource = existsSync(schemaPath) ? readFileSync(schemaPath, "utf8") : null;
+const defaultsModule = readFileSync(
+  "packages/noodle/src/engine/packages/client/src/components/noodle/noodle-settings-defaults.ts",
+  "utf8",
+);
+
+const schemaKeys = schemaSource
+  ? (schemaSource
+      .slice(schemaSource.indexOf("export const noodleSettingsSchema = z.object({"))
+      .split("\n});")[0]!
+      .match(/^  (\w+):/gmu) ?? []
+    ).map((line) => line.trim().replace(":", ""))
+  : null;
+if (schemaKeys) assert.ok(schemaKeys.length > 40, "schema keys should have parsed");
+else console.warn("  (skipped schema completeness: set MARINARA_ENGINE_ROOT to enable)");
+
+const mapBlock = defaultsModule.slice(
+  defaultsModule.indexOf("NOODLE_SETTINGS_SECTION_KEYS"),
+  defaultsModule.indexOf("Never restored by a reset"),
+);
+const mappedKeys = (mapBlock.match(/"(\w+)"/gu) ?? []).map((q) => q.replaceAll('"', ""));
+
+if (schemaKeys) {
+  assert.deepEqual(
+    schemaKeys.filter((key) => !mappedKeys.includes(key)),
+    [],
+    "every setting must belong to a section",
+  );
+  assert.deepEqual(
+    mappedKeys.filter((key) => !schemaKeys.includes(key)),
+    [],
+    "the map must not list settings the schema does not have",
+  );
+}
+assert.deepEqual(
+  mappedKeys.filter((key, index) => mappedKeys.indexOf(key) !== index),
+  [],
+  "a setting must belong to exactly one section",
+);
+
+// Onboarding progress records what happened, not a preference. Resetting must never reopen the
+// wizard, so those keys are excluded from both the count and the patch.
+assert.match(defaultsModule, /NOODLE_SETTINGS_RESET_EXCLUDED[\s\S]{0,140}noodlerOnboardingComplete/u);
+assert.match(defaultsModule, /noodlerOnboardingState/u);
+
+// Object-valued settings need a value comparison, or every load reports them as changed.
+assert.match(defaultsModule, /JSON\.stringify\(current\) === JSON\.stringify\(shipped\)/u);
+
+// A reset writes only keys that actually differ, so pressing it with nothing changed is a no-op.
+assert.match(defaultsModule, /for \(const key of changedNoodleSettingKeys\(settings, section\)\)/u);
+assert.match(home, /if \(keys\.length === 0\) return;/u);
+assert.match(home, /const patch = noodleSettingsResetPatch\(settings, group\);/u);
+
+// It is confirmed before it runs, and the section badge is what reveals a section needs one.
+assert.match(home, /await showConfirmDialog\(\{[\s\S]{0,200}resetSectionConfirm/u);
+assert.match(home, /changedCountFor\(settingsTab, section\.id\) > 0 && \(/u);
+for (const key of [
+  "ui.noodle.socialsettings.changedFromDefault",
+  "ui.noodle.socialsettings.resetSection",
+  "ui.noodle.socialsettings.resetSectionConfirm",
+  "ui.noodle.socialsettings.resetSectionDone",
+]) {
+  assert.equal(typeof enLocale[key], "string", `${key} must exist`);
+}
+assert.match(enLocale["ui.noodle.socialsettings.resetSectionConfirm"], /not touched/iu);
 
 console.log("Noodle settings structure regressions passed.");

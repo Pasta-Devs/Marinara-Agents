@@ -68,6 +68,11 @@ import {
 import { ApiError } from "../../lib/api-client";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import {
+  changedNoodleSettingKeys,
+  noodleSettingsResetPatch,
+  type NoodleSettingsSectionId,
+} from "./noodle-settings-defaults";
+import {
   DEFAULT_NOODLE_SETTINGS,
   normalizeAvatarCrop,
   type AvatarCrop,
@@ -1359,6 +1364,57 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
 
   const saveSettings = (patch: NoodleSettingsUpdateInput) => {
     updateSettings.mutate(patch, {
+      onError: (error) =>
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : localizeUi("ui.noodle.noodlehome.couldNotUpdateNoodleSettings"),
+        ),
+    });
+  };
+
+  /**
+   * The NoodleR tab's sections are all backed by one "noodler" key group: its settings live in
+   * NoodlerPublishingSettings and the Creator surfaces rather than in per-section blocks here.
+   */
+  const settingsKeyGroupFor = (
+    tab: SocialSettingsTab,
+    section: SocialSettingsSection,
+  ): NoodleSettingsSectionId | null => {
+    if (tab === "noodler") return section === "general" ? "noodler" : null;
+    return section === "creators" ? null : (section as NoodleSettingsSectionId);
+  };
+
+  const changedCountFor = (
+    tab: SocialSettingsTab,
+    section: SocialSettingsSection,
+  ) => {
+    const group = settingsKeyGroupFor(tab, section);
+    return group ? changedNoodleSettingKeys(settings, group).length : 0;
+  };
+
+  const resetSettingsSection = async () => {
+    const group = settingsKeyGroupFor(settingsTab, settingsSection);
+    if (!group) return;
+    const patch = noodleSettingsResetPatch(settings, group);
+    const keys = Object.keys(patch);
+    if (keys.length === 0) return;
+    const confirmed = await showConfirmDialog({
+      title: localizeUi("ui.noodle.socialsettings.resetSection"),
+      message: localizeUi("ui.noodle.socialsettings.resetSectionConfirm", {
+        count: keys.length,
+      }),
+      confirmLabel: localizeUi("ui.noodle.socialsettings.resetSection"),
+      tone: "destructive",
+    });
+    if (!confirmed) return;
+    // Only this section's changed keys are patched, so a reset can never disturb another
+    // section, and onboarding progress is excluded by the key map itself.
+    updateSettings.mutate(patch, {
+      onSuccess: () =>
+        toast.success(
+          localizeUi("ui.noodle.socialsettings.resetSectionDone", { count: keys.length }),
+        ),
       onError: (error) =>
         toast.error(
           error instanceof Error
@@ -6349,10 +6405,37 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                       >
                         <Icon size={13} />
                         {localizeUi(section.labelKey)}
+                        {/* Every edit saves instantly, so this is the only signal that a section
+                            holds values you changed rather than the shipped ones. */}
+                        {changedCountFor(settingsTab, section.id) > 0 && (
+                          <span
+                            title={localizeUi("ui.noodle.socialsettings.changedFromDefault", {
+                              count: changedCountFor(settingsTab, section.id),
+                            })}
+                            className="rounded-full bg-[var(--noodle-accent)]/20 px-1.5 text-[0.6rem] font-bold text-[var(--noodle-accent)]"
+                          >
+                            {changedCountFor(settingsTab, section.id)}
+                          </span>
+                        )}
                       </button>
                     );
                   })}
                 </div>
+                {/* Instant-save has no undo, so a per-section reset is the way back. It patches
+                    only this section's changed keys, and never onboarding progress. */}
+                {changedCountFor(settingsTab, settingsSection) > 0 && (
+                  <div className="flex justify-end px-3 pb-2">
+                    <button
+                      type="button"
+                      disabled={updateSettings.isPending}
+                      onClick={() => void resetSettingsSection()}
+                      className="inline-flex min-h-8 items-center gap-1.5 rounded-md border border-[var(--noodle-divider)] px-2.5 text-xs font-semibold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:opacity-40"
+                    >
+                      <RotateCcw size={13} />
+                      {localizeUi("ui.noodle.socialsettings.resetSection")}
+                    </button>
+                  </div>
+                )}
               </div>
               <div
                 style={
