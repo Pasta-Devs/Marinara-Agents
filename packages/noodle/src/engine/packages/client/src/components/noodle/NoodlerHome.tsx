@@ -3298,7 +3298,19 @@ function StageProfileView({
                 }}
                 className="h-9 w-full rounded-md border border-[var(--noodle-divider)] bg-[var(--background)] px-2"
               >
-                <option value="inherit">{localizeUi("ui.noodle.noodlerfanactivity.inherit")}</option>
+                {/* "Use global defaults" is meaningless without saying what that resolves to
+                    right now, which used to mean leaving the Creator to go and look. */}
+                <option value="inherit">
+                  {globalSettings
+                    ? localizeUi("ui.noodle.noodlerfanactivity.inheritResolved", {
+                        value: localizeUi(
+                          globalSettings.fanActivityEnabled
+                            ? "ui.noodle.noodlerfanactivity.on"
+                            : "ui.noodle.noodlerfanactivity.off",
+                        ),
+                      })
+                    : localizeUi("ui.noodle.noodlerfanactivity.inherit")}
+                </option>
                 <option value="on">{localizeUi("ui.noodle.noodlerfanactivity.on")}</option>
                 <option value="off">{localizeUi("ui.noodle.noodlerfanactivity.off")}</option>
               </select>
@@ -3307,13 +3319,20 @@ function StageProfileView({
               <div className="grid grid-cols-2 gap-2">
                 {(["ordinary", "eccentric", "crossFandom", "raider", "organicDiscovery", "freeResource"] as const).map(
                   (archetype) => {
-                    const current =
-                      profile.fanActivity?.archetypeWeights?.[archetype] ??
-                      globalSettings.fanArchetypeWeights[archetype];
+                    const override = profile.fanActivity?.archetypeWeights?.[archetype];
+                    const globalValue = globalSettings.fanArchetypeWeights[archetype];
+                    const current = override ?? globalValue;
                     return (
                       <label key={archetype} className="space-y-1 text-[0.68rem] font-semibold">
                         <span className="block text-[var(--muted-foreground)]">
                           {localizeUi(`ui.noodle.noodlerfanactivity.archetype.${archetype}`)}
+                          {/* Without this an inherited value and a deliberate override that
+                              happens to match look identical. */}
+                          {override === undefined && (
+                            <span className="ml-1 font-normal opacity-70">
+                              {localizeUi("ui.noodle.noodlerfanactivity.inheritedValue")}
+                            </span>
+                          )}
                         </span>
                         <input
                           key={`${profile.id}-${archetype}-${current}`}

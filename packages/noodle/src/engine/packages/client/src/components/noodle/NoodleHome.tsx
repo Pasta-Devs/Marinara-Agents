@@ -5091,6 +5091,9 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                         "ui.noodle.noodlehome.textGenerationConnection",
                       )}
                     </FieldLabel>
+                    <p className="text-[0.68rem] text-[var(--muted-foreground)]">
+                      {localizeUi("ui.noodle.socialsettings.sharedWithNoodle")}
+                    </p>
                     <select
                       value={settings.generationConnectionId ?? ""}
                       onChange={(event) =>

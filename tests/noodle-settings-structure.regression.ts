@@ -125,4 +125,25 @@ for (const marker of ["noodleAndNoodlerImageGeneration", "imageUnderstanding"]) 
   );
 }
 
+// --- S3: a setting must say what it resolves to -----------------------------
+const noodlerHome = readFileSync(
+  "packages/noodle/src/engine/packages/client/src/components/noodle/NoodlerHome.tsx",
+  "utf8",
+);
+
+// "Use global defaults" without showing the resolved value forces a trip to another screen.
+assert.match(noodlerHome, /ui\.noodle\.noodlerfanactivity\.inheritResolved/u);
+assert.match(enLocale["ui.noodle.noodlerfanactivity.inheritResolved"], /\{\{value\}\}/u);
+
+// An inherited weight and a deliberate override that happens to match must not look identical.
+assert.match(noodlerHome, /const override = profile\.fanActivity\?\.archetypeWeights\?\.\[archetype\];/u);
+assert.match(noodlerHome, /override === undefined && \(/u);
+assert.equal(typeof enLocale["ui.noodle.noodlerfanactivity.inheritedValue"], "string");
+
+// The text connection is edited in both tabs on purpose and is one value; the NoodleR copy says so.
+assert.match(home, /ui\.noodle\.socialsettings\.sharedWithNoodle/u);
+assert.match(enLocale["ui.noodle.socialsettings.sharedWithNoodle"], /changes it there too/iu);
+const connectionEdits = home.match(/generationConnectionId: event\.target\.value \|\| null,/gu) ?? [];
+assert.equal(connectionEdits.length, 2, "both tabs still edit the shared connection");
+
 console.log("Noodle settings structure regressions passed.");
