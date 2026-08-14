@@ -17,6 +17,7 @@ import {
   Sparkles,
   Trash2,
   Upload,
+  VolumeX,
   UserRound,
   X,
 } from "lucide-react";
@@ -72,6 +73,7 @@ import {
   useToggleNoodlerFollow,
   useToggleNoodlerSubscription,
   useUnlockNoodlerPost,
+  useUpdateNoodleSettings,
   useUpdateNoodlerPost,
   useReplaceNoodlerPostImage,
   useUpdateNoodlerAccess,
@@ -108,6 +110,15 @@ import { ChatImageLightbox } from "../chat/ChatImageLightbox";
 import { useNoodlerMediaSrc } from "../../hooks/use-noodler-media-src";
 import { summarizeRefreshOutcomes } from "./noodle-auto-post";
 import { NoodlerOnboardingWizard } from "./NoodlerBulkCreatePanel";
+import {
+  NOODLER_QUIETER_ACTIVITY_PRESET,
+  noodlerPostsPerDayForPreset,
+} from "./noodler-activity-presets";
+
+/** Resolved once from the shared preset table so "quieter" means the same thing everywhere. */
+const NOODLER_QUIETER_POSTS_PER_DAY = noodlerPostsPerDayForPreset(
+  NOODLER_QUIETER_ACTIVITY_PRESET,
+);
 import {
   Avatar,
   getNoodleAccentStyle,
@@ -245,26 +256,29 @@ function toManagedPostCardModel(post: NoodlerManagedPost, profile: NoodlerStageP
   };
 }
 
-const DISCLOSURE_OPTIONS: Array<{
+type DisclosureOption = {
   value: NoodleIdentityDisclosure;
   label: string;
   shortLabel: string;
   detail: string;
   guidance: string;
-}> = [
+};
+
+function disclosureOptions(t: ReturnType<typeof useUiTranslation>["t"]): DisclosureOption[] {
+  return [
   {
     value: "open",
     label: "Linked identity",
     shortLabel: "Open",
-    detail: "This stage identity can openly be the same person.",
+    detail: "This Creator may openly use the source identity.",
     guidance: "Names, handles, recognizable details, and continuity may carry over.",
   },
   {
     value: "hinted",
-    label: "Inspired alter ego",
-    shortLabel: "Hinted",
-    detail: "Familiar themes can remain, without naming the public identity.",
-    guidance: "Exact names and handles are removed, but broad personality and interests may inspire the draft.",
+    label: t("ui.noodle.disclosure.hinted.label"),
+    shortLabel: t("ui.noodle.disclosure.hinted.shortLabel"),
+    detail: t("ui.noodle.disclosure.hinted.detail"),
+    guidance: t("ui.noodle.disclosure.hinted.guidance"),
   },
   {
     value: "secret",
@@ -273,7 +287,8 @@ const DISCLOSURE_OPTIONS: Array<{
     detail: "Create a genuinely separate identity with no public connection.",
     guidance: "The AI receives a reduced, non-identifying inspiration brief and avoids distinctive canonical details.",
   },
-];
+  ];
+}
 
 const EMPTY_STAGE_PROFILE: NoodleStageProfileInput = {
   displayName: "",
@@ -316,6 +331,14 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     null;
   const viewerAccounts = (data?.accounts ?? []).filter((account) => account.kind === "persona");
   const shellPersonaAccount = viewerAccounts.find((account) => account.entityId === viewerPersonaId) ?? null;
+  // The active persona's own Creator profile. Bulk onboarding deliberately lists characters only,
+  // so without this the player has no obvious way to act as a Creator themselves — the persona is
+  // buried in the generic source picker among every eligible character. Both destinations already
+  // exist as navigation targets, so this only decides which one the persona currently needs.
+  const myCreatorProfile =
+    (shellPersonaAccount &&
+      accountsQuery.data?.find((profile) => profile.noodleAccountId === shellPersonaAccount.id)) ||
+    null;
   const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [mobileAccountSwitcherOpen, setMobileAccountSwitcherOpen] = useState(false);
@@ -474,6 +497,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   const generatePost = useGenerateNoodlerNoodlePost();
   const confirmImagePrompts = useConfirmNoodlerImagePrompts();
   const runAutoPostNow = useRunNoodlerAutoPostNow();
+  const updateNoodleSettings = useUpdateNoodleSettings();
   const setupAutoPosting = useUpdateNoodlerAutoPosting();
   const refreshAllNow = useRefreshAllNoodlerCreatorsNow();
   const createPost = useCreateNoodlerPost();
@@ -628,7 +652,11 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   };
   const submitReply = async (
     post: NoodlePostCardModel,
-    input: { content: string; parentInteractionId: string | null },
+    input: {
+      content: string;
+      parentInteractionId: string | null;
+      askForReply: boolean;
+    },
   ) => {
     if (!viewerPersonaId) return;
     const viewerReply = await createInteraction.mutateAsync(
@@ -643,6 +671,9 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
         onError: (error) => toast.error(errorMessage(error, localizeUi("ui.noodle.noodlerhome.couldNotPostThisReply"))),
       },
     );
+    // The comment is already posted at this point. Opting out simply stops here, so no provider
+    // request is made and the failure toast below can only ever mean a reply was actually asked for.
+    if (!input.askForReply) return;
     try {
       await triggerCreatorReply.mutateAsync({
         postId: post.id,
@@ -714,6 +745,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
     reactToReply,
     voteInPoll,
     submitReply,
+    creatorReplyRequest: true,
     reactionPendingFor: () => false,
     createInteractionPendingFor: (_postId, type) =>
       (type === "reply" && (createInteraction.isPending || triggerCreatorReply.isPending)) ||
@@ -793,6 +825,27 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   useEffect(() => {
     if (data && !enabled && !arrivedFromGate && onboardingMode === null) onNavigate({ mode: "public", view: "home" });
   }, [arrivedFromGate, data, enabled, onboardingMode, onNavigate]);
+
+  // One click from a busy world to a calm one, without learning the scheduler. It only steps
+  // Lively (or faster) down to Occasional; Manual stays in normal settings, so this can never
+  // silence automatic posting by accident. The ceiling is global, not per Creator, so adding
+  // Creators never speeds the feed back up.
+  const quieterPending = updateNoodleSettings.isPending;
+  const canQuieten = (data?.settings.postsPerDay ?? 0) > NOODLER_QUIETER_POSTS_PER_DAY;
+  const makeQuieter = () =>
+    updateNoodleSettings.mutate(
+      { postsPerDay: NOODLER_QUIETER_POSTS_PER_DAY },
+      {
+        onSuccess: () =>
+          toast.success(
+            localizeUi("ui.noodle.noodlerhome.quieterApplied", {
+              count: NOODLER_QUIETER_POSTS_PER_DAY,
+            }),
+          ),
+        onError: (error) =>
+          toast.error(errorMessage(error, localizeUi("ui.noodle.noodlerhome.couldNotMakeNoodlerQuieter"))),
+      },
+    );
 
   const beginCreate = () => {
     invalidateProfileDraftGeneration();
@@ -1596,6 +1649,47 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
                 {refreshAllNow.isPending ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
                 {localizeUi("ui.noodle.noodlerhome.refreshNoodlerNow")}
               </button>
+              {canQuieten && (
+                <button
+                  type="button"
+                  onClick={makeQuieter}
+                  disabled={quieterPending}
+                  title={localizeUi("ui.noodle.noodlerhome.makeNoodlerQuieterDetail", {
+                    count: NOODLER_QUIETER_POSTS_PER_DAY,
+                  })}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {quieterPending ? <Loader2 size={15} className="animate-spin" /> : <VolumeX size={15} />}
+                  {localizeUi("ui.noodle.noodlerhome.makeNoodlerQuieter")}
+                </button>
+              )}
+              {shellPersonaAccount && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onNavigate(
+                      myCreatorProfile
+                        ? { mode: "noodler", view: "profile", accountId: myCreatorProfile.id }
+                        : {
+                            mode: "noodler",
+                            view: "create-profile",
+                            noodleAccountId: shellPersonaAccount.id,
+                          },
+                    )
+                  }
+                  title={localizeUi("ui.noodle.noodlerhome.myCreatorProfileDetail", {
+                    persona: shellPersonaAccount.displayName,
+                  })}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)]"
+                >
+                  <UserRound size={15} />
+                  {localizeUi(
+                    myCreatorProfile
+                      ? "ui.noodle.noodlerhome.myCreatorProfile"
+                      : "ui.noodle.noodlerhome.createMyCreatorProfile",
+                  )}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={beginCreate}
@@ -1829,6 +1923,7 @@ function StageProfileForm({
   onSave: () => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
+  const disclosureChoices = disclosureOptions(localizeUi);
   const accent = useNoodleAccent();
   const [connectionPickerOpen, setConnectionPickerOpen] = useState(false);
   const [relationshipPickerOpen, setRelationshipPickerOpen] = useState(false);
@@ -1846,7 +1941,7 @@ function StageProfileForm({
     !isGenerating;
   const selectedConnection = connections.find((connection) => connection.id === connectionId) ?? null;
   const selectedDisclosure =
-    DISCLOSURE_OPTIONS.find((option) => option.value === disclosureMode) ?? DISCLOSURE_OPTIONS[0];
+    disclosureChoices.find((option) => option.value === disclosureMode) ?? disclosureChoices[0];
 
   useEffect(() => {
     if (!connectionPickerOpen) return;
@@ -1911,7 +2006,7 @@ function StageProfileForm({
                 : { visibility: "hidden" },
             )}
           >
-            {DISCLOSURE_OPTIONS.map((option) => {
+            {disclosureChoices.map((option) => {
               const isSelected = option.value === disclosureMode;
               return (
                 <button
@@ -2469,6 +2564,7 @@ function DisclosureStep({
   onContinue: () => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
+  const disclosureChoices = disclosureOptions(localizeUi);
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col">
       <div className="px-4 py-5 sm:px-6 @min-[1024px]:py-6">
@@ -2483,7 +2579,7 @@ function DisclosureStep({
           </p>
         )}
         <div className="mt-5 space-y-3">
-          {DISCLOSURE_OPTIONS.map((option) => (
+          {disclosureChoices.map((option) => (
             <button
               key={option.value}
               type="button"
@@ -2681,6 +2777,8 @@ function StageProfileView({
   const [activeTab, setActiveTab] = useState<NoodlerProfileTab>("posts");
   const [revealedManagedPostIds, setRevealedManagedPostIds] = useState<Set<string>>(() => new Set());
   const subscribersQuery = useNoodlerSubscribers(profile.id);
+  const subscribers = subscribersQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const subscriberTotal = subscribersQuery.data?.pages[0]?.total ?? subscribers.length;
   const accent = useNoodleAccent();
   const viewingOwnCreator = Boolean(viewerAccount && profile.noodleAccountId === viewerAccount.id);
   const characterSource = publicSource?.kind === "character" ? publicSource : null;
@@ -2727,9 +2825,9 @@ function StageProfileView({
             action={localizeUi("capabilities.actions.tryAgain")}
             onAction={() => void subscribersQuery.refetch()}
           />
-        ) : (subscribersQuery.data ?? []).length > 0 ? (
+        ) : subscribers.length > 0 ? (
           <div>
-            {(subscribersQuery.data ?? []).map((subscriber) => (
+            {subscribers.map((subscriber) => (
               <div
                 key={subscriber.id}
                 className="flex min-h-16 items-center gap-3 border-b border-[var(--noodle-divider)] px-4 py-3"
@@ -2744,6 +2842,22 @@ function StageProfileView({
                 </time>
               </div>
             ))}
+            {subscribersQuery.hasNextPage && (
+              <div className="flex justify-center p-4">
+                <button
+                  type="button"
+                  onClick={() => void subscribersQuery.fetchNextPage()}
+                  disabled={subscribersQuery.isFetchingNextPage}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--noodle-divider)] px-4 text-sm font-bold hover:bg-[var(--accent)] disabled:opacity-50"
+                >
+                  {subscribersQuery.isFetchingNextPage && <Loader2 size={14} className="animate-spin" />}
+                  {localizeUi("ui.noodle.noodlehome.loadMore", {
+                    visible: subscribers.length,
+                    total: subscriberTotal,
+                  })}
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <EmptyState
@@ -3044,10 +3158,10 @@ function StageProfileView({
           {
             id: "subscribers",
             label: localizeUi("ui.noodle.stageProfile.tabs.subscribers", {
-              count: subscribersQuery.data?.length ?? "…",
+              count: subscribersQuery.data ? subscriberTotal : "…",
             }),
             ariaLabel: localizeUi("ui.noodle.stageProfile.tabs.subscribersAria", {
-              count: subscribersQuery.data?.length ?? localizeUi("ui.noodle.stageProfile.tabs.loading"),
+              count: subscribersQuery.data ? subscriberTotal : localizeUi("ui.noodle.stageProfile.tabs.loading"),
             }),
           },
         ]}
@@ -3190,7 +3304,13 @@ function StageProfileView({
                 {localizeUi("ui.noodle.noodlerfanactivity.creatorMode")}
               </span>
               <select
-                value={profile.fanActivity ? (profile.fanActivity.enabled === false ? "off" : "on") : "inherit"}
+                value={
+                  profile.fanActivity?.enabled === true
+                    ? "on"
+                    : profile.fanActivity?.enabled === false
+                      ? "off"
+                      : "inherit"
+                }
                 onChange={(event) => {
                   const mode = event.target.value;
                   updateFanActivity.mutate(
@@ -3208,7 +3328,19 @@ function StageProfileView({
                 }}
                 className="h-9 w-full rounded-md border border-[var(--noodle-divider)] bg-[var(--background)] px-2"
               >
-                <option value="inherit">{localizeUi("ui.noodle.noodlerfanactivity.inherit")}</option>
+                {/* "Use global defaults" is meaningless without saying what that resolves to
+                    right now, which used to mean leaving the Creator to go and look. */}
+                <option value="inherit">
+                  {globalSettings
+                    ? localizeUi("ui.noodle.noodlerfanactivity.inheritResolved", {
+                        value: localizeUi(
+                          globalSettings.fanActivityEnabled
+                            ? "ui.noodle.noodlerfanactivity.on"
+                            : "ui.noodle.noodlerfanactivity.off",
+                        ),
+                      })
+                    : localizeUi("ui.noodle.noodlerfanactivity.inherit")}
+                </option>
                 <option value="on">{localizeUi("ui.noodle.noodlerfanactivity.on")}</option>
                 <option value="off">{localizeUi("ui.noodle.noodlerfanactivity.off")}</option>
               </select>
@@ -3217,13 +3349,20 @@ function StageProfileView({
               <div className="grid grid-cols-2 gap-2">
                 {(["ordinary", "eccentric", "crossFandom", "raider", "organicDiscovery", "freeResource"] as const).map(
                   (archetype) => {
-                    const current =
-                      profile.fanActivity?.archetypeWeights?.[archetype] ??
-                      globalSettings.fanArchetypeWeights[archetype];
+                    const override = profile.fanActivity?.archetypeWeights?.[archetype];
+                    const globalValue = globalSettings.fanArchetypeWeights[archetype];
+                    const current = override ?? globalValue;
                     return (
                       <label key={archetype} className="space-y-1 text-[0.68rem] font-semibold">
                         <span className="block text-[var(--muted-foreground)]">
                           {localizeUi(`ui.noodle.noodlerfanactivity.archetype.${archetype}`)}
+                          {/* Without this an inherited value and a deliberate override that
+                              happens to match look identical. */}
+                          {override === undefined && (
+                            <span className="ml-1 font-normal opacity-70">
+                              {localizeUi("ui.noodle.noodlerfanactivity.inheritedValue")}
+                            </span>
+                          )}
                         </span>
                         <input
                           key={`${profile.id}-${archetype}-${current}`}

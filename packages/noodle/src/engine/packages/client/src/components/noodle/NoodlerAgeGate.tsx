@@ -195,7 +195,10 @@ export function NoodlerAgeGate({
           {tt("cardTitle", "Confirm you're an adult with a credit card")}
         </h2>
         <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-          {tt("cardSub", "We fill it in for you. Don't worry about it.")}
+          {tt(
+            "cardSub",
+            "The card is fake and we fill it in for you. Nothing is charged and nothing leaves your computer.",
+          )}
         </p>
       </div>
 

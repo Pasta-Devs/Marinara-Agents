@@ -23,7 +23,7 @@ export type NoodleSettingsReturnState =
 export type NoodleSettingsNavigationState = {
   mode: "settings";
   tab?: "noodle" | "noodler";
-  section?: "general" | "timeline" | "participants" | "creators" | "advanced";
+  section?: "general" | "timeline" | "images" | "participants" | "creators" | "advanced";
   returnTo?: NoodleSettingsReturnState;
 };
 

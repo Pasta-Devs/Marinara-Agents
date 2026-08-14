@@ -7,6 +7,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useTranslation as useUiTranslation } from "react-i18next";
 import { api } from "../lib/api-client";
@@ -68,6 +69,7 @@ export type NoodleRefreshResult = {
 export const noodleKeys = {
   all: ["noodle"] as const,
   bootstrap: () => [...noodleKeys.all, "bootstrap"] as const,
+  refreshIndicator: () => [...noodleKeys.all, "refresh-indicator"] as const,
   noodlerRoot: () => [...noodleKeys.all, "noodler"] as const,
   noodlerAccounts: () => [...noodleKeys.noodlerRoot(), "accounts"] as const,
   noodlerEligibleAccountsRoot: () =>
@@ -94,6 +96,31 @@ export type NoodlerImageConnections = {
   defaultConnectionId: string | null;
   creatorConnectionIds: Record<string, string>;
 };
+
+type NoodlerPageCursor = { createdAt: string; id: string };
+
+function cursorQuery(cursor: NoodlerPageCursor | null): string {
+  return cursor
+    ? `&cursorAt=${encodeURIComponent(cursor.createdAt)}&cursorId=${encodeURIComponent(cursor.id)}`
+    : "";
+}
+
+function mergeNoodlerViewerShell(
+  current: NoodlerViewerScope | undefined,
+  shell: NoodlerViewerScope,
+): NoodlerViewerScope {
+  if (!current) return shell;
+  const currentByCreator = new Map(
+    current.creators.map((creator) => [creator.profile.id, creator]),
+  );
+  return {
+    ...shell,
+    creators: shell.creators.map((creator) => ({
+      ...creator,
+      posts: currentByCreator.get(creator.profile.id)?.posts ?? [],
+    })),
+  };
+}
 
 export function useNoodlerImageConnections(enabled = true) {
   return useQuery({
@@ -130,13 +157,38 @@ function preservePollVotes(
 }
 
 export function useNoodle(enabled = true) {
-  return useQuery({
-    queryKey: noodleKeys.bootstrap(),
-    queryFn: () => api.get<NoodleBootstrap>("/noodle"),
+  const qc = useQueryClient();
+  const observedMarker = useRef<string | null | undefined>(undefined);
+  const refreshIndicator = useQuery({
+    queryKey: noodleKeys.refreshIndicator(),
+    queryFn: () =>
+      api.get<{ marker: string | null }>("/noodle/refresh-indicator"),
     enabled,
     staleTime: 10_000,
     refetchInterval: enabled ? 30_000 : false,
     refetchIntervalInBackground: false,
+  });
+
+  useEffect(() => {
+    const marker = refreshIndicator.data?.marker;
+    if (marker === undefined) return;
+    if (observedMarker.current === undefined) {
+      observedMarker.current = marker;
+      return;
+    }
+    if (marker !== observedMarker.current) {
+      observedMarker.current = marker;
+      void qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
+    }
+  }, [qc, refreshIndicator.data?.marker]);
+
+  return useQuery({
+    queryKey: noodleKeys.bootstrap(),
+    queryFn: () => api.get<NoodleBootstrap>("/noodle"),
+    // Take the first refresh marker before the bootstrap snapshot. This prevents a completed
+    // refresh from becoming the baseline while an older bootstrap response is still in flight.
+    enabled: enabled && !refreshIndicator.isPending,
+    staleTime: 10_000,
     structuralSharing: (current, next) =>
       preservePollVotes(
         current as NoodleBootstrap | undefined,
@@ -216,9 +268,11 @@ export function useNoodlerPosts(accountId: string | null) {
   return useQuery({
     queryKey: noodleKeys.noodlerPosts(accountId ?? "none"),
     queryFn: () =>
-      api.get<NoodlerManagedPost[]>(
+      api.get<{
+        items: Array<{ managed: NoodlerManagedPost }>;
+      }>(
         `/noodle/noodler/accounts/${encodeURIComponent(accountId!)}/posts`,
-      ),
+      ).then((page) => page.items.map((item) => item.managed)),
     enabled: Boolean(accountId),
     staleTime: 10_000,
     // Automatic posts are written server-side without a client mutation; poll while visible.
@@ -228,12 +282,18 @@ export function useNoodlerPosts(accountId: string | null) {
 }
 
 export function useNoodlerSubscribers(accountId: string | null) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: noodleKeys.noodlerSubscribers(accountId ?? "none"),
-    queryFn: () =>
-      api.get<NoodlerSubscriber[]>(
-        `/noodle/noodler/accounts/${encodeURIComponent(accountId!)}/subscribers`,
+    initialPageParam: null as NoodlerPageCursor | null,
+    queryFn: ({ pageParam }) =>
+      api.get<{
+        items: NoodlerSubscriber[];
+        total: number;
+        nextCursor: NoodlerPageCursor | null;
+      }>(
+        `/noodle/noodler/accounts/${encodeURIComponent(accountId!)}/subscribers?limit=20${cursorQuery(pageParam)}`,
       ),
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
     enabled: Boolean(accountId),
     staleTime: 10_000,
   });
@@ -621,10 +681,53 @@ export function useLoadNoodlerPostImage() {
 export function useNoodlerViewer(personaId: string | null, enabled = true) {
   return useQuery({
     queryKey: noodleKeys.viewer(personaId ?? "none"),
-    queryFn: () =>
-      api.get<NoodlerViewerScope>(
-        `/noodle/noodler/viewer?personaId=${encodeURIComponent(personaId!)}`,
-      ),
+    queryFn: async () => {
+      const encodedPersonaId = encodeURIComponent(personaId!);
+      type FeedPage = {
+        items: Array<{
+          creatorAccountId: string;
+          post: NoodlerViewerScope["creators"][number]["posts"][number];
+        }>;
+        total: number;
+        nextCursor: NoodlerPageCursor | null;
+      };
+      const scopePromise = api.get<NoodlerViewerScope>(
+        `/noodle/noodler/viewer?personaId=${encodedPersonaId}`,
+      );
+      const feedItems: FeedPage["items"] = [];
+      let cursor: NoodlerPageCursor | null = null;
+      do {
+        const page: FeedPage = await api.get<{
+          items: Array<{
+            creatorAccountId: string;
+            post: NoodlerViewerScope["creators"][number]["posts"][number];
+          }>;
+          total: number;
+          nextCursor: NoodlerPageCursor | null;
+        }>(
+          `/noodle/noodler/viewer/feed?personaId=${encodedPersonaId}&tab=all&limit=20${cursorQuery(cursor)}`,
+        );
+        feedItems.push(...page.items);
+        cursor = page.nextCursor;
+      } while (cursor);
+      const scope = await scopePromise;
+      const postsByCreator = new Map<
+        string,
+        NoodlerViewerScope["creators"][number]["posts"]
+      >();
+      for (const item of feedItems) {
+        const posts = postsByCreator.get(item.creatorAccountId) ?? [];
+        posts.push(item.post);
+        postsByCreator.set(item.creatorAccountId, posts);
+      }
+      return {
+        ...scope,
+        creators: scope.creators.map((creator) => ({
+          ...creator,
+          posts: postsByCreator.get(creator.profile.id) ?? [],
+        })),
+      };
+    },
     enabled: enabled && Boolean(personaId),
     staleTime: 10_000,
   });
@@ -689,15 +792,20 @@ export function useToggleNoodlerSubscription() {
               personaId,
             },
           ),
-    // Patch the viewer cache with the returned scope instead of refetching the whole feed,
-    // so revealed/re-locked posts flip in place without a reload-and-jump.
+    // The mutation returns a shell without posts. Keep the current feed visible until refetch.
     onSuccess: async (scope, input) => {
       // Cancel any in-flight viewer poll first, or it can land after us and restore the stale scope.
       await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
-      qc.setQueryData(noodleKeys.viewer(input.personaId), scope);
-      return qc.invalidateQueries({
-        queryKey: noodleKeys.noodlerSubscribers(input.creatorAccountId),
-      });
+      qc.setQueryData<NoodlerViewerScope | undefined>(
+        noodleKeys.viewer(input.personaId),
+        (current) => mergeNoodlerViewerShell(current, scope),
+      );
+      return Promise.all([
+        qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
+        qc.invalidateQueries({
+          queryKey: noodleKeys.noodlerSubscribers(input.creatorAccountId),
+        }),
+      ]);
     },
   });
 }
@@ -723,7 +831,11 @@ export function useToggleNoodlerFollow() {
       ),
     onSuccess: async (scope, input) => {
       await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
-      qc.setQueryData(noodleKeys.viewer(input.personaId), scope);
+      qc.setQueryData<NoodlerViewerScope | undefined>(
+        noodleKeys.viewer(input.personaId),
+        (current) => mergeNoodlerViewerShell(current, scope),
+      );
+      await qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) });
     },
   });
 }
@@ -745,7 +857,11 @@ export function useUnlockNoodlerPost() {
     onSuccess: async (scope, input) => {
       // Cancel any in-flight viewer poll first, or it can land after us and restore the locked scope.
       await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
-      qc.setQueryData(noodleKeys.viewer(input.personaId), scope);
+      qc.setQueryData<NoodlerViewerScope | undefined>(
+        noodleKeys.viewer(input.personaId),
+        (current) => mergeNoodlerViewerShell(current, scope),
+      );
+      await qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) });
     },
   });
 }

@@ -69,7 +69,7 @@ type FormattedNoodlerGenerationRequest = NoodlerGenerationRequest & {
 
 const NOODLER_FORMAT_PROMPTS: Record<NoodlerContentFormat, string> = {
   caption:
-    "Format: caption. Target 40-220 characters in one short creator-feed caption. Hard limit 320 characters: never write more, and never write several paragraphs.",
+    "Format: caption. Target 40-220 characters in one short creator-feed caption. Hard limit 300 characters: never write more, and never write several paragraphs.",
   teaser:
     "Format: teaser. Target 40-220 characters. Hard limit 280 characters. Make the public text useful but leave a clear reason to open the linked locked follow-up.",
   announcement:
@@ -79,7 +79,7 @@ const NOODLER_FORMAT_PROMPTS: Record<NoodlerContentFormat, string> = {
 };
 
 const NOODLER_FORMAT_MAX_LENGTH: Record<NoodlerContentFormat, number> = {
-  caption: 320,
+  caption: 300,
   teaser: 280,
   announcement: 1000,
   long_form: NOODLER_POST_CONTENT_MAX_LENGTH,

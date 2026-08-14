@@ -68,6 +68,11 @@ import {
 import { ApiError } from "../../lib/api-client";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import {
+  changedNoodleSettingKeys,
+  noodleSettingsResetPatch,
+  type NoodleSettingsSectionId,
+} from "./noodle-settings-defaults";
+import {
   DEFAULT_NOODLE_SETTINGS,
   normalizeAvatarCrop,
   type AvatarCrop,
@@ -197,7 +202,7 @@ type SocialSettingsSection = NonNullable<
 // Package-owned default for the editable NoodleR generation guidance.
 // Keep in sync with NOODLER_DEFAULT_GENERATION_GUIDANCE in the server noodle.storage.ts.
 const NOODLER_DEFAULT_GENERATION_GUIDANCE =
-  "All NoodleR creators and viewers are adults (18+). This is an adult creator page and explicit content is the norm here, not the exception: most posts are lewd — flirty, sexual, suggestive, or openly explicit — and say what the creator is doing, wearing, offering, or thinking about. Tease the locked posts, talk to fans like they are paying for it, and answer horny comments in kind. Keep each creator's personality intact: a shy creator is lewd shyly, a blunt one crudely, a funny one filthily. Ordinary posts (updates, humor, behind the scenes, project news) still appear and keep the page human, but they are the minority. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.";
+  "All NoodleR creators and viewers are adults (18+). This is an adult creator page: flirty, suggestive, teasing, and sensual posts are common, and explicit posts appear regularly when they suit the creator — but they are not required and need not be the majority. Tease the locked posts and answer flirty comments in kind. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one bluntly, a funny one filthily. Ordinary posts — updates, humor, behind the scenes, project news — matter just as much and keep both the page and the character human. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.";
 
 const SOCIAL_SETTINGS_SECTIONS: Record<
   SocialSettingsTab,
@@ -206,12 +211,16 @@ const SOCIAL_SETTINGS_SECTIONS: Record<
   noodle: [
     { id: "general", labelKey: "ui.noodle.socialsettings.general" },
     { id: "timeline", labelKey: "ui.noodle.socialsettings.timeline" },
+    // Every image control lives here. They used to be split between Timeline and Advanced,
+    // which meant hunting two sections to configure one feature.
+    { id: "images", labelKey: "ui.noodle.socialsettings.images" },
     { id: "participants", labelKey: "ui.noodle.socialsettings.participants" },
     { id: "advanced", labelKey: "ui.noodle.socialsettings.advanced" },
   ],
   noodler: [
+    // Publishing folded into General: General held one control, and an unknown section falls back
+    // to General below, so an old `timeline` deep link lands where its content now lives.
     { id: "general", labelKey: "ui.noodle.socialsettings.general" },
-    { id: "timeline", labelKey: "ui.noodle.socialsettings.publishing" },
     { id: "creators", labelKey: "ui.noodle.socialsettings.creatorProfiles" },
     { id: "participants", labelKey: "ui.noodle.socialsettings.audience" },
     { id: "advanced", labelKey: "ui.noodle.socialsettings.advanced" },
@@ -1356,6 +1365,58 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
 
   const saveSettings = (patch: NoodleSettingsUpdateInput) => {
     updateSettings.mutate(patch, {
+      onError: (error) =>
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : localizeUi("ui.noodle.noodlehome.couldNotUpdateNoodleSettings"),
+        ),
+    });
+  };
+
+  const settingsKeyGroupFor = (
+    tab: SocialSettingsTab,
+    section: SocialSettingsSection,
+  ): NoodleSettingsSectionId | null => {
+    if (tab === "noodler") {
+      if (section === "general") return "noodlerGeneral";
+      if (section === "advanced") return "noodlerAdvanced";
+      if (section === "participants") return "noodlerParticipants";
+      return null;
+    }
+    return section === "creators" ? null : (section as NoodleSettingsSectionId);
+  };
+
+  const changedCountFor = (
+    tab: SocialSettingsTab,
+    section: SocialSettingsSection,
+  ) => {
+    const group = settingsKeyGroupFor(tab, section);
+    return group ? changedNoodleSettingKeys(settings, group).length : 0;
+  };
+
+  const resetSettingsSection = async () => {
+    const group = settingsKeyGroupFor(settingsTab, settingsSection);
+    if (!group) return;
+    const patch = noodleSettingsResetPatch(settings, group);
+    const keys = Object.keys(patch);
+    if (keys.length === 0) return;
+    const confirmed = await showConfirmDialog({
+      title: localizeUi("ui.noodle.socialsettings.resetSection"),
+      message: localizeUi("ui.noodle.socialsettings.resetSectionConfirm", {
+        count: keys.length,
+      }),
+      confirmLabel: localizeUi("ui.noodle.socialsettings.resetSection"),
+      tone: "destructive",
+    });
+    if (!confirmed) return;
+    // Only this section's changed keys are patched, so a reset can never disturb another
+    // section, and onboarding progress is excluded by the key map itself.
+    updateSettings.mutate(patch, {
+      onSuccess: () =>
+        toast.success(
+          localizeUi("ui.noodle.socialsettings.resetSectionDone", { count: keys.length }),
+        ),
       onError: (error) =>
         toast.error(
           error instanceof Error
@@ -4630,7 +4691,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
           </Section>
 
           <Section
-            visible={settingsTab === "noodle" && settingsSection === "timeline"}
+            visible={settingsTab === "noodle" && settingsSection === "images"}
             title={localizeUi(
               "ui.noodle.noodlehome.noodleAndNoodlerImageGeneration",
             )}
@@ -4815,7 +4876,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
           </Section>
 
           <Section
-            visible={settingsTab === "noodle" && settingsSection === "advanced"}
+            visible={settingsTab === "noodle" && settingsSection === "images"}
             title={localizeUi("ui.noodle.noodlehome.imageUnderstanding")}
             help={localizeUi(
               "ui.noodle.noodlehome.letsAVisionCapableConnectionDescribeTimelineImagesFor",
@@ -5088,6 +5149,9 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                         "ui.noodle.noodlehome.textGenerationConnection",
                       )}
                     </FieldLabel>
+                    <p className="text-[0.68rem] text-[var(--muted-foreground)]">
+                      {localizeUi("ui.noodle.socialsettings.sharedWithNoodle")}
+                    </p>
                     <select
                       value={settings.generationConnectionId ?? ""}
                       onChange={(event) =>
@@ -5212,7 +5276,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
           {settings.enableNoodler && (
             <Section
               visible={
-                settingsTab === "noodler" && settingsSection === "timeline"
+                settingsTab === "noodler" && settingsSection === "general"
               }
               accent={NOODLE_PINK}
               title={localizeUi("ui.noodle.socialsettings.publishing")}
@@ -5221,7 +5285,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
               <NoodlerPublishingSettings
                 view="publishing"
                 active={
-                  settingsTab === "noodler" && settingsSection === "timeline"
+                  settingsTab === "noodler" && settingsSection === "general"
                 }
               />
             </Section>
@@ -6343,10 +6407,37 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                       >
                         <Icon size={13} />
                         {localizeUi(section.labelKey)}
+                        {/* Every edit saves instantly, so this is the only signal that a section
+                            holds values you changed rather than the shipped ones. */}
+                        {changedCountFor(settingsTab, section.id) > 0 && (
+                          <span
+                            title={localizeUi("ui.noodle.socialsettings.changedFromDefault", {
+                              count: changedCountFor(settingsTab, section.id),
+                            })}
+                            className="rounded-full bg-[var(--noodle-accent)]/20 px-1.5 text-[0.6rem] font-bold text-[var(--noodle-accent)]"
+                          >
+                            {changedCountFor(settingsTab, section.id)}
+                          </span>
+                        )}
                       </button>
                     );
                   })}
                 </div>
+                {/* Instant-save has no undo, so a per-section reset is the way back. It patches
+                    only this section's changed keys, and never onboarding progress. */}
+                {changedCountFor(settingsTab, settingsSection) > 0 && (
+                  <div className="flex justify-end px-3 pb-2">
+                    <button
+                      type="button"
+                      disabled={updateSettings.isPending}
+                      onClick={() => void resetSettingsSection()}
+                      className="inline-flex min-h-8 items-center gap-1.5 rounded-md border border-[var(--noodle-divider)] px-2.5 text-xs font-semibold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:opacity-40"
+                    >
+                      <RotateCcw size={13} />
+                      {localizeUi("ui.noodle.socialsettings.resetSection")}
+                    </button>
+                  </div>
+                )}
               </div>
               <div
                 style={
