@@ -695,7 +695,7 @@ function MemoryAvailabilityWorkbench({
               : localizeUi("ui.longTermMemory.memoryvault.availableEverywhere")}
           </StatusSurface>
         ) : (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1.5" data-ltm-availability-pills>
             {entries.map((entry) => (
               <Pill key={`${entry.kind}:${entry.id}`} label={entry.label} onRemove={() => remove(entry.kind, entry.id)}>
                 {entry.label}
@@ -703,53 +703,71 @@ function MemoryAvailabilityWorkbench({
             ))}
           </div>
         )}
-        <AvailabilityTabRail
-          characters={visibleAvailabilityTargets.characters}
-          personas={visibleAvailabilityTargets.personas}
-          chats={visibleAvailabilityTargets.chats}
-          branches={visibleAvailabilityTargets.branches}
-          selectedIds={selectedIds}
-          tablistLabel={localizeUi("ui.longTermMemory.memoryvault.memoryAvailability")}
-          sectionCopy={{
-            character: {
-              label: localizeUi("ui.longTermMemory.memoryvault.character"),
-              searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchCharacters"),
-              emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingCharacters"),
-              accessibleLabel: (count) => localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
-                label: localizeUi("ui.longTermMemory.memoryvault.character"),
-                count,
-              }),
-            },
-            persona: {
-              label: localizeUi("ui.longTermMemory.memoryvault.persona"),
-              searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchPersonas"),
-              emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingPersonas"),
-              accessibleLabel: (count) => localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
-                label: localizeUi("ui.longTermMemory.memoryvault.persona"),
-                count,
-              }),
-            },
-            chat: {
-              label: localizeUi("ui.longTermMemory.memoryvault.chat"),
-              searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchChats"),
-              emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingChats"),
-              accessibleLabel: (count) => localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
-                label: localizeUi("ui.longTermMemory.memoryvault.chat"),
-                count,
-              }),
-            },
-            branch: {
-              label: localizeUi("ui.longTermMemory.memoryvault.branch"),
-              searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchBranches"),
-              emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingBranches"),
-              accessibleLabel: (count) => localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
-                label: localizeUi("ui.longTermMemory.memoryvault.branch"),
-                count,
-              }),
-            },
-          }}
-          onToggle={toggle}
-        />
+        <details
+          data-ltm-availability-picker
+          className="group"
+        >
+          <summary className="mari-editor-action inline-flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left text-sm font-semibold text-[var(--marinara-editor-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden">
+            <span className="min-w-0 flex-1">
+              {localizeUi("ui.longTermMemory.memoryvault.addMemoryTo")}
+            </span>
+            <ChevronRight
+              aria-hidden="true"
+              size="0.875rem"
+              data-ltm-availability-chevron
+              className="shrink-0 transition-transform"
+            />
+          </summary>
+          <div className="border-t border-[var(--border)] p-3">
+            <AvailabilityTabRail
+              characters={visibleAvailabilityTargets.characters}
+              personas={visibleAvailabilityTargets.personas}
+              chats={visibleAvailabilityTargets.chats}
+              branches={visibleAvailabilityTargets.branches}
+              selectedIds={selectedIds}
+              tablistLabel={localizeUi("ui.longTermMemory.memoryvault.memoryAvailability")}
+              sectionCopy={{
+                character: {
+                  label: localizeUi("ui.longTermMemory.memoryvault.character"),
+                  searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchCharacters"),
+                  emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingCharacters"),
+                  accessibleLabel: (count) => localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+                    label: localizeUi("ui.longTermMemory.memoryvault.character"),
+                    count,
+                  }),
+                },
+                persona: {
+                  label: localizeUi("ui.longTermMemory.memoryvault.persona"),
+                  searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchPersonas"),
+                  emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingPersonas"),
+                  accessibleLabel: (count) => localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+                    label: localizeUi("ui.longTermMemory.memoryvault.persona"),
+                    count,
+                  }),
+                },
+                chat: {
+                  label: localizeUi("ui.longTermMemory.memoryvault.chat"),
+                  searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchChats"),
+                  emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingChats"),
+                  accessibleLabel: (count) => localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+                    label: localizeUi("ui.longTermMemory.memoryvault.chat"),
+                    count,
+                  }),
+                },
+                branch: {
+                  label: localizeUi("ui.longTermMemory.memoryvault.branch"),
+                  searchPlaceholder: localizeUi("ui.longTermMemory.memoryvault.searchBranches"),
+                  emptyLabel: localizeUi("ui.longTermMemory.memoryvault.noMatchingBranches"),
+                  accessibleLabel: (count) => localizeUi("ui.longTermMemory.memoryvault.availabilitySectionSelected", {
+                    label: localizeUi("ui.longTermMemory.memoryvault.branch"),
+                    count,
+                  }),
+                },
+              }}
+              onToggle={toggle}
+            />
+          </div>
+        </details>
       </section>
     </section>
   );
@@ -2316,6 +2334,9 @@ export default function MemoryVault({
           justify-content: flex-start;
         }
         [data-ltm-surface="vault"] details[open] > summary [data-ltm-memory-scope-chevron] {
+          transform: rotate(90deg);
+        }
+        [data-ltm-surface="vault"] details[open] > summary [data-ltm-availability-chevron] {
           transform: rotate(90deg);
         }
       `}</style>

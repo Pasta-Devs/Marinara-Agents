@@ -356,6 +356,7 @@
   "ui.longTermMemory.memoryvault.addAnotherChat": "Add another chat",
   "ui.longTermMemory.memoryvault.addEvidence": "Add evidence",
   "ui.longTermMemory.memoryvault.addAvailability": "Add availability",
+  "ui.longTermMemory.memoryvault.addMemoryTo": "Add this memory to:",
   "ui.longTermMemory.memoryvault.availabilityHelp": "Choose the places and chat modes where this memory can be used.",
   "ui.longTermMemory.memoryvault.availabilityModeRequired": "Choose at least one chat mode before saving this memory.",
   "ui.longTermMemory.memoryvault.availabilityPlaceRequired": "Choose at least one place before saving this memory.",

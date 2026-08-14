@@ -2188,12 +2188,13 @@ async function main() {
           .getAttribute("aria-pressed"),
         "false",
       );
-       assert.equal(
-         await page.locator('[data-ltm-workspace-pane="inspector"]').count(),
-         0,
-       );
-       await page.getByRole("button", { name: "Choose where used" }).click();
-       const availabilityTabs = page.locator("[data-ltm-availability-tabs]");
+        assert.equal(
+          await page.locator('[data-ltm-workspace-pane="inspector"]').count(),
+          0,
+        );
+        await page.getByRole("button", { name: "Choose where used" }).click();
+        await page.locator('[data-ltm-availability-picker] > summary').click();
+        const availabilityTabs = page.locator("[data-ltm-availability-tabs]");
        await availabilityTabs.waitFor();
        assert.deepEqual(
          await availabilityTabs.locator('[role="tab"]').evaluateAll((tabs) =>
