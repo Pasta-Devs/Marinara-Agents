@@ -44,7 +44,6 @@ import type {
   NoodlerSourceSnapshot,
   Persona,
 } from "@marinara-engine/shared";
-import { countNoodlerPostsSince } from "@marinara-engine/shared";
 import {
   useAdoptNoodlerSourceIdentity,
   useCreateNoodlerPost,
@@ -65,6 +64,7 @@ import {
   useNoodlerEligibleAccounts,
   useNoodlerPosts,
   useNoodlerSubscribers,
+  useNoodlerUnseenCount,
   useNoodleUnseenCount,
   useNoodlerViewer,
   usePatchNoodleAccountSettings,
@@ -134,6 +134,8 @@ interface NoodlerHomeProps {
   navigation: Extract<NoodleNavigationState, { mode: "noodler" }>;
   onNavigate: (destination: NoodleNavigationState) => void;
 }
+
+const NOODLER_FEED_WINDOW_SIZE = 20;
 
 interface NoodlerPostSubmission {
   profileId: string;
@@ -417,6 +419,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
   const [feedTab, setFeedTab] = useState<"following" | "all">("following");
   const [onboardingMode, setOnboardingMode] = useState<"first-run" | null>(null);
   const viewerQuery = useNoodlerViewer(viewerPersonaId, enabled);
+  const noodlerUnseenCount = useNoodlerUnseenCount(viewerPersonaId, enabled);
   const patchAccountSettings = usePatchNoodleAccountSettings();
   const noodleUnseenCount = useNoodleUnseenCount(shellPersonaAccount, enabled);
   // The stored timestamp advances as soon as the feed is shown, which would erase the divider
@@ -1112,10 +1115,7 @@ export function NoodlerHome({ navigation, onNavigate }: NoodlerHomeProps) {
             ? ("search" as const)
             : ("noodler" as const),
     homeActive: navigation.mode === "noodler" && navigation.view === "hub",
-    noodlerUnseenCount: countNoodlerPostsSince(
-      viewerQuery.data,
-      viewerQuery.data?.viewer.settings.social.noodlerFeedSeenAt,
-    ),
+    noodlerUnseenCount,
     // The Noodle count matters most from here: this is where the user is while the public
     // timeline is the one filling up unwatched.
     noodleUnseenCount,
@@ -3386,6 +3386,15 @@ function ViewerHub({
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
   const setStickyHeader = useHideOnScroll(scroller);
   const [discoverCollapsed, setDiscoverCollapsed] = useState(false);
+  const [visibleFeedCount, setVisibleFeedCount] = useState(
+    NOODLER_FEED_WINDOW_SIZE,
+  );
+  const profileKey = (scope?.creators ?? [])
+    .map((creator) => creator.profile.id)
+    .join("\u0000");
+  useEffect(() => {
+    setVisibleFeedCount(NOODLER_FEED_WINDOW_SIZE);
+  }, [authorProfile?.id, profileKey, scope?.viewer.id, search, tab]);
   // The visit counts once the feed itself is on screen and loaded — not on app entry, and not
   // while discovery search has replaced it. Declared above the early returns so hook order
   // stays stable across the empty and error states below.
@@ -3443,6 +3452,8 @@ function ViewerHub({
           creator.profile.displayName.toLowerCase().includes(searchTerm)),
     )
     .sort((a, b) => new Date(b.post.createdAt).getTime() - new Date(a.post.createdAt).getTime());
+  const visibleFeed = feed.slice(0, visibleFeedCount);
+  const visibleSearchResults = searchResults.slice(0, visibleFeedCount);
   const discoveredCreators = creators.filter(
     (creator) =>
       creator.profile.id !== authorProfile?.id &&
@@ -3540,7 +3551,20 @@ function ViewerHub({
               </h2>
             </div>
             {searchResults.length > 0 ? (
-              <div>{searchResults.map(renderFeedPost)}</div>
+              <div>
+                {visibleSearchResults.map(renderFeedPost)}
+                {visibleSearchResults.length < searchResults.length && (
+                  <LoadMoreFeedButton
+                    visible={visibleSearchResults.length}
+                    total={searchResults.length}
+                    onLoadMore={() =>
+                      setVisibleFeedCount((count) =>
+                        Math.min(searchResults.length, count + NOODLER_FEED_WINDOW_SIZE),
+                      )
+                    }
+                  />
+                )}
+              </div>
             ) : (
               <p className="px-4 py-6 text-sm text-[var(--muted-foreground)]">
                 {localizeUi("ui.noodle.viewerhub.noSearchResults")}
@@ -3759,12 +3783,23 @@ function ViewerHub({
             </p>
           ) : (
             <div>
-              {feed.map((item, index) => (
+              {visibleFeed.map((item, index) => (
                 <Fragment key={item.post.id}>
                   {index === dividerIndex && <NewSinceLastVisitDivider />}
                   {renderFeedPost(item)}
                 </Fragment>
               ))}
+              {visibleFeed.length < feed.length && (
+                <LoadMoreFeedButton
+                  visible={visibleFeed.length}
+                  total={feed.length}
+                  onLoadMore={() =>
+                    setVisibleFeedCount((count) =>
+                      Math.min(feed.length, count + NOODLER_FEED_WINDOW_SIZE),
+                    )
+                  }
+                />
+              )}
             </div>
           )}
         </>
@@ -3785,6 +3820,28 @@ function ViewerHub({
         />
       )}
     </div>
+  );
+}
+
+function LoadMoreFeedButton({
+  visible,
+  total,
+  onLoadMore,
+}: {
+  visible: number;
+  total: number;
+  onLoadMore: () => void;
+}) {
+  const { t: localizeUi } = useUiTranslation();
+  return (
+    <button
+      data-component="NoodlerHome.LoadMoreFeed"
+      type="button"
+      onClick={onLoadMore}
+      className="min-h-11 w-full border-b border-[var(--noodle-divider)] px-4 py-3 text-sm font-bold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10"
+    >
+      {localizeUi("ui.noodle.noodlehome.loadMore", { visible, total })}
+    </button>
   );
 }
 

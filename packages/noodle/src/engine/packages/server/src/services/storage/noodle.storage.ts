@@ -2477,6 +2477,17 @@ export function createNoodleStorage(db: DB) {
       return result;
     },
 
+    countNoodlerPostsByAccountsSince(accountIds: string[], since: string): number {
+      if (accountIds.length === 0) return 0;
+      return db.count(
+        noodlePosts,
+        and(
+          inArray(noodlePosts.authorAccountId, accountIds),
+          gt(noodlePosts.createdAt, since),
+        ),
+      );
+    },
+
     async getNoodlerPostById(id: string): Promise<NoodlerManagedPost | null> {
       const rows = await db.select().from(noodlePosts).where(eq(noodlePosts.id, id));
       const row = rows[0];
