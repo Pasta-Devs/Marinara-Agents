@@ -190,7 +190,7 @@ function ScopeTargetPicker({
   onClear,
   onSelect,
 }: {
-  kind: "mode" | "character" | "chat" | "branch" | "status" | "sort";
+  kind: "character" | "chat" | "branch" | "status" | "sort";
   label: string;
   value: string;
   allLabel: string;
@@ -1004,7 +1004,9 @@ export default function MemoryVault({
   );
   const targetContextKey = useRef(contextKey);
   const [statusFilter, setStatusFilter] = useState<LtmStatus | "all">(initialNavigatorState?.statusFilter ?? "all");
-  const [scopeMode, setScopeMode] = useState<LtmMode | "all">(props.chatMode ?? "all");
+  const [scopeModes, setScopeModes] = useState<LtmMode[]>(() =>
+    props.chatMode ? [props.chatMode] : [...modes],
+  );
   const [sourceFilter, setSourceFilter] = useState(initialNavigatorState?.sourceFilter ?? false);
   const [sort, setSort] = useState<"updated" | "title" | "created">(initialNavigatorState?.sort ?? "updated");
   const [selectMode, setSelectMode] = useState(false);
@@ -1094,7 +1096,7 @@ export default function MemoryVault({
     });
   }, [contextKey]);
   useEffect(() => {
-    setScopeMode(props.chatMode ?? "all");
+    setScopeModes(props.chatMode ? [props.chatMode] : [...modes]);
   }, [contextKey, props.chatMode]);
   useEffect(() => {
     if (!validation.length) return;
@@ -1356,9 +1358,9 @@ export default function MemoryVault({
   const scopeChats = useMemo(
     () =>
       (scopeTargets.data?.chats ?? []).filter(
-        (chat) => scopeMode === "all" || chat.mode === scopeMode,
+        (chat) => scopeModes.includes(chat.mode),
       ),
-    [scopeMode, scopeTargets.data?.chats],
+    [scopeModes, scopeTargets.data?.chats],
   );
   const scopeGroups = useMemo(() => {
     const chatIds = new Set(scopeChats.map((chat) => chat.id));
@@ -1438,10 +1440,6 @@ export default function MemoryVault({
       ...(branch.groupId ? { groupId: branch.groupId } : {}),
       ...(selectedCharacterId ? { characterIds: [selectedCharacterId] } : {}),
     },
-  }));
-  const modeScopeTargets: Target[] = modes.map((mode) => ({
-    id: mode,
-    label: modeLabel(mode),
   }));
   const statusScopeTargets: Target[] = statuses.map((status) => ({
     id: status,
@@ -1684,20 +1682,24 @@ export default function MemoryVault({
     setMobilePaneAndFocus("navigator");
     return true;
   }
-  async function changeScopeMode(next: LtmMode | "all") {
-    if (target?.id === "all" || !selectedChat || next === "all" || selectedChat.mode === next)
-      return setScopeMode(next);
-    if (
-      !(await selectTarget(
-        selectedCharacter
-          ? characterScopeTargets.find(
-              (candidate) => candidate.id === `character:${selectedCharacter.id}`,
-            )!
-          : targets[0]!,
-      ))
-    )
-      return;
-    setScopeMode(next);
+  async function toggleScopeMode(mode: LtmMode) {
+    const nextModes = scopeModes.includes(mode)
+      ? scopeModes.filter((current) => current !== mode)
+      : [...scopeModes, mode];
+    if (!nextModes.length) return;
+    if (selectedChat && !nextModes.includes(selectedChat.mode)) {
+      if (
+        !(await selectTarget(
+          selectedCharacter
+            ? characterScopeTargets.find(
+                (candidate) => candidate.id === `character:${selectedCharacter.id}`,
+              )!
+            : targets[0]!,
+        ))
+      )
+        return;
+    }
+    setScopeModes(nextModes);
   }
   async function openNote(
     note: LtmNote,
@@ -2488,17 +2490,23 @@ export default function MemoryVault({
             />
           </summary>
           <div className="grid gap-2 border-t border-[var(--border)] p-3">
-            <ScopeTargetPicker
-              kind="mode"
-              label={localizeUi("ui.longTermMemory.memoryvault.chatModes")}
-              value={scopeMode === "all" ? localizeUi("ui.longTermMemory.memoryvault.allChatModes") : modeLabel(scopeMode)}
-              allLabel={localizeUi("ui.longTermMemory.memoryvault.allChatModes")}
-              searchLabel={localizeUi("ui.longTermMemory.memoryvault.searchChatModes")}
-              searchable={false}
-              targets={modeScopeTargets}
-              onClear={() => void changeScopeMode("all")}
-              onSelect={(candidate) => void changeScopeMode(candidate.id as LtmMode)}
-            />
+            <fieldset className="space-y-2 border-b border-[var(--border)] pb-2">
+              <legend className="text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">
+                {localizeUi("ui.longTermMemory.memoryvault.chatModes")}
+              </legend>
+              <div className="flex flex-wrap gap-x-3 gap-y-1">
+                {modes.map((mode) => (
+                  <label key={mode} className="flex min-h-9 items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={scopeModes.includes(mode)}
+                      onChange={() => void toggleScopeMode(mode)}
+                    />
+                    {modeLabel(mode)}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
             <ScopeTargetPicker
               kind="character"
               label={localizeUi("ui.longTermMemory.memoryvault.character")}
