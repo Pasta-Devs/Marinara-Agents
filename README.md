@@ -49,7 +49,7 @@ Across its Engine compatibility lanes, the catalog currently contains **32 first
 | Long-Term Memory | [`long-term-memory`](packages/long-term-memory/manifest.json) | Extracts durable memories from chat summaries, character records, and lorebooks, with scoped vault browsing, review, source management, recall controls, and preset-marker placement for Roleplay. |
 | Music DJ | [`spotify`](packages/spotify/manifest.json) | Plays scene-matched music through Spotify, YouTube, or local Game Assets. |
 | Noodle | [`noodle`](packages/noodle/manifest.json) | Explore the public Noodle social timeline as an optional local social world, available after installation from **Home → Noodle**. |
-| Slurp | [`slurp`](packages/slurp/manifest.json) | Create local Creator profiles from Engine characters or personas, publish public or locked posts, and simulate audience activity from **Home → Slurp**. |
+| Slurp | [`slurp`](packages/slurp/manifest.json) | The standalone successor to NoodleR: create local Creator profiles, publish public or locked posts, and simulate audience activity from **Home → Slurp**. |
 | Poker | [`poker`](packages/poker/manifest.json) | Adds No-Limit Texas Hold'em for Conversation chats and the `/poker` command. |
 | Rock-Paper-Scissors | [`rock-paper-scissors`](packages/rock-paper-scissors/manifest.json) | Adds best-of-three, five, or seven Conversation matches and the `/rps` command. |
 | Storyboard | [`storyboard`](packages/storyboard/manifest.json) | Plans and generates still or animated Game and Roleplay storyboards with provider-tuned prompt chains. |

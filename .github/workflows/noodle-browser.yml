@@ -1,4 +1,4 @@
-name: Noodle Package Browser
+name: Noodle and Slurp Package Browser
 
 on:
   pull_request:
@@ -6,19 +6,24 @@ on:
     paths:
       - ".github/workflows/noodle-browser.yml"
       - "artifacts/noodle-*.zip"
+      - "artifacts/slurp-*.zip"
       - "artwork/agent-covers/noodle.png"
+      - "artwork/agent-covers/slurp.png"
       - "artwork/sources/noodle-*"
+      - "artwork/sources/slurp-*"
       - "catalog/catalog.json"
       - "catalog/v*/catalog.json"
       - "package.json"
       - "package-lock.json"
       - "packages/noodle/**"
+      - "packages/slurp/**"
       - "scripts/build-feature-packages.mjs"
       - "scripts/install-package-browser-fixture.mjs"
       - "scripts/run-package-browser-tests.mjs"
       - "scripts/start-package-browser-servers.mjs"
       - "sources/engine/**"
       - "tests/package-noodle.e2e.ts"
+      - "tests/package-slurp.e2e.ts"
       - "tests/playwright.package.config.ts"
 
 concurrency:
@@ -71,12 +76,17 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Rebuild the Noodle artifact
+      - name: Rebuild the Noodle and Slurp artifacts
         env:
           MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
-        run: node scripts/build-feature-packages.mjs noodle
+        run: node scripts/build-feature-packages.mjs noodle slurp
 
       - name: Run package-owned Noodle browser suite
         env:
           MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
         run: npm run test:browser:noodle
+
+      - name: Run package-owned Slurp browser suite
+        env:
+          MARINARA_ENGINE_ROOT: ${{ github.workspace }}/engine
+        run: npm run test:browser:slurp

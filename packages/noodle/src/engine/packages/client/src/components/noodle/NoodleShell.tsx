@@ -47,6 +47,8 @@ export function getNoodleAccentStyle(
 ): CSSProperties {
   return {
     "--noodle-accent": accent,
+    "--noodle-accent-foreground":
+      "light-dark(color-mix(in srgb, var(--noodle-accent) 65%, var(--foreground)), var(--noodle-accent))",
     "--noodle-divider": "var(--marinara-chat-chrome-panel-divider)",
     ...style,
   } as CSSProperties;
@@ -131,9 +133,10 @@ export function Avatar({
   }
   return (
     <div
+      data-noodle-avatar-fallback
       className={cn(
         dimension,
-        "flex aspect-square flex-none items-center justify-center rounded-full text-xs font-bold text-[var(--noodle-accent)] ring-1 ring-[var(--noodle-accent)]/25",
+        "flex aspect-square flex-none items-center justify-center rounded-full text-xs font-bold !text-[var(--noodle-accent-foreground)] ring-1 ring-[var(--noodle-accent)]/25",
         solid
           ? "bg-[color-mix(in_srgb,var(--noodle-accent)_15%,var(--background))]"
           : "bg-[var(--noodle-accent)]/15",
@@ -145,12 +148,7 @@ export function Avatar({
 }
 
 export type NoodleShellView =
-  | "home"
-  | "search"
-  | "notifications"
-  | "profile"
-  | "settings"
-  | null;
+  "home" | "search" | "notifications" | "profile" | "settings" | null;
 
 export interface NoodleShellProps {
   activeView: NoodleShellView;

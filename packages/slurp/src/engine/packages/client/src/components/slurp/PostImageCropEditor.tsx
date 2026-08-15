@@ -82,6 +82,10 @@ export function PostImageCropEditor({
   );
 
   useEffect(() => {
+    if (imageRef.current) imageRef.current.src = sourceUrl;
+  }, [sourceUrl]);
+
+  useEffect(() => {
     setSourceSize(null);
     setDisplaySize(null);
     setAspect("original");
@@ -227,7 +231,6 @@ export function PostImageCropEditor({
         <div className="relative mx-auto w-fit max-w-full overflow-hidden rounded-md">
           <img
             ref={imageRef}
-            src={sourceUrl}
             alt={localizeUi("ui.noodle.postimagecropeditor.cropPreview")}
             draggable={false}
             onLoad={(event) => {
@@ -394,8 +397,8 @@ export function PostImageFrame({
         className="flex justify-center overflow-hidden rounded-xl bg-black/30"
         style={{ maxHeight }}
       >
-        <img
-          src={src}
+        <ImageWithSource
+          source={src}
           alt={alt}
           onError={onError}
           className="max-w-full object-contain"
@@ -418,8 +421,8 @@ export function PostImageFrame({
       className="relative mx-auto w-full overflow-hidden rounded-xl bg-black/30"
       style={{ aspectRatio, maxWidth: maxHeight * aspectRatio }}
     >
-      <img
-        src={src}
+      <ImageWithSource
+        source={src}
         alt={alt}
         onError={onError}
         className="absolute max-w-none"
@@ -427,6 +430,17 @@ export function PostImageFrame({
       />
     </div>
   );
+}
+
+function ImageWithSource({
+  source,
+  ...props
+}: { source: string } & Omit<React.ComponentProps<"img">, "src">) {
+  const imageRef = useRef<HTMLImageElement>(null);
+  useEffect(() => {
+    if (imageRef.current) imageRef.current.src = source;
+  }, [source]);
+  return <img ref={imageRef} {...props} />;
 }
 
 function isValidCrop(crop: NoodlePostImageCrop): boolean {

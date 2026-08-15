@@ -16,7 +16,7 @@ export async function activate({
   };
 }) {
   // Capability routes are registered through the host's revocable privileged route slots.
-  // Noodle exposes only the public timeline capability. Creator routes run in Slurp.
+  // Noodle exposes only the public timeline capability. Creator routes live in their separate package.
   const routes: FastifyPluginAsync = async (router) => {
     await noodleRoutes(Object.assign(router, { db: app.db }) as FastifyInstance);
   };

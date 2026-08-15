@@ -2,7 +2,18 @@
 // Storage: Noodle Fake Social Media
 // ──────────────────────────────────────────────
 import { existsSync } from "node:fs";
-import { and, desc, eq, gt, inArray, isNotNull, isNull, like, lt, or } from "../../db/file-query.js";
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  like,
+  lt,
+  or,
+} from "../../db/file-query.js";
 import {
   createNoodlePoll,
   DEFAULT_NOODLER_CREATOR_REPLIES_PER_24_HOURS,
@@ -68,7 +79,10 @@ import {
   parsePersistedNoodleFanActivityDayPlan,
 } from "../slurp/noodle-fan-activity-day-plan.js";
 import { NOODLER_FAN_IDENTITY_PREFIX } from "../slurp/noodle-fan-identity-provider.js";
-import { canViewNoodlerPost, isNoodlerHiddenFromViewer } from "../slurp/noodler-access.js";
+import {
+  canViewNoodlerPost,
+  isNoodlerHiddenFromViewer,
+} from "../slurp/noodler-access.js";
 import {
   NOODLER_MEDIA_URL_PREFIX,
   noodlerPostMediaUrl,
@@ -89,7 +103,10 @@ import {
   noodlerReserveState,
   noodlerFanActivityState,
 } from "../../db/schema/slurp.js";
-import { readNoodlerAccountMediaPath, readNoodlerAvatarMediaPath } from "../slurp/noodle-noodler-avatar.js";
+import {
+  readNoodlerAccountMediaPath,
+  readNoodlerAvatarMediaPath,
+} from "../slurp/noodle-noodler-avatar.js";
 import { newId, now } from "../../utils/id-generator.js";
 import {
   compareMinimizedNoodlerSourceSnapshot,
@@ -115,7 +132,11 @@ import {
 
 const NOODLE_SETTINGS_KEY = "slurp.settings";
 const NOODLE_REFRESH_SCHEDULE_KEY = "slurp.refresh-schedule";
-const NOODLE_CARRYOVER_TARGETS: NoodleCarryoverTarget[] = ["conversation", "roleplay", "game"];
+const NOODLE_CARRYOVER_TARGETS: NoodleCarryoverTarget[] = [
+  "conversation",
+  "roleplay",
+  "game",
+];
 const NOODLER_RESERVE_STATE_ID = "noodler-reserve";
 const ROLLING_DAY_MS = 24 * 60 * 60 * 1000;
 const MANUAL_POST_INVALIDATION_MS = 60 * 60 * 1000;
@@ -145,7 +166,10 @@ export type NoodlerPostPageOptions = {
 function noodlerReadablePostCondition(options: NoodlerPostPageOptions) {
   return or(
     eq(noodlePosts.access, "public"),
-    inArray(noodlePosts.authorAccountId, options.readableContentAccountIds ?? []),
+    inArray(
+      noodlePosts.authorAccountId,
+      options.readableContentAccountIds ?? [],
+    ),
     inArray(noodlePosts.id, options.unlockedPostIds ?? []),
   );
 }
@@ -160,7 +184,10 @@ function noodlerPostPageCondition(
     options.mediaOnly
       ? and(
           isNotNull(noodlePosts.imageUrl),
-          or(readable, like(noodlePosts.imageUrl, `${NOODLER_MEDIA_URL_PREFIX}%`)),
+          or(
+            readable,
+            like(noodlePosts.imageUrl, `${NOODLER_MEDIA_URL_PREFIX}%`),
+          ),
         )
       : undefined,
     options.readableOnly ? readable : undefined,
@@ -185,7 +212,8 @@ export type NoodlerPreparedPostPayload = {
 };
 
 export type NoodlerPreparedPostState = "prepared" | "published" | "discarded";
-export type NoodlerPreparedImageState = "none" | "pending" | "generating" | "attached" | "rejected" | "closed";
+export type NoodlerPreparedImageState =
+  "none" | "pending" | "generating" | "attached" | "rejected" | "closed";
 
 export function noodlerReservePolicyFingerprint(
   account: NoodleAccount,
@@ -207,8 +235,10 @@ export function noodlerReservePolicyFingerprint(
     ? {
         imageGenerationConnectionId: settings.imageGenerationConnectionId,
         imageGenerationPrompt: settings.imageGenerationPrompt,
-        imageGenerationUseAvatarReferences: settings.imageGenerationUseAvatarReferences,
-        imageGenerationIncludeDescriptions: settings.imageGenerationIncludeDescriptions,
+        imageGenerationUseAvatarReferences:
+          settings.imageGenerationUseAvatarReferences,
+        imageGenerationIncludeDescriptions:
+          settings.imageGenerationIncludeDescriptions,
         includeCharacterSchedules: settings.includeCharacterSchedules,
         noodlerNightQuiet: settings.noodlerNightQuiet,
       }
@@ -257,16 +287,28 @@ type DigestRow = typeof noodleActivityDigests.$inferSelect;
 type RefreshRunRow = typeof noodleRefreshRuns.$inferSelect;
 type SubscriptionRow = typeof noodleAccountSubscriptions.$inferSelect;
 type PostUnlockRow = typeof noodlePostUnlocks.$inferSelect;
-type PublicCreateInteractionCommand = Omit<NoodleCreateInteractionInput, "actorKind" | "actorEntityId"> & {
+type PublicCreateInteractionCommand = Omit<
+  NoodleCreateInteractionInput,
+  "actorKind" | "actorEntityId"
+> & {
   actorAccountId: string;
 };
-type PublicRemoveInteractionCommand = Omit<NoodleRemoveInteractionInput, "actorKind" | "actorEntityId"> & {
+type PublicRemoveInteractionCommand = Omit<
+  NoodleRemoveInteractionInput,
+  "actorKind" | "actorEntityId"
+> & {
   actorAccountId: string;
 };
-type NoodlerCreateInteractionCommand = Omit<NoodlerCreateInteractionInput, "personaId"> & {
+type NoodlerCreateInteractionCommand = Omit<
+  NoodlerCreateInteractionInput,
+  "personaId"
+> & {
   actorAccountId: string;
 };
-type NoodlerRemoveInteractionCommand = Omit<NoodlerRemoveInteractionInput, "personaId"> & {
+type NoodlerRemoveInteractionCommand = Omit<
+  NoodlerRemoveInteractionInput,
+  "personaId"
+> & {
   actorAccountId: string;
 };
 type DeleteStoredInteractionCommand = {
@@ -312,12 +354,16 @@ function parseRecord(value: unknown): Record<string, unknown> {
   if (typeof value === "string") {
     try {
       const parsed = JSON.parse(value);
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {};
     } catch {
       return {};
     }
   }
-  return typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  return typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function emptyNoodleAccountSettings(): NoodleAccountSettings {
@@ -330,26 +376,42 @@ function emptyNoodleAccountSettings(): NoodleAccountSettings {
   };
 }
 
-function defaultAutoPostingSettings(): NonNullable<NoodleAccountSchedulerSettings["autoPosting"]> {
+function defaultAutoPostingSettings(): NonNullable<
+  NoodleAccountSchedulerSettings["autoPosting"]
+> {
   return { enabled: false, imagesEnabled: false };
 }
 
-export function normalizeScheduler(value: unknown): NoodleAccountSchedulerSettings {
+export function normalizeScheduler(
+  value: unknown,
+): NoodleAccountSchedulerSettings {
   const defaults = defaultAutoPostingSettings();
   const scheduler = parseRecord(value);
   const raw = parseRecord(scheduler.autoPosting);
-  const fanActivity = noodlerFanActivitySettingsSchema.safeParse(scheduler.fanActivity);
+  const fanActivity = noodlerFanActivitySettingsSchema.safeParse(
+    scheduler.fanActivity,
+  );
   return {
     autoPosting: {
-      enabled: typeof raw.enabled === "boolean" ? raw.enabled : defaults.enabled,
-      imagesEnabled: typeof raw.imagesEnabled === "boolean" ? raw.imagesEnabled : defaults.imagesEnabled,
+      enabled:
+        typeof raw.enabled === "boolean" ? raw.enabled : defaults.enabled,
+      imagesEnabled:
+        typeof raw.imagesEnabled === "boolean"
+          ? raw.imagesEnabled
+          : defaults.imagesEnabled,
     },
     ...(fanActivity.success && { fanActivity: fanActivity.data }),
   };
 }
 
-function nestedOrLegacy(nested: Record<string, unknown>, legacy: Record<string, unknown>, key: string) {
-  return Object.prototype.hasOwnProperty.call(nested, key) ? nested[key] : legacy[key];
+function nestedOrLegacy(
+  nested: Record<string, unknown>,
+  legacy: Record<string, unknown>,
+  key: string,
+) {
+  return Object.prototype.hasOwnProperty.call(nested, key)
+    ? nested[key]
+    : legacy[key];
 }
 
 function normalizePersistedBoolean(value: unknown): boolean | undefined {
@@ -359,30 +421,48 @@ function normalizePersistedBoolean(value: unknown): boolean | undefined {
 }
 
 export function normalizePersistedInteger(value: unknown): number | undefined {
-  const parsed = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
-  return Number.isFinite(parsed) && Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined;
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim()
+        ? Number(value)
+        : NaN;
+  return Number.isFinite(parsed) && Number.isInteger(parsed) && parsed >= 0
+    ? parsed
+    : undefined;
 }
 
-function validProfileField(key: string, value: unknown): NoodleAccountSettings["profile"] {
+function validProfileField(
+  key: string,
+  value: unknown,
+): NoodleAccountSettings["profile"] {
   if (value === undefined) return {};
   const parsed = noodleAccountProfileSettingsSchema.safeParse({ [key]: value });
   return parsed.success ? parsed.data : {};
 }
 
-function validSocialField(key: string, value: unknown): NoodleAccountSettings["social"] {
+function validSocialField(
+  key: string,
+  value: unknown,
+): NoodleAccountSettings["social"] {
   if (value === undefined) return {};
   const parsed = noodleAccountSocialSettingsSchema.safeParse({ [key]: value });
   return parsed.success ? parsed.data : {};
 }
 
-function validPrivacyField(key: string, value: unknown): NoodleAccountSettings["privacy"] {
+function validPrivacyField(
+  key: string,
+  value: unknown,
+): NoodleAccountSettings["privacy"] {
   const empty = { access: { hiddenFromAccountIds: [] } };
   if (value === undefined) return empty;
   const parsed = noodleAccountPrivacySettingsSchema.safeParse({ [key]: value });
   return parsed.success ? parsed.data : empty;
 }
 
-export function normalizeNoodleAccountSettings(value: unknown): NoodleAccountSettings {
+export function normalizeNoodleAccountSettings(
+  value: unknown,
+): NoodleAccountSettings {
   const raw = parseRecord(value);
   const rawProfile = parseRecord(raw.profile);
   const rawSocial = parseRecord(raw.social);
@@ -391,50 +471,114 @@ export function normalizeNoodleAccountSettings(value: unknown): NoodleAccountSet
   const rawAvatarCrop = nestedOrLegacy(rawProfile, raw, "avatarCrop");
   const rawBannerUrl = nestedOrLegacy(rawProfile, raw, "bannerUrl");
   const rawLocation = nestedOrLegacy(rawProfile, raw, "location");
-  const rawProfileGenerated = nestedOrLegacy(rawProfile, raw, "profileGenerated");
-  const rawProfileManuallyEdited = nestedOrLegacy(rawProfile, raw, "profileManuallyEdited");
+  const rawProfileGenerated = nestedOrLegacy(
+    rawProfile,
+    raw,
+    "profileGenerated",
+  );
+  const rawProfileManuallyEdited = nestedOrLegacy(
+    rawProfile,
+    raw,
+    "profileManuallyEdited",
+  );
   const rawNoodlerWizardExecutionId = rawProfile.noodlerWizardExecutionId;
   const rawNoodlerSourceSnapshot = rawProfile.noodlerSourceSnapshot;
-  const rawFollowingAccountIds = nestedOrLegacy(rawSocial, raw, "followingAccountIds");
-  const rawFollowingAccountTimestamps = nestedOrLegacy(rawSocial, raw, "followingAccountTimestamps");
-  const rawNotificationsReadAt = nestedOrLegacy(rawSocial, raw, "notificationsReadAt");
-  const rawNoodlerFeedSeenAt = nestedOrLegacy(rawSocial, raw, "noodlerFeedSeenAt");
-  const rawNoodleFeedSeenAt = nestedOrLegacy(rawSocial, raw, "noodleFeedSeenAt");
-  const rawIdentityDisclosure = nestedOrLegacy(rawPrivacy, raw, "identityDisclosure");
-  const rawStagePersonality = nestedOrLegacy(rawPrivacy, raw, "stagePersonality");
+  const rawFollowingAccountIds = nestedOrLegacy(
+    rawSocial,
+    raw,
+    "followingAccountIds",
+  );
+  const rawFollowingAccountTimestamps = nestedOrLegacy(
+    rawSocial,
+    raw,
+    "followingAccountTimestamps",
+  );
+  const rawNotificationsReadAt = nestedOrLegacy(
+    rawSocial,
+    raw,
+    "notificationsReadAt",
+  );
+  const rawNoodlerFeedSeenAt = nestedOrLegacy(
+    rawSocial,
+    raw,
+    "noodlerFeedSeenAt",
+  );
+  const rawNoodleFeedSeenAt = nestedOrLegacy(
+    rawSocial,
+    raw,
+    "noodleFeedSeenAt",
+  );
+  const rawIdentityDisclosure = nestedOrLegacy(
+    rawPrivacy,
+    raw,
+    "identityDisclosure",
+  );
+  const rawStagePersonality = nestedOrLegacy(
+    rawPrivacy,
+    raw,
+    "stagePersonality",
+  );
   const rawAccess = parseRecord(rawPrivacy.access);
-  const normalizedAvatarCrop = rawAvatarCrop === null ? null : normalizeAvatarCrop(rawAvatarCrop);
+  const normalizedAvatarCrop =
+    rawAvatarCrop === null ? null : normalizeAvatarCrop(rawAvatarCrop);
   const profile = {
     ...(rawAvatarCrop !== undefined &&
-      (rawAvatarCrop === null || normalizedAvatarCrop !== null) && { avatarCrop: normalizedAvatarCrop }),
-    ...(rawBannerUrl !== undefined && validProfileField("bannerUrl", rawBannerUrl)),
-    ...(rawLocation !== undefined && validProfileField("location", rawLocation)),
+      (rawAvatarCrop === null || normalizedAvatarCrop !== null) && {
+        avatarCrop: normalizedAvatarCrop,
+      }),
+    ...(rawBannerUrl !== undefined &&
+      validProfileField("bannerUrl", rawBannerUrl)),
+    ...(rawLocation !== undefined &&
+      validProfileField("location", rawLocation)),
     ...(rawProfileGenerated !== undefined &&
-      validProfileField("profileGenerated", normalizePersistedBoolean(rawProfileGenerated))),
+      validProfileField(
+        "profileGenerated",
+        normalizePersistedBoolean(rawProfileGenerated),
+      )),
     ...(rawProfileManuallyEdited !== undefined &&
-      validProfileField("profileManuallyEdited", normalizePersistedBoolean(rawProfileManuallyEdited))),
+      validProfileField(
+        "profileManuallyEdited",
+        normalizePersistedBoolean(rawProfileManuallyEdited),
+      )),
     ...(rawNoodlerWizardExecutionId !== undefined &&
-      validProfileField("noodlerWizardExecutionId", rawNoodlerWizardExecutionId)),
-    ...(rawNoodlerSourceSnapshot !== undefined && validProfileField("noodlerSourceSnapshot", rawNoodlerSourceSnapshot)),
+      validProfileField(
+        "noodlerWizardExecutionId",
+        rawNoodlerWizardExecutionId,
+      )),
+    ...(rawNoodlerSourceSnapshot !== undefined &&
+      validProfileField("noodlerSourceSnapshot", rawNoodlerSourceSnapshot)),
   };
   const followingAccountTimestamps = Object.fromEntries(
     Object.entries(parseRecord(rawFollowingAccountTimestamps)).filter(
       ([accountId, timestamp]) =>
-        noodleAccountSocialSettingsSchema.safeParse({ followingAccountTimestamps: { [accountId]: timestamp } }).success,
+        noodleAccountSocialSettingsSchema.safeParse({
+          followingAccountTimestamps: { [accountId]: timestamp },
+        }).success,
     ),
   );
   const social = {
     ...(rawFollowingAccountIds !== undefined &&
-      validSocialField("followingAccountIds", parseStringArray(rawFollowingAccountIds))),
+      validSocialField(
+        "followingAccountIds",
+        parseStringArray(rawFollowingAccountIds),
+      )),
     ...(rawFollowingAccountTimestamps !== undefined &&
-      validSocialField("followingAccountTimestamps", followingAccountTimestamps)),
-    ...(rawNotificationsReadAt !== undefined && validSocialField("notificationsReadAt", rawNotificationsReadAt)),
-    ...(rawNoodlerFeedSeenAt !== undefined && validSocialField("noodlerFeedSeenAt", rawNoodlerFeedSeenAt)),
-    ...(rawNoodleFeedSeenAt !== undefined && validSocialField("noodleFeedSeenAt", rawNoodleFeedSeenAt)),
+      validSocialField(
+        "followingAccountTimestamps",
+        followingAccountTimestamps,
+      )),
+    ...(rawNotificationsReadAt !== undefined &&
+      validSocialField("notificationsReadAt", rawNotificationsReadAt)),
+    ...(rawNoodlerFeedSeenAt !== undefined &&
+      validSocialField("noodlerFeedSeenAt", rawNoodlerFeedSeenAt)),
+    ...(rawNoodleFeedSeenAt !== undefined &&
+      validSocialField("noodleFeedSeenAt", rawNoodleFeedSeenAt)),
   };
   const privacy = {
-    ...(rawIdentityDisclosure !== undefined && validPrivacyField("identityDisclosure", rawIdentityDisclosure)),
-    ...(rawStagePersonality !== undefined && validPrivacyField("stagePersonality", rawStagePersonality)),
+    ...(rawIdentityDisclosure !== undefined &&
+      validPrivacyField("identityDisclosure", rawIdentityDisclosure)),
+    ...(rawStagePersonality !== undefined &&
+      validPrivacyField("stagePersonality", rawStagePersonality)),
     access: {
       hiddenFromAccountIds: parseStringArray(rawAccess.hiddenFromAccountIds),
     },
@@ -444,7 +588,11 @@ export function normalizeNoodleAccountSettings(value: unknown): NoodleAccountSet
     social,
     scheduler: normalizeScheduler(raw.scheduler),
     privacy,
-    wallet: { coins: normalizePersistedInteger(rawWallet.coins) ?? DEFAULT_NOODLE_WALLET_COINS },
+    wallet: {
+      coins:
+        normalizePersistedInteger(rawWallet.coins) ??
+        DEFAULT_NOODLE_WALLET_COINS,
+    },
   };
 }
 
@@ -462,13 +610,19 @@ function parseRefreshAttempts(value: unknown): NoodleRefreshAttempt[] {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
     const candidate = entry as Record<string, unknown>;
     const kind = candidate.kind;
-    if (kind !== "initial" && kind !== "text_only_fallback" && kind !== "correction") return [];
+    if (
+      kind !== "initial" &&
+      kind !== "text_only_fallback" &&
+      kind !== "correction"
+    )
+      return [];
     if (
       typeof candidate.sequence !== "number" ||
       !Number.isInteger(candidate.sequence) ||
       candidate.sequence < 1 ||
       typeof candidate.response !== "string" ||
-      (candidate.rejectionReason !== null && typeof candidate.rejectionReason !== "string") ||
+      (candidate.rejectionReason !== null &&
+        typeof candidate.rejectionReason !== "string") ||
       typeof candidate.createdAt !== "string"
     ) {
       return [];
@@ -490,12 +644,17 @@ export function parseNoodleAvatarCrop(value: unknown): AvatarCrop | null {
 }
 
 function parseStringArray(value: unknown): string[] {
-  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string" && item.length > 0);
+  if (Array.isArray(value))
+    return value.filter(
+      (item): item is string => typeof item === "string" && item.length > 0,
+    );
   if (typeof value !== "string") return [];
   try {
     const parsed = JSON.parse(value);
     return Array.isArray(parsed)
-      ? parsed.filter((item): item is string => typeof item === "string" && item.length > 0)
+      ? parsed.filter(
+          (item): item is string => typeof item === "string" && item.length > 0,
+        )
       : [];
   } catch {
     return [];
@@ -506,10 +665,15 @@ function parseAuthorSnapshot(value: unknown): NoodleAuthorSnapshot | null {
   const parsed = parseRecord(value);
   const id = typeof parsed.id === "string" ? parsed.id : "";
   const kind =
-    parsed.kind === "persona" || parsed.kind === "character" || parsed.kind === "random_user" ? parsed.kind : null;
+    parsed.kind === "persona" ||
+    parsed.kind === "character" ||
+    parsed.kind === "random_user"
+      ? parsed.kind
+      : null;
   const entityId = typeof parsed.entityId === "string" ? parsed.entityId : "";
   const handle = typeof parsed.handle === "string" ? parsed.handle : "";
-  const displayName = typeof parsed.displayName === "string" ? parsed.displayName : "";
+  const displayName =
+    typeof parsed.displayName === "string" ? parsed.displayName : "";
   if (!id || !kind || !entityId || !handle || !displayName) return null;
   return {
     id,
@@ -517,7 +681,10 @@ function parseAuthorSnapshot(value: unknown): NoodleAuthorSnapshot | null {
     entityId,
     handle,
     displayName,
-    avatarUrl: typeof parsed.avatarUrl === "string" && parsed.avatarUrl ? parsed.avatarUrl : null,
+    avatarUrl:
+      typeof parsed.avatarUrl === "string" && parsed.avatarUrl
+        ? parsed.avatarUrl
+        : null,
     avatarCrop: normalizeAvatarCrop(parsed.avatarCrop),
   };
 }
@@ -540,9 +707,16 @@ function suffixedPublicHandle(base: string, suffixNumber: number): string {
   return `${base.slice(0, Math.max(1, 36 - suffix.length))}${suffix}`;
 }
 
-function nextAvailablePublicHandle(base: string, reserved: ReadonlySet<string>): string {
+function nextAvailablePublicHandle(
+  base: string,
+  reserved: ReadonlySet<string>,
+): string {
   if (!reserved.has(base)) return base;
-  for (let suffixNumber = 2; suffixNumber < Number.MAX_SAFE_INTEGER; suffixNumber += 1) {
+  for (
+    let suffixNumber = 2;
+    suffixNumber < Number.MAX_SAFE_INTEGER;
+    suffixNumber += 1
+  ) {
     const candidate = suffixedPublicHandle(base, suffixNumber);
     if (!reserved.has(candidate)) return candidate;
   }
@@ -554,15 +728,21 @@ function normalizeAccountKind(kind: string): NoodleAccountKind {
   return "persona";
 }
 
-function legacyCarryoverTargets(mode: NoodleCarryoverMode): NoodleCarryoverTarget[] {
+function legacyCarryoverTargets(
+  mode: NoodleCarryoverMode,
+): NoodleCarryoverTarget[] {
   if (mode === "all") return [...NOODLE_CARRYOVER_TARGETS];
-  if (mode === "conversation" || mode === "roleplay" || mode === "game") return [mode];
+  if (mode === "conversation" || mode === "roleplay" || mode === "game")
+    return [mode];
   return [];
 }
 
-function legacyCarryoverMode(targets: NoodleCarryoverTarget[]): NoodleCarryoverMode {
+function legacyCarryoverMode(
+  targets: NoodleCarryoverTarget[],
+): NoodleCarryoverMode {
   const selected = new Set(targets);
-  if (NOODLE_CARRYOVER_TARGETS.every((target) => selected.has(target))) return "all";
+  if (NOODLE_CARRYOVER_TARGETS.every((target) => selected.has(target)))
+    return "all";
   if (targets.length === 1) return targets[0]!;
   return "off";
 }
@@ -595,7 +775,9 @@ const NOODLER_LEGACY_GENERATION_GUIDANCE_DEFAULTS = [
 export function normalizeNoodleSettings(raw: unknown): NoodleSettings {
   const rawRecord = parseRecord(raw);
   const migratedMaxImagesPerRefresh =
-    rawRecord.maxImagesPerRefresh ?? rawRecord.maxImagePromptsPerDay ?? DEFAULT_NOODLE_SETTINGS.maxImagesPerRefresh;
+    rawRecord.maxImagesPerRefresh ??
+    rawRecord.maxImagePromptsPerDay ??
+    DEFAULT_NOODLE_SETTINGS.maxImagesPerRefresh;
   // Renamed from privateGenerationGuidance; without the alias an existing user's
   // customized guidance would silently revert to the shipped default.
   const storedNoodlerGenerationGuidance =
@@ -617,12 +799,18 @@ export function normalizeNoodleSettings(raw: unknown): NoodleSettings {
   const candidate: Record<string, unknown> = {
     ...DEFAULT_NOODLE_SETTINGS,
     ...rawRecord,
+    // Installing Slurp is the opt-in. The old NoodleR feature flag must never
+    // send the standalone package back to a Noodle surface it does not own.
+    enableNoodler: true,
     maxImagesPerRefresh: migratedMaxImagesPerRefresh,
     noodlerGenerationGuidance: migratedNoodlerGenerationGuidance,
-    imageCaptioningUseConnectionDefault: migratedImageCaptioningUseConnectionDefault,
+    imageCaptioningUseConnectionDefault:
+      migratedImageCaptioningUseConnectionDefault,
     noodlerOnboardingState:
       rawRecord.noodlerOnboardingState ??
-      (rawRecord.noodlerOnboardingComplete === true ? "completed" : DEFAULT_NOODLE_SETTINGS.noodlerOnboardingState),
+      (rawRecord.noodlerOnboardingComplete === true
+        ? "completed"
+        : DEFAULT_NOODLE_SETTINGS.noodlerOnboardingState),
   };
   let parsed = noodleSettingsSchema.safeParse(candidate);
   if (!parsed.success) {
@@ -630,16 +818,24 @@ export function normalizeNoodleSettings(raw: unknown): NoodleSettings {
     // things the user never touched (lorebook context, invited character folders, connection).
     // Drop only the fields that failed and let the schema default those instead.
     const rejectedKeys = new Set(
-      parsed.error.issues.map((issue) => String(issue.path[0] ?? "")).filter((key) => key.length > 0),
+      parsed.error.issues
+        .map((issue) => String(issue.path[0] ?? ""))
+        .filter((key) => key.length > 0),
     );
     logger.warn(
       "Noodle settings had invalid field(s); falling back to defaults for: %s",
       [...rejectedKeys].join(", ") || "(unknown)",
     );
     for (const key of rejectedKeys) delete candidate[key];
-    parsed = noodleSettingsSchema.safeParse({ ...DEFAULT_NOODLE_SETTINGS, ...candidate });
+    parsed = noodleSettingsSchema.safeParse({
+      ...DEFAULT_NOODLE_SETTINGS,
+      ...candidate,
+    });
     if (!parsed.success) {
-      logger.error(parsed.error, "Noodle settings could not be recovered; resetting to defaults");
+      logger.error(
+        parsed.error,
+        "Noodle settings could not be recovered; resetting to defaults",
+      );
       return noodleSettingsSchema.parse(DEFAULT_NOODLE_SETTINGS);
     }
   }
@@ -647,7 +843,11 @@ export function normalizeNoodleSettings(raw: unknown): NoodleSettings {
   const max = Math.max(parsed.data.participantMin, parsed.data.participantMax);
   const providedCarryoverModes = Array.isArray(rawRecord.carryoverModes);
   const carryoverModes = Array.from(
-    new Set(parsed.data.carryoverModes.filter((mode) => NOODLE_CARRYOVER_TARGETS.includes(mode))),
+    new Set(
+      parsed.data.carryoverModes.filter((mode) =>
+        NOODLE_CARRYOVER_TARGETS.includes(mode),
+      ),
+    ),
   );
   const normalizedCarryoverModes =
     carryoverModes.length > 0 || providedCarryoverModes
@@ -727,18 +927,25 @@ function updatePollMetadata(
   const currentPoll = readNoodlePollFromMetadata(metadata);
   const generatedPoll = pollUpdate ? createNoodlePoll(pollUpdate) : null;
   const historicalOptionIds = Array.isArray(metadata.pollOptionIds)
-    ? metadata.pollOptionIds.filter((id): id is string => typeof id === "string")
+    ? metadata.pollOptionIds.filter(
+        (id): id is string => typeof id === "string",
+      )
     : [];
-  const usedOptionIds = new Set([...historicalOptionIds, ...(currentPoll?.options.map((option) => option.id) ?? [])]);
+  const usedOptionIds = new Set([
+    ...historicalOptionIds,
+    ...(currentPoll?.options.map((option) => option.id) ?? []),
+  ]);
   const currentOptions = currentPoll?.options ?? [];
   const matchedCurrentOptionIds = new Set<string>();
-  const normalizeOptionLabel = (label: string) => label.trim().toLocaleLowerCase();
+  const normalizeOptionLabel = (label: string) =>
+    label.trim().toLocaleLowerCase();
   const retainedOptionIds =
     generatedPoll?.options.map((option) => {
       const matched = currentOptions.find(
         (current) =>
           !matchedCurrentOptionIds.has(current.id) &&
-          normalizeOptionLabel(current.label) === normalizeOptionLabel(option.label),
+          normalizeOptionLabel(current.label) ===
+            normalizeOptionLabel(option.label),
       );
       if (!matched) return null;
       matchedCurrentOptionIds.add(matched.id);
@@ -750,7 +957,9 @@ function updatePollMetadata(
     const matched =
       samePosition && !matchedCurrentOptionIds.has(samePosition.id)
         ? samePosition
-        : currentOptions.find((current) => !matchedCurrentOptionIds.has(current.id));
+        : currentOptions.find(
+            (current) => !matchedCurrentOptionIds.has(current.id),
+          );
     if (!matched) continue;
     matchedCurrentOptionIds.add(matched.id);
     retainedOptionIds[index] = matched.id;
@@ -762,7 +971,8 @@ function updatePollMetadata(
         options: generatedPoll.options.map((option, index) => {
           const retainedOptionId = retainedOptionIds[index];
           if (retainedOptionId) return { ...option, id: retainedOptionId };
-          while (usedOptionIds.has(`option-${nextOptionNumber}`)) nextOptionNumber += 1;
+          while (usedOptionIds.has(`option-${nextOptionNumber}`))
+            nextOptionNumber += 1;
           const id = `option-${nextOptionNumber}`;
           usedOptionIds.add(id);
           nextOptionNumber += 1;
@@ -787,14 +997,21 @@ function mapSubscription(row: SubscriptionRow): NoodleAccountSubscription {
 }
 
 function mapPostUnlock(row: PostUnlockRow): NoodlePostUnlock {
-  return { id: row.id, viewerAccountId: row.viewerAccountId, postId: row.postId, createdAt: row.createdAt };
+  return {
+    id: row.id,
+    viewerAccountId: row.viewerAccountId,
+    postId: row.postId,
+    createdAt: row.createdAt,
+  };
 }
 
 function imageClaimIsAvailable(row: PostRow, at: string) {
   return (
     Boolean(row.imagePrompt) &&
     !row.imageUrl &&
-    (!row.imageClaimToken || !row.imageClaimLeaseUntil || row.imageClaimLeaseUntil <= at)
+    (!row.imageClaimToken ||
+      !row.imageClaimLeaseUntil ||
+      row.imageClaimLeaseUntil <= at)
   );
 }
 
@@ -805,7 +1022,10 @@ function mapInteraction(row: InteractionRow): NoodleInteraction {
     parentInteractionId: row.parentInteractionId ?? null,
     actorAccountId: row.actorAccountId,
     type:
-      row.type === "repost" || row.type === "reply" || row.type === "like" || row.type === "vote"
+      row.type === "repost" ||
+      row.type === "reply" ||
+      row.type === "like" ||
+      row.type === "vote"
         ? (row.type as NoodleInteractionType)
         : "like",
     content: row.content ?? null,
@@ -830,7 +1050,10 @@ function mapDigest(row: DigestRow): NoodleDigestEntry {
 function mapRefreshRun(row: RefreshRunRow): NoodleRefreshRun {
   return {
     id: row.id,
-    status: row.status === "completed" || row.status === "failed" ? row.status : "running",
+    status:
+      row.status === "completed" || row.status === "failed"
+        ? row.status
+        : "running",
     activeAccountIds: parseStringArray(row.activeAccountIds),
     prompt: row.prompt ?? "",
     result: row.result ?? null,
@@ -868,7 +1091,10 @@ export function createSlurpStorage(db: DB) {
     if (publicHandleReconciliation) return publicHandleReconciliation;
     publicHandleReconciliation = db
       .transaction(async (tx) => {
-        const rows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.platform, "noodle"));
+        const rows = await tx
+          .select()
+          .from(noodleAccounts)
+          .where(eq(noodleAccounts.platform, "noodle"));
         const groups = new Map<string, AccountRow[]>();
         for (const row of rows) {
           const normalized = normalizeHandle(row.handle, row.entityId);
@@ -881,7 +1107,8 @@ export function createSlurpStorage(db: DB) {
         for (const [base, group] of groups) {
           group.sort(
             (left, right) =>
-              String(left.createdAt).localeCompare(String(right.createdAt)) || left.id.localeCompare(right.id),
+              String(left.createdAt).localeCompare(String(right.createdAt)) ||
+              left.id.localeCompare(right.id),
           );
           const keeper = group.find((row) => row.handle === base) ?? group[0]!;
           for (const duplicate of group) {
@@ -923,7 +1150,10 @@ export function createSlurpStorage(db: DB) {
             eq(noodleInteractions.actorAccountId, input.actor.id),
             eq(noodleInteractions.type, input.type),
             input.parentInteractionId
-              ? eq(noodleInteractions.parentInteractionId, input.parentInteractionId)
+              ? eq(
+                  noodleInteractions.parentInteractionId,
+                  input.parentInteractionId,
+                )
               : isNull(noodleInteractions.parentInteractionId),
           ),
         );
@@ -947,7 +1177,12 @@ export function createSlurpStorage(db: DB) {
         createdAt: now(),
       });
     } catch (error) {
-      const toggleKeys = ["postId", "actorAccountId", "type", "parentInteractionId"];
+      const toggleKeys = [
+        "postId",
+        "actorAccountId",
+        "type",
+        "parentInteractionId",
+      ];
       if (
         isToggleInteractionType(input.type) &&
         isFileUniqueConstraintError(error, "slurp_interactions", toggleKeys)
@@ -957,7 +1192,10 @@ export function createSlurpStorage(db: DB) {
       }
       throw error;
     }
-    const rows = await db.select().from(noodleInteractions).where(eq(noodleInteractions.id, id));
+    const rows = await db
+      .select()
+      .from(noodleInteractions)
+      .where(eq(noodleInteractions.id, id));
     return rows[0] ? mapInteraction(rows[0]) : null;
   };
 
@@ -974,16 +1212,32 @@ export function createSlurpStorage(db: DB) {
         tx
           .select()
           .from(noodleAccounts)
-          .where(and(eq(noodleAccounts.id, actorAccountId), eq(noodleAccounts.platform, "noodle"))),
+          .where(
+            and(
+              eq(noodleAccounts.id, actorAccountId),
+              eq(noodleAccounts.platform, "noodle"),
+            ),
+          ),
       ]);
       const currentPost = postRows[0];
       if (!currentPost || !actorRows[0]) return null;
       const authorRows = await tx
         .select()
         .from(noodleAccounts)
-        .where(and(eq(noodleAccounts.id, currentPost.authorAccountId), eq(noodleAccounts.platform, authorPlatform)));
-      const currentPoll = readNoodlePollFromMetadata(parseRecord(currentPost.metadata));
-      if (!authorRows[0] || !currentPoll?.options.some((option) => option.id === optionId)) return null;
+        .where(
+          and(
+            eq(noodleAccounts.id, currentPost.authorAccountId),
+            eq(noodleAccounts.platform, authorPlatform),
+          ),
+        );
+      const currentPoll = readNoodlePollFromMetadata(
+        parseRecord(currentPost.metadata),
+      );
+      if (
+        !authorRows[0] ||
+        !currentPoll?.options.some((option) => option.id === optionId)
+      )
+        return null;
 
       const currentActor = mapAccount(actorRows[0]);
       if (authorPlatform === "noodler") {
@@ -1004,8 +1258,14 @@ export function createSlurpStorage(db: DB) {
                 .from(noodleAccountSubscriptions)
                 .where(
                   and(
-                    eq(noodleAccountSubscriptions.viewerAccountId, currentActor.id),
-                    eq(noodleAccountSubscriptions.creatorAccountId, currentAuthor.id),
+                    eq(
+                      noodleAccountSubscriptions.viewerAccountId,
+                      currentActor.id,
+                    ),
+                    eq(
+                      noodleAccountSubscriptions.creatorAccountId,
+                      currentAuthor.id,
+                    ),
                   ),
                 );
         const unlockRows =
@@ -1072,7 +1332,10 @@ export function createSlurpStorage(db: DB) {
           createdAt: now(),
         });
       }
-      const updated = await tx.select().from(noodleInteractions).where(eq(noodleInteractions.id, voteId));
+      const updated = await tx
+        .select()
+        .from(noodleInteractions)
+        .where(eq(noodleInteractions.id, voteId));
       return updated[0] ? mapInteraction(updated[0]) : null;
     });
   };
@@ -1086,9 +1349,17 @@ export function createSlurpStorage(db: DB) {
     tx: Parameters<Parameters<DB["transaction"]>[0]>[0],
     parentId: string,
   ): Promise<void> => {
-    const parent = (await tx.select().from(noodleInteractions).where(eq(noodleInteractions.id, parentId)))[0];
+    const parent = (
+      await tx
+        .select()
+        .from(noodleInteractions)
+        .where(eq(noodleInteractions.id, parentId))
+    )[0];
     const rows = parent
-      ? await tx.select().from(noodleInteractions).where(eq(noodleInteractions.postId, parent.postId))
+      ? await tx
+          .select()
+          .from(noodleInteractions)
+          .where(eq(noodleInteractions.postId, parent.postId))
       : [];
     // The whole descendant subtree goes, not just the direct children (same closure as
     // deleteInteractionById): a reply to a creator reply would otherwise survive its thread.
@@ -1097,7 +1368,12 @@ export function createSlurpStorage(db: DB) {
     while (changed) {
       changed = false;
       for (const row of rows) {
-        if (removed.has(row.id) || !row.parentInteractionId || !removed.has(row.parentInteractionId)) continue;
+        if (
+          removed.has(row.id) ||
+          !row.parentInteractionId ||
+          !removed.has(row.parentInteractionId)
+        )
+          continue;
         removed.add(row.id);
         changed = true;
       }
@@ -1115,8 +1391,12 @@ export function createSlurpStorage(db: DB) {
       );
     const childIds = removedIds.filter((id) => id !== parentId);
     if (childIds.length === 0) return;
-    await tx.delete(noodleActivityDigests).where(inArray(noodleActivityDigests.sourceInteractionId, childIds));
-    await tx.delete(noodleInteractions).where(inArray(noodleInteractions.id, childIds));
+    await tx
+      .delete(noodleActivityDigests)
+      .where(inArray(noodleActivityDigests.sourceInteractionId, childIds));
+    await tx
+      .delete(noodleInteractions)
+      .where(inArray(noodleInteractions.id, childIds));
   };
 
   const deleteStoredInteraction = async (
@@ -1144,7 +1424,9 @@ export function createSlurpStorage(db: DB) {
     if (digestDeletionPolicy === "delete-directly") {
       await db.transaction(async (tx) => {
         await deleteInteractionChildren(tx, existing.id);
-        await tx.delete(noodleInteractions).where(eq(noodleInteractions.id, existing.id));
+        await tx
+          .delete(noodleInteractions)
+          .where(eq(noodleInteractions.id, existing.id));
       });
       return mapInteraction(existing);
     }
@@ -1154,19 +1436,31 @@ export function createSlurpStorage(db: DB) {
       .from(noodleActivityDigests)
       .where(eq(noodleActivityDigests.sourceInteractionId, existing.id));
     const slurpSourceAccountIds = new Set(
-      (await db.select().from(noodleAccounts).where(eq(noodleAccounts.platform, "noodle"))).map((row) => row.id),
+      (
+        await db
+          .select()
+          .from(noodleAccounts)
+          .where(eq(noodleAccounts.platform, "noodle"))
+      ).map((row) => row.id),
     );
     if (
       relatedDigests.some(
-        (digest) => !parseStringArray(digest.accountIds).every((accountId) => slurpSourceAccountIds.has(accountId)),
+        (digest) =>
+          !parseStringArray(digest.accountIds).every((accountId) =>
+            slurpSourceAccountIds.has(accountId),
+          ),
       )
     ) {
       return null;
     }
     await db.transaction(async (tx) => {
       await deleteInteractionChildren(tx, existing.id);
-      await tx.delete(noodleActivityDigests).where(eq(noodleActivityDigests.sourceInteractionId, existing.id));
-      await tx.delete(noodleInteractions).where(eq(noodleInteractions.id, existing.id));
+      await tx
+        .delete(noodleActivityDigests)
+        .where(eq(noodleActivityDigests.sourceInteractionId, existing.id));
+      await tx
+        .delete(noodleInteractions)
+        .where(eq(noodleInteractions.id, existing.id));
     });
     return mapInteraction(existing);
   };
@@ -1177,7 +1471,9 @@ export function createSlurpStorage(db: DB) {
       return normalizeNoodleSettings(raw);
     },
 
-    async updateSettings(input: NoodleSettingsUpdateInput): Promise<NoodleSettings> {
+    async updateSettings(
+      input: NoodleSettingsUpdateInput,
+    ): Promise<NoodleSettings> {
       const current = await this.getSettings();
       const next = normalizeNoodleSettings({ ...current, ...input });
       // Write-only rollback mirror: a pre-rename build reads only the old key, so dropping it
@@ -1185,16 +1481,28 @@ export function createSlurpStorage(db: DB) {
       // supported version reads `privateGenerationGuidance`.
       await settingsStore.set(
         NOODLE_SETTINGS_KEY,
-        JSON.stringify({ ...next, privateGenerationGuidance: next.noodlerGenerationGuidance }),
+        JSON.stringify({
+          ...next,
+          privateGenerationGuidance: next.noodlerGenerationGuidance,
+        }),
       );
       const currentSchedule = await this.getRefreshSchedule();
-      const reconciled = reconcileNoodleRefreshSchedule(currentSchedule, next.refreshesPerDay, new Date());
+      const reconciled = reconcileNoodleRefreshSchedule(
+        currentSchedule,
+        next.refreshesPerDay,
+        new Date(),
+      );
       await this.saveRefreshSchedule(clearNoodleRefreshFailure(reconciled));
-      if (!current.autoPostingScheduleEnabled && next.autoPostingScheduleEnabled) {
+      if (
+        !current.autoPostingScheduleEnabled &&
+        next.autoPostingScheduleEnabled
+      ) {
         const timestamp = now();
         const rows = await db.select().from(noodlerPreparedPosts);
         const expired = rows.filter(
-          (row) => row.state === "prepared" && Date.parse(row.publishAt) <= Date.parse(timestamp),
+          (row) =>
+            row.state === "prepared" &&
+            Date.parse(row.publishAt) <= Date.parse(timestamp),
         );
         if (expired.length > 0) {
           await db.transaction(async (tx) =>
@@ -1209,7 +1517,12 @@ export function createSlurpStorage(db: DB) {
               ),
           );
           for (const row of expired) {
-            unlinkNoodlerMedia(String(parseRecord(parseRecord(row.payload).metadata).noodlerMediaPath ?? "") || null);
+            unlinkNoodlerMedia(
+              String(
+                parseRecord(parseRecord(row.payload).metadata)
+                  .noodlerMediaPath ?? "",
+              ) || null,
+            );
           }
         }
       }
@@ -1226,8 +1539,13 @@ export function createSlurpStorage(db: DB) {
       }
     },
 
-    async saveRefreshSchedule(schedule: PersistedNoodleRefreshSchedule): Promise<void> {
-      await settingsStore.set(NOODLE_REFRESH_SCHEDULE_KEY, JSON.stringify(schedule));
+    async saveRefreshSchedule(
+      schedule: PersistedNoodleRefreshSchedule,
+    ): Promise<void> {
+      await settingsStore.set(
+        NOODLE_REFRESH_SCHEDULE_KEY,
+        JSON.stringify(schedule),
+      );
     },
 
     async ensureRefreshSchedule(
@@ -1236,7 +1554,11 @@ export function createSlurpStorage(db: DB) {
     ): Promise<PersistedNoodleRefreshSchedule> {
       const settings = settingsOverride ?? (await this.getSettings());
       const current = await this.getRefreshSchedule();
-      const reconciled = reconcileNoodleRefreshSchedule(current, settings.refreshesPerDay, at);
+      const reconciled = reconcileNoodleRefreshSchedule(
+        current,
+        settings.refreshesPerDay,
+        at,
+      );
       if (!current || JSON.stringify(current) !== JSON.stringify(reconciled)) {
         await this.saveRefreshSchedule(reconciled);
       }
@@ -1257,7 +1579,9 @@ export function createSlurpStorage(db: DB) {
       const rows = await db
         .select()
         .from(noodleAccounts)
-        .where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "noodle")));
+        .where(
+          and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "noodle")),
+        );
       return rows[0] ? mapAccount(rows[0]) : null;
     },
 
@@ -1266,19 +1590,28 @@ export function createSlurpStorage(db: DB) {
      * posts/interactions/subscriptions. Dependent rows go via the file-store cascade;
      * activity digests have no cascade, so they are cleared explicitly.
      */
-    async deleteAccountByEntity(kind: NoodleAccountKind, entityId: string): Promise<NoodleAccount | null> {
+    async deleteAccountByEntity(
+      kind: NoodleAccountKind,
+      entityId: string,
+    ): Promise<NoodleAccount | null> {
       const existing = await this.getAccountByEntity(kind, entityId);
       if (!existing) return null;
-      const postIds = (await db.select().from(noodlePosts).where(eq(noodlePosts.authorAccountId, existing.id))).map(
-        (post) => post.id,
-      );
+      const postIds = (
+        await db
+          .select()
+          .from(noodlePosts)
+          .where(eq(noodlePosts.authorAccountId, existing.id))
+      ).map((post) => post.id);
       // Interactions on the account's own posts die with the posts via cascade, but the
       // account's interactions on *other* posts have no cascade — delete those explicitly.
       const ownInteractionIds =
         postIds.length > 0
-          ? (await db.select().from(noodleInteractions).where(inArray(noodleInteractions.postId, postIds))).map(
-              (interaction) => interaction.id,
-            )
+          ? (
+              await db
+                .select()
+                .from(noodleInteractions)
+                .where(inArray(noodleInteractions.postId, postIds))
+            ).map((interaction) => interaction.id)
           : [];
       const authoredRows = await db
         .select()
@@ -1286,42 +1619,68 @@ export function createSlurpStorage(db: DB) {
         .where(eq(noodleInteractions.actorAccountId, existing.id));
       // Replies to an authored interaction would keep a dangling parentInteractionId, so
       // take the whole descendant subtree (same closure as deleteInteractionById).
-      const authoredPostIds = Array.from(new Set(authoredRows.map((row) => row.postId)));
+      const authoredPostIds = Array.from(
+        new Set(authoredRows.map((row) => row.postId)),
+      );
       const siblingRows =
         authoredPostIds.length > 0
-          ? await db.select().from(noodleInteractions).where(inArray(noodleInteractions.postId, authoredPostIds))
+          ? await db
+              .select()
+              .from(noodleInteractions)
+              .where(inArray(noodleInteractions.postId, authoredPostIds))
           : [];
       const doomed = new Set(authoredRows.map((row) => row.id));
       let changed = true;
       while (changed) {
         changed = false;
         for (const row of siblingRows) {
-          if (doomed.has(row.id) || !row.parentInteractionId || !doomed.has(row.parentInteractionId)) continue;
+          if (
+            doomed.has(row.id) ||
+            !row.parentInteractionId ||
+            !doomed.has(row.parentInteractionId)
+          )
+            continue;
           doomed.add(row.id);
           changed = true;
         }
       }
       const authoredInteractionIds = [...doomed];
-      const interactionIds = Array.from(new Set([...ownInteractionIds, ...authoredInteractionIds]));
+      const interactionIds = Array.from(
+        new Set([...ownInteractionIds, ...authoredInteractionIds]),
+      );
       await db.transaction(async (tx) => {
         if (postIds.length > 0) {
-          await tx.delete(noodleActivityDigests).where(inArray(noodleActivityDigests.sourcePostId, postIds));
+          await tx
+            .delete(noodleActivityDigests)
+            .where(inArray(noodleActivityDigests.sourcePostId, postIds));
         }
         if (interactionIds.length > 0) {
           await tx
             .delete(noodleActivityDigests)
-            .where(inArray(noodleActivityDigests.sourceInteractionId, interactionIds));
+            .where(
+              inArray(
+                noodleActivityDigests.sourceInteractionId,
+                interactionIds,
+              ),
+            );
         }
         if (authoredInteractionIds.length > 0) {
-          await tx.delete(noodleInteractions).where(inArray(noodleInteractions.id, authoredInteractionIds));
+          await tx
+            .delete(noodleInteractions)
+            .where(inArray(noodleInteractions.id, authoredInteractionIds));
         }
-        await tx.delete(noodleAccounts).where(eq(noodleAccounts.id, existing.id));
+        await tx
+          .delete(noodleAccounts)
+          .where(eq(noodleAccounts.id, existing.id));
         await tx._fileStore.flush();
       });
       return existing;
     },
 
-    async getAccountByEntity(kind: NoodleAccountKind, entityId: string): Promise<NoodleAccount | null> {
+    async getAccountByEntity(
+      kind: NoodleAccountKind,
+      entityId: string,
+    ): Promise<NoodleAccount | null> {
       const rows = await db
         .select()
         .from(noodleAccounts)
@@ -1335,7 +1694,10 @@ export function createSlurpStorage(db: DB) {
       return rows[0] ? mapAccount(rows[0]) : null;
     },
 
-    async getAccountsByEntities(kind: NoodleAccountKind, entityIds: string[]): Promise<NoodleAccount[]> {
+    async getAccountsByEntities(
+      kind: NoodleAccountKind,
+      entityIds: string[],
+    ): Promise<NoodleAccount[]> {
       if (entityIds.length === 0) return [];
       const rows = await db
         .select()
@@ -1363,38 +1725,72 @@ export function createSlurpStorage(db: DB) {
       const rows = await db
         .select()
         .from(noodleAccounts)
-        .where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "noodler")));
+        .where(
+          and(
+            eq(noodleAccounts.id, id),
+            eq(noodleAccounts.platform, "noodler"),
+          ),
+        );
       return rows[0] ? mapAccount(rows[0]) : null;
     },
 
-    async getNoodlerAccountForNoodleAccount(slurpSourceAccountId: string): Promise<NoodleAccount | null> {
+    async getNoodlerAccountForNoodleAccount(
+      slurpSourceAccountId: string,
+    ): Promise<NoodleAccount | null> {
       const rows = await db
         .select()
         .from(noodleAccounts)
-        .where(and(eq(noodleAccounts.platform, "noodler"), eq(noodleAccounts.slurpSourceAccountId, slurpSourceAccountId)));
+        .where(
+          and(
+            eq(noodleAccounts.platform, "noodler"),
+            eq(noodleAccounts.slurpSourceAccountId, slurpSourceAccountId),
+          ),
+        );
       return rows[0] ? mapAccount(rows[0]) : null;
     },
 
     async deleteNoodlerAccount(id: string): Promise<NoodleAccount | null> {
       const existing = await this.getNoodlerAccountById(id);
       if (!existing) return null;
-      const postRows = await db.select().from(noodlePosts).where(eq(noodlePosts.authorAccountId, id));
+      const postRows = await db
+        .select()
+        .from(noodlePosts)
+        .where(eq(noodlePosts.authorAccountId, id));
       const postIds = postRows.map((post) => post.id);
       const interactionRows =
         postIds.length > 0
-          ? await db.select().from(noodleInteractions).where(inArray(noodleInteractions.postId, postIds))
+          ? await db
+              .select()
+              .from(noodleInteractions)
+              .where(inArray(noodleInteractions.postId, postIds))
           : [];
-      const interactionIds = interactionRows.map((interaction) => interaction.id);
+      const interactionIds = interactionRows.map(
+        (interaction) => interaction.id,
+      );
       await db.transaction(async (tx) => {
         if (postIds.length > 0) {
-          await tx.delete(noodleActivityDigests).where(inArray(noodleActivityDigests.sourcePostId, postIds));
+          await tx
+            .delete(noodleActivityDigests)
+            .where(inArray(noodleActivityDigests.sourcePostId, postIds));
         }
         if (interactionIds.length > 0) {
           await tx
             .delete(noodleActivityDigests)
-            .where(inArray(noodleActivityDigests.sourceInteractionId, interactionIds));
+            .where(
+              inArray(
+                noodleActivityDigests.sourceInteractionId,
+                interactionIds,
+              ),
+            );
         }
-        await tx.delete(noodleAccounts).where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "noodler")));
+        await tx
+          .delete(noodleAccounts)
+          .where(
+            and(
+              eq(noodleAccounts.id, id),
+              eq(noodleAccounts.platform, "noodler"),
+            ),
+          );
         await tx._fileStore.flush();
       });
       return existing;
@@ -1404,9 +1800,14 @@ export function createSlurpStorage(db: DB) {
       const accounts = await this.listNoodlerAccounts();
       return Promise.all(
         accounts.map(async (account) => {
-          const disclosureMode = account.settings.privacy.identityDisclosure ?? null;
-          const publicAccount = account.slurpSourceAccountId ? await this.getAccountById(account.slurpSourceAccountId) : null;
-          const currentSource = publicAccount ? await resolveNoodlerSourceSnapshot(db, publicAccount) : null;
+          const disclosureMode =
+            account.settings.privacy.identityDisclosure ?? null;
+          const publicAccount = account.slurpSourceAccountId
+            ? await this.getAccountById(account.slurpSourceAccountId)
+            : null;
+          const currentSource = publicAccount
+            ? await resolveNoodlerSourceSnapshot(db, publicAccount)
+            : null;
           let baseline = account.settings.profile.noodlerSourceSnapshot;
           const needsMinimization =
             (disclosureMode === "hinted" || disclosureMode === "secret") &&
@@ -1417,17 +1818,31 @@ export function createSlurpStorage(db: DB) {
               currentSource,
               disclosureMode ?? "secret",
             );
-            const updated = await this.updateNoodlerSourceSnapshot(account.id, minimized);
-            baseline = updated?.settings.profile.noodlerSourceSnapshot ?? minimized;
+            const updated = await this.updateNoodlerSourceSnapshot(
+              account.id,
+              minimized,
+            );
+            baseline =
+              updated?.settings.profile.noodlerSourceSnapshot ?? minimized;
           } else if (!currentSource && needsMinimization && baseline) {
             // The linked source account is gone, but a legacy full snapshot
             // remains for a hinted/secret profile — minimize it in place rather
             // than leaving it unminimized forever.
-            const minimized = minimizeNoodlerSourceSnapshot(baseline, disclosureMode ?? "secret");
-            const updated = await this.updateNoodlerSourceSnapshot(account.id, minimized);
-            baseline = updated?.settings.profile.noodlerSourceSnapshot ?? minimized;
+            const minimized = minimizeNoodlerSourceSnapshot(
+              baseline,
+              disclosureMode ?? "secret",
+            );
+            const updated = await this.updateNoodlerSourceSnapshot(
+              account.id,
+              minimized,
+            );
+            baseline =
+              updated?.settings.profile.noodlerSourceSnapshot ?? minimized;
           }
-          if (!currentSource && account.settings.scheduler.autoPosting?.enabled) {
+          if (
+            !currentSource &&
+            account.settings.scheduler.autoPosting?.enabled
+          ) {
             await this.patchAccountSettings(account.id, {
               subtree: "scheduler",
               patch: { autoPosting: { enabled: false } },
@@ -1446,19 +1861,32 @@ export function createSlurpStorage(db: DB) {
             stagePersonality: account.settings.privacy.stagePersonality ?? "",
             access: account.settings.privacy.access,
             autoPosting: currentSource
-              ? (account.settings.scheduler.autoPosting ?? defaultAutoPostingSettings())
-              : { ...(account.settings.scheduler.autoPosting ?? defaultAutoPostingSettings()), enabled: false },
+              ? (account.settings.scheduler.autoPosting ??
+                defaultAutoPostingSettings())
+              : {
+                  ...(account.settings.scheduler.autoPosting ??
+                    defaultAutoPostingSettings()),
+                  enabled: false,
+                },
             fanActivity: account.settings.scheduler.fanActivity ?? null,
             sourceStatus: !currentSource
               ? { state: "missing" as const }
               : compareMinimizedNoodlerSourceSnapshot(
-                  baseline ?? minimizeNoodlerSourceSnapshot(currentSource, disclosureMode ?? "secret"),
+                  baseline ??
+                    minimizeNoodlerSourceSnapshot(
+                      currentSource,
+                      disclosureMode ?? "secret",
+                    ),
                   currentSource,
                   disclosureMode ?? "secret",
                 ),
             publicIdentity:
-              publicAccount && (disclosureMode === "open" || disclosureMode === "hinted")
-                ? { displayName: publicAccount.displayName, handle: publicAccount.handle }
+              publicAccount &&
+              (disclosureMode === "open" || disclosureMode === "hinted")
+                ? {
+                    displayName: publicAccount.displayName,
+                    handle: publicAccount.handle,
+                  }
                 : null,
             createdAt: account.createdAt,
             updatedAt: account.updatedAt,
@@ -1476,19 +1904,27 @@ export function createSlurpStorage(db: DB) {
       bannerUrl?: string | null,
     ): Promise<NoodleAccount | null> {
       const publicAccount = await this.getAccountById(slurpSourceAccountId);
-      if (!publicAccount || (publicAccount.kind !== "persona" && publicAccount.kind !== "character")) return null;
+      if (
+        !publicAccount ||
+        (publicAccount.kind !== "persona" && publicAccount.kind !== "character")
+      )
+        return null;
       const timestamp = now();
       const id = newId();
       const base = emptyNoodleAccountSettings();
       const accountSettings: NoodleAccountSettings = {
         ...base,
         profile: {
-          ...(wizardExecutionId && { noodlerWizardExecutionId: wizardExecutionId }),
+          ...(wizardExecutionId && {
+            noodlerWizardExecutionId: wizardExecutionId,
+          }),
           ...(sourceSnapshot && { noodlerSourceSnapshot: sourceSnapshot }),
           // Only an OPEN creator may hold the literal source banner (see
           // resolveNoodlerCreatorArtwork); callers already gate the value on that, this is
           // belt-and-suspenders against a future caller passing one for hinted/secret.
-          ...(stageProfile.disclosureMode === "open" && bannerUrl ? { bannerUrl } : {}),
+          ...(stageProfile.disclosureMode === "open" && bannerUrl
+            ? { bannerUrl }
+            : {}),
         },
         scheduler: { autoPosting: defaultAutoPostingSettings() },
         privacy: {
@@ -1504,7 +1940,8 @@ export function createSlurpStorage(db: DB) {
         handle: normalizeHandle(stageProfile.handle, publicAccount.entityId),
         displayName: stageProfile.displayName,
         bio: stageProfile.bio,
-        avatarUrl: stageProfile.disclosureMode === "open" ? (avatarUrl ?? null) : null,
+        avatarUrl:
+          stageProfile.disclosureMode === "open" ? (avatarUrl ?? null) : null,
         invited: "false",
         settings: JSON.stringify(accountSettings),
         platform: "noodler",
@@ -1527,7 +1964,12 @@ export function createSlurpStorage(db: DB) {
         const rows = await tx
           .select()
           .from(noodleAccounts)
-          .where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "noodler")));
+          .where(
+            and(
+              eq(noodleAccounts.id, id),
+              eq(noodleAccounts.platform, "noodler"),
+            ),
+          );
         const row = rows[0];
         if (!row) return null;
         const settings = normalizeNoodleAccountSettings(row.settings);
@@ -1538,7 +1980,10 @@ export function createSlurpStorage(db: DB) {
         // literal photo, so it carries no identity to strip.
         const droppingOpen = stageProfile.disclosureMode !== "open";
         const profile = { ...settings.profile };
-        if (droppingOpen && !readNoodlerAccountMediaPath(id, profile.bannerUrl ?? null)) {
+        if (
+          droppingOpen &&
+          !readNoodlerAccountMediaPath(id, profile.bannerUrl ?? null)
+        ) {
           delete profile.bannerUrl;
         }
         await tx
@@ -1554,7 +1999,9 @@ export function createSlurpStorage(db: DB) {
               ...settings,
               profile: {
                 ...profile,
-                ...(sourceSnapshot && { noodlerSourceSnapshot: sourceSnapshot }),
+                ...(sourceSnapshot && {
+                  noodlerSourceSnapshot: sourceSnapshot,
+                }),
               },
               privacy: {
                 ...settings.privacy,
@@ -1565,23 +2012,42 @@ export function createSlurpStorage(db: DB) {
             updatedAt: now(),
           })
           .where(eq(noodleAccounts.id, id));
-        const updatedRows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id));
+        const updatedRows = await tx
+          .select()
+          .from(noodleAccounts)
+          .where(eq(noodleAccounts.id, id));
         return updatedRows[0] ? mapAccount(updatedRows[0]) : null;
       });
     },
 
-    async updateNoodlerAvatar(id: string, avatarUrl: string | null): Promise<NoodleAccount | null> {
+    async updateNoodlerAvatar(
+      id: string,
+      avatarUrl: string | null,
+    ): Promise<NoodleAccount | null> {
       await db
         .update(noodleAccounts)
         .set({ avatarUrl, avatarCrop: null, updatedAt: now() })
-        .where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "noodler")));
+        .where(
+          and(
+            eq(noodleAccounts.id, id),
+            eq(noodleAccounts.platform, "noodler"),
+          ),
+        );
       return this.getNoodlerAccountById(id);
     },
 
     /** Creator banner lives in settings.profile, which patchAccountSettings keeps closed for noodler rows. */
-    async updateNoodlerBanner(id: string, bannerUrl: string | null): Promise<NoodleAccount | null> {
+    async updateNoodlerBanner(
+      id: string,
+      bannerUrl: string | null,
+    ): Promise<NoodleAccount | null> {
       return db.transaction(async (tx) => {
-        const row = (await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id)))[0];
+        const row = (
+          await tx
+            .select()
+            .from(noodleAccounts)
+            .where(eq(noodleAccounts.id, id))
+        )[0];
         if (!row || row.platform !== "noodler") return null;
         const settings = normalizeNoodleAccountSettings(row.settings);
         const profile = { ...settings.profile };
@@ -1590,7 +2056,10 @@ export function createSlurpStorage(db: DB) {
         await tx
           .update(noodleAccounts)
           .set({
-            settings: JSON.stringify({ ...settings, profile } satisfies NoodleAccountSettings),
+            settings: JSON.stringify({
+              ...settings,
+              profile,
+            } satisfies NoodleAccountSettings),
             updatedAt: now(),
           })
           .where(eq(noodleAccounts.id, id));
@@ -1603,7 +2072,12 @@ export function createSlurpStorage(db: DB) {
       sourceSnapshot: NoodlerSourceSnapshot,
     ): Promise<NoodleAccount | null> {
       return db.transaction(async (tx) => {
-        const row = (await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id)))[0];
+        const row = (
+          await tx
+            .select()
+            .from(noodleAccounts)
+            .where(eq(noodleAccounts.id, id))
+        )[0];
         if (!row || row.platform !== "noodler") return null;
         const settings = normalizeNoodleAccountSettings(row.settings);
         await tx
@@ -1611,23 +2085,40 @@ export function createSlurpStorage(db: DB) {
           .set({
             settings: JSON.stringify({
               ...settings,
-              profile: { ...settings.profile, noodlerSourceSnapshot: sourceSnapshot },
+              profile: {
+                ...settings.profile,
+                noodlerSourceSnapshot: sourceSnapshot,
+              },
             } satisfies NoodleAccountSettings),
             updatedAt: now(),
           })
           .where(eq(noodleAccounts.id, id));
-        const updated = (await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id)))[0];
+        const updated = (
+          await tx
+            .select()
+            .from(noodleAccounts)
+            .where(eq(noodleAccounts.id, id))
+        )[0];
         return updated ? mapAccount(updated) : null;
       });
     },
 
-    async adoptNoodlerPublicIdentity(id: string, currentSource: NoodlerSourceSnapshot): Promise<NoodleAccount | null> {
+    async adoptNoodlerPublicIdentity(
+      id: string,
+      currentSource: NoodlerSourceSnapshot,
+    ): Promise<NoodleAccount | null> {
       return db.transaction(async (tx) => {
-        const row = (await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id)))[0];
+        const row = (
+          await tx
+            .select()
+            .from(noodleAccounts)
+            .where(eq(noodleAccounts.id, id))
+        )[0];
         if (!row || row.platform !== "noodler") return null;
         const settings = normalizeNoodleAccountSettings(row.settings);
         if (settings.privacy.identityDisclosure !== "open") return null;
-        const baseline = settings.profile.noodlerSourceSnapshot ?? currentSource;
+        const baseline =
+          settings.profile.noodlerSourceSnapshot ?? currentSource;
         await tx
           .update(noodleAccounts)
           .set({
@@ -1647,7 +2138,12 @@ export function createSlurpStorage(db: DB) {
             updatedAt: now(),
           })
           .where(eq(noodleAccounts.id, id));
-        const updated = (await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id)))[0];
+        const updated = (
+          await tx
+            .select()
+            .from(noodleAccounts)
+            .where(eq(noodleAccounts.id, id))
+        )[0];
         return updated ? mapAccount(updated) : null;
       });
     },
@@ -1664,32 +2160,54 @@ export function createSlurpStorage(db: DB) {
       syncIdentity?: boolean;
     }): Promise<NoodleAccount> {
       await reconcilePublicHandles();
-      const existing = await this.getAccountByEntity(input.kind, input.entityId);
+      const existing = await this.getAccountByEntity(
+        input.kind,
+        input.entityId,
+      );
       if (existing) {
         return db.transaction(async (tx) => {
-          const rows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, existing.id));
+          const rows = await tx
+            .select()
+            .from(noodleAccounts)
+            .where(eq(noodleAccounts.id, existing.id));
           const row = rows[0];
           if (!row) return existing;
           const settings = normalizeNoodleAccountSettings(row.settings);
-          const profileManuallyEdited = settings.profile.profileManuallyEdited === true;
+          const profileManuallyEdited =
+            settings.profile.profileManuallyEdited === true;
           const updates: Record<string, unknown> = { updatedAt: now() };
           if (input.syncIdentity && !profileManuallyEdited) {
-            updates.displayName = input.displayName.trim().slice(0, 120) || row.handle;
-            if (input.avatarUrl !== undefined) updates.avatarUrl = input.avatarUrl;
+            updates.displayName =
+              input.displayName.trim().slice(0, 120) || row.handle;
+            if (input.avatarUrl !== undefined)
+              updates.avatarUrl = input.avatarUrl;
           } else if (!String(row.displayName ?? "").trim()) {
             updates.displayName = input.displayName || row.handle;
           }
-          if (!profileManuallyEdited && !String(row.bio ?? "").trim() && input.bio) updates.bio = input.bio;
-          if (!input.syncIdentity && !row.avatarUrl && input.avatarUrl) updates.avatarUrl = input.avatarUrl;
-          if (input.invited !== undefined) updates.invited = String(input.invited);
+          if (
+            !profileManuallyEdited &&
+            !String(row.bio ?? "").trim() &&
+            input.bio
+          )
+            updates.bio = input.bio;
+          if (!input.syncIdentity && !row.avatarUrl && input.avatarUrl)
+            updates.avatarUrl = input.avatarUrl;
+          if (input.invited !== undefined)
+            updates.invited = String(input.invited);
           if (input.avatarCrop !== undefined && !profileManuallyEdited) {
             updates.settings = JSON.stringify({
               ...settings,
               profile: { ...settings.profile, avatarCrop: input.avatarCrop },
             });
           }
-          await tx.update(noodleAccounts).set(updates).where(eq(noodleAccounts.id, existing.id));
-          const updatedRows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, existing.id));
+          await tx
+            .update(noodleAccounts)
+            .set(updates)
+            .where(eq(noodleAccounts.id, existing.id));
+          const updatedRows = await tx
+            .select()
+            .from(noodleAccounts)
+            .where(eq(noodleAccounts.id, existing.id));
           return updatedRows[0] ? mapAccount(updatedRows[0]) : existing;
         });
       }
@@ -1697,10 +2215,20 @@ export function createSlurpStorage(db: DB) {
       const id = await db.transaction(async (tx) => {
         const timestamp = now();
         const accountId = newId();
-        const displayName = input.displayName.trim() || (input.kind === "persona" ? "User" : "Character");
-        const publicRows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.platform, "noodle"));
-        const reserved = new Set(publicRows.map((row) => normalizeHandle(row.handle, row.entityId)));
-        const handle = nextAvailablePublicHandle(normalizeHandle(displayName, input.entityId), reserved);
+        const displayName =
+          input.displayName.trim() ||
+          (input.kind === "persona" ? "User" : "Character");
+        const publicRows = await tx
+          .select()
+          .from(noodleAccounts)
+          .where(eq(noodleAccounts.platform, "noodle"));
+        const reserved = new Set(
+          publicRows.map((row) => normalizeHandle(row.handle, row.entityId)),
+        );
+        const handle = nextAvailablePublicHandle(
+          normalizeHandle(displayName, input.entityId),
+          reserved,
+        );
         await tx.insert(noodleAccounts).values({
           id: accountId,
           kind: input.kind,
@@ -1712,7 +2240,10 @@ export function createSlurpStorage(db: DB) {
           invited: String(input.invited ?? input.kind === "persona"),
           settings: JSON.stringify({
             ...emptyNoodleAccountSettings(),
-            profile: input.avatarCrop !== undefined ? { avatarCrop: input.avatarCrop } : {},
+            profile:
+              input.avatarCrop !== undefined
+                ? { avatarCrop: input.avatarCrop }
+                : {},
           }),
           platform: "noodle",
           slurpSourceAccountId: null,
@@ -1727,38 +2258,65 @@ export function createSlurpStorage(db: DB) {
       return (await this.getAccountById(id))!;
     },
 
-    async updateAccount(id: string, input: NoodleAccountUpdateInput): Promise<NoodleAccount | null> {
+    async updateAccount(
+      id: string,
+      input: NoodleAccountUpdateInput,
+    ): Promise<NoodleAccount | null> {
       await reconcilePublicHandles();
       return db.transaction(async (tx) => {
         const rows = await tx
           .select()
           .from(noodleAccounts)
-          .where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "noodle")));
+          .where(
+            and(
+              eq(noodleAccounts.id, id),
+              eq(noodleAccounts.platform, "noodle"),
+            ),
+          );
         const row = rows[0];
         if (!row) return null;
         await tx
           .update(noodleAccounts)
           .set({
-            ...(input.handle !== undefined && { handle: normalizeHandle(input.handle, row.entityId) }),
-            ...(input.displayName !== undefined && { displayName: input.displayName.trim().slice(0, 120) }),
+            ...(input.handle !== undefined && {
+              handle: normalizeHandle(input.handle, row.entityId),
+            }),
+            ...(input.displayName !== undefined && {
+              displayName: input.displayName.trim().slice(0, 120),
+            }),
             ...(input.bio !== undefined && { bio: input.bio.slice(0, 500) }),
-            ...(input.avatarUrl !== undefined && { avatarUrl: input.avatarUrl }),
-            ...(input.invited !== undefined && { invited: String(input.invited) }),
+            ...(input.avatarUrl !== undefined && {
+              avatarUrl: input.avatarUrl,
+            }),
+            ...(input.invited !== undefined && {
+              invited: String(input.invited),
+            }),
             updatedAt: now(),
           })
           .where(eq(noodleAccounts.id, id));
-        const updatedRows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id));
+        const updatedRows = await tx
+          .select()
+          .from(noodleAccounts)
+          .where(eq(noodleAccounts.id, id));
         return updatedRows[0] ? mapAccount(updatedRows[0]) : null;
       });
     },
 
-    async updateAccountProfile(id: string, input: NoodleAccountProfileUpdateInput): Promise<NoodleAccount | null> {
+    async updateAccountProfile(
+      id: string,
+      input: NoodleAccountProfileUpdateInput,
+    ): Promise<NoodleAccount | null> {
       await reconcilePublicHandles();
       return db.transaction(async (tx) => {
         const rows = await tx
           .select()
           .from(noodleAccounts)
-          .where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "noodle")));
+          .where(
+            and(
+              eq(noodleAccounts.id, id),
+              eq(noodleAccounts.platform, "noodle"),
+            ),
+          );
         const row = rows[0];
         if (!row) return null;
         const settings = normalizeNoodleAccountSettings(row.settings);
@@ -1769,31 +2327,58 @@ export function createSlurpStorage(db: DB) {
         await tx
           .update(noodleAccounts)
           .set({
-            ...(input.handle !== undefined && { handle: normalizeHandle(input.handle, row.entityId) }),
-            ...(input.displayName !== undefined && { displayName: input.displayName.trim().slice(0, 120) }),
+            ...(input.handle !== undefined && {
+              handle: normalizeHandle(input.handle, row.entityId),
+            }),
+            ...(input.displayName !== undefined && {
+              displayName: input.displayName.trim().slice(0, 120),
+            }),
             ...(input.bio !== undefined && { bio: input.bio.slice(0, 500) }),
-            ...(input.avatarUrl !== undefined && { avatarUrl: input.avatarUrl }),
+            ...(input.avatarUrl !== undefined && {
+              avatarUrl: input.avatarUrl,
+            }),
             settings: JSON.stringify(nextSettings),
             updatedAt: now(),
           })
           .where(eq(noodleAccounts.id, id));
-        const updatedRows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id));
+        const updatedRows = await tx
+          .select()
+          .from(noodleAccounts)
+          .where(eq(noodleAccounts.id, id));
         return updatedRows[0] ? mapAccount(updatedRows[0]) : null;
       });
     },
 
-    async patchAccountSettings(id: string, input: NoodleAccountSettingsPatchInput): Promise<NoodleAccount | null> {
+    async patchAccountSettings(
+      id: string,
+      input: NoodleAccountSettingsPatchInput,
+    ): Promise<NoodleAccount | null> {
       return db.transaction(async (tx) => {
-        const rows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id));
+        const rows = await tx
+          .select()
+          .from(noodleAccounts)
+          .where(eq(noodleAccounts.id, id));
         const row = rows[0];
         if (!row) return null;
-        if (row.platform === "noodler" && input.subtree !== "privacy" && input.subtree !== "scheduler") return null;
-        if (row.platform !== "noodler" && input.subtree === "scheduler") return null;
-        if (row.platform !== "noodler" && input.subtree === "privacy" && input.patch.access !== undefined) return null;
+        if (
+          row.platform === "noodler" &&
+          input.subtree !== "privacy" &&
+          input.subtree !== "scheduler"
+        )
+          return null;
+        if (row.platform !== "noodler" && input.subtree === "scheduler")
+          return null;
+        if (
+          row.platform !== "noodler" &&
+          input.subtree === "privacy" &&
+          input.patch.access !== undefined
+        )
+          return null;
         if (
           row.platform === "noodler" &&
           input.subtree === "privacy" &&
-          (input.patch.identityDisclosure !== undefined || input.patch.stagePersonality !== undefined)
+          (input.patch.identityDisclosure !== undefined ||
+            input.patch.stagePersonality !== undefined)
         ) {
           return null;
         }
@@ -1804,21 +2389,30 @@ export function createSlurpStorage(db: DB) {
           // (both surfaces record on mount), and the later request is not always the later
           // timestamp — an out-of-order write would resurrect an already-cleared counter.
           const social = { ...current.social, ...input.patch };
-          for (const field of ["noodleFeedSeenAt", "noodlerFeedSeenAt"] as const) {
+          for (const field of [
+            "noodleFeedSeenAt",
+            "noodlerFeedSeenAt",
+          ] as const) {
             const stored = current.social[field];
-            if (stored && social[field] && !(Date.parse(social[field]) > (Date.parse(stored) || 0))) {
+            if (
+              stored &&
+              social[field] &&
+              !(Date.parse(social[field]) > (Date.parse(stored) || 0))
+            ) {
               social[field] = stored;
             }
           }
           next = { ...current, social };
         } else if (input.subtree === "scheduler") {
-          const currentAuto = current.scheduler.autoPosting ?? defaultAutoPostingSettings();
+          const currentAuto =
+            current.scheduler.autoPosting ?? defaultAutoPostingSettings();
           const patchAuto = input.patch.autoPosting;
           const patchFan = input.patch.fanActivity;
           const config = patchAuto
             ? {
                 enabled: patchAuto.enabled ?? currentAuto.enabled,
-                imagesEnabled: patchAuto.imagesEnabled ?? currentAuto.imagesEnabled,
+                imagesEnabled:
+                  patchAuto.imagesEnabled ?? currentAuto.imagesEnabled,
               }
             : currentAuto;
           next = {
@@ -1833,7 +2427,9 @@ export function createSlurpStorage(db: DB) {
                       fanActivity: {
                         ...current.scheduler.fanActivity,
                         ...patchFan,
-                        ...(patchFan.archetypeWeights && { archetypeWeights: patchFan.archetypeWeights }),
+                        ...(patchFan.archetypeWeights && {
+                          archetypeWeights: patchFan.archetypeWeights,
+                        }),
                       },
                     }
                   : {}),
@@ -1853,21 +2449,35 @@ export function createSlurpStorage(db: DB) {
           .update(noodleAccounts)
           .set({ settings: JSON.stringify(next), updatedAt: now() })
           .where(eq(noodleAccounts.id, id));
-        const updatedRows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id));
+        const updatedRows = await tx
+          .select()
+          .from(noodleAccounts)
+          .where(eq(noodleAccounts.id, id));
         return updatedRows[0] ? mapAccount(updatedRows[0]) : null;
       });
     },
 
     /** Every NoodleR creator account with automatic posting enabled, settings attached. */
     async listAutoPostEnabledAccounts(): Promise<NoodleAccount[]> {
-      const rows = await db.select().from(noodleAccounts).where(eq(noodleAccounts.platform, "noodler"));
+      const rows = await db
+        .select()
+        .from(noodleAccounts)
+        .where(eq(noodleAccounts.platform, "noodler"));
       const enabled = rows
         .map(mapAccount)
-        .filter((account) => account.settings.scheduler.autoPosting?.enabled === true);
+        .filter(
+          (account) => account.settings.scheduler.autoPosting?.enabled === true,
+        );
       const checked = await Promise.all(
         enabled.map(async (account) => {
-          const publicAccount = account.slurpSourceAccountId ? await this.getAccountById(account.slurpSourceAccountId) : null;
-          if (publicAccount && (await resolveNoodlerSourceSnapshot(db, publicAccount))) return account;
+          const publicAccount = account.slurpSourceAccountId
+            ? await this.getAccountById(account.slurpSourceAccountId)
+            : null;
+          if (
+            publicAccount &&
+            (await resolveNoodlerSourceSnapshot(db, publicAccount))
+          )
+            return account;
           await this.patchAccountSettings(account.id, {
             subtree: "scheduler",
             patch: { autoPosting: { enabled: false } },
@@ -1875,7 +2485,9 @@ export function createSlurpStorage(db: DB) {
           return null;
         }),
       );
-      return checked.filter((account): account is NoodleAccount => account !== null);
+      return checked.filter(
+        (account): account is NoodleAccount => account !== null,
+      );
     },
 
     /**
@@ -1895,7 +2507,8 @@ export function createSlurpStorage(db: DB) {
       };
       for (const post of posts) observe(post.authorAccountId, post.createdAt);
       for (const item of prepared) {
-        if (item.state !== "discarded") observe(item.creatorAccountId, item.publishAt);
+        if (item.state !== "discarded")
+          observe(item.creatorAccountId, item.publishAt);
       }
       return latest;
     },
@@ -1906,27 +2519,46 @@ export function createSlurpStorage(db: DB) {
     }> {
       return db.transaction(async (tx) => {
         const existing = (
-          await tx.select().from(noodlerReserveState).where(eq(noodlerReserveState.id, NOODLER_RESERVE_STATE_ID))
+          await tx
+            .select()
+            .from(noodlerReserveState)
+            .where(eq(noodlerReserveState.id, NOODLER_RESERVE_STATE_ID))
         )[0];
         // Imported or hand-edited state can carry timestamps that do not parse. NaN would
         // propagate into every budget and hold comparison, so an unreadable value resets to now.
-        const parsed = existing ? Date.parse(existing.lastObservedBudgetTime) : 0;
-        const observedMs = Math.max(at.getTime(), Number.isNaN(parsed) ? 0 : parsed);
+        const parsed = existing
+          ? Date.parse(existing.lastObservedBudgetTime)
+          : 0;
+        const observedMs = Math.max(
+          at.getTime(),
+          Number.isNaN(parsed) ? 0 : parsed,
+        );
         if (existing) {
           const observed = new Date(observedMs).toISOString();
-          const preparationNotBefore = Number.isNaN(Date.parse(existing.preparationNotBefore))
+          const preparationNotBefore = Number.isNaN(
+            Date.parse(existing.preparationNotBefore),
+          )
             ? new Date(observedMs + ROLLING_DAY_MS).toISOString()
             : existing.preparationNotBefore;
-          if (observed !== existing.lastObservedBudgetTime || preparationNotBefore !== existing.preparationNotBefore) {
+          if (
+            observed !== existing.lastObservedBudgetTime ||
+            preparationNotBefore !== existing.preparationNotBefore
+          ) {
             await tx
               .update(noodlerReserveState)
-              .set({ lastObservedBudgetTime: observed, preparationNotBefore, updatedAt: at.toISOString() })
+              .set({
+                lastObservedBudgetTime: observed,
+                preparationNotBefore,
+                updatedAt: at.toISOString(),
+              })
               .where(eq(noodlerReserveState.id, NOODLER_RESERVE_STATE_ID));
           }
           return { lastObservedBudgetTime: observed, preparationNotBefore };
         }
         const timestamp = at.toISOString();
-        const preparationNotBefore = new Date(at.getTime() + ROLLING_DAY_MS).toISOString();
+        const preparationNotBefore = new Date(
+          at.getTime() + ROLLING_DAY_MS,
+        ).toISOString();
         await tx.insert(noodlerReserveState).values({
           id: NOODLER_RESERVE_STATE_ID,
           lastObservedBudgetTime: timestamp,
@@ -1942,17 +2574,25 @@ export function createSlurpStorage(db: DB) {
       kind: "text" | "image",
       limit: number,
       at = new Date(),
-    ): Promise<{ status: "claimed"; claimId: string; claimedAt: string } | { status: "exhausted" | "holding" }> {
+    ): Promise<
+      | { status: "claimed"; claimId: string; claimedAt: string }
+      | { status: "exhausted" | "holding" }
+    > {
       return db.transaction(async (tx) => {
         let state = (
-          await tx.select().from(noodlerReserveState).where(eq(noodlerReserveState.id, NOODLER_RESERVE_STATE_ID))
+          await tx
+            .select()
+            .from(noodlerReserveState)
+            .where(eq(noodlerReserveState.id, NOODLER_RESERVE_STATE_ID))
         )[0];
         if (!state) {
           const timestamp = at.toISOString();
           await tx.insert(noodlerReserveState).values({
             id: NOODLER_RESERVE_STATE_ID,
             lastObservedBudgetTime: timestamp,
-            preparationNotBefore: new Date(at.getTime() + ROLLING_DAY_MS).toISOString(),
+            preparationNotBefore: new Date(
+              at.getTime() + ROLLING_DAY_MS,
+            ).toISOString(),
             createdAt: timestamp,
             updatedAt: timestamp,
           });
@@ -1961,30 +2601,44 @@ export function createSlurpStorage(db: DB) {
         // Same NaN handling as ensureNoodlerReserveState: an unreadable stored timestamp resets
         // to now instead of poisoning the comparison (and toISOString) with NaN.
         const observed = Date.parse(state.lastObservedBudgetTime);
-        const effectiveMs = Math.max(at.getTime(), Number.isNaN(observed) ? 0 : observed);
+        const effectiveMs = Math.max(
+          at.getTime(),
+          Number.isNaN(observed) ? 0 : observed,
+        );
         const effectiveIso = new Date(effectiveMs).toISOString();
         if (effectiveIso !== state.lastObservedBudgetTime) {
           await tx
             .update(noodlerReserveState)
-            .set({ lastObservedBudgetTime: effectiveIso, updatedAt: at.toISOString() })
+            .set({
+              lastObservedBudgetTime: effectiveIso,
+              updatedAt: at.toISOString(),
+            })
             .where(eq(noodlerReserveState.id, NOODLER_RESERVE_STATE_ID));
           state = { ...state, lastObservedBudgetTime: effectiveIso };
         }
         const notBefore = Date.parse(state.preparationNotBefore);
         // An unparseable hold must not read as "hold expired"; hold until it is repaired.
-        if (Number.isNaN(notBefore) || effectiveMs < notBefore) return { status: "holding" };
+        if (Number.isNaN(notBefore) || effectiveMs < notBefore)
+          return { status: "holding" };
         const cutoff = effectiveMs - ROLLING_DAY_MS;
         // Prune claims that have left the rolling window, in the same transaction that
         // counts them: they can never affect the budget again, and the ledger is scanned
         // on every claim.
         const cutoffIso = new Date(cutoff).toISOString();
-        await tx.delete(noodlerAutomaticAttempts).where(lt(noodlerAutomaticAttempts.claimedAt, cutoffIso));
-        const attempts = (await tx.select().from(noodlerAutomaticAttempts)).filter(
+        await tx
+          .delete(noodlerAutomaticAttempts)
+          .where(lt(noodlerAutomaticAttempts.claimedAt, cutoffIso));
+        const attempts = (
+          await tx.select().from(noodlerAutomaticAttempts)
+        ).filter(
           // A failed attempt (provider error, moderation reject, timeout) never produced a
           // post, so it must not permanently burn a slot out of the rolling-day budget: image
           // generation fails far more often than text, and without this a handful of image
           // failures locks out image posting for the rest of the day while text keeps going.
-          (row) => row.kind === kind && row.outcome !== "failed" && Date.parse(row.claimedAt) > cutoff,
+          (row) =>
+            row.kind === kind &&
+            row.outcome !== "failed" &&
+            Date.parse(row.claimedAt) > cutoff,
         );
         if (attempts.length >= limit) return { status: "exhausted" };
         const claimId = newId();
@@ -1998,8 +2652,14 @@ export function createSlurpStorage(db: DB) {
       });
     },
 
-    async completeNoodlerAutomaticAttempt(claimId: string, outcome: "completed" | "failed"): Promise<void> {
-      await db.update(noodlerAutomaticAttempts).set({ outcome }).where(eq(noodlerAutomaticAttempts.id, claimId));
+    async completeNoodlerAutomaticAttempt(
+      claimId: string,
+      outcome: "completed" | "failed",
+    ): Promise<void> {
+      await db
+        .update(noodlerAutomaticAttempts)
+        .set({ outcome })
+        .where(eq(noodlerAutomaticAttempts.id, claimId));
     },
 
     async createNoodlerPreparedPost(input: {
@@ -2023,7 +2683,9 @@ export function createSlurpStorage(db: DB) {
           policyFingerprint: input.policyFingerprint,
           state: "prepared",
           publishedPostId: null,
-          imageState: input.payload.metadata.noodlerMediaPath ? "attached" : "none",
+          imageState: input.payload.metadata.noodlerMediaPath
+            ? "attached"
+            : "none",
           imageClaimToken: null,
           imageClaimLeaseUntil: null,
           updatedAt: input.generatedAt,
@@ -2048,7 +2710,10 @@ export function createSlurpStorage(db: DB) {
         updatedAt: string;
       }>
     > {
-      const rows = await db.select().from(noodlerPreparedPosts).orderBy(noodlerPreparedPosts.publishAt);
+      const rows = await db
+        .select()
+        .from(noodlerPreparedPosts)
+        .orderBy(noodlerPreparedPosts.publishAt);
       return rows.map((row) => ({
         ...row,
         state: (row.state === "prepared" || row.state === "published"
@@ -2067,7 +2732,10 @@ export function createSlurpStorage(db: DB) {
 
     /** Existence check for the idle scheduler poll, so it never materializes or parses rows. */
     async hasNoodlerPreparedPosts(): Promise<boolean> {
-      const rows = await db.select({ id: noodlerPreparedPosts.id }).from(noodlerPreparedPosts).limit(1);
+      const rows = await db
+        .select({ id: noodlerPreparedPosts.id })
+        .from(noodlerPreparedPosts)
+        .limit(1);
       return rows.length > 0;
     },
 
@@ -2076,8 +2744,16 @@ export function createSlurpStorage(db: DB) {
      * image bytes are gone, so the state is committed first and the file removed afterwards.
      * A crash between the two leaks a file, which `sweepOrphanedNoodlerMedia` reclaims.
      */
-    async discardNoodlerPreparedPost(id: string, at = new Date()): Promise<void> {
-      const current = (await db.select().from(noodlerPreparedPosts).where(eq(noodlerPreparedPosts.id, id)))[0];
+    async discardNoodlerPreparedPost(
+      id: string,
+      at = new Date(),
+    ): Promise<void> {
+      const current = (
+        await db
+          .select()
+          .from(noodlerPreparedPosts)
+          .where(eq(noodlerPreparedPosts.id, id))
+      )[0];
       await db.transaction(async (tx) =>
         tx
           .update(noodlerPreparedPosts)
@@ -2085,10 +2761,18 @@ export function createSlurpStorage(db: DB) {
           .where(eq(noodlerPreparedPosts.id, id)),
       );
       if (current)
-        unlinkNoodlerMedia(String(parseRecord(parseRecord(current.payload).metadata).noodlerMediaPath ?? "") || null);
+        unlinkNoodlerMedia(
+          String(
+            parseRecord(parseRecord(current.payload).metadata)
+              .noodlerMediaPath ?? "",
+          ) || null,
+        );
     },
 
-    async discardPreparedPostsAfterManualPost(creatorAccountId: string, manualCreatedAt: string): Promise<number> {
+    async discardPreparedPostsAfterManualPost(
+      creatorAccountId: string,
+      manualCreatedAt: string,
+    ): Promise<number> {
       const start = Date.parse(manualCreatedAt);
       const end = start + MANUAL_POST_INVALIDATION_MS;
       const rows = await db
@@ -2097,7 +2781,10 @@ export function createSlurpStorage(db: DB) {
         .where(eq(noodlerPreparedPosts.creatorAccountId, creatorAccountId));
       const ids = rows
         .filter(
-          (row) => row.state === "prepared" && Date.parse(row.publishAt) > start && Date.parse(row.publishAt) <= end,
+          (row) =>
+            row.state === "prepared" &&
+            Date.parse(row.publishAt) > start &&
+            Date.parse(row.publishAt) <= end,
         )
         .map((row) => row.id);
       if (ids.length > 0) {
@@ -2107,8 +2794,15 @@ export function createSlurpStorage(db: DB) {
             .set({ state: "discarded", updatedAt: now() })
             .where(inArray(noodlerPreparedPosts.id, ids)),
         );
-        for (const row of rows.filter((candidate) => ids.includes(candidate.id))) {
-          unlinkNoodlerMedia(String(parseRecord(parseRecord(row.payload).metadata).noodlerMediaPath ?? "") || null);
+        for (const row of rows.filter((candidate) =>
+          ids.includes(candidate.id),
+        )) {
+          unlinkNoodlerMedia(
+            String(
+              parseRecord(parseRecord(row.payload).metadata).noodlerMediaPath ??
+                "",
+            ) || null,
+          );
         }
       }
       return ids.length;
@@ -2116,9 +2810,12 @@ export function createSlurpStorage(db: DB) {
 
     async publishDueNoodlerPreparedPosts(at = new Date()): Promise<number> {
       const settings = await this.getSettings();
-      if (!settings.enableNoodler || !settings.autoPostingScheduleEnabled) return 0;
+      if (!settings.enableNoodler || !settings.autoPostingScheduleEnabled)
+        return 0;
       const due = (await this.listNoodlerPreparedPosts()).filter(
-        (item) => item.state === "prepared" && Date.parse(item.publishAt) <= at.getTime(),
+        (item) =>
+          item.state === "prepared" &&
+          Date.parse(item.publishAt) <= at.getTime(),
       );
       if (due.length === 0) return 0;
       // One pass over posts for the whole batch: the crash-recovery lookup below only needs
@@ -2126,7 +2823,10 @@ export function createSlurpStorage(db: DB) {
       const publishedPreparedIds = new Map<string, { id: string }>();
       for (const post of await db.select().from(noodlePosts)) {
         const preparedId = parseRecord(post.metadata).noodlerPreparedPostId;
-        if (typeof preparedId === "string" && !publishedPreparedIds.has(preparedId)) {
+        if (
+          typeof preparedId === "string" &&
+          !publishedPreparedIds.has(preparedId)
+        ) {
           publishedPreparedIds.set(preparedId, { id: post.id });
         }
       }
@@ -2134,10 +2834,24 @@ export function createSlurpStorage(db: DB) {
       const discardedMediaPaths: Array<string | null> = [];
       for (const item of due) {
         const didPublish = await db.transaction(async (tx) => {
-          const current = (await tx.select().from(noodlerPreparedPosts).where(eq(noodlerPreparedPosts.id, item.id)))[0];
-          if (!current || current.state !== "prepared" || Date.parse(current.publishAt) > at.getTime()) return false;
+          const current = (
+            await tx
+              .select()
+              .from(noodlerPreparedPosts)
+              .where(eq(noodlerPreparedPosts.id, item.id))
+          )[0];
+          if (
+            !current ||
+            current.state !== "prepared" ||
+            Date.parse(current.publishAt) > at.getTime()
+          )
+            return false;
           const existingPost = publishedPreparedIds.get(current.id);
-          if (!existingPost && Date.parse(current.publishAt) < at.getTime() - ELAPSED_PREPARED_SLOT_MS) {
+          if (
+            !existingPost &&
+            Date.parse(current.publishAt) <
+              at.getTime() - ELAPSED_PREPARED_SLOT_MS
+          ) {
             await tx
               .update(noodlerPreparedPosts)
               .set({ state: "discarded", updatedAt: at.toISOString() })
@@ -2145,19 +2859,29 @@ export function createSlurpStorage(db: DB) {
             // Unlinked only after the discard commits, so a crash here leaks a file rather than
             // leaving a publishable row whose image is already gone.
             discardedMediaPaths.push(
-              String(parseRecord(parseRecord(current.payload).metadata).noodlerMediaPath ?? "") || null,
+              String(
+                parseRecord(parseRecord(current.payload).metadata)
+                  .noodlerMediaPath ?? "",
+              ) || null,
             );
             return false;
           }
           if (existingPost) {
             await tx
               .update(noodlerPreparedPosts)
-              .set({ state: "published", publishedPostId: existingPost.id, updatedAt: at.toISOString() })
+              .set({
+                state: "published",
+                publishedPostId: existingPost.id,
+                updatedAt: at.toISOString(),
+              })
               .where(eq(noodlerPreparedPosts.id, current.id));
             return false;
           }
           const accountRow = (
-            await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, current.creatorAccountId))
+            await tx
+              .select()
+              .from(noodleAccounts)
+              .where(eq(noodleAccounts.id, current.creatorAccountId))
           )[0];
           if (!accountRow || accountRow.platform !== "noodler") {
             await tx
@@ -2168,15 +2892,27 @@ export function createSlurpStorage(db: DB) {
           }
           const account = mapAccount(accountRow);
           const sourceRow = account.slurpSourceAccountId
-            ? (await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, account.slurpSourceAccountId)))[0]
+            ? (
+                await tx
+                  .select()
+                  .from(noodleAccounts)
+                  .where(eq(noodleAccounts.id, account.slurpSourceAccountId))
+              )[0]
             : null;
           const source = sourceRow ? mapAccount(sourceRow) : null;
-          const sourceSnapshot = source ? await resolveNoodlerSourceSnapshot(db, source) : null;
+          const sourceSnapshot = source
+            ? await resolveNoodlerSourceSnapshot(db, source)
+            : null;
           if (
             !account.settings.scheduler.autoPosting?.enabled ||
             !source ||
             !sourceSnapshot ||
-            current.policyFingerprint !== noodlerReservePolicyFingerprint(account, settings, source.updatedAt)
+            current.policyFingerprint !==
+              noodlerReservePolicyFingerprint(
+                account,
+                settings,
+                source.updatedAt,
+              )
           ) {
             await tx
               .update(noodlerPreparedPosts)
@@ -2184,7 +2920,9 @@ export function createSlurpStorage(db: DB) {
               .where(eq(noodlerPreparedPosts.id, current.id));
             return false;
           }
-          const payload = parseRecord(current.payload) as NoodlerPreparedPostPayload;
+          const payload = parseRecord(
+            current.payload,
+          ) as NoodlerPreparedPostPayload;
           if (typeof payload.content !== "string" || !payload.content.trim()) {
             await tx
               .update(noodlerPreparedPosts)
@@ -2193,24 +2931,36 @@ export function createSlurpStorage(db: DB) {
             return false;
           }
           const postId = newId();
-          const imageState = current.imageState === "attached" ? "attached" : "closed";
+          const imageState =
+            current.imageState === "attached" ? "attached" : "closed";
           await tx.insert(noodlePosts).values({
             id: postId,
             authorAccountId: account.id,
             title: typeof payload.title === "string" ? payload.title : null,
             content: payload.content,
             imageUrl:
-              typeof parseRecord(payload.metadata).noodlerMediaPath === "string" ? noodlerPostMediaUrl(postId) : null,
-            imagePrompt: typeof payload.imagePrompt === "string" ? payload.imagePrompt : null,
+              typeof parseRecord(payload.metadata).noodlerMediaPath === "string"
+                ? noodlerPostMediaUrl(postId)
+                : null,
+            imagePrompt:
+              typeof payload.imagePrompt === "string"
+                ? payload.imagePrompt
+                : null,
             parentPostId: null,
             quotePostId: null,
             source: "generated",
             access: payload.access === "public" ? "public" : "locked",
-            metadata: JSON.stringify({ ...parseRecord(payload.metadata), noodlerPreparedPostId: current.id }),
+            metadata: JSON.stringify({
+              ...parseRecord(payload.metadata),
+              noodlerPreparedPostId: current.id,
+            }),
             authorSnapshot: JSON.stringify(snapshotForAccount(account)),
             // A late publish is stamped with the moment it actually happened. Using publishAt
             // would file the post behind whatever the feed received during the delay.
-            createdAt: Date.parse(current.publishAt) < at.getTime() ? at.toISOString() : current.publishAt,
+            createdAt:
+              Date.parse(current.publishAt) < at.getTime()
+                ? at.toISOString()
+                : current.publishAt,
             updatedAt: at.toISOString(),
           });
           await tx
@@ -2249,15 +2999,22 @@ export function createSlurpStorage(db: DB) {
         }
         let count = 0;
         for (const item of items) {
-          const linkedPosts = (postsByPreparedId.get(item.id) ?? []).sort((left, right) =>
-            left.id.localeCompare(right.id),
+          const linkedPosts = (postsByPreparedId.get(item.id) ?? []).sort(
+            (left, right) => left.id.localeCompare(right.id),
           );
           const linkedPost = linkedPosts[0];
           if (linkedPost) {
-            if (item.state !== "published" || item.publishedPostId !== linkedPost.id) {
+            if (
+              item.state !== "published" ||
+              item.publishedPostId !== linkedPost.id
+            ) {
               await tx
                 .update(noodlerPreparedPosts)
-                .set({ state: "published", publishedPostId: linkedPost.id, updatedAt: at.toISOString() })
+                .set({
+                  state: "published",
+                  publishedPostId: linkedPost.id,
+                  updatedAt: at.toISOString(),
+                })
                 .where(eq(noodlerPreparedPosts.id, item.id));
               count += 1;
             }
@@ -2270,7 +3027,11 @@ export function createSlurpStorage(db: DB) {
               .update(noodlerPreparedPosts)
               .set(
                 slotStillAhead
-                  ? { state: "prepared", publishedPostId: null, updatedAt: at.toISOString() }
+                  ? {
+                      state: "prepared",
+                      publishedPostId: null,
+                      updatedAt: at.toISOString(),
+                    }
                   : { state: "discarded", updatedAt: at.toISOString() },
               )
               .where(eq(noodlerPreparedPosts.id, item.id));
@@ -2282,7 +3043,10 @@ export function createSlurpStorage(db: DB) {
       const items = await this.listNoodlerPreparedPosts();
       const prepared = items.filter((item) => item.state === "prepared");
       const accounts = new Map(
-        [...(await this.listAccounts()), ...(await this.listNoodlerAccounts())].map((account) => [account.id, account]),
+        [
+          ...(await this.listAccounts()),
+          ...(await this.listNoodlerAccounts()),
+        ].map((account) => [account.id, account]),
       );
       const missingSourceAccountIds = new Set(
         (
@@ -2290,8 +3054,13 @@ export function createSlurpStorage(db: DB) {
             [...accounts.values()]
               .filter((account) => account.platform === "noodler")
               .map(async (account) => {
-                const source = account.slurpSourceAccountId ? accounts.get(account.slurpSourceAccountId) : null;
-                return !source || !(await resolveNoodlerSourceSnapshot(db, source)) ? account.id : null;
+                const source = account.slurpSourceAccountId
+                  ? accounts.get(account.slurpSourceAccountId)
+                  : null;
+                return !source ||
+                  !(await resolveNoodlerSourceSnapshot(db, source))
+                  ? account.id
+                  : null;
               }),
           )
         ).filter((id): id is string => id !== null),
@@ -2299,7 +3068,9 @@ export function createSlurpStorage(db: DB) {
       const invalidIds = prepared
         .filter((item) => {
           const account = accounts.get(item.creatorAccountId);
-          const source = account?.slurpSourceAccountId ? accounts.get(account.slurpSourceAccountId) : null;
+          const source = account?.slurpSourceAccountId
+            ? accounts.get(account.slurpSourceAccountId)
+            : null;
           return (
             // A row whose timestamps do not parse can never become due and would otherwise make
             // every status read and publish pass fail until someone edited storage by hand.
@@ -2309,7 +3080,12 @@ export function createSlurpStorage(db: DB) {
             !source ||
             missingSourceAccountIds.has(item.creatorAccountId) ||
             !account.settings.scheduler.autoPosting?.enabled ||
-            item.policyFingerprint !== noodlerReservePolicyFingerprint(account, settings, source.updatedAt)
+            item.policyFingerprint !==
+              noodlerReservePolicyFingerprint(
+                account,
+                settings,
+                source.updatedAt,
+              )
           );
         })
         .map((item) => item.id);
@@ -2317,9 +3093,15 @@ export function createSlurpStorage(db: DB) {
       // Soonest first, so lowering postsPerDay discards the latest excess items and leaves
       // the imminent ones intact.
       const validFuture = prepared
-        .filter((item) => !invalidIdSet.has(item.id) && Date.parse(item.publishAt) > at.getTime())
+        .filter(
+          (item) =>
+            !invalidIdSet.has(item.id) &&
+            Date.parse(item.publishAt) > at.getTime(),
+        )
         .sort((a, b) => Date.parse(a.publishAt) - Date.parse(b.publishAt));
-      const excessIds = validFuture.slice(settings.postsPerDay).map((item) => item.id);
+      const excessIds = validFuture
+        .slice(settings.postsPerDay)
+        .map((item) => item.id);
       const discardedSet = new Set([...invalidIds, ...excessIds]);
       const discarded = [...discardedSet];
       if (discarded.length > 0) {
@@ -2329,8 +3111,13 @@ export function createSlurpStorage(db: DB) {
             .set({ state: "discarded", updatedAt: at.toISOString() })
             .where(inArray(noodlerPreparedPosts.id, discarded)),
         );
-        for (const item of prepared.filter((candidate) => discardedSet.has(candidate.id))) {
-          unlinkNoodlerMedia(String(parseRecord(item.payload.metadata).noodlerMediaPath ?? "") || null);
+        for (const item of prepared.filter((candidate) =>
+          discardedSet.has(candidate.id),
+        )) {
+          unlinkNoodlerMedia(
+            String(parseRecord(item.payload.metadata).noodlerMediaPath ?? "") ||
+              null,
+          );
         }
       }
       // A crash between the durable row write and the media promotion leaves a row pointing at a
@@ -2342,7 +3129,8 @@ export function createSlurpStorage(db: DB) {
         if (typeof mediaPath !== "string" || !mediaPath) continue;
         const absolute = resolveNoodlerMediaAbsolutePath(mediaPath);
         if (absolute && existsSync(absolute)) continue;
-        const { noodlerMediaPath: _missing, ...metadata } = item.payload.metadata;
+        const { noodlerMediaPath: _missing, ...metadata } =
+          item.payload.metadata;
         await db.transaction(async (tx) =>
           tx
             .update(noodlerPreparedPosts)
@@ -2360,16 +3148,22 @@ export function createSlurpStorage(db: DB) {
       const prunable = items
         .filter(
           (item) =>
-            item.state !== "prepared" && !discardedSet.has(item.id) && !(Date.parse(item.updatedAt) > pruneBefore),
+            item.state !== "prepared" &&
+            !discardedSet.has(item.id) &&
+            !(Date.parse(item.updatedAt) > pruneBefore),
         )
         .map((item) => item.id);
       if (prunable.length > 0) {
-        await db.delete(noodlerPreparedPosts).where(inArray(noodlerPreparedPosts.id, prunable));
+        await db
+          .delete(noodlerPreparedPosts)
+          .where(inArray(noodlerPreparedPosts.id, prunable));
       }
       return repaired + discarded.length;
     },
 
-    async getNoodlerReserveStatus(at = new Date()): Promise<NoodlerReserveStatus> {
+    async getNoodlerReserveStatus(
+      at = new Date(),
+    ): Promise<NoodlerReserveStatus> {
       const settings = await this.getSettings();
       const state = await this.ensureNoodlerReserveState(at);
       const effectiveMs = Date.parse(state.lastObservedBudgetTime);
@@ -2383,22 +3177,33 @@ export function createSlurpStorage(db: DB) {
       return {
         preparedCount: prepared.length,
         preparedThrough: prepared.reduce<string | null>(
-          (latest, item) => (!latest || item.publishAt > latest ? item.publishAt : latest),
+          (latest, item) =>
+            !latest || item.publishAt > latest ? item.publishAt : latest,
           null,
         ),
         textAttemptsUsed: attempts.filter(
-          (row) => row.kind === "text" && row.outcome !== "failed" && Date.parse(row.claimedAt) > cutoff,
+          (row) =>
+            row.kind === "text" &&
+            row.outcome !== "failed" &&
+            Date.parse(row.claimedAt) > cutoff,
         ).length,
         imageAttemptsUsed: attempts.filter(
-          (row) => row.kind === "image" && row.outcome !== "failed" && Date.parse(row.claimedAt) > cutoff,
+          (row) =>
+            row.kind === "image" &&
+            row.outcome !== "failed" &&
+            Date.parse(row.claimedAt) > cutoff,
         ).length,
         postsPerDay: settings.postsPerDay,
         preparationNotBefore: state.preparationNotBefore,
         creators: creators.map((account) => ({
           accountId: account.id,
-          nextPreparedAt: prepared.find((item) => item.creatorAccountId === account.id)?.publishAt ?? null,
+          nextPreparedAt:
+            prepared.find((item) => item.creatorAccountId === account.id)
+              ?.publishAt ?? null,
           // Settings shows who is holding reserve and how many, so the count travels with the row.
-          preparedCount: prepared.filter((item) => item.creatorAccountId === account.id).length,
+          preparedCount: prepared.filter(
+            (item) => item.creatorAccountId === account.id,
+          ).length,
         })),
       };
     },
@@ -2413,14 +3218,22 @@ export function createSlurpStorage(db: DB) {
         const rows = await tx
           .select()
           .from(noodleAccounts)
-          .where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "noodle")));
+          .where(
+            and(
+              eq(noodleAccounts.id, id),
+              eq(noodleAccounts.platform, "noodle"),
+            ),
+          );
         const row = rows[0];
         if (!row) return null;
         const current = normalizeNoodleAccountSettings(row.settings);
         const followingAccountIds = current.social.followingAccountIds ?? [];
         const isFollowing = followingAccountIds.includes(targetAccountId);
-        const followingAccountTimestamps = { ...current.social.followingAccountTimestamps };
-        const hasFollowTimestamp = typeof followingAccountTimestamps[targetAccountId] === "string";
+        const followingAccountTimestamps = {
+          ...current.social.followingAccountTimestamps,
+        };
+        const hasFollowTimestamp =
+          typeof followingAccountTimestamps[targetAccountId] === "string";
         if (isFollowing === followed && (!followed || hasFollowTimestamp)) {
           return { account: mapAccount(row), changed: false };
         }
@@ -2432,7 +3245,9 @@ export function createSlurpStorage(db: DB) {
             ...current.social,
             followingAccountIds: followed
               ? [...followingAccountIds, targetAccountId]
-              : followingAccountIds.filter((accountId) => accountId !== targetAccountId),
+              : followingAccountIds.filter(
+                  (accountId) => accountId !== targetAccountId,
+                ),
             followingAccountTimestamps,
           },
         };
@@ -2440,12 +3255,20 @@ export function createSlurpStorage(db: DB) {
           .update(noodleAccounts)
           .set({ settings: JSON.stringify(next), updatedAt: now() })
           .where(eq(noodleAccounts.id, id));
-        const updatedRows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id));
-        return updatedRows[0] ? { account: mapAccount(updatedRows[0]), changed: true } : null;
+        const updatedRows = await tx
+          .select()
+          .from(noodleAccounts)
+          .where(eq(noodleAccounts.id, id));
+        return updatedRows[0]
+          ? { account: mapAccount(updatedRows[0]), changed: true }
+          : null;
       });
     },
 
-    async setCharacterInvited(characterId: string, invited: boolean): Promise<NoodleAccount | null> {
+    async setCharacterInvited(
+      characterId: string,
+      invited: boolean,
+    ): Promise<NoodleAccount | null> {
       const existing = await this.getAccountByEntity("character", characterId);
       if (!existing) return null;
       return this.updateAccount(existing.id, { invited });
@@ -2465,16 +3288,26 @@ export function createSlurpStorage(db: DB) {
         );
     },
 
-    async listPosts(options: { limit?: number; since?: string } = {}): Promise<NoodlePost[]> {
-      const limit = Math.max(1, Math.min(300, Math.floor(options.limit ?? 120)));
-      const slurpSourceAccountIds = (await this.listAccounts()).map((account) => account.id);
+    async listPosts(
+      options: { limit?: number; since?: string } = {},
+    ): Promise<NoodlePost[]> {
+      const limit = Math.max(
+        1,
+        Math.min(300, Math.floor(options.limit ?? 120)),
+      );
+      const slurpSourceAccountIds = (await this.listAccounts()).map(
+        (account) => account.id,
+      );
       if (slurpSourceAccountIds.length === 0) return [];
       const rows = options.since
         ? await db
             .select()
             .from(noodlePosts)
             .where(
-              and(gt(noodlePosts.createdAt, options.since), inArray(noodlePosts.authorAccountId, slurpSourceAccountIds)),
+              and(
+                gt(noodlePosts.createdAt, options.since),
+                inArray(noodlePosts.authorAccountId, slurpSourceAccountIds),
+              ),
             )
             .orderBy(desc(noodlePosts.createdAt))
             .limit(limit)
@@ -2488,17 +3321,27 @@ export function createSlurpStorage(db: DB) {
     },
 
     async listPostsBefore(before: string): Promise<NoodlePost[]> {
-      const slurpSourceAccountIds = (await this.listAccounts()).map((account) => account.id);
+      const slurpSourceAccountIds = (await this.listAccounts()).map(
+        (account) => account.id,
+      );
       if (slurpSourceAccountIds.length === 0) return [];
       const rows = await db
         .select()
         .from(noodlePosts)
-        .where(and(lt(noodlePosts.createdAt, before), inArray(noodlePosts.authorAccountId, slurpSourceAccountIds)))
+        .where(
+          and(
+            lt(noodlePosts.createdAt, before),
+            inArray(noodlePosts.authorAccountId, slurpSourceAccountIds),
+          ),
+        )
         .orderBy(desc(noodlePosts.createdAt));
       return rows.map((row) => mapPost(row));
     },
 
-    async listNoodlerPostsByAccount(accountId: string, limit = 8): Promise<NoodlerManagedPost[]> {
+    async listNoodlerPostsByAccount(
+      accountId: string,
+      limit = 8,
+    ): Promise<NoodlerManagedPost[]> {
       const account = await this.getNoodlerAccountById(accountId);
       if (!account) return [];
       const rows = await db
@@ -2513,7 +3356,9 @@ export function createSlurpStorage(db: DB) {
     // Unbounded — used by the disclosure-downgrade review, which must inspect every
     // published post (the clamped list above would undercount and let old
     // identifying posts slip through a privacy downgrade).
-    async listAllNoodlerPostsByAccount(accountId: string): Promise<NoodlerManagedPost[]> {
+    async listAllNoodlerPostsByAccount(
+      accountId: string,
+    ): Promise<NoodlerManagedPost[]> {
       const account = await this.getNoodlerAccountById(accountId);
       if (!account) return [];
       const rows = await db
@@ -2524,7 +3369,10 @@ export function createSlurpStorage(db: DB) {
       return rows.map(mapManagedPost);
     },
 
-    async listNoodlerPostsByAccounts(accountIds: string[], limit = 8): Promise<Map<string, NoodlerManagedPost[]>> {
+    async listNoodlerPostsByAccounts(
+      accountIds: string[],
+      limit = 8,
+    ): Promise<Map<string, NoodlerManagedPost[]>> {
       const boundedLimit = Math.max(1, Math.min(50, Math.floor(limit)));
       const result = new Map<string, NoodlerManagedPost[]>();
       if (accountIds.length === 0) return result;
@@ -2553,7 +3401,9 @@ export function createSlurpStorage(db: DB) {
       const search = options.search?.trim().toLowerCase() ?? "";
       if (search) {
         const creatorMatches = new Set(options.creatorSearchAccountIds ?? []);
-        const readableAccounts = new Set(options.readableContentAccountIds ?? []);
+        const readableAccounts = new Set(
+          options.readableContentAccountIds ?? [],
+        );
         const unlockedPosts = new Set(options.unlockedPostIds ?? []);
         const matchingRows = (
           await db
@@ -2639,7 +3489,9 @@ export function createSlurpStorage(db: DB) {
         })
         .from(noodlePosts)
         .where(inArray(noodlePosts.authorAccountId, visibleAccountIds));
-      const latestPost = [...posts].sort(compareNoodlerPostSortKeysDescending)[0];
+      const latestPost = [...posts].sort(
+        compareNoodlerPostSortKeysDescending,
+      )[0];
       const latestUpdate = [...posts].sort((left, right) =>
         compareNoodlerPostSortKeysDescending(
           { createdAt: left.updatedAt, id: left.id },
@@ -2653,21 +3505,34 @@ export function createSlurpStorage(db: DB) {
           createdAt: noodleInteractions.createdAt,
         })
         .from(noodleInteractions)
-        .where(inArray(noodleInteractions.postId, posts.map((row) => row.id)))
-        .orderBy(desc(noodleInteractions.createdAt), desc(noodleInteractions.id))
+        .where(
+          inArray(
+            noodleInteractions.postId,
+            posts.map((row) => row.id),
+          ),
+        )
+        .orderBy(
+          desc(noodleInteractions.createdAt),
+          desc(noodleInteractions.id),
+        )
         .limit(1);
       const latestInteraction = latestInteractionRows[0];
       return {
         count: normalizedSeenAt
           ? posts.filter(
               (row) =>
-                unseen.has(row.authorAccountId) && row.createdAt > normalizedSeenAt,
+                unseen.has(row.authorAccountId) &&
+                row.createdAt > normalizedSeenAt,
             ).length
           : 0,
-        latestPost: latestPost ? `${latestPost.createdAt}:${latestPost.id}` : null,
+        latestPost: latestPost
+          ? `${latestPost.createdAt}:${latestPost.id}`
+          : null,
         latestPostId: latestPost?.id ?? null,
         latestPostAccountId: latestPost?.authorAccountId ?? null,
-        latestPostUpdate: latestUpdate ? `${latestUpdate.updatedAt}:${latestUpdate.id}` : null,
+        latestPostUpdate: latestUpdate
+          ? `${latestUpdate.updatedAt}:${latestUpdate.id}`
+          : null,
         updatedPostId: latestUpdate?.id ?? null,
         updatedPostAccountId: latestUpdate?.authorAccountId ?? null,
         latestInteraction: latestInteraction
@@ -2677,7 +3542,10 @@ export function createSlurpStorage(db: DB) {
       };
     },
 
-    countNoodlerPostsByAccountsSince(accountIds: string[], since: string): number {
+    countNoodlerPostsByAccountsSince(
+      accountIds: string[],
+      since: string,
+    ): number {
       if (accountIds.length === 0) return 0;
       return db.count(
         noodlePosts,
@@ -2689,21 +3557,37 @@ export function createSlurpStorage(db: DB) {
     },
 
     async getNoodlerPostById(id: string): Promise<NoodlerManagedPost | null> {
-      const rows = await db.select().from(noodlePosts).where(eq(noodlePosts.id, id));
+      const rows = await db
+        .select()
+        .from(noodlePosts)
+        .where(eq(noodlePosts.id, id));
       const row = rows[0];
-      if (!row || !(await this.getNoodlerAccountById(row.authorAccountId))) return null;
+      if (!row || !(await this.getNoodlerAccountById(row.authorAccountId)))
+        return null;
       return mapManagedPost(row);
     },
 
-    async getNoodlerPostByWizardExecution(accountId: string, executionId: string): Promise<NoodlerManagedPost | null> {
+    async getNoodlerPostByWizardExecution(
+      accountId: string,
+      executionId: string,
+    ): Promise<NoodlerManagedPost | null> {
       const account = await this.getNoodlerAccountById(accountId);
       if (!account) return null;
-      const rows = await db.select().from(noodlePosts).where(eq(noodlePosts.authorAccountId, accountId));
-      const row = rows.find((candidate) => parseRecord(candidate.metadata).noodlerWizardExecutionId === executionId);
+      const rows = await db
+        .select()
+        .from(noodlePosts)
+        .where(eq(noodlePosts.authorAccountId, accountId));
+      const row = rows.find(
+        (candidate) =>
+          parseRecord(candidate.metadata).noodlerWizardExecutionId ===
+          executionId,
+      );
       return row ? mapManagedPost(row) : null;
     },
 
-    async createNoodlerPost(input: NoodlerPostPersistenceInput): Promise<NoodlerManagedPost | null> {
+    async createNoodlerPost(
+      input: NoodlerPostPersistenceInput,
+    ): Promise<NoodlerManagedPost | null> {
       const posts = await this.createNoodlerPosts([input]);
       return posts?.[0] ?? null;
     },
@@ -2714,7 +3598,9 @@ export function createSlurpStorage(db: DB) {
       inputs: NoodlerPostPersistenceInput[],
     ): Promise<NoodlerManagedPost[] | null> {
       const accounts = await Promise.all(
-        inputs.map((input) => this.getNoodlerAccountById(input.authorAccountId)),
+        inputs.map((input) =>
+          this.getNoodlerAccountById(input.authorAccountId),
+        ),
       );
       if (accounts.some((account) => !account)) return null;
       const timestamp = now();
@@ -2739,10 +3625,19 @@ export function createSlurpStorage(db: DB) {
         const stored = await tx
           .select()
           .from(noodlePosts)
-          .where(inArray(noodlePosts.id, rows.map((row) => row.id)));
-        const byId = new Map(stored.map((row) => [row.id, mapManagedPost(row)]));
+          .where(
+            inArray(
+              noodlePosts.id,
+              rows.map((row) => row.id),
+            ),
+          );
+        const byId = new Map(
+          stored.map((row) => [row.id, mapManagedPost(row)]),
+        );
         const managed = rows.map((row) => byId.get(row.id));
-        return managed.every((post) => post) ? (managed as NoodlerManagedPost[]) : null;
+        return managed.every((post) => post)
+          ? (managed as NoodlerManagedPost[])
+          : null;
       });
     },
 
@@ -2777,15 +3672,23 @@ export function createSlurpStorage(db: DB) {
     },
 
     async getPostById(id: string): Promise<NoodlePost | null> {
-      const rows = await db.select().from(noodlePosts).where(eq(noodlePosts.id, id));
+      const rows = await db
+        .select()
+        .from(noodlePosts)
+        .where(eq(noodlePosts.id, id));
       const row = rows[0];
-      if (!row || !(await this.getAccountById(row.authorAccountId))) return null;
+      if (!row || !(await this.getAccountById(row.authorAccountId)))
+        return null;
       return mapPost(row);
     },
 
     async updatePostMedia(
       id: string,
-      input: { imageUrl?: string | null; imagePrompt?: string | null; metadata?: Record<string, unknown> },
+      input: {
+        imageUrl?: string | null;
+        imagePrompt?: string | null;
+        metadata?: Record<string, unknown>;
+      },
     ): Promise<NoodlePost | null> {
       const existing = await this.getPostById(id);
       if (!existing) return null;
@@ -2793,13 +3696,19 @@ export function createSlurpStorage(db: DB) {
         .update(noodlePosts)
         .set({
           ...(input.imageUrl !== undefined && { imageUrl: input.imageUrl }),
-          ...(input.imagePrompt !== undefined && { imagePrompt: input.imagePrompt }),
-          ...((input.imageUrl !== undefined || input.imagePrompt !== undefined) && {
+          ...(input.imagePrompt !== undefined && {
+            imagePrompt: input.imagePrompt,
+          }),
+          ...((input.imageUrl !== undefined ||
+            input.imagePrompt !== undefined) && {
             imageClaimToken: null,
             imageClaimLeaseUntil: null,
           }),
           ...(input.metadata !== undefined && {
-            metadata: JSON.stringify({ ...existing.metadata, ...input.metadata }),
+            metadata: JSON.stringify({
+              ...existing.metadata,
+              ...input.metadata,
+            }),
           }),
           updatedAt: now(),
         })
@@ -2807,9 +3716,17 @@ export function createSlurpStorage(db: DB) {
       return this.getPostById(id);
     },
 
-    async claimPostImage(id: string, token: string, leaseUntil: string, at = now()): Promise<NoodlePost | null> {
+    async claimPostImage(
+      id: string,
+      token: string,
+      leaseUntil: string,
+      at = now(),
+    ): Promise<NoodlePost | null> {
       return db.transaction(async (tx) => {
-        const rows = await tx.select().from(noodlePosts).where(eq(noodlePosts.id, id));
+        const rows = await tx
+          .select()
+          .from(noodlePosts)
+          .where(eq(noodlePosts.id, id));
         const row = rows[0];
         if (!row || !imageClaimIsAvailable(row, at)) return null;
         await tx
@@ -2820,9 +3737,17 @@ export function createSlurpStorage(db: DB) {
       });
     },
 
-    async renewPostImageClaim(id: string, token: string, leaseUntil: string, at = now()): Promise<boolean> {
+    async renewPostImageClaim(
+      id: string,
+      token: string,
+      leaseUntil: string,
+      at = now(),
+    ): Promise<boolean> {
       return db.transaction(async (tx) => {
-        const rows = await tx.select().from(noodlePosts).where(eq(noodlePosts.id, id));
+        const rows = await tx
+          .select()
+          .from(noodlePosts)
+          .where(eq(noodlePosts.id, id));
         const row = rows[0];
         if (
           !row ||
@@ -2837,19 +3762,26 @@ export function createSlurpStorage(db: DB) {
         await tx
           .update(noodlePosts)
           .set({ imageClaimLeaseUntil: leaseUntil })
-          .where(and(eq(noodlePosts.id, id), eq(noodlePosts.imageClaimToken, token)));
+          .where(
+            and(eq(noodlePosts.id, id), eq(noodlePosts.imageClaimToken, token)),
+          );
         return true;
       });
     },
 
     async releasePostImageClaim(id: string, token: string): Promise<boolean> {
       return db.transaction(async (tx) => {
-        const rows = await tx.select().from(noodlePosts).where(eq(noodlePosts.id, id));
+        const rows = await tx
+          .select()
+          .from(noodlePosts)
+          .where(eq(noodlePosts.id, id));
         if (rows[0]?.imageClaimToken !== token) return false;
         await tx
           .update(noodlePosts)
           .set({ imageClaimToken: null, imageClaimLeaseUntil: null })
-          .where(and(eq(noodlePosts.id, id), eq(noodlePosts.imageClaimToken, token)));
+          .where(
+            and(eq(noodlePosts.id, id), eq(noodlePosts.imageClaimToken, token)),
+          );
         return true;
       });
     },
@@ -2857,11 +3789,18 @@ export function createSlurpStorage(db: DB) {
     async finalizePostImageClaim(
       id: string,
       token: string,
-      input: { imageUrl: string | null; imagePrompt?: string | null; metadata: Record<string, unknown> },
+      input: {
+        imageUrl: string | null;
+        imagePrompt?: string | null;
+        metadata: Record<string, unknown>;
+      },
       at = now(),
     ): Promise<boolean> {
       return db.transaction(async (tx) => {
-        const rows = await tx.select().from(noodlePosts).where(eq(noodlePosts.id, id));
+        const rows = await tx
+          .select()
+          .from(noodlePosts)
+          .where(eq(noodlePosts.id, id));
         const row = rows[0];
         if (
           !row ||
@@ -2875,43 +3814,70 @@ export function createSlurpStorage(db: DB) {
         }
         // Finalization owns the terminal transition: drop the pending-review marker so a
         // finalized (success or failed) row never keeps contradictory pending lifecycle state.
-        const mergedMetadata = { ...parseRecord(row.metadata), ...input.metadata };
+        const mergedMetadata = {
+          ...parseRecord(row.metadata),
+          ...input.metadata,
+        };
         delete mergedMetadata.imagePendingReview;
         await tx
           .update(noodlePosts)
           .set({
             imageUrl: input.imageUrl,
-            ...(input.imagePrompt !== undefined && { imagePrompt: input.imagePrompt }),
+            ...(input.imagePrompt !== undefined && {
+              imagePrompt: input.imagePrompt,
+            }),
             metadata: JSON.stringify(mergedMetadata),
             imageClaimToken: null,
             imageClaimLeaseUntil: null,
             updatedAt: now(),
           })
-          .where(and(eq(noodlePosts.id, id), eq(noodlePosts.imageClaimToken, token)));
+          .where(
+            and(eq(noodlePosts.id, id), eq(noodlePosts.imageClaimToken, token)),
+          );
         return true;
       });
     },
 
-    async updatePost(id: string, input: NoodlePostUpdateInput): Promise<NoodlePost | null> {
+    async updatePost(
+      id: string,
+      input: NoodlePostUpdateInput,
+    ): Promise<NoodlePost | null> {
       const updated = await db.transaction(async (tx) => {
-        const postRows = await tx.select().from(noodlePosts).where(eq(noodlePosts.id, id));
+        const postRows = await tx
+          .select()
+          .from(noodlePosts)
+          .where(eq(noodlePosts.id, id));
         const existing = postRows[0];
         if (!existing) return false;
         const authorRows = await tx
           .select()
           .from(noodleAccounts)
-          .where(and(eq(noodleAccounts.id, existing.authorAccountId), eq(noodleAccounts.platform, "noodle")));
+          .where(
+            and(
+              eq(noodleAccounts.id, existing.authorAccountId),
+              eq(noodleAccounts.platform, "noodle"),
+            ),
+          );
         if (!authorRows[0]) return false;
-        const nextMetadata = updatePollMetadata(mapPost(existing).metadata, input.poll);
+        const nextMetadata = updatePollMetadata(
+          mapPost(existing).metadata,
+          input.poll,
+        );
         if (input.imageCrop === null) delete nextMetadata.imageCrop;
-        else if (input.imageCrop !== undefined) nextMetadata.imageCrop = input.imageCrop;
+        else if (input.imageCrop !== undefined)
+          nextMetadata.imageCrop = input.imageCrop;
         await tx
           .update(noodlePosts)
           .set({
-            ...(input.content !== undefined && { content: input.content.trim().slice(0, 4000) }),
+            ...(input.content !== undefined && {
+              content: input.content.trim().slice(0, 4000),
+            }),
             ...(input.imageUrl !== undefined && { imageUrl: input.imageUrl }),
-            ...(input.imagePrompt !== undefined && { imagePrompt: input.imagePrompt }),
-            ...((input.imageUrl !== undefined || input.imagePrompt !== undefined) && {
+            ...(input.imagePrompt !== undefined && {
+              imagePrompt: input.imagePrompt,
+            }),
+            ...((input.imageUrl !== undefined ||
+              input.imagePrompt !== undefined) && {
               imageClaimToken: null,
               imageClaimLeaseUntil: null,
             }),
@@ -2930,27 +3896,48 @@ export function createSlurpStorage(db: DB) {
     async deletePost(id: string): Promise<NoodlePost | null> {
       const existing = await this.getPostById(id);
       if (!existing) return null;
-      const interactions = await db.select().from(noodleInteractions).where(eq(noodleInteractions.postId, id));
-      const slurpSourceAccountIds = new Set((await this.listAccounts()).map((account) => account.id));
-      if (interactions.some((interaction) => !slurpSourceAccountIds.has(interaction.actorAccountId))) return null;
+      const interactions = await db
+        .select()
+        .from(noodleInteractions)
+        .where(eq(noodleInteractions.postId, id));
+      const slurpSourceAccountIds = new Set(
+        (await this.listAccounts()).map((account) => account.id),
+      );
+      if (
+        interactions.some(
+          (interaction) =>
+            !slurpSourceAccountIds.has(interaction.actorAccountId),
+        )
+      )
+        return null;
       const interactionIds = interactions.map((interaction) => interaction.id);
       const digests = await db.select().from(noodleActivityDigests);
       const relatedDigests = digests.filter(
         (digest) =>
           digest.sourcePostId === id ||
-          (digest.sourceInteractionId !== null && interactionIds.includes(digest.sourceInteractionId)),
+          (digest.sourceInteractionId !== null &&
+            interactionIds.includes(digest.sourceInteractionId)),
       );
       if (
         relatedDigests.some(
-          (digest) => !parseStringArray(digest.accountIds).every((accountId) => slurpSourceAccountIds.has(accountId)),
+          (digest) =>
+            !parseStringArray(digest.accountIds).every((accountId) =>
+              slurpSourceAccountIds.has(accountId),
+            ),
         )
       ) {
         return null;
       }
       await db.transaction(async (tx) => {
-        await tx.delete(noodlePostUnlocks).where(eq(noodlePostUnlocks.postId, id));
-        await tx.delete(noodleInteractions).where(eq(noodleInteractions.postId, id));
-        await tx.delete(noodleActivityDigests).where(eq(noodleActivityDigests.sourcePostId, id));
+        await tx
+          .delete(noodlePostUnlocks)
+          .where(eq(noodlePostUnlocks.postId, id));
+        await tx
+          .delete(noodleInteractions)
+          .where(eq(noodleInteractions.postId, id));
+        await tx
+          .delete(noodleActivityDigests)
+          .where(eq(noodleActivityDigests.sourcePostId, id));
         await tx.delete(noodlePosts).where(eq(noodlePosts.id, id));
       });
       return existing;
@@ -2963,15 +3950,26 @@ export function createSlurpStorage(db: DB) {
     ): Promise<NoodlerManagedPost | null> {
       const imageChanged = Boolean(media || input.removeImage);
       const updated = await db.transaction(async (tx) => {
-        const postRows = await tx.select().from(noodlePosts).where(eq(noodlePosts.id, id));
+        const postRows = await tx
+          .select()
+          .from(noodlePosts)
+          .where(eq(noodlePosts.id, id));
         const existing = postRows[0];
         if (!existing) return false;
         const authorRows = await tx
           .select()
           .from(noodleAccounts)
-          .where(and(eq(noodleAccounts.id, existing.authorAccountId), eq(noodleAccounts.platform, "noodler")));
+          .where(
+            and(
+              eq(noodleAccounts.id, existing.authorAccountId),
+              eq(noodleAccounts.platform, "noodler"),
+            ),
+          );
         if (!authorRows[0]) return false;
-        const nextMetadata = updatePollMetadata(mapManagedPost(existing).metadata, input.poll);
+        const nextMetadata = updatePollMetadata(
+          mapManagedPost(existing).metadata,
+          input.poll,
+        );
         if (imageChanged) {
           for (const key of [
             "noodlerMediaPath",
@@ -2987,20 +3985,26 @@ export function createSlurpStorage(db: DB) {
           }
         }
         if (media) nextMetadata.noodlerMediaPath = media.noodlerMediaPath;
-        if (input.removeImage || input.imageCrop === null) delete nextMetadata.imageCrop;
-        else if (input.imageCrop !== undefined) nextMetadata.imageCrop = input.imageCrop;
+        if (input.removeImage || input.imageCrop === null)
+          delete nextMetadata.imageCrop;
+        else if (input.imageCrop !== undefined)
+          nextMetadata.imageCrop = input.imageCrop;
         await tx
           .update(noodlePosts)
           .set({
             ...(input.title !== undefined && { title: input.title }),
-            ...(input.content !== undefined && { content: input.content.trim().slice(0, 4000) }),
+            ...(input.content !== undefined && {
+              content: input.content.trim().slice(0, 4000),
+            }),
             ...(imageChanged && {
               imageUrl: media?.imageUrl ?? null,
               imagePrompt: null,
               imageClaimToken: null,
               imageClaimLeaseUntil: null,
             }),
-            ...((imageChanged || input.imageCrop !== undefined || input.poll !== undefined) && {
+            ...((imageChanged ||
+              input.imageCrop !== undefined ||
+              input.poll !== undefined) && {
               metadata: JSON.stringify(nextMetadata),
             }),
             updatedAt: now(),
@@ -3015,14 +4019,26 @@ export function createSlurpStorage(db: DB) {
     async deleteNoodlerPost(id: string): Promise<NoodlerManagedPost | null> {
       const existing = await this.getNoodlerPostById(id);
       if (!existing) return null;
-      const interactionRows = await db.select().from(noodleInteractions).where(eq(noodleInteractions.postId, id));
-      const interactionIds = interactionRows.map((interaction) => interaction.id);
+      const interactionRows = await db
+        .select()
+        .from(noodleInteractions)
+        .where(eq(noodleInteractions.postId, id));
+      const interactionIds = interactionRows.map(
+        (interaction) => interaction.id,
+      );
       await db.transaction(async (tx) => {
-        await tx.delete(noodleActivityDigests).where(eq(noodleActivityDigests.sourcePostId, id));
+        await tx
+          .delete(noodleActivityDigests)
+          .where(eq(noodleActivityDigests.sourcePostId, id));
         if (interactionIds.length > 0) {
           await tx
             .delete(noodleActivityDigests)
-            .where(inArray(noodleActivityDigests.sourceInteractionId, interactionIds));
+            .where(
+              inArray(
+                noodleActivityDigests.sourceInteractionId,
+                interactionIds,
+              ),
+            );
         }
         await tx.delete(noodlePosts).where(eq(noodlePosts.id, id));
         await tx._fileStore.flush();
@@ -3031,10 +4047,17 @@ export function createSlurpStorage(db: DB) {
     },
 
     async resetTimeline(): Promise<void> {
-      const slurpSourceAccountIds = (await this.listAccounts()).map((account) => account.id);
+      const slurpSourceAccountIds = (await this.listAccounts()).map(
+        (account) => account.id,
+      );
       const publicPosts =
         slurpSourceAccountIds.length > 0
-          ? await db.select().from(noodlePosts).where(inArray(noodlePosts.authorAccountId, slurpSourceAccountIds))
+          ? await db
+              .select()
+              .from(noodlePosts)
+              .where(
+                inArray(noodlePosts.authorAccountId, slurpSourceAccountIds),
+              )
           : [];
       const publicPostIds = publicPosts.map((post) => post.id);
       const publicInteractions = await db
@@ -3044,16 +4067,30 @@ export function createSlurpStorage(db: DB) {
       const slurpSourceAccountIdSet = new Set(slurpSourceAccountIds);
       const protectedPostIds = new Set(
         publicInteractions
-          .filter((interaction) => !slurpSourceAccountIdSet.has(interaction.actorAccountId))
+          .filter(
+            (interaction) =>
+              !slurpSourceAccountIdSet.has(interaction.actorAccountId),
+          )
           .map((interaction) => interaction.postId),
       );
       const interactionPostById = new Map(
-        publicInteractions.map((interaction) => [interaction.id, interaction.postId]),
+        publicInteractions.map((interaction) => [
+          interaction.id,
+          interaction.postId,
+        ]),
       );
       const digests = await db.select().from(noodleActivityDigests);
       for (const digest of digests) {
-        if (parseStringArray(digest.accountIds).every((accountId) => slurpSourceAccountIdSet.has(accountId))) continue;
-        if (digest.sourcePostId && publicPostIds.includes(digest.sourcePostId)) {
+        if (
+          parseStringArray(digest.accountIds).every((accountId) =>
+            slurpSourceAccountIdSet.has(accountId),
+          )
+        )
+          continue;
+        if (
+          digest.sourcePostId &&
+          publicPostIds.includes(digest.sourcePostId)
+        ) {
           protectedPostIds.add(digest.sourcePostId);
         }
         if (digest.sourceInteractionId) {
@@ -3061,7 +4098,9 @@ export function createSlurpStorage(db: DB) {
           if (postId) protectedPostIds.add(postId);
         }
       }
-      const deletablePostIds = publicPostIds.filter((postId) => !protectedPostIds.has(postId));
+      const deletablePostIds = publicPostIds.filter(
+        (postId) => !protectedPostIds.has(postId),
+      );
       const deletableInteractionIds = publicInteractions
         .filter((interaction) => deletablePostIds.includes(interaction.postId))
         .map((interaction) => interaction.id);
@@ -3069,18 +4108,33 @@ export function createSlurpStorage(db: DB) {
         if (deletableInteractionIds.length > 0) {
           await tx
             .delete(noodleActivityDigests)
-            .where(inArray(noodleActivityDigests.sourceInteractionId, deletableInteractionIds));
+            .where(
+              inArray(
+                noodleActivityDigests.sourceInteractionId,
+                deletableInteractionIds,
+              ),
+            );
         }
         if (deletablePostIds.length > 0) {
-          await tx.delete(noodleActivityDigests).where(inArray(noodleActivityDigests.sourcePostId, deletablePostIds));
-          await tx.delete(noodleInteractions).where(inArray(noodleInteractions.postId, deletablePostIds));
-          await tx.delete(noodlePosts).where(inArray(noodlePosts.id, deletablePostIds));
+          await tx
+            .delete(noodleActivityDigests)
+            .where(
+              inArray(noodleActivityDigests.sourcePostId, deletablePostIds),
+            );
+          await tx
+            .delete(noodleInteractions)
+            .where(inArray(noodleInteractions.postId, deletablePostIds));
+          await tx
+            .delete(noodlePosts)
+            .where(inArray(noodlePosts.id, deletablePostIds));
         }
         await tx.delete(noodleRefreshRuns);
       });
     },
 
-    async listInteractions(postIds: string[] = []): Promise<NoodleInteraction[]> {
+    async listInteractions(
+      postIds: string[] = [],
+    ): Promise<NoodleInteraction[]> {
       if (postIds.length === 0) return [];
       const publicPostIds = new Set(
         (await Promise.all(postIds.map((postId) => this.getPostById(postId))))
@@ -3088,18 +4142,28 @@ export function createSlurpStorage(db: DB) {
           .map((post) => post.id),
       );
       if (publicPostIds.size === 0) return [];
-      const slurpSourceAccountIds = new Set((await this.listAccounts()).map((account) => account.id));
+      const slurpSourceAccountIds = new Set(
+        (await this.listAccounts()).map((account) => account.id),
+      );
       const rows = await db
         .select()
         .from(noodleInteractions)
         .where(inArray(noodleInteractions.postId, [...publicPostIds]))
         .orderBy(noodleInteractions.createdAt);
-      return rows.filter((row) => slurpSourceAccountIds.has(row.actorAccountId)).map(mapInteraction);
+      return rows
+        .filter((row) => slurpSourceAccountIds.has(row.actorAccountId))
+        .map(mapInteraction);
     },
 
-    async listRepliesByActorSince(actorAccountId: string, since: string, limit = 100): Promise<NoodleInteraction[]> {
+    async listRepliesByActorSince(
+      actorAccountId: string,
+      since: string,
+      limit = 100,
+    ): Promise<NoodleInteraction[]> {
       if (!(await this.getAccountById(actorAccountId))) return [];
-      const slurpSourceAccountIds = (await this.listAccounts()).map((account) => account.id);
+      const slurpSourceAccountIds = (await this.listAccounts()).map(
+        (account) => account.id,
+      );
       if (slurpSourceAccountIds.length === 0) return [];
       const publicPostIds = new Set(
         (
@@ -3121,14 +4185,22 @@ export function createSlurpStorage(db: DB) {
         )
         .orderBy(desc(noodleInteractions.createdAt))
         .limit(Math.max(1, Math.min(200, Math.floor(limit))));
-      return rows.filter((row) => publicPostIds.has(row.postId)).map(mapInteraction);
+      return rows
+        .filter((row) => publicPostIds.has(row.postId))
+        .map(mapInteraction);
     },
 
     async getInteractionById(id: string): Promise<NoodleInteraction | null> {
-      const rows = await db.select().from(noodleInteractions).where(eq(noodleInteractions.id, id));
+      const rows = await db
+        .select()
+        .from(noodleInteractions)
+        .where(eq(noodleInteractions.id, id));
       const row = rows[0];
       if (!row) return null;
-      const [post, actor] = await Promise.all([this.getPostById(row.postId), this.getAccountById(row.actorAccountId)]);
+      const [post, actor] = await Promise.all([
+        this.getPostById(row.postId),
+        this.getAccountById(row.actorAccountId),
+      ]);
       return post && actor ? mapInteraction(row) : null;
     },
 
@@ -3141,8 +4213,12 @@ export function createSlurpStorage(db: DB) {
       await db
         .update(noodleInteractions)
         .set({
-          ...(input.content !== undefined && { content: input.content?.trim() || null }),
-          ...(input.imageUrl !== undefined && { imageUrl: input.imageUrl?.trim() || null }),
+          ...(input.content !== undefined && {
+            content: input.content?.trim() || null,
+          }),
+          ...(input.imageUrl !== undefined && {
+            imageUrl: input.imageUrl?.trim() || null,
+          }),
         })
         .where(eq(noodleInteractions.id, id));
       return this.getInteractionById(id);
@@ -3151,13 +4227,21 @@ export function createSlurpStorage(db: DB) {
     async deleteInteractionById(id: string): Promise<NoodleInteraction[]> {
       const existing = await this.getInteractionById(id);
       if (!existing) return [];
-      const rows = await db.select().from(noodleInteractions).where(eq(noodleInteractions.postId, existing.postId));
+      const rows = await db
+        .select()
+        .from(noodleInteractions)
+        .where(eq(noodleInteractions.postId, existing.postId));
       const deletedIds = new Set([id]);
       let changed = true;
       while (changed) {
         changed = false;
         for (const row of rows) {
-          if (deletedIds.has(row.id) || !row.parentInteractionId || !deletedIds.has(row.parentInteractionId)) continue;
+          if (
+            deletedIds.has(row.id) ||
+            !row.parentInteractionId ||
+            !deletedIds.has(row.parentInteractionId)
+          )
+            continue;
           deletedIds.add(row.id);
           changed = true;
         }
@@ -3166,14 +4250,18 @@ export function createSlurpStorage(db: DB) {
       // The guard is "every actor in this subtree is an account this installation owns". A
       // creator reply is authored by a NoodleR stage account, so leaving those out made a
       // comment undeletable as soon as its creator answered it.
-      const slurpSourceAccountIds = new Set((await this.listAccounts()).map((account) => account.id));
+      const slurpSourceAccountIds = new Set(
+        (await this.listAccounts()).map((account) => account.id),
+      );
       const knownAccountIds = new Set([
         ...slurpSourceAccountIds,
         ...(await this.listNoodlerAccounts()).map((account) => account.id),
       ]);
       if (
         deletedRows.some(
-          (row) => !knownAccountIds.has(row.actorAccountId) && !row.actorAccountId.startsWith(NOODLER_FAN_IDENTITY_PREFIX),
+          (row) =>
+            !knownAccountIds.has(row.actorAccountId) &&
+            !row.actorAccountId.startsWith(NOODLER_FAN_IDENTITY_PREFIX),
         )
       ) {
         return [];
@@ -3181,10 +4269,15 @@ export function createSlurpStorage(db: DB) {
       const relatedDigests = await db
         .select()
         .from(noodleActivityDigests)
-        .where(inArray(noodleActivityDigests.sourceInteractionId, [...deletedIds]));
+        .where(
+          inArray(noodleActivityDigests.sourceInteractionId, [...deletedIds]),
+        );
       if (
         relatedDigests.some(
-          (digest) => !parseStringArray(digest.accountIds).every((accountId) => slurpSourceAccountIds.has(accountId)),
+          (digest) =>
+            !parseStringArray(digest.accountIds).every((accountId) =>
+              slurpSourceAccountIds.has(accountId),
+            ),
         )
       ) {
         return [];
@@ -3192,22 +4285,37 @@ export function createSlurpStorage(db: DB) {
       await db.transaction(async (tx) => {
         await tx
           .delete(noodleActivityDigests)
-          .where(inArray(noodleActivityDigests.sourceInteractionId, [...deletedIds]));
+          .where(
+            inArray(noodleActivityDigests.sourceInteractionId, [...deletedIds]),
+          );
         // This is the route comment deletion actually takes, and the subtree it removes can
         // contain both a comment that owns a creator-reply claim and the reply that claim
         // points at. Either one left behind keeps consuming the rolling allowance forever.
         await tx
           .delete(noodlerCreatorReplyClaims)
-          .where(inArray(noodlerCreatorReplyClaims.parentInteractionId, [...deletedIds]));
+          .where(
+            inArray(noodlerCreatorReplyClaims.parentInteractionId, [
+              ...deletedIds,
+            ]),
+          );
         await tx
           .delete(noodlerCreatorReplyClaims)
-          .where(inArray(noodlerCreatorReplyClaims.replyInteractionId, [...deletedIds]));
-        await tx.delete(noodleInteractions).where(inArray(noodleInteractions.id, [...deletedIds]));
+          .where(
+            inArray(noodlerCreatorReplyClaims.replyInteractionId, [
+              ...deletedIds,
+            ]),
+          );
+        await tx
+          .delete(noodleInteractions)
+          .where(inArray(noodleInteractions.id, [...deletedIds]));
       });
       return deletedRows.map(mapInteraction);
     },
 
-    async createInteraction(postId: string, input: PublicCreateInteractionCommand): Promise<NoodleInteraction | null> {
+    async createInteraction(
+      postId: string,
+      input: PublicCreateInteractionCommand,
+    ): Promise<NoodleInteraction | null> {
       const parentInteractionId = input.parentInteractionId ?? null;
       if (input.type === "vote") {
         if (parentInteractionId) return null;
@@ -3220,12 +4328,16 @@ export function createSlurpStorage(db: DB) {
         );
       }
 
-      const [post, actor] = await Promise.all([this.getPostById(postId), this.getAccountById(input.actorAccountId)]);
+      const [post, actor] = await Promise.all([
+        this.getPostById(postId),
+        this.getAccountById(input.actorAccountId),
+      ]);
       if (!post || !actor) return null;
 
       if (parentInteractionId) {
         const parent = await this.getInteractionById(parentInteractionId);
-        if (!parent || parent.postId !== postId || parent.type !== "reply") return null;
+        if (!parent || parent.postId !== postId || parent.type !== "reply")
+          return null;
       }
 
       return insertInteraction(postId, {
@@ -3237,7 +4349,10 @@ export function createSlurpStorage(db: DB) {
       });
     },
 
-    async deleteInteraction(postId: string, input: PublicRemoveInteractionCommand): Promise<NoodleInteraction | null> {
+    async deleteInteraction(
+      postId: string,
+      input: PublicRemoveInteractionCommand,
+    ): Promise<NoodleInteraction | null> {
       const post = await this.getPostById(postId);
       if (!post) return null;
       return deleteStoredInteraction(postId, input, "protect-public-digests");
@@ -3246,7 +4361,9 @@ export function createSlurpStorage(db: DB) {
     // Callers pass post IDs already resolved from NoodleR-account queries
     // (listNoodlerPostsByAccounts), so this trusts them and issues a single bulk
     // read instead of re-validating each ID with getNoodlerPostById (2N reads).
-    async listNoodlerInteractions(noodlerPostIds: string[] = []): Promise<NoodleInteraction[]> {
+    async listNoodlerInteractions(
+      noodlerPostIds: string[] = [],
+    ): Promise<NoodleInteraction[]> {
       if (noodlerPostIds.length === 0) return [];
       const rows = await db
         .select()
@@ -3269,12 +4386,25 @@ export function createSlurpStorage(db: DB) {
           tx
             .select()
             .from(noodleAccounts)
-            .where(and(eq(noodleAccounts.id, creatorAccountId), eq(noodleAccounts.platform, "noodler"))),
-          tx.select().from(noodleInteractions).where(eq(noodleInteractions.id, parentInteractionId)),
+            .where(
+              and(
+                eq(noodleAccounts.id, creatorAccountId),
+                eq(noodleAccounts.platform, "noodler"),
+              ),
+            ),
+          tx
+            .select()
+            .from(noodleInteractions)
+            .where(eq(noodleInteractions.id, parentInteractionId)),
           tx
             .select()
             .from(noodleAccounts)
-            .where(and(eq(noodleAccounts.id, viewerAccountId), eq(noodleAccounts.platform, "noodle"))),
+            .where(
+              and(
+                eq(noodleAccounts.id, viewerAccountId),
+                eq(noodleAccounts.platform, "noodle"),
+              ),
+            ),
         ]);
         const creatorRow = creatorRows[0];
         const parentRow = parentRows[0];
@@ -3296,12 +4426,18 @@ export function createSlurpStorage(db: DB) {
         const postRows = await tx
           .select()
           .from(noodlePosts)
-          .where(and(eq(noodlePosts.id, postId), eq(noodlePosts.authorAccountId, creatorAccountId)));
+          .where(
+            and(
+              eq(noodlePosts.id, postId),
+              eq(noodlePosts.authorAccountId, creatorAccountId),
+            ),
+          );
         const postRow = postRows[0];
         if (!postRow) return { status: "ineligible" };
 
         const creator = mapAccount(creatorRow);
-        if (isNoodlerHiddenFromViewer(creator, viewerAccountId)) return { status: "ineligible" };
+        if (isNoodlerHiddenFromViewer(creator, viewerAccountId))
+          return { status: "ineligible" };
         const post = mapManagedPost(postRow);
         const [subscriptions, unlocks] = await Promise.all([
           tx
@@ -3310,13 +4446,21 @@ export function createSlurpStorage(db: DB) {
             .where(
               and(
                 eq(noodleAccountSubscriptions.viewerAccountId, viewerAccountId),
-                eq(noodleAccountSubscriptions.creatorAccountId, creatorAccountId),
+                eq(
+                  noodleAccountSubscriptions.creatorAccountId,
+                  creatorAccountId,
+                ),
               ),
             ),
           tx
             .select()
             .from(noodlePostUnlocks)
-            .where(and(eq(noodlePostUnlocks.viewerAccountId, viewerAccountId), eq(noodlePostUnlocks.postId, post.id))),
+            .where(
+              and(
+                eq(noodlePostUnlocks.viewerAccountId, viewerAccountId),
+                eq(noodlePostUnlocks.postId, post.id),
+              ),
+            ),
         ]);
         if (
           !canViewNoodlerPost({
@@ -3335,9 +4479,9 @@ export function createSlurpStorage(db: DB) {
         // Budget membership is `claimedAt > cutoff`, so anything not greater is outside the
         // window: pruning must use the exact complement or a claim sitting on the boundary is
         // neither counted nor released, and blocks its comment forever.
-        const expiredOrphans = (await tx.select().from(noodlerCreatorReplyClaims)).filter(
-          (row) => !row.replyInteractionId && !(row.claimedAt > cutoff),
-        );
+        const expiredOrphans = (
+          await tx.select().from(noodlerCreatorReplyClaims)
+        ).filter((row) => !row.replyInteractionId && !(row.claimedAt > cutoff));
         if (expiredOrphans.length > 0) {
           await tx.delete(noodlerCreatorReplyClaims).where(
             inArray(
@@ -3354,16 +4498,25 @@ export function createSlurpStorage(db: DB) {
           .from(noodlerCreatorReplyClaims)
           .where(
             and(
-              eq(noodlerCreatorReplyClaims.parentInteractionId, parentInteractionId),
+              eq(
+                noodlerCreatorReplyClaims.parentInteractionId,
+                parentInteractionId,
+              ),
               eq(noodlerCreatorReplyClaims.creatorAccountId, creatorAccountId),
             ),
           );
         const existing = existingClaims[0];
         if (existing) {
           const replyRows = existing.replyInteractionId
-            ? await tx.select().from(noodleInteractions).where(eq(noodleInteractions.id, existing.replyInteractionId))
+            ? await tx
+                .select()
+                .from(noodleInteractions)
+                .where(eq(noodleInteractions.id, existing.replyInteractionId))
             : [];
-          return { status: "duplicate", interaction: replyRows[0] ? mapInteraction(replyRows[0]) : null };
+          return {
+            status: "duplicate",
+            interaction: replyRows[0] ? mapInteraction(replyRows[0]) : null,
+          };
         }
         // The reply can also outlive its claim if a crash lost the claim write. Reconcile against
         // the replies themselves so the comment cannot collect a second creator reply.
@@ -3388,7 +4541,10 @@ export function createSlurpStorage(db: DB) {
             replyInteractionId: strandedReply.id,
             claimedAt: at,
           });
-          return { status: "duplicate", interaction: mapInteraction(strandedReply) };
+          return {
+            status: "duplicate",
+            interaction: mapInteraction(strandedReply),
+          };
         }
 
         const recentClaims = await tx
@@ -3424,13 +4580,21 @@ export function createSlurpStorage(db: DB) {
      */
     async releaseNoodlerCreatorReplyClaim(claimId: string): Promise<void> {
       await db.transaction(async (tx) => {
-        const rows = await tx.select().from(noodlerCreatorReplyClaims).where(eq(noodlerCreatorReplyClaims.id, claimId));
+        const rows = await tx
+          .select()
+          .from(noodlerCreatorReplyClaims)
+          .where(eq(noodlerCreatorReplyClaims.id, claimId));
         if (!rows[0] || rows[0].replyInteractionId) return;
-        await tx.delete(noodlerCreatorReplyClaims).where(eq(noodlerCreatorReplyClaims.id, claimId));
+        await tx
+          .delete(noodlerCreatorReplyClaims)
+          .where(eq(noodlerCreatorReplyClaims.id, claimId));
       });
     },
 
-    async finalizeNoodlerCreatorReplyClaim(claimId: string, content: string): Promise<NoodleInteraction | null> {
+    async finalizeNoodlerCreatorReplyClaim(
+      claimId: string,
+      content: string,
+    ): Promise<NoodleInteraction | null> {
       return db.transaction(async (tx) => {
         const claimRows = await tx
           .select()
@@ -3449,8 +4613,16 @@ export function createSlurpStorage(db: DB) {
           tx
             .select()
             .from(noodleAccounts)
-            .where(and(eq(noodleAccounts.id, claim.creatorAccountId), eq(noodleAccounts.platform, "noodler"))),
-          tx.select().from(noodleInteractions).where(eq(noodleInteractions.id, claim.parentInteractionId)),
+            .where(
+              and(
+                eq(noodleAccounts.id, claim.creatorAccountId),
+                eq(noodleAccounts.platform, "noodler"),
+              ),
+            ),
+          tx
+            .select()
+            .from(noodleInteractions)
+            .where(eq(noodleInteractions.id, claim.parentInteractionId)),
           tx.select().from(noodlePosts).where(eq(noodlePosts.id, claim.postId)),
         ]);
         const creatorRow = creatorRows[0];
@@ -3467,7 +4639,8 @@ export function createSlurpStorage(db: DB) {
           return null;
         }
         const creator = mapAccount(creatorRow);
-        if (isNoodlerHiddenFromViewer(creator, parentRow.actorAccountId)) return null;
+        if (isNoodlerHiddenFromViewer(creator, parentRow.actorAccountId))
+          return null;
         const post = mapManagedPost(postRow);
         const [subscriptions, unlocks] = await Promise.all([
           tx
@@ -3475,7 +4648,10 @@ export function createSlurpStorage(db: DB) {
             .from(noodleAccountSubscriptions)
             .where(
               and(
-                eq(noodleAccountSubscriptions.viewerAccountId, parentRow.actorAccountId),
+                eq(
+                  noodleAccountSubscriptions.viewerAccountId,
+                  parentRow.actorAccountId,
+                ),
                 eq(noodleAccountSubscriptions.creatorAccountId, creatorRow.id),
               ),
             ),
@@ -3536,7 +4712,10 @@ export function createSlurpStorage(db: DB) {
           .update(noodlerCreatorReplyClaims)
           .set({ replyInteractionId: replyId })
           .where(eq(noodlerCreatorReplyClaims.id, claimId));
-        const rows = await tx.select().from(noodleInteractions).where(eq(noodleInteractions.id, replyId));
+        const rows = await tx
+          .select()
+          .from(noodleInteractions)
+          .where(eq(noodleInteractions.id, replyId));
         return rows[0] ? mapInteraction(rows[0]) : null;
       });
     },
@@ -3548,7 +4727,13 @@ export function createSlurpStorage(db: DB) {
       const parentInteractionId = input.parentInteractionId ?? null;
       if (input.type === "vote") {
         if (parentInteractionId) return null;
-        return upsertPollVote(postId, input.actorAccountId, input.content?.trim() ?? "", "noodler", null);
+        return upsertPollVote(
+          postId,
+          input.actorAccountId,
+          input.content?.trim() ?? "",
+          "noodler",
+          null,
+        );
       }
 
       const [post, actor] = await Promise.all([
@@ -3563,7 +4748,8 @@ export function createSlurpStorage(db: DB) {
           .from(noodleInteractions)
           .where(eq(noodleInteractions.id, parentInteractionId));
         const parent = parentRows[0];
-        if (!parent || parent.postId !== postId || parent.type !== "reply") return null;
+        if (!parent || parent.postId !== postId || parent.type !== "reply")
+          return null;
       }
 
       return insertInteraction(postId, {
@@ -3587,7 +4773,10 @@ export function createSlurpStorage(db: DB) {
       },
     ): Promise<{ interaction: NoodleInteraction; created: boolean } | null> {
       return db.transaction(async (tx) => {
-        const postRows = await tx.select().from(noodlePosts).where(eq(noodlePosts.id, postId));
+        const postRows = await tx
+          .select()
+          .from(noodlePosts)
+          .where(eq(noodlePosts.id, postId));
         const postRow = postRows[0];
         if (
           !postRow ||
@@ -3599,30 +4788,47 @@ export function createSlurpStorage(db: DB) {
         const creatorRows = await tx
           .select()
           .from(noodleAccounts)
-          .where(and(eq(noodleAccounts.id, input.creatorAccountId), eq(noodleAccounts.platform, "noodler")));
+          .where(
+            and(
+              eq(noodleAccounts.id, input.creatorAccountId),
+              eq(noodleAccounts.platform, "noodler"),
+            ),
+          );
         if (!creatorRows[0]) return null;
-        const settings = normalizeNoodleSettings(await createAppSettingsStorage(tx).get(NOODLE_SETTINGS_KEY));
+        const settings = normalizeNoodleSettings(
+          await createAppSettingsStorage(tx).get(NOODLE_SETTINGS_KEY),
+        );
         const creator = mapAccount(creatorRows[0]);
         const override = creator.settings.scheduler.fanActivity;
-        if (!settings.fanActivityEnabled || override?.enabled === false) return null;
+        if (!settings.fanActivityEnabled || override?.enabled === false)
+          return null;
 
         const stateRows = await tx.select().from(noodlerFanActivityState);
         const plan = stateRows
           .flatMap((row) => {
             try {
-              const parsed = parsePersistedNoodleFanActivityDayPlan(JSON.parse(row.plan));
+              const parsed = parsePersistedNoodleFanActivityDayPlan(
+                JSON.parse(row.plan),
+              );
               return parsed ? [parsed] : [];
             } catch {
               return [];
             }
           })
-          .find((candidate) => candidate.runs.some((run) => run.id === input.runId));
-        const run = plan?.runs.find((candidate) => candidate.id === input.runId);
+          .find((candidate) =>
+            candidate.runs.some((run) => run.id === input.runId),
+          );
+        const run = plan?.runs.find(
+          (candidate) => candidate.id === input.runId,
+        );
         const creatorActivities =
-          run?.acceptedActivities.filter((activity) => activity.creatorId === input.creatorAccountId) ?? [];
+          run?.acceptedActivities.filter(
+            (activity) => activity.creatorId === input.creatorAccountId,
+          ) ?? [];
         if (
           run?.status !== "applying" ||
-          creatorActivities.length > NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR ||
+          creatorActivities.length >
+            NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR ||
           !creatorActivities.some(
             (activity) =>
               activity.id === input.id &&
@@ -3634,8 +4840,12 @@ export function createSlurpStorage(db: DB) {
           return null;
         }
 
-        const stableRows = await tx.select().from(noodleInteractions).where(eq(noodleInteractions.id, input.id));
-        if (stableRows[0]) return { interaction: mapInteraction(stableRows[0]), created: false };
+        const stableRows = await tx
+          .select()
+          .from(noodleInteractions)
+          .where(eq(noodleInteractions.id, input.id));
+        if (stableRows[0])
+          return { interaction: mapInteraction(stableRows[0]), created: false };
 
         const existingRows = await tx
           .select()
@@ -3648,9 +4858,11 @@ export function createSlurpStorage(db: DB) {
               isNull(noodleInteractions.parentInteractionId),
             ),
           );
-        const content = input.type === "reply" ? input.content?.trim() || null : null;
+        const content =
+          input.type === "reply" ? input.content?.trim() || null : null;
         const duplicate = existingRows[0];
-        if (duplicate) return { interaction: mapInteraction(duplicate), created: false };
+        if (duplicate)
+          return { interaction: mapInteraction(duplicate), created: false };
         if (input.type === "reply" && !content) return null;
 
         await tx.insert(noodleInteractions).values({
@@ -3664,8 +4876,13 @@ export function createSlurpStorage(db: DB) {
           actorSnapshot: JSON.stringify(input.actorSnapshot),
           createdAt: now(),
         });
-        const rows = await tx.select().from(noodleInteractions).where(eq(noodleInteractions.id, input.id));
-        return rows[0] ? { interaction: mapInteraction(rows[0]), created: true } : null;
+        const rows = await tx
+          .select()
+          .from(noodleInteractions)
+          .where(eq(noodleInteractions.id, input.id));
+        return rows[0]
+          ? { interaction: mapInteraction(rows[0]), created: true }
+          : null;
       });
     },
 
@@ -3686,24 +4903,43 @@ export function createSlurpStorage(db: DB) {
       sourceInteractionId?: string | null;
     }): Promise<NoodleDigestEntry> {
       const id = newId();
-      const uniqueAccountIds = Array.from(new Set(input.accountIds.filter(Boolean)));
-      const slurpSourceAccountIds = new Set((await this.listAccounts()).map((account) => account.id));
-      if (!uniqueAccountIds.every((accountId) => slurpSourceAccountIds.has(accountId))) {
-        throw new Error("Public Noodle digests cannot reference NoodleR accounts.");
+      const uniqueAccountIds = Array.from(
+        new Set(input.accountIds.filter(Boolean)),
+      );
+      const slurpSourceAccountIds = new Set(
+        (await this.listAccounts()).map((account) => account.id),
+      );
+      if (
+        !uniqueAccountIds.every((accountId) =>
+          slurpSourceAccountIds.has(accountId),
+        )
+      ) {
+        throw new Error(
+          "Public Noodle digests cannot reference NoodleR accounts.",
+        );
       }
       await db.transaction(async (tx) => {
         if (input.sourceInteractionId) {
           const existingDigests = await tx
             .select()
             .from(noodleActivityDigests)
-            .where(eq(noodleActivityDigests.sourceInteractionId, input.sourceInteractionId));
+            .where(
+              eq(
+                noodleActivityDigests.sourceInteractionId,
+                input.sourceInteractionId,
+              ),
+            );
           const publicDigestIds = existingDigests
             .filter((digest) =>
-              parseStringArray(digest.accountIds).every((accountId) => slurpSourceAccountIds.has(accountId)),
+              parseStringArray(digest.accountIds).every((accountId) =>
+                slurpSourceAccountIds.has(accountId),
+              ),
             )
             .map((digest) => digest.id);
           if (publicDigestIds.length > 0) {
-            await tx.delete(noodleActivityDigests).where(inArray(noodleActivityDigests.id, publicDigestIds));
+            await tx
+              .delete(noodleActivityDigests)
+              .where(inArray(noodleActivityDigests.id, publicDigestIds));
           }
         }
         await tx.insert(noodleActivityDigests).values({
@@ -3716,7 +4952,10 @@ export function createSlurpStorage(db: DB) {
           createdAt: now(),
         });
       });
-      const rows = await db.select().from(noodleActivityDigests).where(eq(noodleActivityDigests.id, id));
+      const rows = await db
+        .select()
+        .from(noodleActivityDigests)
+        .where(eq(noodleActivityDigests.id, id));
       return mapDigest(rows[0]!);
     },
 
@@ -3724,14 +4963,25 @@ export function createSlurpStorage(db: DB) {
       id: string,
       input: { accountIds: string[]; content: string },
     ): Promise<NoodleDigestEntry | null> {
-      const uniqueAccountIds = Array.from(new Set(input.accountIds.filter(Boolean)));
-      const existingRows = await db.select().from(noodleActivityDigests).where(eq(noodleActivityDigests.id, id));
+      const uniqueAccountIds = Array.from(
+        new Set(input.accountIds.filter(Boolean)),
+      );
+      const existingRows = await db
+        .select()
+        .from(noodleActivityDigests)
+        .where(eq(noodleActivityDigests.id, id));
       const existing = existingRows[0];
       if (!existing) return null;
-      const slurpSourceAccountIds = new Set((await this.listAccounts()).map((account) => account.id));
+      const slurpSourceAccountIds = new Set(
+        (await this.listAccounts()).map((account) => account.id),
+      );
       if (
-        !parseStringArray(existing.accountIds).every((accountId) => slurpSourceAccountIds.has(accountId)) ||
-        !uniqueAccountIds.every((accountId) => slurpSourceAccountIds.has(accountId))
+        !parseStringArray(existing.accountIds).every((accountId) =>
+          slurpSourceAccountIds.has(accountId),
+        ) ||
+        !uniqueAccountIds.every((accountId) =>
+          slurpSourceAccountIds.has(accountId),
+        )
       ) {
         return null;
       }
@@ -3742,11 +4992,16 @@ export function createSlurpStorage(db: DB) {
           content: input.content.trim().slice(0, 1200),
         })
         .where(eq(noodleActivityDigests.id, id));
-      const rows = await db.select().from(noodleActivityDigests).where(eq(noodleActivityDigests.id, id));
+      const rows = await db
+        .select()
+        .from(noodleActivityDigests)
+        .where(eq(noodleActivityDigests.id, id));
       return rows[0] ? mapDigest(rows[0]) : null;
     },
 
-    async listDigests(options: { limit?: number; since?: string } = {}): Promise<NoodleDigestEntry[]> {
+    async listDigests(
+      options: { limit?: number; since?: string } = {},
+    ): Promise<NoodleDigestEntry[]> {
       const limit = Math.max(1, Math.min(200, Math.floor(options.limit ?? 80)));
       const fetchLimit = 200;
       const rows = options.since
@@ -3762,31 +5017,65 @@ export function createSlurpStorage(db: DB) {
             .orderBy(desc(noodleActivityDigests.createdAt))
             .limit(fetchLimit);
 
-      const sourcePostIds = Array.from(new Set(rows.flatMap((row) => (row.sourcePostId ? [row.sourcePostId] : []))));
+      const sourcePostIds = Array.from(
+        new Set(
+          rows.flatMap((row) => (row.sourcePostId ? [row.sourcePostId] : [])),
+        ),
+      );
       const sourceInteractionIds = Array.from(
-        new Set(rows.flatMap((row) => (row.sourceInteractionId ? [row.sourceInteractionId] : []))),
+        new Set(
+          rows.flatMap((row) =>
+            row.sourceInteractionId ? [row.sourceInteractionId] : [],
+          ),
+        ),
       );
       const [sourcePosts, sourceInteractions] = await Promise.all([
         sourcePostIds.length > 0
-          ? db.select().from(noodlePosts).where(inArray(noodlePosts.id, sourcePostIds))
+          ? db
+              .select()
+              .from(noodlePosts)
+              .where(inArray(noodlePosts.id, sourcePostIds))
           : Promise.resolve([]),
         sourceInteractionIds.length > 0
-          ? db.select().from(noodleInteractions).where(inArray(noodleInteractions.id, sourceInteractionIds))
+          ? db
+              .select()
+              .from(noodleInteractions)
+              .where(inArray(noodleInteractions.id, sourceInteractionIds))
           : Promise.resolve([]),
       ]);
-      const sourcePostById = new Map(sourcePosts.map((post) => [post.id, post]));
-      const sourceInteractionById = new Map(sourceInteractions.map((interaction) => [interaction.id, interaction]));
-      const slurpSourceAccountIds = new Set((await this.listAccounts()).map((account) => account.id));
+      const sourcePostById = new Map(
+        sourcePosts.map((post) => [post.id, post]),
+      );
+      const sourceInteractionById = new Map(
+        sourceInteractions.map((interaction) => [interaction.id, interaction]),
+      );
+      const slurpSourceAccountIds = new Set(
+        (await this.listAccounts()).map((account) => account.id),
+      );
 
       return rows
         .filter((row) => {
           const digest = mapDigest(row);
-          if (!digest.accountIds.every((accountId) => slurpSourceAccountIds.has(accountId))) return false;
+          if (
+            !digest.accountIds.every((accountId) =>
+              slurpSourceAccountIds.has(accountId),
+            )
+          )
+            return false;
           if (row.sourceInteractionId) {
-            const interaction = sourceInteractionById.get(row.sourceInteractionId);
-            if (!interaction || !slurpSourceAccountIds.has(interaction.actorAccountId)) return false;
+            const interaction = sourceInteractionById.get(
+              row.sourceInteractionId,
+            );
+            if (
+              !interaction ||
+              !slurpSourceAccountIds.has(interaction.actorAccountId)
+            )
+              return false;
             const sourcePost = sourcePostById.get(interaction.postId);
-            return Boolean(sourcePost && slurpSourceAccountIds.has(sourcePost.authorAccountId));
+            return Boolean(
+              sourcePost &&
+              slurpSourceAccountIds.has(sourcePost.authorAccountId),
+            );
           }
           // Older model-authored summaries had only a refresh-run reference,
           // so there is no way to invalidate them when their source post or
@@ -3794,7 +5083,11 @@ export function createSlurpStorage(db: DB) {
           if (row.sourceRunId && !row.sourcePostId) return false;
           if (!row.sourcePostId) return true;
           const sourcePost = sourcePostById.get(row.sourcePostId);
-          if (!sourcePost || !slurpSourceAccountIds.has(sourcePost.authorAccountId)) return false;
+          if (
+            !sourcePost ||
+            !slurpSourceAccountIds.has(sourcePost.authorAccountId)
+          )
+            return false;
           // Digests created before source_interaction_id existed cannot be tied
           // safely to a still-live comment. Keep only the post's canonical digest;
           // stale legacy comment digests must never re-enter generation context.
@@ -3804,7 +5097,10 @@ export function createSlurpStorage(db: DB) {
         .map(mapDigest);
     },
 
-    async createRefreshRun(input: { activeAccountIds: string[]; prompt: string }): Promise<NoodleRefreshRun> {
+    async createRefreshRun(input: {
+      activeAccountIds: string[];
+      prompt: string;
+    }): Promise<NoodleRefreshRun> {
       const timestamp = now();
       const id = newId();
       await db.insert(noodleRefreshRuns).values({
@@ -3818,11 +5114,16 @@ export function createSlurpStorage(db: DB) {
         createdAt: timestamp,
         updatedAt: timestamp,
       });
-      const rows = await db.select().from(noodleRefreshRuns).where(eq(noodleRefreshRuns.id, id));
+      const rows = await db
+        .select()
+        .from(noodleRefreshRuns)
+        .where(eq(noodleRefreshRuns.id, id));
       return mapRefreshRun(rows[0]!);
     },
 
-    async listRefreshRuns(options: { limit?: number; status?: NoodleRefreshRun["status"] } = {}) {
+    async listRefreshRuns(
+      options: { limit?: number; status?: NoodleRefreshRun["status"] } = {},
+    ) {
       const limit = Math.max(1, Math.min(20, Math.floor(options.limit ?? 5)));
       const baseQuery = db.select().from(noodleRefreshRuns);
       const rows = options.status
@@ -3830,28 +5131,46 @@ export function createSlurpStorage(db: DB) {
             .where(eq(noodleRefreshRuns.status, options.status))
             .orderBy(desc(noodleRefreshRuns.createdAt))
             .limit(limit)
-        : await baseQuery.orderBy(desc(noodleRefreshRuns.createdAt)).limit(limit);
+        : await baseQuery
+            .orderBy(desc(noodleRefreshRuns.createdAt))
+            .limit(limit);
       return rows.map(mapRefreshRun);
     },
 
-    async recordRefreshAttempt(id: string, attempt: NoodleRefreshAttempt): Promise<NoodleRefreshRun | null> {
-      const rows = await db.select().from(noodleRefreshRuns).where(eq(noodleRefreshRuns.id, id));
+    async recordRefreshAttempt(
+      id: string,
+      attempt: NoodleRefreshAttempt,
+    ): Promise<NoodleRefreshRun | null> {
+      const rows = await db
+        .select()
+        .from(noodleRefreshRuns)
+        .where(eq(noodleRefreshRuns.id, id));
       const current = rows[0];
       if (!current) return null;
       await db
         .update(noodleRefreshRuns)
         .set({
-          attempts: JSON.stringify([...parseRefreshAttempts(current.attempts), attempt]),
+          attempts: JSON.stringify([
+            ...parseRefreshAttempts(current.attempts),
+            attempt,
+          ]),
           updatedAt: now(),
         })
         .where(eq(noodleRefreshRuns.id, id));
-      const updatedRows = await db.select().from(noodleRefreshRuns).where(eq(noodleRefreshRuns.id, id));
+      const updatedRows = await db
+        .select()
+        .from(noodleRefreshRuns)
+        .where(eq(noodleRefreshRuns.id, id));
       return updatedRows[0] ? mapRefreshRun(updatedRows[0]) : null;
     },
 
     async finishRefreshRun(
       id: string,
-      patch: { status: "completed" | "failed"; result?: string | null; error?: string | null },
+      patch: {
+        status: "completed" | "failed";
+        result?: string | null;
+        error?: string | null;
+      },
     ): Promise<NoodleRefreshRun | null> {
       await db
         .update(noodleRefreshRuns)
@@ -3862,27 +5181,41 @@ export function createSlurpStorage(db: DB) {
           updatedAt: now(),
         })
         .where(eq(noodleRefreshRuns.id, id));
-      const rows = await db.select().from(noodleRefreshRuns).where(eq(noodleRefreshRuns.id, id));
+      const rows = await db
+        .select()
+        .from(noodleRefreshRuns)
+        .where(eq(noodleRefreshRuns.id, id));
       const finished = rows[0] ? mapRefreshRun(rows[0]) : null;
       // Retention cleanup is best-effort: never let a pruning failure make the
       // caller treat already-completed generation work as failed and retry it.
       try {
         await pruneFinishedRefreshRuns();
       } catch (error) {
-        console.error("Noodle refresh-run retention cleanup failed", error);
+        logger.error(error, "Slurp refresh-run retention cleanup failed");
       }
       return finished;
     },
 
-    async subscribe(viewerAccountId: string, creatorAccountId: string): Promise<NoodleAccountSubscription | null> {
+    async subscribe(
+      viewerAccountId: string,
+      creatorAccountId: string,
+    ): Promise<NoodleAccountSubscription | null> {
       if (viewerAccountId === creatorAccountId) return null;
       return db.transaction(async (tx) => {
         const [viewerRows, creatorRows] = await Promise.all([
-          tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, viewerAccountId)),
           tx
             .select()
             .from(noodleAccounts)
-            .where(and(eq(noodleAccounts.id, creatorAccountId), eq(noodleAccounts.platform, "noodler"))),
+            .where(eq(noodleAccounts.id, viewerAccountId)),
+          tx
+            .select()
+            .from(noodleAccounts)
+            .where(
+              and(
+                eq(noodleAccounts.id, creatorAccountId),
+                eq(noodleAccounts.platform, "noodler"),
+              ),
+            ),
         ]);
         const viewer = viewerRows[0] ? mapAccount(viewerRows[0]) : null;
         const creator = creatorRows[0] ? mapAccount(creatorRows[0]) : null;
@@ -3905,10 +5238,14 @@ export function createSlurpStorage(db: DB) {
             ),
           );
         if (existing[0]) {
-          const followingAccountIds = viewer.settings.social.followingAccountIds ?? [];
-          const followingAccountTimestamps = { ...viewer.settings.social.followingAccountTimestamps };
+          const followingAccountIds =
+            viewer.settings.social.followingAccountIds ?? [];
+          const followingAccountTimestamps = {
+            ...viewer.settings.social.followingAccountTimestamps,
+          };
           if (!followingAccountIds.includes(creatorAccountId)) {
-            followingAccountTimestamps[creatorAccountId] ??= existing[0].createdAt;
+            followingAccountTimestamps[creatorAccountId] ??=
+              existing[0].createdAt;
             await tx
               .update(noodleAccounts)
               .set({
@@ -3916,7 +5253,10 @@ export function createSlurpStorage(db: DB) {
                   ...viewer.settings,
                   social: {
                     ...viewer.settings.social,
-                    followingAccountIds: [...followingAccountIds, creatorAccountId],
+                    followingAccountIds: [
+                      ...followingAccountIds,
+                      creatorAccountId,
+                    ],
                     followingAccountTimestamps,
                   },
                 }),
@@ -3927,8 +5267,11 @@ export function createSlurpStorage(db: DB) {
           return mapSubscription(existing[0]);
         }
         const timestamp = now();
-        const followingAccountIds = viewer.settings.social.followingAccountIds ?? [];
-        const followingAccountTimestamps = { ...viewer.settings.social.followingAccountTimestamps };
+        const followingAccountIds =
+          viewer.settings.social.followingAccountIds ?? [];
+        const followingAccountTimestamps = {
+          ...viewer.settings.social.followingAccountTimestamps,
+        };
         followingAccountTimestamps[creatorAccountId] ??= timestamp;
         const nextViewerSettings: NoodleAccountSettings = {
           ...viewer.settings,
@@ -3950,7 +5293,10 @@ export function createSlurpStorage(db: DB) {
           });
         } catch (error) {
           if (
-            !isFileUniqueConstraintError(error, "slurp_account_subscriptions", ["viewerAccountId", "creatorAccountId"])
+            !isFileUniqueConstraintError(error, "slurp_account_subscriptions", [
+              "viewerAccountId",
+              "creatorAccountId",
+            ])
           ) {
             throw error;
           }
@@ -3960,14 +5306,20 @@ export function createSlurpStorage(db: DB) {
             .where(
               and(
                 eq(noodleAccountSubscriptions.viewerAccountId, viewerAccountId),
-                eq(noodleAccountSubscriptions.creatorAccountId, creatorAccountId),
+                eq(
+                  noodleAccountSubscriptions.creatorAccountId,
+                  creatorAccountId,
+                ),
               ),
             );
           return duplicate[0] ? mapSubscription(duplicate[0]) : null;
         }
         await tx
           .update(noodleAccounts)
-          .set({ settings: JSON.stringify(nextViewerSettings), updatedAt: timestamp })
+          .set({
+            settings: JSON.stringify(nextViewerSettings),
+            updatedAt: timestamp,
+          })
           .where(eq(noodleAccounts.id, viewerAccountId));
         const rows = await tx
           .select()
@@ -3982,7 +5334,10 @@ export function createSlurpStorage(db: DB) {
       });
     },
 
-    async unsubscribe(viewerAccountId: string, creatorAccountId: string): Promise<void> {
+    async unsubscribe(
+      viewerAccountId: string,
+      creatorAccountId: string,
+    ): Promise<void> {
       await db
         .delete(noodleAccountSubscriptions)
         .where(
@@ -3993,7 +5348,9 @@ export function createSlurpStorage(db: DB) {
         );
     },
 
-    async listSubscriptionsForViewer(viewerAccountId: string): Promise<NoodleAccountSubscription[]> {
+    async listSubscriptionsForViewer(
+      viewerAccountId: string,
+    ): Promise<NoodleAccountSubscription[]> {
       const rows = await db
         .select()
         .from(noodleAccountSubscriptions)
@@ -4001,11 +5358,15 @@ export function createSlurpStorage(db: DB) {
       return rows.map(mapSubscription);
     },
 
-    async listSubscriptionsForCreator(creatorAccountId: string): Promise<NoodleAccountSubscription[]> {
+    async listSubscriptionsForCreator(
+      creatorAccountId: string,
+    ): Promise<NoodleAccountSubscription[]> {
       const rows = await db
         .select()
         .from(noodleAccountSubscriptions)
-        .where(eq(noodleAccountSubscriptions.creatorAccountId, creatorAccountId))
+        .where(
+          eq(noodleAccountSubscriptions.creatorAccountId, creatorAccountId),
+        )
         .orderBy(desc(noodleAccountSubscriptions.createdAt));
       return rows.map(mapSubscription);
     },
@@ -4054,10 +5415,16 @@ export function createSlurpStorage(db: DB) {
       };
     },
 
-    async unlockPost(viewerAccountId: string, postId: string): Promise<NoodlePostUnlock | null> {
+    async unlockPost(
+      viewerAccountId: string,
+      postId: string,
+    ): Promise<NoodlePostUnlock | null> {
       return db.transaction(async (tx) => {
         const [viewerRows, postRows] = await Promise.all([
-          tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, viewerAccountId)),
+          tx
+            .select()
+            .from(noodleAccounts)
+            .where(eq(noodleAccounts.id, viewerAccountId)),
           tx.select().from(noodlePosts).where(eq(noodlePosts.id, postId)),
         ]);
         const viewer = viewerRows[0] ? mapAccount(viewerRows[0]) : null;
@@ -4074,7 +5441,12 @@ export function createSlurpStorage(db: DB) {
         const authorRows = await tx
           .select()
           .from(noodleAccounts)
-          .where(and(eq(noodleAccounts.id, postRow.authorAccountId), eq(noodleAccounts.platform, "noodler")));
+          .where(
+            and(
+              eq(noodleAccounts.id, postRow.authorAccountId),
+              eq(noodleAccounts.platform, "noodler"),
+            ),
+          );
         const author = authorRows[0] ? mapAccount(authorRows[0]) : null;
         if (
           !author ||
@@ -4086,30 +5458,60 @@ export function createSlurpStorage(db: DB) {
         const existing = await tx
           .select()
           .from(noodlePostUnlocks)
-          .where(and(eq(noodlePostUnlocks.viewerAccountId, viewerAccountId), eq(noodlePostUnlocks.postId, postId)));
+          .where(
+            and(
+              eq(noodlePostUnlocks.viewerAccountId, viewerAccountId),
+              eq(noodlePostUnlocks.postId, postId),
+            ),
+          );
         if (existing[0]) return mapPostUnlock(existing[0]);
         const timestamp = now();
         // An already-unlocked post stays idempotent.
         try {
-          await tx.insert(noodlePostUnlocks).values({ id: newId(), viewerAccountId, postId, createdAt: timestamp });
+          await tx
+            .insert(noodlePostUnlocks)
+            .values({
+              id: newId(),
+              viewerAccountId,
+              postId,
+              createdAt: timestamp,
+            });
         } catch (error) {
-          if (!isFileUniqueConstraintError(error, "slurp_post_unlocks", ["viewerAccountId", "postId"])) throw error;
+          if (
+            !isFileUniqueConstraintError(error, "slurp_post_unlocks", [
+              "viewerAccountId",
+              "postId",
+            ])
+          )
+            throw error;
           const duplicate = await tx
             .select()
             .from(noodlePostUnlocks)
-            .where(and(eq(noodlePostUnlocks.viewerAccountId, viewerAccountId), eq(noodlePostUnlocks.postId, postId)));
+            .where(
+              and(
+                eq(noodlePostUnlocks.viewerAccountId, viewerAccountId),
+                eq(noodlePostUnlocks.postId, postId),
+              ),
+            );
           return duplicate[0] ? mapPostUnlock(duplicate[0]) : null;
         }
         // Unlocking no longer touches viewer settings at all: there is nothing to debit.
         const rows = await tx
           .select()
           .from(noodlePostUnlocks)
-          .where(and(eq(noodlePostUnlocks.viewerAccountId, viewerAccountId), eq(noodlePostUnlocks.postId, postId)));
+          .where(
+            and(
+              eq(noodlePostUnlocks.viewerAccountId, viewerAccountId),
+              eq(noodlePostUnlocks.postId, postId),
+            ),
+          );
         return rows[0] ? mapPostUnlock(rows[0]) : null;
       });
     },
 
-    async listPostUnlocksForViewer(viewerAccountId: string): Promise<NoodlePostUnlock[]> {
+    async listPostUnlocksForViewer(
+      viewerAccountId: string,
+    ): Promise<NoodlePostUnlock[]> {
       const rows = await db
         .select()
         .from(noodlePostUnlocks)

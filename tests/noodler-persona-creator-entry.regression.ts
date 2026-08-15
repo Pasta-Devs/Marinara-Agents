@@ -24,16 +24,19 @@ const enLocale = JSON.parse(
 // The persona's own Creator is found by the link back to its Noodle account, not by name.
 assert.match(
   home,
-  /accountsQuery\.data\?\.find\(\(profile\) => profile\.sourceAccountId === shellPersonaAccount\.id\)/u,
+  /accountsQuery\.data\?\.find\(\s*\(profile\) => profile\.sourceAccountId === shellPersonaAccount\.id,?\s*\)/u,
 );
 
 // Both destinations reuse navigation targets that already existed: create-profile preselects the
 // source and opens at the disclosure step, so this adds no parallel creation flow.
 assert.match(home, /view: "create-profile",\s*sourceAccountId: shellPersonaAccount\.id,/u);
-assert.match(home, /myCreatorProfile\s*\?\s*\{ mode: "creator", view: "profile", accountId: myCreatorProfile\.id \}/u);
 assert.match(
   home,
-  /navigation\.view !== "create-profile"\) return;[\s\S]{0,200}setCreationStep\("disclosure"\)/u,
+  /myCreatorProfile\s*\?\s*\{\s*mode: "creator",\s*view: "profile",\s*accountId: myCreatorProfile\.id,?\s*\}/u,
+);
+assert.match(
+  home,
+  /navigation\.mode !== "creator" \|\| navigation\.view !== "create-profile"\)[\s\S]{0,240}setCreationStep\("disclosure"\)/u,
   "create-profile must still open at the disclosure step with the source preselected",
 );
 

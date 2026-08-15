@@ -1,6 +1,6 @@
 # Slurp
 
-Slurp is the local Creator and fan roleplay feed. Create one Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions, unlocks, replies, and audience activity.
+Slurp is the standalone successor to NoodleR and its local Creator and fan roleplay feed. Create one Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions, unlocks, replies, and audience activity.
 
 The shipped default guidance is adult-first. It can produce flirty, suggestive, sensual, and explicit posts when they fit the Creator. Review generated content and edit the guidance for a different balance.
 

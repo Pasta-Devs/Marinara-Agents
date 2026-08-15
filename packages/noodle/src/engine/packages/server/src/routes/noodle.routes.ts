@@ -1,60 +1,856 @@
+// ──────────────────────────────────────────────
+// Routes: Noodle public social timeline
+// ──────────────────────────────────────────────
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import {
+  canManageNoodleReply,
+  createNoodlePoll,
+  noodleAccountFollowUpdateSchema,
+  noodleAccountProfileUpdateSchema,
+  noodleAccountSettingsPatchSchema,
+  noodleAccountUpdateSchema,
+  noodleAmbientProfileRerollSchema,
+  noodleBulkInviteSchema,
+  noodleCreateInteractionSchema,
+  noodleCreatePostSchema,
+  noodleInteractionOwnerSchema,
+  noodleInteractionUpdateSchema,
+  noodleInviteSchema,
+  noodlePostUpdateSchema,
+  noodlePublicGenerationRequestSchema,
+  noodleRemoveInteractionSchema,
+  noodleRescheduleRefreshSchema,
+  noodleSettingsUpdateSchema,
+  readNoodlePollFromMetadata,
+  type NoodleAccount,
+} from "@marinara-engine/shared";
+import { isFileUniqueConstraintError } from "../db/file-schema.js";
+import { logger } from "../lib/logger.js";
+import { createCharactersStorage } from "../services/storage/characters.storage.js";
+import { createConnectionsStorage } from "../services/storage/connections.storage.js";
 import { createNoodleStorage } from "../services/storage/noodle.storage.js";
+import {
+  admissionModeForRequest,
+  isConnectionAdmissionFailure,
+} from "../services/generation/connection-admission.js";
+import { resolveImageCaptioningRuntime } from "./generate/image-captioning-runtime.js";
+import { normalizePromptTimeZone } from "../services/conversation/timezone.js";
+import { rerollAmbientNoodleProfiles } from "../services/noodle/noodle-ambient-profile-generation.service.js";
+import {
+  ensureAmbientNoodleAccounts,
+  isAmbientNoodleAccount,
+} from "../services/noodle/noodle-ambient-profiles.js";
+import { createPublicNoodleGenerationService } from "../services/noodle/noodle-public-generation.service.js";
+import { createPublicNoodleImagesService } from "../services/noodle/noodle-public-images.service.js";
+import {
+  noodleRefreshSchedulerStatus,
+  rescheduleNoodleRefreshTime,
+} from "../services/noodle/noodle-refresh-schedule.js";
+import { resolveNoodleAvatarCropAfterProfileUpdate } from "../services/noodle/noodle-profile-avatar.js";
+import { isDirectlyInvitedNoodleCharacter } from "../services/noodle/noodle-invited-post-draft-access.js";
+import { tryNoodleOperation } from "../services/noodle/noodle-operation-lock.js";
+import {
+  bootstrapVisibleNoodle,
+  characterAvatarCrop,
+  characterNameFromRow,
+  ensurePersonaAccounts,
+  getErrorMessage,
+  interactionDigestVerb,
+  mentionedAccountMetadata,
+  mentionedCharacterAccounts,
+  noodleDigestAccountLabel,
+  parseRecord,
+  resolvePersonaAccount,
+} from "../services/noodle/noodle-public-support.js";
 
-const accountQuery = z.object({ accountId: z.string().trim().min(1) });
+const noodleImagePromptConfirmationSchema = z.object({
+  prompts: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        prompt: z.string().trim().min(1).max(20_000),
+        negativePrompt: z.string().trim().max(20_000).optional(),
+      }),
+    )
+    .max(20),
+  debugMode: z.boolean().optional(),
+});
+
+/** The identity lock is shared by refresh, reroll, and profile edits. */
+const NOODLE_IDENTITY_LOCK_BUSY =
+  "Another Noodle identity operation is already running. Wait for it to finish.";
 
 export async function noodleRoutes(app: FastifyInstance) {
   const noodle = createNoodleStorage(app.db);
+  const characters = createCharactersStorage(app.db);
+  const connections = createConnectionsStorage(app.db);
+  const publicGeneration = createPublicNoodleGenerationService(app.db);
+  const publicImages = createPublicNoodleImagesService(app.db);
 
-  app.get("/", async () => noodle.bootstrap());
-  app.get("/accounts", async () => noodle.listAccounts());
-  app.get("/accounts/:id", async (request, reply) => {
-    const account = await noodle.getAccountById((request.params as { id: string }).id);
-    return account ?? reply.code(404).send({ error: "Noodle account not found" });
+
+  app.get("/", async () => {
+    return bootstrapVisibleNoodle(noodle, characters);
   });
-  app.get("/viewer", async (request, reply) => {
-    const parsed = accountQuery.safeParse(request.query);
-    if (!parsed.success) return reply.code(400).send({ error: "accountId is required" });
-    return noodle.getAccountById(parsed.data.accountId);
+
+  app.get("/refresh-indicator", async () => {
+    const [latestRefresh] = await noodle.listRefreshRuns({
+      status: "completed",
+      limit: 1,
+    });
+    return {
+      marker: latestRefresh
+        ? `${latestRefresh.id}:${latestRefresh.updatedAt}`
+        : null,
+    };
   });
-  app.get("/posts", async (request) =>
-    noodle.listPosts(request.query as { limit?: number; since?: string }),
+
+  app.put("/settings", async (req, reply) => {
+    const parsed = noodleSettingsUpdateSchema.safeParse(req.body);
+    if (!parsed.success)
+      return reply.code(400).send({ error: parsed.error.flatten() });
+    return noodle.updateSettings(parsed.data);
+  });
+
+  app.post("/ambient-profiles/reroll", async (req, reply) => {
+    const parsed = noodleAmbientProfileRerollSchema.safeParse(req.body);
+    if (!parsed.success)
+      return reply.code(400).send({ error: parsed.error.flatten() });
+    const operation = await tryNoodleOperation("identity", async () => {
+      try {
+        const settings = await noodle.getSettings();
+        const connectionId = settings.generationConnectionId;
+        if (!connectionId)
+          return reply
+            .code(400)
+            .send({ error: "Select a Noodle generation connection first." });
+        const connection = await connections.getWithKey(connectionId);
+        if (!connection)
+          return reply
+            .code(404)
+            .send({ error: "Noodle generation connection not found" });
+        await ensureAmbientNoodleAccounts(noodle, settings.allowRandomUsers);
+        const accounts = (
+          await Promise.all(
+            parsed.data.accountIds.map((accountId) =>
+              noodle.getAccountById(accountId),
+            ),
+          )
+        ).filter((account): account is NoodleAccount => account !== null);
+        if (
+          accounts.length !== parsed.data.accountIds.length ||
+          accounts.some((account) => !isAmbientNoodleAccount(account))
+        ) {
+          return reply
+            .code(400)
+            .send({
+              error: "Only managed Ambient Noodle profiles can be rerolled.",
+            });
+        }
+        return await rerollAmbientNoodleProfiles({
+          db: app.db,
+          noodle,
+          accounts,
+          connection,
+          debugMode: parsed.data.debugMode,
+        });
+      } catch (error) {
+        if (isConnectionAdmissionFailure(error))
+          return reply.code(409).send({ error: getErrorMessage(error) });
+        logger.error(error, "[noodle] Ambient profile reroll failed");
+        return reply.code(500).send({ error: getErrorMessage(error) });
+      }
+    });
+    if (!operation.acquired)
+      return reply.code(409).send({ error: NOODLE_IDENTITY_LOCK_BUSY });
+    return operation.value;
+  });
+
+
+  app.put("/refresh-schedule", async (req, reply) => {
+    const parsed = noodleRescheduleRefreshSchema.safeParse(req.body);
+    if (!parsed.success)
+      return reply.code(400).send({ error: parsed.error.flatten() });
+    // Hold the lock across the read-modify-write: a bare check leaves a window for a refresh
+    // to claim in between and have its schedule overwritten.
+    const at = new Date();
+    const operation = await tryNoodleOperation("identity", async () => {
+      try {
+        const schedule = await noodle.ensureRefreshSchedule(at);
+        const rescheduled = rescheduleNoodleRefreshTime(
+          schedule,
+          parsed.data.scheduledTime,
+          parsed.data.time,
+          at,
+        );
+        await noodle.saveRefreshSchedule(rescheduled);
+        return noodleRefreshSchedulerStatus(rescheduled, at);
+      } catch (error) {
+        return reply
+          .code(400)
+          .send({
+            error:
+              error instanceof Error
+                ? error.message
+                : "Could not reschedule refresh.",
+          });
+      }
+    });
+    if (!operation.acquired)
+      return reply.code(409).send({ error: NOODLE_IDENTITY_LOCK_BUSY });
+    return operation.value;
+  });
+
+  app.put("/accounts/:id", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const parsed = noodleAccountUpdateSchema.safeParse(req.body);
+    if (!parsed.success)
+      return reply.code(400).send({ error: parsed.error.flatten() });
+    const operation = await tryNoodleOperation("identity", async () => {
+      try {
+        const updated = await noodle.updateAccount(id, parsed.data);
+        if (!updated)
+          return reply.code(404).send({ error: "Noodle account not found" });
+        return updated;
+      } catch (error) {
+        if (isFileUniqueConstraintError(error, "noodle_accounts", ["handle"])) {
+          return reply
+            .code(409)
+            .send({
+              code: "NOODLE_HANDLE_TAKEN",
+              error: "That Noodle handle is already in use.",
+            });
+        }
+        throw error;
+      }
+    });
+    if (!operation.acquired)
+      return reply.code(409).send({ error: NOODLE_IDENTITY_LOCK_BUSY });
+    return operation.value;
+  });
+
+  app.put("/accounts/:id/profile", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const parsed = noodleAccountProfileUpdateSchema.safeParse(req.body);
+    if (!parsed.success)
+      return reply.code(400).send({ error: parsed.error.flatten() });
+    const operation = await tryNoodleOperation("identity", async () => {
+      try {
+        const existing = await noodle.getAccountById(id);
+        if (!existing)
+          return reply.code(404).send({ error: "Noodle account not found" });
+        const sourceCharacter =
+          existing.kind === "character"
+            ? await characters.getById(existing.entityId)
+            : null;
+        const avatarCrop = resolveNoodleAvatarCropAfterProfileUpdate({
+          currentAvatarUrl: existing.avatarUrl,
+          nextAvatarUrl: parsed.data.avatarUrl,
+          currentCrop: existing.avatarCrop,
+          sourceAvatarUrl: sourceCharacter?.avatarPath,
+          sourceCrop: sourceCharacter
+            ? characterAvatarCrop(sourceCharacter)
+            : null,
+        });
+        const profileFieldsChanged =
+          (existing.kind === "character" || isAmbientNoodleAccount(existing)) &&
+          (parsed.data.handle !== undefined ||
+            parsed.data.displayName !== undefined ||
+            parsed.data.bio !== undefined ||
+            parsed.data.avatarUrl !== undefined);
+        const updated = await noodle.updateAccountProfile(id, {
+          ...parsed.data,
+          ...((profileFieldsChanged || parsed.data.profile) && {
+            profile: {
+              ...parsed.data.profile,
+              ...(profileFieldsChanged && avatarCrop !== undefined
+                ? { avatarCrop }
+                : {}),
+              ...(profileFieldsChanged ? { profileManuallyEdited: true } : {}),
+            },
+          }),
+        });
+        if (!updated)
+          return reply.code(404).send({ error: "Noodle account not found" });
+        return updated;
+      } catch (error) {
+        if (isFileUniqueConstraintError(error, "noodle_accounts", ["handle"])) {
+          return reply
+            .code(409)
+            .send({
+              code: "NOODLE_HANDLE_TAKEN",
+              error: "That Noodle handle is already in use.",
+            });
+        }
+        throw error;
+      }
+    });
+    if (!operation.acquired)
+      return reply.code(409).send({ error: NOODLE_IDENTITY_LOCK_BUSY });
+    return operation.value;
+  });
+
+  app.patch("/accounts/:id/settings", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const parsed = noodleAccountSettingsPatchSchema.safeParse(req.body);
+    if (!parsed.success)
+      return reply.code(400).send({ error: parsed.error.flatten() });
+    const updated = await noodle.patchAccountSettings(id, parsed.data);
+    if (!updated)
+      return reply.code(404).send({ error: "Noodle account not found" });
+    return updated;
+  });
+
+
+  app.patch("/accounts/:id/follows/:targetAccountId", async (req, reply) => {
+    const { id, targetAccountId } = req.params as {
+      id: string;
+      targetAccountId: string;
+    };
+    if (id === targetAccountId)
+      return reply
+        .code(400)
+        .send({ error: "A Noodle account cannot follow itself" });
+    const parsed = noodleAccountFollowUpdateSchema.safeParse(req.body);
+    if (!parsed.success)
+      return reply.code(400).send({ error: parsed.error.flatten() });
+    const [account, target] = await Promise.all([
+      noodle.getAccountById(id),
+      noodle.getAccountById(targetAccountId),
+    ]);
+    if (!account || !target)
+      return reply.code(404).send({ error: "Noodle account not found" });
+    const updated = await noodle.updateAccountFollow(
+      id,
+      targetAccountId,
+      parsed.data.followed,
+    );
+    if (!updated)
+      return reply.code(404).send({ error: "Noodle account not found" });
+    return updated.account;
+  });
+
+  app.post("/invites", async (req, reply) => {
+    const parsed = noodleInviteSchema.safeParse(req.body);
+    if (!parsed.success)
+      return reply.code(400).send({ error: parsed.error.flatten() });
+    const row = await characters.getById(parsed.data.characterId);
+    if (!row) return reply.code(404).send({ error: "Character not found" });
+    const name = characterNameFromRow(row);
+    return noodle.upsertAccountFromProfile({
+      kind: "character",
+      entityId: row.id,
+      displayName: name,
+      avatarUrl: row.avatarPath ?? null,
+      avatarCrop: characterAvatarCrop(row),
+      bio: String(parseRecord(row.data).description ?? ""),
+      invited: true,
+      syncIdentity: true,
+    });
+  });
+
+  app.post("/invites/bulk", async (req, reply) => {
+    const parsed = noodleBulkInviteSchema.safeParse(req.body);
+    if (!parsed.success)
+      return reply.code(400).send({ error: parsed.error.flatten() });
+    const uniqueCharacterIds = Array.from(new Set(parsed.data.characterIds));
+    const accounts: NoodleAccount[] = [];
+    for (const characterId of uniqueCharacterIds) {
+      const row = await characters.getById(characterId);
+      if (!row) continue;
+      accounts.push(
+        await noodle.upsertAccountFromProfile({
+          kind: "character",
+          entityId: row.id,
+          displayName: characterNameFromRow(row),
+          avatarUrl: row.avatarPath ?? null,
+          avatarCrop: characterAvatarCrop(row),
+          bio: String(parseRecord(row.data).description ?? ""),
+          invited: true,
+          syncIdentity: true,
+        }),
+      );
+    }
+    return accounts;
+  });
+
+  app.delete("/invites", async () => {
+    await Promise.all([
+      noodle.clearCharacterInvites(),
+      noodle.updateSettings({
+        invitedCharacterGroupIds: [],
+        allowRandomUsers: false,
+      }),
+    ]);
+    return bootstrapVisibleNoodle(noodle, characters);
+  });
+
+  app.delete("/invites/:characterId", async (req, reply) => {
+    const { characterId } = req.params as { characterId: string };
+    const account = await noodle.setCharacterInvited(characterId, false);
+    if (!account)
+      return reply
+        .code(404)
+        .send({ error: "Noodle character account not found" });
+    return account;
+  });
+
+
+  app.post("/posts", async (req, reply) => {
+    if (req.body && typeof req.body === "object" && "title" in req.body) {
+      return reply
+        .code(400)
+        .send({ error: "Public Noodle posts do not support titles." });
+    }
+    const parsed = noodleCreatePostSchema.safeParse(req.body);
+    if (!parsed.success)
+      return reply.code(400).send({ error: parsed.error.flatten() });
+    let account = await noodle.getAccountByEntity(
+      parsed.data.authorKind,
+      parsed.data.authorEntityId,
+    );
+    if (!account && parsed.data.authorKind === "persona") {
+      account = await resolvePersonaAccount(
+        noodle,
+        characters,
+        parsed.data.authorEntityId,
+      );
+    }
+    if (!account)
+      return reply.code(404).send({ error: "Noodle account not found" });
+    if (parsed.data.authorKind === "character" && !isDirectlyInvitedNoodleCharacter(account))
+      return reply.code(403).send({ error: "Only directly invited characters can post publicly." });
+    const mentionedAccounts = mentionedCharacterAccounts(
+      await noodle.listAccounts(),
+      parsed.data.content,
+    );
+    const poll = parsed.data.poll ? createNoodlePoll(parsed.data.poll) : null;
+    const post = await noodle.createPost({
+      authorAccountId: account.id,
+      content: parsed.data.content,
+      imageUrl: parsed.data.imageUrl ?? null,
+      imagePrompt: parsed.data.imagePrompt ?? null,
+      parentPostId: parsed.data.parentPostId ?? null,
+      quotePostId: parsed.data.quotePostId ?? null,
+      source: "manual",
+      metadata: {
+        ...mentionedAccountMetadata(mentionedAccounts),
+        ...(poll ? { poll } : {}),
+        ...(parsed.data.imageCrop ? { imageCrop: parsed.data.imageCrop } : {}),
+      },
+    });
+    if (!post)
+      return reply.code(404).send({ error: "Noodle author not found" });
+    const digest = await noodle.createDigest({
+      accountIds: [
+        account.id,
+        ...mentionedAccounts.map((mentionedAccount) => mentionedAccount.id),
+      ],
+      content: `${noodleDigestAccountLabel(account)} posted on Noodle: ${post.content}`,
+      sourcePostId: post.id,
+    });
+    return (
+      (await noodle.updatePostMedia(post.id, {
+        metadata: { activityDigestId: digest.id },
+      })) ?? post
+    );
+  });
+
+  app.patch("/posts/:id", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (req.body && typeof req.body === "object" && "title" in req.body) {
+      return reply
+        .code(400)
+        .send({ error: "Public Noodle posts do not support titles." });
+    }
+    const parsed = noodlePostUpdateSchema.safeParse(req.body);
+    if (!parsed.success)
+      return reply.code(400).send({ error: parsed.error.flatten() });
+    const existing = await noodle.getPostById(id);
+    if (!existing)
+      return reply.code(404).send({ error: "Noodle post not found" });
+    const nextContent =
+      parsed.data.content === undefined
+        ? existing.content
+        : parsed.data.content;
+    const nextPoll =
+      parsed.data.poll === undefined
+        ? readNoodlePollFromMetadata(existing.metadata)
+        : parsed.data.poll
+          ? createNoodlePoll(parsed.data.poll)
+          : null;
+    if (!nextContent.trim() && !nextPoll) {
+      return reply.code(400).send({ error: "Posts need a body or poll." });
+    }
+    let post = await noodle.updatePost(id, parsed.data);
+    if (!post) return reply.code(404).send({ error: "Noodle post not found" });
+    if (parsed.data.content !== undefined || parsed.data.poll !== undefined) {
+      const mentionedAccounts = mentionedCharacterAccounts(
+        await noodle.listAccounts(),
+        post.content,
+      );
+      post =
+        (await noodle.updatePostMedia(post.id, {
+          metadata: mentionedAccountMetadata(mentionedAccounts),
+        })) ?? post;
+      const digestId = post.metadata.activityDigestId;
+      const author = await noodle.getAccountById(post.authorAccountId);
+      const poll = readNoodlePollFromMetadata(post.metadata);
+      const digestContent =
+        post.content.trim() || poll?.question || "Shared a poll.";
+      if (typeof digestId === "string" && digestId && author) {
+        await noodle.updateDigest(digestId, {
+          accountIds: [
+            author.id,
+            ...mentionedAccounts.map((mentionedAccount) => mentionedAccount.id),
+          ],
+          content: `${noodleDigestAccountLabel(author)} posted on Noodle: ${digestContent}`,
+        });
+      }
+    }
+    return post;
+  });
+
+  app.delete("/posts/:id", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const deleted = await noodle.deletePost(id);
+    if (!deleted)
+      return reply.code(404).send({ error: "Noodle post not found" });
+    return deleted;
+  });
+
+  app.delete("/timeline", async () => {
+    await noodle.resetTimeline();
+    return bootstrapVisibleNoodle(noodle, characters);
+  });
+
+  app.post("/posts/:id/interactions", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const parsed = noodleCreateInteractionSchema.safeParse(req.body);
+    if (!parsed.success)
+      return reply.code(400).send({ error: parsed.error.flatten() });
+    let actor = await noodle.getAccountByEntity(
+      parsed.data.actorKind,
+      parsed.data.actorEntityId,
+    );
+    if (!actor && parsed.data.actorKind === "persona") {
+      actor = await resolvePersonaAccount(
+        noodle,
+        characters,
+        parsed.data.actorEntityId,
+      );
+    }
+    if (!actor)
+      return reply.code(404).send({ error: "Noodle actor not found" });
+    const post = await noodle.getPostById(id);
+    if (!post) return reply.code(404).send({ error: "Noodle post not found" });
+    if (parsed.data.type === "vote") {
+      const poll = readNoodlePollFromMetadata(post.metadata);
+      if (
+        !poll ||
+        !poll.options.some(
+          (option) => option.id === parsed.data.content?.trim(),
+        )
+      ) {
+        return reply
+          .code(400)
+          .send({ error: "Choose a valid option from this poll." });
+      }
+    }
+    const interaction = await noodle.createInteraction(id, {
+      actorAccountId: actor.id,
+      type: parsed.data.type,
+      content: parsed.data.content ?? null,
+      imageUrl: parsed.data.imageUrl ?? null,
+      parentInteractionId: parsed.data.parentInteractionId ?? null,
+    });
+    if (!interaction)
+      return reply
+        .code(400)
+        .send({ error: "Could not add that Noodle interaction." });
+    if (parsed.data.type !== "like") {
+      const directReplyTarget = parsed.data.parentInteractionId
+        ? await noodle.getInteractionById(parsed.data.parentInteractionId)
+        : null;
+      const poll = readNoodlePollFromMetadata(post.metadata);
+      const selectedPollOption =
+        parsed.data.type === "vote"
+          ? poll?.options.find((option) => option.id === interaction.content)
+              ?.label
+          : undefined;
+      const interactionSummary =
+        parsed.data.type === "vote" && poll && selectedPollOption
+          ? `${poll.question}: ${selectedPollOption}`
+          : interaction.content ||
+            (interaction.imageUrl ? "shared an image" : post.content);
+      await noodle.createDigest({
+        accountIds: Array.from(
+          new Set(
+            [
+              actor.id,
+              post.authorAccountId,
+              directReplyTarget?.actorAccountId,
+            ].filter(Boolean) as string[],
+          ),
+        ),
+        content: `${noodleDigestAccountLabel(actor)} ${interactionDigestVerb(parsed.data.type)} a Noodle post: ${interactionSummary}`,
+        sourcePostId: post.id,
+        sourceInteractionId: interaction.id,
+      });
+    }
+    return interaction;
+  });
+
+  app.patch(
+    "/posts/:postId/interactions/:interactionId",
+    async (req, reply) => {
+      const { postId, interactionId } = req.params as {
+        postId: string;
+        interactionId: string;
+      };
+      const parsed = noodleInteractionUpdateSchema.safeParse(req.body);
+      if (!parsed.success)
+        return reply.code(400).send({ error: parsed.error.flatten() });
+      const interaction = await noodle.getInteractionById(interactionId);
+      if (!interaction || interaction.postId !== postId) {
+        return reply.code(404).send({ error: "Noodle comment not found" });
+      }
+      await ensurePersonaAccounts(noodle, characters);
+      const persona = await noodle.getAccountByEntity(
+        "persona",
+        parsed.data.personaId,
+      );
+      if (!persona)
+        return reply.code(404).send({ error: "Noodle persona not found" });
+      const interactionActor = await noodle.getAccountById(
+        interaction.actorAccountId,
+      );
+      const actorKind =
+        interactionActor?.kind ?? interaction.actorSnapshot?.kind;
+      if (
+        interaction.type !== "reply" ||
+        !canManageNoodleReply({
+          actorKind,
+          actorAccountId: interaction.actorAccountId,
+          personaAccountId: persona.id,
+        })
+      ) {
+        return reply
+          .code(403)
+          .send({
+            error:
+              "You can only edit comments from this persona or a character.",
+          });
+      }
+      const content =
+        parsed.data.content === undefined
+          ? interaction.content
+          : parsed.data.content?.trim() || null;
+      const imageUrl =
+        parsed.data.imageUrl === undefined
+          ? interaction.imageUrl
+          : parsed.data.imageUrl?.trim() || null;
+      if (!content && !imageUrl)
+        return reply
+          .code(400)
+          .send({ error: "Comments need text or an image." });
+      const updated = await noodle.updateInteraction(interactionId, {
+        content,
+        imageUrl,
+      });
+      if (!updated)
+        return reply.code(404).send({ error: "Noodle comment not found" });
+      const [post, accounts] = await Promise.all([
+        noodle.getPostById(postId),
+        noodle.listAccounts(),
+      ]);
+      if (post && interactionActor) {
+        const directReplyTarget = updated.parentInteractionId
+          ? await noodle.getInteractionById(updated.parentInteractionId)
+          : null;
+        const mentionedAccounts = mentionedCharacterAccounts(
+          accounts,
+          updated.content ?? "",
+        );
+        await noodle.createDigest({
+          accountIds: Array.from(
+            new Set(
+              [
+                interactionActor.id,
+                post.authorAccountId,
+                directReplyTarget?.actorAccountId,
+                ...mentionedAccounts.map((account) => account.id),
+              ].filter(Boolean) as string[],
+            ),
+          ),
+          content: `${noodleDigestAccountLabel(interactionActor)} replied to a Noodle post: ${
+            updated.content ||
+            (updated.imageUrl ? "shared an image" : post.content)
+          }`,
+          sourcePostId: post.id,
+          sourceInteractionId: updated.id,
+        });
+      }
+      return updated;
+    },
   );
-  app.post("/posts", async (request, reply) => {
-    const result = await noodle.createPost(request.body as Parameters<typeof noodle.createPost>[0]);
-    return reply.code(201).send(result);
-  });
-  app.patch("/posts/:id", async (request, reply) => {
-    const result = await noodle.updatePost(
-      (request.params as { id: string }).id,
-      request.body as Parameters<typeof noodle.updatePost>[1],
-    );
-    return result ?? reply.code(404).send({ error: "Post not found" });
-  });
-  app.delete("/posts/:id", async (request, reply) => {
-    const result = await noodle.deletePost((request.params as { id: string }).id);
-    return result ?? reply.code(404).send({ error: "Post not found" });
-  });
-  app.post("/posts/:id/interactions", async (request, reply) => {
-    const result = await noodle.createInteraction(
-      (request.params as { id: string }).id,
-      request.body as Parameters<typeof noodle.createInteraction>[1],
-    );
-    return result ? reply.code(201).send(result) : reply.code(404).send({ error: "Post not found" });
-  });
-  app.delete("/posts/:id/interactions", async (request, reply) => {
-    const result = await noodle.deleteInteraction(
-      (request.params as { id: string }).id,
-      request.body as Parameters<typeof noodle.deleteInteraction>[1],
-    );
-    return result ?? reply.code(404).send({ error: "Interaction not found" });
-  });
-  app.patch("/accounts/:id/follows/:targetAccountId", async (request) =>
-    noodle.updateAccountFollow(
-      (request.params as { id: string; targetAccountId: string }).id,
-      (request.params as { id: string; targetAccountId: string }).targetAccountId,
-      request.body as Parameters<typeof noodle.updateAccountFollow>[2],
-    ),
+
+  app.delete(
+    "/posts/:postId/interactions/:interactionId",
+    async (req, reply) => {
+      const { postId, interactionId } = req.params as {
+        postId: string;
+        interactionId: string;
+      };
+      const parsed = noodleInteractionOwnerSchema.safeParse(req.query);
+      if (!parsed.success)
+        return reply.code(400).send({ error: parsed.error.flatten() });
+      const interaction = await noodle.getInteractionById(interactionId);
+      if (!interaction || interaction.postId !== postId) {
+        return reply.code(404).send({ error: "Noodle comment not found" });
+      }
+      await ensurePersonaAccounts(noodle, characters);
+      const persona = await noodle.getAccountByEntity(
+        "persona",
+        parsed.data.personaId,
+      );
+      if (!persona)
+        return reply.code(404).send({ error: "Noodle persona not found" });
+      const interactionActor = await noodle.getAccountById(
+        interaction.actorAccountId,
+      );
+      const actorKind =
+        interactionActor?.kind ?? interaction.actorSnapshot?.kind;
+      if (
+        interaction.type !== "reply" ||
+        !canManageNoodleReply({
+          actorKind,
+          actorAccountId: interaction.actorAccountId,
+          personaAccountId: persona.id,
+        })
+      ) {
+        return reply
+          .code(403)
+          .send({
+            error:
+              "You can only delete comments from this persona or a character.",
+          });
+      }
+      const deleted = await noodle.deleteInteractionById(interactionId);
+      if (deleted.length === 0)
+        return reply.code(404).send({ error: "Noodle comment not found" });
+      return deleted;
+    },
   );
+
+  app.delete("/posts/:id/interactions", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const parsed = noodleRemoveInteractionSchema.safeParse(req.query);
+    if (!parsed.success)
+      return reply.code(400).send({ error: parsed.error.flatten() });
+    let actor = await noodle.getAccountByEntity(
+      parsed.data.actorKind,
+      parsed.data.actorEntityId,
+    );
+    if (!actor && parsed.data.actorKind === "persona") {
+      actor = await resolvePersonaAccount(
+        noodle,
+        characters,
+        parsed.data.actorEntityId,
+      );
+    }
+    if (!actor)
+      return reply.code(404).send({ error: "Noodle actor not found" });
+    const interaction = await noodle.deleteInteraction(id, {
+      actorAccountId: actor.id,
+      type: parsed.data.type,
+      parentInteractionId: parsed.data.parentInteractionId ?? null,
+    });
+    if (!interaction)
+      return reply.code(404).send({ error: "Noodle interaction not found" });
+    return interaction;
+  });
+
+  app.post("/refresh/images", async (req, reply) => {
+    const parsed = noodleImagePromptConfirmationSchema.safeParse(req.body);
+    if (!parsed.success)
+      return reply.code(400).send({ error: parsed.error.flatten() });
+    const result = await publicImages.generateReviewedImages({
+      prompts: parsed.data.prompts,
+      debugMode: parsed.data.debugMode === true,
+    });
+    if (!result.ok) return reply.code(400).send({ error: result.message });
+    return result.bootstrap;
+  });
+
+
+  app.post("/refresh", async (req, reply) => {
+    const parsed = noodlePublicGenerationRequestSchema.safeParse(req.body);
+    if (!parsed.success)
+      return reply.code(400).send({ error: parsed.error.flatten() });
+    const operation = await tryNoodleOperation("identity", async () => {
+      try {
+        const settings = await noodle.getSettings();
+        const connectionId =
+          parsed.data.connectionId ?? settings.generationConnectionId;
+        if (!connectionId)
+          return reply
+            .code(400)
+            .send({ error: "Select a Noodle generation connection first." });
+        const connection = await connections.getWithKey(connectionId);
+        if (!connection)
+          return reply
+            .code(404)
+            .send({ error: "Noodle generation connection not found" });
+        const admissionMode = admissionModeForRequest(req.headers);
+        const imageCaptioning = await resolveImageCaptioningRuntime({
+          chatMeta: settings.imageCaptioningUseConnectionDefault
+            ? {}
+            : {
+                imageCaptioningEnabled: settings.imageCaptioningEnabled,
+                imageCaptioningConnectionId:
+                  settings.imageCaptioningConnectionId,
+              },
+          fallbackConnectionId: connectionId,
+          connections,
+          admissionMode,
+        });
+        const imageConnection = settings.enableImagePrompts
+          ? settings.imageGenerationConnectionId
+            ? await connections.getWithKey(settings.imageGenerationConnectionId)
+            : await connections.getDefaultForImageGeneration()
+          : null;
+        if (settings.enableImagePrompts && !imageConnection) {
+          return reply
+            .code(400)
+            .send({
+              error: "Select a Noodle image generation connection first.",
+            });
+        }
+        const generated = await publicGeneration.generate({
+          connection,
+          imageConnection,
+          imageCaptioning,
+          settings,
+          personaId: parsed.data.personaId,
+          timeZone: normalizePromptTimeZone(parsed.data.timeZone),
+          debugMode: parsed.data.debugMode === true,
+          reviewImagePromptsBeforeSend:
+            parsed.data.reviewImagePromptsBeforeSend === true,
+          admissionMode,
+        });
+        if (!generated.ok)
+          return reply.code(400).send({ error: generated.error });
+        return generated.result;
+      } catch (error) {
+        if (isConnectionAdmissionFailure(error))
+          return reply.code(409).send({ error: getErrorMessage(error) });
+        logger.error(error, "[noodle] Public timeline refresh failed");
+        return reply.code(500).send({ error: getErrorMessage(error) });
+      }
+    });
+    if (!operation.acquired)
+      return reply.code(409).send({ error: NOODLE_IDENTITY_LOCK_BUSY });
+    return operation.value;
+  });
 }

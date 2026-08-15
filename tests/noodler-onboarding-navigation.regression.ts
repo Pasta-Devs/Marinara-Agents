@@ -34,7 +34,10 @@ assert.match(panel, /await saveSettings\(\s*selected\.size === 0 \? "zero" : "co
 assert.match(panel, /selectionOnly\s*\?\s*\{\}\s*:\s*\{ noodlerOnboardingComplete: true, noodlerOnboardingState: state \}/u);
 
 // A dismissed run is still incomplete, so the next mount reopens the wizard.
-assert.match(home, /noodlerOnboardingState === "incomplete"\) setOnboardingMode\("first-run"\)/u);
+assert.match(
+  home,
+  /noodlerOnboardingState === "incomplete"\)\s*setOnboardingMode\("first-run"\)/u,
+);
 
 // The Easy lane skips steps 2 and 3, so Back from the review step returns to selection rather
 // than dropping the player into a Customize step they never saw.

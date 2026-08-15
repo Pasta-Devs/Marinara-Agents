@@ -20,7 +20,10 @@ async function main() {
   assert.match(creatorHooks, /noodlerAccounts\(\)[\s\S]*noodlerEligibleAccountsRoot\(\)[\s\S]*noodlerViewers\(\)/);
   assert.match(creatorHooks, /useDeleteNoodlerStageProfile/);
 
-  assert.match(home, /const characterSource = publicSource\?\.kind === "character" \? publicSource : null/);
+  assert.match(
+    home,
+    /const characterSource =\s*publicSource\?\.kind === "character" \? publicSource : null/,
+  );
   assert.match(home, /characterSource && profile\.sourceStatus\.state !== "missing"/);
   assert.match(home, /const directInvite = characterSource\?\.invited === true/);
   assert.match(home, /sourceFolderInvited[\s\S]*folderOnlyParticipation[\s\S]*notInvited/);

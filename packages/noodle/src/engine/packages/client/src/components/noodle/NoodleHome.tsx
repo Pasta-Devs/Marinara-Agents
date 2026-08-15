@@ -2,6 +2,7 @@
 // Noodle: fake social media timeline
 // ──────────────────────────────────────────────
 import {
+  AlertTriangle,
   AtSign,
   Bell,
   ChevronLeft,
