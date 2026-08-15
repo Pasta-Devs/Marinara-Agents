@@ -462,7 +462,13 @@ export function SlurpOnboardingWizard({
       width="max-w-3xl"
       mobileFullscreen
       contentClassName="max-sm:flex max-sm:flex-col max-sm:overflow-hidden max-sm:px-4 max-sm:py-2"
-      panelStyle={getNoodleAccentStyle(NOODLE_PINK)}
+      panelStyle={getNoodleAccentStyle(NOODLE_PINK, {
+        "--background": "#17121b",
+        "--foreground": "#fff7fc",
+        "--muted-foreground": "#d8c9d4",
+        "--border": "rgba(255, 126, 193, 0.24)",
+        "--accent": "rgba(255, 126, 193, 0.12)",
+      })}
     >
       <div className="flex max-h-[min(78vh,46rem)] min-h-[26rem] flex-col max-sm:min-h-0 max-sm:max-h-none max-sm:flex-1 max-sm:self-stretch">
         {intro !== null && (
@@ -535,7 +541,7 @@ export function SlurpOnboardingWizard({
                 title={t("ui.noodle.noodlerwizard.intro.welcome.title")}
                 help={t("ui.noodle.noodlerwizard.intro.welcome.help")}
               />
-              <div className="flex items-center gap-4 rounded-xl border border-[var(--border)] bg-[var(--accent)]/25 p-4 max-sm:items-start max-sm:gap-3 max-sm:p-3">
+              <div className="flex items-center gap-4 rounded-xl border border-[var(--noodle-accent)]/25 bg-[var(--noodle-accent)]/10 p-4 max-sm:items-start max-sm:gap-3 max-sm:p-3">
                 <img
                   src="/sprites/mari/Mari_wave.png"
                   alt=""
@@ -572,7 +578,7 @@ export function SlurpOnboardingWizard({
                 help={t("ui.noodle.noodlerwizard.intro.identity.help")}
               />
               <div className="grid gap-3 max-sm:grid-cols-[5.5rem_minmax(0,1fr)] sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-                <div className="flex flex-col items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--accent)]/25 p-4 text-center max-sm:p-2">
+                <div className="flex flex-col items-center justify-center rounded-xl border border-[var(--noodle-accent)]/25 bg-[var(--noodle-accent)]/10 p-4 text-center max-sm:p-2">
                   <Avatar
                     account={{
                       displayName: demoProfile.displayName,
@@ -606,7 +612,7 @@ export function SlurpOnboardingWizard({
                         "w-full rounded-lg border px-3 py-2.5 text-left transition-colors max-sm:px-2.5 max-sm:py-2",
                         disclosure === value
                           ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10"
-                          : "border-[var(--border)] hover:bg-[var(--accent)]",
+                           : "border-[var(--border)] hover:border-[var(--noodle-accent)]/40 hover:bg-[var(--noodle-accent)]/8",
                       )}
                     >
                       <span className="block text-sm font-bold">
@@ -683,7 +689,7 @@ export function SlurpOnboardingWizard({
                       "rounded-lg border px-3 py-2.5 text-left transition-colors max-sm:py-2",
                       activityChoice === choice
                         ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10"
-                        : "border-[var(--border)] hover:bg-[var(--accent)]",
+                         : "border-[var(--border)] hover:border-[var(--noodle-accent)]/40 hover:bg-[var(--noodle-accent)]/8",
                     )}
                   >
                     <span className="block text-sm font-bold">
