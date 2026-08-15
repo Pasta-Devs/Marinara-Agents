@@ -43,6 +43,10 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     modes: ["roleplay", "game"],
     activation: "Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
   },
+  "inventory-tracker": {
+    modes: ["roleplay"],
+    activation: "Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+  },
   "persona-stats": {
     modes: ["roleplay"],
     activation: "Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
