@@ -16,6 +16,7 @@
   },
   "scripts": {
     "test:browser:noodle": "node scripts/run-package-browser-tests.mjs noodle tests/package-noodle.e2e.ts",
+    "test:browser:slurp": "node scripts/run-package-browser-tests.mjs slurp tests/package-slurp.e2e.ts",
     "test:noodle:regressions": "sh -c 'for test in tests/noodle*.regression.ts; do tsx \"$test\" || exit 1; done'",
     "test:noodle:quality": "node scripts/evaluate-noodle-generation.mjs tests/fixtures/noodle-generation-quality.samples.json",
     "test:security": "node scripts/tests/catalog-path-safety.regression.mjs && tsx tests/long-term-memory-index-keys.regression.ts"

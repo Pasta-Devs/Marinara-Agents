@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const hooks = readFileSync(
-  "packages/noodle/src/engine/packages/client/src/hooks/use-noodle.ts",
+  "packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts",
   "utf8",
 );
 const unseenHook = hooks.slice(
@@ -24,7 +24,7 @@ assert.match(bootstrapHook, /enabled: enabled && !refreshIndicator\.isPending/u)
 assert.match(bootstrapHook, /qc\.invalidateQueries\(\{ queryKey: noodleKeys\.bootstrap\(\) \}\)/u);
 
 const routes = readFileSync(
-  "packages/noodle/src/engine/packages/server/src/routes/noodle.routes.ts",
+  "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts",
   "utf8",
 );
 const unseenRoute = routes.slice(
@@ -39,7 +39,7 @@ assert.match(routes, /listNoodlerPostPage/u);
 assert.match(routes, /listSubscriptionsForCreatorPage/u);
 
 const storage = readFileSync(
-  "packages/noodle/src/engine/packages/server/src/services/storage/noodle.storage.ts",
+  "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts",
   "utf8",
 );
 assert.match(storage, /async listNoodlerPostPage/u);
@@ -61,7 +61,7 @@ assert.match(viewerHook, /noodler\/viewer\/feed/u);
 assert.match(viewerHook, /postsByCreator/u);
 
 const home = readFileSync(
-  "packages/noodle/src/engine/packages/client/src/components/noodle/NoodlerHome.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerHome.tsx",
   "utf8",
 );
 assert.match(home, /NOODLER_FEED_WINDOW_SIZE = 20/u);
@@ -71,10 +71,10 @@ assert.match(home, /count \+ NOODLER_FEED_WINDOW_SIZE/u);
 assert.match(home, /data-component="NoodlerHome\.LoadMoreFeed"/u);
 
 const unseenHelper = readFileSync(
-  "packages/noodle/src/engine/packages/server/src/services/noodle/noodler-viewer-unseen.ts",
+  "packages/slurp/src/engine/packages/server/src/services/slurp/noodler-viewer-unseen.ts",
   "utf8",
 );
-assert.match(unseenHelper, /account\.noodleAccountId !== viewerAccountId/u);
+assert.match(unseenHelper, /account\.slurpSourceAccountId !== viewerAccountId/u);
 assert.match(unseenHelper, /isNoodlerHiddenFromViewer\(account, viewerAccountId\)/u);
 
 console.log("NoodleR bounded feed and lightweight unseen-count regressions passed.");

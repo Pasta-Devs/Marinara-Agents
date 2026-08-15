@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import {
   characterContextFromRow,
   hintedNoodlerSourceBrief,
-} from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-prompt-safety";
+} from "../packages/slurp/src/engine/packages/server/src/services/slurp/noodle-prompt-safety";
 import {
   createNoodlerSourceRevisionToken,
   verifyNoodlerSourceRevisionToken,
-} from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-source-revision";
+} from "../packages/slurp/src/engine/packages/server/src/services/slurp/noodle-source-revision";
 
 const characterBlock = characterContextFromRow({
   id: "prompt-safety",

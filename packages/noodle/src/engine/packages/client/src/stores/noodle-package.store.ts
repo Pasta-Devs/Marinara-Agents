@@ -19,6 +19,12 @@ type NoodlePackageState = {
   setNoodleSelectedPersonaId: (id: string | null) => void;
 };
 
+function isPublicNoodleNavigation(
+  navigation: NoodleNavigationState | undefined,
+): navigation is Exclude<NoodleNavigationState, { mode: "noodler" }> {
+  return navigation?.mode === "public" || navigation?.mode === "settings";
+}
+
 function readRecord(key: string): Record<string, unknown> | null {
   try {
     const parsed = JSON.parse(
@@ -41,8 +47,10 @@ function validatedPersistedState(
     typeof state.noodleNavigation === "object" &&
     !Array.isArray(state.noodleNavigation)
   ) {
-    validated.noodleNavigation =
-      state.noodleNavigation as NoodleNavigationState;
+    const navigation = state.noodleNavigation as NoodleNavigationState;
+    if (isPublicNoodleNavigation(navigation)) {
+      validated.noodleNavigation = navigation;
+    }
   }
   if (
     typeof state.noodleSelectedPersonaId === "string" ||

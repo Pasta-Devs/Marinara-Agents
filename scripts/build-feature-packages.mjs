@@ -58,6 +58,17 @@ const noodleOwnedSourcePaths = [
   "packages/server/src/services/storage/noodle-refresh-run-retention.ts",
   "packages/server/src/services/storage/noodle.storage.ts",
 ];
+const slurpSourceRoot = join(packagesDir, "slurp/src/engine");
+const slurpOwnedSourcePaths = [
+  "packages/client/src/components/slurp",
+  "packages/client/src/hooks/use-slurp.ts",
+  "packages/client/src/slurp-package-entry.tsx",
+  "packages/client/src/stores/slurp-package.store.ts",
+  "packages/server/src/db/schema/slurp.ts",
+  "packages/server/src/routes/slurp.routes.ts",
+  "packages/server/src/services/slurp",
+  "packages/server/src/services/storage/slurp.storage.ts",
+];
 const reuseExistingRuntime = process.env.MARINARA_REUSE_FEATURE_RUNTIME === "1";
 const rebuiltFeatureClients = new Set(
   String(process.env.MARINARA_REBUILD_FEATURE_CLIENTS || "")
@@ -67,7 +78,7 @@ const rebuiltFeatureClients = new Set(
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
 async function prepareFeatureBuildRoot(feature) {
-  if (feature.id === "noodle") {
+  if (feature.id === "noodle" || feature.id === "slurp") {
     if (!existsSync(feature.packageSourceRoot)) {
       throw new Error(`Missing package-owned ${feature.name} source`);
     }
@@ -157,34 +168,33 @@ const features = [
     minEngineVersion: "2.4.2",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
-    description:
-      "Explore the Noodle public timeline and the NoodleR creator-and-fan roleplay feed as an optional local social world.",
+    description: "Explore the public Noodle timeline as an optional local social world.",
     localizations: {
       de: {
         name: "Noodle",
         description:
-          "Entdecke die öffentliche Noodle-Timeline und den lokalen NoodleR-Rollenspiel-Feed für Kreative und Fans als optionale soziale Welt. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Noodle.",
+          "Entdecke die öffentliche Noodle-Timeline als optionale lokale soziale Welt. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Noodle.",
         homeBrowserTab: {
           label: "Noodle",
-          ariaLabel: "Noodle und NoodleR öffnen",
+          ariaLabel: "Noodle öffnen",
         },
       },
       ko: {
         name: "Noodle",
         description:
-          "Noodle 공개 타임라인과 로컬 NoodleR 크리에이터 및 팬 역할극 피드를 선택형 소셜 세계로 만나 보세요. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Noodle을 여세요.",
+          "Noodle 공개 타임라인을 선택형 로컬 소셜 세계로 만나 보세요. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Noodle을 여세요.",
         homeBrowserTab: {
           label: "Noodle",
-          ariaLabel: "Noodle 및 NoodleR 열기",
+          ariaLabel: "Noodle 열기",
         },
       },
       pl: {
         name: "Noodle",
         description:
-          "Poznaj publiczną oś czasu Noodle oraz lokalny kanał fabularny NoodleR dla twórców i fanów jako opcjonalny świat społecznościowy. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Noodle na stronie głównej.",
+          "Poznaj publiczną oś czasu Noodle jako opcjonalny lokalny świat społecznościowy. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Noodle na stronie głównej.",
         homeBrowserTab: {
           label: "Noodle",
-          ariaLabel: "Otwórz Noodle i NoodleR",
+          ariaLabel: "Otwórz Noodle",
         },
       },
     },
@@ -198,13 +208,70 @@ const features = [
     packageSourceRoot: noodleSourceRoot,
     ownedSourcePaths: noodleOwnedSourcePaths,
     libraryHidden: true,
-    assetPaths: ["noodle-klusek.png", "noodler-klusek.png"],
+    assetPaths: ["noodle-klusek.png"],
     contributions: {
       slots: ["home-browser-tab"],
       homeBrowserTab: {
         label: "Noodle",
-        ariaLabel: "Open Noodle and NoodleR",
-        iconPaths: ["noodle-klusek.png", "noodler-klusek.png"],
+        ariaLabel: "Open Noodle",
+        iconPaths: ["noodle-klusek.png"],
+      },
+    },
+  },
+  {
+    id: "slurp",
+    version: "1.0.0",
+    minEngineVersion: "2.4.3",
+    maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
+    name: "Slurp",
+    description:
+      "The standalone successor to NoodleR: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity.",
+    localizations: {
+      de: {
+        name: "Slurp",
+        description:
+          "Erstelle ein lokales Creator-Profil aus einem Engine-Charakter oder einer Engine-Persona, veröffentliche öffentliche oder gesperrte Beiträge und simuliere Abonnements und Publikumsaktivität. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Slurp.",
+        homeBrowserTab: {
+          label: "Slurp",
+          ariaLabel: "Slurp öffnen",
+        },
+      },
+      ko: {
+        name: "Slurp",
+        description:
+          "Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Slurp를 여세요.",
+        homeBrowserTab: {
+          label: "Slurp",
+          ariaLabel: "Slurp 열기",
+        },
+      },
+      pl: {
+        name: "Slurp",
+        description:
+          "Utwórz lokalny profil twórcy z postaci silnika lub persony silnika, publikuj publiczne lub zablokowane posty i symuluj subskrypcje oraz aktywność publiczności. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Slurp na stronie głównej.",
+        homeBrowserTab: {
+          label: "Slurp",
+          ariaLabel: "Otwórz Slurp",
+        },
+      },
+    },
+    category: "misc",
+    kind: ["agent"],
+    modes: ["conversation", "roleplay", "game"],
+    permissions: ["chat-read", "chat-write", "network", "routes", "storage", "ui"],
+    serverImport: "packages/server/src/services/slurp/server-entry.ts",
+    serverEntry: true,
+    clientImport: "packages/client/src/slurp-package-entry.tsx",
+    packageSourceRoot: slurpSourceRoot,
+    ownedSourcePaths: slurpOwnedSourcePaths,
+    libraryHidden: true,
+    assetPaths: ["slurp-klusek.png"],
+    contributions: {
+      slots: ["home-browser-tab"],
+      homeBrowserTab: {
+        label: "Slurp",
+        ariaLabel: "Open Slurp",
+        iconPaths: ["slurp-klusek.png"],
       },
     },
   },
@@ -576,10 +643,10 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
   }
 }
 
-async function buildNoodleStyles(buildRoot, temporary) {
-  const input = join(temporary, "noodle.css");
-  const outputDir = join(temporary, "noodle-css");
-  const config = join(temporary, "vite.noodle.config.mjs");
+async function buildPackageStyles(buildRoot, temporary, capabilityId) {
+  const input = join(temporary, `${capabilityId}.css`);
+  const outputDir = join(temporary, `${capabilityId}-css`);
+  const config = join(temporary, `vite.${capabilityId}.config.mjs`);
   const globals = join(engineRoot, "packages/client/src/styles/globals.css");
   const packageClientSources = join(buildRoot, "packages/client/src").split(sep).join("/");
   await writeFile(
@@ -612,11 +679,11 @@ export default defineConfig({
     ["--filter", "@marinara-engine/client", "exec", "vite", "build", "--config", config],
     { cwd: engineRoot, encoding: "utf8", env: { ...process.env, SKIP_PWA: "1" } },
   );
-  if (result.status !== 0) throw new Error(result.stderr || result.stdout || "Noodle stylesheet build failed");
+  if (result.status !== 0) throw new Error(result.stderr || result.stdout || `${capabilityId} stylesheet build failed`);
   const assets = join(outputDir, "assets");
   const cssFiles = (await readdir(assets)).filter((filename) => filename.endsWith(".css")).sort();
   if (cssFiles.length !== 1) {
-    throw new Error(`Noodle stylesheet build produced ${cssFiles.length} CSS assets; expected exactly one`);
+    throw new Error(`${capabilityId} stylesheet build produced ${cssFiles.length} CSS assets; expected exactly one`);
   }
   const [cssFile] = cssFiles;
   const styles = await readFile(join(assets, cssFile), "utf8");
@@ -624,7 +691,7 @@ export default defineConfig({
     .replaceAll(":root", ":scope")
     .replaceAll("[data-theme=dark]", ":scope:where([data-theme=dark] *)")
     .replaceAll("[data-theme=light]", ":scope:where([data-theme=light] *)");
-  return `@scope (marinara-capability-noodle){${scopedStyles}}`;
+  return `@scope (marinara-capability-${capabilityId}){${scopedStyles}}`;
 }
 
 async function bundleSpecialClient(feature, output) {
@@ -1298,10 +1365,11 @@ function Root({ element }) {
 class Element extends HTMLElement { connectedCallback() { if (!this.__root) this.__root = createRoot(this); this.__root.render(<QueryClientProvider client={client}><Root element={this} /></QueryClientProvider>); } disconnectedCallback() { queueMicrotask(() => { if (!this.isConnected && this.__root) { this.__root.unmount(); this.__root = null; } }); } }
 if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.stringify(tag)}, Element);`;
     } else if (feature.clientImport) {
-      if (feature.id === "noodle") {
-        source = `import { setNoodlePackageStyles } from ${JSON.stringify(resolve(prepared.buildRoot, feature.clientImport))};`;
-        const styles = await buildNoodleStyles(prepared.buildRoot, temporary);
-        source += `\nsetNoodlePackageStyles(${JSON.stringify(styles)});\n`;
+      if (feature.id === "noodle" || feature.id === "slurp") {
+        const setterName = feature.id === "noodle" ? "setNoodlePackageStyles" : "setSlurpPackageStyles";
+        source = `import { ${setterName} } from ${JSON.stringify(resolve(prepared.buildRoot, feature.clientImport))};`;
+        const styles = await buildPackageStyles(prepared.buildRoot, temporary, feature.id);
+        source += `\n${setterName}(${JSON.stringify(styles)});\n`;
       } else source = `import ${JSON.stringify(resolve(prepared.buildRoot, feature.clientImport))};`;
     } else return;
     const entry = join(temporary, "entry.tsx");
@@ -1553,7 +1621,9 @@ for (const feature of selectedFeatures) {
           ? "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md"
           : feature.id === "noodle"
             ? "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
-          : `https://github.com/Pasta-Devs/Marinara-Agents#${feature.id}`,
+            : feature.id === "slurp"
+              ? "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp/README.md"
+              : `https://github.com/Pasta-Devs/Marinara-Agents#${feature.id}`,
     });
   } finally {
     await rm(temporary, { recursive: true, force: true });

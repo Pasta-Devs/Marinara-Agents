@@ -8,20 +8,20 @@ import { readFileSync } from "node:fs";
 // persist silently into the next comment, and Noodle must not grow a toggle it cannot honour.
 
 const card = readFileSync(
-  "packages/noodle/src/engine/packages/client/src/components/noodle/NoodlePostCard.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlePostCard.tsx",
   "utf8",
 );
 const noodler = readFileSync(
-  "packages/noodle/src/engine/packages/client/src/components/noodle/NoodlerHome.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerHome.tsx",
   "utf8",
 );
 const noodle = readFileSync(
-  "packages/noodle/src/engine/packages/client/src/components/noodle/NoodleHome.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodleHome.tsx",
   "utf8",
 );
 const enLocale = JSON.parse(
   readFileSync(
-    "packages/noodle/src/engine/packages/client/src/localization/locales/en.json",
+    "packages/slurp/src/engine/packages/client/src/localization/locales/en.json",
     "utf8",
   ),
 ) as Record<string, string>;

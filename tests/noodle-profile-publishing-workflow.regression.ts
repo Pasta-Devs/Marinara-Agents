@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const homePath = "packages/noodle/src/engine/packages/client/src/components/noodle/NoodleHome.tsx";
+const homePath = "packages/slurp/src/engine/packages/client/src/components/slurp/NoodleHome.tsx";
 const publishingPath =
-  "packages/noodle/src/engine/packages/client/src/components/noodle/NoodlerPublishingSettings.tsx";
+  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerPublishingSettings.tsx";
 const localePath =
-  "packages/noodle/src/engine/packages/client/src/localization/locales/en.json";
+  "packages/slurp/src/engine/packages/client/src/localization/locales/en.json";
 
 async function main() {
   const [home, publishing, locale] = await Promise.all([

@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "id": "slurp",
+  "name": "Slurp",
+  "version": "1.0.0",
+  "description": "The standalone successor to NoodleR: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
+  "localizations": {
+    "de": {
+      "name": "Slurp",
+      "description": "Erstelle ein lokales Creator-Profil aus einem Engine-Charakter oder einer Engine-Persona, veröffentliche öffentliche oder gesperrte Beiträge und simuliere Abonnements und Publikumsaktivität. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Slurp.",
+      "homeBrowserTab": {
+        "label": "Slurp",
+        "ariaLabel": "Slurp öffnen"
+      }
+    },
+    "ko": {
+      "name": "Slurp",
+      "description": "Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Slurp를 여세요.",
+      "homeBrowserTab": {
+        "label": "Slurp",
+        "ariaLabel": "Slurp 열기"
+      }
+    },
+    "pl": {
+      "name": "Slurp",
+      "description": "Utwórz lokalny profil twórcy z postaci silnika lub persony silnika, publikuj publiczne lub zablokowane posty i symuluj subskrypcje oraz aktywność publiczności. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Slurp na stronie głównej.",
+      "homeBrowserTab": {
+        "label": "Slurp",
+        "ariaLabel": "Otwórz Slurp"
+      }
+    }
+  },
+  "engine": {
+    "min": "2.4.3",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "server": "server.mjs",
+    "client": "client.js"
+  },
+  "contributions": {
+    "slots": [
+      "home-browser-tab"
+    ],
+    "homeBrowserTab": {
+      "label": "Slurp",
+      "ariaLabel": "Open Slurp",
+      "iconPaths": [
+        "slurp-klusek.png"
+      ]
+    }
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "e6bc01992d2c0010a0fa3dc5d53365ad554942cff886997462b46203c61f105d",
+      "bytes": 702
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "155b379795cde815851f3f24223e00287ff28a796f786eef3f137c1d3829ba8f",
+      "bytes": 2495778
+    },
+    {
+      "path": "client.js",
+      "sha256": "30ac228f52fbee7114c90894e41b3f77669638a24602fc93b0d68e126f162338",
+      "bytes": 2224582
+    },
+    {
+      "path": "slurp-klusek.png",
+      "sha256": "f3f0eb142c6ff572dea636aa7ab7d046922aedde2f5425890327e79834bd923e",
+      "bytes": 27664
+    }
+  ],
+  "permissions": [
+    "chat-read",
+    "chat-write",
+    "network",
+    "routes",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": true
+}
