@@ -25,23 +25,23 @@ assert.match(schema, /Teaser posts require a locked follow-up/u);
 assert.match(schema, /Only teaser posts can link a locked follow-up/u);
 
 const generation = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/noodle-noodler-generation.service.ts",
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
   "utf8",
 );
 const operations = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/noodle-noodler-post.operation.ts",
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-post.operation.ts",
   "utf8",
 );
 const reserve = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/noodle-noodler-reserve.operation.ts",
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-reserve.operation.ts",
   "utf8",
 );
 const responseFormat = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/noodle-response-format.ts",
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-response-format.ts",
   "utf8",
 );
 const composer = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerHome.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
   "utf8",
 );
 

@@ -22,7 +22,7 @@ async function main() {
     );
   }
   assert.match(view, /<NoodleHome navigation=\{navigation\} onNavigate=\{setNavigation\} \/>/);
-  assert.doesNotMatch(view, /NoodlerHome|mode === "noodler"/);
+  assert.doesNotMatch(view, /SlurpHome|mode === "noodler"/);
   assert.match(navigation, /mode: "public"/);
   assert.doesNotMatch(navigation, /mode: "noodler"|tab\?: "noodle" \| "noodler"/);
   assert.match(serverEntry, /Creator routes run in Slurp/);

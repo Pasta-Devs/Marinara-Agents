@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 // character creation rather than being folded back into the bulk list.
 
 const home = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerHome.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
   "utf8",
 );
 const routes = readFileSync(
@@ -74,7 +74,7 @@ assert.match(
 
 // Bulk onboarding stays character-only; this path is what covers personas.
 const bulk = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerBulkCreatePanel.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx",
   "utf8",
 );
 assert.doesNotMatch(bulk, /kind="persona"|"persona"\s*\)/u, "bulk onboarding must not start listing personas");

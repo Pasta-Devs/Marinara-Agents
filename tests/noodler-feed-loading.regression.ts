@@ -56,17 +56,17 @@ assert.match(viewerHook, /noodler\/viewer\/feed/u);
 assert.match(viewerHook, /postsByCreator/u);
 
 const home = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerHome.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
   "utf8",
 );
 assert.match(home, /NOODLER_FEED_WINDOW_SIZE = 20/u);
 assert.match(home, /feed\.slice\(0, visibleFeedCount\)/u);
 assert.match(home, /searchResults\.slice\(0, visibleFeedCount\)/u);
 assert.match(home, /count \+ NOODLER_FEED_WINDOW_SIZE/u);
-assert.match(home, /data-component="NoodlerHome\.LoadMoreFeed"/u);
+assert.match(home, /data-component="SlurpHome\.LoadMoreFeed"/u);
 
 const unseenHelper = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/noodler-viewer-unseen.ts",
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-viewer-unseen.ts",
   "utf8",
 );
 assert.match(unseenHelper, /account\.kind === "persona" && account\.entityId === viewerAccountId/u);

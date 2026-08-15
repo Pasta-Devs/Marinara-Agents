@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 // one shared preset table before it writes Creator settings.
 
 const wizard = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerBulkCreatePanel.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx",
   "utf8",
 );
 const hooks = readFileSync(
@@ -18,7 +18,7 @@ const settings = readFileSync(
 );
 
 // The preset table stays in Slurp, and the wizard applies the complete Creator settings patch.
-assert.match(wizard, /from "\.\/noodler-activity-presets"/u);
+assert.match(wizard, /from "\.\/slurp-activity-presets"/u);
 assert.match(wizard, /const patch = noodlerActivityPresetPatch\(choice\);/u);
 assert.match(wizard, /setAutoPostingEnabled\(patch\.autoPostingScheduleEnabled\);/u);
 assert.match(wizard, /setPostsPerDay\(patch\.postsPerDay\);/u);

@@ -33,64 +33,64 @@ import {
 } from "@marinara-engine/shared";
 import { createCharactersStorage } from "../services/storage/characters.storage.js";
 import { createCharacterGalleryStorage } from "../services/storage/character-gallery.storage.js";
-import { resolveNoodlerCreatorArtwork } from "../services/slurp/noodle-public-profiles.service.js";
+import { resolveNoodlerCreatorArtwork } from "../services/slurp/slurp-public-profiles.service.js";
 import { createConnectionsStorage } from "../services/storage/connections.storage.js";
 import { createSlurpStorage, slurpSettingsSchema } from "../services/storage/slurp.storage.js";
 import {
   NOODLER_SUBSCRIPTION_COST,
   noodlerUnlockPriceFromMetadata,
-} from "../services/slurp/noodler-prices.js";
+} from "../services/slurp/slurp-prices.js";
 import { settleAgentJobsWithConcurrencyLimit } from "../services/agents/agent-concurrency.js";
 import { logger } from "../lib/logger.js";
 import { isFileUniqueConstraintError } from "../db/file-schema.js";
 import { isAllowedImageBuffer, safeFetch } from "../utils/security.js";
 
-import { NOODLER_FAN_IDENTITY_PREFIX } from "../services/slurp/noodle-fan-identity-provider.js";
+import { NOODLER_FAN_IDENTITY_PREFIX } from "../services/slurp/slurp-fan-identity-provider.js";
 import {
   buildNoodlerPublicIdentity,
   stageProfileContainsPublicIdentity,
   stageProfileContainsSourceDetails,
-} from "../services/slurp/noodle-noodler-generation.service.js";
+} from "../services/slurp/slurp-generation.service.js";
 import {
   createNoodlerPost,
   generateAndApplyNoodlerPost,
   refreshAllNoodlerCreatorsNow,
   refreshTargetedNoodlerCreatorsNow,
   updateNoodlerPostWithMedia,
-} from "../services/slurp/noodle-noodler-post.operation.js";
-import { tryNoodlerAccountOperation } from "../services/slurp/noodle-noodler-account-operation-lock.js";
-import { generateAndApplyNoodlerCreatorReply } from "../services/slurp/noodle-noodler-creator-reply.operation.js";
+} from "../services/slurp/slurp-post.operation.js";
+import { tryNoodlerAccountOperation } from "../services/slurp/slurp-account-operation-lock.js";
+import { generateAndApplyNoodlerCreatorReply } from "../services/slurp/slurp-creator-reply.operation.js";
 import {
   getNoodlerFanActivityStatus,
   runNoodlerFanActivity,
-} from "../services/slurp/noodle-fan-activity.operation.js";
+} from "../services/slurp/slurp-fan-activity.operation.js";
 import {
   admissionModeForRequest,
   isConnectionAdmissionFailure,
 } from "../services/generation/connection-admission.js";
-import { generateNoodlerStageProfileDraft } from "../services/slurp/noodle-stage-profile-draft.service.js";
+import { generateNoodlerStageProfileDraft } from "../services/slurp/slurp-stage-profile-draft.service.js";
 import {
   getNoodlerImageConnections,
   updateNoodlerImageConnections,
-} from "../services/slurp/noodler-image-connections.js";
-import { verifyNoodlerSourceRevisionToken } from "../services/slurp/noodle-source-revision.js";
+} from "../services/slurp/slurp-image-connections.js";
+import { verifyNoodlerSourceRevisionToken } from "../services/slurp/slurp-source-revision.js";
 import {
   compareNoodlerSourceSnapshots,
   minimizeNoodlerSourceSnapshot,
-} from "../services/slurp/noodle-noodler-source.js";
-import { resolveNoodlerSourceSnapshot } from "../services/slurp/noodle-noodler-source-resolve.js";
+} from "../services/slurp/slurp-source.js";
+import { resolveNoodlerSourceSnapshot } from "../services/slurp/slurp-source-resolve.js";
 import {
   canViewNoodlerPost,
   isNoodlerHiddenFromViewer,
-} from "../services/slurp/noodler-access.js";
+} from "../services/slurp/slurp-access.js";
 import {
   noodlerUnseenCreatorAccountIds,
-} from "../services/slurp/noodler-viewer-unseen.js";
+} from "../services/slurp/slurp-viewer-unseen.js";
 import {
   noodlerDisclosureReviewReasons,
   projectNoodlerAudienceProfile,
-} from "../services/slurp/noodler-disclosure.js";
-import { createNoodlerNoodleImagesService } from "../services/slurp/noodle-noodler-images.service.js";
+} from "../services/slurp/slurp-disclosure.js";
+import { createNoodlerNoodleImagesService } from "../services/slurp/slurp-images.service.js";
 import {
   NOODLER_MEDIA_URL_PREFIX,
   noodlerPostMediaUrlForPersona,
@@ -100,14 +100,14 @@ import {
   resolveNoodlerMediaAbsolutePath,
   type NoodlerPostMediaUpload,
   unlinkNoodlerMedia,
-} from "../services/slurp/noodle-noodler-media.js";
+} from "../services/slurp/slurp-media.js";
 import {
   resolveNoodlerAvatarAbsolutePath,
   stageNoodlerAvatar,
   unlinkNoodlerAvatar,
   resolveNoodlerBannerAbsolutePath,
-} from "../services/slurp/noodle-noodler-avatar.js";
-import { getErrorMessage } from "../services/slurp/noodle-public-support.js";
+} from "../services/slurp/slurp-avatar.js";
+import { getErrorMessage } from "../services/slurp/slurp-public-support.js";
 
 function requestRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)

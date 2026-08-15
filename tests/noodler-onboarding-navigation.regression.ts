@@ -2,17 +2,17 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 // Onboarding completion is a one-way door: saveSettings("zero") writes noodlerOnboardingState
-// "zero", and NoodlerHome only reopens the wizard while that state is "incomplete". So the write
+// "zero", and SlurpHome only reopens the wizard while that state is "incomplete". So the write
 // must happen for a deliberate Skip Setup and nothing else. Wiring it to the modal's dismiss
 // handler made Escape, the backdrop, and the X silently end the teaching flow forever. The
 // component needs a DOM to render, so this asserts the wiring in source.
 
 const panel = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerBulkCreatePanel.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx",
   "utf8",
 );
 const home = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerHome.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
   "utf8",
 );
 

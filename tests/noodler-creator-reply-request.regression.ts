@@ -8,11 +8,11 @@ import { readFileSync } from "node:fs";
 // persist silently into the next comment, and Noodle must not grow a toggle it cannot honour.
 
 const card = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlePostCard.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpPostCard.tsx",
   "utf8",
 );
 const noodler = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerHome.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
   "utf8",
 );
 const noodle = readFileSync(

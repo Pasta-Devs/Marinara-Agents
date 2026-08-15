@@ -7,7 +7,7 @@ import english from "./localization/locales/en.json";
 import german from "./localization/locales/de.json";
 import korean from "./localization/locales/ko.json";
 import polish from "./localization/locales/pl.json";
-import { NoodlerHome } from "./components/slurp/NoodlerHome";
+import { SlurpHome } from "./components/slurp/SlurpHome";
 import { SlurpSettings } from "./components/slurp/SlurpSettings";
 import { useSlurpUIStore } from "./stores/slurp-package.store";
 import { configureSlurpPackageState } from "./stores/slurp-package.store";
@@ -101,7 +101,7 @@ function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
           {navigation.mode === "creator-settings" ? (
             <SlurpSettings navigation={navigation} onNavigate={setNavigation} />
           ) : (
-            <NoodlerHome navigation={navigation} onNavigate={setNavigation} />
+            <SlurpHome navigation={navigation} onNavigate={setNavigation} />
           )}
         </div>
       </QueryClientProvider>

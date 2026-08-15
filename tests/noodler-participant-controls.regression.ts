@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const homePath = "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerHome.tsx";
+const homePath = "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx";
 const hooksPath = "packages/noodle/src/engine/packages/client/src/hooks/use-noodle.ts";
 const creatorHooksPath = "packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts";
 const publishingSettingsPath =

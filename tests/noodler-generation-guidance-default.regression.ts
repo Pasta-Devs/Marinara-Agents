@@ -13,7 +13,7 @@ const storage = readFileSync(
   "utf8",
 );
 const home = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerHome.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
   "utf8",
 );
 const readme = readFileSync("packages/slurp/README.md", "utf8");

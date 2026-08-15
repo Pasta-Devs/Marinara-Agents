@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { isDirectlyInvitedNoodleCharacter } from "../packages/slurp/src/engine/packages/server/src/services/slurp/noodle-invited-post-draft-access";
+import { isDirectlyInvitedNoodleCharacter } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-invited-post-draft-access";
 
 assert.equal(isDirectlyInvitedNoodleCharacter(null), false);
 assert.equal(

@@ -58,20 +58,20 @@ export {
   NOODLER_UNLOCK_COST,
   noodlerUnlockPriceFromMetadata,
   noodlerUnlockPriceMetadata,
-} from "../slurp/noodler-prices.js";
+} from "../slurp/slurp-prices.js";
 import { logger } from "../../lib/logger.js";
 import {
   NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR,
   parsePersistedNoodleFanActivityDayPlan,
-} from "../slurp/noodle-fan-activity-day-plan.js";
-import { NOODLER_FAN_IDENTITY_PREFIX } from "../slurp/noodle-fan-identity-provider.js";
-import { canViewNoodlerPost, isNoodlerHiddenFromViewer } from "../slurp/noodler-access.js";
+} from "../slurp/slurp-fan-activity-day-plan.js";
+import { NOODLER_FAN_IDENTITY_PREFIX } from "../slurp/slurp-fan-identity-provider.js";
+import { canViewNoodlerPost, isNoodlerHiddenFromViewer } from "../slurp/slurp-access.js";
 import {
   NOODLER_MEDIA_URL_PREFIX,
   noodlerPostMediaUrl,
   resolveNoodlerMediaAbsolutePath,
   unlinkNoodlerMedia,
-} from "../slurp/noodle-noodler-media.js";
+} from "../slurp/slurp-media.js";
 import {
   noodleAccounts,
   noodleAccountSubscriptions,
@@ -87,14 +87,14 @@ import {
   noodlerFanActivityState,
   slurpViewers,
 } from "../../db/schema/slurp.js";
-import { readNoodlerAccountMediaPath, readNoodlerAvatarMediaPath } from "../slurp/noodle-noodler-avatar.js";
+import { readNoodlerAccountMediaPath, readNoodlerAvatarMediaPath } from "../slurp/slurp-avatar.js";
 import { newId, now } from "../../utils/id-generator.js";
 import {
   compareMinimizedNoodlerSourceSnapshot,
   isMinimizedNoodlerSourceSnapshot,
   minimizeNoodlerSourceSnapshot,
-} from "../slurp/noodle-noodler-source.js";
-import { resolveNoodlerSourceSnapshot } from "../slurp/noodle-noodler-source-resolve.js";
+} from "../slurp/slurp-source.js";
+import { resolveNoodlerSourceSnapshot } from "../slurp/slurp-source-resolve.js";
 import { createAppSettingsStorage } from "./app-settings.storage.js";
 import {
   clearNoodleRefreshFailure,
@@ -102,15 +102,15 @@ import {
   parsePersistedNoodleRefreshSchedule,
   reconcileNoodleRefreshSchedule,
   type PersistedNoodleRefreshSchedule,
-} from "../slurp/noodle-refresh-schedule.js";
-import { pruneNoodleRefreshRuns } from "./noodle-refresh-run-retention.js";
-import { normalizeNoodlerSeenAt } from "../slurp/noodler-viewer-unseen.js";
+} from "../slurp/slurp-refresh-schedule.js";
+import { pruneNoodleRefreshRuns } from "./slurp-refresh-run-retention.js";
+import { normalizeNoodlerSeenAt } from "../slurp/slurp-viewer-unseen.js";
 import { createCharactersStorage } from "./characters.storage.js";
 import {
   compareNoodlerPostSortKeysDescending,
   isNoodlerPostAfterCursor,
   type NoodlerPostSortKey,
-} from "../slurp/noodler-post-page.js";
+} from "../slurp/slurp-post-page.js";
 
 const SLURP_SETTINGS_KEY = "slurp.settings";
 const NOODLE_REFRESH_SCHEDULE_KEY = "slurp.refresh-schedule";

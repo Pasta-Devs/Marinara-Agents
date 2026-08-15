@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 
 async function main() {
   const [home, settings, hooks, locale] = await Promise.all([
-    readFile("packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerHome.tsx", "utf8"),
+    readFile("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8"),
     readFile("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx", "utf8"),
     readFile("packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8"),
     readFile("packages/slurp/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
