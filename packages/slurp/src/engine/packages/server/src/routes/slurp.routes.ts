@@ -1187,10 +1187,19 @@ export async function slurpRoutes(app: FastifyInstance) {
   });
 
   app.delete("/noodler/posts/:id", async (req, reply) => {
+    const accountId =
+      typeof (req.query as { accountId?: unknown })?.accountId === "string"
+        ? (req.query as { accountId: string }).accountId
+        : null;
+    if (!accountId) {
+      return reply.code(400).send({ error: "accountId is required" });
+    }
     const { id } = req.params as { id: string };
     const existing = await noodle.getNoodlerPostById(id);
     if (!existing)
       return reply.code(404).send({ error: "NoodleR post not found" });
+    if (existing.authorAccountId !== accountId)
+      return reply.code(403).send({ error: "Forbidden" });
     const locked = await tryNoodlerAccountOperation(
       existing.authorAccountId,
       () => noodle.deleteNoodlerPost(id),

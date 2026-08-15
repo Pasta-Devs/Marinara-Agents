@@ -1006,9 +1006,9 @@ export function useReplaceNoodlerPostImage() {
 export function useDeleteNoodlerPost() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id }: { id: string; accountId: string }) =>
+    mutationFn: ({ id, accountId }: { id: string; accountId: string }) =>
       api.delete<NoodlerManagedPost>(
-        `/slurp/noodler/posts/${encodeURIComponent(id)}`,
+        `/slurp/noodler/posts/${encodeURIComponent(id)}?accountId=${encodeURIComponent(accountId)}`,
       ),
     onSuccess: (_post, input) => {
       return Promise.all([

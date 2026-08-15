@@ -62,13 +62,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "14c13f6986d243c2a6c42f0b115c0556c81e81199c17d25d9f9ca619b44a61b4",
-      "bytes": 2313429
+      "sha256": "97a5877b59a9adfedfb99579ea9be44977546562d2be7e538c1f9393a4bf7394",
+      "bytes": 2313627
     },
     {
       "path": "client.js",
-      "sha256": "0d4cac0973c653a2553f5465d16a3b7c1eb377a2f5f9b268d86508c4696e4771",
-      "bytes": 2291697
+      "sha256": "5e144879c7784b831bc326795d3da3e318c81a27f0ed594a9160b5cf8df790bd",
+      "bytes": 2291744
     },
     {
       "path": "slurp-klusek.png",

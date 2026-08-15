@@ -16,6 +16,17 @@ const files = [
   ...sourceFiles("packages/slurp/src/engine/packages/client"),
   ...sourceFiles("packages/slurp/src/engine/packages/server"),
 ];
+
+const slurpRoutes = readFileSync(
+  join(root, "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts"),
+  "utf8",
+);
+assert.match(
+  slurpRoutes,
+  /app\.delete\("\/noodler\/posts\/:id"[\s\S]*?accountId is required[\s\S]*?existing\.authorAccountId !== accountId/u,
+  "NoodleR post deletion must require and verify the owning account",
+);
+
 for (const file of files) {
   const source = readFileSync(join(root, file), "utf8");
   for (const marker of [
