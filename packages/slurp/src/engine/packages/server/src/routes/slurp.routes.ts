@@ -1529,11 +1529,15 @@ export async function slurpRoutes(app: FastifyInstance) {
         .code(201)
         .send({ created: [], skipped: [], failed: [], executionId });
     }
-    const connection = await connections.getDefaultForAgents();
+    const settings = await noodle.getSettings();
+    if (!settings.generationConnectionId) {
+      return reply.code(400).send({
+        error: "Select a Slurp generation connection before creating creators.",
+      });
+    }
+    const connection = await connections.getWithKey(settings.generationConnectionId);
     if (!connection)
-      return reply
-        .code(404)
-        .send({ error: "Noodle generation connection not found" });
+      return reply.code(404).send({ error: "Slurp generation connection not found" });
     const created: string[] = [];
     const skipped: string[] = [];
     // Operational failures (provider/storage) are reported apart from expected exclusions

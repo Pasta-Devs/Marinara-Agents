@@ -138,7 +138,10 @@ const noodlerFanArchetypeWeightsSchema = z
     organicDiscovery: z.number().finite().min(0),
     freeResource: z.number().finite().min(0),
   })
-  .partial();
+  .partial()
+  .refine((value) => Object.values(value).some((weight) => (weight ?? 0) > 0), {
+    message: "At least one fan archetype weight must be greater than zero.",
+  });
 
 /**
  * Creator settings are owned by Slurp. Keep this deliberately narrow: public Noodle settings
@@ -176,8 +179,8 @@ export const slurpSettingsSchema = z.object({
   fanActivityEnabled: z.boolean(),
   fanActivityRunsPerDay: z.number().int().min(1).max(24),
   fanLikesPerRefresh: z.number().int().min(0).max(24),
-  fanRepliesPerRefresh: z.number().int().min(0).max(24),
-  fanRepostsPerRefresh: z.number().int().min(0).max(24),
+  fanRepliesPerRefresh: z.number().int().min(0).max(12),
+  fanRepostsPerRefresh: z.number().int().min(0).max(12),
   fanArchetypeWeights: noodlerFanArchetypeWeightsSchema,
   nightQuiet: z.boolean(),
   onboarding: z.enum(["not_started", "in_progress", "completed"]),

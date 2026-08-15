@@ -31,6 +31,7 @@ import {
   useBulkCreateNoodlerStageProfiles,
   useNoodlerEligibleAccounts,
   useRefreshTargetedNoodlerCreatorsNow,
+  useSlurpConnections,
   useUpdateSlurpSettings,
 } from "../../hooks/use-slurp";
 import { cn, generateClientId } from "../../lib/utils";
@@ -123,6 +124,7 @@ export function SlurpOnboardingWizard({
   const bulkCreate = useBulkCreateNoodlerStageProfiles();
   const refreshTargeted = useRefreshTargetedNoodlerCreatorsNow();
   const updateSlurpSettings = useUpdateSlurpSettings();
+  const connectionsQuery = useSlurpConnections(open);
   const accounts = useMemo(
     () => eligible.data?.pages.flatMap((page) => page.items) ?? [],
     [eligible.data?.pages],
@@ -154,6 +156,8 @@ export function SlurpOnboardingWizard({
   const [creationFailures, setCreationFailures] = useState(0);
   const [settingsFailed, setSettingsFailed] = useState(false);
   const [creationFailed, setCreationFailed] = useState(false);
+  const [creationError, setCreationError] = useState<string | null>(null);
+  const [generationConnectionId, setGenerationConnectionId] = useState("");
   const [outcomes, setOutcomes] = useState<NoodlerRefreshNowOutcome[]>([]);
   const [completion, setCompletion] = useState<CompletionKind | null>(null);
   const [executionId, setExecutionId] = useState("");
@@ -201,6 +205,8 @@ export function SlurpOnboardingWizard({
     setCreationFailures(0);
     setSettingsFailed(false);
     setCreationFailed(false);
+    setCreationError(null);
+    setGenerationConnectionId("");
     setOutcomes([]);
     setCompletion(null);
     setExecutionId(generateClientId());
@@ -290,7 +296,7 @@ export function SlurpOnboardingWizard({
         executionId,
       });
       finalizeOutcomes([...kept, ...result.outcomes], createFailures);
-    } catch {
+    } catch (error) {
       // The profiles still exist; only generation fell over, so they stay retryable.
       finalizeOutcomes(
         [
@@ -305,6 +311,7 @@ export function SlurpOnboardingWizard({
     try {
       await updateSlurpSettings.mutateAsync({
         postsPerDay,
+        generationConnectionId: generationConnectionId || null,
         autoPostingScheduleEnabled: autoPostingEnabled,
         nightQuiet,
         onboarding: state === "completed" ? "completed" : "not_started",
@@ -349,10 +356,12 @@ export function SlurpOnboardingWizard({
       // than making the user reselect everything.
       setCreationFailed(true);
       setCompletion("failed");
+      if (error instanceof Error) setCreationError(error.message);
       setStep(5);
       return;
     }
     setCreationFailed(false);
+    setCreationError(null);
     // A failed settings write keeps onboarding incomplete, but the profiles already exist:
     // still write their first posts so the run is not stranded halfway.
     const settingsSaved = await saveSettings(
@@ -1131,6 +1140,16 @@ export function SlurpOnboardingWizard({
                   />
                 </label>
               )}
+              <label className="flex min-h-14 items-center justify-between gap-4 rounded-md border border-[#5b3a52] px-3 py-2">
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold">Generation connection</span>
+                  <span className="block text-xs leading-5 text-[#d8c9d4]">Choose the language model that writes creator posts.</span>
+                </span>
+                <select value={generationConnectionId} onChange={(event) => setGenerationConnectionId(event.target.value)} className="h-9 max-w-[55%] rounded-md border border-[#ff7ec1]/45 bg-[#17121b] px-2 text-sm text-[#fff7fc]" disabled={connectionsQuery.isLoading}>
+                  <option value="">Select a connection</option>
+                  {(connectionsQuery.data ?? []).filter((connection) => connection.provider !== "image_generation").map((connection) => <option key={connection.id} value={connection.id}>{connection.name ?? connection.model ?? connection.id}</option>)}
+                </select>
+              </label>
               {setupLane === "easy" ? (
                 <div className="divide-y divide-[#ff7ec1]/20 rounded-lg border border-[#ff7ec1]/30 bg-[#ff7ec1]/[0.06]">
                   <div className="flex min-h-14 items-center justify-between gap-4 px-3 py-2.5">
@@ -1397,18 +1416,22 @@ export function SlurpOnboardingWizard({
                 </button>
               )}
               {creationFailed && (
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => void finish()}
-                  className="mt-5 flex min-h-10 items-center gap-2 rounded-md border border-[#ff7ec1]/40 px-4 text-sm font-bold text-[#ff7ec1] disabled:opacity-50"
-                >
-                  <RefreshCw
-                    size={15}
-                    className={pending ? "animate-spin" : ""}
-                  />
-                  {t("capabilities.actions.tryAgain")}
-                </button>
+                <>
+                  {creationError && (
+                    <p className="mt-4 rounded-md border border-[#ff7ec1]/25 bg-[#ff7ec1]/[0.06] px-3 py-2 text-left text-xs leading-5 text-[#f3dce9]">
+                      {creationError}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => void finish()}
+                    className="mt-5 flex min-h-10 items-center gap-2 rounded-md border border-[#ff7ec1]/40 px-4 text-sm font-bold text-[#ff7ec1] disabled:opacity-50"
+                  >
+                    <RefreshCw size={15} className={pending ? "animate-spin" : ""} />
+                    {t("capabilities.actions.tryAgain")}
+                  </button>
+                </>
               )}
               {failedIds.length > 0 && (
                 <button

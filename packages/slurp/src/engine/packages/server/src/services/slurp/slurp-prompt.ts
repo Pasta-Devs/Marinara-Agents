@@ -69,6 +69,9 @@ const NOODLE_CHARACTER_ONLY_CREATIVE_FORMAT_INSTRUCTIONS = [
 export function noodleCreativeFormatInstructions(allowRandomUsers: boolean): readonly string[] {
   return allowRandomUsers ? NOODLE_CREATIVE_FORMAT_INSTRUCTIONS : NOODLE_CHARACTER_ONLY_CREATIVE_FORMAT_INSTRUCTIONS;
 }
+/** Legacy single-line tone instruction, used when enhanced timeline writing is off. */
+export const NOODLE_LEGACY_TONE_INSTRUCTION =
+  "- Characters should act in character but like people posting online: funny, messy, indirect, petty, affectionate, dramatic, vulgar, or casual as fits them.";
 export const NOODLE_TONE_INSTRUCTIONS = [
   "- Characters post like real people online (funny, messy, indirect, petty, affectionate, dramatic, vulgar, or casual) — but which of these fits, and how much, must come from each character's own Personality/Description/Backstory below, not a default upbeat voice. Do not make every account sound equally enthusiastic, chatty, or friendly.",
   "- Before writing each account's posts/replies, briefly ground yourself in that account's stated personality traits (guarded, blunt, anxious, arrogant, deadpan, etc.) and let sentence length, punctuation, capitalization, and emoji use vary accordingly. A withdrawn or hostile character should not sound like an enthusiastic extrovert.",
@@ -93,7 +96,7 @@ export const NOODLE_RANDOM_USER_TREATMENT_INSTRUCTION =
  */
 export function noodleTimelineVoiceDefaultText(enhanced: boolean, allowRandomUsers = true): string {
   return [
-    ...NOODLE_TONE_INSTRUCTIONS,
+    ...(enhanced ? NOODLE_TONE_INSTRUCTIONS : [NOODLE_LEGACY_TONE_INSTRUCTION]),
     ...(allowRandomUsers ? [NOODLE_RANDOM_USER_TREATMENT_INSTRUCTION] : []),
     ...noodleCreativeFormatInstructions(allowRandomUsers),
     ...(enhanced ? [NOODLE_CONGRUENCY_INSTRUCTION] : []),
