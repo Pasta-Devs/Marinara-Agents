@@ -89,6 +89,18 @@ export async function generateNoodlerPostImage(input: {
   preview: Omit<NoodleImagePromptReviewItem, "id"> | null;
   stagedMedia: StagedGalleryImage | null;
 }> {
+  const redactIdentity = (value: string) => {
+    if (input.disclosureMode === "open" || !input.linkedPublicAccount) return value;
+    const terms = [
+      input.linkedPublicAccount.displayName,
+      input.linkedPublicAccount.handle,
+      input.linkedPublicAccount.entityId,
+    ].filter((term) => term.trim().length > 0);
+    return terms.reduce(
+      (text, term) => text.replace(new RegExp(term.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "giu"), "[redacted]"),
+      value,
+    );
+  };
   const imageSettings = await loadImageGenerationUserSettings(input.db);
   const imageDefaults = resolveConnectionImageDefaults(input.imageConnection);
   const imageModel = input.imageConnection.model || "";
@@ -188,8 +200,9 @@ export async function generateNoodlerPostImage(input: {
     imageSettings.styleProfiles,
     compiledPrompt.profile.id,
   );
-  const rawFinalPrompt =
-    input.promptOverride?.prompt.trim() || compiledPrompt.prompt;
+  const rawFinalPrompt = redactIdentity(
+    input.promptOverride?.prompt.trim() || compiledPrompt.prompt,
+  );
   const imagePromptInstructions = input.imageConnection.imagePromptInstructions?.trim();
   const instructionLine = imagePromptInstructions
     ? `User image instructions: ${imagePromptInstructions.replace(/\s+/g, " ").slice(0, 5000)}`
@@ -213,7 +226,7 @@ export async function generateNoodlerPostImage(input: {
       ? `${rawFinalPrompt}\n${instructionLine}`
       : rawFinalPrompt);
   const finalNegativePrompt = input.promptOverride
-    ? input.promptOverride.negativePrompt?.trim() || undefined
+    ? redactIdentity(input.promptOverride.negativePrompt?.trim() || "") || undefined
     : compiledPrompt.negativePrompt || undefined;
   logDebugOverride(
     input.debugMode,

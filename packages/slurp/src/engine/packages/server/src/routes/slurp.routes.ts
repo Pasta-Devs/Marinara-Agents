@@ -1020,7 +1020,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         return result;
       } catch (error) {
         logger.error(error, "[noodler-reply] Creator reply generation failed");
-        return reply.code(500).send({ error: getErrorMessage(error) });
+        return reply.code(500).send({ error: "Creator reply generation failed." });
       }
     },
   );
@@ -1432,7 +1432,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       });
     } catch (error) {
       logger.error(error, "[noodler] Stage profile draft generation failed");
-      return reply.code(500).send({ error: getErrorMessage(error) });
+      return reply.code(500).send({ error: "Stage profile draft generation failed." });
     }
   });
 
@@ -1442,6 +1442,9 @@ export async function slurpRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
     const publicAccount = await noodle.resolveSourceByEntityId(id);
+    if (!publicAccount) {
+      return reply.code(404).send({ error: "Noodle account not found" });
+    }
     const sourceSnapshot = publicAccount
       ? await resolveNoodlerSourceSnapshot(app.db, publicAccount)
       : null;
@@ -1463,14 +1466,12 @@ export async function slurpRoutes(app: FastifyInstance) {
       });
     }
     try {
-      const artwork = publicAccount
-        ? await resolveNoodlerCreatorArtwork({
-            characters,
-            characterGallery,
-            publicAccount,
-            disclosureMode: parsed.data.stageProfile.disclosureMode,
-          })
-        : { avatarUrl: null, bannerUrl: null };
+      const artwork = await resolveNoodlerCreatorArtwork({
+        characters,
+        characterGallery,
+        publicAccount,
+        disclosureMode: parsed.data.stageProfile.disclosureMode,
+      });
       const created = await noodle.createNoodlerAccount(
         publicAccount.kind as "character" | "persona",
         publicAccount.entityId,
@@ -2038,6 +2039,13 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (creatorId && !(await noodle.getNoodlerAccountById(creatorId))) {
       return reply.code(404).send({ error: "NoodleR stage profile not found" });
     }
+    for (const connectionId of [defaultConnectionId, connectionId]) {
+      if (connectionId === undefined || connectionId === null) continue;
+      const connection = await connections.getWithKey(connectionId);
+      if (!connection || connection.provider !== "image_generation") {
+        return reply.code(404).send({ error: "Noodle image connection not found" });
+      }
+    }
     return updateNoodlerImageConnections(app.db, (current) => {
       const creatorConnectionIds = { ...current.creatorConnectionIds };
       if (creatorId) {
@@ -2086,7 +2094,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       return reply.code(404).send({ error: "NoodleR account not found." });
     } catch (error) {
       logger.error(error, "[noodler] Manual run-now failed");
-      return reply.code(500).send({ error: getErrorMessage(error) });
+      return reply.code(500).send({ error: "Manual post generation failed." });
     }
   });
 
@@ -2133,7 +2141,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       if (isConnectionAdmissionFailure(error))
         return reply.code(409).send({ error: getErrorMessage(error) });
       logger.error(error, "[noodler] Fan activity generation failed");
-      return reply.code(500).send({ error: getErrorMessage(error) });
+      return reply.code(500).send({ error: "Fan activity generation failed." });
     }
   });
 
@@ -2212,7 +2220,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       if (isConnectionAdmissionFailure(error))
         return reply.code(409).send({ error: getErrorMessage(error) });
       logger.error(error, "[noodler] NoodleR post generation failed");
-      return reply.code(500).send({ error: getErrorMessage(error) });
+      return reply.code(500).send({ error: "NoodleR post generation failed." });
     }
   });
 }

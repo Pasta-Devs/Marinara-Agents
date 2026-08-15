@@ -301,13 +301,13 @@ const features = [
     packageSourceRoot: slurpSourceRoot,
     ownedSourcePaths: slurpOwnedSourcePaths,
     libraryHidden: true,
-    assetPaths: ["slurp-klusek.png"],
+     assetPaths: ["slurp-logo.png", "slurpagent.png"],
     contributions: {
       slots: ["home-browser-tab"],
       homeBrowserTab: {
         label: "Slurp",
         ariaLabel: "Open Slurp",
-        iconPaths: ["slurp-klusek.png"],
+         iconPaths: ["slurp-logo.png"],
       },
     },
   },

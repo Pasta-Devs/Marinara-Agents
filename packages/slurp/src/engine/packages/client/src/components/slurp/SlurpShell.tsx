@@ -83,9 +83,9 @@ export const NOODLE_ICON_SCOPE_CLASS =
 export const NOODLER_MARK = "R";
 export const NOODLER_ADD_MARK = "+R";
 export const NOODLE_LOGO_SRC =
-  "/api/capability-packages/slurp/assets/slurp-klusek.png";
+  "/api/capability-packages/slurp/assets/slurp-logo.png";
 const NOODLER_LOGO_SRC =
-  "/api/capability-packages/slurp/assets/slurp-klusek.png";
+  "/api/capability-packages/slurp/assets/slurp-logo.png";
 export const NOODLE_PERSONA_SWITCHER_PAGE_SIZE = 5;
 
 export function getNoodleAccentStyle(

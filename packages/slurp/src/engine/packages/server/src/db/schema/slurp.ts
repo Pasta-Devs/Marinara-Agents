@@ -104,7 +104,7 @@ export const noodleInteractions = fileTable(
     uniqueBy: [
       {
         keys: ["postId", "actorAccountId", "type", "parentInteractionId"],
-        when: (row) => row.type === "like" || row.type === "repost",
+        when: (row) => row.type === "like" || row.type === "repost" || row.type === "vote",
       },
     ],
   },
