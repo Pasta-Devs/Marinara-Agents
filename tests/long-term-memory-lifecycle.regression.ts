@@ -2207,8 +2207,8 @@ async function main() {
          [
            { kind: "character", selected: "true", tabIndex: "0", count: "0" },
            { kind: "persona", selected: "false", tabIndex: "-1", count: "0" },
-           { kind: "chat", selected: "false", tabIndex: "-1", count: "0" },
-           { kind: "branch", selected: "false", tabIndex: "-1", count: "0" },
+            { kind: "chat", selected: "false", tabIndex: "-1", count: "1" },
+            { kind: "branch", selected: "false", tabIndex: "-1", count: "1" },
          ],
        );
        const desktopRailLayout = await availabilityTabs.evaluate((rail) => {
@@ -2228,14 +2228,25 @@ async function main() {
            tablistWidth: tablistRect.width,
          };
        });
-       assert.deepEqual(desktopRailLayout, {
+        assert.deepEqual(desktopRailLayout, {
          columns: 4,
          sameRow: true,
          equalWidths: true,
          panelBelowTabs: true,
          panelWidth: desktopRailLayout.tablistWidth,
-         tablistWidth: desktopRailLayout.tablistWidth,
-       });
+           tablistWidth: desktopRailLayout.tablistWidth,
+         });
+         await availabilityTabs.locator('[data-ltm-availability-tab="chat"]').click();
+         assert.equal(
+           await availabilityTabs.locator('[data-ltm-availability-target="chat:all"]').getAttribute("aria-pressed"),
+           "true",
+         );
+         await availabilityTabs.locator('[data-ltm-availability-tab="branch"]').click();
+         assert.equal(
+           await availabilityTabs.locator('[data-ltm-availability-target="branch:all"]').getAttribute("aria-pressed"),
+           "true",
+         );
+         await availabilityTabs.locator('[data-ltm-availability-tab="character"]').click();
        const characterTab = availabilityTabs.locator('[data-ltm-availability-tab="character"]');
        const personaTab = availabilityTabs.locator('[data-ltm-availability-tab="persona"]');
        await characterTab.press("ArrowRight");
@@ -2252,8 +2263,8 @@ async function main() {
          "true",
        );
        await characterTab.click();
-       await availabilityTabs.locator('[data-ltm-availability-search="character"]').fill("Character");
-       await availabilityTabs.locator('[data-ltm-availability-target="character:character-a"]').click();
+        await availabilityTabs.locator('[data-ltm-availability-search="character"]').fill("Character");
+        await availabilityTabs.locator('[data-ltm-availability-target="character:character-a"]').click();
        assert.equal(
          await availabilityTabs.locator('[data-ltm-availability-target="character:character-a"]').getAttribute("aria-pressed"),
          "true",
@@ -2278,11 +2289,11 @@ async function main() {
            pageFits: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
          };
        });
-       assert.deepEqual(mobileRailLayout, {
-         columns: 4,
-         panelBelowTabs: true,
-         pageFits: true,
-       });
+        assert.deepEqual(mobileRailLayout, {
+          columns: 1,
+          panelBelowTabs: true,
+          pageFits: true,
+        });
        await page.setViewportSize({ width: 1280, height: 900 });
        await personaTab.click();
        await page
@@ -2301,20 +2312,78 @@ async function main() {
          .locator('[data-ltm-availability-target="branch:memory-chat"]')
          .click();
        assert.equal(await page.getByText("Groups", { exact: true }).count(), 0);
-       await page.getByRole("button", { name: "Save availability" }).click();
-      const cleanupRequest = page.waitForRequest(
-        (request) =>
-          request.method() === "DELETE" &&
-          request
-            .url()
-            .includes(`/rejected-suggestions/${rejectedSuggestionId}`),
-      );
-      await page.getByRole("button", { name: "Save", exact: true }).click();
-      await cleanupRequest;
-      await page.locator('[data-ltm-status="success"]').waitFor();
-      assert.equal(await page.locator('[role="alert"]').count(), 0);
-      assert.equal(deletedSuggestionId, rejectedSuggestionId);
-      assert.equal(savedNote?.type, "world");
+        await page.getByRole("button", { name: "Save availability" }).click();
+       await page.locator('[data-ltm-select-mode]').click();
+       const selectableWorldNotes = page.locator(
+         '[data-ltm-note-type="world"] input[type="checkbox"]',
+       );
+       assert.ok(await selectableWorldNotes.count() >= 2);
+       const worldGroup = page.locator('[data-ltm-memory-group="world"]');
+        if (!(await worldGroup.evaluate((group) => (group as HTMLDetailsElement).open))) {
+         await worldGroup.locator(":scope > summary").click();
+       }
+       await selectableWorldNotes.nth(0).check();
+       await selectableWorldNotes.nth(1).check();
+       await page.locator('[data-ltm-bulk-availability]').click();
+       const bulkAvailability = page.locator('[data-ltm-bulk-availability-workbench]');
+       await bulkAvailability.waitFor();
+       const bulkRail = bulkAvailability.locator('[data-ltm-availability-tabs]');
+       await bulkRail.waitFor();
+       assert.deepEqual(
+         await bulkRail.evaluate((rail) => ({
+           railRadius: getComputedStyle(rail).borderRadius,
+           tabRadius: getComputedStyle(rail.querySelector<HTMLElement>('[role="tab"]')!).borderRadius,
+           pageFits: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+         })),
+         { railRadius: "0px", tabRadius: "0px", pageFits: true },
+        );
+        await bulkRail.locator('[data-ltm-availability-tab="character"]').click();
+        await bulkRail.locator('[data-ltm-availability-target="character:character-a"]').click();
+        assert.equal(
+          await bulkRail.locator('[data-ltm-availability-target="character:character-a"]').getAttribute("aria-pressed"),
+          "true",
+        );
+         await bulkRail.locator('[data-ltm-availability-tab="chat"]').click();
+         assert.equal(
+           await bulkRail.locator('[data-ltm-availability-target="chat:all"]').getAttribute("aria-pressed"),
+           "true",
+         );
+         await bulkRail.locator('[data-ltm-availability-tab="branch"]').click();
+         assert.equal(
+           await bulkRail.locator('[data-ltm-availability-target="branch:all"]').getAttribute("aria-pressed"),
+           "true",
+         );
+        await bulkRail.locator('[data-ltm-availability-tab="persona"]').click();
+        await bulkRail.locator('[data-ltm-availability-target="persona:persona-a"]').click();
+        assert.equal(
+          await bulkRail.locator('[data-ltm-availability-target="persona:persona-a"]').getAttribute("aria-pressed"),
+          "true",
+        );
+        const bulkAvailabilityRequest = page.waitForRequest(
+          (request) =>
+            request.method() === "POST" &&
+            request.url().includes("/api/long-term-memory/notes/batch"),
+        );
+        await bulkAvailability.getByRole("button", { name: "Apply" }).click();
+        const bulkAvailabilityPayload = (await bulkAvailabilityRequest).postDataJSON();
+        assert.deepEqual(bulkAvailabilityPayload.addScope, {
+          characterIds: ["character-a"],
+          personaIds: ["persona-a"],
+        });
+        await page.locator('[data-ltm-note-editor]').waitFor();
+        const cleanupRequest = page.waitForRequest(
+          (request) =>
+            request.method() === "DELETE" &&
+            request
+              .url()
+              .includes(`/rejected-suggestions/${rejectedSuggestionId}`),
+        );
+        await page.getByRole("button", { name: "Save", exact: true }).click();
+        await cleanupRequest;
+        await page.locator('[data-ltm-status="success"]').waitFor();
+        assert.equal(await page.locator('[role="alert"]').count(), 0);
+        assert.equal(deletedSuggestionId, rejectedSuggestionId);
+        assert.equal(savedNote?.type, "world");
       await page
         .locator(
           '[data-ltm-control="navigation"][data-ltm-destination="sources"]',

@@ -1593,6 +1593,39 @@ async function main() {
     });
     assert.equal(availabilityRemoved.status, "complete");
     assert.deepEqual((await storage.getNote(availabilityNote.id))?.modes, ["roleplay"]);
+    const multipleAvailabilityAdded = await storage.bulkMutateNotes({
+      noteIds: [availabilityNote.id],
+      addScope: {
+        chatIds: ["chat-b"],
+        groupIds: ["group-a"],
+        characterIds: ["character-b"],
+        personaIds: ["persona-a"],
+      },
+    });
+    assert.equal(multipleAvailabilityAdded.status, "complete");
+    assert.deepEqual((await storage.getNote(availabilityNote.id))?.scope, {
+      chatId: "chat-a",
+      chatIds: ["chat-a", "chat-b"],
+      groupId: "group-a",
+      groupIds: ["group-a"],
+      characterIds: ["character-b"],
+      personaId: "persona-a",
+      personaIds: ["persona-a"],
+    });
+    const multipleAvailabilityRemoved = await storage.bulkMutateNotes({
+      noteIds: [availabilityNote.id],
+      removeScope: {
+        chatIds: ["chat-b"],
+        groupIds: ["group-a"],
+        characterIds: ["character-b"],
+        personaIds: ["persona-a"],
+      },
+    });
+    assert.equal(multipleAvailabilityRemoved.status, "complete");
+    assert.deepEqual((await storage.getNote(availabilityNote.id))?.scope, {
+      chatId: "chat-a",
+      chatIds: ["chat-a"],
+    });
     const finalAvailability = await storage.bulkMutateNotes({
       noteIds: [availabilityNote.id],
       removeScope: { chatIds: ["chat-a"] },

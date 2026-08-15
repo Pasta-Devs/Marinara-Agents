@@ -107,6 +107,17 @@ async function main() {
     lastMessageAt: null,
     updatedAt: "2026-07-17T00:00:00.000Z",
   }, {
+    id: "chat-persona-a",
+    name: "Persona A chat",
+    mode: "roleplay",
+    characterIds: ["character-a"],
+    groupId: null,
+    personaId: "persona-a",
+    connectionId: null,
+    metadata: {},
+    lastMessageAt: null,
+    updatedAt: "2026-07-17T00:00:00.000Z",
+  }, {
     id: "chat-other-character",
     name: "Other character chat",
     mode: "roleplay",
@@ -794,12 +805,18 @@ async function main() {
     await storage.createNote(note("world_character_cross_chat", "chat-a", `The ${scopedRecallText} belongs to character A.`, {
       scope: { chatId: "chat-a", chatIds: ["chat-a"], characterIds: ["character-a"] },
     }));
+    await storage.createNote(note("world_character_all_chats", "chat-a", `The ${scopedRecallText} is available across every character A chat.`, {
+      scope: { characterIds: ["character-a"] },
+    }));
     await storage.createNote(note("world_character_wrong_chat", "chat-a", `The ${scopedRecallText} belongs to character B.`, {
       scope: { chatId: "chat-a", chatIds: ["chat-a"], characterIds: ["character-b"] },
     }));
     await storage.createNote(note("world_pure_chat_cross_chat", "chat-a", `The ${scopedRecallText} is old-chat-only.`));
     await storage.createNote(note("world_persona_cross_chat", "chat-a", `The ${scopedRecallText} belongs to persona A.`, {
       scope: { chatId: "chat-a", chatIds: ["chat-a"], characterIds: ["character-a"], personaId: "persona-a" },
+    }));
+    await storage.createNote(note("world_persona_all_chats", "chat-a", `The ${scopedRecallText} is available across every persona A chat.`, {
+      scope: { personaIds: ["persona-a"] },
     }));
     await storage.createNote(note("world_group_cross_chat", "chat-a", `The ${scopedRecallText} belongs to group A.`, {
       scope: { chatId: "chat-a", chatIds: ["chat-a"], characterIds: ["character-a"], groupId: "group-a" },
@@ -812,7 +829,8 @@ async function main() {
       messages: [{ role: "user", content: scopedRecallText }],
       debugMode: false,
      });
-     assert.match(newCharacterRecall?.text ?? "", /belongs to character A/);
+      assert.match(newCharacterRecall?.text ?? "", /belongs to character A/);
+      assert.match(newCharacterRecall?.text ?? "", /every character A chat/);
      assert.match(newCharacterRecall?.text ?? "", /belongs to persona A/);
      assert.match(newCharacterRecall?.text ?? "", /belongs to group A/);
      assert.doesNotMatch(newCharacterRecall?.text ?? "", /old-chat-only|belongs to character B/);
@@ -827,14 +845,25 @@ async function main() {
       /belongs to character A/,
     );
     const personaCharacterRecall = (await runtime.recall({
-      chatId: "chat-other-persona",
+      chatId: "chat-persona-a",
       chatMode: "roleplay",
       characterIds: ["character-a"],
       messages: [{ role: "user", content: scopedRecallText }],
       debugMode: false,
      }))?.text ?? "";
-     assert.match(personaCharacterRecall, /belongs to character A/);
-     assert.match(personaCharacterRecall, /belongs to persona A/);
+      assert.match(personaCharacterRecall, /belongs to character A/);
+      assert.match(personaCharacterRecall, /belongs to persona A/);
+      assert.match(personaCharacterRecall, /every persona A chat/);
+      assert.doesNotMatch(
+        (await runtime.recall({
+          chatId: "chat-other-persona",
+          chatMode: "roleplay",
+          characterIds: ["character-a"],
+          messages: [{ role: "user", content: scopedRecallText }],
+          debugMode: false,
+        }))?.text ?? "",
+        /every persona A chat/,
+      );
      assert.match(
       (await runtime.recall({
         chatId: "chat-other-group",

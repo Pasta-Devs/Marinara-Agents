@@ -668,7 +668,6 @@ export class LongTermMemoryStorage {
           .filter((chatId) => !removeChatIds.has(chatId));
         const nextScope = withMergedLtmScopeLinks(
           {
-            ...current.scope,
             chatIds: nextChatIds,
             groupIds: currentGroupIds.filter((id) => !removeGroupIds.has(id)),
             characterIds: current.scope.characterIds?.filter(

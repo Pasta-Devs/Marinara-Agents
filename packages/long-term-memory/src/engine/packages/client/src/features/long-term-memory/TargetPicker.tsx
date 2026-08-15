@@ -40,10 +40,10 @@ export function AvailabilityTabRail({
   selectedIds: ReadonlySet<string>;
   tablistLabel: string;
   sectionCopy: {
-    character: { label: string; searchPlaceholder: string; emptyLabel: string; accessibleLabel: (count: number) => string };
-    persona: { label: string; searchPlaceholder: string; emptyLabel: string; accessibleLabel: (count: number) => string };
-    chat: { label: string; searchPlaceholder: string; emptyLabel: string; accessibleLabel: (count: number) => string };
-    branch: { label: string; searchPlaceholder: string; emptyLabel: string; accessibleLabel: (count: number) => string };
+    character: { label: string; allLabel: string; searchPlaceholder: string; emptyLabel: string; accessibleLabel: (count: number) => string };
+    persona: { label: string; allLabel: string; searchPlaceholder: string; emptyLabel: string; accessibleLabel: (count: number) => string };
+    chat: { label: string; allLabel: string; searchPlaceholder: string; emptyLabel: string; accessibleLabel: (count: number) => string };
+    branch: { label: string; allLabel: string; searchPlaceholder: string; emptyLabel: string; accessibleLabel: (count: number) => string };
   };
   onToggle: (kind: "character" | "persona" | "chat" | "branch", id: string) => void;
 }) {
@@ -61,7 +61,10 @@ export function AvailabilityTabRail({
   const [activeKind, activeTargets] = activeEntry;
   const activeCopy = sectionCopy[activeKind];
   const query = queries[activeKind] ?? "";
-  const filtered = activeTargets.filter((target) =>
+  const displayedTargets = activeKind === "chat" || activeKind === "branch"
+    ? [{ id: "all", label: activeCopy.allLabel }, ...activeTargets]
+    : activeTargets;
+  const filtered = displayedTargets.filter((target) =>
     `${target.label} ${target.comment ?? ""}`
       .toLocaleLowerCase()
       .includes(query.trim().toLocaleLowerCase()),
@@ -86,17 +89,18 @@ export function AvailabilityTabRail({
   return (
     <div
       data-ltm-availability-tabs
-      className="overflow-hidden rounded-lg border border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-control-bg)]"
+      className="overflow-hidden border-y border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-control-bg)]"
+      style={{ containerType: "inline-size" }}
     >
       <style>{`
         [data-ltm-availability-tablist] {
           display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 0.25rem;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 1px;
           width: 100%;
           box-sizing: border-box;
           border-bottom: 1px solid var(--marinara-editor-divider);
-          padding: 0.25rem;
+          background: var(--marinara-editor-divider);
         }
         [data-ltm-availability-count] {
           flex: 0 0 auto;
@@ -106,10 +110,27 @@ export function AvailabilityTabRail({
         }
         [data-ltm-availability-tab] {
           justify-self: stretch;
+          min-width: 0;
+          border: 0;
+          border-radius: 0;
+          background: var(--marinara-editor-control-bg);
         }
-        @media (max-width: 30rem) {
+        [data-ltm-availability-tab][data-active="true"] {
+          background: var(--secondary);
+        }
+        @container (min-width: 34rem) {
+          [data-ltm-availability-tablist] {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+          }
+        }
+        @container (max-width: 28rem) {
+          [data-ltm-availability-tablist] {
+            grid-template-columns: minmax(0, 1fr);
+          }
+        }
+        @container (max-width: 36rem) {
           [data-ltm-availability-tab] {
-            padding-inline: 0.25rem;
+            padding-inline: 0.5rem;
             font-size: 0.625rem;
           }
         }
@@ -128,7 +149,10 @@ export function AvailabilityTabRail({
         {sections.map(([kind, targets], index) => {
           const copy = sectionCopy[kind];
           const active = activeSection === kind;
-          const count = targets.filter((target) => selectedIds.has(`${kind}:${target.id}`)).length;
+           const displayTargets = kind === "chat" || kind === "branch"
+             ? [{ id: "all", label: copy.allLabel }, ...targets]
+             : targets;
+           const count = displayTargets.filter((target) => selectedIds.has(`${kind}:${target.id}`)).length;
           const tabId = `${railId}-${kind}-tab`;
           return (
             <button
