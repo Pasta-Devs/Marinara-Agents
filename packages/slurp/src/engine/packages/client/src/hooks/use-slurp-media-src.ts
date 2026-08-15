@@ -8,7 +8,7 @@ import { api } from "../lib/api-client";
  * bare image prompt. Fetch those URLs through the API client instead and hand the element an
  * object URL. Engine-native URLs (character galleries, avatars) are returned untouched.
  */
-export function useNoodlerMediaSrc(
+export function useSlurpMediaSrc(
   imageUrl: string | null | undefined,
 ): string | null {
   const [resolved, setResolved] = useState<string | null>(null);

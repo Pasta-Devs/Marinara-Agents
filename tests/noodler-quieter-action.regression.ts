@@ -19,7 +19,7 @@ const settings = readFileSync(
 
 // The preset table stays in Slurp, and the wizard applies the complete Creator settings patch.
 assert.match(wizard, /from "\.\/slurp-activity-presets"/u);
-assert.match(wizard, /const patch = noodlerActivityPresetPatch\(choice\);/u);
+assert.match(wizard, /const patch = slurpActivityPresetPatch\(choice\);/u);
 assert.match(wizard, /setAutoPostingEnabled\(patch\.autoPostingScheduleEnabled\);/u);
 assert.match(wizard, /setPostsPerDay\(patch\.postsPerDay\);/u);
 assert.match(wizard, /useUpdateSlurpSettings/u);

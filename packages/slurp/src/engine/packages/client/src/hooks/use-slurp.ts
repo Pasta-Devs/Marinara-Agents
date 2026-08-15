@@ -161,20 +161,20 @@ export function useSlurpConnections(enabled = true) {
   });
 }
 
-export type NoodlerImageConnections = {
+export type SlurpImageConnections = {
   defaultConnectionId: string | null;
   creatorConnectionIds: Record<string, string>;
 };
 
-type NoodlerPageCursor = { createdAt: string; id: string };
+type SlurpPageCursor = { createdAt: string; id: string };
 
-function cursorQuery(cursor: NoodlerPageCursor | null): string {
+function cursorQuery(cursor: SlurpPageCursor | null): string {
   return cursor
     ? `&cursorAt=${encodeURIComponent(cursor.createdAt)}&cursorId=${encodeURIComponent(cursor.id)}`
     : "";
 }
 
-function mergeNoodlerViewerShell(
+function mergeSlurpViewerShell(
   current: NoodlerViewerScope | undefined,
   shell: NoodlerViewerScope,
 ): NoodlerViewerScope {
@@ -191,23 +191,23 @@ function mergeNoodlerViewerShell(
   };
 }
 
-export function useNoodlerImageConnections(enabled = true) {
+export function useSlurpImageConnections(enabled = true) {
   return useQuery({
     queryKey: noodleKeys.noodlerImageConnections(),
-    queryFn: () => api.get<NoodlerImageConnections>("/slurp/noodler/image-connections"),
+    queryFn: () => api.get<SlurpImageConnections>("/slurp/noodler/image-connections"),
     enabled,
     staleTime: 10_000,
   });
 }
 
-export function useUpdateNoodlerImageConnections() {
+export function useUpdateSlurpImageConnections() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (patch: {
       defaultConnectionId?: string | null;
       creatorId?: string;
       connectionId?: string | null;
-    }) => api.patch<NoodlerImageConnections>("/slurp/noodler/image-connections", patch),
+    }) => api.patch<SlurpImageConnections>("/slurp/noodler/image-connections", patch),
     onSuccess: (value) => qc.setQueryData(noodleKeys.noodlerImageConnections(), value),
   });
 }
@@ -292,7 +292,7 @@ export function useNoodlerEligibleAccounts(
   });
 }
 
-export type NoodlerProfilePost =
+export type SlurpProfilePost =
   | { managed: NoodlerManagedPost; viewerPost: NoodlerPostView | null }
   | { viewerPost: NoodlerPostView };
 
@@ -301,7 +301,7 @@ export function useNoodlerPosts(accountId: string | null, personaId: string | nu
     queryKey: [...noodleKeys.noodlerPosts(accountId ?? "none"), personaId ?? "none"],
     queryFn: () =>
       api.get<{
-        items: NoodlerProfilePost[];
+        items: SlurpProfilePost[];
       }>(
         `/slurp/noodler/accounts/${encodeURIComponent(accountId!)}/posts${personaId ? `?personaId=${encodeURIComponent(personaId)}` : ""}`,
       ).then((page) => page.items),
@@ -316,12 +316,12 @@ export function useNoodlerPosts(accountId: string | null, personaId: string | nu
 export function useNoodlerSubscribers(accountId: string | null) {
   return useInfiniteQuery({
     queryKey: noodleKeys.noodlerSubscribers(accountId ?? "none"),
-    initialPageParam: null as NoodlerPageCursor | null,
+    initialPageParam: null as SlurpPageCursor | null,
     queryFn: ({ pageParam }) =>
       api.get<{
         items: NoodlerSubscriber[];
         total: number;
-        nextCursor: NoodlerPageCursor | null;
+        nextCursor: SlurpPageCursor | null;
       }>(
         `/slurp/noodler/accounts/${encodeURIComponent(accountId!)}/subscribers?limit=20${cursorQuery(pageParam)}`,
       ),
@@ -721,13 +721,13 @@ export function useNoodlerViewer(personaId: string | null, enabled = true) {
           post: NoodlerViewerScope["creators"][number]["posts"][number];
         }>;
         total: number;
-        nextCursor: NoodlerPageCursor | null;
+        nextCursor: SlurpPageCursor | null;
       };
       const scopePromise = api.get<NoodlerViewerScope>(
         `/slurp/noodler/viewer?personaId=${encodedPersonaId}`,
       );
       const feedItems: FeedPage["items"] = [];
-      let cursor: NoodlerPageCursor | null = null;
+      let cursor: SlurpPageCursor | null = null;
       do {
         const page: FeedPage = await api.get<{
           items: Array<{
@@ -735,7 +735,7 @@ export function useNoodlerViewer(personaId: string | null, enabled = true) {
             post: NoodlerViewerScope["creators"][number]["posts"][number];
           }>;
           total: number;
-          nextCursor: NoodlerPageCursor | null;
+          nextCursor: SlurpPageCursor | null;
         }>(
           `/slurp/noodler/viewer/feed?personaId=${encodedPersonaId}&tab=all&limit=20${cursorQuery(cursor)}`,
         );
@@ -817,7 +817,7 @@ export function useToggleNoodlerSubscription() {
       await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
       qc.setQueryData<NoodlerViewerScope | undefined>(
         noodleKeys.viewer(input.personaId),
-        (current) => mergeNoodlerViewerShell(current, scope),
+        (current) => mergeSlurpViewerShell(current, scope),
       );
       return Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
@@ -852,7 +852,7 @@ export function useToggleNoodlerFollow() {
       await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
       qc.setQueryData<NoodlerViewerScope | undefined>(
         noodleKeys.viewer(input.personaId),
-        (current) => mergeNoodlerViewerShell(current, scope),
+        (current) => mergeSlurpViewerShell(current, scope),
       );
       await qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) });
     },
@@ -878,7 +878,7 @@ export function useUnlockNoodlerPost() {
       await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
       qc.setQueryData<NoodlerViewerScope | undefined>(
         noodleKeys.viewer(input.personaId),
-        (current) => mergeNoodlerViewerShell(current, scope),
+        (current) => mergeSlurpViewerShell(current, scope),
       );
       await qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) });
     },

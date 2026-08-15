@@ -34,7 +34,7 @@ import {
 import { cn } from "../../lib/utils";
 import { ConversationMediaPickerPanel } from "../chat/ConversationMediaPickerPanel";
 import type { ChatImage } from "../../hooks/use-gallery";
-import { useNoodlerMediaSrc } from "../../hooks/use-slurp-media-src";
+import { useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 import { Modal } from "../ui/Modal";
 import { Avatar, ProfileInitial } from "./SlurpShell";
 import { formatTime } from "./SlurpDateTime";
@@ -53,7 +53,7 @@ import {
   NoodlePollCard,
   NoodleTextContent,
   NoodleToolButton,
-  NoodlerToolPopover,
+  SlurpToolPopover,
   PostImageEditControls,
   textareaClass,
   type NoodlePostCardCtx,
@@ -62,7 +62,7 @@ import {
 import { NoodlePollComposer } from "./SlurpPollComposer";
 import { PostImageFrame } from "./PostImageCropEditor";
 
-export function LockedNoodlerPostCard({
+export function LockedSlurpPostCard({
   post,
   profile,
   controllerOnly = false,
@@ -110,7 +110,7 @@ export function LockedNoodlerPostCard({
   const revealed = Boolean(demo && demoUnlocked);
   // A locked post's URL resolves to a server-blurred teaser, not the original bytes. Where no
   // teaser can be built the server sends nothing and only the frame renders.
-  const mediaSrc = useNoodlerMediaSrc(
+  const mediaSrc = useSlurpMediaSrc(
     (revealed && demo?.unlockedImageUrl) || post.imageUrl || null,
   );
   // No teaser could be built (the route 404s), so drop the broken <img> and keep the frame.
@@ -394,7 +394,7 @@ function NoodlerFictionalPrice({ amount }: { amount: number }) {
   );
 }
 
-export function NoodlerPostCard({
+export function SlurpCreatorPostCard({
   post,
   ctx,
 }: {
@@ -518,7 +518,7 @@ export function NoodlerPostCard({
     Boolean(ctx.postManagement) && editingPostId === post.id;
   const imageCrop = readNoodlePostImageCrop(post.metadata);
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
-  const postImageSrc = useNoodlerMediaSrc(post.imageUrl);
+  const postImageSrc = useSlurpMediaSrc(post.imageUrl);
   const displayedImageUrl =
     postImageSrc && postImageSrc !== failedImageUrl ? postImageSrc : null;
   // Distinct from displayedImageUrl: while postImageSrc is still resolving (the authenticated
@@ -786,7 +786,7 @@ export function NoodlerPostCard({
         </div>
       </div>
       {!disableReplyImage && activeReplyComposerTool === "image" && (
-        <NoodlerToolPopover
+        <SlurpToolPopover
           title={localizeUi("ui.noodle.noodlehome.attachImage")}
           anchorRef={replyImageToolRef}
           onClose={() => setActiveReplyComposerTool(null)}
@@ -830,7 +830,7 @@ export function NoodlerPostCard({
               {localizeUi("ui.noodle.noodlehome.attachUrl")}
             </button>
           </div>
-        </NoodlerToolPopover>
+        </SlurpToolPopover>
       )}
       {activeReplyComposerTool === "media" && (
         <NoodleAnchoredPopover anchorRef={replyMediaToolRef} wide>
@@ -897,7 +897,7 @@ export function NoodlerPostCard({
                 {author?.displayName ??
                   localizeUi("ui.noodle.noodlepostcard.noodleUser")}
               </button>
-              {/* Locked cards reach this component only after access is granted; pre-unlock teasers use LockedNoodlerPostCard. */}
+              {/* Locked cards reach this component only after access is granted; pre-unlock teasers use LockedSlurpPostCard. */}
               <span
                 title={localizeUi(
                   post.access === "locked"

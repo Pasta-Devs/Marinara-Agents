@@ -7,12 +7,12 @@ import {
   useDeleteNoodlerStageProfile,
   useNoodlerAccounts,
   useNoodlerFanActivityStatus,
-  useNoodlerImageConnections,
+  useSlurpImageConnections,
   useNoodlerReserveStatus,
   useSlurpConnections,
   useSlurpSettings,
   useUpdateNoodlerAutoPosting,
-  useUpdateNoodlerImageConnections,
+  useUpdateSlurpImageConnections,
   useUpdateSlurpSettings,
   type SlurpSettings,
 } from "../../hooks/use-slurp";
@@ -52,11 +52,11 @@ export function SlurpSettings({ navigation, onNavigate }: SlurpSettingsProps) {
   const section = navigation.section ?? "general";
   const save = (patch: Partial<SlurpSettings>) => updateSettings.mutate(patch, { onError: (error) => toast.error(errorMessage(error)) });
   const accountsQuery = useNoodlerAccounts(section === "creators");
-  const imageSettingsQuery = useNoodlerImageConnections(section === "general" || section === "creators");
+  const imageSettingsQuery = useSlurpImageConnections(section === "general" || section === "creators");
   const fanStatusQuery = useNoodlerFanActivityStatus(section === "advanced");
   const reserveStatusQuery = useNoodlerReserveStatus(section === "creators");
   const updateAuto = useUpdateNoodlerAutoPosting();
-  const updateImages = useUpdateNoodlerImageConnections();
+  const updateImages = useUpdateSlurpImageConnections();
   const deleteCreator = useDeleteNoodlerStageProfile();
   const connectionsQuery = useSlurpConnections(section === "general" || section === "creators");
   const imageConnections = (connectionsQuery.data ?? []).filter((connection) => connection.provider === "image_generation");

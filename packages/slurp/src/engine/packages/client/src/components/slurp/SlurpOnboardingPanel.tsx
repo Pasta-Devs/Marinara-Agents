@@ -37,12 +37,12 @@ import { cn, generateClientId } from "../../lib/utils";
 import { Modal } from "../ui/Modal";
 import { Avatar, getNoodleAccentStyle, NOODLE_PINK } from "./SlurpShell";
 import {
-  NOODLER_ACTIVITY_PRESETS,
-  NOODLER_DEFAULT_ACTIVITY_PRESET,
-  noodlerActivityPresetPatch,
-  type NoodlerActivityPreset,
+  SLURP_ACTIVITY_PRESETS,
+  SLURP_DEFAULT_ACTIVITY_PRESET,
+  slurpActivityPresetPatch,
+  type SlurpActivityPreset,
 } from "./slurp-activity-presets";
-import { LockedNoodlerPostCard } from "./SlurpCreatorPostCard";
+import { LockedSlurpPostCard } from "./SlurpCreatorPostCard";
 
 type Step = 1 | 2 | 3 | 4 | 5;
 /** The teaching screens that run ahead of the numbered steps on first run. */
@@ -58,8 +58,8 @@ const clampPostsPerDay = (raw: string) =>
   );
 
 const DISCLOSURES: NoodleIdentityDisclosure[] = ["open", "hinted", "secret"];
-const DEFAULT_ACTIVITY_PATCH = noodlerActivityPresetPatch(
-  NOODLER_DEFAULT_ACTIVITY_PRESET,
+const DEFAULT_ACTIVITY_PATCH = slurpActivityPresetPatch(
+  SLURP_DEFAULT_ACTIVITY_PRESET,
 );
 const DEFAULT_POSTS_PER_DAY = DEFAULT_ACTIVITY_PATCH.postsPerDay!;
 
@@ -132,7 +132,7 @@ export function SlurpOnboardingWizard({
   const [setupLane, setSetupLane] = useState<SetupLane>(selectionOnly ? "easy" : null);
   const [postExplored, setPostExplored] = useState(false);
   const [activityChoice, setActivityChoice] =
-    useState<NoodlerActivityPreset>(NOODLER_DEFAULT_ACTIVITY_PRESET);
+    useState<SlurpActivityPreset>(SLURP_DEFAULT_ACTIVITY_PRESET);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectionInitialized, setSelectionInitialized] = useState(false);
   const [disclosure, setDisclosure] =
@@ -187,7 +187,7 @@ export function SlurpOnboardingWizard({
     setIntro(selectionOnly ? null : 0);
     setSetupLane(selectionOnly ? "easy" : null);
     setPostExplored(false);
-    setActivityChoice(NOODLER_DEFAULT_ACTIVITY_PRESET);
+    setActivityChoice(SLURP_DEFAULT_ACTIVITY_PRESET);
     setPostsPerDay(DEFAULT_POSTS_PER_DAY);
     setPostsPerDayDraft(String(DEFAULT_POSTS_PER_DAY));
     setSelected(new Set());
@@ -241,9 +241,9 @@ export function SlurpOnboardingWizard({
       return next;
     });
   };
-  const chooseActivity = (choice: NoodlerActivityPreset) => {
+  const chooseActivity = (choice: SlurpActivityPreset) => {
     setActivityChoice(choice);
-    const patch = noodlerActivityPresetPatch(choice);
+    const patch = slurpActivityPresetPatch(choice);
     setAutoPostingEnabled(patch.autoPostingScheduleEnabled);
     if (patch.postsPerDay !== undefined) {
       setPostsPerDay(patch.postsPerDay);
@@ -640,7 +640,7 @@ export function SlurpOnboardingWizard({
               {/* Capped width: the wizard modal is 3xl, and a full-bleed card makes the demo post
                   read as a page rather than as one item in a feed. */}
               <div className="mx-auto max-w-sm overflow-hidden rounded-xl border border-[var(--noodle-divider)] max-sm:max-w-[18rem]">
-                <LockedNoodlerPostCard
+                <LockedSlurpPostCard
                   key={disclosure}
                   post={{
                     ...DEMO_POST,
@@ -680,7 +680,7 @@ export function SlurpOnboardingWizard({
                 help={t("ui.noodle.noodlerwizard.intro.activity.help")}
               />
               <div className="grid gap-2 sm:grid-cols-2">
-                {NOODLER_ACTIVITY_PRESETS.map((choice) => (
+                {SLURP_ACTIVITY_PRESETS.map((choice) => (
                   <button
                     key={choice}
                     type="button"

@@ -80,7 +80,7 @@ import {
   useUseNoodlerSourceAvatar,
   useRemoveNoodlerAvatar,
   type NoodlerContentFormat,
-  type NoodlerProfilePost,
+  type SlurpProfilePost,
   type NoodlerPostDraftImage,
 } from "../../hooks/use-slurp";
 import { useActivePersona, useCharacterGroups, usePersonas } from "../../hooks/use-creator-personas";
@@ -102,20 +102,20 @@ import {
   type NoodlePostImageUpdate,
   useNoodlePostCardController,
 } from "./SlurpPostCard";
-import { LockedNoodlerPostCard, NoodlerPostCard } from "./SlurpCreatorPostCard";
+import { LockedSlurpPostCard, SlurpCreatorPostCard } from "./SlurpCreatorPostCard";
 import { ChatImageLightbox } from "../chat/ChatImageLightbox";
-import { useNoodlerMediaSrc } from "../../hooks/use-slurp-media-src";
+import { useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
 import { summarizeRefreshOutcomes } from "./slurp-auto-post";
 import { SlurpOnboardingWizard } from "./SlurpOnboardingPanel";
 import { SlurpAgeGate } from "./SlurpAgeGate";
 import {
-  NOODLER_QUIETER_ACTIVITY_PRESET,
-  noodlerPostsPerDayForPreset,
+  SLURP_QUIETER_ACTIVITY_PRESET,
+  slurpPostsPerDayForPreset,
 } from "./slurp-activity-presets";
 
 /** Resolved once from the shared preset table so "quieter" means the same thing everywhere. */
-const NOODLER_QUIETER_POSTS_PER_DAY = noodlerPostsPerDayForPreset(
-  NOODLER_QUIETER_ACTIVITY_PRESET,
+const SLURP_QUIETER_POSTS_PER_DAY = slurpPostsPerDayForPreset(
+  SLURP_QUIETER_ACTIVITY_PRESET,
 );
 import {
   Avatar,
@@ -1631,7 +1631,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
                   onClick={makeQuieter}
                   disabled={quieterPending}
                   title={localizeUi("ui.noodle.noodlerhome.makeNoodlerQuieterDetail", {
-                    count: NOODLER_QUIETER_POSTS_PER_DAY,
+                    count: SLURP_QUIETER_POSTS_PER_DAY,
                   })}
                   className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -2722,7 +2722,7 @@ function StageProfileView({
   onAccessChange,
 }: {
   profile: NoodlerManagedStageProfile;
-  posts: NoodlerProfilePost[];
+  posts: SlurpProfilePost[];
   viewerCreator: NonNullable<ReturnType<typeof useNoodlerViewer>["data"]>["creators"][number] | null;
   viewerAccount: NoodleAccount | null;
   slurpSettings: ReturnType<typeof useSlurpSettings>["data"] | null;
@@ -2762,7 +2762,7 @@ function StageProfileView({
   onAccessChange: (access: NoodlerManagedStageProfile["access"]) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
-  const bannerSrc = useNoodlerMediaSrc(profile.bannerUrl);
+  const bannerSrc = useSlurpMediaSrc(profile.bannerUrl);
   const [accessSettingsOpen, setAccessSettingsOpen] = useState(false);
   const [automationOpen, setAutomationOpen] = useState(false);
   const updateAutoPosting = useUpdateNoodlerAutoPosting();
@@ -2895,7 +2895,7 @@ function StageProfileView({
       ) : visiblePosts.length > 0 ? (
         visiblePosts.map((item) =>
           item.kind === "locked" || item.kind === "controller-locked" ? (
-            <LockedNoodlerPostCard
+            <LockedSlurpPostCard
               key={item.post.id}
               post={item.post}
               profile={profile}
@@ -2934,10 +2934,10 @@ function StageProfileView({
                   {localizeUi("ui.noodle.stageprofileview.hide")}
                 </button>
               </div>
-              <NoodlerPostCard post={item.model} ctx={{ ...postCardCtx, personaAccount: null, postManagement: true }} />
+              <SlurpCreatorPostCard post={item.model} ctx={{ ...postCardCtx, personaAccount: null, postManagement: true }} />
             </div>
           ) : (
-            <NoodlerPostCard
+            <SlurpCreatorPostCard
               key={item.model.id}
               post={item.model}
               ctx={{
@@ -3625,7 +3625,7 @@ function ViewerHub({
   const dividerIndex = lastNewIndex >= 0 && lastNewIndex < feed.length - 1 ? lastNewIndex + 1 : -1;
   const renderFeedPost = ({ post, creator }: (typeof searchResults)[number]) =>
     post.locked ? (
-      <LockedNoodlerPostCard
+      <LockedSlurpPostCard
         key={post.id}
         post={post}
         profile={creator.profile}
@@ -3637,7 +3637,7 @@ function ViewerHub({
         onOpenProfile={postCardCtx.openAuthorProfile}
       />
     ) : (
-      <NoodlerPostCard
+      <SlurpCreatorPostCard
         key={post.id}
         post={toNoodlePostCardModel(post, creator.profile)}
         ctx={{

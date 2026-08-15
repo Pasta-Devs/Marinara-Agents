@@ -947,7 +947,7 @@ export function NoodleAnchoredPopover({
   );
 }
 
-export function NoodlerToolPopover({
+export function SlurpToolPopover({
   title,
   onClose,
   children,

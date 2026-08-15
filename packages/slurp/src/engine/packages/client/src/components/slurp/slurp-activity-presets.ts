@@ -10,14 +10,14 @@
  * turn auto-posting off instead.
  */
 
-export type NoodlerActivityPreset =
+export type SlurpActivityPreset =
   | "manual"
   | "occasional"
   | "lively"
   | "veryActive";
 
 /** Ordered quietest-first, which is also the order the onboarding wizard offers them in. */
-export const NOODLER_ACTIVITY_PRESETS: readonly NoodlerActivityPreset[] = [
+export const SLURP_ACTIVITY_PRESETS: readonly SlurpActivityPreset[] = [
   "manual",
   "occasional",
   "lively",
@@ -25,8 +25,8 @@ export const NOODLER_ACTIVITY_PRESETS: readonly NoodlerActivityPreset[] = [
 ] as const;
 
 /** Posts per day for each preset. `manual` has none: it disables automatic posting. */
-export const NOODLER_ACTIVITY_PRESET_POSTS_PER_DAY: Record<
-  Exclude<NoodlerActivityPreset, "manual">,
+export const SLURP_ACTIVITY_PRESET_POSTS_PER_DAY: Record<
+  Exclude<SlurpActivityPreset, "manual">,
   number
 > = {
   occasional: 2,
@@ -35,18 +35,18 @@ export const NOODLER_ACTIVITY_PRESET_POSTS_PER_DAY: Record<
 };
 
 /** The shipped pace. Confirmed product decision: at most four posts a day across all Creators. */
-export const NOODLER_DEFAULT_ACTIVITY_PRESET: NoodlerActivityPreset = "lively";
+export const SLURP_DEFAULT_ACTIVITY_PRESET: SlurpActivityPreset = "lively";
 
 /** One step quieter than the default, used by the one-click calm-down action. */
-export const NOODLER_QUIETER_ACTIVITY_PRESET: Exclude<
-  NoodlerActivityPreset,
+export const SLURP_QUIETER_ACTIVITY_PRESET: Exclude<
+  SlurpActivityPreset,
   "manual"
 > = "occasional";
 
-export function noodlerPostsPerDayForPreset(
-  preset: Exclude<NoodlerActivityPreset, "manual">,
+export function slurpPostsPerDayForPreset(
+  preset: Exclude<SlurpActivityPreset, "manual">,
 ): number {
-  return NOODLER_ACTIVITY_PRESET_POSTS_PER_DAY[preset];
+  return SLURP_ACTIVITY_PRESET_POSTS_PER_DAY[preset];
 }
 
 /**
@@ -54,30 +54,30 @@ export function noodlerPostsPerDayForPreset(
  * A player who typed an exact number keeps it: the settings UI shows no preset as selected
  * rather than silently rounding their choice to the nearest one.
  */
-export function noodlerActivityPresetForSettings(input: {
+export function slurpActivityPresetForSettings(input: {
   autoPostingScheduleEnabled: boolean;
   postsPerDay: number;
-}): NoodlerActivityPreset | null {
+}): SlurpActivityPreset | null {
   if (!input.autoPostingScheduleEnabled) return "manual";
   const match = (
-    Object.keys(NOODLER_ACTIVITY_PRESET_POSTS_PER_DAY) as Array<
-      Exclude<NoodlerActivityPreset, "manual">
+    Object.keys(SLURP_ACTIVITY_PRESET_POSTS_PER_DAY) as Array<
+      Exclude<SlurpActivityPreset, "manual">
     >
   ).find(
     (preset) =>
-      NOODLER_ACTIVITY_PRESET_POSTS_PER_DAY[preset] === input.postsPerDay,
+      SLURP_ACTIVITY_PRESET_POSTS_PER_DAY[preset] === input.postsPerDay,
   );
   return match ?? null;
 }
 
 /** The settings patch a preset implies. Manual turns the scheduler off and leaves the rate alone. */
-export function noodlerActivityPresetPatch(preset: NoodlerActivityPreset): {
+export function slurpActivityPresetPatch(preset: SlurpActivityPreset): {
   autoPostingScheduleEnabled: boolean;
   postsPerDay?: number;
 } {
   if (preset === "manual") return { autoPostingScheduleEnabled: false };
   return {
     autoPostingScheduleEnabled: true,
-    postsPerDay: noodlerPostsPerDayForPreset(preset),
+    postsPerDay: slurpPostsPerDayForPreset(preset),
   };
 }

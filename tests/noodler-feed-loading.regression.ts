@@ -44,7 +44,7 @@ const postsHook = hooks.slice(
   hooks.indexOf("export function useNoodlerPosts"),
   hooks.indexOf("export function useCreateNoodlerStageProfile"),
 );
-assert.match(postsHook, /items: NoodlerProfilePost\[\]/u);
+assert.match(postsHook, /items: SlurpProfilePost\[\]/u);
 assert.match(postsHook, /personaId: string \| null/u);
 assert.match(postsHook, /page\.items/u);
 
