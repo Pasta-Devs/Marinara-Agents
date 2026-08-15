@@ -999,14 +999,15 @@ export function SlurpOnboardingWizard({
                           </span>
                           <select
                             value={exceptions[account.id] ?? disclosure}
-                            onChange={(event) =>
-                              setExceptions((current) => ({
+                             onChange={(event) =>
+                               setExceptions((current) => ({
                                 ...current,
                                 [account.id]: event.target
                                   .value as NoodleIdentityDisclosure,
-                              }))
-                            }
-                            className="h-8 rounded-md border border-[#5b3a52] bg-[var(--background)] px-2"
+                               }))
+                             }
+                             style={{ colorScheme: "dark" }}
+                             className="h-8 rounded-md border border-[#ff7ec1]/45 bg-[#17121b] px-2 text-[#fff7fc] color-scheme-dark"
                           >
                             {DISCLOSURES.map((value) => (
                               <option key={value} value={value}>
@@ -1061,19 +1062,20 @@ export function SlurpOnboardingWizard({
                         max={NOODLER_POSTS_PER_DAY_MAX}
                         value={postsPerDayDraft}
                         onChange={(event) => setPostsPerDayDraft(event.target.value)}
-                        onBlur={() => {
+                         onBlur={() => {
                           const value = clampPostsPerDay(postsPerDayDraft);
                           setPostsPerDay(value);
                           setPostsPerDayDraft(String(value));
                         }}
-                        className="mt-2 h-11 w-28 rounded-md border border-[#5b3a52] bg-[var(--background)] px-3"
+                         style={{ colorScheme: "dark" }}
+                         className="mt-2 h-11 w-28 rounded-md border border-[#ff7ec1]/45 bg-[#17121b] px-3 text-[#fff7fc] color-scheme-dark"
                       />
                     </label>
                     <label className="flex min-h-12 items-center gap-3 rounded-md border border-[#5b3a52] px-3">
                       <input
                         type="checkbox"
                         checked={nightQuiet}
-                        onChange={(event) =>
+                       onChange={(event) =>
                           setNightQuiet(event.target.checked)
                         }
                         className="h-4 w-4 accent-[#ff7ec1]"
@@ -1157,9 +1159,10 @@ export function SlurpOnboardingWizard({
                       onChange={(event) =>
                         setDisclosure(
                           event.target.value as NoodleIdentityDisclosure,
-                        )
-                      }
-                      className="h-9 min-w-0 max-w-[65%] rounded-md border border-[#5b3a52] bg-[var(--background)] px-2 text-sm"
+                         )
+                       }
+                       style={{ colorScheme: "dark" }}
+                       className="h-9 min-w-0 max-w-[65%] rounded-md border border-[#ff7ec1]/45 bg-[#17121b] px-2 text-sm text-[#fff7fc] color-scheme-dark"
                     >
                       {DISCLOSURES.map((value) => (
                         <option key={value} value={value}>
