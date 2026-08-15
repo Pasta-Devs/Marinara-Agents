@@ -127,7 +127,7 @@ test.describe("standalone Slurp package", () => {
               handle: `slurp_mari_${suffix}`,
               bio: "Standalone Slurp package browser proof.",
               stagePersonality: "Knowing, playful, and scientifically precise.",
-              disclosureMode: "hinted",
+              disclosureMode: "open",
             },
           },
         },
@@ -153,6 +153,8 @@ test.describe("standalone Slurp package", () => {
 
       await page.addInitScript(
         ({ personaId }) => {
+          const bootKey = "marinara:slurp:test-bootstrapped";
+          if (sessionStorage.getItem(bootKey)) return;
           localStorage.setItem(
             "marinara:slurp:ui",
             JSON.stringify({
@@ -160,6 +162,7 @@ test.describe("standalone Slurp package", () => {
               viewerPersonaId: personaId,
             }),
           );
+          sessionStorage.setItem(bootKey, "true");
         },
         { personaId: persona.id },
       );
@@ -188,7 +191,12 @@ test.describe("standalone Slurp package", () => {
       await page.reload();
       await openSlurp(page);
       await slurp.getByRole("button", { name: "New profile" }).click();
-      await expect(slurp.getByText(personaName, { exact: true })).toBeVisible();
+      await expect(
+        slurp.getByRole("button", {
+          name: `S ${personaName} @slurp_viewer_${suffix} persona`,
+          exact: true,
+        }),
+      ).toBeVisible();
       expect(errors).toEqual([]);
     } finally {
       if (postId) {
@@ -203,7 +211,9 @@ test.describe("standalone Slurp package", () => {
           })
           .catch(() => undefined);
       }
-      await page.request.delete(`/api/characters/personas/${persona.id}`);
+      await page.request
+        .delete(`/api/characters/personas/${persona.id}`, { timeout: 5_000 })
+        .catch(() => undefined);
     }
   });
 });

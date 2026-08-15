@@ -7,7 +7,7 @@
   "localizations": {
     "de": {
       "name": "Slurp",
-      "description": "Erstelle ein lokales Creator-Profil aus einem Engine-Chrakter oder einer Engine-Persona, veröffentliche öffentliche oder gesperrte Beiträge und simuliere Abonnements und Publikumsaktivität. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Slurp.",
+      "description": "Erstelle ein lokales Creator-Profil aus einem Engine-Charakter oder einer Engine-Persona, veröffentliche öffentliche oder gesperrte Beiträge und simuliere Abonnements und Publikumsaktivität. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Slurp.",
       "homeBrowserTab": {
         "label": "Slurp",
         "ariaLabel": "Slurp öffnen"
@@ -31,7 +31,7 @@
     }
   },
   "engine": {
-    "min": "2.4.2",
+    "min": "2.4.3",
     "maxExclusive": "4.0.0"
   },
   "kind": [
@@ -62,13 +62,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "e235abf25a76f5cab7e39aa22c0f289482bd9b39fcec9dd1bbdc1ac706554ffe",
-      "bytes": 2495152
+      "sha256": "155b379795cde815851f3f24223e00287ff28a796f786eef3f137c1d3829ba8f",
+      "bytes": 2495778
     },
     {
       "path": "client.js",
-      "sha256": "f03b40b643f9f7cb0d347cee05ec379df43b1c21007efe8be1487f7abbb9198c",
-      "bytes": 2224420
+      "sha256": "30ac228f52fbee7114c90894e41b3f77669638a24602fc93b0d68e126f162338",
+      "bytes": 2224582
     },
     {
       "path": "slurp-klusek.png",

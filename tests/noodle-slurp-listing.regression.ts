@@ -7,6 +7,7 @@ const manifest = JSON.parse(
   id: string;
   name: string;
   description: string;
+  engine?: { min?: string };
   contributions?: {
     homeBrowserTab?: {
       label?: string;
@@ -27,6 +28,7 @@ const catalog = JSON.parse(readFileSync("catalog/catalog.json", "utf8")) as {
 
 assert.equal(manifest.id, "slurp");
 assert.equal(manifest.name, "Slurp");
+assert.equal(manifest.engine?.min, "2.4.3");
 assert.match(manifest.description, /standalone successor to NoodleR/i);
 assert.match(manifest.description, /Creator profile/i);
 assert.deepEqual(manifest.contributions?.homeBrowserTab, {

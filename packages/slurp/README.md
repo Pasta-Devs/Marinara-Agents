@@ -6,6 +6,8 @@ The shipped default guidance is adult-first. It can produce flirty, suggestive, 
 
 Find the package in **Agents -> Download Agents**. After installation and an Engine restart, Slurp appears as its own tab in **Home**. Slurp starts with empty package-owned state.
 
+Slurp requires Marinara Engine 2.4.3 or newer because that release registers its package-owned storage tables.
+
 Slurp uses direct Engine source references. It does not import Noodle account identifiers or Noodle storage. Viewer state is scoped to an Engine persona. A deleted source pauses its Slurp profile and posts.
 
 All profiles, posts, subscriptions, unlocks, and audience actions are local roleplay state. Prices are fictional. They do not represent real payments, identity, or access control.

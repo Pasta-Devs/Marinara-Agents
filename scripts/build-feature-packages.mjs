@@ -221,7 +221,7 @@ const features = [
   {
     id: "slurp",
     version: "1.0.0",
-    minEngineVersion: "2.4.2",
+    minEngineVersion: "2.4.3",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
     description:
@@ -230,7 +230,7 @@ const features = [
       de: {
         name: "Slurp",
         description:
-          "Erstelle ein lokales Creator-Profil aus einem Engine-Chrakter oder einer Engine-Persona, veröffentliche öffentliche oder gesperrte Beiträge und simuliere Abonnements und Publikumsaktivität. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Slurp.",
+          "Erstelle ein lokales Creator-Profil aus einem Engine-Charakter oder einer Engine-Persona, veröffentliche öffentliche oder gesperrte Beiträge und simuliere Abonnements und Publikumsaktivität. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Slurp.",
         homeBrowserTab: {
           label: "Slurp",
           ariaLabel: "Slurp öffnen",

@@ -41,4 +41,14 @@ for (const [file, source] of noodleSources) {
   }
 }
 
+const sharedNoodlePromptRegistry = readFileSync(
+  join(root, "sources/engine/packages/server/src/services/prompt-overrides/registry/noodle.ts"),
+  "utf8",
+);
+assert.match(
+  sharedNoodlePromptRegistry,
+  /export const NOODLE_IMAGE_INTERPRET\b/u,
+  "the shared extraction snapshot must define the image prompt override imported by Slurp",
+);
+
 console.log("Noodle extraction import regressions passed.");

@@ -24,6 +24,16 @@ interface ImageSize {
   height: number;
 }
 
+function safeImageSource(source: string): string {
+  try {
+    const url = new URL(source, window.location.origin);
+    if (!["blob:", "http:", "https:"].includes(url.protocol)) return "";
+    return encodeURI(url.href);
+  } catch {
+    return "";
+  }
+}
+
 const ASPECT_OPTIONS: Array<{ value: CropAspect; labelKey: string }> = [
   {
     value: "original",
@@ -82,7 +92,7 @@ export function PostImageCropEditor({
   );
 
   useEffect(() => {
-    if (imageRef.current) imageRef.current.src = sourceUrl;
+    if (imageRef.current) imageRef.current.src = safeImageSource(sourceUrl);
   }, [sourceUrl]);
 
   useEffect(() => {
@@ -438,7 +448,7 @@ function ImageWithSource({
 }: { source: string } & Omit<React.ComponentProps<"img">, "src">) {
   const imageRef = useRef<HTMLImageElement>(null);
   useEffect(() => {
-    if (imageRef.current) imageRef.current.src = source;
+    if (imageRef.current) imageRef.current.src = safeImageSource(source);
   }, [source]);
   return <img ref={imageRef} {...props} />;
 }
