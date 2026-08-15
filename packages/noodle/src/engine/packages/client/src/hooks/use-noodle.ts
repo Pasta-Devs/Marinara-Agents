@@ -203,11 +203,11 @@ export function useUpdateNoodleAccountFollow() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, targetAccountId, ...input }: { id: string; targetAccountId: string } & NoodleAccountFollowUpdateInput) =>
-      api.patch<NoodleAccount>(
+      api.patch<{ account: NoodleAccount; changed: boolean }>(
         `/noodle/accounts/${encodeURIComponent(id)}/follows/${encodeURIComponent(targetAccountId)}`,
         input,
       ),
-    onSuccess: (account) => {
+    onSuccess: ({ account }) => {
       qc.setQueryData<NoodleBootstrap | undefined>(
         noodleKeys.bootstrap(),
         (current) =>

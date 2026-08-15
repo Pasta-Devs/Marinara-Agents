@@ -27,17 +27,15 @@ assert.match(panel, /intro === null \? void skip\(\) : setIntro\(null\)/u);
 
 // "zero" is only ever written by that skip. The other saveSettings call decides between "zero"
 // and "completed" from how many creators the run actually produced.
-assert.match(panel, /const skip = async \(\) => \{\s*if \(await saveSettings\("zero"\)\) onClose\(\);/u);
+assert.match(panel, /const skip = async \(\) => \{[\s\S]*?saveSettings\("zero"\)[\s\S]*?onSkipped\?\.\(\)[\s\S]*?onClose\(\);/u);
 assert.match(panel, /await saveSettings\(\s*selected\.size === 0 \? "zero" : "completed",\s*\);/u);
 
-// Adding creators later reuses this wizard; that run must not touch the onboarding flags at all.
-assert.match(panel, /selectionOnly\s*\?\s*\{\}\s*:\s*\{ noodlerOnboardingComplete: true, noodlerOnboardingState: state \}/u);
+// Adding creators later reuses this wizard; its settings write remains Slurp-owned.
+assert.match(panel, /useUpdateSlurpSettings/u);
+assert.match(panel, /autoPostingScheduleEnabled: autoPostingEnabled/u);
 
 // A dismissed run is still incomplete, so the next mount reopens the wizard.
-assert.match(
-  home,
-  /noodlerOnboardingState === "incomplete"\)\s*setOnboardingMode\("first-run"\)/u,
-);
+assert.doesNotMatch(home, /noodlerOnboardingState/u);
 
 // The Easy lane skips steps 2 and 3, so Back from the review step returns to selection rather
 // than dropping the player into a Customize step they never saw.

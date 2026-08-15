@@ -3,9 +3,9 @@ import {
   type NoodleAccount,
   type NoodlePost,
   type NoodleRefreshAttemptKind,
-  type NoodleSettings,
 } from "@marinara-engine/shared";
 import type { DB } from "../../db/connection.js";
+import type { SlurpSettings } from "../storage/slurp.storage.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
 import {
@@ -61,7 +61,7 @@ type PublicGenerationInput = {
   connection: PublicGenerationConnection;
   imageConnection: PublicGenerationConnection | null;
   imageCaptioning: ImageCaptioningRuntime;
-  settings: NoodleSettings;
+  settings: SlurpSettings;
   personaId?: string;
   timeZone?: string;
   debugMode: boolean;

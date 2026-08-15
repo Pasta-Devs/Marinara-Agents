@@ -4,7 +4,6 @@ import {
   type NoodleAccount,
   type NoodleGeneratedRefresh,
   type NoodleInteractionType,
-  type NoodleSettings,
 } from "@marinara-engine/shared";
 import type { DB } from "../../db/connection.js";
 import { logger } from "../../lib/logger.js";
@@ -13,7 +12,7 @@ import { createCharactersStorage } from "../storage/characters.storage.js";
 import { createChatsStorage } from "../storage/chats.storage.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createGalleryStorage } from "../storage/gallery.storage.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpStorage, type SlurpSettings } from "../storage/slurp.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
 import { canCreateGeneratedNoodleInteraction } from "./noodle-interaction-policy.js";
 import {
@@ -110,7 +109,7 @@ export async function prepareGeneratedNoodleMedia(input: {
   generated: NoodleGeneratedRefresh;
   selectedParticipants: NoodleAccount[];
   personaAccount: NoodleAccount | null;
-  settings: NoodleSettings;
+  settings: SlurpSettings;
   imageConnection: ImageConnection | null;
   debugMode: boolean;
   reviewImagePromptsBeforeSend: boolean;
@@ -241,7 +240,7 @@ export async function persistGeneratedNoodleActivity(input: {
   generated: NoodleGeneratedRefresh;
   selectedParticipants: NoodleAccount[];
   personaAccount: NoodleAccount | null;
-  settings: NoodleSettings;
+  settings: SlurpSettings;
   runId: string;
   recalledPostIds: string[];
   preparedMedia: PreparedGeneratedNoodleMedia;
@@ -477,7 +476,7 @@ export async function commitGeneratedNoodleActivity(input: {
   generated: NoodleGeneratedRefresh;
   selectedParticipants: NoodleAccount[];
   personaAccount: NoodleAccount | null;
-  settings: NoodleSettings;
+  settings: SlurpSettings;
   runId: string;
   result: string;
   recalledPostIds: string[];

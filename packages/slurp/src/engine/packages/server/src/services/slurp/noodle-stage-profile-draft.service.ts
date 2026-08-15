@@ -202,10 +202,10 @@ export async function generateNoodlerStageProfileDraft(
   const noodlerAccount = input.request.noodlerAccountId
     ? await noodle.getNoodlerAccountById(input.request.noodlerAccountId)
     : null;
-  const publicAccount = noodlerAccount?.slurpSourceAccountId
-    ? await noodle.getAccountById(noodlerAccount.slurpSourceAccountId)
-    : input.request.slurpSourceAccountId
-      ? await noodle.getAccountById(input.request.slurpSourceAccountId)
+  const publicAccount = noodlerAccount
+    ? await noodle.resolveAccountSource(noodlerAccount)
+    : input.request.noodleAccountId
+      ? await noodle.resolveSourceByEntityId(input.request.noodleAccountId)
       : null;
   if (!publicAccount) throw new Error("Noodle source account not found.");
   const characters = createCharactersStorage(db);

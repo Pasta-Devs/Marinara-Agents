@@ -1,12 +1,11 @@
 import type {
   NoodleAccount,
   NoodleIdentityDisclosure,
-  NoodleSettings,
 } from "@marinara-engine/shared";
 import type { DB } from "../../db/connection.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { newId } from "../../utils/id-generator.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpStorage, type SlurpSettings } from "../storage/slurp.storage.js";
 import { getErrorMessage } from "./noodle-public-support.js";
 import {
   NOODLER_MEDIA_PREFIX,
@@ -69,7 +68,12 @@ export async function generateNoodlerPostImage(input: {
   disclosureMode: NoodleIdentityDisclosure;
   postContent: string;
   draftPrompt: string;
-  settings: NoodleSettings;
+  settings: Pick<
+    SlurpSettings,
+    | "imageGenerationPrompt"
+    | "imageGenerationUseAvatarReferences"
+    | "imageGenerationIncludeDescriptions"
+  >;
   characters: ReturnType<typeof createCharactersStorage>;
   promptOverrides: ReturnType<typeof createPromptOverridesStorage>;
   imageConnection: ImageConnection;
@@ -345,9 +349,7 @@ export function createNoodlerNoodleImagesService(db: DB) {
         }
         const disclosureMode =
           account.settings.privacy.identityDisclosure ?? "secret";
-        const linkedPublicAccount = account.slurpSourceAccountId
-          ? await noodle.getAccountById(account.slurpSourceAccountId)
-          : null;
+        const linkedPublicAccount = await noodle.resolveAccountSource(account);
 
         let claimOwned = true;
         const renewClaim = async () => {
@@ -428,7 +430,8 @@ export function createNoodlerNoodleImagesService(db: DB) {
         if (
           !fresh ||
           freshDisclosure !== disclosureMode ||
-          (fresh.slurpSourceAccountId ?? null) !== (account.slurpSourceAccountId ?? null)
+          fresh.sourceKind !== account.sourceKind ||
+          fresh.sourceEntityId !== account.sourceEntityId
         ) {
           image.stagedMedia?.compensate();
           await noodle.finalizePostImageClaim(claimed.id, claimToken, {

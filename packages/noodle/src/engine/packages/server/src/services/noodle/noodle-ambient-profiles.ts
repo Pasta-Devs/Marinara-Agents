@@ -1,5 +1,5 @@
 import { AMBIENT_NOODLE_ENTITY_IDS, type NoodleAccount } from "@marinara-engine/shared";
-import { createNoodleStorage } from "../storage/slurp.storage.js";
+import { createNoodleStorage } from "../storage/noodle.storage.js";
 
 /** Seed copy for the shared ambient roster. Keyed by entity ID so a roster change fails to compile here. */
 const AMBIENT_NOODLE_SEED_COPY: Record<

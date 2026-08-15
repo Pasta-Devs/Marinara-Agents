@@ -1,6 +1,6 @@
 // NoodleR enable/verification surface: a plain explainer, then the joke "age verification".
 // The explainer runs first because this modal is the opt-in — the user has to be able to learn
-// what NoodleR is, and back out, before `enableNoodler` is written.
+// what NoodleR is, and back out, before Creator setup starts.
 // The card itself is purely presentational: no real input is collected — it fills itself — so
 // there is zero PII and nothing to validate.
 import {

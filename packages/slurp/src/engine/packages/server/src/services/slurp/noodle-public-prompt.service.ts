@@ -3,13 +3,12 @@ import {
   resolveMacros,
   type NoodleAccount,
   type NoodlePost,
-  type NoodleSettings,
   type WeekSchedule,
 } from "@marinara-engine/shared";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
 import { createChatsStorage } from "../storage/chats.storage.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpStorage, type SlurpSettings } from "../storage/slurp.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
 import {
   loadPrompt,
@@ -350,7 +349,7 @@ export async function buildRefreshPrompt(input: {
   promptOverrides: ReturnType<typeof createPromptOverridesStorage>;
   activeAccounts: NoodleAccount[];
   personaAccount: NoodleAccount | null;
-  settings: NoodleSettings;
+  settings: SlurpSettings;
   timeZone?: string;
   imageCaptioning: ImageCaptioningRuntime;
   debugMode: boolean;

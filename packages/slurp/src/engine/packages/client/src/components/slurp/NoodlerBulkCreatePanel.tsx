@@ -29,10 +29,9 @@ import {
 import { useTranslation as useUiTranslation } from "react-i18next";
 import {
   useBulkCreateNoodlerStageProfiles,
-  useNoodle,
   useNoodlerEligibleAccounts,
   useRefreshTargetedNoodlerCreatorsNow,
-  useUpdateNoodleSettings,
+  useUpdateSlurpSettings,
 } from "../../hooks/use-slurp";
 import { cn, generateClientId } from "../../lib/utils";
 import { Modal } from "../ui/Modal";
@@ -102,6 +101,7 @@ interface WizardProps {
   selectionOnly?: boolean;
   onClose: () => void;
   onComplete?: () => void;
+  onSkipped?: () => void;
 }
 
 function disclosureLabel(
@@ -116,13 +116,13 @@ export function NoodlerOnboardingWizard({
   selectionOnly = false,
   onClose,
   onComplete,
+  onSkipped,
 }: WizardProps) {
   const { t } = useUiTranslation();
-  const { data } = useNoodle(open);
   const eligible = useNoodlerEligibleAccounts("", "character", open);
   const bulkCreate = useBulkCreateNoodlerStageProfiles();
-  const updateSettings = useUpdateNoodleSettings();
   const refreshTargeted = useRefreshTargetedNoodlerCreatorsNow();
+  const updateSlurpSettings = useUpdateSlurpSettings();
   const accounts = useMemo(
     () => eligible.data?.pages.flatMap((page) => page.items) ?? [],
     [eligible.data?.pages],
@@ -135,7 +135,6 @@ export function NoodlerOnboardingWizard({
     useState<NoodlerActivityPreset>(NOODLER_DEFAULT_ACTIVITY_PRESET);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectionInitialized, setSelectionInitialized] = useState(false);
-  const [settingsSeeded, setSettingsSeeded] = useState(false);
   const [disclosure, setDisclosure] =
     useState<NoodleIdentityDisclosure>("hinted");
   const [exceptions, setExceptions] = useState<
@@ -193,7 +192,6 @@ export function NoodlerOnboardingWizard({
     setPostsPerDayDraft(String(DEFAULT_POSTS_PER_DAY));
     setSelected(new Set());
     setSelectionInitialized(false);
-    setSettingsSeeded(false);
     setDisclosure("hinted");
     setExceptions({});
     setAutoPostingEnabled(true);
@@ -207,14 +205,6 @@ export function NoodlerOnboardingWizard({
     setCompletion(null);
     setExecutionId(generateClientId());
   }, [open, selectionOnly]);
-
-  useEffect(() => {
-    if (!open || settingsSeeded || !data?.settings) return;
-    setPostsPerDay(data.settings.postsPerDay);
-    setPostsPerDayDraft(String(data.settings.postsPerDay));
-    setNightQuiet(data.settings.noodlerNightQuiet);
-    setSettingsSeeded(true);
-  }, [data?.settings, open, settingsSeeded]);
 
   const { fetchNextPage, hasNextPage, isFetching } = eligible;
   useEffect(() => {
@@ -311,18 +301,18 @@ export function NoodlerOnboardingWizard({
       );
     }
   };
-  // Settings are recoverable from the settings panel, so a failure here must not block the
-  // rest of the flow — but it must also never be the reason onboarding counts as done.
   const saveSettings = async (state: "zero" | "completed") => {
     try {
-      await updateSettings.mutateAsync({
+      await updateSlurpSettings.mutateAsync({
         postsPerDay,
-        noodlerNightQuiet: nightQuiet,
-        // Adding creators later reuses this wizard, but it is not onboarding: leave the
-        // onboarding flags alone so a completed run never gets rewound to "zero".
-        ...(selectionOnly
-          ? {}
-          : { noodlerOnboardingComplete: true, noodlerOnboardingState: state }),
+        autoPostingScheduleEnabled: autoPostingEnabled,
+        nightQuiet,
+        onboarding: state === "completed" ? "completed" : "completed",
+        imageGenerationUseAvatarReferences: imagesEnabled,
+        generationGuidance:
+          state === "completed"
+            ? "The Creator should publish in its own voice and balance public updates with locked posts."
+            : undefined,
       });
       return true;
     } catch {
@@ -330,7 +320,10 @@ export function NoodlerOnboardingWizard({
     }
   };
   const skip = async () => {
-    if (await saveSettings("zero")) onClose();
+    if (await saveSettings("zero")) {
+      onSkipped?.();
+      onClose();
+    }
   };
   const finish = async () => {
     let newIds: string[] = [];
@@ -338,7 +331,7 @@ export function NoodlerOnboardingWizard({
     try {
       {
         const result = await bulkCreate.mutateAsync({
-          sourceAccountIds: [...selected],
+          noodleAccountIds: [...selected],
           executionId,
           disclosureMode: disclosure,
           disclosureExceptions: exceptions,
@@ -404,7 +397,6 @@ export function NoodlerOnboardingWizard({
   };
   const pending =
     bulkCreate.isPending ||
-    updateSettings.isPending ||
     refreshTargeted.isPending;
   const summaries =
     setupLane === "easy"
@@ -1361,7 +1353,6 @@ export function NoodlerOnboardingWizard({
               {completion === "settingsFailed" && (
                 <button
                   type="button"
-                  disabled={updateSettings.isPending}
                   onClick={() => {
                     void (async () => {
                       if (
@@ -1389,7 +1380,7 @@ export function NoodlerOnboardingWizard({
                 >
                   <RefreshCw
                     size={15}
-                    className={updateSettings.isPending ? "animate-spin" : ""}
+                    className=""
                   />
                   {t("ui.noodle.noodlerwizard.retrySettings")}
                 </button>

@@ -459,8 +459,6 @@ export interface NoodleShellProps {
   onOpenSettings: () => void;
   /** Omit on surfaces with no scoped equivalent. */
   onCompose?: (opener: HTMLElement) => void;
-  /** Shows the Noodle/NoodleR mode toggle only once the user has turned NoodleR on in settings. */
-  enableNoodler?: boolean;
   /** Optional right-hand rail (search box, suggestions, etc). Omitted entirely on surfaces that don't need one. */
   rightRail?: ReactNode;
   /** Theme-dependent overlays (lightboxes and modals) that must render inside the token scope. */
@@ -499,7 +497,6 @@ export function NoodleShell({
   onOpenProfile,
   onOpenSettings,
   onCompose,
-  enableNoodler = false,
   rightRail,
   overlays,
   accent = NOODLE_BLUE,
@@ -535,7 +532,7 @@ export function NoodleShell({
   const lastHomeTapAt = useRef(0);
   const onMobileHomeTap = () => {
     const now = Date.now();
-    const switching = enableNoodler && now - lastHomeTapAt.current < 320;
+    const switching = false;
     lastHomeTapAt.current = switching ? 0 : now;
     if (switching) (noodlerActive ? onOpenHome : onOpenNoodler)();
     else onOpenMobileHomeDestination();
@@ -623,7 +620,7 @@ export function NoodleShell({
                   </button>
                 </div>
 
-                {enableNoodler && (
+                {false && (
                   <div className="mt-7">
                     <NoodleModeToggle
                       activeMode={resolvedAppMode}
@@ -835,7 +832,7 @@ export function NoodleShell({
                     className="h-10 w-16"
                   />
                 </div>
-                {enableNoodler && (
+                {false && (
                   <div className="mb-3">
                     <NoodleModeToggle
                       activeMode={resolvedAppMode}
@@ -1120,24 +1117,9 @@ export function NoodleShell({
             <button
               type="button"
               onClick={onMobileHomeTap}
-              aria-label={
-                enableNoodler
-                  ? `${localizeUi("ui.noodle.noodleshell.noodleValue1", {
-                      value1: homeLabel,
-                    })}. ${localizeUi("ui.noodle.noodleshell.doubleTapToSwitchTo", {
-                      mode: otherModeLabel,
-                    })}`
-                  : localizeUi("ui.noodle.noodleshell.noodleValue1", {
-                      value1: homeLabel,
-                    })
-              }
-              title={
-                enableNoodler
-                  ? localizeUi("ui.noodle.noodleshell.doubleTapToSwitchTo", {
-                      mode: otherModeLabel,
-                    })
-                  : undefined
-              }
+              aria-label={localizeUi("ui.noodle.noodleshell.noodleValue1", {
+                value1: homeLabel,
+              })}
               aria-current={homeActive ? "page" : undefined}
               className="relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
             >

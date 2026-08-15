@@ -10,6 +10,7 @@ import {
 import type { DB } from "../../db/connection.js";
 import { wrapContent } from "../prompt/format-engine.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createCharactersStorage } from "../storage/characters.storage.js";
 import { sinceHoursIso } from "./noodle-public-support.js";
 
 export const NOODLE_CARRYOVER_TOKEN_BUDGET = 8192;
@@ -105,11 +106,8 @@ export async function buildRecentSocialMediaActivityBlock(input: {
     if (account.invited) accountIds.add(account.id);
   }
   if (input.personaId) {
-    const personaAccount = await noodle.getAccountByEntity(
-      "persona",
-      input.personaId,
-    );
-    if (personaAccount) accountIds.add(personaAccount.id);
+    const persona = await createCharactersStorage(input.db).getPersona(input.personaId);
+    if (persona) accountIds.add(persona.id);
   }
   if (accountIds.size === 0) return null;
 

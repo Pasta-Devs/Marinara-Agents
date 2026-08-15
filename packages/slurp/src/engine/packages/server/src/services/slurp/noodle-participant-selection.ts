@@ -4,8 +4,8 @@ import {
   type NoodleAccount,
   type NoodleInteraction,
   type NoodlePost,
-  type NoodleSettings,
 } from "@marinara-engine/shared";
+import type { SlurpSettings } from "../storage/slurp.storage.js";
 
 type RandomSource = () => number;
 
@@ -58,7 +58,7 @@ export function collectNoodlePriorityAccountIds(input: {
 
 export function chooseNoodleParticipantAccounts(input: {
   accounts: NoodleAccount[];
-  settings: NoodleSettings;
+  settings: SlurpSettings;
   selectedGroupCharacterIds: ReadonlySet<string>;
   followedAccountIds?: ReadonlySet<string>;
   recentlyActiveAccountIds?: ReadonlySet<string>;

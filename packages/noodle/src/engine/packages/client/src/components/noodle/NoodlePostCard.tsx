@@ -28,7 +28,6 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import {
-  canManageNoodleReply,
   findNoodleTextMentions,
   noodlePollInputSchema,
   readNoodlePostImageCrop,
@@ -196,7 +195,7 @@ export function NoodleTextContent({
 }) {
   const { t: localizeUi, i18n } = useUiTranslation();
   // The public timeline renders 150+ of these, and the parse ran on every render of
-  // every card — the reason returning to Noodle from NoodleR felt slow while the trip
+  // every card, which made returning to the timeline feel slow while the trip
   // out did not. The parse output embeds these callbacks, so memoizing on them
   // directly would either miss every time (they are fresh each render) or freeze a
   // stale handler into the tree. Hold them in a ref and hand the parser a stable
@@ -760,8 +759,7 @@ export function createNoodleLightboxImage(
     chatId: "noodle",
     filePath: safeFilename,
     // Noodle image prompts are generation bookkeeping, not user-facing captions. Passing
-    // them to the shared chat lightbox exposed raw prompt/identifier-like text below both
-    // Noodle and NoodleR images.
+    // them to the shared chat lightbox exposed raw prompt or identifier text below images.
     prompt: "",
     provider: "",
     model: "",
@@ -813,8 +811,7 @@ type NoodleComposerTool = {
   onClick?: () => void;
 };
 
-// Shared composer icon row (image / poll / emoji) so every Noodle surface renders
-// the identical toolbar. NoodleR passes a trailing coin control for monetization settings.
+// Shared composer icon row so every Noodle surface renders the identical toolbar.
 export function NoodleComposerToolRow({
   image,
   poll,
@@ -947,7 +944,7 @@ export function NoodleAnchoredPopover({
   );
 }
 
-export function NoodlerToolPopover({
+export function NoodleToolPopover({
   title,
   onClose,
   children,
@@ -991,7 +988,7 @@ export function NoodlerToolPopover({
 
 /**
  * Reply image attach/upload/lightbox. Hosts that persist reply images pass this; hosts that
- * don't (NoodleR) omit it — the card then hides the attach-image tool, upload, GIF tab, and
+ * do not persist reply media, omit it. The card then hides the attach-image tool, upload, GIF tab, and
  * lightbox instead of the host having to pass discarded setters and dangling refs.
  */
 interface NoodlePostCardMediaCap {
@@ -1006,7 +1003,7 @@ interface NoodlePostCardMediaCap {
   uploadGlobalImages: { isPending: boolean };
 }
 
-/** Editing/deleting replies. Omit on hosts without a reply-management path (NoodleR). */
+/** Editing and deleting replies. */
 interface NoodlePostCardReplyManagementCap {
   editingReplyId: string | null;
   editingReplyContent: string;
@@ -1027,7 +1024,7 @@ interface NoodlePostCardReplyManagementCap {
   canManageReply?: (reply: NoodleInteraction) => boolean;
 }
 
-/** @mention autocomplete in the reply composer. Omit on hosts without mentions (NoodleR). */
+/** @mention autocomplete in the reply composer. */
 interface NoodlePostCardMentionsCap {
   activeReplyMention: ActiveComposerMention | null;
   activeReplyMentionIndex: number;
@@ -1054,12 +1051,6 @@ export type NoodlePostCardModel = Pick<
   authorSnapshot: NoodlePostCardAuthor | null;
   interactions: NoodleInteraction[];
 };
-
-interface NoodlePostCardTitleEditingCap {
-  editingPostTitle: string;
-  setEditingPostTitle: React.Dispatch<React.SetStateAction<string>>;
-  maxLength: number;
-}
 
 export type NoodlePostImageUpdate =
   | { kind: "replace"; file: File; crop: NoodlePostImageCrop }
@@ -1331,8 +1322,6 @@ export interface NoodlePostCardCtx {
   ) => void;
   clearReplyComposer: () => void;
   submitReply: (post: NoodlePostCardModel) => void;
-  /** Present only when the host enables creatorReplyRequest. */
-  creatorReplyRequest?: { asked: boolean; setAsked: (asked: boolean) => void };
   appendToReply: (text: string) => void;
   reactionPendingFor: (
     postId: string,
@@ -1347,8 +1336,6 @@ export interface NoodlePostCardCtx {
   updatePostPending: boolean;
   /** Human controller edit/delete capability. Viewer-only projections set this false. */
   postManagement: boolean;
-  /** NoodleR title editing. Noodle posts omit this capability and remain titleless. */
-  titleEditing?: NoodlePostCardTitleEditingCap;
   /** Existing-poll editing. Poll-less posts do not expose an add-poll path here. */
   pollEditing?: {
     value: NoodlePollInput | null;
@@ -1356,10 +1343,8 @@ export interface NoodlePostCardCtx {
   };
   /** Allow an empty edited body when the existing post has a poll. */
   allowPollOnlyEdits?: boolean;
-  /** Navigate to an author/mention profile. Omit on hosts without profile navigation (NoodleR). */
+  /** Navigate to an author or mention profile. */
   openProfile?: (account: NoodleAccount | null) => void;
-  /** Navigate by NoodleR author ID when no Noodle account object exists. */
-  openAuthorProfile?: (accountId: string) => void;
   /** Vote in a post's poll. Pollless posts never call it. */
   voteInPoll?: (
     post: NoodlePostCardModel,
@@ -1376,7 +1361,7 @@ export interface NoodlePostCardCtx {
   media?: NoodlePostCardMediaCap;
   /**
    * Opening an image fullscreen is not the same capability as attaching one to a reply, so
-   * hosts without the reply-image cap (NoodleR) still get a lightbox by passing this.
+   * Hosts without the reply-image cap can still get a lightbox by passing this.
    */
   setImageLightbox?: React.Dispatch<React.SetStateAction<ChatImage | null>>;
   /** Reply edit/delete capability. Absent → reply management UI stays hidden. */
@@ -1413,15 +1398,8 @@ interface NoodlePostCardControllerOptions {
     input: {
       content: string;
       parentInteractionId: string | null;
-      askForReply: boolean;
     },
   ) => Promise<void>;
-  /**
-   * Show the "Ask for a reply" composer toggle. NoodleR Creators can answer a comment, and that
-   * answer costs a provider request, so the player decides per comment instead of every comment
-   * silently triggering one. Noodle omits this: its authors have no such reply operation.
-   */
-  creatorReplyRequest?: boolean;
   reactionPendingFor: (
     postId: string,
     type: "like" | "repost",
@@ -1433,9 +1411,7 @@ interface NoodlePostCardControllerOptions {
     parentInteractionId?: string | null,
   ) => boolean;
   updatePostPending: boolean;
-  titleMaxLength?: number;
   allowPollOnlyEdits?: boolean;
-  openAuthorProfile?: (accountId: string) => void;
   voteInPoll?: (
     post: NoodlePostCardModel,
     optionId: string,
@@ -1565,7 +1541,6 @@ export function useNoodlePostCardController(
   const [imageLightbox, setImageLightbox] = useState<ChatImage | null>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editingPostContent, setEditingPostContent] = useState("");
-  const [editingPostTitle, setEditingPostTitle] = useState("");
   const [editingPostPoll, setEditingPostPoll] =
     useState<NoodlePollInput | null>(null);
   const [replyPostId, setReplyPostId] = useState<string | null>(null);
@@ -1575,7 +1550,6 @@ export function useNoodlePostCardController(
   const [replyText, setReplyText] = useState("");
   const [replyHasText, setReplyHasText] = useState(false);
   // Defaults on: an unanswered comment is the dull case, so opting out is the deliberate act.
-  const [askForReply, setAskForReply] = useState(true);
   const [activeReplyComposerTool, setActiveReplyComposerTool] =
     useState<ReplyComposerTool | null>(null);
   const [mediaPickerTab, setMediaPickerTab] =
@@ -1594,7 +1568,6 @@ export function useNoodlePostCardController(
     replyValueRef.current = "";
     setReplyHasText(false);
     setActiveReplyComposerTool(null);
-    setAskForReply(true);
     if (replyComposerRef.current) replyComposerRef.current.value = "";
   };
   const cancelEditingPost = () => {
@@ -1653,7 +1626,7 @@ export function useNoodlePostCardController(
     if (!content && !(options.allowPollOnlyEdits && validPoll)) return;
     void options
       .savePost(post, {
-        title: editingPostTitle.trim() || null,
+        title: null,
         content,
         image: imageEditor.update,
         ...(existingPoll && { poll: editingPostPoll }),
@@ -1668,7 +1641,6 @@ export function useNoodlePostCardController(
       .submitReply(post, {
         content,
         parentInteractionId: replyParentInteractionId,
-        askForReply: options.creatorReplyRequest ? askForReply : false,
       })
       .then(clearReplyComposer)
       .catch(() => {});
@@ -1710,25 +1682,14 @@ export function useNoodlePostCardController(
     handleReplyChange,
     clearReplyComposer,
     submitReply,
-    creatorReplyRequest: options.creatorReplyRequest
-      ? { asked: askForReply, setAsked: setAskForReply }
-      : undefined,
     appendToReply,
     reactionPendingFor: options.reactionPendingFor,
     createInteractionPendingFor: options.createInteractionPendingFor,
     updatePostPending: options.updatePostPending,
-    openAuthorProfile: options.openAuthorProfile,
     voteInPoll: options.voteInPoll,
     deduplicatePollBody: options.deduplicatePollBody ?? true,
     imageFit: options.imageFit ?? "cover",
     imageEditing: imageEditor.cap,
-    titleEditing: options.titleMaxLength
-      ? {
-          editingPostTitle,
-          setEditingPostTitle,
-          maxLength: options.titleMaxLength,
-        }
-      : undefined,
     pollEditing: {
       value: editingPostPoll,
       setValue: setEditingPostPoll,
@@ -1780,7 +1741,6 @@ export function NoodlePostCard({
     reactionPendingFor,
     createInteractionPendingFor,
     updatePostPending,
-    titleEditing,
     pollEditing,
     imageEditing,
     media,
@@ -1804,10 +1764,9 @@ export function NoodlePostCard({
   const fallbackFileRef = useRef<HTMLInputElement | null>(null);
   const openProfile: (account: NoodleAccount | null) => void =
     ctx.openProfile ?? (() => {});
-  const canOpenAuthorProfile = Boolean(authorAccount || ctx.openAuthorProfile);
+  const canOpenAuthorProfile = Boolean(authorAccount);
   const openPostAuthor = () => {
     if (authorAccount) openProfile(authorAccount);
-    else ctx.openAuthorProfile?.(post.authorAccountId);
   };
   const handleReplyKeyDown: (
     event: React.KeyboardEvent<HTMLTextAreaElement>,
@@ -2035,19 +1994,6 @@ export function NoodlePostCard({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {ctx.creatorReplyRequest && (
-            <label className="flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]">
-              <input
-                type="checkbox"
-                checked={ctx.creatorReplyRequest.asked}
-                onChange={(event) =>
-                  ctx.creatorReplyRequest?.setAsked(event.target.checked)
-                }
-                className="h-3.5 w-3.5 accent-[var(--noodle-accent)]"
-              />
-              {localizeUi("ui.noodle.noodlepostcard.askForReply")}
-            </label>
-          )}
           <button
             type="button"
             onClick={clearReplyComposer}
@@ -2241,31 +2187,11 @@ export function NoodlePostCard({
           </div>
           {ctx.postManagement && editingPostId === post.id ? (
             <div className="mt-2 space-y-2">
-              {titleEditing && (
-                <label className="block">
-                  <span className="sr-only">
-                    {localizeUi("ui.noodle.noodlepostcard.titleOptional")}
-                  </span>
-                  <input
-                    value={titleEditing.editingPostTitle}
-                    onChange={(event) =>
-                      titleEditing.setEditingPostTitle(event.target.value)
-                    }
-                    maxLength={titleEditing.maxLength}
-                    className="h-9 w-full rounded-lg border-0 bg-[var(--noodle-accent)]/5 px-3 text-base font-bold text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus:bg-[var(--noodle-accent)]/10"
-                    placeholder={localizeUi(
-                      "ui.noodle.noodlepostcard.titleOptional",
-                    )}
-                  />
-                </label>
-              )}
               <textarea
                 value={editingPostContent}
                 onChange={(event) => setEditingPostContent(event.target.value)}
                 className="min-h-20 w-full resize-none rounded-lg border-0 bg-[var(--noodle-accent)]/5 px-3 py-2 text-[1rem] leading-6 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus:bg-[var(--noodle-accent)]/10"
-                placeholder={localizeUi(
-                  "ui.noodle.noodlerpostcomposer.whatSSimmering",
-                )}
+                placeholder={localizeUi("ui.noodle.noodlehome.whatSSimmering")}
               />
               {imageEditing && (
                 <PostImageEditControls
@@ -2529,15 +2455,7 @@ export function NoodlePostCard({
                   : false;
                 const canManageReply = canManageReplyOverride
                   ? canManageReplyOverride(reply)
-                  : Boolean(
-                      personaAccount &&
-                        canManageNoodleReply({
-                          actorKind:
-                            actorAccount?.kind ?? reply.actorSnapshot?.kind,
-                          actorAccountId: reply.actorAccountId,
-                          personaAccountId: personaAccount.id,
-                        }),
-                    );
+                  : Boolean(personaAccount && reply.actorAccountId === personaAccount.id);
                 return (
                   <Fragment key={reply.id}>
                     <div
@@ -2814,8 +2732,7 @@ export function NoodlePostCard({
 }
 
 // Shared composer chrome: avatar gutter, borderless body, divider, and the
-// tools-left / action-right toolbar row. Noodle fills it with its post composer;
-// NoodleR fills it with the guided-generation composer. Keeps both pixel-aligned.
+// tools-left / action-right toolbar row for the public post composer.
 export function NoodleComposerShell({
   header,
   avatar,

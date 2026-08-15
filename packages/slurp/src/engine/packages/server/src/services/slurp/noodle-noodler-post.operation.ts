@@ -84,8 +84,6 @@ export async function generateAndApplyNoodlerPost(
   admissionMode?: ConnectionAdmissionMode,
 ): Promise<GenerateAndApplyNoodlerPostResult> {
   const noodle = createSlurpStorage(db);
-  const settings = await noodle.getSettings();
-  if (!settings.enableNoodler) return { status: "disabled" };
 
   const locked = await tryNoodlerAccountOperation(
     request.targetAccountId,
@@ -96,9 +94,7 @@ export async function generateAndApplyNoodlerPost(
       if (!account) {
         return { status: "noodler_account_not_found" } as const;
       }
-      const publicAccount = account.slurpSourceAccountId
-        ? await noodle.getAccountById(account.slurpSourceAccountId)
-        : null;
+      const publicAccount = await noodle.resolveAccountSource(account);
       if (!publicAccount) {
         return { status: "noodler_account_not_found" } as const;
       }
@@ -125,11 +121,9 @@ export async function generateAndApplyNoodlerPost(
       if (!(await resolveNoodlerSourceSnapshot(db, publicAccount))) {
         return { status: "noodler_account_not_found" } as const;
       }
-      const connectionId =
-        request.connectionId ?? settings.generationConnectionId;
-      if (!connectionId) return { status: "connection_required" } as const;
-      const connection =
-        await createConnectionsStorage(db).getWithKey(connectionId);
+      const connection = request.connectionId
+        ? await createConnectionsStorage(db).getWithKey(request.connectionId)
+        : await createConnectionsStorage(db).getDefaultForAgents();
       if (!connection) return { status: "connection_not_found" } as const;
       const generated = await generateNoodlerPost(db, {
         account,
@@ -167,8 +161,6 @@ export async function refreshAllNoodlerCreatorsNow(
   db: DB,
 ): Promise<NoodlerRefreshNowResult> {
   const noodle = createSlurpStorage(db);
-  const settings = await noodle.getSettings();
-  if (!settings.enableNoodler) return { status: "disabled" };
 
   const accounts = await noodle.listAutoPostEnabledAccounts();
   // Least-recently active creator first, so limited provider capacity goes to the quiet ones.
@@ -218,8 +210,6 @@ export async function refreshTargetedNoodlerCreatorsNow(
   executionId?: string,
 ): Promise<NoodlerRefreshNowResult> {
   const noodle = createSlurpStorage(db);
-  const settings = await noodle.getSettings();
-  if (!settings.enableNoodler) return { status: "disabled" };
 
   // One creator named twice is one refresh, not two: the per-account lock already serializes the
   // work, but without this the response reports that creator twice.
@@ -264,9 +254,6 @@ export async function createNoodlerPost(
   media?: NoodlerPostMediaUpload,
 ): Promise<CreateNoodlerPostResult> {
   const noodle = createSlurpStorage(db);
-  const settings = await noodle.getSettings();
-  if (!settings.enableNoodler) return { status: "disabled" };
-
   const locked = await tryNoodlerAccountOperation(
     input.targetAccountId,
     async () => {
@@ -378,9 +365,6 @@ export async function updateNoodlerPostWithMedia(
   media: NoodlerPostMediaUpload,
 ): Promise<UpdateNoodlerPostResult> {
   const noodle = createSlurpStorage(db);
-  const settings = await noodle.getSettings();
-  if (!settings.enableNoodler) return { status: "disabled" };
-
   const existing = await noodle.getNoodlerPostById(id);
   if (!existing) return { status: "noodler_post_not_found" };
   if (existing.authorAccountId !== accountId) return { status: "forbidden" };

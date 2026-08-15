@@ -41,6 +41,7 @@ import type {
   NoodlerGenerationRequest,
   NoodleStageProfileDraftRequest,
   NoodlerManagedPost,
+  NoodlerPostView,
   NoodlerRefreshNowOutcome,
   NoodlerStageProfile,
   NoodlerManagedStageProfile,
@@ -53,7 +54,6 @@ import type {
   NoodlerRemoveInteractionInput,
 } from "@marinara-engine/shared";
 import {
-  countNoodlePostsSince,
   mergeNoodlePollVoteInteractions,
 } from "@marinara-engine/shared";
 import type {
@@ -69,6 +69,7 @@ export type NoodleRefreshResult = {
 export const noodleKeys = {
   all: ["noodle"] as const,
   bootstrap: () => [...noodleKeys.all, "bootstrap"] as const,
+  settings: () => ["slurp", "settings"] as const,
   refreshIndicator: () => [...noodleKeys.all, "refresh-indicator"] as const,
   noodlerRoot: () => [...noodleKeys.all, "noodler"] as const,
   noodlerAccounts: () => [...noodleKeys.noodlerRoot(), "accounts"] as const,
@@ -91,6 +92,74 @@ export const noodleKeys = {
     [...noodleKeys.noodlerRoot(), "image-connections"] as const,
   noodlerFanStatus: () => [...noodleKeys.noodlerRoot(), "fan-status"] as const,
 };
+
+export type SlurpSettings = {
+  generationGuidance: string;
+  postsPerDay: number;
+  autoPostingScheduleEnabled: boolean;
+  fanActivityEnabled: boolean;
+  generationConnectionId: string | null;
+  imageGenerationConnectionId: string | null;
+  imageGenerationPrompt: string;
+  imageGenerationUseAvatarReferences: boolean;
+  imageGenerationIncludeDescriptions: boolean;
+  allowRandomUsers: boolean;
+  allowProfessorMari: boolean;
+  participantSelectionMode: "all" | "random" | "exact";
+  participantMin: number;
+  participantMax: number;
+  invitedCharacterGroupIds: string[];
+  carryoverModes: Array<"conversation" | "roleplay" | "game">;
+  carryoverHours: number;
+  carryoverMaxItems: number;
+  enableEnhancedTimelineWriting: boolean;
+  includeCharacterSchedules: boolean;
+  enableLorebookContext: boolean;
+  enableImagePrompts: boolean;
+  maxImagesPerRefresh: number;
+  maxGeneratedPostsPerRefresh: number;
+  maxLikesPerRefresh: number;
+  maxRepostsPerRefresh: number;
+  maxRepliesPerRefresh: number;
+  allowGalleryImageAttachments: boolean;
+  fanActivityRunsPerDay: number;
+  fanLikesPerRefresh: number;
+  fanRepliesPerRefresh: number;
+  fanRepostsPerRefresh: number;
+  fanArchetypeWeights: Record<string, number>;
+  nightQuiet: boolean;
+  onboarding: "not_started" | "in_progress" | "completed";
+};
+
+export type SlurpSettingsUpdate = Partial<SlurpSettings>;
+
+export function useSlurpSettings() {
+  return useQuery({
+    queryKey: noodleKeys.settings(),
+    queryFn: () => api.get<SlurpSettings>("/slurp/settings"),
+    staleTime: 10_000,
+  });
+}
+
+export function useUpdateSlurpSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: SlurpSettingsUpdate) =>
+      api.patch<SlurpSettings>("/slurp/settings", patch),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(noodleKeys.settings(), settings);
+    },
+  });
+}
+
+export function useSlurpConnections(enabled = true) {
+  return useQuery({
+    queryKey: ["slurp", "connections"],
+    queryFn: () => api.get<Array<{ id: string; name?: string; model?: string; provider?: string }>>("/connections"),
+    enabled,
+    staleTime: 5 * 60_000,
+  });
+}
 
 export type NoodlerImageConnections = {
   defaultConnectionId: string | null;
@@ -154,47 +223,6 @@ function preservePollVotes(
     next.interactions,
   );
   return interactions === next.interactions ? next : { ...next, interactions };
-}
-
-export function useNoodle(enabled = true) {
-  const qc = useQueryClient();
-  const observedMarker = useRef<string | null | undefined>(undefined);
-  const refreshIndicator = useQuery({
-    queryKey: noodleKeys.refreshIndicator(),
-    queryFn: () =>
-      api.get<{ marker: string | null }>("/slurp/refresh-indicator"),
-    enabled,
-    staleTime: 10_000,
-    refetchInterval: enabled ? 30_000 : false,
-    refetchIntervalInBackground: false,
-  });
-
-  useEffect(() => {
-    const marker = refreshIndicator.data?.marker;
-    if (marker === undefined) return;
-    if (observedMarker.current === undefined) {
-      observedMarker.current = marker;
-      return;
-    }
-    if (marker !== observedMarker.current) {
-      observedMarker.current = marker;
-      void qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
-    }
-  }, [qc, refreshIndicator.data?.marker]);
-
-  return useQuery({
-    queryKey: noodleKeys.bootstrap(),
-    queryFn: () => api.get<NoodleBootstrap>("/slurp"),
-    // Take the first refresh marker before the bootstrap snapshot. This prevents a completed
-    // refresh from becoming the baseline while an older bootstrap response is still in flight.
-    enabled: enabled && !refreshIndicator.isPending,
-    staleTime: 10_000,
-    structuralSharing: (current, next) =>
-      preservePollVotes(
-        current as NoodleBootstrap | undefined,
-        next as NoodleBootstrap,
-      ),
-  });
 }
 
 export function useRerollAmbientNoodleProfiles() {
@@ -264,15 +292,19 @@ export function useNoodlerEligibleAccounts(
   });
 }
 
-export function useNoodlerPosts(accountId: string | null) {
+export type NoodlerProfilePost =
+  | { managed: NoodlerManagedPost; viewerPost: NoodlerPostView | null }
+  | { viewerPost: NoodlerPostView };
+
+export function useNoodlerPosts(accountId: string | null, personaId: string | null) {
   return useQuery({
-    queryKey: noodleKeys.noodlerPosts(accountId ?? "none"),
+    queryKey: [...noodleKeys.noodlerPosts(accountId ?? "none"), personaId ?? "none"],
     queryFn: () =>
       api.get<{
-        items: Array<{ managed: NoodlerManagedPost }>;
+        items: NoodlerProfilePost[];
       }>(
-        `/slurp/noodler/accounts/${encodeURIComponent(accountId!)}/posts`,
-      ).then((page) => page.items.map((item) => item.managed)),
+        `/slurp/noodler/accounts/${encodeURIComponent(accountId!)}/posts${personaId ? `?personaId=${encodeURIComponent(personaId)}` : ""}`,
+      ).then((page) => page.items),
     enabled: Boolean(accountId),
     staleTime: 10_000,
     // Automatic posts are written server-side without a client mutation; poll while visible.
@@ -738,19 +770,6 @@ export function useNoodlerViewer(personaId: string | null, enabled = true) {
  * surfaces already hold, so the badge is the same number whether it is rendered from Noodle or
  * from NoodleR.
  */
-export function useNoodleUnseenCount(
-  personaAccount: NoodleAccount | null,
-  enabled = true,
-) {
-  const { data } = useNoodle(enabled);
-  return countNoodlePostsSince(
-    data?.posts ?? [],
-    data?.interactions ?? [],
-    personaAccount?.id ?? null,
-    personaAccount?.settings.social.noodleFeedSeenAt,
-  );
-}
-
 /** Poll the badge without downloading the complete viewer feed or historical media metadata. */
 export function useNoodlerUnseenCount(
   personaId: string | null,
@@ -1178,462 +1197,5 @@ export function useNoodlerFanActivityStatus(enabled = true) {
     enabled,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
-  });
-}
-
-export function useUpdateNoodleSettings() {
-  const qc = useQueryClient();
-  return useMutation({
-    scope: { id: "noodle-settings" },
-    mutationFn: (settings: NoodleSettingsUpdateInput) =>
-      api.put<NoodleSettings>("/slurp/settings", settings),
-    onMutate: async (patch) => {
-      await qc.cancelQueries({ queryKey: noodleKeys.bootstrap() });
-      const previous = qc.getQueryData<NoodleBootstrap>(noodleKeys.bootstrap());
-      qc.setQueryData<NoodleBootstrap | undefined>(
-        noodleKeys.bootstrap(),
-        (current) =>
-          current
-            ? {
-                ...current,
-                settings: { ...current.settings, ...patch } as NoodleSettings,
-              }
-            : current,
-      );
-      return { previous };
-    },
-    onError: (_error, _patch, context) => {
-      if (context?.previous)
-        qc.setQueryData(noodleKeys.bootstrap(), context.previous);
-    },
-    onSuccess: (settings) => {
-      qc.setQueryData<NoodleBootstrap | undefined>(
-        noodleKeys.bootstrap(),
-        (current) => (current ? { ...current, settings } : current),
-      );
-    },
-    onSettled: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
-  });
-}
-
-export function useRescheduleNoodleRefresh() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (input: NoodleRescheduleRefreshInput) =>
-      api.put<NoodleRefreshSchedulerStatus>("/slurp/refresh-schedule", input),
-    onSuccess: (scheduler) => {
-      qc.setQueryData<NoodleBootstrap | undefined>(
-        noodleKeys.bootstrap(),
-        (current) => (current ? { ...current, scheduler } : current),
-      );
-    },
-    onSettled: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
-  });
-}
-
-export function useUpdateNoodleAccountProfile() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      id,
-      ...input
-    }: { id: string } & NoodleAccountProfileUpdateInput) =>
-      api.put<NoodleAccount>(
-        `/slurp/accounts/${encodeURIComponent(id)}/profile`,
-        input,
-      ),
-    onSuccess: (account) => {
-      qc.setQueryData<NoodleBootstrap | undefined>(
-        noodleKeys.bootstrap(),
-        (current) =>
-          current
-            ? {
-                ...current,
-                accounts: current.accounts.map((item) =>
-                  item.id === account.id ? account : item,
-                ),
-              }
-            : current,
-      );
-      qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
-    },
-  });
-}
-
-export function usePatchNoodleAccountSettings() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      id,
-      ...input
-    }: { id: string } & NoodleAccountSettingsPatchInput) =>
-      api.patch<NoodleAccount>(
-        `/slurp/accounts/${encodeURIComponent(id)}/settings`,
-        input,
-      ),
-    onSuccess: (account) => {
-      qc.setQueryData<NoodleBootstrap | undefined>(
-        noodleKeys.bootstrap(),
-        (current) =>
-          current
-            ? {
-                ...current,
-                accounts: current.accounts.map((item) =>
-                  item.id === account.id ? account : item,
-                ),
-              }
-            : current,
-      );
-      qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
-    },
-  });
-}
-
-export function useUpdateNoodleAccountFollow() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      id,
-      targetAccountId,
-      ...input
-    }: {
-      id: string;
-      targetAccountId: string;
-    } & NoodleAccountFollowUpdateInput) =>
-      api.patch<NoodleAccount>(
-        `/slurp/accounts/${encodeURIComponent(id)}/follows/${encodeURIComponent(targetAccountId)}`,
-        input,
-      ),
-    onSuccess: (account) => {
-      qc.setQueryData<NoodleBootstrap | undefined>(
-        noodleKeys.bootstrap(),
-        (current) =>
-          current
-            ? {
-                ...current,
-                accounts: current.accounts.map((item) =>
-                  item.id === account.id ? account : item,
-                ),
-              }
-            : current,
-      );
-      qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
-    },
-  });
-}
-
-export function useInviteNoodleCharacter() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (characterId: string) =>
-      api.post<NoodleAccount>("/slurp/invites", { characterId }),
-    onSuccess: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerEligibleAccountsRoot() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-      ]),
-  });
-}
-
-export function useInviteNoodleCharacters() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (characterIds: string[]) =>
-      api.post<NoodleAccount[]>("/slurp/invites/bulk", { characterIds }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
-  });
-}
-
-export function useRemoveNoodleCharacter() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (characterId: string) =>
-      api.delete<NoodleAccount>(
-        `/slurp/invites/${encodeURIComponent(characterId)}`,
-      ),
-    onSuccess: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerEligibleAccountsRoot() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-      ]),
-  });
-}
-
-/** Clear every Noodle invitation source and refresh the bootstrap cache. */
-export function useClearNoodleInvites() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () => api.delete<NoodleBootstrap>("/slurp/invites"),
-    onSuccess: (bootstrap) => {
-      qc.setQueryData<NoodleBootstrap>(noodleKeys.bootstrap(), bootstrap);
-      qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
-    },
-  });
-}
-
-export function useDeleteUninvitedNoodleProfiles() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (includeNoodler: boolean) =>
-      api.delete<{ deleted: number; deletedNoodler: number; bootstrap: NoodleBootstrap }>(
-        `/slurp/accounts/uninvited${includeNoodler ? "?includeNoodler=true" : ""}`,
-      ),
-    onSuccess: ({ bootstrap }) => {
-      qc.setQueryData<NoodleBootstrap>(noodleKeys.bootstrap(), bootstrap);
-      qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() });
-    },
-  });
-}
-
-export function useCreateNoodlePost() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (input: NoodleCreatePostInput) =>
-      api.post<NoodlePost>("/slurp/posts", input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
-  });
-}
-
-export function useUpdateNoodlePost() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, ...input }: { id: string } & NoodlePostUpdateInput) =>
-      api.patch<NoodlePost>(`/slurp/posts/${encodeURIComponent(id)}`, input),
-    onSuccess: (post) => {
-      qc.setQueryData<NoodleBootstrap | undefined>(
-        noodleKeys.bootstrap(),
-        (current) =>
-          current
-            ? {
-                ...current,
-                posts: current.posts.map((item) =>
-                  item.id === post.id ? post : item,
-                ),
-              }
-            : current,
-      );
-      qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
-    },
-  });
-}
-
-export function useDeleteNoodlePost() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      api.delete<NoodlePost>(`/slurp/posts/${encodeURIComponent(id)}`),
-    onSuccess: (post) => {
-      qc.setQueryData<NoodleBootstrap | undefined>(
-        noodleKeys.bootstrap(),
-        (current) =>
-          current
-            ? {
-                ...current,
-                posts: current.posts.filter((item) => item.id !== post.id),
-                interactions: current.interactions.filter(
-                  (interaction) => interaction.postId !== post.id,
-                ),
-                digests: current.digests.filter(
-                  (digest) => digest.sourcePostId !== post.id,
-                ),
-              }
-            : current,
-      );
-      qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
-    },
-  });
-}
-
-export function useResetNoodleTimeline() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () => api.delete<NoodleBootstrap>("/slurp/timeline"),
-    onSuccess: (bootstrap) =>
-      qc.setQueryData(noodleKeys.bootstrap(), bootstrap),
-    onSettled: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
-  });
-}
-
-export function useCreateNoodleInteraction() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      postId,
-      ...input
-    }: NoodleCreateInteractionInput & {
-      postId: string;
-      actorKind: NoodleAccountKind;
-      actorEntityId: string;
-    }) =>
-      api.post<NoodleInteraction>(
-        `/slurp/posts/${encodeURIComponent(postId)}/interactions`,
-        input,
-      ),
-    onSuccess: (interaction) => {
-      qc.setQueryData<NoodleBootstrap | undefined>(
-        noodleKeys.bootstrap(),
-        (current) =>
-          current
-            ? {
-                ...current,
-                interactions: current.interactions.some(
-                  (item) => item.id === interaction.id,
-                )
-                  ? current.interactions.map((item) =>
-                      item.id === interaction.id ? interaction : item,
-                    )
-                  : [...current.interactions, interaction],
-              }
-            : current,
-      );
-    },
-  });
-}
-
-export function useRemoveNoodleInteraction() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      postId,
-      ...input
-    }: NoodleRemoveInteractionInput & {
-      postId: string;
-      actorKind: NoodleAccountKind;
-      actorEntityId: string;
-    }) => {
-      const params = new URLSearchParams({
-        actorKind: input.actorKind,
-        actorEntityId: input.actorEntityId,
-        type: input.type,
-      });
-      if (input.parentInteractionId)
-        params.set("parentInteractionId", input.parentInteractionId);
-      return api.delete<NoodleInteraction>(
-        `/slurp/posts/${encodeURIComponent(postId)}/interactions?${params}`,
-      );
-    },
-    onSuccess: (interaction) => {
-      qc.setQueryData<NoodleBootstrap | undefined>(
-        noodleKeys.bootstrap(),
-        (current) =>
-          current
-            ? {
-                ...current,
-                interactions: current.interactions.filter(
-                  (item) => item.id !== interaction.id,
-                ),
-              }
-            : current,
-      );
-    },
-  });
-}
-
-export function useUpdateNoodleInteraction() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      postId,
-      interactionId,
-      ...input
-    }: NoodleInteractionUpdateInput & {
-      postId: string;
-      interactionId: string;
-    }) =>
-      api.patch<NoodleInteraction>(
-        `/slurp/posts/${encodeURIComponent(postId)}/interactions/${encodeURIComponent(interactionId)}`,
-        input,
-      ),
-    onSuccess: (interaction) => {
-      qc.setQueryData<NoodleBootstrap | undefined>(
-        noodleKeys.bootstrap(),
-        (current) =>
-          current
-            ? {
-                ...current,
-                interactions: current.interactions.map((item) =>
-                  item.id === interaction.id ? interaction : item,
-                ),
-              }
-            : current,
-      );
-    },
-  });
-}
-
-export function useDeleteNoodleInteraction() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      postId,
-      interactionId,
-      personaId,
-    }: {
-      postId: string;
-      interactionId: string;
-      personaId: string;
-    }) =>
-      api.delete<NoodleInteraction[]>(
-        `/slurp/posts/${encodeURIComponent(postId)}/interactions/${encodeURIComponent(interactionId)}?personaId=${encodeURIComponent(personaId)}`,
-      ),
-    onSuccess: (interactions) => {
-      const deletedIds = new Set(
-        interactions.map((interaction) => interaction.id),
-      );
-      qc.setQueryData<NoodleBootstrap | undefined>(
-        noodleKeys.bootstrap(),
-        (current) =>
-          current
-            ? {
-                ...current,
-                interactions: current.interactions.filter(
-                  (item) => !deletedIds.has(item.id),
-                ),
-              }
-            : current,
-      );
-    },
-  });
-}
-
-export function useRefreshNoodle() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (input: { personaId?: string; connectionId?: string }) =>
-      api.post<NoodleRefreshResult>("/slurp/refresh", {
-        mode: "public",
-        ...input,
-        timeZone: useSlurpUIStore.getState().conversationTimeZone,
-        debugMode: useSlurpUIStore.getState().debugMode,
-        reviewImagePromptsBeforeSend:
-          useSlurpUIStore.getState().reviewImagePromptsBeforeSend,
-      }),
-    onSuccess: (result) =>
-      qc.setQueryData<NoodleBootstrap | undefined>(
-        noodleKeys.bootstrap(),
-        (current) => preservePollVotes(current, result.bootstrap),
-      ),
-    onSettled: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
-  });
-}
-
-export function useConfirmNoodleImagePrompts() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (prompts: ImagePromptOverride[]) =>
-      api.post<NoodleBootstrap>("/slurp/refresh/images", {
-        prompts,
-        debugMode: useSlurpUIStore.getState().debugMode,
-      }),
-    onSuccess: (bootstrap) =>
-      qc.setQueryData<NoodleBootstrap | undefined>(
-        noodleKeys.bootstrap(),
-        (current) => preservePollVotes(current, bootstrap),
-      ),
-    onSettled: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
   });
 }

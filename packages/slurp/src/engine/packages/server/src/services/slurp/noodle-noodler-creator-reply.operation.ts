@@ -27,18 +27,13 @@ export async function generateAndApplyNoodlerCreatorReply(
       );
     }
   };
-  const settings = await noodle.getSettings();
-  if (!settings.enableNoodler) return { status: "ineligible" };
   const post = await noodle.getNoodlerPostById(input.postId);
   if (!post) return { status: "ineligible" };
 
   const locked = await tryNoodlerAccountOperation(
     post.authorAccountId,
     async () => {
-      const connectionId = settings.generationConnectionId;
-      if (!connectionId) return { status: "connection_required" } as const;
-      const connection =
-        await createConnectionsStorage(db).getWithKey(connectionId);
+      const connection = await createConnectionsStorage(db).getDefaultForAgents();
       if (!connection) return { status: "connection_not_found" } as const;
       const claim = await noodle.claimNoodlerCreatorReply(
         post.authorAccountId,

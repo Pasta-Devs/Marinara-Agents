@@ -4,7 +4,6 @@ import {
   type NoodleGeneratedFanRefresh,
   type NoodleInteraction,
   type NoodlerFanArchetypeWeights,
-  type NoodleSettings,
 } from "@marinara-engine/shared";
 import type { DB } from "../../db/connection.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
@@ -16,7 +15,7 @@ import { parseGameJsonish } from "../game/jsonish.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpStorage, type SlurpSettings } from "../storage/slurp.storage.js";
 import {
   NOODLE_FAN_ACTIVITY_MAX_ACTIVITIES_PER_CREATOR,
   NOODLE_FAN_ACTIVITY_MAX_CREATORS_PER_RUN,
@@ -39,7 +38,7 @@ export interface ResolvedNoodlerFanActivityPolicy {
 }
 
 export function resolveNoodlerFanActivityPolicy(
-  settings: NoodleSettings,
+  settings: Pick<SlurpSettings, "fanArchetypeWeights" | "fanActivityEnabled">,
   creator: NoodleAccount,
 ): ResolvedNoodlerFanActivityPolicy {
   const override = creator.settings.scheduler.fanActivity;
@@ -124,7 +123,7 @@ export function selectNoodlerFanActivities(input: {
 
 function buildFanActivityMessages(input: {
   creators: NoodlerFanCreatorCandidate[];
-  settings: NoodleSettings;
+  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "fanRepostsPerRefresh">;
 }): ChatMessage[] {
   const system = [
     "Propose quiet synthetic audience activity for the supplied NoodleR posts.",
@@ -159,7 +158,7 @@ function buildFanActivityMessages(input: {
 
 async function generateFanActivity(input: {
   connection: GenerationConnection;
-  settings: NoodleSettings;
+  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "fanRepostsPerRefresh">;
   creators: NoodlerFanCreatorCandidate[];
   debugMode: boolean;
 }): Promise<NoodleGeneratedFanRefresh> {
@@ -237,7 +236,7 @@ export function parseGeneratedFanActivityResponse(value: unknown): {
 
 export async function prepareNoodlerFanCreatorCandidates(input: {
   db: DB;
-  settings: NoodleSettings;
+  settings: Pick<SlurpSettings, "fanActivityEnabled" | "fanArchetypeWeights">;
   creatorIds: string[];
   identityProvider?: NoodlerFanIdentityProvider;
 }): Promise<NoodlerFanCreatorCandidate[]> {
@@ -271,7 +270,7 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
 
 export async function generateNoodlerFanActivityBatch(input: {
   db: DB;
-  settings: NoodleSettings;
+  settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "fanRepostsPerRefresh">;
   connection: GenerationConnection;
   creators: NoodlerFanCreatorCandidate[];
   debugMode?: boolean;
@@ -298,7 +297,10 @@ export async function generateNoodlerFanActivityBatch(input: {
   });
 }
 
-export async function resolveNoodlerFanConnection(db: DB, settings: NoodleSettings) {
+export async function resolveNoodlerFanConnection(
+  db: DB,
+  settings: Pick<SlurpSettings, "generationConnectionId">,
+) {
   if (!settings.generationConnectionId) return null;
   return createConnectionsStorage(db).getWithKey(settings.generationConnectionId);
 }

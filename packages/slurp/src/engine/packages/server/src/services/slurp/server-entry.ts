@@ -1,7 +1,5 @@
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import { slurpRoutes } from "../../routes/slurp.routes.js";
-import { buildRecentSocialMediaActivityBlock } from "./noodle-context.js";
-import { startNoodleRefreshScheduler } from "./noodle-refresh-scheduler.service.js";
 import { startNoodleAutoPostScheduler } from "./noodle-autopost-scheduler.service.js";
 import { startNoodlerFanActivityScheduler } from "./noodle-fan-activity-scheduler.service.js";
 
@@ -28,9 +26,8 @@ export async function activate({
     api.registerService("slurp:backup", {
       pause: async <T>(run: () => Promise<T>) => run(),
     }),
-    api.registerService("slurp:prompt-context", { build: buildRecentSocialMediaActivityBlock }),
   ];
-  const schedulers = [startNoodleRefreshScheduler(app), startNoodleAutoPostScheduler(app), startNoodlerFanActivityScheduler(app)];
+  const schedulers = [startNoodleAutoPostScheduler(app), startNoodlerFanActivityScheduler(app)];
   active = true;
   return async () => {
     active = false;

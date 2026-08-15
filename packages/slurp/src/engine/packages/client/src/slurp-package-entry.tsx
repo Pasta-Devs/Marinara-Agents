@@ -4,7 +4,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import i18next from "i18next";
 import { I18nextProvider, initReactI18next } from "react-i18next";
 import english from "./localization/locales/en.json";
+import german from "./localization/locales/de.json";
+import korean from "./localization/locales/ko.json";
+import polish from "./localization/locales/pl.json";
 import { NoodlerHome } from "./components/slurp/NoodlerHome";
+import { SlurpSettings } from "./components/slurp/SlurpSettings";
 import { useSlurpUIStore } from "./stores/slurp-package.store";
 import { configureSlurpPackageState } from "./stores/slurp-package.store";
 
@@ -19,7 +23,12 @@ void localization.use(initReactI18next).init({
   fallbackLng: "en",
   interpolation: { escapeValue: false },
   lng: "en",
-  resources: { en: { translation: english } },
+  resources: {
+    de: { translation: german },
+    en: { translation: english },
+    ko: { translation: korean },
+    pl: { translation: polish },
+  },
 });
 
 type CapabilityElement = HTMLElement & {
@@ -89,7 +98,11 @@ function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
     <I18nextProvider i18n={localization}>
       <QueryClientProvider client={client}>
         <div className="h-full min-h-0 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
-          <NoodlerHome navigation={navigation} onNavigate={setNavigation} />
+          {navigation.mode === "creator-settings" ? (
+            <SlurpSettings navigation={navigation} onNavigate={setNavigation} />
+          ) : (
+            <NoodlerHome navigation={navigation} onNavigate={setNavigation} />
+          )}
         </div>
       </QueryClientProvider>
     </I18nextProvider>

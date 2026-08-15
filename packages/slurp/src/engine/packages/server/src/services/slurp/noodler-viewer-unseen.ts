@@ -20,7 +20,7 @@ export function noodlerUnseenCreatorAccountIds(
   return accounts
     .filter(
       (account) =>
-        account.slurpSourceAccountId !== viewerAccountId &&
+        !(account.kind === "persona" && account.entityId === viewerAccountId) &&
         !isNoodlerHiddenFromViewer(account, viewerAccountId),
     )
     .map((account) => account.id);

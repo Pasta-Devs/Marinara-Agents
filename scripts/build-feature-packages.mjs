@@ -53,7 +53,35 @@ const noodleOwnedSourcePaths = [
   "packages/client/src/stores/noodle-package.store.ts",
   "packages/server/src/db/schema/noodle.ts",
   "packages/server/src/routes/noodle.routes.ts",
-  "packages/server/src/services/noodle",
+  "packages/server/src/services/noodle/noodle-ambient-profile-generation.service.ts",
+  "packages/server/src/services/noodle/noodle-ambient-profiles.ts",
+  "packages/server/src/services/noodle/noodle-context.ts",
+  "packages/server/src/services/noodle/noodle-generated-activity.service.ts",
+  "packages/server/src/services/noodle/noodle-generated-profiles.ts",
+  "packages/server/src/services/noodle/noodle-generated-refresh.ts",
+  "packages/server/src/services/noodle/noodle-generation-log.ts",
+  "packages/server/src/services/noodle/noodle-handle.ts",
+  "packages/server/src/services/noodle/noodle-image-prompt-rewrite.ts",
+  "packages/server/src/services/noodle/noodle-image-prompt.ts",
+  "packages/server/src/services/noodle/noodle-image-retry.ts",
+  "packages/server/src/services/noodle/noodle-interaction-policy.ts",
+  "packages/server/src/services/noodle/noodle-participant-selection.ts",
+  "packages/server/src/services/noodle/noodle-post-target.ts",
+  "packages/server/src/services/noodle/noodle-profile-avatar.ts",
+  "packages/server/src/services/noodle/noodle-profile-selection.ts",
+  "packages/server/src/services/noodle/noodle-prompt.ts",
+  "packages/server/src/services/noodle/noodle-public-generation.service.ts",
+  "packages/server/src/services/noodle/noodle-public-images.service.ts",
+  "packages/server/src/services/noodle/noodle-public-profiles.service.ts",
+  "packages/server/src/services/noodle/noodle-public-prompt.service.ts",
+  "packages/server/src/services/noodle/noodle-public-support.ts",
+  "packages/server/src/services/noodle/noodle-prompt-safety.ts",
+  "packages/server/src/services/noodle/noodle-refresh-schedule.ts",
+  "packages/server/src/services/noodle/noodle-refresh-scheduler.service.ts",
+  "packages/server/src/services/noodle/noodle-response-format.ts",
+  "packages/server/src/services/noodle/noodle-sampling-options.ts",
+  "packages/server/src/services/noodle/noodle-vision.ts",
+  "packages/server/src/services/noodle/server-entry.ts",
   "packages/server/src/services/prompt-overrides/registry/noodle.ts",
   "packages/server/src/services/storage/noodle-refresh-run-retention.ts",
   "packages/server/src/services/storage/noodle.storage.ts",
@@ -62,6 +90,7 @@ const slurpSourceRoot = join(packagesDir, "slurp/src/engine");
 const slurpOwnedSourcePaths = [
   "packages/client/src/components/slurp",
   "packages/client/src/hooks/use-slurp.ts",
+  "packages/client/src/localization/locales",
   "packages/client/src/slurp-package-entry.tsx",
   "packages/client/src/stores/slurp-package.store.ts",
   "packages/server/src/db/schema/slurp.ts",
@@ -161,14 +190,21 @@ async function capturePackageSources(metafilePath, buildRoot, excludedPaths) {
   }
 }
 
+async function removeOwnedSourceSnapshots(excludedPaths) {
+  for (const path of excludedPaths) {
+    await rm(join(sourcesRoot, path), { recursive: true, force: true });
+  }
+}
+
 const features = [
   {
     id: "noodle",
-    version: "1.0.13",
+    version: "1.0.14",
     minEngineVersion: "2.4.2",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
-    description: "Explore the public Noodle timeline as an optional local social world.",
+    description:
+      "Explore the Noodle public timeline as an optional local social world.",
     localizations: {
       de: {
         name: "Noodle",
@@ -220,7 +256,7 @@ const features = [
   },
   {
     id: "slurp",
-    version: "1.0.0",
+    version: "1.0.1",
     minEngineVersion: "2.4.3",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
@@ -239,7 +275,7 @@ const features = [
       ko: {
         name: "Slurp",
         description:
-          "Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Slurp를 여세요.",
+          "Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 NoodleR 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Slurp를 여세요.",
         homeBrowserTab: {
           label: "Slurp",
           ariaLabel: "Slurp 열기",
@@ -248,7 +284,7 @@ const features = [
       pl: {
         name: "Slurp",
         description:
-          "Utwórz lokalny profil twórcy z postaci silnika lub persony silnika, publikuj publiczne lub zablokowane posty i symuluj subskrypcje oraz aktywność publiczności. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Slurp na stronie głównej.",
+          "Utwórz lokalne profile twórców z postaci silnika lub person silnika, publikuj publiczne lub zablokowane posty NoodleR i symuluj subskrypcje oraz aktywność publiczności. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Slurp na stronie głównej.",
         homeBrowserTab: {
           label: "Slurp",
           ariaLabel: "Otwórz Slurp",
@@ -319,7 +355,7 @@ const features = [
   {
     id: "conversation-calls",
     name: "Calls",
-    version: "1.0.10",
+    version: "1.0.9",
     minEngineVersion: "2.4.1",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
@@ -547,6 +583,11 @@ export async function selfCheck() {
     }
     if (feature.ownedSourcePaths?.length) {
       await capturePackageSources(metafile, prepared.buildRoot, feature.ownedSourcePaths);
+      if (feature.id === "slurp") {
+        await removeOwnedSourceSnapshots([
+          "packages/client/src/localization/locales",
+        ]);
+      }
     } else {
       await captureEngineSources(
         metafile,
@@ -1348,7 +1389,7 @@ function Root({ element }) {
   if (element.getAttribute("view") === "settings") return <Settings props={props} />;
   if (element.getAttribute("view") === "toolbar") {
     if (!callsEnabled && !active) return null;
-    return <button type="button" className="mari-chrome-control flex h-8 w-8 items-center justify-center p-0 max-md:h-9 max-md:w-9" title={active ? "Open call" : "Start call"} onClick={async () => {
+    return <button type="button" className="mari-chrome-control flex h-9 w-9 items-center justify-center p-0" title={active ? "Open call" : "Start call"} onClick={async () => {
       if (active) return setExpanded(chatId);
       try {
         await start.mutateAsync();

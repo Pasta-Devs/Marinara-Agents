@@ -5,9 +5,9 @@ import {
   PROFESSOR_MARI_ID,
   type NoodleAccount,
   type NoodleBootstrap,
-  type NoodleSettings,
 } from "@marinara-engine/shared";
 import type { DB } from "../../db/connection.js";
+import type { SlurpSettings } from "../storage/slurp.storage.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { newId } from "../../utils/id-generator.js";
 import { resolveImageConnectionFallback } from "../generation/media-connection-fallback.js";
@@ -134,7 +134,7 @@ export async function generateNoodlePostImage(input: {
   referenceAccounts: NoodleAccount[];
   postContent: string;
   draftPrompt: string;
-  settings: NoodleSettings;
+  settings: SlurpSettings;
   characters: ReturnType<typeof createCharactersStorage>;
   characterGallery: ReturnType<typeof createCharacterGalleryStorage>;
   promptOverrides: ReturnType<typeof createPromptOverridesStorage>;

@@ -16,7 +16,7 @@ const noodler = readFileSync(
   "utf8",
 );
 const noodle = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodleHome.tsx",
+  "packages/noodle/src/engine/packages/client/src/components/noodle/NoodleHome.tsx",
   "utf8",
 );
 const enLocale = JSON.parse(

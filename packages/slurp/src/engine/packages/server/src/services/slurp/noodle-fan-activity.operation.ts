@@ -1,13 +1,12 @@
 import type {
   NoodleAuthorSnapshot,
-  NoodleSettings,
 } from "@marinara-engine/shared";
 import type { DB } from "../../db/connection.js";
 import { eq } from "../../db/file-query.js";
 import { noodlerFanActivityState } from "../../db/schema/slurp.js";
 import { now } from "../../utils/id-generator.js";
 import { tryBackgroundConnection } from "../generation/connection-admission.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpStorage, type SlurpSettings } from "../storage/slurp.storage.js";
 import {
   claimManualNoodleFanActivityRun,
   claimNoodleFanActivityRun,
@@ -136,7 +135,7 @@ async function findRecoverablePlan(db: DB) {
   return null;
 }
 
-async function reconcilePlan(db: DB, settings: NoodleSettings, at: Date) {
+async function reconcilePlan(db: DB, settings: SlurpSettings, at: Date) {
   const noodle = createSlurpStorage(db);
   const creators = await noodle.listNoodlerAccounts();
   const eligibleIds = settings.fanActivityEnabled
@@ -161,7 +160,7 @@ async function applyAcceptedActivities(
   db: DB,
   plan: PersistedNoodleFanActivityDayPlan,
   run: NoodleFanActivityDayPlanRun,
-  settings: NoodleSettings,
+  settings: SlurpSettings,
   finishedAt: Date,
 ) {
   const noodle = createSlurpStorage(db);
@@ -252,7 +251,7 @@ export async function runNoodlerFanActivity(input: {
           };
         }
       }
-      if (!settings.enableNoodler || !settings.fanActivityEnabled)
+      if (!settings.fanActivityEnabled)
         return { status: "disabled", created: 0 };
       let plan = await reconcilePlan(input.db, settings, at);
 

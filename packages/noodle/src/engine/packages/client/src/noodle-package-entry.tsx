@@ -4,8 +4,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import i18next from "i18next";
 import { I18nextProvider, initReactI18next } from "react-i18next";
 import { Toaster } from "sonner";
+import german from "./localization/locales/de.json";
 import english from "./localization/locales/en.json";
 import korean from "./localization/locales/ko.json";
+import polish from "./localization/locales/pl.json";
 import { AppDialogRenderer } from "./components/ui/AppDialogRenderer";
 import { ModalPortalContext } from "./components/ui/Modal";
 import { NoodleView } from "./components/noodle/NoodleView";
@@ -20,8 +22,10 @@ void localization.use(initReactI18next).init({
   interpolation: { escapeValue: false },
   lng: "en",
   resources: {
+    de: { translation: german },
     en: { translation: english },
     ko: { translation: korean },
+    pl: { translation: polish },
   },
 });
 

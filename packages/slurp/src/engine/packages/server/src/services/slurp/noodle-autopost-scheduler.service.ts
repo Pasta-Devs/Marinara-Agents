@@ -33,10 +33,9 @@ export async function withNoodleAutoPostPaused<T>(
 
 /** True when nothing can be prepared or published, so the poll only has existing rows to tidy. */
 export function noodlerReservePollIsIdle(settings: {
-  enableNoodler: boolean;
   autoPostingScheduleEnabled: boolean;
 }): boolean {
-  return !settings.enableNoodler || !settings.autoPostingScheduleEnabled;
+  return !settings.autoPostingScheduleEnabled;
 }
 
 export function startNoodleAutoPostScheduler(app: FastifyInstance) {

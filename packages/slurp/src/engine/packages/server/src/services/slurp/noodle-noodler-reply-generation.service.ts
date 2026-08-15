@@ -130,7 +130,7 @@ export async function generateNoodlerCreatorReply(input: {
     ...input,
     disclosureMode,
     publicIdentity,
-    generationGuidance: settings.noodlerGenerationGuidance,
+    generationGuidance: settings.generationGuidance,
   });
   const debugMode = input.debugMode === true || isDebugAgentsEnabled();
   const options = {

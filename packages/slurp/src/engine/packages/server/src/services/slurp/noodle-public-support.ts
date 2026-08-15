@@ -3,9 +3,7 @@ import {
   PROFESSOR_MARI_ID,
   type NoodleAccount,
   type NoodleAccountProfileSettings,
-  type NoodleBootstrap,
   type NoodleInteractionType,
-  type NoodleSettings,
 } from "@marinara-engine/shared";
 import { basename } from "path";
 import { logger } from "../../lib/logger.js";
@@ -13,6 +11,8 @@ import { createCharactersStorage } from "../storage/characters.storage.js";
 import {
   createSlurpStorage,
   parseNoodleAvatarCrop,
+  type SlurpBootstrap,
+  type SlurpSettings,
 } from "../storage/slurp.storage.js";
 import { isNoodleProfileGenerated } from "./noodle-profile-selection.js";
 import { ensureAmbientNoodleAccounts } from "./noodle-ambient-profiles.js";
@@ -186,9 +186,9 @@ export async function ensurePersonaAccounts(
 }
 
 function filterStalePersonaAccounts(
-  bootstrap: NoodleBootstrap,
+  bootstrap: SlurpBootstrap,
   livePersonaIds: Set<string>,
-): NoodleBootstrap {
+): SlurpBootstrap {
   return {
     ...bootstrap,
     accounts: bootstrap.accounts.filter(
@@ -199,9 +199,9 @@ function filterStalePersonaAccounts(
 }
 
 function filterExcludedNoodleAccounts(
-  bootstrap: NoodleBootstrap,
-  settings: NoodleSettings,
-): NoodleBootstrap {
+  bootstrap: SlurpBootstrap,
+  settings: SlurpSettings,
+): SlurpBootstrap {
   if (settings.allowProfessorMari) return bootstrap;
   return {
     ...bootstrap,

@@ -35,7 +35,6 @@ function artworkPrompt(
 export async function backfillNextNoodlerCreatorArtwork(db: DB): Promise<NoodlerArtworkOutcome> {
   const noodle = createSlurpStorage(db);
   const settings = await noodle.getSettings();
-  if (!settings.enableNoodler) return "idle";
 
   const profiles = await noodle.listNoodlerStageProfiles();
   const target = profiles.find((profile) => !profile.avatarUrl || !profile.bannerUrl);
@@ -45,9 +44,7 @@ export async function backfillNextNoodlerCreatorArtwork(db: DB): Promise<Noodler
   const locked = await tryNoodlerAccountOperation(target.id, async () => {
     const account = await noodle.getNoodlerAccountById(target.id);
     if (!account) return "idle" as const;
-    const linkedPublicAccount = account.slurpSourceAccountId
-      ? await noodle.getAccountById(account.slurpSourceAccountId)
-      : null;
+    const linkedPublicAccount = await noodle.resolveAccountSource(account);
     const disclosureMode = account.settings.privacy.identityDisclosure ?? "secret";
 
     // Open creators inherit rather than generate, including ones created before artwork existed.

@@ -16,23 +16,35 @@ export const noodleAccounts = fileTable(
     invited: text("invited").notNull().default("false"),
     settings: text("settings").notNull().default("{}"),
     platform: text("platform").notNull().default("slurp"),
-     slurpSourceAccountId: text("slurp_source_account_id"),
+    sourceKind: text("source_kind"),
+    sourceEntityId: text("source_entity_id"),
+    slurpSourceAccountId: text("slurp_source_account_id"),
     // Rollback-only mirrors of platform/slurpSourceAccountId. Nothing reads these; they exist so a
     // build from before the rename can still tell a NoodleR profile from a Noodle account. Without
     // them an older build falls back to the column default and puts NoodleR content on the public
     // timeline. Safe to drop once no supported version reads `visibility`.
-     visibility: text("visibility").notNull().default("public"),
-     publicAccountId: text("slurp_public_account_id"),
+    visibility: text("visibility").notNull().default("public"),
+    publicAccountId: text("slurp_public_account_id"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
   {
     uniqueBy: [
-      { keys: ["slurpSourceAccountId"], when: (row) => row.slurpSourceAccountId != null },
-      { keys: ["handle"], when: (row) => row.platform !== "creator" },
+      {
+        keys: ["sourceKind", "sourceEntityId"],
+        when: (row) => row.platform === "slurp" && row.sourceKind != null && row.sourceEntityId != null,
+      },
+      { keys: ["handle"], when: (row) => row.platform === "slurp" },
     ],
   },
 );
+
+export const slurpViewers = fileTable("slurp_viewers", {
+  personaId: text("persona_id").primaryKey(),
+  settings: text("settings").notNull().default("{}"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
 
 export const noodlePosts = fileTable("slurp_posts", {
   id: text("id").primaryKey(),

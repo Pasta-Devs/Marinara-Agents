@@ -30,7 +30,7 @@ import { createLLMProvider } from "../llm/provider-registry.js";
 import { resolveNoodlerImageConnectionId } from "./noodler-image-connections.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
-import { createSlurpStorage } from "../storage/slurp.storage.js";
+import { createSlurpStorage, type SlurpAccount } from "../storage/slurp.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
 import { generateNoodlerPostImage } from "./noodle-noodler-images.service.js";
 import {
@@ -204,15 +204,10 @@ export async function noodlerPublicIdentityFor(
 
 export async function resolveNoodlerPublicIdentity(
   db: DB,
-  account: Pick<NoodleAccount, "slurpSourceAccountId">,
+  account: Pick<SlurpAccount, "sourceKind" | "sourceEntityId">,
 ): Promise<PublicIdentity | null> {
   const noodle = createSlurpStorage(db);
-  return noodlerPublicIdentityFor(
-    db,
-    account.slurpSourceAccountId
-      ? await noodle.getAccountById(account.slurpSourceAccountId)
-      : null,
-  );
+  return noodlerPublicIdentityFor(db, await noodle.resolveAccountSource(account));
 }
 
 export function stageProfileContainsPublicIdentity(
@@ -473,9 +468,7 @@ export async function generateNoodlerPost(
   const recentPosts = await noodle.listNoodlerPostsByAccount(account.id, 8);
   const disclosureMode =
     account.settings.privacy.identityDisclosure ?? "secret";
-  const linkedPublicAccount = account.slurpSourceAccountId
-    ? await noodle.getAccountById(account.slurpSourceAccountId)
-    : null;
+  const linkedPublicAccount = await noodle.resolveAccountSource(account as SlurpAccount);
   // Derive the identity from the row already in hand; resolving it again would re-read it.
   const publicIdentity = await noodlerPublicIdentityFor(
     db,
@@ -489,7 +482,7 @@ export async function generateNoodlerPost(
     recentPosts,
     request: input.request,
     allowImagePrompt: imagesEnabled,
-    generationGuidance: settings.noodlerGenerationGuidance,
+    generationGuidance: settings.generationGuidance,
   });
   const debugMode = input.request.debugMode === true || isDebugAgentsEnabled();
   logDebugOverride(

@@ -51,7 +51,6 @@ export async function prepareNextNoodlerReservePost(
   const noodle = createSlurpStorage(db);
   const settings = await noodle.getSettings();
   if (
-    !settings.enableNoodler ||
     !settings.autoPostingScheduleEnabled ||
     settings.postsPerDay <= 0
   )
@@ -80,7 +79,7 @@ export async function prepareNextNoodlerReservePost(
   if (accounts.length === 0) return "ineligible";
   let eligibleAccounts = accounts;
   if (
-    settings.noodlerNightQuiet &&
+    settings.nightQuiet &&
     isNoodlerNightQuietTime(new Date(publishAt))
   ) {
     eligibleAccounts = accounts.filter(
@@ -159,9 +158,7 @@ export async function prepareNextNoodlerReservePost(
             : null) ?? (await createConnectionsStorage(db).getDefaultForImageGeneration());
         if (imageConnection) {
           try {
-            const linkedPublicAccount = account.slurpSourceAccountId
-              ? await noodle.getAccountById(account.slurpSourceAccountId)
-              : null;
+            const linkedPublicAccount = await noodle.resolveAccountSource(account);
             const image = await generateNoodlerPostImage({
               account,
               linkedPublicAccount,
@@ -237,10 +234,7 @@ export async function prepareNextNoodlerReservePost(
           policyFingerprint: noodlerReservePolicyFingerprint(
             account,
             settings,
-            account.slurpSourceAccountId
-              ? (await noodle.getAccountById(account.slurpSourceAccountId))
-                  ?.updatedAt
-              : null,
+            (await noodle.resolveAccountSource(account))?.updatedAt ?? null,
           ),
         });
       } catch (persistError) {
