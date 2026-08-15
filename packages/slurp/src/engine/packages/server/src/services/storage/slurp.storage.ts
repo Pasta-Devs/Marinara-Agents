@@ -633,12 +633,12 @@ function isToggleInteractionType(type: NoodleInteractionType) {
   return type === "like" || type === "repost";
 }
 
-// Package-owned default for the editable NoodleR generation guidance. This is the
+// Package-owned default for the editable Slurp generation guidance. This is the
 // single tone prompt: creator personality, mood balance, and the adult flirty lean
-// all live here so they are visible and editable in NoodleR settings, not hardcoded.
-// Keep in sync with NOODLER_DEFAULT_GENERATION_GUIDANCE in the client NoodleHome.tsx.
+// all live here so they are visible and editable in Slurp settings, not hardcoded.
+// Keep this value aligned with the Slurp settings surface.
 export const NOODLER_DEFAULT_GENERATION_GUIDANCE =
-  "All NoodleR creators and viewers are adults (18+). This is an adult creator page: flirty, suggestive, teasing, and sensual posts are common, and explicit posts appear regularly when they suit the creator — but they are not required and need not be the majority. Tease the locked posts and answer flirty comments in kind. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one bluntly, a funny one filthily. Ordinary posts — updates, humor, behind the scenes, project news — matter just as much and keep both the page and the character human. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.";
+  "All Slurp creators and viewers are adults (18+). This is an adult creator page: flirty, suggestive, teasing, and sensual posts are common, and explicit posts appear regularly when they suit the creator — but they are not required and need not be the majority. Tease the locked posts and answer flirty comments in kind. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one bluntly, a funny one filthily. Ordinary posts — updates, humor, behind the scenes, project news — matter just as much and keep both the page and the character human. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.";
 
 /**
  * Every previously shipped default, newest first. An install that never edited the guidance
