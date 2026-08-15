@@ -11,6 +11,7 @@ import { SlurpHome } from "./components/slurp/SlurpHome";
 import { SlurpSettings } from "./components/slurp/SlurpSettings";
 import { useSlurpUIStore } from "./stores/slurp-package.store";
 import { configureSlurpPackageState } from "./stores/slurp-package.store";
+import { ModalPortalContext } from "./components/ui/Modal";
 
 const SLURP_ELEMENT_TAG = "marinara-capability-slurp";
 const SLURP_STYLE_ID = "marinara-capability-slurp-styles";
@@ -97,13 +98,15 @@ function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
   return (
     <I18nextProvider i18n={localization}>
       <QueryClientProvider client={client}>
-        <div className="h-full min-h-0 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
-          {navigation.mode === "creator-settings" ? (
-            <SlurpSettings navigation={navigation} onNavigate={setNavigation} />
-          ) : (
-            <SlurpHome navigation={navigation} onNavigate={setNavigation} />
-          )}
-        </div>
+        <ModalPortalContext.Provider value={element}>
+          <div className="h-full min-h-0 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
+            {navigation.mode === "creator-settings" ? (
+              <SlurpSettings navigation={navigation} onNavigate={setNavigation} />
+            ) : (
+              <SlurpHome navigation={navigation} onNavigate={setNavigation} />
+            )}
+          </div>
+        </ModalPortalContext.Provider>
       </QueryClientProvider>
     </I18nextProvider>
   );
