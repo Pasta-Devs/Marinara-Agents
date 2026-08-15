@@ -72,8 +72,10 @@ for (const id of selectedPackageDirectories) {
     if (error instanceof SyntaxError) continue;
     throw error;
   }
-  // Feature packages own their build in build-feature-packages.mjs.
-  if (!manifest.kind?.includes("agent") || manifest.entrypoints?.server) continue;
+  // Server-bearing feature packages own their build in build-feature-packages.mjs;
+  // client-bearing ones (Pixelforge) own theirs in build-<id>-package.mjs. Rebuilding
+  // either here would strip client.js and assets from files[] and the artifact.
+  if (!manifest.kind?.includes("agent") || manifest.entrypoints?.server || manifest.entrypoints?.client) continue;
   const manifestId = assertPortableFilenameComponent(manifest.id, `Package id in ${id}/manifest.json`);
   if (manifestId !== id) throw new Error(`Package directory ${id} contains manifest id ${manifestId}`);
   const artifactName = packageArtifactName(manifestId, manifest.version);

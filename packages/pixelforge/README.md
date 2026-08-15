@@ -1,0 +1,58 @@
+# Pixelforge
+
+A downloadable Game Mode **Experience** (capability package, `game-surface` slot): a walkable
+top-down pixel village in the spirit of pre-3D Harvest Moon / Stardew Valley, rendered by a
+package-owned Canvas2D engine. NPC dialogue flows into the normal GM turn loop, World Maps
+(hierarchical spatial context) is read and written as you move, and combat hands off to the
+engine's own vanilla combat — the package never replaces it.
+
+Requires **Marinara Engine 2.4.3+** (capability API 1.10 for `contributions.assets`). It is
+client-only: no server entrypoint, no restart after install. The package agent definition is a
+runtime-inert stub that satisfies the catalog loader; all behavior lives in `client.js`.
+
+## How to play
+
+Install Pixelforge from the agent catalog, create a **Game Mode** chat, and choose **Pixelforge**
+in the Experience chooser. Walk with the arrow keys / WASD or the on-screen D-pad, talk to NPCs to
+drive the story, and let the GM narrate. The world saves into the chat (debounced), so reloading
+resumes where you left off.
+
+## Art
+
+Two tiers, resolved at runtime with graceful degradation:
+
+- **Tier 1 (shipped)** — the tile atlas (`tiles.png` + `atlas.json`) and 4-direction × 4-frame
+  walk-cycle sprite sheets (`sprites/*.png` + `sprites.json`) generated at build time by
+  `build/build-art.mjs` with a dependency-free PNG encoder (`build/png.mjs`). Deterministic:
+  rebuilding produces byte-identical assets. Served through the engine's package-asset route via
+  `contributions.assets`.
+- **Tier 0 (fallback)** — procedural Canvas painters inside `client.js`. If assets fail to load
+  (or on engines without asset serving) the game still runs, just plainer.
+
+## Layout
+
+```
+packages/pixelforge/
+├── src/                  # plain-JS modules, concatenated in filename order into client.js
+├── build/
+│   ├── build-art.mjs     # deterministic Tier-1 art generator (writes build/assets/, untracked)
+│   ├── png.mjs           # dependency-free PNG encoder
+│   └── cover.mjs         # regenerates artwork/agent-covers/pixelforge.png
+├── engine-boundary.json  # capability API + build provenance; zero private engine imports
+├── client.js             # generated — do not edit
+├── agents.json           # generated — do not edit
+├── manifest.json         # generated — do not edit
+├── locales/en.json       # generated — do not edit
+└── tiles.png, atlas.json, sprites.json, sprites/*.png   # generated Tier-1 assets
+```
+
+## Rebuilding
+
+```
+node scripts/build-pixelforge-package.mjs
+```
+
+Regenerates `client.js`, the Tier-1 assets, `manifest.json`/`agents.json`/`locales/en.json`, the
+reproducible `artifacts/pixelforge-<version>.zip` (deterministic store-only zip, no system `zip`
+binary needed), and the catalog lanes. Bump `VERSION` in the build script and update
+`engine-boundary.json` when rebuilding against a newer engine.

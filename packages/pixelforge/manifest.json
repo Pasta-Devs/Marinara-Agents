@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 2,
+  "capabilityApi": {
+    "major": 1,
+    "minor": 10
+  },
+  "builtAgainst": {
+    "engineVersion": "2.4.3",
+    "engineCommit": "3fc2924291ede77e13d595ba0ea469b68419ab13"
+  },
+  "id": "pixelforge",
+  "name": "Pixelforge",
+  "version": "0.2.0",
+  "description": "A walkable pixel-art village RPG Experience for Game Mode: explore a closed world, talk to NPCs to drive the story, and let the GM narrate — with World Maps integration and the engine's own combat. Install it, then choose Pixelforge as the Experience when creating a Game Mode chat.",
+  "engine": {
+    "min": "2.4.3",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "client": "client.js"
+  },
+  "contributions": {
+    "slots": [
+      "game-surface"
+    ],
+    "gameSurface": {
+      "surfaceClass": "pixelforge-surface"
+    },
+    "assets": {
+      "paths": [
+        "tiles.png",
+        "atlas.json",
+        "sprites.json",
+        "sprites/player.png",
+        "sprites/mira.png",
+        "sprites/tam.png",
+        "sprites/rook.png"
+      ]
+    }
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "ef05f1d047010e778527de646d1d99f501ba1feea94e01a23ab0b952449841ce",
+      "bytes": 693
+    },
+    {
+      "path": "client.js",
+      "sha256": "5bc63084ec78dd8907c1cbb89864e8b7e030fb5db6882c6b1c80968520d0a5dc",
+      "bytes": 80180
+    },
+    {
+      "path": "tiles.png",
+      "sha256": "5cde968afd12c67f4c3032cfc4bcbb08fd53a48e1ec850cb34c927128cbbb657",
+      "bytes": 1261
+    },
+    {
+      "path": "atlas.json",
+      "sha256": "15f630fa24084ee5cabcb7657e7cd7f077ee87a374bc5cf44c1d6c4568ecd68d",
+      "bytes": 403
+    },
+    {
+      "path": "sprites.json",
+      "sha256": "febd0c4c6b6d4433b2e6b5306a00ddc551fb10c96e84c23df760dc2e4a72385b",
+      "bytes": 269
+    },
+    {
+      "path": "sprites/player.png",
+      "sha256": "dcc25ead27f081dd18824ba7951b5498476bd0537535c5d62d5a27ae07b1cdd7",
+      "bytes": 423
+    },
+    {
+      "path": "sprites/mira.png",
+      "sha256": "1c062d538fbfdea82c1360a9f1af894f8137c9195d09ab982a51471532182496",
+      "bytes": 422
+    },
+    {
+      "path": "sprites/tam.png",
+      "sha256": "2b64f03908d1a2be31fc17c15119cc83dce941a3b4eb4c083d13eed19bf0b536",
+      "bytes": 422
+    },
+    {
+      "path": "sprites/rook.png",
+      "sha256": "1ca8a2b6069b5972adea2bcd115cf0efe1f284ac5f77a6febd1289d349a06a1f",
+      "bytes": 423
+    }
+  ],
+  "permissions": [
+    "ui"
+  ],
+  "restartRequired": false
+}
