@@ -696,10 +696,12 @@ for (const entry of catalog.packages) {
       ),
       "utf8",
     );
-    for (const marker of [surfaceClass, `marinara-capability-${manifest.id}`]) {
-      if (!clientSource.includes(marker)) {
-        throw new Error(`${manifest.id} client runtime is missing the ${marker} game-surface contract`);
-      }
+    // surfaceClass is a host-side styling hook (the Engine applies it to its own
+    // mount container), so the client contract is the custom element the module
+    // loader instantiates for this package.
+    const elementTag = `marinara-capability-${manifest.id}`;
+    if (!clientSource.includes(elementTag)) {
+      throw new Error(`${manifest.id} client runtime is missing the ${elementTag} game-surface contract`);
     }
   }
   if (manifest.kind.includes("conversation-calls")) {

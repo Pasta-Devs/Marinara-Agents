@@ -44,8 +44,8 @@ for (let row = 0; row < 6; row++) {
   art.rect(houseX - 1 + row, houseY + row, houseW + 2 - row * 2, 1, row % 2 ? "#8a3f36" : "#9e4a3f");
 }
 art.rect(houseX + 1, houseY + 5, houseW - 2, 1, "#b85e4d");
-art.rect(houseX + 8, houseY + 14, 4, 8, "#5d4530"); // door
-art.px(houseX + 11, houseY + 18, "#d9c07a"); // knob
+art.rect(houseX + 8, houseY + 9, 4, 5, "#5d4530"); // door
+art.px(houseX + 11, houseY + 11, "#d9c07a"); // knob
 art.rect(houseX + 2, houseY + 9, 3, 3, "#2e5f8a"); // window
 art.rect(houseX + 14, houseY + 9, 3, 3, "#2e5f8a");
 
