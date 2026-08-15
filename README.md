@@ -42,7 +42,7 @@ Across its Engine compatibility lanes, the catalog currently contains **33 first
 | Calls | [`conversation-calls`](packages/conversation-calls/manifest.json) | Adds live audio/video calls, microphone transcription, and character video presence. |
 | CYOA Choices | [`cyoa`](packages/cyoa/manifest.json) | Generates clickable Choose Your Own Adventure choices after Roleplay responses. |
 | Echo Chamber | [`echo-chamber`](packages/echo-chamber/manifest.json) | Simulates a streaming-style audience chat reacting to Roleplay in real time. |
-| Haptic Feedback | [`haptic`](packages/haptic/manifest.json) | Controls connected Intiface devices from analyzed narrative content. |
+| Haptic Feedback | [`haptic`](packages/haptic/manifest.json) | Controls every supported action and pattern on connected Intiface devices. |
 | Illustrator | [`illustrator`](packages/illustrator/manifest.json) | Creates images and videos, with optional automatic Roleplay backgrounds for new scene locations. |
 | Immersive HTML | [`html`](packages/html/manifest.json) | Adds diegetic HTML/CSS/JS visual artifacts without changing story meaning. |
 | Lorebook Keeper | [`lorebook-keeper`](packages/lorebook-keeper/manifest.json) | Creates and updates durable lorebook entries from important story facts. |
