@@ -101,6 +101,10 @@ const artifactClient = execFileSync("unzip", ["-p", artifactPath, "client.js"], 
 assert.deepEqual(artifactManifest, manifest);
 assert.match(artifactClient, /Call summary connection/u);
 assert.match(artifactClient, /Loading connection(?:…|\\u2026)/u);
+assert.match(
+  artifactClient,
+  /mari-chrome-control flex h-8 w-8 items-center justify-center p-0 max-md:h-9 max-md:w-9/u,
+);
 
 for (const relativePath of ["catalog/catalog.json", "catalog/v2/catalog.json", "catalog/v3/catalog.json"]) {
   const catalog = JSON.parse(await readFile(join(repoRoot, relativePath), "utf8"));
