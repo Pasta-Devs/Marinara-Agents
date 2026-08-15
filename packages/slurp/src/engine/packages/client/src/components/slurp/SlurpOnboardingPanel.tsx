@@ -473,7 +473,7 @@ export function SlurpOnboardingWizard({
       <div className="flex max-h-[min(78vh,46rem)] min-h-[26rem] flex-col max-sm:min-h-0 max-sm:max-h-none max-sm:flex-1 max-sm:self-stretch">
         {intro !== null && (
           <div
-            className="-mx-5 flex items-center gap-2 border-b border-[var(--noodle-accent)]/25 bg-gradient-to-r from-[var(--noodle-accent)]/20 via-[var(--noodle-accent)]/8 to-transparent px-5 pb-3 pt-2 max-sm:-mx-4 max-sm:gap-1.5 max-sm:px-4 max-sm:pb-2"
+            className="-mx-5 flex items-center gap-2 border-b border-[#ff7ec1]/25 bg-gradient-to-r from-[#ff7ec1]/20 via-[#ff7ec1]/8 to-transparent px-5 pb-3 pt-2 max-sm:-mx-4 max-sm:gap-1.5 max-sm:px-4 max-sm:pb-2"
             aria-hidden="true"
           >
             {[0, 1, 2, 3].map((dot) => (
@@ -482,15 +482,15 @@ export function SlurpOnboardingWizard({
                 className={cn(
                   "h-1.5 rounded-full transition-all",
                   dot === intro
-                    ? "w-6 bg-[var(--noodle-accent)]"
-                    : "w-1.5 bg-[var(--border)]",
+                    ? "w-6 bg-[#ff7ec1]"
+                    : "w-1.5 bg-[#5b3a52]",
                 )}
               />
             ))}
           </div>
         )}
         {intro === null && setupLane !== null && step < 5 && (
-          <div className="-mx-5 border-b border-[var(--noodle-accent)]/25 bg-gradient-to-r from-[var(--noodle-accent)]/20 via-[var(--noodle-accent)]/8 to-transparent px-5 pb-3 pt-1.5 max-sm:-mx-4 max-sm:px-4 max-sm:pb-1.5">
+          <div className="-mx-5 border-b border-[#ff7ec1]/25 bg-gradient-to-r from-[#ff7ec1]/20 via-[#ff7ec1]/8 to-transparent px-5 pb-3 pt-1.5 max-sm:-mx-4 max-sm:px-4 max-sm:pb-1.5">
             {/* Progress rail: done steps stay reachable, later ones stay locked until you get there. */}
             <ol className="flex gap-1.5">
               {summaries.map((item) => {
@@ -505,7 +505,7 @@ export function SlurpOnboardingWizard({
                       className={cn(
                         "w-full min-w-0 rounded-md px-2 pb-1.5 pt-2 text-left transition-colors max-sm:px-1 max-sm:pb-1 max-sm:pt-1.5",
                         reachable
-                          ? "hover:bg-[var(--accent)]"
+                          ? "hover:bg-[#3a2335]"
                           : "cursor-default opacity-45",
                       )}
                     >
@@ -513,16 +513,16 @@ export function SlurpOnboardingWizard({
                         className={cn(
                           "block h-1 rounded-full transition-colors",
                           step === item.step
-                            ? "bg-[var(--noodle-accent)]"
+                            ? "bg-[#ff7ec1]"
                             : item.step < step
-                              ? "bg-[var(--noodle-accent)]/45"
-                              : "bg-[var(--border)]",
+                              ? "bg-[#ff7ec1]/45"
+                              : "bg-[#5b3a52]",
                         )}
                       />
                       <span className="mt-1.5 block truncate text-[0.7rem] font-bold max-sm:mt-1">
                         {item.label}
                       </span>
-                      <span className="block truncate text-[0.7rem] text-[var(--muted-foreground)] max-sm:hidden">
+                      <span className="block truncate text-[0.7rem] text-[#d8c9d4] max-sm:hidden">
                         {item.value}
                       </span>
                     </button>
@@ -541,7 +541,7 @@ export function SlurpOnboardingWizard({
                 title={t("ui.noodle.noodlerwizard.intro.welcome.title")}
                 help={t("ui.noodle.noodlerwizard.intro.welcome.help")}
               />
-              <div className="flex items-center gap-4 rounded-xl border border-[var(--noodle-accent)]/25 bg-[var(--noodle-accent)]/10 p-4 max-sm:items-start max-sm:gap-3 max-sm:p-3">
+              <div className="flex items-center gap-4 rounded-xl border border-[#ff7ec1]/25 bg-[#ff7ec1]/10 p-4 max-sm:items-start max-sm:gap-3 max-sm:p-3">
                 <img
                   src="/sprites/mari/Mari_wave.png"
                   alt=""
@@ -551,15 +551,15 @@ export function SlurpOnboardingWizard({
                   <p className="font-semibold">
                     {t("ui.noodle.noodlerwizard.intro.welcome.lead")}
                   </p>
-                  <p className="text-[var(--muted-foreground)]">
+                  <p className="text-[#d8c9d4]">
                     {t("ui.noodle.noodlerwizard.intro.welcome.detail")}
                   </p>
                 </div>
               </div>
-              <div className="flex items-start gap-2 rounded-lg border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/10 px-3 py-2 text-xs leading-5 text-[var(--muted-foreground)]">
+              <div className="flex items-start gap-2 rounded-lg border border-[#ff7ec1]/35 bg-[#ff7ec1]/10 px-3 py-2 text-xs leading-5 text-[#d8c9d4]">
                 <AlertTriangle
                   size={14}
-                  className="mt-0.5 shrink-0 text-[var(--noodle-accent)]"
+                  className="mt-0.5 shrink-0 text-[#ff7ec1]"
                 />
                 <p>
                   {t(
@@ -578,7 +578,7 @@ export function SlurpOnboardingWizard({
                 help={t("ui.noodle.noodlerwizard.intro.identity.help")}
               />
               <div className="grid gap-3 max-sm:grid-cols-[5.5rem_minmax(0,1fr)] sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-                <div className="flex flex-col items-center justify-center rounded-xl border border-[var(--noodle-accent)]/25 bg-[var(--noodle-accent)]/10 p-4 text-center max-sm:p-2">
+                <div className="flex flex-col items-center justify-center rounded-xl border border-[#ff7ec1]/25 bg-[#ff7ec1]/10 p-4 text-center max-sm:p-2">
                   <Avatar
                     account={{
                       displayName: demoProfile.displayName,
@@ -590,10 +590,10 @@ export function SlurpOnboardingWizard({
                   <p className="mt-3 font-bold max-sm:mt-2 max-sm:text-xs">
                     {demoProfile.displayName}
                   </p>
-                  <p className="text-xs text-[var(--muted-foreground)]">
+                  <p className="text-xs text-[#d8c9d4]">
                     @{demoProfile.handle}
                   </p>
-                  <p className="mt-2 text-xs font-semibold text-[var(--noodle-accent)] max-sm:mt-1 max-sm:text-[0.625rem]">
+                  <p className="mt-2 text-xs font-semibold text-[#ff7ec1] max-sm:mt-1 max-sm:text-[0.625rem]">
                     {t(
                       `ui.noodle.noodlerwizard.identityPreview.${disclosure}.connection`,
                     )}
@@ -611,14 +611,14 @@ export function SlurpOnboardingWizard({
                       className={cn(
                         "w-full rounded-lg border px-3 py-2.5 text-left transition-colors max-sm:px-2.5 max-sm:py-2",
                         disclosure === value
-                          ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10"
-                           : "border-[var(--border)] hover:border-[var(--noodle-accent)]/40 hover:bg-[var(--noodle-accent)]/8",
+                          ? "border-[#ff7ec1] bg-[#ff7ec1]/10"
+                           : "border-[#5b3a52] hover:border-[#ff7ec1]/40 hover:bg-[#ff7ec1]/8",
                       )}
                     >
                       <span className="block text-sm font-bold">
                         {t(`ui.noodle.noodlerwizard.disclosure.${value}.title`)}
                       </span>
-                      <span className="mt-0.5 block text-xs leading-5 text-[var(--muted-foreground)] max-sm:line-clamp-2 max-sm:leading-4">
+                      <span className="mt-0.5 block text-xs leading-5 text-[#d8c9d4] max-sm:line-clamp-2 max-sm:leading-4">
                         {t(
                           `ui.noodle.noodlerwizard.disclosure.${value}.detail`,
                         )}
@@ -688,8 +688,8 @@ export function SlurpOnboardingWizard({
                     className={cn(
                       "rounded-lg border px-3 py-2.5 text-left transition-colors max-sm:py-2",
                       activityChoice === choice
-                        ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10"
-                         : "border-[var(--border)] hover:border-[var(--noodle-accent)]/40 hover:bg-[var(--noodle-accent)]/8",
+                        ? "border-[#ff7ec1] bg-[#ff7ec1]/10"
+                         : "border-[#5b3a52] hover:border-[#ff7ec1]/40 hover:bg-[#ff7ec1]/8",
                     )}
                   >
                     <span className="block text-sm font-bold">
@@ -697,7 +697,7 @@ export function SlurpOnboardingWizard({
                         `ui.noodle.noodlerwizard.activityChoice.${choice}.title`,
                       )}
                     </span>
-                    <span className="mt-0.5 block text-xs leading-5 text-[var(--muted-foreground)]">
+                    <span className="mt-0.5 block text-xs leading-5 text-[#d8c9d4]">
                       {t(
                         `ui.noodle.noodlerwizard.activityChoice.${choice}.detail`,
                       )}
@@ -705,13 +705,13 @@ export function SlurpOnboardingWizard({
                   </button>
                 ))}
               </div>
-              <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-lg border border-[var(--noodle-accent)]/30 bg-[var(--noodle-accent)]/[0.06] px-3 py-2.5">
+              <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-lg border border-[#ff7ec1]/30 bg-[#ff7ec1]/[0.06] px-3 py-2.5">
                 <label className="flex items-center gap-2 text-sm font-semibold">
                   <input
                     type="checkbox"
                     checked={nightQuiet}
                     onChange={(event) => setNightQuiet(event.target.checked)}
-                    className="h-4 w-4 accent-[var(--noodle-accent)]"
+                    className="h-4 w-4 accent-[#ff7ec1]"
                   />
                   {t("ui.noodle.noodlerwizard.nightQuiet")}
                 </label>
@@ -720,12 +720,12 @@ export function SlurpOnboardingWizard({
                     type="checkbox"
                     checked={imagesEnabled}
                     onChange={(event) => setImagesEnabled(event.target.checked)}
-                    className="h-4 w-4 accent-[var(--noodle-accent)]"
+                    className="h-4 w-4 accent-[#ff7ec1]"
                   />
                   {t("ui.noodle.noodlerwizard.imagesShort")}
                 </label>
               </div>
-              <div className="flex items-center gap-3 rounded-lg border border-[var(--noodle-accent)]/30 bg-[var(--noodle-accent)]/8 px-3 py-2.5 max-sm:py-2">
+              <div className="flex items-center gap-3 rounded-lg border border-[#ff7ec1]/30 bg-[#ff7ec1]/8 px-3 py-2.5 max-sm:py-2">
                 <img
                   src="/sprites/mari/Mari_explaining.png"
                   alt=""
@@ -756,19 +756,19 @@ export function SlurpOnboardingWizard({
                     setSetupLane("easy");
                     setStep(1);
                   }}
-                  className="group rounded-xl border border-[var(--noodle-accent)]/60 bg-gradient-to-br from-[var(--noodle-accent)]/22 to-[var(--noodle-accent)]/6 p-5 text-left shadow-sm shadow-[var(--noodle-accent)]/15 transition-[transform,box-shadow,background-color] hover:-translate-y-0.5 hover:shadow-md hover:shadow-[var(--noodle-accent)]/25 motion-reduce:transform-none"
+                  className="group rounded-xl border border-[#ff7ec1]/60 bg-gradient-to-br from-[#ff7ec1]/22 to-[#ff7ec1]/6 p-5 text-left shadow-sm shadow-[#ff7ec1]/15 transition-[transform,box-shadow,background-color] hover:-translate-y-0.5 hover:shadow-md hover:shadow-[#ff7ec1]/25 motion-reduce:transform-none"
                 >
                   <span className="flex items-center gap-2 text-base font-bold">
                     <Sparkles
                       size={17}
-                      className="text-[var(--noodle-accent)]"
+                      className="text-[#ff7ec1]"
                     />
                     {t("ui.noodle.noodlerwizard.handoff.easy.title")}
                   </span>
-                  <span className="mt-2 block text-sm leading-6 text-[var(--muted-foreground)]">
+                  <span className="mt-2 block text-sm leading-6 text-[#d8c9d4]">
                     {t("ui.noodle.noodlerwizard.handoff.easy.detail")}
                   </span>
-                  <span className="mt-4 flex items-center gap-1 text-sm font-bold text-[var(--noodle-accent)]">
+                  <span className="mt-4 flex items-center gap-1 text-sm font-bold text-[#ff7ec1]">
                     {t("ui.noodle.noodlerwizard.handoff.easy.action")}
                     <ChevronRight size={15} />
                   </span>
@@ -779,16 +779,16 @@ export function SlurpOnboardingWizard({
                     setSetupLane("customize");
                     setStep(1);
                   }}
-                  className="group rounded-xl border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/[0.06] p-5 text-left transition-[transform,background-color] hover:-translate-y-0.5 hover:bg-[var(--noodle-accent)]/12 motion-reduce:transform-none"
+                  className="group rounded-xl border border-[#ff7ec1]/35 bg-[#ff7ec1]/[0.06] p-5 text-left transition-[transform,background-color] hover:-translate-y-0.5 hover:bg-[#ff7ec1]/12 motion-reduce:transform-none"
                 >
                   <span className="flex items-center gap-2 text-base font-bold">
                     <SlidersHorizontal size={17} />
                     {t("ui.noodle.noodlerwizard.handoff.customize.title")}
                   </span>
-                  <span className="mt-2 block text-sm leading-6 text-[var(--muted-foreground)]">
+                  <span className="mt-2 block text-sm leading-6 text-[#d8c9d4]">
                     {t("ui.noodle.noodlerwizard.handoff.customize.detail")}
                   </span>
-                  <span className="mt-4 flex items-center gap-1 text-sm font-bold text-[var(--foreground)]">
+                  <span className="mt-4 flex items-center gap-1 text-sm font-bold text-[#fff7fc]">
                     {t("ui.noodle.noodlerwizard.handoff.customize.action")}
                     <ChevronRight size={15} />
                   </span>
@@ -813,7 +813,7 @@ export function SlurpOnboardingWizard({
                     onClick={() =>
                       setSetupLane(setupLane === "easy" ? "customize" : "easy")
                     }
-                    className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-[var(--noodle-accent)]/40 px-3 text-xs font-bold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10"
+                    className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-[#ff7ec1]/40 px-3 text-xs font-bold text-[#ff7ec1] transition-colors hover:bg-[#ff7ec1]/10"
                   >
                     <SlidersHorizontal size={13} />
                     {t(
@@ -825,8 +825,8 @@ export function SlurpOnboardingWizard({
                 )}
               </div>
               {accounts.length > 0 && (
-                <div className="sticky top-0 z-10 -mt-1 flex items-center justify-between gap-3 rounded-lg border border-[var(--noodle-accent)]/25 bg-[color-mix(in_srgb,var(--noodle-accent)_8%,var(--background))] px-3 py-1.5">
-                  <span className="text-xs font-bold text-[var(--noodle-accent)]">
+                <div className="sticky top-0 z-10 -mt-1 flex items-center justify-between gap-3 rounded-lg border border-[#ff7ec1]/25 bg-[color-mix(in_srgb,var(--noodle-accent)_8%,var(--background))] px-3 py-1.5">
+                  <span className="text-xs font-bold text-[#ff7ec1]">
                     {t("ui.noodle.noodlerwizard.selectedCount", {
                       count: selected.size,
                     })}
@@ -845,7 +845,7 @@ export function SlurpOnboardingWizard({
                         ),
                       )
                     }
-                    className="min-h-10 shrink-0 px-1 text-xs font-bold text-[var(--noodle-accent)] disabled:opacity-40"
+                    className="min-h-10 shrink-0 px-1 text-xs font-bold text-[#ff7ec1] disabled:opacity-40"
                   >
                     {selected.size > 0
                       ? t("ui.noodle.noodlerwizard.selectNone")
@@ -855,13 +855,13 @@ export function SlurpOnboardingWizard({
               )}
               {eligible.isError && accounts.length === 0 ? (
                 <div className="py-8 text-center">
-                  <p className="text-sm text-[var(--muted-foreground)]">
+                  <p className="text-sm text-[#d8c9d4]">
                     {t("ui.noodle.noodlerwizard.loadFailed")}
                   </p>
                   <button
                     type="button"
                     onClick={() => void eligible.refetch()}
-                    className="mt-2 min-h-10 px-2 text-sm font-bold text-[var(--noodle-accent)]"
+                    className="mt-2 min-h-10 px-2 text-sm font-bold text-[#ff7ec1]"
                   >
                     {t("capabilities.actions.tryAgain")}
                   </button>
@@ -870,10 +870,10 @@ export function SlurpOnboardingWizard({
                 !eligible.isLoading &&
                 !eligible.hasNextPage ? (
                 <div className="flex flex-col items-center py-8 text-center">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--noodle-accent)]/12 text-[var(--noodle-accent)]">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#ff7ec1]/12 text-[#ff7ec1]">
                     <Users size={22} />
                   </span>
-                  <p className="mt-3 max-w-md text-sm leading-6 text-[var(--muted-foreground)]">
+                  <p className="mt-3 max-w-md text-sm leading-6 text-[#d8c9d4]">
                     {t("ui.noodle.noodlerwizard.zeroEligible")}
                   </p>
                 </div>
@@ -890,8 +890,8 @@ export function SlurpOnboardingWizard({
                       className={cn(
                         "flex min-h-16 items-center gap-3 rounded-xl border px-3 py-2 text-left transition-[transform,background-color,box-shadow] hover:-translate-y-0.5 motion-reduce:transform-none",
                         selected.has(account.id)
-                          ? "border-[var(--noodle-accent)] bg-gradient-to-r from-[var(--noodle-accent)]/20 to-[var(--noodle-accent)]/5 shadow-sm shadow-[var(--noodle-accent)]/20 ring-1 ring-[var(--noodle-accent)]/35"
-                          : "border-[var(--border)] hover:border-[var(--noodle-accent)]/40 hover:bg-[var(--noodle-accent)]/[0.06]",
+                          ? "border-[#ff7ec1] bg-gradient-to-r from-[#ff7ec1]/20 to-[#ff7ec1]/5 shadow-sm shadow-[#ff7ec1]/20 ring-1 ring-[#ff7ec1]/35"
+                          : "border-[#5b3a52] hover:border-[#ff7ec1]/40 hover:bg-[#ff7ec1]/[0.06]",
                         selectionFull &&
                           !selected.has(account.id) &&
                           "opacity-40",
@@ -909,7 +909,7 @@ export function SlurpOnboardingWizard({
                         <span className="block truncate text-sm font-semibold">
                           {account.displayName}
                         </span>
-                        <span className="block truncate text-xs text-[var(--muted-foreground)]">
+                        <span className="block truncate text-xs text-[#d8c9d4]">
                           @{account.handle}
                         </span>
                       </span>
@@ -918,8 +918,8 @@ export function SlurpOnboardingWizard({
                         className={cn(
                           "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
                           selected.has(account.id)
-                            ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)] text-zinc-950"
-                            : "border-[var(--border)]",
+                            ? "border-[#ff7ec1] bg-[#ff7ec1] text-zinc-950"
+                            : "border-[#5b3a52]",
                         )}
                       >
                         {selected.has(account.id) && <Check size={13} />}
@@ -930,7 +930,7 @@ export function SlurpOnboardingWizard({
                     Array.from({ length: 4 }, (_, index) => (
                       <span
                         key={`skeleton-${index}`}
-                        className="min-h-14 animate-pulse rounded-lg border border-[var(--border)] bg-[var(--accent)]/40"
+                        className="min-h-14 animate-pulse rounded-lg border border-[#5b3a52] bg-[#3a2335]/40"
                       >
                         <span className="sr-only">
                           {t("ui.noodle.noodlerwizard.loadingCharacters")}
@@ -942,7 +942,7 @@ export function SlurpOnboardingWizard({
               {selectionFull && (
                 <p
                   aria-live="polite"
-                  className="text-xs font-semibold text-[var(--muted-foreground)]"
+                  className="text-xs font-semibold text-[#d8c9d4]"
                 >
                   {t("ui.noodle.noodlerwizard.selectionLimit", {
                     count: NOODLER_BULK_ACCOUNT_MAX,
@@ -968,14 +968,14 @@ export function SlurpOnboardingWizard({
                     className={cn(
                       "w-full rounded-md border p-3 text-left",
                       disclosure === value
-                        ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10"
-                        : "border-[var(--border)] hover:bg-[var(--accent)]",
+                        ? "border-[#ff7ec1] bg-[#ff7ec1]/10"
+                        : "border-[#5b3a52] hover:bg-[#3a2335]",
                     )}
                   >
                     <span className="block text-sm font-bold">
                       {t(`ui.noodle.noodlerwizard.disclosure.${value}.title`)}
                     </span>
-                    <span className="mt-1 block text-xs leading-5 text-[var(--muted-foreground)]">
+                    <span className="mt-1 block text-xs leading-5 text-[#d8c9d4]">
                       {t(`ui.noodle.noodlerwizard.disclosure.${value}.detail`)}
                     </span>
                   </button>
@@ -986,7 +986,7 @@ export function SlurpOnboardingWizard({
                   <h4 className="mb-2 text-sm font-bold">
                     {t("ui.noodle.noodlerwizard.exceptions")}
                   </h4>
-                  <div className="divide-y divide-[var(--noodle-accent)]/20 rounded-md border border-[var(--noodle-accent)]/30">
+                  <div className="divide-y divide-[#ff7ec1]/20 rounded-md border border-[#ff7ec1]/30">
                     {accounts
                       .filter((account) => selected.has(account.id))
                       .map((account) => (
@@ -1006,7 +1006,7 @@ export function SlurpOnboardingWizard({
                                   .value as NoodleIdentityDisclosure,
                               }))
                             }
-                            className="h-8 rounded-md border border-[var(--border)] bg-[var(--background)] px-2"
+                            className="h-8 rounded-md border border-[#5b3a52] bg-[var(--background)] px-2"
                           >
                             {DISCLOSURES.map((value) => (
                               <option key={value} value={value}>
@@ -1029,24 +1029,24 @@ export function SlurpOnboardingWizard({
                 title={t("ui.noodle.noodlerwizard.activity")}
                 help={t("ui.noodle.noodlerwizard.activityHelp")}
               />
-              <p className="rounded-lg border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/10 px-3 py-2 text-xs leading-5 text-[var(--muted-foreground)]">
+              <p className="rounded-lg border border-[#ff7ec1]/35 bg-[#ff7ec1]/10 px-3 py-2 text-xs leading-5 text-[#d8c9d4]">
                 {t("ui.noodle.noodlerschedulemanagermodal.limitsTemporary")}
               </p>
               <>
-                <label className="flex min-h-12 items-center gap-3 rounded-md border border-[var(--border)] px-3">
+                <label className="flex min-h-12 items-center gap-3 rounded-md border border-[#5b3a52] px-3">
                   <input
                     type="checkbox"
                     checked={autoPostingEnabled}
                     onChange={(event) =>
                       setAutoPostingEnabled(event.target.checked)
                     }
-                    className="h-4 w-4 accent-[var(--noodle-accent)]"
+                    className="h-4 w-4 accent-[#ff7ec1]"
                   />
                   <span>
                     <span className="block text-sm font-semibold">
                       {t("ui.noodle.noodlerwizard.autoPosting")}
                     </span>
-                    <span className="block text-xs text-[var(--muted-foreground)]">
+                    <span className="block text-xs text-[#d8c9d4]">
                       {t("ui.noodle.noodlerwizard.autoPostingHelp")}
                     </span>
                   </span>
@@ -1066,23 +1066,23 @@ export function SlurpOnboardingWizard({
                           setPostsPerDay(value);
                           setPostsPerDayDraft(String(value));
                         }}
-                        className="mt-2 h-11 w-28 rounded-md border border-[var(--border)] bg-[var(--background)] px-3"
+                        className="mt-2 h-11 w-28 rounded-md border border-[#5b3a52] bg-[var(--background)] px-3"
                       />
                     </label>
-                    <label className="flex min-h-12 items-center gap-3 rounded-md border border-[var(--border)] px-3">
+                    <label className="flex min-h-12 items-center gap-3 rounded-md border border-[#5b3a52] px-3">
                       <input
                         type="checkbox"
                         checked={nightQuiet}
                         onChange={(event) =>
                           setNightQuiet(event.target.checked)
                         }
-                        className="h-4 w-4 accent-[var(--noodle-accent)]"
+                        className="h-4 w-4 accent-[#ff7ec1]"
                       />
                       <span>
                         <span className="block text-sm font-semibold">
                           {t("ui.noodle.noodlerwizard.nightQuiet")}
                         </span>
-                        <span className="block text-xs text-[var(--muted-foreground)]">
+                        <span className="block text-xs text-[#d8c9d4]">
                           {t("ui.noodle.noodlerwizard.nightQuietHelp")}
                         </span>
                       </span>
@@ -1109,12 +1109,12 @@ export function SlurpOnboardingWizard({
                 }
               />
               {setupLane === "customize" && (
-                <label className="flex min-h-12 items-center justify-between gap-4 rounded-md border border-[var(--border)] px-3">
+                <label className="flex min-h-12 items-center justify-between gap-4 rounded-md border border-[#5b3a52] px-3">
                   <span className="min-w-0">
                     <span className="block text-sm font-semibold">
                       {t("ui.noodle.noodlerwizard.images")}
                     </span>
-                    <span className="block text-xs leading-5 text-[var(--muted-foreground)]">
+                    <span className="block text-xs leading-5 text-[#d8c9d4]">
                       {t("ui.noodle.noodlerwizard.imagesHelp")}
                     </span>
                   </span>
@@ -1123,18 +1123,18 @@ export function SlurpOnboardingWizard({
                     role="switch"
                     checked={imagesEnabled}
                     onChange={(event) => setImagesEnabled(event.target.checked)}
-                    className="h-5 w-5 shrink-0 accent-[var(--noodle-accent)]"
+                    className="h-5 w-5 shrink-0 accent-[#ff7ec1]"
                   />
                 </label>
               )}
               {setupLane === "easy" ? (
-                <div className="divide-y divide-[var(--noodle-accent)]/20 rounded-lg border border-[var(--noodle-accent)]/30 bg-[var(--noodle-accent)]/[0.06]">
+                <div className="divide-y divide-[#ff7ec1]/20 rounded-lg border border-[#ff7ec1]/30 bg-[#ff7ec1]/[0.06]">
                   <div className="flex min-h-14 items-center justify-between gap-4 px-3 py-2.5">
                     <span>
                       <span className="block text-sm font-semibold">
                         {t("ui.noodle.noodlerwizard.characters")}
                       </span>
-                      <span className="block text-xs text-[var(--muted-foreground)]">
+                      <span className="block text-xs text-[#d8c9d4]">
                         {t("ui.noodle.noodlerwizard.selectedCount", {
                           count: selected.size,
                         })}
@@ -1143,7 +1143,7 @@ export function SlurpOnboardingWizard({
                     <button
                       type="button"
                       onClick={() => setStep(1)}
-                      className="min-h-9 shrink-0 px-2 text-xs font-bold text-[var(--noodle-accent)]"
+                      className="min-h-9 shrink-0 px-2 text-xs font-bold text-[#ff7ec1]"
                     >
                       {t("ui.noodle.noodlerwizard.change")}
                     </button>
@@ -1159,7 +1159,7 @@ export function SlurpOnboardingWizard({
                           event.target.value as NoodleIdentityDisclosure,
                         )
                       }
-                      className="h-9 min-w-0 max-w-[65%] rounded-md border border-[var(--border)] bg-[var(--background)] px-2 text-sm"
+                      className="h-9 min-w-0 max-w-[65%] rounded-md border border-[#5b3a52] bg-[var(--background)] px-2 text-sm"
                     >
                       {DISCLOSURES.map((value) => (
                         <option key={value} value={value}>
@@ -1180,11 +1180,11 @@ export function SlurpOnboardingWizard({
                         onChange={(event) =>
                           setAutoPostingEnabled(event.target.checked)
                         }
-                        className="h-5 w-5 shrink-0 accent-[var(--noodle-accent)]"
+                        className="h-5 w-5 shrink-0 accent-[#ff7ec1]"
                       />
                     </label>
                     {autoPostingEnabled && (
-                      <label className="flex items-center justify-between gap-4 text-xs text-[var(--muted-foreground)]">
+                      <label className="flex items-center justify-between gap-4 text-xs text-[#d8c9d4]">
                         <span>
                           {t("ui.noodle.noodlerwizard.easyPostingPace")}
                         </span>
@@ -1203,7 +1203,7 @@ export function SlurpOnboardingWizard({
                             aria-label={t(
                               "ui.noodle.noodlerwizard.postsPerDay",
                             )}
-                            className="h-9 w-16 rounded-md border border-[var(--border)] bg-[var(--background)] px-2 text-center text-sm text-[var(--foreground)]"
+                            className="h-9 w-16 rounded-md border border-[#5b3a52] bg-[var(--background)] px-2 text-center text-sm text-[#fff7fc]"
                           />
                           {t("ui.noodle.noodlerwizard.postsPerDayShort")}
                         </span>
@@ -1219,7 +1219,7 @@ export function SlurpOnboardingWizard({
                       role="switch"
                       checked={nightQuiet}
                       onChange={(event) => setNightQuiet(event.target.checked)}
-                      className="h-5 w-5 shrink-0 accent-[var(--noodle-accent)]"
+                      className="h-5 w-5 shrink-0 accent-[#ff7ec1]"
                     />
                   </label>
                   <label className="flex min-h-14 items-center justify-between gap-4 px-3 py-2.5">
@@ -1233,12 +1233,12 @@ export function SlurpOnboardingWizard({
                       onChange={(event) =>
                         setImagesEnabled(event.target.checked)
                       }
-                      className="h-5 w-5 shrink-0 accent-[var(--noodle-accent)]"
+                      className="h-5 w-5 shrink-0 accent-[#ff7ec1]"
                     />
                   </label>
                 </div>
               ) : (
-                <div className="divide-y divide-[var(--noodle-accent)]/20 rounded-lg border border-[var(--noodle-accent)]/30 bg-[var(--noodle-accent)]/[0.06]">
+                <div className="divide-y divide-[#ff7ec1]/20 rounded-lg border border-[#ff7ec1]/30 bg-[#ff7ec1]/[0.06]">
                   {[
                     [
                       t("ui.noodle.noodlerwizard.characters"),
@@ -1276,26 +1276,26 @@ export function SlurpOnboardingWizard({
                       className="flex items-start justify-between gap-4 px-3 py-2.5 text-sm"
                     >
                       <span className="font-semibold">{label}</span>
-                      <span className="max-w-[65%] text-right text-[var(--muted-foreground)]">
+                      <span className="max-w-[65%] text-right text-[#d8c9d4]">
                         {value}
                       </span>
                     </div>
                   ))}
                 </div>
               )}
-              <div className="rounded-md bg-[var(--accent)]/30 p-4 ring-1 ring-inset ring-[var(--border)]">
+              <div className="rounded-md bg-[#3a2335]/30 p-4 ring-1 ring-inset ring-[#5b3a52]">
                 <label className="flex min-h-11 items-center gap-3">
                   <input
                     type="checkbox"
                     checked={generateNow}
                     onChange={(event) => setGenerateNow(event.target.checked)}
-                    className="h-5 w-5 accent-[var(--noodle-accent)]"
+                    className="h-5 w-5 accent-[#ff7ec1]"
                   />
                   <span>
                     <span className="block text-sm font-semibold">
                       {t("ui.noodle.noodlerwizard.generateNow")}
                     </span>
-                    <span className="block text-xs leading-5 text-[var(--muted-foreground)]">
+                    <span className="block text-xs leading-5 text-[#d8c9d4]">
                       {t("ui.noodle.noodlerwizard.generateNowHelp")}
                     </span>
                   </span>
@@ -1308,9 +1308,9 @@ export function SlurpOnboardingWizard({
             <div className="flex min-h-[20rem] flex-col items-center justify-center text-center">
               <div
                 className={cn(
-                  "flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-[var(--noodle-accent)] to-[var(--noodle-accent)]/70 text-zinc-950 shadow-lg shadow-[var(--noodle-accent)]/25",
+                  "flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-[#ff7ec1] to-[#ff7ec1]/70 text-zinc-950 shadow-lg shadow-[#ff7ec1]/25",
                   completion === "generated" &&
-                    "ring-4 ring-[var(--noodle-accent)]/20 transition-shadow duration-500 motion-reduce:transition-none",
+                    "ring-4 ring-[#ff7ec1]/20 transition-shadow duration-500 motion-reduce:transition-none",
                 )}
               >
                 {completion === "generated" ? (
@@ -1330,7 +1330,7 @@ export function SlurpOnboardingWizard({
               >
                 {t(`ui.noodle.noodlerwizard.completion.${completion}.title`)}
               </h3>
-              <p className="mt-2 max-w-md text-sm leading-6 text-[var(--muted-foreground)]">
+              <p className="mt-2 max-w-md text-sm leading-6 text-[#d8c9d4]">
                 {t(`ui.noodle.noodlerwizard.completion.${completion}.detail`, {
                   created: createdIds.length,
                   generated: generatedCount,
@@ -1346,9 +1346,9 @@ export function SlurpOnboardingWizard({
                   ].map((cell) => (
                     <div
                       key={cell.key}
-                      className="min-w-24 rounded-md bg-[var(--accent)]/30 px-3 py-2 ring-1 ring-inset ring-[var(--border)]"
+                      className="min-w-24 rounded-md bg-[#3a2335]/30 px-3 py-2 ring-1 ring-inset ring-[#5b3a52]"
                     >
-                      <dt className="text-[0.7rem] font-semibold text-[var(--muted-foreground)]">
+                      <dt className="text-[0.7rem] font-semibold text-[#d8c9d4]">
                         {t(`ui.noodle.noodlerwizard.stat.${cell.key}`)}
                       </dt>
                       <dd className="text-lg font-bold">{cell.value}</dd>
@@ -1382,7 +1382,7 @@ export function SlurpOnboardingWizard({
                       );
                     })();
                   }}
-                  className="mt-5 flex min-h-10 items-center gap-2 rounded-md border border-[var(--noodle-accent)]/40 px-4 text-sm font-bold text-[var(--noodle-accent)] disabled:opacity-50"
+                  className="mt-5 flex min-h-10 items-center gap-2 rounded-md border border-[#ff7ec1]/40 px-4 text-sm font-bold text-[#ff7ec1] disabled:opacity-50"
                 >
                   <RefreshCw
                     size={15}
@@ -1396,7 +1396,7 @@ export function SlurpOnboardingWizard({
                   type="button"
                   disabled={pending}
                   onClick={() => void finish()}
-                  className="mt-5 flex min-h-10 items-center gap-2 rounded-md border border-[var(--noodle-accent)]/40 px-4 text-sm font-bold text-[var(--noodle-accent)] disabled:opacity-50"
+                  className="mt-5 flex min-h-10 items-center gap-2 rounded-md border border-[#ff7ec1]/40 px-4 text-sm font-bold text-[#ff7ec1] disabled:opacity-50"
                 >
                   <RefreshCw
                     size={15}
@@ -1410,7 +1410,7 @@ export function SlurpOnboardingWizard({
                   type="button"
                   disabled={refreshTargeted.isPending}
                   onClick={() => void runGeneration(failedIds)}
-                  className="mt-5 flex min-h-10 items-center gap-2 rounded-md border border-[var(--noodle-accent)]/40 px-4 text-sm font-bold text-[var(--noodle-accent)] disabled:opacity-50"
+                  className="mt-5 flex min-h-10 items-center gap-2 rounded-md border border-[#ff7ec1]/40 px-4 text-sm font-bold text-[#ff7ec1] disabled:opacity-50"
                 >
                   <RefreshCw
                     size={15}
@@ -1423,14 +1423,14 @@ export function SlurpOnboardingWizard({
           )}
         </div>
 
-        <div className="border-t border-[var(--border)] pt-3 max-sm:pt-2">
+        <div className="border-t border-[#5b3a52] pt-3 max-sm:pt-2">
           <div className="flex items-center justify-between gap-3 max-sm:gap-1.5">
             <div className="flex items-center gap-2 max-sm:gap-0.5">
               {intro !== null && intro > 0 && (
                 <button
                   type="button"
                   onClick={() => setIntro((intro - 1) as Intro)}
-                  className="flex min-h-10 items-center gap-1 rounded-md border border-[var(--border)] px-3 text-sm font-bold max-sm:px-2"
+                  className="flex min-h-10 items-center gap-1 rounded-md border border-[#5b3a52] px-3 text-sm font-bold max-sm:px-2"
                 >
                   <ChevronLeft size={15} />
                   {t("ui.noodle.noodlerwizard.back")}
@@ -1442,7 +1442,7 @@ export function SlurpOnboardingWizard({
                   onClick={() =>
                     setStep(setupLane === "easy" ? 1 : ((step - 1) as Step))
                   }
-                  className="flex min-h-10 items-center gap-1 rounded-md border border-[var(--border)] px-3 text-sm font-bold max-sm:px-2"
+                  className="flex min-h-10 items-center gap-1 rounded-md border border-[#5b3a52] px-3 text-sm font-bold max-sm:px-2"
                 >
                   <ChevronLeft size={15} />
                   {t("ui.noodle.noodlerwizard.back")}
@@ -1455,7 +1455,7 @@ export function SlurpOnboardingWizard({
                   <button
                     type="button"
                     onClick={() => setSetupLane(null)}
-                    className="flex min-h-10 items-center gap-1 rounded-md border border-[var(--border)] px-3 text-sm font-bold max-sm:px-2"
+                    className="flex min-h-10 items-center gap-1 rounded-md border border-[#5b3a52] px-3 text-sm font-bold max-sm:px-2"
                   >
                     <ChevronLeft size={15} />
                     {t("ui.noodle.noodlerwizard.back")}
@@ -1470,7 +1470,7 @@ export function SlurpOnboardingWizard({
                     onClick={() =>
                       intro === null ? void skip() : setIntro(null)
                     }
-                    className="min-h-10 rounded-md px-2 text-sm font-semibold text-[var(--muted-foreground)] hover:text-[var(--foreground)] disabled:opacity-50 max-sm:px-1.5 max-sm:text-xs"
+                    className="min-h-10 rounded-md px-2 text-sm font-semibold text-[#d8c9d4] hover:text-[#fff7fc] disabled:opacity-50 max-sm:px-1.5 max-sm:text-xs"
                   >
                     {intro === null
                       ? t("ui.noodle.noodlerwizard.skip")
@@ -1485,7 +1485,7 @@ export function SlurpOnboardingWizard({
                 onClick={() =>
                   setIntro(intro < LAST_INTRO ? ((intro + 1) as Intro) : null)
                 }
-                className="flex min-h-10 items-center gap-2 rounded-md bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 disabled:opacity-50 max-sm:px-3"
+                className="flex min-h-10 items-center gap-2 rounded-md bg-[#ff7ec1] px-4 text-sm font-bold text-zinc-950 disabled:opacity-50 max-sm:px-3"
               >
                 {intro < LAST_INTRO
                   ? t("ui.noodle.noodlerwizard.continue")
@@ -1502,7 +1502,7 @@ export function SlurpOnboardingWizard({
                     else if (setupLane === "easy" && step === 1) setStep(4);
                     else setStep((step + 1) as Step);
                   }}
-                  className="flex min-h-10 items-center gap-2 rounded-md bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950 disabled:opacity-50 max-sm:px-3 max-sm:text-xs"
+                  className="flex min-h-10 items-center gap-2 rounded-md bg-[#ff7ec1] px-4 text-sm font-bold text-zinc-950 disabled:opacity-50 max-sm:px-3 max-sm:text-xs"
                 >
                   {pending && <Loader2 size={15} className="animate-spin" />}
                   {step === 4
@@ -1523,7 +1523,7 @@ export function SlurpOnboardingWizard({
               <button
                 type="button"
                 onClick={onClose}
-                className="min-h-10 rounded-md bg-[var(--noodle-accent)] px-4 text-sm font-bold text-zinc-950"
+                className="min-h-10 rounded-md bg-[#ff7ec1] px-4 text-sm font-bold text-zinc-950"
               >
                 {t("ui.noodle.noodlerwizard.openAllCreators")}
               </button>
@@ -1532,7 +1532,7 @@ export function SlurpOnboardingWizard({
           {/* Creating profiles then writing first posts can take a while; say which half we are in. */}
           <p
             aria-live="polite"
-            className="mt-2 min-h-4 text-xs text-[var(--muted-foreground)] max-sm:mt-1"
+            className="mt-2 min-h-4 text-xs text-[#d8c9d4] max-sm:mt-1"
           >
             {bulkCreate.isPending
               ? t("ui.noodle.noodlerwizard.progressCreating")
@@ -1557,14 +1557,14 @@ function StepHeading({
 }) {
   return (
     <div className="flex gap-3 max-sm:gap-2">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[var(--noodle-accent)] to-[var(--noodle-accent)]/70 text-zinc-950 shadow-sm shadow-[var(--noodle-accent)]/30 max-sm:h-8 max-sm:w-8">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#ff7ec1] to-[#ff7ec1]/70 text-zinc-950 shadow-sm shadow-[#ff7ec1]/30 max-sm:h-8 max-sm:w-8">
         {icon}
       </span>
       <div className="min-w-0">
         <h3 className="text-xl font-bold leading-snug max-sm:text-lg">
           {title}
         </h3>
-        <p className="mt-1 max-w-[70ch] text-sm leading-6 text-[var(--muted-foreground)] max-sm:leading-5">
+        <p className="mt-1 max-w-[70ch] text-sm leading-6 text-[#d8c9d4] max-sm:leading-5">
           {help}
         </p>
       </div>
