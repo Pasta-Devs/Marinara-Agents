@@ -604,6 +604,7 @@ export function SlurpOnboardingWizard({
                     <button
                       key={value}
                       type="button"
+                      aria-pressed={disclosure === value}
                       onClick={() => {
                         setDisclosure(value);
                         setPostExplored(false);
@@ -611,12 +612,13 @@ export function SlurpOnboardingWizard({
                       className={cn(
                         "w-full rounded-lg border px-3 py-2.5 text-left transition-colors max-sm:px-2.5 max-sm:py-2",
                         disclosure === value
-                          ? "border-[#ff7ec1] bg-[#ff7ec1]/10"
+                          ? "border-[#ff7ec1] bg-[#ff7ec1]/15 text-[#fff7fc] ring-2 ring-[#ff7ec1]/45"
                            : "border-[#5b3a52] hover:border-[#ff7ec1]/40 hover:bg-[#ff7ec1]/8",
                       )}
                     >
-                      <span className="block text-sm font-bold">
+                      <span className="flex items-center justify-between gap-2 text-sm font-bold">
                         {t(`ui.noodle.noodlerwizard.disclosure.${value}.title`)}
+                        {disclosure === value && <Check size={15} className="shrink-0 text-[#ff7ec1]" />}
                       </span>
                       <span className="mt-0.5 block text-xs leading-5 text-[#d8c9d4] max-sm:line-clamp-2 max-sm:leading-4">
                         {t(

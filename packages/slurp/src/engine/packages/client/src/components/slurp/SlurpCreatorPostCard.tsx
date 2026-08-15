@@ -262,7 +262,7 @@ export function LockedSlurpPostCard({
               type="button"
               disabled={unlockPending || subscriptionPending}
               onClick={() => setUnlockSheetOpen(true)}
-              className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-[opacity,scale] hover:opacity-90 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:!text-zinc-950"
+              className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md bg-[#ff7ec1] px-4 text-xs font-bold text-[#17121b] transition-[opacity,scale] hover:bg-[#ff9dce] active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:!text-[#17121b]"
             >
               <Eye size={14} />{" "}
               {localizeUi("ui.noodle.lockednoodlerpostcard.unlock")}
@@ -304,6 +304,13 @@ export function LockedSlurpPostCard({
         onClose={() => setUnlockSheetOpen(false)}
         title={localizeUi("ui.noodle.unlocksheet.title")}
         width="max-w-sm"
+        panelStyle={{
+          "--background": "#17121b",
+          "--foreground": "#fff7fc",
+          "--muted-foreground": "#d8c9d4",
+          "--border": "rgba(255, 126, 193, 0.28)",
+          "--accent": "rgba(255, 126, 193, 0.14)",
+        }}
       >
         <div
           data-component="SlurpHome.UnlockSheet"
@@ -320,7 +327,7 @@ export function LockedSlurpPostCard({
                 demo.onReveal?.();
               } else onUnlock(post.id);
             }}
-            className="flex min-h-16 w-full items-center gap-3 px-1 py-3 text-left hover:bg-[var(--accent)] disabled:opacity-50"
+            className="flex min-h-16 w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-[#3a2335] disabled:opacity-50"
           >
             <Eye size={20} className="shrink-0 text-[var(--noodle-accent)]" />
             <span className="min-w-0 flex-1">
@@ -344,7 +351,7 @@ export function LockedSlurpPostCard({
                 demo.onReveal?.();
               } else onToggleSubscription(profile.id, subscribed);
             }}
-            className="flex min-h-16 w-full items-center gap-3 px-1 py-3 text-left hover:bg-[var(--accent)] disabled:opacity-50"
+            className="flex min-h-16 w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-[#3a2335] disabled:opacity-50"
           >
             <Bell size={20} className="shrink-0 text-[var(--noodle-accent)]" />
             <span className="min-w-0 flex-1">
