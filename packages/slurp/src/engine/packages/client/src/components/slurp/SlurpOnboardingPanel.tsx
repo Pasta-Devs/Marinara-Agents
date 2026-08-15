@@ -307,7 +307,7 @@ export function SlurpOnboardingWizard({
         postsPerDay,
         autoPostingScheduleEnabled: autoPostingEnabled,
         nightQuiet,
-        onboarding: state === "completed" ? "completed" : "completed",
+        onboarding: state === "completed" ? "completed" : "not_started",
         imageGenerationUseAvatarReferences: imagesEnabled,
         generationGuidance:
           state === "completed"

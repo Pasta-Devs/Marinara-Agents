@@ -746,7 +746,7 @@ function mapAccount(row: AccountRow): SlurpAccount {
     avatarCrop: settings.profile.avatarCrop ?? null,
     invited: normalizeBool(row.invited),
     settings,
-    platform: "noodle",
+    platform: "slurp",
     slurpSourceAccountId: null,
     sourceKind: normalizeAccountKind(row.sourceKind ?? row.kind) as SlurpSourceKind,
     sourceEntityId: row.sourceEntityId ?? row.entityId,
@@ -775,7 +775,7 @@ function mapViewer(
     avatarCrop: normalizeAvatarCrop(persona.avatarCrop),
     invited: true,
     settings: normalizeNoodleAccountSettings(row.settings),
-    platform: "noodle",
+    platform: "slurp",
     slurpSourceAccountId: null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -1091,19 +1091,19 @@ export function createSlurpStorage(db: DB) {
 
   const upsertPollVote = async (
     postId: string,
-    actorAccountId: string,
+    actor: NoodleAccount,
     optionId: string,
     authorPlatform: NoodlePlatform,
     imageUrl: string | null,
   ): Promise<NoodleInteraction | null> => {
     return db.transaction(async (tx) => {
-      const [postRows, actorRows] = await Promise.all([
-        tx.select().from(noodlePosts).where(eq(noodlePosts.id, postId)),
-        tx
-          .select()
-          .from(noodleAccounts)
-          .where(and(eq(noodleAccounts.id, actorAccountId), eq(noodleAccounts.platform, "slurp"))),
-      ]);
+        const [postRows, actorRows] = await Promise.all([
+          tx.select().from(noodlePosts).where(eq(noodlePosts.id, postId)),
+          tx
+            .select()
+            .from(noodleAccounts)
+            .where(and(eq(noodleAccounts.id, actor.id), eq(noodleAccounts.platform, "slurp"))),
+        ]);
       const currentPost = postRows[0];
       if (!currentPost || !actorRows[0]) return null;
       const authorRows = await tx
@@ -1113,7 +1113,7 @@ export function createSlurpStorage(db: DB) {
       const currentPoll = readNoodlePollFromMetadata(parseRecord(currentPost.metadata));
       if (!authorRows[0] || !currentPoll?.options.some((option) => option.id === optionId)) return null;
 
-      const currentActor = mapAccount(actorRows[0]);
+        const currentActor = actorRows[0] ? mapAccount(actorRows[0]) : actor;
       if (authorPlatform === "noodler") {
         const currentAuthor = mapAccount(authorRows[0]);
         if (
@@ -1351,12 +1351,16 @@ export function createSlurpStorage(db: DB) {
       let rows = await db.select().from(slurpViewers).where(eq(slurpViewers.personaId, personaId));
       if (!rows[0]) {
         const timestamp = now();
-        await db.insert(slurpViewers).values({
-          personaId,
-          settings: JSON.stringify(emptyNoodleAccountSettings()),
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        });
+        try {
+          await db.insert(slurpViewers).values({
+            personaId,
+            settings: JSON.stringify(emptyNoodleAccountSettings()),
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          });
+        } catch (error) {
+          if (!isFileUniqueConstraintError(error, "slurp_viewers", ["personaId"])) throw error;
+        }
         rows = await db.select().from(slurpViewers).where(eq(slurpViewers.personaId, personaId));
       }
       return rows[0] ? mapViewer(rows[0], persona) : null;
@@ -1504,6 +1508,28 @@ export function createSlurpStorage(db: DB) {
         if (authoredInteractionIds.length > 0) {
           await tx.delete(noodleInteractions).where(inArray(noodleInteractions.id, authoredInteractionIds));
         }
+        await tx.delete(noodlePostUnlocks).where(
+          or(
+            eq(noodlePostUnlocks.viewerAccountId, existing.id),
+            postIds.length > 0 ? inArray(noodlePostUnlocks.postId, postIds) : eq(noodlePostUnlocks.postId, "__none__"),
+          ),
+        );
+        await tx.delete(noodleAccountSubscriptions).where(
+          or(
+            eq(noodleAccountSubscriptions.viewerAccountId, existing.id),
+            eq(noodleAccountSubscriptions.creatorAccountId, existing.id),
+          ),
+        );
+        await tx.delete(noodlerCreatorReplyClaims).where(
+          or(
+            eq(noodlerCreatorReplyClaims.creatorAccountId, existing.id),
+            postIds.length > 0
+              ? inArray(noodlerCreatorReplyClaims.postId, postIds)
+              : eq(noodlerCreatorReplyClaims.postId, "__none__"),
+          ),
+        );
+        await tx.delete(noodlerPreparedPosts).where(eq(noodlerPreparedPosts.creatorAccountId, existing.id));
+        await tx.delete(noodlePosts).where(inArray(noodlePosts.id, postIds));
         await tx.delete(noodleAccounts).where(eq(noodleAccounts.id, existing.id));
         await tx._fileStore.flush();
       });
@@ -1647,8 +1673,35 @@ export function createSlurpStorage(db: DB) {
         if (interactionIds.length > 0) {
           await tx
             .delete(noodleActivityDigests)
-            .where(inArray(noodleActivityDigests.sourceInteractionId, interactionIds));
+              .where(inArray(noodleActivityDigests.sourceInteractionId, interactionIds));
         }
+        await tx.delete(noodlePostUnlocks).where(
+          or(
+            eq(noodlePostUnlocks.viewerAccountId, id),
+            postIds.length > 0 ? inArray(noodlePostUnlocks.postId, postIds) : eq(noodlePostUnlocks.postId, "__none__"),
+          ),
+        );
+        await tx.delete(noodleAccountSubscriptions).where(
+          or(
+            eq(noodleAccountSubscriptions.viewerAccountId, id),
+            eq(noodleAccountSubscriptions.creatorAccountId, id),
+          ),
+        );
+        await tx.delete(noodlerCreatorReplyClaims).where(
+          or(
+            eq(noodlerCreatorReplyClaims.creatorAccountId, id),
+            postIds.length > 0
+              ? inArray(noodlerCreatorReplyClaims.postId, postIds)
+              : eq(noodlerCreatorReplyClaims.postId, "__none__"),
+          ),
+        );
+        await tx.delete(noodlerPreparedPosts).where(eq(noodlerPreparedPosts.creatorAccountId, id));
+        await tx.delete(noodleInteractions).where(
+          or(
+            eq(noodleInteractions.actorAccountId, id),
+            postIds.length > 0 ? inArray(noodleInteractions.postId, postIds) : eq(noodleInteractions.postId, "__none__"),
+          ),
+        );
         await tx.delete(noodleAccounts).where(and(eq(noodleAccounts.id, id), eq(noodleAccounts.platform, "slurp")));
         await tx._fileStore.flush();
       });
@@ -2047,9 +2100,8 @@ export function createSlurpStorage(db: DB) {
         const rows = await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, id));
         const row = rows[0];
         if (!row) return null;
-        if (row.platform === "slurp" && input.subtree !== "privacy" && input.subtree !== "scheduler") return null;
-        if (row.platform !== "slurp" && input.subtree === "scheduler") return null;
-        if (row.platform !== "slurp" && input.subtree === "privacy" && input.patch.access !== undefined) return null;
+        if (row.platform !== "slurp") return null;
+        if (input.subtree !== "privacy" && input.subtree !== "scheduler" && input.subtree !== "social") return null;
         if (
           row.platform === "slurp" &&
           input.subtree === "privacy" &&
@@ -3281,8 +3333,11 @@ export function createSlurpStorage(db: DB) {
         if (interactionIds.length > 0) {
           await tx
             .delete(noodleActivityDigests)
-            .where(inArray(noodleActivityDigests.sourceInteractionId, interactionIds));
+              .where(inArray(noodleActivityDigests.sourceInteractionId, interactionIds));
         }
+        await tx.delete(noodlePostUnlocks).where(inArray(noodlePostUnlocks.postId, postIds));
+        await tx.delete(noodlerCreatorReplyClaims).where(inArray(noodlerCreatorReplyClaims.postId, postIds));
+        await tx.delete(noodleInteractions).where(inArray(noodleInteractions.postId, postIds));
         await tx.delete(noodlePosts).where(eq(noodlePosts.id, id));
         await tx._fileStore.flush();
       });
@@ -3802,12 +3857,14 @@ export function createSlurpStorage(db: DB) {
       const parentInteractionId = input.parentInteractionId ?? null;
       if (input.type === "vote") {
         if (parentInteractionId) return null;
-        return upsertPollVote(postId, input.actorAccountId, input.content?.trim() ?? "", "noodler", null);
+        const actor = (await this.getAccountById(input.actorAccountId)) ?? (await this.getViewer(input.actorAccountId));
+        if (!actor) return null;
+        return upsertPollVote(postId, actor, input.content?.trim() ?? "", "slurp", null);
       }
 
       const [post, actor] = await Promise.all([
         this.getNoodlerPostById(postId),
-        this.getAccountById(input.actorAccountId),
+        this.getAccountById(input.actorAccountId).then((account) => account ?? this.getViewer(input.actorAccountId)),
       ]);
       if (!post || !actor) return null;
 

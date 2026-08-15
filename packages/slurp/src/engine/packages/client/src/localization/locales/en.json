@@ -565,7 +565,7 @@
   "ui.noodle.noodlehome.noodleTimelineReset": "Noodle timeline reset.",
   "ui.noodle.noodlehome.noodlerAccess": "Slurp Access",
   "ui.noodle.noodlehome.noodlerAutomation": "Slurp Automation",
-  "ui.noodle.noodlehome.noodlerIsStillBeingImplementedAndIsNotUsable": "Slurp is a beta feature. Generation can fail, ignore guidance, or disclose source details. Public and locked access and identity disclosure are roleplay behavior, not privacy or security controls. Configured providers receive the prompt context and media required for generation. Do not use Slurp for secrets or real access control. Questions and bug reports can be shared in the #pasta-testers channel on Discord if you have the Beta Tester role.",
+  "ui.noodle.noodlehome.noodlerIsStillBeingImplementedAndIsNotUsable": "Slurp is an adult creator experience. Generation can fail, ignore guidance, or disclose source details. Public and locked access and identity disclosure are roleplay behavior, not privacy or security controls. Configured providers receive the prompt context and media required for generation. Do not use Slurp for secrets or real access control.",
   "ui.noodle.noodlehome.noodlerPostsPerDayHelp": "Maximum automatic posts across the creator feed each day. Higher values use more generation requests.",
   "ui.noodle.noodlehome.notFollowingAnyoneYet": "Not following anyone yet.",
   "ui.noodle.noodlehome.notInvited": "Not invited",

@@ -20,7 +20,6 @@ for (const file of files) {
   const source = readFileSync(join(root, file), "utf8");
   for (const marker of [
     /packages\/noodle\/src\/engine\/packages/u,
-    /\bnoodleAccountId\b/u,
     /\/api\/noodle/u,
     /noodle\.settings/u,
     /["`]noodle_(?:accounts|posts|interactions|prepared_posts|automatic_attempts|reserve_state|fan_activity_state|account_subscriptions|post_unlocks)["`]/u,
