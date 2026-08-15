@@ -263,7 +263,7 @@ export function NoodlerAgeGate({
         {isPending ? (
           <Loader2 size={18} className="mx-auto animate-spin" />
         ) : (
-          tt("enter", "Enter NoodleR")
+          tt("enter", "Enter Slurp")
         )}
       </button>
 
@@ -273,7 +273,7 @@ export function NoodlerAgeGate({
         disabled={isPending}
         className="mx-auto text-xs font-semibold text-[var(--muted-foreground)] underline-offset-4 hover:underline disabled:opacity-50"
       >
-        {tt("skipTheGate", "Skip the joke and enter NoodleR")}
+        {tt("skipTheGate", "Skip the joke and enter Slurp")}
       </button>
     </div>
   );
