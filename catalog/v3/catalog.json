@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-15T20:40:00.966Z",
+  "generatedAt": "2026-08-15T22:54:39.126Z",
   "packages": [
     {
       "manifest": {
@@ -1358,7 +1358,7 @@
         "schemaVersion": 1,
         "id": "slurp",
         "name": "Slurp",
-        "version": "1.0.0",
+        "version": "1.0.1",
         "description": "The standalone successor to NoodleR: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
         "localizations": {
           "de": {
@@ -1418,13 +1418,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "155b379795cde815851f3f24223e00287ff28a796f786eef3f137c1d3829ba8f",
-            "bytes": 2495778
+            "sha256": "626861a9cabe661d89a3256cffd60a893a9e4d096e24e87a3bc569589bb1ee6b",
+            "bytes": 2435147
           },
           {
             "path": "client.js",
-            "sha256": "30ac228f52fbee7114c90894e41b3f77669638a24602fc93b0d68e126f162338",
-            "bytes": 2224582
+            "sha256": "ff0bf8b7d51905d0cf2e00b0b1e073fd20a032a64357e52f5cd94700ae76efb3",
+            "bytes": 2219507
           },
           {
             "path": "slurp-klusek.png",
@@ -1445,9 +1445,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp-1.0.0.zip",
-        "sha256": "c70bde79cf44dc4e8d9f7b44a94f002c39cfbf7fbb8568c02fbea3d0389b5604",
-        "bytes": 1177459
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp-1.0.1.zip",
+        "sha256": "8c7ce8e1f9bd114ee16a0b8b4a8cf9ca50b2391c9f905cfcdc633ab268677996",
+        "bytes": 1162562
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp/README.md"
     },

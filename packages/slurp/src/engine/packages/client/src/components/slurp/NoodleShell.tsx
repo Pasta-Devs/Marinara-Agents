@@ -84,32 +84,7 @@ export const NOODLER_MARK = "R";
 export const NOODLER_ADD_MARK = "+R";
 export const NOODLE_LOGO_SRC =
   "/api/capability-packages/slurp/assets/slurp-klusek.png";
-const NOODLER_LOGO_SRC =
-  "/api/capability-packages/slurp/assets/slurp-klusek.png";
 export const NOODLE_PERSONA_SWITCHER_PAGE_SIZE = 5;
-
-// Switching apps unmounts the whole surface, so the bows come back as new elements with
-// nothing to transition from. The module outlives the remount, so it can remember which
-// mode was on screen last and let the new pair animate out of the old arrangement.
-let lastRenderedAppMode: NoodleShellMode | null = null;
-
-// Plain CSS keyframes rather than a JS animation: transform and opacity are handed to
-// the compositor, so the swap costs no main-thread work per frame. 220ms, twice, on two
-// images the size of a fingernail.
-const BOW_REST_BACK = "translate3d(5px, 4px, 0) scale(0.8)";
-const BOW_SWAP_KEYFRAMES = `
-@keyframes noodle-bow-to-front {
-  from { transform: ${BOW_REST_BACK}; opacity: 0.55; filter: saturate(0.65); }
-  to { transform: none; opacity: 1; filter: saturate(1); }
-}
-@keyframes noodle-bow-to-back {
-  from { transform: none; opacity: 1; filter: saturate(1); }
-  to { transform: ${BOW_REST_BACK}; opacity: 0.55; filter: saturate(0.65); }
-}
-@media (prefers-reduced-motion: reduce) {
-  [data-noodle-bow] { animation: none !important; }
-}
-`;
 
 export function getNoodleAccentStyle(
   accent: string,
@@ -231,81 +206,6 @@ export function useHideOnScroll(scroller: HTMLElement | null) {
 /** Base classes for a sticky bar driven by {@link useHideOnScroll}. */
 export const HIDE_ON_SCROLL_CLASS = "will-change-transform";
 
-// The count is the reason to come back, so it carries its own label rather than leaving a
-// bare number for screen readers to read out of context.
-function UnseenBadge({ count }: { count: number }) {
-  const { t: localizeUi } = useUiTranslation();
-  if (count <= 0) return null;
-  return (
-    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[var(--noodle-accent)] px-1.5 text-[0.65rem] font-bold tabular-nums text-zinc-950">
-      <span aria-hidden="true">{count > 99 ? "99+" : count}</span>
-      <span className="sr-only">
-        {localizeUi("ui.noodle.noodlemodetoggle.newSinceLastVisitCount", {
-          count,
-        })}
-      </span>
-    </span>
-  );
-}
-
-// Two-way switch between the Noodle and NoodleR apps — reads as picking one of two
-// exclusive modes, not another item in the vertical nav list.
-function NoodleModeToggle({
-  activeMode,
-  onOpenHome,
-  onOpenNoodler,
-  noodlerUnseenCount = 0,
-  noodleUnseenCount = 0,
-}: {
-  activeMode: NoodleShellMode;
-  onOpenHome: () => void;
-  onOpenNoodler: () => void;
-  /** Posts published since this viewer persona last had the NoodleR feed shown to it. */
-  noodlerUnseenCount?: number;
-  /** The same for the public Noodle timeline. */
-  noodleUnseenCount?: number;
-}) {
-  const { t: localizeUi } = useUiTranslation();
-  const noodler = activeMode === "noodler";
-  const segment = (active: boolean) =>
-    cn(
-      "flex min-h-9 items-center justify-center gap-1.5 rounded-full px-2 text-sm font-bold transition-colors",
-      active
-        ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm"
-        : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
-    );
-  return (
-    <div
-      className="grid grid-cols-2 gap-1 rounded-full bg-[var(--accent)] p-1"
-      role="tablist"
-      aria-label={localizeUi(
-        "ui.noodle.noodlemodetoggle.switchBetweenNoodleAndNoodler",
-      )}
-    >
-      <button
-        type="button"
-        role="tab"
-        aria-selected={!noodler}
-        onClick={onOpenHome}
-        className={segment(!noodler)}
-      >
-        {localizeUi("navigation.topbar.noodle")}
-        <UnseenBadge count={noodleUnseenCount} />
-      </button>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={noodler}
-        onClick={onOpenNoodler}
-        className={segment(noodler)}
-      >
-        {localizeUi("ui.noodle.noodlemodetoggle.noodler")}
-        <UnseenBadge count={noodlerUnseenCount} />
-      </button>
-    </div>
-  );
-}
-
 /** Boundary marker between posts arrived since the last visit and everything already read. */
 export function NewSinceLastVisitDivider() {
   const { t: localizeUi } = useUiTranslation();
@@ -425,10 +325,6 @@ export interface NoodleShellProps {
   appMode?: NoodleShellMode;
   /** Overrides whether the Home/Hub destination is selected when app mode and subview are separate. */
   homeActive?: boolean;
-  /** Posts published since this viewer persona last had the NoodleR feed shown to it. */
-  noodlerUnseenCount?: number;
-  /** The same for the public Noodle timeline. */
-  noodleUnseenCount?: number;
   personaAccount: NoodleAccount | null;
   sortedPersonaAccounts: NoodleAccount[];
   visiblePersonaAccounts: NoodleAccount[];
@@ -459,8 +355,6 @@ export interface NoodleShellProps {
   onOpenSettings: () => void;
   /** Omit on surfaces with no scoped equivalent. */
   onCompose?: (opener: HTMLElement) => void;
-  /** Shows the Noodle/NoodleR mode toggle only once the user has turned NoodleR on in settings. */
-  enableNoodler?: boolean;
   /** Optional right-hand rail (search box, suggestions, etc). Omitted entirely on surfaces that don't need one. */
   rightRail?: ReactNode;
   /** Theme-dependent overlays (lightboxes and modals) that must render inside the token scope. */
@@ -474,8 +368,6 @@ export function NoodleShell({
   activeView,
   appMode,
   homeActive: homeActiveOverride,
-  noodlerUnseenCount = 0,
-  noodleUnseenCount = 0,
   personaAccount,
   sortedPersonaAccounts,
   visiblePersonaAccounts,
@@ -499,7 +391,6 @@ export function NoodleShell({
   onOpenProfile,
   onOpenSettings,
   onCompose,
-  enableNoodler = false,
   rightRail,
   overlays,
   accent = NOODLE_BLUE,
@@ -526,26 +417,6 @@ export function NoodleShell({
   const onOpenMobileHomeDestination = noodlerActive
     ? onOpenNoodler
     : onOpenMobileHome;
-  const otherModeLabel = noodlerActive
-    ? localizeUi("navigation.topbar.noodle")
-    : localizeUi("ui.noodle.noodlemodetoggle.noodler");
-  // The bottom-nav wordmark doubles as the mode switch. The first tap navigates at
-  // once — holding it back to watch for a second would make every trip home feel
-  // late — and a second tap inside the window supersedes it with the switch.
-  const lastHomeTapAt = useRef(0);
-  const onMobileHomeTap = () => {
-    const now = Date.now();
-    const switching = enableNoodler && now - lastHomeTapAt.current < 320;
-    lastHomeTapAt.current = switching ? 0 : now;
-    if (switching) (noodlerActive ? onOpenHome : onOpenNoodler)();
-    else onOpenMobileHomeDestination();
-  };
-  const previousAppMode = useRef(lastRenderedAppMode).current;
-  const modeJustSwapped =
-    previousAppMode !== null && previousAppMode !== resolvedAppMode;
-  useEffect(() => {
-    lastRenderedAppMode = resolvedAppMode;
-  }, [resolvedAppMode]);
   useDialogFocusScope(mobileDrawerOpen, mobileDrawerRef, mobileDrawerCloseRef);
 
   return (
@@ -623,17 +494,6 @@ export function NoodleShell({
                   </button>
                 </div>
 
-                {enableNoodler && (
-                  <div className="mt-7">
-                    <NoodleModeToggle
-                      activeMode={resolvedAppMode}
-                      onOpenHome={onOpenHome}
-                      onOpenNoodler={onOpenNoodler}
-                      noodlerUnseenCount={noodlerUnseenCount}
-                      noodleUnseenCount={noodleUnseenCount}
-                    />
-                  </div>
-                )}
                 <nav
                   className="mt-3 space-y-1"
                   aria-label={localizeUi(
@@ -830,22 +690,8 @@ export function NoodleShell({
             <aside className="hidden w-[17rem] shrink-0 border-r border-[var(--noodle-divider)] bg-[var(--background)] @min-[1024px]:flex @min-[1024px]:flex-col">
               <div className="flex min-h-0 flex-1 flex-col px-5 py-4">
                 <div className="mb-5 flex h-12 items-center">
-                  <NoodleLogo
-                    src={noodlerActive ? NOODLER_LOGO_SRC : NOODLE_LOGO_SRC}
-                    className="h-10 w-16"
-                  />
+                  <NoodleLogo className="h-10 w-16" />
                 </div>
-                {enableNoodler && (
-                  <div className="mb-3">
-                    <NoodleModeToggle
-                      activeMode={resolvedAppMode}
-                      onOpenHome={onOpenHome}
-                      onOpenNoodler={onOpenNoodler}
-                      noodlerUnseenCount={noodlerUnseenCount}
-                      noodleUnseenCount={noodleUnseenCount}
-                    />
-                  </div>
-                )}
                 <nav className="space-y-1">
                   <button
                     type="button"
@@ -1119,60 +965,16 @@ export function NoodleShell({
             )}
             <button
               type="button"
-              onClick={onMobileHomeTap}
-              aria-label={
-                enableNoodler
-                  ? `${localizeUi("ui.noodle.noodleshell.noodleValue1", {
-                      value1: homeLabel,
-                    })}. ${localizeUi("ui.noodle.noodleshell.doubleTapToSwitchTo", {
-                      mode: otherModeLabel,
-                    })}`
-                  : localizeUi("ui.noodle.noodleshell.noodleValue1", {
-                      value1: homeLabel,
-                    })
-              }
-              title={
-                enableNoodler
-                  ? localizeUi("ui.noodle.noodleshell.doubleTapToSwitchTo", {
-                      mode: otherModeLabel,
-                    })
-                  : undefined
-              }
+              onClick={onOpenMobileHomeDestination}
+              aria-label={localizeUi(
+                "ui.noodle.noodleshell.noodleValue1",
+                { value1: homeLabel },
+              )}
               aria-current={homeActive ? "page" : undefined}
               className="relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
             >
-              {/* Both bows, the back one offset to the bottom right: the front says which
-                  app you are in, the one behind says there is another to switch to. They
-                  trade places on the switch, which is the whole animation. A logo is not
-                  a state indicator, so the front bow keeps its own colour whatever is on
-                  screen — the dot below carries the active state. The back one is
-                  smaller, tucked close, and eased off, so it reads as depth. */}
               <span className="relative flex h-8 w-12 items-center justify-center">
-                <style>{BOW_SWAP_KEYFRAMES}</style>
-                {[
-                  { src: NOODLE_LOGO_SRC, front: !noodlerActive },
-                  { src: NOODLER_LOGO_SRC, front: noodlerActive },
-                ].map((bow) => (
-                  <img
-                    key={bow.src}
-                    src={bow.src}
-                    alt=""
-                    data-noodle-bow=""
-                    className={cn(
-                      "absolute h-6 w-9 object-contain",
-                      bow.front
-                        ? "z-10 opacity-100"
-                        : "translate-x-[5px] translate-y-[4px] scale-[0.8] opacity-55 saturate-[0.65]",
-                    )}
-                    style={
-                      modeJustSwapped
-                        ? {
-                            animation: `noodle-bow-to-${bow.front ? "front" : "back"} 220ms cubic-bezier(0.22, 1, 0.36, 1) both`,
-                          }
-                        : undefined
-                    }
-                  />
-                ))}
+                <NoodleLogo className="h-6 w-9" />
               </span>
               {homeActive && (
                 <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-accent)]" />
