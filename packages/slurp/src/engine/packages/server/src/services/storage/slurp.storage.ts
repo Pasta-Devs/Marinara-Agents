@@ -1313,14 +1313,13 @@ export function createSlurpStorage(db: DB) {
     },
 
     async resolveSourceByEntityId(sourceEntityId: string): Promise<NoodleAccount | null> {
-      const [character, persona] = await Promise.all([
-        characters.getById(sourceEntityId),
-        characters.getPersona(sourceEntityId),
-      ]);
-      if (character && persona) return null;
+      // Character onboarding sends entity IDs without a kind. Prefer the character
+      // record when an ID exists in both character and persona namespaces.
+      const character = await characters.getById(sourceEntityId);
       if (character) {
         return sourceAccountFromEntity("character", sourceEntityId, character as unknown as Record<string, unknown>);
       }
+      const persona = await characters.getPersona(sourceEntityId);
       return persona
         ? sourceAccountFromEntity("persona", sourceEntityId, persona as unknown as Record<string, unknown>)
         : null;

@@ -88,29 +88,6 @@ const NOODLER_LOGO_SRC =
   "/api/capability-packages/slurp/assets/slurp-klusek.png";
 export const NOODLE_PERSONA_SWITCHER_PAGE_SIZE = 5;
 
-// Switching apps unmounts the whole surface, so the bows come back as new elements with
-// nothing to transition from. The module outlives the remount, so it can remember which
-// mode was on screen last and let the new pair animate out of the old arrangement.
-let lastRenderedAppMode: NoodleShellMode | null = null;
-
-// Plain CSS keyframes rather than a JS animation: transform and opacity are handed to
-// the compositor, so the swap costs no main-thread work per frame. 220ms, twice, on two
-// images the size of a fingernail.
-const BOW_REST_BACK = "translate3d(5px, 4px, 0) scale(0.8)";
-const BOW_SWAP_KEYFRAMES = `
-@keyframes noodle-bow-to-front {
-  from { transform: ${BOW_REST_BACK}; opacity: 0.55; filter: saturate(0.65); }
-  to { transform: none; opacity: 1; filter: saturate(1); }
-}
-@keyframes noodle-bow-to-back {
-  from { transform: none; opacity: 1; filter: saturate(1); }
-  to { transform: ${BOW_REST_BACK}; opacity: 0.55; filter: saturate(0.65); }
-}
-@media (prefers-reduced-motion: reduce) {
-  [data-noodle-bow] { animation: none !important; }
-}
-`;
-
 export function getNoodleAccentStyle(
   accent: string,
   style: CSSProperties = {},
@@ -537,12 +514,6 @@ export function NoodleShell({
     if (switching) (noodlerActive ? onOpenHome : onOpenNoodler)();
     else onOpenMobileHomeDestination();
   };
-  const previousAppMode = useRef(lastRenderedAppMode).current;
-  const modeJustSwapped =
-    previousAppMode !== null && previousAppMode !== resolvedAppMode;
-  useEffect(() => {
-    lastRenderedAppMode = resolvedAppMode;
-  }, [resolvedAppMode]);
   useDialogFocusScope(mobileDrawerOpen, mobileDrawerRef, mobileDrawerCloseRef);
 
   return (
@@ -1123,38 +1094,8 @@ export function NoodleShell({
               aria-current={homeActive ? "page" : undefined}
               className="relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
             >
-              {/* Both bows, the back one offset to the bottom right: the front says which
-                  app you are in, the one behind says there is another to switch to. They
-                  trade places on the switch, which is the whole animation. A logo is not
-                  a state indicator, so the front bow keeps its own colour whatever is on
-                  screen — the dot below carries the active state. The back one is
-                  smaller, tucked close, and eased off, so it reads as depth. */}
               <span className="relative flex h-8 w-12 items-center justify-center">
-                <style>{BOW_SWAP_KEYFRAMES}</style>
-                {[
-                  { src: NOODLE_LOGO_SRC, front: !noodlerActive },
-                  { src: NOODLER_LOGO_SRC, front: noodlerActive },
-                ].map((bow) => (
-                  <img
-                    key={bow.src}
-                    src={bow.src}
-                    alt=""
-                    data-noodle-bow=""
-                    className={cn(
-                      "absolute h-6 w-9 object-contain",
-                      bow.front
-                        ? "z-10 opacity-100"
-                        : "translate-x-[5px] translate-y-[4px] scale-[0.8] opacity-55 saturate-[0.65]",
-                    )}
-                    style={
-                      modeJustSwapped
-                        ? {
-                            animation: `noodle-bow-to-${bow.front ? "front" : "back"} 220ms cubic-bezier(0.22, 1, 0.36, 1) both`,
-                          }
-                        : undefined
-                    }
-                  />
-                ))}
+                <Home size={22} strokeWidth={homeActive ? 2.8 : 2} />
               </span>
               {homeActive && (
                 <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-accent)]" />
