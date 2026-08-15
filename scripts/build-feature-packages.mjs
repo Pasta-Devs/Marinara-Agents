@@ -732,7 +732,7 @@ export default defineConfig({
     .replaceAll(":root", ":scope")
     .replaceAll("[data-theme=dark]", ":scope:where([data-theme=dark] *)")
     .replaceAll("[data-theme=light]", ":scope:where([data-theme=light] *)");
-  return `@scope (marinara-capability-${capabilityId}){${scopedStyles}}`;
+  return `@scope (marinara-capability-${capabilityId}, [data-marinara-capability-scope=${JSON.stringify(capabilityId)}]){${scopedStyles}}`;
 }
 
 async function bundleSpecialClient(feature, output) {

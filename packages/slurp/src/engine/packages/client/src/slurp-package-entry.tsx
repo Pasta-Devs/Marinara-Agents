@@ -35,6 +35,7 @@ void localization.use(initReactI18next).init({
 type CapabilityElement = HTMLElement & {
   capabilityProps?: Record<string, unknown>;
   __root?: Root | null;
+  __portal?: HTMLDivElement | null;
 };
 
 let slurpPackageStyles = "";
@@ -98,7 +99,7 @@ function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
   return (
     <I18nextProvider i18n={localization}>
       <QueryClientProvider client={client}>
-        <ModalPortalContext.Provider value={element}>
+        <ModalPortalContext.Provider value={element.__portal ?? element}>
           <div className="h-full min-h-0 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
             {navigation.mode === "creator-settings" ? (
               <SlurpSettings navigation={navigation} onNavigate={setNavigation} />
@@ -114,9 +115,21 @@ function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
 
 class MarinaraSlurpElement extends HTMLElement {
   declare __root: Root | null;
+  declare __portal: HTMLDivElement | null;
 
   connectedCallback() {
     syncSlurpPackageStyles();
+    if (!this.__portal) {
+      this.__portal = document.createElement("div");
+      this.__portal.dataset.marinaraCapabilityScope = "slurp";
+      Object.assign(this.__portal.style, {
+        inset: "0",
+        pointerEvents: "none",
+        position: "fixed",
+        zIndex: "2147483000",
+      });
+      document.body.appendChild(this.__portal);
+    }
     this.__root ??= createRoot(this);
     this.__root.render(<SlurpPackageRoot element={this} />);
   }
@@ -126,6 +139,10 @@ class MarinaraSlurpElement extends HTMLElement {
       if (!this.isConnected && this.__root) {
         this.__root.unmount();
         this.__root = null;
+      }
+      if (!this.isConnected && this.__portal) {
+        this.__portal.remove();
+        this.__portal = null;
       }
       syncSlurpPackageStyles();
     });

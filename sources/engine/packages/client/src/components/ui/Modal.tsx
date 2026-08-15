@@ -125,7 +125,7 @@ export function Modal({
       aria-label={title}
       data-chat-floating-panel={chatFloatingPanel ? "true" : undefined}
       data-component="Modal"
-      className={`mari-modal fixed inset-0 z-[10000] flex items-center justify-center ${
+      className={`mari-modal pointer-events-auto fixed inset-0 z-[10000] flex items-center justify-center ${
         mobileFullscreen
           ? "p-0 sm:p-4"
           : "p-3 max-md:pt-[max(0.75rem,env(safe-area-inset-top))] max-md:pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4"
