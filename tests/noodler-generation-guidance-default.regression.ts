@@ -9,16 +9,16 @@ import { readFileSync } from "node:fs";
 // outside an Engine checkout (it resolves ../../db/file-query.js), so this reads the source.
 
 const storage = readFileSync(
-  "packages/noodle/src/engine/packages/server/src/services/storage/noodle.storage.ts",
+  "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts",
   "utf8",
 );
 const home = readFileSync(
-  "packages/noodle/src/engine/packages/client/src/components/noodle/NoodleHome.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodleHome.tsx",
   "utf8",
 );
-const readme = readFileSync("packages/noodle/README.md", "utf8");
+const readme = readFileSync("packages/slurp/README.md", "utf8");
 const enLocale = readFileSync(
-  "packages/noodle/src/engine/packages/client/src/localization/locales/en.json",
+  "packages/slurp/src/engine/packages/client/src/localization/locales/en.json",
   "utf8",
 );
 

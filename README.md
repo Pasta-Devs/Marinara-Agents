@@ -4,7 +4,7 @@ Official downloadable agents and capability packages for [Marinara Engine](https
 
 Marinara Engine starts lightweight: a fresh installation contains no optional agents. Open **Agents → Download Agents** on desktop or mobile to browse this catalog, read what each package does, and install only the features you want. Installed packages appear in the normal Agents panel and the chat modes they support. You can update or uninstall them from the same catalog. Restart Marinara Engine when the installer asks you to do so.
 
-Across its Engine compatibility lanes, the catalog currently contains **32 first-party packages**: 6 Writer Agents, 8 Tracker Agents, and 18 Misc Agents. Most packages support **Marinara Engine v2.3.0+**; Long-Term Memory requires **v2.4.1**, while World Maps, Storyboard, and Noodle require **v2.4.2**. Every package accepts compatible Engine v2 and v3 releases below **v4.0.0**. Each Engine release sees only the packages compatible with its major version. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
+Across its Engine compatibility lanes, the catalog currently contains **33 first-party packages**: 6 Writer Agents, 8 Tracker Agents, and 19 Misc Agents. Most packages support **Marinara Engine v2.3.0+**; Long-Term Memory requires **v2.4.1**; World Maps, Storyboard, and Noodle require **v2.4.2**; and Slurp requires **v2.4.3** for its package-owned storage tables. Every package accepts compatible Engine v2 and v3 releases below **v4.0.0**. Each Engine release sees only the packages compatible with its major version. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
 
 ## Official catalog
 
@@ -48,7 +48,8 @@ Across its Engine compatibility lanes, the catalog currently contains **32 first
 | Lorebook Keeper | [`lorebook-keeper`](packages/lorebook-keeper/manifest.json) | Creates and updates durable lorebook entries from important story facts. |
 | Long-Term Memory | [`long-term-memory`](packages/long-term-memory/manifest.json) | Extracts durable memories from chat summaries, character records, and lorebooks, with scoped vault browsing, review, source management, recall controls, and preset-marker placement for Roleplay. |
 | Music DJ | [`spotify`](packages/spotify/manifest.json) | Plays scene-matched music through Spotify, YouTube, or local Game Assets. |
-| Noodle | [`noodle`](packages/noodle/manifest.json) | Explore the familiar Noodle and NoodleR social timelines as an optional social world, available after installation from **Home → Noodle**. |
+| Noodle | [`noodle`](packages/noodle/manifest.json) | Explore the public Noodle social timeline as an optional local social world, available after installation from **Home → Noodle**. |
+| Slurp | [`slurp`](packages/slurp/manifest.json) | The standalone successor to NoodleR: create local Creator profiles, publish public or locked posts, and simulate audience activity from **Home → Slurp**. |
 | Poker | [`poker`](packages/poker/manifest.json) | Adds No-Limit Texas Hold'em for Conversation chats and the `/poker` command. |
 | Rock-Paper-Scissors | [`rock-paper-scissors`](packages/rock-paper-scissors/manifest.json) | Adds best-of-three, five, or seven Conversation matches and the `/rps` command. |
 | Storyboard | [`storyboard`](packages/storyboard/manifest.json) | Plans and generates still or animated Game and Roleplay storyboards with provider-tuned prompt chains. |

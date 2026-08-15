@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-14T18:16:31.321Z",
+  "generatedAt": "2026-08-15T07:57:14.573Z",
   "packages": [
     {
       "manifest": {
@@ -997,30 +997,30 @@
         "id": "noodle",
         "name": "Noodle",
         "version": "1.0.13",
-        "description": "Explore the Noodle public timeline and the NoodleR creator-and-fan roleplay feed as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
+        "description": "Explore the public Noodle timeline as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
         "localizations": {
           "de": {
             "name": "Noodle",
-            "description": "Entdecke die öffentliche Noodle-Timeline und den lokalen NoodleR-Rollenspiel-Feed für Kreative und Fans als optionale soziale Welt. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Noodle.",
+            "description": "Entdecke die öffentliche Noodle-Timeline als optionale lokale soziale Welt. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Noodle.",
             "homeBrowserTab": {
               "label": "Noodle",
-              "ariaLabel": "Noodle und NoodleR öffnen"
+              "ariaLabel": "Noodle öffnen"
             }
           },
           "ko": {
             "name": "Noodle",
-            "description": "Noodle 공개 타임라인과 로컬 NoodleR 크리에이터 및 팬 역할극 피드를 선택형 소셜 세계로 만나 보세요. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Noodle을 여세요.",
+            "description": "Noodle 공개 타임라인을 선택형 로컬 소셜 세계로 만나 보세요. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Noodle을 여세요.",
             "homeBrowserTab": {
               "label": "Noodle",
-              "ariaLabel": "Noodle 및 NoodleR 열기"
+              "ariaLabel": "Noodle 열기"
             }
           },
           "pl": {
             "name": "Noodle",
-            "description": "Poznaj publiczną oś czasu Noodle oraz lokalny kanał fabularny NoodleR dla twórców i fanów jako opcjonalny świat społecznościowy. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Noodle na stronie głównej.",
+            "description": "Poznaj publiczną oś czasu Noodle jako opcjonalny lokalny świat społecznościowy. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Noodle na stronie głównej.",
             "homeBrowserTab": {
               "label": "Noodle",
-              "ariaLabel": "Otwórz Noodle i NoodleR"
+              "ariaLabel": "Otwórz Noodle"
             }
           }
         },
@@ -1042,38 +1042,32 @@
           ],
           "homeBrowserTab": {
             "label": "Noodle",
-            "ariaLabel": "Open Noodle and NoodleR",
+            "ariaLabel": "Open Noodle",
             "iconPaths": [
-              "noodle-klusek.png",
-              "noodler-klusek.png"
+              "noodle-klusek.png"
             ]
           }
         },
         "files": [
           {
             "path": "agents.json",
-            "sha256": "650529c8995d40249a1870ffcc5f422c3f39cb4d3ec8601c5606c62a86882dfe",
-            "bytes": 634
+            "sha256": "bdf9df7eec2e3f24028e5c98453ab6de932f54a587f90532d012c4638707102a",
+            "bytes": 588
           },
           {
             "path": "server.mjs",
-            "sha256": "ca39b2cc572182ab2f5beae930d8916fbbe5197088496236867ec5970aa0aed4",
-            "bytes": 2489473
+            "sha256": "2fd81e38bd64d77baf9c08b399ee87e96f84019025ad42b15284c7e6e79ec802",
+            "bytes": 2348976
           },
           {
             "path": "client.js",
-            "sha256": "8261086c5dfe3b7c313752fdd181867a2e407113d7f95625467558276a3721bd",
-            "bytes": 2490366
+            "sha256": "eabf73f58e31091ad173cf2d8ce9e87cb0f3a3abf3d4782788d27bc62f916993",
+            "bytes": 2302641
           },
           {
             "path": "noodle-klusek.png",
             "sha256": "003236ad2b83c5eb44731a48048c86b07aa8c1f9c411f881c15f7d4af3c68212",
             "bytes": 28325
-          },
-          {
-            "path": "noodler-klusek.png",
-            "sha256": "f3f0eb142c6ff572dea636aa7ab7d046922aedde2f5425890327e79834bd923e",
-            "bytes": 27664
           }
         ],
         "permissions": [
@@ -1090,8 +1084,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.0.13.zip",
-        "sha256": "4eddba68ef20c716773294f580b7f92b03909c0114b8ee1b66748d4167b06ae1",
-        "bytes": 1261569
+        "sha256": "81b27e7c809926071a176c8b619be31ee47172ab7edbb7a20f772fcf35eb5e1e",
+        "bytes": 1160222
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },
@@ -1358,6 +1352,104 @@
         "bytes": 189017
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#rock-paper-scissors"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "slurp",
+        "name": "Slurp",
+        "version": "1.0.0",
+        "description": "The standalone successor to NoodleR: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
+        "localizations": {
+          "de": {
+            "name": "Slurp",
+            "description": "Erstelle ein lokales Creator-Profil aus einem Engine-Charakter oder einer Engine-Persona, veröffentliche öffentliche oder gesperrte Beiträge und simuliere Abonnements und Publikumsaktivität. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Slurp.",
+            "homeBrowserTab": {
+              "label": "Slurp",
+              "ariaLabel": "Slurp öffnen"
+            }
+          },
+          "ko": {
+            "name": "Slurp",
+            "description": "Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Slurp를 여세요.",
+            "homeBrowserTab": {
+              "label": "Slurp",
+              "ariaLabel": "Slurp 열기"
+            }
+          },
+          "pl": {
+            "name": "Slurp",
+            "description": "Utwórz lokalny profil twórcy z postaci silnika lub persony silnika, publikuj publiczne lub zablokowane posty i symuluj subskrypcje oraz aktywność publiczności. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Slurp na stronie głównej.",
+            "homeBrowserTab": {
+              "label": "Slurp",
+              "ariaLabel": "Otwórz Slurp"
+            }
+          }
+        },
+        "engine": {
+          "min": "2.4.3",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "home-browser-tab"
+          ],
+          "homeBrowserTab": {
+            "label": "Slurp",
+            "ariaLabel": "Open Slurp",
+            "iconPaths": [
+              "slurp-klusek.png"
+            ]
+          }
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "e6bc01992d2c0010a0fa3dc5d53365ad554942cff886997462b46203c61f105d",
+            "bytes": 702
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "155b379795cde815851f3f24223e00287ff28a796f786eef3f137c1d3829ba8f",
+            "bytes": 2495778
+          },
+          {
+            "path": "client.js",
+            "sha256": "30ac228f52fbee7114c90894e41b3f77669638a24602fc93b0d68e126f162338",
+            "bytes": 2224582
+          },
+          {
+            "path": "slurp-klusek.png",
+            "sha256": "f3f0eb142c6ff572dea636aa7ab7d046922aedde2f5425890327e79834bd923e",
+            "bytes": 27664
+          }
+        ],
+        "permissions": [
+          "chat-read",
+          "chat-write",
+          "network",
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp-1.0.0.zip",
+        "sha256": "c70bde79cf44dc4e8d9f7b44a94f002c39cfbf7fbb8568c02fbea3d0389b5604",
+        "bytes": 1177459
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp/README.md"
     },
     {
       "manifest": {

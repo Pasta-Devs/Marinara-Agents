@@ -1,15 +1,5 @@
-// ──────────────────────────────────────────────
 // React Query: Noodle hooks
-// ──────────────────────────────────────────────
-import {
-  useInfiniteQuery,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
-import { toast } from "sonner";
-import { useTranslation as useUiTranslation } from "react-i18next";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api-client";
 import { useUIStore } from "../stores/noodle-package.store";
 import type {
@@ -21,36 +11,17 @@ import type {
   NoodleAccountProfileUpdateInput,
   NoodleAccountSettingsPatchInput,
   NoodleBootstrap,
-  NoodleBulkNoodlerAccountCreateInput,
   NoodleCreateInteractionInput,
   NoodleCreatePostInput,
   NoodleInteraction,
   NoodleInteractionUpdateInput,
   NoodlePost,
-  NoodlePostImageCrop,
   NoodlePostUpdateInput,
-  NoodlerPostCreateInput,
-  NoodlerPostUpdateInput,
   NoodleRemoveInteractionInput,
   NoodleRescheduleRefreshInput,
   NoodleRefreshSchedulerStatus,
   NoodleSettings,
   NoodleSettingsUpdateInput,
-  NoodleStageProfileInput,
-  NoodlerSourceSnapshot,
-  NoodlerGenerationRequest,
-  NoodleStageProfileDraftRequest,
-  NoodlerManagedPost,
-  NoodlerRefreshNowOutcome,
-  NoodlerStageProfile,
-  NoodlerManagedStageProfile,
-  NoodlerSubscriber,
-  NoodlerViewerScope,
-  NoodlerCreateInteractionInput,
-  NoodlerCreatorReplyResult,
-  NoodlerReserveStatus,
-  NoodlerFanActivitySettings,
-  NoodlerRemoveInteractionInput,
 } from "@marinara-engine/shared";
 import {
   countNoodlePostsSince,
@@ -69,79 +40,7 @@ export type NoodleRefreshResult = {
 export const noodleKeys = {
   all: ["noodle"] as const,
   bootstrap: () => [...noodleKeys.all, "bootstrap"] as const,
-  refreshIndicator: () => [...noodleKeys.all, "refresh-indicator"] as const,
-  noodlerRoot: () => [...noodleKeys.all, "noodler"] as const,
-  noodlerAccounts: () => [...noodleKeys.noodlerRoot(), "accounts"] as const,
-  noodlerEligibleAccountsRoot: () =>
-    [...noodleKeys.noodlerRoot(), "eligible"] as const,
-  noodlerEligibleAccounts: (search: string, kind: string) =>
-    [...noodleKeys.noodlerEligibleAccountsRoot(), search, kind] as const,
-  noodlerPosts: (accountId: string) =>
-    [...noodleKeys.noodlerRoot(), "posts", accountId] as const,
-  noodlerSubscribers: (accountId: string) =>
-    [...noodleKeys.noodlerRoot(), "subscribers", accountId] as const,
-  noodlerViewers: () => [...noodleKeys.noodlerRoot(), "viewers"] as const,
-  viewer: (personaId: string) =>
-    [...noodleKeys.noodlerViewers(), personaId] as const,
-  noodlerUnseenCount: (personaId: string) =>
-    [...noodleKeys.noodlerViewers(), "unseen-count", personaId] as const,
-  noodlerReserveStatus: () =>
-    [...noodleKeys.noodlerRoot(), "reserve-status"] as const,
-  noodlerImageConnections: () =>
-    [...noodleKeys.noodlerRoot(), "image-connections"] as const,
-  noodlerFanStatus: () => [...noodleKeys.noodlerRoot(), "fan-status"] as const,
 };
-
-export type NoodlerImageConnections = {
-  defaultConnectionId: string | null;
-  creatorConnectionIds: Record<string, string>;
-};
-
-type NoodlerPageCursor = { createdAt: string; id: string };
-
-function cursorQuery(cursor: NoodlerPageCursor | null): string {
-  return cursor
-    ? `&cursorAt=${encodeURIComponent(cursor.createdAt)}&cursorId=${encodeURIComponent(cursor.id)}`
-    : "";
-}
-
-function mergeNoodlerViewerShell(
-  current: NoodlerViewerScope | undefined,
-  shell: NoodlerViewerScope,
-): NoodlerViewerScope {
-  if (!current) return shell;
-  const currentByCreator = new Map(
-    current.creators.map((creator) => [creator.profile.id, creator]),
-  );
-  return {
-    ...shell,
-    creators: shell.creators.map((creator) => ({
-      ...creator,
-      posts: currentByCreator.get(creator.profile.id)?.posts ?? [],
-    })),
-  };
-}
-
-export function useNoodlerImageConnections(enabled = true) {
-  return useQuery({
-    queryKey: noodleKeys.noodlerImageConnections(),
-    queryFn: () => api.get<NoodlerImageConnections>("/noodle/noodler/image-connections"),
-    enabled,
-    staleTime: 10_000,
-  });
-}
-
-export function useUpdateNoodlerImageConnections() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (patch: {
-      defaultConnectionId?: string | null;
-      creatorId?: string;
-      connectionId?: string | null;
-    }) => api.patch<NoodlerImageConnections>("/noodle/noodler/image-connections", patch),
-    onSuccess: (value) => qc.setQueryData(noodleKeys.noodlerImageConnections(), value),
-  });
-}
 
 function preservePollVotes(
   current: NoodleBootstrap | undefined,
@@ -157,38 +56,13 @@ function preservePollVotes(
 }
 
 export function useNoodle(enabled = true) {
-  const qc = useQueryClient();
-  const observedMarker = useRef<string | null | undefined>(undefined);
-  const refreshIndicator = useQuery({
-    queryKey: noodleKeys.refreshIndicator(),
-    queryFn: () =>
-      api.get<{ marker: string | null }>("/noodle/refresh-indicator"),
+  return useQuery({
+    queryKey: noodleKeys.bootstrap(),
+    queryFn: () => api.get<NoodleBootstrap>("/noodle"),
     enabled,
     staleTime: 10_000,
     refetchInterval: enabled ? 30_000 : false,
     refetchIntervalInBackground: false,
-  });
-
-  useEffect(() => {
-    const marker = refreshIndicator.data?.marker;
-    if (marker === undefined) return;
-    if (observedMarker.current === undefined) {
-      observedMarker.current = marker;
-      return;
-    }
-    if (marker !== observedMarker.current) {
-      observedMarker.current = marker;
-      void qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
-    }
-  }, [qc, refreshIndicator.data?.marker]);
-
-  return useQuery({
-    queryKey: noodleKeys.bootstrap(),
-    queryFn: () => api.get<NoodleBootstrap>("/noodle"),
-    // Take the first refresh marker before the bootstrap snapshot. This prevents a completed
-    // refresh from becoming the baseline while an older bootstrap response is still in flight.
-    enabled: enabled && !refreshIndicator.isPending,
-    staleTime: 10_000,
     structuralSharing: (current, next) =>
       preservePollVotes(
         current as NoodleBootstrap | undefined,
@@ -226,518 +100,6 @@ export function useRerollAmbientNoodleProfiles() {
   });
 }
 
-export function useNoodlerAccounts(enabled = true) {
-  return useQuery({
-    queryKey: noodleKeys.noodlerAccounts(),
-    queryFn: () =>
-      api.get<NoodlerManagedStageProfile[]>("/noodle/noodler/accounts"),
-    enabled,
-    staleTime: 10_000,
-    // Autonomous reserve work changes operator state without a client mutation.
-    refetchInterval: enabled ? 30_000 : false,
-    refetchIntervalInBackground: false,
-  });
-}
-
-export function useNoodlerEligibleAccounts(
-  search: string,
-  kind: "all" | "character" | "persona",
-  enabled = true,
-) {
-  const normalizedSearch = search.trim();
-  return useInfiniteQuery({
-    queryKey: noodleKeys.noodlerEligibleAccounts(normalizedSearch, kind),
-    initialPageParam: 0,
-    queryFn: ({ pageParam }) =>
-      api.get<{
-        items: NoodleAccount[];
-        limit: number;
-        offset: number;
-        hasMore: boolean;
-      }>(
-        `/noodle/noodler/eligible-accounts?limit=100&offset=${pageParam}&search=${encodeURIComponent(normalizedSearch)}${kind === "all" ? "" : `&kind=${kind}`}`,
-      ),
-    getNextPageParam: (page) =>
-      page.hasMore ? page.offset + page.items.length : undefined,
-    enabled,
-    staleTime: 10_000,
-  });
-}
-
-export function useNoodlerPosts(accountId: string | null) {
-  return useQuery({
-    queryKey: noodleKeys.noodlerPosts(accountId ?? "none"),
-    queryFn: () =>
-      api.get<{
-        items: Array<{ managed: NoodlerManagedPost }>;
-      }>(
-        `/noodle/noodler/accounts/${encodeURIComponent(accountId!)}/posts`,
-      ).then((page) => page.items.map((item) => item.managed)),
-    enabled: Boolean(accountId),
-    staleTime: 10_000,
-    // Automatic posts are written server-side without a client mutation; poll while visible.
-    refetchInterval: accountId ? 30_000 : false,
-    refetchIntervalInBackground: false,
-  });
-}
-
-export function useNoodlerSubscribers(accountId: string | null) {
-  return useInfiniteQuery({
-    queryKey: noodleKeys.noodlerSubscribers(accountId ?? "none"),
-    initialPageParam: null as NoodlerPageCursor | null,
-    queryFn: ({ pageParam }) =>
-      api.get<{
-        items: NoodlerSubscriber[];
-        total: number;
-        nextCursor: NoodlerPageCursor | null;
-      }>(
-        `/noodle/noodler/accounts/${encodeURIComponent(accountId!)}/subscribers?limit=20${cursorQuery(pageParam)}`,
-      ),
-    getNextPageParam: (page) => page.nextCursor ?? undefined,
-    enabled: Boolean(accountId),
-    staleTime: 10_000,
-  });
-}
-
-export function useCreateNoodlerStageProfile() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      noodleAccountId,
-      stageProfile,
-    }: {
-      noodleAccountId: string;
-      stageProfile: NoodleStageProfileInput;
-    }) =>
-      api.post<NoodlerStageProfile>(
-        `/noodle/accounts/${encodeURIComponent(noodleAccountId)}/noodler`,
-        {
-          stageProfile,
-        },
-      ),
-    onSuccess: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
-        qc.invalidateQueries({
-          queryKey: noodleKeys.noodlerEligibleAccountsRoot(),
-        }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-      ]),
-  });
-}
-
-export function useBulkCreateNoodlerStageProfiles() {
-  const qc = useQueryClient();
-  const { t: localizeUi } = useUiTranslation();
-  return useMutation({
-    mutationFn: (input: NoodleBulkNoodlerAccountCreateInput) =>
-      api.post<{
-        created: NoodlerManagedStageProfile[];
-        skipped: string[];
-        failed?: string[];
-      }>("/noodle/noodler/accounts/bulk", input),
-    onSuccess: (result) => {
-      const failed = result.failed?.length ?? 0;
-      const counts = {
-        value1: result.created.length,
-        value2: result.skipped.length,
-        value3: failed,
-      };
-      if (failed) {
-        toast.error(
-          localizeUi(
-            "ui.noodle.noodlerbulkcreatepanel.createdValue1SkippedValue2FailedValue3",
-            counts,
-          ),
-        );
-      } else {
-        toast.success(
-          localizeUi(
-            "ui.noodle.noodlerbulkcreatepanel.createdValue1SkippedValue2",
-            counts,
-          ),
-        );
-      }
-      return Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
-        qc.invalidateQueries({
-          queryKey: noodleKeys.noodlerEligibleAccountsRoot(),
-        }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-      ]);
-    },
-  });
-}
-
-export function useUpdateNoodlerStageProfile() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      accountId,
-      sourceSnapshot,
-      ...input
-    }: {
-      accountId: string;
-      acceptSourceChanges?: boolean;
-      sourceSnapshot?: NoodlerSourceSnapshot;
-      sourceRevisionToken?: string;
-      confirmAvatarReview?: boolean;
-    } & NoodleStageProfileInput) =>
-      api.put<NoodlerStageProfile>(
-        `/noodle/noodler/accounts/${encodeURIComponent(accountId)}/stage-profile`,
-        {
-          ...input,
-          ...(sourceSnapshot ? { sourceSnapshot } : {}),
-        },
-      ),
-    onSuccess: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-      ]),
-  });
-}
-
-function useNoodlerAvatarMutation<TInput extends { accountId: string }>(
-  mutationFn: (input: TInput) => Promise<NoodlerStageProfile>,
-) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn,
-    onSuccess: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-      ]),
-  });
-}
-
-export function useUploadNoodlerAvatar() {
-  return useNoodlerAvatarMutation(({ accountId, file }: { accountId: string; file: File }) => {
-    const form = new FormData();
-    form.append("payload", "{}");
-    form.append("file", file);
-    return api.upload<NoodlerStageProfile>(
-      `/noodle/noodler/accounts/${encodeURIComponent(accountId)}/avatar`,
-      form,
-    );
-  });
-}
-
-export function useUseNoodlerSourceAvatar() {
-  return useNoodlerAvatarMutation(({ accountId }) =>
-    api.patch<NoodlerStageProfile>(
-      `/noodle/noodler/accounts/${encodeURIComponent(accountId)}/avatar/source`,
-      {},
-    ),
-  );
-}
-
-export function useRemoveNoodlerAvatar() {
-  return useNoodlerAvatarMutation(({ accountId }) =>
-    api.delete<NoodlerStageProfile>(
-      `/noodle/noodler/accounts/${encodeURIComponent(accountId)}/avatar`,
-    ),
-  );
-}
-
-function useNoodlerSourceAction(action: "dismiss" | "adopt-identity") {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (accountId: string) =>
-      api.post<NoodlerManagedStageProfile>(
-        `/noodle/noodler/accounts/${encodeURIComponent(accountId)}/source/${action}`,
-        {},
-      ),
-    onSuccess: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-      ]),
-  });
-}
-
-export function useDismissNoodlerSourceChanges() {
-  return useNoodlerSourceAction("dismiss");
-}
-
-export function useAdoptNoodlerSourceIdentity() {
-  return useNoodlerSourceAction("adopt-identity");
-}
-
-export function useDeleteNoodlerStageProfile() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (accountId: string) =>
-      api.delete<NoodleAccount>(
-        `/noodle/noodler/accounts/${encodeURIComponent(accountId)}`,
-      ),
-    onSuccess: (_account, accountId) => {
-      qc.removeQueries({ queryKey: noodleKeys.noodlerPosts(accountId) });
-      return Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
-        qc.invalidateQueries({
-          queryKey: noodleKeys.noodlerEligibleAccountsRoot(),
-        }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-      ]);
-    },
-  });
-}
-
-export function useGenerateNoodlerStageProfileDraft() {
-  return useMutation({
-    mutationFn: (input: NoodleStageProfileDraftRequest) => {
-      const controller = new AbortController();
-      // ponytail: fixed 60s ceiling, no per-provider tuning — raise if real drafts routinely take longer
-      const timer = setTimeout(() => controller.abort(), 60_000);
-      return api
-        .post<
-          NoodleStageProfileInput & {
-            sourceSnapshot?: NoodlerSourceSnapshot;
-            sourceRevisionToken?: string;
-          }
-        >("/noodle/noodler/stage-profile-draft", input, {
-          signal: controller.signal,
-        })
-        .finally(() => clearTimeout(timer));
-    },
-  });
-}
-
-export type NoodlePostDraft = {
-  title: string | null;
-  content: string;
-  imagePrompt: string | null;
-  access: "public";
-  authorAccountId: string;
-};
-
-export type NoodlePostDraftRequest = {
-  accountId: string;
-  guidance?: string;
-  connectionId?: string;
-};
-
-export function useGenerateNoodlePostDraft() {
-  return useMutation({
-    mutationFn: ({ accountId, ...input }: NoodlePostDraftRequest) =>
-      api.post<NoodlePostDraft>(
-        `/noodle/accounts/${encodeURIComponent(accountId)}/post-draft`,
-        { ...input, debugMode: useUIStore.getState().debugMode },
-      ),
-  });
-}
-
-export type GeneratedNoodlerNoodlePost = NoodlerManagedPost & {
-  imagePromptReview?: ImagePromptReviewItem;
-};
-
-export type NoodlerPostDraftImage = {
-  source: File | string;
-  crop: NoodlePostImageCrop | null;
-};
-
-export type NoodlerContentFormat =
-  | "caption"
-  | "teaser"
-  | "announcement"
-  | "long_form";
-
-type NoodlerFormatRequest = {
-  format?: NoodlerContentFormat;
-  lockedFollowUpPostId?: string;
-  lockedFollowUp?: { title: string; content: string };
-};
-
-type NoodlerCreatePostRequest = Omit<
-  NoodlerPostCreateInput,
-  "uploadedImageUrl" | "imageCrop"
-> & {
-  image?: NoodlerPostDraftImage | null;
-} & NoodlerFormatRequest;
-
-type NoodlerGeneratePostRequest = Omit<
-  NoodlerGenerationRequest,
-  "uploadedImageUrl" | "imageCrop"
-> & {
-  image?: NoodlerPostDraftImage | null;
-} & NoodlerFormatRequest;
-
-function postNoodlerRequestWithImage<T>(
-  path: string,
-  input: Record<string, unknown>,
-  image?: NoodlerPostDraftImage | null,
-): Promise<T> {
-  if (!image) return api.post<T>(path, input);
-  const payload = {
-    ...input,
-    ...(image.crop ? { imageCrop: image.crop } : {}),
-  };
-  if (image.source instanceof File) {
-    const form = new FormData();
-    form.append("payload", JSON.stringify(payload));
-    form.append("file", image.source);
-    return api.upload<T>(path, form);
-  }
-  return api.post<T>(path, { ...payload, uploadedImageUrl: image.source });
-}
-
-export function useGenerateNoodlerNoodlePost() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ image, ...input }: NoodlerGeneratePostRequest) =>
-      postNoodlerRequestWithImage<GeneratedNoodlerNoodlePost>(
-        "/noodle/refresh",
-        {
-          ...input,
-          debugMode: useUIStore.getState().debugMode,
-          reviewImagePromptsBeforeSend:
-            useUIStore.getState().reviewImagePromptsBeforeSend,
-        },
-        image,
-      ),
-    onSuccess: (_post, input) =>
-      Promise.all([
-        qc.invalidateQueries({
-          queryKey: noodleKeys.noodlerPosts(input.targetAccountId),
-        }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-      ]),
-  });
-}
-
-export function useConfirmNoodlerImagePrompts() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (input: {
-      targetAccountId: string;
-      prompts: ImagePromptOverride[];
-    }) =>
-      api.post<{ finalized: number }>("/noodle/noodler/refresh/images", {
-        prompts: input.prompts,
-        debugMode: useUIStore.getState().debugMode,
-      }),
-    onSuccess: (_result, input) =>
-      Promise.all([
-        qc.invalidateQueries({
-          queryKey: noodleKeys.noodlerPosts(input.targetAccountId),
-        }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-      ]),
-  });
-}
-
-export function useCreateNoodlerPost() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ image, ...input }: NoodlerCreatePostRequest) =>
-      postNoodlerRequestWithImage<NoodlerManagedPost>(
-        "/noodle/noodler/posts",
-        input,
-        image,
-      ),
-    onSuccess: (_post, input) =>
-      Promise.all([
-        qc.invalidateQueries({
-          queryKey: noodleKeys.noodlerPosts(input.targetAccountId),
-        }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-      ]),
-  });
-}
-
-function imageFileExtension(contentType: string): string {
-  if (contentType === "image/png") return "png";
-  if (contentType === "image/webp") return "webp";
-  if (contentType === "image/gif") return "gif";
-  if (contentType === "image/avif") return "avif";
-  return "jpg";
-}
-
-export function useLoadNoodlerPostImage() {
-  return useMutation({
-    mutationFn: async ({ imageUrl }: { imageUrl: string }) => {
-      const url = new URL(imageUrl, window.location.origin);
-      if (
-        url.origin !== window.location.origin ||
-        !url.pathname.startsWith("/api/")
-      ) {
-        throw new Error("This post image is not stored by Marinara.");
-      }
-      const response = await api.raw(`${url.pathname.slice(4)}${url.search}`);
-      if (!response.ok)
-        throw new Error("Could not load this post image for editing.");
-      const blob = await response.blob();
-      const extension = imageFileExtension(blob.type);
-      return new File([blob], `noodler-post.${extension}`, {
-        type: blob.type,
-        lastModified: Date.now(),
-      });
-    },
-  });
-}
-
-export function useNoodlerViewer(personaId: string | null, enabled = true) {
-  return useQuery({
-    queryKey: noodleKeys.viewer(personaId ?? "none"),
-    queryFn: async () => {
-      const encodedPersonaId = encodeURIComponent(personaId!);
-      type FeedPage = {
-        items: Array<{
-          creatorAccountId: string;
-          post: NoodlerViewerScope["creators"][number]["posts"][number];
-        }>;
-        total: number;
-        nextCursor: NoodlerPageCursor | null;
-      };
-      const scopePromise = api.get<NoodlerViewerScope>(
-        `/noodle/noodler/viewer?personaId=${encodedPersonaId}`,
-      );
-      const feedItems: FeedPage["items"] = [];
-      let cursor: NoodlerPageCursor | null = null;
-      do {
-        const page: FeedPage = await api.get<{
-          items: Array<{
-            creatorAccountId: string;
-            post: NoodlerViewerScope["creators"][number]["posts"][number];
-          }>;
-          total: number;
-          nextCursor: NoodlerPageCursor | null;
-        }>(
-          `/noodle/noodler/viewer/feed?personaId=${encodedPersonaId}&tab=all&limit=20${cursorQuery(cursor)}`,
-        );
-        feedItems.push(...page.items);
-        cursor = page.nextCursor;
-      } while (cursor);
-      const scope = await scopePromise;
-      const postsByCreator = new Map<
-        string,
-        NoodlerViewerScope["creators"][number]["posts"]
-      >();
-      for (const item of feedItems) {
-        const posts = postsByCreator.get(item.creatorAccountId) ?? [];
-        posts.push(item.post);
-        postsByCreator.set(item.creatorAccountId, posts);
-      }
-      return {
-        ...scope,
-        creators: scope.creators.map((creator) => ({
-          ...creator,
-          posts: postsByCreator.get(creator.profile.id) ?? [],
-        })),
-      };
-    },
-    enabled: enabled && Boolean(personaId),
-    staleTime: 10_000,
-  });
-}
-
-/**
- * Unseen-post count for the public Noodle entry point. Reads the bootstrap query both Noodle
- * surfaces already hold, so the badge is the same number whether it is rendered from Noodle or
- * from NoodleR.
- */
 export function useNoodleUnseenCount(
   personaAccount: NoodleAccount | null,
   enabled = true,
@@ -749,436 +111,6 @@ export function useNoodleUnseenCount(
     personaAccount?.id ?? null,
     personaAccount?.settings.social.noodleFeedSeenAt,
   );
-}
-
-/** Poll the badge without downloading the complete viewer feed or historical media metadata. */
-export function useNoodlerUnseenCount(
-  personaId: string | null,
-  enabled = true,
-) {
-  const { data } = useQuery({
-    queryKey: noodleKeys.noodlerUnseenCount(personaId ?? "none"),
-    queryFn: () =>
-      api.get<{ count: number }>(
-        `/noodle/noodler/viewer/unseen-count?personaId=${encodeURIComponent(personaId!)}`,
-      ),
-    enabled: enabled && Boolean(personaId),
-    staleTime: 10_000,
-    refetchInterval: enabled && personaId ? 30_000 : false,
-    refetchIntervalInBackground: false,
-  });
-  return Math.max(0, Math.floor(data?.count ?? 0));
-}
-
-export function useToggleNoodlerSubscription() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      creatorAccountId,
-      personaId,
-      subscribed,
-    }: {
-      creatorAccountId: string;
-      personaId: string;
-      subscribed: boolean;
-    }) =>
-      subscribed
-        ? api.delete<NoodlerViewerScope>(
-            `/noodle/noodler/accounts/${encodeURIComponent(creatorAccountId)}/subscribe?personaId=${encodeURIComponent(personaId)}`,
-          )
-        : api.post<NoodlerViewerScope>(
-            `/noodle/noodler/accounts/${encodeURIComponent(creatorAccountId)}/subscribe`,
-            {
-              personaId,
-            },
-          ),
-    // The mutation returns a shell without posts. Keep the current feed visible until refetch.
-    onSuccess: async (scope, input) => {
-      // Cancel any in-flight viewer poll first, or it can land after us and restore the stale scope.
-      await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
-      qc.setQueryData<NoodlerViewerScope | undefined>(
-        noodleKeys.viewer(input.personaId),
-        (current) => mergeNoodlerViewerShell(current, scope),
-      );
-      return Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
-        qc.invalidateQueries({
-          queryKey: noodleKeys.noodlerSubscribers(input.creatorAccountId),
-        }),
-      ]);
-    },
-  });
-}
-
-export function useToggleNoodlerFollow() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      creatorAccountId,
-      personaId,
-      followed,
-    }: {
-      creatorAccountId: string;
-      personaId: string;
-      followed: boolean;
-    }) =>
-      api.patch<NoodlerViewerScope>(
-        `/noodle/noodler/accounts/${encodeURIComponent(creatorAccountId)}/follow`,
-        {
-          personaId,
-          followed,
-        },
-      ),
-    onSuccess: async (scope, input) => {
-      await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
-      qc.setQueryData<NoodlerViewerScope | undefined>(
-        noodleKeys.viewer(input.personaId),
-        (current) => mergeNoodlerViewerShell(current, scope),
-      );
-      await qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) });
-    },
-  });
-}
-
-export function useUnlockNoodlerPost() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      postId,
-      personaId,
-    }: {
-      postId: string;
-      personaId: string;
-    }) =>
-      api.post<NoodlerViewerScope>(
-        `/noodle/noodler/posts/${encodeURIComponent(postId)}/unlock`,
-        { personaId },
-      ),
-    onSuccess: async (scope, input) => {
-      // Cancel any in-flight viewer poll first, or it can land after us and restore the locked scope.
-      await qc.cancelQueries({ queryKey: noodleKeys.viewer(input.personaId) });
-      qc.setQueryData<NoodlerViewerScope | undefined>(
-        noodleKeys.viewer(input.personaId),
-        (current) => mergeNoodlerViewerShell(current, scope),
-      );
-      await qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) });
-    },
-  });
-}
-
-export function useCreateNoodlerInteraction() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      postId,
-      ...input
-    }: { postId: string } & NoodlerCreateInteractionInput) =>
-      api.post<NoodleInteraction>(
-        `/noodle/noodler/posts/${encodeURIComponent(postId)}/interactions`,
-        input,
-      ),
-    onSuccess: (_result, input) =>
-      qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
-  });
-}
-
-export function useTriggerNoodlerCreatorReply() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      postId,
-      interactionId,
-      personaId,
-    }: {
-      postId: string;
-      interactionId: string;
-      personaId: string;
-    }) =>
-      api.post<NoodlerCreatorReplyResult>(
-        `/noodle/noodler/posts/${encodeURIComponent(postId)}/interactions/${encodeURIComponent(interactionId)}/creator-reply`,
-        { personaId, debugMode: useUIStore.getState().debugMode },
-      ),
-    onSettled: (_result, _error, input) =>
-      qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
-  });
-}
-
-export function useRemoveNoodlerInteraction() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      postId,
-      ...input
-    }: { postId: string } & NoodlerRemoveInteractionInput) => {
-      const params = new URLSearchParams({
-        personaId: input.personaId,
-        type: input.type,
-      });
-      if (input.parentInteractionId)
-        params.set("parentInteractionId", input.parentInteractionId);
-      return api.delete<NoodleInteraction>(
-        `/noodle/noodler/posts/${encodeURIComponent(postId)}/interactions?${params}`,
-      );
-    },
-    onSuccess: (_result, input) =>
-      qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
-  });
-}
-
-export function useUpdateNoodlerPost() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      id,
-      accountId,
-      ...input
-    }: { id: string; accountId: string } & NoodlerPostUpdateInput) =>
-      api.patch<NoodlerManagedPost>(
-        `/noodle/noodler/posts/${encodeURIComponent(id)}`,
-        { ...input, accountId },
-      ),
-    onSuccess: (_post, input) => {
-      return Promise.all([
-        qc.invalidateQueries({
-          queryKey: noodleKeys.noodlerPosts(input.accountId),
-        }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-      ]);
-    },
-  });
-}
-
-export function useReplaceNoodlerPostImage() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      id,
-      accountId,
-      file,
-      crop,
-      ...input
-    }: {
-      id: string;
-      accountId: string;
-      file: File;
-      crop: NoodlePostImageCrop;
-    } & Omit<NoodlerPostUpdateInput, "imageCrop" | "removeImage">) => {
-      const form = new FormData();
-      form.append(
-        "payload",
-        JSON.stringify({ ...input, imageCrop: crop, accountId }),
-      );
-      form.append("file", file);
-      return api.upload<NoodlerManagedPost>(
-        `/noodle/noodler/posts/${encodeURIComponent(id)}/media`,
-        form,
-      );
-    },
-    onSuccess: (_post, input) =>
-      Promise.all([
-        qc.invalidateQueries({
-          queryKey: noodleKeys.noodlerPosts(input.accountId),
-        }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-      ]),
-  });
-}
-
-export function useDeleteNoodlerPost() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id }: { id: string; accountId: string }) =>
-      api.delete<NoodlerManagedPost>(
-        `/noodle/noodler/posts/${encodeURIComponent(id)}`,
-      ),
-    onSuccess: (_post, input) => {
-      return Promise.all([
-        qc.invalidateQueries({
-          queryKey: noodleKeys.noodlerPosts(input.accountId),
-        }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-      ]);
-    },
-  });
-}
-
-export function useUpdateNoodlerAccess() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      accountId,
-      ...access
-    }: {
-      accountId: string;
-      hiddenFromAccountIds: string[];
-    }) =>
-      api.patch<NoodleAccount>(
-        `/noodle/accounts/${encodeURIComponent(accountId)}/settings`,
-        {
-          subtree: "privacy",
-          patch: { access },
-        } satisfies NoodleAccountSettingsPatchInput,
-      ),
-    onSuccess: () => {
-      return Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-      ]);
-    },
-  });
-}
-
-export function useUpdateNoodlerAutoPosting() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      accountId,
-      ...autoPosting
-    }: {
-      accountId: string;
-      enabled?: boolean;
-      imagesEnabled?: boolean;
-    }) =>
-      api.patch<NoodleAccount>(
-        `/noodle/accounts/${encodeURIComponent(accountId)}/settings`,
-        {
-          subtree: "scheduler",
-          patch: { autoPosting },
-        } satisfies NoodleAccountSettingsPatchInput,
-      ),
-    // Auto-post state lives only under noodlerAccounts(); the /noodle bootstrap has none of it.
-    onSuccess: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerReserveStatus() }),
-      ]),
-  });
-}
-
-export function useUpdateNoodlerFanActivity() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      accountId,
-      fanActivity,
-    }: {
-      accountId: string;
-      fanActivity: NoodlerFanActivitySettings | null;
-    }) =>
-      api.patch<NoodleAccount>(
-        `/noodle/accounts/${encodeURIComponent(accountId)}/settings`,
-        {
-          subtree: "scheduler",
-          patch: { fanActivity },
-        } satisfies NoodleAccountSettingsPatchInput,
-      ),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
-  });
-}
-
-export function useNoodlerReserveStatus(enabled = true) {
-  return useQuery({
-    queryKey: noodleKeys.noodlerReserveStatus(),
-    queryFn: () =>
-      api.get<NoodlerReserveStatus>("/noodle/noodler/auto-post/status"),
-    enabled,
-    // The scheduler prepares posts on its own timer, so nothing here invalidates this key when
-    // the counts change. Same 30s cadence the creator list already uses.
-    refetchInterval: 30_000,
-    refetchIntervalInBackground: false,
-  });
-}
-
-export function useRunNoodlerAutoPostNow() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (accountId: string) =>
-      api.post<NoodlerManagedPost>(
-        `/noodle/noodler/accounts/${encodeURIComponent(accountId)}/auto-post/run-now`,
-      ),
-    onSuccess: (_post, accountId) =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerPosts(accountId) }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-      ]),
-  });
-}
-
-export function useRefreshAllNoodlerCreatorsNow() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () =>
-      api.post<{ outcomes: NoodlerRefreshNowOutcome[] }>(
-        "/noodle/noodler/auto-post/refresh-now",
-      ),
-    onSuccess: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
-        qc.invalidateQueries({
-          queryKey: [...noodleKeys.noodlerRoot(), "posts"],
-        }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-      ]),
-  });
-}
-
-export function useRefreshTargetedNoodlerCreatorsNow() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (input: { accountIds: string[]; executionId?: string }) =>
-      api.post<{ outcomes: NoodlerRefreshNowOutcome[] }>(
-        "/noodle/noodler/auto-post/refresh-targeted",
-        {
-          ...input,
-        },
-      ),
-    onSuccess: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
-        qc.invalidateQueries({
-          queryKey: [...noodleKeys.noodlerRoot(), "posts"],
-        }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-      ]),
-  });
-}
-
-export function useRefreshNoodlerFanActivityNow() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () =>
-      api.post<{ status: string; created: number }>(
-        "/noodle/noodler/fan-activity/refresh-now",
-        {
-          debugMode: useUIStore.getState().debugMode,
-        },
-      ),
-    onSuccess: () =>
-      Promise.all([
-        qc.invalidateQueries({
-          queryKey: [...noodleKeys.noodlerRoot(), "posts"],
-        }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerFanStatus() }),
-      ]),
-  });
-}
-
-export function useNoodlerFanActivityStatus(enabled = true) {
-  return useQuery({
-    queryKey: noodleKeys.noodlerFanStatus(),
-    queryFn: () =>
-      api.get<{
-        localDate: string;
-        usedRuns: number;
-        runLimit: number;
-        lastRun: { status: string; finishedAt: string | null } | null;
-      }>("/noodle/noodler/fan-activity/status"),
-    enabled,
-    refetchInterval: 30_000,
-    refetchIntervalInBackground: false,
-  });
 }
 
 export function useUpdateNoodleSettings() {
@@ -1234,25 +166,14 @@ export function useRescheduleNoodleRefresh() {
 export function useUpdateNoodleAccountProfile() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      id,
-      ...input
-    }: { id: string } & NoodleAccountProfileUpdateInput) =>
-      api.put<NoodleAccount>(
-        `/noodle/accounts/${encodeURIComponent(id)}/profile`,
-        input,
-      ),
+    mutationFn: ({ id, ...input }: { id: string } & NoodleAccountProfileUpdateInput) =>
+      api.put<NoodleAccount>(`/noodle/accounts/${encodeURIComponent(id)}/profile`, input),
     onSuccess: (account) => {
       qc.setQueryData<NoodleBootstrap | undefined>(
         noodleKeys.bootstrap(),
         (current) =>
           current
-            ? {
-                ...current,
-                accounts: current.accounts.map((item) =>
-                  item.id === account.id ? account : item,
-                ),
-              }
+            ? { ...current, accounts: current.accounts.map((item) => item.id === account.id ? account : item) }
             : current,
       );
       qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
@@ -1263,25 +184,14 @@ export function useUpdateNoodleAccountProfile() {
 export function usePatchNoodleAccountSettings() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      id,
-      ...input
-    }: { id: string } & NoodleAccountSettingsPatchInput) =>
-      api.patch<NoodleAccount>(
-        `/noodle/accounts/${encodeURIComponent(id)}/settings`,
-        input,
-      ),
+    mutationFn: ({ id, ...input }: { id: string } & NoodleAccountSettingsPatchInput) =>
+      api.patch<NoodleAccount>(`/noodle/accounts/${encodeURIComponent(id)}/settings`, input),
     onSuccess: (account) => {
       qc.setQueryData<NoodleBootstrap | undefined>(
         noodleKeys.bootstrap(),
         (current) =>
           current
-            ? {
-                ...current,
-                accounts: current.accounts.map((item) =>
-                  item.id === account.id ? account : item,
-                ),
-              }
+            ? { ...current, accounts: current.accounts.map((item) => item.id === account.id ? account : item) }
             : current,
       );
       qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
@@ -1292,14 +202,7 @@ export function usePatchNoodleAccountSettings() {
 export function useUpdateNoodleAccountFollow() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      id,
-      targetAccountId,
-      ...input
-    }: {
-      id: string;
-      targetAccountId: string;
-    } & NoodleAccountFollowUpdateInput) =>
+    mutationFn: ({ id, targetAccountId, ...input }: { id: string; targetAccountId: string } & NoodleAccountFollowUpdateInput) =>
       api.patch<NoodleAccount>(
         `/noodle/accounts/${encodeURIComponent(id)}/follows/${encodeURIComponent(targetAccountId)}`,
         input,
@@ -1309,12 +212,7 @@ export function useUpdateNoodleAccountFollow() {
         noodleKeys.bootstrap(),
         (current) =>
           current
-            ? {
-                ...current,
-                accounts: current.accounts.map((item) =>
-                  item.id === account.id ? account : item,
-                ),
-              }
+            ? { ...current, accounts: current.accounts.map((item) => item.id === account.id ? account : item) }
             : current,
       );
       qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
@@ -1325,23 +223,15 @@ export function useUpdateNoodleAccountFollow() {
 export function useInviteNoodleCharacter() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (characterId: string) =>
-      api.post<NoodleAccount>("/noodle/invites", { characterId }),
-    onSuccess: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerEligibleAccountsRoot() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-      ]),
+    mutationFn: (characterId: string) => api.post<NoodleAccount>("/noodle/invites", { characterId }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
   });
 }
 
 export function useInviteNoodleCharacters() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (characterIds: string[]) =>
-      api.post<NoodleAccount[]>("/noodle/invites/bulk", { characterIds }),
+    mutationFn: (characterIds: string[]) => api.post<NoodleAccount[]>("/noodle/invites/bulk", { characterIds }),
     onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
   });
 }
@@ -1349,21 +239,11 @@ export function useInviteNoodleCharacters() {
 export function useRemoveNoodleCharacter() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (characterId: string) =>
-      api.delete<NoodleAccount>(
-        `/noodle/invites/${encodeURIComponent(characterId)}`,
-      ),
-    onSuccess: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerEligibleAccountsRoot() }),
-        qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
-      ]),
+    mutationFn: (characterId: string) => api.delete<NoodleAccount>(`/noodle/invites/${encodeURIComponent(characterId)}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
   });
 }
 
-/** Clear every Noodle invitation source and refresh the bootstrap cache. */
 export function useClearNoodleInvites() {
   const qc = useQueryClient();
   return useMutation({
@@ -1375,25 +255,10 @@ export function useClearNoodleInvites() {
   });
 }
 
-export function useDeleteUninvitedNoodleProfiles() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (includeNoodler: boolean) =>
-      api.delete<{ deleted: number; deletedNoodler: number; bootstrap: NoodleBootstrap }>(
-        `/noodle/accounts/uninvited${includeNoodler ? "?includeNoodler=true" : ""}`,
-      ),
-    onSuccess: ({ bootstrap }) => {
-      qc.setQueryData<NoodleBootstrap>(noodleKeys.bootstrap(), bootstrap);
-      qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() });
-    },
-  });
-}
-
 export function useCreateNoodlePost() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: NoodleCreatePostInput) =>
-      api.post<NoodlePost>("/noodle/posts", input),
+    mutationFn: (input: NoodleCreatePostInput) => api.post<NoodlePost>("/noodle/posts", input),
     onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
   });
 }
@@ -1401,20 +266,11 @@ export function useCreateNoodlePost() {
 export function useUpdateNoodlePost() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...input }: { id: string } & NoodlePostUpdateInput) =>
-      api.patch<NoodlePost>(`/noodle/posts/${encodeURIComponent(id)}`, input),
+    mutationFn: ({ id, ...input }: { id: string } & NoodlePostUpdateInput) => api.patch<NoodlePost>(`/noodle/posts/${encodeURIComponent(id)}`, input),
     onSuccess: (post) => {
       qc.setQueryData<NoodleBootstrap | undefined>(
         noodleKeys.bootstrap(),
-        (current) =>
-          current
-            ? {
-                ...current,
-                posts: current.posts.map((item) =>
-                  item.id === post.id ? post : item,
-                ),
-              }
-            : current,
+        (current) => current ? { ...current, posts: current.posts.map((item) => item.id === post.id ? post : item) } : current,
       );
       qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
     },
@@ -1424,24 +280,16 @@ export function useUpdateNoodlePost() {
 export function useDeleteNoodlePost() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) =>
-      api.delete<NoodlePost>(`/noodle/posts/${encodeURIComponent(id)}`),
+    mutationFn: (id: string) => api.delete<NoodlePost>(`/noodle/posts/${encodeURIComponent(id)}`),
     onSuccess: (post) => {
       qc.setQueryData<NoodleBootstrap | undefined>(
         noodleKeys.bootstrap(),
-        (current) =>
-          current
-            ? {
-                ...current,
-                posts: current.posts.filter((item) => item.id !== post.id),
-                interactions: current.interactions.filter(
-                  (interaction) => interaction.postId !== post.id,
-                ),
-                digests: current.digests.filter(
-                  (digest) => digest.sourcePostId !== post.id,
-                ),
-              }
-            : current,
+        (current) => current ? {
+          ...current,
+          posts: current.posts.filter((item) => item.id !== post.id),
+          interactions: current.interactions.filter((interaction) => interaction.postId !== post.id),
+          digests: current.digests.filter((digest) => digest.sourcePostId !== post.id),
+        } : current,
       );
       qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() });
     },
@@ -1452,8 +300,7 @@ export function useResetNoodleTimeline() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => api.delete<NoodleBootstrap>("/noodle/timeline"),
-    onSuccess: (bootstrap) =>
-      qc.setQueryData(noodleKeys.bootstrap(), bootstrap),
+    onSuccess: (bootstrap) => qc.setQueryData(noodleKeys.bootstrap(), bootstrap),
     onSettled: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
   });
 }
@@ -1461,34 +308,17 @@ export function useResetNoodleTimeline() {
 export function useCreateNoodleInteraction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      postId,
-      ...input
-    }: NoodleCreateInteractionInput & {
-      postId: string;
-      actorKind: NoodleAccountKind;
-      actorEntityId: string;
-    }) =>
-      api.post<NoodleInteraction>(
-        `/noodle/posts/${encodeURIComponent(postId)}/interactions`,
-        input,
-      ),
+    mutationFn: ({ postId, ...input }: NoodleCreateInteractionInput & { postId: string; actorKind: NoodleAccountKind; actorEntityId: string }) =>
+      api.post<NoodleInteraction>(`/noodle/posts/${encodeURIComponent(postId)}/interactions`, input),
     onSuccess: (interaction) => {
       qc.setQueryData<NoodleBootstrap | undefined>(
         noodleKeys.bootstrap(),
-        (current) =>
-          current
-            ? {
-                ...current,
-                interactions: current.interactions.some(
-                  (item) => item.id === interaction.id,
-                )
-                  ? current.interactions.map((item) =>
-                      item.id === interaction.id ? interaction : item,
-                    )
-                  : [...current.interactions, interaction],
-              }
-            : current,
+        (current) => current ? {
+          ...current,
+          interactions: current.interactions.some((item) => item.id === interaction.id)
+            ? current.interactions.map((item) => item.id === interaction.id ? interaction : item)
+            : [...current.interactions, interaction],
+        } : current,
       );
     },
   });
@@ -1497,37 +327,15 @@ export function useCreateNoodleInteraction() {
 export function useRemoveNoodleInteraction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      postId,
-      ...input
-    }: NoodleRemoveInteractionInput & {
-      postId: string;
-      actorKind: NoodleAccountKind;
-      actorEntityId: string;
-    }) => {
-      const params = new URLSearchParams({
-        actorKind: input.actorKind,
-        actorEntityId: input.actorEntityId,
-        type: input.type,
-      });
-      if (input.parentInteractionId)
-        params.set("parentInteractionId", input.parentInteractionId);
-      return api.delete<NoodleInteraction>(
-        `/noodle/posts/${encodeURIComponent(postId)}/interactions?${params}`,
-      );
+    mutationFn: ({ postId, ...input }: NoodleRemoveInteractionInput & { postId: string; actorKind: NoodleAccountKind; actorEntityId: string }) => {
+      const params = new URLSearchParams({ actorKind: input.actorKind, actorEntityId: input.actorEntityId, type: input.type });
+      if (input.parentInteractionId) params.set("parentInteractionId", input.parentInteractionId);
+      return api.delete<NoodleInteraction>(`/noodle/posts/${encodeURIComponent(postId)}/interactions?${params}`);
     },
     onSuccess: (interaction) => {
       qc.setQueryData<NoodleBootstrap | undefined>(
         noodleKeys.bootstrap(),
-        (current) =>
-          current
-            ? {
-                ...current,
-                interactions: current.interactions.filter(
-                  (item) => item.id !== interaction.id,
-                ),
-              }
-            : current,
+        (current) => current ? { ...current, interactions: current.interactions.filter((item) => item.id !== interaction.id) } : current,
       );
     },
   });
@@ -1536,30 +344,12 @@ export function useRemoveNoodleInteraction() {
 export function useUpdateNoodleInteraction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      postId,
-      interactionId,
-      ...input
-    }: NoodleInteractionUpdateInput & {
-      postId: string;
-      interactionId: string;
-    }) =>
-      api.patch<NoodleInteraction>(
-        `/noodle/posts/${encodeURIComponent(postId)}/interactions/${encodeURIComponent(interactionId)}`,
-        input,
-      ),
+    mutationFn: ({ postId, interactionId, ...input }: NoodleInteractionUpdateInput & { postId: string; interactionId: string }) =>
+      api.patch<NoodleInteraction>(`/noodle/posts/${encodeURIComponent(postId)}/interactions/${encodeURIComponent(interactionId)}`, input),
     onSuccess: (interaction) => {
       qc.setQueryData<NoodleBootstrap | undefined>(
         noodleKeys.bootstrap(),
-        (current) =>
-          current
-            ? {
-                ...current,
-                interactions: current.interactions.map((item) =>
-                  item.id === interaction.id ? interaction : item,
-                ),
-              }
-            : current,
+        (current) => current ? { ...current, interactions: current.interactions.map((item) => item.id === interaction.id ? interaction : item) } : current,
       );
     },
   });
@@ -1568,33 +358,13 @@ export function useUpdateNoodleInteraction() {
 export function useDeleteNoodleInteraction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      postId,
-      interactionId,
-      personaId,
-    }: {
-      postId: string;
-      interactionId: string;
-      personaId: string;
-    }) =>
-      api.delete<NoodleInteraction[]>(
-        `/noodle/posts/${encodeURIComponent(postId)}/interactions/${encodeURIComponent(interactionId)}?personaId=${encodeURIComponent(personaId)}`,
-      ),
+    mutationFn: ({ postId, interactionId, personaId }: { postId: string; interactionId: string; personaId: string }) =>
+      api.delete<NoodleInteraction[]>(`/noodle/posts/${encodeURIComponent(postId)}/interactions/${encodeURIComponent(interactionId)}?personaId=${encodeURIComponent(personaId)}`),
     onSuccess: (interactions) => {
-      const deletedIds = new Set(
-        interactions.map((interaction) => interaction.id),
-      );
+      const deletedIds = new Set(interactions.map((interaction) => interaction.id));
       qc.setQueryData<NoodleBootstrap | undefined>(
         noodleKeys.bootstrap(),
-        (current) =>
-          current
-            ? {
-                ...current,
-                interactions: current.interactions.filter(
-                  (item) => !deletedIds.has(item.id),
-                ),
-              }
-            : current,
+        (current) => current ? { ...current, interactions: current.interactions.filter((item) => !deletedIds.has(item.id)) } : current,
       );
     },
   });
@@ -1609,14 +379,12 @@ export function useRefreshNoodle() {
         ...input,
         timeZone: useUIStore.getState().conversationTimeZone,
         debugMode: useUIStore.getState().debugMode,
-        reviewImagePromptsBeforeSend:
-          useUIStore.getState().reviewImagePromptsBeforeSend,
+        reviewImagePromptsBeforeSend: useUIStore.getState().reviewImagePromptsBeforeSend,
       }),
-    onSuccess: (result) =>
-      qc.setQueryData<NoodleBootstrap | undefined>(
-        noodleKeys.bootstrap(),
-        (current) => preservePollVotes(current, result.bootstrap),
-      ),
+    onSuccess: (result) => qc.setQueryData<NoodleBootstrap | undefined>(
+      noodleKeys.bootstrap(),
+      (current) => preservePollVotes(current, result.bootstrap),
+    ),
     onSettled: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
   });
 }
@@ -1629,11 +397,10 @@ export function useConfirmNoodleImagePrompts() {
         prompts,
         debugMode: useUIStore.getState().debugMode,
       }),
-    onSuccess: (bootstrap) =>
-      qc.setQueryData<NoodleBootstrap | undefined>(
-        noodleKeys.bootstrap(),
-        (current) => preservePollVotes(current, bootstrap),
-      ),
+    onSuccess: (bootstrap) => qc.setQueryData<NoodleBootstrap | undefined>(
+      noodleKeys.bootstrap(),
+      (current) => preservePollVotes(current, bootstrap),
+    ),
     onSettled: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
   });
 }

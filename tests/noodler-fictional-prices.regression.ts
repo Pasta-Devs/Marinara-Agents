@@ -5,7 +5,7 @@ import {
   NOODLER_UNLOCK_COST,
   noodlerUnlockPriceFromMetadata,
   noodlerUnlockPriceMetadata,
-} from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodler-prices";
+} from "../packages/slurp/src/engine/packages/server/src/services/slurp/noodler-prices";
 
 // Prices are roleplay flavour. The confirmed direction is that they never gate access: no
 // affordability check, no debit, no visible balance. Until 1.0.12 both unlock and subscribe
@@ -31,7 +31,7 @@ for (const junk of [{ noodlerUnlockPrice: "3" }, { noodlerUnlockPrice: -1 }, { n
 }
 
 const storage = readFileSync(
-  "packages/noodle/src/engine/packages/server/src/services/storage/noodle.storage.ts",
+  "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts",
   "utf8",
 );
 const fanInteraction = storage.slice(
@@ -53,7 +53,7 @@ assert.ok(subscribe.length > 0);
 assert.match(subscribe, /followingAccountIds\.includes\(creatorAccountId\)/u);
 
 const routes = readFileSync(
-  "packages/noodle/src/engine/packages/server/src/routes/noodle.routes.ts",
+  "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts",
   "utf8",
 );
 // A locked post withholds its metadata, so the price has to travel as its own field.
@@ -65,12 +65,12 @@ const unlockRoute = routes.slice(routes.indexOf('"/noodler/posts/:id/unlock"'));
 assert.doesNotMatch(unlockRoute.slice(0, 1500), /unlockPrice|wallet/u);
 
 const card = readFileSync(
-  "packages/noodle/src/engine/packages/client/src/components/noodle/NoodlerPostCard.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerPostCard.tsx",
   "utf8",
 );
 const enLocale = JSON.parse(
   readFileSync(
-    "packages/noodle/src/engine/packages/client/src/localization/locales/en.json",
+    "packages/slurp/src/engine/packages/client/src/localization/locales/en.json",
     "utf8",
   ),
 ) as Record<string, string>;

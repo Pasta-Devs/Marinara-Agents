@@ -7,16 +7,16 @@ import { readFileSync } from "node:fs";
 // feed is already quiet and does nothing when pressed.
 
 const home = readFileSync(
-  "packages/noodle/src/engine/packages/client/src/components/noodle/NoodlerHome.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerHome.tsx",
   "utf8",
 );
 const wizard = readFileSync(
-  "packages/noodle/src/engine/packages/client/src/components/noodle/NoodlerBulkCreatePanel.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerBulkCreatePanel.tsx",
   "utf8",
 );
 const enLocale = JSON.parse(
   readFileSync(
-    "packages/noodle/src/engine/packages/client/src/localization/locales/en.json",
+    "packages/slurp/src/engine/packages/client/src/localization/locales/en.json",
     "utf8",
   ),
 ) as Record<string, string>;
@@ -42,12 +42,15 @@ const quieterBlock = home.slice(
 assert.doesNotMatch(quieterBlock, /autoPosting|enableNoodler|postsPerDay: 0/u);
 
 // Hidden once the feed is already Occasional or quieter, so it never no-ops.
-assert.match(home, /const canQuieten = \(data\?\.settings\.postsPerDay \?\? 0\) > NOODLER_QUIETER_POSTS_PER_DAY;/u);
+assert.match(
+  home,
+  /const canQuieten =\s*\(data\?\.settings\.postsPerDay \?\? 0\) > NOODLER_QUIETER_POSTS_PER_DAY;/u,
+);
 assert.match(home, /\{canQuieten && \(\s*<button/u);
 
 // A pending save disables it, and a failed one says so rather than pretending it worked.
 assert.match(home, /disabled=\{quieterPending\}/u);
-assert.match(quieterBlock, /onError:[\s\S]{0,120}couldNotMakeNoodlerQuieter/u);
+assert.match(quieterBlock, /onError:[\s\S]{0,240}couldNotMakeNoodlerQuieter/u);
 
 // The confirmation states the resulting pace, including that the ceiling is global.
 for (const key of [
