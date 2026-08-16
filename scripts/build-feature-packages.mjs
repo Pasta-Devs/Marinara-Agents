@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
 import { existsSync, realpathSync } from "node:fs";
-import { chmod, copyFile, cp, mkdir, mkdtemp, readFile, readdir, rm, utimes, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { createRequire } from "node:module";
 import { catalogArtworkUrl } from "./catalog-artwork.mjs";
+import { createDeterministicZip } from "./deterministic-zip.mjs";
 import { readCatalogFamily, writeCatalogFamily } from "./catalog-lanes.mjs";
 import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
 import { assertPackagePrivateImportBoundary } from "./package-engine-boundary.mjs";
@@ -14,6 +16,40 @@ import { writeEnglishPackageLocale } from "./package-locales.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"));
+
+// Tool binaries run as JS entrypoints under the current Node instead of via
+// `pnpm exec`: pnpm is a .cmd on Windows that bare spawnSync cannot start, and
+// shell-mode spawning would mangle arguments that contain spaces (the esbuild
+// banner). Resolution goes through the engine workspace that declares each
+// tool, so the pnpm strict layout still applies.
+const engineRequire = createRequire(pathToFileURL(join(engineRoot, "package.json")));
+const engineClientRequire = createRequire(pathToFileURL(join(engineRoot, "packages/client/package.json")));
+// esbuild honors NODE_PATH; `pnpm exec` used to provide the module paths, so
+// list every workspace node_modules a vendored source can import from (pnpm's
+// strict layout keeps each package's deps in its own node_modules symlinks).
+// This repo's own node_modules comes FIRST so a package pinned in BOTH repos
+// (zod) resolves to a single copy everywhere — the vendored shared dist
+// already reaches it by directory walk-up, and two distinct realpaths would
+// bundle twice (review finding: doubled zod bloated every bundle ~6-20%).
+const engineNodePathDirs = [
+  join(repoRoot, "node_modules"),
+  join(engineRoot, "node_modules"),
+  join(engineRoot, "packages/server/node_modules"),
+  join(engineRoot, "packages/shared/node_modules"),
+  join(engineRoot, "packages/client/node_modules"),
+];
+let engineNodePath = engineNodePathDirs.join(process.platform === "win32" ? ";" : ":");
+
+// esbuild's bin is a JS shim on Windows but is optimized into the NATIVE
+// executable by its postinstall on POSIX — running that under node would try
+// to parse machine code as JavaScript. Spawn it directly where it is
+// executable; only Windows needs the node indirection (review finding).
+function spawnEsbuild(args, options) {
+  const bin = engineRequire.resolve("esbuild/bin/esbuild");
+  return process.platform === "win32"
+    ? spawnSync(process.execPath, [bin, ...args], options)
+    : spawnSync(bin, args, options);
+}
 const artifactsDir = join(repoRoot, "artifacts");
 const packagesDir = join(repoRoot, "packages");
 const sourcesRoot = join(repoRoot, "sources/engine");
@@ -23,10 +59,22 @@ const sourceRoot = process.env.MARINARA_ENGINE_SOURCE_ROOT
   : existsSync(sourcesRoot)
     ? sourcesRoot
     : engineRoot;
+// An external MARINARA_ENGINE_SOURCE_ROOT tree carries its own dependency
+// installs; without these entries its bare imports (e.g. chess.js) cannot
+// resolve (review finding).
+if (process.env.MARINARA_ENGINE_SOURCE_ROOT && sourceRoot !== engineRoot && sourceRoot !== sourcesRoot) {
+  engineNodePath = [
+    ...engineNodePathDirs.slice(0, 1),
+    join(sourceRoot, "node_modules"),
+    join(sourceRoot, "packages/server/node_modules"),
+    join(sourceRoot, "packages/shared/node_modules"),
+    join(sourceRoot, "packages/client/node_modules"),
+    ...engineNodePathDirs.slice(1),
+  ].join(process.platform === "win32" ? ";" : ":");
+}
 const packageSharedEntry = join(repoRoot, "sources/package-shared.ts");
 const MIN_ENGINE_VERSION = "2.3.0";
 const MAX_ENGINE_EXCLUSIVE = "4.0.0";
-const ARTIFACT_MTIME = new Date("2000-01-01T00:00:00.000Z");
 const hierarchicalMapsOwnedSourcePaths = [
   "packages/server/src/routes/spatial-context.routes.ts",
   "packages/server/src/services/spatial-context",
@@ -155,10 +203,16 @@ async function captureEngineSources(metafilePath, buildRoot = sourceRoot, exclud
   const normalizedBuildRoot = resolve(buildRoot);
   for (const input of Object.keys(metafile.inputs || {})) {
     const absolute = resolve(engineRoot, input);
-    if (!absolute.startsWith(`${normalizedBuildRoot}/`) || absolute.includes("/node_modules/")) continue;
-    const relative = absolute.slice(normalizedBuildRoot.length + 1);
-    if (excludedPaths.some((path) => relative === path || relative.startsWith(`${path}/`))) continue;
-    const destination = join(sourcesRoot, relative);
+    // Separator-aware like capturePackageSources: resolve() yields \-delimited
+    // paths on Windows, and the old /-based prefix check silently captured
+    // nothing there (review finding).
+    if (!absolute.startsWith(`${normalizedBuildRoot}${sep}`) || absolute.includes(`${sep}node_modules${sep}`)) continue;
+    const relativePath = relative(normalizedBuildRoot, absolute);
+    if (!relativePath || relativePath.startsWith(`..${sep}`) || relativePath === "..") continue;
+    const normalizedRelativePath = relativePath.split(sep).join("/");
+    if (excludedPaths.some((path) => normalizedRelativePath === path || normalizedRelativePath.startsWith(`${path}/`)))
+      continue;
+    const destination = join(sourcesRoot, normalizedRelativePath);
     if (absolute === destination) continue;
     await mkdir(dirname(destination), { recursive: true });
     await copyFile(absolute, destination);
@@ -338,7 +392,7 @@ const features = [
   },
   {
     id: "hierarchical-maps",
-    version: "1.3.6",
+    version: "1.4.0",
     minEngineVersion: "2.4.2",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "World Maps",
@@ -548,11 +602,8 @@ export async function selfCheck() {
     const entry = join(temporary, "entry.mjs");
     const metafile = join(temporary, "meta.json");
     await writeFile(entry, source);
-    const result = spawnSync(
-      "pnpm",
+    const result = spawnEsbuild(
       [
-        "exec",
-        "esbuild",
         entry,
         "--bundle",
         "--platform=node",
@@ -575,7 +626,7 @@ export async function selfCheck() {
       {
         cwd: engineRoot,
         encoding: "utf8",
-        env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") },
+        env: { ...process.env, NODE_PATH: engineNodePath },
       },
     );
     if (result.status !== 0) {
@@ -649,11 +700,8 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
     const entry = join(temporary, "entry.tsx");
     const metafile = join(temporary, "meta.json");
     await writeFile(entry, source);
-    const result = spawnSync(
-      "pnpm",
+    const result = spawnEsbuild(
       [
-        "exec",
-        "esbuild",
         entry,
         "--bundle",
         "--platform=browser",
@@ -673,7 +721,7 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
       {
         cwd: engineRoot,
         encoding: "utf8",
-        env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") },
+        env: { ...process.env, NODE_PATH: engineNodePath },
       },
     );
     if (result.status !== 0)
@@ -716,9 +764,9 @@ export default defineConfig({
 `,
   );
   const result = spawnSync(
-    "pnpm",
-    ["--filter", "@marinara-engine/client", "exec", "vite", "build", "--config", config],
-    { cwd: engineRoot, encoding: "utf8", env: { ...process.env, SKIP_PWA: "1" } },
+    process.execPath,
+    [join(dirname(engineClientRequire.resolve("vite/package.json")), "bin/vite.js"), "build", "--config", config],
+    { cwd: join(engineRoot, "packages/client"), encoding: "utf8", env: { ...process.env, SKIP_PWA: "1" } },
   );
   if (result.status !== 0) throw new Error(result.stderr || result.stdout || `${capabilityId} stylesheet build failed`);
   const assets = join(outputDir, "assets");
@@ -1416,11 +1464,8 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
     const entry = join(temporary, "entry.tsx");
     const metafile = join(temporary, "meta.json");
     await writeFile(entry, source);
-    const result = spawnSync(
-      "pnpm",
+    const result = spawnEsbuild(
       [
-        "exec",
-        "esbuild",
         entry,
         "--bundle",
         "--platform=browser",
@@ -1440,7 +1485,7 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
       {
         cwd: engineRoot,
         encoding: "utf8",
-        env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") },
+        env: { ...process.env, NODE_PATH: engineNodePath },
       },
     );
     if (result.status !== 0)
@@ -1634,20 +1679,21 @@ for (const feature of selectedFeatures) {
       ...(clientBuffer ? ["client.js"] : []),
       ...assetPayloads.map((asset) => asset.path),
     ];
-    for (const artifactFile of artifactFiles) {
-      const artifactSource = join(temporary, artifactFile);
-      await chmod(artifactSource, 0o644);
-      await utimes(artifactSource, ARTIFACT_MTIME, ARTIFACT_MTIME);
-    }
     const artifactName = `${feature.id}-${version}.zip`;
     const artifactPath = join(artifactsDir, artifactName);
     await rm(artifactPath, { force: true });
-    const zipped = spawnSync("zip", ["-X", "-q", artifactPath, ...artifactFiles], {
-      cwd: temporary,
-      env: { ...process.env, TZ: "UTC" },
-    });
-    if (zipped.status !== 0) throw new Error(`zip failed for ${feature.id}`);
-    const artifact = await readFile(artifactPath);
+    // Deterministic store-only zip (same module the Pixelforge build uses):
+    // byte-stable across machines and requires no system `zip` binary, so the
+    // feature build runs on Windows dev machines too.
+    const artifact = createDeterministicZip(
+      await Promise.all(
+        artifactFiles.map(async (artifactFile) => ({
+          name: artifactFile,
+          data: await readFile(join(temporary, artifactFile)),
+        })),
+      ),
+    );
+    await writeFile(artifactPath, artifact);
     catalog.packages.push({
       manifest,
       category: feature.category ?? "misc",
