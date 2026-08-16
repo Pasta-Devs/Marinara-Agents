@@ -23,6 +23,8 @@ import type { SlurpNavigationState } from "./slurp-navigation.types";
 type SlurpSettingsProps = {
   navigation: Extract<SlurpNavigationState, { mode: "creator-settings" }>;
   onNavigate: (navigation: SlurpNavigationState) => void;
+  onAddCreators: () => void;
+  onRestartOnboarding: () => void;
 };
 
 const archetypes = ["ordinary", "eccentric", "crossFandom", "raider", "organicDiscovery", "freeResource"] as const;
@@ -45,7 +47,7 @@ function NumberSetting({ value, min, max, onSave }: { value: number; min: number
   return <input type="number" min={min} max={max} value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={commit} onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()} className="h-9 w-full rounded-md border border-[var(--border)] bg-transparent px-2 text-sm" />;
 }
 
-export function SlurpSettings({ navigation, onNavigate }: SlurpSettingsProps) {
+export function SlurpSettings({ navigation, onNavigate, onAddCreators, onRestartOnboarding }: SlurpSettingsProps) {
   const { t } = useTranslation();
   const settingsQuery = useSlurpSettings();
   const updateSettings = useUpdateSlurpSettings();
@@ -81,6 +83,7 @@ export function SlurpSettings({ navigation, onNavigate }: SlurpSettingsProps) {
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 p-5 sm:p-8">
         <header className="flex items-center justify-between gap-4 border-b border-[var(--border)] pb-5">
           <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--noodle-accent)]">Slurp</p><h1 className="mt-1 text-2xl font-bold">Creator settings</h1><p className="mt-1 text-sm text-[var(--muted-foreground)]">Configure creator posts, participants, images, and audience activity.</p></div>
+          <div className="flex flex-wrap justify-end gap-2"><button type="button" onClick={onAddCreators} className="inline-flex min-h-9 items-center gap-2 rounded-md border border-[var(--noodle-accent)]/40 px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10"><UsersRound size={14} />Add creators</button><button type="button" onClick={onRestartOnboarding} className="inline-flex min-h-9 items-center gap-2 rounded-md border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)]"><RefreshCw size={14} />Restart onboarding</button></div>
         </header>
         <nav className="flex flex-wrap gap-2 border-b border-[var(--border)] pb-3" aria-label="Creator settings sections">
           {(["general", "creators", "participants", "advanced"] as const).map((item) => <button key={item} type="button" onClick={() => onNavigate({ ...navigation, section: item })} className={`rounded-md border px-3 py-2 text-sm ${section === item ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10" : "border-[var(--border)] hover:bg-[var(--accent)]"}`}>{item[0].toUpperCase() + item.slice(1)}</button>)}

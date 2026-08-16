@@ -443,7 +443,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   const [feedSearch, setFeedSearch] = useState("");
   const discoveryInputRef = useRef<HTMLInputElement | null>(null);
   const [feedTab, setFeedTab] = useState<"following" | "all">("following");
-  const [onboardingMode, setOnboardingMode] = useState<"first-run" | null>(null);
+  const [onboardingMode, setOnboardingMode] = useState<"first-run" | "add-creators" | null>(null);
   const [gateOpen, setGateOpen] = useState(false);
   const gatePresentedRef = useRef(false);
   const onboardingPresentedRef = useRef(false);
@@ -1206,7 +1206,26 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   if (navigation.mode === "creator-settings") {
     return (
       <NoodleShell {...shellProps} rightRail={emptyRightRail}>
-        <SlurpSettings navigation={navigation} onNavigate={onNavigate} />
+        <SlurpSettings
+          navigation={navigation}
+          onNavigate={onNavigate}
+          onAddCreators={() => setOnboardingMode("add-creators")}
+          onRestartOnboarding={() => {
+            onboardingPresentedRef.current = true;
+            setOnboardingState("entered");
+            setOnboardingMode("first-run");
+          }}
+        />
+        <SlurpOnboardingWizard
+          open={onboardingMode !== null}
+          selectionOnly={onboardingMode === "add-creators"}
+          onClose={() => setOnboardingMode(null)}
+          onComplete={() => {
+            setOnboardingState("completed");
+            setOnboardingMode(null);
+          }}
+          onSkipped={() => setOnboardingMode(null)}
+        />
       </NoodleShell>
     );
   }
