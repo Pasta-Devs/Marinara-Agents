@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 const agents = JSON.parse(
@@ -8,6 +9,7 @@ const storyboard = agents.find((agent) => agent.id === "storyboard");
 assert.ok(storyboard, "Storyboard agent definition must exist");
 
 const settings = storyboard.defaultSettings;
+const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 const findTemplate = (collection, id) => {
   const templates = settings[collection];
   assert.ok(Array.isArray(templates), `${collection} must be a template collection`);
@@ -19,15 +21,18 @@ const findTemplate = (collection, id) => {
   return templates.find((template) => template.id === id);
 };
 
-const episode = findTemplate("roleplayEpisodeTemplates", "roleplay-minimax-h3-episode");
-assert.match(episode.promptTemplate, /MiniMax H3 Roleplay Storyboard planner/u);
-assert.match(episode.promptTemplate, /exact first frame at time T=0/u);
-assert.match(episode.promptTemplate, /integrated_multimodal_description/u);
-assert.match(episode.promptTemplate, /overall_soundscape/u);
-assert.match(episode.promptTemplate, /non_diegetic_music/u);
-assert.match(episode.promptTemplate, /\$\{durationSeconds\}/u);
+assert.deepEqual(
+  settings.roleplayEpisodeTemplates.map((template) => template.id),
+  ["roleplay-completed-episode"],
+  "MiniMax H3 must use the proven provider-neutral Roleplay episode contract",
+);
 
 const animation = findTemplate("roleplayAnimationTemplates", "roleplay-minimax-h3-cinematic");
+assert.equal(
+  sha256(animation.promptTemplate),
+  "535690b73e8a252ccb7563a23bb9a7d884f8e3c0e979ea5c90ae075f402568e5",
+  "MiniMax H3 cinematic addon must match the proven 7:53 PM prompt",
+);
 assert.match(animation.promptTemplate, /Storyboard \(each shot a separate scene/u);
 assert.match(animation.promptTemplate, /\[0s-Xs\] Shot 1/u);
 assert.match(animation.promptTemplate, /Camera:/u);
@@ -38,6 +43,11 @@ assert.match(animation.promptTemplate, /\$\{durationSeconds\}/u);
 const refinement = findTemplate(
   "animationRefinementTemplates",
   "minimax-h3-image-aware-shot-planner",
+);
+assert.equal(
+  sha256(refinement.promptTemplate),
+  "31a7fd80fe3c95531371a6a052cdb1c321c0735d5ec76902ab21eb469f3310ee",
+  "MiniMax H3 image-aware planner must match the proven 7:53 PM prompt",
 );
 for (const variable of [
   "title",
