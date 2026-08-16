@@ -161,7 +161,8 @@ catalog.packages.push({
   documentationUrl: "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/pixelforge/README.md",
 });
 catalog.packages.sort((left, right) => left.manifest.name.localeCompare(right.manifest.name));
-catalog.generatedAt = new Date().toISOString();
+// generatedAt is resolved centrally in writeCatalogFamily (preserved by
+// default; refreshed only when MARINARA_CATALOG_STAMP_GENERATED_AT=1).
 await writeCatalogFamily(repoRoot, catalog);
 
 if (!existsSync(join(repoRoot, "artwork/agent-covers/pixelforge.png"))) {
