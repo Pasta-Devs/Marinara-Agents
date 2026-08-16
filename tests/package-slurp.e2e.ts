@@ -41,8 +41,11 @@ async function prepareFreshClient(page: Page) {
 }
 
 async function openSlurp(page: Page) {
-  await page.getByRole("tab", { name: "Open Slurp" }).click();
-  await expect(page.locator('[data-component="NoodleView"]')).toBeVisible();
+  const slurp = page.locator('[data-component="NoodleView"]');
+  if (!(await slurp.isVisible())) {
+    await page.getByRole("tab", { name: "Open Slurp" }).click();
+  }
+  await expect(slurp).toBeVisible();
 }
 
 async function getSlurpSettings(page: Page) {
