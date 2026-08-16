@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-16T14:23:27.358Z",
+  "generatedAt": "2026-08-16T16:09:06.456Z",
   "packages": [
     {
       "manifest": {
@@ -1182,11 +1182,11 @@
         },
         "builtAgainst": {
           "engineVersion": "2.4.3",
-          "engineCommit": "315c4bc787a332133193df7ddbcb2baa295cdc13"
+          "engineCommit": "bb551bf921c006922edac7be06dbea8fe4c999b9"
         },
         "id": "pixelforge",
         "name": "Pixelforge",
-        "version": "0.4.0",
+        "version": "0.4.1",
         "description": "A walkable pixel-art RPG Experience for Game Mode: your setup preferences generate the world — a cozy village or a sci-fi colony — then explore it, talk to NPCs to drive the story, and let the GM narrate, with World Maps integration and the engine's own combat. Install it, then choose Pixelforge as the Experience when creating a Game Mode chat.",
         "engine": {
           "min": "2.4.3",
@@ -1228,8 +1228,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "e256d853773e209576e503ff6a82d6fb2b1ba4604e563c9565a1d8d2fad6d3cc",
-            "bytes": 164505
+            "sha256": "543d4867352006e1eba65f431fbcff0848e66e7c285f951839b854e5030b0f45",
+            "bytes": 168424
           },
           {
             "path": "tiles.png",
@@ -1285,9 +1285,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/pixelforge.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/pixelforge-0.4.0.zip",
-        "sha256": "061c55677048612140e642300933f900799517380c25a9ac3c372088d85f6c7c",
-        "bytes": 174787
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/pixelforge-0.4.1.zip",
+        "sha256": "7b4a5aecae7d0ae156782689694dd64e64160a0ec849b25c565495947aaef666",
+        "bytes": 178706
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/pixelforge/README.md"
     },
