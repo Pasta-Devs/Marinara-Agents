@@ -501,10 +501,12 @@ export class LongTermMemoryStorage {
         throw new LtmServiceError("Long-term memory section not found.", 404, "ltm_section_not_found");
       if (Object.keys(current.sections).length - removed.size < 1)
         throw new LtmServiceError("A memory must keep at least one detail.", 400, "ltm_last_section");
+      if (notePatch.sections && !Object.keys(notePatch.sections).length)
+        assertWritableSections(notePatch.sections);
       const sectionInput =
         notePatch.sections !== undefined
           ? Object.fromEntries(
-              Object.entries(notePatch.sections).filter(
+              Object.entries({ ...current.sections, ...notePatch.sections }).filter(
                 ([key]) => !removed.has(key),
               ),
             )
