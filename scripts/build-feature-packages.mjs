@@ -31,13 +31,14 @@ const engineClientRequire = createRequire(pathToFileURL(join(engineRoot, "packag
 // (zod) resolves to a single copy everywhere — the vendored shared dist
 // already reaches it by directory walk-up, and two distinct realpaths would
 // bundle twice (review finding: doubled zod bloated every bundle ~6-20%).
-const engineNodePath = [
+const engineNodePathDirs = [
   join(repoRoot, "node_modules"),
   join(engineRoot, "node_modules"),
   join(engineRoot, "packages/server/node_modules"),
   join(engineRoot, "packages/shared/node_modules"),
   join(engineRoot, "packages/client/node_modules"),
-].join(process.platform === "win32" ? ";" : ":");
+];
+let engineNodePath = engineNodePathDirs.join(process.platform === "win32" ? ";" : ":");
 
 // esbuild's bin is a JS shim on Windows but is optimized into the NATIVE
 // executable by its postinstall on POSIX — running that under node would try
@@ -58,6 +59,19 @@ const sourceRoot = process.env.MARINARA_ENGINE_SOURCE_ROOT
   : existsSync(sourcesRoot)
     ? sourcesRoot
     : engineRoot;
+// An external MARINARA_ENGINE_SOURCE_ROOT tree carries its own dependency
+// installs; without these entries its bare imports (e.g. chess.js) cannot
+// resolve (review finding).
+if (process.env.MARINARA_ENGINE_SOURCE_ROOT && sourceRoot !== engineRoot && sourceRoot !== sourcesRoot) {
+  engineNodePath = [
+    ...engineNodePathDirs.slice(0, 1),
+    join(sourceRoot, "node_modules"),
+    join(sourceRoot, "packages/server/node_modules"),
+    join(sourceRoot, "packages/shared/node_modules"),
+    join(sourceRoot, "packages/client/node_modules"),
+    ...engineNodePathDirs.slice(1),
+  ].join(process.platform === "win32" ? ";" : ":");
+}
 const packageSharedEntry = join(repoRoot, "sources/package-shared.ts");
 const MIN_ENGINE_VERSION = "2.3.0";
 const MAX_ENGINE_EXCLUSIVE = "4.0.0";
@@ -189,10 +203,16 @@ async function captureEngineSources(metafilePath, buildRoot = sourceRoot, exclud
   const normalizedBuildRoot = resolve(buildRoot);
   for (const input of Object.keys(metafile.inputs || {})) {
     const absolute = resolve(engineRoot, input);
-    if (!absolute.startsWith(`${normalizedBuildRoot}/`) || absolute.includes("/node_modules/")) continue;
-    const relative = absolute.slice(normalizedBuildRoot.length + 1);
-    if (excludedPaths.some((path) => relative === path || relative.startsWith(`${path}/`))) continue;
-    const destination = join(sourcesRoot, relative);
+    // Separator-aware like capturePackageSources: resolve() yields \-delimited
+    // paths on Windows, and the old /-based prefix check silently captured
+    // nothing there (review finding).
+    if (!absolute.startsWith(`${normalizedBuildRoot}${sep}`) || absolute.includes(`${sep}node_modules${sep}`)) continue;
+    const relativePath = relative(normalizedBuildRoot, absolute);
+    if (!relativePath || relativePath.startsWith(`..${sep}`) || relativePath === "..") continue;
+    const normalizedRelativePath = relativePath.split(sep).join("/");
+    if (excludedPaths.some((path) => normalizedRelativePath === path || normalizedRelativePath.startsWith(`${path}/`)))
+      continue;
+    const destination = join(sourcesRoot, normalizedRelativePath);
     if (absolute === destination) continue;
     await mkdir(dirname(destination), { recursive: true });
     await copyFile(absolute, destination);

@@ -370,22 +370,44 @@ export function createSpatialContextService() {
         }>;
       },
     ): Promise<MapsSpatialContextResponse & { addedLocationIds: string[] }> {
-      const current = await this.get(chatId);
-      if (!current.definition) {
+      // Read the stored world directly rather than through get(): get() folds a
+      // corrupt map and an unavailable linked world into definition:null, which
+      // would mask them as "no map yet" here — the caller must see the same
+      // corrupt/shared-world errors the editor gets (review finding). update()
+      // re-checks all of this under the lock; this pre-read only classifies.
+      const chat = await persistence.getChat(chatId);
+      if (!chat) throw new SpatialContextServiceError("chat_not_found", "Chat not found.", 404);
+      assertSupportedMode(chat.mode);
+      const stored = await resolveSpatialWorldSource(chat, persistence, { includeLinkedChatCount: true });
+      if (stored.corrupt) {
+        throw new SpatialContextServiceError(
+          "spatial_definition_corrupt",
+          "The stored world map is invalid and must be repaired before it can be updated.",
+          409,
+        );
+      }
+      if (stored.link && !stored.world) {
+        throw new SpatialContextServiceError(
+          "spatial_shared_world_missing",
+          "This chat's shared world was removed or is unavailable. Fork a recovered copy or link another world.",
+          409,
+        );
+      }
+      if (!stored.definition) {
         throw new SpatialContextServiceError(
           "spatial_definition_missing",
           "This chat has no world map yet — create one before adding locations.",
           409,
         );
       }
-      if (input.expectedRevision !== current.definition.revision) {
+      if (input.expectedRevision !== stored.definition.revision) {
         throw new SpatialContextServiceError(
           "spatial_definition_stale",
           "The world map changed. Reload it before saving.",
           409,
         );
       }
-      const existing = current.definition.locations;
+      const existing = stored.definition.locations;
       // A friendly cap check before the schema's raw array error (500 is the
       // schema's maxLocations bound).
       if (existing.length + input.locations.length > 500) {
@@ -476,7 +498,7 @@ export function createSpatialContextService() {
         {
           expectedRevision: input.expectedRevision,
           expectedCurrentLocationId: null,
-          definition: { ...current.definition, locations: [...existing, ...additions] },
+          definition: { ...stored.definition, locations: [...existing, ...additions] },
         },
         { skipCurrentLocationCas: true },
       );
