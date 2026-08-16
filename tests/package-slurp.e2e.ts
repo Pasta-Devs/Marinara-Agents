@@ -176,6 +176,31 @@ test.describe("standalone Slurp package", () => {
         { personaId: persona.id },
       );
 
+      const feedProbe = await page.request.get(
+        `/api/slurp/noodler/viewer/feed?personaId=${encodeURIComponent(persona.id)}&tab=all&limit=20`,
+      );
+      expect(feedProbe.ok()).toBe(true);
+      const feedProbeBody = (await feedProbe.json()) as {
+        items: Array<{ creatorAccountId: string; post: { id: string; content: string } }>;
+      };
+      expect(
+        feedProbeBody.items.some(
+          (item) => item.post.id === postId && item.post.content === postContent,
+        ),
+        JSON.stringify(feedProbeBody),
+      ).toBe(true);
+      const shellProbe = await page.request.get(
+        `/api/slurp/noodler/viewer?personaId=${encodeURIComponent(persona.id)}`,
+      );
+      expect(shellProbe.ok()).toBe(true);
+      const shellProbeBody = (await shellProbe.json()) as {
+        creators: Array<{ profile: { id: string } }>;
+      };
+      expect(
+        shellProbeBody.creators.some((creator) => creator.profile.id === stageProfile.id),
+        JSON.stringify(shellProbeBody),
+      ).toBe(true);
+
       await page.goto("/");
       await openSlurp(page);
       const slurp = page.locator('[data-component="NoodleView"]');
