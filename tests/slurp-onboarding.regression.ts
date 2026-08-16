@@ -101,5 +101,10 @@ assert.match(
   /settings\.generationConnectionId[\s\S]*?connections\.getWithKey\(settings\.generationConnectionId\)[\s\S]*?: await connections\.getDefaultForAgents\(\)/u,
   "Creator creation must inherit the Engine agent connection when Slurp has no override",
 );
+assert.match(
+  home,
+  /function StageProfileView\(\{[\s\S]*?viewerAccount,\s*slurpSettings,\s*postCardCtx,/u,
+  "Creator profile pages must receive their Slurp settings prop",
+);
 
 console.log("Slurp onboarding regressions passed.");

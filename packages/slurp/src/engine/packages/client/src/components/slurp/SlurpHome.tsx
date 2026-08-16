@@ -2716,6 +2716,7 @@ function StageProfileView({
   posts,
   viewerCreator,
   viewerAccount,
+  slurpSettings,
   postCardCtx,
   viewerAccounts,
   publicSource,
