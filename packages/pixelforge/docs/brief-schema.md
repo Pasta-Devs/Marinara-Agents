@@ -209,9 +209,16 @@ route could never merge duplicates later. Location ids for created rows are seed
 `pf.<fnv32(seed)>.<zoneId>` — and the map definition itself is the idempotency ledger: ids
 already present are diffed out before posting, so re-runs (new sessions, rebuilds from the same
 brief) add nothing and merely re-bind. The route is additive with revision CAS; a stale or
-conflicted 409 re-reads and retries, surrendering after two no-progress rounds so a live map
-editor is never dueled. No hierarchical map, an older maps package (404), or an archived parent
-all degrade to "the world runs on package state alone" — quietly. Exported ids land in
+conflicted 409 re-reads and retries, surrendering after no-progress rounds so a live map editor
+(or a write-eating proxy) is never dueled. Completion state is keyed by **world object
+identity** — a rebuild (brief arrival, rewind) is a new world and re-syncs, which the diff turns
+into a cheap re-bind/self-heal. The export never runs for: the interim pre-brief boot world of a
+generation-enabled chat (`world.interim`, stamped by §60-save — its throwaway zones must not
+pollute the map), shared-world-linked chats (an additive write would stage unpublished draft
+edits to a communal world), or a definition whose location list is not visible. A stale root
+binding (map replaced/started over) prunes the dead bindings so the exterior re-seeds and the
+export re-runs under the new root; deliberate refusals (archived parent, the location cap, route
+absent) end the attempt for the session with no retry drumbeat. Exported ids land in
 `world.bindings`, which is what lets travel and narrated drift teleport into generated zones.
 
 Not yet exported (still §9 territory): the root's population phrase and per-feature locations —

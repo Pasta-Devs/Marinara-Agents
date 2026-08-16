@@ -134,6 +134,8 @@ PF.api = {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-marinara-csrf": "1" },
       body: JSON.stringify(body),
+      // A hung request must not wedge the exporter's in-flight slot for the tab's lifetime.
+      signal: AbortSignal.timeout(30000),
     });
     let payload = null;
     try {

@@ -697,17 +697,17 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   const prevGetSpatial = loadedPF.api.getSpatial;
   const prevPostLocations = loadedPF.api.postSpatialLocations;
   const resetExportState = () => {
-    mapsExport._doneKey = null;
-    mapsExport._inFlight = false;
+    mapsExport._done = new WeakSet();
+    mapsExport._inFlightWorld = null;
     mapsExport._failed = null;
   };
   /** Bind the root deterministically, then drive the export by hand: the
    *  refresh-triggered fire-and-forget would race the assertions. */
   const bindRoot = async (core) => {
     loadedPF.spatial.reset();
-    mapsExport._inFlight = true;
+    mapsExport._inFlightWorld = core.sim.world;
     await loadedPF.spatial.refresh(core);
-    mapsExport._inFlight = false;
+    mapsExport._inFlightWorld = null;
   };
 
   // 31. Happy path: only missing zones post, as children of the bound root,
@@ -806,7 +806,7 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     await mapsExport.maybeSync(core);
     assert.equal(posts.length, 1, "the conflict is not retried blindly");
     assert.equal(w.bindings[mapsExport.idFor(w, zoneIds[0])], zoneIds[0], "already-registered ids still bind");
-    assert.equal(mapsExport._doneKey, `chat-export-33:${mapsExport._hash(String(w.seed))}`, "the run completes");
+    assert.ok(mapsExport._done.has(w), "the run completes");
   }
 
   // 34. Older maps package (route absent): quiet skip, no bindings to
@@ -869,7 +869,7 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     await bindRoot(core);
     await mapsExport.maybeSync(core);
     assert.equal(Object.keys(w.bindings).length, 1, "no export bindings written after a chat switch");
-    assert.equal(mapsExport._doneKey, null, "the run does not mark itself complete");
+    assert.ok(!mapsExport._done.has(w), "the run does not mark itself complete");
   }
 
   // 37. Adoption: a same-named root child authored before the export (hand
@@ -970,6 +970,142 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     await mapsExport.maybeSync(core);
     assert.equal(posts.length, 3, "three attempts with no visible progress, then surrender");
     assert.ok(mapsExport._failed, "the failure is recorded for backoff");
+  }
+
+  // 39. A same-chat, same-seed REBUILD (brief arrival, rewind) is a new world
+  // object: completion state must not carry over — the rebuilt world re-syncs,
+  // the diff makes it a re-bind, and the self-heal actually runs (the string
+  // done-key suppressed all of this: review finding).
+  {
+    const { w, core } = exportScaffold(1357, "chat-export-39");
+    const zoneIds = Object.keys(w.zones).filter((id) => id !== w.startZone);
+    let serverLocs = [{ id: "loc-root" }];
+    const posts = [];
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision: 2, locations: serverLocs.slice() },
+      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async (chatId, body) => {
+      posts.push(body);
+      serverLocs = serverLocs.concat(body.locations.map((row) => ({ id: row.id })));
+      return { ok: true, status: 200, body: {} };
+    };
+    resetExportState();
+    await bindRoot(core);
+    await mapsExport.maybeSync(core);
+    assert.ok(mapsExport._done.has(w), "first world completes");
+    // The rebuild: same chat, same seed, fresh world object with empty bindings.
+    const sealed = brief.defaults("cozy-village", 1357);
+    const w2 = world.build(1357, "cozy-village", sealed);
+    core.sim = {
+      world: w2, zoneId: w2.startZone, mode: "walk",
+      zone() { return this.world.zones[this.zoneId]; },
+      teleport() {},
+    };
+    w2.bindings["loc-root"] = w2.startZone;
+    await mapsExport.maybeSync(core);
+    assert.ok(mapsExport._done.has(w2), "the rebuilt world syncs despite identical chat+seed");
+    assert.equal(posts.length, 1, "nothing re-posts — the definition diff turns the re-sync into a re-bind");
+    for (const zoneId of zoneIds) {
+      assert.equal(w2.bindings[mapsExport.idFor(w2, zoneId)], zoneId, "the rebuilt world's bindings self-heal");
+    }
+  }
+
+  // 40. The pre-brief boot world of a generation-enabled chat (world.interim,
+  // stamped by 60-save) never exports — its throwaway zones would pollute the
+  // map forever on an additive route.
+  {
+    const { w, core } = exportScaffold(8642, "chat-export-40");
+    w.interim = true;
+    const posts = [];
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision: 1, locations: [{ id: "loc-root" }] },
+      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async () => {
+      posts.push(1);
+      return { ok: true, status: 200, body: {} };
+    };
+    resetExportState();
+    await bindRoot(core);
+    await mapsExport.maybeSync(core);
+    assert.equal(posts.length, 0, "an interim world never posts");
+    assert.ok(!mapsExport._done.has(w), "and is not marked done — the final world will sync");
+  }
+
+  // 41. A shared-world-linked chat skips: posting would silently stage
+  // unpublished draft edits to a communal world. Not marked done, so
+  // unlinking re-enables the export.
+  {
+    const { w, core } = exportScaffold(9753, "chat-export-41");
+    const posts = [];
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision: 1, locations: [{ id: "loc-root" }] },
+      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+      sharedWorld: { mode: "linked", worldId: "world-1", pendingChanges: false },
+    });
+    loadedPF.api.postSpatialLocations = async () => {
+      posts.push(1);
+      return { ok: true, status: 200, body: {} };
+    };
+    resetExportState();
+    await bindRoot(core);
+    await mapsExport.maybeSync(core);
+    assert.equal(posts.length, 0, "a linked chat never posts");
+    assert.ok(!mapsExport._done.has(w), "and is not marked done");
+  }
+
+  // 42. A stale root binding (map replaced or root archived) prunes the dead
+  // bindings instead of 400-looping forever; the emptied table re-seeds on
+  // the next refresh.
+  {
+    const { w, core } = exportScaffold(1122, "chat-export-42");
+    const posts = [];
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision: 5, locations: [{ id: "loc-new-root" }] },
+      currentLocationId: "loc-new-root", breadcrumb: [{ name: "New Root" }], destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async () => {
+      posts.push(1);
+      return { ok: false, status: 400, body: { code: "spatial_replacement_invalid" } };
+    };
+    resetExportState();
+    loadedPF.spatial.reset();
+    mapsExport._inFlightWorld = core.sim.world;
+    await loadedPF.spatial.refresh(core);
+    mapsExport._inFlightWorld = null;
+    // The save restored bindings from BEFORE the map was replaced.
+    delete w.bindings["loc-new-root"];
+    w.bindings["loc-dead-root"] = w.startZone;
+    w.bindings[mapsExport.idFor(w, Object.keys(w.zones).find((id) => id !== w.startZone))] = "z2";
+    core.dirty = 0;
+    await mapsExport.maybeSync(core);
+    assert.equal(posts.length, 0, "nothing posts under a dead root");
+    assert.equal(Object.keys(w.bindings).length, 0, "every dead binding is pruned so re-seeding can run");
+    assert.ok(core.dirty > 0, "the prune persists");
+    assert.ok(!mapsExport._done.has(w), "the world is not done — it re-syncs under the new root");
+  }
+
+  // 43. A deliberate refusal (archived parent raced in, the 500-location cap)
+  // marks the world done for the session — no 60-second retry drumbeat.
+  {
+    const { w, core } = exportScaffold(3344, "chat-export-43");
+    const posts = [];
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision: 3, locations: [{ id: "loc-root" }] },
+      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async () => {
+      posts.push(1);
+      return { ok: false, status: 400, body: { code: "spatial_replacement_invalid" } };
+    };
+    resetExportState();
+    await bindRoot(core);
+    await mapsExport.maybeSync(core);
+    mapsExport._failed = null; // isolate the done-marking from the backoff window
+    await mapsExport.maybeSync(core);
+    assert.equal(posts.length, 1, "a 4xx refusal is terminal for the session, not retried");
+    assert.ok(mapsExport._done.has(w), "the world is marked done");
   }
 
   loadedPF.api.getSpatial = prevGetSpatial;
