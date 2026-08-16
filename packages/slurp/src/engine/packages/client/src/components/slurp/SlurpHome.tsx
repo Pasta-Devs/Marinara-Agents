@@ -130,6 +130,7 @@ import {
   useNoodleAccent,
 } from "./SlurpShell";
 import { NoodleProfileSurface } from "./SlurpProfileSurface";
+import { SlurpSettings } from "./SlurpSettings";
 import { NoodleImageComposer } from "./SlurpImageComposer";
 import { NoodlePollComposer } from "./SlurpPollComposer";
 import { PostImageCropEditor, PostImageFrame } from "./PostImageCropEditor";
@@ -1201,6 +1202,14 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   const emptyRightRail = (
     <aside className="hidden w-[22rem] shrink-0 px-4 py-3 @min-[1280px]:block" aria-hidden="true" />
   );
+
+  if (navigation.mode === "creator-settings") {
+    return (
+      <NoodleShell {...shellProps} rightRail={emptyRightRail}>
+        <SlurpSettings navigation={navigation} onNavigate={onNavigate} />
+      </NoodleShell>
+    );
+  }
 
   // Shared review layer: Guide generation can be triggered from both the selected stage-profile
   // view and the hub, so the confirmation modal must render on every branch that owns that action.

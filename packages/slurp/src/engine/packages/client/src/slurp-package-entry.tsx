@@ -8,7 +8,6 @@ import german from "./localization/locales/de.json";
 import korean from "./localization/locales/ko.json";
 import polish from "./localization/locales/pl.json";
 import { SlurpHome } from "./components/slurp/SlurpHome";
-import { SlurpSettings } from "./components/slurp/SlurpSettings";
 import { useSlurpUIStore } from "./stores/slurp-package.store";
 import { configureSlurpPackageState } from "./stores/slurp-package.store";
 import { ModalPortalContext } from "./components/ui/Modal";
@@ -101,11 +100,7 @@ function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
       <QueryClientProvider client={client}>
         <ModalPortalContext.Provider value={element.__portal ?? element}>
           <div className="h-full min-h-0 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
-            {navigation.mode === "creator-settings" ? (
-              <SlurpSettings navigation={navigation} onNavigate={setNavigation} />
-            ) : (
-              <SlurpHome navigation={navigation} onNavigate={setNavigation} />
-            )}
+            <SlurpHome navigation={navigation} onNavigate={setNavigation} />
           </div>
         </ModalPortalContext.Provider>
       </QueryClientProvider>
