@@ -1540,11 +1540,11 @@ export async function slurpRoutes(app: FastifyInstance) {
     // Operational failures (provider/storage) are reported apart from expected exclusions
     // so a provider outage cannot look like a batch of harmless skips.
     const failed: string[] = [];
-    // Every exclusion carries a reason, deduplicated: without one the wizard can only report a
-    // count, and the user has nothing to act on.
-    const reasons: string[] = [];
-    const noteReason = (reason: string) => {
-      if (!reasons.includes(reason)) reasons.push(reason);
+    // Every exclusion carries a reason against its creator: without one the wizard can only
+    // report a count, and one batch can fail for several different causes.
+    const reasons: { accountId: string; reason: string }[] = [];
+    const noteReason = (accountId: string, reason: string) => {
+      reasons.push({ accountId, reason });
     };
     const errorReason = (error: unknown) =>
       error instanceof Error ? error.message : String(error);
@@ -1582,11 +1582,12 @@ export async function slurpRoutes(app: FastifyInstance) {
                 noodleAccountId,
               );
               failed.push(noodleAccountId);
-              noteReason(errorReason(error));
+              noteReason(noodleAccountId, errorReason(error));
             }
           } else {
             skipped.push(noodleAccountId);
             noteReason(
+              noodleAccountId,
               "Already a Slurp creator from an earlier run. Remove the existing creator first to create it again.",
             );
           }
@@ -1597,6 +1598,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         if (!publicAccount) {
           skipped.push(noodleAccountId);
           noteReason(
+            noodleAccountId,
             "The source character or persona no longer exists in Noodle.",
           );
           return;
@@ -1625,6 +1627,7 @@ export async function slurpRoutes(app: FastifyInstance) {
           ) {
             skipped.push(noodleAccountId);
             noteReason(
+              noodleAccountId,
               "The generated stage profile repeated the linked public identity, so it was rejected. Try again, or set the disclosure mode to open.",
             );
             return;
@@ -1648,7 +1651,10 @@ export async function slurpRoutes(app: FastifyInstance) {
           );
           if (!account) {
             skipped.push(noodleAccountId);
-            noteReason("The creator record could not be written.");
+            noteReason(
+              noodleAccountId,
+              "The creator record could not be written.",
+            );
             return;
           }
           await applyAutoPosting(account.id);
@@ -1681,11 +1687,12 @@ export async function slurpRoutes(app: FastifyInstance) {
                   noodleAccountId,
                 );
                 failed.push(noodleAccountId);
-                noteReason(errorReason(autoPostingError));
+                noteReason(noodleAccountId, errorReason(autoPostingError));
               }
             } else {
               skipped.push(noodleAccountId);
               noteReason(
+                noodleAccountId,
                 "Already a Slurp creator from an earlier run. Remove the existing creator first to create it again.",
               );
             }
@@ -1697,7 +1704,7 @@ export async function slurpRoutes(app: FastifyInstance) {
             noodleAccountId,
           );
           failed.push(noodleAccountId);
-          noteReason(errorReason(error));
+          noteReason(noodleAccountId, errorReason(error));
           return;
         }
       },
@@ -1711,7 +1718,7 @@ export async function slurpRoutes(app: FastifyInstance) {
         noodleAccountId,
       );
       failed.push(noodleAccountId);
-      noteReason(errorReason(result.reason));
+      noteReason(noodleAccountId, errorReason(result.reason));
     });
     const profiles = await noodle.listNoodlerStageProfiles();
     return reply.code(201).send({

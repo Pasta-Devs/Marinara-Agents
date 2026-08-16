@@ -950,7 +950,7 @@
   "ui.noodle.noodlerwizard.change": "Change",
   "ui.noodle.noodlerwizard.characters": "Creator sources",
   "ui.noodle.noodlerwizard.chooseCharacters": "Who becomes a Slurp creator?",
-  "ui.noodle.noodlerwizard.completion.creationFailed.detail": "{{failed}} creators could not be set up, so no first posts were written. The reason is below. Fix it and try again — creators that already exist are not duplicated.",
+  "ui.noodle.noodlerwizard.completion.creationFailed.detail": "{{failed}} creators could not be set up, so no first posts were written. The reasons are below. Fix them and try again — creators that already exist are not duplicated.",
   "ui.noodle.noodlerwizard.completion.creationFailed.title": "Creators could not be set up",
   "ui.noodle.noodlerwizard.completion.declined.detail": "Created {{created}} creators. Their first posts are not written yet — use Refresh Slurp whenever you are ready.",
   "ui.noodle.noodlerwizard.completion.declined.title": "Creators are ready",

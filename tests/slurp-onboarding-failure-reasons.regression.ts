@@ -67,12 +67,19 @@ assert.match(
   "The repair retry must not send an empty assistant turn",
 );
 
-// Every bulk exclusion carries a reason, or the wizard can only report a count.
-for (const site of [
-  /skipped\.push\(noodleAccountId\);\s*\n\s*noteReason\(/u,
-  /failed\.push\(noodleAccountId\);\s*\n\s*noteReason\(/u,
-]) {
-  assert.match(routes, site, "Bulk skips and failures must record a reason");
+// Every bulk exclusion carries a reason against its creator, or the wizard cannot say which
+// creator failed for which cause.
+assert.match(
+  routes,
+  /const reasons: \{ accountId: string; reason: string \}\[\] = \[\];/u,
+  "Reasons must be recorded per creator, not as a bare list",
+);
+for (const call of routes.match(/noteReason\([\s\S]{0,40}/gu) ?? []) {
+  assert.match(
+    call,
+    /noteReason\(\s*noodleAccountId,/u,
+    "Every reason must name its creator",
+  );
 }
 assert.equal(
   (routes.match(/skipped\.push\(noodleAccountId\)/gu) ?? []).length,
@@ -107,6 +114,23 @@ assert.match(
   panel,
   /creationReasons\.length > 0 && \([\s\S]*?creationReasons\.map/u,
   "The completion screen must show the reasons",
+);
+assert.match(
+  panel,
+  /accounts\.find\([\s\S]*?account\.id === entry\.accountId[\s\S]*?\)\?\.displayName/u,
+  "Each reason must name the creator it belongs to",
+);
+
+// A run that created nothing must not be recorded as finished onboarding.
+assert.match(
+  panel,
+  /selected\.size === 0 \|\| newIds\.length === 0 \? "zero" : "completed"/u,
+  "Nothing created must not write the completed onboarding state",
+);
+assert.match(
+  panel,
+  /if \(settingsSaved && newIds\.length > 0\) onComplete\?\.\(\);/u,
+  "Nothing created must not report the wizard as complete",
 );
 assert.match(
   panel,

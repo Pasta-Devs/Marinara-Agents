@@ -162,7 +162,9 @@ export function SlurpOnboardingWizard({
   const [settingsFailed, setSettingsFailed] = useState(false);
   const [creationFailed, setCreationFailed] = useState(false);
   const [creationError, setCreationError] = useState<string | null>(null);
-  const [creationReasons, setCreationReasons] = useState<string[]>([]);
+  const [creationReasons, setCreationReasons] = useState<
+    { accountId: string; reason: string }[]
+  >([]);
   const [generationConnectionId, setGenerationConnectionId] = useState("");
   const [settingsSeeded, setSettingsSeeded] = useState(false);
   const [outcomes, setOutcomes] = useState<NoodlerRefreshNowOutcome[]>([]);
@@ -407,8 +409,10 @@ export function SlurpOnboardingWizard({
     setCreationError(null);
     // A failed settings write keeps onboarding incomplete, but the profiles already exist:
     // still write their first posts so the run is not stranded halfway.
+    // Nothing was created, so onboarding is not complete: writing "completed" here would
+    // close the wizard for good on a run that produced no creator at all.
     const settingsSaved = await saveSettings(
-      selected.size === 0 ? "zero" : "completed",
+      selected.size === 0 || newIds.length === 0 ? "zero" : "completed",
     );
     setSettingsFailed(!settingsSaved);
     if (newIds.length === 0 || !generateNow) {
@@ -423,7 +427,7 @@ export function SlurpOnboardingWizard({
           : "settingsFailed",
       );
       setStep(5);
-      if (settingsSaved) onComplete?.();
+      if (settingsSaved && newIds.length > 0) onComplete?.();
       return;
     }
     try {
@@ -1412,9 +1416,24 @@ export function SlurpOnboardingWizard({
               </p>
               {creationReasons.length > 0 && (
                 <ul className="mt-3 max-w-md list-disc space-y-1 rounded-md border border-[#ff7ec1]/25 bg-[#ff7ec1]/[0.06] px-5 py-2 text-left text-xs leading-5 text-[#f3dce9]">
-                  {creationReasons.map((reason) => (
-                    <li key={reason}>{reason}</li>
-                  ))}
+                  {creationReasons.map((entry) => {
+                    // The eligible list is the same source the selection came from, so the name
+                    // is normally known. An unnamed creator still shows its reason.
+                    const name = accounts.find(
+                      (account) => account.id === entry.accountId,
+                    )?.displayName;
+                    return (
+                      <li key={`${entry.accountId}:${entry.reason}`}>
+                        {name ? (
+                          <>
+                            <span className="font-semibold">{name}</span>
+                            {" — "}
+                          </>
+                        ) : null}
+                        {entry.reason}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
               {createdIds.length > 0 && (
