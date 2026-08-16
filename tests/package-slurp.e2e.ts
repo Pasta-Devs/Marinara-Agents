@@ -43,10 +43,19 @@ async function prepareFreshClient(page: Page) {
 async function openSlurp(page: Page) {
   const slurp = page.locator('[data-component="NoodleView"]');
   const tab = page.getByRole("tab", { name: "Open Slurp" });
-  if ((await tab.getAttribute("aria-selected")) !== "true") {
-    await tab.click();
-  }
-  await expect(slurp).toBeVisible();
+  await expect(tab).toBeVisible();
+  await expect
+    .poll(
+      async () => {
+        if (await slurp.isVisible()) return true;
+        if ((await tab.getAttribute("aria-selected")) !== "true") {
+          await tab.click();
+        }
+        return false;
+      },
+      { timeout: 30_000, intervals: [250, 500, 1_000] },
+    )
+    .toBe(true);
 }
 
 async function getSlurpSettings(page: Page) {
@@ -220,18 +229,9 @@ test.describe("standalone Slurp package", () => {
         }),
       ).toBeVisible();
 
-      await page.evaluate((personaId) => {
-        localStorage.setItem(
-          "marinara:slurp:package-ui",
-          JSON.stringify({
-            navigation: { mode: "creator", view: "profiles" },
-            viewerPersonaId: personaId,
-            onboardingState: "completed",
-          }),
-        );
-      }, persona.id);
-      await page.reload();
-      await openSlurp(page);
+      await slurp.getByRole("button", { name: "Settings" }).click();
+      await slurp.getByRole("button", { name: "Creators", exact: true }).click();
+      await slurp.getByRole("button", { name: "Add creators" }).click();
       await slurp.getByRole("button", { name: "New profile" }).click();
       await expect(
         slurp.getByRole("button", {
