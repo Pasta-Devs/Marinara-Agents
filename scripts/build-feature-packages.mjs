@@ -310,7 +310,7 @@ const features = [
   },
   {
     id: "slurp",
-    version: "1.0.4",
+    version: "1.0.5",
     minEngineVersion: "2.4.3",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
