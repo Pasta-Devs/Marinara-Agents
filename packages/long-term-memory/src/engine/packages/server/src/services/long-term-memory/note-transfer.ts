@@ -11,6 +11,8 @@ import type {
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
   getLtmScopeChatIds,
+  getLtmScopeGroupIds,
+  getLtmScopePersonaIds,
   isGlobalLtmScope,
   matchesLtmScope,
   withMergedLtmScopeLinks,
@@ -122,17 +124,37 @@ function normalizedPreviewText(note: LtmNote) {
     .trim();
 }
 
-function noteSourceNoteId(note: Pick<LtmNote, "links">) {
-  return note.links.find((link) => link.relation === "extracted_from")?.target;
+function noteSourceNoteIds(note: Pick<LtmNote, "links">) {
+  return uniqueStrings(
+    note.links
+      .filter((link) => link.relation === "extracted_from")
+      .map((link) => link.target),
+  );
+}
+
+function lineageForNote(noteById: Map<string, LtmNote>, noteId: string) {
+  const lineage = new Set<string>();
+  const pending = [noteId];
+  while (pending.length) {
+    const current = pending.pop()!;
+    if (lineage.has(current)) continue;
+    lineage.add(current);
+    for (const parent of noteSourceNoteIds(noteById.get(current) ?? { links: [] }))
+      if (!lineage.has(parent)) pending.push(parent);
+  }
+  return lineage;
 }
 
 function normalizedScopeForComparison(scope: LtmScope | null | undefined) {
   const chatIds = uniqueStrings(getLtmScopeChatIds(scope)).sort();
+  const groupIds = uniqueStrings(getLtmScopeGroupIds(scope)).sort();
   const characterIds = uniqueStrings(scope?.characterIds ?? []).sort();
+  const personaIds = uniqueStrings(getLtmScopePersonaIds(scope)).sort();
   return {
     ...(chatIds.length ? { chatIds, chatId: chatIds[0] } : {}),
-    ...(scope?.groupId ? { groupId: scope.groupId } : {}),
+    ...(groupIds.length ? { groupIds, groupId: groupIds[0] } : {}),
     ...(characterIds.length ? { characterIds } : {}),
+    ...(personaIds.length ? { personaIds, personaId: personaIds[0] } : {}),
   } satisfies LtmScope;
 }
 
@@ -147,18 +169,11 @@ function scopesEqual(
 }
 
 function scopeForCopy(note: LtmNote, destinationScope: LtmScope) {
-  if (
-    note.scope.personaId &&
-    note.scope.personaId !== destinationScope.personaId
-  )
-    throw new LtmNoteTransferError(
-      "Persona-scoped memories cannot be copied to a different persona.",
-      409,
-    );
   return withMergedLtmScopeLinks(note.scope, {
     chatIds: getLtmScopeChatIds(destinationScope),
+    groupIds: getLtmScopeGroupIds(destinationScope),
     characterIds: destinationScope.characterIds,
-    personaId: destinationScope.personaId,
+    personaIds: getLtmScopePersonaIds(destinationScope),
   });
 }
 
@@ -170,10 +185,11 @@ function extractedChildrenForNoteIds(notes: LtmNote[], noteIds: string[]) {
   while (changed) {
     changed = false;
     for (const note of notes) {
-      const sourceNoteId = noteSourceNoteId(note);
+      const sourceNoteIds = noteSourceNoteIds(note);
       if (
-        !sourceNoteId ||
-        (!selected.has(sourceNoteId) && !descendants.has(sourceNoteId))
+        !sourceNoteIds.some(
+          (sourceNoteId) => selected.has(sourceNoteId) || descendants.has(sourceNoteId),
+        )
       )
         continue;
       if (selected.has(note.id) || descendants.has(note.id)) continue;
@@ -249,13 +265,11 @@ function targetConflictForNotes(
   targetNormalizedText: string,
   noteTokens: Set<string>,
   targetTokens: Set<string>,
+  noteLineage: Set<string>,
+  targetLineage: Set<string>,
 ): LtmNoteTransferConflict | null {
-  const sourceNoteId = noteSourceNoteId(note);
-  const targetSourceNoteId = noteSourceNoteId(target);
   const sharedSourceType =
-    sourceNoteId &&
-    targetSourceNoteId &&
-    sourceNoteId === targetSourceNoteId &&
+    [...noteLineage].some((id) => targetLineage.has(id)) &&
     note.type === target.type;
 
   if (noteNormalizedText && noteNormalizedText === targetNormalizedText) {
@@ -357,10 +371,12 @@ async function buildTransferPlan(
   const destinationTokens = new Map(
     destinationCandidates.map((note) => [note.id, tokenizeForSimilarity(note)]),
   );
+  const noteLineages = new Map(notes.map((note) => [note.id, lineageForNote(noteLookup, note.id)]));
 
   const items = transferNoteIds
     .map((noteId): LtmNoteTransferPreviewItem => {
       const note = noteLookup.get(noteId)!;
+      const sourceNoteIds = noteSourceNoteIds(note);
       const derived = !requestedNoteIds.includes(noteId);
       const nextScope =
         request.mode === "copy"
@@ -381,8 +397,8 @@ async function buildTransferPlan(
           scope: note.scope,
           nextScope,
           derived,
-          ...(noteSourceNoteId(note)
-            ? { sourceNoteId: noteSourceNoteId(note) }
+          ...(sourceNoteIds.length
+            ? { sourceNoteId: sourceNoteIds[0], sourceNoteIds }
             : {}),
           classification: "no_op",
           defaultIncluded: false,
@@ -406,6 +422,8 @@ async function buildTransferPlan(
             destinationNormalizedText.get(target.id) ?? "",
             noteTokens,
             destinationTokens.get(target.id) ?? new Set<string>(),
+            noteLineages.get(note.id) ?? new Set([note.id]),
+            noteLineages.get(target.id) ?? new Set([target.id]),
           ),
         )
         .filter((entry): entry is LtmNoteTransferConflict => Boolean(entry))
@@ -420,8 +438,8 @@ async function buildTransferPlan(
         scope: note.scope,
         nextScope,
         derived,
-        ...(noteSourceNoteId(note)
-          ? { sourceNoteId: noteSourceNoteId(note) }
+          ...(sourceNoteIds.length
+            ? { sourceNoteId: sourceNoteIds[0], sourceNoteIds }
           : {}),
         classification: conflicts.length > 0 ? "conflict" : "ready",
         defaultIncluded: conflicts.length === 0,

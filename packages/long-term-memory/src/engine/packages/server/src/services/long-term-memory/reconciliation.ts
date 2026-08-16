@@ -350,6 +350,8 @@ async function applyInner(
         409,
         draft.status === "superseded"
           ? "ltm_draft_superseded"
+          : draft.status === "invalidated"
+            ? "ltm_draft_invalidated"
           : "ltm_draft_not_pending",
       );
     if (draft.reviewRequired && options.autoApplyLowRiskOnly)

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { ltmEventSchema, ltmNoteSchema, type LtmEvent } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import { z } from "zod";
 import { withMergedLtmScopeLinks } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 import { commitLtmMutation, type LtmMutationFileChange } from "./mutation-transaction.js";
 import { nowIso } from "./ltm-utils.js";
@@ -11,9 +12,10 @@ import { withLtmVaultLock } from "./vault-lock.js";
 
 export async function applyLtmScopeLinksToDerivedNotes(
   sourceNoteId:string,
-  links:{chatIds?:string[];characterIds?:string[]},
+  links:z.infer<typeof scopeLinksSchema>,
   options:{root:string},
 ){
+  scopeLinksSchema.parse(links);
   return withLtmVaultLock(options.root, async () => {
     const storage=new LongTermMemoryStorage(options.root);
     if(!await storage.getNote(sourceNoteId))return null;
@@ -36,3 +38,10 @@ export async function applyLtmScopeLinksToDerivedNotes(
     return{sourceNoteId,count:affectedNoteIds.length,affectedNoteIds,rebuild};
   });
 }
+
+export const scopeLinksSchema = z.object({
+  chatIds: z.array(z.string().min(1).max(120)).max(100).optional(),
+  groupIds: z.array(z.string().min(1).max(120)).max(100).optional(),
+  characterIds: z.array(z.string().min(1).max(120)).max(100).optional(),
+  personaIds: z.array(z.string().min(1).max(120)).max(100).optional(),
+}).strict().refine((value) => Object.values(value).some((items) => items?.length), "Provide at least one scope link to apply.");

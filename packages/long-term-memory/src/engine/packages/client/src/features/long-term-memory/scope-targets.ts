@@ -8,6 +8,7 @@ export type ScopeTargetChat = {
   label: string;
   mode: LtmMode;
   groupId: string | null;
+  personaId: string | null;
   characterIds: string[];
 };
 export type ScopeTargetGroup = { id: string; label: string; chatIds: string[] };

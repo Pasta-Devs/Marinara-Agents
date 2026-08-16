@@ -7,6 +7,11 @@ import {
   type LtmSourceProvenance,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { stableJsonHash } from "./chunking.js";
+import {
+  getLtmScopeChatIds,
+  getLtmScopeGroupIds,
+  getLtmScopePersonaIds,
+} from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 
 function normalizedStrings(values: readonly (string | null | undefined)[]) {
   return Array.from(
@@ -15,12 +20,15 @@ function normalizedStrings(values: readonly (string | null | undefined)[]) {
 }
 
 function normalizedScope(scope: LtmScope | null | undefined): LtmScope {
-  const chatIds = normalizedStrings([scope?.chatId, ...(scope?.chatIds ?? [])]);
+  const chatIds = normalizedStrings(getLtmScopeChatIds(scope));
+  const groupIds = normalizedStrings(getLtmScopeGroupIds(scope));
   const characterIds = normalizedStrings(scope?.characterIds ?? []);
+  const personaIds = normalizedStrings(getLtmScopePersonaIds(scope));
   return {
     ...(chatIds.length ? { chatId: chatIds[0], chatIds } : {}),
-    ...(scope?.groupId?.trim() ? { groupId: scope.groupId.trim() } : {}),
+    ...(groupIds.length ? { groupId: groupIds[0], groupIds } : {}),
     ...(characterIds.length ? { characterIds } : {}),
+    ...(personaIds.length ? { personaId: personaIds[0], personaIds } : {}),
   };
 }
 
@@ -65,7 +73,7 @@ export function extractionFingerprintForLtmSourceMaterial(input: {
   const modes = normalizedStrings(input.modes) as LtmMode[];
   const extractionMode = input.extractionMode ?? modes[0] ?? "roleplay";
   return ltmExtractionFingerprintSchema.parse({
-    version: 2,
+    version: 3,
     sourceHash: sourceHashForLtmSourceMaterial(input),
     provenance: input.provenance ?? null,
     scope: normalizedScope(input.scope),

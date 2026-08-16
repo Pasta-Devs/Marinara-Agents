@@ -694,10 +694,42 @@ export const ltmScopeSchema = z
     chatId: z.string().min(1).max(120).optional(),
     chatIds: z.array(z.string().min(1).max(120)).max(100).optional(),
     groupId: z.string().min(1).max(120).optional(),
+    groupIds: z.array(z.string().min(1).max(120)).max(100).optional(),
     characterIds: z.array(z.string().min(1).max(120)).max(100).optional(),
     personaId: z.string().min(1).max(120).optional(),
+    personaIds: z.array(z.string().min(1).max(120)).max(100).optional(),
   })
   .strict();
+
+export function ltmScopeAliasConflict(
+  scope:
+    | {
+        chatId?: string;
+        chatIds?: readonly string[];
+        groupId?: string;
+        groupIds?: readonly string[];
+        personaId?: string;
+        personaIds?: readonly string[];
+      }
+    | null
+    | undefined,
+) {
+  for (const [scalar, values, label] of [
+    [scope?.chatId, scope?.chatIds, "chatId/chatIds"],
+    [scope?.groupId, scope?.groupIds, "groupId/groupIds"],
+    [scope?.personaId, scope?.personaIds, "personaId/personaIds"],
+  ] as const) {
+    if (scalar && values !== undefined && !values.includes(scalar))
+      return `${label} must identify the same scope.`;
+  }
+  return null;
+}
+
+export const ltmWriteScopeSchema = ltmScopeSchema.superRefine((scope, ctx) => {
+  const conflict = ltmScopeAliasConflict(scope);
+  if (conflict)
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: [], message: conflict });
+});
 
 /**
  * The context that a source was successfully extracted against. Keep the
@@ -706,7 +738,7 @@ export const ltmScopeSchema = z
  */
 export const ltmExtractionFingerprintSchema = z
   .object({
-    version: z.literal(2),
+    version: z.union([z.literal(2), z.literal(3)]),
     sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
     provenance: ltmSourceProvenanceSchema.nullable(),
     scope: ltmScopeSchema,
@@ -748,6 +780,7 @@ export const ltmNoteTransferPreviewItemSchema = z
     nextScope: ltmScopeSchema,
     derived: z.boolean().default(false),
     sourceNoteId: ltmNoteIdSchema.optional(),
+    sourceNoteIds: z.array(ltmNoteIdSchema).max(250).optional(),
     classification: z.enum(["ready", "no_op", "conflict"]),
     defaultIncluded: z.boolean(),
     reason: z.string().min(1).max(240).optional(),
@@ -760,9 +793,26 @@ export const ltmNoteTransferPreviewRequestSchema = z
     noteIds: z.array(ltmNoteIdSchema).min(1).max(500),
     mode: ltmNoteTransferModeSchema,
     destinationChatId: z.string().min(1).max(120),
+    derivedNoteIds: z
+      .array(ltmNoteIdSchema)
+      .max(500)
+      .refine(
+        (ids) => new Set(ids).size === ids.length,
+        "Derived note IDs must be unique.",
+      )
+      .optional(),
     includeDerived: z.boolean().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    const requested = new Set(value.noteIds);
+    if (value.derivedNoteIds?.some((id) => requested.has(id)))
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["derivedNoteIds"],
+        message: "Requested and derived transfer IDs must be disjoint.",
+      });
+  });
 
 export const ltmNoteTransferPreviewResponseSchema = z
   .object({
@@ -850,12 +900,17 @@ export const ltmSourceDerivedMemorySchema = z
     type: ltmNoteTypeSchema,
     status: ltmStatusSchema,
     scope: ltmScopeSchema,
+    previewText: z.string().max(600),
+    incomingLinkCount: z.number().int().min(0),
+    outgoingLinkCount: z.number().int().min(0),
   })
   .strict();
 
 export const ltmSourceDerivedMemoriesResponseSchema = z
   .object({
     sourceNoteId: ltmNoteIdSchema,
+    sourceIncomingLinkCount: z.number().int().min(0),
+    sourceOutgoingLinkCount: z.number().int().min(0),
     memories: z.array(ltmSourceDerivedMemorySchema),
   })
   .strict();
@@ -1018,6 +1073,8 @@ export const ltmNoteSchema = z
     scope: ltmScopeSchema.default({}),
     tags: z.array(ltmIdentifierSchema).max(100).default([]),
     keywords: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
+    manualKeywords: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
+    suppressedKeywords: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
     createdAt: ltmIsoTimestampSchema,
     updatedAt: ltmIsoTimestampSchema,
     links: z.array(ltmLinkSchema).max(250).default([]),
@@ -1105,6 +1162,20 @@ export const ltmBulkNoteArchiveActionSchema = z.enum([
   "with_derived",
 ]);
 
+const ltmAvailabilityScopePatchSchema = ltmWriteScopeSchema.refine(
+  (scope) =>
+    Boolean(
+      scope.chatId ||
+        scope.chatIds?.length ||
+        scope.groupId ||
+        scope.groupIds?.length ||
+        scope.characterIds?.length ||
+        scope.personaId ||
+        scope.personaIds?.length,
+    ),
+  "Choose at least one place.",
+);
+
 export const ltmBulkNoteRequestSchema = z
   .object({
     noteIds: z
@@ -1125,6 +1196,10 @@ export const ltmBulkNoteRequestSchema = z
         "Modes must be unique.",
       )
       .optional(),
+    enableModes: z.array(ltmModeSchema).min(1).max(8).optional(),
+    disableModes: z.array(ltmModeSchema).min(1).max(8).optional(),
+    addScope: ltmAvailabilityScopePatchSchema.optional(),
+    removeScope: ltmAvailabilityScopePatchSchema.optional(),
     addTags: z
       .array(ltmIdentifierSchema)
       .max(100)
@@ -1148,6 +1223,10 @@ export const ltmBulkNoteRequestSchema = z
     if (
       !request.status &&
       !request.modes &&
+      !request.enableModes?.length &&
+      !request.disableModes?.length &&
+      !request.addScope &&
+      !request.removeScope &&
       !request.addTags?.length &&
       !request.removeTags?.length &&
       !request.archive
@@ -1175,6 +1254,33 @@ export const ltmBulkNoteRequestSchema = z
             "A tag cannot be added and removed in the same bulk request.",
         });
       }
+    }
+    const enabledModes = new Set(request.enableModes ?? []);
+    for (const [index, mode] of (request.disableModes ?? []).entries())
+      if (enabledModes.has(mode))
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["disableModes", index],
+          message: "A chat mode cannot be enabled and disabled in the same bulk request.",
+        });
+    if (request.modes && (request.enableModes?.length || request.disableModes?.length))
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["modes"],
+        message: "Modes cannot be combined with incremental mode changes.",
+      });
+    const addScope = request.addScope;
+    const removeScope = request.removeScope;
+    const dimensions = [
+      ["chat", [...(addScope?.chatIds ?? []), ...(addScope?.chatId ? [addScope.chatId] : [])], [...(removeScope?.chatIds ?? []), ...(removeScope?.chatId ? [removeScope.chatId] : [])]],
+      ["group", [...(addScope?.groupIds ?? []), ...(addScope?.groupId ? [addScope.groupId] : [])], [...(removeScope?.groupIds ?? []), ...(removeScope?.groupId ? [removeScope.groupId] : [])]],
+      ["character", addScope?.characterIds ?? [], removeScope?.characterIds ?? []],
+      ["persona", [...(addScope?.personaIds ?? []), ...(addScope?.personaId ? [addScope.personaId] : [])], [...(removeScope?.personaIds ?? []), ...(removeScope?.personaId ? [removeScope.personaId] : [])]],
+    ] as const;
+    for (const [dimension, added, removed] of dimensions) {
+      const overlap = new Set(added.filter((id) => removed.includes(id)));
+      if (overlap.size)
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["addScope"], message: `Scope ${dimension} IDs cannot be added and removed in the same request: ${[...overlap].join(", ")}` });
     }
   });
 
@@ -2006,11 +2112,64 @@ export const ltmNoteTransferApplyResponseSchema = z
   })
   .strict();
 
+export const ltmRenameNoteSectionRequestSchema = z
+  .object({
+    fromSectionKey: ltmSectionKeySchema,
+    toSectionKey: ltmSectionKeySchema,
+  })
+  .strict()
+  .refine(
+    (value) => value.fromSectionKey !== value.toSectionKey,
+    "Section keys must be different.",
+  );
+
+export const ltmRenameNoteSectionPreviewResponseSchema = z
+  .object({
+    fromSectionKey: ltmSectionKeySchema,
+    toSectionKey: ltmSectionKeySchema,
+    rewrittenDraftCount: z.number().int().min(0),
+    rewrittenDraftIds: z.array(z.string().uuid()).max(10_000),
+  })
+  .strict();
+
+const ltmSectionRebuildSchema = z.discriminatedUnion("status", [
+  z
+    .object({
+      status: z.literal("complete"),
+      generatedAt: ltmIsoTimestampSchema,
+      noteCount: z.number().int().min(0),
+      chunkCount: z.number().int().min(0),
+      embeddedChunkCount: z.number().int().min(0),
+      embeddingsAvailable: z.boolean(),
+    })
+    .strict(),
+  z
+    .object({ status: z.literal("deferred"), error: z.string().min(1) })
+    .strict(),
+]);
+
+export const ltmRenameNoteSectionResponseSchema = z
+  .object({
+    note: ltmNoteSchema,
+    rewrittenDraftCount: z.number().int().min(0),
+    rebuild: ltmSectionRebuildSchema,
+  })
+  .strict();
+
+export const ltmDeleteNoteSectionResponseSchema = z
+  .object({
+    note: ltmNoteSchema,
+    invalidatedDraftCount: z.number().int().min(0),
+    rebuild: ltmSectionRebuildSchema,
+  })
+  .strict();
+
 export const ltmDraftStatusSchema = z.enum([
   "pending",
   "accepted",
   "auto_applied",
   "superseded",
+  "invalidated",
 ]);
 
 export const ltmDraftApplyStateSchema = z.enum([
@@ -2048,9 +2207,11 @@ export const ltmDraftNoteInputSchema = z
     type: ltmNoteTypeSchema,
     status: ltmStatusSchema.default("active"),
     modes: z.array(ltmModeSchema).min(1).max(8),
-    scope: ltmScopeSchema.default({}),
+    scope: ltmWriteScopeSchema.default({}),
     tags: z.array(ltmIdentifierSchema).max(100).default([]),
     keywords: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
+    manualKeywords: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
+    suppressedKeywords: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
     createdAt: ltmIsoTimestampSchema.optional(),
     updatedAt: ltmIsoTimestampSchema.optional(),
     extracted: z.boolean().optional(),
@@ -2310,6 +2471,8 @@ export const ltmExtractionDraftSchema = z
     skippedMutationIds: z.array(z.string().uuid()).optional(),
     supersededAt: ltmIsoTimestampSchema.optional(),
     supersededByDraftId: z.string().uuid().optional(),
+    invalidatedAt: ltmIsoTimestampSchema.optional(),
+    invalidationReason: z.string().min(1).max(2_000).optional(),
   })
   .strip();
 
@@ -2320,6 +2483,7 @@ export const ltmDraftFreshnessSchema = z.enum([
   "missing",
   "invalid",
   "superseded",
+  "invalidated",
   "not_pending",
 ]);
 
@@ -2329,6 +2493,7 @@ export const ltmDraftBlockReasonCodeSchema = z.enum([
   "source_missing",
   "source_invalid",
   "draft_superseded",
+  "draft_invalidated",
   "draft_not_pending",
   "projection_failed",
   "no_mutations",
@@ -3015,6 +3180,18 @@ export type LtmTransferRebuildSummary = z.infer<
 export type LtmNoteTransferApplyResponse = z.infer<
   typeof ltmNoteTransferApplyResponseSchema
 >;
+export type LtmRenameNoteSectionRequest = z.infer<
+  typeof ltmRenameNoteSectionRequestSchema
+>;
+export type LtmRenameNoteSectionPreviewResponse = z.infer<
+  typeof ltmRenameNoteSectionPreviewResponseSchema
+>;
+export type LtmRenameNoteSectionResponse = z.infer<
+  typeof ltmRenameNoteSectionResponseSchema
+>;
+export type LtmDeleteNoteSectionResponse = z.infer<
+  typeof ltmDeleteNoteSectionResponseSchema
+>;
 export type LtmDraftStatus = z.infer<typeof ltmDraftStatusSchema>;
 export type LtmDraftApplyState = z.infer<typeof ltmDraftApplyStateSchema>;
 export type LtmDraftIndexRebuildStatus = z.infer<
@@ -3179,6 +3356,17 @@ export const ltmBackupSchema = z
       })
       .strict(),
   })
-  .strict();
+  .strict()
+  .superRefine((backup, ctx) => {
+    for (const [index, note] of backup.notes.entries()) {
+      const conflict = ltmScopeAliasConflict(note.scope);
+      if (!conflict) continue;
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["notes", index, "scope"],
+        message: conflict,
+      });
+    }
+  });
 
 export type LtmBackup = z.infer<typeof ltmBackupSchema>;

@@ -81,7 +81,11 @@ async function main() {
   const { compileEvidenceUnitExtraction } = await import(
     `${source}/evidence-unit-extraction.ts`
   );
-  const { sourceHashForLtmSourceNote } = await import(
+  const {
+    extractionFingerprintForLtmSourceNote,
+    isLtmSourceExtractionFingerprintCurrent,
+    sourceHashForLtmSourceNote,
+  } = await import(
     `${source}/source-hash.ts`
   );
   const { projectLongTermMemoryDraftReview } = await import(
@@ -98,8 +102,27 @@ async function main() {
     `${source}/index-state.ts`
   );
   const { runLongTermMemoryRetention } = await import(`${source}/retention.ts`);
+  const {
+    rebuildLtmActivityIndex,
+    readLtmActivityEvents,
+  } = await import(`${source}/activity-index.ts`);
   const { renderSectionContributions } = await import(
     `${source}/section-contributions.ts`
+  );
+  const { extractNoteKeywords } = await import(`${source}/keyword-extract.ts`);
+  const { mergeKeywords } = await import(`${source}/keyword-extract.ts`);
+  const {
+    getLtmActiveKeywords,
+    ltmKeywordKey,
+    normalizeLtmKeywordIntent,
+  } = await import(
+    "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/keywords.ts"
+  );
+  const { ltmScopesOverlap, validateLtmExplicitAvailability } = await import(
+    "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/scope.ts"
+  );
+  const { normalizeDetailName } = await import(
+    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/detail-name.ts"
   );
   const {
     exportLongTermMemoryData,
@@ -125,7 +148,7 @@ async function main() {
     title: "Restart proof",
     type: "world",
     modes: ["roleplay"],
-    scope: {},
+    scope: { chatId: "chat-a", chatIds: ["chat-a"] },
     tags: [],
     keywords: ["restart"],
     links: [],
@@ -401,6 +424,20 @@ async function main() {
         },
       },
     });
+    assert.throws(
+      () =>
+        parseLongTermMemoryBackup({
+          ...exported,
+          notes: [
+            {
+              ...exported.notes[0]!,
+              scope: { chatId: "chat-a", chatIds: ["chat-b"] },
+            },
+          ],
+        }),
+      /same scope/u,
+      "backups must reject contradictory scalar and array scope aliases",
+    );
     await replaceLongTermMemoryData(legacyBackup, freshRoot);
     const reexportedLegacy = await exportLongTermMemoryData(freshRoot);
     assert.equal("policies" in reexportedLegacy.settings, false);
@@ -455,6 +492,126 @@ async function main() {
     );
 
     const storage = new LongTermMemoryStorage(root);
+    assert.deepEqual(
+      normalizeLtmKeywordIntent({ keywords: ["Legacy keyword"] }),
+      {
+        keywords: [],
+        manualKeywords: ["Legacy keyword"],
+        suppressedKeywords: [],
+      },
+      "legacy keywords must remain editable after lazy migration",
+    );
+    assert.equal(
+      validateLtmExplicitAvailability({}, ["roleplay"]),
+      "Choose at least one place where this memory is available.",
+    );
+    assert.equal(
+      validateLtmExplicitAvailability({ chatId: "chat-a" }, []),
+      "Choose at least one chat mode.",
+    );
+    assert.equal(
+      validateLtmExplicitAvailability({ chatId: "chat-a" }, ["roleplay"]),
+      null,
+    );
+    assert.equal(normalizeDetailName("Current state"), "current_state");
+    assert.equal(normalizeDetailName(" Important facts! "), "important_facts");
+    assert.equal(ltmKeywordKey(" I "), "i");
+    assert.deepEqual(
+      mergeKeywords(["Cobalt-Moon"], ["cobalt moon"], 30),
+      ["cobalt moon"],
+    );
+    assert.equal(
+      ltmScopesOverlap(
+        { characterIds: ["character-a"] },
+        {},
+        { characterIds: ["character-b"], includeGlobal: false },
+      ),
+      false,
+    );
+    assert.equal(
+      ltmScopesOverlap(
+        { personaIds: ["persona-a"] },
+        {},
+        { personaIds: ["persona-b"], includeGlobal: false },
+      ),
+      false,
+    );
+    await assert.rejects(
+      storage.createNote({ ...noteInput, id: "world_storage_global_rejected", scope: {} }),
+      (error: any) => error.code === "ltm_explicit_availability_required",
+      "storage must reject new non-source global memories even when callers bypass routes",
+    );
+    for (const scope of [
+      { chatId: "chat-a", chatIds: ["chat-b"] },
+      { groupId: "group-a", groupIds: ["group-b"] },
+      { personaId: "persona-a", personaIds: ["persona-b"] },
+    ]) {
+      await assert.rejects(
+        storage.createNote({
+          ...noteInput,
+          id: `world_scope_conflict_${Object.keys(scope)[0]}`,
+          scope,
+        }),
+        /same scope/u,
+      );
+    }
+    const projectScopeTarget = await storage.createNote({
+      ...noteInput,
+      id: "world_scope_update_target",
+    });
+    await assert.rejects(
+      storage.updateNote(projectScopeTarget.id, {
+        scope: { chatId: "chat-a", chatIds: ["chat-b"] },
+      }),
+      (error: any) => error.code === "ltm_scope_alias_conflict",
+    );
+    await assert.rejects(
+      storage.bulkMutateNotes({
+        noteIds: [projectScopeTarget.id],
+        addScope: { groupId: "group-a", groupIds: ["group-b"] },
+      }),
+      /same scope/u,
+    );
+    await assert.rejects(
+      storage.createNote({ ...noteInput, id: "world_empty_storage", sections: {} }),
+      (error: any) => error.code === "ltm_empty_sections",
+    );
+    await assert.rejects(
+      storage.projectNote("world_empty_project", "world", () => ({
+        ...noteInput,
+        id: "world_empty_project",
+        sections: {},
+      })),
+      (error: any) => error.code === "ltm_empty_sections",
+    );
+    assert.equal(await storage.getNote("world_empty_project"), null);
+    const keywordIntent = await storage.createNote({
+      ...noteInput,
+      id: "world_keyword_intent",
+      keywords: ["Cobalt", "cobalt"],
+      sections: {
+        facts: { text: "Cobalt appears in this memory.", updatedAt: timestamp },
+      },
+    });
+    assert.deepEqual(keywordIntent.keywords, ["Cobalt"]);
+    assert.deepEqual(keywordIntent.manualKeywords, []);
+    const suppressedKeyword = await storage.updateNote(keywordIntent.id, {
+      manualKeywords: ["Manual", "manual"],
+      suppressedKeywords: ["cobalt"],
+    });
+    assert.deepEqual(getLtmActiveKeywords(suppressedKeyword), ["Manual"]);
+    assert.equal(
+      extractNoteKeywords(suppressedKeyword).some(
+        (keyword) => keyword.toLowerCase() === "cobalt",
+      ),
+      false,
+      "suppressed generated and text-derived keywords must stay out of recall indexing",
+    );
+    const restoredKeyword = await storage.updateNote(keywordIntent.id, {
+      manualKeywords: ["Manual", "Cobalt"],
+      suppressedKeywords: [],
+    });
+    assert.deepEqual(getLtmActiveKeywords(restoredKeyword), ["Cobalt", "Manual"]);
     const legacySource = await storage.createNote({
       id: "source_import_chat_legacy_draft",
       title: "Legacy draft source",
@@ -472,12 +629,40 @@ async function main() {
       },
       sections: { source: { text: "Legacy evidence.", updatedAt: timestamp } },
     });
+    const scopedFingerprintSource = {
+      ...legacySource,
+      scope: {
+        chatId: "chat-a",
+        chatIds: ["chat-a"],
+        groupId: "group-a",
+        groupIds: ["group-a"],
+        personaId: "persona-a",
+        personaIds: ["persona-a"],
+      },
+    };
+    const currentFingerprint = extractionFingerprintForLtmSourceNote(
+      scopedFingerprintSource,
+    );
+    assert.equal(currentFingerprint.version, 3);
+    assert.equal(
+      isLtmSourceExtractionFingerprintCurrent(scopedFingerprintSource, {
+        ...currentFingerprint,
+        version: 2,
+        scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      }),
+      false,
+      "legacy scoped fingerprints must require re-extraction",
+    );
     await storage.createNote({
       ...noteInput,
       id: "world_legacy_target",
       title: "Legacy target",
       scope: { chatId: "chat-a", chatIds: ["chat-a"] },
       links: [],
+      sections: {
+        facts: noteInput.sections.facts,
+        links: { text: "Existing links detail.", updatedAt: timestamp },
+      },
     });
     const draftStore = new LongTermMemoryDraftStore(root);
     let afterWriteRan = false;
@@ -614,8 +799,96 @@ async function main() {
               relation: "evidenced_by",
             },
           },
+          {
+            id: randomUUID(),
+            kind: "update_section",
+            risk: "low",
+            confidence: 0.9,
+            summary: "Keep the renamed section target current.",
+            evidence: [`source_note:${legacySource.id}`],
+            noteId: "world_legacy_target",
+            sectionKey: "facts",
+            section: {
+              text: "A pending section update.",
+              updatedAt: timestamp,
+            },
+          },
         ],
       },
+    });
+    const beforeRename = await storage.getNote("world_legacy_target");
+    await assert.rejects(
+      storage.renameNoteSection("world_legacy_target", "facts", "links"),
+      (error: any) => error.code === "ltm_section_already_exists",
+    );
+    await addRejectedSuggestions({
+      ...rejectionDraft,
+      source: { sourceNoteId: legacySource.id, chatId: "chat-a" },
+      extractionOutcome: {
+        ...rejectionDraft.extractionOutcome,
+        droppedCandidates: [{
+          index: 0,
+          reason: "invalid_format",
+          message: "Renamed recovery.",
+          recovery: { noteId: "world_legacy_target", sectionKey: "facts" },
+        }],
+      },
+    }, root);
+    assert.deepEqual(
+      Object.keys((await storage.getNote("world_legacy_target"))!.sections),
+      Object.keys(beforeRename!.sections),
+    );
+    const renamePreview = await storage.previewNoteSectionRename(
+      "world_legacy_target",
+      "facts",
+      "details",
+    );
+    assert.deepEqual(renamePreview, {
+      fromSectionKey: "facts",
+      toSectionKey: "details",
+      rewrittenDraftCount: 1,
+      rewrittenDraftIds: [pending.id],
+    });
+    const renamedSection = await storage.renameNoteSection(
+      "world_legacy_target",
+      "facts",
+      "details",
+    );
+    assert.deepEqual(Object.keys(renamedSection.note.sections), ["details", "links"]);
+    assert.equal(
+      renamedSection.note.sections.details?.text,
+      beforeRename?.sections.facts?.text,
+    );
+    assert.equal(renamedSection.rewrittenDraftCount, 1);
+    assert.equal(
+      (await listRejectedSuggestions({}, root)).some(
+        (suggestion) =>
+          suggestion.candidate.recovery?.noteId === "world_legacy_target" &&
+          suggestion.candidate.recovery?.sectionKey === "details",
+      ),
+      true,
+      "section rename must atomically preserve rejected-suggestion recovery targets",
+    );
+    const sectionRenamedDraft = await draftStore.getDraft(pending.id);
+    assert.equal(
+      (sectionRenamedDraft?.mutations.find(
+        (mutation) =>
+          mutation.kind === "update_section" &&
+          mutation.noteId === "world_legacy_target",
+      ) as any).sectionKey,
+      "details",
+    );
+    const sectionRenameEvents = (await readFile(getLongTermMemoryDirectories(root).eventLog, "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    const sectionRenameEvent = sectionRenameEvents.find(
+      (event) => event.type === "world.section_renamed" && event.target === "world_legacy_target",
+    );
+    assert.deepEqual(sectionRenameEvent?.payload, {
+      note: renamedSection.note,
+      fromSectionKey: "facts",
+      toSectionKey: "details",
     });
     const canonicalSourceId = "source_chat_summary_1234567890abcdef";
     await storage.renameNoteId(legacySource.id, canonicalSourceId);
@@ -1327,6 +1600,107 @@ async function main() {
     assert.equal(noChanges.status, "no_changes");
     assert.deepEqual(noChanges.skippedNoteIds, [bulkSource.id]);
 
+    const availabilityNote = await storage.createNote({
+      ...noteInput,
+      id: "world_availability_fixture",
+      title: "Availability fixture",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+    });
+    const legacyGlobal = (await storage.projectNote(
+      "world_availability_global",
+      "world",
+      () => ({
+        ...noteInput,
+        id: "world_availability_global",
+        title: "Legacy global availability",
+        modes: ["conversation"],
+        scope: {},
+        status: "active",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        version: 1,
+      }),
+    )).note!;
+    const availabilityAdded = await storage.bulkMutateNotes({
+      noteIds: [availabilityNote.id, legacyGlobal.id],
+      addScope: { characterIds: ["character-a"] },
+      enableModes: ["game"],
+    });
+    assert.equal(availabilityAdded.status, "complete");
+    await assert.rejects(
+      storage.bulkMutateNotes({
+        noteIds: [availabilityNote.id],
+        addScope: { chatIds: ["chat-a"] },
+        removeScope: { chatId: "chat-a" },
+      }),
+      /cannot be added and removed/u,
+    );
+    assert.deepEqual(
+      (await storage.getNote(availabilityNote.id))?.scope,
+      { chatId: "chat-a", chatIds: ["chat-a"], characterIds: ["character-a"] },
+    );
+    assert.deepEqual((await storage.getNote(availabilityNote.id))?.modes, ["roleplay", "game"]);
+    assert.deepEqual(
+      (await storage.getNote(legacyGlobal.id))?.scope,
+      { characterIds: ["character-a"] },
+    );
+    const availabilityRemoved = await storage.bulkMutateNotes({
+      noteIds: [availabilityNote.id],
+      removeScope: { characterIds: ["character-a"] },
+      disableModes: ["game"],
+    });
+    assert.equal(availabilityRemoved.status, "complete");
+    assert.deepEqual((await storage.getNote(availabilityNote.id))?.modes, ["roleplay"]);
+    const multipleAvailabilityAdded = await storage.bulkMutateNotes({
+      noteIds: [availabilityNote.id],
+      addScope: {
+        chatIds: ["chat-b"],
+        groupIds: ["group-a"],
+        characterIds: ["character-b"],
+        personaIds: ["persona-a"],
+      },
+    });
+    assert.equal(multipleAvailabilityAdded.status, "complete");
+    assert.deepEqual((await storage.getNote(availabilityNote.id))?.scope, {
+      chatId: "chat-a",
+      chatIds: ["chat-a", "chat-b"],
+      groupId: "group-a",
+      groupIds: ["group-a"],
+      characterIds: ["character-b"],
+      personaId: "persona-a",
+      personaIds: ["persona-a"],
+    });
+    const multipleAvailabilityRemoved = await storage.bulkMutateNotes({
+      noteIds: [availabilityNote.id],
+      removeScope: {
+        chatIds: ["chat-b"],
+        groupIds: ["group-a"],
+        characterIds: ["character-b"],
+        personaIds: ["persona-a"],
+      },
+    });
+    assert.equal(multipleAvailabilityRemoved.status, "complete");
+    assert.deepEqual((await storage.getNote(availabilityNote.id))?.scope, {
+      chatId: "chat-a",
+      chatIds: ["chat-a"],
+    });
+    const finalAvailability = await storage.bulkMutateNotes({
+      noteIds: [availabilityNote.id],
+      removeScope: { chatIds: ["chat-a"] },
+      disableModes: ["roleplay"],
+    });
+    assert.equal(finalAvailability.status, "no_changes");
+    assert.deepEqual(finalAvailability.skippedNoteIds, [availabilityNote.id]);
+    await assert.rejects(
+      storage.bulkMutateNotes({
+        noteIds: [availabilityNote.id],
+        modes: ["roleplay"],
+        enableModes: ["game"],
+      }),
+      /Modes cannot be combined/u,
+    );
+
     const retractSourceA = await storage.createNote({
       ...noteInput,
       id: "source_retract_a",
@@ -1357,6 +1731,44 @@ async function main() {
       updatedAt: timestamp,
       evidence: [`source_note:${sourceNoteId}`],
     });
+    const nonSourceRoot = await storage.createNote({
+      ...noteInput,
+      id: "world_retract_non_source_root",
+      title: "Non-source retraction root",
+      sections: { facts: { text: "Root fact.", updatedAt: timestamp } },
+    });
+    const nonSourceChild = await storage.projectNote(
+      "world_retract_non_source_child",
+      "world",
+      () => ({
+        ...noteInput,
+        id: "world_retract_non_source_child",
+        title: "Non-source child",
+        status: "active",
+        links: [{ target: nonSourceRoot.id, relation: "extracted_from" }],
+        sections: {
+          facts: renderSectionContributions(
+            [sourceContribution(nonSourceRoot.id, "0".repeat(64), "Child fact.")],
+            true,
+          )!,
+        },
+      }),
+    );
+    const nonSourceDelete = await storage.deleteNotesPermanently(
+      [nonSourceRoot.id],
+      { retractExtracted: true },
+    );
+    assert.deepEqual(nonSourceDelete.deletedIds, [nonSourceRoot.id]);
+    assert.equal(
+      (await storage.getNote(nonSourceChild.note!.id))?.sections.facts.text,
+      "Child fact.",
+      "non-source deletion must not retract descendant content",
+    );
+    assert.deepEqual(
+      (await storage.getNote(nonSourceChild.note!.id))?.links,
+      [],
+      "deletion may detach the missing parent link without retracting content",
+    );
     const sharedFacts = renderSectionContributions(
       [
         sourceContribution(retractSourceA.id, hashA, "Shared durable fact."),
@@ -1416,7 +1828,15 @@ async function main() {
         facts: { text: "Manually preserved fact.", updatedAt: timestamp },
       },
     });
-    assert.equal(manual.sections.facts.contributions?.[0]?.owner, "manual");
+    assert.deepEqual(manual.sections.facts.contributions?.map((item) => item.owner), [
+      "source",
+      "manual",
+    ]);
+    assert.equal(
+      manual.sections.facts.text,
+      "Extracted fact.\n\nManually preserved fact.",
+    );
+    assert.deepEqual(manual.sections.facts.evidence, [`source_note:${retractSourceA.id}`]);
 
     await storage.projectNote("rel_retract_fallback", "relationship", () => ({
       ...noteInput,
@@ -1478,14 +1898,32 @@ async function main() {
       updatedAt: timestamp,
       version: 1,
     }));
-    await storage.deleteNotesPermanently([uncheckedSource.id]);
+    await assert.rejects(
+      storage.deleteNotesPermanently([uncheckedSource.id]),
+      (error: any) => error.code === "ltm_source_lineage_preview_required",
+    );
     const uncheckedMemory = await storage.getNote("world_retract_unchecked");
     assert.equal(uncheckedMemory?.sections.facts.text, "Unchecked fact.");
-    assert.deepEqual(uncheckedMemory?.links, []);
+    assert.deepEqual(uncheckedMemory?.links, [{ target: uncheckedSource.id, relation: "extracted_from" }]);
 
     const retracted = await storage.deleteNotesPermanently(
-      [retractSourceA.id],
-      { retractExtracted: true },
+      [retractSourceA.id, "world_retract_empty"],
+      {
+        retractExtracted: true,
+        excludedNoteIds: [
+          "world_retract_shared",
+          "world_retract_manual",
+          "rel_retract_fallback",
+        ],
+        lineageSourceNoteId: retractSourceA.id,
+        expectedLineageNoteIds: [
+          retractSourceA.id,
+          "world_retract_shared",
+          "world_retract_empty",
+          "world_retract_manual",
+          "rel_retract_fallback",
+        ],
+      },
     );
     assert.deepEqual(retracted.deletedIds.sort(), [
       retractSourceA.id,
@@ -1504,7 +1942,7 @@ async function main() {
     ]);
     assert.equal(
       (await storage.getNote("rel_retract_fallback"))?.sections.state.text,
-      "Earlier B state.",
+      "Latest A state.",
     );
     assert.equal(
       (await storage.getNote("world_retract_manual"))?.sections.facts.text,
@@ -1517,6 +1955,216 @@ async function main() {
     assert.deepEqual(
       (await storage.getNote("world_retract_manual"))?.links,
       [],
+    );
+
+    const excludedSource = await storage.createNote({
+      ...noteInput,
+      id: "source_retract_excluded",
+      title: "Excluded source",
+      type: "source",
+      provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "excluded" },
+      sections: { source: { text: "Excluded source evidence.", updatedAt: timestamp } },
+    });
+    const excludedChild = await storage.projectNote(
+      "world_retract_excluded",
+      "world",
+      () => ({
+        ...noteInput,
+        id: "world_retract_excluded",
+        title: "Excluded child",
+        status: "active",
+        links: [{ target: excludedSource.id, relation: "extracted_from" }],
+        sections: {
+          facts: renderSectionContributions(
+            [
+              {
+                owner: "source" as const,
+                sourceNoteId: excludedSource.id,
+                sourceHash: sourceHashForLtmSourceNote(excludedSource),
+                text: "Excluded content survives source deletion.",
+                updatedAt: timestamp,
+                evidence: [`source_note:${excludedSource.id}`],
+              },
+            ],
+            true,
+          )!,
+        },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        version: 1,
+      }),
+    );
+    const excludedDelete = await storage.deleteNotesPermanently(
+      [excludedSource.id],
+      {
+        retractExtracted: true,
+        excludedNoteIds: [excludedChild.note!.id],
+        lineageSourceNoteId: excludedSource.id,
+        expectedLineageNoteIds: [excludedSource.id, excludedChild.note!.id],
+      },
+    );
+    assert.deepEqual(excludedDelete.deletedIds, [excludedSource.id]);
+    assert.equal(await storage.getNote(excludedSource.id), null);
+    const detachedChild = await storage.getNote(excludedChild.note!.id);
+    assert.equal(
+      detachedChild?.sections.facts.text,
+      "Excluded content survives source deletion.",
+    );
+    assert.deepEqual(detachedChild?.sections.facts.contributions, [
+      {
+        owner: "manual",
+        text: "Excluded content survives source deletion.",
+        updatedAt: timestamp,
+        evidence: [],
+      },
+    ]);
+    assert.equal(detachedChild?.sections.facts.evidence, undefined);
+    assert.deepEqual(detachedChild?.links, []);
+    const deletionEvents = (await readFile(
+      getLongTermMemoryDirectories(root).eventLog,
+      "utf8",
+    ))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+      .filter((event) => event.target === excludedChild.note!.id);
+    assert.deepEqual(deletionEvents.at(-1)?.payload.detachedFrom, [
+      excludedSource.id,
+    ]);
+    assert.equal(
+      deletionEvents.at(-1)?.payload.previousNote.sections.facts.text,
+      "Excluded content survives source deletion.",
+    );
+
+    const deletionTarget = await storage.createNote({
+      ...noteInput,
+      id: "world_detail_deletion",
+      title: "Detail deletion target",
+      sections: {
+        facts: { text: "A removable fact.", updatedAt: timestamp },
+        history: { text: "A retained history.", updatedAt: timestamp },
+      },
+    });
+    const deletionDraft = await draftStore.createDraft({
+      source: { sourceNoteId: canonicalSourceId, chatId: "chat-a" },
+      scope: deletionTarget.scope,
+      modes: deletionTarget.modes,
+      response: {
+        summary: "Update the removable fact.",
+        mutations: [{
+          id: randomUUID(),
+          kind: "update_section",
+          risk: "low",
+          confidence: 0.9,
+          summary: "Update the removable fact.",
+          evidence: [`source_note:${canonicalSourceId}`],
+          noteId: deletionTarget.id,
+          sectionKey: "facts",
+          section: { text: "A pending fact update.", updatedAt: timestamp },
+        }],
+      },
+    });
+    const deletedDetail = await storage.updateNote(deletionTarget.id, {
+      sections: deletionTarget.sections,
+      removedSectionKeys: ["facts"],
+    });
+    assert.deepEqual(Object.keys(deletedDetail.sections), ["history"]);
+
+    const partialSectionUpdate = await storage.createNote({
+      ...noteInput,
+      id: "world_partial_section_update",
+      title: "Partial section update target",
+      sections: {
+        facts: { text: "An old fact.", updatedAt: timestamp },
+        history: { text: "A retained history.", updatedAt: timestamp },
+      },
+    });
+    const updatedPartialSection = await storage.updateNote(partialSectionUpdate.id, {
+      sections: { facts: { text: "A new fact.", updatedAt: timestamp } },
+    });
+    assert.deepEqual(Object.keys(updatedPartialSection.sections), ["facts", "history"]);
+    assert.equal(updatedPartialSection.sections.history.text, "A retained history.");
+
+    const partialSourceUpdate = await storage.createNote({
+      ...noteInput,
+      id: "source_partial_section_update",
+      type: "source",
+      title: "Partial source update target",
+      provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "partial" },
+      sections: {
+        source: { text: "Source text.", updatedAt: timestamp },
+        metadata: { text: "Retained metadata.", updatedAt: timestamp },
+      },
+    });
+    const updatedPartialSource = await storage.updateNote(partialSourceUpdate.id, {
+      sections: { source: { text: "Refreshed source text.", updatedAt: timestamp } },
+    });
+    assert.deepEqual(Object.keys(updatedPartialSource.sections), ["source", "metadata"]);
+    assert.equal(updatedPartialSource.sections.metadata.text, "Retained metadata.");
+    const invalidatedDraft = await draftStore.getDraft(deletionDraft.id);
+    assert.equal(invalidatedDraft?.status, "invalidated");
+    assert.match(invalidatedDraft?.invalidationReason ?? "", /targeted detail was removed/);
+    const invalidatedReview = await projectLongTermMemoryDraftReview({
+      root,
+      includeInvalidated: true,
+    });
+    assert.equal(
+      invalidatedReview.sources.some((source) =>
+        source.drafts.some(
+          (draft) =>
+            draft.draft.id === deletionDraft.id &&
+            draft.freshness === "invalidated" &&
+            draft.blockReasons.some((reason) => reason.code === "draft_invalidated"),
+        ),
+      ),
+      true,
+      "invalidated proposals must remain visible with their explicit blocking reason",
+    );
+    assert.equal(
+      invalidatedReview.counts.mutations,
+      0,
+      "invalidated drafts must not contribute pending mutations",
+    );
+    await assert.rejects(
+      storage.updateNote(deletionTarget.id, { removedSectionKeys: ["history"] }),
+      (error: any) => error.code === "ltm_last_section",
+    );
+    await assert.rejects(
+      storage.updateNote(deletionTarget.id, { sections: {} }),
+      (error: any) => error.code === "ltm_empty_sections",
+    );
+    assert.deepEqual(Object.keys((await storage.getNote(deletionTarget.id))!.sections), ["history"]);
+
+    const activityRoot = join(dataDir, "activity-index");
+    const activityDirectories = getLongTermMemoryDirectories(activityRoot);
+    await mkdir(activityDirectories.events, { recursive: true });
+    const activityEvents = Array.from({ length: 150 }, (_, index) => ({
+      id: randomUUID(),
+      ts: new Date(Date.parse(timestamp) + index).toISOString(),
+      type: "world.updated",
+      target: "world_activity_target",
+      payload: { index },
+    }));
+    await writeFile(
+      activityDirectories.eventLog,
+      activityEvents.map((event) => JSON.stringify(event)).join("\n") + "\n",
+    );
+    await rebuildLtmActivityIndex(activityRoot);
+    const recentActivity = await readLtmActivityEvents(
+      activityRoot,
+      "world_activity_target",
+      101,
+    );
+    assert.deepEqual(
+      recentActivity.map((event) => event.payload.index),
+      Array.from({ length: 100 }, (_, index) => 149 - index),
+      "activity index must retain the newest events in newest-first order",
+    );
+    await rm(activityDirectories.eventLog, { force: true });
+    assert.equal(
+      (await readLtmActivityEvents(activityRoot, "world_activity_target", 1))[0]?.payload.index,
+      149,
+      "activity reads must not depend on rescanning the full event log",
     );
 
     process.stdout.write(

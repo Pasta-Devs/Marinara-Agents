@@ -7,6 +7,7 @@ import {
   Plus,
   Settings2,
   Sparkles,
+  TriangleAlert,
   Upload,
 } from "lucide-react";
 import type { LtmStatusResponse } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
@@ -134,6 +135,13 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     null,
   );
   const [destinationDirty, setDestinationDirty] = useState(false);
+  const destinationSaveRef = useRef<(() => Promise<boolean>) | null>(null);
+  const navigationSaveInFlightRef = useRef(false);
+  const [navigationSaveInFlight, setNavigationSaveInFlight] = useState(false);
+  const [navigationPrompt, setNavigationPrompt] = useState<string | null>(null);
+  const navigationDialogRef = useRef<HTMLDialogElement>(null);
+  const navigationResolveRef = useRef<((allow: boolean) => void) | null>(null);
+  const navigationTriggerRef = useRef<HTMLElement | null>(null);
   const [openedNoteId, setOpenedNoteId] = useState<string | null>(null);
   const [reviewSourceNoteId, setReviewSourceNoteId] = useState<string | null>(
     null,
@@ -147,6 +155,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     source: SourceTab;
   } | null>(null);
   const [selectedSource, setSelectedSource] = useState<SourceTab>("chats");
+  const [openActivityRequest, setOpenActivityRequest] = useState(0);
   const [onboardingSource, setOnboardingSource] =
     useState<SourceTab>("chats");
   const Destination = destinations[destination];
@@ -172,6 +181,13 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [addOpen]);
+  useEffect(() => {
+    if (!navigationPrompt) return;
+    const dialog = navigationDialogRef.current;
+    if (!dialog) return;
+    if (!dialog.open) dialog.showModal();
+    dialog.querySelector<HTMLElement>("[data-ltm-destination-stay]")?.focus();
+  }, [navigationPrompt]);
 
   useEffect(() => {
     props.onDirtyChange?.(destinationDirty);
@@ -219,6 +235,16 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
 
   const confirmDestinationChange = async (next: string) => {
     if (!destinationDirty) return true;
+    if (destinationSaveRef.current) {
+      return new Promise<boolean>((resolve) => {
+        navigationResolveRef.current?.(false);
+        navigationResolveRef.current = resolve;
+        navigationTriggerRef.current = document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+        setNavigationPrompt(next);
+      });
+    }
     const options = {
       title: localizeUi(
         "ui.longTermMemory.longtermmemorydetail.discardUnsavedChanges",
@@ -240,6 +266,26 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
             { title: options.title, message: options.message },
           ),
         );
+  };
+  const finishNavigationPrompt = async (decision: "save" | "discard" | "stay") => {
+    if (decision === "save") {
+      if (navigationSaveInFlightRef.current) return;
+      navigationSaveInFlightRef.current = true;
+      setNavigationSaveInFlight(true);
+      try {
+        if (!(await destinationSaveRef.current?.())) return;
+      } finally {
+        navigationSaveInFlightRef.current = false;
+        setNavigationSaveInFlight(false);
+      }
+    }
+    const resolve = navigationResolveRef.current;
+    navigationResolveRef.current = null;
+    navigationDialogRef.current?.close();
+    setNavigationPrompt(null);
+    resolve?.(decision !== "stay");
+    requestAnimationFrame(() => navigationTriggerRef.current?.focus({ preventScroll: true }));
+    navigationTriggerRef.current = null;
   };
   const selectDestination = async (next: LongTermMemoryDestination) => {
     if (next === destination) return true;
@@ -304,6 +350,12 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     }
     setDestination("sources");
     return true;
+  };
+  const openActivity = async () => {
+    if (!(await confirmDestinationChange(destinationLabel("settings")))) return;
+    setDestinationDirty(false);
+    setOpenActivityRequest((value) => value + 1);
+    setDestination("settings");
   };
   const toggleActivation = async () => {
     if (!props.onEnabledForChatChange) return;
@@ -553,6 +605,51 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           }
         }
       `}</style>
+      {navigationPrompt ? (
+        <dialog
+          ref={navigationDialogRef}
+          aria-modal="true"
+          aria-labelledby="ltm-destination-unsaved-title"
+          aria-describedby="ltm-destination-unsaved-description"
+          onCancel={(event) => {
+            event.preventDefault();
+            void finishNavigationPrompt("stay");
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Tab") return;
+            const focusable = Array.from(
+              event.currentTarget.querySelectorAll<HTMLElement>(
+                'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+              ),
+            );
+            if (!focusable.length) return;
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+              event.preventDefault();
+              last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+              event.preventDefault();
+              first.focus();
+            }
+          }}
+          className="fixed inset-0 z-50 m-0 grid h-full w-full place-items-center bg-black/50 p-4"
+        >
+          <section className="w-full max-w-md space-y-4 rounded-md border border-[var(--border)] bg-[var(--background)] p-5 shadow-xl">
+            <h2 id="ltm-destination-unsaved-title" className="text-base font-semibold">
+              {localizeUi("ui.longTermMemory.memoryvault.unsavedNavigationTitle")}
+            </h2>
+            <p id="ltm-destination-unsaved-description" className="text-sm text-[var(--muted-foreground)]">
+              {localizeUi("ui.longTermMemory.memoryvault.unsavedNavigationDescription", { action: navigationPrompt })}
+            </p>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button disabled={navigationSaveInFlight} data-ltm-destination-stay onClick={() => void finishNavigationPrompt("stay")}>{localizeUi("ui.longTermMemory.memoryvault.stay")}</Button>
+              <Button disabled={navigationSaveInFlight} destructive onClick={() => void finishNavigationPrompt("discard")}>{localizeUi("ui.longTermMemory.memoryvault.discardAndContinue")}</Button>
+              <Button disabled={navigationSaveInFlight} primary onClick={() => void finishNavigationPrompt("save")}>{localizeUi("ui.longTermMemory.memoryvault.saveAndContinue")}</Button>
+            </div>
+          </section>
+        </dialog>
+      ) : null}
       <header className="mari-editor-header relative z-20">
         <div className="mari-editor-header-main">
           <button
@@ -777,7 +874,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                     review: pendingDrafts.data?.count,
                   }}
                 />
-                {health !== "healthy" ? (
+                {health !== "healthy" && !needsHealthAttention ? (
                   <div
                     aria-busy={status.isFetching}
                     data-ltm-surface="vault-health-pill"
@@ -799,29 +896,30 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                             )}
                     </span>
                     {needsHealthAttention ? null : (
-                      <InfoPopover
-                        label={localizeUi(
-                          "ui.longTermMemory.longtermmemorydetail.howToRepairVaultHealth",
-                        )}
-                        content={healthInfo}
-                      />
+                    <InfoPopover
+                      label={localizeUi(
+                        "ui.longTermMemory.longtermmemorydetail.howToRepairVaultHealth",
+                      )}
+                      content={healthInfo}
+                      compact
+                    />
                     )}
                   </div>
                 ) : null}
               </div>
-              {needsHealthAttention ? (
-                <StatusSurface
-                  compact
-                  tone={healthNeedsDangerTone ? "danger" : "neutral"}
-                  data-ltm-surface="vault-health-warning"
-                  className="justify-between"
-                >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span
-                      aria-hidden="true"
-                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${healthTone}`}
-                    />
-                    <span className="font-semibold">{healthLabel}</span>
+                {needsHealthAttention ? (
+                  <StatusSurface
+                    tone={healthNeedsDangerTone ? "danger" : "warning"}
+                    data-ltm-surface="vault-health-warning"
+                    className="min-h-12 justify-between px-3 py-2 text-sm font-medium"
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <TriangleAlert
+                        aria-hidden="true"
+                        size="1rem"
+                        className="shrink-0 !text-[var(--marinara-editor-warning)]"
+                      />
+                      <span className="font-semibold">{healthLabel}</span>
                     <span className="hidden truncate sm:inline">
                       {localizeUi(
                         "ui.longTermMemory.longtermmemorydetail.checkSettingsMaintenanceReindexRecallData",
@@ -840,7 +938,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                 data-ltm-destination-content
                 role="region"
                 aria-label={destinationLabel(destination)}
-                className="min-w-0 space-y-5"
+                className="min-w-0 space-y-5 [&>section]:scroll-mt-4"
                 style={{
                   containerName: "ltm-destination",
                   containerType: "inline-size",
@@ -1748,9 +1846,16 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   <Destination
                     props={props}
                     onDirtyChange={setDestinationDirty}
+                    onSaveRequest={(save) => {
+                      destinationSaveRef.current = save;
+                    }}
                     onOpenMemory={openMemory}
+                    onOpenSources={openSources}
                     onOpenVault={() => void selectDestination("vault")}
                     onOpenReview={openReview}
+                    onOpenActivity={destination === "vault" ? () => void openActivity() : undefined}
+                    openActivityRequest={openActivityRequest}
+                    onOpenActivityHandled={() => setOpenActivityRequest(0)}
                     onRecoverCandidate={recoverCandidate}
                     openedNoteId={openedNoteId}
                     createMemoryRequest={createMemoryRequest}

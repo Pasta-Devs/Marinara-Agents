@@ -10,6 +10,7 @@ import { markLtmIndexesDirty, rebuildLtmNoteSummary, updateLtmNoteSummary } from
 import { isEnoent, nowIso } from "./ltm-utils.js";
 import { assertInsideDirectory, getLongTermMemoryDirectories, safeJoin } from "./paths.js";
 import { logger } from "./package-runtime.js";
+import { appendLtmActivityEvents } from "./activity-index.js";
 
 const changeSchema = z.object({ path: ltmSafeRelativePathSchema, before: z.unknown().nullable(), after: z.unknown().nullable() }).strict();
 export const ltmMutationTransactionSchema = z.object({ version: z.literal(1), id: z.string().uuid(), createdAt: z.string().datetime(), status: z.enum(["prepared", "committing", "committed"]), files: z.array(changeSchema).min(1), events: z.array(ltmEventSchema) }).strict();
@@ -37,6 +38,7 @@ async function publish(root: string, tx: LtmMutationTransaction, deduplicate = f
     if (!isEnoent(error)) throw error;
   }
   for (const event of deduplicate ? pending.values() : tx.events) await appendJsonLineAtomic(eventLog, event);
+  await appendLtmActivityEvents(root, tx.events);
   await remove(root, tx);
 }
 export async function commitLtmMutation(root: string, input: { files: LtmMutationFileChange[]; events?: LtmEvent[] }) {

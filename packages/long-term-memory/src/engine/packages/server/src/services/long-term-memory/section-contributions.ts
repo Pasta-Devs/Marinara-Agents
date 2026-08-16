@@ -39,8 +39,18 @@ export function renderSectionContributions(
   additive: boolean,
 ): LtmSection | null {
   if (!contributions.length) return null;
-  const rendered = additive ? contributions : [contributions.at(-1)!];
-  const latest = rendered.at(-1)!;
+  const manual = contributions.filter((contribution) => contribution.owner === "manual");
+  const rendered = additive
+    ? [
+        ...contributions.filter((contribution) => contribution.owner === "source"),
+        ...(manual.length ? [manual.at(-1)!] : []),
+      ]
+    : manual.length
+      ? [manual.at(-1)!]
+      : [contributions.at(-1)!];
+  const latest = [...rendered]
+    .sort((left, right) => left.updatedAt.localeCompare(right.updatedAt))
+    .at(-1)!;
   let text = "";
   if (additive) {
     const seen = new Set<string>();
@@ -60,7 +70,7 @@ export function renderSectionContributions(
   const importance = (["critical", "major", "moderate", "minor"] as const).find(
     (value) => rendered.some((item) => item.importance === value),
   );
-  const evidence = uniqueStrings(rendered.flatMap((item) => item.evidence ?? [])).slice(0, 100);
+  const evidence = uniqueStrings(contributions.flatMap((item) => item.evidence ?? [])).slice(0, 100);
   return {
     text,
     updatedAt: latest.updatedAt,

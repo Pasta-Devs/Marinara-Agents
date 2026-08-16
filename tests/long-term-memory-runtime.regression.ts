@@ -40,6 +40,28 @@ async function main() {
   const { LTM_RECALL_STYLE_WEIGHTS } = await import(
     "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/constants.ts"
   );
+  const { ltmScopesOverlap, normalizeLtmScope } = await import(
+    "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/scope.ts",
+  );
+  assert.deepEqual(
+    normalizeLtmScope({ chatId: "legacy-chat", groupId: "legacy-group", personaId: "legacy-persona" }),
+    {
+      chatId: "legacy-chat",
+      chatIds: ["legacy-chat"],
+      groupId: "legacy-group",
+      groupIds: ["legacy-group"],
+      personaId: "legacy-persona",
+      personaIds: ["legacy-persona"],
+    },
+  );
+  assert.equal(
+    ltmScopesOverlap(
+      { groupIds: ["chat-family-a"], personaIds: ["persona-a"] },
+      { chatId: "branch-a", groupId: "chat-family-a", personaId: "persona-b" },
+      { includeGlobal: false },
+    ),
+    true,
+  );
   const { configurePackageRuntime, getPackageEmbeddingAdapter } = await import(
     `${source}/package-runtime.ts`,
   );
@@ -67,7 +89,7 @@ async function main() {
     name: "Legacy chat",
     mode: "roleplay",
     characterIds: [],
-    groupId: null,
+    groupId: "group-a",
     personaId: null,
     connectionId: null,
     metadata: { enableLongTermMemory: true, longTermMemoryBudgetTokens: 2048 },
@@ -80,6 +102,17 @@ async function main() {
     characterIds: ["character-a"],
     groupId: null,
     personaId: null,
+    connectionId: null,
+    metadata: {},
+    lastMessageAt: null,
+    updatedAt: "2026-07-17T00:00:00.000Z",
+  }, {
+    id: "chat-persona-a",
+    name: "Persona A chat",
+    mode: "roleplay",
+    characterIds: ["character-a"],
+    groupId: null,
+    personaId: "persona-a",
     connectionId: null,
     metadata: {},
     lastMessageAt: null,
@@ -550,6 +583,45 @@ async function main() {
       maxTokens: 4096,
     });
     assert.equal(keywordOnly.chunks[0]?.chunk.noteId, "world_keyword_exact");
+    await storage.updateNote("world_keyword_exact", {
+      suppressedKeywords: ["harrowmark obscryl oath"],
+    });
+    await rebuildLongTermMemoryIndexes({ root: storage.root });
+    const suppressedKeywordRecall = await retrieveLongTermMemory({
+      root: storage.root,
+      queryText: "harrowmark obscryl oath",
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      mode: "roleplay",
+      semanticWeight: 0,
+      lexicalWeight: 0,
+      graphWeight: 1,
+      keywordWeight: 1,
+      maxChunks: 5,
+      maxTokens: 4096,
+    });
+    assert.equal(
+      suppressedKeywordRecall.chunks.some((entry: any) => entry.chunk.noteId === "world_keyword_exact"),
+      false,
+      "a suppressed generated or text-derived keyword must not seed recall after rebuilding",
+    );
+    await storage.updateNote("world_keyword_exact", {
+      manualKeywords: ["harrowmark obscryl oath"],
+      suppressedKeywords: [],
+    });
+    await rebuildLongTermMemoryIndexes({ root: storage.root });
+    const restoredKeywordRecall = await retrieveLongTermMemory({
+      root: storage.root,
+      queryText: "harrowmark obscryl oath",
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      mode: "roleplay",
+      semanticWeight: 0,
+      lexicalWeight: 0,
+      graphWeight: 0,
+      keywordWeight: 1,
+      maxChunks: 5,
+      maxTokens: 4096,
+    });
+    assert.equal(restoredKeywordRecall.chunks[0]?.chunk.noteId, "world_keyword_exact");
     const keywordThresholded = await retrieveLongTermMemory({
       root: storage.root,
       queryText: "harrowmark obscryl oath",
@@ -733,15 +805,21 @@ async function main() {
     await storage.createNote(note("world_character_cross_chat", "chat-a", `The ${scopedRecallText} belongs to character A.`, {
       scope: { chatId: "chat-a", chatIds: ["chat-a"], characterIds: ["character-a"] },
     }));
+    await storage.createNote(note("world_character_all_chats", "chat-a", `The ${scopedRecallText} is available across every character A chat.`, {
+      scope: { characterIds: ["character-a"] },
+    }));
     await storage.createNote(note("world_character_wrong_chat", "chat-a", `The ${scopedRecallText} belongs to character B.`, {
       scope: { chatId: "chat-a", chatIds: ["chat-a"], characterIds: ["character-b"] },
     }));
     await storage.createNote(note("world_pure_chat_cross_chat", "chat-a", `The ${scopedRecallText} is old-chat-only.`));
     await storage.createNote(note("world_persona_cross_chat", "chat-a", `The ${scopedRecallText} belongs to persona A.`, {
-      scope: { chatId: "chat-a", chatIds: ["chat-a"], characterIds: ["character-a"], personaId: "persona-a" },
+      scope: { chatId: "chat-a", chatIds: ["chat-a"], personaId: "persona-a" },
+    }));
+    await storage.createNote(note("world_persona_all_chats", "chat-a", `The ${scopedRecallText} is available across every persona A chat.`, {
+      scope: { personaIds: ["persona-a"] },
     }));
     await storage.createNote(note("world_group_cross_chat", "chat-a", `The ${scopedRecallText} belongs to group A.`, {
-      scope: { chatId: "chat-a", chatIds: ["chat-a"], characterIds: ["character-a"], groupId: "group-a" },
+      scope: { groupId: "group-a" },
     }));
     await rebuildLongTermMemoryIndexes({ root: storage.root });
     const newCharacterRecall = await runtime.recall({
@@ -750,9 +828,11 @@ async function main() {
       characterIds: ["character-a"],
       messages: [{ role: "user", content: scopedRecallText }],
       debugMode: false,
-    });
-    assert.match(newCharacterRecall?.text ?? "", /belongs to character A/);
-    assert.doesNotMatch(newCharacterRecall?.text ?? "", /old-chat-only|belongs to character B|belongs to persona A|belongs to group A/);
+     });
+      assert.match(newCharacterRecall?.text ?? "", /belongs to character A/);
+      assert.match(newCharacterRecall?.text ?? "", /every character A chat/);
+      assert.doesNotMatch(newCharacterRecall?.text ?? "", /belongs to persona A|belongs to group A/);
+     assert.doesNotMatch(newCharacterRecall?.text ?? "", /old-chat-only|belongs to character B/);
     assert.doesNotMatch(
       (await runtime.recall({
         chatId: "chat-other-character",
@@ -764,24 +844,44 @@ async function main() {
       /belongs to character A/,
     );
     const personaCharacterRecall = (await runtime.recall({
-      chatId: "chat-other-persona",
+      chatId: "chat-persona-a",
       chatMode: "roleplay",
-      characterIds: ["character-a"],
+       characterIds: [],
       messages: [{ role: "user", content: scopedRecallText }],
       debugMode: false,
-    }))?.text ?? "";
-    assert.match(personaCharacterRecall, /belongs to character A/);
-    assert.doesNotMatch(personaCharacterRecall, /belongs to persona A/);
-    assert.doesNotMatch(
-      (await runtime.recall({
-        chatId: "chat-other-group",
-        chatMode: "roleplay",
-        characterIds: ["character-a"],
-        messages: [{ role: "user", content: scopedRecallText }],
-        debugMode: false,
-      }))?.text ?? "",
-      /belongs to group A/,
-    );
+     }))?.text ?? "";
+       assert.match(personaCharacterRecall, /belongs to persona A/);
+      assert.match(personaCharacterRecall, /every persona A chat/);
+      assert.doesNotMatch(
+        (await runtime.recall({
+          chatId: "chat-other-persona",
+          chatMode: "roleplay",
+           characterIds: [],
+          messages: [{ role: "user", content: scopedRecallText }],
+          debugMode: false,
+        }))?.text ?? "",
+        /every persona A chat/,
+      );
+     assert.match(
+       (await runtime.recall({
+         chatId: "chat-a",
+         chatMode: "roleplay",
+         characterIds: [],
+         messages: [{ role: "user", content: scopedRecallText }],
+         debugMode: false,
+       }))?.text ?? "",
+       /belongs to group A/,
+     );
+     assert.doesNotMatch(
+       (await runtime.recall({
+         chatId: "chat-other-group",
+         chatMode: "roleplay",
+         characterIds: [],
+         messages: [{ role: "user", content: scopedRecallText }],
+         debugMode: false,
+       }))?.text ?? "",
+       /belongs to group A/,
+     );
     const legacyReadable = await runtime.recall(input);
     assert.match(legacyReadable.text, /beneath the observatory/);
     const first = await runtime.recall(input);

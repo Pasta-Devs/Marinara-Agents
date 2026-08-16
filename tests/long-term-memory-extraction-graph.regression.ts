@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 async function main() {
   const source =
@@ -30,7 +30,7 @@ async function main() {
   const { normalizeStructuredSummaryEvidenceUnits } = await import(
     `${source}/structured-summary-normalizer.ts`
   );
-  const { resolveScopedEvidenceUnitTargets } = await import(
+  const { resolveScopedEvidenceUnitTargets, scopedVariantNoteId } = await import(
     `${source}/scoped-targets.ts`
   );
   const { ltmNoteIdSchema } = await import(
@@ -462,6 +462,44 @@ async function main() {
   );
 
   const strictStorageIds: string[][] = [];
+  const legacyScope = { chatId: "chat-a", chatIds: ["chat-a"] };
+  const legacyHash = createHash("sha256")
+    .update("ltm_scope_v1:chat:chat-a")
+    .digest("hex")
+    .slice(0, 10);
+  const legacyNoteId = `world_legacy_scope_fact_${legacyHash}`;
+  const conflictingNote = {
+    ...chat,
+    id: "world_legacy_scope_fact",
+    type: "world" as const,
+    scope: { groupId: "group-b" },
+    tags: [],
+    sections: { facts: { text: "Other scoped memory.", updatedAt: timestamp } },
+  };
+  const legacyNote = {
+    ...chat,
+    id: legacyNoteId,
+    type: "world" as const,
+    scope: legacyScope,
+    tags: [],
+    sections: { facts: { text: "Legacy scoped memory.", updatedAt: timestamp } },
+  };
+  const legacyResolution = await resolveScopedEvidenceUnitTargets({
+    units: [unit(chat, {
+      bucket: "world_fact",
+      subjectId: `legacy_scope_fact_${legacyHash}`,
+      sectionKey: "facts",
+      text: "Legacy scoped memory.",
+      links: [{ target: chat.id, relation: "extracted_from" }],
+    })],
+    existingNotes: [legacyNote, conflictingNote],
+    storage: { getNotesByIds: async () => new Map([[conflictingNote.id, conflictingNote], [legacyNote.id, legacyNote]]) },
+    scope: legacyScope,
+  });
+  assert.equal(legacyResolution.remaps.size, 0);
+  assert.equal(legacyResolution.existingNotes.some((note) => note.id === legacyNote.id), true);
+  assert.notEqual(scopedVariantNoteId("world_legacy_scope", legacyScope), legacyNoteId);
+
   const targetResolution = await resolveScopedEvidenceUnitTargets({
     units: [
       unit(chat, {

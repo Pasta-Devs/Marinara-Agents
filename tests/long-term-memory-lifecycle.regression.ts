@@ -236,7 +236,7 @@ async function main() {
       for (const copy of [
         "accepted proposals become recallable.",
         "Stable appearance can help the character remain visually consistent",
-        "This source note preserves imported material as audit evidence. It is not recalled directly; accepted derived memories appear below.",
+        "This source note preserves imported material as audit evidence. It is not recalled directly; accepted memories created from it appear below.",
         "Saving something does not mean it shows up in every reply.",
          "Import a character",
          "Note: You can use any summary.",
@@ -274,7 +274,7 @@ async function main() {
           `Generated client retains removed guidance: ${copy}`,
         );
       for (const copy of [
-        "Branch group",
+         "Chat",
         "Persona",
         "Occurred in",
         "Already applicable",
@@ -282,7 +282,7 @@ async function main() {
         "Back to Agents",
         "Add memories",
         "Clear memory search",
-        "Remove {{value1}} section",
+        "Remove {{value1}} detail",
         "{{mutation}}: {{title}}",
       ])
         assert.ok(
@@ -316,6 +316,42 @@ async function main() {
       );
       const rejectedSuggestionId = "2a1b5c7d-9e0f-4a1b-8c2d-3e4f5a6b7c8d";
       let savedNote: Record<string, unknown> | null = null;
+      const noteTimestamp = "2026-07-30T00:00:00.000Z";
+      let legacyGlobalNote = {
+        id: "world_legacy_global",
+        title: "Legacy global memory",
+        type: "world",
+        status: "active",
+        modes: ["roleplay"],
+        scope: {},
+        tags: [],
+        keywords: [],
+        links: [],
+        sections: {
+          facts: {
+            text: "Legacy global memory text.",
+            importance: "major",
+            updatedAt: noteTimestamp,
+          },
+        },
+        createdAt: noteTimestamp,
+        updatedAt: noteTimestamp,
+        version: 1,
+      };
+      const scopedDesktopNote = {
+        ...legacyGlobalNote,
+        id: "world_scoped_desktop",
+        title: "Scoped desktop memory",
+        scope: { chatId: "desktop-chat", chatIds: ["desktop-chat"] },
+        sections: {
+          facts: {
+            text: "Scoped desktop memory text.",
+            importance: "major",
+            updatedAt: noteTimestamp,
+          },
+        },
+      };
+      const availabilityPatches: Array<Record<string, unknown>> = [];
       let deletedSuggestionId: string | null = null;
       const scopeTargetQueries: string[] = [];
       const noteQueries: string[] = [];
@@ -516,7 +552,7 @@ async function main() {
         },
       ];
       let healthState: "healthy" | "degraded" = "healthy";
-      let noteTotal = 3;
+      let noteTotal = 5;
       let pendingDraftCount = 2;
       let lastInjectionRequests = 0;
       browserServer = createServer(async (request, response) => {
@@ -572,6 +608,15 @@ async function main() {
           });
         if (request.method === "GET" && url.pathname.endsWith("/settings"))
           return send(200, {});
+        if (request.method === "POST" && url.pathname.endsWith("/notes/batch"))
+          return send(200, {
+            status: "complete",
+            requestedNoteIds: ["world_artifact_lifecycle"],
+            updatedNoteIds: ["world_artifact_lifecycle"],
+            affectedNoteIds: ["world_artifact_lifecycle"],
+            skippedNoteIds: [],
+            failedNoteIds: [],
+          });
         if (
           request.method === "GET" &&
           url.pathname.endsWith("/extraction-settings")
@@ -658,19 +703,34 @@ async function main() {
         ) {
           scopeTargetQueries.push(url.search);
           return send(200, {
-            currentScope: { chatId: "empty-chat", chatIds: ["empty-chat"] },
+            currentScope: { chatId: "desktop-chat", chatIds: ["desktop-chat"] },
             chats: [
+              {
+                id: "desktop-chat",
+                label: "Desktop chat",
+                 mode: "conversation",
+                 groupId: null,
+                 personaId: "persona-a",
+                 characterIds: ["character-a"],
+              },
               {
                 id: "memory-chat",
                 label: "Memory chat",
-                mode: "roleplay",
-                groupId: null,
-                characterIds: ["character-a"],
+                 mode: "roleplay",
+                 groupId: "conversation-a",
+                 personaId: "persona-a",
+                 characterIds: ["character-a"],
               },
             ],
-            groups: [],
+            groups: [
+              {
+                id: "conversation-a",
+                label: "Conversation A",
+                chatIds: ["memory-chat"],
+              },
+            ],
             characters: [{ id: "character-a", label: "Character A" }],
-            personas: [],
+             personas: [{ id: "persona-a", label: "Persona A" }],
           });
         }
         if (request.method === "GET" && url.pathname.endsWith("/notes")) {
@@ -717,12 +777,37 @@ async function main() {
               updatedAt: "2026-07-30T00:00:00.000Z",
               version: 1,
             },
+            {
+              id: "world_outside_current_chat",
+              title: "Memory outside current chat",
+              type: "world",
+              status: "active",
+              modes: ["roleplay"],
+              scope: { chatId: "memory-chat", chatIds: ["memory-chat"] },
+              tags: [],
+              keywords: [],
+              links: [],
+              sections: {
+                facts: {
+                  text: "This memory belongs to another chat.",
+                  importance: "major",
+                  updatedAt: "2026-07-30T00:00:00.000Z",
+                },
+              },
+              createdAt: "2026-07-30T00:00:00.000Z",
+              updatedAt: "2026-07-30T00:00:00.000Z",
+              version: 1,
+            },
+            legacyGlobalNote,
+            scopedDesktopNote,
           ];
           return send(
             200,
             url.searchParams.get("scopeCharacterIds") === "character-a"
               ? notes.filter((note) => note.id === "world_second_mobile")
-              : notes,
+              : url.searchParams.get("scopeChatIds") === "desktop-chat"
+                ? notes.filter((note) => note.id !== "world_outside_current_chat")
+                : notes,
           );
         }
         if (
@@ -750,6 +835,32 @@ async function main() {
             updatedAt: "2026-07-30T00:00:00.000Z",
             version: 1,
           });
+        if (
+          request.method === "GET" &&
+          url.pathname.endsWith(`/notes/${legacyGlobalNote.id}`)
+        )
+          return send(200, legacyGlobalNote);
+        if (
+          request.method === "GET" &&
+          url.pathname.endsWith(`/notes/${scopedDesktopNote.id}`)
+        )
+          return send(200, scopedDesktopNote);
+        if (
+          request.method === "PATCH" &&
+          url.pathname.endsWith(`/notes/${legacyGlobalNote.id}`)
+        ) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          const patch = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+          availabilityPatches.push(patch);
+          legacyGlobalNote = {
+            ...legacyGlobalNote,
+            ...patch,
+            updatedAt: noteTimestamp,
+            version: legacyGlobalNote.version + 1,
+          };
+          return send(200, { note: legacyGlobalNote });
+        }
         if (
           request.method === "POST" &&
           url.pathname.endsWith("/import/preview")
@@ -971,14 +1082,140 @@ async function main() {
         document.body.append(element);
       }, packageManifest.version);
       await page.locator('[data-ltm-surface="detail"]').waitFor();
-      await page.waitForFunction(
-        () =>
-          document.querySelector("[data-ltm-browser-controls]") &&
-          document.querySelectorAll("[data-ltm-browser-controls] select")[1]
-            ?.value === "",
+      await page.locator('[data-ltm-browser-controls]').waitFor();
+      const memoryScope = page.locator("[data-ltm-memory-scope]");
+      await memoryScope.locator(":scope > summary").waitFor();
+      assert.equal(
+        await memoryScope.locator(":scope > summary").innerText(),
+        "Currently viewing memories in:desktop chat",
       );
-      await page.waitForFunction(() =>
-        document.body.textContent?.includes("Second mobile review memory"),
+      assert.equal(
+        await page.getByText("Memory outside current chat").count(),
+        0,
+      );
+      await memoryScope.locator(":scope > summary").click();
+      const scopeControlStyle = await memoryScope
+        .locator(":scope > summary")
+        .evaluate((element) => {
+          const chevron = element.querySelector<SVGElement>(
+            "[data-ltm-memory-scope-chevron]",
+          );
+          const label = element.querySelector<HTMLElement>("span");
+          const style = getComputedStyle(element);
+          return {
+            display: style.display,
+            fontFamily: style.fontFamily,
+            chevronAfterLabel: Boolean(chevron && label && chevron.getBoundingClientRect().left >= label.getBoundingClientRect().right),
+          };
+        });
+      assert.equal(scopeControlStyle.display, "flex");
+      assert.ok(scopeControlStyle.fontFamily.length > 0);
+      assert.equal(scopeControlStyle.chevronAfterLabel, true);
+      assert.equal(
+        await memoryScope
+          .locator('[data-ltm-memory-scope-target="character:character-a"]')
+          .textContent(),
+        "Character A",
+      );
+        assert.equal(
+          await memoryScope
+            .locator('[data-ltm-memory-scope-picker="chat"]')
+            .locator(":scope > summary")
+            .innerText(),
+          "ChatDesktop chat",
+        );
+      assert.equal(
+        await memoryScope
+          .locator('[data-ltm-memory-scope-picker="branch"]')
+          .getByText("All branches", { exact: true })
+          .count(),
+        1,
+      );
+       await memoryScope
+         .locator('[data-ltm-memory-scope-picker="character"] > summary')
+         .press("Enter");
+       assert.equal(
+         await memoryScope
+           .locator('[data-ltm-memory-scope-picker="character"]')
+            .evaluate((picker) => (picker as HTMLDetailsElement).open),
+         true,
+       );
+       const characterPickerStyle = await memoryScope
+         .locator('[data-ltm-memory-scope-picker="character"]')
+         .evaluate((picker) => {
+           const summary = picker.querySelector<HTMLElement>("summary")!;
+           const chevron = summary.querySelector<SVGElement>(
+             "[data-ltm-memory-scope-chevron]",
+           )!;
+           const target = picker.querySelector<HTMLElement>(
+             '[data-ltm-memory-scope-target="character:character-a"]',
+           )!;
+           const targetStyle = getComputedStyle(target);
+           return {
+             chevronTransform: getComputedStyle(chevron).transform,
+             targetBackground: targetStyle.backgroundColor,
+             targetFontWeight: Number.parseInt(targetStyle.fontWeight, 10),
+           };
+         });
+       assert.notEqual(characterPickerStyle.chevronTransform, "none");
+       assert.notEqual(characterPickerStyle.targetBackground, "rgba(0, 0, 0, 0)");
+       assert.ok(characterPickerStyle.targetFontWeight >= 600);
+         await page
+           .locator('[data-ltm-memory-scope-target="character:character-a"]')
+           .focus();
+         await page
+           .locator('[data-ltm-memory-scope-target="character:character-a"]')
+           .press("Enter");
+         await page.waitForFunction(() =>
+           document.activeElement ===
+           document.querySelector('[data-ltm-memory-scope-picker="character"] > summary'),
+         );
+        assert.equal(
+          await memoryScope
+            .locator('[data-ltm-memory-scope-picker="character"]')
+           .evaluate((picker) => (picker as HTMLDetailsElement).open),
+          false,
+        );
+        for (const kind of ["chat", "branch", "status", "sort"]) {
+          const picker = page.locator(`[data-ltm-memory-scope-picker="${kind}"]`);
+          const summary = picker.locator(":scope > summary");
+          await summary.focus();
+          await summary.press("Enter");
+           await picker.locator('[data-ltm-memory-scope-target$=":all"]').focus();
+           await picker.locator('[data-ltm-memory-scope-target$=":all"]').press("Enter");
+          await page.waitForFunction(
+            (selector) => document.activeElement === document.querySelector(selector),
+            `[data-ltm-memory-scope-picker="${kind}"] > summary`,
+            { timeout: 5000 },
+          );
+        }
+        const memoryGroupSummary = page.locator('[data-ltm-memory-group="world"] > summary');
+        await page.evaluate(() => {
+          document.body.tabIndex = -1;
+          document.body.focus();
+        });
+        for (let index = 0; index < 200; index += 1) {
+          if (await memoryGroupSummary.evaluate((summary) => summary.matches(":focus"))) break;
+          await page.keyboard.press("Tab");
+        }
+        const memoryGroupFocus = await memoryGroupSummary.evaluate((summary) => ({
+          outlineStyle: getComputedStyle(summary).outlineStyle,
+          outlineWidth: getComputedStyle(summary).outlineWidth,
+          height: summary.getBoundingClientRect().height,
+        }));
+        assert.notEqual(memoryGroupFocus.outlineStyle, "none");
+        assert.ok(memoryGroupFocus.height >= 44, JSON.stringify(memoryGroupFocus));
+        await page.evaluate(() => document.body.removeAttribute("tabindex"));
+       await memoryScope
+         .locator('[data-ltm-memory-scope-picker="character"] > summary')
+         .click();
+       await page
+         .locator('[data-ltm-memory-scope-target="character:all"]')
+         .click();
+      await page.locator('[data-ltm-memory-group="world"] > summary').click();
+      await page.getByText("Memory outside current chat").waitFor();
+      assert.ok(
+        noteQueries.some((query) => !query.includes("scopeChatIds")),
       );
       const setupGuide = page.getByRole("button", { name: "Show setup guide" });
       await setupGuide.click();
@@ -1033,7 +1270,7 @@ async function main() {
         await page.locator("#ltm-onboarding-description ul li").count(),
         3,
       );
-      assert.deepEqual(
+        assert.deepEqual(
         await page
           .locator("#ltm-onboarding-description ul li strong")
           .allInnerTexts(),
@@ -1114,14 +1351,63 @@ async function main() {
       await page
         .locator('[data-ltm-destination-content][aria-label="Memory Vault"]')
         .waitFor();
-      await page
-        .locator(
-          '[data-ltm-navigation="desktop"] [data-ltm-destination="review"]',
-        )
-        .click();
-      await page
-        .locator('[data-ltm-review-source-select="source_mobile_review"]')
-        .click();
+       await page
+         .locator(
+           '[data-ltm-navigation="desktop"] [data-ltm-destination="review"]',
+         )
+         .click();
+       await page
+         .locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]')
+         .click();
+       await page.locator('[data-ltm-surface="vault"]').waitFor();
+       const memorySearch = page.getByLabel("Search memories");
+       await memorySearch.fill("Legacy global memory");
+       await page
+         .locator('[data-ltm-note-type="world"]')
+         .filter({ hasText: /^Legacy global memory/u })
+         .locator("button")
+         .first()
+         .click();
+       await page.getByRole("button", { name: "Choose where used" }).click();
+       await page.locator('[data-ltm-availability-workbench]').waitFor();
+       const availability = page.locator('[data-ltm-availability-workbench]');
+       await availability.getByRole("checkbox", { name: "Conversation" }).check();
+       await availability.getByRole("button", { name: "Save availability" }).click();
+       await page.waitForFunction(
+         () => document.querySelector('[data-ltm-availability-workbench]') === null,
+       );
+       assert.deepEqual(availabilityPatches.at(-1), {
+         scope: {},
+         modes: ["roleplay", "conversation"],
+       });
+        assert.deepEqual(legacyGlobalNote.scope, {});
+        assert.deepEqual(legacyGlobalNote.modes, ["roleplay", "conversation"]);
+        await memorySearch.fill("Scoped desktop memory");
+        const scopedCard = page
+          .locator('[data-ltm-note-type="world"]')
+          .filter({ hasText: /^Scoped desktop memory/u });
+        await scopedCard.waitFor();
+        await scopedCard.locator("button").first().click();
+        await page.getByRole("button", { name: "Edit availability" }).waitFor();
+        await page.getByRole("button", { name: "Edit availability" }).click();
+       await page.locator('[data-ltm-availability-workbench]').waitFor();
+       const scopedAvailability = page.locator('[data-ltm-availability-workbench]');
+       await scopedAvailability.locator('[data-ltm-availability-pills] button').first().click();
+       await scopedAvailability.locator('[role="alert"]').waitFor();
+       assert.equal(
+         await page
+           .locator('[data-ltm-availability-workbench] [role="alert"]')
+           .count(),
+         1,
+       );
+       assert.equal(availabilityPatches.length, 1);
+       await page.getByRole("button", { name: "Cancel" }).click();
+       await page
+         .locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]')
+         .click();
+        await page
+          .locator('[data-ltm-review-source-select="source_mobile_review"]')
+         .click();
       await page.locator('[data-ltm-review-mutation-toggle]').click();
       await page.evaluate(() => {
         const element = document.querySelector(
@@ -1186,6 +1472,7 @@ async function main() {
         localStorage.removeItem("marinara-long-term-memory-onboarding-v1");
       }, packageManifest.version);
       await page.locator('[data-ltm-surface="detail"]').waitFor();
+      const scopeTargetQueryCount = scopeTargetQueries.length;
       await page
         .locator(
           '[data-ltm-navigation="desktop"] [data-ltm-destination="review"]',
@@ -1406,7 +1693,12 @@ async function main() {
         .locator('[data-ltm-source-tab="lorebooks"][aria-selected="true"]')
         .waitFor();
       await page.locator('[data-ltm-source-tab="chats"]').click();
-      assert.equal(scopeTargetQueries[0], "?chatId=desktop-chat");
+      assert.equal(
+        scopeTargetQueries.slice(scopeTargetQueryCount).includes(
+          "?includeAllChats=true&chatId=desktop-chat",
+        ),
+        true,
+      );
       await page
         .locator(
           '[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]',
@@ -1519,21 +1811,13 @@ async function main() {
       assert.equal(lastInjectionRequests, 3);
       assert.equal(await lastInjection.getByText("Retained memory").count(), 0);
       assert.equal(await lastInjection.getByText("42 tokens").count(), 0);
-      await page
-        .locator('[aria-label="Character"]')
-        .selectOption("character-a");
-      await page.waitForFunction(
-        () =>
-          document.querySelector('[aria-label="Character"]')?.value ===
-          "character-a",
-      );
       await page.waitForFunction(() =>
         document.body.textContent?.includes("Second mobile review memory"),
       );
-      const characterNoteQuery = new URLSearchParams(noteQueries.at(-1));
-      assert.equal(characterNoteQuery.get("scopeCharacterIds"), "character-a");
-      assert.equal(characterNoteQuery.get("scopeChatIds"), "memory-chat");
-      assert.equal(characterNoteQuery.get("includeGlobal"), "false");
+      assert.equal(
+        noteQueries.at(-1),
+        "?scopeChatIds=desktop-chat&includeGlobal=false&limit=500&offset=0",
+      );
       assert.equal(
         await page.locator('[data-ltm-surface="overview"]').count(),
         0,
@@ -1609,7 +1893,11 @@ async function main() {
         .locator('[data-ltm-review-source-select="source_mobile_review"]')
         .waitFor();
       assert.ok(reviewQueries.length > 0);
-      assert.ok(reviewQueries.every((query) => query === "?status=pending"));
+      assert.ok(
+        reviewQueries.every(
+          (query) => query === "?includeInvalidated=true",
+        ),
+      );
       assert.ok(rejectedSuggestionQueries.length > 0);
       assert.ok(rejectedSuggestionQueries.every((query) => query === ""));
       await page.setViewportSize({ width: 390, height: 844 });
@@ -1678,8 +1966,8 @@ async function main() {
         [
           { destination: "review", top: true, left: true },
           { destination: "vault", top: true, left: true },
-        ],
-      );
+          ],
+        );
       assert.equal(
         await page.locator('[data-ltm-workspace-pane-tab="workbench"]').count(),
         0,
@@ -1915,11 +2203,20 @@ async function main() {
       );
       await page.locator("[data-ltm-rejected-suggestions] > summary").click();
       await page.getByRole("button", { name: /^Recover suggestion:/u }).click();
-      await page.locator("[data-ltm-note-editor]").waitFor();
-      await page.locator("[data-ltm-details-toggle]").click();
-      await page.waitForFunction(
-        () =>
-          document.querySelectorAll("[data-ltm-workspace-pane-tab]").length ===
+       await page.locator("[data-ltm-note-editor]").waitFor();
+       await page.locator("[data-ltm-details-toggle]").click();
+       await page
+         .locator('[data-ltm-linked-memories] > summary')
+         .click();
+       assert.equal(
+         await page
+           .locator('[data-ltm-linked-memories]')
+           .evaluate((section) => (section as HTMLDetailsElement).open),
+         true,
+       );
+       await page.waitForFunction(
+         () =>
+           document.querySelectorAll("[data-ltm-workspace-pane-tab]").length ===
           0,
       );
       assert.equal(
@@ -2054,46 +2351,239 @@ async function main() {
         document.documentElement.style.fontSize = "";
       });
       await page.setViewportSize({ width: 1280, height: 900 });
-      page.once("dialog", (dialog) => void dialog.accept());
-      await page
-        .locator(
-          '[data-ltm-control="navigation"][data-ltm-destination="review"]',
-        )
-        .first()
-        .click();
-      await page.locator("[data-ltm-rejected-suggestions]").waitFor();
-      if (
-        !(await page
-          .locator("[data-ltm-rejected-suggestions]")
-          .evaluate((element) => (element as HTMLDetailsElement).open))
-      ) {
-        await page.locator("[data-ltm-rejected-suggestions] > summary").click();
-      }
-      await page.getByRole("button", { name: /^Recover suggestion:/u }).click();
-      await page.locator("[data-ltm-note-editor]").waitFor();
+      await page.locator("[data-ltm-details-toggle]").click();
       assert.equal(
         await page
           .locator("[data-ltm-details-toggle]")
           .getAttribute("aria-pressed"),
         "false",
       );
-      assert.equal(
-        await page.locator('[data-ltm-workspace-pane="inspector"]').count(),
-        0,
-      );
-      const cleanupRequest = page.waitForRequest(
-        (request) =>
-          request.method() === "DELETE" &&
-          request
-            .url()
-            .includes(`/rejected-suggestions/${rejectedSuggestionId}`),
-      );
-      await page.getByRole("button", { name: "Save", exact: true }).click();
-      await cleanupRequest;
-      await page.locator('[data-ltm-status="success"]').waitFor();
-      assert.equal(await page.locator('[role="alert"]').count(), 0);
-      assert.equal(deletedSuggestionId, rejectedSuggestionId);
-      assert.equal(savedNote?.type, "world");
+        assert.equal(
+          await page.locator('[data-ltm-workspace-pane="inspector"]').count(),
+          0,
+        );
+        await page.getByRole("button", { name: "Choose where used" }).click();
+        await page.locator('[data-ltm-availability-picker] > summary').click();
+        const availabilityTabs = page.locator("[data-ltm-availability-tabs]");
+       await availabilityTabs.waitFor();
+        assert.deepEqual(
+          await availabilityTabs.locator('[role="tab"]').evaluateAll((tabs) =>
+           tabs.map((tab) => ({
+             kind: tab.getAttribute("data-ltm-availability-tab"),
+             selected: tab.getAttribute("aria-selected"),
+             tabIndex: tab.getAttribute("tabindex"),
+             count: tab.querySelector("[data-ltm-availability-count]")?.textContent,
+           })),
+         ),
+         [
+           { kind: "character", selected: "true", tabIndex: "0", count: "0" },
+           { kind: "persona", selected: "false", tabIndex: "-1", count: "0" },
+            { kind: "chat", selected: "false", tabIndex: "-1", count: "1" },
+            { kind: "branch", selected: "false", tabIndex: "-1", count: "1" },
+          ],
+        );
+        assert.equal(
+          await availabilityTabs
+            .locator('[data-ltm-availability-tab="persona"] span')
+            .first()
+            .innerText(),
+          "Persona",
+        );
+        assert.equal(
+          await availabilityTabs
+            .locator('[data-ltm-availability-tab="chat"] span')
+            .first()
+            .innerText(),
+          "Chat",
+        );
+        const desktopRailLayout = await availabilityTabs.evaluate((rail) => {
+         const tablist = rail.querySelector<HTMLElement>('[role="tablist"]')!;
+         const tabs = [...rail.querySelectorAll<HTMLElement>('[role="tab"]')];
+         const rects = tabs.map((tab) => tab.getBoundingClientRect());
+         const panel = rail.querySelector<HTMLElement>('[role="tabpanel"]')!;
+         const panelRect = panel.getBoundingClientRect();
+         const tablistRect = tablist.getBoundingClientRect();
+         const template = getComputedStyle(tablist).gridTemplateColumns;
+         return {
+           columns: template.startsWith("repeat(4,") ? 4 : template.split(/\s+/u).length,
+           sameRow: rects.every((rect) => Math.abs(rect.top - rects[0]!.top) <= 1),
+           equalWidths: rects.every((rect) => Math.abs(rect.width - rects[0]!.width) <= 1),
+           panelBelowTabs: panelRect.top >= tablistRect.bottom,
+           panelWidth: panelRect.width,
+           tablistWidth: tablistRect.width,
+         };
+       });
+        assert.deepEqual(
+          {
+            columns: desktopRailLayout.columns,
+            sameRow: desktopRailLayout.sameRow,
+            equalWidths: desktopRailLayout.equalWidths,
+            panelBelowTabs: desktopRailLayout.panelBelowTabs,
+          },
+          {
+            columns: 4,
+            sameRow: true,
+            equalWidths: true,
+            panelBelowTabs: true,
+          },
+        );
+        assert.ok(
+          Math.abs(desktopRailLayout.panelWidth - desktopRailLayout.tablistWidth) <= 0.5,
+        );
+         await availabilityTabs.locator('[data-ltm-availability-tab="chat"]').click();
+         assert.equal(
+           await availabilityTabs.locator('[data-ltm-availability-target="chat:all"]').getAttribute("aria-pressed"),
+           "true",
+         );
+         await availabilityTabs.locator('[data-ltm-availability-tab="branch"]').click();
+         assert.equal(
+           await availabilityTabs.locator('[data-ltm-availability-target="branch:all"]').getAttribute("aria-pressed"),
+           "true",
+         );
+         await availabilityTabs.locator('[data-ltm-availability-tab="character"]').click();
+       const characterTab = availabilityTabs.locator('[data-ltm-availability-tab="character"]');
+       const personaTab = availabilityTabs.locator('[data-ltm-availability-tab="persona"]');
+       await characterTab.press("ArrowRight");
+       assert.equal(await personaTab.getAttribute("aria-selected"), "true");
+       assert.equal(
+         await availabilityTabs.locator('[role="tabpanel"]').getAttribute("aria-labelledby"),
+         await personaTab.getAttribute("id"),
+       );
+       await personaTab.press("Home");
+       assert.equal(await characterTab.getAttribute("aria-selected"), "true");
+       await characterTab.press("End");
+       assert.equal(
+         await availabilityTabs.locator('[data-ltm-availability-tab="branch"]').getAttribute("aria-selected"),
+         "true",
+       );
+       await characterTab.click();
+        await availabilityTabs.locator('[data-ltm-availability-search="character"]').fill("Character");
+        await availabilityTabs.locator('[data-ltm-availability-target="character:character-a"]').click();
+       assert.equal(
+         await availabilityTabs.locator('[data-ltm-availability-target="character:character-a"]').getAttribute("aria-pressed"),
+         "true",
+       );
+       await personaTab.click();
+       assert.equal(await characterTab.getAttribute("aria-selected"), "false");
+       assert.equal(await personaTab.getAttribute("aria-selected"), "true");
+       await characterTab.click();
+       assert.equal(
+         await availabilityTabs.locator('[data-ltm-availability-search="character"]').inputValue(),
+         "Character",
+       );
+       await page.setViewportSize({ width: 320, height: 720 });
+       const mobileRailLayout = await availabilityTabs.evaluate((rail) => {
+         const tablist = rail.querySelector<HTMLElement>('[role="tablist"]')!;
+         const panel = rail.querySelector<HTMLElement>('[role="tabpanel"]')!;
+         const tablistRect = tablist.getBoundingClientRect();
+         const panelRect = panel.getBoundingClientRect();
+         return {
+           columns: getComputedStyle(tablist).gridTemplateColumns.split(/\s+/u).length,
+           panelBelowTabs: panelRect.top >= tablistRect.bottom,
+           pageFits: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+         };
+       });
+        assert.deepEqual(mobileRailLayout, {
+          columns: 1,
+          panelBelowTabs: true,
+          pageFits: true,
+        });
+       await page.setViewportSize({ width: 1280, height: 900 });
+       await personaTab.click();
+       await page
+         .locator('[data-ltm-availability-target="persona:persona-a"]')
+         .click();
+       await page
+         .locator('[data-ltm-availability-tab="chat"]')
+         .click();
+       await page
+         .locator('[data-ltm-availability-target="chat:conversation-a"]')
+         .click();
+       await page
+         .locator('[data-ltm-availability-tab="branch"]')
+         .click();
+       await page
+         .locator('[data-ltm-availability-target="branch:memory-chat"]')
+         .click();
+       assert.equal(await page.getByText("Groups", { exact: true }).count(), 0);
+        await page.getByRole("button", { name: "Save availability" }).click();
+       await page.locator('[data-ltm-select-mode]').click();
+       const selectableWorldNotes = page.locator(
+         '[data-ltm-note-type="world"] input[type="checkbox"]',
+       );
+       assert.ok(await selectableWorldNotes.count() >= 2);
+       const worldGroup = page.locator('[data-ltm-memory-group="world"]');
+        if (!(await worldGroup.evaluate((group) => (group as HTMLDetailsElement).open))) {
+         await worldGroup.locator(":scope > summary").click();
+       }
+       await selectableWorldNotes.nth(0).check();
+       await selectableWorldNotes.nth(1).check();
+       await page.locator('[data-ltm-bulk-availability]').click();
+       const bulkAvailability = page.locator('[data-ltm-bulk-availability-workbench]');
+       await bulkAvailability.waitFor();
+       const bulkRail = bulkAvailability.locator('[data-ltm-availability-tabs]');
+       await bulkRail.waitFor();
+       assert.deepEqual(
+         await bulkRail.evaluate((rail) => ({
+           railRadius: getComputedStyle(rail).borderRadius,
+           tabRadius: getComputedStyle(rail.querySelector<HTMLElement>('[role="tab"]')!).borderRadius,
+           pageFits: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+         })),
+         { railRadius: "0px", tabRadius: "0px", pageFits: true },
+        );
+        await bulkRail.locator('[data-ltm-availability-tab="character"]').click();
+        await bulkRail.locator('[data-ltm-availability-target="character:character-a"]').click();
+        assert.equal(
+          await bulkRail.locator('[data-ltm-availability-target="character:character-a"]').getAttribute("aria-pressed"),
+          "true",
+        );
+         await bulkRail.locator('[data-ltm-availability-tab="chat"]').click();
+         assert.equal(
+           await bulkRail.locator('[data-ltm-availability-target="chat:all"]').getAttribute("aria-pressed"),
+           "true",
+         );
+         await bulkRail.locator('[data-ltm-availability-tab="branch"]').click();
+         assert.equal(
+           await bulkRail.locator('[data-ltm-availability-target="branch:all"]').getAttribute("aria-pressed"),
+           "true",
+         );
+        await bulkRail.locator('[data-ltm-availability-tab="persona"]').click();
+        await bulkRail.locator('[data-ltm-availability-target="persona:persona-a"]').click();
+         assert.equal(
+           await bulkRail.locator('[data-ltm-availability-target="persona:persona-a"]').getAttribute("aria-pressed"),
+           "true",
+         );
+         const bulkAvailabilityResponse = page.waitForResponse(
+           (response) =>
+             response.request().method() === "POST" &&
+             response.url().includes("/api/long-term-memory/notes/batch"),
+         );
+         const bulkAvailabilityRequest = page.waitForRequest(
+          (request) =>
+            request.method() === "POST" &&
+            request.url().includes("/api/long-term-memory/notes/batch"),
+        );
+        await bulkAvailability.getByRole("button", { name: "Apply" }).click();
+         const bulkAvailabilityPayload = (await bulkAvailabilityRequest).postDataJSON();
+         assert.deepEqual(bulkAvailabilityPayload.addScope, {
+          characterIds: ["character-a"],
+           personaIds: ["persona-a"],
+         });
+         assert.equal((await bulkAvailabilityResponse).status(), 200);
+        await page.locator('[data-ltm-note-editor]').waitFor();
+        const cleanupRequest = page.waitForRequest(
+          (request) =>
+            request.method() === "DELETE" &&
+            request
+              .url()
+              .includes(`/rejected-suggestions/${rejectedSuggestionId}`),
+        );
+        await page.getByRole("button", { name: "Save", exact: true }).click();
+        await cleanupRequest;
+        await page.locator('[data-ltm-status="success"]').waitFor();
+        assert.equal(await page.locator('[role="alert"]').count(), 0);
+        assert.equal(deletedSuggestionId, rejectedSuggestionId);
+        assert.equal(savedNote?.type, "world");
       await page
         .locator(
           '[data-ltm-control="navigation"][data-ltm-destination="sources"]',
@@ -2785,7 +3275,7 @@ async function main() {
         type: "world",
         status: "active",
         modes: ["roleplay"],
-        scope: {},
+        scope: { characterIds: ["character-a"] },
         tags: ["artifact_lifecycle"],
         keywords: ["artifact", "lifecycle"],
         links: [],

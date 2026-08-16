@@ -18,13 +18,19 @@ import { nowIso, uniqueStrings } from "./ltm-utils.js";
 import { isLtmSourceExtractionFingerprintCurrent } from "./source-hash.js";
 import { LongTermMemoryStorage } from "./storage.js";
 
-export type ProjectLtmDraftReviewOptions = { root?: string; sourceNoteId?: string; chatId?: string; status?: LtmDraftStatus };
+export type ProjectLtmDraftReviewOptions = { root?: string; sourceNoteId?: string; chatId?: string; status?: LtmDraftStatus; includeInvalidated?: boolean };
 type MutableSource = { sourceNoteId: string; modes: Set<LtmNote["modes"][number]>; drafts: LtmDraftReviewDraft[]; targets: Map<string, LtmDraftReviewTarget> };
 
 export async function projectLongTermMemoryDraftReview(options: ProjectLtmDraftReviewOptions = {}): Promise<LtmDraftReviewResponse> {
   const store = new LongTermMemoryDraftStore(options.root);
   const storage = new LongTermMemoryStorage(options.root);
-  const drafts = (await store.listDrafts({ status: options.status ?? "pending", chatId: options.chatId })).sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+  const drafts = (await store.listDrafts({ chatId: options.chatId }))
+    .filter((draft) =>
+      options.status
+        ? draft.status === options.status
+        : draft.status === "pending" || (options.includeInvalidated && draft.status === "invalidated"),
+    )
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
   const overlay = await storage.getNotesByIds(uniqueStrings(drafts.flatMap((draft) => draft.mutations.map(noteIdForLtmDraftMutation))));
   const sourceNotes = await storage.getNotesByIds(uniqueStrings(drafts.map((draft) => draft.source.sourceNoteId)));
   const sources = new Map<string, MutableSource>();
@@ -71,7 +77,7 @@ export async function projectLongTermMemoryDraftReview(options: ProjectLtmDraftR
     counts: {
       sources: projectedSources.length,
       drafts: projectedSources.reduce((sum, source) => sum + source.drafts.length, 0),
-      mutations: projectedSources.reduce((sum, source) => sum + source.drafts.reduce((draftSum, item) => draftSum + item.draft.mutations.length, 0), 0),
+      mutations: projectedSources.reduce((sum, source) => sum + source.drafts.reduce((draftSum, item) => draftSum + (item.draft.status === "pending" ? item.draft.mutations.length : 0), 0), 0),
       blockedDrafts: projectedSources.reduce((sum, source) => sum + source.drafts.filter((item) => item.blockReasons.length).length, 0),
       candidateRejections: projectedSources.reduce((sum, source) => sum + source.drafts.reduce((draftSum, item) => draftSum + item.candidateRejections.length, 0), 0),
       deduplications: projectedSources.reduce((sum, source) => sum + source.drafts.reduce((draftSum, item) => draftSum + item.deduplications.length, 0), 0),
@@ -81,6 +87,7 @@ export async function projectLongTermMemoryDraftReview(options: ProjectLtmDraftR
 
 function draftFreshness(draft: LtmDraftReviewDraft["draft"], source: LtmNote | null): LtmDraftFreshness {
   if (draft.status === "superseded") return "superseded";
+  if (draft.status === "invalidated") return "invalidated";
   if (draft.status !== "pending") return "not_pending";
   if (!source) return "missing";
   if (!isLtmSourceLikeNote(source)) return "invalid";
@@ -95,6 +102,7 @@ function blockReasonsForDraft(draft: LtmDraftReviewDraft["draft"], freshness: Lt
     : freshness === "hashless" ? { code: "source_context_unbound" as const, message: "This legacy draft is not bound to its extraction context. Extract the source again before applying it." }
     : freshness === "stale" ? { code: "source_stale" as const, message: "The source or extraction context changed after this extraction." }
     : freshness === "superseded" ? { code: "draft_superseded" as const, message: "A newer extraction superseded this draft." }
+    : freshness === "invalidated" ? { code: "draft_invalidated" as const, message: draft.invalidationReason ?? "A targeted memory detail was deleted." }
     : freshness === "not_pending" ? { code: "draft_not_pending" as const, message: "This draft is no longer pending review." } : null;
   if (reason) reasons.push(reason);
   if (!draft.mutations.length) reasons.push({ code: "no_mutations", message: "No mutation survived extraction." });

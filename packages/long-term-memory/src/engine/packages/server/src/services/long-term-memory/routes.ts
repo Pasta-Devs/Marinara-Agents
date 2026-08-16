@@ -37,7 +37,11 @@ import {
   ltmInteropPreviewResponseSchema,
   ltmRepairRequestSchema,
   ltmRepairResponseSchema,
+  ltmRenameNoteSectionRequestSchema,
+  ltmRenameNoteSectionPreviewResponseSchema,
+  ltmRenameNoteSectionResponseSchema,
   ltmStatusResponseSchema,
+  ltmWriteScopeSchema,
   ltmScopeSchema,
   ltmSectionKeySchema,
   ltmSectionSchema,
@@ -78,6 +82,7 @@ import {
   rebuildLongTermMemoryIndexes,
 } from "./rebuild.js";
 import { readLtmIndexState, readLtmNoteSummary } from "./index-state.js";
+import { readLtmActivityEvents } from "./activity-index.js";
 import { CURRENT_LTM_CHUNK_FORMAT_VERSION } from "./chunking.js";
 import { retrieveLongTermMemory } from "./retrieval.js";
 import { applyLongTermMemoryDraft } from "./reconciliation.js";
@@ -101,6 +106,8 @@ import {
 } from "./interop.js";
 import {
   getLtmScopeChatIds,
+  getLtmScopeGroupIds,
+  getLtmScopePersonaIds,
   isGlobalLtmScope,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 import {
@@ -160,8 +167,10 @@ const listNotesQuery = z
     tag: ltmIdentifierSchema.optional(),
     scopeChatIds: scopedIds,
     scopeGroupId: z.string().min(1).max(120).optional(),
+    scopeGroupIds: scopedIds,
     scopeCharacterIds: scopedIds,
     scopePersonaId: z.string().min(1).max(120).optional(),
+    scopePersonaIds: scopedIds,
     includeGlobal: queryBoolean,
     offset: z.coerce.number().int().min(0).default(0),
     limit: z.coerce.number().int().min(1).max(500).default(100),
@@ -171,6 +180,12 @@ const scopeTargetsQuery = z
   .object({
     chatId: z.string().min(1).max(120).optional(),
     includeAllChats: queryBoolean,
+  })
+  .strict();
+const noteEventsQuery = z
+  .object({
+    noteId: ltmNoteIdSchema,
+    limit: z.coerce.number().int().min(1).max(20).default(5),
   })
   .strict();
 
@@ -229,9 +244,11 @@ const createNoteBody = z
     type: ltmNoteTypeSchema.exclude(["source"]),
     status: ltmStatusSchema,
     modes: z.array(ltmModeSchema).min(1).max(8),
-    scope: ltmScopeSchema.default({}),
+    scope: ltmWriteScopeSchema.default({}),
     tags: z.array(ltmIdentifierSchema).max(100).default([]),
     keywords: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
+    manualKeywords: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
+    suppressedKeywords: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
     createdAt: ltmIsoTimestampSchema.optional(),
     updatedAt: ltmIsoTimestampSchema.optional(),
     links: z.array(ltmLinkSchema).max(250).default([]),
@@ -240,19 +257,46 @@ const createNoteBody = z
     subjects: ltmSubjectsSchema.optional(),
     version: z.number().int().min(1).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((note, ctx) => {
+    if (
+      note.scope.chatId ||
+      note.scope.chatIds?.length ||
+      note.scope.groupId ||
+      note.scope.groupIds?.length ||
+      note.scope.characterIds?.length ||
+      note.scope.personaId ||
+      note.scope.personaIds?.length
+    )
+      return;
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["scope"],
+      message: "Choose at least one place where this memory is available.",
+    });
+  });
 const updateNoteBody = z
   .object({
     title: ltmNoteTitleSchema.optional(),
     status: ltmStatusSchema.optional(),
     modes: z.array(ltmModeSchema).min(1).max(8).optional(),
-    scope: ltmScopeSchema.optional(),
+    scope: ltmWriteScopeSchema.optional(),
     tags: z.array(ltmIdentifierSchema).max(100).optional(),
     keywords: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
+    manualKeywords: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
+    suppressedKeywords: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
     links: z.array(ltmLinkSchema).max(250).optional(),
     sections: z.record(ltmSectionKeySchema, ltmSectionSchema).optional(),
     conflicts: z.array(ltmConflictSchema).max(250).optional(),
     subjects: ltmSubjectsSchema.optional(),
+    removedSectionKeys: z
+      .array(ltmSectionKeySchema)
+      .max(100)
+      .refine(
+        (keys) => new Set(keys).size === keys.length,
+        "Removed section keys must be unique.",
+      )
+      .optional(),
   })
   .strict()
   .refine(
@@ -263,13 +307,15 @@ const removeScopeBody = z
   .object({
     chatIds: z.array(z.string().min(1).max(120)).max(100).optional(),
     groupId: z.string().min(1).max(120).optional(),
+    groupIds: z.array(z.string().min(1).max(120)).max(100).optional(),
     characterIds: z.array(z.string().min(1).max(120)).max(100).optional(),
+    personaIds: z.array(z.string().min(1).max(120)).max(100).optional(),
   })
   .strict()
   .refine(
     (value) =>
       Boolean(
-        value.chatIds?.length || value.groupId || value.characterIds?.length,
+        value.chatIds?.length || value.groupId || value.groupIds?.length || value.characterIds?.length || value.personaIds?.length,
       ),
     "At least one scope link is required.",
   );
@@ -279,12 +325,14 @@ const removeCurrentChatBody = z
 const applyDerivedBody = z
   .object({
     chatIds: z.array(z.string().min(1).max(120)).max(100).optional(),
+    groupIds: z.array(z.string().min(1).max(120)).max(100).optional(),
     characterIds: z.array(z.string().min(1).max(120)).max(100).optional(),
+    personaIds: z.array(z.string().min(1).max(120)).max(100).optional(),
   })
   .strict()
   .refine(
-    (value) => Boolean(value.chatIds?.length || value.characterIds?.length),
-    "Provide at least one chat or character link to apply.",
+     (value) => Boolean(value.chatIds?.length || value.groupIds?.length || value.characterIds?.length || value.personaIds?.length),
+     "Provide at least one scope link to apply.",
   );
 const searchBody = z
   .object({
@@ -315,6 +363,7 @@ const draftReviewQuery = z
     sourceNoteId: ltmNoteIdSchema.optional(),
     chatId: z.string().min(1).max(120).optional(),
     status: ltmDraftStatusSchema.optional(),
+    includeInvalidated: queryBoolean,
   })
   .strict();
 const rejectedSuggestionsQuery = z
@@ -365,6 +414,28 @@ function routeError(error: unknown, fallback: string) {
   };
 }
 
+function vaultNoteValidationError(note: {
+  title?: string;
+  type: string;
+  subjects?: unknown[];
+  sections?: Record<string, { text?: string }>;
+  links?: Array<{ target?: string; relation?: string }>;
+  conflicts?: Array<{ resolution?: string }>;
+}) {
+  if (!note.title?.trim()) return "A memory title is required.";
+  if (!note.sections || !Object.keys(note.sections).length)
+    return "A memory must include at least one detail.";
+  if (Object.values(note.sections).some((section) => !section.text?.trim()))
+    return "Every memory detail needs text.";
+  if (note.type === "character" && note.subjects?.length !== 1)
+    return "Character memories must have exactly one subject.";
+  if (note.type === "relationship" && note.subjects?.length !== 2)
+    return "Relationship memories must have exactly two subjects.";
+  if (note.links?.some((link) => !link.target || !link.relation))
+    return "Every linked memory needs a memory and relationship.";
+  return null;
+}
+
 export function createLongTermMemoryRoutes(runtime: {
   root: string;
   storage: LongTermMemoryStorage;
@@ -372,14 +443,16 @@ export function createLongTermMemoryRoutes(runtime: {
 }): FastifyPluginAsync {
   return async (app) => {
     const { root, storage, draftStore } = runtime;
-    const rebuildAfterMutation = async () => {
+    const rebuildAfterMutation = async (ordinaryEditorMutation = false) => {
       try {
         const result = await rebuildLongTermMemoryIndexes({ root });
         return { status: "complete" as const, ...result };
       } catch (error) {
         logger.warn(
           error,
-          "[ltm] Deferred index rebuild after maintenance mutation",
+          ordinaryEditorMutation
+            ? "[ltm] Recall index rebuild failed after editor mutation"
+            : "[ltm] Deferred index rebuild after maintenance mutation",
         );
         return {
           status: "deferred" as const,
@@ -451,6 +524,18 @@ export function createLongTermMemoryRoutes(runtime: {
       if (!parsed.success)
         return reply.status(400).send({ error: parsed.error.message });
       return { events: await readLtmDebugLog(parsed.data, root) };
+    });
+    app.get<{ Querystring: unknown }>("/events", async (request, reply) => {
+      const parsed = noteEventsQuery.safeParse(request.query);
+      if (!parsed.success)
+        return reply.status(400).send({ error: parsed.error.message });
+      return {
+        events: await readLtmActivityEvents(
+          root,
+          parsed.data.noteId,
+          parsed.data.limit,
+        ),
+      };
     });
     app.get("/debug-log/export", async (_request, reply) =>
       reply
@@ -564,19 +649,23 @@ export function createLongTermMemoryRoutes(runtime: {
       const scope =
         query.scopeChatIds?.length ||
         query.scopeGroupId ||
+        query.scopeGroupIds?.length ||
         query.scopeCharacterIds?.length ||
-        query.scopePersonaId
+        query.scopePersonaId ||
+        query.scopePersonaIds?.length
           ? {
               ...(query.scopeChatIds?.length
                 ? { chatIds: query.scopeChatIds, chatId: query.scopeChatIds[0] }
                 : {}),
               ...(query.scopeGroupId ? { groupId: query.scopeGroupId } : {}),
+              ...(query.scopeGroupIds?.length ? { groupIds: query.scopeGroupIds } : {}),
               ...(query.scopeCharacterIds?.length
                 ? { characterIds: query.scopeCharacterIds }
                 : {}),
               ...(query.scopePersonaId
                 ? { personaId: query.scopePersonaId }
                 : {}),
+              ...(query.scopePersonaIds?.length ? { personaIds: query.scopePersonaIds } : {}),
             }
           : undefined;
       const notes = await storage.listNotes({
@@ -644,15 +733,13 @@ export function createLongTermMemoryRoutes(runtime: {
             (characterId) => characterIds.add(characterId),
           );
         }
-        if (
-          note.scope.groupId &&
-          eligibleChats.some((chat) => chat.groupId === note.scope.groupId)
-        )
-          groupIds.add(note.scope.groupId);
+        for (const groupId of getLtmScopeGroupIds(note.scope)) {
+          if (eligibleChats.some((chat) => chat.groupId === groupId)) groupIds.add(groupId);
+        }
         note.scope.characterIds
           ?.filter((id) => id !== PROFESSOR_MARI_CHARACTER_ID)
           .forEach((id) => characterIds.add(id));
-        if (note.scope.personaId) personaIds.add(note.scope.personaId);
+        for (const personaId of getLtmScopePersonaIds(note.scope)) personaIds.add(personaId);
         for (const subject of note.subjects ?? []) {
           if (subject.ref?.kind === "character") characterIds.add(subject.ref.id);
           if (subject.ref?.kind === "persona") personaIds.add(subject.ref.id);
@@ -667,6 +754,7 @@ export function createLongTermMemoryRoutes(runtime: {
             label: chat.name?.trim() || "Untitled chat",
             mode: ltmModeForChatMode(chat.mode),
             groupId: chat.groupId,
+            personaId: chat.personaId,
             characterIds: normalizeLtmChatCharacterIds(chat.characterIds),
           }))
           .sort(
@@ -754,42 +842,49 @@ export function createLongTermMemoryRoutes(runtime: {
           return reply
             .status(404)
             .send({ error: "Long-term memory source note not found" });
-        const direct = notes.filter(
-          (note) =>
-            note.id !== sourceNoteId &&
-            note.links.some(
-              (link) =>
-                link.relation === "extracted_from" &&
-                link.target === sourceNoteId,
-            ),
-        );
-        const directIds = new Set(direct.map((note) => note.id));
-        const timelineIds = new Set(
-          direct
-            .filter((note) => note.type === "timeline_event")
-            .map((note) => note.id),
-        );
-        const related = [
-          ...direct,
-          ...notes.filter(
-            (note) =>
-              note.id !== sourceNoteId &&
-              !directIds.has(note.id) &&
-              note.links.some((link) => timelineIds.has(link.target)),
-          ),
-        ]
+        const linkedIds = new Set([sourceNoteId]);
+        let changed = true;
+        while (changed) {
+          changed = false;
+          for (const note of notes) {
+            if (
+              linkedIds.has(note.id) ||
+              !note.links.some(
+                (link) =>
+                  link.relation === "extracted_from" && linkedIds.has(link.target),
+              )
+            )
+              continue;
+            linkedIds.add(note.id);
+            changed = true;
+          }
+        }
+         const incomingLinkCounts = new Map<string, number>();
+         const outgoingLinkCounts = new Map(notes.map((note) => [note.id, note.links.length]));
+         for (const note of notes)
+           for (const link of note.links)
+             incomingLinkCounts.set(link.target, (incomingLinkCounts.get(link.target) ?? 0) + 1);
+        const related = notes
+          .filter((note) => note.id !== sourceNoteId && linkedIds.has(note.id))
           .sort((left, right) =>
             (left.title ?? left.id).localeCompare(right.title ?? right.id),
           )
-          .map(({ id, title, type, status, scope }) => ({
+          .map(({ id, title, type, status, scope, sections }) => ({
             id,
             ...(title ? { title } : {}),
             type,
             status,
             scope,
+            previewText:
+              Object.values(sections)[0]?.text.replace(/\s+/g, " ").trim().slice(0, 600) ??
+              "",
+             incomingLinkCount: incomingLinkCounts.get(id) ?? 0,
+             outgoingLinkCount: outgoingLinkCounts.get(id) ?? 0,
           }));
         return ltmSourceDerivedMemoriesResponseSchema.parse({
           sourceNoteId,
+           sourceIncomingLinkCount: incomingLinkCounts.get(sourceNoteId) ?? 0,
+           sourceOutgoingLinkCount: outgoingLinkCounts.get(sourceNoteId) ?? 0,
           memories: related,
         });
       },
@@ -1024,9 +1119,11 @@ export function createLongTermMemoryRoutes(runtime: {
         const parsed = createNoteBody.safeParse(request.body);
         if (!parsed.success)
           return reply.status(400).send({ error: parsed.error.message });
+        const validationError = vaultNoteValidationError(parsed.data);
+        if (validationError) return reply.status(400).send({ error: validationError });
         try {
           const note = await storage.createNote(parsed.data);
-          const rebuild = await rebuildAfterMutation();
+          const rebuild = await rebuildAfterMutation(true);
           return reply.status(201).send({ note, rebuild });
         } catch (error) {
           if (error instanceof LtmServiceError)
@@ -1057,6 +1154,8 @@ export function createLongTermMemoryRoutes(runtime: {
             .status(404)
             .send({ error: "Long-term memory note not found" });
         const patch = parsedBody.data;
+        const validationError = vaultNoteValidationError({ ...existing, ...patch });
+        if (validationError) return reply.status(400).send({ error: validationError });
         if (existing.type === "source" && patch.sections !== undefined)
           return reply.status(400).send({
             error:
@@ -1078,8 +1177,75 @@ export function createLongTermMemoryRoutes(runtime: {
           const result = routeError(error, "Could not update note.");
           return reply.status(result.statusCode).send(result.body);
         }
-        const rebuild = await rebuildAfterMutation();
+        const rebuild = await rebuildAfterMutation(true);
         return { note, rebuild };
+      },
+    );
+    app.post<{ Params: { id: string }; Body: unknown }>(
+      "/notes/:id/sections/rename-preview",
+      { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES },
+      async (request, reply) => {
+        const parsedId = ltmNoteIdSchema.safeParse(request.params.id);
+        const parsedBody = ltmRenameNoteSectionRequestSchema.safeParse(request.body);
+        if (!parsedId.success || !parsedBody.success) {
+          const result = routeError(
+            !parsedId.success ? parsedId.error : parsedBody.error,
+            "Invalid section rename.",
+          );
+          return reply.status(result.statusCode).send(result.body);
+        }
+        try {
+          return ltmRenameNoteSectionPreviewResponseSchema.parse(
+            await storage.previewNoteSectionRename(
+              parsedId.data,
+              parsedBody.data.fromSectionKey,
+              parsedBody.data.toSectionKey,
+            ),
+          );
+        } catch (error) {
+          const result = routeError(error, "Could not preview note section rename.");
+          return reply.status(result.statusCode).send(result.body);
+        }
+      },
+    );
+    app.post<{ Params: { id: string }; Body: unknown }>(
+      "/notes/:id/sections/rename",
+      { bodyLimit: MAINTENANCE_BODY_LIMIT_BYTES },
+      async (request, reply) => {
+        const parsedId = ltmNoteIdSchema.safeParse(request.params.id);
+        const parsedBody = ltmRenameNoteSectionRequestSchema.safeParse(request.body);
+        if (!parsedId.success || !parsedBody.success) {
+          const result = routeError(
+            !parsedId.success ? parsedId.error : parsedBody.error,
+            "Invalid section rename.",
+          );
+          return reply.status(result.statusCode).send(result.body);
+        }
+        try {
+          const renamed = await storage.renameNoteSection(
+            parsedId.data,
+            parsedBody.data.fromSectionKey,
+            parsedBody.data.toSectionKey,
+          );
+          const rebuildResult = await rebuildAfterMutation(true);
+          return ltmRenameNoteSectionResponseSchema.parse({
+            ...renamed,
+            rebuild:
+              rebuildResult.status === "complete"
+                ? {
+                    status: rebuildResult.status,
+                    generatedAt: rebuildResult.generatedAt,
+                    noteCount: rebuildResult.noteCount,
+                    chunkCount: rebuildResult.chunkCount,
+                    embeddedChunkCount: rebuildResult.embeddedChunkCount,
+                    embeddingsAvailable: rebuildResult.embeddingsAvailable,
+                  }
+                : rebuildResult,
+          });
+        } catch (error) {
+          const result = routeError(error, "Could not rename note section.");
+          return reply.status(result.statusCode).send(result.body);
+        }
       },
     );
     app.post<{ Params: { id: string }; Body: unknown }>(
@@ -1109,25 +1275,37 @@ export function createLongTermMemoryRoutes(runtime: {
         return { archived: true, note: notes[0], notes, rebuild };
       },
     );
-    app.post<{ Body: unknown }>("/notes/permanent-delete", async (request) => {
+    app.post<{ Body: unknown }>("/notes/permanent-delete", async (request, reply) => {
       const body = z
         .object({
-          ids: z.array(ltmNoteIdSchema).min(1).max(100),
+          ids: z.array(ltmNoteIdSchema).min(1).max(500),
           retractExtracted: z.boolean().optional().default(false),
+          excludedNoteIds: z.array(ltmNoteIdSchema).max(500).optional(),
+          lineageSourceNoteId: ltmNoteIdSchema.optional(),
+          expectedLineageNoteIds: z.array(ltmNoteIdSchema).max(1_000).optional(),
         })
         .strict()
         .parse(request.body ?? {});
-      const result = await storage.deleteNotesPermanently(body.ids, {
-        retractExtracted: body.retractExtracted,
-      });
-      const rebuild = result.deletedIds.length
-        ? await rebuildAfterMutation()
-        : null;
-      return {
-        deletedIds: result.deletedIds,
-        failedIds: result.failedIds,
-        rebuild,
-      };
+      try {
+        const result = await storage.deleteNotesPermanently(body.ids, {
+          retractExtracted: body.retractExtracted,
+          excludedNoteIds: body.excludedNoteIds,
+          lineageSourceNoteId: body.lineageSourceNoteId,
+          expectedLineageNoteIds: body.expectedLineageNoteIds,
+        });
+        const rebuild = result.deletedIds.length
+          ? await rebuildAfterMutation()
+          : null;
+        return {
+          deletedIds: result.deletedIds,
+          failedIds: result.failedIds,
+          detachedNoteIds: result.detachedNoteIds,
+          rebuild,
+        };
+      } catch (error) {
+        const result = routeError(error, "Could not permanently delete memories.");
+        return reply.status(result.statusCode).send(result.body);
+      }
     });
     app.delete<{ Params: { id: string }; Body: unknown }>(
       "/notes/:id/scope/current-chat",
@@ -1292,6 +1470,7 @@ export function createLongTermMemoryRoutes(runtime: {
           sourceNoteId: query.sourceNoteId,
           chatId: query.chatId,
           status: query.status,
+          includeInvalidated: query.includeInvalidated,
         }),
       );
     });

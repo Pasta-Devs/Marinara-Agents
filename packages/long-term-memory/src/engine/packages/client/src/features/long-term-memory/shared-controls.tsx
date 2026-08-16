@@ -102,7 +102,6 @@ export function InfoPopover({
   label,
   content,
   wide = false,
-  compact = false,
 }: {
   label: string;
   content: ReactNode;
@@ -117,16 +116,18 @@ export function InfoPopover({
   const [open, setOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
-  const closeRef = useRef<() => void>(() => undefined);
+  const closeRef = useRef<(restoreFocus?: boolean) => void>(() => undefined);
 
   const clearCloseTimer = () => {
     if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
     closeTimer.current = null;
   };
-  const close = () => {
+  const close = (restoreFocus = false) => {
     clearCloseTimer();
     setOpen(false);
     setPinned(false);
+    if (restoreFocus)
+      requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
   };
   closeRef.current = close;
   const show = () => {
@@ -172,7 +173,7 @@ export function InfoPopover({
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeRef.current();
+      if (event.key === "Escape") closeRef.current(true);
     };
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
@@ -211,12 +212,8 @@ export function InfoPopover({
         aria-controls={open ? `${id}-panel` : undefined}
         aria-describedby={open && !pinned ? `${id}-panel` : undefined}
         data-ltm-info={label}
-        className={`${compact ? "h-7 w-7" : "h-11 w-11"} inline-grid shrink-0 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]`}
-        style={
-          compact
-            ? { height: "1.75rem", width: "1.75rem", flexShrink: 0 }
-            : { height: "2.75rem", width: "2.75rem", flexShrink: 0 }
-        }
+        className="inline-grid h-11 w-11 shrink-0 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+        style={{ height: "2.75rem", width: "2.75rem", flexShrink: 0 }}
         onMouseEnter={show}
         onMouseLeave={scheduleClose}
         onFocus={show}
@@ -231,7 +228,6 @@ export function InfoPopover({
             setPinned(true);
           }
         }}
-        onMouseDown={(event) => event.preventDefault()}
       >
         <Info aria-hidden="true" size="0.875rem" />
       </button>
@@ -352,7 +348,7 @@ export function StatusSurface({
   busy?: boolean;
   compact?: boolean;
   className?: string;
-} & HTMLAttributes<HTMLParagraphElement>) {
+} & HTMLAttributes<HTMLDivElement>) {
   const toneClass = {
     neutral: "text-[var(--marinara-editor-muted)]",
     success:
@@ -362,7 +358,7 @@ export function StatusSurface({
     danger: "border-[var(--destructive)]/35 text-[var(--destructive)]",
   }[tone];
   return (
-    <p
+    <div
       role={tone === "danger" ? "alert" : "status"}
       aria-live="polite"
       data-ltm-status={tone}
@@ -377,6 +373,6 @@ export function StatusSurface({
         />
       ) : null}
       {children}
-    </p>
+    </div>
   );
 }

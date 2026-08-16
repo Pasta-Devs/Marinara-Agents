@@ -148,6 +148,13 @@ export function LtmWorkspace({
           width: 2.75rem;
           min-width: 2.75rem;
         }
+        [data-ltm-workspace] [data-ltm-workspace-switcher] {
+          background: var(--marinara-editor-control-bg);
+        }
+        [data-ltm-workspace] [data-ltm-workspace-pane-tab][data-active="true"] {
+          background: var(--background);
+          color: var(--foreground);
+        }
         @container ltm-workspace (min-width: ${compactBreakpointRem}rem) {
           [data-ltm-workspace] [data-ltm-workspace-pane] {
             min-height: 0;

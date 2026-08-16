@@ -132,7 +132,7 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
           </select>
           {styleInherited && globalSettings.data ? (
             <span className="text-[0.5625rem] text-[var(--muted-foreground)]">
-              <span className="inline-flex rounded bg-[var(--secondary)] px-1.5 py-0.5">
+              <span className="inline-flex rounded border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">
                 {localizeUi("ui.longTermMemory.chatsettings.globalDefault")}
               </span>
             </span>
@@ -156,7 +156,7 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
           />
           {budgetInherited && globalSettings.data ? (
             <span className="text-[0.5625rem] text-[var(--muted-foreground)]">
-              <span className="inline-flex rounded bg-[var(--secondary)] px-1.5 py-0.5">
+              <span className="inline-flex rounded border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">
                 {localizeUi("ui.longTermMemory.chatsettings.globalDefault")}
               </span>
             </span>
@@ -177,7 +177,7 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
           />
           {maxChunksInherited && globalSettings.data ? (
             <span className="text-[0.5625rem] text-[var(--muted-foreground)]">
-              <span className="inline-flex rounded bg-[var(--secondary)] px-1.5 py-0.5">
+              <span className="inline-flex rounded border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">
                 {localizeUi("ui.longTermMemory.chatsettings.globalDefault")}
               </span>
             </span>

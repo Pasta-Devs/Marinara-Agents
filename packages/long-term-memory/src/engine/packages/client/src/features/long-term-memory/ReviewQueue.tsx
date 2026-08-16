@@ -85,6 +85,7 @@ const freshnessLabel: Record<string, string> = {
   missing: "ui.longTermMemory.reviewqueue.sourceMissing",
   invalid: "ui.longTermMemory.reviewqueue.sourceInvalid",
   superseded: "ui.longTermMemory.reviewqueue.superseded",
+  invalidated: "ui.longTermMemory.reviewqueue.invalidated",
   not_pending: "ui.longTermMemory.reviewqueue.notPending",
 };
 
@@ -96,6 +97,7 @@ function freshnessClass(freshness: string) {
     freshness === "missing" ||
     freshness === "invalid" ||
     freshness === "superseded" ||
+    freshness === "invalidated" ||
     freshness === "not_pending"
   )
     return "border-[var(--marinara-editor-warning)]/40 text-[var(--marinara-editor-warning)]";
@@ -861,7 +863,7 @@ export default function ReviewQueue({
   const review = useQuery({
     queryKey: queryKeys.review,
     queryFn: () =>
-      request<LtmDraftReviewResponse>("/drafts/review?status=pending"),
+      request<LtmDraftReviewResponse>("/drafts/review?includeInvalidated=true"),
   });
   const rejectedSuggestions = useQuery({
     queryKey: queryKeys.rejectedSuggestions,
@@ -1110,6 +1112,16 @@ export default function ReviewQueue({
   const eligibleSelectedRows = selectedRows.filter((row) =>
     eligibleIds.has(row.mutation.id),
   );
+  const skippableDraftIds = new Set(
+    (review.data?.sources ?? []).flatMap((source) =>
+      source.drafts
+        .filter((item) => item.draft.status === "pending")
+        .map((item) => item.draft.id),
+    ),
+  );
+  const skippableSelectedRows = selectedRows.filter((row) =>
+    skippableDraftIds.has(row.draftId),
+  );
   const invalidSelectedEdits = eligibleSelectedRows.filter((row) => {
     const edited = editedById.get(row.mutation.id);
     return edited ? !selectedEditIsValid(edited) : false;
@@ -1167,7 +1179,7 @@ export default function ReviewQueue({
   ) => {
     const applicableRows =
       explicitRows ??
-      (action === "accept" ? eligibleSelectedRows : selectedRows);
+      (action === "accept" ? eligibleSelectedRows : skippableSelectedRows);
     if (!applicableRows.length) return;
     const invalidEditIds =
       action === "accept" ? invalidClosureEditIds(applicableRows) : [];
@@ -1576,21 +1588,21 @@ export default function ReviewQueue({
               {targetType ? (
                 <span
                   data-ltm-review-type={targetType}
-                  className="rounded-full bg-[var(--secondary)] px-1.5 py-0.5"
+                  className="rounded-full border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5"
                 >
                   {localizedLabel(targetType, localizeUi, labelKeys.noteType)}
                 </span>
               ) : null}
               <span
                 data-ltm-review-disposition={row.disposition}
-                className="rounded-full bg-[var(--secondary)] px-1.5 py-0.5"
+                className="rounded-full border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5"
               >
                 {dispositionLabel}
               </span>
               {mutation.kind !== "create_note" ? (
                 <span
                   data-ltm-review-operation={mutation.kind}
-                  className="rounded-full bg-[var(--secondary)] px-1.5 py-0.5"
+                  className="rounded-full border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5"
                 >
                   {mutationLabel}
                 </span>
@@ -1598,18 +1610,18 @@ export default function ReviewQueue({
               {importance ? (
                 <span
                   data-ltm-review-importance={importance}
-                  className="rounded-full bg-[var(--secondary)] px-1.5 py-0.5"
+                  className="rounded-full border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5"
                 >
                   {localizedLabel(importance, localizeUi, labelKeys.importance)}
                 </span>
               ) : null}
-              <span className="rounded-full bg-[var(--secondary)] px-1.5 py-0.5">
+              <span className="rounded-full border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">
                 {localizedLabel(row.mutation.risk, localizeUi, labelKeys.risk)} /{" "}
                 {Math.round(row.mutation.confidence * 100)}
                 {localizeUi("ui.longTermMemory.reviewqueue.confidence")}
               </span>
               {dependencyCount ? (
-                <span className="rounded-full bg-[var(--secondary)] px-1.5 py-0.5">
+                <span className="rounded-full border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">
                   {localizeUi("ui.longTermMemory.reviewqueue.dependencyHint", {
                     count: dependencyCount,
                     dependency:
@@ -1657,7 +1669,9 @@ export default function ReviewQueue({
               className="!h-11 !min-h-11 !w-11 !min-w-11"
               style={{ height: 44, minHeight: 44, width: 44, minWidth: 44 }}
               destructive
-              disabled={running !== null}
+              disabled={
+                !skippableDraftIds.has(row.draftId) || running !== null
+              }
               onClick={() => void runBatch("skip", [row])}
             />
           </div>
@@ -2362,14 +2376,14 @@ export default function ReviewQueue({
                   </Button>
                   <Button
                     destructive
-                    disabled={running !== null}
+                    disabled={!skippableSelectedRows.length || running !== null}
                     onClick={() => void runBatch("skip")}
                   >
                     {running === "skip"
                       ? localizeUi("ui.longTermMemory.reviewqueue.skipping")
                       : localizeUi(
                           "ui.longTermMemory.reviewqueue.skipSelectedValue1",
-                          { value1: selectedRows.length },
+                          { value1: skippableSelectedRows.length },
                         )}
                   </Button>
                   <Button
