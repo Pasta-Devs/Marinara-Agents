@@ -45,6 +45,19 @@ async function openSlurp(page: Page) {
   await expect(page.locator('[data-component="NoodleView"]')).toBeVisible();
 }
 
+async function getSlurpSettings(page: Page) {
+  await expect
+    .poll(
+      async () => {
+        const response = await page.request.get("/api/slurp/settings");
+        return response.ok();
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+  return page.request.get("/api/slurp/settings");
+}
+
 test.beforeEach(async ({ page }) => {
   const resetUiSettings = await page.request.put("/api/app-settings/ui", {
     data: { value: "" },
@@ -56,8 +69,7 @@ test.beforeEach(async ({ page }) => {
 test.describe("standalone Slurp package", () => {
   test("opens as an enabled pink Creator surface", async ({ page }) => {
     const errors = collectUnexpectedErrors(page);
-    const settingsResponse = await page.request.get("/api/slurp/settings");
-    expect(settingsResponse.ok()).toBe(true);
+    const settingsResponse = await getSlurpSettings(page);
     const settings = (await settingsResponse.json()) as {
       onboarding: string;
     };
@@ -103,6 +115,7 @@ test.describe("standalone Slurp package", () => {
     let stageProfileId: string | null = null;
     let postId: string | null = null;
     try {
+      await getSlurpSettings(page);
       const settingsResponse = await page.request.patch("/api/slurp/settings", {
         data: { onboarding: "completed" },
       });
