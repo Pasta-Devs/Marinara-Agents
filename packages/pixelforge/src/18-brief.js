@@ -210,7 +210,10 @@ PF.brief = (() => {
       const place = { kind, name, flavor: capText(item?.flavor, 120) };
       if (kind === "wilds") {
         place.features = [];
-        for (const feature of asArray(item?.features).slice(0, 3)) {
+        // Same kept-items rule as the settlement loop: the cap counts what we
+        // KEEP, so a leading run of junk cannot discard valid features behind it.
+        for (const feature of asArray(item?.features)) {
+          if (place.features.length >= 3) break;
           const tag = foldEnum(feature?.tag, FEATURE_TAGS, null);
           if (!tag) continue;
           place.features.push({ tag, name: capText(feature?.name, 24) || FEATURE_LABELS[tag] });
@@ -347,12 +350,16 @@ PF.brief = (() => {
     for (const place of brief.places) for (const feature of place.features ?? []) ids.features[`f${featureOrdinal++}`] = feature.name;
     brief._ids = ids;
 
-    // Global byte budget: truncate prose in reverse-leverage order.
-    const overBudget = () => JSON.stringify(brief).length > BRIEF_BYTE_BUDGET;
+    // Global byte budget: truncate prose in reverse-leverage order. Measured
+    // in UTF-8 BYTES — String.length counts UTF-16 code units, which
+    // undercounts CJK threefold (emoji fourfold vs two) and would defeat the
+    // ≤8KB contract for exactly the non-Latin briefs §2 promises to support.
+    const encoder = new TextEncoder();
+    const overBudget = () => encoder.encode(JSON.stringify(brief)).length > BRIEF_BYTE_BUDGET;
     if (overBudget()) for (const member of brief.cast) member.persona = "";
     if (overBudget()) for (const place of brief.places) place.flavor = "";
     if (overBudget()) brief.flavor = "";
-    if (JSON.stringify(brief).length > BRIEF_BYTE_BUDGET) repairs.push("budget: still over after prose truncation");
+    if (overBudget()) repairs.push("budget: still over after prose truncation");
 
     brief._repairs = repairs;
     return brief;
@@ -439,15 +446,19 @@ PF.brief = (() => {
    *  themed defaults. Transient outcomes — 404 route-absent, 409, 429, 5xx,
    *  network error, budget timeout — return NULL so the caller leaves the
    *  chat unsealed and the next boot simply tries again. */
-  async function generate(chatId, { theme, seed, preferences, onProgress, budgetMs = 90_000 }) {
+  async function generate(
+    chatId,
+    { theme, seed, preferences, onProgress, budgetMs = 90_000, busyWaitMs = Math.min(15_000, budgetMs / 6) },
+  ) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), budgetMs);
     try {
       const base = { instructions: guidance(theme), userContent: capPreferences(preferences), schema: schema() };
       let response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
       if (response.status === 409) {
-        // chat_busy ships Retry-After: 15 — wait it out once inside the budget.
-        await new Promise((resolve) => setTimeout(resolve, Math.min(15_000, budgetMs / 6)));
+        // chat_busy ships Retry-After: 15 — wait it out once inside the budget
+        // (busyWaitMs is a timer seam so the harness never sleeps for real).
+        await new Promise((resolve) => setTimeout(resolve, busyWaitMs));
         if (!controller.signal.aborted) response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
       }
       const rawOf = (r) => (r.status === 422 && r.body?.truncated && typeof r.body.raw === "string" ? r.body.raw : null);

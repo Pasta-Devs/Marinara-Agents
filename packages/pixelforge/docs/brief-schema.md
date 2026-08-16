@@ -1,9 +1,10 @@
 # The World Brief — schema v1 (sealed spec)
 
 **Architecture:** the LLM decides *what exists*, the algorithm decides *where every tile goes.*
-One structured call at game creation (engine route `POST /api/game/:chatId/experience-generation`,
-#5135) turns the wizard's preferences into a compact **brief**; a deterministic compiler builds the
-tile world from `compile(brief, seed)` forever after. This document is the contract between them.
+One structured call at game creation (engine #5135, route
+`POST /api/game/:chatId/experience-generation`) turns the wizard's preferences into a compact
+**brief**; a deterministic compiler builds the tile world from `compile(brief, seed)` forever
+after. This document is the contract between them.
 
 Synthesized from a three-draft adversarial panel (minimal-enum ×  repair-first base, judged by a
 cost skeptic and the compiler author). Design rule inherited from the product discussion: **the form
@@ -129,8 +130,8 @@ response is **never stored** (checkpoints capture by value — see #5110).
      (leader > host > grower > maker > merchant > guard > healer > scholar > folk).
 6. **Quality floors** (valid-but-degenerate briefs — the weak-local-model shape): after repair,
    enforce ≥2 distinct households (split by seed), ≥2 zones (synthesize one wilds), ≥3 distinct
-   tints (rotate by seed), no 4×-duplicate feature tag (replace by seed from the theme's placer
-   list). Every top-up derives from `hash(seed, floorName)`.
+   tints (rotate by seed), and no feature tag on more than TWO kept slots (the surplus re-rolls
+   by seed from the theme's placer list). Every top-up derives from `hash(seed, floorName)`.
 
 **Global budget:** the sealed brief must serialize ≤8 KB; over-budget briefs truncate prose fields
 in reverse-leverage order (`persona`s → zone `flavor`s → `flavor`) before anything structural.

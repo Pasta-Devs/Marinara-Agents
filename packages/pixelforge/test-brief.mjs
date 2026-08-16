@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 // Mirror the real bundle: concatenate the modules into one scope (the prelude
 // declares `const PF` itself) and return PF. The DOM helpers stay unused.
-const source = ["00-prelude.js", "10-art.js", "18-brief.js", "20-world.js", "30-sim.js", "50-spatial.js"]
+const source = ["00-prelude.js", "10-art.js", "15-assets.js", "18-brief.js", "20-world.js", "30-sim.js", "50-spatial.js"]
   .map((file) => readFileSync(join(here, "src", file), "utf8"))
   .join("\n");
 const loadedPF = new Function(`"use strict";\n${source}\nreturn PF;`)();
@@ -125,8 +125,10 @@ const ctx = { theme: "cozy-village", seed: 424242 };
   const a = JSON.stringify(brief.validate(degenerate, ctx));
   const b = JSON.stringify(brief.validate(degenerate, ctx));
   assert.equal(a, b, "validate is deterministic for a given seed");
-  const c = JSON.stringify(brief.validate(degenerate, { ...ctx, seed: 7 }));
-  assert.notEqual(a, c, "top-ups derive from the seed");
+  // Bounded-enum picks can collide between two PARTICULAR seeds, so require
+  // only that some nearby seed diverges — non-probabilistic across the set.
+  const variants = [7, 8, 9, 10, 11].map((seed) => JSON.stringify(brief.validate(degenerate, { ...ctx, seed })));
+  assert.ok(variants.some((v) => v !== a), "top-ups derive from the seed");
 }
 
 // 7. Defaults: both themes produce valid sealed briefs with the known casts.
@@ -195,9 +197,18 @@ function checkWorld(w, sealed, label) {
       assert.ok(!zone.solid[zone.w * portal.y + portal.x], `${label}: portal source in ${zone.id} is reachable`);
     }
   }
-  // Buildings honor the arithmetic: at least one roof per household group, and
-  // the settlement spawn is walkable.
+  // Buildings honor the arithmetic (§4.5): at least one roof per distinct
+  // household homed at the settlement root. (Household MERGING only kicks in
+  // under area pressure, which no harness fixture reaches — a future stress
+  // fixture that trips this assert should relax it to the merged-block count.)
   const v = w.zones.z1;
+  const rootName = sealed._ids.zones.z1;
+  const rootHouseholds = new Set(sealed.cast.filter((c) => c.home === rootName).map((c) => c.household));
+  const doorCount = v.object.filter((t) => t === "door").length;
+  assert.ok(
+    doorCount >= rootHouseholds.size,
+    `${label}: a roof per settlement household (${doorCount} doors < ${rootHouseholds.size} households)`,
+  );
   assert.ok(!v.solid[v.w * v.spawn.y + v.spawn.x], `${label}: spawn walkable`);
 }
 
@@ -230,7 +241,11 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   const doorCount = v.object.filter((t) => t === "door").length;
   assert.ok(doorCount >= 4 && doorCount <= 10, `a handful of doors (${doorCount}), never thirty`);
   assert.ok(w.zones.z2 && w.zones.z3, "hall and gathering interiors compiled");
-  const innkeeper = Object.values(w.zones).flatMap((z) => z.npcs).find((n) => n.name === "Perrin");
+  // The only fixture that proves home-to-zone binding for a NON-root home:
+  // resolve the gathering's ordinal id and assert membership in THAT zone.
+  const gatheringId = Object.entries(sealed._ids.zones).find(([, zoneName]) => zoneName === "The Wet Boot")?.[0];
+  assert.ok(gatheringId, "the gathering has an ordinal id");
+  const innkeeper = w.zones[gatheringId].npcs.find((n) => n.name === "Perrin");
   assert.ok(innkeeper, "the innkeeper lives in the gathering interior");
 }
 
@@ -424,6 +439,7 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   let dirtied = false;
   const core = { chatId: "chat-spatial", sim, markDirty: () => { dirtied = true; }, hud: { toast() {}, refreshChips() {} } };
   loadedPF.api = loadedPF.api ?? {};
+  const prevGetSpatial = loadedPF.api.getSpatial;
   loadedPF.api.getSpatial = async () => ({
     definition: { revision: 1 }, currentLocationId: "loc-root",
     breadcrumb: [{ name: "Rootville" }], destinations: [],
@@ -441,6 +457,9 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   });
   await loadedPF.spatial.refresh(core);
   assert.equal(sim.zoneId, "z1", "a stale binding degrades to staying put");
+  // Leave no stub behind: later cases must not inherit this case's spatial state.
+  loadedPF.api.getSpatial = prevGetSpatial;
+  loadedPF.spatial.reset();
 }
 
 // 22-25. The §5 failure ladder (amended): transients leave the chat UNSEALED,
@@ -448,6 +467,7 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
 // and only deterministic/paid failures seal the themed default.
 {
   loadedPF.api = loadedPF.api ?? {};
+  const prevPost = loadedPF.api.postExperienceGeneration;
   const calls = [];
   const stub = (script) => {
     let i = 0;
@@ -487,15 +507,19 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
 
   // 25. 409 chat_busy waits out Retry-After once inside the budget, then
   // succeeds; oversized preferences clamp under the route's 8,000-char cap.
+  // busyWaitMs: 0 is the timer seam — the harness never sleeps for real.
   calls.length = 0;
   stub([
     { status: 409, body: { code: "chat_busy" } },
     { status: 200, body: { ok: true, data: { scale: "hamlet", name: "Busyville", cast: [] } } },
   ]);
-  const busySeal = await brief.generate("c", { theme: "cozy-village", seed: 3, preferences: "x".repeat(9000), budgetMs: 1200 });
+  const busySeal = await brief.generate("c", { theme: "cozy-village", seed: 3, preferences: "x".repeat(9000), busyWaitMs: 0 });
   assert.equal(calls.length, 2, "busy → one wait-out retry");
   assert.ok(calls[0].userContent.length <= 7_801, "userContent clamped under the route cap");
   assert.equal(busySeal.name, "Busyville", "the wait-out retry seals the real brief");
+
+  // Leave no stub behind for later cases.
+  loadedPF.api.postExperienceGeneration = prevPost;
 }
 
 // 26. Sanitizer defeats tag reassembly and never leaks an angle bracket
@@ -517,6 +541,50 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     assert.ok(!/<script/i.test(text), "no reassembled script tag");
   }
   assert.ok(sealed.name.includes("Safeton"), "legitimate text survives");
+}
+
+// 27. Asset loader chases a theme change that lands mid-load (review finding):
+// the loading guard used to drop it, leaving the new theme procedural until an
+// unrelated reload.
+{
+  const prevFetch = globalThis.fetch;
+  const prevImage = globalThis.Image;
+  const requested = [];
+  globalThis.fetch = async (url) => ({
+    ok: true,
+    json: async () =>
+      String(url).includes("sprites.json")
+        ? { frameWidth: 12, frameHeight: 16, frames: 4, rows: ["down", "up", "left", "right"], actors: {} }
+        : { tileSize: 16, columns: 8, tiles: {} },
+  });
+  globalThis.Image = class {
+    set src(value) {
+      requested.push(String(value));
+      queueMicrotask(() => {
+        this.complete = true;
+        this.naturalWidth = 128;
+        this.onload?.();
+      });
+    }
+  };
+  try {
+    const core = { host: { packageId: "pixelforge", packageVersion: "0.4.0" } };
+    loadedPF.art.setTheme("cozy-village");
+    const first = loadedPF.assets.load(core); // in flight
+    loadedPF.art.setTheme("sci-fi-colony");
+    void loadedPF.assets.load(core); // hits the loading guard — must be QUEUED, not dropped
+    await first;
+    for (let i = 0; i < 40 && !(loadedPF.assets.status === "ready" && loadedPF.assets._requestedTheme === "sci-fi-colony"); i++) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    assert.equal(loadedPF.assets.status, "ready", "chase load settles");
+    assert.equal(loadedPF.assets.atlasTheme, "sci-fi-colony", "the mid-load theme change is chased, not dropped");
+    assert.ok(requested.some((u) => u.includes("tiles-sci-fi-colony.png")), "the themed atlas sheet was requested");
+  } finally {
+    globalThis.fetch = prevFetch;
+    globalThis.Image = prevImage;
+    loadedPF.art.setTheme("cozy-village");
+  }
 }
 
 console.log("brief validator + compiler: all cases passed");

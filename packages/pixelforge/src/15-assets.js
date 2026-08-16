@@ -47,7 +47,13 @@ PF.assets = {
 
   async load(core) {
     const theme = PF.art?.theme ?? "cozy-village";
-    if (this.status === "loading") return;
+    if (this.status === "loading") {
+      // A theme change landing mid-load must not be dropped (the generation
+      // rebuild can call load() while the boot load is still in flight):
+      // remember the newest request and chase it once this load settles.
+      this._queuedTheme = theme;
+      return;
+    }
     // The REQUESTED theme is tracked separately from the RESOLVED one: when a
     // theme has no shipped atlas the fallback sheet loads, and without this
     // distinction every props delivery would re-run a 404-fetch + full zone
@@ -96,10 +102,15 @@ PF.assets = {
       this.status = "ready";
       // Zone composites were painted with the previous tier/theme — rebuild.
       core.render?.clearZones?.();
+      // Chase a theme change that was queued while this load was in flight.
+      const queued = this._queuedTheme;
+      this._queuedTheme = null;
+      if (queued && queued !== theme) void this.load(core);
     } catch (err) {
       this.status = "failed";
       this._failedAt = Date.now();
       this._requestedTheme = null;
+      this._queuedTheme = null; // the 30s retry re-reads the live theme anyway
       console.warn("[pixelforge] Tier-1 assets unavailable, staying on procedural art", err);
     }
   },
