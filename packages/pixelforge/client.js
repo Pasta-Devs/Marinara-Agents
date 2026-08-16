@@ -2685,9 +2685,16 @@ PF.mapsExport = {
     let plan = this._plan(world, zoneIds, rootLoc);
     let missing = plan.filter((entry) => entry.create).map((entry) => entry.zoneId);
     let retriesWithoutProgress = 0;
+    let attempts = 0;
 
     // The route caps a batch at 50; worlds are far smaller, but never assume.
     while (missing.length) {
+      // Absolute budget: the no-progress counters below compare consecutive
+      // iterations, and a live editor can make `missing` OSCILLATE (archiving
+      // an adoptable flips a zone back to creation, restoring it flips it
+      // again) so consecutive comparisons alone never fire. Every response
+      // sequence must terminate.
+      if (++attempts > 8) throw new Error("too many export attempts; the map keeps changing");
       const batch = missing.slice(0, 50);
       const res = await PF.api.postSpatialLocations(chatId, {
         expectedRevision: PF.spatial.data.definition.revision,
@@ -2719,7 +2726,9 @@ PF.mapsExport = {
         const before = missing.length;
         plan = this._plan(world, zoneIds, rootLoc);
         missing = plan.filter((entry) => entry.create).map((entry) => entry.zoneId);
-        if (missing.length === before && ++retriesWithoutProgress > 2) {
+        // >= not ===: a GROWN missing list (someone archived an adoptable out
+        // from under the plan) is regression, not progress.
+        if (missing.length >= before && ++retriesWithoutProgress > 2) {
           throw new Error("definition kept moving during export");
         }
         continue;

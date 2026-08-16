@@ -1108,6 +1108,39 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     assert.ok(mapsExport._done.has(w), "the world is marked done");
   }
 
+  // 44. An oscillating map (an editor archiving/restoring an adoptable
+  // between every CAS attempt flips a zone between adoption and creation, so
+  // consecutive no-progress comparisons never fire) still terminates via the
+  // absolute attempt budget — CodeRabbit finding on #389.
+  {
+    const { w, core } = exportScaffold(5566, "chat-export-44");
+    const zoneIds = Object.keys(w.zones).filter((id) => id !== w.startZone);
+    const flipName = w.zones[zoneIds[0]].name;
+    let reads = 0;
+    const posts = [];
+    loadedPF.api.getSpatial = async () => ({
+      definition: {
+        revision: 10 + reads,
+        locations: [
+          { id: "loc-root" },
+          // Present on every OTHER read: adoption flips to creation and back,
+          // so missing.length oscillates and never repeats consecutively.
+          ...(reads++ % 2 === 0 ? [{ id: "flippy", parentId: "loc-root", name: flipName }] : []),
+        ],
+      },
+      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async () => {
+      posts.push(1);
+      return { ok: false, status: 409, body: { code: "spatial_definition_stale" } };
+    };
+    resetExportState();
+    await bindRoot(core);
+    await mapsExport.maybeSync(core);
+    assert.ok(posts.length <= 8, `the absolute budget bounds the loop (posted ${posts.length} times)`);
+    assert.ok(mapsExport._failed, "the surrender is recorded for backoff");
+  }
+
   loadedPF.api.getSpatial = prevGetSpatial;
   loadedPF.api.postSpatialLocations = prevPostLocations;
   resetExportState();
