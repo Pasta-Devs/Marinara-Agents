@@ -129,7 +129,7 @@ async function startProject(name, clientPort, serverPort) {
         DEV_SERVER_READY_TIMEOUT_MS: "180000",
         DEV_SKIP_SHARED_BUILD: "true",
         LOG_DISABLE_REQUEST_LOGGING: "true",
-        LOG_LEVEL: "info",
+        LOG_LEVEL: "silent",
         MARINARA_E2E_DISABLE_RATE_LIMIT: "true",
         MARINARA_ENV_FILE: resolve(dataDir, ".env"),
         MARINARA_GIT_BRANCH: "staging",

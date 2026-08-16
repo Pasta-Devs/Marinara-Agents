@@ -1,6 +1,5 @@
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import { slurpRoutes } from "../../routes/slurp.routes.js";
-import * as slurpSchema from "../../db/schema/slurp.js";
 import { startNoodleAutoPostScheduler } from "./slurp-autopost-scheduler.service.js";
 import { startNoodlerFanActivityScheduler } from "./slurp-fan-activity-scheduler.service.js";
 
@@ -16,7 +15,6 @@ export async function activate({
     registerPrivilegedRoutes(routes: FastifyPluginAsync, options: { prefix: string }): Promise<() => void | Promise<void>>;
   };
 }) {
-  await app.db._fileStore.registerTables(Object.values(slurpSchema));
   // Capability routes are registered through the host's revocable privileged route slots.
   // Noodle's existing plugin creates storage adapters while it registers, so
   // expose only the host database on the otherwise constrained collector.

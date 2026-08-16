@@ -50,15 +50,9 @@ async function getSlurpSettings(page: Page) {
     .poll(
       async () => {
         const response = await page.request.get("/api/slurp/settings");
-        if (!response.ok()) {
-          // TEMP DIAGNOSTIC (#375): surface the exact status/body so CI shows why /settings is not ok.
-          console.log(
-            `[diag] GET /api/slurp/settings -> ${response.status()} ${response.statusText()} :: ${(await response.text()).slice(0, 400)}`,
-          );
-        }
         return response.ok();
       },
-      { timeout: 30_000, intervals: [2_000] },
+      { timeout: 30_000 },
     )
     .toBe(true);
   return page.request.get("/api/slurp/settings");
