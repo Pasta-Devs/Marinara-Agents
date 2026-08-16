@@ -154,7 +154,11 @@ PF.mountSetup = (el, props) => {
       errEl.style.display = "block";
       return;
     }
-    const seed = (Number.parseInt(seedIn.value, 10) || PF.hashStr(seedIn.value || nameIn.value)) >>> 0;
+    // Strict parse: a purely-numeric entry (including 0) is used verbatim;
+    // anything else — "42abc" included — hashes as a text seed instead of
+    // silently truncating at the first non-digit.
+    const seedText = seedIn.value.trim();
+    const seed = (/^\d+$/.test(seedText) ? Number.parseInt(seedText, 10) : PF.hashStr(seedText || nameIn.value)) >>> 0;
     const setupConfig = {
       genre: "Cozy pixel-art village RPG (Stardew/Harvest-Moon-like), slice of life with gentle adventure",
       setting: settingIn.value.trim() || "The pixel village of Hearthvale.",

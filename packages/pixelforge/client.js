@@ -791,6 +791,12 @@ PF.Render = class {
     this._zoneCache.delete(zoneId);
   }
 
+  /** Drop every zone composite (chat/world switch): the cache is keyed by zone
+   *  id alone, so a new world's zones would otherwise reuse stale composites. */
+  clearZones() {
+    this._zoneCache.clear();
+  }
+
   _composite(z) {
     let c = this._zoneCache.get(z.id);
     if (c) return c;
@@ -1003,6 +1009,12 @@ PF.spatial = {
   /** Travel via the host generation pipeline. Refusals and 409s surface as toasts. */
   async travel(core, dest) {
     if (!this.available || !core.host?.sendMessage || core.sim?.mode !== "walk") return;
+    // One journey at a time: a second command would overwrite the first pending
+    // entry and orphan its stale-count recovery.
+    if (this.pending) {
+      core.hud?.toast("A journey is already underway.");
+      return;
+    }
     const transition = {
       destinationId: dest.id,
       expectedDefinitionRevision: this.data.definition.revision,
@@ -1011,19 +1023,25 @@ PF.spatial = {
     };
     this.pending = { commandId: transition.commandId, destinationId: dest.id, name: dest.name, staleCount: 0 };
     core.hud?.toast(`Traveling to ${dest.name}…`);
+    // A chat switch during the await runs reset(); the post-await branches must
+    // then leave the NEW chat's state alone (same guard refresh() uses).
+    const gen = this._gen;
+    const chatId = core.chatId;
     try {
       const text = `${core.sim.header()} We travel to ${dest.name}.`;
       const ok = await core.host.sendMessage(text, undefined, transition);
+      if (gen !== this._gen || core.chatId !== chatId) return;
       if (ok === false) {
         // The host refused the turn (e.g. session concluded) — nothing is in flight.
         this.pending = null;
         core.hud?.toast("The story isn't accepting turns right now.");
       }
     } catch (err) {
+      console.warn("[pixelforge] travel failed", err);
+      if (gen !== this._gen || core.chatId !== chatId) return;
       this.pending = null;
       core.hud?.toast("Travel could not start — the map may have changed. Try again.");
       await this.refresh(core);
-      console.warn("[pixelforge] travel failed", err);
     }
   },
 };
@@ -1039,6 +1057,7 @@ PF.spatial = {
 PF.save = {
   _timer: 0,
   _lastSerialized: null,
+  _flushChain: null,
 
   snapshot(core) {
     const sim = core.sim;
@@ -1075,10 +1094,11 @@ PF.save = {
   /** Restore a saved state into a freshly built world. Returns the sim. */
   restore(meta, chatId) {
     const saved = meta && typeof meta.pixelforge === "object" && meta.pixelforge !== null ? meta.pixelforge : null;
-    const seed =
-      (saved && typeof saved.seed === "number" && (saved.seed >>> 0)) ||
-      this._configSeed(meta) ||
-      PF.hashStr(String(chatId));
+    // Explicit null checks: 0 is a legitimate seed, so truthiness chaining would
+    // silently rebuild a zero-seeded world from the wrong source.
+    let seed = saved && typeof saved.seed === "number" ? saved.seed >>> 0 : null;
+    if (seed === null) seed = this._configSeed(meta);
+    if (seed === null) seed = PF.hashStr(String(chatId));
     const world = PF.world.build(seed);
     const sim = new PF.Sim(world);
     if (saved && saved.v === 1) {
@@ -1127,7 +1147,15 @@ PF.save = {
     }, 2500);
   },
 
-  async flush(core, teardown) {
+  /** Serialize flushes: a teardown flush and a debounced flush can otherwise
+   *  overlap and both send the same PATCH (the dedupe check reads
+   *  _lastSerialized, which is only written after the await). */
+  flush(core, teardown) {
+    this._flushChain = (this._flushChain ?? Promise.resolve()).then(() => this._flushNow(core, teardown));
+    return this._flushChain;
+  },
+
+  async _flushNow(core, teardown) {
     if (this._timer) {
       clearTimeout(this._timer);
       this._timer = 0;
@@ -1201,6 +1229,9 @@ PF.Hud = class {
       const pad = PF.el("button", {
         type: "button",
         "aria-label": `move ${dir}`,
+        // Pointer/touch affordance only: out of the tab order so the keyboard
+        // path stays the WASD/arrow bindings (a focused pad would swallow them).
+        tabindex: "-1",
         style:
           `position:absolute;left:${x}px;top:${y}px;width:44px;height:44px;border-radius:10px;` +
           "background:rgba(20,24,20,0.75);color:#f3efe2;border:1px solid rgba(243,239,226,0.3);font-size:15px;touch-action:none;",
@@ -1489,7 +1520,11 @@ PF.mountSetup = (el, props) => {
       errEl.style.display = "block";
       return;
     }
-    const seed = (Number.parseInt(seedIn.value, 10) || PF.hashStr(seedIn.value || nameIn.value)) >>> 0;
+    // Strict parse: a purely-numeric entry (including 0) is used verbatim;
+    // anything else — "42abc" included — hashes as a text seed instead of
+    // silently truncating at the first non-digit.
+    const seedText = seedIn.value.trim();
+    const seed = (/^\d+$/.test(seedText) ? Number.parseInt(seedText, 10) : PF.hashStr(seedText || nameIn.value)) >>> 0;
     const setupConfig = {
       genre: "Cozy pixel-art village RPG (Stardew/Harvest-Moon-like), slice of life with gentle adventure",
       setting: settingIn.value.trim() || "The pixel village of Hearthvale.",
@@ -1695,8 +1730,9 @@ PF.core = {
     PF.spatial.reset();
     this.chatId = p.chatId;
     this.sim = PF.save.restore(p.chatMeta ?? {}, p.chatId);
-    this.render?.invalidateZone("village");
-    this.render?.invalidateZone("inn");
+    // New chat, new world: drop every cached zone composite — the cache is
+    // keyed by zone id alone, so a stale entry would show the previous game.
+    this.render?.clearZones();
     this._resumeMode = "walk";
     this._combatOverride = false;
     this._lastPosSave = 0;
@@ -1951,7 +1987,13 @@ if (!customElements.get(PF_TAG)) customElements.define(PF_TAG, PixelforgeElement
 // Debug/testing handle: lets automated playtests (and future Playwright smoke
 // lanes) inspect and step the world without relying on requestAnimationFrame,
 // which browsers pause for non-composited tabs. The package runs full-trust in
-// the main realm anyway, so this exposes nothing that wasn't already reachable.
-globalThis.__pixelforge = PF;
+// the main realm anyway, so this exposes nothing that wasn't already reachable —
+// but it is still gated behind an explicit opt-in so a shipped install doesn't
+// hand other page scripts a ready-made driving handle.
+try {
+  if (globalThis.localStorage?.getItem("pixelforge-debug") === "1") globalThis.__pixelforge = PF;
+} catch {
+  // Storage access can throw in exotic embeddings; the handle just stays off.
+}
 
 })();

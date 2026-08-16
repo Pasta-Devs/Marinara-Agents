@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-16T10:04:37.894Z",
+  "generatedAt": "2026-08-16T10:20:40.262Z",
   "packages": [
     {
       "manifest": {
@@ -1226,8 +1226,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "234679835536e3c29cc336ce4c622c91c6df5cebdda8f296356a23046a6ebbce",
-            "bytes": 78250
+            "sha256": "bb83dcf233ca5996dd483eb5dea29205750cc3565501169a27c332730dea208e",
+            "bytes": 80482
           },
           {
             "path": "tiles.png",
@@ -1274,8 +1274,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/pixelforge.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/pixelforge-0.2.0.zip",
-        "sha256": "a6eeccc5cc6d4d6c97e643f691b8c12d6055434d68d577d6b7146bdc5dc2b818",
-        "bytes": 86124
+        "sha256": "abacac43474ded9c4e9792bc6fa096931cebacfcf89a4f0b9e806a83e0b09a8b",
+        "bytes": 88356
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/pixelforge/README.md"
     },

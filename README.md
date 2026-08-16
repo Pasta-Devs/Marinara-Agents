@@ -88,6 +88,7 @@ Build the shared package snapshot and all feature bundles from a neighboring Mar
 node scripts/build-agent-catalog.mjs
 node scripts/build-feature-packages.mjs
 node scripts/test-catalog-lanes.mjs
+node scripts/validate-package-locales.mjs
 node scripts/validate-catalog.mjs
 ```
 

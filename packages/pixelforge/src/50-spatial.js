@@ -93,6 +93,12 @@ PF.spatial = {
   /** Travel via the host generation pipeline. Refusals and 409s surface as toasts. */
   async travel(core, dest) {
     if (!this.available || !core.host?.sendMessage || core.sim?.mode !== "walk") return;
+    // One journey at a time: a second command would overwrite the first pending
+    // entry and orphan its stale-count recovery.
+    if (this.pending) {
+      core.hud?.toast("A journey is already underway.");
+      return;
+    }
     const transition = {
       destinationId: dest.id,
       expectedDefinitionRevision: this.data.definition.revision,
@@ -101,19 +107,25 @@ PF.spatial = {
     };
     this.pending = { commandId: transition.commandId, destinationId: dest.id, name: dest.name, staleCount: 0 };
     core.hud?.toast(`Traveling to ${dest.name}…`);
+    // A chat switch during the await runs reset(); the post-await branches must
+    // then leave the NEW chat's state alone (same guard refresh() uses).
+    const gen = this._gen;
+    const chatId = core.chatId;
     try {
       const text = `${core.sim.header()} We travel to ${dest.name}.`;
       const ok = await core.host.sendMessage(text, undefined, transition);
+      if (gen !== this._gen || core.chatId !== chatId) return;
       if (ok === false) {
         // The host refused the turn (e.g. session concluded) — nothing is in flight.
         this.pending = null;
         core.hud?.toast("The story isn't accepting turns right now.");
       }
     } catch (err) {
+      console.warn("[pixelforge] travel failed", err);
+      if (gen !== this._gen || core.chatId !== chatId) return;
       this.pending = null;
       core.hud?.toast("Travel could not start — the map may have changed. Try again.");
       await this.refresh(core);
-      console.warn("[pixelforge] travel failed", err);
     }
   },
 };

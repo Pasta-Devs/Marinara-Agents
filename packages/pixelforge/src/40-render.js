@@ -16,6 +16,12 @@ PF.Render = class {
     this._zoneCache.delete(zoneId);
   }
 
+  /** Drop every zone composite (chat/world switch): the cache is keyed by zone
+   *  id alone, so a new world's zones would otherwise reuse stale composites. */
+  clearZones() {
+    this._zoneCache.clear();
+  }
+
   _composite(z) {
     let c = this._zoneCache.get(z.id);
     if (c) return c;

@@ -23,15 +23,17 @@ Two tiers, resolved at runtime with graceful degradation:
 
 - **Tier 1 (shipped)** — the tile atlas (`tiles.png` + `atlas.json`) and 4-direction × 4-frame
   walk-cycle sprite sheets (`sprites/*.png` + `sprites.json`) generated at build time by
-  `build/build-art.mjs` with a dependency-free PNG encoder (`build/png.mjs`). Deterministic:
-  rebuilding produces byte-identical assets. Served through the engine's package-asset route via
+  `build/build-art.mjs` with a dependency-free PNG encoder (`build/png.mjs`). Deterministic for a
+  given Node.js build: the pixel data never varies, but the PNG container bytes depend on Node's
+  bundled zlib, so rebuilding on a different Node release may churn them — harmlessly, because the
+  build re-stamps every hash from its own output and CI verifies committed bytes without rebuilding. Served through the engine's package-asset route via
   `contributions.assets`.
 - **Tier 0 (fallback)** — procedural Canvas painters inside `client.js`. If assets fail to load
   (or on engines without asset serving) the game still runs, just plainer.
 
 ## Layout
 
-```
+```text
 packages/pixelforge/
 ├── src/                  # plain-JS modules, concatenated in filename order into client.js
 ├── build/
@@ -48,7 +50,7 @@ packages/pixelforge/
 
 ## Rebuilding
 
-```
+```sh
 node scripts/build-pixelforge-package.mjs
 ```
 

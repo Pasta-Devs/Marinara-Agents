@@ -1,7 +1,9 @@
 // Tier-1 art generator: deterministic, dependency-free, build-time.
 // Produces the shipped tile atlas + 4-direction × 4-frame walk-cycle sprite
 // sheets as real PNGs under assets/, richer than the runtime Tier-0 painters
-// (shading, edge highlights, full walk cycles). Runs from build.mjs.
+// (shading, edge highlights, full walk cycles). Runs from
+// scripts/build-pixelforge-package.mjs. Pixel data is deterministic for a given
+// Node.js build; the PNG container bytes depend on its zlib (see png.mjs).
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";

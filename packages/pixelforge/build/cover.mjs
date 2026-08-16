@@ -86,7 +86,7 @@ art.rect(S - 2, 0, 2, S, "#22261f");
 const cover = new Raster(S * SCALE, S * SCALE);
 for (let y = 0; y < S * SCALE; y++) {
   for (let x = 0; x < S * SCALE; x++) {
-    const i = ((y >> 3) * S + (x >> 3)) * 4;
+    const i = (Math.floor(y / SCALE) * S + Math.floor(x / SCALE)) * 4;
     const j = (y * cover.w + x) * 4;
     cover.data[j] = art.data[i];
     cover.data[j + 1] = art.data[i + 1];

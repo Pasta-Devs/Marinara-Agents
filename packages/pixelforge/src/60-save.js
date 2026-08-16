@@ -8,6 +8,7 @@
 PF.save = {
   _timer: 0,
   _lastSerialized: null,
+  _flushChain: null,
 
   snapshot(core) {
     const sim = core.sim;
@@ -44,10 +45,11 @@ PF.save = {
   /** Restore a saved state into a freshly built world. Returns the sim. */
   restore(meta, chatId) {
     const saved = meta && typeof meta.pixelforge === "object" && meta.pixelforge !== null ? meta.pixelforge : null;
-    const seed =
-      (saved && typeof saved.seed === "number" && (saved.seed >>> 0)) ||
-      this._configSeed(meta) ||
-      PF.hashStr(String(chatId));
+    // Explicit null checks: 0 is a legitimate seed, so truthiness chaining would
+    // silently rebuild a zero-seeded world from the wrong source.
+    let seed = saved && typeof saved.seed === "number" ? saved.seed >>> 0 : null;
+    if (seed === null) seed = this._configSeed(meta);
+    if (seed === null) seed = PF.hashStr(String(chatId));
     const world = PF.world.build(seed);
     const sim = new PF.Sim(world);
     if (saved && saved.v === 1) {
@@ -96,7 +98,15 @@ PF.save = {
     }, 2500);
   },
 
-  async flush(core, teardown) {
+  /** Serialize flushes: a teardown flush and a debounced flush can otherwise
+   *  overlap and both send the same PATCH (the dedupe check reads
+   *  _lastSerialized, which is only written after the await). */
+  flush(core, teardown) {
+    this._flushChain = (this._flushChain ?? Promise.resolve()).then(() => this._flushNow(core, teardown));
+    return this._flushChain;
+  },
+
+  async _flushNow(core, teardown) {
     if (this._timer) {
       clearTimeout(this._timer);
       this._timer = 0;

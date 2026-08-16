@@ -151,8 +151,9 @@ PF.core = {
     PF.spatial.reset();
     this.chatId = p.chatId;
     this.sim = PF.save.restore(p.chatMeta ?? {}, p.chatId);
-    this.render?.invalidateZone("village");
-    this.render?.invalidateZone("inn");
+    // New chat, new world: drop every cached zone composite — the cache is
+    // keyed by zone id alone, so a stale entry would show the previous game.
+    this.render?.clearZones();
     this._resumeMode = "walk";
     this._combatOverride = false;
     this._lastPosSave = 0;
@@ -407,5 +408,11 @@ if (!customElements.get(PF_TAG)) customElements.define(PF_TAG, PixelforgeElement
 // Debug/testing handle: lets automated playtests (and future Playwright smoke
 // lanes) inspect and step the world without relying on requestAnimationFrame,
 // which browsers pause for non-composited tabs. The package runs full-trust in
-// the main realm anyway, so this exposes nothing that wasn't already reachable.
-globalThis.__pixelforge = PF;
+// the main realm anyway, so this exposes nothing that wasn't already reachable —
+// but it is still gated behind an explicit opt-in so a shipped install doesn't
+// hand other page scripts a ready-made driving handle.
+try {
+  if (globalThis.localStorage?.getItem("pixelforge-debug") === "1") globalThis.__pixelforge = PF;
+} catch {
+  // Storage access can throw in exotic embeddings; the handle just stays off.
+}

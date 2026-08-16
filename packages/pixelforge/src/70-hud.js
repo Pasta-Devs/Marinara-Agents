@@ -51,6 +51,9 @@ PF.Hud = class {
       const pad = PF.el("button", {
         type: "button",
         "aria-label": `move ${dir}`,
+        // Pointer/touch affordance only: out of the tab order so the keyboard
+        // path stays the WASD/arrow bindings (a focused pad would swallow them).
+        tabindex: "-1",
         style:
           `position:absolute;left:${x}px;top:${y}px;width:44px;height:44px;border-radius:10px;` +
           "background:rgba(20,24,20,0.75);color:#f3efe2;border:1px solid rgba(243,239,226,0.3);font-size:15px;touch-action:none;",

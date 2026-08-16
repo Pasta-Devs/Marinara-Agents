@@ -36,7 +36,13 @@ export function encodePng(w, h, rgba) {
     raw[y * (w * 4 + 1)] = 0; // filter: none
     Buffer.from(rgba.buffer, rgba.byteOffset + y * w * 4, w * 4).copy(raw, y * (w * 4 + 1) + 1);
   }
-  // level 9 for determinism + size; zlib output is stable for fixed input/level
+  // level 9: deterministic for a given Node build, but zlib may change across
+  // Node releases, so a rebuild on a different Node can churn the PNG bytes.
+  // That is safe here: CI only verifies committed bytes against committed
+  // hashes (it never rebuilds), and scripts/build-pixelforge-package.mjs
+  // re-stamps manifest.files[] and the artifact from the same run's output, so
+  // a rebuild is always self-consistent. The artifact zip itself is store-only
+  // (scripts/deterministic-zip.mjs) and does not involve zlib at all.
   const idat = deflateSync(raw, { level: 9 });
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
@@ -73,7 +79,10 @@ export class Raster {
       for (let x = 0; x < src.w; x++) {
         const i = (y * src.w + x) * 4;
         if (src.data[i + 3] === 0) continue;
-        const j = ((dy + y) * this.w + (dx + x)) * 4;
+        const tx = dx + x;
+        const ty = dy + y;
+        if (tx < 0 || ty < 0 || tx >= this.w || ty >= this.h) continue;
+        const j = (ty * this.w + tx) * 4;
         this.data[j] = src.data[i];
         this.data[j + 1] = src.data[i + 1];
         this.data[j + 2] = src.data[i + 2];
