@@ -178,4 +178,47 @@ PF.Sim = class {
     const near = this.nearNpc ? `; near: ${this.nearNpc.name} (${this.nearNpc.role})` : "";
     return `[World: ${z.name}; ${this.clockLabel()}${near}]`;
   }
+
+  /** The metered turn prefix (docs/brief-schema.md §7): name+role ride the
+   *  header ALWAYS; the settlement situation injects once on the first
+   *  outbound message; a zone's flavor once on first entry; an NPC's persona
+   *  once per NPC. The one-shot flags persist in saves, so a reload never
+   *  re-taxes the context — chat history is the durable channel. Legacy
+   *  worlds carry no prose, so this degrades to header() exactly. */
+  composePrefix(npc) {
+    this.intro ??= { world: false, zones: {}, npcs: {} };
+    const parts = [this.header()];
+    // Compose is pure; the one-shot flags burn only on commitIntro(), which the
+    // senders call once the host ACCEPTS the turn — a refused or failed send
+    // must not lose the prose forever (review finding).
+    const pending = { world: false, zone: null, npc: null };
+    if (!this.intro.world && this.world.situation) {
+      parts.push(`[Setting: ${this.world.situation}]`);
+      pending.world = true;
+    }
+    const z = this.zone();
+    if (!this.intro.zones[this.zoneId] && z.flavor) {
+      parts.push(`[${z.name}: ${z.flavor}]`);
+      pending.zone = this.zoneId;
+    }
+    if (npc && npc.id && npc.persona && !this.intro.npcs[npc.id]) {
+      parts.push(`[${npc.name}: ${npc.persona}]`);
+      pending.npc = npc.id;
+    }
+    this._pendingIntro = pending;
+    return parts.join(" ");
+  }
+
+  /** Burn the one-shot flags for the last composed prefix (accepted turn). */
+  commitIntro() {
+    const pending = this._pendingIntro;
+    if (!pending) return;
+    this._pendingIntro = null;
+    if (!pending.world && !pending.zone && !pending.npc) return;
+    this.intro ??= { world: false, zones: {}, npcs: {} };
+    if (pending.world) this.intro.world = true;
+    if (pending.zone) this.intro.zones[pending.zone] = true;
+    if (pending.npc) this.intro.npcs[pending.npc] = true;
+    this.dirty = true;
+  }
 };

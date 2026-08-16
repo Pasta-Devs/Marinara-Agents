@@ -2,8 +2,13 @@
 // The deterministic bottom rung: a fixed 32-colour ramp and canvas-painted
 // tiles/sprites so the game is playable with zero assets and zero network.
 // Later tiers (authored atlas, AI bake) resolve above this and fall back here.
+//
+// THEMES (0.4.0): tile ids are SEMANTIC (grass/path/wall/roof/...), and a theme
+// re-skins them — a palette override plus, where a recolour isn't enough, a
+// painter override. The same zone grammar renders a cozy village or a sci-fi
+// colony; the semantic layer is what the world compiler targets.
 PF.art = (() => {
-  const PAL = {
+  const BASE_PAL = {
     grass1: "#3e7a44", grass2: "#356b3c", grass3: "#4b8a4f",
     leaf: "#2c5a33", leafHi: "#5aa25e", trunk: "#5b4432",
     path1: "#b39764", path2: "#a3875a", pathFleck: "#c7ab74",
@@ -19,19 +24,30 @@ PF.art = (() => {
     ink: "#22261f", white: "#f3efe2",
   };
 
+  // Painters read PAL by reference, so themes swap colours by mutating this one
+  // object in place (setTheme) — every painter and the renderer's tint code keep
+  // working untouched. Tile caches are keyed by theme, so swaps never bleed.
+  const PAL = { ...BASE_PAL };
+
   const T = PF.TILE;
 
-  /** One 16×16 tile canvas: Tier-1 (authored atlas) ?? Tier-0 (procedural). */
+  /** One 16×16 tile canvas: Tier-1 (authored atlas) ?? Tier-0 (procedural).
+   *  Tier-1 only serves the theme it was authored for; other themes stay
+   *  procedural until themed atlases ship. */
   const tileCache = new Map();
   function tile(id) {
-    const authored = PF.assets?.tileCanvas(id);
-    if (authored) return authored;
-    let c = tileCache.get(id);
+    if (activeTheme === PF.assets?.atlasTheme) {
+      const authored = PF.assets?.tileCanvas(id);
+      if (authored) return authored;
+    }
+    const cacheKey = `${activeTheme}:${id}`;
+    let c = tileCache.get(cacheKey);
     if (c) return c;
     c = PF.offscreen(T, T);
     const g = c.getContext("2d");
-    (PAINTERS[id] || PAINTERS.grass)(g, PF.rng(PF.hashStr(`tile:${id}`)));
-    tileCache.set(id, c);
+    const themePainters = THEMES[activeTheme]?.painters;
+    ((themePainters && themePainters[id]) || PAINTERS[id] || PAINTERS.grass)(g, PF.rng(PF.hashStr(`tile:${activeTheme}:${id}`)));
+    tileCache.set(cacheKey, c);
     return c;
   }
 
@@ -160,6 +176,137 @@ PF.art = (() => {
     },
   };
 
+  // ── Themes ──────────────────────────────────────────────────────────────────
+  // A theme = palette overrides + painter overrides where a recolour can't carry
+  // the meaning. Semantic ids keep their WORLD role (trunk blocks, canopy is
+  // overhead, water is liquid/impassable); only the visual story changes.
+  const THEMES = {
+    "cozy-village": {
+      label: "Cozy village",
+      palette: {},
+      painters: {},
+    },
+    "sci-fi-colony": {
+      label: "Sci-fi colony",
+      palette: {
+        // regolith ground, steel decking, hull walls, glass domes, coolant water
+        grass1: "#5a4a44", grass2: "#4e403b", grass3: "#6a5850",
+        leaf: "#3e6d74", leafHi: "#7fd4d4", trunk: "#8e99a6",
+        path1: "#7d8894", path2: "#6b7580", pathFleck: "#9aa5b1",
+        dirt: "#4a3f3a", crop: "#59c08a", cropRipe: "#b6e86a",
+        water1: "#1f8a8a", water2: "#2aa3a0", waterHi: "#8ff0e8",
+        wall: "#8b95a3", wallDark: "#5d6672", plaster: "#aeb7c2", beam: "#3f4854",
+        roof1: "#4a6a8a", roof2: "#3d5871", roofHi: "#7fb0d4",
+        floor1: "#59616c", floor2: "#4d545e", rug: "#2a6a8a",
+        stone: "#767e88", stoneDark: "#5a626c",
+        fence: "#5d6672", door: "#3f4854", doorKnob: "#8ff0e8",
+        well: "#4d545e", counter: "#3f4854",
+        night: "#101726", windowGlow: "#8fd4ff",
+      },
+      painters: {
+        // hab wall: smooth panel with a seam and rivets instead of timber framing
+        wall(g) {
+          px(g, 0, 0, T, T, PAL.plaster);
+          px(g, 0, 0, T, 1, PAL.beam);
+          px(g, 0, T - 1, T, 1, PAL.beam);
+          px(g, 7, 1, 1, T - 2, PAL.wallDark);
+          px(g, 2, 2, 1, 1, PAL.wallDark);
+          px(g, 13, 2, 1, 1, PAL.wallDark);
+          px(g, 2, 13, 1, 1, PAL.wallDark);
+          px(g, 13, 13, 1, 1, PAL.wallDark);
+        },
+        // porthole window
+        window(g) {
+          px(g, 0, 0, T, T, PAL.plaster);
+          px(g, 0, 0, T, 1, PAL.beam);
+          px(g, 0, T - 1, T, 1, PAL.beam);
+          px(g, 4, 3, 8, 10, PAL.beam);
+          px(g, 5, 4, 6, 8, PAL.water2);
+          px(g, 6, 5, 2, 2, PAL.waterHi);
+        },
+        // pressure door with a light strip instead of a knob
+        door(g) {
+          px(g, 0, 0, T, T, PAL.wallDark);
+          px(g, 2, 1, 12, 15, PAL.door);
+          px(g, 3, 2, 10, 13, PAL.beam);
+          px(g, 7, 2, 2, 13, PAL.wallDark);
+          px(g, 4, 7, 8, 2, PAL.doorKnob);
+        },
+        // solar-panel roof: cell grid with a bright specular row
+        roof(g, rnd) {
+          px(g, 0, 0, T, T, PAL.roof1);
+          for (let r = 0; r < T; r += 4) px(g, 0, r, T, 1, PAL.roof2);
+          for (let cx = 0; cx < T; cx += 4) px(g, cx, 0, 1, T, PAL.roof2);
+          dither(g, rnd, PAL.roofHi, 3);
+        },
+        // comms mast: the "tree" of the colony — steel pylon on regolith
+        trunk(g) {
+          px(g, 0, 0, T, T, PAL.grass1);
+          px(g, 7, 2, 2, 14, PAL.trunk);
+          px(g, 5, 4, 6, 1, PAL.trunk);
+          px(g, 6, 12, 4, 2, PAL.wallDark);
+        },
+        // antenna array / dome cap as the overhead layer
+        canopy(g, rnd) {
+          g.clearRect(0, 0, T, T);
+          px(g, 5, 0, 6, 2, PAL.leafHi);
+          px(g, 7, 2, 2, 3, PAL.trunk);
+          px(g, 3, 4, 10, 2, PAL.trunk);
+          px(g, 2, 5, 2, 1, PAL.leafHi);
+          px(g, 12, 5, 2, 1, PAL.leafHi);
+          dither(g, rnd, PAL.leaf, 3);
+        },
+        // hydroponics tray instead of a tilled crop row
+        crop(g, rnd) {
+          px(g, 0, 0, T, T, PAL.floor2);
+          px(g, 1, 2, T - 2, 5, PAL.beam);
+          px(g, 1, 9, T - 2, 5, PAL.beam);
+          px(g, 2, 3, T - 4, 3, PAL.dirt);
+          px(g, 2, 10, T - 4, 3, PAL.dirt);
+          dither(g, rnd, PAL.crop, 9);
+          dither(g, rnd, PAL.cropRipe, 3);
+        },
+        // atmosphere recycler where the village well stood
+        well(g) {
+          px(g, 0, 0, T, T, PAL.grass1);
+          px(g, 3, 3, 10, 11, PAL.well);
+          px(g, 4, 4, 8, 2, PAL.leafHi);
+          px(g, 4, 7, 8, 1, PAL.wallDark);
+          px(g, 4, 9, 8, 1, PAL.wallDark);
+          px(g, 4, 11, 8, 1, PAL.wallDark);
+        },
+        // guard rail instead of a wooden fence
+        fence(g) {
+          px(g, 0, 0, T, T, PAL.grass1);
+          px(g, 2, 4, 2, 10, PAL.fence);
+          px(g, 12, 4, 2, 10, PAL.fence);
+          px(g, 0, 6, T, 1, PAL.trunk);
+          px(g, 0, 9, T, 1, PAL.trunk);
+        },
+      },
+    },
+  };
+
+  let activeTheme = "cozy-village";
+
+  /** Swap the active theme: mutate PAL in place (painters and the renderer read
+   *  it by reference) and drop this module's procedural caches. Callers that
+   *  composite tiles (the zone renderer) must clear their own caches too —
+   *  world builds already do. Unknown ids resolve to the fixed default, never
+   *  whatever theme happens to be active (order-dependent worlds otherwise). */
+  function setTheme(id) {
+    const theme = THEMES[typeof id === "string" ? id : ""] ? id : "cozy-village";
+    if (theme === activeTheme) return activeTheme;
+    activeTheme = theme;
+    for (const key of Object.keys(PAL)) delete PAL[key];
+    Object.assign(PAL, BASE_PAL, THEMES[activeTheme].palette);
+    tileCache.clear();
+    actorCache.clear();
+    return activeTheme;
+  }
+
+  const themeIds = () => Object.keys(THEMES);
+
   // ── Actor sprites: 12×16 humanoid, 4 facings × 3 frames (idle, stepA, stepB)
   const actorCache = new Map();
   function actor(hue) {
@@ -217,5 +364,5 @@ PF.art = (() => {
     ctx.drawImage(strip.frames[facing][frame], dx, dy);
   }
 
-  return { PAL, tile, actor, drawActor };
+  return { PAL, tile, actor, drawActor, setTheme, themeIds, get theme() { return activeTheme; } };
 })();
