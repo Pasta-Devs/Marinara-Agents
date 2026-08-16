@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-16T13:11:03.007Z",
+  "generatedAt": "2026-08-16T13:18:43.553Z",
   "packages": [
     {
       "manifest": {
@@ -1182,12 +1182,12 @@
         },
         "builtAgainst": {
           "engineVersion": "2.4.3",
-          "engineCommit": "92af241b1f33306680d1efc5fab06e113b7fbb47"
+          "engineCommit": "315c4bc787a332133193df7ddbcb2baa295cdc13"
         },
         "id": "pixelforge",
         "name": "Pixelforge",
-        "version": "0.3.0",
-        "description": "A walkable pixel-art village RPG Experience for Game Mode: explore a closed world, talk to NPCs to drive the story, and let the GM narrate — with World Maps integration and the engine's own combat. Install it, then choose Pixelforge as the Experience when creating a Game Mode chat.",
+        "version": "0.4.0",
+        "description": "A walkable pixel-art RPG Experience for Game Mode: your setup preferences generate the world — a cozy village or a sci-fi colony — then explore it, talk to NPCs to drive the story, and let the GM narrate, with World Maps integration and the engine's own combat. Install it, then choose Pixelforge as the Experience when creating a Game Mode chat.",
         "engine": {
           "min": "2.4.3",
           "maxExclusive": "4.0.0"
@@ -1209,6 +1209,7 @@
           "assets": {
             "paths": [
               "tiles.png",
+              "tiles-sci-fi-colony.png",
               "atlas.json",
               "sprites.json",
               "sprites/player.png",
@@ -1222,18 +1223,23 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "ef05f1d047010e778527de646d1d99f501ba1feea94e01a23ab0b952449841ce",
-            "bytes": 693
+            "sha256": "779bf47b19cd641d043487d216cdc72293e41eed6a325ea967e49f67b2b3bc4a",
+            "bytes": 759
           },
           {
             "path": "client.js",
-            "sha256": "2ea998045c6b8baad640d1f625541ca3acc184be4d4f885eabbb00ec7532de70",
-            "bytes": 91019
+            "sha256": "1e8adc2a64dc0510e3aadf0afeb83fc21a2b4e061ad65ae1bc77626cf845a4b9",
+            "bytes": 160543
           },
           {
             "path": "tiles.png",
-            "sha256": "5cde968afd12c67f4c3032cfc4bcbb08fd53a48e1ec850cb34c927128cbbb657",
-            "bytes": 1261
+            "sha256": "11a6078061eea4e4055b8f4aa81afd3d4212a64fb7f8f15108772f3fdd78c540",
+            "bytes": 1244
+          },
+          {
+            "path": "tiles-sci-fi-colony.png",
+            "sha256": "9fa853c1002950b7bc2269d79e65395ab877d01a40e4084d7518969b5cd5e5e5",
+            "bytes": 1242
           },
           {
             "path": "atlas.json",
@@ -1279,9 +1285,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/pixelforge.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/pixelforge-0.3.0.zip",
-        "sha256": "145f860550a2c7316d47c93d217b49c0b644845439193d7b60f3b0894b41cbd4",
-        "bytes": 99628
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/pixelforge-0.4.0.zip",
+        "sha256": "a81c497cf54ce92d6548bb290c761486f28c75fcf3d1c1b02a134788d2e365c7",
+        "bytes": 170825
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/pixelforge/README.md"
     },

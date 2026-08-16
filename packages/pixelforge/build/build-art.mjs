@@ -13,7 +13,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const outDir = join(here, "assets");
 
 const T = 16;
-const PAL = {
+// Painters read PAL by reference; themed atlases swap it in place per emission
+// (same mechanism as the runtime Tier-0 layer in src/10-art.js).
+const BASE_PAL = {
   grass1: "#3e7a44", grass2: "#356b3c", grass3: "#4b8a4f", grassHi: "#5fae64",
   leaf: "#2c5a33", leafHi: "#5aa25e", leafShadow: "#1f4126", trunk: "#5b4432", trunkHi: "#75593f",
   path1: "#b39764", path2: "#a3875a", pathFleck: "#c7ab74", pathEdge: "#8a7350",
@@ -26,6 +28,109 @@ const PAL = {
   fence: "#7d6142", fenceHi: "#97794f", door: "#5d4530", doorKnob: "#d9c07a",
   well: "#6f6f78", counter: "#725539",
   ink: "#22261f", white: "#f3efe2",
+};
+const PAL = { ...BASE_PAL };
+
+// Themed atlases: palette overrides + shape overrides where a recolour can't
+// carry the meaning — the atlas-grade mirror of src/10-art.js's THEMES. The
+// cozy atlas keeps its legacy filename (tiles.png); others emit
+// tiles-<theme>.png with the SAME id→index map (one atlas.json serves all).
+const THEME_ART = {
+  "cozy-village": { file: "tiles.png", palette: {}, painters: {} },
+  "sci-fi-colony": {
+    file: "tiles-sci-fi-colony.png",
+    palette: {
+      grass1: "#5a4a44", grass2: "#4e403b", grass3: "#6a5850", grassHi: "#7d6a60",
+      leaf: "#3e6d74", leafHi: "#7fd4d4", leafShadow: "#2a4d52", trunk: "#8e99a6", trunkHi: "#b3bdc9",
+      path1: "#7d8894", path2: "#6b7580", pathFleck: "#9aa5b1", pathEdge: "#59626d",
+      dirt: "#4a3f3a", crop: "#59c08a", cropRipe: "#b6e86a",
+      water1: "#1f8a8a", water2: "#2aa3a0", waterHi: "#8ff0e8", waterDeep: "#166a6c",
+      wall: "#8b95a3", wallDark: "#5d6672", plaster: "#aeb7c2", plasterShadow: "#97a0ac", beam: "#3f4854",
+      roof1: "#4a6a8a", roof2: "#3d5871", roofHi: "#7fb0d4",
+      floor1: "#59616c", floor2: "#4d545e", floorHi: "#6a727e", rug: "#2a6a8a", rugHi: "#4d8cab",
+      stone: "#767e88", stoneDark: "#5a626c", stoneHi: "#939ba6",
+      fence: "#5d6672", fenceHi: "#7d8894", door: "#3f4854", doorKnob: "#8ff0e8",
+      well: "#4d545e", counter: "#3f4854",
+    },
+    painters: {
+      // Hab panel: smooth plating, one vertical seam, corner rivets.
+      wall(g) {
+        g.rect(0, 0, T, T, PAL.plaster);
+        g.rect(0, 11, T, 5, PAL.plasterShadow);
+        g.rect(0, 0, T, 1, PAL.beam); g.rect(0, T - 1, T, 1, PAL.beam);
+        g.rect(7, 1, 1, T - 2, PAL.wallDark);
+        for (const [x, y] of [[2, 2], [13, 2], [2, 13], [13, 13]]) { g.px(x, y, PAL.wallDark); g.px(x + 1, y, PAL.stoneHi); }
+      },
+      // Porthole with a bright upper arc.
+      window(g) {
+        THEME_ART["sci-fi-colony"].painters.wall(g);
+        g.rect(4, 3, 8, 10, PAL.beam);
+        g.rect(5, 4, 6, 8, PAL.water2);
+        g.rect(5, 4, 6, 2, PAL.waterHi);
+        g.px(5, 4, PAL.beam); g.px(10, 4, PAL.beam); g.px(5, 11, PAL.beam); g.px(10, 11, PAL.beam);
+      },
+      // Pressure door: split panels + light strip.
+      door(g) {
+        g.rect(0, 0, T, T, PAL.wallDark);
+        g.rect(2, 1, 12, 15, PAL.door);
+        g.rect(3, 2, 10, 13, PAL.beam);
+        g.rect(4, 3, 8, 11, PAL.door);
+        g.rect(7, 2, 2, 13, PAL.wallDark);
+        g.rect(4, 7, 8, 2, PAL.doorKnob);
+      },
+      // Solar-cell roof: grid with a specular sweep.
+      roof(g, rnd) {
+        g.rect(0, 0, T, T, PAL.roof1);
+        for (let r = 0; r < T; r += 4) g.rect(0, r, T, 1, PAL.roof2);
+        for (let c = 0; c < T; c += 4) g.rect(c, 0, 1, T, PAL.roof2);
+        g.rect(1, 1, 2, 2, PAL.roofHi); g.rect(9, 5, 2, 2, PAL.roofHi);
+        dither(g, rnd, PAL.roofHi, 2);
+      },
+      roofEdge(g, rnd) {
+        THEME_ART["sci-fi-colony"].painters.roof(g, rnd);
+        g.rect(0, T - 3, T, 3, PAL.beam); g.rect(0, T - 3, T, 1, PAL.trunkHi);
+      },
+      // Comms mast on regolith.
+      trunk(g) {
+        g.rect(0, 0, T, T, PAL.grass1);
+        g.rect(7, 2, 2, 14, PAL.trunk); g.rect(7, 2, 1, 14, PAL.trunkHi);
+        g.rect(5, 4, 6, 1, PAL.trunk);
+        g.rect(6, 12, 4, 2, PAL.wallDark);
+      },
+      // Antenna array / dome cap as the overhead layer.
+      canopy(g, rnd) {
+        g.rect(5, 0, 6, 2, PAL.leafHi);
+        g.rect(7, 2, 2, 3, PAL.trunk);
+        g.rect(3, 4, 10, 2, PAL.trunk);
+        g.rect(3, 4, 10, 1, PAL.trunkHi);
+        g.rect(2, 5, 2, 1, PAL.leafHi); g.rect(12, 5, 2, 1, PAL.leafHi);
+        dither(g, rnd, PAL.leaf, 4);
+      },
+      // Hydroponics tray rows under grow light.
+      crop(g, rnd) {
+        g.rect(0, 0, T, T, PAL.floor2);
+        g.rect(1, 2, T - 2, 5, PAL.beam); g.rect(1, 9, T - 2, 5, PAL.beam);
+        g.rect(2, 3, T - 4, 3, PAL.dirt); g.rect(2, 10, T - 4, 3, PAL.dirt);
+        for (let c = 3; c < T - 2; c += 3) { g.px(c, 4, PAL.crop); g.px(c + 1, 4 + ((rnd() * 2) | 0), PAL.cropRipe); g.px(c, 11, PAL.crop); }
+        g.rect(1, 2, T - 2, 1, PAL.leafHi);
+      },
+      // Atmosphere recycler where the village well stood.
+      well(g) {
+        g.rect(0, 0, T, T, PAL.grass1);
+        g.rect(3, 3, 10, 11, PAL.well); g.rect(3, 3, 10, 1, PAL.stoneHi);
+        g.rect(4, 4, 8, 2, PAL.leafHi);
+        for (const y of [7, 9, 11]) g.rect(4, y, 8, 1, PAL.wallDark);
+      },
+      // Guard rail instead of a wooden fence.
+      fence(g) {
+        g.rect(0, 0, T, T, PAL.grass1);
+        g.rect(2, 4, 2, 10, PAL.fence); g.px(2, 4, PAL.fenceHi);
+        g.rect(12, 4, 2, 10, PAL.fence); g.px(12, 4, PAL.fenceHi);
+        g.rect(0, 6, T, 1, PAL.trunk); g.rect(0, 9, T, 1, PAL.trunk);
+        g.px(0, 6, PAL.trunkHi);
+      },
+    },
+  },
 };
 
 const rng = (seed) => {
@@ -219,19 +324,31 @@ export function buildArt() {
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(join(outDir, "sprites"), { recursive: true });
 
-  // Atlas: 8 columns
+  // Atlases: 8 columns, one per theme, all sharing the SAME id→index map so a
+  // single atlas.json serves every theme's sheet.
   const tileIds = Object.keys(PAINTERS);
   const cols = 8;
   const rows = Math.ceil(tileIds.length / cols);
-  const atlas = new Raster(cols * T, rows * T);
   const tileMap = {};
   tileIds.forEach((id, index) => {
-    const tile = new Raster(T, T);
-    PAINTERS[id](tile, rng(hash(`tier1:${id}`)));
-    atlas.blit(tile, (index % cols) * T, Math.floor(index / cols) * T);
     tileMap[id] = index;
   });
-  writeFileSync(join(outDir, "tiles.png"), atlas.toPng());
+  const atlasFiles = [];
+  for (const [themeId, themeArt] of Object.entries(THEME_ART)) {
+    for (const key of Object.keys(PAL)) delete PAL[key];
+    Object.assign(PAL, BASE_PAL, themeArt.palette);
+    const atlas = new Raster(cols * T, rows * T);
+    tileIds.forEach((id, index) => {
+      const tile = new Raster(T, T);
+      (themeArt.painters[id] || PAINTERS[id])(tile, rng(hash(`tier1:${themeId}:${id}`)));
+      atlas.blit(tile, (index % cols) * T, Math.floor(index / cols) * T);
+    });
+    writeFileSync(join(outDir, themeArt.file), atlas.toPng());
+    atlasFiles.push(themeArt.file);
+  }
+  // Restore the base palette for the actor sheets below.
+  for (const key of Object.keys(PAL)) delete PAL[key];
+  Object.assign(PAL, BASE_PAL);
   writeFileSync(
     join(outDir, "atlas.json"),
     JSON.stringify({ tileSize: T, columns: cols, tiles: tileMap }, null, 2),
@@ -266,6 +383,6 @@ export function buildArt() {
   // the route's wildcard already namespaces under /assets/).
   return {
     dir: outDir,
-    files: ["tiles.png", "atlas.json", "sprites.json", ...Object.keys(actors).map((n) => `sprites/${n}.png`)],
+    files: [...atlasFiles, "atlas.json", "sprites.json", ...Object.keys(actors).map((n) => `sprites/${n}.png`)],
   };
 }

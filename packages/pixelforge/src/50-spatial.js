@@ -57,11 +57,15 @@ PF.spatial = {
       if (!this.available) return;
 
       const loc = data.currentLocationId;
-      // Seed the starting binding: first location we ever see maps to the exterior.
+      // Seed the starting binding: first location we ever see maps to the
+      // exterior — the world's OWN start zone, never a hardcoded id (compiled
+      // worlds key zones z1..; the legacy literal poisoned their bindings
+      // forever and broke drift-following — review blocker).
       const world = core.sim?.world;
-      if (world && Object.keys(world.bindings).length === 0) {
-        world.bindings[loc] = "village";
-        world.zones.village.spatialLocationId = loc;
+      const rootZone = world ? world.zones[world.startZone] : null;
+      if (world && rootZone && Object.keys(world.bindings).length === 0) {
+        world.bindings[loc] = world.startZone;
+        rootZone.spatialLocationId = loc;
         core.markDirty();
       }
       if (this.pending) {
@@ -75,10 +79,11 @@ PF.spatial = {
         }
       } else if (this._lastLocationId && loc !== this._lastLocationId) {
         // Narrated drift — the GM moved the party. Follow it; never compensate.
+        // Guarded on the zone existing: a stale binding must degrade, not throw.
         const zoneId = world?.bindings[loc];
-        if (zoneId && core.sim && core.sim.zoneId !== zoneId) {
-          const spawn = world.zones[zoneId].spawn;
-          core.sim.teleport(zoneId, spawn.x, spawn.y);
+        const target = zoneId ? world?.zones[zoneId] : null;
+        if (target && core.sim && core.sim.zoneId !== zoneId) {
+          core.sim.teleport(zoneId, target.spawn.x, target.spawn.y);
         }
         core.hud?.toast(`Now at: ${this.locationName() ?? loc}`);
       }
@@ -112,9 +117,10 @@ PF.spatial = {
     const gen = this._gen;
     const chatId = core.chatId;
     try {
-      const text = `${core.sim.header()} We travel to ${dest.name}.`;
+      const text = `${core.sim.composePrefix(null)} We travel to ${dest.name}.`;
       const ok = await core.host.sendMessage(text, undefined, transition);
       if (gen !== this._gen || core.chatId !== chatId) return;
+      if (ok !== false) core.sim?.commitIntro?.();
       if (ok === false) {
         // The host refused the turn (e.g. session concluded) — nothing is in flight.
         this.pending = null;

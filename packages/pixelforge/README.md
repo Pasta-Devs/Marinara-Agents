@@ -17,11 +17,35 @@ in the Experience chooser. Walk with the arrow keys / WASD or the on-screen D-pa
 drive the story, and let the GM narrate. The world saves into the chat (debounced), so reloading
 resumes where you left off.
 
+## World generation (0.4.0)
+
+Since 0.4.0 the wizard's preferences drive what the world *is*, under one rule: **the LLM decides
+what exists, the algorithm decides where every tile goes.** After launch the surface makes one
+host-run structured generation call (`POST /api/game/:chatId/experience-generation`, Engine
+2.4.3-staging+) with themed guidance and a strict schema; the model returns a compact **World
+Brief** — settlement, cast with household structure, places, features — and a deterministic
+compiler builds the tile world from it (30 villagers in 6 households → ~6 houses, never 30). The
+brief is validated, repaired, and floored (`src/18-brief.js`, spec in `docs/brief-schema.md`),
+then sealed into chat metadata; the compiled zones carry the prose the GM sees, metered so it
+never taxes more than one turn.
+
+Generation is an upgrade, never a gate: the chat boots the themed default world instantly and
+rebuilds in place when the brief lands. Any failure — timeout, truncation, provider error, or an
+engine without the route — lands on the themed default world, which plays exactly like 0.3.0.
+
+Run the validator/compiler regression harness with:
+
+```sh
+node packages/pixelforge/test-brief.mjs
+```
+
 ## Art
 
 Two tiers, resolved at runtime with graceful degradation:
 
-- **Tier 1 (shipped)** — the tile atlas (`tiles.png` + `atlas.json`) and 4-direction × 4-frame
+- **Tier 1 (shipped)** — per-theme tile atlases (`tiles.png` for cozy-village,
+  `tiles-sci-fi-colony.png` for the colony theme, both sharing one `atlas.json` id map) and
+  4-direction × 4-frame
   walk-cycle sprite sheets (`sprites/*.png` + `sprites.json`) generated at build time by
   `build/build-art.mjs` with a dependency-free PNG encoder (`build/png.mjs`). Deterministic for a
   given Node.js build: the pixel data never varies, but the PNG container bytes depend on Node's
@@ -36,6 +60,8 @@ Two tiers, resolved at runtime with graceful degradation:
 ```text
 packages/pixelforge/
 ├── src/                  # plain-JS modules, concatenated in filename order into client.js
+├── docs/brief-schema.md  # the World Brief schema v1 spec (sealed; amendments inline)
+├── test-brief.mjs        # standalone validator/compiler/spatial regression harness
 ├── build/
 │   ├── build-art.mjs     # deterministic Tier-1 art generator (writes build/assets/, untracked)
 │   ├── png.mjs           # dependency-free PNG encoder
@@ -45,7 +71,7 @@ packages/pixelforge/
 ├── agents.json           # generated — do not edit
 ├── manifest.json         # generated — do not edit
 ├── locales/en.json       # generated — do not edit
-└── tiles.png, atlas.json, sprites.json, sprites/*.png   # generated Tier-1 assets
+└── tiles*.png, atlas.json, sprites.json, sprites/*.png   # generated Tier-1 assets
 ```
 
 ## Rebuilding
