@@ -27,6 +27,55 @@ assert.match(
   "NoodleR post deletion must require and verify the owning account",
 );
 
+const slurpImages = readFileSync(
+  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-images.service.ts"),
+  "utf8",
+);
+const stageProfileDraft = readFileSync(
+  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-stage-profile-draft.service.ts"),
+  "utf8",
+);
+assert.match(
+  stageProfileDraft,
+  /This is the same public creator[\s\S]*Use exactly[\s\S]*displayName[\s\S]*handle/u,
+  "open Slurp profile creation must use the linked public identity",
+);
+assert.match(
+  stageProfileDraft,
+  /Create the same person behind a different stage name and handle[\s\S]*species[\s\S]*unusual anatomy/u,
+  "hinted Slurp profile creation must preserve recognizable physical traits without the public identity",
+);
+assert.match(
+  stageProfileDraft,
+  /Create a separate creator identity with a different display name and handle[\s\S]*fixed physical facts[\s\S]*Do not use or imply/u,
+  "secret Slurp profile creation must preserve physical traits and reject public identity clues",
+);
+assert.match(
+  stageProfileDraft,
+  /function noodlerSecretSourceText[\s\S]*Personality[\s\S]*Appearance/u,
+  "secret Slurp profile prompts must include personality and appearance context",
+);
+assert.match(
+  slurpImages,
+  /sourceAppearance[\s\S]*imageGenerationIncludeDescriptions[\s\S]*characterDescription = redactIdentity\(sourceAppearance\)/u,
+  "hidden Slurp identities must retain redacted source appearance details for image prompts",
+);
+assert.match(
+  slurpImages,
+  /input\.disclosureMode !== "secret"[\s\S]*referenceImages/u,
+  "secret Slurp identities must not receive avatar reference images",
+);
+
+const noodleHome = readFileSync(
+  join(root, "packages/noodle/src/engine/packages/client/src/components/noodle/NoodleHome.tsx"),
+  "utf8",
+);
+assert.match(
+  noodleHome,
+  /settingsContent[\s\S]*pb-\[calc\(56px\+env\(safe-area-inset-bottom\)\)\]/u,
+  "Noodle settings must reserve space for the mobile bottom navigation",
+);
+
 for (const file of files) {
   const source = readFileSync(join(root, file), "utf8");
   for (const marker of [

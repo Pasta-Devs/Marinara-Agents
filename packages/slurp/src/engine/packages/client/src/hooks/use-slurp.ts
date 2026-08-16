@@ -770,6 +770,7 @@ export function useNoodlerViewer(personaId: string | null, enabled = true) {
     },
     enabled: enabled && Boolean(personaId),
     staleTime: 10_000,
+    refetchOnMount: "always",
   });
 }
 

@@ -5793,7 +5793,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   })}
                 </div>
               </div>
-              <div>
+              <div className="pb-[calc(56px+env(safe-area-inset-bottom))] @min-[1024px]:pb-0">
                 {settingsContent}
               </div>
             </div>

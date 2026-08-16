@@ -117,17 +117,32 @@ export async function generateNoodlerPostImage(input: {
   let characterImageInstructions = "";
   let characterPersonality = "";
   let referenceImages: string[] | undefined;
-  // Identity protection applies to reference selection. A SECRET creator gets no identifying
-  // reference material at all. A HINTED creator does: the whole point of a hinted disclosure is
-  // that the same body, tattoos, and rooms keep showing up while the name never does, so the
-  // appearance carries over and only the textual identity stays protected.
+  // Identity protection applies to reference selection. A SECRET creator gets no image reference
+  // material, but keeps redacted appearance text so species and stable physical traits survive.
+  // A HINTED creator also keeps image references: the same body, tattoos, and rooms can show up
+  // while the source name and handle stay protected.
   const referenceCharacter =
     input.disclosureMode !== "secret" &&
     input.linkedPublicAccount?.kind === "character"
       ? input.linkedPublicAccount
       : null;
+  const sourceCharacter =
+    input.linkedPublicAccount?.kind === "character"
+      ? await input.characters.getById(input.linkedPublicAccount.entityId)
+      : null;
+  const sourcePersona =
+    input.linkedPublicAccount?.kind === "persona"
+      ? await input.characters.getPersona(input.linkedPublicAccount.entityId)
+      : null;
+  const sourceAppearance = sourceCharacter
+    ? characterAppearanceFromRow(sourceCharacter)
+    : sourcePersona?.appearance?.trim() || "";
+  if (sourceAppearance && input.settings.imageGenerationIncludeDescriptions) {
+    // Keep stable physical facts for hidden identities, but remove source identity terms.
+    characterDescription = redactIdentity(sourceAppearance);
+  }
   if (referenceCharacter) {
-    const row = await input.characters.getById(referenceCharacter.entityId);
+    const row = sourceCharacter;
     if (row) {
       const imageContext = characterNoodleImageContextFromRow(row);
       characterPersonality = imageContext.personality;
@@ -163,7 +178,7 @@ export async function generateNoodlerPostImage(input: {
           input.settings.imageGenerationIncludeDescriptions &&
           referenceResolution.appearanceBlock
         ) {
-          characterDescription = referenceResolution.appearanceBlock;
+          characterDescription = redactIdentity(referenceResolution.appearanceBlock);
         }
         if (
           input.settings.imageGenerationUseAvatarReferences &&

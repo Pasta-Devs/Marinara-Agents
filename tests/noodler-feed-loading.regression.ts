@@ -54,6 +54,7 @@ const viewerHook = hooks.slice(
 );
 assert.match(viewerHook, /noodler\/viewer\/feed/u);
 assert.match(viewerHook, /postsByCreator/u);
+assert.match(viewerHook, /refetchOnMount: "always"/u);
 
 const home = readFileSync(
   "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
