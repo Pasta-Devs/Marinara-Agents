@@ -232,7 +232,6 @@ test.describe("standalone Slurp package", () => {
       await slurp.getByRole("button", { name: "Settings" }).click();
       await slurp.getByRole("button", { name: "Creators", exact: true }).click();
       await slurp.getByRole("button", { name: "Add creators" }).click();
-      await slurp.getByRole("button", { name: "New profile" }).click();
       await expect(
         slurp.getByRole("button", {
           name: `S ${personaName} @slurp_viewer_${suffix} persona`,
