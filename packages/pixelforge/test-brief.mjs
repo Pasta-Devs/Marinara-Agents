@@ -443,4 +443,59 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   assert.equal(sim.zoneId, "z1", "a stale binding degrades to staying put");
 }
 
+// 22-25. The §5 failure ladder (amended): transients leave the chat UNSEALED,
+// truncation re-rolls plainly and salvages the longest raw across attempts,
+// and only deterministic/paid failures seal the themed default.
+{
+  loadedPF.api = loadedPF.api ?? {};
+  const calls = [];
+  const stub = (script) => {
+    let i = 0;
+    loadedPF.api.postExperienceGeneration = async (chatId, body) => {
+      calls.push(body);
+      return script[Math.min(i++, script.length - 1)];
+    };
+  };
+
+  // 22. Route absent (old engine) → null: unsealed, the next visit retries.
+  calls.length = 0;
+  stub([{ status: 404, body: null }]);
+  assert.equal(await brief.generate("c", { theme: "cozy-village", seed: 1, preferences: "" }), null, "404 → unsealed");
+
+  // 23. Truncated twice → plain re-roll (NO maxTokens override — the route
+  // treats it as min()-only) + longest-raw salvage across both attempts.
+  calls.length = 0;
+  const longRaw =
+    '{"scale":"village","name":"Longton","cast":[{"name":"A","kind":"folk","tint":"red","home":"Longton","household":1},{"name":"B","ki';
+  const shortRaw = '{"scale":"village","name":"Shor';
+  stub([
+    { status: 422, body: { truncated: true, raw: longRaw } },
+    { status: 422, body: { truncated: true, raw: shortRaw } },
+  ]);
+  const salvagedSeal = await brief.generate("c", { theme: "cozy-village", seed: 1, preferences: "p" });
+  assert.equal(calls.length, 2, "exactly one re-roll");
+  assert.ok(!("maxTokens" in calls[1]), "the re-roll carries no maxTokens override");
+  assert.equal(salvagedSeal.name, "Longton", "the LONGEST raw wins the salvage even when the retry's is shorter");
+  assert.ok(salvagedSeal._repairs.some((r) => r.includes("salvaged")), "salvage recorded in _repairs");
+
+  // 24. Deterministic provider failure → sealed themed default (a paid call
+  // per visit would be worse than the default world).
+  stub([{ status: 422, body: { code: "provider_error", truncated: false } }]);
+  const sealedDefault = await brief.generate("c", { theme: "sci-fi-colony", seed: 2, preferences: "" });
+  assert.ok(sealedDefault && Array.isArray(sealedDefault.cast), "provider_error seals a full brief");
+  assert.equal(sealedDefault.theme, "sci-fi-colony", "the sealed default keeps the theme");
+
+  // 25. 409 chat_busy waits out Retry-After once inside the budget, then
+  // succeeds; oversized preferences clamp under the route's 8,000-char cap.
+  calls.length = 0;
+  stub([
+    { status: 409, body: { code: "chat_busy" } },
+    { status: 200, body: { ok: true, data: { scale: "hamlet", name: "Busyville", cast: [] } } },
+  ]);
+  const busySeal = await brief.generate("c", { theme: "cozy-village", seed: 3, preferences: "x".repeat(9000), budgetMs: 1200 });
+  assert.equal(calls.length, 2, "busy → one wait-out retry");
+  assert.ok(calls[0].userContent.length <= 7_801, "userContent clamped under the route cap");
+  assert.equal(busySeal.name, "Busyville", "the wait-out retry seals the real brief");
+}
+
 console.log("brief validator + compiler: all cases passed");

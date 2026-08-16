@@ -50,7 +50,7 @@ Across its Engine compatibility lanes, the catalog currently contains **35 first
 | Long-Term Memory | [`long-term-memory`](packages/long-term-memory/manifest.json) | Extracts durable memories from chat summaries, character records, and lorebooks, with scoped vault browsing, review, source management, recall controls, and preset-marker placement for Roleplay. |
 | Music DJ | [`spotify`](packages/spotify/manifest.json) | Plays scene-matched music through Spotify, YouTube, or local Game Assets. |
 | Noodle | [`noodle`](packages/noodle/manifest.json) | Explore the public Noodle social timeline as an optional local social world, available after installation from **Home → Noodle**. |
-| Pixelforge | [`pixelforge`](packages/pixelforge/manifest.json) | A walkable pixel-art village RPG Experience for Game Mode: pick it in the Experience chooser, explore a Canvas-rendered closed world, and talk to NPCs to drive the story. Requires Engine 2.4.3+. |
+| Pixelforge | [`pixelforge`](packages/pixelforge/manifest.json) | A walkable pixel-art RPG Experience for Game Mode: your setup preferences generate the world — a cozy village or a sci-fi colony — then explore it and talk to NPCs to drive the story. Requires Engine 2.4.3+. |
 | Slurp | [`slurp`](packages/slurp/manifest.json) | The standalone successor to NoodleR: create local Creator profiles, publish public or locked posts, and simulate audience activity from **Home → Slurp**. |
 | Poker | [`poker`](packages/poker/manifest.json) | Adds No-Limit Texas Hold'em for Conversation chats and the `/poker` command. |
 | Rock-Paper-Scissors | [`rock-paper-scissors`](packages/rock-paper-scissors/manifest.json) | Adds best-of-three, five, or seven Conversation matches and the `/rps` command. |

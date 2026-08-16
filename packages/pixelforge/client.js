@@ -1076,38 +1076,67 @@ PF.brief = (() => {
     }
   }
 
-  /** The one #5135 generation call with the §5 failure ladder: bounded wait,
-   *  one higher-budget retry on truncation, salvage of the truncated raw, and
-   *  themed defaults on every other outcome. Returns a SEALED brief either
-   *  way — generation is an upgrade, never a gate. */
+  /** The route caps userContent at 8,000 chars and 400s past it — a hard
+   *  contract, so an unbounded wizard Setting must be clamped here or the
+   *  most detailed settings would silently forfeit generation (review). */
+  const capPreferences = (text) =>
+    typeof text === "string" && text.length > 7_800 ? `${text.slice(0, 7_800)}…` : text;
+
+  /** The one #5135 generation call with the §5 failure ladder (amended):
+   *  bounded wait; one wait-out on the server's documented-transient 409
+   *  chat_busy; one plain re-roll on truncation (the route's maxTokens is
+   *  min()-only — "never a raise" — so a numeric override could only shrink
+   *  the budget); salvage of the LONGEST truncated raw seen across attempts.
+   *  Returns a SEALED brief only for outcomes worth sealing: success, salvage,
+   *  or a deterministic/paid failure (400 contract, 422 provider/parse) →
+   *  themed defaults. Transient outcomes — 404 route-absent, 409, 429, 5xx,
+   *  network error, budget timeout — return NULL so the caller leaves the
+   *  chat unsealed and the next boot simply tries again. */
   async function generate(chatId, { theme, seed, preferences, onProgress, budgetMs = 90_000 }) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), budgetMs);
     try {
-      const base = { instructions: guidance(theme), userContent: preferences, schema: schema() };
+      const base = { instructions: guidance(theme), userContent: capPreferences(preferences), schema: schema() };
       let response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
+      if (response.status === 409) {
+        // chat_busy ships Retry-After: 15 — wait it out once inside the budget.
+        await new Promise((resolve) => setTimeout(resolve, Math.min(15_000, budgetMs / 6)));
+        if (!controller.signal.aborted) response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
+      }
+      const rawOf = (r) => (r.status === 422 && r.body?.truncated && typeof r.body.raw === "string" ? r.body.raw : null);
+      let bestRaw = rawOf(response);
       if (response.status === 422 && response.body?.truncated) {
         onProgress?.("Generating your world… (one more try)");
-        response = await PF.api.postExperienceGeneration(chatId, { ...base, maxTokens: 4096 }, controller.signal);
+        response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
+        const retryRaw = rawOf(response);
+        if (retryRaw && (!bestRaw || retryRaw.length > bestRaw.length)) bestRaw = retryRaw;
       }
       if (response.status === 200 && response.body?.ok && response.body.data && typeof response.body.data === "object") {
         return validate(response.body.data, { theme, seed });
       }
-      if (response.status === 422 && response.body?.truncated && typeof response.body.raw === "string") {
-        const salvaged = salvageText(response.body.raw);
+      if (bestRaw) {
+        const salvaged = salvageText(bestRaw);
         if (salvaged) {
           const sealed = validate(salvaged, { theme, seed });
           sealed._repairs.push("transport: salvaged from a truncated response");
           return sealed;
         }
       }
+      if (response.status === 404 || response.status === 409 || response.status === 429 || response.status >= 500) {
+        console.warn("[pixelforge] world generation unavailable (transient); retrying next visit", response.status);
+        return null;
+      }
       console.warn(
-        "[pixelforge] world generation unavailable; using the themed default",
+        "[pixelforge] world generation failed; sealing the themed default",
         response.status,
         response.body?.error ?? null,
       );
     } catch (err) {
-      if (!controller.signal.aborted) console.warn("[pixelforge] world generation failed; using the themed default", err);
+      // Network trouble and the budget timeout are both transient — leave the
+      // chat unsealed rather than freezing the default world in forever.
+      if (!controller.signal.aborted) console.warn("[pixelforge] world generation failed (network); retrying next visit", err);
+      else console.warn("[pixelforge] world generation timed out; retrying next visit");
+      return null;
     } finally {
       clearTimeout(timer);
     }
@@ -2490,6 +2519,13 @@ PF.save = {
         .filter(Boolean)
         .join("\n");
       const sealed = await PF.brief.generate(chatId, { theme, seed, preferences });
+      if (!sealed) {
+        // Transient failure (busy engine, network, timeout, route absent): do
+        // NOT seal — the key stays absent and the next visit tries again. The
+        // default world stays fully playable meanwhile.
+        core.hud?.toast("World generation couldn't run — it will retry next visit.");
+        return;
+      }
       let stored = false;
       for (let attempt = 0; attempt < 3 && !stored; attempt++) {
         try {

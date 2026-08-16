@@ -118,6 +118,13 @@ PF.save = {
         .filter(Boolean)
         .join("\n");
       const sealed = await PF.brief.generate(chatId, { theme, seed, preferences });
+      if (!sealed) {
+        // Transient failure (busy engine, network, timeout, route absent): do
+        // NOT seal — the key stays absent and the next visit tries again. The
+        // default world stays fully playable meanwhile.
+        core.hud?.toast("World generation couldn't run — it will retry next visit.");
+        return;
+      }
       let stored = false;
       for (let attempt = 0; attempt < 3 && !stored; attempt++) {
         try {

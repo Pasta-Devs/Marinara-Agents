@@ -142,14 +142,21 @@ pre-launch chat is not experience-stamped, so the #5135 route 409s before launch
 launch the host tears the setup UI down — there is no wizard window to block.* Generation runs
 **surface-side, after launch**: the wizard stamps `generate: true` into the experience config and
 seeds the themed default world, so the player is walking immediately; the one call runs behind a
-toast. Package-side call budget: 90 s abort. On the route's `truncated: true` 422 → **one** retry
-at `maxTokens: 4096`; if still truncated, **salvage** from `raw` (transport pass rules: balanced
-span, complete array elements) and let the floors top up the rest. On `provider_error` /
-parse-failure 422 → themed defaults, with the raw text logged to console only. The sealed result
-stores **atomically** under the top-level `pixelforgeBrief` metadata key (shallow-merge PATCH,
-3 retries — never a read-modify-write of the whole setup config), and the world rebuilds in
-place when it lands; the stored key doubles as the one-shot guard, so a chat never generates
-twice. Token budgets in this spec are asserted, not measured — the pre-ship gate is running the
+toast. Package-side call budget: 90 s abort; `userContent` clamps to 7,800 chars (the route 400s
+past 8,000 — a hard contract). On a 409 `chat_busy` (server-documented transient, Retry-After 15)
+→ wait it out **once** inside the budget. On the route's `truncated: true` 422 → **one** plain
+re-roll retry — *amended: the draft said "retry at maxTokens: 4096", but the route treats
+`maxTokens` as min()-only ("never a raise"), so a numeric override could only shrink the budget;
+the retry's value is length variance* — then **salvage** from the LONGEST `raw` seen across both
+attempts (transport pass rules: balanced span, complete array elements) and let the floors top up
+the rest. Only outcomes worth sealing seal: success, salvage, or a deterministic/paid failure
+(400 contract, `provider_error`/parse-failure 422) → themed defaults. Transient outcomes — 404
+route-absent, 409, 429, 5xx, network error, budget timeout — leave the chat **unsealed**: the
+key stays absent and the next visit simply tries again (the default world plays fine meanwhile).
+The sealed result stores **atomically** under the top-level `pixelforgeBrief` metadata key
+(shallow-merge PATCH, 3 retries — never a read-modify-write of the whole setup config), and the
+world rebuilds in place when it lands; the stored key doubles as the one-shot guard, so a chat
+never generates twice. Token budgets in this spec are asserted, not measured — the pre-ship gate is running the
 guidance through the smallest target models N times and counting parse failures, enum drift,
 ceiling overruns, and wall-clock (tracked as a 0.4.0 validation TODO).
 
