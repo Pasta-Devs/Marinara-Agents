@@ -212,7 +212,20 @@ export function createNoodleStorage(db: DB) {
     async getAccountsByEntities(kind: string, entityIds: string[]) { if (!entityIds.length) return []; return (await db.select().from(noodleAccounts).where(and(eq(noodleAccounts.kind, kind), inArray(noodleAccounts.entityId, entityIds), eq(noodleAccounts.platform, "noodle")))).map(mapAccount); },
     async upsertAccountFromProfile(input: any) {
       const existing = await this.getAccountByEntity(input.kind, input.entityId); const timestamp = now();
-      if (existing) { const settings = { ...existing.settings, profile: { ...(existing.settings.profile ?? {}), ...(input.avatarCrop !== undefined ? { avatarCrop: input.avatarCrop } : {}) } }; await db.update(noodleAccounts).set({ displayName: input.displayName?.trim() || existing.displayName, bio: input.bio?.trim() ?? existing.bio, ...(input.avatarUrl !== undefined && { avatarUrl: input.avatarUrl }), ...(input.invited !== undefined && { invited: String(input.invited) }), settings: JSON.stringify(settings), updatedAt: timestamp }).where(eq(noodleAccounts.id, existing.id)); return this.getAccountById(existing.id); }
+      if (existing) {
+        // Card data only fills blanks: a manual profile edit must survive every bootstrap sync.
+        const manual = existing.settings.profile?.profileManuallyEdited === true;
+        const sync = input.syncIdentity === true && !manual;
+        const settings = { ...existing.settings, profile: { ...(existing.settings.profile ?? {}), ...(input.avatarCrop !== undefined && !manual ? { avatarCrop: input.avatarCrop } : {}) } };
+        await db.update(noodleAccounts).set({
+          ...((sync || !String(existing.displayName ?? "").trim()) && { displayName: String(input.displayName ?? "").trim().slice(0, 120) || existing.displayName }),
+          ...(!manual && !String(existing.bio ?? "").trim() && input.bio && { bio: String(input.bio).slice(0, 500) }),
+          ...(input.avatarUrl !== undefined && (sync || !existing.avatarUrl) && { avatarUrl: input.avatarUrl }),
+          ...(input.invited !== undefined && { invited: String(input.invited) }),
+          settings: JSON.stringify(settings), updatedAt: timestamp,
+        }).where(eq(noodleAccounts.id, existing.id));
+        return this.getAccountById(existing.id);
+      }
       const reserved = new Set((await publicAccounts()).map((row) => row.handle)); let next = handle(input.handle ?? input.displayName, input.entityId); let suffix = 2; while (reserved.has(next)) next = `${handle(input.handle ?? input.displayName, input.entityId).slice(0, 36 - String(suffix).length - 1)}_${suffix++}`;
       const row = { id: newId(), kind: input.kind, entityId: input.entityId, handle: next, displayName: input.displayName?.trim() || "User", bio: input.bio?.trim() ?? "", avatarUrl: input.avatarUrl ?? null, invited: String(input.invited ?? input.kind === "persona"), settings: JSON.stringify({ profile: input.avatarCrop !== undefined ? { avatarCrop: input.avatarCrop } : {}, social: {} }), platform: "noodle", createdAt: timestamp, updatedAt: timestamp };
       await db.insert(noodleAccounts).values(row); return mapAccount(row);
