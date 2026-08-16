@@ -103,6 +103,13 @@ for (const relativePath of [
   }
 }
 
+const pixelforgeBoundary = await assertPackagePrivateImportBoundary({
+  sourceRoot: join(repoRoot, "packages/pixelforge/src"),
+  boundaryPath: join(repoRoot, "packages/pixelforge/engine-boundary.json"),
+  displayName: "Pixelforge",
+  capabilityApi: { major: 1, minor: 10 },
+});
+
 const hierarchicalMapsClientSourceRoot = join(
   repoRoot,
   "packages/hierarchical-maps/src/engine/packages/client/src",
@@ -317,6 +324,17 @@ for (const entry of catalog.packages) {
     }
     if (JSON.stringify(manifest.builtAgainst) !== JSON.stringify(longTermMemoryBoundary.builtAgainst)) {
       throw new Error("Long-Term Memory build provenance does not match engine-boundary.json");
+    }
+  }
+  if (manifest.id === "pixelforge") {
+    if (manifest.schemaVersion !== 2) {
+      throw new Error("Pixelforge must use capability package manifest v2");
+    }
+    if (JSON.stringify(manifest.capabilityApi) !== JSON.stringify(pixelforgeBoundary.capabilityApi)) {
+      throw new Error("Pixelforge capability API does not match engine-boundary.json");
+    }
+    if (JSON.stringify(manifest.builtAgainst) !== JSON.stringify(pixelforgeBoundary.builtAgainst)) {
+      throw new Error("Pixelforge build provenance does not match engine-boundary.json");
     }
   }
   if (manifest.id === "noodle") {
@@ -647,6 +665,45 @@ for (const entry of catalog.packages) {
       }
     }
   }
+  const packageAssetPaths = manifest.contributions?.assets?.paths;
+  if (packageAssetPaths !== undefined) {
+    if (!Array.isArray(packageAssetPaths) || packageAssetPaths.length === 0 || packageAssetPaths.length > 256) {
+      throw new Error(`${manifest.id} must declare between 1 and 256 package asset paths`);
+    }
+    for (const assetPath of packageAssetPaths) {
+      assertPortableRelativePath(assetPath, `Package asset for ${manifest.id}`);
+      if (!declaredPaths.has(assetPath)) {
+        throw new Error(`Undeclared package asset ${assetPath} for ${manifest.id}`);
+      }
+      if (!/\.(?:gif|jpe?g|json|png|webp)$/iu.test(assetPath)) {
+        throw new Error(`Unsupported package asset format ${assetPath} for ${manifest.id}`);
+      }
+    }
+  }
+  if (manifest.contributions?.slots?.includes("game-surface")) {
+    if (!hasClient) {
+      throw new Error(`${manifest.id} declares the game-surface slot without a client entrypoint`);
+    }
+    const surfaceClass = manifest.contributions?.gameSurface?.surfaceClass;
+    if (typeof surfaceClass !== "string" || surfaceClass.trim().length === 0) {
+      throw new Error(`${manifest.id} game-surface contribution is missing its surface class`);
+    }
+    const clientSource = await readFile(
+      await resolveContainedPortablePath(
+        packageRoot,
+        manifest.entrypoints.client,
+        `Client entrypoint for ${manifest.id}`,
+      ),
+      "utf8",
+    );
+    // surfaceClass is a host-side styling hook (the Engine applies it to its own
+    // mount container), so the client contract is the custom element the module
+    // loader instantiates for this package.
+    const elementTag = `marinara-capability-${manifest.id}`;
+    if (!clientSource.includes(elementTag)) {
+      throw new Error(`${manifest.id} client runtime is missing the ${elementTag} game-surface contract`);
+    }
+  }
   if (manifest.kind.includes("conversation-calls")) {
     if (!manifest.permissions.includes("routes")) throw new Error(`${manifest.id} is missing the routes permission`);
     const slots = new Set(manifest.contributions?.slots ?? []);
@@ -695,8 +752,8 @@ if (JSON.stringify(guidanceIds) !== JSON.stringify([...ids].sort())) {
 
 const agentOnly = catalog.packages.filter((entry) => !entry.manifest.entrypoints.server).length;
 const features = catalog.packages.length - agentOnly;
-if (catalog.packages.length !== 34 || agentOnly !== 23 || features !== 11) {
-  throw new Error(`Expected 23 agents and 11 features, found ${agentOnly} and ${features}`);
+if (catalog.packages.length !== 35 || agentOnly !== 24 || features !== 11) {
+  throw new Error(`Expected 24 agents and 11 features, found ${agentOnly} and ${features}`);
 }
 console.log(`Catalog valid: ${catalog.packages.length} packages (${agentOnly} agents, ${features} features).`);
 console.log(
