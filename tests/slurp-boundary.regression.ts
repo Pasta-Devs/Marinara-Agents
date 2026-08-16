@@ -56,6 +56,16 @@ assert.match(
 );
 assert.match(
   stageProfileDraft,
+  /input\.request\.disclosureMode !== "open" &&[\s\S]*stageProfileContainsPublicIdentity/u,
+  "open Slurp profile creation must permit its required linked identity",
+);
+assert.match(
+  stageProfileDraft,
+  /bio: input\.request\.currentDraft\?\.bio \?\? publicAccount\.bio/u,
+  "open Slurp profile creation must preserve an explicit draft bio",
+);
+assert.match(
+  stageProfileDraft,
   /Create the same person behind a different stage name and handle[\s\S]*species[\s\S]*unusual anatomy/u,
   "hinted Slurp profile creation must preserve recognizable physical traits without the public identity",
 );
@@ -66,13 +76,18 @@ assert.match(
 );
 assert.match(
   stageProfileDraft,
-  /function noodlerSecretSourceText[\s\S]*Personality[\s\S]*Appearance/u,
-  "secret Slurp profile prompts must include personality and appearance context",
+  /function noodlerSecretSourceText[\s\S]*reviewedNoodlerTemperamentThemes[\s\S]*reviewedNoodlerPhysicalFacts/u,
+  "secret Slurp profile prompts must use reviewed temperament and physical tokens",
 );
 assert.match(
   slurpImages,
-  /sourceAppearance[\s\S]*imageGenerationIncludeDescriptions[\s\S]*characterDescription = redactIdentity\(sourceAppearance\)/u,
-  "hidden Slurp identities must retain redacted source appearance details for image prompts",
+  /sourceAppearance[\s\S]*imageGenerationIncludeDescriptions[\s\S]*reviewedNoodlerPhysicalFacts\(sourceAppearance\)/u,
+  "hidden Slurp image prompts must use reviewed physical tokens",
+);
+assert.match(
+  slurpImages,
+  /const finalPrompt = redactIdentity\([\s\S]*rewrittenPrompt/u,
+  "rewritten Slurp image prompts must receive final identity redaction",
 );
 assert.match(
   slurpImages,

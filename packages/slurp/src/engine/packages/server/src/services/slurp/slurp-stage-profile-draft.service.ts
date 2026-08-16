@@ -30,7 +30,11 @@ import {
   stageProfileContainsPublicIdentity,
 } from "./slurp-generation.service.js";
 import { resolveNoodlerSourceSnapshot } from "./slurp-source-resolve.js";
-import { hintedNoodlerSourceBrief } from "./slurp-prompt-safety.js";
+import {
+  hintedNoodlerSourceBrief,
+  reviewedNoodlerPhysicalFacts,
+  reviewedNoodlerTemperamentThemes,
+} from "./slurp-prompt-safety.js";
 import { normalizeNoodlerStageProfileDraft } from "./slurp-stage-profile-normalize.js";
 import { parseRecord } from "./slurp-public-support.js";
 import { createNoodlerSourceRevisionToken } from "./slurp-source-revision.js";
@@ -56,11 +60,25 @@ export function noodlerHintedSourceText(data: unknown): string {
 export function noodlerSecretSourceText(data: unknown): string {
   const source = parseRecord(data);
   const extensions = parseRecord(source.extensions);
+  const appearance =
+    typeof source.appearance === "string"
+      ? source.appearance
+      : typeof extensions.appearance === "string"
+        ? extensions.appearance
+        : "";
+  const themes = reviewedNoodlerTemperamentThemes(
+    typeof source.personality === "string" ? source.personality : "",
+  );
+  const physicalFacts = reviewedNoodlerPhysicalFacts(appearance);
   return [
-    `Personality: ${typeof source.personality === "string" ? source.personality : ""}`,
-    `Appearance: ${typeof source.appearance === "string" ? source.appearance : typeof extensions.appearance === "string" ? extensions.appearance : ""}`,
+    themes.length > 0
+      ? `Approved source themes: ${themes.join(", ")}.`
+      : "General temperament and creative interests from the source profile.",
+    physicalFacts.length > 0
+      ? `Approved physical facts: ${physicalFacts.join(", ")}.`
+      : "",
   ]
-    .filter((line) => line.split(": ").slice(1).join(": ").trim())
+    .filter(Boolean)
     .join("\n");
 }
 
@@ -324,7 +342,10 @@ export async function generateNoodlerStageProfileDraft(
     ...parsedDraft,
     disclosureMode: input.request.disclosureMode,
   };
-  if (stageProfileContainsPublicIdentity(draft, identity)) {
+  if (
+    input.request.disclosureMode !== "open" &&
+    stageProfileContainsPublicIdentity(draft, identity)
+  ) {
     throw new Error(
       "Generated stage draft included the linked public identity. Try again with different guidance.",
     );
@@ -335,7 +356,7 @@ export async function generateNoodlerStageProfileDraft(
       ? {
           displayName: publicAccount.displayName,
           handle: publicAccount.handle,
-          bio: publicAccount.bio,
+          bio: input.request.currentDraft?.bio ?? publicAccount.bio,
         }
       : {}),
     ...(input.request.disclosureMode === "open" && sourceSnapshot
