@@ -86,5 +86,8 @@ assert.match(settings, /Image generation prompt/u);
 assert.match(settings, /Edit image generation prompt/u);
 assert.match(settings, /restoreDefaultImagePrompt/u);
 assert.match(settings, /saveImagePrompt/u);
+assert.match(storage, /NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT/u);
+assert.match(storage, /rawRecord\.imageGenerationPrompt === undefined \|\| rawRecord\.imageGenerationPrompt === ""/u);
+assert.match(settings, /DEFAULT_SLURP_IMAGE_GENERATION_PROMPT/u);
 
 console.log("NoodleR generation guidance default regressions passed.");
