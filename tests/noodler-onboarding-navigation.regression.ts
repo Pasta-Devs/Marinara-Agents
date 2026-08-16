@@ -28,7 +28,10 @@ assert.match(panel, /intro === null \? void skip\(\) : setIntro\(null\)/u);
 // "zero" is only ever written by that skip. The other saveSettings call decides between "zero"
 // and "completed" from how many creators the run actually produced.
 assert.match(panel, /const skip = async \(\) => \{[\s\S]*?saveSettings\("zero"\)[\s\S]*?onSkipped\?\.\(\)[\s\S]*?onClose\(\);/u);
-assert.match(panel, /await saveSettings\(\s*selected\.size === 0 \? "zero" : "completed",\s*\);/u);
+assert.match(
+  panel,
+  /await saveSettings\(\s*selected\.size === 0 \|\| newIds\.length === 0 \? "zero" : "completed",\s*\);/u,
+);
 
 // Adding creators later reuses this wizard; its settings write remains Slurp-owned.
 assert.match(panel, /useUpdateSlurpSettings/u);

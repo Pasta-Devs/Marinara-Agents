@@ -39,13 +39,6 @@ export const noodleAccounts = fileTable(
   },
 );
 
-export const slurpViewers = fileTable("slurp_viewers", {
-  personaId: text("persona_id").primaryKey(),
-  settings: text("settings").notNull().default("{}"),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
-});
-
 export const noodlePosts = fileTable("slurp_posts", {
   id: text("id").primaryKey(),
   authorAccountId: text("author_account_id").notNull(),

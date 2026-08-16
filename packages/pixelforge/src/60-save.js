@@ -174,7 +174,13 @@ PF.save = {
     // world; the brief lives ONLY in chat metadata (pixelforgeBrief, or the
     // legacy nested config spot), never in save rows.
     const theme = (saved && typeof saved.theme === "string" ? saved.theme : null) ?? this._configTheme(meta);
-    const world = PF.world.build(seed, theme, this._configBrief(meta));
+    const brief = this._configBrief(meta);
+    const world = PF.world.build(seed, theme, brief);
+    // The pre-brief boot world of a generation-enabled chat is a throwaway
+    // that the sealed brief will replace — stamped so the World Maps export
+    // (§8) never registers its zones on the user's map. A sealed brief or a
+    // {skipped:true} marker makes the world final.
+    if (!brief && meta?.pixelforgeBrief === undefined && this._configGenerate(meta)) world.interim = true;
     const sim = new PF.Sim(world);
     if (saved && saved.v === 1) {
       if (typeof saved.zone === "string" && world.zones[saved.zone]) sim.zoneId = saved.zone;

@@ -85,7 +85,6 @@ import {
   noodlerPreparedPosts,
   noodlerReserveState,
   noodlerFanActivityState,
-  slurpViewers,
 } from "../../db/schema/slurp.js";
 import { readNoodlerAccountMediaPath, readNoodlerAvatarMediaPath } from "../slurp/slurp-avatar.js";
 import { newId, now } from "../../utils/id-generator.js";
@@ -114,6 +113,8 @@ import {
 
 const SLURP_SETTINGS_KEY = "slurp.settings";
 const NOODLE_REFRESH_SCHEDULE_KEY = "slurp.refresh-schedule";
+const slurpViewerSettingsKey = (personaId: string) =>
+  `slurp.viewer.${personaId}.settings`;
 const NOODLE_CARRYOVER_TARGETS: NoodleCarryoverTarget[] = ["conversation", "roleplay", "game"];
 const NOODLER_RESERVE_STATE_ID = "noodler-reserve";
 const ROLLING_DAY_MS = 24 * 60 * 60 * 1000;
@@ -769,29 +770,32 @@ function mapAccount(row: AccountRow): SlurpAccount {
 }
 
 function mapViewer(
-  row: typeof slurpViewers.$inferSelect,
+  personaId: string,
+  settings: NoodleAccountSettings,
   persona: {
     name: string;
     convoDisplayName?: string | null;
     avatarPath?: string | null;
     avatarCrop?: unknown;
+    createdAt?: string;
+    updatedAt?: string;
   },
 ): NoodleAccount {
   return {
-    id: row.personaId,
+    id: personaId,
     kind: "persona",
-    entityId: row.personaId,
-    handle: normalizeHandle(persona.convoDisplayName || persona.name, row.personaId),
+    entityId: personaId,
+    handle: normalizeHandle(persona.convoDisplayName || persona.name, personaId),
     displayName: persona.convoDisplayName || persona.name || "User",
     bio: "",
     avatarUrl: persona.avatarPath ?? null,
     avatarCrop: normalizeAvatarCrop(persona.avatarCrop),
     invited: true,
-    settings: normalizeNoodleAccountSettings(row.settings),
+    settings,
     platform: "slurp",
     slurpSourceAccountId: null,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    createdAt: persona.createdAt ?? "",
+    updatedAt: persona.updatedAt ?? persona.createdAt ?? "",
   };
 }
 
@@ -1359,22 +1363,12 @@ export function createSlurpStorage(db: DB) {
     async getViewer(personaId: string): Promise<NoodleAccount | null> {
       const persona = await characters.getPersona(personaId);
       if (!persona) return null;
-      let rows = await db.select().from(slurpViewers).where(eq(slurpViewers.personaId, personaId));
-      if (!rows[0]) {
-        const timestamp = now();
-        try {
-          await db.insert(slurpViewers).values({
-            personaId,
-            settings: JSON.stringify(emptyNoodleAccountSettings()),
-            createdAt: timestamp,
-            updatedAt: timestamp,
-          });
-        } catch (error) {
-          if (!isFileUniqueConstraintError(error, "slurp_viewers", ["personaId"])) throw error;
-        }
-        rows = await db.select().from(slurpViewers).where(eq(slurpViewers.personaId, personaId));
-      }
-      return rows[0] ? mapViewer(rows[0], persona) : null;
+      const raw = await settingsStore.get(slurpViewerSettingsKey(personaId));
+      return mapViewer(
+        personaId,
+        raw ? normalizeNoodleAccountSettings(raw) : emptyNoodleAccountSettings(),
+        persona,
+      );
     },
 
     async getSettings(): Promise<SlurpSettings> {
@@ -1624,13 +1618,10 @@ export function createSlurpStorage(db: DB) {
           social[field] = stored;
         }
       }
-      await db
-        .update(slurpViewers)
-        .set({
-          settings: JSON.stringify({ ...viewer.settings, social }),
-          updatedAt: now(),
-        })
-        .where(eq(slurpViewers.personaId, personaId));
+      await settingsStore.set(
+        slurpViewerSettingsKey(personaId),
+        JSON.stringify({ ...viewer.settings, social }),
+      );
       return this.getViewer(personaId);
     },
 
@@ -1660,10 +1651,7 @@ export function createSlurpStorage(db: DB) {
           followingAccountTimestamps,
         },
       };
-      await db
-        .update(slurpViewers)
-        .set({ settings: JSON.stringify(next), updatedAt: now() })
-        .where(eq(slurpViewers.personaId, personaId));
+      await settingsStore.set(slurpViewerSettingsKey(personaId), JSON.stringify(next));
       return { account: (await this.getViewer(personaId))!, changed: true };
     },
 
@@ -4341,20 +4329,17 @@ export function createSlurpStorage(db: DB) {
           const followingAccountTimestamps = { ...viewer.settings.social.followingAccountTimestamps };
           if (!followingAccountIds.includes(creatorAccountId)) {
             followingAccountTimestamps[creatorAccountId] ??= existing[0].createdAt;
-            await tx
-              .update(slurpViewers)
-              .set({
-                settings: JSON.stringify({
-                  ...viewer.settings,
-                  social: {
-                    ...viewer.settings.social,
-                    followingAccountIds: [...followingAccountIds, creatorAccountId],
-                    followingAccountTimestamps,
-                  },
-                }),
-                updatedAt: now(),
-              })
-              .where(eq(slurpViewers.personaId, viewerAccountId));
+            await createAppSettingsStorage(tx).set(
+              slurpViewerSettingsKey(viewerAccountId),
+              JSON.stringify({
+                ...viewer.settings,
+                social: {
+                  ...viewer.settings.social,
+                  followingAccountIds: [...followingAccountIds, creatorAccountId],
+                  followingAccountTimestamps,
+                },
+              }),
+            );
           }
           return mapSubscription(existing[0]);
         }
@@ -4397,10 +4382,10 @@ export function createSlurpStorage(db: DB) {
             );
           return duplicate[0] ? mapSubscription(duplicate[0]) : null;
         }
-        await tx
-          .update(slurpViewers)
-          .set({ settings: JSON.stringify(nextViewerSettings), updatedAt: timestamp })
-          .where(eq(slurpViewers.personaId, viewerAccountId));
+        await createAppSettingsStorage(tx).set(
+          slurpViewerSettingsKey(viewerAccountId),
+          JSON.stringify(nextViewerSettings),
+        );
         const rows = await tx
           .select()
           .from(noodleAccountSubscriptions)

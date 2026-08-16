@@ -284,6 +284,9 @@ PF.world = (() => {
     n.npcs.push({ id: "mira", name: "Mira", role: "innkeeper", hue: 8, x: 5, y: 4, wander: { x0: 2, y0: 4, x1: 8, y1: 9 } });
     f.npcs.push({ id: "fen", name: "Fen", role: "forager", hue: 140, x: 29, y: 12, wander: { x0: 26, y0: 9, x1: 31, y1: 13 } });
 
+    v.mapKind = "settlement";
+    n.mapKind = "building";
+    f.mapKind = "place";
     return {
       seed,
       theme: activeTheme,
@@ -316,6 +319,7 @@ PF.world = (() => {
 
     // ── The settlement exterior (z1) ──
     const v = makeZone("z1", brief.name, scale.w, scale.h, "grass");
+    v.mapKind = "settlement";
     const groundMix = { woods: 0.3, fields: 0.22, rocky: 0.2, water: 0.25, barren: 0.35 }[brief.surround] ?? 0.25;
     for (let i = 0; i < v.ground.length; i++) if (rnd() < groundMix) v.ground[i] = "grass2";
     borderTrees(v);
@@ -469,6 +473,7 @@ PF.world = (() => {
       put(zone, doorX, h - 1, "object", "door", false);
       zone.spawn = { x: doorX, y: h - 2 };
       zone.flavor = place.flavor;
+      zone.mapKind = "building"; // World Maps export kind (spec §8)
       zones[id] = zone;
       const facade = buildings.find((b) => b.boundPlace === place);
       if (facade) {
@@ -525,6 +530,7 @@ PF.world = (() => {
       }
       if (!east) zone.spawn = { x: zone.w - 4, y: wMidY };
       zone.flavor = place.flavor;
+      zone.mapKind = "place"; // World Maps export kind (spec §8)
       zones[id] = zone;
     });
 

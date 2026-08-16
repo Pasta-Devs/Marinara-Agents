@@ -192,15 +192,38 @@ context. Nothing else from the brief ever enters GM context — the durable chan
 history**: each injection lands once inside a committed turn and stays in the transcript the GM
 re-reads every generation.
 
-## 8. World Maps export (deferred — amended)
+## 8. World Maps export (shipped in 0.5.0)
 
-*Amended: the sealed draft made World Maps the durable channel via an export "at first compile."
-There is no runtime write API for locations — `spatialMapInstructions` is a create-time mode flag
-only, and by the time the brief exists the map does too. The durable channel is chat history
-(§7).* The export design is retained for when a location write path ships: root
-`{name, description: flavor + " " + populationPhrase(backgroundPopulation), kind: root}`; each
-place `{name, description: flavor, parentId: root, kind by zone kind}`; each feature
-`{name, description: tag's theme label, parentId: its zone}`; keyed by §2 ids.
+*History: the sealed draft made World Maps the durable channel via an export "at first compile";
+that was deferred because no runtime location write API existed, and the durable channel became
+chat history (§7 — unchanged). World Maps 1.4.0 shipped the write path
+(`POST /api/chats/:chatId/spatial-context/locations`, Marinara-Engine#5144), so the export now
+runs.*
+
+Once the exterior binds to its starting location (the §50-spatial seed binding), every other
+compiled zone registers as a **child of that bound location**: interiors as `kind: "building"`,
+wilds as `kind: "place"`, `description` from the zone's `flavor`. A root child that already
+carries a zone's name (trim + case-insensitive; hand edits or the wizard's map instructions
+often author these first) is **adopted** — bound instead of twinned — because the additive
+route could never merge duplicates later. Location ids for created rows are seed-stable —
+`pf.<fnv32(seed)>.<zoneId>` — and the map definition itself is the idempotency ledger: ids
+already present are diffed out before posting, so re-runs (new sessions, rebuilds from the same
+brief) add nothing and merely re-bind. The route is additive with revision CAS; a stale or
+conflicted 409 re-reads and retries, surrendering after no-progress rounds so a live map editor
+(or a write-eating proxy) is never dueled. Completion state is keyed by **world object
+identity** — a rebuild (brief arrival, rewind) is a new world and re-syncs, which the diff turns
+into a cheap re-bind/self-heal. The export never runs for: the interim pre-brief boot world of a
+generation-enabled chat (`world.interim`, stamped by §60-save — its throwaway zones must not
+pollute the map), shared-world-linked chats (an additive write would stage unpublished draft
+edits to a communal world), or a definition whose location list is not visible. A stale root
+binding (map replaced/started over) prunes the dead bindings so the exterior re-seeds and the
+export re-runs under the new root; deliberate refusals (archived parent, the location cap, route
+absent) end the attempt for the session with no retry drumbeat. Exported ids land in
+`world.bindings`, which is what lets travel and narrated drift teleport into generated zones.
+
+Not yet exported (still §9 territory): the root's population phrase and per-feature locations —
+features have no zones of their own, and decorating the root would edit a location the user may
+have authored (the route deliberately cannot).
 
 ## 9. Reserved consumers (sealed now, wired in 0.5.x)
 

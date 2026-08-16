@@ -10,10 +10,14 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 // Mirror the real bundle: concatenate the modules into one scope (the prelude
 // declares `const PF` itself) and return PF. The DOM helpers stay unused.
-const source = ["00-prelude.js", "10-art.js", "15-assets.js", "18-brief.js", "20-world.js", "30-sim.js", "50-spatial.js"]
+const source = ["00-prelude.js", "10-art.js", "15-assets.js", "18-brief.js", "20-world.js", "30-sim.js", "50-spatial.js", "55-maps-export.js"]
   .map((file) => readFileSync(join(here, "src", file), "utf8"))
   .join("\n");
 const loadedPF = new Function(`"use strict";\n${source}\nreturn PF;`)();
+// refresh() fire-and-forgets the maps export; without a stub every earlier
+// spatial case would hit undefined fetch and warn. 404 = "route absent" is the
+// quiet-skip mode, exactly right as a default. Export cases override it.
+loadedPF.api.postSpatialLocations = async () => ({ ok: false, status: 404, body: null });
 const { brief, world } = loadedPF;
 const ctx = { theme: "cozy-village", seed: 424242 };
 
@@ -672,6 +676,475 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
 
   loadedPF.api.getSpatial = prevGetSpatial;
   spatial.reset();
+}
+
+// 31-36. World Maps export (spec §8): seed-stable ids, the definition as the
+// idempotency ledger, additive-route retry discipline, and quiet degradation.
+{
+  const exportScaffold = (seed, chatId) => {
+    const sealed = brief.defaults("cozy-village", seed);
+    const w = world.build(seed, "cozy-village", sealed);
+    const sim = {
+      world: w, zoneId: w.startZone, mode: "walk",
+      zone() { return this.world.zones[this.zoneId]; },
+      teleport() {},
+    };
+    const core = { chatId, sim, dirty: 0, hud: { toast() {}, refreshChips() {} } };
+    core.markDirty = () => { core.dirty++; };
+    return { w, core };
+  };
+  const mapsExport = loadedPF.mapsExport;
+  const prevGetSpatial = loadedPF.api.getSpatial;
+  const prevPostLocations = loadedPF.api.postSpatialLocations;
+  const resetExportState = () => {
+    mapsExport._done = new WeakSet();
+    mapsExport._inFlightWorld = null;
+    mapsExport._failed = null;
+  };
+  /** Bind the root deterministically, then drive the export by hand: the
+   *  refresh-triggered fire-and-forget would race the assertions. */
+  const bindRoot = async (core) => {
+    loadedPF.spatial.reset();
+    mapsExport._inFlightWorld = core.sim.world;
+    await loadedPF.spatial.refresh(core);
+    mapsExport._inFlightWorld = null;
+  };
+
+  // 31. Happy path: only missing zones post, as children of the bound root,
+  // buildings and wilds keep their kinds, and pre-existing ids re-bind
+  // (self-heal) without re-posting. A second run is a no-op.
+  {
+    const { w, core } = exportScaffold(4242, "chat-export-31");
+    const zoneIds = Object.keys(w.zones).filter((id) => id !== w.startZone);
+    assert.ok(zoneIds.length >= 2, "the default brief compiles interior and wilds zones");
+    const preSeeded = mapsExport.idFor(w, zoneIds[0]);
+    let revision = 5;
+    let serverLocs = [{ id: "loc-root", kind: "settlement" }, { id: preSeeded, kind: "building" }];
+    const posts = [];
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision, locations: serverLocs.slice() },
+      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async (chatId, body) => {
+      posts.push(body);
+      assert.equal(body.expectedRevision, revision, "CAS rides the freshest revision");
+      serverLocs = serverLocs.concat(body.locations.map((row) => ({ id: row.id, kind: row.kind })));
+      revision++;
+      return { ok: true, status: 200, body: {} };
+    };
+    resetExportState();
+    await bindRoot(core);
+    await mapsExport.maybeSync(core);
+    assert.equal(posts.length, 1, "one batch for the missing zones");
+    assert.equal(posts[0].locations.length, zoneIds.length - 1, "the pre-seeded id is diffed out");
+    for (const row of posts[0].locations) {
+      assert.equal(row.parentId, "loc-root", "zones hang under the exterior's bound location");
+      const zoneId = row.id.split(".").pop();
+      assert.equal(row.kind, w.zones[zoneId].mapKind === "building" ? "building" : "place", "kind follows the zone");
+    }
+    for (const zoneId of zoneIds) {
+      assert.equal(w.bindings[mapsExport.idFor(w, zoneId)], zoneId, `zone ${zoneId} is bound (including the pre-seeded one)`);
+      assert.equal(w.zones[zoneId].spatialLocationId, mapsExport.idFor(w, zoneId), "the zone records its location id");
+    }
+    assert.ok(core.dirty > 0, "bindings persist via a save");
+    await mapsExport.maybeSync(core);
+    assert.equal(posts.length, 1, "a completed export never re-posts");
+  }
+
+  // 32. A stale 409 re-reads and retries with the fresh revision — user edits
+  // between our read and write cost one round trip, nothing else.
+  {
+    const { w, core } = exportScaffold(555, "chat-export-32");
+    let revision = 7;
+    let serverLocs = [{ id: "loc-root" }];
+    const posts = [];
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision, locations: serverLocs.slice() },
+      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async (chatId, body) => {
+      posts.push(body);
+      if (posts.length === 1) {
+        revision = 9; // someone edited the map mid-flight
+        return { ok: false, status: 409, body: { code: "spatial_definition_stale" } };
+      }
+      serverLocs = serverLocs.concat(body.locations.map((row) => ({ id: row.id })));
+      revision++;
+      return { ok: true, status: 200, body: {} };
+    };
+    resetExportState();
+    await bindRoot(core);
+    await mapsExport.maybeSync(core);
+    assert.equal(posts.length, 2, "stale CAS retries once after a re-read");
+    assert.equal(posts[1].expectedRevision, 9, "the retry carries the re-read revision");
+    assert.ok(Object.keys(w.bindings).length > 1, "the retry completed the bindings");
+  }
+
+  // 33. An id conflict means another actor already registered our rows: the
+  // re-read diff empties the batch and bindings still land.
+  {
+    const { w, core } = exportScaffold(777, "chat-export-33");
+    const zoneIds = Object.keys(w.zones).filter((id) => id !== w.startZone);
+    let raced = false;
+    const posts = [];
+    loadedPF.api.getSpatial = async () => ({
+      definition: {
+        revision: 3,
+        locations: [{ id: "loc-root" }].concat(
+          raced ? zoneIds.map((zoneId) => ({ id: mapsExport.idFor(w, zoneId) })) : [],
+        ),
+      },
+      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async () => {
+      posts.push(1);
+      raced = true; // a second tab beat us to every id
+      return { ok: false, status: 409, body: { code: "spatial_location_conflict" } };
+    };
+    resetExportState();
+    await bindRoot(core);
+    await mapsExport.maybeSync(core);
+    assert.equal(posts.length, 1, "the conflict is not retried blindly");
+    assert.equal(w.bindings[mapsExport.idFor(w, zoneIds[0])], zoneIds[0], "already-registered ids still bind");
+    assert.ok(mapsExport._done.has(w), "the run completes");
+  }
+
+  // 34. Older maps package (route absent): quiet skip, no bindings to
+  // locations that do not exist, and no per-turn retry hammering.
+  {
+    const { w, core } = exportScaffold(888, "chat-export-34");
+    const posts = [];
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision: 1, locations: [{ id: "loc-root" }] },
+      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async () => {
+      posts.push(1);
+      return { ok: false, status: 404, body: null };
+    };
+    resetExportState();
+    await bindRoot(core);
+    await mapsExport.maybeSync(core);
+    await mapsExport.maybeSync(core);
+    assert.equal(posts.length, 1, "404 marks the world done for this session");
+    assert.equal(Object.keys(w.bindings).length, 1, "only the root binding exists — nothing binds to absent locations");
+  }
+
+  // 35. A live editor moving the revision forever: two no-progress retries,
+  // then back off — never a duel, and the backoff holds within the window.
+  {
+    const { core } = exportScaffold(999, "chat-export-35");
+    let revision = 1;
+    const posts = [];
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision: ++revision, locations: [{ id: "loc-root" }] },
+      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async () => {
+      posts.push(1);
+      return { ok: false, status: 409, body: { code: "spatial_definition_stale" } };
+    };
+    resetExportState();
+    await bindRoot(core);
+    await mapsExport.maybeSync(core);
+    assert.equal(posts.length, 3, "three attempts, then surrender");
+    assert.ok(mapsExport._failed, "the failure is recorded for backoff");
+    await mapsExport.maybeSync(core);
+    assert.equal(posts.length, 3, "the backoff window suppresses immediate retries");
+  }
+
+  // 36. A chat switch mid-flight must not write into the new chat's world:
+  // same generation discipline refresh() and travel() use.
+  {
+    const { w, core } = exportScaffold(1234, "chat-export-36");
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision: 2, locations: [{ id: "loc-root" }] },
+      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async () => {
+      core.chatId = "some-other-chat"; // the user switched chats mid-await
+      return { ok: true, status: 200, body: {} };
+    };
+    resetExportState();
+    await bindRoot(core);
+    await mapsExport.maybeSync(core);
+    assert.equal(Object.keys(w.bindings).length, 1, "no export bindings written after a chat switch");
+    assert.ok(!mapsExport._done.has(w), "the run does not mark itself complete");
+  }
+
+  // 37. Adoption: a same-named root child authored before the export (hand
+  // edits, wizard map instructions) is bound instead of twinned; only truly
+  // new zones post. A location already bound to another zone never adopts.
+  {
+    const { w, core } = exportScaffold(2468, "chat-export-37");
+    const zoneIds = Object.keys(w.zones).filter((id) => id !== w.startZone);
+    const adoptedZone = zoneIds[0];
+    const adoptedName = w.zones[adoptedZone].name;
+    const posts = [];
+    let serverLocs = [
+      { id: "loc-root" },
+      { id: "authored-1", parentId: "loc-root", name: `  ${adoptedName.toUpperCase()}  ` },
+    ];
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision: 4, locations: serverLocs.slice() },
+      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async (chatId, body) => {
+      posts.push(body);
+      serverLocs = serverLocs.concat(body.locations.map((row) => ({ id: row.id })));
+      return { ok: true, status: 200, body: {} };
+    };
+    resetExportState();
+    await bindRoot(core);
+    await mapsExport.maybeSync(core);
+    assert.ok(
+      !posts.flatMap((p) => p.locations).some((row) => row.name === adoptedName),
+      "the adopted zone is never posted as a twin",
+    );
+    assert.equal(w.bindings["authored-1"], adoptedZone, "the authored location is bound (name match is trim+case-insensitive)");
+    assert.equal(w.zones[adoptedZone].spatialLocationId, "authored-1", "the zone records the adopted id");
+    for (const zoneId of zoneIds.slice(1)) {
+      assert.equal(w.bindings[mapsExport.idFor(w, zoneId)], zoneId, "non-adopted zones still create and bind pf ids");
+    }
+  }
+
+  // 37b. A restored save already carries a prior adoption: re-planning must
+  // KEEP adopting the location bound to the same zone, never flip back to
+  // creating a twin (live-found regression on the Kepler playtest).
+  {
+    const { w, core } = exportScaffold(2468, "chat-export-37b");
+    const zoneIds = Object.keys(w.zones).filter((id) => id !== w.startZone);
+    const adoptedZone = zoneIds[0];
+    const adoptedName = w.zones[adoptedZone].name;
+    const posts = [];
+    let serverLocs = [
+      { id: "loc-root" },
+      { id: "authored-1", parentId: "loc-root", name: adoptedName },
+    ];
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision: 4, locations: serverLocs.slice() },
+      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async (chatId, body) => {
+      posts.push(body);
+      serverLocs = serverLocs.concat(body.locations.map((row) => ({ id: row.id })));
+      return { ok: true, status: 200, body: {} };
+    };
+    resetExportState();
+    await bindRoot(core);
+    w.bindings["authored-1"] = adoptedZone; // the save restored last session's adoption
+    await mapsExport.maybeSync(core);
+    assert.ok(
+      !posts.flatMap((p) => p.locations).some((row) => row.name === adoptedName),
+      "an already-bound adoption never flips back to creating a twin",
+    );
+    assert.equal(w.bindings["authored-1"], adoptedZone, "the adoption binding survives");
+    // A location bound to a DIFFERENT zone is never stolen: it creates instead.
+    const otherZone = zoneIds[1];
+    if (otherZone) {
+      resetExportState();
+      w.bindings["authored-1"] = otherZone; // user rebound it (or a conflicting save)
+      delete w.bindings[mapsExport.idFor(w, adoptedZone)];
+      await mapsExport.maybeSync(core);
+      assert.equal(w.bindings["authored-1"], otherZone, "a foreign binding is never stolen");
+      assert.equal(w.bindings[mapsExport.idFor(w, adoptedZone)], adoptedZone, "the shadowed zone creates its own id instead");
+    }
+  }
+
+  // 38. An accepted batch whose rows never appear in the re-read (a proxy
+  // eating writes, a stale read replica) surrenders instead of posting
+  // forever — the regression that OOM'd the harness when first written.
+  {
+    const { core } = exportScaffold(3690, "chat-export-38");
+    const posts = [];
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision: 1, locations: [{ id: "loc-root" }] },
+      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async () => {
+      posts.push(1);
+      return { ok: true, status: 200, body: {} }; // accepted, but the GET never reflects it
+    };
+    resetExportState();
+    await bindRoot(core);
+    await mapsExport.maybeSync(core);
+    assert.equal(posts.length, 3, "three attempts with no visible progress, then surrender");
+    assert.ok(mapsExport._failed, "the failure is recorded for backoff");
+  }
+
+  // 39. A same-chat, same-seed REBUILD (brief arrival, rewind) is a new world
+  // object: completion state must not carry over — the rebuilt world re-syncs,
+  // the diff makes it a re-bind, and the self-heal actually runs (the string
+  // done-key suppressed all of this: review finding).
+  {
+    const { w, core } = exportScaffold(1357, "chat-export-39");
+    const zoneIds = Object.keys(w.zones).filter((id) => id !== w.startZone);
+    let serverLocs = [{ id: "loc-root" }];
+    const posts = [];
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision: 2, locations: serverLocs.slice() },
+      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async (chatId, body) => {
+      posts.push(body);
+      serverLocs = serverLocs.concat(body.locations.map((row) => ({ id: row.id })));
+      return { ok: true, status: 200, body: {} };
+    };
+    resetExportState();
+    await bindRoot(core);
+    await mapsExport.maybeSync(core);
+    assert.ok(mapsExport._done.has(w), "first world completes");
+    // The rebuild: same chat, same seed, fresh world object with empty bindings.
+    const sealed = brief.defaults("cozy-village", 1357);
+    const w2 = world.build(1357, "cozy-village", sealed);
+    core.sim = {
+      world: w2, zoneId: w2.startZone, mode: "walk",
+      zone() { return this.world.zones[this.zoneId]; },
+      teleport() {},
+    };
+    w2.bindings["loc-root"] = w2.startZone;
+    await mapsExport.maybeSync(core);
+    assert.ok(mapsExport._done.has(w2), "the rebuilt world syncs despite identical chat+seed");
+    assert.equal(posts.length, 1, "nothing re-posts — the definition diff turns the re-sync into a re-bind");
+    for (const zoneId of zoneIds) {
+      assert.equal(w2.bindings[mapsExport.idFor(w2, zoneId)], zoneId, "the rebuilt world's bindings self-heal");
+    }
+  }
+
+  // 40. The pre-brief boot world of a generation-enabled chat (world.interim,
+  // stamped by 60-save) never exports — its throwaway zones would pollute the
+  // map forever on an additive route.
+  {
+    const { w, core } = exportScaffold(8642, "chat-export-40");
+    w.interim = true;
+    const posts = [];
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision: 1, locations: [{ id: "loc-root" }] },
+      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async () => {
+      posts.push(1);
+      return { ok: true, status: 200, body: {} };
+    };
+    resetExportState();
+    await bindRoot(core);
+    await mapsExport.maybeSync(core);
+    assert.equal(posts.length, 0, "an interim world never posts");
+    assert.ok(!mapsExport._done.has(w), "and is not marked done — the final world will sync");
+  }
+
+  // 41. A shared-world-linked chat skips: posting would silently stage
+  // unpublished draft edits to a communal world. Not marked done, so
+  // unlinking re-enables the export.
+  {
+    const { w, core } = exportScaffold(9753, "chat-export-41");
+    const posts = [];
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision: 1, locations: [{ id: "loc-root" }] },
+      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+      sharedWorld: { mode: "linked", worldId: "world-1", pendingChanges: false },
+    });
+    loadedPF.api.postSpatialLocations = async () => {
+      posts.push(1);
+      return { ok: true, status: 200, body: {} };
+    };
+    resetExportState();
+    await bindRoot(core);
+    await mapsExport.maybeSync(core);
+    assert.equal(posts.length, 0, "a linked chat never posts");
+    assert.ok(!mapsExport._done.has(w), "and is not marked done");
+  }
+
+  // 42. A stale root binding (map replaced or root archived) prunes the dead
+  // bindings instead of 400-looping forever; the emptied table re-seeds on
+  // the next refresh.
+  {
+    const { w, core } = exportScaffold(1122, "chat-export-42");
+    const posts = [];
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision: 5, locations: [{ id: "loc-new-root" }] },
+      currentLocationId: "loc-new-root", breadcrumb: [{ name: "New Root" }], destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async () => {
+      posts.push(1);
+      return { ok: false, status: 400, body: { code: "spatial_replacement_invalid" } };
+    };
+    resetExportState();
+    loadedPF.spatial.reset();
+    mapsExport._inFlightWorld = core.sim.world;
+    await loadedPF.spatial.refresh(core);
+    mapsExport._inFlightWorld = null;
+    // The save restored bindings from BEFORE the map was replaced.
+    delete w.bindings["loc-new-root"];
+    w.bindings["loc-dead-root"] = w.startZone;
+    w.bindings[mapsExport.idFor(w, Object.keys(w.zones).find((id) => id !== w.startZone))] = "z2";
+    core.dirty = 0;
+    await mapsExport.maybeSync(core);
+    assert.equal(posts.length, 0, "nothing posts under a dead root");
+    assert.equal(Object.keys(w.bindings).length, 0, "every dead binding is pruned so re-seeding can run");
+    assert.ok(core.dirty > 0, "the prune persists");
+    assert.ok(!mapsExport._done.has(w), "the world is not done — it re-syncs under the new root");
+  }
+
+  // 43. A deliberate refusal (archived parent raced in, the 500-location cap)
+  // marks the world done for the session — no 60-second retry drumbeat.
+  {
+    const { w, core } = exportScaffold(3344, "chat-export-43");
+    const posts = [];
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision: 3, locations: [{ id: "loc-root" }] },
+      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async () => {
+      posts.push(1);
+      return { ok: false, status: 400, body: { code: "spatial_replacement_invalid" } };
+    };
+    resetExportState();
+    await bindRoot(core);
+    await mapsExport.maybeSync(core);
+    mapsExport._failed = null; // isolate the done-marking from the backoff window
+    await mapsExport.maybeSync(core);
+    assert.equal(posts.length, 1, "a 4xx refusal is terminal for the session, not retried");
+    assert.ok(mapsExport._done.has(w), "the world is marked done");
+  }
+
+  // 44. An oscillating map (an editor archiving/restoring an adoptable
+  // between every CAS attempt flips a zone between adoption and creation, so
+  // consecutive no-progress comparisons never fire) still terminates via the
+  // absolute attempt budget — CodeRabbit finding on #389.
+  {
+    const { w, core } = exportScaffold(5566, "chat-export-44");
+    const zoneIds = Object.keys(w.zones).filter((id) => id !== w.startZone);
+    const flipName = w.zones[zoneIds[0]].name;
+    let reads = 0;
+    const posts = [];
+    loadedPF.api.getSpatial = async () => ({
+      definition: {
+        revision: 10 + reads,
+        locations: [
+          { id: "loc-root" },
+          // Present on every OTHER read: adoption flips to creation and back,
+          // so missing.length oscillates and never repeats consecutively.
+          ...(reads++ % 2 === 0 ? [{ id: "flippy", parentId: "loc-root", name: flipName }] : []),
+        ],
+      },
+      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async () => {
+      posts.push(1);
+      return { ok: false, status: 409, body: { code: "spatial_definition_stale" } };
+    };
+    resetExportState();
+    await bindRoot(core);
+    await mapsExport.maybeSync(core);
+    assert.ok(posts.length <= 8, `the absolute budget bounds the loop (posted ${posts.length} times)`);
+    assert.ok(mapsExport._failed, "the surrender is recorded for backoff");
+  }
+
+  loadedPF.api.getSpatial = prevGetSpatial;
+  loadedPF.api.postSpatialLocations = prevPostLocations;
+  resetExportState();
+  loadedPF.spatial.reset();
 }
 
 console.log("brief validator + compiler: all cases passed");

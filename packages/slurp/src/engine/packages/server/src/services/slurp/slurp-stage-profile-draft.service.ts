@@ -17,6 +17,7 @@ import {
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
+import { requireModelAnswer } from "./slurp-model-answer.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
@@ -30,7 +31,11 @@ import {
   stageProfileContainsPublicIdentity,
 } from "./slurp-generation.service.js";
 import { resolveNoodlerSourceSnapshot } from "./slurp-source-resolve.js";
-import { hintedNoodlerSourceBrief } from "./slurp-prompt-safety.js";
+import {
+  hintedNoodlerSourceBrief,
+  reviewedNoodlerPhysicalFacts,
+  reviewedNoodlerTemperamentThemes,
+} from "./slurp-prompt-safety.js";
 import { normalizeNoodlerStageProfileDraft } from "./slurp-stage-profile-normalize.js";
 import { parseRecord } from "./slurp-public-support.js";
 import { createNoodlerSourceRevisionToken } from "./slurp-source-revision.js";
@@ -39,10 +44,7 @@ type GenerationConnection = NonNullable<
   Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>
 >;
 
-/**
- * Hinted drafts see look, temperament, and everyday texture — the material a follower would
- * recognize — but not the name or the canonical story beats (scenario, backstory).
- */
+/** Hinted drafts preserve appearance and recognizable everyday texture without copying identity text. */
 export function noodlerHintedSourceText(data: unknown): string {
   const source = parseRecord(data);
   const extensions = parseRecord(source.extensions);
@@ -52,6 +54,32 @@ export function noodlerHintedSourceText(data: unknown): string {
     `Appearance: ${typeof source.appearance === "string" ? source.appearance : typeof extensions.appearance === "string" ? extensions.appearance : ""}`,
   ]
     .filter((line) => line.split(": ").slice(1).join(": ").trim())
+    .join("\n");
+}
+
+/** Secret drafts keep visual continuity and broad temperament, but no public-life details. */
+export function noodlerSecretSourceText(data: unknown): string {
+  const source = parseRecord(data);
+  const extensions = parseRecord(source.extensions);
+  const appearance =
+    typeof source.appearance === "string"
+      ? source.appearance
+      : typeof extensions.appearance === "string"
+        ? extensions.appearance
+        : "";
+  const themes = reviewedNoodlerTemperamentThemes(
+    typeof source.personality === "string" ? source.personality : "",
+  );
+  const physicalFacts = reviewedNoodlerPhysicalFacts(appearance);
+  return [
+    themes.length > 0
+      ? `Approved source themes: ${themes.join(", ")}.`
+      : "General temperament and creative interests from the source profile.",
+    physicalFacts.length > 0
+      ? `Approved physical facts: ${physicalFacts.join(", ")}.`
+      : "",
+  ]
+    .filter(Boolean)
     .join("\n");
 }
 
@@ -75,10 +103,10 @@ function disclosureRules(
   publicIdentity: { displayName: string; handle: string },
 ) {
   if (mode === "open")
-    return `The public identity ${publicIdentity.displayName} (@${publicIdentity.handle}) may inspire and appear in the draft.`;
+    return `This is the same public creator. Use exactly ${publicIdentity.displayName} as displayName and ${publicIdentity.handle} as handle. Keep the linked public bio unless the user gives a direct edit. Do not invent a stage identity.`;
   if (mode === "hinted")
-    return "Create the same person behind a stage name, as an open secret. Looks, voice, interests, and daily life carry over so a regular follower recognizes them, but never use the exact public name or handle, and never copy canonical biography sentences.";
-  return "Create a separate persona. Treat the source only as confidential authoring inspiration. Do not use the public name, handle, canonical occupation, relationships, locations, signature phrases, or distinctive identifying details.";
+    return "Create the same person behind a different stage name and handle, as an open secret. Preserve species, body, age range, unusual anatomy, scars, missing or unusual features, clothing preferences, voice, interests, and recurring visual traits. Preserve indirect clues that regular followers may recognize. Never use the exact public name or handle, and never copy canonical biography sentences.";
+  return "Create a separate creator identity with a different display name and handle. Preserve fixed physical facts needed for visual continuity, including species, body, age range, unusual anatomy, scars, missing or unusual features, and other non-identifying appearance details. Do not use or imply the public name, handle, biography, occupation, relationships, locations, audience, signature phrases, or distinctive public-life clues.";
 }
 
 export function buildNoodlerStageProfileDraftMessages(input: {
@@ -117,10 +145,10 @@ export function buildNoodlerStageProfileDraftMessages(input: {
   const rawSourceContext =
     input.request.disclosureMode === "secret"
       ? [
-          "# Non-identifying inspiration brief",
-          "Use only broad temperament, creative interests, and non-identifying aesthetic direction.",
-          "Do not infer canonical facts or recognizable story details.",
-          `Public bio themes, redacted: ${input.publicAccount.bio ? "A source bio exists; do not reproduce its wording." : "None."}`,
+          "# Confidential appearance and temperament brief",
+          "Preserve concrete physical facts for visual continuity. These facts are not identity clues: species, body, age range, unusual anatomy, scars, missing or unusual features, hair, clothing preferences, and other stable appearance details.",
+          "Use general temperament only. Do not infer or reproduce canonical biography, occupation, relationships, locations, audience, signature phrases, or public-life details.",
+          noodlerSecretSourceText(input.source?.data) || hintedNoodlerSourceBrief(input.sourceSnapshot),
         ].join("\n")
       : hintedBrief
         ? [
@@ -155,9 +183,9 @@ export function buildNoodlerStageProfileDraftMessages(input: {
     {
       role: "system",
       content: [
-        "Create one editable NoodleR stage profile draft.",
+        "Create one editable NoodleR creator profile draft.",
         "Return JSON only with displayName, handle, bio, stagePersonality, and disclosureMode.",
-        "Make the stage identity distinct, concise, and usable for future NoodleR post generation.",
+        "Make the profile concise and usable for future NoodleR post generation. Follow the disclosure rules exactly.",
         disclosureRules(input.request.disclosureMode, identity),
       ].join("\n"),
     },
@@ -182,7 +210,9 @@ const noodlerStageProfileDraftSchema = noodleStageProfileDraftResponseSchema
   .strip();
 
 export function parseNoodlerStageProfileDraft(content: string) {
-  const normalized = normalizeNoodlerStageProfileDraft(parseGameJsonish(content));
+  const normalized = normalizeNoodlerStageProfileDraft(
+    parseGameJsonish(requireModelAnswer(content, "a creator profile")),
+  );
   return noodlerStageProfileDraftSchema.parse(normalized);
 }
 
@@ -300,7 +330,10 @@ export async function generateNoodlerStageProfileDraft(
     const retry = await provider.chatComplete(
       [
         ...messages,
-        { role: "assistant", content: response.content ?? "" },
+        // An empty assistant turn is rejected by several providers, so only echo a real answer.
+        ...(response.content?.trim()
+          ? [{ role: "assistant" as const, content: response.content }]
+          : []),
         {
           role: "user",
           content:
@@ -315,13 +348,23 @@ export async function generateNoodlerStageProfileDraft(
     ...parsedDraft,
     disclosureMode: input.request.disclosureMode,
   };
-  if (stageProfileContainsPublicIdentity(draft, identity)) {
+  if (
+    input.request.disclosureMode !== "open" &&
+    stageProfileContainsPublicIdentity(draft, identity)
+  ) {
     throw new Error(
       "Generated stage draft included the linked public identity. Try again with different guidance.",
     );
   }
   return {
     ...draft,
+    ...(input.request.disclosureMode === "open"
+      ? {
+          displayName: publicAccount.displayName,
+          handle: publicAccount.handle,
+          bio: input.request.currentDraft?.bio ?? publicAccount.bio,
+        }
+      : {}),
     ...(input.request.disclosureMode === "open" && sourceSnapshot
       ? { sourceSnapshot }
       : {}),

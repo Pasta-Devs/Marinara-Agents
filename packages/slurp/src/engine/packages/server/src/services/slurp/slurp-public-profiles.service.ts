@@ -12,6 +12,7 @@ import {
   resolveStoredMaxTokens,
 } from "../generation/generation-parameters.js";
 import { parseGameJsonish } from "../game/jsonish.js";
+import { requireModelAnswer } from "./slurp-model-answer.js";
 import type { BaseLLMProvider, ChatMessage } from "../llm/base-provider.js";
 import { createCharacterGalleryStorage } from "../storage/character-gallery.storage.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
@@ -53,12 +54,8 @@ export async function pickRandomCharacterBannerUrl(
 }
 
 /**
- * Only OPEN inherits the literal source photo — republishing the source's actual image file is a
- * copy, not a stage presence, and a hinted creator is a separate account keeping up appearances
- * rather than the same profile twice. Hinted and secret both get null here and pick up freshly
- * generated artwork instead (see backfillNextNoodlerCreatorArtwork): hinted
- * generates through the appearance-referenced pipeline so it still looks like the same person
- * without being the same photo, secret gets no reference material at all.
+ * Only OPEN inherits the literal source photo. Hinted and secret create new artwork instead:
+ * hinted may use appearance references, while secret receives only redacted appearance text.
  */
 export async function resolveNoodlerCreatorArtwork(input: {
   characters: ReturnType<typeof createCharactersStorage>;
@@ -204,7 +201,7 @@ export async function generateMissingNoodleProfiles(input: {
     responseFormat: noodleResponseFormat(input.connection.model, "profiles"),
   });
   const generated = parseNoodleGeneratedProfiles(
-    parseGameJsonish(result.content ?? ""),
+    parseGameJsonish(requireModelAnswer(result.content ?? "", "public profiles")),
   );
   if (generated.rejected.length > 0) {
     logger.warn(

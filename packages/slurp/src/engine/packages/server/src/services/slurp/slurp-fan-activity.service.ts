@@ -12,6 +12,7 @@ import { clampGenerationMaxOutputTokens } from "../generation/output-token-limit
 import { resolveStoredChatOptions } from "../generation/generation-parameters.js";
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
+import { requireModelAnswer } from "./slurp-model-answer.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
@@ -205,7 +206,9 @@ async function generateFanActivity(input: {
     "[debug/noodler-fan] Model response received (%d characters); content is redacted.",
     content.length,
   );
-  const parsed = parseGeneratedFanActivityResponse(parseGameJsonish(content));
+  const parsed = parseGeneratedFanActivityResponse(
+    parseGameJsonish(requireModelAnswer(content, "fan activity")),
+  );
   if (parsed.rejected > 0) {
     logger.warn("Ignored %d malformed generated NoodleR fan activities", parsed.rejected);
   }

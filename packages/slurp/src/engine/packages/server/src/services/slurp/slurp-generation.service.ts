@@ -20,6 +20,7 @@ import { clampGenerationMaxOutputTokens } from "../generation/output-token-limit
 import { resolveStoredChatOptions } from "../generation/generation-parameters.js";
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
+import { requireModelAnswer } from "./slurp-model-answer.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
 import {
   isConnectionAdmissionFailure,
@@ -119,12 +120,12 @@ export function noodlerIdentityInstruction(
   publicIdentity: PublicIdentity | null,
 ): string {
   if (mode === "open" && publicIdentity) {
-    return `Disclosure is open. The linked public identity ${publicIdentity.displayName} (@${publicIdentity.handle}) may be named.`;
+    return `Disclosure is open. This is the same public creator. Use the linked identity ${publicIdentity.displayName} (@${publicIdentity.handle}) directly when relevant.`;
   }
   if (mode === "hinted") {
     return [
       "Disclosure is hinted. The creator's other public life is an open secret.",
-      "Tease it: allude to that life — the day job, the city, the schedule, the people around it, an event both accounts attended — often enough that a regular follower can put it together.",
+      "Use indirect clues from the same person's public life — appearance, voice, interests, routines, and recurring themes — so regular followers may recognize them.",
       "Never write the public name or handle. Never confirm a guess and never flatly deny one; deflect, joke, or change the subject.",
     ].join(" ");
   }
@@ -416,7 +417,7 @@ export function noodlerTitleFromContent(content: string): string {
 }
 
 function parseNoodlerPost(content: string) {
-  const parsed = parseGameJsonish(content);
+  const parsed = parseGameJsonish(requireModelAnswer(content, "a creator post"));
   // Many LLMs (especially local models via Ollama/KoboldCPP) wrap the expected object
   // in an array ([{"title":...}]) regardless of the prompt instructing "one JSON object".
   // Unwrap the common single-item array response while preserving validation for other shapes.

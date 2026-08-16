@@ -76,19 +76,53 @@ const REVIEWED_HINTED_THEME_TOKENS = [
   "witty",
 ] as const;
 
+const REVIEWED_PHYSICAL_FACT_TOKENS = [
+  "adult",
+  "androgynous",
+  "athletic",
+  "beard",
+  "blind",
+  "curly hair",
+  "dark hair",
+  "freckles",
+  "glasses",
+  "horns",
+  "light hair",
+  "long hair",
+  "muscular",
+  "prosthetic",
+  "scar",
+  "short hair",
+  "slender",
+  "tattoo",
+  "wings",
+] as const;
+
 /** A hinted identity receives only reviewed, non-identifying theme tokens. */
+export function reviewedNoodlerTemperamentThemes(value: string) {
+  const personalityWords = new Set(
+    value.toLocaleLowerCase().match(/[a-z]+/gu) ?? [],
+  );
+  return REVIEWED_HINTED_THEME_TOKENS.filter((token) =>
+    personalityWords.has(token),
+  );
+}
+
 export function hintedNoodlerSourceBrief(
   snapshot: NoodlerSourceSnapshot | null,
 ) {
   if (!snapshot)
     return "General temperament and creative interests from the source profile.";
-  const personalityWords = new Set(
-    snapshot.personality.toLocaleLowerCase().match(/[a-z]+/gu) ?? [],
-  );
-  const themes = REVIEWED_HINTED_THEME_TOKENS.filter((token) =>
-    personalityWords.has(token),
-  );
+  const themes = reviewedNoodlerTemperamentThemes(snapshot.personality);
   return themes.length > 0
     ? `Approved source themes: ${themes.join(", ")}.`
     : "General temperament and creative interests from the source profile.";
+}
+
+/** Hidden identities receive only reviewed physical tokens, never raw profile prose. */
+export function reviewedNoodlerPhysicalFacts(value: string) {
+  const normalized = value.toLocaleLowerCase();
+  return REVIEWED_PHYSICAL_FACT_TOKENS.filter((token) =>
+    normalized.includes(token),
+  );
 }

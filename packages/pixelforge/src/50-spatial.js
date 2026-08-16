@@ -107,6 +107,10 @@ PF.spatial = {
       }
       this._lastLocationId = loc;
       core.hud?.refreshChips();
+      // Spec §8: once the exterior is bound, generated zones register as map
+      // locations. Fire-and-forget — every guard (done-key, in-flight, backoff,
+      // chat-switch generation) lives inside the export module.
+      void PF.mapsExport?.maybeSync(core);
     } catch (err) {
       // Network/parse trouble is not fatal to the world — stay on package state.
       console.warn("[pixelforge] spatial refresh failed", err);
