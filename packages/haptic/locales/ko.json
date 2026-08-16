@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "ko",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "햅틱 피드백 (Haptic Feedback)",
+    "description": "서사 내용을 분석해 연결된 성인용 기기를 실시간으로 제어합니다. 로컬에서 Intiface Central이 실행 중이어야 합니다 — 먼저 Intiface Central에서 기기를 연결한 뒤 이 에이전트를 켜세요. 대화 및 롤플레이 모드에서는 채팅 설정 → 에이전트 → Commands/기타 에이전트에서 Command와 에이전트로 모두 추가하세요."
+  },
+  "agents": {
+    "haptic": {
+      "name": "햅틱 피드백 (Haptic Feedback)",
+      "description": "서사 내용을 분석해 연결된 성인용 기기를 실시간으로 제어합니다. 로컬에서 Intiface Central이 실행 중이어야 합니다 — 먼저 Intiface Central에서 기기를 연결한 뒤 이 에이전트를 켜세요. 대화 및 롤플레이 모드에서는 채팅 설정 → 에이전트 → Commands/기타 에이전트에서 Command와 에이전트로 모두 추가하세요."
+    }
+  }
+}

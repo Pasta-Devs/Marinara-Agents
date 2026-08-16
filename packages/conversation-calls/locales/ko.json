@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "ko",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "통화 (Calls)",
+    "description": "대화 캐릭터와의 실시간 음성·영상 통화를 추가합니다. 대화 모드에서는 채팅 설정 → 에이전트 → Commands/통화에서 Command와 에이전트로 모두 추가하세요."
+  },
+  "agents": {
+    "conversation-calls": {
+      "name": "통화 (Calls)",
+      "description": "대화 캐릭터와의 실시간 음성·영상 통화를 추가합니다. 대화 모드에서는 채팅 설정 → 에이전트 → Commands/통화에서 Command와 에이전트로 모두 추가하세요."
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "ko",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "배경 (Background)",
+    "description": "현재 장면에 가장 잘 어울리는 기존 배경 이미지를 배경 라이브러리에서 선택합니다. 롤플레이 모드에서는 채팅 설정 → 에이전트 → 추적 에이전트에서 이 에이전트를 추가하세요."
+  },
+  "agents": {
+    "background": {
+      "name": "배경 (Background)",
+      "description": "현재 장면에 가장 잘 어울리는 기존 배경 이미지를 배경 라이브러리에서 선택합니다. 롤플레이 모드에서는 채팅 설정 → 에이전트 → 추적 에이전트에서 이 에이전트를 추가하세요."
+    }
+  }
+}

@@ -2,8 +2,34 @@
   "schemaVersion": 1,
   "id": "noodle",
   "name": "Noodle",
-  "version": "1.0.0",
-  "description": "Explore the familiar Noodle public timeline and private NoodleR creator platform as an optional social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
+  "version": "1.2.0",
+  "description": "Explore the Noodle public timeline as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
+  "localizations": {
+    "de": {
+      "name": "Noodle",
+      "description": "Entdecke die öffentliche Noodle-Timeline als optionale lokale soziale Welt. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Noodle.",
+      "homeBrowserTab": {
+        "label": "Noodle",
+        "ariaLabel": "Noodle öffnen"
+      }
+    },
+    "ko": {
+      "name": "Noodle",
+      "description": "Noodle 공개 타임라인을 선택형 로컬 소셜 세계로 만나 보세요. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Noodle을 여세요.",
+      "homeBrowserTab": {
+        "label": "Noodle",
+        "ariaLabel": "Noodle 열기"
+      }
+    },
+    "pl": {
+      "name": "Noodle",
+      "description": "Poznaj publiczną oś czasu Noodle jako opcjonalny lokalny świat społecznościowy. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Noodle na stronie głównej.",
+      "homeBrowserTab": {
+        "label": "Noodle",
+        "ariaLabel": "Otwórz Noodle"
+      }
+    }
+  },
   "engine": {
     "min": "2.4.2",
     "maxExclusive": "4.0.0"
@@ -22,38 +48,32 @@
     ],
     "homeBrowserTab": {
       "label": "Noodle",
-      "ariaLabel": "Open Noodle and NoodleR",
+      "ariaLabel": "Open Noodle",
       "iconPaths": [
-        "noodle-klusek.png",
-        "noodler-klusek.png"
+        "noodle-klusek.png"
       ]
     }
   },
   "files": [
     {
       "path": "agents.json",
-      "sha256": "a2d57fb9c2d28f450878395f8eb40a5edff84ce812623999b73a1d8ca5ef51b2",
-      "bytes": 628
+      "sha256": "905d74012562eb8531a26cb9b3e3e01ac7485900c282c6021f000d2bd4b8cfac",
+      "bytes": 588
     },
     {
       "path": "server.mjs",
-      "sha256": "01f3e41a956ac795270a8389c62c515a780c5345e5a9e36e110be3d8eb6fa0bc",
-      "bytes": 2382557
+      "sha256": "2bee7244fc7f45f03e585d15200413938513375f0a56a48bf724d5d5c8cd52ee",
+      "bytes": 2337117
     },
     {
       "path": "client.js",
-      "sha256": "ca5f1bc6ab1b6b176d0ed2cc05fe42d1132e308d1c87066994eae1403779c359",
-      "bytes": 2469464
+      "sha256": "7fc182759e3697c00f76968004612388c3009a4a87360641890ded1f12658647",
+      "bytes": 2242613
     },
     {
       "path": "noodle-klusek.png",
       "sha256": "003236ad2b83c5eb44731a48048c86b07aa8c1f9c411f881c15f7d4af3c68212",
       "bytes": 28325
-    },
-    {
-      "path": "noodler-klusek.png",
-      "sha256": "f3f0eb142c6ff572dea636aa7ab7d046922aedde2f5425890327e79834bd923e",
-      "bytes": 27664
     }
   ],
   "permissions": [

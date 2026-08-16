@@ -14,7 +14,7 @@ import {
   type LtmRepairResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { chunkNotes, stableJsonHash } from "./chunking.js";
-import { ltmIndexStatePath, readLtmIndexState } from "./index-state.js";
+import { ltmIndexStatePath } from "./index-state.js";
 import { isEnoent, nowIso } from "./ltm-utils.js";
 import { logger } from "./package-runtime.js";
 import {

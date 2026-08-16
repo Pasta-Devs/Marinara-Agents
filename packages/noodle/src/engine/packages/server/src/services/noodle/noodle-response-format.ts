@@ -1,5 +1,8 @@
 import { isOpenAIGpt56Model } from "@marinara-engine/shared";
 
+const NOODLE_POST_HARD_MAX_LENGTH = 4000;
+const NOODLE_REPLY_HARD_MAX_LENGTH = 2000;
+
 export const NOODLE_JSON_OUTPUT_HEADING = "# JSON Output Format";
 
 const nullableString = { type: ["string", "null"] } as const;
@@ -30,7 +33,7 @@ const timelineSchema = {
         properties: {
           tempId: { type: "string" },
           authorHandle: { type: "string" },
-          content: { type: "string" },
+          content: { type: "string", maxLength: NOODLE_POST_HARD_MAX_LENGTH },
           imagePrompt: nullableString,
           attachGalleryImage: { type: "boolean" },
           poll: pollSchema,
@@ -56,7 +59,7 @@ const timelineSchema = {
           targetPostId: nullableString,
           parentInteractionId: nullableString,
           type: { type: "string", enum: ["like", "repost", "reply", "vote"] },
-          content: nullableString,
+          content: { type: ["string", "null"], maxLength: NOODLE_REPLY_HARD_MAX_LENGTH },
           pollOptionIndex: nullableInteger,
         },
         required: [
@@ -111,110 +114,18 @@ const profilesSchema = {
   additionalProperties: false,
 } as const;
 
-const noodlerPostSchema = {
-  type: "object",
-  properties: {
-    title: { type: ["string", "null"] },
-    content: { type: "string" },
-    // strict mode has no optional properties — nullable + required is how optionality is spelled.
-    imagePrompt: { type: ["string", "null"] },
-  },
-  required: ["title", "content", "imagePrompt"],
-  additionalProperties: false,
-} as const;
-
-const noodlerProfileSchema = {
-  type: "object",
-  properties: {
-    displayName: { type: "string" },
-    handle: { type: "string" },
-    bio: { type: "string" },
-    stagePersonality: { type: "string" },
-    disclosureMode: { type: "string", enum: ["open", "hinted", "secret"] },
-  },
-  required: [
-    "displayName",
-    "handle",
-    "bio",
-    "stagePersonality",
-    "disclosureMode",
-  ],
-  additionalProperties: false,
-} as const;
-
-const noodlerReplySchema = {
-  type: "object",
-  properties: { content: { type: "string" } },
-  required: ["content"],
-  additionalProperties: false,
-} as const;
-
-const noodlerFanActivitySchema = {
-  type: "object",
-  properties: {
-    actorHandle: { type: "string" },
-    creatorAccountId: { type: "string" },
-    targetPostId: { type: "string" },
-    type: { type: "string", enum: ["like", "reply", "repost"] },
-    content: nullableString,
-  },
-  required: [
-    "actorHandle",
-    "creatorAccountId",
-    "targetPostId",
-    "type",
-    "content",
-  ],
-  additionalProperties: false,
-} as const;
-
 export function noodleResponseFormat(
   model: string,
-  kind:
-    | "timeline"
-    | "profiles"
-    | "noodler_post"
-    | "noodler_profile"
-    | "noodler_reply"
-    | "noodler_fan_activity",
+  kind: "timeline" | "profiles",
 ): { type: string; [key: string]: unknown } {
   if (!isOpenAIGpt56Model(model)) return { type: "json_object" };
-  const schema =
-    kind === "timeline"
-      ? timelineSchema
-      : kind === "profiles"
-        ? profilesSchema
-        : kind === "noodler_profile"
-          ? noodlerProfileSchema
-          : kind === "noodler_reply"
-            ? noodlerReplySchema
-            : kind === "noodler_fan_activity"
-              ? {
-                  type: "object",
-                  properties: {
-                    activities: {
-                      type: "array",
-                      items: noodlerFanActivitySchema,
-                    },
-                  },
-                  required: ["activities"],
-                  additionalProperties: false,
-                }
-              : noodlerPostSchema;
+  const schema = kind === "timeline" ? timelineSchema : profilesSchema;
   return {
     type: "json_schema",
     name:
       kind === "timeline"
         ? "noodle_timeline"
-        : kind === "profiles"
-          ? "noodle_profiles"
-          : kind === "noodler_profile"
-            ? "noodler_profile"
-            : kind === "noodler_reply"
-              ? "noodler_reply"
-              : kind === "noodler_fan_activity"
-                ? "noodler_fan_activity"
-                : "noodler_post",
+        : "noodle_profiles",
     schema,
     strict: true,
   };

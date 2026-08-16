@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "storyboard",
   "name": "Storyboard",
-  "version": "1.1.1",
+  "version": "1.1.5",
   "description": "Plans still or animated Game and Roleplay storyboards with separate planning prompts and shared provider formatters. Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Roleplay and Game modes.",
   "engine": {
-    "min": "2.3.5",
+    "min": "2.4.2",
     "maxExclusive": "4.0.0"
   },
   "kind": [
@@ -17,8 +17,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "bf7699b1415d712515637cb1da9ca56b6a183dfab6c8a94bfe4b066b2dfd783c",
-      "bytes": 69315
+      "sha256": "c2fbd390e49ed87b50bf5285283ed90e7327a8b049f751623996f102c973f940",
+      "bytes": 83086
     }
   ],
   "permissions": [

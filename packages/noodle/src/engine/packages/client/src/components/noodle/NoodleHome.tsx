@@ -2,8 +2,8 @@
 // Noodle: fake social media timeline
 // ──────────────────────────────────────────────
 import {
-  AtSign,
   AlertTriangle,
+  AtSign,
   Bell,
   ChevronLeft,
   ChevronRight,
@@ -47,7 +47,6 @@ import {
   noodleTextMentionsHandle as textMentionsHandle,
   AMBIENT_NOODLE_ENTITY_IDS,
   noodlePollInputSchema,
-  NOODLER_POSTS_PER_DAY_MAX,
   parseConnectionImageCaptioningDefaults,
   PROFESSOR_MARI_ID,
   readNoodlePollFromMetadata,
@@ -113,9 +112,7 @@ import {
   useInviteNoodleCharacter,
   useInviteNoodleCharacters,
   useNoodle,
-  useNoodlerAccounts,
   useNoodleUnseenCount,
-  useNoodlerUnseenCount,
   usePatchNoodleAccountSettings,
   useRefreshNoodle,
   useRerollAmbientNoodleProfiles,
@@ -135,11 +132,8 @@ import {
   getNoodleAccentStyle,
   NewSinceLastVisitDivider,
   NoodleLogo,
-  NOODLER_ADD_MARK,
-  NOODLER_MARK,
   NoodleShell,
   NOODLE_BLUE,
-  NOODLE_PINK,
   NOODLE_ICON_SCOPE_CLASS,
   NOODLE_PERSONA_SWITCHER_PAGE_SIZE,
 } from "./NoodleShell";
@@ -149,10 +143,7 @@ import type {
   NoodleSettingsNavigationState,
   NoodleSettingsReturnState,
 } from "./noodle-navigation.types";
-import { NoodlerAgeGate } from "./NoodlerAgeGate";
 import { NoodleProfileSurface } from "./NoodleProfileSurface";
-import { NoodlerPublishingSettings } from "./NoodlerPublishingSettings";
-import { NoodlerOnboardingWizard } from "./NoodlerBulkCreatePanel";
 import { formatTime } from "./NoodleDateTime";
 import { NoodleImageComposer } from "./NoodleImageComposer";
 import { NoodlePollComposer } from "./NoodlePollComposer";
@@ -185,7 +176,7 @@ type NoodlePendingComposerImage = {
   source: File | string;
   crop: NoodlePostImageCrop | null;
 };
-type SocialSettingsTab = "noodle" | "noodler";
+type SocialSettingsTab = "noodle";
 type SocialSettingsSection = NonNullable<
   NoodleSettingsNavigationState["section"]
 >;
@@ -198,11 +189,6 @@ const SOCIAL_SETTINGS_SECTIONS: Record<
     { id: "general", labelKey: "ui.noodle.socialsettings.general" },
     { id: "timeline", labelKey: "ui.noodle.socialsettings.timeline" },
     { id: "participants", labelKey: "ui.noodle.socialsettings.participants" },
-    { id: "advanced", labelKey: "ui.noodle.socialsettings.advanced" },
-  ],
-  noodler: [
-    { id: "general", labelKey: "ui.noodle.socialsettings.general" },
-    { id: "creators", labelKey: "ui.noodle.socialsettings.creatorProfiles" },
     { id: "advanced", labelKey: "ui.noodle.socialsettings.advanced" },
   ],
 };
@@ -580,7 +566,7 @@ function Section({
   title: string;
   help?: React.ReactNode;
   children: React.ReactNode;
-  /** Overrides `--noodle-accent` for this section, e.g. NoodleR's pink brand accent. */
+  /** Overrides `--noodle-accent` for this section. */
   accent?: string;
   visible?: boolean;
 }) {
@@ -688,41 +674,15 @@ interface NoodleHomeProps {
 
 export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const { t: localizeUi, i18n } = useUiTranslation();
-  const selectedPersonaId =
-    useUIStore((state) => state.noodleSelectedPersonaId) ?? "";
-  const [gateOpen, setGateOpen] = useState(false);
-  const setSelectedPersonaId = useUIStore(
-    (state) => state.setNoodleSelectedPersonaId,
-  );
+  const [selectedPersonaId, setSelectedPersonaId] = useState<string | null>(null);
   const { data, isLoading, isError } = useNoodle();
-  const noodlerAccountsQuery = useNoodlerAccounts(
-    data?.settings.enableNoodler === true,
-  );
-  // The counter is the reason to come back, so it has to be visible from the Noodle side —
-  // where the user is when they are not already watching NoodleR.
-  const noodlerUnseenCount = useNoodlerUnseenCount(
-    selectedPersonaId || null,
-    data?.settings.enableNoodler === true,
-  );
-  // Same idea for Noodle's own timeline. Frozen per account for the same reason as NoodleR:
+  // Freeze the seen marker while the current timeline remains visible:
   // the stored value advances as soon as the timeline is shown, which would otherwise erase
   // the divider while the reader is still on it.
   const [frozenNoodleFeedSeenAt, setFrozenNoodleFeedSeenAt] = useState<
     Record<string, string | null>
   >({});
   const timelineShownForAccountRef = useRef<string | null>(null);
-  const noodlerCreators = noodlerAccountsQuery.data ?? [];
-  const noodlerCreatorCount = noodlerCreators.length;
-  const noodlerAutomatingCount = noodlerCreators.filter(
-    (profile) => profile.autoPosting.enabled,
-  ).length;
-  const noodlerScheduleSummary =
-    noodlerCreatorCount === 0
-      ? localizeUi("ui.noodle.socialsettings.noCreatorProfiles")
-      : localizeUi("ui.noodle.socialsettings.creatorProfilesSummary", {
-          count: noodlerCreatorCount,
-          automating: noodlerAutomatingCount,
-        });
   const { data: activePersona } = useActivePersona();
   const { data: personasData } = usePersonas();
   const { data: charactersRaw } = useCharacters();
@@ -905,8 +865,6 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     useState(false);
   const [pollEditorValue, setPollEditorValue] =
     useState<NoodlePollInput | null>(null);
-  const [noodlerGenerationGuidanceDraft, setNoodlerGenerationGuidanceDraft] =
-    useState("");
   const [draftPoll, setDraftPoll] = useState<NoodlePollInput | null>(null);
   const postImageEditor = useNoodlePostImageEditor(async (post) => {
     if (!post.imageUrl) throw new Error("This post does not have an image.");
@@ -916,15 +874,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const activeNoodleView =
     navigation.mode === "public" ? navigation.view : navigation.mode;
   const settings = data?.settings;
-  const requestedSettingsTab: SocialSettingsTab =
-    navigation.mode === "settings" ? (navigation.tab ?? "noodle") : "noodle";
-  const settingsTab: SocialSettingsTab =
-    requestedSettingsTab === "noodler" && !settings?.enableNoodler
-      ? "noodle"
-      : requestedSettingsTab;
-  // The tab can fall back to `noodle` when NoodleR is disabled while a persisted section like
-  // `creators` survives from the noodler tab. That section has no chip here, so nothing renders
-  // selected and the settings body comes up empty — clamp the section to the resolved tab.
+  const settingsTab: SocialSettingsTab = "noodle";
   const requestedSettingsSection: SocialSettingsSection =
     navigation.mode === "settings"
       ? (navigation.section ?? "general")
@@ -934,9 +884,6 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   ].some((section) => section.id === requestedSettingsSection)
     ? requestedSettingsSection
     : "general";
-  const noodlerSettingsActive =
-    navigation.mode === "settings" && settingsTab === "noodler";
-  const [addCreatorsOpen, setAddCreatorsOpen] = useState(false);
   const viewedProfileAccountId =
     navigation.mode === "public" && navigation.view === "profile"
       ? navigation.accountId
@@ -1113,30 +1060,6 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const viewingOwnProfile = Boolean(
     personaAccount && viewedProfileAccount?.id === personaAccount.id,
   );
-  const linkedNoodleAccountIds = useMemo(
-    () =>
-      new Set(
-        (noodlerAccountsQuery.data ?? []).flatMap(
-          (profile) => profile.noodleAccountId ?? [],
-        ),
-      ),
-    [noodlerAccountsQuery.data],
-  );
-  const canCreateStageProfileFromViewed = Boolean(
-    settings?.enableNoodler &&
-    viewedProfileAccount &&
-    (viewedProfileAccount.kind === "persona" ||
-      viewedProfileAccount.kind === "character") &&
-    noodlerAccountsQuery.isSuccess &&
-    !linkedNoodleAccountIds.has(viewedProfileAccount.id),
-  );
-  // Noodle profiles that already back a NoodleR Creator get the same "R" mark as the create
-  // button, so the badge and the action read as one signal rather than two unrelated widgets.
-  const viewedProfileHasStageProfile = Boolean(
-    settings?.enableNoodler &&
-    viewedProfileAccount &&
-    linkedNoodleAccountIds.has(viewedProfileAccount.id),
-  );
   const canEditViewedProfile = Boolean(
     viewingOwnProfile ||
     (viewedProfileAccount?.kind === "character" &&
@@ -1274,11 +1197,6 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       setImageGenerationPromptDraft(settings?.imageGenerationPrompt ?? "");
   }, [imageInstructionsEditorOpen, settings?.imageGenerationPrompt]);
 
-  useEffect(() => {
-    setNoodlerGenerationGuidanceDraft(
-      settings?.noodlerGenerationGuidance ?? "",
-    );
-  }, [settings?.noodlerGenerationGuidance]);
 
   useEffect(() => {
     if (!noodlePromptEditorOpen) setNoodlePromptDraft(noodlePromptText);
@@ -3375,16 +3293,6 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     onNavigate(navigation.returnTo ?? { mode: "public", view: "home" });
   };
 
-  const openCreatorFromSettings = (accountId: string) => {
-    if (navigation.mode !== "settings") return;
-    onNavigate({
-      mode: "noodler",
-      view: "profile",
-      accountId,
-      returnToSettings: navigation,
-    });
-  };
-
   const openAmbientProfileFromSettings = (accountId: string) => {
     if (navigation.mode !== "settings") return;
     setProfileEditing(true);
@@ -3397,65 +3305,6 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       edit: true,
       returnToSettings: navigation,
     });
-  };
-
-  const openNoodler = () => {
-    if (!settings?.enableNoodler) {
-      void openNoodlerVerification();
-      return;
-    }
-    onNavigate({ mode: "noodler", view: "hub" });
-    setAccountSwitcherOpen(false);
-    setMobileDrawerOpen(false);
-    setActiveComposerTool(null);
-  };
-
-  // Both entrances (nav rail and the settings switch) raise the same gate modal over whatever
-  // is on screen; entering it saves the opt-in and lands on the hub, where the first-run
-  // onboarding wizard opens itself.
-  const enterNoodlerFromGate = () => {
-    setGateOpen(false);
-    updateSettings.mutate(
-      { enableNoodler: true },
-      {
-        onSuccess: () => {
-          onNavigate({ mode: "noodler", view: "hub", onboarding: true });
-          setAccountSwitcherOpen(false);
-          setMobileDrawerOpen(false);
-          setActiveComposerTool(null);
-        },
-        onError: (error) =>
-          toast.error(
-            error instanceof Error
-              ? error.message
-              : localizeUi("ui.noodle.noodlehome.couldNotUpdateNoodleSettings"),
-          ),
-      },
-    );
-  };
-
-  const openNoodlerVerification = async () => {
-    const hasUnsavedDraft =
-      composerHasText ||
-      Boolean(attachedImage) ||
-      Boolean(pendingImage) ||
-      Boolean(draftPoll) ||
-      replyHasText ||
-      Boolean(replyImageUrl);
-    if (
-      hasUnsavedDraft &&
-      !(await showConfirmDialog({
-        title: localizeUi("ui.noodle.noodlehome.discardYourNoodleDraft"),
-        message: localizeUi(
-          "ui.noodle.noodlehome.yourUnsentPostOrReplyWillBeLostWhen",
-        ),
-        confirmLabel: localizeUi("ui.noodle.noodlehome.discardDraft"),
-        tone: "destructive",
-      }))
-    ) {
-      return;
-    }
-    setGateOpen(true);
   };
 
   const openProfileConnection = (connection: ProfileConnectionTab | null) => {
@@ -4894,158 +4743,6 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
           </Section>
 
           <Section
-            visible={settingsTab === "noodle" && settingsSection === "general"}
-            accent={NOODLE_PINK}
-            title={localizeUi("ui.noodle.noodlehome.noodlerAccess")}
-            help={localizeUi(
-              "ui.noodle.noodlehome.keepsNoodlerCreatorAccountsIsolatedFromThePublicNoodle",
-            )}
-          >
-            <div className="space-y-3">
-              <ToggleSetting
-                label={localizeUi("ui.noodle.noodlehome.enableNoodler")}
-                help={localizeUi(
-                  "ui.noodle.noodlehome.optInToNoodlerCreatorAccountsTurningThisOff",
-                )}
-                checked={settings.enableNoodler}
-                asSwitch
-                disabled={updateSettings.isPending}
-                onChange={(checked) => {
-                  if (checked) void openNoodlerVerification();
-                  else saveSettings({ enableNoodler: false });
-                }}
-              />
-              <div className="flex items-start gap-2 rounded-lg border border-[var(--noodle-accent)]/35 bg-[var(--noodle-accent)]/10 px-3 py-2 text-xs leading-5 text-[var(--muted-foreground)]">
-                <AlertTriangle
-                  size={14}
-                  className="mt-0.5 shrink-0 text-[var(--noodle-accent)]"
-                />
-                <p>
-                  {localizeUi(
-                    "ui.noodle.noodlehome.noodlerIsStillBeingImplementedAndIsNotUsable",
-                  )}
-                </p>
-              </div>
-            </div>
-          </Section>
-
-          {settings.enableNoodler && (
-            <Section
-              visible={
-                settingsTab === "noodler" && settingsSection === "general"
-              }
-              accent={NOODLE_PINK}
-              title={localizeUi("ui.noodle.socialsettings.noodlerGeneral")}
-              help={localizeUi("ui.noodle.socialsettings.noodlerGeneralHelp")}
-            >
-              <div className="grid gap-2 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={openNoodler}
-                  className="flex min-h-10 w-full items-center justify-center rounded-md border border-[var(--noodle-accent)]/40 bg-[var(--noodle-accent)]/10 px-3 text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/15"
-                >
-                  {localizeUi("ui.noodle.noodlehome.openNoodler")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => navigateSettings("noodler", "creators")}
-                  className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--noodle-accent)]/40 bg-[var(--noodle-accent)]/10 px-3 text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/15"
-                >
-                  <Settings2 size={15} />
-                  {localizeUi("ui.noodle.socialsettings.creatorProfiles")}
-                </button>
-              </div>
-            </Section>
-          )}
-
-          {settings.enableNoodler && (
-            <Section
-              visible={
-                settingsTab === "noodler" && settingsSection === "advanced"
-              }
-              accent={NOODLE_PINK}
-              title={localizeUi("ui.noodle.noodlehome.noodlerAutomation")}
-              help={localizeUi(
-                "ui.noodle.noodlehome.sharedCreativeGuidanceForEveryGeneratedNoodlerPostPlus",
-              )}
-            >
-              <div className="space-y-4">
-                <NumberSetting
-                  label={localizeUi(
-                    "ui.noodle.noodlerschedulemanagermodal.postsPerDay",
-                  )}
-                  help={localizeUi(
-                    "ui.noodle.noodlehome.noodlerPostsPerDayHelp",
-                  )}
-                  value={settings.postsPerDay}
-                  min={1}
-                  max={NOODLER_POSTS_PER_DAY_MAX}
-                  onCommit={(value) => saveSettings({ postsPerDay: value })}
-                />
-                <label className="block space-y-1.5">
-                  <FieldLabel
-                    help={localizeUi(
-                      "ui.noodle.noodlehome.prependedToEveryNoodlerPostGenerationUseIt",
-                    )}
-                  >
-                    {localizeUi("ui.noodle.noodlehome.generationGuidance")}
-                  </FieldLabel>
-                  <textarea
-                    value={noodlerGenerationGuidanceDraft}
-                    onChange={(event) =>
-                      setNoodlerGenerationGuidanceDraft(event.target.value)
-                    }
-                    onBlur={() => {
-                      if (
-                        noodlerGenerationGuidanceDraft !==
-                        settings.noodlerGenerationGuidance
-                      ) {
-                        saveSettings({
-                          noodlerGenerationGuidance:
-                            noodlerGenerationGuidanceDraft,
-                        });
-                      }
-                    }}
-                    className={textareaClass}
-                  />
-                </label>
-              </div>
-            </Section>
-          )}
-
-          {settings.enableNoodler && (
-            <Section
-              visible={
-                settingsTab === "noodler" && settingsSection === "creators"
-              }
-              accent={NOODLE_PINK}
-              title={localizeUi("ui.noodle.socialsettings.creatorProfiles")}
-              help={localizeUi("ui.noodle.socialsettings.creatorProfilesHelp")}
-            >
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-xs text-[var(--muted-foreground)]">
-                    {noodlerScheduleSummary}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setAddCreatorsOpen(true)}
-                    className="min-h-9 rounded-md border border-[var(--noodle-accent)]/40 px-3 text-xs font-semibold text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10"
-                  >
-                    {localizeUi("ui.noodle.socialsettings.addCreatorProfiles")}
-                  </button>
-                </div>
-                <NoodlerPublishingSettings
-                  active={
-                    settingsTab === "noodler" && settingsSection === "creators"
-                  }
-                  onOpenCreator={openCreatorFromSettings}
-                />
-              </div>
-            </Section>
-          )}
-
-          <Section
             visible={settingsTab === "noodle" && settingsSection === "advanced"}
             title={localizeUi("ui.noodle.noodlehome.resetNoodle")}
             help={localizeUi(
@@ -5672,11 +5369,6 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
 
   return (
     <NoodleShell
-      // The settings surface is shared, so the shell has to follow the product tab: the NoodleR
-      // tab keeps the pink NoodleR identity (and its Hub home destination) instead of snapping
-      // back to blue Noodle just because NoodleHome renders it.
-      appMode={noodlerSettingsActive ? "noodler" : "noodle"}
-      accent={noodlerSettingsActive ? NOODLE_PINK : undefined}
       activeView={
         activeNoodleView === "home" ||
         activeNoodleView === "search" ||
@@ -5686,12 +5378,10 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
           ? activeNoodleView
           : null
       }
-      noodlerUnseenCount={noodlerUnseenCount}
       noodleUnseenCount={noodleUnseenCount}
       personaAccount={personaAccount}
       sortedPersonaAccounts={sortedPersonaAccounts}
       visiblePersonaAccounts={visiblePersonaAccounts}
-      linkedNoodleAccountIds={linkedNoodleAccountIds}
       onLoadMorePersonaAccounts={() =>
         setPersonaAccountLimit(
           (current) => current + NOODLE_PERSONA_SWITCHER_PAGE_SIZE,
@@ -5706,27 +5396,16 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       mobileAccountSwitcherOpen={mobileAccountSwitcherOpen}
       onMobileAccountSwitcherOpenChange={setMobileAccountSwitcherOpen}
       notificationCount={notificationCount}
-      enableNoodler={settings?.enableNoodler ?? false}
       onOpenHome={openHomeTimeline}
       onOpenMobileHome={openMobileHomeTimeline}
-      onOpenNoodler={openNoodler}
-      // NoodleR settings borrows this shell; its rail must not offer Noodle-only destinations.
-      onOpenSearch={noodlerSettingsActive ? undefined : openSearch}
-      onOpenNotifications={
-        noodlerSettingsActive ? undefined : openNotifications
-      }
-      onOpenProfile={noodlerSettingsActive ? undefined : openOwnProfile}
+      onOpenSearch={openSearch}
+      onOpenNotifications={openNotifications}
+      onOpenProfile={openOwnProfile}
       onOpenSettings={openSettings}
-      onCompose={noodlerSettingsActive ? undefined : openComposeModal}
+      onCompose={openComposeModal}
       rightRail={rightRail}
       overlays={
         <>
-          <NoodlerOnboardingWizard
-            open={addCreatorsOpen}
-            selectionOnly
-            onClose={() => setAddCreatorsOpen(false)}
-            onComplete={() => setAddCreatorsOpen(false)}
-          />
           <input
             ref={imageFileRef}
             type="file"
@@ -6072,81 +5751,25 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                     className="hidden text-[var(--noodle-accent)] sm:block"
                   />
                   <h2 className="min-w-0 truncate text-lg font-bold">
-                    {settingsTab === "noodler"
-                      ? localizeUi("ui.noodle.socialsettings.noodlerTitle")
-                      : localizeUi("ui.noodle.socialsettings.noodleTitle")}
+                    {localizeUi("ui.noodle.socialsettings.noodleTitle")}
                   </h2>
                 </div>
-                {settings?.enableNoodler && (
-                  <div
-                    className="grid grid-cols-2 gap-1.5 px-3 pb-2"
-                    role="tablist"
-                    aria-label={localizeUi("ui.noodle.socialsettings.products")}
-                  >
-                    {(["noodle", "noodler"] as const).map((tab) => (
-                      <button
-                        key={tab}
-                        type="button"
-                        role="tab"
-                        aria-selected={settingsTab === tab}
-                        onClick={() => navigateSettings(tab)}
-                        className={cn(
-                          "flex min-h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm font-bold transition-colors",
-                          settingsTab === tab
-                            ? "border-[var(--noodle-accent)]/45 bg-[var(--noodle-accent)]/10 text-[var(--foreground)]"
-                            : "border-[var(--noodle-divider)] text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]",
-                        )}
-                        style={
-                          tab === "noodler"
-                            ? ({
-                                "--noodle-accent": NOODLE_PINK,
-                              } as CSSProperties)
-                            : undefined
-                        }
-                      >
-                        {tab === "noodle" ? (
-                          <NoodleLogo className="h-4 w-6" />
-                        ) : (
-                          <span
-                            aria-hidden="true"
-                            className="text-sm font-black text-[var(--noodle-accent)]"
-                          >
-                            {NOODLER_ADD_MARK}
-                          </span>
-                        )}
-                        {tab === "noodle"
-                          ? localizeUi("navigation.topbar.noodle")
-                          : localizeUi("ui.noodle.noodlemodetoggle.noodler")}
-                      </button>
-                    ))}
-                  </div>
-                )}
                 <div
-                  className={cn(
-                    "flex gap-1 overflow-x-auto px-3 py-2 [scrollbar-width:none]",
-                    settings?.enableNoodler &&
-                      "border-t border-[var(--noodle-divider)]",
-                  )}
+                  className="flex gap-1 overflow-x-auto px-3 py-2 [scrollbar-width:none]"
                 >
                   {SOCIAL_SETTINGS_SECTIONS[settingsTab].map((section) => {
-                    const disabled =
-                      settingsTab === "noodler" &&
-                      !settings?.enableNoodler &&
-                      section.id !== "general";
                     const Icon =
                       section.id === "general"
                         ? Settings2
                         : section.id === "timeline"
                           ? CalendarClock
-                          : section.id === "participants" ||
-                              section.id === "creators"
+                          : section.id === "participants"
                             ? ListChecks
                             : SlidersHorizontal;
                     return (
                       <button
                         key={section.id}
                         type="button"
-                        disabled={disabled}
                         aria-pressed={settingsSection === section.id}
                         onClick={() =>
                           navigateSettings(settingsTab, section.id)
@@ -6165,13 +5788,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   })}
                 </div>
               </div>
-              <div
-                style={
-                  settingsTab === "noodler"
-                    ? ({ "--noodle-accent": NOODLE_PINK } as CSSProperties)
-                    : undefined
-                }
-              >
+              <div>
                 {settingsContent}
               </div>
             </div>
@@ -6328,43 +5945,6 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                         ),
                     }
                   : undefined
-              }
-              secondaryActions={
-                canCreateStageProfileFromViewed && viewedProfileAccount ? (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onNavigate({
-                        mode: "noodler",
-                        view: "create-profile",
-                        noodleAccountId: viewedProfileAccount.id,
-                      })
-                    }
-                    title={localizeUi(
-                      "ui.noodle.noodlehome.createStageProfile",
-                    )}
-                    aria-label={localizeUi(
-                      "ui.noodle.noodlehome.createStageProfile",
-                    )}
-                    // NoodleR pink on a blue Noodle page, so the accent is scoped to the control.
-                    style={getNoodleAccentStyle(NOODLE_PINK)}
-                    className="h-9 rounded-full border border-[var(--noodle-accent)]/45 px-4 text-sm font-black tracking-tight text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
-                  >
-                    {NOODLER_ADD_MARK}
-                  </button>
-                ) : viewedProfileHasStageProfile ? (
-                  <span
-                    title={localizeUi("ui.noodle.noodlehome.hasStageProfile")}
-                    style={getNoodleAccentStyle(NOODLE_PINK)}
-                    className="flex h-9 items-center rounded-full border border-[var(--noodle-accent)]/45 bg-[var(--noodle-accent)]/10 px-4 text-sm font-black tracking-tight text-[var(--noodle-accent)]"
-                  >
-                    {NOODLER_MARK}
-                    <span className="sr-only">
-                      {" "}
-                      {localizeUi("ui.noodle.noodlehome.hasStageProfile")}
-                    </span>
-                  </span>
-                ) : undefined
               }
               bioContent={
                 profileBioPreview ? (
@@ -6788,23 +6368,6 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
         onCancel={() => setImagePromptReviewItems([])}
         onConfirm={confirmReviewedNoodleImagePrompts}
       />
-      <Modal
-        open={gateOpen}
-        onClose={() => setGateOpen(false)}
-        title={localizeUi("ui.noodle.noodlemodetoggle.noodler")}
-        width="max-w-md"
-        panelClassName={NOODLE_ICON_SCOPE_CLASS}
-        panelStyle={getNoodleAccentStyle(NOODLE_PINK)}
-        closeDisabled={updateSettings.isPending}
-      >
-        <NoodlerAgeGate
-          personaName={personaAccount?.displayName ?? ""}
-          onComplete={enterNoodlerFromGate}
-          onSkip={enterNoodlerFromGate}
-          onDismiss={() => setGateOpen(false)}
-          isPending={updateSettings.isPending}
-        />
-      </Modal>
     </NoodleShell>
   );
 }

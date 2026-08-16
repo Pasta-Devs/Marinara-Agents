@@ -92,6 +92,12 @@ export function PostImageCropEditor({
 
   useEffect(() => {
     if (!sourceSize || !initialCrop) return;
+    if (
+      initialCrop.sourceWidth !== sourceSize.width ||
+      initialCrop.sourceHeight !== sourceSize.height
+    ) {
+      return;
+    }
     const initialAspect = closestAspect(sourceSize, initialCrop);
     const base = resolveCrop(sourceSize, initialAspect, 1, { x: 0.5, y: 0.5 });
     setAspect(initialAspect);
@@ -373,13 +379,16 @@ export function PostImageFrame({
   crop,
   alt,
   maxHeight = 384,
+  onError,
 }: {
   src: string;
   crop: NoodlePostImageCrop | null;
   alt: string;
   maxHeight?: number;
+  onError?: () => void;
 }) {
-  if (!crop) {
+  const validCrop = crop && isValidCrop(crop) ? crop : null;
+  if (!validCrop) {
     return (
       <div
         className="flex justify-center overflow-hidden rounded-xl bg-black/30"
@@ -388,6 +397,7 @@ export function PostImageFrame({
         <img
           src={src}
           alt={alt}
+          onError={onError}
           className="max-w-full object-contain"
           style={{ maxHeight }}
         />
@@ -395,12 +405,13 @@ export function PostImageFrame({
     );
   }
   const aspectRatio =
-    (crop.width * crop.sourceWidth) / (crop.height * crop.sourceHeight);
+    (validCrop.width * validCrop.sourceWidth) /
+    (validCrop.height * validCrop.sourceHeight);
   const imageStyle: CSSProperties = {
-    left: `${(-crop.x / crop.width) * 100}%`,
-    top: `${(-crop.y / crop.height) * 100}%`,
-    width: `${100 / crop.width}%`,
-    height: `${100 / crop.height}%`,
+    left: `${(-validCrop.x / validCrop.width) * 100}%`,
+    top: `${(-validCrop.y / validCrop.height) * 100}%`,
+    width: `${100 / validCrop.width}%`,
+    height: `${100 / validCrop.height}%`,
   };
   return (
     <div
@@ -410,12 +421,36 @@ export function PostImageFrame({
       <img
         src={src}
         alt={alt}
+        onError={onError}
         className="absolute max-w-none"
         style={imageStyle}
       />
     </div>
   );
 }
+
+function isValidCrop(crop: NoodlePostImageCrop): boolean {
+  return (
+    Number.isFinite(crop.x) &&
+    Number.isFinite(crop.y) &&
+    Number.isFinite(crop.width) &&
+    Number.isFinite(crop.height) &&
+    Number.isFinite(crop.sourceWidth) &&
+    Number.isFinite(crop.sourceHeight) &&
+    crop.sourceWidth > 0 &&
+    crop.sourceHeight > 0 &&
+    crop.width > 0 &&
+    crop.height > 0 &&
+    crop.x >= 0 &&
+    crop.y >= 0 &&
+    // Allow a tiny IEEE-754 tolerance: resolveCrop clamps center to 1 - width/2,
+    // so x + width can exceed 1 by an ULP and wrongly reject a valid stored crop.
+    crop.x + crop.width <= 1 + CROP_BOUND_TOLERANCE &&
+    crop.y + crop.height <= 1 + CROP_BOUND_TOLERANCE
+  );
+}
+
+const CROP_BOUND_TOLERANCE = 1e-6;
 
 function resolveCrop(
   size: ImageSize,

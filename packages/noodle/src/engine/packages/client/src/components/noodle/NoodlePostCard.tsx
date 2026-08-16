@@ -28,7 +28,6 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import {
-  canManageNoodleReply,
   findNoodleTextMentions,
   noodlePollInputSchema,
   readNoodlePostImageCrop,
@@ -71,6 +70,8 @@ export const labelClass =
   "text-[0.68rem] font-semibold uppercase tracking-normal text-[var(--marinara-chat-chrome-panel-muted)]";
 export const noodleIconButtonClass =
   "inline-flex h-8 min-w-8 items-center justify-center gap-1 rounded-md px-2 text-xs font-medium !text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:!text-[var(--noodle-accent)]";
+export const noodleCommentActionClass =
+  "inline-flex h-7 items-center justify-center gap-1 rounded-full !text-[var(--noodle-accent-foreground)] transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70 disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:!text-[var(--noodle-accent-foreground)]";
 export const NOODLE_MEDIA_PICKER_TABS: ConversationMediaPickerTab[] = [
   { id: "emoji", label: "Emoji" },
   { id: "gifs", label: "GIFs" },
@@ -192,32 +193,391 @@ export function NoodleTextContent({
   onOpenProfile: (account: NoodleAccount) => void;
   className?: string;
 }) {
-  const { t: localizeUi } = useUiTranslation();
-  const mentions = findNoodleTextMentions(content);
-  if (mentions.length === 0) {
-    return (
-      <p className={cn("whitespace-pre-wrap text-sm", className)}>{content}</p>
+  const { t: localizeUi, i18n } = useUiTranslation();
+  // The public timeline renders 150+ of these, and the parse ran on every render of
+  // every card, which made returning to the timeline feel slow while the trip
+  // out did not. The parse output embeds these callbacks, so memoizing on them
+  // directly would either miss every time (they are fresh each render) or freeze a
+  // stale handler into the tree. Hold them in a ref and hand the parser a stable
+  // wrapper instead; then the only real inputs are the text and the handle map.
+  const handlers = useRef({ onOpenProfile, localizeUi });
+  handlers.current = { onOpenProfile, localizeUi };
+  const rendered = useMemo(
+    () =>
+      renderNoodleMarkdown(content, {
+        accountByHandle,
+        onOpenProfile: (account) => handlers.current.onOpenProfile(account),
+        mentionLabel: (handle) =>
+          handlers.current.localizeUi(
+            "ui.noodle.noodletextcontent.viewValue1Profile",
+            { value1: handle },
+          ),
+      }),
+    // The label text is baked in at parse time, so a language change has to reparse.
+    [content, accountByHandle, i18n.language],
+  );
+  return <div className={cn("text-sm [&>*+*]:mt-2", className)}>{rendered}</div>;
+}
+
+type NoodleMarkdownContext = {
+  accountByHandle: Map<string, NoodleAccount>;
+  onOpenProfile: (account: NoodleAccount) => void;
+  mentionLabel: (handle: string) => string;
+};
+
+function renderNoodleMarkdown(
+  content: string,
+  context: NoodleMarkdownContext,
+): React.ReactNode[] {
+  const lines = content.replace(/\r\n?/g, "\n").split("\n");
+  const parts: React.ReactNode[] = [];
+  let lineIndex = 0;
+
+  while (lineIndex < lines.length) {
+    const line = lines[lineIndex] ?? "";
+    if (!line.trim()) {
+      lineIndex += 1;
+      continue;
+    }
+
+    const fence = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+    if (fence) {
+      const marker = fence[1]![0]!;
+      const minimumLength = fence[1]!.length;
+      const closingFence = new RegExp(`^ {0,3}${marker}{${minimumLength},}\\s*$`);
+      const codeLines: string[] = [];
+      lineIndex += 1;
+      while (
+        lineIndex < lines.length &&
+        !closingFence.test(lines[lineIndex] ?? "")
+      ) {
+        codeLines.push(lines[lineIndex] ?? "");
+        lineIndex += 1;
+      }
+      if (lineIndex < lines.length) lineIndex += 1;
+      parts.push(
+        <pre
+          key={`code:${lineIndex}`}
+          className="overflow-x-auto whitespace-pre rounded-md bg-foreground/10 p-3 text-xs leading-5"
+        >
+          <code>{codeLines.join("\n")}</code>
+        </pre>,
+      );
+      continue;
+    }
+
+    const heading = line.match(/^ {0,3}(#{1,6})\s+(.+?)\s*#*$/);
+    if (heading) {
+      const level = heading[1]!.length;
+      const headingContent = renderNoodleInlineMarkdown(
+        heading[2]!,
+        context,
+        `heading:${lineIndex}`,
+      );
+      const headingClass = cn(
+        "break-words font-bold",
+        level === 1 && "text-xl leading-7",
+        level === 2 && "text-lg leading-7",
+        level >= 3 && "text-base leading-6",
+      );
+      parts.push(
+        level === 1 ? (
+          <h1 key={`heading:${lineIndex}`} className={headingClass}>
+            {headingContent}
+          </h1>
+        ) : level === 2 ? (
+          <h2 key={`heading:${lineIndex}`} className={headingClass}>
+            {headingContent}
+          </h2>
+        ) : level === 3 ? (
+          <h3 key={`heading:${lineIndex}`} className={headingClass}>
+            {headingContent}
+          </h3>
+        ) : level === 4 ? (
+          <h4 key={`heading:${lineIndex}`} className={headingClass}>
+            {headingContent}
+          </h4>
+        ) : level === 5 ? (
+          <h5 key={`heading:${lineIndex}`} className={headingClass}>
+            {headingContent}
+          </h5>
+        ) : (
+          <h6 key={`heading:${lineIndex}`} className={headingClass}>
+            {headingContent}
+          </h6>
+        ),
+      );
+      lineIndex += 1;
+      continue;
+    }
+
+    if (/^ {0,3}>/.test(line)) {
+      const quoteLines: string[] = [];
+      while (
+        lineIndex < lines.length &&
+        /^ {0,3}>/.test(lines[lineIndex] ?? "")
+      ) {
+        quoteLines.push((lines[lineIndex] ?? "").replace(/^ {0,3}> ?/, ""));
+        lineIndex += 1;
+      }
+      parts.push(
+        <blockquote
+          key={`quote:${lineIndex}`}
+          className="border-l-2 border-[var(--noodle-divider)] pl-3 text-[var(--muted-foreground)]"
+        >
+          {renderNoodleMarkdown(quoteLines.join("\n"), context)}
+        </blockquote>,
+      );
+      continue;
+    }
+
+    const listMatch = line.match(/^ {0,3}(?:(\d+)[.)]|([-+*]))\s+(.+)$/);
+    if (listMatch) {
+      const ordered = Boolean(listMatch[1]);
+      const start = ordered ? Number(listMatch[1]) : undefined;
+      const items: React.ReactNode[] = [];
+      while (lineIndex < lines.length) {
+        const item = (lines[lineIndex] ?? "").match(
+          /^ {0,3}(?:(\d+)[.)]|([-+*]))\s+(.+)$/,
+        );
+        if (!item || Boolean(item[1]) !== ordered) break;
+        items.push(
+          <li key={`item:${lineIndex}`} className="pl-1">
+            {renderNoodleInlineMarkdown(item[3]!, context, `item:${lineIndex}`)}
+          </li>,
+        );
+        lineIndex += 1;
+      }
+      parts.push(
+        ordered ? (
+          <ol
+            key={`list:${lineIndex}`}
+            start={start}
+            className="list-decimal space-y-1 pl-6"
+          >
+            {items}
+          </ol>
+        ) : (
+          <ul key={`list:${lineIndex}`} className="list-disc space-y-1 pl-6">
+            {items}
+          </ul>
+        ),
+      );
+      continue;
+    }
+
+    const paragraphLines = [line];
+    lineIndex += 1;
+    while (
+      lineIndex < lines.length &&
+      (lines[lineIndex] ?? "").trim() &&
+      !isNoodleMarkdownBlockStart(lines[lineIndex] ?? "")
+    ) {
+      paragraphLines.push(lines[lineIndex] ?? "");
+      lineIndex += 1;
+    }
+    parts.push(
+      <p
+        key={`paragraph:${lineIndex}`}
+        className="whitespace-pre-wrap break-words"
+      >
+        {renderNoodleInlineMarkdown(
+          paragraphLines.join("\n"),
+          context,
+          `paragraph:${lineIndex}`,
+        )}
+      </p>,
     );
   }
+
+  return parts;
+}
+
+function isNoodleMarkdownBlockStart(line: string) {
+  return /^(?: {0,3}(?:#{1,6}\s+|>|`{3,}|~{3,}|(?:(?:\d+)[.)]|[-+*])\s+))/.test(
+    line,
+  );
+}
+
+function renderNoodleInlineMarkdown(
+  text: string,
+  context: NoodleMarkdownContext,
+  keyPrefix: string,
+): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  let plain = "";
+  let index = 0;
+
+  const flushPlain = () => {
+    if (!plain) return;
+    parts.push(
+      ...renderNoodleMentionText(
+        plain,
+        context,
+        `${keyPrefix}:text:${index - plain.length}`,
+      ),
+    );
+    plain = "";
+  };
+
+  while (index < text.length) {
+    if (text[index] === "\\" && index + 1 < text.length) {
+      plain += text[index + 1];
+      index += 2;
+      continue;
+    }
+
+    if (text[index] === "`") {
+      const markerLength = text.slice(index).match(/^`+/)?.[0].length ?? 1;
+      const marker = "`".repeat(markerLength);
+      const end = text.indexOf(marker, index + markerLength);
+      if (end >= 0) {
+        flushPlain();
+        parts.push(
+          <code
+            key={`${keyPrefix}:code:${index}`}
+            className="whitespace-pre-wrap rounded bg-foreground/10 px-1 py-0.5 font-mono text-[0.9em]"
+          >
+            {text.slice(index + markerLength, end).replace(/\n/g, " ")}
+          </code>,
+        );
+        index = end + markerLength;
+        continue;
+      }
+    }
+
+    const image = readNoodleMarkdownLabel(text, index, true);
+    if (image) {
+      flushPlain();
+      parts.push(
+        <Fragment key={`${keyPrefix}:image:${index}`}>
+          {renderNoodleInlineMarkdown(
+            image.label,
+            context,
+            `${keyPrefix}:image-label:${index}`,
+          )}
+        </Fragment>,
+      );
+      index = image.end;
+      continue;
+    }
+
+    const link = readNoodleMarkdownLabel(text, index, false);
+    if (link) {
+      flushPlain();
+      parts.push(
+        <Fragment key={`${keyPrefix}:link:${index}`}>
+          {renderNoodleInlineMarkdown(
+            link.label,
+            context,
+            `${keyPrefix}:link-label:${index}`,
+          )}
+        </Fragment>,
+      );
+      index = link.end;
+      continue;
+    }
+
+    const delimiter = text.startsWith("**", index)
+      ? "**"
+      : text.startsWith("__", index)
+        ? "__"
+        : text.startsWith("~~", index)
+          ? "~~"
+          : text[index] === "*" || text[index] === "_"
+            ? text[index]!
+            : null;
+    if (delimiter) {
+      // CommonMark forbids intraword `_`/`__` emphasis (but allows `*`), so
+      // text like `noodle_post_id` must stay literal.
+      const isUnderscore = delimiter === "_" || delimiter === "__";
+      const openerOk =
+        !isUnderscore || index === 0 || !isMarkdownWordChar(text[index - 1]!);
+      const end = openerOk
+        ? text.indexOf(delimiter, index + delimiter.length)
+        : -1;
+      const closerOk =
+        !isUnderscore ||
+        end + delimiter.length >= text.length ||
+        !isMarkdownWordChar(text[end + delimiter.length]!);
+      if (end > index + delimiter.length && closerOk) {
+        flushPlain();
+        const children = renderNoodleInlineMarkdown(
+          text.slice(index + delimiter.length, end),
+          context,
+          `${keyPrefix}:format:${index}`,
+        );
+        parts.push(
+          delimiter === "**" || delimiter === "__" ? (
+            <strong key={`${keyPrefix}:strong:${index}`}>{children}</strong>
+          ) : delimiter === "~~" ? (
+            <del key={`${keyPrefix}:del:${index}`}>{children}</del>
+          ) : (
+            <em key={`${keyPrefix}:em:${index}`}>{children}</em>
+          ),
+        );
+        index = end + delimiter.length;
+        continue;
+      }
+    }
+
+    plain += text[index];
+    index += 1;
+  }
+
+  flushPlain();
+  return parts;
+}
+
+function isMarkdownWordChar(ch: string): boolean {
+  return /[\p{L}\p{N}]/u.test(ch);
+}
+
+function readNoodleMarkdownLabel(
+  text: string,
+  start: number,
+  image: boolean,
+): { label: string; end: number } | null {
+  const labelStart = start + (image ? 2 : 1);
+  if (image ? !text.startsWith("![", start) : text[start] !== "[") return null;
+  let labelEnd = labelStart;
+  while (labelEnd < text.length && text[labelEnd] !== "]") labelEnd += 1;
+  if (labelEnd >= text.length || text[labelEnd + 1] !== "(") return null;
+
+  let destinationEnd = labelEnd + 2;
+  let depth = 1;
+  while (destinationEnd < text.length && depth > 0) {
+    if (text[destinationEnd] === "\\") destinationEnd += 1;
+    else if (text[destinationEnd] === "(") depth += 1;
+    else if (text[destinationEnd] === ")") depth -= 1;
+    destinationEnd += 1;
+  }
+  if (depth !== 0) return null;
+  return { label: text.slice(labelStart, labelEnd), end: destinationEnd };
+}
+
+function renderNoodleMentionText(
+  text: string,
+  context: NoodleMarkdownContext,
+  keyPrefix: string,
+): React.ReactNode[] {
+  const mentions = findNoodleTextMentions(text);
+  if (mentions.length === 0) return [text];
 
   const parts: React.ReactNode[] = [];
   let cursor = 0;
   for (const mention of mentions) {
-    if (mention.start > cursor)
-      parts.push(content.slice(cursor, mention.start));
-    const label = content.slice(mention.start, mention.end);
-    const account = accountByHandle.get(mention.handle);
+    if (mention.start > cursor) parts.push(text.slice(cursor, mention.start));
+    const label = text.slice(mention.start, mention.end);
+    const account = context.accountByHandle.get(mention.handle);
     parts.push(
       account ? (
         <button
-          key={`${mention.start}:${mention.handle}`}
+          key={`${keyPrefix}:${mention.start}:${mention.handle}`}
           type="button"
-          onClick={() => onOpenProfile(account)}
+          onClick={() => context.onOpenProfile(account)}
           className="inline font-semibold text-[var(--noodle-accent)] hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70"
-          aria-label={localizeUi(
-            "ui.noodle.noodletextcontent.viewValue1Profile",
-            { value1: account.handle },
-          )}
+          aria-label={context.mentionLabel(account.handle)}
         >
           {label}
         </button>
@@ -227,10 +587,8 @@ export function NoodleTextContent({
     );
     cursor = mention.end;
   }
-  if (cursor < content.length) parts.push(content.slice(cursor));
-  return (
-    <p className={cn("whitespace-pre-wrap text-sm", className)}>{parts}</p>
-  );
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return parts;
 }
 
 export function NoodlePollCard({
@@ -389,7 +747,7 @@ export function countInteractions(
 export function createNoodleLightboxImage(
   id: string,
   url: string,
-  prompt = "",
+  _prompt = "",
 ): ChatImage {
   const filename = url.split("?")[0]?.split("/").pop();
   const safeFilename =
@@ -400,7 +758,9 @@ export function createNoodleLightboxImage(
     id,
     chatId: "noodle",
     filePath: safeFilename,
-    prompt,
+    // Noodle image prompts are generation bookkeeping, not user-facing captions. Passing
+    // them to the shared chat lightbox exposed raw prompt or identifier text below images.
+    prompt: "",
     provider: "",
     model: "",
     width: null,
@@ -451,8 +811,7 @@ type NoodleComposerTool = {
   onClick?: () => void;
 };
 
-// Shared composer icon row (image / poll / emoji) so every Noodle surface renders
-// the identical toolbar. NoodleR passes a trailing coin control for monetization settings.
+// Shared composer icon row so every Noodle surface renders the identical toolbar.
 export function NoodleComposerToolRow({
   image,
   poll,
@@ -530,6 +889,7 @@ export function NoodleAnchoredPopover({
       if (!anchor) return;
       const anchorRect = anchor.getBoundingClientRect();
       const panelWidth = panelRef.current?.offsetWidth ?? (wide ? 384 : 304);
+      const panelHeight = panelRef.current?.offsetHeight ?? 0;
       const padding = 16;
       const maxLeft = Math.max(
         padding,
@@ -537,9 +897,15 @@ export function NoodleAnchoredPopover({
       );
       const centeredLeft =
         anchorRect.left + anchorRect.width / 2 - panelWidth / 2;
+      const belowTop = anchorRect.bottom + 12;
+      const aboveTop = anchorRect.top - panelHeight - 12;
       setPosition({
         left: Math.min(Math.max(centeredLeft, padding), maxLeft),
-        top: anchorRect.bottom + 12,
+        top:
+          panelHeight > 0 &&
+          belowTop + panelHeight + padding > window.innerHeight
+            ? Math.max(padding, aboveTop)
+            : belowTop,
       });
     };
 
@@ -561,7 +927,7 @@ export function NoodleAnchoredPopover({
       ref={panelRef}
       data-noodle-compose-focus-portal={modalOwned ? "true" : undefined}
       className={cn(
-        "fixed max-w-[calc(100vw-2rem)]",
+        "fixed max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] overflow-y-auto",
         modalOwned ? "z-[10001]" : "z-[80]",
         NOODLE_ICON_SCOPE_CLASS,
         wide ? "w-[18rem] sm:w-[24rem]" : "w-[19rem]",
@@ -578,7 +944,7 @@ export function NoodleAnchoredPopover({
   );
 }
 
-export function NoodlerToolPopover({
+export function NoodleToolPopover({
   title,
   onClose,
   children,
@@ -622,7 +988,7 @@ export function NoodlerToolPopover({
 
 /**
  * Reply image attach/upload/lightbox. Hosts that persist reply images pass this; hosts that
- * don't (NoodleR) omit it — the card then hides the attach-image tool, upload, GIF tab, and
+ * do not persist reply media, omit it. The card then hides the attach-image tool, upload, GIF tab, and
  * lightbox instead of the host having to pass discarded setters and dangling refs.
  */
 interface NoodlePostCardMediaCap {
@@ -637,7 +1003,7 @@ interface NoodlePostCardMediaCap {
   uploadGlobalImages: { isPending: boolean };
 }
 
-/** Editing/deleting replies. Omit on hosts without a reply-management path (NoodleR). */
+/** Editing and deleting replies. */
 interface NoodlePostCardReplyManagementCap {
   editingReplyId: string | null;
   editingReplyContent: string;
@@ -658,7 +1024,7 @@ interface NoodlePostCardReplyManagementCap {
   canManageReply?: (reply: NoodleInteraction) => boolean;
 }
 
-/** @mention autocomplete in the reply composer. Omit on hosts without mentions (NoodleR). */
+/** @mention autocomplete in the reply composer. */
 interface NoodlePostCardMentionsCap {
   activeReplyMention: ActiveComposerMention | null;
   activeReplyMentionIndex: number;
@@ -685,12 +1051,6 @@ export type NoodlePostCardModel = Pick<
   authorSnapshot: NoodlePostCardAuthor | null;
   interactions: NoodleInteraction[];
 };
-
-interface NoodlePostCardTitleEditingCap {
-  editingPostTitle: string;
-  setEditingPostTitle: React.Dispatch<React.SetStateAction<string>>;
-  maxLength: number;
-}
 
 export type NoodlePostImageUpdate =
   | { kind: "replace"; file: File; crop: NoodlePostImageCrop }
@@ -976,8 +1336,6 @@ export interface NoodlePostCardCtx {
   updatePostPending: boolean;
   /** Human controller edit/delete capability. Viewer-only projections set this false. */
   postManagement: boolean;
-  /** NoodleR title editing. Noodle posts omit this capability and remain titleless. */
-  titleEditing?: NoodlePostCardTitleEditingCap;
   /** Existing-poll editing. Poll-less posts do not expose an add-poll path here. */
   pollEditing?: {
     value: NoodlePollInput | null;
@@ -985,10 +1343,8 @@ export interface NoodlePostCardCtx {
   };
   /** Allow an empty edited body when the existing post has a poll. */
   allowPollOnlyEdits?: boolean;
-  /** Navigate to an author/mention profile. Omit on hosts without profile navigation (NoodleR). */
+  /** Navigate to an author or mention profile. */
   openProfile?: (account: NoodleAccount | null) => void;
-  /** Navigate by NoodleR author ID when no Noodle account object exists. */
-  openAuthorProfile?: (accountId: string) => void;
   /** Vote in a post's poll. Pollless posts never call it. */
   voteInPoll?: (
     post: NoodlePostCardModel,
@@ -1003,6 +1359,11 @@ export interface NoodlePostCardCtx {
   imageEditing?: NoodlePostCardImageEditingCap;
   /** Reply image/upload capability. Absent → the card hides all reply-image affordances. */
   media?: NoodlePostCardMediaCap;
+  /**
+   * Opening an image fullscreen is not the same capability as attaching one to a reply, so
+   * Hosts without the reply-image cap can still get a lightbox by passing this.
+   */
+  setImageLightbox?: React.Dispatch<React.SetStateAction<ChatImage | null>>;
   /** Reply edit/delete capability. Absent → reply management UI stays hidden. */
   replyManagement?: NoodlePostCardReplyManagementCap;
   /** @mention autocomplete capability. Absent → no mention suggestions. */
@@ -1034,7 +1395,10 @@ interface NoodlePostCardControllerOptions {
   ) => void;
   submitReply: (
     post: NoodlePostCardModel,
-    input: { content: string; parentInteractionId: string | null },
+    input: {
+      content: string;
+      parentInteractionId: string | null;
+    },
   ) => Promise<void>;
   reactionPendingFor: (
     postId: string,
@@ -1047,9 +1411,7 @@ interface NoodlePostCardControllerOptions {
     parentInteractionId?: string | null,
   ) => boolean;
   updatePostPending: boolean;
-  titleMaxLength?: number;
   allowPollOnlyEdits?: boolean;
-  openAuthorProfile?: (accountId: string) => void;
   voteInPoll?: (
     post: NoodlePostCardModel,
     optionId: string,
@@ -1176,9 +1538,9 @@ export function useNoodlePostCardController(
   options: NoodlePostCardControllerOptions,
 ) {
   const [postMenuId, setPostMenuId] = useState<string | null>(null);
+  const [imageLightbox, setImageLightbox] = useState<ChatImage | null>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editingPostContent, setEditingPostContent] = useState("");
-  const [editingPostTitle, setEditingPostTitle] = useState("");
   const [editingPostPoll, setEditingPostPoll] =
     useState<NoodlePollInput | null>(null);
   const [replyPostId, setReplyPostId] = useState<string | null>(null);
@@ -1187,6 +1549,7 @@ export function useNoodlePostCardController(
   >(null);
   const [replyText, setReplyText] = useState("");
   const [replyHasText, setReplyHasText] = useState(false);
+  // Defaults on: an unanswered comment is the dull case, so opting out is the deliberate act.
   const [activeReplyComposerTool, setActiveReplyComposerTool] =
     useState<ReplyComposerTool | null>(null);
   const [mediaPickerTab, setMediaPickerTab] =
@@ -1263,7 +1626,7 @@ export function useNoodlePostCardController(
     if (!content && !(options.allowPollOnlyEdits && validPoll)) return;
     void options
       .savePost(post, {
-        title: editingPostTitle.trim() || null,
+        title: null,
         content,
         image: imageEditor.update,
         ...(existingPoll && { poll: editingPostPoll }),
@@ -1288,6 +1651,7 @@ export function useNoodlePostCardController(
   };
 
   const ctx: NoodlePostCardCtx = {
+    setImageLightbox,
     personaAccount: options.personaAccount,
     postManagement: options.postManagement,
     postMenuId,
@@ -1322,25 +1686,17 @@ export function useNoodlePostCardController(
     reactionPendingFor: options.reactionPendingFor,
     createInteractionPendingFor: options.createInteractionPendingFor,
     updatePostPending: options.updatePostPending,
-    openAuthorProfile: options.openAuthorProfile,
     voteInPoll: options.voteInPoll,
     deduplicatePollBody: options.deduplicatePollBody ?? true,
     imageFit: options.imageFit ?? "cover",
     imageEditing: imageEditor.cap,
-    titleEditing: options.titleMaxLength
-      ? {
-          editingPostTitle,
-          setEditingPostTitle,
-          maxLength: options.titleMaxLength,
-        }
-      : undefined,
     pollEditing: {
       value: editingPostPoll,
       setValue: setEditingPostPoll,
     },
     allowPollOnlyEdits: options.allowPollOnlyEdits,
   };
-  return { ctx, reset };
+  return { ctx, reset, imageLightbox, setImageLightbox };
 }
 
 export function NoodlePostCard({
@@ -1385,7 +1741,6 @@ export function NoodlePostCard({
     reactionPendingFor,
     createInteractionPendingFor,
     updatePostPending,
-    titleEditing,
     pollEditing,
     imageEditing,
     media,
@@ -1409,10 +1764,9 @@ export function NoodlePostCard({
   const fallbackFileRef = useRef<HTMLInputElement | null>(null);
   const openProfile: (account: NoodleAccount | null) => void =
     ctx.openProfile ?? (() => {});
-  const canOpenAuthorProfile = Boolean(authorAccount || ctx.openAuthorProfile);
+  const canOpenAuthorProfile = Boolean(authorAccount);
   const openPostAuthor = () => {
     if (authorAccount) openProfile(authorAccount);
-    else ctx.openAuthorProfile?.(post.authorAccountId);
   };
   const handleReplyKeyDown: (
     event: React.KeyboardEvent<HTMLTextAreaElement>,
@@ -1425,7 +1779,7 @@ export function NoodlePostCard({
   const disableReplyImage = !media;
   const setImageLightbox: React.Dispatch<
     React.SetStateAction<ChatImage | null>
-  > = media?.setImageLightbox ?? (() => {});
+  > = ctx.setImageLightbox ?? media?.setImageLightbox ?? (() => {});
   const replyImageUrl = media?.replyImageUrl ?? "";
   const setReplyImageUrl: React.Dispatch<React.SetStateAction<string>> =
     media?.setReplyImageUrl ?? (() => {});
@@ -1833,31 +2187,11 @@ export function NoodlePostCard({
           </div>
           {ctx.postManagement && editingPostId === post.id ? (
             <div className="mt-2 space-y-2">
-              {titleEditing && (
-                <label className="block">
-                  <span className="sr-only">
-                    {localizeUi("ui.noodle.noodlepostcard.titleOptional")}
-                  </span>
-                  <input
-                    value={titleEditing.editingPostTitle}
-                    onChange={(event) =>
-                      titleEditing.setEditingPostTitle(event.target.value)
-                    }
-                    maxLength={titleEditing.maxLength}
-                    className="h-9 w-full rounded-lg border-0 bg-[var(--noodle-accent)]/5 px-3 text-base font-bold text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus:bg-[var(--noodle-accent)]/10"
-                    placeholder={localizeUi(
-                      "ui.noodle.noodlepostcard.titleOptional",
-                    )}
-                  />
-                </label>
-              )}
               <textarea
                 value={editingPostContent}
                 onChange={(event) => setEditingPostContent(event.target.value)}
                 className="min-h-20 w-full resize-none rounded-lg border-0 bg-[var(--noodle-accent)]/5 px-3 py-2 text-[1rem] leading-6 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus:bg-[var(--noodle-accent)]/10"
-                placeholder={localizeUi(
-                  "ui.noodle.noodlerpostcomposer.whatSSimmering",
-                )}
+                placeholder={localizeUi("ui.noodle.noodlehome.whatSSimmering")}
               />
               {imageEditing && (
                 <PostImageEditControls
@@ -2121,15 +2455,7 @@ export function NoodlePostCard({
                   : false;
                 const canManageReply = canManageReplyOverride
                   ? canManageReplyOverride(reply)
-                  : Boolean(
-                      personaAccount &&
-                      canManageNoodleReply({
-                        actorKind:
-                          actorAccount?.kind ?? reply.actorSnapshot?.kind,
-                        actorAccountId: reply.actorAccountId,
-                        personaAccountId: personaAccount.id,
-                      }),
-                    );
+                  : Boolean(personaAccount && reply.actorAccountId === personaAccount.id);
                 return (
                   <Fragment key={reply.id}>
                     <div
@@ -2167,20 +2493,23 @@ export function NoodlePostCard({
                         />
                       </button>
                       <div className="min-w-0 bg-transparent">
-                        <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                        <div
+                          data-noodle-comment-metadata
+                          className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[var(--noodle-accent-foreground)]"
+                        >
                           <button
                             type="button"
                             onClick={() => openProfile(actorAccount)}
                             disabled={!actorAccount}
-                            className="max-w-full truncate font-semibold transition-colors enabled:hover:text-[var(--noodle-accent)] disabled:cursor-default"
+                            className="max-w-full truncate font-semibold !text-[var(--foreground)] transition-colors enabled:hover:!text-[var(--noodle-accent)] disabled:cursor-default"
                           >
                             {actor?.displayName ??
                               localizeUi("ui.noodle.noodlepostcard.noodleUser")}
                           </button>
-                          <span className="truncate text-[var(--muted-foreground)]">
+                          <span className="truncate !text-[var(--noodle-accent-foreground)]">
                             @{actor?.handle ?? "noodle"}
                           </span>
-                          <span className="text-[var(--muted-foreground)]">
+                          <span className="!text-[var(--noodle-accent-foreground)] opacity-75">
                             · {formatTime(reply.createdAt, i18n.language)}
                           </span>
                         </div>
@@ -2227,7 +2556,7 @@ export function NoodlePostCard({
                                 type="button"
                                 onClick={cancelEditingReply}
                                 disabled={updateInteraction.isPending}
-                                className="h-8 rounded-full px-3 text-xs font-semibold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] disabled:opacity-50"
+                                className="h-8 rounded-full px-3 text-xs font-semibold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--noodle-accent)]/10 hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70 disabled:opacity-50"
                               >
                                 {localizeUi("chat.delete.dialog.cancel")}
                               </button>
@@ -2302,7 +2631,8 @@ export function NoodlePostCard({
                               reactionPendingFor(post.id, "like", reply.id)
                             }
                             className={cn(
-                              "inline-flex h-7 items-center gap-1 rounded-full px-2 font-medium text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50",
+                              noodleCommentActionClass,
+                              "px-2 font-medium",
                               likedReplyByPersona &&
                                 "bg-[var(--noodle-accent)]/10",
                             )}
@@ -2338,7 +2668,7 @@ export function NoodlePostCard({
                             type="button"
                             onClick={() => openReplyComposer(post.id, reply.id)}
                             disabled={!personaAccount}
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+                            className={cn(noodleCommentActionClass, "w-7")}
                             title={localizeUi("ui.noodle.noodlepostcard.reply")}
                             aria-label={localizeUi(
                               "ui.noodle.noodlepostcard.reply",
@@ -2355,7 +2685,7 @@ export function NoodlePostCard({
                                   updateInteraction.isPending ||
                                   deleteInteraction.isPending
                                 }
-                                className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+                                className={cn(noodleCommentActionClass, "w-7")}
                                 title={localizeUi(
                                   "ui.noodle.noodlepostcard.editComment",
                                 )}
@@ -2372,7 +2702,7 @@ export function NoodlePostCard({
                                   updateInteraction.isPending ||
                                   deleteInteraction.isPending
                                 }
-                                className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+                                className={cn(noodleCommentActionClass, "w-7")}
                                 title={localizeUi(
                                   "ui.noodle.noodlepostcard.deleteComment",
                                 )}
@@ -2402,8 +2732,7 @@ export function NoodlePostCard({
 }
 
 // Shared composer chrome: avatar gutter, borderless body, divider, and the
-// tools-left / action-right toolbar row. Noodle fills it with its post composer;
-// NoodleR fills it with the guided-generation composer. Keeps both pixel-aligned.
+// tools-left / action-right toolbar row for the public post composer.
 export function NoodleComposerShell({
   header,
   avatar,
@@ -2434,9 +2763,14 @@ export function NoodleComposerShell({
         <div className="min-w-0">{children}</div>
       </div>
       <div className="mt-1 h-px w-full bg-[var(--noodle-divider)]" />
-      <div className="relative mt-3 flex items-center justify-between gap-2 pl-14">
+      {/* Tools and actions are two wrapping groups, not seven buttons in one row: on a
+          phone the old single row broke them apart mid-group. The avatar-width indent
+          is a wide-layout nicety and costs 3.5rem the narrow layout cannot spare. */}
+      <div className="relative mt-3 flex flex-wrap items-center gap-2 @min-[480px]:pl-14">
         <div className="flex min-w-0 flex-wrap items-center gap-1">{tools}</div>
-        {action}
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          {action}
+        </div>
         {popovers}
       </div>
       {footer}

@@ -7,8 +7,8 @@ import {
   type NoodleAccountKind,
   type NoodleInteraction,
   type NoodlePost,
-  type NoodleSettings,
 } from "@marinara-engine/shared";
+import type { SlurpSettings } from "../storage/slurp.storage.js";
 
 export const NOODLE_PAST_MEMORY_MIN_AGE_MS = 48 * 60 * 60 * 1000;
 /** Behavior when a Noodle setting's `enableEnhancedTimelineWriting` is off — reproduces the exact pre-toggle defaults. */
@@ -17,16 +17,58 @@ export const NOODLE_LEGACY_PAST_MEMORY_INCLUSION_CHANCE = 0.5;
 /** Behavior when `enableEnhancedTimelineWriting` is on. */
 export const NOODLE_PAST_MEMORY_MAX_ITEMS = 5;
 export const NOODLE_PAST_MEMORY_INCLUSION_CHANCE = 0.85;
+export const NOODLE_ADULT_PLATFORM_POLICY =
+  "Noodle only accepts confirmed adult accounts and personas. Every participant on Noodle is 18+; minors are not allowed on the platform. NSFW content is allowed, anything goes, and adult in-character drama, flirtation, gossip, and explicit references may appear when they fit the accounts involved.";
 export const NOODLE_PERSONA_AUTHORSHIP_INSTRUCTION =
   "- The user persona is controlled exclusively by the user. Never generate posts, replies, likes, reposts, poll votes, or follows as a persona. Personas may only be mentioned or targeted by other accounts.";
+export const NOODLE_PERSONA_IDENTITY_INSTRUCTION =
+  "- Every persona account is a separate user identity. Preserve the accountKey on historical posts and replies: changing the currently selected persona never changes, merges, or reattributes activity created by another persona.";
+export const NOODLE_UNIQUE_CONTENT_INSTRUCTION =
+  "- Never reuse the same message text for more than one post or reply by the same account. In particular, do not copy a new post's content into a reply or duplicate a reply as a new post.";
+export const NOODLE_SOCIAL_LENGTH_INSTRUCTION =
+  "- Keep normal posts short: usually 40-280 characters. Keep replies to one or two short sentences. Use longer text only when the account and topic clearly call for an uncommon long-form post.";
+export const NOODLE_CONTENT_MIX_INSTRUCTION =
+  "- Vary the feed across casual updates, humor, questions, useful observations, teasing, affection, projects, promotion, and occasional conflict or low mood. Drama, hostility, anxiety, and sadness are possibilities, not the default mood or a quota.";
+export const NOODLE_HISTORY_MOOD_INSTRUCTION =
+  "- Use recent activity for facts, relationships, and continuity. Do not copy its length, format, or emotional mood by default; let each account's present personality and situation set the tone.";
+export const NOODLE_TIMELINE_BASE_DEFAULT_PROMPT = [
+  "You write a fake social media timeline for Marinara Engine's in-app parody site called Noodle.",
+  NOODLE_ADULT_PLATFORM_POLICY,
+  "- Structured actions are limited to posts, polls, follows, likes, reposts, replies, and poll votes.",
+  "- Generated interactions may target existing posts included in this prompt or posts you create in this response.",
+  "- To respond directly to an existing comment, create a reply interaction for its post and set parentInteractionId to that comment's exact replyId.",
+  "- Do not make an account interact with the same existing post again when it has already liked, reposted, voted, or replied there, unless that account was tagged or is answering a direct response to its own comment. Never make an account reply to its own comment.",
+  "- Avoid repeating an account's recent post topic or phrasing. Continue an existing thread only when new activity gives the account a reason to return.",
+  NOODLE_UNIQUE_CONTENT_INSTRUCTION,
+  NOODLE_SOCIAL_LENGTH_INSTRUCTION,
+  NOODLE_CONTENT_MIX_INSTRUCTION,
+  NOODLE_HISTORY_MOOD_INSTRUCTION,
+  NOODLE_PERSONA_AUTHORSHIP_INSTRUCTION,
+  NOODLE_PERSONA_IDENTITY_INSTRUCTION,
+  "- For each interaction, set either targetTempId or targetPostId and set the unused target field to null.",
+  "- pollOptionIndex must be a zero-based integer for votes and null for every other interaction.",
+  "- An exact @handle in post or reply text tags that active account. Preserve the @handle exactly when mentioning someone.",
+  "- Return JSON only. No prose outside the JSON object.",
+].join("\n");
+
+export function composeNoodleTimelineSystemPrompt(basePromptText: string, timelineVoiceText: string): string {
+  return [basePromptText.trim(), timelineVoiceText.trim()].filter(Boolean).join("\n");
+}
 export const NOODLE_CREATIVE_FORMAT_INSTRUCTIONS = [
   "- Characters and random users may create polls in their own posts and vote in polls. Occasionally use a poll when an audience question or set of choices fits naturally with the account and current activity; polls are optional, not a quota.",
   "- Standard Unicode emojis are allowed in post and reply content. Use them naturally when they fit the account's voice or reaction; emojis are optional, and not every post or reply needs one.",
   "- Characters are allowed to be assholes to each other when it fits their personalities, history, and relationships. They may be rude, insulting, confrontational, jealous, petty, sarcastic, start arguments, revive old grievances, form rivalries, or deliberately stir up interpersonal drama. This is permission, not a quota: do not force hostility into every refresh or flatten established characterization just to create conflict.",
 ] as const;
-/** Legacy single-line tone instruction, used when `enableEnhancedTimelineWriting` is off. */
-export const NOODLE_LEGACY_TONE_INSTRUCTION =
-  "- Characters should act in character but like people posting online: funny, messy, indirect, petty, affectionate, dramatic, vulgar, or casual as fits them.";
+const NOODLE_CHARACTER_ONLY_POLL_INSTRUCTION =
+  "- Characters may create polls in their own posts and vote in polls. Occasionally use a poll when an audience question or set of choices fits naturally with the account and current activity; polls are optional, not a quota.";
+const NOODLE_CHARACTER_ONLY_CREATIVE_FORMAT_INSTRUCTIONS = [
+  NOODLE_CHARACTER_ONLY_POLL_INSTRUCTION,
+  ...NOODLE_CREATIVE_FORMAT_INSTRUCTIONS.slice(1),
+] as const;
+
+export function noodleCreativeFormatInstructions(allowRandomUsers: boolean): readonly string[] {
+  return allowRandomUsers ? NOODLE_CREATIVE_FORMAT_INSTRUCTIONS : NOODLE_CHARACTER_ONLY_CREATIVE_FORMAT_INSTRUCTIONS;
+}
 export const NOODLE_TONE_INSTRUCTIONS = [
   "- Characters post like real people online (funny, messy, indirect, petty, affectionate, dramatic, vulgar, or casual) — but which of these fits, and how much, must come from each character's own Personality/Description/Backstory below, not a default upbeat voice. Do not make every account sound equally enthusiastic, chatty, or friendly.",
   "- Before writing each account's posts/replies, briefly ground yourself in that account's stated personality traits (guarded, blunt, anxious, arrogant, deadpan, etc.) and let sentence length, punctuation, capitalization, and emoji use vary accordingly. A withdrawn or hostile character should not sound like an enthusiastic extrovert.",
@@ -51,9 +93,9 @@ export const NOODLE_RANDOM_USER_TREATMENT_INSTRUCTION =
  */
 export function noodleTimelineVoiceDefaultText(enhanced: boolean, allowRandomUsers = true): string {
   return [
-    ...(enhanced ? NOODLE_TONE_INSTRUCTIONS : [NOODLE_LEGACY_TONE_INSTRUCTION]),
+    ...NOODLE_TONE_INSTRUCTIONS,
     ...(allowRandomUsers ? [NOODLE_RANDOM_USER_TREATMENT_INSTRUCTION] : []),
-    ...NOODLE_CREATIVE_FORMAT_INSTRUCTIONS,
+    ...noodleCreativeFormatInstructions(allowRandomUsers),
     ...(enhanced ? [NOODLE_CONGRUENCY_INSTRUCTION] : []),
   ].join("\n");
 }
@@ -64,8 +106,8 @@ export const NOODLE_RECALLED_MEMORY_INSTRUCTION =
   "- These posts are more than 48 hours old and are past context an account might plausibly remember, especially posts or threads involving currently active accounts. When a recalled post naturally continues a relevant thread, character relationship, or grievance, feel free to revisit, reply to, repost, or build on it — but do not force a reference to every recalled post, and skip ones that don't fit the moment.";
 
 type NoodleTimelineFeatureSettings = Pick<
-  NoodleSettings,
-  "allowRandomUsers" | "enableImagePrompts" | "allowGalleryImageAttachments"
+  SlurpSettings,
+  "allowRandomUsers" | "enableImagePrompts" | "allowGalleryImageAttachments" | "imageGenerationPrompt"
 >;
 
 type RandomSource = () => number;
@@ -94,6 +136,11 @@ type NoodlePromptInteraction = Pick<
 >;
 
 const NOODLE_PROMPT_REPLIES_PER_POST = 12;
+
+function formatNoodlePromptAccount(snapshot: NoodlePost["authorSnapshot"], fallbackAccountId: string): string {
+  if (!snapshot) return `accountKey=${fallbackAccountId}`;
+  return `${snapshot.displayName} (@${snapshot.handle}; ${snapshot.kind} accountKey=${snapshot.kind}:${snapshot.entityId})`;
+}
 
 export interface NoodlePromptImageCandidate {
   key: string;
@@ -195,7 +242,7 @@ export function formatNoodleTimelineForPrompt(
     .slice()
     .reverse()
     .map((post) => {
-      const author = post.authorSnapshot?.displayName ?? post.authorAccountId;
+      const author = formatNoodlePromptAccount(post.authorSnapshot, post.authorAccountId);
       const poll = readNoodlePollFromMetadata(post.metadata);
       const pollSummary = poll
         ? ` [poll: ${poll.question}; ${poll.options
@@ -210,15 +257,14 @@ export function formatNoodleTimelineForPrompt(
         : "";
       const timestamp = options.includeTimestamp ? ` at ${post.createdAt}` : "";
       const replyLines = promptRepliesForPost(interactions, post.id, options.priorityActorAccountId).map((reply) => {
-        const replyAuthor = reply.actorSnapshot?.displayName ?? reply.actorAccountId;
-        const replyHandle = reply.actorSnapshot?.handle ? ` (@${reply.actorSnapshot.handle})` : "";
+        const replyAuthor = formatNoodlePromptAccount(reply.actorSnapshot, reply.actorAccountId);
         const parent = reply.parentInteractionId ? ` parentReplyId=${reply.parentInteractionId}` : "";
         const imageKey = noodleReplyImageKey(reply.id);
         const imageAttached = options.attachedImageKeys?.has(imageKey) === true;
         const imageCaption = options.imageCaptions?.get(imageKey)?.trim();
         const replyBody =
           reply.content || (imageAttached ? "[image]" : reply.imageUrl ? "[image reply]" : "[empty reply]");
-        return `  - replyId=${reply.id}${parent} by ${replyAuthor}${replyHandle} at ${reply.createdAt}: ${replyBody}${
+        return `  - replyId=${reply.id}${parent} by ${replyAuthor} at ${reply.createdAt}: ${replyBody}${
           imageAttached
             ? ` [attached image: ${imageKey}]`
             : imageCaption
@@ -310,12 +356,15 @@ export function sampleNoodlePastMemoriesWeighted<T>(
  * Noodle can batch far more characters into one refresh (up to 100, or uncapped with "All
  * invited") than a normal chat turn (1-2 characters), so it scales its own lorebook budget by
  * active character count rather than reusing DEFAULT_LOREBOOK_TOKEN_BUDGET outright — a
- * single-character refresh gets at least the floor, and a large roster is capped at the same
- * default a normal chat turn would get, never more.
+ * single-character refresh gets at least the floor, and a large roster is capped at Noodle's
+ * explicit 8k-token hard ceiling, never more.
  */
 export function noodleLorebookTokenBudget(activeCharacterCount: number): number {
   const scaled = Math.max(activeCharacterCount, 0) * LIMITS.NOODLE_LOREBOOK_TOKEN_BUDGET_PER_ACCOUNT;
-  return Math.min(LIMITS.DEFAULT_LOREBOOK_TOKEN_BUDGET, Math.max(LIMITS.NOODLE_LOREBOOK_TOKEN_BUDGET_FLOOR, scaled));
+  return Math.min(
+    LIMITS.NOODLE_LOREBOOK_TOKEN_BUDGET_MAX,
+    Math.max(LIMITS.NOODLE_LOREBOOK_TOKEN_BUDGET_FLOOR, scaled),
+  );
 }
 
 export function noodleTimelineFeatureInstructions(settings: NoodleTimelineFeatureSettings): string[] {
@@ -330,6 +379,11 @@ export function noodleTimelineFeatureInstructions(settings: NoodleTimelineFeatur
     ...(settings.enableImagePrompts
       ? [
           "- When image generation is enabled, imagePrompt must contain only the final concrete visual description for the attached image: either a character-focused image of the author/their scene/selfie, or an in-character meme they would plausibly post. Do not put the post JSON, field names, meta-commentary, instructions to another model, or the full post text inside imagePrompt.",
+          ...(settings.imageGenerationPrompt?.trim()
+            ? [
+                `- Apply these user image directions when writing imagePrompt. They are instructions to you, not text to copy into imagePrompt: ${settings.imageGenerationPrompt.trim()}`,
+              ]
+            : []),
         ]
       : []),
     ...(settings.allowGalleryImageAttachments

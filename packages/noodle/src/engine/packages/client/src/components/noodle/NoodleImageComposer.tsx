@@ -53,6 +53,7 @@ export function NoodleImageComposer({
         type="button"
         onClick={onChooseFile}
         disabled={disabled}
+        style={{ backgroundColor: "var(--noodle-accent)" }}
         className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[var(--noodle-accent)] px-4 text-sm font-bold text-[var(--primary-foreground)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <ImagePlus size={17} />

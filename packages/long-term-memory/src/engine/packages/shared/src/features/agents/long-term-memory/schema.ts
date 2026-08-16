@@ -8,6 +8,31 @@ import {
   LTM_EXTRACTION_MAX_REJECTION_DETAILS,
 } from "./constants.js";
 
+// Zod 3 intentionally omits an own "__proto__" key while parsing z.record.
+// Validate records as entries so every valid user key survives without ever
+// being assigned through an object's prototype setter.
+function ltmStringRecordSchema<T extends z.ZodTypeAny>(
+  keySchema: z.ZodString,
+  valueSchema: T,
+) {
+  return z
+    .preprocess(
+      (value) =>
+        value && typeof value === "object" && !Array.isArray(value)
+          ? { entries: Object.entries(value) }
+          : value,
+      z
+        .object({
+          entries: z.array(z.tuple([keySchema, valueSchema])),
+        })
+        .strict(),
+    )
+    .transform(
+      ({ entries }) =>
+        Object.fromEntries(entries) as Record<string, z.infer<T>>,
+    );
+}
+
 export const ltmNoteTypeSchema = z.enum([
   "source",
   "timeline_event",
@@ -644,20 +669,21 @@ const ltmUsageChunkSchema = z
 export const ltmUsageSchema = z
   .object({
     version: z.literal(2),
-    chats: z.record(
+    chats: ltmStringRecordSchema(
       z.string().min(1).max(120),
       z
         .object({
-          chunks: z.record(z.string().min(1).max(240), ltmUsageChunkSchema),
+          chunks: ltmStringRecordSchema(
+            z.string().min(1).max(240),
+            ltmUsageChunkSchema,
+          ),
         })
         .strict(),
     ),
-    acceptedReceipts: z
-      .record(
+    acceptedReceipts: ltmStringRecordSchema(
         z.string().min(1).max(240),
         z.union([ltmIsoTimestampSchema, z.literal(true)]),
-      )
-      .optional(),
+      ).optional(),
   })
   .strict();
 
@@ -1567,11 +1593,11 @@ export const ltmBm25IndexSchema = z
     version: z.literal(1),
     chunkCount: z.number().int().min(0),
     avgDocLength: z.number().finite().min(0),
-    documents: z.record(
+    documents: ltmStringRecordSchema(
       z.string().min(1).max(240),
       z.object({ length: z.number().int().min(0) }).strict(),
     ),
-    terms: z.record(
+    terms: ltmStringRecordSchema(
       z.string().min(1),
       z
         .object({
@@ -1607,7 +1633,7 @@ export const ltmGraphIndexSchema = z
   })
   .strict();
 
-const ltmIndexStringBucketsSchema = z.record(
+const ltmIndexStringBucketsSchema = ltmStringRecordSchema(
   z.string().min(1).max(240),
   z.array(z.string().min(1).max(240)),
 );
@@ -1623,7 +1649,10 @@ export const ltmKeywordIndexSchema = z
 const ltmMetadataIndexShape = z
   .object({
     version: z.literal(1),
-    chunks: z.record(z.string().min(1).max(240), ltmMemoryChunkSchema),
+    chunks: ltmStringRecordSchema(
+      z.string().min(1).max(240),
+      ltmMemoryChunkSchema,
+    ),
     byNoteId: ltmIndexStringBucketsSchema,
     byTag: ltmIndexStringBucketsSchema,
   })

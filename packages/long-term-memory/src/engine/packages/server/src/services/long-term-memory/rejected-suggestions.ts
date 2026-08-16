@@ -8,7 +8,7 @@ import {
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { readJsonFile, writeJsonAtomic } from "./atomic-json.js";
 import { getLongTermMemoryRoot, ltmRejectedSuggestionsPath } from "./paths.js";
-import { isEnoent, nowIso } from "./ltm-utils.js";
+import { nowIso } from "./ltm-utils.js";
 import { logger } from "./package-runtime.js";
 import { withLtmVaultLock } from "./vault-lock.js";
 

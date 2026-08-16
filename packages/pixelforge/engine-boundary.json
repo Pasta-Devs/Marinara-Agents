@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "capabilityApi": { "major": 1, "minor": 10 },
+  "builtAgainst": {
+    "engineVersion": "2.4.3",
+    "engineCommit": "3fc2924291ede77e13d595ba0ea469b68419ab13"
+  },
+  "privateEngineImports": []
+}

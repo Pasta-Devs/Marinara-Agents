@@ -6,27 +6,20 @@ import type { LtmMemoryChunk } from "../../../../shared/src/features/agents/long
 
 export type { LtmMetadataIndex } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 
-type MutableLtmMetadataIndex = Omit<
-  LtmMetadataIndex,
-  "chunks"
-> & {
-  chunks: Record<string, LtmMemoryChunk>;
-};
-
 function addToBucket(
-  index: Record<string, string[]>,
+  index: Map<string, string[]>,
   key: string | undefined,
   chunkId: string,
 ) {
   if (!key) return;
-  const bucket = index[key] ?? [];
+  const bucket = index.get(key) ?? [];
   bucket.push(chunkId);
-  index[key] = bucket;
+  index.set(key, bucket);
 }
 
-function sortRecordBuckets(record: Record<string, string[]>) {
+function sortBuckets(record: Map<string, string[]>) {
   return Object.fromEntries(
-    Object.entries(record)
+    Array.from(record.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([key, values]) => [key, values.sort((a, b) => a.localeCompare(b))]),
   );
@@ -35,26 +28,23 @@ function sortRecordBuckets(record: Record<string, string[]>) {
 export function buildLtmMetadataIndex(
   chunks: LtmMemoryChunk[],
 ): LtmMetadataIndex {
-  const index: MutableLtmMetadataIndex = {
-    version: 1,
-    chunks: {},
-    byNoteId: {},
-    byTag: {},
-  };
+  const chunksById = new Map<string, LtmMemoryChunk>();
+  const byNoteId = new Map<string, string[]>();
+  const byTag = new Map<string, string[]>();
 
   for (const chunk of chunks.slice().sort((a, b) => a.id.localeCompare(b.id))) {
-    index.chunks[chunk.id] = chunk;
-    addToBucket(index.byNoteId, chunk.noteId, chunk.id);
-    for (const tag of chunk.tags) addToBucket(index.byTag, tag, chunk.id);
+    chunksById.set(chunk.id, chunk);
+    addToBucket(byNoteId, chunk.noteId, chunk.id);
+    for (const tag of chunk.tags) addToBucket(byTag, tag, chunk.id);
   }
 
   return ltmMetadataIndexSchema.parse({
-    ...index,
+    version: 1,
     chunks: Object.fromEntries(
-      Object.entries(index.chunks).sort(([a], [b]) => a.localeCompare(b)),
+      Array.from(chunksById.entries()).sort(([a], [b]) => a.localeCompare(b)),
     ),
-    byNoteId: sortRecordBuckets(index.byNoteId),
-    byTag: sortRecordBuckets(index.byTag),
+    byNoteId: sortBuckets(byNoteId),
+    byTag: sortBuckets(byTag),
   });
 }
 
@@ -79,14 +69,20 @@ export function getLtmMetadataMatches(
   }
 
   for (const noteId of query.noteIds ?? []) {
-    for (const chunkId of (index.byNoteId[noteId] ?? []).slice(
+    const matches = Object.hasOwn(index.byNoteId, noteId)
+      ? index.byNoteId[noteId]
+      : undefined;
+    for (const chunkId of (matches ?? []).slice(
       0,
       maxBucketEntries,
     ))
       add(chunkId, 1, `note:${noteId}`);
   }
   for (const tag of query.tags ?? []) {
-    for (const chunkId of (index.byTag[tag] ?? []).slice(0, maxBucketEntries))
+    const matches = Object.hasOwn(index.byTag, tag)
+      ? index.byTag[tag]
+      : undefined;
+    for (const chunkId of (matches ?? []).slice(0, maxBucketEntries))
       add(chunkId, 0.8, `tag:${tag}`);
   }
 

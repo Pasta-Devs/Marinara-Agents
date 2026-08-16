@@ -73,6 +73,29 @@ const aiBuilderSource = readFileSync(
   ),
   "utf8",
 );
+const connectionSelectorSource = readFileSync(
+  new URL(
+    "../packages/hierarchical-maps/src/engine/packages/client/src/features/spatial-context/components/SpatialConnectionOverrideSelect.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const mapsLocalizationSource = readFileSync(
+  new URL(
+    "../packages/hierarchical-maps/src/engine/packages/client/src/features/spatial-context/localization.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const mapsEnglishCatalog = JSON.parse(
+  readFileSync(
+    new URL(
+      "../packages/hierarchical-maps/src/engine/packages/client/src/features/spatial-context/locales/en.json",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+);
 const aiDraftSource = readFileSync(
   new URL(
     "../packages/hierarchical-maps/src/engine/packages/server/src/services/spatial-context/ai-draft.ts",
@@ -88,6 +111,17 @@ assert.match(runtimeBarSource, /Step by step/u, "Runtime location controls must 
 assert.match(runtimeBarSource, /Travel now/u, "Runtime location controls must expose immediate travel.");
 assert.match(
   runtimeBarSource,
+  /pendingRoute\?\.steps\[0\]\?\.locationName/u,
+  "Step-by-step status must derive the next stop from the current route.",
+);
+assert.match(
+  runtimeBarSource,
+  /ui\.worldMaps\.runtime\.nextStop[\s\S]*?nextStopName/u,
+  "Step-by-step status must render the next stop beneath the route mode.",
+);
+assert.equal(mapsEnglishCatalog["ui.worldMaps.runtime.nextStop"], "Next stop");
+assert.match(
+  runtimeBarSource,
   /\{enabled && mapAvailable && \(\s*<div data-marinara-maps-runtime-mobile\b[^>]*>/u,
   "The mobile story-map trigger must remain available while a step-by-step move is pending.",
 );
@@ -99,6 +133,7 @@ assert.doesNotMatch(
 assert.doesNotMatch(runtimeBarSource, /Set destination/u, "Runtime location controls must replace the legacy destination-only action.");
 assert.match(builtClient, /Step by step/u, "The built client must include the travel-mode control.");
 assert.match(builtClient, /Travel now/u, "The built client must include the immediate-travel control.");
+assert.match(builtClient, /Next stop/u, "The built client must include the step-by-step next-stop label.");
 assert.match(
   aiBuilderSource,
   /aria-pressed=\{targetLocationCount === option\.targetLocationCount\}[\s\S]*?Custom place target/u,
@@ -113,6 +148,37 @@ assert.match(aiDraftSource, /resolveSpatialDraftSizeSpec/u, "The server must res
 assert.match(aiDraftSource, /SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT/u, "Custom targets must retain a bounded one-call generation ceiling.");
 assert.match(builtClient, /Custom place target/u, "The built client must include the editable expansion target.");
 assert.match(builtServer, /targetLocationCount/u, "The built server must accept and apply the expansion target.");
+assert.match(
+  aiBuilderSource,
+  /useUpdateSpatialAgentConfiguration[\s\S]*?connectionId: nextConnectionId \|\| null/u,
+  "The in-editor selector must save through the existing World Maps connection override.",
+);
+assert.match(
+  aiBuilderSource,
+  /generationPending \|\| updateAgentConfiguration\.isPending \|\| requestInvalid/u,
+  "Generation must wait for an in-editor connection change to finish saving.",
+);
+assert.match(
+  connectionSelectorSource,
+  /provider !== "image_generation" && connection\.provider !== "video_generation"/u,
+  "The shared selector must list only text-generation connections.",
+);
+assert.match(
+  connectionSelectorSource,
+  /ui\.worldMaps\.connection\.savedUnavailable/u,
+  "Unavailable saved connections must remain visible through localized UI copy.",
+);
+assert.match(
+  mapsLocalizationSource,
+  /englishCatalog[\s\S]*?SpatialMapLocalizationProvider/u,
+  "World Maps editor copy must use its package-local localization provider.",
+);
+assert.match(builtClient, /AI connection/u, "The built client must include the in-editor connection selector.");
+assert.match(
+  browserRegressionSource,
+  /World Maps editor changes the AI connection without losing the draft[\s\S]*?combobox", \{ name: "AI map connection" \}[\s\S]*?toHaveValue\(unavailableConnectionId\)[\s\S]*?selectOption\(editorConnection\.id\)[\s\S]*?toHaveValue\("Keep the harbor districts compact\."\)[\s\S]*?homeConnectionOverride\)\.toHaveValue\(editorConnection\.id\)/u,
+  "The browser regression must verify unavailable, persisted, draft-preserving, and home-synchronized editor connection states.",
+);
 assert.match(
   workspaceSource,
   /onOpenTemplates\(\{ startOver: true \}\)/u,

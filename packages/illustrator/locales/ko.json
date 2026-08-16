@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "ko",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "일러스트레이터 (Illustrator)",
+    "description": "이미지와 영상을 생성하며, 롤플레이 장소 변경 시 선택적으로 장면 배경을 자동 생성합니다. 대화·롤플레이·게임 모드에서는 채팅 설정 → 에이전트 → Commands/기타 에이전트/일러스트레이터에서 Command와 에이전트로 모두 추가하세요."
+  },
+  "agents": {
+    "illustrator": {
+      "name": "일러스트레이터 (Illustrator)",
+      "description": "이미지와 영상을 생성하며, 롤플레이 장소 변경 시 선택적으로 장면 배경을 자동 생성합니다. 대화·롤플레이·게임 모드에서는 채팅 설정 → 에이전트 → Commands/기타 에이전트/일러스트레이터에서 Command와 에이전트로 모두 추가하세요."
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "ko",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "페르소나 스탯 (Persona Stats)",
+    "description": "플레이어 페르소나의 상태 바(포만감, 에너지, 위생 및 기타 사용자 지정 스탯)가 서사 속 사건에 따라 현실적으로 변화하도록 추적합니다. 롤플레이 모드에서는 채팅 설정 → 에이전트 → 추적 에이전트에서 이 에이전트를 추가하세요."
+  },
+  "agents": {
+    "persona-stats": {
+      "name": "페르소나 스탯 (Persona Stats)",
+      "description": "플레이어 페르소나의 상태 바(포만감, 에너지, 위생 및 기타 사용자 지정 스탯)가 서사 속 사건에 따라 현실적으로 변화하도록 추적합니다. 롤플레이 모드에서는 채팅 설정 → 에이전트 → 추적 에이전트에서 이 에이전트를 추가하세요."
+    }
+  }
+}

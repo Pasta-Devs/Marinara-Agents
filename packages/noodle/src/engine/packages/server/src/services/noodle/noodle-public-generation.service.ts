@@ -8,9 +8,14 @@ import {
 import type { DB } from "../../db/connection.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
-import { resolveStoredChatOptions, resolveStoredMaxTokens } from "../generation/generation-parameters.js";
+import {
+  resolveStoredChatOptions,
+  resolveStoredMaxTokens,
+} from "../generation/generation-parameters.js";
 import type { ImageCaptioningRuntime } from "../generation/image-captioning-runtime.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
+import { noodleSamplingOptions } from "./noodle-sampling-options.js";
+import { noodleTimelineRefreshMaxTokens } from "./noodle-post-target.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
@@ -80,10 +85,6 @@ function parseStringArray(value: unknown): string[] {
 
 function sinceHoursIso(hours: number) {
   return new Date(Date.now() - Math.max(1, hours) * 60 * 60 * 1000).toISOString();
-}
-
-function timelineRefreshMaxTokens(characterCount: number) {
-  return 4096 + Math.max(0, characterCount) * 1024;
 }
 
 async function ensureSelectedGroupCharacterAccounts(
@@ -277,20 +278,21 @@ export function createPublicNoodleGenerationService(db: DB) {
           model: input.connection.model,
           maxTokens: resolveStoredMaxTokens(
             input.connection.defaultParameters,
-            timelineRefreshMaxTokens(selectedParticipants.filter((account) => account.kind === "character").length),
+            noodleTimelineRefreshMaxTokens(selectedParticipants.length),
           ),
           maxTokensOverride: input.connection.maxTokensOverride,
         });
         const completionOptions = {
           model: input.connection.model,
-          maxTokens: timelineMaxTokens,
-          temperature: 0.9,
-          topP: 0.95,
-          ...resolveStoredChatOptions(
-            input.connection.defaultParameters,
-            input.connection.provider,
-            input.connection.model,
+          ...noodleSamplingOptions(
+            resolveStoredChatOptions(
+              input.connection.defaultParameters,
+              input.connection.provider,
+              input.connection.model,
+            ),
+            { temperature: 0.9, topP: 0.95 },
           ),
+          maxTokens: timelineMaxTokens,
           stream: false,
           debugMode,
           responseFormat: noodleResponseFormat(input.connection.model, "timeline"),

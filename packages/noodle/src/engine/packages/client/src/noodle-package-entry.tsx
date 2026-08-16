@@ -4,8 +4,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import i18next from "i18next";
 import { I18nextProvider, initReactI18next } from "react-i18next";
 import { Toaster } from "sonner";
+import german from "./localization/locales/de.json";
 import english from "./localization/locales/en.json";
 import korean from "./localization/locales/ko.json";
+import polish from "./localization/locales/pl.json";
+import { AppDialogRenderer } from "./components/ui/AppDialogRenderer";
+import { ModalPortalContext } from "./components/ui/Modal";
 import { NoodleView } from "./components/noodle/NoodleView";
 import { configureNoodlePackageState } from "./stores/noodle-package.store";
 
@@ -18,8 +22,10 @@ void localization.use(initReactI18next).init({
   interpolation: { escapeValue: false },
   lng: "en",
   resources: {
+    de: { translation: german },
     en: { translation: english },
     ko: { translation: korean },
+    pl: { translation: polish },
   },
 });
 
@@ -82,10 +88,17 @@ function NoodlePackageRoot({ element }: { element: CapabilityElement }) {
   return (
     <I18nextProvider i18n={localization}>
       <QueryClientProvider client={client}>
-        <div className="h-full min-h-0 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
-          <NoodleView />
-          <Toaster richColors />
-        </div>
+        <ModalPortalContext.Provider value={element}>
+          <div className="h-full min-h-0 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
+            <NoodleView />
+            {/* The package bundles its own copy of the dialog store, so the host's
+                renderer never sees a dialog opened in here: showConfirmDialog would
+                resolve nothing and every confirmed action stopped silently. Render
+                the dialogs inside the package tree that opens them. */}
+            <AppDialogRenderer />
+            <Toaster richColors />
+          </div>
+        </ModalPortalContext.Provider>
       </QueryClientProvider>
     </I18nextProvider>
   );

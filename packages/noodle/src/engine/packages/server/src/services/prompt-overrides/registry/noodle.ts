@@ -14,11 +14,25 @@ export interface NoodleImagePostCtx extends Record<string, string | number | und
   characterPersonality: string;
 }
 
+export type NoodleImageInterpretCtx = Record<string, string | number | undefined>;
+
+/** Defines the editable instruction used to interpret Noodle image art styles. */
+export const NOODLE_IMAGE_INTERPRET: PromptOverrideKeyDef<NoodleImageInterpretCtx> = {
+  key: "noodle.imageInterpret",
+  label: "Noodle Image Style Interpretation",
+  description:
+    "Instruction for applying a character's art style to a Noodle image prompt. An explicit style in the prompt takes precedence.",
+  variables: [],
+  defaultBuilder: () =>
+    "Interpret the character's visual identity and apply the appropriate art style to this image prompt. Anime or game characters should use anime or illustration style, and realistic characters should use photorealistic style. If the prompt explicitly names an art style, preserve that style instead of replacing it. Return only the provider-ready image prompt.",
+  exampleContext: {},
+};
+
 export const NOODLE_IMAGE_POST: PromptOverrideKeyDef<NoodleImagePostCtx> = {
   key: "noodle.imagePost",
   label: "Noodle Post Image",
   description:
-    "Template that assembles the final image-generation prompt. Everything this produces is sent to the image model verbatim — no LLM pass runs after it. The default sends the visual idea, appearance notes, and character image habits, without the post text or your Noodle image instructions (those are given to the timeline model instead).",
+    "Template that assembles the base image-generation prompt. When the selected image connection has image instructions, Marinara first tries to have an agent text model apply them; if rewriting is unavailable, it appends normalized instructions directly. The default sends the visual idea, appearance notes, and character image habits, without the post text or your Noodle image instructions (those are also given to the timeline model).",
   variables: [
     { name: "authorName", description: "Display name of the Noodle account posting.", example: "Dottore" },
     {

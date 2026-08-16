@@ -1,0 +1,16 @@
+{
+  "_meta": {
+    "locale": "en",
+    "direction": "ltr"
+  },
+  "ui.worldMaps.connection.aiLabel": "AI connection",
+  "ui.worldMaps.connection.aiAriaLabel": "AI map connection",
+  "ui.worldMaps.connection.help": "Saved for World Maps and used by the next AI draft or expansion.",
+  "ui.worldMaps.connection.saved": "Saved",
+  "ui.worldMaps.connection.savedUnavailable": "Saved connection (unavailable)",
+  "ui.worldMaps.connection.saveError": "The World Maps connection could not be saved.",
+  "ui.worldMaps.connection.saving": "Saving…",
+  "ui.worldMaps.connection.useChat": "Use chat connection",
+  "ui.worldMaps.connection.useDefault": "Use default connection",
+  "ui.worldMaps.runtime.nextStop": "Next stop"
+}

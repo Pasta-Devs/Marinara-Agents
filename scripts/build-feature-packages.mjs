@@ -54,9 +54,50 @@ const noodleOwnedSourcePaths = [
   "packages/client/src/stores/noodle-package.store.ts",
   "packages/server/src/db/schema/noodle.ts",
   "packages/server/src/routes/noodle.routes.ts",
-  "packages/server/src/services/noodle",
+  "packages/server/src/services/noodle/noodle-ambient-profile-generation.service.ts",
+  "packages/server/src/services/noodle/noodle-ambient-profiles.ts",
+  "packages/server/src/services/noodle/noodle-context.ts",
+  "packages/server/src/services/noodle/noodle-generated-activity.service.ts",
+  "packages/server/src/services/noodle/noodle-generated-profiles.ts",
+  "packages/server/src/services/noodle/noodle-generated-refresh.ts",
+  "packages/server/src/services/noodle/noodle-generation-log.ts",
+  "packages/server/src/services/noodle/noodle-handle.ts",
+  "packages/server/src/services/noodle/noodle-image-prompt-rewrite.ts",
+  "packages/server/src/services/noodle/noodle-image-prompt.ts",
+  "packages/server/src/services/noodle/noodle-image-retry.ts",
+  "packages/server/src/services/noodle/noodle-interaction-policy.ts",
+  "packages/server/src/services/noodle/noodle-participant-selection.ts",
+  "packages/server/src/services/noodle/noodle-post-target.ts",
+  "packages/server/src/services/noodle/noodle-profile-avatar.ts",
+  "packages/server/src/services/noodle/noodle-profile-selection.ts",
+  "packages/server/src/services/noodle/noodle-prompt.ts",
+  "packages/server/src/services/noodle/noodle-public-generation.service.ts",
+  "packages/server/src/services/noodle/noodle-public-images.service.ts",
+  "packages/server/src/services/noodle/noodle-public-profiles.service.ts",
+  "packages/server/src/services/noodle/noodle-public-prompt.service.ts",
+  "packages/server/src/services/noodle/noodle-public-support.ts",
+  "packages/server/src/services/noodle/noodle-prompt-safety.ts",
+  "packages/server/src/services/noodle/noodle-refresh-schedule.ts",
+  "packages/server/src/services/noodle/noodle-refresh-scheduler.service.ts",
+  "packages/server/src/services/noodle/noodle-response-format.ts",
+  "packages/server/src/services/noodle/noodle-sampling-options.ts",
+  "packages/server/src/services/noodle/noodle-vision.ts",
+  "packages/server/src/services/noodle/server-entry.ts",
   "packages/server/src/services/prompt-overrides/registry/noodle.ts",
+  "packages/server/src/services/storage/noodle-refresh-run-retention.ts",
   "packages/server/src/services/storage/noodle.storage.ts",
+];
+const slurpSourceRoot = join(packagesDir, "slurp/src/engine");
+const slurpOwnedSourcePaths = [
+  "packages/client/src/components/slurp",
+  "packages/client/src/hooks/use-slurp.ts",
+  "packages/client/src/localization/locales",
+  "packages/client/src/slurp-package-entry.tsx",
+  "packages/client/src/stores/slurp-package.store.ts",
+  "packages/server/src/db/schema/slurp.ts",
+  "packages/server/src/routes/slurp.routes.ts",
+  "packages/server/src/services/slurp",
+  "packages/server/src/services/storage/slurp.storage.ts",
 ];
 const reuseExistingRuntime = process.env.MARINARA_REUSE_FEATURE_RUNTIME === "1";
 const rebuiltFeatureClients = new Set(
@@ -65,13 +106,9 @@ const rebuiltFeatureClients = new Set(
     .filter(Boolean),
 );
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
-const featureSource = (relativePath, buildRoot = sourceRoot) => {
-  const packaged = resolve(buildRoot, relativePath);
-  return existsSync(packaged) ? packaged : resolve(engineRoot, relativePath);
-};
 
 async function prepareFeatureBuildRoot(feature) {
-  if (feature.id === "noodle") {
+  if (feature.id === "noodle" || feature.id === "slurp") {
     if (!existsSync(feature.packageSourceRoot)) {
       throw new Error(`Missing package-owned ${feature.name} source`);
     }
@@ -154,15 +191,50 @@ async function capturePackageSources(metafilePath, buildRoot, excludedPaths) {
   }
 }
 
+async function removeOwnedSourceSnapshots(excludedPaths) {
+  for (const path of excludedPaths) {
+    await rm(join(sourcesRoot, path), { recursive: true, force: true });
+  }
+}
+
 const features = [
   {
     id: "noodle",
-    version: "1.0.0",
+    version: "1.2.0",
     minEngineVersion: "2.4.2",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
     description:
-      "Explore the familiar Noodle public timeline and private NoodleR creator platform as an optional social world.",
+      "Explore the Noodle public timeline as an optional local social world.",
+    localizations: {
+      de: {
+        name: "Noodle",
+        description:
+          "Entdecke die öffentliche Noodle-Timeline als optionale lokale soziale Welt. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Noodle.",
+        homeBrowserTab: {
+          label: "Noodle",
+          ariaLabel: "Noodle öffnen",
+        },
+      },
+      ko: {
+        name: "Noodle",
+        description:
+          "Noodle 공개 타임라인을 선택형 로컬 소셜 세계로 만나 보세요. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Noodle을 여세요.",
+        homeBrowserTab: {
+          label: "Noodle",
+          ariaLabel: "Noodle 열기",
+        },
+      },
+      pl: {
+        name: "Noodle",
+        description:
+          "Poznaj publiczną oś czasu Noodle jako opcjonalny lokalny świat społecznościowy. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Noodle na stronie głównej.",
+        homeBrowserTab: {
+          label: "Noodle",
+          ariaLabel: "Otwórz Noodle",
+        },
+      },
+    },
     category: "misc",
     kind: ["agent"],
     modes: ["conversation", "roleplay", "game"],
@@ -173,19 +245,76 @@ const features = [
     packageSourceRoot: noodleSourceRoot,
     ownedSourcePaths: noodleOwnedSourcePaths,
     libraryHidden: true,
-    assetPaths: ["noodle-klusek.png", "noodler-klusek.png"],
+    assetPaths: ["noodle-klusek.png"],
     contributions: {
       slots: ["home-browser-tab"],
       homeBrowserTab: {
         label: "Noodle",
-        ariaLabel: "Open Noodle and NoodleR",
-        iconPaths: ["noodle-klusek.png", "noodler-klusek.png"],
+        ariaLabel: "Open Noodle",
+        iconPaths: ["noodle-klusek.png"],
+      },
+    },
+  },
+  {
+    id: "slurp",
+    version: "1.0.1",
+    minEngineVersion: "2.4.3",
+    maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
+    name: "Slurp",
+    description:
+      "The standalone successor to NoodleR: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity.",
+    localizations: {
+      de: {
+        name: "Slurp",
+        description:
+          "Erstelle ein lokales Creator-Profil aus einem Engine-Charakter oder einer Engine-Persona, veröffentliche öffentliche oder gesperrte Beiträge und simuliere Abonnements und Publikumsaktivität. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Slurp.",
+        homeBrowserTab: {
+          label: "Slurp",
+          ariaLabel: "Slurp öffnen",
+        },
+      },
+      ko: {
+        name: "Slurp",
+        description:
+          "Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 NoodleR 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Slurp를 여세요.",
+        homeBrowserTab: {
+          label: "Slurp",
+          ariaLabel: "Slurp 열기",
+        },
+      },
+      pl: {
+        name: "Slurp",
+        description:
+          "Utwórz lokalne profile twórców z postaci silnika lub person silnika, publikuj publiczne lub zablokowane posty NoodleR i symuluj subskrypcje oraz aktywność publiczności. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Slurp na stronie głównej.",
+        homeBrowserTab: {
+          label: "Slurp",
+          ariaLabel: "Otwórz Slurp",
+        },
+      },
+    },
+    category: "misc",
+    kind: ["agent"],
+    modes: ["conversation", "roleplay", "game"],
+    permissions: ["chat-read", "chat-write", "network", "routes", "storage", "ui"],
+    serverImport: "packages/server/src/services/slurp/server-entry.ts",
+    serverEntry: true,
+    clientImport: "packages/client/src/slurp-package-entry.tsx",
+    packageSourceRoot: slurpSourceRoot,
+    ownedSourcePaths: slurpOwnedSourcePaths,
+    libraryHidden: true,
+     assetPaths: ["slurp-logo.png", "slurpagent.png"],
+    contributions: {
+      slots: ["home-browser-tab"],
+      homeBrowserTab: {
+        label: "Slurp",
+        ariaLabel: "Open Slurp",
+         iconPaths: ["slurp-logo.png"],
       },
     },
   },
   {
     id: "long-term-memory",
-    version: "1.2.4",
+    version: "1.2.6",
     minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
@@ -235,7 +364,7 @@ const features = [
   },
   {
     id: "hierarchical-maps",
-    version: "1.3.4",
+    version: "1.3.6",
     minEngineVersion: "2.4.2",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "World Maps",
@@ -480,6 +609,11 @@ export async function selfCheck() {
     }
     if (feature.ownedSourcePaths?.length) {
       await capturePackageSources(metafile, prepared.buildRoot, feature.ownedSourcePaths);
+      if (feature.id === "slurp") {
+        await removeOwnedSourceSnapshots([
+          "packages/client/src/localization/locales",
+        ]);
+      }
     } else {
       await captureEngineSources(
         metafile,
@@ -576,10 +710,10 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
   }
 }
 
-async function buildNoodleStyles(buildRoot, temporary) {
-  const input = join(temporary, "noodle.css");
-  const outputDir = join(temporary, "noodle-css");
-  const config = join(temporary, "vite.noodle.config.mjs");
+async function buildPackageStyles(buildRoot, temporary, capabilityId) {
+  const input = join(temporary, `${capabilityId}.css`);
+  const outputDir = join(temporary, `${capabilityId}-css`);
+  const config = join(temporary, `vite.${capabilityId}.config.mjs`);
   const globals = join(engineRoot, "packages/client/src/styles/globals.css");
   const packageClientSources = join(buildRoot, "packages/client/src").split(sep).join("/");
   await writeFile(
@@ -612,11 +746,11 @@ export default defineConfig({
     ["--filter", "@marinara-engine/client", "exec", "vite", "build", "--config", config],
     { cwd: engineRoot, encoding: "utf8", env: { ...process.env, SKIP_PWA: "1" } },
   );
-  if (result.status !== 0) throw new Error(result.stderr || result.stdout || "Noodle stylesheet build failed");
+  if (result.status !== 0) throw new Error(result.stderr || result.stdout || `${capabilityId} stylesheet build failed`);
   const assets = join(outputDir, "assets");
   const cssFiles = (await readdir(assets)).filter((filename) => filename.endsWith(".css")).sort();
   if (cssFiles.length !== 1) {
-    throw new Error(`Noodle stylesheet build produced ${cssFiles.length} CSS assets; expected exactly one`);
+    throw new Error(`${capabilityId} stylesheet build produced ${cssFiles.length} CSS assets; expected exactly one`);
   }
   const [cssFile] = cssFiles;
   const styles = await readFile(join(assets, cssFile), "utf8");
@@ -624,7 +758,7 @@ export default defineConfig({
     .replaceAll(":root", ":scope")
     .replaceAll("[data-theme=dark]", ":scope:where([data-theme=dark] *)")
     .replaceAll("[data-theme=light]", ":scope:where([data-theme=light] *)");
-  return `@scope (marinara-capability-noodle){${scopedStyles}}`;
+  return `@scope (marinara-capability-${capabilityId}, [data-marinara-capability-scope=${JSON.stringify(capabilityId)}]){${scopedStyles}}`;
 }
 
 async function bundleSpecialClient(feature, output) {
@@ -651,6 +785,10 @@ async function bundleSpecialClient(feature, output) {
       const worldMap = resolve(prepared.buildRoot, "packages/client/src/components/game/GameWorldMap.tsx");
       const spatialHooks = resolve(prepared.buildRoot, "packages/client/src/hooks/use-spatial-context.ts");
       const packageApi = resolve(prepared.buildRoot, "packages/client/src/features/spatial-context/package-api.ts");
+      const localization = resolve(
+        prepared.buildRoot,
+        "packages/client/src/features/spatial-context/localization.tsx",
+      );
       const pendingTransitions = resolve(
         prepared.buildRoot,
         "packages/client/src/features/spatial-context/pending-spatial-transitions.ts",
@@ -898,6 +1036,7 @@ import { SpatialContextRuntimeBar } from ${JSON.stringify(runtimeBar)};
 import { GameWorldMap } from ${JSON.stringify(worldMap)};
 import { useSpatialContext } from ${JSON.stringify(spatialHooks)};
 import { packageApi } from ${JSON.stringify(packageApi)};
+import { SpatialMapLocalizationProvider } from ${JSON.stringify(localization)};
 import { clearPendingSpatialTransition, getPendingSpatialTransition, reconcileCommittedSpatialTravel, setPendingSpatialTransition, setPendingSpatialTransitionStatus, usePendingSpatialTransition } from ${JSON.stringify(pendingTransitions)};
 import { findSpatialRoute } from ${JSON.stringify(routePlans)};
 const workspaceStyles = ${JSON.stringify(workspaceStyles)};
@@ -1149,17 +1288,18 @@ function Root({ element }) {
     });
     props.onClose?.();
   };
-  if (view === "setup-apply") return chatId ? <SetupSharedWorldApply chatId={chatId} props={props} /> : null;
-  if (view === "setup") return <LibraryOverlay chatId="" props={props} setupSelection onSelectForSetup={selectTemplateForSetup} onSelectSharedWorldForSetup={selectSharedWorldForSetup} onClose={() => props.onClose?.()} />;
-  if (libraryOpen) return <LibraryOverlay chatId={chatId} props={props} setupSelection={setupTemplateNeedsSelection} startOverReplacement={libraryStartOver} onSelectForSetup={selectTemplateForSetup} onClose={closeLibrary} onAppliedToChat={() => { setLibraryOpen(false); setLibraryStartOver(false); setWorkspaceOpen(true); }} />;
-  if (workspaceOpen && chatId) return <WorkspaceOverlay chatId={chatId} props={props} stagedTemplate={stagedTemplate || pendingSetupTemplate} onClose={closeWorkspace} onOpenTemplates={(options) => { setLibraryStartOver(options?.startOver === true); setLibraryOpen(true); }} />;
-  if (worldMapOpen && chatId) return <WorldMapOverlay chatId={chatId} props={props} onClose={() => setWorldMapOpen(false)} onOpenEditor={editFromWorldMap} />;
-  if (view === "detail") return <><SpatialMapsHome chatId={chatId || null} chatName={typeof props.chatName === "string" ? props.chatName : null} chatMode={typeof props.chatMode === "string" ? props.chatMode : null} enabledForChat={props.enabledForChat === true} packageInfo={props.package || null} agentInfo={props.agent || null} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onOpenMap={() => setWorldMapOpen(true)} onOpenEditor={() => setWorkspaceOpen(true)} onOpenLibrary={() => setLibraryOpen(true)} onManagePackage={typeof props.onManagePackage === "function" ? props.onManagePackage : undefined} confirmAction={typeof props.confirmAction === "function" ? props.confirmAction : undefined} onDirtyChange={typeof props.onDirtyChange === "function" ? props.onDirtyChange : undefined} onClose={typeof props.onClose === "function" ? props.onClose : undefined} /><Toaster richColors /></>;
-  if (!chatId) return null;
-  if (view === "runtime") return <><style data-marinara-maps-world-styles>{worldMapStyles}</style><style data-marinara-maps-runtime-styles>{runtimeStyles}</style><SpatialContextRuntimeBar chatId={chatId} disabled={props.disabled === true} onOpenEditor={() => setWorkspaceOpen(true)} /><PendingBridge chatId={chatId} onChange={props.onPendingTransitionChange} /></>;
-  if (view === "world-map") return <WorldMapView props={props} chatId={chatId} onOpenEditor={() => setWorkspaceOpen(true)} />;
-  if (view === "workspace") return <WorkspaceOverlay chatId={chatId} props={props} stagedTemplate={stagedTemplate || pendingSetupTemplate} onClose={closeWorkspace} onOpenTemplates={(options) => { setLibraryStartOver(options?.startOver === true); setLibraryOpen(true); }} />;
-  return <><SpatialContextSettingsSection chatId={chatId} style={props.style} enabledForChat={props.enabledForChat === true} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onOpenEditor={() => setWorkspaceOpen(true)} /><Toaster richColors /></>;
+  let content = null;
+  if (view === "setup-apply") content = chatId ? <SetupSharedWorldApply chatId={chatId} props={props} /> : null;
+  else if (view === "setup") content = <LibraryOverlay chatId="" props={props} setupSelection onSelectForSetup={selectTemplateForSetup} onSelectSharedWorldForSetup={selectSharedWorldForSetup} onClose={() => props.onClose?.()} />;
+  else if (libraryOpen) content = <LibraryOverlay chatId={chatId} props={props} setupSelection={setupTemplateNeedsSelection} startOverReplacement={libraryStartOver} onSelectForSetup={selectTemplateForSetup} onClose={closeLibrary} onAppliedToChat={() => { setLibraryOpen(false); setLibraryStartOver(false); setWorkspaceOpen(true); }} />;
+  else if (workspaceOpen && chatId) content = <WorkspaceOverlay chatId={chatId} props={props} stagedTemplate={stagedTemplate || pendingSetupTemplate} onClose={closeWorkspace} onOpenTemplates={(options) => { setLibraryStartOver(options?.startOver === true); setLibraryOpen(true); }} />;
+  else if (worldMapOpen && chatId) content = <WorldMapOverlay chatId={chatId} props={props} onClose={() => setWorldMapOpen(false)} onOpenEditor={editFromWorldMap} />;
+  else if (view === "detail") content = <><SpatialMapsHome chatId={chatId || null} chatName={typeof props.chatName === "string" ? props.chatName : null} chatMode={typeof props.chatMode === "string" ? props.chatMode : null} enabledForChat={props.enabledForChat === true} packageInfo={props.package || null} agentInfo={props.agent || null} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onOpenMap={() => setWorldMapOpen(true)} onOpenEditor={() => setWorkspaceOpen(true)} onOpenLibrary={() => setLibraryOpen(true)} onManagePackage={typeof props.onManagePackage === "function" ? props.onManagePackage : undefined} confirmAction={typeof props.confirmAction === "function" ? props.confirmAction : undefined} onDirtyChange={typeof props.onDirtyChange === "function" ? props.onDirtyChange : undefined} onClose={typeof props.onClose === "function" ? props.onClose : undefined} /><Toaster richColors /></>;
+  else if (chatId && view === "runtime") content = <><style data-marinara-maps-world-styles>{worldMapStyles}</style><style data-marinara-maps-runtime-styles>{runtimeStyles}</style><SpatialContextRuntimeBar chatId={chatId} disabled={props.disabled === true} onOpenEditor={() => setWorkspaceOpen(true)} /><PendingBridge chatId={chatId} onChange={props.onPendingTransitionChange} /></>;
+  else if (chatId && view === "world-map") content = <WorldMapView props={props} chatId={chatId} onOpenEditor={() => setWorkspaceOpen(true)} />;
+  else if (chatId && view === "workspace") content = <WorkspaceOverlay chatId={chatId} props={props} stagedTemplate={stagedTemplate || pendingSetupTemplate} onClose={closeWorkspace} onOpenTemplates={(options) => { setLibraryStartOver(options?.startOver === true); setLibraryOpen(true); }} />;
+  else if (chatId) content = <><SpatialContextSettingsSection chatId={chatId} style={props.style} enabledForChat={props.enabledForChat === true} onEnabledForChatChange={typeof props.onEnabledForChatChange === "function" ? props.onEnabledForChatChange : undefined} onOpenEditor={() => setWorkspaceOpen(true)} /><Toaster richColors /></>;
+  return <SpatialMapLocalizationProvider localization={props.localization}>{content}</SpatialMapLocalizationProvider>;
 }
 class Element extends HTMLElement { connectedCallback() { if (!this.__root) this.__root = createRoot(this); this.__root.render(<QueryClientProvider client={client}><CapabilityClientErrorBoundary element={this}><Root element={this} /></CapabilityClientErrorBoundary></QueryClientProvider>); } disconnectedCallback() { queueMicrotask(() => { if (!this.isConnected && this.__root) { this.__root.unmount(); this.__root = null; } }); } }
 if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.stringify(tag)}, Element);`;
@@ -1292,10 +1432,11 @@ function Root({ element }) {
 class Element extends HTMLElement { connectedCallback() { if (!this.__root) this.__root = createRoot(this); this.__root.render(<QueryClientProvider client={client}><Root element={this} /></QueryClientProvider>); } disconnectedCallback() { queueMicrotask(() => { if (!this.isConnected && this.__root) { this.__root.unmount(); this.__root = null; } }); } }
 if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.stringify(tag)}, Element);`;
     } else if (feature.clientImport) {
-      if (feature.id === "noodle") {
-        source = `import { setNoodlePackageStyles } from ${JSON.stringify(resolve(prepared.buildRoot, feature.clientImport))};`;
-        const styles = await buildNoodleStyles(prepared.buildRoot, temporary);
-        source += `\nsetNoodlePackageStyles(${JSON.stringify(styles)});\n`;
+      if (feature.id === "noodle" || feature.id === "slurp") {
+        const setterName = feature.id === "noodle" ? "setNoodlePackageStyles" : "setSlurpPackageStyles";
+        source = `import { ${setterName} } from ${JSON.stringify(resolve(prepared.buildRoot, feature.clientImport))};`;
+        const styles = await buildPackageStyles(prepared.buildRoot, temporary, feature.id);
+        source += `\n${setterName}(${JSON.stringify(styles)});\n`;
       } else source = `import ${JSON.stringify(resolve(prepared.buildRoot, feature.clientImport))};`;
     } else return;
     const entry = join(temporary, "entry.tsx");
@@ -1436,6 +1577,7 @@ for (const feature of selectedFeatures) {
     name: feature.name,
     version,
     description,
+    ...(feature.localizations ? { localizations: feature.localizations } : {}),
     engine: {
       min: feature.minEngineVersion ?? MIN_ENGINE_VERSION,
       maxExclusive: feature.maxEngineExclusive ?? MAX_ENGINE_EXCLUSIVE,
@@ -1569,7 +1711,9 @@ for (const feature of selectedFeatures) {
           ? "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md"
           : feature.id === "noodle"
             ? "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
-          : `https://github.com/Pasta-Devs/Marinara-Agents#${feature.id}`,
+            : feature.id === "slurp"
+              ? "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp/README.md"
+              : `https://github.com/Pasta-Devs/Marinara-Agents#${feature.id}`,
     });
   } finally {
     await rm(temporary, { recursive: true, force: true });

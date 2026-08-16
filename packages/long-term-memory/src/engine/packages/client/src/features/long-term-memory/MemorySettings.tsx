@@ -1103,7 +1103,7 @@ export default function MemorySettings({
             tabIndex={activeTab === tab.id ? 0 : -1}
             onClick={() => setActiveTab(tab.id)}
             onKeyDown={(event) => {
-              let next = index;
+              let next: number;
               if (event.key === "ArrowRight")
                 next = (index + 1) % settingsTabs.length;
               else if (event.key === "ArrowLeft")

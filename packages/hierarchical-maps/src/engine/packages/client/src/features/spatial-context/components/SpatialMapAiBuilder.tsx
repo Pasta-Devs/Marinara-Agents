@@ -30,12 +30,18 @@ import type {
 } from "@marinara-engine/shared";
 import { compareSpatialLocations } from "@marinara-engine/shared";
 import {
+  parseAgentSettings,
   useGenerateSpatialMapDraft,
   useGenerateSpatialMapTemplateDraft,
+  useSpatialAgentConfiguration,
+  useSpatialConnections,
   useSpatialGenerationPromptLibraries,
+  useUpdateSpatialAgentConfiguration,
   type MapsGenerateSpatialMapDraftResponse,
 } from "../../../hooks/use-spatial-context";
 import { cn } from "../package-utils";
+import { useSpatialMapTranslation } from "../localization";
+import { SpatialConnectionOverrideSelect } from "./SpatialConnectionOverrideSelect";
 import { SpatialLocationIcon } from "./SpatialLocationIcon";
 import {
   HIERARCHY_TEMPLATES,
@@ -52,6 +58,7 @@ import {
 
 interface SpatialMapAiBuilderProps {
   chatId: string;
+  chatConnectionId?: string | null;
   standalone?: boolean;
   ownerMode: SpatialOwnerMode;
   open: boolean;
@@ -175,6 +182,7 @@ function withHierarchyProfile(
 
 export function SpatialMapAiBuilder({
   chatId,
+  chatConnectionId = null,
   standalone = false,
   ownerMode,
   open,
@@ -199,7 +207,11 @@ export function SpatialMapAiBuilder({
 }: SpatialMapAiBuilderProps) {
   const generateDraft = useGenerateSpatialMapDraft();
   const generateTemplateDraft = useGenerateSpatialMapTemplateDraft();
+  const agentConfiguration = useSpatialAgentConfiguration();
+  const connections = useSpatialConnections();
+  const updateAgentConfiguration = useUpdateSpatialAgentConfiguration();
   const promptLibraries = useSpatialGenerationPromptLibraries();
+  const { t } = useSpatialMapTranslation();
   const generationPreferencesOverride = useMemo(
     () =>
       generationPreferencesWithPromptLibrary(
@@ -254,6 +266,9 @@ export function SpatialMapAiBuilder({
   const [selectedPreviewId, setSelectedPreviewId] = useState<string | null>(null);
   const [expandedPreviewIds, setExpandedPreviewIds] = useState<Set<string>>(() => new Set());
   const [previewQuery, setPreviewQuery] = useState("");
+  const [connectionId, setConnectionId] = useState("");
+  const [connectionSaved, setConnectionSaved] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const requestInputRef = useRef<HTMLTextAreaElement>(null);
   const handledRegenerationRef = useRef(0);
   const excludedLorebookIdSet = useMemo(() => new Set(excludedLorebookIds), [excludedLorebookIds]);
@@ -336,6 +351,18 @@ export function SpatialMapAiBuilder({
   const proposedStartingLocation = result?.definition.startingLocationId
     ? (result.definition.locations.find((location) => location.id === result.definition.startingLocationId) ?? null)
     : null;
+  const generationPending = generateDraft.isPending || generateTemplateDraft.isPending;
+
+  useEffect(() => {
+    if (!agentConfiguration.isSuccess || updateAgentConfiguration.isPending) return;
+    setConnectionId(agentConfiguration.data?.connectionId ?? "");
+  }, [agentConfiguration.data, agentConfiguration.isSuccess, updateAgentConfiguration.isPending]);
+
+  useEffect(() => {
+    if (!connectionSaved) return;
+    const timer = window.setTimeout(() => setConnectionSaved(false), 1_800);
+    return () => window.clearTimeout(timer);
+  }, [connectionSaved]);
 
   useEffect(() => {
     if (!open) return;
@@ -465,6 +492,33 @@ export function SpatialMapAiBuilder({
 
   if (!open) return null;
 
+  const changeConnection = async (nextConnectionId: string) => {
+    const configuration = agentConfiguration.data;
+    if (!configuration || updateAgentConfiguration.isPending || generationPending) return;
+    const previousConnectionId = configuration.connectionId ?? "";
+    const settings = parseAgentSettings(configuration.settings);
+    setConnectionId(nextConnectionId);
+    setConnectionSaved(false);
+    setConnectionError(null);
+    try {
+      const saved = await updateAgentConfiguration.mutateAsync({
+        description: configuration.description,
+        phase: "pre_generation",
+        connectionId: nextConnectionId || null,
+        settings: {
+          author: typeof settings.author === "string" && settings.author.trim() ? settings.author : "Pasta Devs",
+        },
+      });
+      setConnectionId(saved.connectionId ?? "");
+      setConnectionSaved(true);
+    } catch (saveError) {
+      setConnectionId(previousConnectionId);
+      setConnectionError(
+        saveError instanceof Error ? saveError.message : t("ui.worldMaps.connection.saveError"),
+      );
+    }
+  };
+
   const resetResult = () => {
     setResult(null);
     setError(null);
@@ -496,8 +550,7 @@ export function SpatialMapAiBuilder({
   const resultHierarchyValid = Boolean(
     result && result.hierarchyProfile.types.every((type) => type.label.trim().length > 0),
   );
-  const generationPending = generateDraft.isPending || generateTemplateDraft.isPending;
-  const generationDisabled = generationPending || requestInvalid;
+  const generationDisabled = generationPending || updateAgentConfiguration.isPending || requestInvalid;
   const generate = () => runGeneration(currentRequest);
   const selectedPreviewProvenance = selectedPreviewLocation ? result?.provenance?.[selectedPreviewLocation.id] : null;
   const togglePreviewExpanded = (locationId: string) => {
@@ -603,6 +656,45 @@ export function SpatialMapAiBuilder({
 
       <div className="mari-maps-ai-grid grid min-h-0 gap-px bg-[var(--marinara-editor-divider)]">
         <div className="bg-[var(--marinara-editor-bg)] p-4">
+          <div className="mb-4">
+            <label className="text-xs font-semibold text-[var(--marinara-editor-title)]" htmlFor="spatial-ai-connection">
+              {t("ui.worldMaps.connection.aiLabel")}
+            </label>
+            <SpatialConnectionOverrideSelect
+              id="spatial-ai-connection"
+              ariaLabel={t("ui.worldMaps.connection.aiAriaLabel")}
+              value={connectionId}
+              onChange={(nextConnectionId) => void changeConnection(nextConnectionId)}
+              connections={connections.data ?? []}
+              fallbackConnectionId={standalone ? null : chatConnectionId}
+              fallbackLabel={
+                standalone ? t("ui.worldMaps.connection.useDefault") : t("ui.worldMaps.connection.useChat")
+              }
+              disabled={
+                generationPending ||
+                updateAgentConfiguration.isPending ||
+                !agentConfiguration.isSuccess ||
+                connections.isLoading
+              }
+              className="mt-2 min-h-11 w-full rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-sm outline-none focus:border-[var(--marinara-chat-chrome-button-border-active)] focus:ring-2 focus:ring-[var(--marinara-chat-chrome-highlight-bg)] disabled:opacity-60"
+            />
+            <div className="mt-1 flex min-h-4 items-start justify-between gap-3 text-[0.625rem] text-[var(--marinara-editor-muted)]">
+              <span>{t("ui.worldMaps.connection.help")}</span>
+              <span className="shrink-0" aria-live="polite">
+                {updateAgentConfiguration.isPending
+                  ? t("ui.worldMaps.connection.saving")
+                  : connectionSaved
+                    ? t("ui.worldMaps.connection.saved")
+                    : ""}
+              </span>
+            </div>
+            {connectionError && (
+              <p className="mt-1 text-xs text-[var(--destructive)]" role="alert">
+                {connectionError}
+              </p>
+            )}
+          </div>
+
           {hasLocations && operation === "expand" && (
             <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] px-3 py-2.5">
               <div className="min-w-48 flex-1">

@@ -8,12 +8,14 @@ export function LastInjectionSummary({
   error = false,
   onOpenMemory,
   onRetry,
+  compact = false,
 }: {
   data?: LtmLastInjectionResponse;
   loading?: boolean;
   error?: boolean;
   onOpenMemory?: (noteId: string) => void;
   onRetry?: () => void;
+  compact?: boolean;
 }) {
   const { t: localizeUi, locale } = useLtmTranslation();
   return (
@@ -22,7 +24,9 @@ export function LastInjectionSummary({
       aria-busy={loading}
       className="mari-editor-panel mari-editor-panel--soft"
     >
-      <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 py-2 text-xs font-semibold">
+      <summary
+        className={`flex cursor-pointer items-center justify-between font-semibold ${compact ? "min-h-8 gap-2 px-2.5 py-1.5 text-[0.625rem]" : "min-h-11 gap-3 px-3 py-2 text-xs"}`}
+      >
         <span>
           {error
             ? localizeUi(
@@ -52,9 +56,11 @@ export function LastInjectionSummary({
           </span>
         ) : null}
       </summary>
-      <div className="border-t border-[var(--border)] px-3 py-2">
+      <div
+        className={`border-t border-[var(--border)] ${compact ? "px-2.5 py-1.5" : "px-3 py-2"}`}
+      >
         {error ? (
-          <StatusSurface tone="danger">
+          <StatusSurface tone="danger" compact={compact}>
             {localizeUi(
               "ui.longTermMemory.lastinjectionsummary.theLastRecallCouldNotLoad",
             )}
@@ -70,18 +76,20 @@ export function LastInjectionSummary({
             ) : null}
           </StatusSurface>
         ) : loading ? (
-          <StatusSurface busy>
+          <StatusSurface busy compact={compact}>
             {localizeUi(
               "ui.longTermMemory.lastinjectionsummary.loadingRecalledMemories",
             )}
           </StatusSurface>
         ) : null}
         {!loading && !error && data?.memories.length ? (
-          <ul className="space-y-1 text-xs text-[var(--muted-foreground)]">
+          <ul
+            className={`${compact ? "text-[0.625rem]" : "text-xs"} space-y-1 text-[var(--muted-foreground)]`}
+          >
             {data.memories.map((memory) => (
               <li
                 key={memory.noteId}
-                className="mari-editor-panel mari-editor-panel--soft flex min-h-9 items-center justify-between gap-3 px-2"
+                className={`mari-editor-panel mari-editor-panel--soft flex items-center justify-between gap-3 px-2 ${compact ? "min-h-7" : "min-h-9"}`}
               >
                 {onOpenMemory ? (
                   <button
@@ -104,7 +112,9 @@ export function LastInjectionSummary({
           </ul>
         ) : null}
         {!loading && !error && !data?.memories.length ? (
-          <p className="text-xs text-[var(--muted-foreground)]">
+          <p
+            className={`${compact ? "text-[0.625rem]" : "text-xs"} text-[var(--muted-foreground)]`}
+          >
             {localizeUi(
               "ui.longTermMemory.lastinjectionsummary.noMemoriesWereInjectedInTheLastRecall",
             )}

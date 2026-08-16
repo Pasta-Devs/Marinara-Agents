@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "en",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "Pixelforge",
+    "description": "A walkable pixel-art village RPG Experience for Game Mode: explore a closed world, talk to NPCs to drive the story, and let the GM narrate — with World Maps integration and the engine's own combat. Install it, then choose Pixelforge as the Experience when creating a Game Mode chat."
+  },
+  "agents": {
+    "pixelforge": {
+      "name": "Pixelforge",
+      "description": "A walkable pixel-art village RPG Experience for Game Mode: explore a closed world, talk to NPCs to drive the story, and let the GM narrate — with World Maps integration and the engine's own combat. Install it, then choose Pixelforge as the Experience when creating a Game Mode chat."
+    }
+  }
+}

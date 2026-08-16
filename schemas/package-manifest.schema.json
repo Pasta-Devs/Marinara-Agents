@@ -32,6 +32,26 @@
     "name": { "type": "string", "minLength": 1, "maxLength": 120 },
     "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$" },
     "description": { "type": "string", "maxLength": 2000 },
+    "localizations": {
+      "type": "object",
+      "propertyNames": { "type": "string", "minLength": 2, "maxLength": 35 },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "description": { "type": "string", "maxLength": 2000 },
+          "homeBrowserTab": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "label": { "type": "string", "minLength": 1, "maxLength": 40 },
+              "ariaLabel": { "type": "string", "minLength": 1, "maxLength": 100 }
+            }
+          }
+        }
+      }
+    },
     "engine": {
       "type": "object",
       "additionalProperties": false,

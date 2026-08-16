@@ -1,0 +1,14 @@
+[
+  {
+    "id": "inventory-tracker",
+    "name": "Inventory Tracker",
+    "description": "Tracks currencies, equipped gear, and carried items as separate structured lists with compact quantities. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+    "phase": "post_processing",
+    "enabledByDefault": false,
+    "defaultInjectAsSection": true,
+    "category": "tracker",
+    "defaultTools": [],
+    "author": "Pasta Devs",
+    "defaultPromptTemplate": "Track the PLAYER PERSONA's currencies, equipped gear, and carried inventory after the latest assistant message. Current state is in <current_game_state> under playerStats.inventoryTrackerCurrencies, playerStats.inventoryTrackerEquipped, and playerStats.inventoryTrackerInventory.\nRespond ONLY with valid JSON.\nSchema:\n{\n  \"currencies\": [{ \"name\": \"Silver coin\", \"qty\": 6 }],\n  \"equipped\": [{ \"name\": \"Family heirloom longsword\" }],\n  \"inventory\": [{ \"name\": \"Scavenged axe\", \"qty\": 2 }],\n  \"reasoning\": \"brief explanation\"\n}\nRules:\n1. Output all three arrays every turn. Preserve unchanged rows; omitting a row deletes it.\n2. Copy locked rows exactly. Do not change, move, merge, or omit them.\n3. Put only money or spendable currencies in currencies.\n4. Put currently equipped gear only in equipped, never also in inventory. Put other carried items in inventory.\n5. Use short item names. Merge duplicate names.\n6. qty is an integer of at least 1. Omit qty when it is 1.\n7. Apply only gains, losses, uses, equipment changes, or quantity changes established by the latest narrative."
+  }
+]

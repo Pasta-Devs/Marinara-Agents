@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-11T16:07:38.578Z",
+  "generatedAt": "2026-08-16T10:22:35.544Z",
   "packages": [
     {
       "manifest": {
@@ -65,9 +65,9 @@
         "restartRequired": true
       },
       "category": "misc",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/eightball.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/eightball.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/eightball-1.0.4.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/eightball-1.0.4.zip",
         "sha256": "8fc4d46daf5bba51e39bb3abad8ed54a9a1ff5dc5aba51e07db61557e725f9a6",
         "bytes": 200312
       },
@@ -107,9 +107,9 @@
         "restartRequired": false
       },
       "category": "tracker",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/background.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/background.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/background-1.0.3.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/background-1.0.3.zip",
         "sha256": "379d9f255044cd4bb882b909e4bad8fd5533465cf055fea5b8cfeae3b5ed894b",
         "bytes": 1433
       },
@@ -120,7 +120,7 @@
         "schemaVersion": 1,
         "id": "conversation-calls",
         "name": "Calls",
-        "version": "1.0.9",
+        "version": "1.0.10",
         "description": "Adds live audio and video calls with Conversation characters. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Calls for Conversation mode.",
         "engine": {
           "min": "2.4.1",
@@ -155,8 +155,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "f67dce6eaaf8fb1421798154e852c3bbd11dfe5efedcc0b8b6aa3026916d4b5a",
-            "bytes": 903567
+            "sha256": "bfc56dd7f9d9fc3c635a2a13ddb3e7a2acae0ca2975eab509b139110946505af",
+            "bytes": 849571
           }
         ],
         "permissions": [
@@ -171,11 +171,11 @@
         "restartRequired": true
       },
       "category": "misc",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/conversation-calls.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/conversation-calls.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/conversation-calls-1.0.9.zip",
-        "sha256": "a8b2f8e2f3f79be1cd19f202eaf1cb542a8bcf39f2558ec78b4724005499ca52",
-        "bytes": 920280
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.10.zip",
+        "sha256": "b4a272ed8022afb07892d44558695c78af0b7366b8866dad0487aefd153aa430",
+        "bytes": 903942
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#conversation-calls"
     },
@@ -213,9 +213,9 @@
         "restartRequired": false
       },
       "category": "writer",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/card-evolution-auditor.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/card-evolution-auditor.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/card-evolution-auditor-1.0.2.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/card-evolution-auditor-1.0.2.zip",
         "sha256": "24a70ccbaf9629b0ee432c846aca87d14cca82a0088c1b55a9b998634e28fe33",
         "bytes": 1595
       },
@@ -255,9 +255,9 @@
         "restartRequired": false
       },
       "category": "tracker",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/character-tracker.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/character-tracker.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/character-tracker-1.0.2.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/character-tracker-1.0.2.zip",
         "sha256": "4e6dfef855b5a4f51869bbe0e9ffe7e17b634406b45b5b92b20d694130b8fb7a",
         "bytes": 1841
       },
@@ -322,9 +322,9 @@
         "restartRequired": true
       },
       "category": "misc",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/chess.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/chess.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/chess-1.0.4.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/chess-1.0.4.zip",
         "sha256": "8da4f9773ffe48c446dd047cd6c3c1c6a7ca3cacbd4471102a47a4b3b041a36c",
         "bytes": 204109
       },
@@ -364,9 +364,9 @@
         "restartRequired": false
       },
       "category": "misc",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/combat.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/combat.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/combat-1.0.3.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/combat-1.0.3.zip",
         "sha256": "a34d0c456679ba8651d0411b29bc4117630416d4d4476ffd9240d510a1a2f4d3",
         "bytes": 1603
       },
@@ -406,9 +406,9 @@
         "restartRequired": false
       },
       "category": "writer",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/continuity.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/continuity.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/continuity-1.0.2.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/continuity-1.0.2.zip",
         "sha256": "d9c38fdec6f2496eeec98aab4df0721291f487329330e096e34fda4b76f8e606",
         "bytes": 1615
       },
@@ -448,9 +448,9 @@
         "restartRequired": false
       },
       "category": "tracker",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/custom-tracker.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/custom-tracker.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/custom-tracker-1.0.2.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/custom-tracker-1.0.2.zip",
         "sha256": "8c035a4788a53bbae6be2b8cd5190fcf336bad007fa073c8c011fc8d1091b445",
         "bytes": 1462
       },
@@ -490,9 +490,9 @@
         "restartRequired": false
       },
       "category": "misc",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/cyoa.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/cyoa.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/cyoa-1.0.3.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/cyoa-1.0.3.zip",
         "sha256": "dc54e3bb3eef178d030c41fd9a78682dd08927af8d3185a1f5a5371d082992d5",
         "bytes": 1466
       },
@@ -532,9 +532,9 @@
         "restartRequired": false
       },
       "category": "misc",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/echo-chamber.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/echo-chamber.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/echo-chamber-1.0.2.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/echo-chamber-1.0.2.zip",
         "sha256": "5b570c2b3a7377de1a396fa94f6c460650f1f575cfc8082945634b814e413fb0",
         "bytes": 2429
       },
@@ -574,9 +574,9 @@
         "restartRequired": false
       },
       "category": "tracker",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/expression.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/expression.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/expression-1.0.4.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/expression-1.0.4.zip",
         "sha256": "3e1921c3b33f7367efcbf32630e68634008dab058432ee8cbda0fc5cfeeec357",
         "bytes": 1578
       },
@@ -587,10 +587,10 @@
         "schemaVersion": 1,
         "id": "haptic",
         "name": "Haptic Feedback",
-        "version": "1.0.2",
-        "description": "Analyzes narrative content and controls connected intimate toys in real time. Requires Intiface Central running locally — connect your toy there first, then enable this agent. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents for Conversation and Roleplay modes.",
+        "version": "1.0.3",
+        "description": "Analyzes narrative content and controls every supported action and pattern on connected intimate toys in real time. Requires Intiface Central running locally; connect your toy there first, then enable this agent. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents for Conversation, Roleplay, and Game modes.",
         "engine": {
-          "min": "2.3.0",
+          "min": "2.4.3",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -602,8 +602,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "b34bc8f72a2d6c5256d4d71dcfeabb53399d3a1caa06d807da579962977ce283",
-            "bytes": 1966
+            "sha256": "d8cee65d87a03190fa09f16ca1184a8f9024781001d0ba0fb8b33910cb573b30",
+            "bytes": 2776
           }
         ],
         "permissions": [
@@ -616,11 +616,11 @@
         "restartRequired": false
       },
       "category": "misc",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/haptic.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/haptic.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/haptic-1.0.2.zip",
-        "sha256": "b108f502f33680f51f4f1c97e580e5c55523081ead8b263184a7f8856555059a",
-        "bytes": 1733
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/haptic-1.0.3.zip",
+        "sha256": "ae8143e3aad7b4cc383060498db9d00036c3200877e7da4e93ead82bcdf0e449",
+        "bytes": 2061
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#haptic-feedback"
     },
@@ -658,9 +658,9 @@
         "restartRequired": false
       },
       "category": "misc",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/illustrator.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/illustrator.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/illustrator-1.0.4.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/illustrator-1.0.4.zip",
         "sha256": "d616832a9a79c05410f65bba012355e81bffc1ac210bab9a2317b9854e1d8325",
         "bytes": 3173
       },
@@ -700,13 +700,55 @@
         "restartRequired": false
       },
       "category": "misc",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/html.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/html.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/html-1.0.2.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/html-1.0.2.zip",
         "sha256": "a5929f769a883861fcba2e5a3aefba0a3a7a482f0f77d40ecab3783065f15f07",
         "bytes": 1675
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#immersive-html"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "inventory-tracker",
+        "name": "Inventory Tracker",
+        "version": "1.0.0",
+        "description": "Tracks currencies, equipped gear, and carried items as separate structured lists with compact quantities. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+        "engine": {
+          "min": "2.4.3",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json"
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "1ba0380f1d01e66f0ba3ca01a4b57bff57d4016f2c479b3c49fec8d4a9fd0a80",
+            "bytes": 1616
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "prompt-context",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": false
+      },
+      "category": "tracker",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/inventory-tracker.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/inventory-tracker-1.0.0.zip",
+        "sha256": "bd2b5ef5677b8e0c53c62f4b4d6b7e9940afadc54d4df6f36121e15db2dab3c8",
+        "bytes": 1464
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#inventory-tracker"
     },
     {
       "manifest": {
@@ -742,9 +784,9 @@
         "restartRequired": false
       },
       "category": "writer",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/knowledge-retrieval.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/knowledge-retrieval.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/knowledge-retrieval-1.0.3.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/knowledge-retrieval-1.0.3.zip",
         "sha256": "db16a966ca57a79bebe857bdadf7f94db666bcb9d498239275b554b57559c21d",
         "bytes": 1514
       },
@@ -784,9 +826,9 @@
         "restartRequired": false
       },
       "category": "writer",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/knowledge-router.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/knowledge-router.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/knowledge-router-1.0.3.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/knowledge-router-1.0.3.zip",
         "sha256": "a04b95d9c51377cb47b1651174bc16854fd7dfd770c0d7029e8a83fef8fcaa68",
         "bytes": 1634
       },
@@ -805,7 +847,7 @@
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.2.4",
+        "version": "1.2.6",
         "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
         "engine": {
           "min": "2.4.1",
@@ -837,13 +879,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "352232262380fe48858a9b3fdd5b956101ce4c2b2a28ba9d26744607b88fa787",
-            "bytes": 350120
+            "sha256": "f76665fb412b5719fc4f95251584039c8461ae4c2e92ce57217f60f581f711fa",
+            "bytes": 350586
           },
           {
             "path": "client.js",
-            "sha256": "7c2fb1813d2a21ccf77e858115eb56cd5b5656b55f0e11ea63ddf7891482c744",
-            "bytes": 620109
+            "sha256": "2a546ab12fa0028f43c0960b139c4b32e5c72081a3557cc572204cf1de09f228",
+            "bytes": 620705
           }
         ],
         "permissions": [
@@ -857,11 +899,11 @@
         "restartRequired": true
       },
       "category": "misc",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/long-term-memory.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/long-term-memory-1.2.4.zip",
-        "sha256": "2d45793e4a836c09b9ef254da5ff9af77ffdf96222f3e464380e827033a828e9",
-        "bytes": 264023
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.2.6.zip",
+        "sha256": "5f4c8114abb6710111f875cadbdf657443eac0a3cc898460f460867cb29e19ec",
+        "bytes": 264391
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },
@@ -899,9 +941,9 @@
         "restartRequired": false
       },
       "category": "misc",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/lorebook-keeper.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/lorebook-keeper.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/lorebook-keeper-1.0.2.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/lorebook-keeper-1.0.2.zip",
         "sha256": "14c1685daf9dffe53e7029571c3a8a776bb757fb4021a4555e78021f4dee6edb",
         "bytes": 1600
       },
@@ -941,9 +983,9 @@
         "restartRequired": false
       },
       "category": "misc",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/spotify.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/spotify.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/spotify-1.0.2.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/spotify-1.0.2.zip",
         "sha256": "21679b713bcffda6ac34c08faec40df37a01b01e447bbe4fba740efbca0cf631",
         "bytes": 2621
       },
@@ -983,9 +1025,9 @@
         "restartRequired": false
       },
       "category": "writer",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/director.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/director.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/director-1.0.2.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/director-1.0.2.zip",
         "sha256": "5df277cfeea05fec99467ca513a92d2d1d09c1738c70300985bb77fe0539b572",
         "bytes": 1440
       },
@@ -996,8 +1038,34 @@
         "schemaVersion": 1,
         "id": "noodle",
         "name": "Noodle",
-        "version": "1.0.0",
-        "description": "Explore the familiar Noodle public timeline and private NoodleR creator platform as an optional social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
+        "version": "1.2.0",
+        "description": "Explore the Noodle public timeline as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
+        "localizations": {
+          "de": {
+            "name": "Noodle",
+            "description": "Entdecke die öffentliche Noodle-Timeline als optionale lokale soziale Welt. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Noodle.",
+            "homeBrowserTab": {
+              "label": "Noodle",
+              "ariaLabel": "Noodle öffnen"
+            }
+          },
+          "ko": {
+            "name": "Noodle",
+            "description": "Noodle 공개 타임라인을 선택형 로컬 소셜 세계로 만나 보세요. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Noodle을 여세요.",
+            "homeBrowserTab": {
+              "label": "Noodle",
+              "ariaLabel": "Noodle 열기"
+            }
+          },
+          "pl": {
+            "name": "Noodle",
+            "description": "Poznaj publiczną oś czasu Noodle jako opcjonalny lokalny świat społecznościowy. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Noodle na stronie głównej.",
+            "homeBrowserTab": {
+              "label": "Noodle",
+              "ariaLabel": "Otwórz Noodle"
+            }
+          }
+        },
         "engine": {
           "min": "2.4.2",
           "maxExclusive": "4.0.0"
@@ -1016,38 +1084,32 @@
           ],
           "homeBrowserTab": {
             "label": "Noodle",
-            "ariaLabel": "Open Noodle and NoodleR",
+            "ariaLabel": "Open Noodle",
             "iconPaths": [
-              "noodle-klusek.png",
-              "noodler-klusek.png"
+              "noodle-klusek.png"
             ]
           }
         },
         "files": [
           {
             "path": "agents.json",
-            "sha256": "a2d57fb9c2d28f450878395f8eb40a5edff84ce812623999b73a1d8ca5ef51b2",
-            "bytes": 628
+            "sha256": "905d74012562eb8531a26cb9b3e3e01ac7485900c282c6021f000d2bd4b8cfac",
+            "bytes": 588
           },
           {
             "path": "server.mjs",
-            "sha256": "01f3e41a956ac795270a8389c62c515a780c5345e5a9e36e110be3d8eb6fa0bc",
-            "bytes": 2382557
+            "sha256": "2bee7244fc7f45f03e585d15200413938513375f0a56a48bf724d5d5c8cd52ee",
+            "bytes": 2337117
           },
           {
             "path": "client.js",
-            "sha256": "ca5f1bc6ab1b6b176d0ed2cc05fe42d1132e308d1c87066994eae1403779c359",
-            "bytes": 2469464
+            "sha256": "7fc182759e3697c00f76968004612388c3009a4a87360641890ded1f12658647",
+            "bytes": 2242613
           },
           {
             "path": "noodle-klusek.png",
             "sha256": "003236ad2b83c5eb44731a48048c86b07aa8c1f9c411f881c15f7d4af3c68212",
             "bytes": 28325
-          },
-          {
-            "path": "noodler-klusek.png",
-            "sha256": "f3f0eb142c6ff572dea636aa7ab7d046922aedde2f5425890327e79834bd923e",
-            "bytes": 27664
           }
         ],
         "permissions": [
@@ -1061,11 +1123,11 @@
         "restartRequired": true
       },
       "category": "misc",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/noodle.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/noodle-1.0.0.zip",
-        "sha256": "48c947d05668e49b32289b775a83f452d8c268c6ec3ff81fb6f262ecf230a6bf",
-        "bytes": 1224765
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.2.0.zip",
+        "sha256": "49c24d74fd1a971dab6d7e9640e2629eacb17bbe99ed8c9b71d3284d13e81e2a",
+        "bytes": 1153922
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },
@@ -1103,13 +1165,119 @@
         "restartRequired": false
       },
       "category": "tracker",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/persona-stats.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/persona-stats.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/persona-stats-1.0.2.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/persona-stats-1.0.2.zip",
         "sha256": "4eef29229ec1d721683a71b2b514bed9579112d1a421934beebc37c2d86c0b98",
         "bytes": 1758
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#persona-stats"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
+          "minor": 10
+        },
+        "builtAgainst": {
+          "engineVersion": "2.4.3",
+          "engineCommit": "3fc2924291ede77e13d595ba0ea469b68419ab13"
+        },
+        "id": "pixelforge",
+        "name": "Pixelforge",
+        "version": "0.2.0",
+        "description": "A walkable pixel-art village RPG Experience for Game Mode: explore a closed world, talk to NPCs to drive the story, and let the GM narrate — with World Maps integration and the engine's own combat. Install it, then choose Pixelforge as the Experience when creating a Game Mode chat.",
+        "engine": {
+          "min": "2.4.3",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "game-surface"
+          ],
+          "gameSurface": {
+            "surfaceClass": "pixelforge-surface"
+          },
+          "assets": {
+            "paths": [
+              "tiles.png",
+              "atlas.json",
+              "sprites.json",
+              "sprites/player.png",
+              "sprites/mira.png",
+              "sprites/tam.png",
+              "sprites/rook.png"
+            ]
+          }
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "ef05f1d047010e778527de646d1d99f501ba1feea94e01a23ab0b952449841ce",
+            "bytes": 693
+          },
+          {
+            "path": "client.js",
+            "sha256": "bb83dcf233ca5996dd483eb5dea29205750cc3565501169a27c332730dea208e",
+            "bytes": 80482
+          },
+          {
+            "path": "tiles.png",
+            "sha256": "5cde968afd12c67f4c3032cfc4bcbb08fd53a48e1ec850cb34c927128cbbb657",
+            "bytes": 1261
+          },
+          {
+            "path": "atlas.json",
+            "sha256": "15f630fa24084ee5cabcb7657e7cd7f077ee87a374bc5cf44c1d6c4568ecd68d",
+            "bytes": 403
+          },
+          {
+            "path": "sprites.json",
+            "sha256": "febd0c4c6b6d4433b2e6b5306a00ddc551fb10c96e84c23df760dc2e4a72385b",
+            "bytes": 269
+          },
+          {
+            "path": "sprites/player.png",
+            "sha256": "dcc25ead27f081dd18824ba7951b5498476bd0537535c5d62d5a27ae07b1cdd7",
+            "bytes": 423
+          },
+          {
+            "path": "sprites/mira.png",
+            "sha256": "1c062d538fbfdea82c1360a9f1af894f8137c9195d09ab982a51471532182496",
+            "bytes": 422
+          },
+          {
+            "path": "sprites/tam.png",
+            "sha256": "2b64f03908d1a2be31fc17c15119cc83dce941a3b4eb4c083d13eed19bf0b536",
+            "bytes": 422
+          },
+          {
+            "path": "sprites/rook.png",
+            "sha256": "1ca8a2b6069b5972adea2bcd115cf0efe1f284ac5f77a6febd1289d349a06a1f",
+            "bytes": 423
+          }
+        ],
+        "permissions": [
+          "ui"
+        ],
+        "restartRequired": false
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/pixelforge.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/pixelforge-0.2.0.zip",
+        "sha256": "abacac43474ded9c4e9792bc6fa096931cebacfcf89a4f0b9e806a83e0b09a8b",
+        "bytes": 88356
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/pixelforge/README.md"
     },
     {
       "manifest": {
@@ -1172,9 +1340,9 @@
         "restartRequired": true
       },
       "category": "misc",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/poker.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/poker.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/poker-1.0.4.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/poker-1.0.4.zip",
         "sha256": "cc5dd20cda833bc4800cbffb95d7cd9472e27ab0219cde65d4aed0a2ffa13afb",
         "bytes": 195656
       },
@@ -1214,9 +1382,9 @@
         "restartRequired": false
       },
       "category": "writer",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/prose-guardian.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/prose-guardian.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/prose-guardian-1.0.2.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/prose-guardian-1.0.2.zip",
         "sha256": "db6443a06764c7472df382a80b465466a4930f2aa0d2b45199b676d3f44ea275",
         "bytes": 1573
       },
@@ -1256,9 +1424,9 @@
         "restartRequired": false
       },
       "category": "tracker",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/quest.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/quest.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/quest-1.0.4.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/quest-1.0.4.zip",
         "sha256": "83b8a1f5e55be9851dd665009fc50a9bf35d9fbaf1fe427509737aa541ff37f9",
         "bytes": 2990
       },
@@ -1325,9 +1493,9 @@
         "restartRequired": true
       },
       "category": "misc",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/rock-paper-scissors.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/rock-paper-scissors.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/rock-paper-scissors-1.0.4.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/rock-paper-scissors-1.0.4.zip",
         "sha256": "285e0592b4c1abbe173b22fc193a7a4be37cd89f0d044391751f9e6bbbbe6e94",
         "bytes": 189017
       },
@@ -1336,12 +1504,115 @@
     {
       "manifest": {
         "schemaVersion": 1,
+        "id": "slurp",
+        "name": "Slurp",
+        "version": "1.0.1",
+        "description": "The standalone successor to NoodleR: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
+        "localizations": {
+          "de": {
+            "name": "Slurp",
+            "description": "Erstelle ein lokales Creator-Profil aus einem Engine-Charakter oder einer Engine-Persona, veröffentliche öffentliche oder gesperrte Beiträge und simuliere Abonnements und Publikumsaktivität. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Slurp.",
+            "homeBrowserTab": {
+              "label": "Slurp",
+              "ariaLabel": "Slurp öffnen"
+            }
+          },
+          "ko": {
+            "name": "Slurp",
+            "description": "Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 NoodleR 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Slurp를 여세요.",
+            "homeBrowserTab": {
+              "label": "Slurp",
+              "ariaLabel": "Slurp 열기"
+            }
+          },
+          "pl": {
+            "name": "Slurp",
+            "description": "Utwórz lokalne profile twórców z postaci silnika lub person silnika, publikuj publiczne lub zablokowane posty NoodleR i symuluj subskrypcje oraz aktywność publiczności. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Slurp na stronie głównej.",
+            "homeBrowserTab": {
+              "label": "Slurp",
+              "ariaLabel": "Otwórz Slurp"
+            }
+          }
+        },
+        "engine": {
+          "min": "2.4.3",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "home-browser-tab"
+          ],
+          "homeBrowserTab": {
+            "label": "Slurp",
+            "ariaLabel": "Open Slurp",
+            "iconPaths": [
+              "slurp-logo.png"
+            ]
+          }
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "e6bc01992d2c0010a0fa3dc5d53365ad554942cff886997462b46203c61f105d",
+            "bytes": 702
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "e5e25f536d8060857130e55bbb898b9f4dce8c197b925cde660a671481f7b82b",
+            "bytes": 2318281
+          },
+          {
+            "path": "client.js",
+            "sha256": "22021b028290792aaed5168962dfcb64d24204b27cc4c348c305d53105a615e3",
+            "bytes": 2306367
+          },
+          {
+            "path": "slurp-logo.png",
+            "sha256": "722def3c01846167c9979b0408f380f923c520e7515aed1584de0d879131a75b",
+            "bytes": 31677
+          },
+          {
+            "path": "slurpagent.png",
+            "sha256": "47805313b5ec8dbc608fec82c4d51f1f82020afe4f286a04919b59cc8ef06f37",
+            "bytes": 120424
+          }
+        ],
+        "permissions": [
+          "chat-read",
+          "chat-write",
+          "network",
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp-1.0.1.zip",
+        "sha256": "58d09349e98f1371fc4db1eaea928b141ba0ea540d9a1fdfeb60d24bfcfbe33c",
+        "bytes": 1277119
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp/README.md"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
         "id": "storyboard",
         "name": "Storyboard",
-        "version": "1.1.1",
+        "version": "1.1.5",
         "description": "Plans still or animated Game and Roleplay storyboards with separate planning prompts and shared provider formatters. Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Roleplay and Game modes.",
         "engine": {
-          "min": "2.3.5",
+          "min": "2.4.2",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -1353,8 +1624,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "bf7699b1415d712515637cb1da9ca56b6a183dfab6c8a94bfe4b066b2dfd783c",
-            "bytes": 69315
+            "sha256": "c2fbd390e49ed87b50bf5285283ed90e7327a8b049f751623996f102c973f940",
+            "bytes": 83086
           }
         ],
         "permissions": [
@@ -1367,11 +1638,11 @@
         "restartRequired": false
       },
       "category": "misc",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/storyboard.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/storyboard.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/storyboard-1.1.1.zip",
-        "sha256": "99c7abe02c4be0a89eb095a6c53ac2b9639cd46439d96d2754643fdca67d2809",
-        "bytes": 13595
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/storyboard-1.1.5.zip",
+        "sha256": "e6d3ff1c35275477d4faa0c7e4406cad638bcfcd523ed34ff51c93316d9e6aaa",
+        "bytes": 17142
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#storyboard"
     },
@@ -1437,9 +1708,9 @@
         "restartRequired": true
       },
       "category": "misc",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/tic-tac-toe.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/tic-tac-toe.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/tic-tac-toe-1.0.4.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/tic-tac-toe-1.0.4.zip",
         "sha256": "f404050a89e3d3bd52054f08650796e1f70b352630c6575106086eb89e6ccef0",
         "bytes": 188186
       },
@@ -1504,78 +1775,13 @@
         "restartRequired": true
       },
       "category": "misc",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/uno.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/uno.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/uno-1.0.4.zip",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/uno-1.0.4.zip",
         "sha256": "74e595320746d75f6c89f6752f7be633ac45292bee9deab21a7370484b9f52e0",
         "bytes": 195154
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#uno"
-    },
-    {
-      "manifest": {
-        "schemaVersion": 1,
-        "id": "virtual-phone",
-        "name": "Virtual Phone",
-        "version": "2.9.1",
-        "description": "Adds persistent in-story phones for personas and configured characters, with per-phone baseline themes and a docked device shell. Add the Agent in Chat Settings → Agents → Misc Agents, then open the phone from the chat toolbar.",
-        "engine": {
-          "min": "2.4.2",
-          "maxExclusive": "4.0.0"
-        },
-        "kind": [
-          "agent"
-        ],
-        "entrypoints": {
-          "agents": "agents.json",
-          "server": "server.mjs",
-          "client": "client.js"
-        },
-        "contributions": {
-          "agentDetail": {
-            "agentIds": [
-              "virtual-phone"
-            ]
-          },
-          "slots": [
-            "conversation-toolbar",
-            "conversation-surface",
-            "chat-settings"
-          ]
-        },
-        "files": [
-          {
-            "path": "agents.json",
-            "sha256": "662bd5c424cd4f96c4e6b779acb01ff9c3b1473ac3fc3e62f5c33a3957177382",
-            "bytes": 659
-          },
-          {
-            "path": "server.mjs",
-            "sha256": "15f7de188b2d02bd0791ef4565163bf60b84d1f63b9092674c9c793e216aa73b",
-            "bytes": 112345
-          },
-          {
-            "path": "client.js",
-            "sha256": "09944d4a43411aee9433ce28e83a62fc7d67270df3f2658cb7ed6b018d044699",
-            "bytes": 487093
-          }
-        ],
-        "permissions": [
-          "prompt-context",
-          "routes",
-          "storage",
-          "ui"
-        ],
-        "restartRequired": true
-      },
-      "category": "misc",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/virtual-phone.png",
-      "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/virtual-phone-2.9.1.zip",
-        "sha256": "a32471ef6399b0f9b6da9d746f71255b8cc781a99d1d303074cbd603ac9d362d",
-        "bytes": 167406
-      },
-      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#virtual-phone"
     },
     {
       "manifest": {
@@ -1590,7 +1796,7 @@
         },
         "id": "hierarchical-maps",
         "name": "World Maps",
-        "version": "1.3.4",
+        "version": "1.3.6",
         "description": "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, customizable Direct Link lines, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
         "engine": {
           "min": "2.4.2",
@@ -1626,13 +1832,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "7420614c95cedb67df9f95c88604efd8758eae99f75dfc3a1012c4a598381450",
-            "bytes": 366047
+            "sha256": "beee8d2c1d2b394bb02eb174c1a822b14b71627e10424698343f50e18f6b6959",
+            "bytes": 308584
           },
           {
             "path": "client.js",
-            "sha256": "a5f3778b6d3cf70dd86b861e9a89de3529db617994b993f0be13d8bc844c720b",
-            "bytes": 978944
+            "sha256": "1d8a50fd79ebcfb18987bcdbf1e1409a303fdc01fa2e45694a29b1cc7031433f",
+            "bytes": 926112
           }
         ],
         "permissions": [
@@ -1648,11 +1854,11 @@
         "restartRequired": true
       },
       "category": "tracker",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/hierarchical-maps.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/hierarchical-maps.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/hierarchical-maps-1.3.4.zip",
-        "sha256": "6cf633e1b1cb11b9c7a7a07af5296fe977f5678e8887a7af3f1db558cce39b3a",
-        "bytes": 353762
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.3.6.zip",
+        "sha256": "f51e30913f39a546c8ebac44c07f3fca9c8170690629bf64cff290e3b85eab92",
+        "bytes": 321203
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md"
     },
@@ -1661,7 +1867,7 @@
         "schemaVersion": 1,
         "id": "world-state",
         "name": "World State",
-        "version": "1.0.3",
+        "version": "1.0.4",
         "description": "Tracks date, time, weather, location, temperature, and custom world details automatically. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.3.0",
@@ -1676,8 +1882,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "504609f5954b6a01f2aad125994d9126c9788091812f6208dd30f99562425b1c",
-            "bytes": 2064
+            "sha256": "1a492846367d34c4fc55c193f4dfe1df9f70ad0402d1b56bf084c60d7cec5a13",
+            "bytes": 2168
           }
         ],
         "permissions": [
@@ -1690,11 +1896,11 @@
         "restartRequired": false
       },
       "category": "tracker",
-      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artwork/agent-covers/world-state.png",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/world-state.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/hold-the-phone/artifacts/world-state-1.0.3.zip",
-        "sha256": "85c4c5a88801b007ae84a6417c26b45cca0abcf5ba6fa902f1f6c26cc7c74e4b",
-        "bytes": 1640
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/world-state-1.0.4.zip",
+        "sha256": "110df266b87d7c273dd3854b64fac1e2debf6c862807085998ef4dc4ccb0e6cf",
+        "bytes": 1694
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#world-state"
     }

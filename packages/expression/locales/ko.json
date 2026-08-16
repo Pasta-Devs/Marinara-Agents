@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "ko",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "표정 엔진 (Expression Engine)",
+    "description": "캐릭터의 감정을 감지해 VN 스프라이트/표정을 선택합니다. 롤플레이 모드에서는 채팅 설정 → 에이전트 → 추적 에이전트에서 이 에이전트를 추가하세요."
+  },
+  "agents": {
+    "expression": {
+      "name": "표정 엔진 (Expression Engine)",
+      "description": "캐릭터의 감정을 감지해 VN 스프라이트/표정을 선택합니다. 롤플레이 모드에서는 채팅 설정 → 에이전트 → 추적 에이전트에서 이 에이전트를 추가하세요."
+    }
+  }
+}

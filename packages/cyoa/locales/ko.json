@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": {
+    "locale": "ko",
+    "direction": "ltr"
+  },
+  "package": {
+    "name": "CYOA 선택지 (CYOA Choices)",
+    "description": "각 어시스턴트 메시지 뒤에 상호작용형 CYOA(Choose Your Own Adventure) 선택지를 생성합니다. 선택지를 클릭하면 응답으로 전송됩니다. 롤플레이 채팅에서 사용할 수 있습니다. 롤플레이 모드에서는 채팅 설정 → 에이전트 → 기타 에이전트에서 이 에이전트를 추가하세요."
+  },
+  "agents": {
+    "cyoa": {
+      "name": "CYOA 선택지 (CYOA Choices)",
+      "description": "각 어시스턴트 메시지 뒤에 상호작용형 CYOA(Choose Your Own Adventure) 선택지를 생성합니다. 선택지를 클릭하면 응답으로 전송됩니다. 롤플레이 채팅에서 사용할 수 있습니다. 롤플레이 모드에서는 채팅 설정 → 에이전트 → 기타 에이전트에서 이 에이전트를 추가하세요."
+    }
+  }
+}
