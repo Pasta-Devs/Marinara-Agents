@@ -10,7 +10,7 @@ const entry = readFileSync(
   "utf8",
 );
 
-assert.doesNotMatch(view, /NoodlerHome/u);
+assert.doesNotMatch(view, /SlurpHome/u);
 assert.doesNotMatch(entry, /startNoodleAutoPostScheduler|startNoodlerFanActivityScheduler/u);
 assert.match(entry, /startNoodleRefreshScheduler/u);
 console.log("Noodle public activation boundary regressions passed.");

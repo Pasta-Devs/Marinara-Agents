@@ -19,10 +19,7 @@ export type NoodleSettingsSectionId =
   | "timeline"
   | "images"
   | "participants"
-  | "advanced"
-  | "noodlerGeneral"
-  | "noodlerAdvanced"
-  | "noodlerParticipants";
+  | "advanced";
 
 export const NOODLE_SETTINGS_SECTION_KEYS: Record<
   NoodleSettingsSectionId,
@@ -64,25 +61,6 @@ export const NOODLE_SETTINGS_SECTION_KEYS: Record<
     "carryoverHours",
     "carryoverMaxItems",
   ],
-  noodlerGeneral: [
-    "enableNoodler",
-    "autoPostingScheduleEnabled",
-    "postsPerDay",
-    "noodlerNightQuiet",
-    // Onboarding progress, not a preference. Listed so the completeness check passes, but
-    // excluded from resets below: resetting a section must never reopen the wizard.
-    "noodlerOnboardingComplete",
-    "noodlerOnboardingState",
-  ],
-  noodlerAdvanced: ["noodlerGenerationGuidance"],
-  noodlerParticipants: [
-    "fanActivityEnabled",
-    "fanActivityRunsPerDay",
-    "fanLikesPerRefresh",
-    "fanRepliesPerRefresh",
-    "fanRepostsPerRefresh",
-    "fanArchetypeWeights",
-  ],
 };
 
 /**
@@ -90,20 +68,15 @@ export const NOODLE_SETTINGS_SECTION_KEYS: Record<
  * section they belong to.
  *
  * Their defaults describe an unconfigured profile rather than a chosen behaviour: the connection
- * IDs all default to null and nothing works until you pick one, and enableNoodler defaults to
- * false because NoodleR is opt-in. Counting them made both General tabs show a permanent badge
- * for every user, which tells you nothing — and, worse, a reset of the Images section would have
- * cleared the image connections it depends on. The onboarding keys are here for the same reason:
- * a reset must never reopen the wizard.
+ * IDs all default to null and nothing works until you pick one. Counting them made the General
+ * tab show a permanent badge for every user, which tells you nothing. A reset of the Images
+ * section would also clear the image connections it depends on.
  */
 const NOODLE_SETTINGS_RESET_EXCLUDED: ReadonlySet<keyof NoodleSettings> =
   new Set([
     "generationConnectionId",
     "imageGenerationConnectionId",
     "imageCaptioningConnectionId",
-    "enableNoodler",
-    "noodlerOnboardingComplete",
-    "noodlerOnboardingState",
   ]);
 
 function isDefault(settings: NoodleSettings, key: keyof NoodleSettings): boolean {

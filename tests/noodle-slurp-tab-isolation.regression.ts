@@ -8,14 +8,14 @@ function manifest(packageId: "noodle" | "slurp") {
 }
 
 assert.deepEqual(manifest("noodle").contributions?.homeBrowserTab?.iconPaths, ["noodle-klusek.png"]);
-assert.deepEqual(manifest("slurp").contributions?.homeBrowserTab?.iconPaths, ["slurp-klusek.png"]);
+assert.deepEqual(manifest("slurp").contributions?.homeBrowserTab?.iconPaths, ["slurp-logo.png"]);
 
 const noodleShell = readFileSync(
   "packages/noodle/src/engine/packages/client/src/components/noodle/NoodleShell.tsx",
   "utf8",
 );
 const slurpShell = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodleShell.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpShell.tsx",
   "utf8",
 );
 for (const [surface, source] of [

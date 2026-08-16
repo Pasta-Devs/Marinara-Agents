@@ -1,13 +1,16 @@
 import { create } from "zustand";
 import type { SlurpNavigationState } from "../components/slurp/slurp-navigation.types";
 
-const PACKAGE_STATE_KEY = "marinara:slurp:ui";
-const LEGACY_UI_STATE_KEY = "marinara:slurp:ui";
+const PACKAGE_STATE_KEY = "marinara:slurp:package-ui";
+const LEGACY_UI_STATE_KEY = "marinara:ui";
 
 type PersistedSlurpState = {
   navigation?: SlurpNavigationState;
   viewerPersonaId?: string | null;
+  onboardingState?: SlurpOnboardingState;
 };
+
+export type SlurpOnboardingState = "unseen" | "entered" | "completed";
 
 type SlurpPackageState = {
   conversationTimeZone: string;
@@ -15,14 +18,53 @@ type SlurpPackageState = {
   reviewImagePromptsBeforeSend: boolean;
   navigation: SlurpNavigationState;
   viewerPersonaId: string | null;
+  onboardingState: SlurpOnboardingState;
   setNavigation: (navigation: SlurpNavigationState) => void;
   setViewerPersonaId: (id: string | null) => void;
+  setOnboardingState: (state: SlurpOnboardingState) => void;
 };
 
-function isSlurpNavigation(
-  navigation: SlurpNavigationState | undefined,
-): navigation is SlurpNavigationState {
-  return navigation?.mode === "creator" || navigation?.mode === "creator-settings";
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isSlurpNavigation(value: unknown): value is SlurpNavigationState {
+  if (!isRecord(value)) return false;
+  if (value.mode === "creator-settings") {
+    return (
+      (value.tab === undefined || value.tab === "creator") &&
+      (value.section === undefined ||
+        ["general", "creators", "participants", "advanced"].includes(
+          value.section as string,
+        )) &&
+      (value.returnTo === undefined || isSlurpNavigation(value.returnTo))
+    );
+  }
+  if (value.mode !== "creator" || typeof value.view !== "string") return false;
+  switch (value.view) {
+    case "hub":
+      return value.onboarding === undefined || typeof value.onboarding === "boolean";
+    case "search":
+    case "notifications":
+      return true;
+    case "profile":
+      return (
+        (value.accountId === null || typeof value.accountId === "string") &&
+        (value.connection === undefined || value.connection === null ||
+          value.connection === "followers" || value.connection === "following") &&
+        (value.edit === undefined || typeof value.edit === "boolean") &&
+        (value.returnToSettings === undefined || isSlurpNavigation(value.returnToSettings))
+      );
+    case "profiles":
+      return value.returnToSettings === undefined || isSlurpNavigation(value.returnToSettings);
+    case "create-profile":
+      return (
+        typeof value.sourceAccountId === "string" &&
+        (value.returnToSettings === undefined || isSlurpNavigation(value.returnToSettings))
+      );
+    default:
+      return false;
+  }
 }
 
 function readRecord(key: string): Record<string, unknown> | null {
@@ -47,16 +89,20 @@ function validatedPersistedState(
     typeof state.navigation === "object" &&
     !Array.isArray(state.navigation)
   ) {
-    const navigation = state.navigation as SlurpNavigationState;
-    if (isSlurpNavigation(navigation)) {
-      validated.navigation = navigation;
-    }
+    if (isSlurpNavigation(state.navigation)) validated.navigation = state.navigation;
   }
   if (
     typeof state.viewerPersonaId === "string" ||
     state.viewerPersonaId === null
   ) {
     validated.viewerPersonaId = state.viewerPersonaId;
+  }
+  if (
+    state.onboardingState === "unseen" ||
+    state.onboardingState === "entered" ||
+    state.onboardingState === "completed"
+  ) {
+    validated.onboardingState = state.onboardingState;
   }
   return validated;
 }
@@ -78,7 +124,7 @@ function readInitialState(): PersistedSlurpState {
 function persistSlurpState(
   state: Pick<
     SlurpPackageState,
-    "navigation" | "viewerPersonaId"
+    "navigation" | "viewerPersonaId" | "onboardingState"
   >,
 ) {
   try {
@@ -96,11 +142,13 @@ export const useSlurpUIStore = create<SlurpPackageState>((set, get) => ({
   reviewImagePromptsBeforeSend: false,
   navigation: initialState.navigation ?? { mode: "creator", view: "hub" },
   viewerPersonaId: initialState.viewerPersonaId ?? null,
+  onboardingState: initialState.onboardingState ?? "unseen",
   setNavigation: (navigation) => {
     set({ navigation });
     persistSlurpState({
       navigation,
       viewerPersonaId: get().viewerPersonaId,
+      onboardingState: get().onboardingState,
     });
   },
   setViewerPersonaId: (viewerPersonaId) => {
@@ -108,6 +156,15 @@ export const useSlurpUIStore = create<SlurpPackageState>((set, get) => ({
     persistSlurpState({
       navigation: get().navigation,
       viewerPersonaId,
+      onboardingState: get().onboardingState,
+    });
+  },
+  setOnboardingState: (onboardingState) => {
+    set({ onboardingState });
+    persistSlurpState({
+      navigation: get().navigation,
+      viewerPersonaId: get().viewerPersonaId,
+      onboardingState,
     });
   },
 }));

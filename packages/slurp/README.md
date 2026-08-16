@@ -1,12 +1,10 @@
 # Slurp
 
-Slurp is the standalone successor to NoodleR and its local Creator and fan roleplay feed. Create one Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions, unlocks, replies, and audience activity.
+Slurp is the local Creator and fan roleplay feed. Create local Creator profiles from Engine characters or personas, publish public or locked NoodleR posts, and simulate subscriptions, unlocks, replies, and audience activity.
 
 The shipped default guidance is adult-first. It can produce flirty, suggestive, sensual, and explicit posts when they fit the Creator. Review generated content and edit the guidance for a different balance.
 
 Find the package in **Agents -> Download Agents**. After installation and an Engine restart, Slurp appears as its own tab in **Home**. Slurp starts with empty package-owned state.
-
-Slurp requires Marinara Engine 2.4.3 or newer because that release registers its package-owned storage tables.
 
 Slurp uses direct Engine source references. It does not import Noodle account identifiers or Noodle storage. Viewer state is scoped to an Engine persona. A deleted source pauses its Slurp profile and posts.
 

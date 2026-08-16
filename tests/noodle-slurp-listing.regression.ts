@@ -34,7 +34,7 @@ assert.match(manifest.description, /Creator profile/i);
 assert.deepEqual(manifest.contributions?.homeBrowserTab, {
   label: "Slurp",
   ariaLabel: "Open Slurp",
-  iconPaths: ["slurp-klusek.png"],
+  iconPaths: ["slurp-logo.png"],
 });
 
 const agent = agents.find((entry) => entry.id === "slurp");
