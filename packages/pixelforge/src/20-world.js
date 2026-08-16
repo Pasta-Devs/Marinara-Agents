@@ -132,9 +132,46 @@ PF.world = (() => {
     n.spawn = { x: 8, y: n.h - 2 };
     n.lights.push({ x: 4, y: 3 }, { x: 11, y: 5 });
 
-    // portals (two-way)
+    // ── The Whisperwood (forest, east of the village) ──
+    // Composed entirely from existing tiles: dense trees, a 2-wide path to a
+    // stone clearing with a standing stone, and a stream crossed by a ford.
+    const f = makeZone("forest", "The Whisperwood", 36, 24, "grass");
+    for (let i = 0; i < f.ground.length; i++) if (rnd() < 0.4) f.ground[i] = "grass2";
+    borderTrees(f);
+    fillRect(f, 1, 12, 19, 2, "ground", "path"); // west approach
+    fillRect(f, 20, 1, 2, 22, "ground", "water", true); // the stream
+    fillRect(f, 20, 12, 2, 2, "ground", "path", false); // the ford
+    fillRect(f, 22, 12, 4, 2, "ground", "path"); // east approach
+    fillRect(f, 26, 9, 6, 5, "ground", "stone"); // the clearing
+    put(f, 28, 11, "object", "wallStone", true); // the standing stone
+    f.lights.push({ x: 28, y: 11 });
+    scatterTrees(f, rnd, 60, [
+      { x: 1, y: 12 },
+      { x: 1, y: 13 },
+      { x: 20, y: 12 },
+      { x: 21, y: 13 },
+    ]);
+    f.spawn = { x: 3, y: 12 };
+
+    // portals (two-way). The village's east road runs off the map into the wood:
+    // extend the crossroad to the border and open a two-tile gap in the trees.
+    fillRect(v, 42, 14, 2, 2, "ground", "path");
+    for (const y of [14, 15]) {
+      put(v, 43, y, "object", null, false);
+      put(v, 43, y, "overhead", null);
+      put(f, 0, y - 2, "object", null, false); // forest west gap at y=12/13
+      put(f, 0, y - 2, "overhead", null);
+    }
     v.portals.push({ x: inn.doorX, y: inn.doorY, toZone: "inn", toX: n.spawn.x, toY: n.spawn.y, label: "Enter the inn" });
     n.portals.push({ x: 8, y: n.h - 1, toZone: "village", toX: inn.doorX, toY: inn.doorY + 1, label: "Step outside" });
+    v.portals.push(
+      { x: 43, y: 14, toZone: "forest", toX: 2, toY: 12, label: "Into the Whisperwood" },
+      { x: 43, y: 15, toZone: "forest", toX: 2, toY: 13, label: "Into the Whisperwood" },
+    );
+    f.portals.push(
+      { x: 0, y: 12, toZone: "village", toX: 42, toY: 14, label: "Back to Hearthvale" },
+      { x: 0, y: 13, toZone: "village", toX: 42, toY: 15, label: "Back to Hearthvale" },
+    );
 
     // NPCs — LLM characters in the story; sprites here are just their world tokens.
     v.npcs.push(
@@ -142,10 +179,11 @@ PF.world = (() => {
       { id: "rook", name: "Rook", role: "village guard", hue: 210, x: 21, y: 10, wander: { x0: 17, y0: 8, x1: 24, y1: 18 } },
     );
     n.npcs.push({ id: "mira", name: "Mira", role: "innkeeper", hue: 8, x: 5, y: 4, wander: { x0: 2, y0: 4, x1: 8, y1: 9 } });
+    f.npcs.push({ id: "fen", name: "Fen", role: "forager", hue: 140, x: 29, y: 12, wander: { x0: 26, y0: 9, x1: 31, y1: 13 } });
 
     return {
       seed,
-      zones: { village: v, inn: n },
+      zones: { village: v, inn: n, forest: f },
       startZone: "village",
       // The exterior binds to the campaign's starting World Maps location once known.
       bindings: {}, // spatialLocationId → zoneId
