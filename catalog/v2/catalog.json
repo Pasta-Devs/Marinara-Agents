@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-15T22:18:57.730Z",
+  "generatedAt": "2026-08-16T10:04:37.894Z",
   "packages": [
     {
       "manifest": {
@@ -707,6 +707,48 @@
         "bytes": 1675
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#immersive-html"
+    },
+    {
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "inventory-tracker",
+        "name": "Inventory Tracker",
+        "version": "1.0.0",
+        "description": "Tracks currencies, equipped gear, and carried items as separate structured lists with compact quantities. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+        "engine": {
+          "min": "2.4.3",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json"
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "1ba0380f1d01e66f0ba3ca01a4b57bff57d4016f2c479b3c49fec8d4a9fd0a80",
+            "bytes": 1616
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "prompt-context",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": false
+      },
+      "category": "tracker",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/inventory-tracker.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/inventory-tracker-1.0.0.zip",
+        "sha256": "bd2b5ef5677b8e0c53c62f4b4d6b7e9940afadc54d4df6f36121e15db2dab3c8",
+        "bytes": 1464
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#inventory-tracker"
     },
     {
       "manifest": {
@@ -1464,7 +1506,7 @@
         "schemaVersion": 1,
         "id": "slurp",
         "name": "Slurp",
-        "version": "1.0.0",
+        "version": "1.0.1",
         "description": "The standalone successor to NoodleR: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
         "localizations": {
           "de": {
@@ -1524,13 +1566,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "155b379795cde815851f3f24223e00287ff28a796f786eef3f137c1d3829ba8f",
-            "bytes": 2495778
+            "sha256": "626861a9cabe661d89a3256cffd60a893a9e4d096e24e87a3bc569589bb1ee6b",
+            "bytes": 2435147
           },
           {
             "path": "client.js",
-            "sha256": "30ac228f52fbee7114c90894e41b3f77669638a24602fc93b0d68e126f162338",
-            "bytes": 2224582
+            "sha256": "ff0bf8b7d51905d0cf2e00b0b1e073fd20a032a64357e52f5cd94700ae76efb3",
+            "bytes": 2219507
           },
           {
             "path": "slurp-klusek.png",
@@ -1551,9 +1593,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp-1.0.0.zip",
-        "sha256": "c70bde79cf44dc4e8d9f7b44a94f002c39cfbf7fbb8568c02fbea3d0389b5604",
-        "bytes": 1177459
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp-1.0.1.zip",
+        "sha256": "8c7ce8e1f9bd114ee16a0b8b4a8cf9ca50b2391c9f905cfcdc633ab268677996",
+        "bytes": 1162562
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp/README.md"
     },
@@ -1562,7 +1604,7 @@
         "schemaVersion": 1,
         "id": "storyboard",
         "name": "Storyboard",
-        "version": "1.1.2",
+        "version": "1.1.5",
         "description": "Plans still or animated Game and Roleplay storyboards with separate planning prompts and shared provider formatters. Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Roleplay and Game modes.",
         "engine": {
           "min": "2.4.2",
@@ -1577,8 +1619,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "dbb53569cff38b9b39575b4cec00e35a6c95758b1e94e2022be1e793c19edd19",
-            "bytes": 72073
+            "sha256": "c2fbd390e49ed87b50bf5285283ed90e7327a8b049f751623996f102c973f940",
+            "bytes": 83086
           }
         ],
         "permissions": [
@@ -1593,9 +1635,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/storyboard.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/storyboard-1.1.2.zip",
-        "sha256": "348a1ba3376325c31fe6c80148cf703e135ea25ca4d8fd62c117791655eb3e17",
-        "bytes": 14473
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/storyboard-1.1.5.zip",
+        "sha256": "e6d3ff1c35275477d4faa0c7e4406cad638bcfcd523ed34ff51c93316d9e6aaa",
+        "bytes": 17142
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#storyboard"
     },
