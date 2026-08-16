@@ -707,10 +707,20 @@ PF.brief = (() => {
   // ── Text hygiene: sanitize + grapheme-aware caps, Unicode-aware folding ─────
   function sanitize(value) {
     if (typeof value !== "string") return "";
-    return value
-      .replace(/[\x00-\x1f\x7f]/g, " ")
-      .replace(/[`*_~#>|]/g, "")
-      .replace(/<[^>]*>/g, "")
+    let text = value.replace(/[\x00-\x1f\x7f]/g, " ");
+    // One-pass tag stripping can reassemble a tag from its own fragments
+    // ("<scr<b>ipt>" → "<script>"), so strip to a fixpoint FIRST — before the
+    // markdown pass eats the ">" characters the tag regex needs to match…
+    let previous;
+    do {
+      previous = text;
+      text = text.replace(/<[^>]*>/g, "");
+    } while (text !== previous);
+    // …then drop the markdown set and ANY surviving angle bracket. Brief prose
+    // has no legitimate use for them, and zero brackets in the output means no
+    // tag fragment can ever survive (CodeQL js/incomplete-multi-character-sanitization).
+    return text
+      .replace(/[`*_~#>|<]/g, "")
       .replace(/\s+/g, " ")
       .trim();
   }

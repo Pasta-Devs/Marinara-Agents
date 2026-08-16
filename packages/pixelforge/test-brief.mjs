@@ -498,4 +498,25 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   assert.equal(busySeal.name, "Busyville", "the wait-out retry seals the real brief");
 }
 
+// 26. Sanitizer defeats tag reassembly and never leaks an angle bracket
+// (CodeQL js/incomplete-multi-character-sanitization): one-pass stripping
+// turns "<scr<b>ipt>" into "<script>", and the old order removed every ">"
+// before the tag regex could match anything at all.
+{
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "<scr<b>ipt>Safeton",
+      flavor: "A <script src=//evil.example/x.js quiet place.",
+      cast: [],
+    },
+    ctx,
+  );
+  for (const text of [sealed.name, sealed.flavor]) {
+    assert.ok(!text.includes("<") && !text.includes(">"), `no angle bracket survives sanitize: ${text}`);
+    assert.ok(!/<script/i.test(text), "no reassembled script tag");
+  }
+  assert.ok(sealed.name.includes("Safeton"), "legitimate text survives");
+}
+
 console.log("brief validator + compiler: all cases passed");
