@@ -1221,8 +1221,10 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
           selectionOnly={onboardingMode === "add-creators"}
           onClose={() => setOnboardingMode(null)}
           onComplete={() => {
-            setOnboardingState("completed");
-            setOnboardingMode(null);
+            if (onboardingMode === "first-run") {
+              setOnboardingState("completed");
+              setOnboardingMode(null);
+            }
           }}
           onSkipped={() => setOnboardingMode(null)}
         />

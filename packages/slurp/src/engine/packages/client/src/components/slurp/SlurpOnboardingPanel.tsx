@@ -314,12 +314,17 @@ export function SlurpOnboardingWizard({
         generationConnectionId: generationConnectionId || null,
         autoPostingScheduleEnabled: autoPostingEnabled,
         nightQuiet,
-        onboarding: state === "completed" ? "completed" : "not_started",
         imageGenerationUseAvatarReferences: imagesEnabled,
-        generationGuidance:
-          state === "completed"
-            ? "The Creator should publish in its own voice and balance public updates with locked posts."
-            : undefined,
+        ...(selectionOnly
+          ? {}
+          : {
+              onboarding:
+                state === "completed" ? "completed" : "not_started",
+              generationGuidance:
+                state === "completed"
+                  ? "The Creator should publish in its own voice and balance public updates with locked posts."
+                  : undefined,
+            }),
       });
       return true;
     } catch {
@@ -350,7 +355,7 @@ export function SlurpOnboardingWizard({
           result.skipped.length + (result.failed?.length ?? 0);
         setCreationFailures(createFailureCount);
       }
-    } catch {
+    } catch (error) {
       // The request may still have created profiles before the response was lost. The server
       // replays the same executionId idempotently, so keep the run retryable in place rather
       // than making the user reselect everything.
@@ -368,7 +373,6 @@ export function SlurpOnboardingWizard({
       selected.size === 0 ? "zero" : "completed",
     );
     setSettingsFailed(!settingsSaved);
-    if (settingsSaved) onComplete?.();
     if (newIds.length === 0 || !generateNow) {
       setCompletion(
         settingsSaved
@@ -381,6 +385,7 @@ export function SlurpOnboardingWizard({
           : "settingsFailed",
       );
       setStep(5);
+      if (settingsSaved) onComplete?.();
       return;
     }
     try {
@@ -394,6 +399,7 @@ export function SlurpOnboardingWizard({
         newIds.length,
         settingsSaved,
       );
+      if (settingsSaved) onComplete?.();
     } catch {
       // The profiles exist; only generation fell over, so every one of them is retryable.
       finalizeOutcomes(
@@ -402,10 +408,12 @@ export function SlurpOnboardingWizard({
         newIds.length,
         settingsSaved,
       );
+      if (settingsSaved) onComplete?.();
     }
   };
   const pending =
     bulkCreate.isPending ||
+    updateSlurpSettings.isPending ||
     refreshTargeted.isPending;
   const summaries =
     setupLane === "easy"
