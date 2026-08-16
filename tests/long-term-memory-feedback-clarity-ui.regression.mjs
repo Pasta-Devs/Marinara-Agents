@@ -245,6 +245,17 @@ assert.equal(locale["ui.longTermMemory.memoryvault.saveAndContinue"], "Save and 
 assert.match(vault, /extractionImportance/u);
 assert.match(vault, /extractionConfidence/u);
 assert.match(vault, /data-ltm-validation-summary/u);
+assert.match(sharedControls, /HTMLAttributes<HTMLDivElement>/u);
+assert.match(sharedControls, /<div\s+role=\{tone === "danger" \? "alert" : "status"\}/u);
+assert.doesNotMatch(vault, /<div role="alert"><StatusSurface tone="danger">/u);
+assert.match(vault, /data-ltm-memory-group=\{type\}[\s\S]*min-h-11[\s\S]*focus-visible:outline/u);
+assert.match(vault, /min-h-11 w-full[\s\S]*focus-visible:outline[\s\S]*moreLinkTypes/u);
+assert.match(vault, /inline-flex min-h-11 max-w-full[\s\S]*h-11 w-11/u);
+assert.match(vault, /clearMemorySearch[\s\S]*h-11 w-11/u);
+assert.match(vault, /scopeModes[\s\S]*min-h-11/u);
+assert.match(vault, /bulkModes[\s\S]*min-h-11/u);
+assert.match(vault, /detailsRef[\s\S]*summaryRef[\s\S]*requestAnimationFrame/u);
+assert.match(vault, /details\.open = false/u);
 assert.match(vault, /data-ltm-note-inspector/u);
 assert.match(vault, /mari-editor-panel min-w-0 space-y-4 p-3/u);
 assert.match(vault, /copyDiagnostics/u);

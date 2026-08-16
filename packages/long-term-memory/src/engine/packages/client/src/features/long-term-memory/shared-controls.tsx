@@ -102,7 +102,6 @@ export function InfoPopover({
   label,
   content,
   wide = false,
-  compact = false,
 }: {
   label: string;
   content: ReactNode;
@@ -213,12 +212,8 @@ export function InfoPopover({
         aria-controls={open ? `${id}-panel` : undefined}
         aria-describedby={open && !pinned ? `${id}-panel` : undefined}
         data-ltm-info={label}
-        className={`${compact ? "h-7 w-7" : "h-11 w-11"} inline-grid shrink-0 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]`}
-        style={
-          compact
-            ? { height: "1.75rem", width: "1.75rem", flexShrink: 0 }
-            : { height: "2.75rem", width: "2.75rem", flexShrink: 0 }
-        }
+        className="inline-grid h-11 w-11 shrink-0 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+        style={{ height: "2.75rem", width: "2.75rem", flexShrink: 0 }}
         onMouseEnter={show}
         onMouseLeave={scheduleClose}
         onFocus={show}
@@ -353,7 +348,7 @@ export function StatusSurface({
   busy?: boolean;
   compact?: boolean;
   className?: string;
-} & HTMLAttributes<HTMLParagraphElement>) {
+} & HTMLAttributes<HTMLDivElement>) {
   const toneClass = {
     neutral: "text-[var(--marinara-editor-muted)]",
     success:
@@ -363,7 +358,7 @@ export function StatusSurface({
     danger: "border-[var(--destructive)]/35 text-[var(--destructive)]",
   }[tone];
   return (
-    <p
+    <div
       role={tone === "danger" ? "alert" : "status"}
       aria-live="polite"
       data-ltm-status={tone}
@@ -378,6 +373,6 @@ export function StatusSurface({
         />
       ) : null}
       {children}
-    </p>
+    </div>
   );
 }

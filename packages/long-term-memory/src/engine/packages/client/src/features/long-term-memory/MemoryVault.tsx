@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -237,19 +237,32 @@ function ScopeTargetPicker({
   onSelect: (target: Target) => void;
 }) {
   const [query, setQuery] = useState("");
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  const summaryRef = useRef<HTMLElement>(null);
   const filtered = targets.filter((target) =>
     target.label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
   );
-  const close = (event: MouseEvent<HTMLButtonElement>) => {
+  const close = () => {
     setQuery("");
-    event.currentTarget.closest("details")?.removeAttribute("open");
+    const details = detailsRef.current;
+    if (!details) return;
+    details.open = false;
+    const restoreFocus = () => {
+      const currentDetails = detailsRef.current;
+      const currentSummary = summaryRef.current;
+      if (currentDetails?.isConnected && currentSummary?.isConnected)
+        currentSummary.focus({ preventScroll: true });
+    };
+    restoreFocus();
+    requestAnimationFrame(restoreFocus);
   };
   return (
     <details
+      ref={detailsRef}
       data-ltm-memory-scope-picker={kind}
       className="group relative"
     >
-      <summary className="mari-editor-action flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left text-[var(--marinara-editor-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden">
+      <summary ref={summaryRef} className="mari-editor-action flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-left text-[var(--marinara-editor-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden">
         <span className="min-w-0 flex-1">
           <span className="block text-[0.625rem] font-medium text-[var(--marinara-editor-muted)]">{label}</span>
           <span className="block truncate text-xs font-semibold text-[var(--marinara-editor-text)]" title={value}>{value}</span>
@@ -283,8 +296,8 @@ function ScopeTargetPicker({
             type="button"
             data-ltm-memory-scope-target={`${kind}:all`}
             className="mari-editor-action mari-editor-action--compact block min-h-11 w-full rounded-none border-x-0 border-t-0 px-3 py-2 text-left text-xs last:border-b-0"
-            onClick={(event) => {
-              close(event);
+            onClick={() => {
+              close();
               onClear();
             }}
           >
@@ -296,8 +309,8 @@ function ScopeTargetPicker({
               type="button"
               data-ltm-memory-scope-target={target.id}
               className="mari-editor-action mari-editor-action--compact block min-h-11 w-full rounded-none border-x-0 border-t-0 px-3 py-2 text-left text-xs last:border-b-0"
-              onClick={(event) => {
-                close(event);
+              onClick={() => {
+                close();
                 onSelect(target);
               }}
             >
@@ -344,6 +357,18 @@ function hasExplicitScope(scope: LtmScope) {
     scope.characterIds?.length ||
     getLtmScopePersonaIds(scope).length,
   );
+}
+function sameScope(left: LtmScope, right: LtmScope) {
+  const normalize = (scope: LtmScope) => ({
+    chatIds: getLtmScopeChatIds(scope).sort(),
+    groupIds: getLtmScopeGroupIds(scope).sort(),
+    characterIds: [...(scope.characterIds ?? [])].sort(),
+    personaIds: getLtmScopePersonaIds(scope).sort(),
+  });
+  return JSON.stringify(normalize(left)) === JSON.stringify(normalize(right));
+}
+function sameModes(left: readonly LtmMode[], right: readonly LtmMode[]) {
+  return left.length === right.length && left.every((mode) => right.includes(mode));
 }
 function availabilityEntries(
   scope: LtmScope,
@@ -516,14 +541,14 @@ function Pill({
     value1: label ?? String(children),
   });
   return (
-    <span className="inline-flex min-h-8 max-w-full items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 text-xs text-[var(--foreground)]">
+    <span className="inline-flex min-h-11 max-w-full items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 text-xs text-[var(--foreground)]">
       <span className="truncate">{children}</span>
       <button
         type="button"
         onClick={onRemove}
         aria-label={removeLabel}
         title={removeLabel}
-        className="flex h-6 w-6 shrink-0 items-center justify-center rounded leading-none hover:bg-[var(--accent)]"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded leading-none hover:bg-[var(--accent)]"
       >
         <X aria-hidden="true" size="0.75rem" />
       </button>
@@ -533,6 +558,7 @@ function Pill({
 
 function MemoryAvailabilityWorkbench({
   note,
+  originalNote,
   isNew,
   targets,
   availabilityTargets,
@@ -542,6 +568,7 @@ function MemoryAvailabilityWorkbench({
   onCancel,
 }: {
   note: LtmNote;
+  originalNote: LtmNote | null;
   isNew: boolean;
   targets: PickerTarget[];
   availabilityTargets: AvailabilityTargets;
@@ -594,6 +621,17 @@ function MemoryAvailabilityWorkbench({
     ],
   };
   const entries = availabilityEntries(scope, targets, unavailableLabels);
+  const baseline = originalNote ?? note;
+  const scopeChanged = !sameScope(scope, baseline.scope);
+  const modesChanged = !sameModes(selectedModes, baseline.modes);
+  const legacyGlobalModeOnly = Boolean(
+    !isNew &&
+      originalNote &&
+      !hasExplicitScope(originalNote.scope) &&
+      !scopeChanged &&
+      !hasExplicitScope(scope) &&
+      modesChanged,
+  );
   const selectedIds = new Set([
     ...getLtmScopePersonaIds(scope).map((id) => `persona:${id}`),
     ...(scope.characterIds ?? []).map((id) => `character:${id}`),
@@ -686,7 +724,7 @@ function MemoryAvailabilityWorkbench({
     setError("");
   };
   const save = async () => {
-    if (!entries.length) {
+    if (!entries.length && !legacyGlobalModeOnly) {
       setError(localizeUi("ui.longTermMemory.memoryvault.availabilityPlaceRequired"));
       return;
     }
@@ -719,7 +757,7 @@ function MemoryAvailabilityWorkbench({
           </Button>
         </div>
       </header>
-      {error ? <div role="alert"><StatusSurface tone="danger">{error}</StatusSurface></div> : null}
+      {error ? <StatusSurface tone="danger">{error}</StatusSurface> : null}
       <fieldset className="space-y-2 border-b border-[var(--border)] pb-4">
         <legend className="text-sm font-semibold">{localizeUi("ui.longTermMemory.memoryvault.chatModes")}</legend>
         <p className="text-xs text-[var(--muted-foreground)]">{localizeUi("ui.longTermMemory.memoryvault.modesHelp")}</p>
@@ -1809,7 +1847,7 @@ export default function MemoryVault({
     setLinkRelation("involves");
     setSectionKey("");
     setAddingSection(false);
-    setMobilePaneAndFocus("navigator");
+    setMobilePane("navigator");
     return true;
   }
   async function toggleScopeMode(mode: LtmMode) {
@@ -2614,7 +2652,7 @@ export default function MemoryVault({
               </legend>
               <div className="flex flex-wrap gap-x-3 gap-y-1">
                 {modes.map((mode) => (
-                  <label key={mode} className="flex min-h-9 items-center gap-2 text-xs">
+                  <label key={mode} className="flex min-h-11 items-center gap-2 text-xs">
                     <input
                       type="checkbox"
                       checked={scopeModes.includes(mode)}
@@ -2704,7 +2742,7 @@ export default function MemoryVault({
                 "ui.longTermMemory.memoryvault.clearMemorySearch",
               )}
               onClick={() => setSearch("")}
-              className="absolute right-1 top-1 grid h-9 w-9 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)]"
+              className="absolute right-1 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)]"
             >
               <X aria-hidden="true" size="0.875rem" />
             </button>
@@ -2735,7 +2773,7 @@ export default function MemoryVault({
         <div className="col-span-2 flex flex-wrap items-center gap-3 border-t border-[var(--border)] pt-2">
           <Button onClick={() => { setSelectMode((value) => !value); setChecked(new Set()); }} data-ltm-select-mode>{selectMode ? localizeUi("ui.longTermMemory.memoryvault.done") : localizeUi("ui.longTermMemory.memoryvault.select")}</Button>
           <Button onClick={() => setSourceFilter((value) => !value)} aria-pressed={sourceFilter} data-ltm-source-filter><FileText aria-hidden="true" size="1rem" className="shrink-0" />{localizeUi("ui.longTermMemory.memoryvault.sources")}</Button>
-          {selectMode ? <label className="flex min-h-9 items-center gap-2 text-xs"><input type="checkbox" checked={visible.filter((note) => note.type !== "source").length > 0 && visible.filter((note) => note.type !== "source").every((note) => checked.has(note.id))} onChange={(event) => toggleVisibleSelection(event.target.checked)} />{localizeUi("ui.longTermMemory.memoryvault.selectVisible")}</label> : null}
+          {selectMode ? <label className="flex min-h-11 items-center gap-2 text-xs"><input type="checkbox" checked={visible.filter((note) => note.type !== "source").length > 0 && visible.filter((note) => note.type !== "source").every((note) => checked.has(note.id))} onChange={(event) => toggleVisibleSelection(event.target.checked)} />{localizeUi("ui.longTermMemory.memoryvault.selectVisible")}</label> : null}
           <span
             data-ltm-selection-count
             id="ltm-selection-count"
@@ -2794,7 +2832,7 @@ export default function MemoryVault({
               {modes.map((mode) => (
                 <label
                   key={mode}
-                  className="flex min-h-8 items-center gap-1 text-xs"
+                  className="flex min-h-11 items-center gap-1 text-xs"
                 >
                   <input
                     type="checkbox"
@@ -2974,7 +3012,7 @@ export default function MemoryVault({
                 className="group"
                 data-ltm-memory-group={type}
               >
-                <summary className="flex min-h-10 cursor-pointer items-center gap-2 border-b border-[var(--border)] bg-[var(--secondary)]/35 px-3 text-xs font-semibold">
+                 <summary style={{ minHeight: "2.75rem" }} className="flex min-h-11 cursor-pointer items-center gap-2 border-b border-[var(--border)] bg-[var(--secondary)]/35 px-3 text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)]">
                   <ChevronRight
                     aria-hidden="true"
                     size="0.875rem"
@@ -3147,6 +3185,7 @@ export default function MemoryVault({
         availabilityOpen === "single" && draft ? (
           <MemoryAvailabilityWorkbench
             note={draft}
+            originalNote={saved ? (JSON.parse(saved) as LtmNote) : null}
             isNew={isNew}
             targets={pickerTargets}
             availabilityTargets={availabilityTargets}
@@ -3539,7 +3578,7 @@ export default function MemoryVault({
                         ))}
                       </select>
                       <details className="group">
-                        <summary className="flex cursor-pointer list-none items-center gap-1 text-xs underline underline-offset-2 [&::-webkit-details-marker]:hidden"><ChevronRight aria-hidden="true" size="0.875rem" className="shrink-0 transition-transform group-open:rotate-90" />{localizeUi("ui.longTermMemory.memoryvault.moreLinkTypes")}</summary>
+                         <summary className="flex min-h-11 w-full cursor-pointer list-none items-center gap-1 text-xs underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--ring)] [&::-webkit-details-marker]:hidden"><ChevronRight aria-hidden="true" size="0.875rem" className="shrink-0 transition-transform group-open:rotate-90" />{localizeUi("ui.longTermMemory.memoryvault.moreLinkTypes")}</summary>
                         <select className={`${inputClass} mt-2`} value={linkRelation} onChange={(event) => setLinkRelation(event.target.value as LtmLink["relation"])} aria-label={localizeUi("ui.longTermMemory.memoryvault.moreLinkTypes")}>
                           {relations.filter((relation) => relation !== "extracted_from" && !recommendedRelations[draft.type].includes(relation)).map((relation) => <option key={relation} value={relation}>{relationLabel(relation)}</option>)}
                         </select>

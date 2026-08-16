@@ -316,6 +316,42 @@ async function main() {
       );
       const rejectedSuggestionId = "2a1b5c7d-9e0f-4a1b-8c2d-3e4f5a6b7c8d";
       let savedNote: Record<string, unknown> | null = null;
+      const noteTimestamp = "2026-07-30T00:00:00.000Z";
+      let legacyGlobalNote = {
+        id: "world_legacy_global",
+        title: "Legacy global memory",
+        type: "world",
+        status: "active",
+        modes: ["roleplay"],
+        scope: {},
+        tags: [],
+        keywords: [],
+        links: [],
+        sections: {
+          facts: {
+            text: "Legacy global memory text.",
+            importance: "major",
+            updatedAt: noteTimestamp,
+          },
+        },
+        createdAt: noteTimestamp,
+        updatedAt: noteTimestamp,
+        version: 1,
+      };
+      const scopedDesktopNote = {
+        ...legacyGlobalNote,
+        id: "world_scoped_desktop",
+        title: "Scoped desktop memory",
+        scope: { chatId: "desktop-chat", chatIds: ["desktop-chat"] },
+        sections: {
+          facts: {
+            text: "Scoped desktop memory text.",
+            importance: "major",
+            updatedAt: noteTimestamp,
+          },
+        },
+      };
+      const availabilityPatches: Array<Record<string, unknown>> = [];
       let deletedSuggestionId: string | null = null;
       const scopeTargetQueries: string[] = [];
       const noteQueries: string[] = [];
@@ -516,7 +552,7 @@ async function main() {
         },
       ];
       let healthState: "healthy" | "degraded" = "healthy";
-      let noteTotal = 3;
+      let noteTotal = 5;
       let pendingDraftCount = 2;
       let lastInjectionRequests = 0;
       browserServer = createServer(async (request, response) => {
@@ -753,6 +789,8 @@ async function main() {
               updatedAt: "2026-07-30T00:00:00.000Z",
               version: 1,
             },
+            legacyGlobalNote,
+            scopedDesktopNote,
           ];
           return send(
             200,
@@ -788,6 +826,32 @@ async function main() {
             updatedAt: "2026-07-30T00:00:00.000Z",
             version: 1,
           });
+        if (
+          request.method === "GET" &&
+          url.pathname.endsWith(`/notes/${legacyGlobalNote.id}`)
+        )
+          return send(200, legacyGlobalNote);
+        if (
+          request.method === "GET" &&
+          url.pathname.endsWith(`/notes/${scopedDesktopNote.id}`)
+        )
+          return send(200, scopedDesktopNote);
+        if (
+          request.method === "PATCH" &&
+          url.pathname.endsWith(`/notes/${legacyGlobalNote.id}`)
+        ) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          const patch = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+          availabilityPatches.push(patch);
+          legacyGlobalNote = {
+            ...legacyGlobalNote,
+            ...patch,
+            updatedAt: noteTimestamp,
+            version: legacyGlobalNote.version + 1,
+          };
+          return send(200, { note: legacyGlobalNote });
+        }
         if (
           request.method === "POST" &&
           url.pathname.endsWith("/import/preview")
@@ -1060,7 +1124,13 @@ async function main() {
       );
        await memoryScope
          .locator('[data-ltm-memory-scope-picker="character"] > summary')
-         .click();
+         .press("Enter");
+       assert.equal(
+         await memoryScope
+           .locator('[data-ltm-memory-scope-picker="character"]')
+            .evaluate((picker) => (picker as HTMLDetailsElement).open),
+         true,
+       );
        const characterPickerStyle = await memoryScope
          .locator('[data-ltm-memory-scope-picker="character"]')
          .evaluate((picker) => {
@@ -1081,15 +1151,52 @@ async function main() {
        assert.notEqual(characterPickerStyle.chevronTransform, "none");
        assert.notEqual(characterPickerStyle.targetBackground, "rgba(0, 0, 0, 0)");
        assert.ok(characterPickerStyle.targetFontWeight >= 600);
-       await page
-         .locator('[data-ltm-memory-scope-target="character:character-a"]')
-         .click();
-       assert.equal(
-         await memoryScope
-           .locator('[data-ltm-memory-scope-picker="character"]')
+         await page
+           .locator('[data-ltm-memory-scope-target="character:character-a"]')
+           .focus();
+         await page
+           .locator('[data-ltm-memory-scope-target="character:character-a"]')
+           .press("Enter");
+         await page.waitForFunction(() =>
+           document.activeElement ===
+           document.querySelector('[data-ltm-memory-scope-picker="character"] > summary'),
+         );
+        assert.equal(
+          await memoryScope
+            .locator('[data-ltm-memory-scope-picker="character"]')
            .evaluate((picker) => (picker as HTMLDetailsElement).open),
-         false,
-       );
+          false,
+        );
+        for (const kind of ["chat", "branch", "status", "sort"]) {
+          const picker = page.locator(`[data-ltm-memory-scope-picker="${kind}"]`);
+          const summary = picker.locator(":scope > summary");
+          await summary.focus();
+          await summary.press("Enter");
+           await picker.locator('[data-ltm-memory-scope-target$=":all"]').focus();
+           await picker.locator('[data-ltm-memory-scope-target$=":all"]').press("Enter");
+          await page.waitForFunction(
+            (selector) => document.activeElement === document.querySelector(selector),
+            `[data-ltm-memory-scope-picker="${kind}"] > summary`,
+            { timeout: 5000 },
+          );
+        }
+        const memoryGroupSummary = page.locator('[data-ltm-memory-group="world"] > summary');
+        await page.evaluate(() => {
+          document.body.tabIndex = -1;
+          document.body.focus();
+        });
+        for (let index = 0; index < 200; index += 1) {
+          if (await memoryGroupSummary.evaluate((summary) => summary.matches(":focus"))) break;
+          await page.keyboard.press("Tab");
+        }
+        const memoryGroupFocus = await memoryGroupSummary.evaluate((summary) => ({
+          outlineStyle: getComputedStyle(summary).outlineStyle,
+          outlineWidth: getComputedStyle(summary).outlineWidth,
+          height: summary.getBoundingClientRect().height,
+        }));
+        assert.notEqual(memoryGroupFocus.outlineStyle, "none");
+        assert.ok(memoryGroupFocus.height >= 44, JSON.stringify(memoryGroupFocus));
+        await page.evaluate(() => document.body.removeAttribute("tabindex"));
        await memoryScope
          .locator('[data-ltm-memory-scope-picker="character"] > summary')
          .click();
@@ -1235,14 +1342,63 @@ async function main() {
       await page
         .locator('[data-ltm-destination-content][aria-label="Memory Vault"]')
         .waitFor();
-      await page
-        .locator(
-          '[data-ltm-navigation="desktop"] [data-ltm-destination="review"]',
-        )
-        .click();
-      await page
-        .locator('[data-ltm-review-source-select="source_mobile_review"]')
-        .click();
+       await page
+         .locator(
+           '[data-ltm-navigation="desktop"] [data-ltm-destination="review"]',
+         )
+         .click();
+       await page
+         .locator('[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]')
+         .click();
+       await page.locator('[data-ltm-surface="vault"]').waitFor();
+       const memorySearch = page.getByLabel("Search memories");
+       await memorySearch.fill("Legacy global memory");
+       await page
+         .locator('[data-ltm-note-type="world"]')
+         .filter({ hasText: /^Legacy global memory/u })
+         .locator("button")
+         .first()
+         .click();
+       await page.getByRole("button", { name: "Choose where used" }).click();
+       await page.locator('[data-ltm-availability-workbench]').waitFor();
+       const availability = page.locator('[data-ltm-availability-workbench]');
+       await availability.getByRole("checkbox", { name: "Conversation" }).check();
+       await availability.getByRole("button", { name: "Save availability" }).click();
+       await page.waitForFunction(
+         () => document.querySelector('[data-ltm-availability-workbench]') === null,
+       );
+       assert.deepEqual(availabilityPatches.at(-1), {
+         scope: {},
+         modes: ["roleplay", "conversation"],
+       });
+        assert.deepEqual(legacyGlobalNote.scope, {});
+        assert.deepEqual(legacyGlobalNote.modes, ["roleplay", "conversation"]);
+        await memorySearch.fill("Scoped desktop memory");
+        const scopedCard = page
+          .locator('[data-ltm-note-type="world"]')
+          .filter({ hasText: /^Scoped desktop memory/u });
+        await scopedCard.waitFor();
+        await scopedCard.locator("button").first().click();
+        await page.getByRole("button", { name: "Edit availability" }).waitFor();
+        await page.getByRole("button", { name: "Edit availability" }).click();
+       await page.locator('[data-ltm-availability-workbench]').waitFor();
+       const scopedAvailability = page.locator('[data-ltm-availability-workbench]');
+       await scopedAvailability.locator('[data-ltm-availability-pills] button').first().click();
+       await scopedAvailability.locator('[role="alert"]').waitFor();
+       assert.equal(
+         await page
+           .locator('[data-ltm-availability-workbench] [role="alert"]')
+           .count(),
+         1,
+       );
+       assert.equal(availabilityPatches.length, 1);
+       await page.getByRole("button", { name: "Cancel" }).click();
+       await page
+         .locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]')
+         .click();
+        await page
+          .locator('[data-ltm-review-source-select="source_mobile_review"]')
+         .click();
       await page.locator('[data-ltm-review-mutation-toggle]').click();
       await page.evaluate(() => {
         const element = document.querySelector(
