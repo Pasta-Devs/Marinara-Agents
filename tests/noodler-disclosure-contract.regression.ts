@@ -4,12 +4,12 @@ import {
   isNoodlerDisclosureDowngrade,
   noodlerDisclosureReviewReasons,
   projectNoodlerAudienceProfile,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/noodler-disclosure";
+} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-disclosure";
 import {
   compareMinimizedNoodlerSourceSnapshot,
   isMinimizedNoodlerSourceSnapshot,
   minimizeNoodlerSourceSnapshot,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/noodle-noodler-source";
+} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-source";
 
 const managedProfile = {
   id: "creator",
@@ -138,7 +138,7 @@ assert.deepEqual(
 );
 
 const generationPrivacy = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/noodle-noodler-generation.service.ts",
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
   "utf8",
 );
 assert.match(generationPrivacy, /stageProfileContainsSourceDetails/u);
@@ -153,13 +153,13 @@ assert.match(generationPrivacy, /Never confirm a guess/u);
 assert.match(generationPrivacy, /mode === "hinted" \? "you-know-who" : "someone"/u);
 
 const imagesPrivacy = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/noodle-noodler-images.service.ts",
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-images.service.ts",
   "utf8",
 );
 assert.match(imagesPrivacy, /input\.disclosureMode !== "secret" &&\s+input\.linkedPublicAccount\?\.kind === "character"/u);
 
 const draftPrivacy = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/noodle-stage-profile-draft.service.ts",
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-stage-profile-draft.service.ts",
   "utf8",
 );
 assert.match(draftPrivacy, /# Open-secret inspiration brief/u);
@@ -171,7 +171,7 @@ assert.doesNotMatch(
 );
 
 const artworkPrivacy = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/noodle-public-profiles.service.ts",
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-public-profiles.service.ts",
   "utf8",
 );
 // Only an OPEN creator may inherit the literal source photo as its avatar/banner. Hinted must
@@ -181,7 +181,7 @@ const artworkPrivacy = readFileSync(
 assert.match(artworkPrivacy, /if \(input\.disclosureMode !== "open"\) return \{ avatarUrl: null, bannerUrl: null \};/u);
 
 const fanActivityPrivacy = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/noodle-noodler-fan-activity.service.ts",
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-fan-activity.service.ts",
   "utf8",
 );
 // Locked posts are eligible fan-activity targets, but only their title reaches the prompt — a

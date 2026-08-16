@@ -10,7 +10,7 @@ async function main() {
   ]);
   assert.doesNotMatch(noodleView, /Noodler|noodler/u);
   assert.doesNotMatch(noodleTypes, /Noodler|noodler/u);
-  assert.match(slurpEntry, /NoodlerHome/u);
+  assert.match(slurpEntry, /SlurpHome/u);
   assert.match(slurpEntry, /marinara-capability-slurp/u);
   assert.match(slurpTypes, /mode: "creator"/u);
   assert.match(slurpTypes, /sourceAccountId: string/u);

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-16T06:33:42.169Z",
+  "generatedAt": "2026-08-16T10:11:00.740Z",
   "packages": [
     {
       "manifest": {
@@ -1038,8 +1038,8 @@
         "schemaVersion": 1,
         "id": "noodle",
         "name": "Noodle",
-        "version": "1.0.13",
-        "description": "Explore the public Noodle timeline as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
+        "version": "1.2.0",
+        "description": "Explore the Noodle public timeline as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
         "localizations": {
           "de": {
             "name": "Noodle",
@@ -1093,18 +1093,18 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "bdf9df7eec2e3f24028e5c98453ab6de932f54a587f90532d012c4638707102a",
+            "sha256": "905d74012562eb8531a26cb9b3e3e01ac7485900c282c6021f000d2bd4b8cfac",
             "bytes": 588
           },
           {
             "path": "server.mjs",
-            "sha256": "2fd81e38bd64d77baf9c08b399ee87e96f84019025ad42b15284c7e6e79ec802",
-            "bytes": 2348976
+            "sha256": "2bee7244fc7f45f03e585d15200413938513375f0a56a48bf724d5d5c8cd52ee",
+            "bytes": 2337117
           },
           {
             "path": "client.js",
-            "sha256": "eabf73f58e31091ad173cf2d8ce9e87cb0f3a3abf3d4782788d27bc62f916993",
-            "bytes": 2302641
+            "sha256": "7fc182759e3697c00f76968004612388c3009a4a87360641890ded1f12658647",
+            "bytes": 2242613
           },
           {
             "path": "noodle-klusek.png",
@@ -1125,9 +1125,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.0.13.zip",
-        "sha256": "81b27e7c809926071a176c8b619be31ee47172ab7edbb7a20f772fcf35eb5e1e",
-        "bytes": 1160222
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.2.0.zip",
+        "sha256": "49c24d74fd1a971dab6d7e9640e2629eacb17bbe99ed8c9b71d3284d13e81e2a",
+        "bytes": 1153922
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },
@@ -1413,7 +1413,7 @@
           },
           "ko": {
             "name": "Slurp",
-            "description": "Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Slurp를 여세요.",
+            "description": "Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 NoodleR 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Slurp를 여세요.",
             "homeBrowserTab": {
               "label": "Slurp",
               "ariaLabel": "Slurp 열기"
@@ -1421,7 +1421,7 @@
           },
           "pl": {
             "name": "Slurp",
-            "description": "Utwórz lokalny profil twórcy z postaci silnika lub persony silnika, publikuj publiczne lub zablokowane posty i symuluj subskrypcje oraz aktywność publiczności. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Slurp na stronie głównej.",
+            "description": "Utwórz lokalne profile twórców z postaci silnika lub person silnika, publikuj publiczne lub zablokowane posty NoodleR i symuluj subskrypcje oraz aktywność publiczności. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Slurp na stronie głównej.",
             "homeBrowserTab": {
               "label": "Slurp",
               "ariaLabel": "Otwórz Slurp"
@@ -1448,7 +1448,7 @@
             "label": "Slurp",
             "ariaLabel": "Open Slurp",
             "iconPaths": [
-              "slurp-klusek.png"
+              "slurp-logo.png"
             ]
           }
         },
@@ -1460,18 +1460,23 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "626861a9cabe661d89a3256cffd60a893a9e4d096e24e87a3bc569589bb1ee6b",
-            "bytes": 2435147
+            "sha256": "e5e25f536d8060857130e55bbb898b9f4dce8c197b925cde660a671481f7b82b",
+            "bytes": 2318281
           },
           {
             "path": "client.js",
-            "sha256": "ff0bf8b7d51905d0cf2e00b0b1e073fd20a032a64357e52f5cd94700ae76efb3",
-            "bytes": 2219507
+            "sha256": "22021b028290792aaed5168962dfcb64d24204b27cc4c348c305d53105a615e3",
+            "bytes": 2306367
           },
           {
-            "path": "slurp-klusek.png",
-            "sha256": "f3f0eb142c6ff572dea636aa7ab7d046922aedde2f5425890327e79834bd923e",
-            "bytes": 27664
+            "path": "slurp-logo.png",
+            "sha256": "722def3c01846167c9979b0408f380f923c520e7515aed1584de0d879131a75b",
+            "bytes": 31677
+          },
+          {
+            "path": "slurpagent.png",
+            "sha256": "47805313b5ec8dbc608fec82c4d51f1f82020afe4f286a04919b59cc8ef06f37",
+            "bytes": 120424
           }
         ],
         "permissions": [
@@ -1488,8 +1493,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp-1.0.1.zip",
-        "sha256": "8c7ce8e1f9bd114ee16a0b8b4a8cf9ca50b2391c9f905cfcdc633ab268677996",
-        "bytes": 1162562
+        "sha256": "58d09349e98f1371fc4db1eaea928b141ba0ea540d9a1fdfeb60d24bfcfbe33c",
+        "bytes": 1277119
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp/README.md"
     },

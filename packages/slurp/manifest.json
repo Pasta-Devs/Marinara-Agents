@@ -15,7 +15,7 @@
     },
     "ko": {
       "name": "Slurp",
-      "description": "Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Slurp를 여세요.",
+      "description": "Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 NoodleR 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Slurp를 여세요.",
       "homeBrowserTab": {
         "label": "Slurp",
         "ariaLabel": "Slurp 열기"
@@ -23,7 +23,7 @@
     },
     "pl": {
       "name": "Slurp",
-      "description": "Utwórz lokalny profil twórcy z postaci silnika lub persony silnika, publikuj publiczne lub zablokowane posty i symuluj subskrypcje oraz aktywność publiczności. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Slurp na stronie głównej.",
+      "description": "Utwórz lokalne profile twórców z postaci silnika lub person silnika, publikuj publiczne lub zablokowane posty NoodleR i symuluj subskrypcje oraz aktywność publiczności. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Slurp na stronie głównej.",
       "homeBrowserTab": {
         "label": "Slurp",
         "ariaLabel": "Otwórz Slurp"
@@ -50,7 +50,7 @@
       "label": "Slurp",
       "ariaLabel": "Open Slurp",
       "iconPaths": [
-        "slurp-klusek.png"
+        "slurp-logo.png"
       ]
     }
   },
@@ -62,18 +62,23 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "626861a9cabe661d89a3256cffd60a893a9e4d096e24e87a3bc569589bb1ee6b",
-      "bytes": 2435147
+      "sha256": "e5e25f536d8060857130e55bbb898b9f4dce8c197b925cde660a671481f7b82b",
+      "bytes": 2318281
     },
     {
       "path": "client.js",
-      "sha256": "ff0bf8b7d51905d0cf2e00b0b1e073fd20a032a64357e52f5cd94700ae76efb3",
-      "bytes": 2219507
+      "sha256": "22021b028290792aaed5168962dfcb64d24204b27cc4c348c305d53105a615e3",
+      "bytes": 2306367
     },
     {
-      "path": "slurp-klusek.png",
-      "sha256": "f3f0eb142c6ff572dea636aa7ab7d046922aedde2f5425890327e79834bd923e",
-      "bytes": 27664
+      "path": "slurp-logo.png",
+      "sha256": "722def3c01846167c9979b0408f380f923c520e7515aed1584de0d879131a75b",
+      "bytes": 31677
+    },
+    {
+      "path": "slurpagent.png",
+      "sha256": "47805313b5ec8dbc608fec82c4d51f1f82020afe4f286a04919b59cc8ef06f37",
+      "bytes": 120424
     }
   ],
   "permissions": [

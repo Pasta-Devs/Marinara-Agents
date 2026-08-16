@@ -20,7 +20,7 @@ interface NoodleProfileSurfaceProps<TTab extends string = NoodleProfileTab> {
     url: string;
     canEdit: boolean;
     uploadTarget: "avatar" | "banner" | null;
-    /** Omitted by read-only hosts (NoodleR), which show a banner but never replace it. */
+    /** Omitted by read-only hosts, which show a banner but never replace it. */
     fileRef?: RefObject<HTMLInputElement | null>;
     onFileChange?: (event: ChangeEvent<HTMLInputElement>) => void;
   };

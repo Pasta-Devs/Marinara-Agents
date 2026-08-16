@@ -30,9 +30,9 @@ assert.match(prompt, /not the default mood/u);
 assert.match(prompt, /Do not copy its length, format, or emotional mood/u);
 assert.match(prompt, /\.\.\.NOODLE_TONE_INSTRUCTIONS/u);
 
-assert.match(responseFormat, /function noodlerPostSchema\(allowImagePrompt: boolean, contentMaxLength: number\)/u);
-assert.match(responseFormat, /allowImagePrompt\s*\? \["title", "content", "imagePrompt"\]/u);
-assert.match(responseFormat, /: \["title", "content"\]/u);
+assert.match(responseFormat, /const timelineSchema =/u);
+assert.match(responseFormat, /const profilesSchema =/u);
+assert.match(responseFormat, /name:[\s\S]*noodle_timeline/u);
 assert.match(responseFormat, /NOODLE_POST_HARD_MAX_LENGTH = 4000/u);
 assert.match(responseFormat, /NOODLE_REPLY_HARD_MAX_LENGTH = 2000/u);
 

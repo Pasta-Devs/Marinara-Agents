@@ -566,7 +566,7 @@ function Section({
   title: string;
   help?: React.ReactNode;
   children: React.ReactNode;
-  /** Overrides `--noodle-accent` for this section, e.g. NoodleR's pink brand accent. */
+  /** Overrides `--noodle-accent` for this section. */
   accent?: string;
   visible?: boolean;
 }) {
@@ -674,13 +674,9 @@ interface NoodleHomeProps {
 
 export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const { t: localizeUi, i18n } = useUiTranslation();
-  const selectedPersonaId =
-    useUIStore((state) => state.noodleSelectedPersonaId) ?? "";
-  const setSelectedPersonaId = useUIStore(
-    (state) => state.setNoodleSelectedPersonaId,
-  );
+  const [selectedPersonaId, setSelectedPersonaId] = useState<string | null>(null);
   const { data, isLoading, isError } = useNoodle();
-  // Same idea for Noodle's own timeline. Frozen per account for the same reason as NoodleR:
+  // Freeze the seen marker while the current timeline remains visible:
   // the stored value advances as soon as the timeline is shown, which would otherwise erase
   // the divider while the reader is still on it.
   const [frozenNoodleFeedSeenAt, setFrozenNoodleFeedSeenAt] = useState<

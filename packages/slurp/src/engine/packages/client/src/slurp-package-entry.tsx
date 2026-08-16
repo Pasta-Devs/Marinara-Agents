@@ -4,9 +4,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import i18next from "i18next";
 import { I18nextProvider, initReactI18next } from "react-i18next";
 import english from "./localization/locales/en.json";
-import { NoodlerHome } from "./components/slurp/NoodlerHome";
+import german from "./localization/locales/de.json";
+import korean from "./localization/locales/ko.json";
+import polish from "./localization/locales/pl.json";
+import { SlurpHome } from "./components/slurp/SlurpHome";
 import { useSlurpUIStore } from "./stores/slurp-package.store";
 import { configureSlurpPackageState } from "./stores/slurp-package.store";
+import { ModalPortalContext } from "./components/ui/Modal";
 
 const SLURP_ELEMENT_TAG = "marinara-capability-slurp";
 const SLURP_STYLE_ID = "marinara-capability-slurp-styles";
@@ -19,12 +23,18 @@ void localization.use(initReactI18next).init({
   fallbackLng: "en",
   interpolation: { escapeValue: false },
   lng: "en",
-  resources: { en: { translation: english } },
+  resources: {
+    de: { translation: german },
+    en: { translation: english },
+    ko: { translation: korean },
+    pl: { translation: polish },
+  },
 });
 
 type CapabilityElement = HTMLElement & {
   capabilityProps?: Record<string, unknown>;
   __root?: Root | null;
+  __portal?: HTMLDivElement | null;
 };
 
 let slurpPackageStyles = "";
@@ -88,9 +98,11 @@ function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
   return (
     <I18nextProvider i18n={localization}>
       <QueryClientProvider client={client}>
-        <div className="h-full min-h-0 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
-          <NoodlerHome navigation={navigation} onNavigate={setNavigation} />
-        </div>
+        <ModalPortalContext.Provider value={element.__portal ?? element}>
+          <div className="h-full min-h-0 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
+            <SlurpHome navigation={navigation} onNavigate={setNavigation} />
+          </div>
+        </ModalPortalContext.Provider>
       </QueryClientProvider>
     </I18nextProvider>
   );
@@ -98,9 +110,21 @@ function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
 
 class MarinaraSlurpElement extends HTMLElement {
   declare __root: Root | null;
+  declare __portal: HTMLDivElement | null;
 
   connectedCallback() {
     syncSlurpPackageStyles();
+    if (!this.__portal) {
+      this.__portal = document.createElement("div");
+      this.__portal.dataset.marinaraCapabilityScope = "slurp";
+      Object.assign(this.__portal.style, {
+        inset: "0",
+        pointerEvents: "none",
+        position: "fixed",
+        zIndex: "2147483000",
+      });
+      document.body.appendChild(this.__portal);
+    }
     this.__root ??= createRoot(this);
     this.__root.render(<SlurpPackageRoot element={this} />);
   }
@@ -110,6 +134,10 @@ class MarinaraSlurpElement extends HTMLElement {
       if (!this.isConnected && this.__root) {
         this.__root.unmount();
         this.__root = null;
+      }
+      if (!this.isConnected && this.__portal) {
+        this.__portal.remove();
+        this.__portal = null;
       }
       syncSlurpPackageStyles();
     });

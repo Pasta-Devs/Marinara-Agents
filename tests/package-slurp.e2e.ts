@@ -75,7 +75,7 @@ test.describe("standalone Slurp package", () => {
       )
       .toBe("#FF7EC1");
     await expect(
-      slurp.locator('img[src$="/slurp-klusek.png"]:visible').first(),
+      slurp.locator('img[src$="/slurp-logo.png"]:visible').first(),
     ).toBeVisible();
     expect(errors).toEqual([]);
   });

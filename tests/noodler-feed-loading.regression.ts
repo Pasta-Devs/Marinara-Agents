@@ -14,14 +14,8 @@ assert.match(unseenHook, /refetchInterval: enabled && personaId \? 30_000 : fals
 assert.doesNotMatch(unseenHook, /useNoodlerViewer/u);
 assert.doesNotMatch(unseenHook, /NoodlerViewerScope/u);
 
-const bootstrapHook = hooks.slice(
-  hooks.indexOf("export function useNoodle"),
-  hooks.indexOf("export function useRerollAmbientNoodleProfiles"),
-);
-// The bootstrap request starts only after the first marker response. A failed marker still opens
-// the bootstrap path because React Query settles pending requests on both success and error.
-assert.match(bootstrapHook, /enabled: enabled && !refreshIndicator\.isPending/u);
-assert.match(bootstrapHook, /qc\.invalidateQueries\(\{ queryKey: noodleKeys\.bootstrap\(\) \}\)/u);
+assert.doesNotMatch(hooks, /useNoodle\(/u);
+assert.match(hooks, /\/slurp\/noodler\/viewer\?personaId=/u);
 
 const routes = readFileSync(
   "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts",
@@ -50,7 +44,8 @@ const postsHook = hooks.slice(
   hooks.indexOf("export function useNoodlerPosts"),
   hooks.indexOf("export function useCreateNoodlerStageProfile"),
 );
-assert.match(postsHook, /page\.items\.map\(\(item\) => item\.managed\)/u);
+assert.match(postsHook, /items: SlurpProfilePost\[\]/u);
+assert.match(postsHook, /personaId: string \| null/u);
 assert.match(postsHook, /page\.items/u);
 
 const viewerHook = hooks.slice(
@@ -61,20 +56,20 @@ assert.match(viewerHook, /noodler\/viewer\/feed/u);
 assert.match(viewerHook, /postsByCreator/u);
 
 const home = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerHome.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
   "utf8",
 );
 assert.match(home, /NOODLER_FEED_WINDOW_SIZE = 20/u);
 assert.match(home, /feed\.slice\(0, visibleFeedCount\)/u);
 assert.match(home, /searchResults\.slice\(0, visibleFeedCount\)/u);
 assert.match(home, /count \+ NOODLER_FEED_WINDOW_SIZE/u);
-assert.match(home, /data-component="NoodlerHome\.LoadMoreFeed"/u);
+assert.match(home, /data-component="SlurpHome\.LoadMoreFeed"/u);
 
 const unseenHelper = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/noodler-viewer-unseen.ts",
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-viewer-unseen.ts",
   "utf8",
 );
-assert.match(unseenHelper, /account\.slurpSourceAccountId !== viewerAccountId/u);
+assert.match(unseenHelper, /account\.kind === "persona" && account\.entityId === viewerAccountId/u);
 assert.match(unseenHelper, /isNoodlerHiddenFromViewer\(account, viewerAccountId\)/u);
 
 console.log("NoodleR bounded feed and lightweight unseen-count regressions passed.");

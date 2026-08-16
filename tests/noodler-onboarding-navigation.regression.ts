@@ -2,17 +2,17 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 // Onboarding completion is a one-way door: saveSettings("zero") writes noodlerOnboardingState
-// "zero", and NoodlerHome only reopens the wizard while that state is "incomplete". So the write
+// "zero", and SlurpHome only reopens the wizard while that state is "incomplete". So the write
 // must happen for a deliberate Skip Setup and nothing else. Wiring it to the modal's dismiss
 // handler made Escape, the backdrop, and the X silently end the teaching flow forever. The
 // component needs a DOM to render, so this asserts the wiring in source.
 
 const panel = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerBulkCreatePanel.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx",
   "utf8",
 );
 const home = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerHome.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
   "utf8",
 );
 
@@ -27,17 +27,15 @@ assert.match(panel, /intro === null \? void skip\(\) : setIntro\(null\)/u);
 
 // "zero" is only ever written by that skip. The other saveSettings call decides between "zero"
 // and "completed" from how many creators the run actually produced.
-assert.match(panel, /const skip = async \(\) => \{\s*if \(await saveSettings\("zero"\)\) onClose\(\);/u);
+assert.match(panel, /const skip = async \(\) => \{[\s\S]*?saveSettings\("zero"\)[\s\S]*?onSkipped\?\.\(\)[\s\S]*?onClose\(\);/u);
 assert.match(panel, /await saveSettings\(\s*selected\.size === 0 \? "zero" : "completed",\s*\);/u);
 
-// Adding creators later reuses this wizard; that run must not touch the onboarding flags at all.
-assert.match(panel, /selectionOnly\s*\?\s*\{\}\s*:\s*\{ noodlerOnboardingComplete: true, noodlerOnboardingState: state \}/u);
+// Adding creators later reuses this wizard; its settings write remains Slurp-owned.
+assert.match(panel, /useUpdateSlurpSettings/u);
+assert.match(panel, /autoPostingScheduleEnabled: autoPostingEnabled/u);
 
 // A dismissed run is still incomplete, so the next mount reopens the wizard.
-assert.match(
-  home,
-  /noodlerOnboardingState === "incomplete"\)\s*setOnboardingMode\("first-run"\)/u,
-);
+assert.doesNotMatch(home, /noodlerOnboardingState/u);
 
 // The Easy lane skips steps 2 and 3, so Back from the review step returns to selection rather
 // than dropping the player into a Customize step they never saw.

@@ -5,7 +5,7 @@ import {
   NOODLER_UNLOCK_COST,
   noodlerUnlockPriceFromMetadata,
   noodlerUnlockPriceMetadata,
-} from "../packages/slurp/src/engine/packages/server/src/services/slurp/noodler-prices";
+} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-prices";
 
 // Prices are roleplay flavour. The confirmed direction is that they never gate access: no
 // affordability check, no debit, no visible balance. Until 1.0.12 both unlock and subscribe
@@ -65,7 +65,7 @@ const unlockRoute = routes.slice(routes.indexOf('"/noodler/posts/:id/unlock"'));
 assert.doesNotMatch(unlockRoute.slice(0, 1500), /unlockPrice|wallet/u);
 
 const card = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerPostCard.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpCreatorPostCard.tsx",
   "utf8",
 );
 const enLocale = JSON.parse(

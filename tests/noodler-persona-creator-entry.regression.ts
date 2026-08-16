@@ -7,11 +7,15 @@ import { readFileSync } from "node:fs";
 // character creation rather than being folded back into the bulk list.
 
 const home = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerHome.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
   "utf8",
 );
 const routes = readFileSync(
   "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts",
+  "utf8",
+);
+const storage = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts",
   "utf8",
 );
 const enLocale = JSON.parse(
@@ -22,10 +26,14 @@ const enLocale = JSON.parse(
 ) as Record<string, string>;
 
 // The persona's own Creator is found by the link back to its Noodle account, not by name.
+assert.match(home, /id: persona\.id,/u);
+assert.doesNotMatch(home, /id: `persona:\$\{persona\.id\}`/u);
 assert.match(
   home,
   /accountsQuery\.data\?\.find\(\s*\(profile\) => profile\.sourceAccountId === shellPersonaAccount\.id,?\s*\)/u,
 );
+assert.match(storage, /sourceAccountId: account\.sourceEntityId,/u);
+assert.doesNotMatch(storage, /slurpSourceAccountId: account\.sourceEntityId,/u);
 
 // Both destinations reuse navigation targets that already existed: create-profile preselects the
 // source and opens at the disclosure step, so this adds no parallel creation flow.
@@ -57,16 +65,16 @@ for (const key of [
 }
 assert.match(enLocale["ui.noodle.noodlerhome.myCreatorProfileDetail"], /\{\{persona\}\}/u);
 
-// A persona that already has a Creator is filtered out of the eligible sources, so the create
+// A persona that already has a Creator is filtered out by the direct source key, so the create
 // branch cannot be reached for one — the button must be showing "My Creator profile" by then.
 assert.match(
   routes,
-  /\(account\.kind === "persona" \|\| account\.kind === "character"\) &&[\s\S]{0,120}!linkedIds\.has\(account\.id\)/u,
+  /linkedIds\.has\(`\$\{account\.kind\}:\$\{account\.entityId\}`\)/u,
 );
 
 // Bulk onboarding stays character-only; this path is what covers personas.
 const bulk = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/NoodlerBulkCreatePanel.tsx",
+  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx",
   "utf8",
 );
 assert.doesNotMatch(bulk, /kind="persona"|"persona"\s*\)/u, "bulk onboarding must not start listing personas");

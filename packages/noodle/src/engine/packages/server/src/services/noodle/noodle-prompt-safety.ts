@@ -1,5 +1,3 @@
-import type { NoodlerSourceSnapshot } from "@marinara-engine/shared";
-
 function promptRecord(value: unknown): Record<string, unknown> {
   if (!value) return {};
   if (typeof value === "string") {
@@ -51,44 +49,4 @@ export function characterContextFromRow(row: {
   }
   lines.push(`</character>`);
   return lines.join("\n");
-}
-
-const REVIEWED_HINTED_THEME_TOKENS = [
-  "adventurous",
-  "artistic",
-  "bookish",
-  "calm",
-  "cheerful",
-  "creative",
-  "curious",
-  "friendly",
-  "gentle",
-  "inventive",
-  "kind",
-  "musical",
-  "outgoing",
-  "playful",
-  "reserved",
-  "scientific",
-  "sporty",
-  "technical",
-  "thoughtful",
-  "witty",
-] as const;
-
-/** A hinted identity receives only reviewed, non-identifying theme tokens. */
-export function hintedNoodlerSourceBrief(
-  snapshot: NoodlerSourceSnapshot | null,
-) {
-  if (!snapshot)
-    return "General temperament and creative interests from the source profile.";
-  const personalityWords = new Set(
-    snapshot.personality.toLocaleLowerCase().match(/[a-z]+/gu) ?? [],
-  );
-  const themes = REVIEWED_HINTED_THEME_TOKENS.filter((token) =>
-    personalityWords.has(token),
-  );
-  return themes.length > 0
-    ? `Approved source themes: ${themes.join(", ")}.`
-    : "General temperament and creative interests from the source profile.";
 }
