@@ -1182,7 +1182,7 @@
         },
         "builtAgainst": {
           "engineVersion": "2.4.3",
-          "engineCommit": "315c4bc787a332133193df7ddbcb2baa295cdc13"
+          "engineCommit": "bb551bf921c006922edac7be06dbea8fe4c999b9"
         },
         "id": "pixelforge",
         "name": "Pixelforge",
@@ -1286,7 +1286,7 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/pixelforge.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/pixelforge-0.4.1.zip",
-        "sha256": "80b07d7976cc3fa1814682575ec947e3c0574bbe3210ba9c497a27929fe09150",
+        "sha256": "7b4a5aecae7d0ae156782689694dd64e64160a0ec849b25c565495947aaef666",
         "bytes": 178706
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/pixelforge/README.md"
