@@ -20,6 +20,7 @@ import { clampGenerationMaxOutputTokens } from "../generation/output-token-limit
 import { resolveStoredChatOptions } from "../generation/generation-parameters.js";
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
+import { requireModelAnswer } from "./slurp-model-answer.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
 import {
   isConnectionAdmissionFailure,
@@ -416,7 +417,7 @@ export function noodlerTitleFromContent(content: string): string {
 }
 
 function parseNoodlerPost(content: string) {
-  const parsed = parseGameJsonish(content);
+  const parsed = parseGameJsonish(requireModelAnswer(content, "a creator post"));
   // Many LLMs (especially local models via Ollama/KoboldCPP) wrap the expected object
   // in an array ([{"title":...}]) regardless of the prompt instructing "one JSON object".
   // Unwrap the common single-item array response while preserving validation for other shapes.

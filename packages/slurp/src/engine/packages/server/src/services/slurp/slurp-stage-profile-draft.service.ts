@@ -17,6 +17,7 @@ import {
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
+import { requireModelAnswer } from "./slurp-model-answer.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
@@ -209,15 +210,9 @@ const noodlerStageProfileDraftSchema = noodleStageProfileDraftResponseSchema
   .strip();
 
 export function parseNoodlerStageProfileDraft(content: string) {
-  // An empty answer is the common provider failure (reasoning budget spent, filtered, or a
-  // dropped response). Left to the JSON parser it surfaces as "Unexpected end of JSON input",
-  // which tells the user nothing about what to change.
-  if (!content.trim()) {
-    throw new Error(
-      "The generation model returned an empty response. Check the Slurp generation connection: raise its max output tokens, or pick a model that answers with JSON.",
-    );
-  }
-  const normalized = normalizeNoodlerStageProfileDraft(parseGameJsonish(content));
+  const normalized = normalizeNoodlerStageProfileDraft(
+    parseGameJsonish(requireModelAnswer(content, "a creator profile")),
+  );
   return noodlerStageProfileDraftSchema.parse(normalized);
 }
 

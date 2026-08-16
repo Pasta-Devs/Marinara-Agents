@@ -12,6 +12,7 @@ import {
   resolveStoredMaxTokens,
 } from "../generation/generation-parameters.js";
 import { parseGameJsonish } from "../game/jsonish.js";
+import { requireModelAnswer } from "./slurp-model-answer.js";
 import type { BaseLLMProvider, ChatMessage } from "../llm/base-provider.js";
 import { createCharacterGalleryStorage } from "../storage/character-gallery.storage.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
@@ -200,7 +201,7 @@ export async function generateMissingNoodleProfiles(input: {
     responseFormat: noodleResponseFormat(input.connection.model, "profiles"),
   });
   const generated = parseNoodleGeneratedProfiles(
-    parseGameJsonish(result.content ?? ""),
+    parseGameJsonish(requireModelAnswer(result.content ?? "", "public profiles")),
   );
   if (generated.rejected.length > 0) {
     logger.warn(

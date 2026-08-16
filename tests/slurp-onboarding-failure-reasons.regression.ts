@@ -1,11 +1,23 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { requireModelAnswer } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-model-answer";
 
 const root = join(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
-const draft = read(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-stage-profile-draft.service.ts",
+const slurpServices =
+  "packages/slurp/src/engine/packages/server/src/services/slurp/";
+const draft = read(`${slurpServices}slurp-stage-profile-draft.service.ts`);
+const parsers = Object.fromEntries(
+  [
+    "slurp-stage-profile-draft.service.ts",
+    "slurp-generation.service.ts",
+    "slurp-reply-generation.service.ts",
+    "slurp-fan-activity.service.ts",
+    "slurp-ambient-profile-generation.service.ts",
+    "slurp-invited-post-draft.service.ts",
+    "slurp-public-profiles.service.ts",
+  ].map((file) => [file, read(`${slurpServices}${file}`)] as const),
 );
 const routes = read(
   "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts",
@@ -21,11 +33,34 @@ const en = JSON.parse(
 
 // An empty provider answer used to reach JSON.parse and surface as "Unexpected end of JSON
 // input", which named neither the cause nor a fix.
-assert.match(
-  draft,
-  /if \(!content\.trim\(\)\) \{[\s\S]*?throw new Error\([\s\S]*?empty response/u,
-  "An empty model answer must fail with a readable reason, not a JSON syntax error",
+assert.equal(requireModelAnswer(' {"a":1} ', "a creator profile"), ' {"a":1} ');
+for (const empty of ["", "   ", "\n\t"]) {
+  assert.throws(
+    () => requireModelAnswer(empty, "a creator profile"),
+    /empty response for a creator profile[\s\S]*max output tokens/u,
+    "An empty model answer must fail with a readable reason, not a JSON syntax error",
+  );
+}
+
+// Every Slurp parse of a model answer goes through the guard, or that path still throws a raw
+// JSON syntax error. The file list is checked against the tree, so a new call site cannot be
+// added without being guarded.
+assert.deepEqual(
+  readdirSync(join(root, slurpServices))
+    .filter((file) => /parseGameJsonish\(/u.test(read(`${slurpServices}${file}`)))
+    .sort(),
+  Object.keys(parsers).sort(),
+  "A Slurp service parses a model answer without being covered here",
 );
+for (const [file, source] of Object.entries(parsers)) {
+  for (const call of source.match(/parseGameJsonish\([^)]*/gu) ?? []) {
+    assert.match(
+      call,
+      /requireModelAnswer\(/u,
+      `Unguarded parseGameJsonish call in ${file}`,
+    );
+  }
+}
 assert.match(
   draft,
   /response\.content\?\.trim\(\)\s*\?\s*\[\{ role: "assistant"/u,
