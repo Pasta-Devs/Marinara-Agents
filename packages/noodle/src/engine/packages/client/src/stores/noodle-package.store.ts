@@ -6,6 +6,7 @@ const LEGACY_UI_STATE_KEY = "marinara-engine-ui";
 
 type PersistedNoodleState = {
   noodleNavigation?: NoodleNavigationState;
+  noodleSelectedPersonaId?: string | null;
 };
 
 type NoodlePackageState = {
@@ -13,7 +14,9 @@ type NoodlePackageState = {
   debugMode: boolean;
   reviewImagePromptsBeforeSend: boolean;
   noodleNavigation: NoodleNavigationState;
+  noodleSelectedPersonaId: string | null;
   setNoodleNavigation: (navigation: NoodleNavigationState) => void;
+  setNoodleSelectedPersonaId: (id: string | null) => void;
 };
 
 function isPublicNoodleNavigation(
@@ -49,6 +52,12 @@ function validatedPersistedState(
       validated.noodleNavigation = navigation;
     }
   }
+  if (
+    typeof state.noodleSelectedPersonaId === "string" ||
+    state.noodleSelectedPersonaId === null
+  ) {
+    validated.noodleSelectedPersonaId = state.noodleSelectedPersonaId;
+  }
   return validated;
 }
 
@@ -69,7 +78,7 @@ function readInitialState(): PersistedNoodleState {
 function persistNoodleState(
   state: Pick<
     NoodlePackageState,
-    "noodleNavigation"
+    "noodleNavigation" | "noodleSelectedPersonaId"
   >,
 ) {
   try {
@@ -89,10 +98,19 @@ export const useUIStore = create<NoodlePackageState>((set, get) => ({
     mode: "public",
     view: "home",
   },
+  noodleSelectedPersonaId: initialState.noodleSelectedPersonaId ?? null,
   setNoodleNavigation: (noodleNavigation) => {
     set({ noodleNavigation });
     persistNoodleState({
       noodleNavigation,
+      noodleSelectedPersonaId: get().noodleSelectedPersonaId,
+    });
+  },
+  setNoodleSelectedPersonaId: (noodleSelectedPersonaId) => {
+    set({ noodleSelectedPersonaId });
+    persistNoodleState({
+      noodleNavigation: get().noodleNavigation,
+      noodleSelectedPersonaId,
     });
   },
 }));

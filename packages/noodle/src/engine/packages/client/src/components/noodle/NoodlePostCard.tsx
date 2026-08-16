@@ -30,6 +30,7 @@ import { createPortal } from "react-dom";
 import {
   findNoodleTextMentions,
   noodlePollInputSchema,
+  canManageNoodleReply,
   readNoodlePostImageCrop,
   readNoodlePollFromMetadata,
   type NoodleAccount,
@@ -2455,7 +2456,16 @@ export function NoodlePostCard({
                   : false;
                 const canManageReply = canManageReplyOverride
                   ? canManageReplyOverride(reply)
-                  : Boolean(personaAccount && reply.actorAccountId === personaAccount.id);
+                  : Boolean(
+                      replyManagement &&
+                        personaAccount &&
+                        canManageNoodleReply({
+                          actorKind:
+                            actorAccount?.kind ?? reply.actorSnapshot?.kind,
+                          actorAccountId: reply.actorAccountId,
+                          personaAccountId: personaAccount.id,
+                        }),
+                    );
                 return (
                   <Fragment key={reply.id}>
                     <div

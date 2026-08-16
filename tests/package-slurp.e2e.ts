@@ -45,6 +45,19 @@ async function openSlurp(page: Page) {
   await expect(page.locator('[data-component="NoodleView"]')).toBeVisible();
 }
 
+async function getSlurpSettings(page: Page) {
+  await expect
+    .poll(
+      async () => {
+        const response = await page.request.get("/api/slurp/settings");
+        return response.ok();
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+  return page.request.get("/api/slurp/settings");
+}
+
 test.beforeEach(async ({ page }) => {
   const resetUiSettings = await page.request.put("/api/app-settings/ui", {
     data: { value: "" },
@@ -56,12 +69,11 @@ test.beforeEach(async ({ page }) => {
 test.describe("standalone Slurp package", () => {
   test("opens as an enabled pink Creator surface", async ({ page }) => {
     const errors = collectUnexpectedErrors(page);
-    const bootstrapResponse = await page.request.get("/api/slurp");
-    expect(bootstrapResponse.ok()).toBe(true);
-    const bootstrap = (await bootstrapResponse.json()) as {
-      settings: { enableNoodler: boolean };
+    const settingsResponse = await getSlurpSettings(page);
+    const settings = (await settingsResponse.json()) as {
+      onboarding: string;
     };
-    expect(bootstrap.settings.enableNoodler).toBe(true);
+    expect(typeof settings.onboarding).toBe("string");
 
     await page.goto("/");
     await openSlurp(page);
@@ -103,23 +115,16 @@ test.describe("standalone Slurp package", () => {
     let stageProfileId: string | null = null;
     let postId: string | null = null;
     try {
-      const settingsResponse = await page.request.put("/api/slurp/settings", {
-        data: { noodlerOnboardingState: "completed" },
+      await getSlurpSettings(page);
+      const settingsResponse = await page.request.patch("/api/slurp/settings", {
+        data: { onboarding: "completed" },
       });
       expect(settingsResponse.ok()).toBe(true);
 
-      const bootstrapResponse = await page.request.get("/api/slurp");
-      expect(bootstrapResponse.ok()).toBe(true);
-      const bootstrap = (await bootstrapResponse.json()) as {
-        accounts: Array<{ id: string; entityId: string }>;
-      };
-      const professorMari = bootstrap.accounts.find(
-        (account) => account.entityId === "__professor_mari__",
-      );
-      expect(professorMari).toBeTruthy();
-
+      // Professor Mari is a built-in character; the standalone Slurp package
+      // resolves a creator source directly by entity id.
       const stageProfileResponse = await page.request.post(
-        `/api/slurp/accounts/${professorMari!.id}/noodler`,
+        `/api/slurp/accounts/__professor_mari__/noodler`,
         {
           data: {
             stageProfile: {
@@ -156,10 +161,14 @@ test.describe("standalone Slurp package", () => {
           const bootKey = "marinara:slurp:test-bootstrapped";
           if (sessionStorage.getItem(bootKey)) return;
           localStorage.setItem(
-            "marinara:slurp:ui",
+            "marinara:slurp:package-ui",
             JSON.stringify({
               navigation: { mode: "creator", view: "hub" },
               viewerPersonaId: personaId,
+              // Skip the "So, what is Slurp?" first-run wizard; without a
+              // "completed" onboardingState it renders an overlay that
+              // intercepts pointer events on the creator hub tabs.
+              onboardingState: "completed",
             }),
           );
           sessionStorage.setItem(bootKey, "true");
@@ -181,10 +190,11 @@ test.describe("standalone Slurp package", () => {
 
       await page.evaluate((personaId) => {
         localStorage.setItem(
-          "marinara:slurp:ui",
+          "marinara:slurp:package-ui",
           JSON.stringify({
             navigation: { mode: "creator", view: "profiles" },
             viewerPersonaId: personaId,
+            onboardingState: "completed",
           }),
         );
       }, persona.id);
