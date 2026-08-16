@@ -102,17 +102,23 @@ PF.save = {
     if (!this._lastSerialized || !core.sim || !core.chatId) return;
     if (meta && typeof meta === "object" && meta.pixelforge == null) {
       this._lastSerialized = null; // force the next flush to actually write
+      this._metaSerialized = null; // the cache PATCH dedupes separately in routes mode
       this.markDirty(core);
     }
   },
 
-  /** Reset per-chat persistence state (chat switch). */
+  /** Reset per-chat persistence state (chat switch). The generation counter
+   *  fences every async read started before the switch: a stale response
+   *  cannot be detected by comparing "current" ids (both moved to the new
+   *  chat together), only by what the request captured when it started. */
   reset() {
+    this._gen = (this._gen ?? 0) + 1;
     if (this._timer) {
       clearTimeout(this._timer);
       this._timer = 0;
     }
     this._lastSerialized = null;
+    this._metaSerialized = null;
     this.mode = null;
     this._serverSerialized = null;
     this._rewindCheckInFlight = false;
@@ -126,9 +132,13 @@ PF.save = {
    *  written up. Any probe failure degrades to metadata mode. */
   async adopt(core) {
     if (!core.chatId || this.mode !== null) return;
+    const gen = this._gen ?? 0;
+    const chatId = core.chatId;
     try {
-      const probe = await PF.api.getExperienceState(core.chatId);
-      if (core.chatId !== (core.host && core.host.chatId)) return; // switched mid-probe
+      const probe = await PF.api.getExperienceState(chatId);
+      // Switched mid-probe: fence on the CAPTURED generation and chat id — a
+      // response for the old chat must never rebuild the new one.
+      if (gen !== (this._gen ?? 0) || chatId !== core.chatId) return;
       if (!probe.available) {
         this.mode = "metadata";
         return;
@@ -160,11 +170,25 @@ PF.save = {
   async checkRewind(core) {
     if (this.mode !== "routes" || !core.chatId || this._rewindCheckInFlight) return;
     this._rewindCheckInFlight = true;
+    const gen = this._gen ?? 0;
+    const chatId = core.chatId;
     try {
-      const probe = await PF.api.getExperienceState(core.chatId);
-      if (!probe.available || core.chatId !== (core.host && core.host.chatId)) return;
+      const probe = await PF.api.getExperienceState(chatId);
+      if (gen !== (this._gen ?? 0) || chatId !== core.chatId) return; // switched mid-probe
+      if (!probe.available) return;
       const body = probe.body || {};
-      if (!body.exists || !body.state || typeof body.state !== "object") return;
+      if (!body.exists || !body.state || typeof body.state !== "object") {
+        // The timeline rewound PAST the first persisted state: this anchor has
+        // no row. Keeping the later local sim would leave the world ahead of
+        // the story — fall back to the baseline build (config seed/theme) and
+        // let the next save write this anchor's row.
+        if (this._serverSerialized !== null) {
+          this._serverSerialized = null;
+          this._rebuild(core, null);
+          core.hud?.toast("The world rewound with the story.");
+        }
+        return;
+      }
       const serverSerialized = JSON.stringify(body.state);
       if (this._serverSerialized !== null && serverSerialized !== this._serverSerialized) {
         this._serverSerialized = serverSerialized;
@@ -176,7 +200,8 @@ PF.save = {
     } catch {
       // Transient; the next turn edge retries.
     } finally {
-      this._rewindCheckInFlight = false;
+      // A stale completion must not clear the NEW chat's in-flight flag.
+      if (gen === (this._gen ?? 0)) this._rewindCheckInFlight = false;
     }
   },
 
@@ -212,25 +237,36 @@ PF.save = {
     const snap = this.snapshot(core);
     if (!snap || !core.chatId) return;
     const serialized = JSON.stringify(snap);
-    if (serialized === this._lastSerialized) return;
+    // Route persistence and metadata-cache persistence dedupe SEPARATELY: a
+    // failed cache write must keep retrying on later flushes even while the
+    // route row is already current.
+    const metaCurrent = this.mode !== "routes" || this._metaSerialized === serialized;
+    if (serialized === this._lastSerialized && metaCurrent) return;
     try {
       if (this.mode === "routes") {
         // Route row first (the authority), metadata second as write-through
         // boot cache + old-engine fallback. A metadata failure is non-fatal
-        // once the route write landed.
-        await PF.api.putExperienceState(core.chatId, snap, teardown);
-        this._serverSerialized = serialized;
-        this._lastSerialized = serialized;
-        if (core.sim) core.sim.dirty = false;
-        try {
-          await PF.api.patchMetadata(core.chatId, { pixelforge: snap }, teardown);
-        } catch (err) {
-          console.warn("[pixelforge] metadata cache save failed (route save landed)", err);
+        // once the route write landed — but it stays pending and retries.
+        if (serialized !== this._lastSerialized) {
+          await PF.api.putExperienceState(core.chatId, snap, teardown);
+          this._serverSerialized = serialized;
+          this._lastSerialized = serialized;
+          if (core.sim) core.sim.dirty = false;
+        }
+        if (this._metaSerialized !== serialized) {
+          try {
+            await PF.api.patchMetadata(core.chatId, { pixelforge: snap }, teardown);
+            this._metaSerialized = serialized;
+          } catch (err) {
+            if (!teardown) this.markDirty(core); // schedule a cache repair pass
+            console.warn("[pixelforge] metadata cache save failed (route save landed); will retry", err);
+          }
         }
         return;
       }
       await PF.api.patchMetadata(core.chatId, { pixelforge: snap }, teardown);
       this._lastSerialized = serialized;
+      this._metaSerialized = serialized;
       if (core.sim) core.sim.dirty = false;
     } catch (err) {
       // A failed save retries on the next dirty mark; never interrupts play.
