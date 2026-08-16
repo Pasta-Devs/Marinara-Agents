@@ -161,10 +161,14 @@ test.describe("standalone Slurp package", () => {
           const bootKey = "marinara:slurp:test-bootstrapped";
           if (sessionStorage.getItem(bootKey)) return;
           localStorage.setItem(
-            "marinara:slurp:ui",
+            "marinara:slurp:package-ui",
             JSON.stringify({
               navigation: { mode: "creator", view: "hub" },
               viewerPersonaId: personaId,
+              // Skip the "So, what is Slurp?" first-run wizard; without a
+              // "completed" onboardingState it renders an overlay that
+              // intercepts pointer events on the creator hub tabs.
+              onboardingState: "completed",
             }),
           );
           sessionStorage.setItem(bootKey, "true");
@@ -186,10 +190,11 @@ test.describe("standalone Slurp package", () => {
 
       await page.evaluate((personaId) => {
         localStorage.setItem(
-          "marinara:slurp:ui",
+          "marinara:slurp:package-ui",
           JSON.stringify({
             navigation: { mode: "creator", view: "profiles" },
             viewerPersonaId: personaId,
+            onboardingState: "completed",
           }),
         );
       }, persona.id);
