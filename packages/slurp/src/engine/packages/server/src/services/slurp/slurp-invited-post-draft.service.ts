@@ -2,6 +2,7 @@ import type { APIProvider, NoodleAccount } from "@marinara-engine/shared";
 import type { DB } from "../../db/connection.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { parseGameJsonish } from "../game/jsonish.js";
+import { requireModelAnswer } from "./slurp-model-answer.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
 import { resolveStoredChatOptions } from "../generation/generation-parameters.js";
@@ -31,7 +32,7 @@ export type InvitedNoodlePostDraft = {
 };
 
 function parseDraft(content: string) {
-  const parsed = parseGameJsonish(content);
+  const parsed = parseGameJsonish(requireModelAnswer(content, "an invited post draft"));
   return noodleGeneratedNoodlerPostSchema.parse(
     Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed,
   );

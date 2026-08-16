@@ -13,6 +13,7 @@ import {
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
+import { requireModelAnswer } from "./slurp-model-answer.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
@@ -173,7 +174,9 @@ export async function rerollAmbientNoodleProfiles(input: {
   // A wholly malformed response throws; report it per account instead of failing the whole request.
   let parsed: ReturnType<typeof parseNoodleGeneratedProfiles> = { profiles: [], rejected: [] };
   try {
-    parsed = parseNoodleGeneratedProfiles(parseGameJsonish(result.content ?? ""));
+    parsed = parseNoodleGeneratedProfiles(
+      parseGameJsonish(requireModelAnswer(result.content ?? "", "Ambient profiles")),
+    );
   } catch (error) {
     logger.warn(error, "[noodle] Ambient profile reroll returned an unusable response");
   }

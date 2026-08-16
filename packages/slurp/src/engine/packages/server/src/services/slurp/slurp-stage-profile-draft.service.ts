@@ -17,6 +17,7 @@ import {
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
+import { requireModelAnswer } from "./slurp-model-answer.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
@@ -209,7 +210,9 @@ const noodlerStageProfileDraftSchema = noodleStageProfileDraftResponseSchema
   .strip();
 
 export function parseNoodlerStageProfileDraft(content: string) {
-  const normalized = normalizeNoodlerStageProfileDraft(parseGameJsonish(content));
+  const normalized = normalizeNoodlerStageProfileDraft(
+    parseGameJsonish(requireModelAnswer(content, "a creator profile")),
+  );
   return noodlerStageProfileDraftSchema.parse(normalized);
 }
 
@@ -327,7 +330,10 @@ export async function generateNoodlerStageProfileDraft(
     const retry = await provider.chatComplete(
       [
         ...messages,
-        { role: "assistant", content: response.content ?? "" },
+        // An empty assistant turn is rejected by several providers, so only echo a real answer.
+        ...(response.content?.trim()
+          ? [{ role: "assistant" as const, content: response.content }]
+          : []),
         {
           role: "user",
           content:

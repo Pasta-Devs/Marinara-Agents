@@ -15,6 +15,7 @@ import { clampGenerationMaxOutputTokens } from "../generation/output-token-limit
 import { resolveStoredChatOptions } from "../generation/generation-parameters.js";
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
+import { requireModelAnswer } from "./slurp-model-answer.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
@@ -168,7 +169,7 @@ export async function generateNoodlerCreatorReply(input: {
     "[debug/noodler-reply] Model response received (%d characters); content is redacted.",
     content.length,
   );
-  const parsed = parseGameJsonish(content);
+  const parsed = parseGameJsonish(requireModelAnswer(content, "a creator reply"));
   const generated = noodleGeneratedNoodlerReplySchema.parse(
     Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed,
   );
