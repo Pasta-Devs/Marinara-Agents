@@ -126,6 +126,23 @@ PF.api = {
     if (!res.ok) throw new Error(`GET spatial-context → ${res.status}`);
     return res.json();
   },
+  /** Additive location registration (World Maps 1.4.0, engine #5144). Returns
+   *  {ok, status, body} without throwing: 404 = older maps package without the
+   *  route, 409 = revision/id race — both are flow signals for the caller. */
+  async postSpatialLocations(chatId, body) {
+    const res = await fetch(`/api/chats/${encodeURIComponent(chatId)}/spatial-context/locations`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-marinara-csrf": "1" },
+      body: JSON.stringify(body),
+    });
+    let payload = null;
+    try {
+      payload = await res.json();
+    } catch {
+      // non-JSON error body — the caller treats it as an unclassified failure
+    }
+    return { ok: res.ok, status: res.status, body: payload };
+  },
 };
 
 /** Report a runtime failure through the host's error contract (per-element). */
