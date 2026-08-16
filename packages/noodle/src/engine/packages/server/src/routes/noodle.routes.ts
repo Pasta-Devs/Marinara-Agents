@@ -202,7 +202,10 @@ export async function noodleRoutes(app: FastifyInstance) {
     const interaction = await noodle.createInteraction(id, {
       actorAccountId: actor.id,
       type: parsed.data.type,
-      content: parsed.data.content ?? null,
+      content:
+        parsed.data.type === "vote"
+          ? (parsed.data.content?.trim() ?? null)
+          : (parsed.data.content ?? null),
       imageUrl: parsed.data.imageUrl ?? null,
       parentInteractionId: parsed.data.parentInteractionId ?? null,
     });

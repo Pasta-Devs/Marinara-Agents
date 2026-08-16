@@ -2457,7 +2457,8 @@ export function NoodlePostCard({
                 const canManageReply = canManageReplyOverride
                   ? canManageReplyOverride(reply)
                   : Boolean(
-                      personaAccount &&
+                      replyManagement &&
+                        personaAccount &&
                         canManageNoodleReply({
                           actorKind:
                             actorAccount?.kind ?? reply.actorSnapshot?.kind,
