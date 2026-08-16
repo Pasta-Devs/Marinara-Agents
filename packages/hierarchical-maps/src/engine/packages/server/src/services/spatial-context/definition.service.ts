@@ -344,12 +344,19 @@ export function createSpatialContextService() {
     /** Append locations without replacing the map — the additive write path
      *  for Experience packages (Marinara-Engine #5144). Ids may be supplied
      *  (deterministic references for the caller) or are allocated like the
-     *  discover directive's; parents may reference other additions in the same
-     *  batch. Delegates the actual write to update(), inheriting its full
-     *  guard set — corrupt/shared-world checks, the revision CAS, schema
-     *  validation, and the repair-snapshot tail — so a concurrent change
-     *  surfaces as exactly the 409s the editor gets. Pure adds never remove
-     *  anything, so the deletion protections are vacuously satisfied. */
+     *  discover directive's, including the next layerOrder under a "layers"
+     *  parent; parents may reference other additions in the same batch, must
+     *  exist, and must be active. Delegates the actual write to update(),
+     *  inheriting its full guard set — corrupt/shared-world checks, the
+     *  revision CAS, schema validation, and the repair-snapshot tail. The
+     *  current-location CAS is deliberately skipped: a pure add cannot
+     *  invalidate the party's position, and party movement does not bump the
+     *  revision, so enforcing it would 409 concurrent-play callers for a
+     *  conflict that cannot exist (review finding). The revision CAS alone
+     *  still rejects every real definition race. On a shared-world-linked
+     *  chat this stages the additions in the chat's pending draft, exactly
+     *  like the editor — callers should heed sharedWorld.pendingChanges in
+     *  the response. */
     async addLocations(
       chatId: string,
       input: {
@@ -379,8 +386,21 @@ export function createSpatialContextService() {
         );
       }
       const existing = current.definition.locations;
-      const knownIds = new Set(existing.map((location) => location.id));
-      // sortOrder continues each parent's sibling sequence, like discover.
+      // A friendly cap check before the schema's raw array error (500 is the
+      // schema's maxLocations bound).
+      if (existing.length + input.locations.length > 500) {
+        throw new SpatialContextServiceError(
+          "spatial_replacement_invalid",
+          `Adding ${input.locations.length} locations would exceed the 500-location map limit (${existing.length} exist).`,
+          400,
+        );
+      }
+      const byId = new Map(existing.map((location) => [location.id, location]));
+      const additionById = new Map<string, { status: "active"; childPresentation: string; layerOrder?: number }>();
+      // sortOrder and layerOrder continue each parent's sibling sequence, like
+      // discover — layerOrder is REQUIRED for children of a "layers" parent,
+      // and the caller has no field for it, so allocation here is what makes
+      // layered buildings reachable at all (review finding).
       const nextSortOrder = new Map<string | null, number>();
       const takeSortOrder = (parentId: string | null): number => {
         if (!nextSortOrder.has(parentId)) {
@@ -391,18 +411,29 @@ export function createSpatialContextService() {
         nextSortOrder.set(parentId, value + 1);
         return value;
       };
+      const nextLayerOrder = new Map<string, number>();
+      const takeLayerOrder = (parentId: string): number => {
+        if (!nextLayerOrder.has(parentId)) {
+          const siblings = existing.filter((location) => location.parentId === parentId);
+          nextLayerOrder.set(parentId, Math.max(-1, ...siblings.map((location) => location.layerOrder ?? -1)) + 1);
+        }
+        const value = nextLayerOrder.get(parentId) ?? 0;
+        nextLayerOrder.set(parentId, value + 1);
+        return value;
+      };
       const additions = input.locations.map((raw) => {
         const id = raw.id ?? `loc_${newId()}`;
-        if (knownIds.has(id)) {
+        if (byId.has(id) || additionById.has(id)) {
           throw new SpatialContextServiceError(
             "spatial_location_conflict",
             `A location with id ${id} already exists.`,
             409,
           );
         }
-        knownIds.add(id);
         const parentId = raw.parentId ?? null;
-        return {
+        const parent = parentId === null ? null : (byId.get(parentId) ?? additionById.get(parentId) ?? null);
+        const parentIsLayers = parent?.childPresentation === "layers";
+        const addition = {
           id,
           parentId,
           name: raw.name,
@@ -413,24 +444,42 @@ export function createSpatialContextService() {
           links: [],
           status: "active" as const,
           sortOrder: takeSortOrder(parentId),
+          ...(parentIsLayers && parentId !== null ? { layerOrder: takeLayerOrder(parentId) } : {}),
         };
+        additionById.set(id, addition);
+        return addition;
       });
-      // Parent existence across the FULL merged set, so a batch can build its
-      // own subtree; update()'s schema re-validates the whole definition too.
+      // Parent checks across the FULL merged set, so a batch can build its own
+      // subtree. Existence AND active status: the archive flow forbids active
+      // children under an archived parent, and such a child would be
+      // unreachable in play (review finding).
       for (const addition of additions) {
-        if (addition.parentId !== null && !knownIds.has(addition.parentId)) {
+        if (addition.parentId === null) continue;
+        const parent = byId.get(addition.parentId) ?? additionById.get(addition.parentId);
+        if (!parent) {
           throw new SpatialContextServiceError(
             "spatial_replacement_invalid",
             `Location ${addition.name} references a parent (${addition.parentId}) that does not exist.`,
             400,
           );
         }
+        if (parent.status !== "active") {
+          throw new SpatialContextServiceError(
+            "spatial_replacement_invalid",
+            `Location ${addition.name} references an archived parent (${addition.parentId}); restore it first.`,
+            400,
+          );
+        }
       }
-      const response = await this.update(chatId, {
-        expectedRevision: input.expectedRevision,
-        expectedCurrentLocationId: current.currentLocationId,
-        definition: { ...current.definition, locations: [...existing, ...additions] },
-      });
+      const response = await this.update(
+        chatId,
+        {
+          expectedRevision: input.expectedRevision,
+          expectedCurrentLocationId: null,
+          definition: { ...current.definition, locations: [...existing, ...additions] },
+        },
+        { skipCurrentLocationCas: true },
+      );
       return { ...response, addedLocationIds: additions.map((addition) => addition.id) };
     },
 
@@ -439,7 +488,7 @@ export function createSpatialContextService() {
       input: UpdateSpatialContextRequestInput & {
         hierarchyProfile?: SpatialHierarchyProfile;
       },
-      options: { detachSharedWorld?: boolean; breakHistoryContinuity?: boolean } = {},
+      options: { detachSharedWorld?: boolean; breakHistoryContinuity?: boolean; skipCurrentLocationCas?: boolean } = {},
     ): Promise<MapsSpatialContextResponse> {
       return persistence.withChatLock(chatId, async () => {
         const chat = await persistence.getChat(chatId);
@@ -476,7 +525,11 @@ export function createSpatialContextService() {
 
         const state = await resolveEffectiveSpatialState(chatId, {}, persistence);
         const currentLocationId = state.currentLocationId;
-        if (input.expectedCurrentLocationId !== currentLocationId) {
+        // skipCurrentLocationCas: the additive path never moves or removes the
+        // current location, and get()'s clamped id lives in a different domain
+        // than this raw snapshot id — comparing them could wedge a chat with a
+        // dangling snapshot permanently (review finding).
+        if (!options.skipCurrentLocationCas && input.expectedCurrentLocationId !== currentLocationId) {
           throw new SpatialContextServiceError(
             "spatial_current_location_stale",
             "The current location changed. Reload the map before saving.",

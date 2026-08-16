@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, realpathSync } from "node:fs";
-import { chmod, copyFile, cp, mkdir, mkdtemp, readFile, readdir, rm, utimes, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -27,13 +27,28 @@ const engineClientRequire = createRequire(pathToFileURL(join(engineRoot, "packag
 // esbuild honors NODE_PATH; `pnpm exec` used to provide the module paths, so
 // list every workspace node_modules a vendored source can import from (pnpm's
 // strict layout keeps each package's deps in its own node_modules symlinks).
+// This repo's own node_modules comes FIRST so a package pinned in BOTH repos
+// (zod) resolves to a single copy everywhere — the vendored shared dist
+// already reaches it by directory walk-up, and two distinct realpaths would
+// bundle twice (review finding: doubled zod bloated every bundle ~6-20%).
 const engineNodePath = [
+  join(repoRoot, "node_modules"),
   join(engineRoot, "node_modules"),
   join(engineRoot, "packages/server/node_modules"),
   join(engineRoot, "packages/shared/node_modules"),
   join(engineRoot, "packages/client/node_modules"),
-  join(repoRoot, "node_modules"),
 ].join(process.platform === "win32" ? ";" : ":");
+
+// esbuild's bin is a JS shim on Windows but is optimized into the NATIVE
+// executable by its postinstall on POSIX — running that under node would try
+// to parse machine code as JavaScript. Spawn it directly where it is
+// executable; only Windows needs the node indirection (review finding).
+function spawnEsbuild(args, options) {
+  const bin = engineRequire.resolve("esbuild/bin/esbuild");
+  return process.platform === "win32"
+    ? spawnSync(process.execPath, [bin, ...args], options)
+    : spawnSync(bin, args, options);
+}
 const artifactsDir = join(repoRoot, "artifacts");
 const packagesDir = join(repoRoot, "packages");
 const sourcesRoot = join(repoRoot, "sources/engine");
@@ -46,7 +61,6 @@ const sourceRoot = process.env.MARINARA_ENGINE_SOURCE_ROOT
 const packageSharedEntry = join(repoRoot, "sources/package-shared.ts");
 const MIN_ENGINE_VERSION = "2.3.0";
 const MAX_ENGINE_EXCLUSIVE = "4.0.0";
-const ARTIFACT_MTIME = new Date("2000-01-01T00:00:00.000Z");
 const hierarchicalMapsOwnedSourcePaths = [
   "packages/server/src/routes/spatial-context.routes.ts",
   "packages/server/src/services/spatial-context",
@@ -568,10 +582,8 @@ export async function selfCheck() {
     const entry = join(temporary, "entry.mjs");
     const metafile = join(temporary, "meta.json");
     await writeFile(entry, source);
-    const result = spawnSync(
-      process.execPath,
+    const result = spawnEsbuild(
       [
-        engineRequire.resolve("esbuild/bin/esbuild"),
         entry,
         "--bundle",
         "--platform=node",
@@ -668,10 +680,8 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
     const entry = join(temporary, "entry.tsx");
     const metafile = join(temporary, "meta.json");
     await writeFile(entry, source);
-    const result = spawnSync(
-      process.execPath,
+    const result = spawnEsbuild(
       [
-        engineRequire.resolve("esbuild/bin/esbuild"),
         entry,
         "--bundle",
         "--platform=browser",
@@ -1434,10 +1444,8 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
     const entry = join(temporary, "entry.tsx");
     const metafile = join(temporary, "meta.json");
     await writeFile(entry, source);
-    const result = spawnSync(
-      process.execPath,
+    const result = spawnEsbuild(
       [
-        engineRequire.resolve("esbuild/bin/esbuild"),
         entry,
         "--bundle",
         "--platform=browser",
@@ -1651,11 +1659,6 @@ for (const feature of selectedFeatures) {
       ...(clientBuffer ? ["client.js"] : []),
       ...assetPayloads.map((asset) => asset.path),
     ];
-    for (const artifactFile of artifactFiles) {
-      const artifactSource = join(temporary, artifactFile);
-      await chmod(artifactSource, 0o644);
-      await utimes(artifactSource, ARTIFACT_MTIME, ARTIFACT_MTIME);
-    }
     const artifactName = `${feature.id}-${version}.zip`;
     const artifactPath = join(artifactsDir, artifactName);
     await rm(artifactPath, { force: true });

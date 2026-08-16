@@ -1714,7 +1714,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
   // the caller needs no follow-up GET.
   const addSpatialLocationsRequestSchema = z
     .object({
-      expectedRevision: z.number().int().nonnegative(),
+      expectedRevision: z.number().int().nonnegative().safe(),
       locations: z
         .array(
           z

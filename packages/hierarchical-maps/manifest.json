@@ -5,8 +5,8 @@
     "minor": 4
   },
   "builtAgainst": {
-    "engineVersion": "2.4.2",
-    "engineCommit": "00986ff5bfdcd5705d70c7fca8d8ade86665b217"
+    "engineVersion": "2.4.3",
+    "engineCommit": "bb551bf921c006922edac7be06dbea8fe4c999b9"
   },
   "id": "hierarchical-maps",
   "name": "World Maps",
@@ -46,13 +46,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "da9cad1b33eceea60ec533f228d194ef0b1b1c0b9dc8433582771cb38fbe8f4e",
-      "bytes": 370508
+      "sha256": "e87e604c15aced0ff89f6e1286a8d16996264b875fe6b29f1196ac13a74821e5",
+      "bytes": 311375
     },
     {
       "path": "client.js",
-      "sha256": "cdd45aded43b8618069c87cd69fc000e5d06cd0ca99f1814856c8779c0fb6d6c",
-      "bytes": 986394
+      "sha256": "1d8a50fd79ebcfb18987bcdbf1e1409a303fdc01fa2e45694a29b1cc7031433f",
+      "bytes": 926112
     }
   ],
   "permissions": [
