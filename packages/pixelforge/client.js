@@ -1,5 +1,5 @@
-// Pixelforge 0.3.0 — Marinara Engine game-surface Experience (single-file client bundle)
-// Built from packages/pixelforge/src (11 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
+// Pixelforge 0.4.0 — Marinara Engine game-surface Experience (single-file client bundle)
+// Built from packages/pixelforge/src (12 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
 // ===== 00-prelude.js =====
@@ -105,6 +105,24 @@ PF.api = {
     });
     if (!res.ok) throw new Error(`PUT experience-state → ${res.status}`);
   },
+  /** One host-run structured generation call (engine #5135). Returns
+   *  {status, body} without throwing on the route's documented 4xx ladder —
+   *  those are failure-ladder signals, not errors. */
+  async postExperienceGeneration(chatId, body, signal) {
+    const res = await fetch(`/api/game/${encodeURIComponent(chatId)}/experience-generation`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-marinara-csrf": "1" },
+      body: JSON.stringify(body),
+      signal,
+    });
+    let payload = null;
+    try {
+      payload = await res.json();
+    } catch {
+      // non-JSON error body (proxy page, empty 5xx) — the ladder treats it as failure
+    }
+    return { status: res.status, body: payload };
+  },
   async getSpatial(chatId) {
     const res = await fetch(`/api/chats/${encodeURIComponent(chatId)}/spatial-context`, {
       headers: { Accept: "application/json" },
@@ -132,8 +150,13 @@ PF.fail = (elOrNull, err) => {
 // The deterministic bottom rung: a fixed 32-colour ramp and canvas-painted
 // tiles/sprites so the game is playable with zero assets and zero network.
 // Later tiers (authored atlas, AI bake) resolve above this and fall back here.
+//
+// THEMES (0.4.0): tile ids are SEMANTIC (grass/path/wall/roof/...), and a theme
+// re-skins them — a palette override plus, where a recolour isn't enough, a
+// painter override. The same zone grammar renders a cozy village or a sci-fi
+// colony; the semantic layer is what the world compiler targets.
 PF.art = (() => {
-  const PAL = {
+  const BASE_PAL = {
     grass1: "#3e7a44", grass2: "#356b3c", grass3: "#4b8a4f",
     leaf: "#2c5a33", leafHi: "#5aa25e", trunk: "#5b4432",
     path1: "#b39764", path2: "#a3875a", pathFleck: "#c7ab74",
@@ -149,19 +172,30 @@ PF.art = (() => {
     ink: "#22261f", white: "#f3efe2",
   };
 
+  // Painters read PAL by reference, so themes swap colours by mutating this one
+  // object in place (setTheme) — every painter and the renderer's tint code keep
+  // working untouched. Tile caches are keyed by theme, so swaps never bleed.
+  const PAL = { ...BASE_PAL };
+
   const T = PF.TILE;
 
-  /** One 16×16 tile canvas: Tier-1 (authored atlas) ?? Tier-0 (procedural). */
+  /** One 16×16 tile canvas: Tier-1 (authored atlas) ?? Tier-0 (procedural).
+   *  Tier-1 only serves the theme it was authored for; other themes stay
+   *  procedural until themed atlases ship. */
   const tileCache = new Map();
   function tile(id) {
-    const authored = PF.assets?.tileCanvas(id);
-    if (authored) return authored;
-    let c = tileCache.get(id);
+    if (activeTheme === PF.assets?.atlasTheme) {
+      const authored = PF.assets?.tileCanvas(id);
+      if (authored) return authored;
+    }
+    const cacheKey = `${activeTheme}:${id}`;
+    let c = tileCache.get(cacheKey);
     if (c) return c;
     c = PF.offscreen(T, T);
     const g = c.getContext("2d");
-    (PAINTERS[id] || PAINTERS.grass)(g, PF.rng(PF.hashStr(`tile:${id}`)));
-    tileCache.set(id, c);
+    const themePainters = THEMES[activeTheme]?.painters;
+    ((themePainters && themePainters[id]) || PAINTERS[id] || PAINTERS.grass)(g, PF.rng(PF.hashStr(`tile:${activeTheme}:${id}`)));
+    tileCache.set(cacheKey, c);
     return c;
   }
 
@@ -290,6 +324,137 @@ PF.art = (() => {
     },
   };
 
+  // ── Themes ──────────────────────────────────────────────────────────────────
+  // A theme = palette overrides + painter overrides where a recolour can't carry
+  // the meaning. Semantic ids keep their WORLD role (trunk blocks, canopy is
+  // overhead, water is liquid/impassable); only the visual story changes.
+  const THEMES = {
+    "cozy-village": {
+      label: "Cozy village",
+      palette: {},
+      painters: {},
+    },
+    "sci-fi-colony": {
+      label: "Sci-fi colony",
+      palette: {
+        // regolith ground, steel decking, hull walls, glass domes, coolant water
+        grass1: "#5a4a44", grass2: "#4e403b", grass3: "#6a5850",
+        leaf: "#3e6d74", leafHi: "#7fd4d4", trunk: "#8e99a6",
+        path1: "#7d8894", path2: "#6b7580", pathFleck: "#9aa5b1",
+        dirt: "#4a3f3a", crop: "#59c08a", cropRipe: "#b6e86a",
+        water1: "#1f8a8a", water2: "#2aa3a0", waterHi: "#8ff0e8",
+        wall: "#8b95a3", wallDark: "#5d6672", plaster: "#aeb7c2", beam: "#3f4854",
+        roof1: "#4a6a8a", roof2: "#3d5871", roofHi: "#7fb0d4",
+        floor1: "#59616c", floor2: "#4d545e", rug: "#2a6a8a",
+        stone: "#767e88", stoneDark: "#5a626c",
+        fence: "#5d6672", door: "#3f4854", doorKnob: "#8ff0e8",
+        well: "#4d545e", counter: "#3f4854",
+        night: "#101726", windowGlow: "#8fd4ff",
+      },
+      painters: {
+        // hab wall: smooth panel with a seam and rivets instead of timber framing
+        wall(g) {
+          px(g, 0, 0, T, T, PAL.plaster);
+          px(g, 0, 0, T, 1, PAL.beam);
+          px(g, 0, T - 1, T, 1, PAL.beam);
+          px(g, 7, 1, 1, T - 2, PAL.wallDark);
+          px(g, 2, 2, 1, 1, PAL.wallDark);
+          px(g, 13, 2, 1, 1, PAL.wallDark);
+          px(g, 2, 13, 1, 1, PAL.wallDark);
+          px(g, 13, 13, 1, 1, PAL.wallDark);
+        },
+        // porthole window
+        window(g) {
+          px(g, 0, 0, T, T, PAL.plaster);
+          px(g, 0, 0, T, 1, PAL.beam);
+          px(g, 0, T - 1, T, 1, PAL.beam);
+          px(g, 4, 3, 8, 10, PAL.beam);
+          px(g, 5, 4, 6, 8, PAL.water2);
+          px(g, 6, 5, 2, 2, PAL.waterHi);
+        },
+        // pressure door with a light strip instead of a knob
+        door(g) {
+          px(g, 0, 0, T, T, PAL.wallDark);
+          px(g, 2, 1, 12, 15, PAL.door);
+          px(g, 3, 2, 10, 13, PAL.beam);
+          px(g, 7, 2, 2, 13, PAL.wallDark);
+          px(g, 4, 7, 8, 2, PAL.doorKnob);
+        },
+        // solar-panel roof: cell grid with a bright specular row
+        roof(g, rnd) {
+          px(g, 0, 0, T, T, PAL.roof1);
+          for (let r = 0; r < T; r += 4) px(g, 0, r, T, 1, PAL.roof2);
+          for (let cx = 0; cx < T; cx += 4) px(g, cx, 0, 1, T, PAL.roof2);
+          dither(g, rnd, PAL.roofHi, 3);
+        },
+        // comms mast: the "tree" of the colony — steel pylon on regolith
+        trunk(g) {
+          px(g, 0, 0, T, T, PAL.grass1);
+          px(g, 7, 2, 2, 14, PAL.trunk);
+          px(g, 5, 4, 6, 1, PAL.trunk);
+          px(g, 6, 12, 4, 2, PAL.wallDark);
+        },
+        // antenna array / dome cap as the overhead layer
+        canopy(g, rnd) {
+          g.clearRect(0, 0, T, T);
+          px(g, 5, 0, 6, 2, PAL.leafHi);
+          px(g, 7, 2, 2, 3, PAL.trunk);
+          px(g, 3, 4, 10, 2, PAL.trunk);
+          px(g, 2, 5, 2, 1, PAL.leafHi);
+          px(g, 12, 5, 2, 1, PAL.leafHi);
+          dither(g, rnd, PAL.leaf, 3);
+        },
+        // hydroponics tray instead of a tilled crop row
+        crop(g, rnd) {
+          px(g, 0, 0, T, T, PAL.floor2);
+          px(g, 1, 2, T - 2, 5, PAL.beam);
+          px(g, 1, 9, T - 2, 5, PAL.beam);
+          px(g, 2, 3, T - 4, 3, PAL.dirt);
+          px(g, 2, 10, T - 4, 3, PAL.dirt);
+          dither(g, rnd, PAL.crop, 9);
+          dither(g, rnd, PAL.cropRipe, 3);
+        },
+        // atmosphere recycler where the village well stood
+        well(g) {
+          px(g, 0, 0, T, T, PAL.grass1);
+          px(g, 3, 3, 10, 11, PAL.well);
+          px(g, 4, 4, 8, 2, PAL.leafHi);
+          px(g, 4, 7, 8, 1, PAL.wallDark);
+          px(g, 4, 9, 8, 1, PAL.wallDark);
+          px(g, 4, 11, 8, 1, PAL.wallDark);
+        },
+        // guard rail instead of a wooden fence
+        fence(g) {
+          px(g, 0, 0, T, T, PAL.grass1);
+          px(g, 2, 4, 2, 10, PAL.fence);
+          px(g, 12, 4, 2, 10, PAL.fence);
+          px(g, 0, 6, T, 1, PAL.trunk);
+          px(g, 0, 9, T, 1, PAL.trunk);
+        },
+      },
+    },
+  };
+
+  let activeTheme = "cozy-village";
+
+  /** Swap the active theme: mutate PAL in place (painters and the renderer read
+   *  it by reference) and drop this module's procedural caches. Callers that
+   *  composite tiles (the zone renderer) must clear their own caches too —
+   *  world builds already do. Unknown ids resolve to the fixed default, never
+   *  whatever theme happens to be active (order-dependent worlds otherwise). */
+  function setTheme(id) {
+    const theme = THEMES[typeof id === "string" ? id : ""] ? id : "cozy-village";
+    if (theme === activeTheme) return activeTheme;
+    activeTheme = theme;
+    for (const key of Object.keys(PAL)) delete PAL[key];
+    Object.assign(PAL, BASE_PAL, THEMES[activeTheme].palette);
+    tileCache.clear();
+    actorCache.clear();
+    return activeTheme;
+  }
+
+  const themeIds = () => Object.keys(THEMES);
+
   // ── Actor sprites: 12×16 humanoid, 4 facings × 3 frames (idle, stepA, stepB)
   const actorCache = new Map();
   function actor(hue) {
@@ -347,7 +512,7 @@ PF.art = (() => {
     ctx.drawImage(strip.frames[facing][frame], dx, dy);
   }
 
-  return { PAL, tile, actor, drawActor };
+  return { PAL, tile, actor, drawActor, setTheme, themeIds, get theme() { return activeTheme; } };
 })();
 
 // ===== 15-assets.js =====
@@ -361,6 +526,9 @@ PF.art = (() => {
 // with ETags — never immutable).
 PF.assets = {
   status: "idle", // idle | loading | ready | failed
+  /** The theme the shipped atlas was authored for: Tier-1 art only serves this
+   *  theme; every other theme renders procedurally until themed atlases ship. */
+  atlasTheme: "cozy-village",
   atlas: null, // {tileSize, columns, tiles: {id: index}}
   sprites: null, // {frameWidth, frameHeight, frames, rows, actors: {name: path}}
   _atlasImg: null,
@@ -378,37 +546,89 @@ PF.assets = {
   async _image(url) {
     const img = new Image();
     img.src = url;
-    await img.decode();
+    // Never await decode(): Chromium defers decode work indefinitely while the
+    // page is hidden (background tab, restored session), which wedged the
+    // loader in "loading" forever. The load event fires regardless; the actual
+    // pixel decode then happens lazily at first drawImage.
+    await new Promise((resolve, reject) => {
+      if (img.complete && img.naturalWidth) return resolve();
+      img.onload = resolve;
+      img.onerror = () => reject(new Error(`image failed to load: ${url}`));
+    });
     return img;
   },
 
+  /** The atlas sheet for a theme: the cozy sheet keeps its legacy filename. */
+  _atlasPath(theme) {
+    return theme === "cozy-village" ? "tiles.png" : `tiles-${encodeURIComponent(theme)}.png`;
+  },
+
   async load(core) {
-    if (this.status === "loading" || this.status === "ready") return;
-    // packageId arrives via capabilityProps on engines with #5092; without it
-    // (older engine) Tier-0 is the deliberate resting state, not an error.
+    const theme = PF.art?.theme ?? "cozy-village";
+    if (this.status === "loading") {
+      // A theme change landing mid-load must not be dropped (the generation
+      // rebuild can call load() while the boot load is still in flight):
+      // remember the newest request and chase it once this load settles.
+      this._queuedTheme = theme;
+      return;
+    }
+    // The REQUESTED theme is tracked separately from the RESOLVED one: when a
+    // theme has no shipped atlas the fallback sheet loads, and without this
+    // distinction every props delivery would re-run a 404-fetch + full zone
+    // recomposite storm (review finding).
+    if (this.status === "ready" && this._requestedTheme === theme) return;
+    // No packageId (pre-#5092 engine) is the one terminal state; network
+    // failures retry, rate-limited, so a transient outage no longer disables
+    // Tier-1 for the whole session (0.3.0 regression fix).
+    if (this._noPackage) return;
+    if (this.status === "failed" && Date.now() - (this._failedAt ?? 0) < 30_000) return;
     if (typeof core.host?.packageId !== "string") {
+      this._noPackage = true;
       this.status = "failed";
       return;
     }
+    this._requestedTheme = theme;
+    const firstLoad = this.status !== "ready";
     this.status = "loading";
     try {
-      const [atlas, sprites] = await Promise.all([
-        fetch(this._url(core, "atlas.json")).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`atlas ${r.status}`)))),
-        fetch(this._url(core, "sprites.json")).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`sprites ${r.status}`)))),
-      ]);
-      const [atlasImg, ...sheets] = await Promise.all([
-        this._image(this._url(core, "tiles.png")),
-        ...Object.entries(sprites.actors ?? {}).map(async ([name, path]) => [name, await this._image(this._url(core, path))]),
-      ]);
-      this.atlas = atlas;
-      this.sprites = sprites;
+      if (firstLoad) {
+        const [atlas, sprites] = await Promise.all([
+          fetch(this._url(core, "atlas.json")).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`atlas ${r.status}`)))),
+          fetch(this._url(core, "sprites.json")).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`sprites ${r.status}`)))),
+        ]);
+        const sheets = await Promise.all(
+          Object.entries(sprites.actors ?? {}).map(async ([name, path]) => [name, await this._image(this._url(core, path))]),
+        );
+        this.atlas = atlas;
+        this.sprites = sprites;
+        for (const [name, img] of sheets) this._sheets.set(name, img);
+      }
+      // The themed atlas sheet, falling back to the cozy sheet when a theme has
+      // no atlas yet (older installed version) — the tile() gate then simply
+      // keeps that theme procedural, which is the deliberate resting state.
+      let atlasTheme = theme;
+      let atlasImg;
+      try {
+        atlasImg = await this._image(this._url(core, this._atlasPath(theme)));
+      } catch {
+        atlasTheme = "cozy-village";
+        atlasImg = await this._image(this._url(core, "tiles.png"));
+      }
       this._atlasImg = atlasImg;
-      for (const [name, img] of sheets) this._sheets.set(name, img);
+      this.atlasTheme = atlasTheme;
+      this._tileCanvases.clear();
       this.status = "ready";
-      // Zone composites were painted with Tier-0 tiles — rebuild them.
-      if (core.render && core.sim) for (const zoneId of Object.keys(core.sim.world.zones)) core.render.invalidateZone(zoneId);
+      // Zone composites were painted with the previous tier/theme — rebuild.
+      core.render?.clearZones?.();
+      // Chase a theme change that was queued while this load was in flight.
+      const queued = this._queuedTheme;
+      this._queuedTheme = null;
+      if (queued && queued !== theme) void this.load(core);
     } catch (err) {
       this.status = "failed";
+      this._failedAt = Date.now();
+      this._requestedTheme = null;
+      this._queuedTheme = null; // the 30s retry re-reads the live theme anyway
       console.warn("[pixelforge] Tier-1 assets unavailable, staying on procedural art", err);
     }
   },
@@ -450,6 +670,682 @@ PF.assets = {
     return true;
   },
 };
+
+// ===== 18-brief.js =====
+// ── The World Brief (schema v1) ───────────────────────────────────────────────
+// The contract between the one LLM call and the deterministic compiler — see
+// docs/brief-schema.md (sealed spec). The LLM decides WHAT exists; the compiler
+// decides where every tile goes. validate() runs the repair passes ONCE; the
+// sealed brief (with compiler-assigned _ids and a _repairs log) is stored in the
+// wizard config and never re-repaired. All entropy for repairs derives from
+// hash(seed, fieldPath) — one source, deterministic forever.
+PF.brief = (() => {
+  const VERSION = 1;
+
+  // ── Vocabularies (the form does the teaching) ───────────────────────────────
+  const SCALES = {
+    outpost: { w: 28, h: 20, buildings: 4 },
+    hamlet: { w: 34, h: 24, buildings: 6 },
+    village: { w: 44, h: 30, buildings: 8 },
+    town: { w: 56, h: 38, buildings: 12 },
+  };
+  const SURROUNDS = ["woods", "fields", "rocky", "water", "barren"];
+  const PROSPERITY = ["struggling", "modest", "thriving"];
+  const PLACE_KINDS = ["gathering", "workshop", "hall", "dwelling", "wilds"];
+  const CAST_KINDS = [
+    "leader", "host", "grower", "maker", "merchant", "guard",
+    "healer", "scholar", "elder", "child", "wanderer", "folk",
+  ];
+  // Nine buckets cannot cluster; sprite legibility is an invariant, not a repair.
+  const TINTS = {
+    red: 4, orange: 28, amber: 48, green: 110, teal: 168,
+    blue: 214, violet: 268, rose: 330, grey: 210,
+  };
+  const FEATURE_TAGS = [
+    "water-feature", "crop-plots", "market-stalls", "workyard", "landmark-stone",
+    "shrine", "water-crossing", "dense-growth", "ruin", "lookout",
+  ];
+  // Which tags make sense per zone kind (invalid-for-zone drops at compile, not parse).
+  const SETTLEMENT_TAGS = new Set(FEATURE_TAGS.filter((t) => t !== "water-crossing" && t !== "dense-growth"));
+
+  const CAPS = { features: 4, places: 4, wilds: 2, hall: 1, gathering: 1, castMin: 4, castMax: 10, household: 6 };
+  const BRIEF_BYTE_BUDGET = 8_192;
+
+  // ── Deterministic entropy: ONE source ───────────────────────────────────────
+  const det = (seed, fieldPath) => PF.rng(PF.hashStr(`${seed >>> 0}|${fieldPath}`));
+  const pick = (seed, fieldPath, list) => list[(det(seed, fieldPath)() * list.length) | 0];
+
+  // ── Text hygiene: sanitize + grapheme-aware caps, Unicode-aware folding ─────
+  function sanitize(value) {
+    if (typeof value !== "string") return "";
+    let text = value.replace(/[\x00-\x1f\x7f]/g, " ");
+    // One-pass tag stripping can reassemble a tag from its own fragments
+    // ("<scr<b>ipt>" → "<script>"), so strip to a fixpoint FIRST — before the
+    // markdown pass eats the ">" characters the tag regex needs to match…
+    let previous;
+    do {
+      previous = text;
+      text = text.replace(/<[^>]*>/g, "");
+    } while (text !== previous);
+    // …then drop the markdown set and ANY surviving angle bracket. Brief prose
+    // has no legitimate use for them, and zero brackets in the output means no
+    // tag fragment can ever survive (CodeQL js/incomplete-multi-character-sanitization).
+    return text
+      .replace(/[`*_~#>|<]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  const segmenter = typeof Intl !== "undefined" && Intl.Segmenter ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : null;
+  function graphemes(value) {
+    if (segmenter) return [...segmenter.segment(value)].map((s) => s.segment);
+    return [...value];
+  }
+  function capText(value, max, { wholeSentence = false } = {}) {
+    const clean = sanitize(value);
+    const parts = graphemes(clean);
+    if (parts.length <= max) return clean;
+    if (wholeSentence) return ""; // a clause-losing cut of a hook is worse than none
+    const cut = parts.slice(0, max).join("");
+    const lastSpace = cut.lastIndexOf(" ");
+    return (lastSpace > max * 0.5 ? cut.slice(0, lastSpace) : cut).trim();
+  }
+  const fold = (value) =>
+    sanitize(value)
+      .normalize("NFKD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+
+  // ── Enum folding ────────────────────────────────────────────────────────────
+  function foldEnum(value, list, fallback) {
+    if (typeof value !== "string") return fallback;
+    const folded = fold(value);
+    return list.find((entry) => entry === folded) ?? fallback;
+  }
+  /** scale may arrive as a POPULATION NUMBER (the most-observed weak-model slip). */
+  function foldScale(value, repairs) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      const bucket = value < 8 ? "outpost" : value < 20 ? "hamlet" : value < 60 ? "village" : "town";
+      repairs.push(`scale: bucketed number ${value} -> ${bucket}`);
+      return bucket;
+    }
+    return foldEnum(value, Object.keys(SCALES), "village");
+  }
+
+  /** Arrays may arrive as objects keyed by id — a common shape without provider
+   *  json_schema. Object.values() BEFORE the array check saves the whole list. */
+  function asArray(value) {
+    if (Array.isArray(value)) return value;
+    if (value && typeof value === "object") return Object.values(value);
+    return [];
+  }
+
+  // ── validate(): the repair passes; runs ONCE, seals the brief ───────────────
+  function validate(raw, { theme: rawTheme, seed }) {
+    const repairs = [];
+    // Theme whitelist: lexicon lookups use bracket access, so a hostile theme
+    // string (a prototype key) must never reach them. The wizard's theme is
+    // still authoritative — an unknown one just resolves to the default.
+    const theme = Object.prototype.hasOwnProperty.call(DEFAULT_BRIEFS, rawTheme) ? rawTheme : "cozy-village";
+    const src = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+    if (src !== raw) repairs.push("transport: non-object root replaced");
+
+    // Pass 2 — scalars.
+    const scale = foldScale(src.scale, repairs);
+    const brief = {
+      briefVersion: VERSION,
+      theme, // ALWAYS the wizard's theme; the model's echo is discarded unconditionally.
+      scale,
+      surround: foldEnum(src.surround, SURROUNDS, pick(seed, "surround", SURROUNDS)),
+      prosperity: foldEnum(src.prosperity, PROSPERITY, "modest"),
+      name: capText(src.name, 24) || pick(seed, "name", DEFAULT_NAMES[theme] || DEFAULT_NAMES["cozy-village"]),
+      flavor: capText(src.flavor, 140),
+      // A clause-losing cut of the hook is worse than none (§4.2): over-length
+      // degrades to empty rather than shipping half a sentence.
+      situation: capText(src.situation, 240, { wholeSentence: true }),
+      features: [],
+      places: [],
+      cast: [],
+      backgroundPopulation: 0,
+    };
+    const population = Number(src.backgroundPopulation);
+    brief.backgroundPopulation = Number.isFinite(population) ? Math.max(0, Math.min(500, Math.round(population))) : 0;
+
+    // Pass 3 — zones. Item-level drop: an unknown tag drops the WHOLE feature.
+    // The cap applies to KEPT items (a leading run of junk must not discard
+    // the valid features behind it — the places loop's semantics).
+    for (const item of asArray(src.features)) {
+      if (brief.features.length >= CAPS.features) break;
+      const tag = foldEnum(item?.tag, FEATURE_TAGS, null);
+      if (!tag || !SETTLEMENT_TAGS.has(tag)) {
+        repairs.push(`features: dropped item with tag ${JSON.stringify(item?.tag ?? null)}`);
+        continue;
+      }
+      brief.features.push({ tag, name: capText(item?.name, 24) || FEATURE_LABELS[tag] });
+    }
+    // Diversity floor (§4.6): no tag may occupy more than two of the kept
+    // slots; the surplus re-rolls from the remaining settlement vocabulary.
+    {
+      const byTag = new Map();
+      for (const feature of brief.features) byTag.set(feature.tag, (byTag.get(feature.tag) ?? 0) + 1);
+      let rerollIndex = 0;
+      for (const feature of brief.features) {
+        if ((byTag.get(feature.tag) ?? 0) <= 2) continue;
+        const alternatives = [...SETTLEMENT_TAGS].filter((tag) => (byTag.get(tag) ?? 0) === 0);
+        if (alternatives.length === 0) break;
+        byTag.set(feature.tag, byTag.get(feature.tag) - 1);
+        const replacement = pick(seed, `feature-dedupe-${rerollIndex++}`, alternatives);
+        repairs.push(`features: tag ${feature.tag} over-represented -> ${replacement}`);
+        feature.tag = replacement;
+        feature.name = FEATURE_LABELS[replacement];
+        byTag.set(replacement, 1);
+      }
+    }
+
+    const usedNames = new Set(); // folded names, for label dedupe
+    const dedupeName = (name, fieldPath) => {
+      // The result must ITSELF be unique: a suffix can collide with a literal
+      // later name, and a duplicate display name collapses two ordinal ids into
+      // one at compile — the misbinding §1 forbids. Loop the suffixes, then
+      // fall to ordinals, and always register the final label.
+      let candidate = name;
+      let attempt = 0;
+      while (usedNames.has(fold(candidate))) {
+        const suffix = attempt < DEDUPE_SUFFIXES.length
+          ? pick(seed, `${fieldPath}-dedupe-${attempt}`, DEDUPE_SUFFIXES)
+          : String(attempt - DEDUPE_SUFFIXES.length + 2);
+        candidate = `${name} ${suffix}`;
+        attempt++;
+      }
+      if (candidate !== name) repairs.push(`${fieldPath}: duplicate name ${JSON.stringify(name)} -> ${JSON.stringify(candidate)}`);
+      usedNames.add(fold(candidate));
+      return candidate;
+    };
+    usedNames.add(fold(brief.name));
+
+    let wildsCount = 0;
+    let hallCount = 0;
+    let gatheringCount = 0;
+    for (const item of asArray(src.places)) {
+      if (brief.places.length >= CAPS.places) break;
+      const kind = foldEnum(item?.kind, PLACE_KINDS, null);
+      if (!kind) {
+        repairs.push(`places: dropped item with kind ${JSON.stringify(item?.kind ?? null)}`);
+        continue;
+      }
+      if (kind === "wilds" && wildsCount >= CAPS.wilds) continue;
+      if (kind === "hall" && hallCount >= CAPS.hall) continue;
+      if (kind === "gathering" && gatheringCount >= CAPS.gathering) continue;
+      if (kind === "wilds") wildsCount++;
+      if (kind === "hall") hallCount++;
+      if (kind === "gathering") gatheringCount++;
+      const name = dedupeName(capText(item?.name, 24) || PLACE_LABELS[kind], `places[${brief.places.length}]`);
+      const place = { kind, name, flavor: capText(item?.flavor, 120) };
+      if (kind === "wilds") {
+        place.features = [];
+        // Same kept-items rule as the settlement loop: the cap counts what we
+        // KEEP, so a leading run of junk cannot discard valid features behind it.
+        for (const feature of asArray(item?.features)) {
+          if (place.features.length >= 3) break;
+          const tag = foldEnum(feature?.tag, FEATURE_TAGS, null);
+          if (!tag) continue;
+          place.features.push({ tag, name: capText(feature?.name, 24) || FEATURE_LABELS[tag] });
+        }
+      }
+      brief.places.push(place);
+    }
+
+    // §4.3: a host with no gathering place synthesizes AT MOST ONE interior
+    // named from the host — the player must be able to walk into the inn.
+    const rawCast = asArray(src.cast);
+    const hasGathering = brief.places.some((p) => p.kind === "gathering");
+    if (!hasGathering && brief.places.length < CAPS.places) {
+      const host = rawCast.find((item) => foldEnum(item?.kind ?? item?.role, CAST_KINDS, null) === "host");
+      const hostName = host ? capText(host.name, 20) : "";
+      if (hostName) {
+        brief.places.push({
+          kind: "gathering",
+          name: dedupeName(`${hostName}'s`, "places-host"),
+          flavor: "",
+        });
+        repairs.push(`places: synthesized a gathering interior for host ${hostName}`);
+      }
+    }
+
+    // Pass 4 — cast. Over the cap, the leader survives (§4.4): hoist the first
+    // leader to the front before truncating by original order.
+    const zoneNames = [brief.name, ...brief.places.map((p) => p.name)];
+    const zoneFolds = new Map(zoneNames.map((n) => [fold(n), n]));
+    const leaderIndex = rawCast.findIndex((item) => foldEnum(item?.kind ?? item?.role, CAST_KINDS, null) === "leader");
+    if (leaderIndex >= CAPS.castMax) {
+      rawCast.unshift(rawCast.splice(leaderIndex, 1)[0]);
+      repairs.push("cast: leader hoisted ahead of the cap");
+    }
+    for (const item of rawCast) {
+      if (brief.cast.length >= CAPS.castMax) {
+        repairs.push(`cast: over ${CAPS.castMax}, dropped the rest`);
+        break;
+      }
+      const name = capText(item?.name, 24);
+      if (!name) continue;
+      const kind = foldEnum(item?.kind ?? item?.role, CAST_KINDS, "folk");
+      const homeRaw = capText(item?.home, 24);
+      // Resolution: exact -> folded -> root. NO substring matching (a guessed
+      // binding is forever).
+      let home = zoneNames.includes(homeRaw) ? homeRaw : (zoneFolds.get(fold(homeRaw)) ?? null);
+      if (!home) {
+        if (homeRaw) repairs.push(`cast[${brief.cast.length}].home: unresolved ${JSON.stringify(homeRaw)} -> root`);
+        home = brief.name;
+      }
+      const householdNumber = Number(item?.household);
+      brief.cast.push({
+        name: dedupeName(name, `cast[${brief.cast.length}]`),
+        role: capText(item?.role, 24) || KIND_LABELS[kind],
+        kind,
+        tint: foldEnum(item?.tint, Object.keys(TINTS), pick(seed, `cast-tint-${brief.cast.length}`, Object.keys(TINTS))),
+        home,
+        household: Number.isFinite(householdNumber) ? Math.max(1, Math.min(CAPS.household, Math.round(householdNumber))) : 1,
+        persona: capText(item?.persona ?? item?.flavor, 100),
+      });
+    }
+
+    // Pass 5 for the schema layer is compile-time (building arithmetic lives in
+    // the compiler; see docs/brief-schema.md §4.5). Pass 6 — quality floors for
+    // valid-but-degenerate briefs. Every top-up derives from the seed.
+    if (brief.cast.length < CAPS.castMin) {
+      const roster = STOCK_CAST[theme] || STOCK_CAST["cozy-village"];
+      const offset = (det(seed, "cast-topup")() * roster.length) | 0;
+      while (brief.cast.length < CAPS.castMin) {
+        const stock = roster[(offset + brief.cast.length) % roster.length];
+        brief.cast.push({
+          ...stock,
+          name: dedupeName(stock.name, `cast-topup[${brief.cast.length}]`),
+          home: brief.name,
+          household: brief.cast.length + 1,
+        });
+        repairs.push(`cast: floor top-up ${stock.name}`);
+      }
+    }
+    const households = new Set(brief.cast.map((c) => c.household));
+    if (households.size < 2 && brief.cast.length >= 2) {
+      // All-in-one-roof is the classic weak-model shape: split by seed.
+      const splitAt = 1 + ((det(seed, "household-split")() * (brief.cast.length - 1)) | 0);
+      for (let i = splitAt; i < brief.cast.length; i++) brief.cast[i].household = 2;
+      repairs.push("cast: single household split into two");
+    }
+    // Oversized households split (>6 members share a number).
+    const byHousehold = new Map();
+    for (const member of brief.cast) {
+      const list = byHousehold.get(member.household) ?? [];
+      list.push(member);
+      byHousehold.set(member.household, list);
+    }
+    for (const [id, members] of byHousehold) {
+      if (members.length <= CAPS.household) continue;
+      // Seed-derived target (§3's single-entropy rule): scan from a seeded
+      // offset for the first free household number.
+      let next = 1 + ((det(seed, `household-split-${id}`)() * CAPS.household) | 0);
+      while (byHousehold.has(next)) next = (next % (CAPS.household * 2)) + 1;
+      for (const member of members.slice(CAPS.household)) member.household = next;
+      byHousehold.set(next, members.slice(CAPS.household));
+      repairs.push(`cast: household ${id} split (over ${CAPS.household} members)`);
+    }
+    const tints = new Set(brief.cast.map((c) => c.tint));
+    if (tints.size < Math.min(3, brief.cast.length)) {
+      const keys = Object.keys(TINTS);
+      const start = (det(seed, "tint-rotate")() * keys.length) | 0;
+      brief.cast.forEach((member, index) => {
+        member.tint = keys[(start + index) % keys.length];
+      });
+      repairs.push("cast: tints rotated for legibility");
+    }
+    if (brief.places.length === 0) {
+      brief.places.push({
+        kind: "wilds",
+        name: dedupeName(pick(seed, "wilds-topup", WILDS_NAMES[theme] || WILDS_NAMES["cozy-village"]), "places-topup"),
+        flavor: "",
+        features: [{ tag: "landmark-stone", name: FEATURE_LABELS["landmark-stone"] }],
+      });
+      repairs.push("places: floor top-up wilds zone");
+    }
+
+    // Identity (§2): opaque ordinal ids assigned once, stored in the sealed brief.
+    const ids = { zones: {}, cast: {}, features: {} };
+    ids.zones["z1"] = brief.name;
+    brief.places.forEach((place, index) => {
+      ids.zones[`z${index + 2}`] = place.name;
+    });
+    brief.cast.forEach((member, index) => {
+      ids.cast[`n${index + 1}`] = member.name;
+    });
+    let featureOrdinal = 1;
+    for (const feature of brief.features) ids.features[`f${featureOrdinal++}`] = feature.name;
+    for (const place of brief.places) for (const feature of place.features ?? []) ids.features[`f${featureOrdinal++}`] = feature.name;
+    brief._ids = ids;
+
+    // Global byte budget: truncate prose in reverse-leverage order. Measured
+    // in UTF-8 BYTES — String.length counts UTF-16 code units, which
+    // undercounts CJK threefold (emoji fourfold vs two) and would defeat the
+    // ≤8KB contract for exactly the non-Latin briefs §2 promises to support.
+    const encoder = new TextEncoder();
+    const overBudget = () => encoder.encode(JSON.stringify(brief)).length > BRIEF_BYTE_BUDGET;
+    if (overBudget()) for (const member of brief.cast) member.persona = "";
+    if (overBudget()) for (const place of brief.places) place.flavor = "";
+    if (overBudget()) brief.flavor = "";
+    if (overBudget()) repairs.push("budget: still over after prose truncation");
+
+    brief._repairs = repairs;
+    return brief;
+  }
+
+  // ── defaults(): the themed fallback brief (skip / failure — never a gate) ───
+  function defaults(theme, seed) {
+    return validate(DEFAULT_BRIEFS[theme] || DEFAULT_BRIEFS["cozy-village"], { theme, seed });
+  }
+
+  /** Truncation salvage (§4.1/§5): strip fences, take the outermost balanced
+   *  JSON object span, parse. Returns the parsed object or null — the caller's
+   *  validate() then repairs and floors whatever survived the cut. */
+  function salvageText(raw) {
+    if (typeof raw !== "string" || !raw.trim()) return null;
+    let text = raw.replace(/```[a-z]*\n?/gi, "").trim();
+    const start = text.indexOf("{");
+    if (start < 0) return null;
+    let depth = 0;
+    let end = -1;
+    let inString = false;
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+      if (inString) {
+        if (ch === "\\") i++;
+        else if (ch === '"') inString = false;
+        continue;
+      }
+      if (ch === '"') inString = true;
+      else if (ch === "{") depth++;
+      else if (ch === "}") {
+        depth--;
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+      }
+    }
+    // A cut-off document has no balanced end: close whatever is open after
+    // trimming a trailing partial element (back to the last , { [ or complete
+    // value) so complete array elements survive the amputation.
+    let candidate;
+    if (end >= 0) {
+      candidate = text.slice(start, end + 1);
+    } else {
+      let body = text.slice(start).replace(/,[^,{}\[\]]*$/, "");
+      const opens = [];
+      inString = false;
+      for (let i = 0; i < body.length; i++) {
+        const ch = body[i];
+        if (inString) {
+          if (ch === "\\") i++;
+          else if (ch === '"') inString = false;
+          continue;
+        }
+        if (ch === '"') inString = true;
+        else if (ch === "{" || ch === "[") opens.push(ch);
+        else if (ch === "}" || ch === "]") opens.pop();
+      }
+      if (inString) body += '"';
+      candidate = body + opens.reverse().map((ch) => (ch === "{" ? "}" : "]")).join("");
+    }
+    try {
+      const parsed = JSON.parse(candidate);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** The route caps userContent at 8,000 chars and 400s past it — a hard
+   *  contract, so an unbounded wizard Setting must be clamped here or the
+   *  most detailed settings would silently forfeit generation (review). */
+  const capPreferences = (text) =>
+    typeof text === "string" && text.length > 7_800 ? `${text.slice(0, 7_800)}…` : text;
+
+  /** The one #5135 generation call with the §5 failure ladder (amended):
+   *  bounded wait; one wait-out on the server's documented-transient 409
+   *  chat_busy; one plain re-roll on truncation (the route's maxTokens is
+   *  min()-only — "never a raise" — so a numeric override could only shrink
+   *  the budget); salvage of the LONGEST truncated raw seen across attempts.
+   *  Returns a SEALED brief only for outcomes worth sealing: success, salvage,
+   *  or a deterministic/paid failure (400 contract, 422 provider/parse) →
+   *  themed defaults. Transient outcomes — 404 route-absent, 409, 429, 5xx,
+   *  network error, budget timeout — return NULL so the caller leaves the
+   *  chat unsealed and the next boot simply tries again. */
+  async function generate(
+    chatId,
+    { theme, seed, preferences, onProgress, budgetMs = 90_000, busyWaitMs = Math.min(15_000, budgetMs / 6) },
+  ) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), budgetMs);
+    try {
+      const base = { instructions: guidance(theme), userContent: capPreferences(preferences), schema: schema() };
+      let response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
+      if (response.status === 409) {
+        // chat_busy ships Retry-After: 15 — wait it out once inside the budget
+        // (busyWaitMs is a timer seam so the harness never sleeps for real).
+        await new Promise((resolve) => setTimeout(resolve, busyWaitMs));
+        if (!controller.signal.aborted) response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
+      }
+      const rawOf = (r) => (r.status === 422 && r.body?.truncated && typeof r.body.raw === "string" ? r.body.raw : null);
+      let bestRaw = rawOf(response);
+      if (response.status === 422 && response.body?.truncated) {
+        onProgress?.("Generating your world… (one more try)");
+        response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
+        const retryRaw = rawOf(response);
+        if (retryRaw && (!bestRaw || retryRaw.length > bestRaw.length)) bestRaw = retryRaw;
+      }
+      if (response.status === 200 && response.body?.ok && response.body.data && typeof response.body.data === "object") {
+        return validate(response.body.data, { theme, seed });
+      }
+      if (bestRaw) {
+        const salvaged = salvageText(bestRaw);
+        if (salvaged) {
+          const sealed = validate(salvaged, { theme, seed });
+          sealed._repairs.push("transport: salvaged from a truncated response");
+          return sealed;
+        }
+      }
+      if (response.status === 404 || response.status === 409 || response.status === 429 || response.status >= 500) {
+        console.warn("[pixelforge] world generation unavailable (transient); retrying next visit", response.status);
+        return null;
+      }
+      console.warn(
+        "[pixelforge] world generation failed; sealing the themed default",
+        response.status,
+        response.body?.error ?? null,
+      );
+    } catch (err) {
+      // Network trouble and the budget timeout are both transient — leave the
+      // chat unsealed rather than freezing the default world in forever.
+      if (!controller.signal.aborted) console.warn("[pixelforge] world generation failed (network); retrying next visit", err);
+      else console.warn("[pixelforge] world generation timed out; retrying next visit");
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+    return defaults(theme, seed);
+  }
+
+  // ── guidance(): the exact text that ships in the one call ───────────────────
+  function guidance(theme) {
+    return [
+      "You are generating a WORLD BRIEF for a walkable pixel-art RPG. You decide WHAT exists;",
+      "a deterministic generator decides where every tile goes. Reply with ONLY a JSON object.",
+      "",
+      `The visual theme is "${theme}" and it is AUTHORITATIVE: dress the player's setting text to fit it.`,
+      "",
+      "Fields (all limits are hard):",
+      `- scale: one of ${Object.keys(SCALES).join(" | ")} — the settlement's size class. Never a number.`,
+      `- surround: one of ${SURROUNDS.join(" | ")}.`,
+      `- prosperity: one of ${PROSPERITY.join(" | ")}.`,
+      "- name: the settlement's name, <=24 characters.",
+      "- flavor: ONE sentence of arrival atmosphere, <=140 characters.",
+      "- situation: ONE sentence, <=240 characters — the unresolved thing happening right now.",
+      "  Name a cause and a person, not a mood.",
+      `- features: 0-4 of {tag, name} placed in the settlement. tag from: ${[...SETTLEMENT_TAGS].join(", ")}.`,
+      "  name <=24 chars — becomes a map location.",
+      `- places: 0-4 additional zones of {kind, name, flavor}. kind from: ${PLACE_KINDS.join(" | ")}.`,
+      "  At most 2 wilds, 1 hall, 1 gathering. wilds may carry 0-3 features (water-crossing and",
+      "  dense-growth are wilds-only). flavor: ONE sentence <=120 chars.",
+      "- cast: 4-10 story-relevant people of {name, role, kind, tint, home, household, persona}.",
+      `  kind (machine field) from: ${CAST_KINDS.join(" | ")}. role: <=24 chars free text (their title).`,
+      `  tint from: ${Object.keys(TINTS).join(" | ")}. home: the NAME of the zone they live in.`,
+      "  household: 1-6 — people sharing a number share a roof; buildings are derived from",
+      "  households, so do NOT list one household per person unless they truly live alone.",
+      "  persona: <=100 chars — what they want, and what they are hiding.",
+      "- backgroundPopulation: total inhabitants including the cast (0-500). This is narrative",
+      "  texture for the map description — it never creates buildings.",
+      "",
+      "Only the cast, features, and places you name will exist. Keep names in the player's language.",
+    ].join("\n");
+  }
+
+  function schema() {
+    const text = (maxLength) => ({ type: "string", maxLength });
+    const featureItem = {
+      type: "object",
+      properties: { tag: { type: "string", enum: FEATURE_TAGS }, name: text(24) },
+      required: ["tag", "name"],
+    };
+    return {
+      type: "object",
+      properties: {
+        scale: { type: "string", enum: Object.keys(SCALES) },
+        surround: { type: "string", enum: SURROUNDS },
+        prosperity: { type: "string", enum: PROSPERITY },
+        name: text(24),
+        flavor: text(140),
+        situation: text(240),
+        features: { type: "array", maxItems: 4, items: featureItem },
+        places: {
+          type: "array",
+          maxItems: 4,
+          items: {
+            type: "object",
+            properties: {
+              kind: { type: "string", enum: PLACE_KINDS },
+              name: text(24),
+              flavor: text(120),
+              features: { type: "array", maxItems: 3, items: featureItem },
+            },
+            required: ["kind", "name"],
+          },
+        },
+        cast: {
+          type: "array",
+          minItems: 4,
+          maxItems: 10,
+          items: {
+            type: "object",
+            properties: {
+              name: text(24),
+              role: text(24),
+              kind: { type: "string", enum: CAST_KINDS },
+              tint: { type: "string", enum: Object.keys(TINTS) },
+              home: text(24),
+              household: { type: "integer", minimum: 1, maximum: 6 },
+              persona: text(100),
+            },
+            required: ["name", "kind", "tint", "home", "household"],
+          },
+        },
+        backgroundPopulation: { type: "integer", minimum: 0, maximum: 500 },
+      },
+      required: ["scale", "name", "cast"],
+    };
+  }
+
+  // ── Theme lexicon (the repair layer's per-theme content — §weakness 6) ──────
+  const FEATURE_LABELS = {
+    "water-feature": "The Pool", "crop-plots": "The Plots", "market-stalls": "The Stalls",
+    workyard: "The Yard", "landmark-stone": "The Old Marker", shrine: "The Shrine",
+    "water-crossing": "The Crossing", "dense-growth": "The Thicket", ruin: "The Ruin", lookout: "The Lookout",
+  };
+  const PLACE_LABELS = { gathering: "The Hearth", workshop: "The Works", hall: "The Hall", dwelling: "The House", wilds: "The Wilds" };
+  const KIND_LABELS = {
+    leader: "leader", host: "keeper", grower: "grower", maker: "artisan", merchant: "trader",
+    guard: "watch", healer: "healer", scholar: "archivist", elder: "elder", child: "youngster",
+    wanderer: "wanderer", folk: "resident",
+  };
+  const DEDUPE_SUFFIXES = ["Upper", "Lower", "Old", "New", "Far", "Near"];
+  const DEFAULT_NAMES = {
+    "cozy-village": ["Hearthvale", "Mossbrook", "Emberfield"],
+    "sci-fi-colony": ["Meridian Base", "Anchorage Nine", "Halcyon Point"],
+  };
+  const WILDS_NAMES = {
+    "cozy-village": ["The Whisperwood", "The Fallow Reach"],
+    "sci-fi-colony": ["The Mast Field", "The Outer Flats"],
+  };
+  const STOCK_CAST = {
+    "cozy-village": [
+      { name: "Mira", role: "innkeeper", kind: "host", tint: "rose", persona: "" },
+      { name: "Tam", role: "farmer", kind: "grower", tint: "green", persona: "" },
+      { name: "Rook", role: "guard", kind: "guard", tint: "blue", persona: "" },
+      { name: "Fen", role: "forager", kind: "wanderer", tint: "teal", persona: "" },
+    ],
+    "sci-fi-colony": [
+      { name: "Mira", role: "cantina keeper", kind: "host", tint: "rose", persona: "" },
+      { name: "Tam", role: "hydroponics lead", kind: "grower", tint: "green", persona: "" },
+      { name: "Rook", role: "pad marshal", kind: "guard", tint: "blue", persona: "" },
+      { name: "Fen", role: "salvage scout", kind: "wanderer", tint: "teal", persona: "" },
+    ],
+  };
+  const DEFAULT_BRIEFS = {
+    "cozy-village": {
+      scale: "village", surround: "woods", prosperity: "modest", name: "Hearthvale",
+      flavor: "A cozy closed valley where the roads all end at somebody's gate.",
+      situation: "",
+      features: [
+        { tag: "water-feature", name: "The Village Pond" },
+        { tag: "crop-plots", name: "Tam's Rows" },
+      ],
+      places: [
+        { kind: "gathering", name: "The Amber Hearth Inn", flavor: "Low beams, warm bread, long memories." },
+        { kind: "wilds", name: "The Whisperwood", flavor: "Dense trees, a shallow stream, an old stone.",
+          features: [{ tag: "water-crossing", name: "The Stepping Stones" }, { tag: "landmark-stone", name: "The Old Marker" }] },
+      ],
+      cast: [
+        { name: "Mira", role: "innkeeper", kind: "host", tint: "rose", home: "The Amber Hearth Inn", household: 1, persona: "" },
+        { name: "Tam", role: "farmer", kind: "grower", tint: "green", home: "Hearthvale", household: 2, persona: "" },
+        { name: "Rook", role: "guard", kind: "guard", tint: "blue", home: "Hearthvale", household: 3, persona: "" },
+        { name: "Fen", role: "forager", kind: "wanderer", tint: "teal", home: "The Whisperwood", household: 4, persona: "" },
+      ],
+      backgroundPopulation: 30,
+    },
+    "sci-fi-colony": {
+      scale: "village", surround: "barren", prosperity: "modest", name: "Meridian Base",
+      flavor: "A frontier colony under a sealed sky, humming at all hours.",
+      situation: "",
+      features: [
+        { tag: "water-feature", name: "The Coolant Pool" },
+        { tag: "crop-plots", name: "The Hydro Bay" },
+      ],
+      places: [
+        { kind: "gathering", name: "The Meridian Cantina", flavor: "Recycled air, real coffee, questionable cards." },
+        { kind: "wilds", name: "The Mast Field", flavor: "Antenna rows marching into the dust.",
+          features: [{ tag: "water-crossing", name: "The Conduit Bridge" }, { tag: "landmark-stone", name: "The Beacon" }] },
+      ],
+      cast: [
+        { name: "Mira", role: "cantina keeper", kind: "host", tint: "rose", home: "The Meridian Cantina", household: 1, persona: "" },
+        { name: "Tam", role: "hydroponics lead", kind: "grower", tint: "green", home: "Meridian Base", household: 2, persona: "" },
+        { name: "Rook", role: "pad marshal", kind: "guard", tint: "blue", home: "Meridian Base", household: 3, persona: "" },
+        { name: "Fen", role: "salvage scout", kind: "wanderer", tint: "teal", home: "The Mast Field", household: 4, persona: "" },
+      ],
+      backgroundPopulation: 24,
+    },
+  };
+
+  return { VERSION, SCALES, TINTS, FEATURE_TAGS, CAPS, validate, defaults, guidance, schema, generate, salvageText };
+})();
 
 // ===== 20-world.js =====
 // ── World generation ──────────────────────────────────────────────────────────
@@ -534,11 +1430,114 @@ PF.world = (() => {
     }
   }
 
-  function build(seed) {
+  // ── Feature placers (docs/brief-schema.md §6) ───────────────────────────────
+  // One NEUTRAL placer per tag, composed from SEMANTIC tiles — the theme layer
+  // (10-art) is what makes crop-plots paint hydroponics trays in a colony, so
+  // geometry needs no per-theme variants. Each placer claims a small rect the
+  // zone builder has reserved on grass and returns nothing; positions are the
+  // builder's, never the model's. The startup assertion below keeps the shipped
+  // tag vocabulary and this registry in lockstep.
+  const PLACERS = {
+    "water-feature"(z, x, y) {
+      fillRect(z, x, y, 6, 4, "ground", "water", true);
+      put(z, x + 6, y + 1, "object", "well", true);
+    },
+    "crop-plots"(z, x, y) {
+      fillRect(z, x + 1, y + 1, 6, 3, "ground", "crop", false);
+      for (let cx = x; cx <= x + 7; cx++) {
+        put(z, cx, y, "object", "fence", true);
+        put(z, cx, y + 4, "object", "fence", true);
+      }
+      for (let cy = y; cy <= y + 4; cy++) {
+        put(z, x, cy, "object", "fence", true);
+        put(z, x + 7, cy, "object", "fence", true);
+      }
+      put(z, x + 3, y, "object", null, false); // gate
+    },
+    "market-stalls"(z, x, y) {
+      for (let i = 0; i < 3; i++) put(z, x + i * 2, y, "object", "table", true);
+    },
+    workyard(z, x, y) {
+      fillRect(z, x, y, 5, 4, "ground", "stone", false);
+      put(z, x + 1, y + 1, "object", "table", true);
+      put(z, x + 3, y + 2, "object", "well", true);
+    },
+    "landmark-stone"(z, x, y) {
+      put(z, x + 1, y + 1, "object", "wallStone", true);
+      z.lights.push({ x: x + 1, y: y + 1 });
+    },
+    shrine(z, x, y) {
+      fillRect(z, x, y, 3, 3, "ground", "stone", false);
+      put(z, x + 1, y + 1, "object", "wallStone", true);
+      z.lights.push({ x: x + 1, y: y + 1 });
+    },
+    "water-crossing"(z, x, y) {
+      // Placed by the wilds builder across its stream; here x,y is the ford column.
+      fillRect(z, x, y, 2, 2, "ground", "path", false);
+    },
+    "dense-growth"(z, x, y) {
+      for (let dy = 0; dy < 4; dy++)
+        for (let dx = 0; dx < 4; dx++)
+          if ((dx + dy) % 2 === 0) {
+            put(z, x + dx, y + dy, "object", "trunk", true);
+            put(z, x + dx, y + dy - 1, "overhead", "canopy");
+          }
+    },
+    ruin(z, x, y) {
+      for (const [dx, dy] of [[0, 0], [1, 0], [3, 0], [0, 1], [0, 3], [4, 1], [4, 2]]) {
+        put(z, x + dx, y + dy, "object", "wallStone", true);
+      }
+      fillRect(z, x + 1, y + 1, 3, 2, "ground", "stone", false);
+    },
+    lookout(z, x, y) {
+      fillRect(z, x, y, 3, 3, "ground", "stone", false);
+      put(z, x, y, "object", "wallStone", true);
+      put(z, x + 2, y, "object", "wallStone", true);
+    },
+  };
+  // Registry completeness: every shipped tag must place in every theme (the
+  // theme layer handles the skin, so one neutral placer satisfies both — but a
+  // vocabulary tag with NO placer would silently drop features, which is the
+  // exact failure the spec forbids shipping).
+  for (const tag of PF.brief?.FEATURE_TAGS ?? []) {
+    if (!PLACERS[tag]) throw new Error(`pixelforge: feature tag "${tag}" has no placer`);
+  }
+
+  // Per-theme display names for the LEGACY fixed layout (pre-brief saves).
+  const ZONE_NAMES = {
+    "cozy-village": { village: "Hearthvale", inn: "The Amber Hearth Inn", forest: "The Whisperwood" },
+    "sci-fi-colony": { village: "Meridian Base", inn: "The Meridian Cantina", forest: "The Mast Field" },
+  };
+
+  function build(seed, theme, sealedBrief) {
+    // Tight gate + containment: only a fully-sealed brief compiles, and a
+    // malformed stored one degrades to the legacy world instead of bricking
+    // the surface on every load.
+    if (
+      sealedBrief &&
+      typeof sealedBrief === "object" &&
+      Array.isArray(sealedBrief.cast) &&
+      Array.isArray(sealedBrief.places) &&
+      Array.isArray(sealedBrief.features) &&
+      sealedBrief._ids &&
+      typeof sealedBrief._ids.zones === "object"
+    ) {
+      try {
+        return compile(sealedBrief, seed);
+      } catch (err) {
+        console.warn("[pixelforge] stored brief failed to compile; using the themed legacy world", err);
+      }
+    }
+    return buildLegacy(seed, theme);
+  }
+
+  function buildLegacy(seed, theme) {
+    const activeTheme = PF.art.setTheme ? PF.art.setTheme(theme) : "cozy-village";
+    const names = ZONE_NAMES[activeTheme] || ZONE_NAMES["cozy-village"];
     const rnd = PF.rng(seed);
 
-    // ── Hearthvale (village exterior) ──
-    const v = makeZone("village", "Hearthvale", 44, 30, "grass");
+    // ── The settlement exterior ──
+    const v = makeZone("village", names.village, 44, 30, "grass");
     for (let i = 0; i < v.ground.length; i++) if (rnd() < 0.25) v.ground[i] = "grass2";
     borderTrees(v);
     // paths: a crossroad through a small plaza
@@ -568,7 +1567,7 @@ PF.world = (() => {
     v.spawn = { x: 21, y: 17 };
 
     // ── Inn interior ──
-    const n = makeZone("inn", "The Amber Hearth Inn", 16, 12, "floor");
+    const n = makeZone("inn", names.inn, 16, 12, "floor");
     for (let x = 0; x < n.w; x++) {
       put(n, x, 0, "object", "wallStone", true);
       put(n, x, 1, "object", "wall", true);
@@ -589,7 +1588,7 @@ PF.world = (() => {
     // ── The Whisperwood (forest, east of the village) ──
     // Composed entirely from existing tiles: dense trees, a 2-wide path to a
     // stone clearing with a standing stone, and a stream crossed by a ford.
-    const f = makeZone("forest", "The Whisperwood", 36, 24, "grass");
+    const f = makeZone("forest", names.forest, 36, 24, "grass");
     for (let i = 0; i < f.ground.length; i++) if (rnd() < 0.4) f.ground[i] = "grass2";
     borderTrees(f);
     fillRect(f, 1, 12, 19, 2, "ground", "path"); // west approach
@@ -637,11 +1636,289 @@ PF.world = (() => {
 
     return {
       seed,
+      theme: activeTheme,
       zones: { village: v, inn: n, forest: f },
       startZone: "village",
       // The exterior binds to the campaign's starting World Maps location once known.
       bindings: {}, // spatialLocationId → zoneId
     };
+  }
+
+  // ── compile(sealedBrief, seed): the deterministic half of the hybrid ────────
+  // The brief says WHAT exists; every position below is computed. Zone keys are
+  // the brief's ordinal ids (z1 = settlement), so saves and World Maps bindings
+  // never depend on model-written names. See docs/brief-schema.md §4.5:
+  // buildings derive from households + cast kinds, over-subscription MERGES
+  // households into shared blocks — a named NPC's home is never dropped.
+  const SPECIAL_BUILDING_KINDS = { leader: "hall", host: "gathering", grower: "farm", guard: "post", merchant: "shop", maker: "shop" };
+  const INTERIOR_DIMS = { gathering: [16, 12], workshop: [16, 12], hall: [18, 12], dwelling: [14, 10] };
+
+  function compile(brief, seed) {
+    const activeTheme = PF.art.setTheme ? PF.art.setTheme(brief.theme) : brief.theme;
+    const rnd = PF.rng(seed);
+    const scale = PF.brief.SCALES[brief.scale] || PF.brief.SCALES.village;
+    const zones = {};
+    // Zones key by the brief's ordinal ids POSITIONALLY (z1 = settlement,
+    // z{n+2} = places[n]) — never by name round-trips, so a display-name
+    // collision can never collapse two ids into one zone.
+    const zoneIdForPlace = (place) => `z${brief.places.indexOf(place) + 2}`;
+    const zoneIdByName = new Map(Object.entries(brief._ids.zones).map(([id, name]) => [name, id]));
+
+    // ── The settlement exterior (z1) ──
+    const v = makeZone("z1", brief.name, scale.w, scale.h, "grass");
+    const groundMix = { woods: 0.3, fields: 0.22, rocky: 0.2, water: 0.25, barren: 0.35 }[brief.surround] ?? 0.25;
+    for (let i = 0; i < v.ground.length; i++) if (rnd() < groundMix) v.ground[i] = "grass2";
+    borderTrees(v);
+    // Paths: a crossroad through a central plaza, scaled to the grid.
+    const midY = (v.h / 2) | 0;
+    const midX = (v.w / 2) | 0;
+    fillRect(v, 2, midY - 1, v.w - 4, 2, "ground", "path");
+    fillRect(v, midX - 1, 2, 2, v.h - 4, "ground", "path");
+    fillRect(v, midX - 4, midY - 4, 8, 8, "ground", "path");
+    if (brief.prosperity === "thriving") fillRect(v, midX - 2, midY - 2, 4, 4, "ground", "stone");
+    if (brief.prosperity === "struggling") {
+      for (let i = 0; i < v.ground.length; i++) if (v.ground[i] === "path" && rnd() < 0.18) v.ground[i] = "dirt";
+    }
+    v.spawn = { x: midX, y: midY + 2 };
+    // Injection-discipline prose (§7) rides the world so the runtime never
+    // needs the brief: zone flavor injects once on first entry, the situation
+    // once on the first outbound message.
+    v.flavor = brief.flavor;
+
+    // ── Building arithmetic (§4.5) ──
+    const households = [...new Set(brief.cast.map((m) => m.household))].sort((a, b) => a - b);
+    const specials = [];
+    const seenSpecial = new Set();
+    for (const member of brief.cast) {
+      const special = SPECIAL_BUILDING_KINDS[member.kind];
+      if (special && !seenSpecial.has(special)) {
+        seenSpecial.add(special);
+        specials.push({ special, owner: member });
+      }
+    }
+    // Interior places claim a facade: gathering binds to the host's building,
+    // hall to the leader's — their doors become the interior portals.
+    const interiorPlaces = brief.places.filter((p) => p.kind !== "wilds");
+    const wildsPlaces = brief.places.filter((p) => p.kind === "wilds");
+    const budget = Math.max(scale.buildings, households.length ? 1 : 0);
+    // Merge over-subscribed households into shared blocks: a merged household
+    // keeps every member housed (never dropped), just under a shared roof.
+    const dwellingSlots = Math.max(1, budget - specials.length - interiorPlaces.length);
+    const householdGroups = [];
+    for (const [index, household] of households.entries()) {
+      const slot = index < dwellingSlots ? index : dwellingSlots - 1;
+      (householdGroups[slot] ??= []).push(household);
+    }
+
+    // Row-placed buildings in the upper and lower thirds, straddling the plaza.
+    const buildings = [];
+    const slots = [];
+    const rowYs = [Math.max(4, midY - 9), Math.min(v.h - 8, midY + 4)];
+    for (const rowY of rowYs) {
+      for (let x = 4; x + 8 < v.w - 4 && slots.length < budget + interiorPlaces.length; x += 9) {
+        if (Math.abs(x + 3 - midX) < 4) continue; // keep the vertical road clear
+        slots.push({ x, y: rowY });
+      }
+    }
+    let slotIndex = 0;
+    const takeSlot = () => slots[slotIndex++] ?? null;
+    for (const place of interiorPlaces) {
+      const slot = takeSlot();
+      if (!slot) break;
+      const width = place.kind === "hall" ? 8 : 7;
+      const b = building(v, slot.x, slot.y, width, 5, 3, [1, 5]);
+      buildings.push({ door: b, rect: { x: slot.x, y: slot.y, w: width, h: 5 }, boundPlace: place });
+    }
+    for (const { special, owner } of specials) {
+      // A special whose interior already exists as a place shares that facade.
+      const bound = buildings.find((b) => b.boundPlace && interiorKindForSpecial(special) === b.boundPlace.kind);
+      if (bound) {
+        bound.owner = owner;
+        continue;
+      }
+      const slot = takeSlot();
+      if (!slot) break;
+      const b = building(v, slot.x, slot.y, 6, 4, 2, [4]);
+      buildings.push({ door: b, rect: { x: slot.x, y: slot.y, w: 6, h: 4 }, special, owner });
+    }
+    for (const group of householdGroups) {
+      const slot = takeSlot();
+      if (!slot) break;
+      const width = Math.min(8, 5 + group.length); // merged blocks read larger
+      const b = building(v, slot.x, slot.y, width, 4, 2, [1]);
+      buildings.push({ door: b, rect: { x: slot.x, y: slot.y, w: width, h: 4 }, households: group });
+    }
+
+    // ── Features: corner anchors, but NEVER over a building or another
+    // feature. Buildings claim their footprint plus the roof overhang above and
+    // a door apron below — a placer that fenced over a hall's only door
+    // orphaned the zone and the NPC inside it (review blocker). A feature with
+    // no clear anchor is dropped: a plainer settlement, never a sealed one.
+    const claimed = buildings.map((b) => ({
+      x: b.rect.x - 1,
+      y: b.rect.y - 3,
+      w: b.rect.w + 2,
+      h: b.rect.h + 5,
+    }));
+    const intersects = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    const featureAnchors = [
+      { x: 4, y: 3 }, { x: v.w - 12, y: 3 }, { x: v.w - 12, y: v.h - 8 }, { x: 4, y: v.h - 8 },
+    ];
+    const FEATURE_RECT = { w: 9, h: 6 };
+    for (const feature of brief.features) {
+      const anchor = featureAnchors.find((candidate) => {
+        const rect = { x: candidate.x, y: candidate.y, ...FEATURE_RECT };
+        return !claimed.some((busy) => intersects(rect, busy));
+      });
+      if (!anchor) continue; // dropped, not misplaced
+      PLACERS[feature.tag]?.(v, anchor.x, anchor.y);
+      claimed.push({ x: anchor.x, y: anchor.y, ...FEATURE_RECT });
+    }
+    const doorRects = buildings.map((b) => ({ x: b.door.doorX, y: b.door.doorY }));
+    scatterTrees(v, rnd, { woods: 26, fields: 8, rocky: 10, water: 12, barren: 5 }[brief.surround] ?? 12,
+      doorRects.concat(doorRects.map((d) => ({ x: d.x, y: d.y + 1 }))));
+    zones.z1 = v;
+
+    // ── Interior zones ──
+    for (const place of interiorPlaces) {
+      const id = zoneIdForPlace(place);
+      if (!id) continue;
+      const [w, h] = INTERIOR_DIMS[place.kind] || INTERIOR_DIMS.dwelling;
+      const zone = makeZone(id, place.name, w, h, "floor");
+      for (let x = 0; x < w; x++) {
+        put(zone, x, 0, "object", "wallStone", true);
+        put(zone, x, 1, "object", "wall", true);
+        put(zone, x, h - 1, "object", "wallStone", true);
+      }
+      for (let y = 0; y < h; y++) {
+        put(zone, 0, y, "object", "wallStone", true);
+        put(zone, w - 1, y, "object", "wallStone", true);
+      }
+      if (place.kind === "gathering") {
+        fillRect(zone, 3, 3, 5, 1, "object", "counter", true);
+        put(zone, w - 6, 5, "object", "table", true);
+        put(zone, w - 4, h - 4, "object", "table", true);
+        fillRect(zone, 5, 6, 4, 3, "ground", "rug", false);
+        zone.lights.push({ x: 4, y: 3 }, { x: w - 5, y: 5 });
+      } else if (place.kind === "hall") {
+        // Rug first: its ground fill clears solidity, so painting it after the
+        // table silently made the table walk-through (review finding).
+        fillRect(zone, 3, 3, w - 6, h - 6, "ground", "rug", false);
+        fillRect(zone, 4, 5, w - 8, 1, "object", "table", true);
+        zone.lights.push({ x: 3, y: 2 }, { x: w - 4, y: 2 });
+      } else if (place.kind === "workshop") {
+        fillRect(zone, 3, 3, 4, 1, "object", "counter", true);
+        put(zone, w - 4, 5, "object", "table", true);
+        zone.lights.push({ x: 3, y: 3 });
+      } else {
+        put(zone, 3, 4, "object", "table", true);
+        fillRect(zone, 5, 5, 3, 2, "ground", "rug", false);
+        zone.lights.push({ x: 3, y: 3 });
+      }
+      const doorX = (w / 2) | 0;
+      put(zone, doorX, h - 1, "object", "door", false);
+      zone.spawn = { x: doorX, y: h - 2 };
+      zone.flavor = place.flavor;
+      zones[id] = zone;
+      const facade = buildings.find((b) => b.boundPlace === place);
+      if (facade) {
+        v.portals.push({ x: facade.door.doorX, y: facade.door.doorY, toZone: id, toX: zone.spawn.x, toY: zone.spawn.y, label: `Enter ${place.name}` });
+        zone.portals.push({ x: doorX, y: h - 1, toZone: "z1", toX: facade.door.doorX, toY: facade.door.doorY + 1, label: "Step outside" });
+      }
+    }
+
+    // ── Wilds zones, hung off alternating map edges ──
+    wildsPlaces.forEach((place, index) => {
+      const id = zoneIdForPlace(place);
+      if (!id) return;
+      const zone = makeZone(id, place.name, 36, 24, "grass");
+      for (let i = 0; i < zone.ground.length; i++) if (rnd() < 0.4) zone.ground[i] = "grass2";
+      borderTrees(zone);
+      const wMidY = 12;
+      const east = index === 0;
+      // The road home runs from the portal side: west-hung wilds mirror the
+      // approach so arrival never lands in scatter (review finding).
+      if (east) fillRect(zone, 1, wMidY, 19, 2, "ground", "path");
+      else fillRect(zone, zone.w - 20, wMidY, 19, 2, "ground", "path");
+      const tags = new Set((place.features ?? []).map((f) => f.tag));
+      if (tags.has("water-crossing")) {
+        fillRect(zone, 20, 1, 2, 22, "ground", "water", true);
+        PLACERS["water-crossing"](zone, 20, wMidY);
+        fillRect(zone, 22, wMidY, 4, 2, "ground", "path");
+      }
+      let anchorX = 26;
+      for (const feature of place.features ?? []) {
+        if (feature.tag === "water-crossing") continue;
+        PLACERS[feature.tag]?.(zone, anchorX, 8 + ((anchorX / 3) | 0) % 4);
+        anchorX = Math.max(6, (anchorX + 9) % (zone.w - 10));
+      }
+      // Reserve BOTH sides' arrival tiles and spawns — the west-hung wilds'
+      // arrival used to land inside scattered trunks on some seeds.
+      scatterTrees(zone, rnd, tags.has("dense-growth") ? 70 : 45, [
+        { x: 1, y: wMidY }, { x: 1, y: wMidY + 1 }, { x: 2, y: wMidY }, { x: 3, y: wMidY },
+        { x: 20, y: wMidY }, { x: 21, y: wMidY + 1 },
+        { x: zone.w - 2, y: wMidY }, { x: zone.w - 2, y: wMidY + 1 }, { x: zone.w - 3, y: wMidY }, { x: zone.w - 4, y: wMidY },
+      ]);
+      zone.spawn = { x: 3, y: wMidY };
+      // Two-tile edge portals: east edge of the settlement for the first wilds,
+      // west edge for the second.
+      const vx = east ? v.w - 1 : 0;
+      const vroadX = east ? v.w - 2 : 1;
+      fillRect(v, east ? v.w - 2 : 0, midY - 1, 2, 2, "ground", "path");
+      for (const dy of [0, 1]) {
+        put(v, vx, midY - 1 + dy, "object", null, false);
+        put(v, vx, midY - 1 + dy, "overhead", null);
+        put(zone, east ? 0 : zone.w - 1, wMidY + dy, "object", null, false);
+        put(zone, east ? 0 : zone.w - 1, wMidY + dy, "overhead", null);
+        v.portals.push({ x: vx, y: midY - 1 + dy, toZone: id, toX: east ? 2 : zone.w - 3, toY: wMidY + dy, label: `Into ${place.name}` });
+        zone.portals.push({ x: east ? 0 : zone.w - 1, y: wMidY + dy, toZone: "z1", toX: vroadX, toY: midY - 1 + dy, label: `Back to ${brief.name}` });
+      }
+      if (!east) zone.spawn = { x: zone.w - 4, y: wMidY };
+      zone.flavor = place.flavor;
+      zones[id] = zone;
+    });
+
+    // ── The cast ──
+    brief.cast.forEach((member, index) => {
+      const npcId = `n${index + 1}`;
+      const homeZoneId = zoneIdByName.get(member.home) ?? "z1";
+      const zone = zones[homeZoneId] ?? v;
+      // Wander near the owner's building when they have one, else around the
+      // zone's spawn; interiors wander their walkable middle.
+      const owned = buildings.find((b) => b.owner === member || (b.households ?? []).includes(member.household));
+      let wander;
+      if (zone === v && owned) {
+        wander = { x0: Math.max(2, owned.door.doorX - 4), y0: Math.max(2, owned.door.doorY), x1: Math.min(v.w - 3, owned.door.doorX + 4), y1: Math.min(v.h - 3, owned.door.doorY + 5) };
+      } else if (zone === v) {
+        wander = { x0: midX - 6, y0: midY - 5, x1: midX + 6, y1: midY + 5 };
+      } else {
+        wander = { x0: 2, y0: 2, x1: zone.w - 3, y1: zone.h - 3 };
+      }
+      zone.npcs.push({
+        id: npcId,
+        name: member.name,
+        role: member.role,
+        hue: PF.brief.TINTS[member.tint] ?? 210,
+        persona: member.persona,
+        x: ((wander.x0 + wander.x1) / 2) | 0,
+        y: ((wander.y0 + wander.y1) / 2) | 0,
+        wander,
+      });
+    });
+
+    return {
+      seed,
+      theme: activeTheme,
+      brieved: true, // marks a compiled world (saves still carry only seed/theme/zone)
+      situation: brief.situation,
+      zones,
+      startZone: "z1",
+      bindings: {},
+    };
+  }
+
+  function interiorKindForSpecial(special) {
+    return special === "gathering" ? "gathering" : special === "hall" ? "hall" : special === "shop" ? "workshop" : null;
   }
 
   return { build, idx };
@@ -827,6 +2104,49 @@ PF.Sim = class {
     const z = this.zone();
     const near = this.nearNpc ? `; near: ${this.nearNpc.name} (${this.nearNpc.role})` : "";
     return `[World: ${z.name}; ${this.clockLabel()}${near}]`;
+  }
+
+  /** The metered turn prefix (docs/brief-schema.md §7): name+role ride the
+   *  header ALWAYS; the settlement situation injects once on the first
+   *  outbound message; a zone's flavor once on first entry; an NPC's persona
+   *  once per NPC. The one-shot flags persist in saves, so a reload never
+   *  re-taxes the context — chat history is the durable channel. Legacy
+   *  worlds carry no prose, so this degrades to header() exactly. */
+  composePrefix(npc) {
+    this.intro ??= { world: false, zones: {}, npcs: {} };
+    const parts = [this.header()];
+    // Compose is pure; the one-shot flags burn only on commitIntro(), which the
+    // senders call once the host ACCEPTS the turn — a refused or failed send
+    // must not lose the prose forever (review finding).
+    const pending = { world: false, zone: null, npc: null };
+    if (!this.intro.world && this.world.situation) {
+      parts.push(`[Setting: ${this.world.situation}]`);
+      pending.world = true;
+    }
+    const z = this.zone();
+    if (!this.intro.zones[this.zoneId] && z.flavor) {
+      parts.push(`[${z.name}: ${z.flavor}]`);
+      pending.zone = this.zoneId;
+    }
+    if (npc && npc.id && npc.persona && !this.intro.npcs[npc.id]) {
+      parts.push(`[${npc.name}: ${npc.persona}]`);
+      pending.npc = npc.id;
+    }
+    this._pendingIntro = pending;
+    return parts.join(" ");
+  }
+
+  /** Burn the one-shot flags for the last composed prefix (accepted turn). */
+  commitIntro() {
+    const pending = this._pendingIntro;
+    if (!pending) return;
+    this._pendingIntro = null;
+    if (!pending.world && !pending.zone && !pending.npc) return;
+    this.intro ??= { world: false, zones: {}, npcs: {} };
+    if (pending.world) this.intro.world = true;
+    if (pending.zone) this.intro.zones[pending.zone] = true;
+    if (pending.npc) this.intro.npcs[pending.npc] = true;
+    this.dirty = true;
   }
 };
 
@@ -1031,11 +2351,15 @@ PF.spatial = {
       if (!this.available) return;
 
       const loc = data.currentLocationId;
-      // Seed the starting binding: first location we ever see maps to the exterior.
+      // Seed the starting binding: first location we ever see maps to the
+      // exterior — the world's OWN start zone, never a hardcoded id (compiled
+      // worlds key zones z1..; the legacy literal poisoned their bindings
+      // forever and broke drift-following — review blocker).
       const world = core.sim?.world;
-      if (world && Object.keys(world.bindings).length === 0) {
-        world.bindings[loc] = "village";
-        world.zones.village.spatialLocationId = loc;
+      const rootZone = world ? world.zones[world.startZone] : null;
+      if (world && rootZone && Object.keys(world.bindings).length === 0) {
+        world.bindings[loc] = world.startZone;
+        rootZone.spatialLocationId = loc;
         core.markDirty();
       }
       if (this.pending) {
@@ -1049,10 +2373,11 @@ PF.spatial = {
         }
       } else if (this._lastLocationId && loc !== this._lastLocationId) {
         // Narrated drift — the GM moved the party. Follow it; never compensate.
+        // Guarded on the zone existing: a stale binding must degrade, not throw.
         const zoneId = world?.bindings[loc];
-        if (zoneId && core.sim && core.sim.zoneId !== zoneId) {
-          const spawn = world.zones[zoneId].spawn;
-          core.sim.teleport(zoneId, spawn.x, spawn.y);
+        const target = zoneId ? world?.zones[zoneId] : null;
+        if (target && core.sim && core.sim.zoneId !== zoneId) {
+          core.sim.teleport(zoneId, target.spawn.x, target.spawn.y);
         }
         core.hud?.toast(`Now at: ${this.locationName() ?? loc}`);
       }
@@ -1086,9 +2411,10 @@ PF.spatial = {
     const gen = this._gen;
     const chatId = core.chatId;
     try {
-      const text = `${core.sim.header()} We travel to ${dest.name}.`;
+      const text = `${core.sim.composePrefix(null)} We travel to ${dest.name}.`;
       const ok = await core.host.sendMessage(text, undefined, transition);
       if (gen !== this._gen || core.chatId !== chatId) return;
+      if (ok !== false) core.sim?.commitIntro?.();
       if (ok === false) {
         // The host refused the turn (e.g. session concluded) — nothing is in flight.
         this.pending = null;
@@ -1135,6 +2461,7 @@ PF.save = {
       v: 1,
       chatId: core.chatId,
       seed: sim.world.seed,
+      theme: sim.world.theme,
       zone: sim.zoneId,
       x: Math.round(sim.x),
       y: Math.round(sim.y),
@@ -1142,6 +2469,9 @@ PF.save = {
       clockMin: sim.clockMin,
       day: sim.day,
       bindings: sim.world.bindings,
+      // §7 one-shot injection flags: persisted so a reload never re-taxes the
+      // GM context with prose that already lives in chat history.
+      intro: sim.intro ?? { world: false, zones: {}, npcs: {} },
     };
   },
 
@@ -1166,6 +2496,104 @@ PF.save = {
     return this.simFromSaved(saved, meta, chatId);
   },
 
+  /** The sealed world brief. Primary home: the TOP-LEVEL pixelforgeBrief
+   *  metadata key (atomic under the queued shallow-merge PATCH — no
+   *  read-modify-write of the whole setup config). The nested config location
+   *  remains readable for chats sealed before the key moved. Absent on
+   *  pre-0.4.0 games → legacy layout. */
+  _configBrief(meta) {
+    const top = meta && typeof meta.pixelforgeBrief === "object" && meta.pixelforgeBrief !== null ? meta.pixelforgeBrief : null;
+    if (top && Array.isArray(top.cast)) return top;
+    if (top) return null; // a {skipped:true} marker: generation declined, stay legacy
+    const setup = meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
+    const outer = setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null ? setup.experienceConfig : null;
+    const inner = outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null ? outer.experienceConfig : null;
+    for (const candidate of [inner?.brief, outer?.brief]) {
+      if (candidate && typeof candidate === "object" && Array.isArray(candidate.cast)) return candidate;
+    }
+    return null;
+  },
+
+  /** The wizard's opt-in for surface-side world generation (0.4.0 chats). */
+  _configGenerate(meta) {
+    const setup = meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
+    const outer = setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null ? setup.experienceConfig : null;
+    const inner = outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null ? outer.experienceConfig : null;
+    return inner?.generate === true || outer?.generate === true;
+  },
+
+  /** Surface-side world generation (spec §5, amended): fully NON-BLOCKING.
+   *  The chat boots on the themed legacy world immediately; the one #5135
+   *  call runs behind a toast, the sealed brief stores atomically under
+   *  pixelforgeBrief (3 retries), and the world rebuilds on arrival. Runs at
+   *  most once per chat: the stored key (sealed brief or a skipped marker) is
+   *  the one-shot guard, so old chats and completed chats never re-generate. */
+  async maybeGenerateBrief(core) {
+    if (!core.chatId || this._generating) return;
+    const chatId = core.chatId;
+    const meta = core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
+    if (meta.pixelforgeBrief !== undefined) return;
+    if (this._configBrief(meta)) return;
+    if (!this._configGenerate(meta)) return;
+    this._generating = true;
+    try {
+      core.hud?.toast("Generating your world — keep exploring meanwhile…");
+      const theme = this._configTheme(meta) ?? "cozy-village";
+      let seed = this._configSeed(meta);
+      if (seed === null) seed = PF.hashStr(String(chatId));
+      const setup = meta.gameSetupConfig && typeof meta.gameSetupConfig === "object" ? meta.gameSetupConfig : {};
+      const preferences = [
+        setup.setting ? `Setting: ${setup.setting}` : "",
+        setup.tone ? `Tone: ${setup.tone}` : "",
+        setup.difficulty ? `Difficulty: ${setup.difficulty}` : "",
+        setup.rating ? `Rating: ${setup.rating}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+      const sealed = await PF.brief.generate(chatId, { theme, seed, preferences });
+      if (!sealed) {
+        // Transient failure (busy engine, network, timeout, route absent): do
+        // NOT seal — the key stays absent and the next visit tries again. The
+        // default world stays fully playable meanwhile.
+        core.hud?.toast("World generation couldn't run — it will retry next visit.");
+        return;
+      }
+      let stored = false;
+      for (let attempt = 0; attempt < 3 && !stored; attempt++) {
+        try {
+          await PF.api.patchMetadata(chatId, { pixelforgeBrief: sealed });
+          stored = true;
+        } catch (err) {
+          if (attempt === 2) console.warn("[pixelforge] brief storage failed; keeping the default world", err);
+          else await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+        }
+      }
+      if (!stored || chatId !== core.chatId) return;
+      // Rebuild onto the generated world (the default one has only seconds of
+      // play on it). Fresh sim, fresh bindings; spatial re-seeds next turn.
+      core.sim = new PF.Sim(PF.world.build(seed, theme, sealed));
+      this._lastSerialized = null;
+      core.render?.clearZones?.();
+      void PF.assets.load(core);
+      core.hud?.refreshChips();
+      core.hud?.toast("The world takes shape.");
+      this.markDirty(core);
+    } finally {
+      this._generating = false;
+    }
+  },
+
+  /** The wizard's theme, from the same double-nested config home as the seed. */
+  _configTheme(meta) {
+    const setup = meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
+    const outer = setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null ? setup.experienceConfig : null;
+    const inner = outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null ? outer.experienceConfig : null;
+    for (const candidate of [inner?.theme, outer?.theme]) {
+      if (typeof candidate === "string" && candidate) return candidate;
+    }
+    return null;
+  },
+
   /** Build a sim from a save object (route state or the metadata key). */
   simFromSaved(saved, meta, chatId) {
     // Explicit null checks: 0 is a legitimate seed, so truthiness chaining would
@@ -1173,7 +2601,13 @@ PF.save = {
     let seed = saved && typeof saved.seed === "number" ? saved.seed >>> 0 : null;
     if (seed === null) seed = this._configSeed(meta);
     if (seed === null) seed = PF.hashStr(String(chatId));
-    const world = PF.world.build(seed);
+    // Saved theme wins (it is what the world was built with), then the wizard
+    // config; build() validates the id and falls back to the default theme.
+    // The sealed brief (when present) makes build() compile the generated
+    // world; the brief lives ONLY in chat metadata (pixelforgeBrief, or the
+    // legacy nested config spot), never in save rows.
+    const theme = (saved && typeof saved.theme === "string" ? saved.theme : null) ?? this._configTheme(meta);
+    const world = PF.world.build(seed, theme, this._configBrief(meta));
     const sim = new PF.Sim(world);
     if (saved && saved.v === 1) {
       if (typeof saved.zone === "string" && world.zones[saved.zone]) sim.zoneId = saved.zone;
@@ -1183,6 +2617,13 @@ PF.save = {
       if (typeof saved.facing === "number") sim.facing = saved.facing & 3;
       if (typeof saved.clockMin === "number") sim.clockMin = PF.clamp(saved.clockMin | 0, 0, 24 * 60 - 1);
       if (typeof saved.day === "number") sim.day = Math.max(1, saved.day | 0);
+      if (saved.intro && typeof saved.intro === "object") {
+        sim.intro = {
+          world: saved.intro.world === true,
+          zones: saved.intro.zones && typeof saved.intro.zones === "object" ? { ...saved.intro.zones } : {},
+          npcs: saved.intro.npcs && typeof saved.intro.npcs === "object" ? { ...saved.intro.npcs } : {},
+        };
+      }
       if (saved.bindings && typeof saved.bindings === "object") {
         for (const [loc, zone] of Object.entries(saved.bindings)) {
           if (typeof zone === "string" && world.zones[zone]) {
@@ -1317,6 +2758,9 @@ PF.save = {
     core.sim = this.simFromSaved(saved, meta, core.chatId);
     this._lastSerialized = JSON.stringify(this.snapshot(core));
     core.render?.clearZones();
+    // A rebuild can change the theme; the asset loader is theme-aware and
+    // no-ops when nothing changed.
+    void PF.assets.load(core);
     core.hud?.refreshChips();
   },
 
@@ -1578,6 +3022,11 @@ PF.Hud = class {
 // World Maps: requests hierarchical mode + agents; if the World Maps agent
 // isn't active the host falls back to standard mode and the surface runs
 // unbound — both are handled (verified trap #6).
+// World generation does NOT happen here (spec §5, amended): the wizard only
+// stamps `generate: true` into the experience config; the surface picks it up
+// after launch (PF.save.maybeGenerateBrief) so the whole 90s window runs
+// behind a playable world instead of a torn-down setup UI.
+
 PF.mountSetup = (el, props) => {
   // The host delivers a FRESH props object on every render, and its onCancel
   // closes over the current `launching` state — capturing the first one would
@@ -1606,12 +3055,57 @@ PF.mountSetup = (el, props) => {
       options.map(([v, t]) => PF.el("option", { value: v, text: t })),
     );
 
-  const nameIn = input("Hearthvale");
+  // Per-theme wizard defaults: picking a theme re-skins the whole run — genre
+  // text for the GM, default name/setting/goals, spatial seed, and the tile
+  // theme the world builder paints with (PF.art themes). Fields the player has
+  // already edited are never overwritten by a theme change.
+  const THEME_PRESETS = {
+    "cozy-village": {
+      genre: "Cozy pixel-art village RPG (Stardew/Harvest-Moon-like), slice of life with gentle adventure",
+      name: "Hearthvale",
+      setting:
+        "The pixel village of Hearthvale: a cozy closed valley with an inn (The Amber Hearth, kept by Mira), " +
+        "Tam's farm, and a small guard post watched by Rook. Slice-of-life with gentle mystery; danger exists but is rare.",
+      goals: "Settle into Hearthvale, get to know its people, and follow whatever quiet mysteries surface.",
+      spatial:
+        "A small closed valley. Root location: the village of Hearthvale. Children: The Amber Hearth Inn, " +
+        "Tam's Farm, the Guard Post, the Village Pond. Keep the world compact and walkable.",
+    },
+    "sci-fi-colony": {
+      genre: "Pixel-art sci-fi frontier-colony RPG, slice of life with gentle mystery among the stars",
+      name: "Meridian Base",
+      setting:
+        "Meridian Base, a small frontier colony under a sealed sky: a hab ring with a cantina (kept by Mira), " +
+        "Tam's hydroponics bay, and a landing pad watched by Rook. Slice-of-life with gentle mystery; danger exists but is rare.",
+      goals: "Settle into the colony, get to know its crew, and follow whatever quiet mysteries surface.",
+      spatial:
+        "A compact pressurised colony. Root location: Meridian Base. Children: the Cantina, the Hydroponics Bay, " +
+        "the Landing Pad, the Coolant Pool. Keep the world compact and walkable.",
+    },
+  };
+
+  const themeSel = select(
+    (PF.art.themeIds ? PF.art.themeIds() : ["cozy-village"])
+      .filter((id) => THEME_PRESETS[id])
+      .map((id) => [id, id === "cozy-village" ? "Cozy village" : "Sci-fi colony"]),
+  );
+
+  const nameIn = input(THEME_PRESETS["cozy-village"].name);
   const seedIn = input(String((Math.random() * 0xffffffff) >>> 0));
   const settingIn = PF.el("textarea", { style: `${S.input}min-height:64px;`, rows: "3" });
-  settingIn.value =
-    "The pixel village of Hearthvale: a cozy closed valley with an inn (The Amber Hearth, kept by Mira), " +
-    "Tam's farm, and a small guard post watched by Rook. Slice-of-life with gentle mystery; danger exists but is rare.";
+  settingIn.value = THEME_PRESETS["cozy-village"].setting;
+
+  // Swap theme-derived defaults on selection, but only for fields still holding
+  // the previous theme's default — a player's own text always wins.
+  let appliedTheme = "cozy-village";
+  themeSel.addEventListener("change", () => {
+    const previous = THEME_PRESETS[appliedTheme];
+    const next = THEME_PRESETS[themeSel.value];
+    if (!next || !previous) return;
+    if (nameIn.value === previous.name) nameIn.value = next.name;
+    if (settingIn.value === previous.setting) settingIn.value = next.setting;
+    appliedTheme = themeSel.value;
+  });
   const toneSel = select([
     ["cozy, warm, gently comedic", "Cozy & warm"],
     ["wistful, quiet, bittersweet", "Wistful & quiet"],
@@ -1655,7 +3149,10 @@ PF.mountSetup = (el, props) => {
         "Uses the engine's own combat, and follows the World Map when its agent is active.",
     }),
     field("Game name", nameIn),
-    field("World seed", seedIn),
+    PF.el("div", { style: S.row }, [
+      PF.el("div", { style: "flex:1;" }, [field("Theme", themeSel)]),
+      PF.el("div", { style: "flex:1;" }, [field("World seed", seedIn)]),
+    ]),
     field("Setting", settingIn),
     PF.el("div", { style: S.row }, [
       PF.el("div", { style: "flex:1;" }, [field("Tone", toneSel)]),
@@ -1732,35 +3229,34 @@ PF.mountSetup = (el, props) => {
     // silently truncating at the first non-digit.
     const seedText = seedIn.value.trim();
     const seed = (/^\d+$/.test(seedText) ? Number.parseInt(seedText, 10) : PF.hashStr(seedText || nameIn.value)) >>> 0;
+    const preset = THEME_PRESETS[themeSel.value] || THEME_PRESETS["cozy-village"];
     const setupConfig = {
-      genre: "Cozy pixel-art village RPG (Stardew/Harvest-Moon-like), slice of life with gentle adventure",
-      setting: settingIn.value.trim() || "The pixel village of Hearthvale.",
+      genre: preset.genre,
+      setting: settingIn.value.trim() || preset.setting,
       tone: toneSel.value,
       difficulty: diffSel.value,
       rating: ratingSel.value,
       gmMode: "standalone",
-      playerGoals: "Settle into Hearthvale, get to know its people, and follow whatever quiet mysteries surface.",
+      playerGoals: preset.goals,
       partyCharacterIds: partyChecks.filter((cb) => cb.checked).map((cb) => cb.value),
       gameWorldMapMode: "hierarchical",
       enableAgents: true,
-      spatialMapInstructions:
-        "A small closed valley. Root location: the village of Hearthvale. Children: The Amber Hearth Inn, " +
-        "Tam's Farm, the Guard Post, the Village Pond. Keep the world compact and walkable.",
+      spatialMapInstructions: preset.spatial,
       combatStyle: "classic",
-      experienceConfig: { seed },
+      experienceConfig: { seed, theme: themeSel.value, generate: true },
     };
     launchBtn.disabled = true;
     cancelBtn.disabled = true; // mirror the host's mid-launch freeze
     launchBtn.textContent = "Setting up…";
     try {
-      const chatId = await el._pfProps.onLaunch(setupConfig, nameIn.value.trim() || "Hearthvale", undefined, {
+      const chatId = await el._pfProps.onLaunch(setupConfig, nameIn.value.trim() || preset.name, undefined, {
         gmConnectionId,
       });
-      // Seed the world state right away so the first surface load is deterministic.
-      // Retried because restore()'s config fallback depends on the host's nesting;
-      // this PATCH is the direct, unambiguous path.
       if (typeof chatId === "string") {
-        const world = PF.world.build(seed);
+        // Seed the world state so the first surface load is deterministic. The
+        // default themed world only — generation runs surface-side after
+        // launch and rebuilds the world when the brief lands.
+        const world = PF.world.build(seed, themeSel.value);
         const sim = new PF.Sim(world);
         const snap = PF.save.snapshot({ sim, chatId });
         for (let attempt = 0; attempt < 3; attempt++) {
@@ -1778,7 +3274,8 @@ PF.mountSetup = (el, props) => {
       errEl.style.display = "block";
       launchBtn.disabled = false;
       cancelBtn.disabled = false;
-      launchBtn.textContent = "Begin in Hearthvale";
+      cancelBtn.textContent = "Cancel";
+      launchBtn.textContent = `Begin in ${nameIn.value.trim() || preset.name}`;
     }
   });
 };
@@ -1946,6 +3443,9 @@ PF.core = {
     this.sim = PF.save.restore(p.chatMeta ?? {}, p.chatId);
     this.host = p;
     void PF.save.adopt(this);
+    // 0.4.0 chats without a sealed brief generate one here, non-blocking: the
+    // default world is playable immediately and rebuilds when the brief lands.
+    void PF.save.maybeGenerateBrief(this);
     // New chat, new world: drop every cached zone composite — the cache is
     // keyed by zone id alone, so a stale entry would show the previous game.
     this.render?.clearZones();
@@ -2022,12 +3522,14 @@ PF.core = {
     this.setMode("dialogue");
     this.hud?.toast(`Talking to ${npc.name}`);
     void Promise.resolve(
-      this.host.sendMessage(`${sim.header()} I walk up to ${npc.name} the ${npc.role} and greet them.`),
+      this.host.sendMessage(`${sim.composePrefix(npc)} I walk up to ${npc.name} the ${npc.role} and greet them.`),
     )
       .then((ok) => {
         if (ok === false) {
           this.setMode("walk");
           this.hud?.toast("The story isn't accepting turns right now.");
+        } else {
+          sim.commitIntro();
         }
       })
       .catch((err) => {

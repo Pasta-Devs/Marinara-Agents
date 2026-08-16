@@ -6,12 +6,12 @@
   },
   "builtAgainst": {
     "engineVersion": "2.4.3",
-    "engineCommit": "92af241b1f33306680d1efc5fab06e113b7fbb47"
+    "engineCommit": "315c4bc787a332133193df7ddbcb2baa295cdc13"
   },
   "id": "pixelforge",
   "name": "Pixelforge",
-  "version": "0.3.0",
-  "description": "A walkable pixel-art village RPG Experience for Game Mode: explore a closed world, talk to NPCs to drive the story, and let the GM narrate — with World Maps integration and the engine's own combat. Install it, then choose Pixelforge as the Experience when creating a Game Mode chat.",
+  "version": "0.4.0",
+  "description": "A walkable pixel-art RPG Experience for Game Mode: your setup preferences generate the world — a cozy village or a sci-fi colony — then explore it, talk to NPCs to drive the story, and let the GM narrate, with World Maps integration and the engine's own combat. Install it, then choose Pixelforge as the Experience when creating a Game Mode chat.",
   "engine": {
     "min": "2.4.3",
     "maxExclusive": "4.0.0"
@@ -33,6 +33,7 @@
     "assets": {
       "paths": [
         "tiles.png",
+        "tiles-sci-fi-colony.png",
         "atlas.json",
         "sprites.json",
         "sprites/player.png",
@@ -46,18 +47,23 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "ef05f1d047010e778527de646d1d99f501ba1feea94e01a23ab0b952449841ce",
-      "bytes": 693
+      "sha256": "779bf47b19cd641d043487d216cdc72293e41eed6a325ea967e49f67b2b3bc4a",
+      "bytes": 759
     },
     {
       "path": "client.js",
-      "sha256": "2ea998045c6b8baad640d1f625541ca3acc184be4d4f885eabbb00ec7532de70",
-      "bytes": 91019
+      "sha256": "e256d853773e209576e503ff6a82d6fb2b1ba4604e563c9565a1d8d2fad6d3cc",
+      "bytes": 164505
     },
     {
       "path": "tiles.png",
-      "sha256": "5cde968afd12c67f4c3032cfc4bcbb08fd53a48e1ec850cb34c927128cbbb657",
-      "bytes": 1261
+      "sha256": "11a6078061eea4e4055b8f4aa81afd3d4212a64fb7f8f15108772f3fdd78c540",
+      "bytes": 1244
+    },
+    {
+      "path": "tiles-sci-fi-colony.png",
+      "sha256": "9fa853c1002950b7bc2269d79e65395ab877d01a40e4084d7518969b5cd5e5e5",
+      "bytes": 1242
     },
     {
       "path": "atlas.json",

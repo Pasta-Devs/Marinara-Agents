@@ -100,6 +100,24 @@ PF.api = {
     });
     if (!res.ok) throw new Error(`PUT experience-state → ${res.status}`);
   },
+  /** One host-run structured generation call (engine #5135). Returns
+   *  {status, body} without throwing on the route's documented 4xx ladder —
+   *  those are failure-ladder signals, not errors. */
+  async postExperienceGeneration(chatId, body, signal) {
+    const res = await fetch(`/api/game/${encodeURIComponent(chatId)}/experience-generation`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-marinara-csrf": "1" },
+      body: JSON.stringify(body),
+      signal,
+    });
+    let payload = null;
+    try {
+      payload = await res.json();
+    } catch {
+      // non-JSON error body (proxy page, empty 5xx) — the ladder treats it as failure
+    }
+    return { status: res.status, body: payload };
+  },
   async getSpatial(chatId) {
     const res = await fetch(`/api/chats/${encodeURIComponent(chatId)}/spatial-context`, {
       headers: { Accept: "application/json" },
