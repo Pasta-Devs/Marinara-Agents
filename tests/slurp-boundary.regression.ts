@@ -31,6 +31,20 @@ const slurpImages = readFileSync(
   join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-images.service.ts"),
   "utf8",
 );
+const slurpStorage = readFileSync(
+  join(root, "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
+  "utf8",
+);
+assert.match(
+  slurpStorage,
+  /slurp\.viewer\.\$\{personaId\}\.settings/u,
+  "Slurp viewer settings must use the Engine-supported app settings table",
+);
+assert.doesNotMatch(
+  slurpStorage,
+  /slurpViewers|slurp_viewers/u,
+  "Slurp must not access an Engine-unregistered viewer table",
+);
 const stageProfileDraft = readFileSync(
   join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-stage-profile-draft.service.ts"),
   "utf8",
