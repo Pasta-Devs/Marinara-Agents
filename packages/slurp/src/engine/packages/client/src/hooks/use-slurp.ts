@@ -731,9 +731,6 @@ export function useNoodlerViewer(personaId: string | null, enabled = true) {
         total: number;
         nextCursor: SlurpPageCursor | null;
       };
-      const scopePromise = api.get<NoodlerViewerScope>(
-        `/slurp/noodler/viewer?personaId=${encodedPersonaId}`,
-      );
       const feedItems: FeedPage["items"] = [];
       let cursor: SlurpPageCursor | null = null;
       do {
@@ -750,7 +747,12 @@ export function useNoodlerViewer(personaId: string | null, enabled = true) {
         feedItems.push(...page.items);
         cursor = page.nextCursor;
       } while (cursor);
-      const scope = await scopePromise;
+      // Read the shell after the feed. A newly-created Creator account and its first post can
+      // otherwise be observed from different file-store snapshots when these requests start
+      // together, leaving the client with a post whose Creator is absent from the shell.
+      const scope = await api.get<NoodlerViewerScope>(
+        `/slurp/noodler/viewer?personaId=${encodedPersonaId}`,
+      );
       const postsByCreator = new Map<
         string,
         NoodlerViewerScope["creators"][number]["posts"]
