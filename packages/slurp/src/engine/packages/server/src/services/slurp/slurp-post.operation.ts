@@ -122,10 +122,11 @@ export async function generateAndApplyNoodlerPost(
         return { status: "noodler_account_not_found" } as const;
       }
       const settings = await noodle.getSettings();
+      const connections = createConnectionsStorage(db);
       const connectionId = request.connectionId ?? settings.generationConnectionId;
       const connection = connectionId
-        ? await createConnectionsStorage(db).getWithKey(connectionId)
-        : null;
+        ? await connections.getWithKey(connectionId)
+        : await connections.getDefaultForAgents();
       if (!connection) return { status: "connection_not_found" } as const;
       const generated = await generateNoodlerPost(db, {
         account,

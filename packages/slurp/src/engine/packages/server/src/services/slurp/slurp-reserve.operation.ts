@@ -110,10 +110,10 @@ export async function prepareNextNoodlerReservePost(
   )[0]!;
 
   const locked = await tryNoodlerAccountOperation(account.id, async () => {
-    const connectionId = settings.generationConnectionId;
-    if (!connectionId) return "ineligible" as const;
-    const connection =
-      await createConnectionsStorage(db).getWithKey(connectionId);
+    const connections = createConnectionsStorage(db);
+    const connection = settings.generationConnectionId
+      ? await connections.getWithKey(settings.generationConnectionId)
+      : await connections.getDefaultForAgents();
     if (!connection) return "ineligible" as const;
     try {
       let payload = await generateNoodlerPost(db, {

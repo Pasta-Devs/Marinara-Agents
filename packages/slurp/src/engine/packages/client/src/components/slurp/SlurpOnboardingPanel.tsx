@@ -32,6 +32,7 @@ import {
   useNoodlerEligibleAccounts,
   useRefreshTargetedNoodlerCreatorsNow,
   useSlurpConnections,
+  useSlurpSettings,
   useUpdateSlurpSettings,
 } from "../../hooks/use-slurp";
 import { cn, generateClientId } from "../../lib/utils";
@@ -40,6 +41,7 @@ import { Avatar, getNoodleAccentStyle, NOODLE_PINK } from "./SlurpShell";
 import {
   SLURP_ACTIVITY_PRESETS,
   SLURP_DEFAULT_ACTIVITY_PRESET,
+  slurpActivityPresetForSettings,
   slurpActivityPresetPatch,
   type SlurpActivityPreset,
 } from "./slurp-activity-presets";
@@ -125,6 +127,7 @@ export function SlurpOnboardingWizard({
   const refreshTargeted = useRefreshTargetedNoodlerCreatorsNow();
   const updateSlurpSettings = useUpdateSlurpSettings();
   const connectionsQuery = useSlurpConnections(open);
+  const settingsQuery = useSlurpSettings();
   const accounts = useMemo(
     () => eligible.data?.pages.flatMap((page) => page.items) ?? [],
     [eligible.data?.pages],
@@ -134,7 +137,7 @@ export function SlurpOnboardingWizard({
   const [setupLane, setSetupLane] = useState<SetupLane>(selectionOnly ? "easy" : null);
   const [postExplored, setPostExplored] = useState(false);
   const [activityChoice, setActivityChoice] =
-    useState<SlurpActivityPreset>(SLURP_DEFAULT_ACTIVITY_PRESET);
+    useState<SlurpActivityPreset | null>(SLURP_DEFAULT_ACTIVITY_PRESET);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectionInitialized, setSelectionInitialized] = useState(false);
   const [disclosure, setDisclosure] =
@@ -158,6 +161,7 @@ export function SlurpOnboardingWizard({
   const [creationFailed, setCreationFailed] = useState(false);
   const [creationError, setCreationError] = useState<string | null>(null);
   const [generationConnectionId, setGenerationConnectionId] = useState("");
+  const [settingsSeeded, setSettingsSeeded] = useState(false);
   const [outcomes, setOutcomes] = useState<NoodlerRefreshNowOutcome[]>([]);
   const [completion, setCompletion] = useState<CompletionKind | null>(null);
   const [executionId, setExecutionId] = useState("");
@@ -192,14 +196,11 @@ export function SlurpOnboardingWizard({
     setSetupLane(selectionOnly ? "easy" : null);
     setPostExplored(false);
     setActivityChoice(SLURP_DEFAULT_ACTIVITY_PRESET);
-    setPostsPerDay(DEFAULT_POSTS_PER_DAY);
-    setPostsPerDayDraft(String(DEFAULT_POSTS_PER_DAY));
     setSelected(new Set());
     setSelectionInitialized(false);
+    setSettingsSeeded(false);
     setDisclosure("hinted");
     setExceptions({});
-    setAutoPostingEnabled(true);
-    setImagesEnabled(false);
     setGenerateNow(true);
     setCreatedIds([]);
     setCreationFailures(0);
@@ -211,6 +212,27 @@ export function SlurpOnboardingWizard({
     setCompletion(null);
     setExecutionId(generateClientId());
   }, [open, selectionOnly]);
+
+  useEffect(() => {
+    if (!open || settingsSeeded || !settingsQuery.data || !connectionsQuery.data) return;
+    const settings = settingsQuery.data;
+    const defaultLanguageConnection = connectionsQuery.data.find(
+      (connection) =>
+        connection.provider !== "image_generation" &&
+        (connection.defaultForAgents === true || connection.defaultForAgents === "true"),
+    );
+    const persistedPostsPerDay = settings.postsPerDay ?? DEFAULT_POSTS_PER_DAY;
+    setPostsPerDay(persistedPostsPerDay);
+    setPostsPerDayDraft(String(persistedPostsPerDay));
+    setAutoPostingEnabled(settings.autoPostingScheduleEnabled);
+    setActivityChoice(slurpActivityPresetForSettings(settings));
+    setNightQuiet(settings.nightQuiet);
+    setImagesEnabled(settings.autoPostingImagesEnabled);
+    setGenerationConnectionId(
+      settings.generationConnectionId ?? defaultLanguageConnection?.id ?? "",
+    );
+    setSettingsSeeded(true);
+  }, [connectionsQuery.data, open, settingsQuery.data, settingsSeeded]);
 
   const { fetchNextPage, hasNextPage, isFetching } = eligible;
   useEffect(() => {
@@ -313,8 +335,8 @@ export function SlurpOnboardingWizard({
         postsPerDay,
         generationConnectionId: generationConnectionId || null,
         autoPostingScheduleEnabled: autoPostingEnabled,
+        autoPostingImagesEnabled: imagesEnabled,
         nightQuiet,
-        imageGenerationUseAvatarReferences: imagesEnabled,
         ...(selectionOnly
           ? {}
           : {

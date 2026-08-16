@@ -17,6 +17,27 @@ const home = readFileSync(
   ),
   "utf8",
 );
+const settings = readFileSync(
+  join(
+    root,
+    "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx",
+  ),
+  "utf8",
+);
+const storage = readFileSync(
+  join(
+    root,
+    "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts",
+  ),
+  "utf8",
+);
+const routes = readFileSync(
+  join(
+    root,
+    "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts",
+  ),
+  "utf8",
+);
 
 assert.match(
   panel,
@@ -47,6 +68,38 @@ assert.match(
   home,
   /selectionOnly=\{onboardingMode === "add-creators"\}[\s\S]*?onComplete=\{\(\) => \{\s*if \(onboardingMode === "first-run"\) \{\s*setOnboardingState\("completed"\);\s*setOnboardingMode\(null\);\s*\}\s*\}\}/u,
   "The settings callback must close only full onboarding after completion",
+);
+assert.match(
+  settings,
+  /section === "creators" && <div className="flex justify-end"><button[^>]+onClick=\{onAddCreators\}/u,
+  "Add creators must be shown in the Creators settings section",
+);
+assert.doesNotMatch(
+  settings,
+  /<header[\s\S]*?onClick=\{onAddCreators\}[\s\S]*?<\/header>/u,
+  "Add creators must not be shown in the shared settings header",
+);
+assert.match(
+  panel,
+  /setImagesEnabled\(settings\.autoPostingImagesEnabled\)/u,
+  "The wizard must restore the saved image-post preference",
+);
+assert.match(
+  panel,
+  /autoPostingImagesEnabled: imagesEnabled/u,
+  "The wizard must save the image-post preference",
+);
+assert.doesNotMatch(
+  panel,
+  /imageGenerationUseAvatarReferences: imagesEnabled/u,
+  "The image-post switch must not overwrite avatar-reference settings",
+);
+assert.match(storage, /autoPostingImagesEnabled: z\.boolean\(\)/u);
+assert.match(storage, /autoPostingImagesEnabled: false/u);
+assert.match(
+  routes,
+  /settings\.generationConnectionId[\s\S]*?connections\.getWithKey\(settings\.generationConnectionId\)[\s\S]*?: await connections\.getDefaultForAgents\(\)/u,
+  "Creator creation must inherit the Engine agent connection when Slurp has no override",
 );
 
 console.log("Slurp onboarding regressions passed.");

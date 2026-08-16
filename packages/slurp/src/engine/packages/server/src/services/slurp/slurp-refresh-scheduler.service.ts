@@ -148,17 +148,6 @@ export function startNoodleRefreshScheduler(app: FastifyInstance) {
       schedule = markNoodleRefreshAttempt(schedule, now);
       await noodle.saveRefreshSchedule(schedule);
 
-      if (!settings.generationConnectionId) {
-        schedule = await persistFailure(
-          schedule,
-          "Select a Noodle generation connection first.",
-          400,
-          new Date(),
-        );
-        nextDelay = nextNoodleSchedulerPollDelayMs(schedule, new Date());
-        return;
-      }
-
       const response = await app.inject({
         method: "POST",
         url: "/api/slurp/refresh",

@@ -103,6 +103,7 @@ export type SlurpSettings = {
   imageGenerationPrompt: string;
   imageGenerationUseAvatarReferences: boolean;
   imageGenerationIncludeDescriptions: boolean;
+  autoPostingImagesEnabled: boolean;
   allowRandomUsers: boolean;
   allowProfessorMari: boolean;
   participantSelectionMode: "all" | "random" | "exact";
@@ -155,7 +156,14 @@ export function useUpdateSlurpSettings() {
 export function useSlurpConnections(enabled = true) {
   return useQuery({
     queryKey: ["slurp", "connections"],
-    queryFn: () => api.get<Array<{ id: string; name?: string; model?: string; provider?: string }>>("/connections"),
+    queryFn: () => api.get<Array<{
+      id: string;
+      name?: string;
+      model?: string;
+      provider?: string;
+      defaultForAgents?: string | boolean;
+      isDefault?: string | boolean;
+    }>>("/connections"),
     enabled,
     staleTime: 5 * 60_000,
   });
