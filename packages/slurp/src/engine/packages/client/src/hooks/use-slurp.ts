@@ -375,6 +375,7 @@ export function useBulkCreateNoodlerStageProfiles() {
         created: NoodlerManagedStageProfile[];
         skipped: string[];
         failed?: string[];
+        reasons?: string[];
       }>("/slurp/noodler/accounts/bulk", input),
     onSuccess: (result) => {
       const failed = result.failed?.length ?? 0;

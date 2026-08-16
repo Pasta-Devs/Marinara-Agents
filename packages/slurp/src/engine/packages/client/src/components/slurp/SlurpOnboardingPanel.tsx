@@ -52,7 +52,9 @@ type Step = 1 | 2 | 3 | 4 | 5;
 type Intro = 0 | 1 | 2 | 3 | null;
 type SetupLane = "easy" | "customize" | null;
 const LAST_INTRO = 3;
-type CompletionKind = NoodlerOnboardingCompletion;
+/** "creationFailed" is local to the wizard: the shared resolver reports it as "failed", which
+ * reads as a first-post problem even when no creator was ever set up. */
+type CompletionKind = NoodlerOnboardingCompletion | "creationFailed";
 
 const clampPostsPerDay = (raw: string) =>
   Math.max(
@@ -160,6 +162,7 @@ export function SlurpOnboardingWizard({
   const [settingsFailed, setSettingsFailed] = useState(false);
   const [creationFailed, setCreationFailed] = useState(false);
   const [creationError, setCreationError] = useState<string | null>(null);
+  const [creationReasons, setCreationReasons] = useState<string[]>([]);
   const [generationConnectionId, setGenerationConnectionId] = useState("");
   const [settingsSeeded, setSettingsSeeded] = useState(false);
   const [outcomes, setOutcomes] = useState<NoodlerRefreshNowOutcome[]>([]);
@@ -207,6 +210,7 @@ export function SlurpOnboardingWizard({
     setSettingsFailed(false);
     setCreationFailed(false);
     setCreationError(null);
+    setCreationReasons([]);
     setGenerationConnectionId("");
     setOutcomes([]);
     setCompletion(null);
@@ -285,6 +289,17 @@ export function SlurpOnboardingWizard({
   const generatedCount = outcomes.filter(
     (outcome) => outcome.status === "generated",
   ).length;
+  // Nothing was created, so the run failed before first posts: say that instead of blaming
+  // generation.
+  const resolveCompletion = (input: {
+    selectedCount: number;
+    createdCount: number;
+    createFailures: number;
+    outcomes: NoodlerRefreshNowOutcome[] | null;
+  }): CompletionKind =>
+    input.createdCount === 0 && input.createFailures > 0
+      ? "creationFailed"
+      : resolveNoodlerOnboardingCompletion(input);
   const finalizeOutcomes = (
     next: NoodlerRefreshNowOutcome[],
     createFailures = creationFailures,
@@ -294,7 +309,7 @@ export function SlurpOnboardingWizard({
     setOutcomes(next);
     setCompletion(
       settingsSaved
-        ? resolveNoodlerOnboardingCompletion({
+        ? resolveCompletion({
             selectedCount: selected.size,
             createdCount,
             createFailures,
@@ -376,13 +391,14 @@ export function SlurpOnboardingWizard({
         createFailureCount =
           result.skipped.length + (result.failed?.length ?? 0);
         setCreationFailures(createFailureCount);
+        setCreationReasons(result.reasons ?? []);
       }
     } catch (error) {
       // The request may still have created profiles before the response was lost. The server
       // replays the same executionId idempotently, so keep the run retryable in place rather
       // than making the user reselect everything.
       setCreationFailed(true);
-      setCompletion("failed");
+      setCompletion("creationFailed");
       if (error instanceof Error) setCreationError(error.message);
       setStep(5);
       return;
@@ -398,7 +414,7 @@ export function SlurpOnboardingWizard({
     if (newIds.length === 0 || !generateNow) {
       setCompletion(
         settingsSaved
-          ? resolveNoodlerOnboardingCompletion({
+          ? resolveCompletion({
               selectedCount: selected.size,
               createdCount: newIds.length,
               createFailures: createFailureCount,
@@ -1371,6 +1387,7 @@ export function SlurpOnboardingWizard({
                   <Check size={26} />
                 ) : completion === "partial" ||
                   completion === "failed" ||
+                  completion === "creationFailed" ||
                   completion === "settingsFailed" ? (
                   <RefreshCw size={24} />
                 ) : (
@@ -1388,9 +1405,18 @@ export function SlurpOnboardingWizard({
                 {t(`ui.noodle.noodlerwizard.completion.${completion}.detail`, {
                   created: createdIds.length,
                   generated: generatedCount,
-                  failed: failedCount,
+                  // A lost request reports no per-creator failures, so fall back to what the
+                  // user selected: "0 creators could not be set up" helps nobody.
+                  failed: failedCount || selected.size,
                 })}
               </p>
+              {creationReasons.length > 0 && (
+                <ul className="mt-3 max-w-md list-disc space-y-1 rounded-md border border-[#ff7ec1]/25 bg-[#ff7ec1]/[0.06] px-5 py-2 text-left text-xs leading-5 text-[#f3dce9]">
+                  {creationReasons.map((reason) => (
+                    <li key={reason}>{reason}</li>
+                  ))}
+                </ul>
+              )}
               {createdIds.length > 0 && (
                 <dl className="mt-5 grid grid-cols-3 gap-2 text-center">
                   {[
@@ -1424,7 +1450,7 @@ export function SlurpOnboardingWizard({
                       setSettingsFailed(false);
                       onComplete?.();
                       setCompletion(
-                        resolveNoodlerOnboardingCompletion({
+                        resolveCompletion({
                           selectedCount: selected.size,
                           createdCount: createdIds.length,
                           createFailures: creationFailures,
@@ -1445,7 +1471,7 @@ export function SlurpOnboardingWizard({
                   {t("ui.noodle.noodlerwizard.retrySettings")}
                 </button>
               )}
-              {creationFailed && (
+              {(creationFailed || completion === "creationFailed") && (
                 <>
                   {creationError && (
                     <p className="mt-4 rounded-md border border-[#ff7ec1]/25 bg-[#ff7ec1]/[0.06] px-3 py-2 text-left text-xs leading-5 text-[#f3dce9]">

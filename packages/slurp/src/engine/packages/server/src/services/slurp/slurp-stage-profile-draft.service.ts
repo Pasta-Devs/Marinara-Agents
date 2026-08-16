@@ -209,6 +209,14 @@ const noodlerStageProfileDraftSchema = noodleStageProfileDraftResponseSchema
   .strip();
 
 export function parseNoodlerStageProfileDraft(content: string) {
+  // An empty answer is the common provider failure (reasoning budget spent, filtered, or a
+  // dropped response). Left to the JSON parser it surfaces as "Unexpected end of JSON input",
+  // which tells the user nothing about what to change.
+  if (!content.trim()) {
+    throw new Error(
+      "The generation model returned an empty response. Check the Slurp generation connection: raise its max output tokens, or pick a model that answers with JSON.",
+    );
+  }
   const normalized = normalizeNoodlerStageProfileDraft(parseGameJsonish(content));
   return noodlerStageProfileDraftSchema.parse(normalized);
 }
@@ -327,7 +335,10 @@ export async function generateNoodlerStageProfileDraft(
     const retry = await provider.chatComplete(
       [
         ...messages,
-        { role: "assistant", content: response.content ?? "" },
+        // An empty assistant turn is rejected by several providers, so only echo a real answer.
+        ...(response.content?.trim()
+          ? [{ role: "assistant" as const, content: response.content }]
+          : []),
         {
           role: "user",
           content:
