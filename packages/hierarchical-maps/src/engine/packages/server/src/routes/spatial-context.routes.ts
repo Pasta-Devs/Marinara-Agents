@@ -1708,6 +1708,54 @@ export async function spatialContextRoutes(app: FastifyInstance) {
     }
   });
 
+  // Additive location write for Experience packages (Marinara-Engine #5144):
+  // append locations under revision CAS without replacing the map. The
+  // response is the full refreshed spatial context plus the allocated ids, so
+  // the caller needs no follow-up GET.
+  const addSpatialLocationsRequestSchema = z
+    .object({
+      expectedRevision: z.number().int().nonnegative(),
+      locations: z
+        .array(
+          z
+            .object({
+              id: z
+                .string()
+                .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/)
+                .max(128)
+                .optional(),
+              parentId: z
+                .string()
+                .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/)
+                .max(128)
+                .nullable()
+                .optional(),
+              name: z.string().trim().min(1).max(200),
+              kind: z.enum(["region", "settlement", "place", "building", "floor", "room"]).optional(),
+              description: z.string().max(4000).optional(),
+            })
+            .strict(),
+        )
+        .min(1)
+        .max(50),
+    })
+    .strict();
+  app.post<{ Params: ChatSpatialParams }>("/:chatId/spatial-context/locations", async (req, reply) => {
+    const parsed = addSpatialLocationsRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: parsed.error.issues[0]?.message ?? "Invalid location list.",
+        code: "spatial_request_invalid",
+        issues: parsed.error.issues,
+      });
+    }
+    try {
+      return await service.addLocations(req.params.chatId, parsed.data);
+    } catch (error) {
+      return sendServiceError(reply, error);
+    }
+  });
+
   app.post<{ Params: ChatSpatialParams }>("/:chatId/spatial-context/start-over", async (req, reply) => {
     const body = isRecord(req.body) ? req.body : {};
     if (body.breakHistoryContinuity !== true) {
