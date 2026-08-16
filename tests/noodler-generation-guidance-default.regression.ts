@@ -16,6 +16,10 @@ const home = readFileSync(
   "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
   "utf8",
 );
+const settings = readFileSync(
+  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx",
+  "utf8",
+);
 const readme = readFileSync("packages/slurp/README.md", "utf8");
 const enLocale = readFileSync(
   "packages/slurp/src/engine/packages/client/src/localization/locales/en.json",
@@ -31,12 +35,17 @@ function defaultGuidance(source: string): string {
 }
 
 const serverDefault = defaultGuidance(storage);
+const clientDefault = defaultGuidance(
+  settings.replace("DEFAULT_SLURP_GENERATION_GUIDANCE", "NOODLER_DEFAULT_GENERATION_GUIDANCE"),
+);
 assert.doesNotMatch(home, /NOODLER_DEFAULT_GENERATION_GUIDANCE/u);
+assert.equal(clientDefault, serverDefault, "Slurp settings and server defaults must match exactly");
 
 // Adult-first *variety*, not explicit dominance. The confirmed product decision is that explicit
 // posts appear regularly but are neither mandatory nor necessarily the majority, and that
 // ordinary posts stay important rather than being demoted to filler.
 assert.match(serverDefault, /adults \(18\+\)/u);
+assert.match(serverDefault, /^All NoodleR creators and viewers/u);
 assert.match(serverDefault, /not required and need not be the majority/u);
 assert.doesNotMatch(serverDefault, /norm here, not the exception|most posts are lewd|the minority/u);
 
@@ -70,5 +79,8 @@ assert.doesNotMatch(storage, /"noodle\.settings"/u);
 assert.doesNotMatch(readme, /does not make content mature by default/u);
 assert.doesNotMatch(enLocale, /does not make content mature by default/u);
 assert.match(readme, /shipped default guidance is adult-first/u);
+assert.match(settings, /Restore default/u);
+assert.match(settings, /Edit prompt/u);
+assert.match(settings, /Save prompt/u);
 
 console.log("NoodleR generation guidance default regressions passed.");

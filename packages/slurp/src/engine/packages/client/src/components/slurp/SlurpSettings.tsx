@@ -1,4 +1,4 @@
-import { Loader2, RefreshCw, Trash2, UsersRound } from "lucide-react";
+import { FileText, Loader2, Pencil, RefreshCw, RotateCcw, Save, Trash2, UsersRound } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -18,6 +18,7 @@ import {
   type SlurpSettings,
 } from "../../hooks/use-slurp";
 import { showConfirmDialog } from "../../lib/app-dialogs";
+import { Modal } from "../ui/Modal";
 import type { SlurpNavigationState } from "./slurp-navigation.types";
 
 type SlurpSettingsProps = {
@@ -28,6 +29,8 @@ type SlurpSettingsProps = {
 };
 
 const archetypes = ["ordinary", "eccentric", "crossFandom", "raider", "organicDiscovery", "freeResource"] as const;
+const DEFAULT_SLURP_GENERATION_GUIDANCE =
+  "All NoodleR creators and viewers are adults (18+). This is an adult creator page: flirty, suggestive, teasing, and sensual posts are common, and explicit posts appear regularly when they suit the creator — but they are not required and need not be the majority. Tease the locked posts and answer flirty comments in kind. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one bluntly, a funny one filthily. Ordinary posts — updates, humor, behind the scenes, project news — matter just as much and keep both the page and the character human. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.";
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Could not update settings.";
@@ -53,13 +56,14 @@ export function SlurpSettings({ navigation, onNavigate, onAddCreators, onRestart
   const updateSettings = useUpdateSlurpSettings();
   const settings = settingsQuery.data;
   const [generationGuidanceDraft, setGenerationGuidanceDraft] = useState("");
+  const [generationGuidanceEditorOpen, setGenerationGuidanceEditorOpen] = useState(false);
   const [imagePromptDraft, setImagePromptDraft] = useState("");
   useEffect(() => {
     if (settings) {
-      setGenerationGuidanceDraft(settings.generationGuidance);
+      if (!generationGuidanceEditorOpen) setGenerationGuidanceDraft(settings.generationGuidance);
       setImagePromptDraft(settings.imageGenerationPrompt);
     }
-  }, [settings?.generationGuidance, settings?.imageGenerationPrompt]);
+  }, [generationGuidanceEditorOpen, settings?.generationGuidance, settings?.imageGenerationPrompt]);
   const section = navigation.section ?? "general";
   const save = (patch: Partial<SlurpSettings>) => updateSettings.mutate(patch, { onError: (error) => toast.error(errorMessage(error)) });
   const accountsQuery = useNoodlerAccounts(section === "creators");
@@ -74,11 +78,38 @@ export function SlurpSettings({ navigation, onNavigate, onAddCreators, onRestart
   const imageConnections = (connectionsQuery.data ?? []).filter((connection) => connection.provider === "image_generation");
   const imageSettings = imageSettingsQuery.data;
   const update = (key: keyof SlurpSettings, value: unknown) => save({ [key]: value } as Partial<SlurpSettings>);
+  const generationGuidanceIsDefault = settings?.generationGuidance === DEFAULT_SLURP_GENERATION_GUIDANCE;
+  const closeGenerationGuidanceEditor = () => {
+    setGenerationGuidanceDraft(settings?.generationGuidance ?? "");
+    setGenerationGuidanceEditorOpen(false);
+  };
+  const restoreDefaultGenerationGuidance = async () => {
+    try {
+      await updateSettings.mutateAsync({ generationGuidance: DEFAULT_SLURP_GENERATION_GUIDANCE });
+      setGenerationGuidanceDraft(DEFAULT_SLURP_GENERATION_GUIDANCE);
+      toast.success("Default generation guidance restored.");
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  };
+  const saveGenerationGuidance = async () => {
+    if (!generationGuidanceDraft.trim()) {
+      toast.error("Generation guidance cannot be empty.");
+      return;
+    }
+    try {
+      await updateSettings.mutateAsync({ generationGuidance: generationGuidanceDraft });
+      setGenerationGuidanceEditorOpen(false);
+      toast.success("Generation guidance saved.");
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  };
 
   if (settingsQuery.isError) return <main className="flex h-full flex-col items-center justify-center gap-3 p-6 text-sm text-[var(--muted-foreground)]"><p>{t("capabilities.actions.tryAgain")}</p><button type="button" onClick={() => void settingsQuery.refetch()} className="inline-flex min-h-9 items-center gap-2 rounded-md border border-[var(--noodle-accent)]/40 px-3 font-semibold text-[var(--noodle-accent)]"><RefreshCw size={14} />{t("capabilities.actions.tryAgain")}</button></main>;
   if (settingsQuery.isLoading || !settings) return <main className="flex h-full items-center justify-center p-6 text-sm text-[var(--muted-foreground)]"><Loader2 size={18} className="animate-spin" />{t("capabilities.actions.loading")}</main>;
 
-  return (
+  return <>
     <main className="h-full overflow-y-auto">
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 p-5 sm:p-8">
         <header className="flex items-center justify-between gap-4 border-b border-[var(--border)] pb-5">
@@ -91,7 +122,7 @@ export function SlurpSettings({ navigation, onNavigate, onAddCreators, onRestart
 
          {section === "general" && <div className="space-y-5">
            <div className="grid gap-4 sm:grid-cols-2"><Field label="Automatic refreshes per day"><NumberSetting value={settings.refreshesPerDay} min={0} max={24} onSave={(value) => update("refreshesPerDay", value)} /></Field><Field label="Generated posts per refresh"><NumberSetting value={settings.maxGeneratedPostsPerRefresh} min={0} max={24} onSave={(value) => update("maxGeneratedPostsPerRefresh", value)} /></Field></div>
-          <Field label="Generation guidance"><textarea value={generationGuidanceDraft} onChange={(event) => setGenerationGuidanceDraft(event.target.value)} onBlur={() => { if (generationGuidanceDraft !== settings.generationGuidance) update("generationGuidance", generationGuidanceDraft); }} className="min-h-40 w-full rounded-md border border-[var(--border)] bg-transparent p-3 text-sm" /></Field>
+          <div className="space-y-3 rounded-md border border-[var(--border)] p-3"><div className="flex items-start gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]"><FileText size={16} /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="text-xs font-semibold">Generation guidance</p><span className="rounded-full border border-[var(--noodle-accent)]/30 bg-[var(--noodle-accent)]/10 px-2 py-0.5 text-[0.625rem] font-semibold text-[var(--noodle-accent)]">{generationGuidanceIsDefault ? "Default" : "Custom"}</span></div><p className="mt-1 line-clamp-3 whitespace-pre-line text-[0.68rem] leading-5 text-[var(--muted-foreground)]">{settings.generationGuidance}</p></div></div><div className="flex flex-wrap justify-end gap-2"><button type="button" onClick={() => void restoreDefaultGenerationGuidance()} disabled={generationGuidanceIsDefault || updateSettings.isPending} className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-[var(--noodle-accent)]/35 px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 disabled:opacity-45">{updateSettings.isPending ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}Restore default</button><button type="button" onClick={() => { setGenerationGuidanceDraft(settings.generationGuidance); setGenerationGuidanceEditorOpen(true); }} disabled={updateSettings.isPending} className="inline-flex min-h-9 items-center gap-2 rounded-md border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-45"><Pencil size={14} className="text-[var(--noodle-accent)]" />Edit prompt</button></div></div>
           <div className="grid gap-4 sm:grid-cols-2"><Field label="Generation connection"><select value={settings.generationConnectionId ?? ""} onChange={(event) => update("generationConnectionId", event.target.value || null)} className="h-9 w-full rounded-md border border-[var(--border)] bg-transparent px-2 text-sm"><option value="">Default connection</option>{(connectionsQuery.data ?? []).filter((connection) => connection.provider !== "image_generation").map((connection) => <option key={connection.id} value={connection.id}>{connection.name ?? connection.model ?? connection.id}</option>)}</select></Field><Field label="Image generation connection"><select value={imageSettings?.defaultConnectionId ?? settings.imageGenerationConnectionId ?? ""} onChange={(event) => { const value = event.target.value || null; updateImages.mutate({ defaultConnectionId: value }, { onError: (error) => toast.error(errorMessage(error)) }); update("imageGenerationConnectionId", value); }} className="h-9 w-full rounded-md border border-[var(--border)] bg-transparent px-2 text-sm"><option value="">Default image connection</option>{imageConnections.map((connection) => <option key={connection.id} value={connection.id}>{connection.name ?? connection.model ?? connection.id}</option>)}</select></Field></div>
            <Field label="Image generation prompt"><textarea value={imagePromptDraft} onChange={(event) => setImagePromptDraft(event.target.value)} onBlur={() => { if (imagePromptDraft !== settings.imageGenerationPrompt) update("imageGenerationPrompt", imagePromptDraft); }} className="min-h-24 w-full rounded-md border border-[var(--border)] bg-transparent p-3 text-sm" /></Field>
            <div className="grid gap-3 sm:grid-cols-2"><Toggle label="Use avatar references" value={settings.imageGenerationUseAvatarReferences} onChange={(value) => update("imageGenerationUseAvatarReferences", value)} /><Toggle label="Include descriptions" value={settings.imageGenerationIncludeDescriptions} onChange={(value) => update("imageGenerationIncludeDescriptions", value)} /><Toggle label="Automatic posting schedule" value={settings.autoPostingScheduleEnabled} onChange={(value) => update("autoPostingScheduleEnabled", value)} /><Toggle label="Image posts by default" value={settings.autoPostingImagesEnabled} onChange={(value) => update("autoPostingImagesEnabled", value)} /><Toggle label="Night quiet" value={settings.nightQuiet} onChange={(value) => update("nightQuiet", value)} /></div>
@@ -107,7 +138,10 @@ export function SlurpSettings({ navigation, onNavigate, onAddCreators, onRestart
          {section === "advanced" && <div className="space-y-5"><Toggle label="Image prompts" value={settings.enableImagePrompts} onChange={(value) => update("enableImagePrompts", value)} /><Toggle label="Enhanced timeline writing" value={settings.enableEnhancedTimelineWriting} onChange={(value) => update("enableEnhancedTimelineWriting", value)} /><Toggle label="Character schedules" value={settings.includeCharacterSchedules} onChange={(value) => update("includeCharacterSchedules", value)} /><Toggle label="Lorebook context" value={settings.enableLorebookContext} onChange={(value) => update("enableLorebookContext", value)} /><Toggle label="Gallery image attachments" value={settings.allowGalleryImageAttachments} onChange={(value) => update("allowGalleryImageAttachments", value)} /><Field label="Onboarding state"><select value={settings.onboarding} onChange={(event) => update("onboarding", event.target.value)} className="h-9 w-full rounded-md border border-[var(--border)] bg-transparent px-2 text-sm"><option value="not_started">Not started</option><option value="in_progress">In progress</option><option value="completed">Completed</option></select></Field><div className="grid gap-4 sm:grid-cols-3">{(["fanLikesPerRefresh", "fanRepliesPerRefresh", "fanRepostsPerRefresh"] as const).map((key) => <Field key={key} label={key}><NumberSetting value={settings[key]} min={0} max={key === "fanLikesPerRefresh" ? 24 : 12} onSave={(value) => update(key, value)} /></Field>)}</div><Toggle label="Fan activity enabled" value={settings.fanActivityEnabled} onChange={(value) => update("fanActivityEnabled", value)} /><Field label="Fan activity runs per day"><NumberSetting value={settings.fanActivityRunsPerDay} min={1} max={24} onSave={(value) => update("fanActivityRunsPerDay", value)} /></Field><div className="grid gap-4 sm:grid-cols-3">{archetypes.map((key) => <Field key={key} label={key}><NumberSetting value={settings.fanArchetypeWeights[key] ?? 0} min={0} max={100} onSave={(value) => { const next = { ...settings.fanArchetypeWeights, [key]: value }; if (!Object.values(next).some((weight) => weight > 0)) { toast.error("At least one fan type must remain enabled."); return; } update("fanArchetypeWeights", next); }} /></Field>)}</div><p className="text-xs text-[var(--muted-foreground)]">Fan runs today: {fanStatusQuery.data?.usedRuns ?? 0} / {fanStatusQuery.data?.runLimit ?? settings.fanActivityRunsPerDay}</p>{fanStatusQuery.data?.lastRun && <p className="text-xs text-[var(--muted-foreground)]">Last run: {fanStatusQuery.data.lastRun.status}</p>}<button type="button" disabled={refreshFans.isPending || !settings.fanActivityEnabled} onClick={() => refreshFans.mutate(undefined, { onSuccess: (result) => toast.success(`${result.created} audience actions created.`), onError: (error) => toast.error(errorMessage(error)) })} className="inline-flex min-h-9 items-center gap-2 rounded-md border border-[var(--border)] px-3 text-xs font-semibold disabled:opacity-50"><UsersRound size={14} />{refreshFans.isPending ? "Running" : "Refresh audience now"}</button></div>}
       </div>
     </main>
-  );
+    <Modal open={generationGuidanceEditorOpen} onClose={closeGenerationGuidanceEditor} title="Edit generation guidance" width="max-w-3xl" closeDisabled={updateSettings.isPending}>
+      <div className="space-y-4"><textarea value={generationGuidanceDraft} onChange={(event) => setGenerationGuidanceDraft(event.target.value)} className="min-h-[24rem] w-full resize-y rounded-md border border-[var(--border)] bg-transparent p-3 text-sm leading-6" /><div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between"><button type="button" onClick={() => void restoreDefaultGenerationGuidance()} disabled={updateSettings.isPending || (generationGuidanceIsDefault && generationGuidanceDraft === DEFAULT_SLURP_GENERATION_GUIDANCE)} className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md border border-[var(--noodle-accent)]/35 px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 disabled:opacity-45">{updateSettings.isPending ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}Restore default</button><div className="flex gap-2"><button type="button" onClick={closeGenerationGuidanceEditor} disabled={updateSettings.isPending} className="min-h-10 flex-1 rounded-md border border-[var(--border)] px-4 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-45 sm:flex-none">Cancel</button><button type="button" onClick={() => void saveGenerationGuidance()} disabled={!generationGuidanceDraft.trim() || generationGuidanceDraft === settings.generationGuidance || updateSettings.isPending} className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-45 sm:flex-none">{updateSettings.isPending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}Save prompt</button></div></div></div>
+    </Modal>
+  </>;
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) { return <label className="block space-y-1 text-xs font-semibold"><span className="block text-[var(--muted-foreground)]">{label}</span>{children}</label>; }

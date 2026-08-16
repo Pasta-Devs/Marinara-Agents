@@ -208,81 +208,6 @@ export function useHideOnScroll(scroller: HTMLElement | null) {
 /** Base classes for a sticky bar driven by {@link useHideOnScroll}. */
 export const HIDE_ON_SCROLL_CLASS = "will-change-transform";
 
-// The count is the reason to come back, so it carries its own label rather than leaving a
-// bare number for screen readers to read out of context.
-function UnseenBadge({ count }: { count: number }) {
-  const { t: localizeUi } = useUiTranslation();
-  if (count <= 0) return null;
-  return (
-    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[var(--noodle-accent)] px-1.5 text-[0.65rem] font-bold tabular-nums text-zinc-950">
-      <span aria-hidden="true">{count > 99 ? "99+" : count}</span>
-      <span className="sr-only">
-        {localizeUi("ui.noodle.noodlemodetoggle.newSinceLastVisitCount", {
-          count,
-        })}
-      </span>
-    </span>
-  );
-}
-
-// Two-way switch between the Noodle and NoodleR apps — reads as picking one of two
-// exclusive modes, not another item in the vertical nav list.
-function NoodleModeToggle({
-  activeMode,
-  onOpenHome,
-  onOpenNoodler,
-  noodlerUnseenCount = 0,
-  noodleUnseenCount = 0,
-}: {
-  activeMode: NoodleShellMode;
-  onOpenHome: () => void;
-  onOpenNoodler: () => void;
-  /** Posts published since this viewer persona last had the NoodleR feed shown to it. */
-  noodlerUnseenCount?: number;
-  /** The same for the public Noodle timeline. */
-  noodleUnseenCount?: number;
-}) {
-  const { t: localizeUi } = useUiTranslation();
-  const noodler = activeMode === "noodler";
-  const segment = (active: boolean) =>
-    cn(
-      "flex min-h-9 items-center justify-center gap-1.5 rounded-full px-2 text-sm font-bold transition-colors",
-      active
-        ? "bg-[var(--background)] text-[var(--foreground)] shadow-sm"
-        : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]",
-    );
-  return (
-    <div
-      className="grid grid-cols-2 gap-1 rounded-full bg-[var(--accent)] p-1"
-      role="tablist"
-      aria-label={localizeUi(
-        "ui.noodle.noodlemodetoggle.switchBetweenNoodleAndNoodler",
-      )}
-    >
-      <button
-        type="button"
-        role="tab"
-        aria-selected={!noodler}
-        onClick={onOpenHome}
-        className={segment(!noodler)}
-      >
-        {localizeUi("navigation.topbar.noodle")}
-        <UnseenBadge count={noodleUnseenCount} />
-      </button>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={noodler}
-        onClick={onOpenNoodler}
-        className={segment(noodler)}
-      >
-        {localizeUi("ui.noodle.noodlemodetoggle.noodler")}
-        <UnseenBadge count={noodlerUnseenCount} />
-      </button>
-    </div>
-  );
-}
-
 /** Boundary marker between posts arrived since the last visit and everything already read. */
 export function NewSinceLastVisitDivider() {
   const { t: localizeUi } = useUiTranslation();
@@ -591,17 +516,6 @@ export function NoodleShell({
                   </button>
                 </div>
 
-                {false && (
-                  <div className="mt-7">
-                    <NoodleModeToggle
-                      activeMode={resolvedAppMode}
-                      onOpenHome={onOpenHome}
-                      onOpenNoodler={onOpenNoodler}
-                      noodlerUnseenCount={noodlerUnseenCount}
-                      noodleUnseenCount={noodleUnseenCount}
-                    />
-                  </div>
-                )}
                 <nav
                   className="mt-3 space-y-1"
                   aria-label={localizeUi(
@@ -803,17 +717,6 @@ export function NoodleShell({
                     className="h-10 w-16"
                   />
                 </div>
-                {false && (
-                  <div className="mb-3">
-                    <NoodleModeToggle
-                      activeMode={resolvedAppMode}
-                      onOpenHome={onOpenHome}
-                      onOpenNoodler={onOpenNoodler}
-                      noodlerUnseenCount={noodlerUnseenCount}
-                      noodleUnseenCount={noodleUnseenCount}
-                    />
-                  </div>
-                )}
                 <nav className="space-y-1">
                   <button
                     type="button"

@@ -43,6 +43,10 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     modes: ["roleplay", "game"],
     activation: "Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
   },
+  "inventory-tracker": {
+    modes: ["roleplay"],
+    activation: "Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+  },
   "persona-stats": {
     modes: ["roleplay"],
     activation: "Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
@@ -80,8 +84,8 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     activation: "Add the Agent in Chat Settings → Agents → Misc Agents for Roleplay mode.",
   },
   haptic: {
-    modes: ["conversation", "roleplay"],
-    activation: "Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents for Conversation and Roleplay modes.",
+    modes: ["conversation", "roleplay", "game"],
+    activation: "Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents for Conversation, Roleplay, and Game modes.",
   },
   illustrator: {
     modes: ["conversation", "roleplay", "game"],
