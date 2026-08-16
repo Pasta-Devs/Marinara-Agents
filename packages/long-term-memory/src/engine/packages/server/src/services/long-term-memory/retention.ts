@@ -166,7 +166,11 @@ async function runLongTermMemoryRetentionUnsafe({
   for (const eventLogPath of [dirs.eventLog, dirs.debugLog]) {
     eventsRemoved += await pruneEventLog(eventLogPath, eventCutoff);
   }
-  await pruneLtmActivityIndex(root, eventCutoff);
+  try {
+    await pruneLtmActivityIndex(root, eventCutoff);
+  } catch (error) {
+    logger.warn(error, "[ltm] Deferred activity index pruning during retention");
+  }
 
   // 5. Incomplete generation receipt cleanup
   const runtimeReceiptsDir = safeJoin(dirs.events, "runtime-receipts");

@@ -61,9 +61,11 @@ export function AvailabilityTabRail({
   const [activeKind, activeTargets] = activeEntry;
   const activeCopy = sectionCopy[activeKind];
   const query = queries[activeKind] ?? "";
-  const displayedTargets = activeKind === "chat" || activeKind === "branch"
-    ? [{ id: "all", label: activeCopy.allLabel }, ...activeTargets]
-    : activeTargets;
+  const displayedTargetsFor = (kind: SectionKind, targets: readonly AvailabilityTarget[], allLabel: string) =>
+    kind === "chat" || kind === "branch"
+      ? [{ id: "all", label: allLabel }, ...targets]
+      : targets;
+  const displayedTargets = displayedTargetsFor(activeKind, activeTargets, activeCopy.allLabel);
   const filtered = displayedTargets.filter((target) =>
     `${target.label} ${target.comment ?? ""}`
       .toLocaleLowerCase()
@@ -149,9 +151,7 @@ export function AvailabilityTabRail({
         {sections.map(([kind, targets], index) => {
           const copy = sectionCopy[kind];
           const active = activeSection === kind;
-           const displayTargets = kind === "chat" || kind === "branch"
-             ? [{ id: "all", label: copy.allLabel }, ...targets]
-             : targets;
+           const displayTargets = displayedTargetsFor(kind, targets, copy.allLabel);
            const count = displayTargets.filter((target) => selectedIds.has(`${kind}:${target.id}`)).length;
           const tabId = `${railId}-${kind}-tab`;
           return (

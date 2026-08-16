@@ -1715,6 +1715,12 @@ async function main() {
         },
       ],
     );
+    const derivedResponse = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/notes/source_delete_retract/derived",
+      headers,
+    });
+    assert.equal(derivedResponse.statusCode, 404);
     const invalidMode = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes/source_route_extract/extract",

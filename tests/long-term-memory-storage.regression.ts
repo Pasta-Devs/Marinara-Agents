@@ -110,6 +110,7 @@ async function main() {
     `${source}/section-contributions.ts`
   );
   const { extractNoteKeywords } = await import(`${source}/keyword-extract.ts`);
+  const { mergeKeywords } = await import(`${source}/keyword-extract.ts`);
   const {
     getLtmActiveKeywords,
     ltmKeywordKey,
@@ -515,6 +516,10 @@ async function main() {
     assert.equal(normalizeDetailName("Current state"), "current_state");
     assert.equal(normalizeDetailName(" Important facts! "), "important_facts");
     assert.equal(ltmKeywordKey(" I "), "i");
+    assert.deepEqual(
+      mergeKeywords(["Cobalt-Moon"], ["cobalt moon"], 30),
+      ["cobalt moon"],
+    );
     assert.equal(
       ltmScopesOverlap(
         { characterIds: ["character-a"] },
@@ -1623,6 +1628,14 @@ async function main() {
       enableModes: ["game"],
     });
     assert.equal(availabilityAdded.status, "complete");
+    await assert.rejects(
+      storage.bulkMutateNotes({
+        noteIds: [availabilityNote.id],
+        addScope: { chatIds: ["chat-a"] },
+        removeScope: { chatId: "chat-a" },
+      }),
+      /cannot be added and removed/u,
+    );
     assert.deepEqual(
       (await storage.getNote(availabilityNote.id))?.scope,
       { chatId: "chat-a", chatIds: ["chat-a"], characterIds: ["character-a"] },

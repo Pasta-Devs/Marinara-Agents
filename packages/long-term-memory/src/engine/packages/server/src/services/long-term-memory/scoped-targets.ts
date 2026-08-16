@@ -147,6 +147,9 @@ async function resolveScopedVariantNoteId({
 }) {
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const candidate = scopedVariantNoteId(baseId, scope, attempt);
+    const legacyCandidate = legacyScopedVariantNoteId(baseId, scope, attempt);
+    const legacyExisting = safeExistingById.get(legacyCandidate) ?? await getNoteById(storage, legacyCandidate);
+    if (legacyExisting && canUseEvidenceTarget(legacyExisting, unit, scope)) return legacyCandidate;
     const existing = safeExistingById.get(candidate) ?? await getNoteById(storage, candidate);
     if (!existing || canUseEvidenceTarget(existing, unit, scope)) return candidate;
   }
@@ -212,7 +215,23 @@ function scopeIdentitySeed(scope: LtmScope) {
   const characterIds = uniqueStrings(scope.characterIds ?? []).sort();
   if (characterIds.length > 0) return `ltm_scope_v2:character:${characterIds.join(",")}:persona:${personaIds.join(",")}`;
 
-  return `ltm_scope_v2:persona:${personaIds.join(",") || "global"}`;
+  return `ltm_scope_v2:persona:${personaIds.length ? personaIds.join(",") : "<global>"}`;
+}
+
+function legacyScopeIdentitySeed(scope: LtmScope) {
+  const groupId = scope.groupId?.trim();
+  if (groupId) return `ltm_scope_v1:group:${groupId}`;
+  const chatIds = uniqueStrings(getLtmScopeChatIds(scope)).sort();
+  if (chatIds.length) return `ltm_scope_v1:chat:${chatIds.join(",")}`;
+  const characterIds = uniqueStrings(scope.characterIds ?? []).sort();
+  if (characterIds.length) return `ltm_scope_v1:character:${characterIds.join(",")}`;
+  return "ltm_scope_v1:global";
+}
+
+function legacyScopedVariantNoteId(baseId: string, scope: LtmScope, attempt = 0) {
+  const hash = createHash("sha256").update(legacyScopeIdentitySeed(scope)).digest("hex").slice(0, 10);
+  const suffix = attempt > 0 ? `${hash}_${attempt + 1}` : hash;
+  return ltmNoteIdSchema.parse(`${baseId.slice(0, 120 - suffix.length - 1)}_${suffix}`);
 }
 
 function isSourceOrScene(note: Pick<LtmNote, "type" | "tags">) {

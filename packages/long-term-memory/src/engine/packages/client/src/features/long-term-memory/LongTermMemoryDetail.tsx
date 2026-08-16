@@ -136,6 +136,8 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   );
   const [destinationDirty, setDestinationDirty] = useState(false);
   const destinationSaveRef = useRef<(() => Promise<boolean>) | null>(null);
+  const navigationSaveInFlightRef = useRef(false);
+  const [navigationSaveInFlight, setNavigationSaveInFlight] = useState(false);
   const [navigationPrompt, setNavigationPrompt] = useState<string | null>(null);
   const navigationDialogRef = useRef<HTMLDialogElement>(null);
   const navigationResolveRef = useRef<((allow: boolean) => void) | null>(null);
@@ -267,7 +269,15 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   };
   const finishNavigationPrompt = async (decision: "save" | "discard" | "stay") => {
     if (decision === "save") {
-      if (!(await destinationSaveRef.current?.())) return;
+      if (navigationSaveInFlightRef.current) return;
+      navigationSaveInFlightRef.current = true;
+      setNavigationSaveInFlight(true);
+      try {
+        if (!(await destinationSaveRef.current?.())) return;
+      } finally {
+        navigationSaveInFlightRef.current = false;
+        setNavigationSaveInFlight(false);
+      }
     }
     const resolve = navigationResolveRef.current;
     navigationResolveRef.current = null;
@@ -633,9 +643,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
               {localizeUi("ui.longTermMemory.memoryvault.unsavedNavigationDescription", { action: navigationPrompt })}
             </p>
             <div className="flex flex-wrap justify-end gap-2">
-              <Button data-ltm-destination-stay onClick={() => void finishNavigationPrompt("stay")}>{localizeUi("ui.longTermMemory.memoryvault.stay")}</Button>
-              <Button destructive onClick={() => void finishNavigationPrompt("discard")}>{localizeUi("ui.longTermMemory.memoryvault.discardAndContinue")}</Button>
-              <Button primary onClick={() => void finishNavigationPrompt("save")}>{localizeUi("ui.longTermMemory.memoryvault.saveAndContinue")}</Button>
+              <Button disabled={navigationSaveInFlight} data-ltm-destination-stay onClick={() => void finishNavigationPrompt("stay")}>{localizeUi("ui.longTermMemory.memoryvault.stay")}</Button>
+              <Button disabled={navigationSaveInFlight} destructive onClick={() => void finishNavigationPrompt("discard")}>{localizeUi("ui.longTermMemory.memoryvault.discardAndContinue")}</Button>
+              <Button disabled={navigationSaveInFlight} primary onClick={() => void finishNavigationPrompt("save")}>{localizeUi("ui.longTermMemory.memoryvault.saveAndContinue")}</Button>
             </div>
           </section>
         </dialog>

@@ -780,7 +780,7 @@ export const ltmNoteTransferPreviewItemSchema = z
     nextScope: ltmScopeSchema,
     derived: z.boolean().default(false),
     sourceNoteId: ltmNoteIdSchema.optional(),
-    sourceNoteIds: z.array(ltmNoteIdSchema).max(100).optional(),
+    sourceNoteIds: z.array(ltmNoteIdSchema).max(250).optional(),
     classification: z.enum(["ready", "no_op", "conflict"]),
     defaultIncluded: z.boolean(),
     reason: z.string().min(1).max(240).optional(),
@@ -1269,6 +1269,19 @@ export const ltmBulkNoteRequestSchema = z
         path: ["modes"],
         message: "Modes cannot be combined with incremental mode changes.",
       });
+    const addScope = request.addScope;
+    const removeScope = request.removeScope;
+    const dimensions = [
+      ["chat", [...(addScope?.chatIds ?? []), ...(addScope?.chatId ? [addScope.chatId] : [])], [...(removeScope?.chatIds ?? []), ...(removeScope?.chatId ? [removeScope.chatId] : [])]],
+      ["group", [...(addScope?.groupIds ?? []), ...(addScope?.groupId ? [addScope.groupId] : [])], [...(removeScope?.groupIds ?? []), ...(removeScope?.groupId ? [removeScope.groupId] : [])]],
+      ["character", addScope?.characterIds ?? [], removeScope?.characterIds ?? []],
+      ["persona", [...(addScope?.personaIds ?? []), ...(addScope?.personaId ? [addScope.personaId] : [])], [...(removeScope?.personaIds ?? []), ...(removeScope?.personaId ? [removeScope.personaId] : [])]],
+    ] as const;
+    for (const [dimension, added, removed] of dimensions) {
+      const overlap = new Set(added.filter((id) => removed.includes(id)));
+      if (overlap.size)
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["addScope"], message: `Scope ${dimension} IDs cannot be added and removed in the same request: ${[...overlap].join(", ")}` });
+    }
   });
 
 export const ltmBulkNoteResultStatusSchema = z.enum([

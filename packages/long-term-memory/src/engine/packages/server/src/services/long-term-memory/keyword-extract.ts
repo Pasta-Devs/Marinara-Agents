@@ -129,7 +129,7 @@ const STOP_WORDS = new Set([
 
 const MAX_NOTE_KEYWORDS = 30;
 
-function normalizeKeywordToken(token: string) {
+export function normalizeKeywordToken(token: string) {
   const normalized = token
     .toLocaleLowerCase()
     .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")
@@ -188,7 +188,7 @@ export function mergeKeywords(
     const normalized = normalizePhrase(keyword);
     if (!normalized || seen.has(normalized)) continue;
     seen.add(normalized);
-    merged.push(keyword.trim());
+    merged.push(normalized);
     if (merged.length >= maxTotal) break;
   }
 
@@ -256,10 +256,14 @@ export function extractNoteKeywords(note: LtmNote) {
   const tfIdfKeywords = noteText
     ? extractKeywordsTfIdf(noteText, MAX_NOTE_KEYWORDS)
     : [];
-  const suppressed = new Set(getLtmKeywordIntent(note).suppressed.map(ltmKeywordKey));
+  const suppressed = new Set(
+    getLtmKeywordIntent(note).suppressed
+      .map(normalizePhrase)
+      .filter((keyword): keyword is string => Boolean(keyword)),
+  );
   return mergeKeywords(
     getLtmActiveKeywords(note),
-    tfIdfKeywords.filter((keyword) => !suppressed.has(ltmKeywordKey(keyword))),
+    tfIdfKeywords.filter((keyword) => !suppressed.has(normalizePhrase(keyword))),
     MAX_NOTE_KEYWORDS,
   );
 }

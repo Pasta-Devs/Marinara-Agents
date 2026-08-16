@@ -48,7 +48,9 @@ export function renderSectionContributions(
     : manual.length
       ? [manual.at(-1)!]
       : [contributions.at(-1)!];
-  const latest = rendered.at(-1)!;
+  const latest = [...rendered]
+    .sort((left, right) => left.updatedAt.localeCompare(right.updatedAt))
+    .at(-1)!;
   let text = "";
   if (additive) {
     const seen = new Set<string>();

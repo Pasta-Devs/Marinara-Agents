@@ -608,6 +608,15 @@ async function main() {
           });
         if (request.method === "GET" && url.pathname.endsWith("/settings"))
           return send(200, {});
+        if (request.method === "POST" && url.pathname.endsWith("/notes/batch"))
+          return send(200, {
+            status: "complete",
+            requestedNoteIds: ["world_artifact_lifecycle"],
+            updatedNoteIds: ["world_artifact_lifecycle"],
+            affectedNoteIds: ["world_artifact_lifecycle"],
+            skippedNoteIds: [],
+            failedNoteIds: [],
+          });
         if (
           request.method === "GET" &&
           url.pathname.endsWith("/extraction-settings")
@@ -2540,21 +2549,27 @@ async function main() {
          );
         await bulkRail.locator('[data-ltm-availability-tab="persona"]').click();
         await bulkRail.locator('[data-ltm-availability-target="persona:persona-a"]').click();
-        assert.equal(
-          await bulkRail.locator('[data-ltm-availability-target="persona:persona-a"]').getAttribute("aria-pressed"),
-          "true",
-        );
-        const bulkAvailabilityRequest = page.waitForRequest(
+         assert.equal(
+           await bulkRail.locator('[data-ltm-availability-target="persona:persona-a"]').getAttribute("aria-pressed"),
+           "true",
+         );
+         const bulkAvailabilityResponse = page.waitForResponse(
+           (response) =>
+             response.request().method() === "POST" &&
+             response.url().includes("/api/long-term-memory/notes/batch"),
+         );
+         const bulkAvailabilityRequest = page.waitForRequest(
           (request) =>
             request.method() === "POST" &&
             request.url().includes("/api/long-term-memory/notes/batch"),
         );
         await bulkAvailability.getByRole("button", { name: "Apply" }).click();
-        const bulkAvailabilityPayload = (await bulkAvailabilityRequest).postDataJSON();
-        assert.deepEqual(bulkAvailabilityPayload.addScope, {
+         const bulkAvailabilityPayload = (await bulkAvailabilityRequest).postDataJSON();
+         assert.deepEqual(bulkAvailabilityPayload.addScope, {
           characterIds: ["character-a"],
-          personaIds: ["persona-a"],
-        });
+           personaIds: ["persona-a"],
+         });
+         assert.equal((await bulkAvailabilityResponse).status(), 200);
         await page.locator('[data-ltm-note-editor]').waitFor();
         const cleanupRequest = page.waitForRequest(
           (request) =>

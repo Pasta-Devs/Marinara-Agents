@@ -10,6 +10,7 @@ import {
 import { readJsonFile, writeJsonAtomic } from "./atomic-json.js";
 import { isEnoent } from "./ltm-utils.js";
 import { getLongTermMemoryDirectories, safeJoin } from "./paths.js";
+import { logger } from "./package-runtime.js";
 
 const MAX_ACTIVITY_EVENTS = 100;
 const activityIndexStateSchema = z.object({ version: z.literal(1) }).strict();
@@ -36,6 +37,7 @@ async function readActivityFile(root: string, noteId: string) {
       : [];
   } catch (error) {
     if (isEnoent(error)) return [];
+    logger.error(error, `[ltm] Activity index could not be read for ${noteId}`);
     return [];
   }
 }

@@ -132,8 +132,7 @@ function noteSourceNoteIds(note: Pick<LtmNote, "links">) {
   );
 }
 
-function lineageForNote(notes: LtmNote[], noteId: string) {
-  const noteById = new Map(notes.map((note) => [note.id, note]));
+function lineageForNote(noteById: Map<string, LtmNote>, noteId: string) {
   const lineage = new Set<string>();
   const pending = [noteId];
   while (pending.length) {
@@ -372,7 +371,7 @@ async function buildTransferPlan(
   const destinationTokens = new Map(
     destinationCandidates.map((note) => [note.id, tokenizeForSimilarity(note)]),
   );
-  const noteLineages = new Map(notes.map((note) => [note.id, lineageForNote(notes, note.id)]));
+  const noteLineages = new Map(notes.map((note) => [note.id, lineageForNote(noteLookup, note.id)]));
 
   const items = transferNoteIds
     .map((noteId): LtmNoteTransferPreviewItem => {

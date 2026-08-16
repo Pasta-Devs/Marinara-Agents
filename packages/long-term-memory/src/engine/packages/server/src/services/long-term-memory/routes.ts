@@ -325,12 +325,14 @@ const removeCurrentChatBody = z
 const applyDerivedBody = z
   .object({
     chatIds: z.array(z.string().min(1).max(120)).max(100).optional(),
+    groupIds: z.array(z.string().min(1).max(120)).max(100).optional(),
     characterIds: z.array(z.string().min(1).max(120)).max(100).optional(),
+    personaIds: z.array(z.string().min(1).max(120)).max(100).optional(),
   })
   .strict()
   .refine(
-    (value) => Boolean(value.chatIds?.length || value.characterIds?.length),
-    "Provide at least one chat or character link to apply.",
+     (value) => Boolean(value.chatIds?.length || value.groupIds?.length || value.characterIds?.length || value.personaIds?.length),
+     "Provide at least one scope link to apply.",
   );
 const searchBody = z
   .object({
@@ -857,12 +859,11 @@ export function createLongTermMemoryRoutes(runtime: {
             changed = true;
           }
         }
-        const linkCounts = (id: string) => ({
-          incomingLinkCount: notes.filter((note) =>
-            note.links.some((link) => link.target === id),
-          ).length,
-          outgoingLinkCount: notes.find((note) => note.id === id)?.links.length ?? 0,
-        });
+         const incomingLinkCounts = new Map<string, number>();
+         const outgoingLinkCounts = new Map(notes.map((note) => [note.id, note.links.length]));
+         for (const note of notes)
+           for (const link of note.links)
+             incomingLinkCounts.set(link.target, (incomingLinkCounts.get(link.target) ?? 0) + 1);
         const related = notes
           .filter((note) => note.id !== sourceNoteId && linkedIds.has(note.id))
           .sort((left, right) =>
@@ -877,12 +878,13 @@ export function createLongTermMemoryRoutes(runtime: {
             previewText:
               Object.values(sections)[0]?.text.replace(/\s+/g, " ").trim().slice(0, 600) ??
               "",
-            ...linkCounts(id),
+             incomingLinkCount: incomingLinkCounts.get(id) ?? 0,
+             outgoingLinkCount: outgoingLinkCounts.get(id) ?? 0,
           }));
         return ltmSourceDerivedMemoriesResponseSchema.parse({
           sourceNoteId,
-          sourceIncomingLinkCount: linkCounts(sourceNoteId).incomingLinkCount,
-          sourceOutgoingLinkCount: linkCounts(sourceNoteId).outgoingLinkCount,
+           sourceIncomingLinkCount: incomingLinkCounts.get(sourceNoteId) ?? 0,
+           sourceOutgoingLinkCount: outgoingLinkCounts.get(sourceNoteId) ?? 0,
           memories: related,
         });
       },
@@ -1285,19 +1287,6 @@ export function createLongTermMemoryRoutes(runtime: {
         .strict()
         .parse(request.body ?? {});
       try {
-        const requestedNotes = await Promise.all(body.ids.map((id) => storage.getNote(id)));
-        if (requestedNotes.some((note) => note?.type === "source") && (
-          !body.retractExtracted ||
-          !body.lineageSourceNoteId ||
-          !body.expectedLineageNoteIds
-        )) {
-          const result = routeError(new LtmServiceError(
-            "Source deletion requires a current lineage preview and explicit selected memories.",
-            400,
-            "ltm_source_lineage_preview_required",
-          ), "Could not permanently delete memories.");
-          return reply.status(result.statusCode).send(result.body);
-        }
         const result = await storage.deleteNotesPermanently(body.ids, {
           retractExtracted: body.retractExtracted,
           excludedNoteIds: body.excludedNoteIds,

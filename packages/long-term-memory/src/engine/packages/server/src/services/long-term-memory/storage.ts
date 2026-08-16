@@ -152,20 +152,15 @@ function rewriteDraftMutationSectionKey(
 
 function extractedLineageIds(notes: LtmNote[], sourceNoteId: string) {
   const ids = new Set([sourceNoteId]);
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const note of notes) {
-      if (
-        ids.has(note.id) ||
-        !note.links.some(
-          (link) => link.relation === "extracted_from" && ids.has(link.target),
-        )
-      )
-        continue;
-      ids.add(note.id);
-      changed = true;
-    }
+  const childrenBySource = new Map<string, string[]>();
+  for (const note of notes)
+    for (const link of note.links)
+      if (link.relation === "extracted_from")
+        childrenBySource.set(link.target, [...(childrenBySource.get(link.target) ?? []), note.id]);
+  const pending = [sourceNoteId];
+  while (pending.length) {
+    for (const child of childrenBySource.get(pending.pop()!) ?? [])
+      if (!ids.has(child)) { ids.add(child); pending.push(child); }
   }
   return ids;
 }
@@ -541,7 +536,7 @@ export class LongTermMemoryStorage {
               }),
             )
           : notePatch.sections;
-      assertWritableSections(sections ?? current.sections);
+      if (sections) assertWritableSections(sections);
       const next = ltmNoteSchema.parse({
         ...current,
         ...notePatch,
@@ -567,7 +562,8 @@ export class LongTermMemoryStorage {
         for (const entry of await readdir(getLongTermMemoryDirectories(this.root).drafts, { withFileTypes: true })) {
           if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
           const path = safeJoin(getLongTermMemoryDirectories(this.root).drafts, entry.name);
-          const before = JSON.parse(await readFile(path, "utf8"));
+           let before: unknown;
+           try { before = JSON.parse(await readFile(path, "utf8")); } catch { continue; }
           const parsed = ltmExtractionDraftSchema.safeParse(before);
           if (
             !parsed.success ||
@@ -1130,7 +1126,8 @@ export class LongTermMemoryStorage {
     for (const entry of await readdir(drafts, { withFileTypes: true })) {
       if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
       const path = safeJoin(drafts, entry.name);
-      const before = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+       let before: Record<string, unknown>;
+       try { before = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>; } catch { continue; }
       const parsed = ltmExtractionDraftSchema.safeParse(before);
       if (!parsed.success || parsed.data.status !== "pending") continue;
       const mutations = parsed.data.mutations.map((mutation) =>
