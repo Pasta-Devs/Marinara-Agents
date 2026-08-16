@@ -77,7 +77,7 @@ export async function projectLongTermMemoryDraftReview(options: ProjectLtmDraftR
     counts: {
       sources: projectedSources.length,
       drafts: projectedSources.reduce((sum, source) => sum + source.drafts.length, 0),
-      mutations: projectedSources.reduce((sum, source) => sum + source.drafts.reduce((draftSum, item) => draftSum + item.draft.mutations.length, 0), 0),
+      mutations: projectedSources.reduce((sum, source) => sum + source.drafts.reduce((draftSum, item) => draftSum + (item.draft.status === "pending" ? item.draft.mutations.length : 0), 0), 0),
       blockedDrafts: projectedSources.reduce((sum, source) => sum + source.drafts.filter((item) => item.blockReasons.length).length, 0),
       candidateRejections: projectedSources.reduce((sum, source) => sum + source.drafts.reduce((draftSum, item) => draftSum + item.candidateRejections.length, 0), 0),
       deduplications: projectedSources.reduce((sum, source) => sum + source.drafts.reduce((draftSum, item) => draftSum + item.deduplications.length, 0), 0),

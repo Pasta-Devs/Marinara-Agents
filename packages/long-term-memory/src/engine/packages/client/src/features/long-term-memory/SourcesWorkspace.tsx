@@ -285,11 +285,13 @@ function SourceOperationWorkbench({
   sourceNoteId,
   sourceTitle,
   destinations,
+  confirmAction,
   onComplete,
 }: {
   sourceNoteId: string;
   sourceTitle: string;
   destinations: ScopeTargetChat[];
+  confirmAction?: LongTermMemoryDestinationProps["props"]["confirmAction"];
   onComplete: () => Promise<void>;
 }) {
   const { t: localizeUi } = useLtmTranslation();
@@ -373,7 +375,29 @@ function SourceOperationWorkbench({
     }
   };
   const apply = async () => {
-    if (!previewed || busy) return;
+    if (!previewed || busy || result) return;
+    if (operation === "archive" || operation === "delete") {
+      const options = {
+        title: localizeUi(`ui.longTermMemory.sourceoperation.apply${operation[0].toUpperCase()}${operation.slice(1)}`),
+        message: localizeUi(
+          operation === "delete"
+            ? "ui.longTermMemory.sourceoperation.confirmDelete"
+            : "ui.longTermMemory.sourceoperation.confirmArchive",
+          { count: selectedIds.length },
+        ),
+        confirmLabel: localizeUi(`ui.longTermMemory.sourceoperation.apply${operation[0].toUpperCase()}${operation.slice(1)}`),
+        tone: operation === "delete" ? "destructive" as const : "default" as const,
+      };
+      const confirmed = confirmAction
+        ? await confirmAction(options)
+        : window.confirm(
+            localizeUi(
+              "ui.longTermMemory.longtermmemorydetail.confirmationWithMessage",
+              { title: options.title, message: options.message },
+            ),
+          );
+      if (!confirmed) return;
+    }
     setBusy("apply");
     setError("");
     try {
@@ -572,7 +596,7 @@ function SourceOperationWorkbench({
           <Button
             primary={operation !== "delete"}
             destructive={operation === "delete"}
-            disabled={busy !== null || ((operation === "copy" || operation === "move") && !preview?.buckets.ready.length)}
+            disabled={Boolean(result) || busy !== null || ((operation === "copy" || operation === "move") && !preview?.buckets.ready.length)}
             onClick={() => void apply()}
             data-ltm-source-operation-action="apply"
           >
@@ -1318,9 +1342,11 @@ export default function SourcesWorkspace({
       `}</style>
       {sourceOperation ? (
         <SourceOperationWorkbench
+          key={sourceOperation.id}
           sourceNoteId={sourceOperation.id}
           sourceTitle={sourceOperation.title}
           destinations={scopeTargets.data?.chats ?? []}
+          confirmAction={props.confirmAction}
           onComplete={async () => {
             await invalidateAfterMutation();
             await (source === "lorebooks"

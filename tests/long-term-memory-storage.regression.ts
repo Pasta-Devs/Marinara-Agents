@@ -81,7 +81,11 @@ async function main() {
   const { compileEvidenceUnitExtraction } = await import(
     `${source}/evidence-unit-extraction.ts`
   );
-  const { sourceHashForLtmSourceNote } = await import(
+  const {
+    extractionFingerprintForLtmSourceNote,
+    isLtmSourceExtractionFingerprintCurrent,
+    sourceHashForLtmSourceNote,
+  } = await import(
     `${source}/source-hash.ts`
   );
   const { projectLongTermMemoryDraftReview } = await import(
@@ -108,11 +112,12 @@ async function main() {
   const { extractNoteKeywords } = await import(`${source}/keyword-extract.ts`);
   const {
     getLtmActiveKeywords,
+    ltmKeywordKey,
     normalizeLtmKeywordIntent,
   } = await import(
     "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/keywords.ts"
   );
-  const { validateLtmExplicitAvailability } = await import(
+  const { ltmScopesOverlap, validateLtmExplicitAvailability } = await import(
     "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/scope.ts"
   );
   const { normalizeDetailName } = await import(
@@ -509,6 +514,23 @@ async function main() {
     );
     assert.equal(normalizeDetailName("Current state"), "current_state");
     assert.equal(normalizeDetailName(" Important facts! "), "important_facts");
+    assert.equal(ltmKeywordKey(" I "), "i");
+    assert.equal(
+      ltmScopesOverlap(
+        { characterIds: ["character-a"] },
+        {},
+        { characterIds: ["character-b"], includeGlobal: false },
+      ),
+      false,
+    );
+    assert.equal(
+      ltmScopesOverlap(
+        { personaIds: ["persona-a"] },
+        {},
+        { personaIds: ["persona-b"], includeGlobal: false },
+      ),
+      false,
+    );
     await assert.rejects(
       storage.createNote({ ...noteInput, id: "world_storage_global_rejected", scope: {} }),
       (error: any) => error.code === "ltm_explicit_availability_required",
@@ -602,6 +624,30 @@ async function main() {
       },
       sections: { source: { text: "Legacy evidence.", updatedAt: timestamp } },
     });
+    const scopedFingerprintSource = {
+      ...legacySource,
+      scope: {
+        chatId: "chat-a",
+        chatIds: ["chat-a"],
+        groupId: "group-a",
+        groupIds: ["group-a"],
+        personaId: "persona-a",
+        personaIds: ["persona-a"],
+      },
+    };
+    const currentFingerprint = extractionFingerprintForLtmSourceNote(
+      scopedFingerprintSource,
+    );
+    assert.equal(currentFingerprint.version, 3);
+    assert.equal(
+      isLtmSourceExtractionFingerprintCurrent(scopedFingerprintSource, {
+        ...currentFingerprint,
+        version: 2,
+        scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      }),
+      false,
+      "legacy scoped fingerprints must require re-extraction",
+    );
     await storage.createNote({
       ...noteInput,
       id: "world_legacy_target",
@@ -1633,6 +1679,14 @@ async function main() {
     });
     assert.equal(finalAvailability.status, "no_changes");
     assert.deepEqual(finalAvailability.skippedNoteIds, [availabilityNote.id]);
+    await assert.rejects(
+      storage.bulkMutateNotes({
+        noteIds: [availabilityNote.id],
+        modes: ["roleplay"],
+        enableModes: ["game"],
+      }),
+      /Modes cannot be combined/u,
+    );
 
     const retractSourceA = await storage.createNote({
       ...noteInput,
@@ -1765,7 +1819,10 @@ async function main() {
       "source",
       "manual",
     ]);
-    assert.equal(manual.sections.facts.text, "Manually preserved fact.");
+    assert.equal(
+      manual.sections.facts.text,
+      "Extracted fact.\n\nManually preserved fact.",
+    );
     assert.deepEqual(manual.sections.facts.evidence, [`source_note:${retractSourceA.id}`]);
 
     await storage.projectNote("rel_retract_fallback", "relationship", () => ({
@@ -1995,7 +2052,7 @@ async function main() {
       },
     });
     const deletedDetail = await storage.updateNote(deletionTarget.id, {
-      sections: { history: deletionTarget.sections.history },
+      sections: deletionTarget.sections,
       removedSectionKeys: ["facts"],
     });
     assert.deepEqual(Object.keys(deletedDetail.sections), ["history"]);
@@ -2017,6 +2074,11 @@ async function main() {
       ),
       true,
       "invalidated proposals must remain visible with their explicit blocking reason",
+    );
+    assert.equal(
+      invalidatedReview.counts.mutations,
+      0,
+      "invalidated drafts must not contribute pending mutations",
     );
     await assert.rejects(
       storage.updateNote(deletionTarget.id, { removedSectionKeys: ["history"] }),
@@ -2046,11 +2108,11 @@ async function main() {
     const recentActivity = await readLtmActivityEvents(
       activityRoot,
       "world_activity_target",
-      20,
+      101,
     );
     assert.deepEqual(
       recentActivity.map((event) => event.payload.index),
-      Array.from({ length: 20 }, (_, index) => 149 - index),
+      Array.from({ length: 100 }, (_, index) => 149 - index),
       "activity index must retain the newest events in newest-first order",
     );
     await rm(activityDirectories.eventLog, { force: true });

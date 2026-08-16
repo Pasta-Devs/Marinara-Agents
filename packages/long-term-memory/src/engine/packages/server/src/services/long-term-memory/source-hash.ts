@@ -8,6 +8,7 @@ import {
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { stableJsonHash } from "./chunking.js";
 import {
+  getLtmScopeChatIds,
   getLtmScopeGroupIds,
   getLtmScopePersonaIds,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
@@ -19,7 +20,7 @@ function normalizedStrings(values: readonly (string | null | undefined)[]) {
 }
 
 function normalizedScope(scope: LtmScope | null | undefined): LtmScope {
-  const chatIds = normalizedStrings([scope?.chatId, ...(scope?.chatIds ?? [])]);
+  const chatIds = normalizedStrings(getLtmScopeChatIds(scope));
   const groupIds = normalizedStrings(getLtmScopeGroupIds(scope));
   const characterIds = normalizedStrings(scope?.characterIds ?? []);
   const personaIds = normalizedStrings(getLtmScopePersonaIds(scope));
@@ -72,7 +73,7 @@ export function extractionFingerprintForLtmSourceMaterial(input: {
   const modes = normalizedStrings(input.modes) as LtmMode[];
   const extractionMode = input.extractionMode ?? modes[0] ?? "roleplay";
   return ltmExtractionFingerprintSchema.parse({
-    version: 2,
+    version: 3,
     sourceHash: sourceHashForLtmSourceMaterial(input),
     provenance: input.provenance ?? null,
     scope: normalizedScope(input.scope),

@@ -1280,7 +1280,7 @@ export function createLongTermMemoryRoutes(runtime: {
           retractExtracted: z.boolean().optional().default(false),
           excludedNoteIds: z.array(ltmNoteIdSchema).max(500).optional(),
           lineageSourceNoteId: ltmNoteIdSchema.optional(),
-          expectedLineageNoteIds: z.array(ltmNoteIdSchema).max(500).optional(),
+          expectedLineageNoteIds: z.array(ltmNoteIdSchema).max(1_000).optional(),
         })
         .strict()
         .parse(request.body ?? {});

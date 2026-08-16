@@ -144,7 +144,7 @@ export function AvailabilityTabRail({
         role="tablist"
         aria-label={tablistLabel}
         data-ltm-availability-tablist
-        className="mari-editor-tab-rail grid w-full grid-cols-4"
+        className="mari-editor-tab-rail grid w-full"
       >
         {sections.map(([kind, targets], index) => {
           const copy = sectionCopy[kind];
@@ -316,10 +316,10 @@ export function TargetPicker({
           />
         ) : null}
       </label>
-      <div id={listId} className="max-h-52 overflow-y-auto rounded-md border border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-control-bg)]">
+      <div id={listId} role="list" className="max-h-52 overflow-y-auto rounded-md border border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-control-bg)]">
         {filtered.length ? (
           filtered.map((target, index) => (
-            <div key={`${target.kind}:${target.id}`}>
+            <div key={`${target.kind}:${target.id}`} role="listitem">
               {groupLabels && (index === 0 || filtered[index - 1]?.kind !== target.kind) ? (
                 <p className="border-b border-[var(--marinara-editor-divider)] bg-[var(--secondary)] px-3 py-1 text-xs font-semibold text-[var(--marinara-editor-muted)]">
                   {groupLabels[target.kind]}

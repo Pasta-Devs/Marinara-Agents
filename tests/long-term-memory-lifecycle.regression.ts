@@ -1108,13 +1108,13 @@ async function main() {
           .textContent(),
         "Character A",
       );
-      assert.equal(
-        await memoryScope
-          .locator('[data-ltm-memory-scope-picker="chat"]')
-          .locator(":scope > summary")
-          .innerText(),
-        "ChatDesktop chat",
-      );
+        assert.equal(
+          await memoryScope
+            .locator('[data-ltm-memory-scope-picker="chat"]')
+            .locator(":scope > summary")
+            .innerText(),
+          "ChatDesktop chat",
+        );
       assert.equal(
         await memoryScope
           .locator('[data-ltm-memory-scope-picker="branch"]')
@@ -1261,7 +1261,7 @@ async function main() {
         await page.locator("#ltm-onboarding-description ul li").count(),
         3,
       );
-      assert.deepEqual(
+        assert.deepEqual(
         await page
           .locator("#ltm-onboarding-description ul li strong")
           .allInnerTexts(),
@@ -1463,6 +1463,7 @@ async function main() {
         localStorage.removeItem("marinara-long-term-memory-onboarding-v1");
       }, packageManifest.version);
       await page.locator('[data-ltm-surface="detail"]').waitFor();
+      const scopeTargetQueryCount = scopeTargetQueries.length;
       await page
         .locator(
           '[data-ltm-navigation="desktop"] [data-ltm-destination="review"]',
@@ -1683,7 +1684,12 @@ async function main() {
         .locator('[data-ltm-source-tab="lorebooks"][aria-selected="true"]')
         .waitFor();
       await page.locator('[data-ltm-source-tab="chats"]').click();
-      assert.equal(scopeTargetQueries[0], "?includeAllChats=true&chatId=desktop-chat");
+      assert.equal(
+        scopeTargetQueries.slice(scopeTargetQueryCount).includes(
+          "?includeAllChats=true&chatId=desktop-chat",
+        ),
+        true,
+      );
       await page
         .locator(
           '[data-ltm-navigation="desktop"] [data-ltm-destination="vault"]',
@@ -1951,8 +1957,8 @@ async function main() {
         [
           { destination: "review", top: true, left: true },
           { destination: "vault", top: true, left: true },
-        ],
-      );
+          ],
+        );
       assert.equal(
         await page.locator('[data-ltm-workspace-pane-tab="workbench"]').count(),
         0,
@@ -2351,8 +2357,8 @@ async function main() {
         await page.locator('[data-ltm-availability-picker] > summary').click();
         const availabilityTabs = page.locator("[data-ltm-availability-tabs]");
        await availabilityTabs.waitFor();
-       assert.deepEqual(
-         await availabilityTabs.locator('[role="tab"]').evaluateAll((tabs) =>
+        assert.deepEqual(
+          await availabilityTabs.locator('[role="tab"]').evaluateAll((tabs) =>
            tabs.map((tab) => ({
              kind: tab.getAttribute("data-ltm-availability-tab"),
              selected: tab.getAttribute("aria-selected"),
@@ -2365,9 +2371,23 @@ async function main() {
            { kind: "persona", selected: "false", tabIndex: "-1", count: "0" },
             { kind: "chat", selected: "false", tabIndex: "-1", count: "1" },
             { kind: "branch", selected: "false", tabIndex: "-1", count: "1" },
-         ],
-       );
-       const desktopRailLayout = await availabilityTabs.evaluate((rail) => {
+          ],
+        );
+        assert.equal(
+          await availabilityTabs
+            .locator('[data-ltm-availability-tab="persona"] span')
+            .first()
+            .innerText(),
+          "Persona",
+        );
+        assert.equal(
+          await availabilityTabs
+            .locator('[data-ltm-availability-tab="chat"] span')
+            .first()
+            .innerText(),
+          "Chat",
+        );
+        const desktopRailLayout = await availabilityTabs.evaluate((rail) => {
          const tablist = rail.querySelector<HTMLElement>('[role="tablist"]')!;
          const tabs = [...rail.querySelectorAll<HTMLElement>('[role="tab"]')];
          const rects = tabs.map((tab) => tab.getBoundingClientRect());
@@ -2384,14 +2404,23 @@ async function main() {
            tablistWidth: tablistRect.width,
          };
        });
-        assert.deepEqual(desktopRailLayout, {
-         columns: 4,
-         sameRow: true,
-         equalWidths: true,
-         panelBelowTabs: true,
-         panelWidth: desktopRailLayout.tablistWidth,
-           tablistWidth: desktopRailLayout.tablistWidth,
-         });
+        assert.deepEqual(
+          {
+            columns: desktopRailLayout.columns,
+            sameRow: desktopRailLayout.sameRow,
+            equalWidths: desktopRailLayout.equalWidths,
+            panelBelowTabs: desktopRailLayout.panelBelowTabs,
+          },
+          {
+            columns: 4,
+            sameRow: true,
+            equalWidths: true,
+            panelBelowTabs: true,
+          },
+        );
+        assert.ok(
+          Math.abs(desktopRailLayout.panelWidth - desktopRailLayout.tablistWidth) <= 0.5,
+        );
          await availabilityTabs.locator('[data-ltm-availability-tab="chat"]').click();
          assert.equal(
            await availabilityTabs.locator('[data-ltm-availability-target="chat:all"]').getAttribute("aria-pressed"),

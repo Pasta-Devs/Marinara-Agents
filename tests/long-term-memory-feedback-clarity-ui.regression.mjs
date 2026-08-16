@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const workspace = readFileSync(
   new URL(
@@ -40,6 +41,13 @@ const vault = readFileSync(
 const targetPicker = readFileSync(
   new URL(
     "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/TargetPicker.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const reviewQueue = readFileSync(
+  new URL(
+    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/ReviewQueue.tsx",
     import.meta.url,
   ),
   "utf8",
@@ -270,6 +278,9 @@ assert.match(vault, /onInput=\{\(event\) =>/u);
 assert.match(sharedControls, /aria-live="polite"/u);
 assert.match(targetPicker, /<button[\s\S]*type="button"/u);
 assert.doesNotMatch(targetPicker, /role="listbox"|role="option"|aria-activedescendant|ArrowDown|ArrowUp/u);
+assert.doesNotMatch(targetPicker, /className="mari-editor-tab-rail grid w-full grid-cols-4"/u);
+assert.match(targetPicker, /id=\{listId\} role="list"/u);
+assert.match(targetPicker, /<div key=\{`\$\{target\.kind\}:\$\{target\.id\}`\} role="listitem">/u);
 assert.match(sharedControls, /Escape[\s\S]*closeRef\.current\(true\)/u);
 assert.match(sharedControls, /focus\(\{ preventScroll: true \}\)/u);
 assert.match(workspaceLayout, /minmax\(17rem, 20rem\)/u);
@@ -278,14 +289,17 @@ assert.match(workspaceLayout, /prefers-reduced-motion/u);
 assert.match(types, /onSaveRequest\?: \(save:/u);
 assert.match(detail, /onSaveRequest=\{\(save\) =>/u);
 assert.match(detail, /navigationPrompt/u);
+assert.match(detail, /navigationResolveRef\.current\?\.\(false\)/u);
 assert.match(detail, /finishNavigationPrompt\("save"\)/u);
 assert.match(detail, /aria-modal="true"/u);
 assert.match(detail, /event\.key !== "Tab"/u);
 
-const localeRoot = new URL(
-  "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/",
-  import.meta.url,
-).pathname;
+const localeRoot = fileURLToPath(
+  new URL(
+    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/",
+    import.meta.url,
+  ),
+);
 const sourceFiles = [];
 const usedKeys = new Set();
 function collectSourceFiles(directory) {
@@ -308,6 +322,10 @@ const vaultLocaleValues = Object.entries(locale)
   .join(" ");
 assert.doesNotMatch(vaultLocaleValues, /\b(?:Metadata|Scope|Derived memories|Connections)\b/u);
 assert.match(workspace, /function SourceOperationWorkbench/u);
+assert.match(workspace, /!previewed \|\| busy \|\| result/u);
+assert.match(workspace, /disabled=\{Boolean\(result\)/u);
+assert.match(workspace, /confirmAction=\{props\.confirmAction\}/u);
+assert.match(workspace, /key=\{sourceOperation\.id\}/u);
 assert.match(workspace, /data-ltm-linked-memory-selection/u);
 assert.match(workspace, /derivedNoteIds: selectedLinkedIds/u);
 assert.match(workspace, /archive: "notes_only"/u);
@@ -316,6 +334,11 @@ assert.match(workspace, /data-ltm-source-operation-preview/u);
 assert.match(workspace, /data-ltm-source-operation-excluded/u);
 assert.match(workspace, /data-ltm-source-operation-result/u);
 assert.equal(locale["ui.longTermMemory.sourceoperation.clearAll"], "Clear all");
+assert.equal(locale["ui.longTermMemory.sourceoperation.confirmArchive"], "Archive the source and {{count}} selected linked memories?");
+assert.equal(locale["ui.longTermMemory.sourceoperation.confirmDelete"], "Permanently delete the source and {{count}} selected linked memories?");
+assert.match(types, /onOpenSources\?: \(source\?: SourceTab\) => boolean \| Promise<boolean>/u);
+assert.match(reviewQueue, /item\.draft\.status === "pending"/u);
+assert.match(reviewQueue, /skippableSelectedRows/u);
 assert.match(locale["ui.longTermMemory.sourceoperation.deleteDetachment"], /detached/u);
 
 process.stdout.write("Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, and defaults ok\n");

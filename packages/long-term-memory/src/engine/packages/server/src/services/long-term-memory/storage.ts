@@ -184,7 +184,10 @@ async function rewriteRejectedSuggestions(
   }
   if (!Array.isArray(before))
     throw new Error("Long-term memory rejected-suggestion ledger is not an array.");
-  const after = before.map((item) => rewrite(ltmRejectedSuggestionSchema.parse(item)));
+  const after = before.map((item) => {
+    const parsed = ltmRejectedSuggestionSchema.safeParse(item);
+    return parsed.success ? rewrite(parsed.data) : item;
+  });
   return JSON.stringify(before) === JSON.stringify(after)
     ? null
     : { path, before, after };
@@ -399,7 +402,10 @@ export class LongTermMemoryStorage {
     const note = ltmNoteSchema.parse({
       ...draft,
       scope,
-      ...normalizeLtmKeywordIntent(draft),
+      ...normalizeLtmKeywordIntent({
+        ...draft,
+        manualKeywords: draft.manualKeywords ?? [],
+      }),
       sections,
       createdAt: (draft as any).createdAt ?? timestamp,
       updatedAt: (draft as any).updatedAt ?? timestamp,
@@ -502,7 +508,11 @@ export class LongTermMemoryStorage {
         throw new LtmServiceError("A memory must keep at least one detail.", 400, "ltm_last_section");
       const sectionInput =
         notePatch.sections !== undefined
-          ? notePatch.sections
+          ? Object.fromEntries(
+              Object.entries(notePatch.sections).filter(
+                ([key]) => !removed.has(key),
+              ),
+            )
           : removed.size
             ? Object.fromEntries(
                 Object.entries(current.sections).filter(([key]) => !removed.has(key)),
@@ -1263,7 +1273,7 @@ export class LongTermMemoryStorage {
                         evidence: evidence?.length ? evidence : undefined,
                       };
                 });
-              if (excluded) {
+              if (excluded && !contributions.some((item) => item.owner === "manual")) {
                 const manual = manualContribution({
                   ...section,
                   evidence: section.evidence?.filter(

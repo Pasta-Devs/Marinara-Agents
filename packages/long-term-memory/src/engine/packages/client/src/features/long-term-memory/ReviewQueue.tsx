@@ -1112,6 +1112,16 @@ export default function ReviewQueue({
   const eligibleSelectedRows = selectedRows.filter((row) =>
     eligibleIds.has(row.mutation.id),
   );
+  const skippableDraftIds = new Set(
+    (review.data?.sources ?? []).flatMap((source) =>
+      source.drafts
+        .filter((item) => item.draft.status === "pending")
+        .map((item) => item.draft.id),
+    ),
+  );
+  const skippableSelectedRows = selectedRows.filter((row) =>
+    skippableDraftIds.has(row.draftId),
+  );
   const invalidSelectedEdits = eligibleSelectedRows.filter((row) => {
     const edited = editedById.get(row.mutation.id);
     return edited ? !selectedEditIsValid(edited) : false;
@@ -1169,7 +1179,7 @@ export default function ReviewQueue({
   ) => {
     const applicableRows =
       explicitRows ??
-      (action === "accept" ? eligibleSelectedRows : selectedRows);
+      (action === "accept" ? eligibleSelectedRows : skippableSelectedRows);
     if (!applicableRows.length) return;
     const invalidEditIds =
       action === "accept" ? invalidClosureEditIds(applicableRows) : [];
@@ -1659,7 +1669,9 @@ export default function ReviewQueue({
               className="!h-11 !min-h-11 !w-11 !min-w-11"
               style={{ height: 44, minHeight: 44, width: 44, minWidth: 44 }}
               destructive
-              disabled={running !== null}
+              disabled={
+                !skippableDraftIds.has(row.draftId) || running !== null
+              }
               onClick={() => void runBatch("skip", [row])}
             />
           </div>
@@ -2364,14 +2376,14 @@ export default function ReviewQueue({
                   </Button>
                   <Button
                     destructive
-                    disabled={running !== null}
+                    disabled={!skippableSelectedRows.length || running !== null}
                     onClick={() => void runBatch("skip")}
                   >
                     {running === "skip"
                       ? localizeUi("ui.longTermMemory.reviewqueue.skipping")
                       : localizeUi(
                           "ui.longTermMemory.reviewqueue.skipSelectedValue1",
-                          { value1: selectedRows.length },
+                          { value1: skippableSelectedRows.length },
                         )}
                   </Button>
                   <Button

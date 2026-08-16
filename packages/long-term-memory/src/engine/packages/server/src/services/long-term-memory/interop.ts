@@ -15,6 +15,7 @@ import {
 import {
   getLtmScopeChatIds,
   getLtmScopeGroupIds,
+  getLtmScopePersonaIds,
   ltmScopesOverlap,
   withMergedLtmScopeLinks,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
@@ -511,7 +512,15 @@ async function candidates(
   if (request.source === "chats") {
     const scopeIds = new Set(getLtmScopeChatIds(request.scope));
     const scopeGroupIds = new Set(getLtmScopeGroupIds(request.scope));
-    const broaderScope = scopeGroupIds.size > 0 || scopeIds.size > 1;
+    const scopeCharacterIds = new Set(request.scope?.characterIds ?? []);
+    const scopePersonaIds = new Set(getLtmScopePersonaIds(request.scope));
+    const hasScopeFilter =
+      scopeIds.size > 0 ||
+      scopeGroupIds.size > 0 ||
+      scopeCharacterIds.size > 0 ||
+      scopePersonaIds.size > 0;
+    const broaderScope = hasScopeFilter &&
+      (scopeGroupIds.size > 0 || scopeIds.size > 1 || scopeCharacterIds.size > 0 || scopePersonaIds.size > 0);
     for (const chat of await getPackagePersistence().listChats()) {
       if (
         normalizeLtmChatCharacterIds(chat.characterIds).includes(
@@ -522,9 +531,11 @@ async function candidates(
       if (request.chatId && !broaderScope && chat.id !== request.chatId)
         continue;
       if (
-        scopeGroupIds.size
-          ? !chat.groupId || !scopeGroupIds.has(chat.groupId)
-          : scopeIds.size && !scopeIds.has(chat.id)
+        hasScopeFilter &&
+        !scopeIds.has(chat.id) &&
+        !(chat.groupId && scopeGroupIds.has(chat.groupId)) &&
+        !normalizeLtmChatCharacterIds(chat.characterIds).some((id) => scopeCharacterIds.has(id)) &&
+        !(chat.personaId && scopePersonaIds.has(chat.personaId))
       )
         continue;
       const metadata = object(chat.metadata),

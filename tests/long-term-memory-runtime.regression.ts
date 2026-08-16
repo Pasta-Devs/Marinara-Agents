@@ -89,7 +89,7 @@ async function main() {
     name: "Legacy chat",
     mode: "roleplay",
     characterIds: [],
-    groupId: null,
+    groupId: "group-a",
     personaId: null,
     connectionId: null,
     metadata: { enableLongTermMemory: true, longTermMemoryBudgetTokens: 2048 },
@@ -813,13 +813,13 @@ async function main() {
     }));
     await storage.createNote(note("world_pure_chat_cross_chat", "chat-a", `The ${scopedRecallText} is old-chat-only.`));
     await storage.createNote(note("world_persona_cross_chat", "chat-a", `The ${scopedRecallText} belongs to persona A.`, {
-      scope: { chatId: "chat-a", chatIds: ["chat-a"], characterIds: ["character-a"], personaId: "persona-a" },
+      scope: { chatId: "chat-a", chatIds: ["chat-a"], personaId: "persona-a" },
     }));
     await storage.createNote(note("world_persona_all_chats", "chat-a", `The ${scopedRecallText} is available across every persona A chat.`, {
       scope: { personaIds: ["persona-a"] },
     }));
     await storage.createNote(note("world_group_cross_chat", "chat-a", `The ${scopedRecallText} belongs to group A.`, {
-      scope: { chatId: "chat-a", chatIds: ["chat-a"], characterIds: ["character-a"], groupId: "group-a" },
+      scope: { groupId: "group-a" },
     }));
     await rebuildLongTermMemoryIndexes({ root: storage.root });
     const newCharacterRecall = await runtime.recall({
@@ -831,8 +831,7 @@ async function main() {
      });
       assert.match(newCharacterRecall?.text ?? "", /belongs to character A/);
       assert.match(newCharacterRecall?.text ?? "", /every character A chat/);
-     assert.match(newCharacterRecall?.text ?? "", /belongs to persona A/);
-     assert.match(newCharacterRecall?.text ?? "", /belongs to group A/);
+      assert.doesNotMatch(newCharacterRecall?.text ?? "", /belongs to persona A|belongs to group A/);
      assert.doesNotMatch(newCharacterRecall?.text ?? "", /old-chat-only|belongs to character B/);
     assert.doesNotMatch(
       (await runtime.recall({
@@ -847,33 +846,42 @@ async function main() {
     const personaCharacterRecall = (await runtime.recall({
       chatId: "chat-persona-a",
       chatMode: "roleplay",
-      characterIds: ["character-a"],
+       characterIds: [],
       messages: [{ role: "user", content: scopedRecallText }],
       debugMode: false,
      }))?.text ?? "";
-      assert.match(personaCharacterRecall, /belongs to character A/);
-      assert.match(personaCharacterRecall, /belongs to persona A/);
+       assert.match(personaCharacterRecall, /belongs to persona A/);
       assert.match(personaCharacterRecall, /every persona A chat/);
       assert.doesNotMatch(
         (await runtime.recall({
           chatId: "chat-other-persona",
           chatMode: "roleplay",
-          characterIds: ["character-a"],
+           characterIds: [],
           messages: [{ role: "user", content: scopedRecallText }],
           debugMode: false,
         }))?.text ?? "",
         /every persona A chat/,
       );
      assert.match(
-      (await runtime.recall({
-        chatId: "chat-other-group",
-        chatMode: "roleplay",
-        characterIds: ["character-a"],
-        messages: [{ role: "user", content: scopedRecallText }],
-        debugMode: false,
-      }))?.text ?? "",
-      /belongs to group A/,
-    );
+       (await runtime.recall({
+         chatId: "chat-a",
+         chatMode: "roleplay",
+         characterIds: [],
+         messages: [{ role: "user", content: scopedRecallText }],
+         debugMode: false,
+       }))?.text ?? "",
+       /belongs to group A/,
+     );
+     assert.doesNotMatch(
+       (await runtime.recall({
+         chatId: "chat-other-group",
+         chatMode: "roleplay",
+         characterIds: [],
+         messages: [{ role: "user", content: scopedRecallText }],
+         debugMode: false,
+       }))?.text ?? "",
+       /belongs to group A/,
+     );
     const legacyReadable = await runtime.recall(input);
     assert.match(legacyReadable.text, /beneath the observatory/);
     const first = await runtime.recall(input);

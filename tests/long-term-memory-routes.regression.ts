@@ -616,13 +616,14 @@ async function main() {
       headers,
     });
     assert.equal(rebuiltAfterFailure.statusCode, 200, rebuiltAfterFailure.body);
-    const renameCollision = await app.inject({
+    const renameSectionCollision = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes/world_route_fixture/sections/rename",
       headers,
-      payload: { fromSectionKey: "details", toSectionKey: "details" },
+      payload: { fromSectionKey: "details", toSectionKey: "history" },
     });
-    assert.equal(renameCollision.statusCode, 400, renameCollision.body);
+    assert.equal(renameSectionCollision.statusCode, 409, renameSectionCollision.body);
+    assert.equal(renameSectionCollision.json().code, "ltm_section_already_exists");
     const rebuiltStatus = await app.inject({
       method: "GET",
       url: "/api/long-term-memory/status",
@@ -1639,6 +1640,50 @@ async function main() {
         },
       },
     });
+    await storageService.storage.projectNote(
+      "world_delete_retract",
+      "world",
+      (current: any) => ({
+        ...current,
+        sections: {
+          facts: {
+            ...current.sections.facts,
+            contributions: [
+              {
+                owner: "source",
+                sourceNoteId: "source_delete_retract",
+                sourceHash:
+                  "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                text: "This memory is retracted.",
+                updatedAt: "2026-07-17T00:00:00.000Z",
+                evidence: ["source_note:source_delete_retract"],
+              },
+            ],
+          },
+        },
+      }),
+    );
+    const oversizedLineage = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/permanent-delete",
+      headers,
+      payload: {
+        ids: ["source_delete_retract"],
+        retractExtracted: true,
+        excludedNoteIds: ["world_delete_retract"],
+        lineageSourceNoteId: "source_delete_retract",
+        expectedLineageNoteIds: [
+          "source_delete_retract",
+          "world_delete_retract",
+          ...Array.from({ length: 998 }, (_, index) => `world_lineage_${index}`),
+        ],
+      },
+    });
+    assert.equal(
+      oversizedLineage.statusCode,
+      409,
+      "a 1,000-ID lineage must pass request validation before stale-lineage detection",
+    );
     const retractSource = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes/permanent-delete",
@@ -3667,12 +3712,12 @@ async function main() {
       payload: { removedSectionKeys: ["history"] },
     });
     assert.equal(lastDetail.statusCode, 400, lastDetail.body);
-    const removedSectionRoute = await app.inject({
+    const unregisteredSectionRoute = await app.inject({
       method: "DELETE",
       url: "/api/long-term-memory/notes/world_detail_route_fixture/sections/history",
       headers,
     });
-    assert.equal(removedSectionRoute.statusCode, 404, removedSectionRoute.body);
+    assert.equal(unregisteredSectionRoute.statusCode, 404, unregisteredSectionRoute.body);
     const deletedAll = await app.inject({
       method: "DELETE",
       url: "/api/long-term-memory/data",

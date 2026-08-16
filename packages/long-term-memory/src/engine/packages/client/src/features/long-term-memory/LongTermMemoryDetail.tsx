@@ -235,6 +235,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     if (!destinationDirty) return true;
     if (destinationSaveRef.current) {
       return new Promise<boolean>((resolve) => {
+        navigationResolveRef.current?.(false);
         navigationResolveRef.current = resolve;
         navigationTriggerRef.current = document.activeElement instanceof HTMLElement
           ? document.activeElement

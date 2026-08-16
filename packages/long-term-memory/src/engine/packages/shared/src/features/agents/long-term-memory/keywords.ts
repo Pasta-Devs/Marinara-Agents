@@ -4,7 +4,7 @@ type LtmKeywordNote = Pick<LtmNote, "keywords"> &
   Partial<Pick<LtmNote, "manualKeywords" | "suppressedKeywords">>;
 
 export function ltmKeywordKey(keyword: string) {
-  return keyword.trim().toLocaleLowerCase();
+  return keyword.trim().toLowerCase();
 }
 
 export function uniqueLtmKeywords(keywords: readonly string[]) {

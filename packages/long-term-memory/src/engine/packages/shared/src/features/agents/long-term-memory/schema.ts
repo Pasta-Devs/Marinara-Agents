@@ -728,7 +728,7 @@ export function ltmScopeAliasConflict(
 export const ltmWriteScopeSchema = ltmScopeSchema.superRefine((scope, ctx) => {
   const conflict = ltmScopeAliasConflict(scope);
   if (conflict)
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["scope"], message: conflict });
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: [], message: conflict });
 });
 
 /**
@@ -738,7 +738,7 @@ export const ltmWriteScopeSchema = ltmScopeSchema.superRefine((scope, ctx) => {
  */
 export const ltmExtractionFingerprintSchema = z
   .object({
-    version: z.literal(2),
+    version: z.union([z.literal(2), z.literal(3)]),
     sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
     provenance: ltmSourceProvenanceSchema.nullable(),
     scope: ltmScopeSchema,
@@ -1263,6 +1263,12 @@ export const ltmBulkNoteRequestSchema = z
           path: ["disableModes", index],
           message: "A chat mode cannot be enabled and disabled in the same bulk request.",
         });
+    if (request.modes && (request.enableModes?.length || request.disableModes?.length))
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["modes"],
+        message: "Modes cannot be combined with incremental mode changes.",
+      });
   });
 
 export const ltmBulkNoteResultStatusSchema = z.enum([
@@ -2113,28 +2119,27 @@ export const ltmRenameNoteSectionPreviewResponseSchema = z
   })
   .strict();
 
+const ltmSectionRebuildSchema = z.discriminatedUnion("status", [
+  z
+    .object({
+      status: z.literal("complete"),
+      generatedAt: ltmIsoTimestampSchema,
+      noteCount: z.number().int().min(0),
+      chunkCount: z.number().int().min(0),
+      embeddedChunkCount: z.number().int().min(0),
+      embeddingsAvailable: z.boolean(),
+    })
+    .strict(),
+  z
+    .object({ status: z.literal("deferred"), error: z.string().min(1) })
+    .strict(),
+]);
+
 export const ltmRenameNoteSectionResponseSchema = z
   .object({
     note: ltmNoteSchema,
     rewrittenDraftCount: z.number().int().min(0),
-    rebuild: z.discriminatedUnion("status", [
-      z
-        .object({
-          status: z.literal("complete"),
-          generatedAt: ltmIsoTimestampSchema,
-          noteCount: z.number().int().min(0),
-          chunkCount: z.number().int().min(0),
-          embeddedChunkCount: z.number().int().min(0),
-          embeddingsAvailable: z.boolean(),
-        })
-        .strict(),
-      z
-        .object({
-          status: z.literal("deferred"),
-          error: z.string().min(1),
-        })
-        .strict(),
-    ]),
+    rebuild: ltmSectionRebuildSchema,
   })
   .strict();
 
@@ -2142,24 +2147,7 @@ export const ltmDeleteNoteSectionResponseSchema = z
   .object({
     note: ltmNoteSchema,
     invalidatedDraftCount: z.number().int().min(0),
-    rebuild: z.discriminatedUnion("status", [
-      z
-        .object({
-          status: z.literal("complete"),
-          generatedAt: ltmIsoTimestampSchema,
-          noteCount: z.number().int().min(0),
-          chunkCount: z.number().int().min(0),
-          embeddedChunkCount: z.number().int().min(0),
-          embeddingsAvailable: z.boolean(),
-        })
-        .strict(),
-      z
-        .object({
-          status: z.literal("deferred"),
-          error: z.string().min(1),
-        })
-        .strict(),
-    ]),
+    rebuild: ltmSectionRebuildSchema,
   })
   .strict();
 
@@ -2209,7 +2197,7 @@ export const ltmDraftNoteInputSchema = z
     scope: ltmWriteScopeSchema.default({}),
     tags: z.array(ltmIdentifierSchema).max(100).default([]),
     keywords: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
-    manualKeywords: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
+    manualKeywords: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
     suppressedKeywords: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
     createdAt: ltmIsoTimestampSchema.optional(),
     updatedAt: ltmIsoTimestampSchema.optional(),

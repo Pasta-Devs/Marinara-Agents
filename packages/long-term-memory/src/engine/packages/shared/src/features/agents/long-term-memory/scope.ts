@@ -98,7 +98,11 @@ export function ltmScopesOverlap(
     ...(options.personaIds ?? []),
   ]);
 
-  if (isGlobalLtmScope(noteScope) || isGlobalLtmScope(targetScope)) {
+  const targetIsGlobal =
+    isGlobalLtmScope(targetScope) &&
+    targetCharacterIds.length === 0 &&
+    targetPersonaIds.length === 0;
+  if (isGlobalLtmScope(noteScope) || targetIsGlobal) {
     return includeGlobal;
   }
 

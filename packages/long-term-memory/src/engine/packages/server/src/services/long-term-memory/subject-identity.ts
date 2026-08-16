@@ -307,12 +307,22 @@ export async function loadTrustedLtmSubjectCatalog(
   const resources = getPackageResources();
   const chatIds = getLtmScopeChatIds(scope);
   const groupIds = getLtmScopeGroupIds(scope);
-  const allChats = chatIds.length === 0 && groupIds.length ? await persistence.listChats() : [];
-  const chats = chatIds.length
-    ? (await Promise.all(chatIds.map((id) => persistence.getChat(id)))).filter(
-        (chat): chat is NonNullable<typeof chat> => Boolean(chat),
-      )
-    : allChats.filter((chat) => chat.groupId && groupIds.includes(chat.groupId));
+  const [explicitChats, allChats] = await Promise.all([
+    Promise.all(chatIds.map((id) => persistence.getChat(id))),
+    groupIds.length ? persistence.listChats() : Promise.resolve([]),
+  ]);
+  const chats = [
+    ...new Map(
+      [
+        ...explicitChats.filter(
+          (chat): chat is NonNullable<typeof chat> => Boolean(chat),
+        ),
+        ...allChats.filter(
+          (chat) => chat.groupId && groupIds.includes(chat.groupId),
+        ),
+      ].map((chat) => [chat.id, chat]),
+    ).values(),
+  ];
   const characterIds = uniqueStrings([
     ...(scope.characterIds ?? []),
     ...chats.flatMap((chat) => normalizeLtmChatCharacterIds(chat.characterIds)),

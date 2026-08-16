@@ -637,6 +637,8 @@
   "ui.longTermMemory.sourceoperation.applyMove": "Move ready records",
   "ui.longTermMemory.sourceoperation.archive": "Archive",
   "ui.longTermMemory.sourceoperation.clearAll": "Clear all",
+  "ui.longTermMemory.sourceoperation.confirmArchive": "Archive the source and {{count}} selected linked memories?",
+  "ui.longTermMemory.sourceoperation.confirmDelete": "Permanently delete the source and {{count}} selected linked memories?",
   "ui.longTermMemory.sourceoperation.copy": "Copy",
   "ui.longTermMemory.sourceoperation.couldNotApply": "Source operation could not be applied.",
   "ui.longTermMemory.sourceoperation.delete": "Delete permanently",

@@ -40,10 +40,13 @@ export function renderSectionContributions(
 ): LtmSection | null {
   if (!contributions.length) return null;
   const manual = contributions.filter((contribution) => contribution.owner === "manual");
-  const rendered = manual.length
-    ? [manual.at(-1)!]
-    : additive
-      ? contributions
+  const rendered = additive
+    ? [
+        ...contributions.filter((contribution) => contribution.owner === "source"),
+        ...(manual.length ? [manual.at(-1)!] : []),
+      ]
+    : manual.length
+      ? [manual.at(-1)!]
       : [contributions.at(-1)!];
   const latest = rendered.at(-1)!;
   let text = "";
