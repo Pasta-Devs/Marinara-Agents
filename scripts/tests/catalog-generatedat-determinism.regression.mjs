@@ -52,6 +52,24 @@ await withTempRepo(async (repoRoot) => {
   assert.equal(await resolveCatalogGeneratedAt(join(repoRoot, "catalog")), EPOCH);
 });
 
+// A committed value that is not a canonical ISO-8601 datetime (date-only,
+// impossible calendar date, or non-canonical form) is rejected and self-heals
+// to the epoch — never preserved into a catalog the Engine schema would reject.
+for (const malformed of ["2026-08-16", "2026-13-45T00:00:00.000Z", "2026-02-30T00:00:00.000Z", "not-a-date", ""]) {
+  await withTempRepo(async (repoRoot) => {
+    await mkdir(join(repoRoot, "catalog"), { recursive: true });
+    await writeFile(
+      join(repoRoot, "catalog/catalog.json"),
+      `${JSON.stringify(sampleCatalog(malformed), null, 2)}\n`,
+    );
+    assert.equal(
+      await resolveCatalogGeneratedAt(join(repoRoot, "catalog")),
+      EPOCH,
+      `malformed generatedAt "${malformed}" must fall back to epoch`,
+    );
+  });
+}
+
 // A committed catalog's timestamp is preserved even when the in-memory catalog
 // carries a different (fresh) value from the build.
 await withTempRepo(async (repoRoot) => {

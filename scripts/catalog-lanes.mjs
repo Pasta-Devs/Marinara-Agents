@@ -155,15 +155,25 @@ export async function readCatalogFamily(repoRoot) {
 
 const GENERATED_AT_EPOCH = "1970-01-01T00:00:00.000Z";
 
+// Strict enough to match what the builders emit (toISOString) and what the
+// Engine catalog schema accepts (z.string().datetime()): a canonical UTC
+// ISO-8601 datetime. Date.parse alone is too lenient — it accepts date-only
+// strings and silently normalizes impossible calendar dates — so a malformed
+// committed value would be preserved and then rejected by the Engine. The
+// round-trip rejects anything that is not already canonical, restoring the
+// self-heal to the epoch fallback.
+function isCanonicalIsoDatetime(value) {
+  if (typeof value !== "string") return false;
+  const parsed = Date.parse(value);
+  return !Number.isNaN(parsed) && new Date(parsed).toISOString() === value;
+}
+
 async function readCommittedGeneratedAt(catalogDirectory) {
   try {
     const committed = JSON.parse(
       await readFile(join(catalogDirectory, "catalog.json"), "utf8"),
     );
-    if (
-      typeof committed.generatedAt === "string" &&
-      !Number.isNaN(Date.parse(committed.generatedAt))
-    ) {
+    if (isCanonicalIsoDatetime(committed.generatedAt)) {
       return committed.generatedAt;
     }
   } catch {
