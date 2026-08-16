@@ -11,10 +11,12 @@ on:
       - "artwork/agent-covers/slurp.png"
       - "artwork/sources/noodle-*"
       - "artwork/sources/slurp-*"
-      - "catalog/catalog.json"
-      - "catalog/v*/catalog.json"
-      - "package.json"
-      - "package-lock.json"
+      # NOTE: intentionally NOT triggering on catalog/*.json, package.json, or
+      # package-lock.json. Those are shared across every package — each release
+      # regenerates the catalog and can touch the lockfile — so triggering on them
+      # ran this Noodle/Slurp browser suite on unrelated package PRs. Noodle/Slurp
+      # changes are already covered by packages/noodle|slurp/**, the noodle/slurp
+      # artifacts, the harness scripts, and sources/engine below.
       - "packages/noodle/**"
       - "packages/slurp/**"
       - "scripts/build-feature-packages.mjs"
