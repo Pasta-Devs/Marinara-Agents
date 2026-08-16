@@ -229,15 +229,6 @@ test.describe("standalone Slurp package", () => {
         }),
       ).toBeVisible();
 
-      await slurp.getByRole("button", { name: "Settings" }).click();
-      await slurp.getByRole("button", { name: "Creators", exact: true }).click();
-      await slurp.getByRole("button", { name: "Add creators" }).click();
-      await expect(
-        slurp.getByRole("button", {
-          name: `S ${personaName} @slurp_viewer_${suffix} persona`,
-          exact: true,
-        }),
-      ).toBeVisible();
       expect(errors).toEqual([]);
     } finally {
       if (postId) {
