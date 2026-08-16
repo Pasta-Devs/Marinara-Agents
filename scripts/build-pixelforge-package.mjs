@@ -23,7 +23,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = join(repoRoot, "packages/pixelforge");
 const artifactsDir = join(repoRoot, "artifacts");
 
-const VERSION = "0.4.0";
+const VERSION = "0.4.1";
 const CAPABILITY_API = Object.freeze({ major: 1, minor: 10 });
 const ENGINE_MIN = "2.4.3"; // first Engine release with contributions.assets (capability API 1.10)
 const MAX_ENGINE_EXCLUSIVE = "4.0.0";
@@ -161,7 +161,8 @@ catalog.packages.push({
   documentationUrl: "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/pixelforge/README.md",
 });
 catalog.packages.sort((left, right) => left.manifest.name.localeCompare(right.manifest.name));
-catalog.generatedAt = new Date().toISOString();
+// generatedAt is resolved centrally in writeCatalogFamily (preserved by
+// default; refreshed only when MARINARA_CATALOG_STAMP_GENERATED_AT=1).
 await writeCatalogFamily(repoRoot, catalog);
 
 if (!existsSync(join(repoRoot, "artwork/agent-covers/pixelforge.png"))) {

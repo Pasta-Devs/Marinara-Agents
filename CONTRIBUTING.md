@@ -81,6 +81,8 @@ node scripts/build-feature-packages.mjs
 
 Both builders accept package IDs for a focused rebuild. When a build changes an artifact, commit the package payload, manifest, ZIP, catalog entry, and captured Engine sources together. Do not hand-edit generated bundles, checksums, byte sizes, or ZIP contents.
 
+The catalog `generatedAt` field is preserved across rebuilds rather than stamped with the current time. This keeps a no-op rebuild byte-identical and stops the timestamp from being a guaranteed merge conflict between concurrent package PRs. A rebuild that touches nothing substantive should leave `catalog/**/catalog.json` unchanged — if `git status` shows only a `generatedAt` diff, discard it. To intentionally refresh the timestamp (for example when promoting a release), run the builder with `MARINARA_CATALOG_STAMP_GENERATED_AT=1`.
+
 ### Engine compatibility and catalog lanes
 
 Each emitted package manifest is the source of truth for Engine compatibility. For ordinary Agent packages, edit the manifest range; for generated feature packages, edit the feature definition in `scripts/build-feature-packages.mjs`, which emits that range into the manifest. The builders automatically publish an entry into every Engine-major lane intersected by `engine.min` (inclusive) and `engine.maxExclusive` (exclusive). For example, `>=2.3.0 <3.0.0` publishes only to v2, `>=2.3.0 <4.0.0` publishes to v2 and v3, and `>=3.2.0 <3.3.0` publishes only to v3. `catalog/catalog.json` remains an exact v2 alias for Engine releases that predate lane selection.

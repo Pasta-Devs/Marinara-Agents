@@ -587,4 +587,91 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   }
 }
 
+// 28-30. Capability API 1.12 event consumption (onHostEvent) + the travel
+// post-await gating: outcomes resolve instantly, stepwise journeys survive
+// intermediate hops, and the event path never double-toasts.
+{
+  const prevGetSpatial = loadedPF.api.getSpatial;
+  const spatialState = { loc: "root", revision: 1 };
+  loadedPF.api.getSpatial = async () => ({
+    definition: { revision: spatialState.revision },
+    currentLocationId: spatialState.loc,
+    breadcrumb: [{ name: spatialState.loc }],
+    destinations: [],
+  });
+  const toasts = [];
+  const core = {
+    chatId: "chat-events",
+    sim: { world: { zones: {}, bindings: { seeded: true }, startZone: "z1" }, zoneId: "z1", mode: "walk", zone() { return { name: "z1" }; } },
+    markDirty() {},
+    hud: { toast: (t) => toasts.push(t), refreshChips() {} },
+  };
+  const spatial = loadedPF.spatial;
+  spatial.reset();
+  await spatial.refresh(core); // seed availability + _lastLocationId ("root")
+
+  // 28. committed with a matching commandId resolves the journey instantly.
+  spatial.pending = { commandId: "cmd-1", destinationId: "bar", name: "Bar", staleCount: 0 };
+  spatialState.loc = "bar";
+  spatial.onHostEvent(core, { type: "spatial_transition_committed", chatId: core.chatId, data: { commandId: "cmd-1" } });
+  assert.equal(spatial.pending, null, "committed event clears the pending journey");
+  await new Promise((r) => setTimeout(r, 5));
+  assert.equal(spatial._lastLocationId, "bar", "the event-driven refresh applied the new location");
+
+  // 29. stepwise journeys survive intermediate hops; the completing event ends them.
+  spatial.pending = { commandId: "cmd-2", destinationId: "far", name: "Far", staleCount: 0 };
+  spatial.onHostEvent(core, {
+    type: "spatial_transition_committed", chatId: core.chatId,
+    data: { commandId: "cmd-2", travel: { mode: "step_by_step", complete: false } },
+  });
+  assert.ok(spatial.pending && spatial.pending.stepwise, "incomplete stepwise leg keeps (and marks) the pending journey");
+  spatialState.loc = "midway";
+  await spatial.refresh(core);
+  assert.ok(spatial.pending, "an intermediate hop is progress, not supersession");
+  spatial.onHostEvent(core, {
+    type: "spatial_transition_committed", chatId: core.chatId,
+    data: { commandId: "cmd-2", travel: { mode: "step_by_step", complete: true } },
+  });
+  assert.equal(spatial.pending, null, "the completing event ends the stepwise journey");
+
+  // Rejected event: instant clear + toast; stale-count untouched by event refreshes.
+  spatial.pending = { commandId: "cmd-3", destinationId: "nope", name: "Nope", staleCount: 0 };
+  spatial.onHostEvent(core, { type: "spatial_transition_rejected", chatId: core.chatId, data: { commandId: "cmd-3", code: "spatial_transition_stale_definition" } });
+  assert.equal(spatial.pending, null, "rejected event clears the journey immediately");
+  assert.ok(toasts.some((t) => t.includes("stayed put")), "rejection toasts immediately");
+
+  // countStale:false refreshes never burn the two-turn fallback budget.
+  spatial.pending = { commandId: "cmd-4", destinationId: "slow", name: "Slow", staleCount: 0 };
+  await spatial.refresh(core, { countStale: false });
+  await spatial.refresh(core, { countStale: false });
+  assert.ok(spatial.pending, "event-driven refreshes don't count toward stale-count");
+  await spatial.refresh(core);
+  await spatial.refresh(core);
+  assert.equal(spatial.pending, null, "turn-driven refreshes still clear a dead journey after two");
+
+  // 30. travel()'s post-await branches act only on their OWN journey: a reject
+  // event that already cleared pending must not produce a second toast.
+  toasts.length = 0;
+  const host = {
+    packageId: "pixelforge",
+    sendMessage: async () => {
+      // Simulate the engine's synthesized reject arriving mid-await.
+      spatial.onHostEvent(core, {
+        type: "spatial_transition_rejected", chatId: core.chatId,
+        data: { commandId: spatial.pending.commandId, code: "spatial_transition_stale_definition" },
+      });
+      return false;
+    },
+  };
+  core.host = host;
+  core.sim.composePrefix = () => "[World]";
+  core.sim.commitIntro = () => {};
+  await spatial.travel(core, { id: "bar", name: "Bar" });
+  assert.ok(toasts.some((t) => t.includes("stayed put")), "the event toast fired");
+  assert.ok(!toasts.some((t) => t.includes("isn't accepting")), "no contradictory second toast after the event handled it");
+
+  loadedPF.api.getSpatial = prevGetSpatial;
+  spatial.reset();
+}
+
 console.log("brief validator + compiler: all cases passed");

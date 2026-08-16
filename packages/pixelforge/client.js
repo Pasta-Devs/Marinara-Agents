@@ -1,4 +1,4 @@
-// Pixelforge 0.4.0 — Marinara Engine game-surface Experience (single-file client bundle)
+// Pixelforge 0.4.1 — Marinara Engine game-surface Experience (single-file client bundle)
 // Built from packages/pixelforge/src (12 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -2300,19 +2300,22 @@ PF.Render = class {
 // teleport to the bound zone (or toast), never queue a compensating transition.
 //
 // Review-hardened: a generation counter guards cross-chat races (a refresh
-// started for chat A must never write into chat B's world), and `pending`
-// self-clears after two refreshes with no movement — the host reports
-// transition commits/rejects only as capability events addressed to
-// hierarchical-maps, which this package cannot hear.
+// started for chat A must never write into chat B's world). Transition
+// outcomes arrive two ways: engines with capability API 1.12 address the
+// commit/reject events to this package (onHostEvent — immediate), and on
+// older engines `pending` still self-clears after two refreshes with no
+// movement (the stale-count fallback; events simply never arrive there).
 PF.spatial = {
   data: null, // last SpatialContextResponse (or null: unbound / not fetched)
   available: false,
-  pending: null, // {commandId, destinationId, name, staleCount}
+  pending: null, // {commandId, destinationId, name, staleCount, stepwise?}
   _lastLocationId: null,
   _gen: 0,
+  _seq: 0, // per-call refresh sequence: only the latest-started response applies
 
   reset() {
     this._gen++;
+    this._seq = 0;
     this.data = null;
     this.available = false;
     this.pending = null;
@@ -2335,14 +2338,18 @@ PF.spatial = {
       .filter((entry) => entry.id);
   },
 
-  async refresh(core) {
+  async refresh(core, { countStale = true } = {}) {
     if (!core.chatId) return;
     const gen = this._gen;
     const chatId = core.chatId;
+    // Latest-started wins: 1.12 event refreshes overlap the per-turn ones, and
+    // a slow pre-commit response landing AFTER a post-commit refresh would
+    // otherwise roll the world back to the departed zone (review finding).
+    const seq = ++this._seq;
     try {
       const data = await PF.api.getSpatial(chatId);
-      // Chat switched (or reset) while we were in flight — drop the response.
-      if (gen !== this._gen || core.chatId !== chatId) return;
+      // Chat switched (or reset) or superseded while in flight — drop it.
+      if (gen !== this._gen || core.chatId !== chatId || seq !== this._seq) return;
       // Both degraded modes (verified trap #6): endpoint absent (package not
       // installed) OR a game that fell back to standard mode (definition null /
       // disabled). Either way the world runs on package state alone.
@@ -2363,11 +2370,22 @@ PF.spatial = {
         core.markDirty();
       }
       if (this.pending) {
-        if (loc === this.pending.destinationId || loc !== this._lastLocationId) {
-          this.pending = null; // transition landed (or was superseded server-side)
-        } else if (++this.pending.staleCount >= 2) {
+        if (loc === this.pending.destinationId) {
+          this.pending = null; // journey landed
+        } else if (loc !== this._lastLocationId) {
+          if (this.pending.stepwise) {
+            // An intermediate hop of a step_by_step route: progress, not
+            // supersession — the completing event clears it (review finding:
+            // the old rule dropped a kept stepwise pending one GET later).
+            this.pending.staleCount = 0;
+          } else {
+            this.pending = null; // superseded server-side
+          }
+        } else if (countStale && ++this.pending.staleCount >= 2) {
           // Two turns with no movement → the transition was rejected somewhere
-          // we can't observe. Let go so drift-following resumes.
+          // we can't observe. Let go so drift-following resumes. Event-driven
+          // refreshes pass countStale:false so 1.12 engines don't halve this
+          // fallback budget (review finding).
           this.pending = null;
           core.hud?.toast("Travel didn't happen — the story stayed put.");
         }
@@ -2386,6 +2404,40 @@ PF.spatial = {
     } catch (err) {
       // Network/parse trouble is not fatal to the world — stay on package state.
       console.warn("[pixelforge] spatial refresh failed", err);
+    }
+  },
+
+  /** Capability API 1.12 events, addressed to this package by the host. The
+   *  element's window listener has already matched packageId and chatId. */
+  onHostEvent(core, detail) {
+    // Event-driven refreshes never count toward the stale-count fallback —
+    // delivery is live, and double-counting would halve the two-turn budget.
+    if (detail.type === "spatial_context_refresh") {
+      void this.refresh(core, { countStale: false });
+      return;
+    }
+    const data = detail.data && typeof detail.data === "object" ? detail.data : {};
+    if (detail.type === "spatial_transition_committed") {
+      if (this.pending && data.commandId === this.pending.commandId) {
+        // A step_by_step journey keeps its pending entry until the completing
+        // event (the host's own keep-pending rule for stepwise routes); mark
+        // it so refresh() treats intermediate hops as progress.
+        const travel = data.travel;
+        if (travel && travel.mode === "step_by_step" && travel.complete === false) this.pending.stepwise = true;
+        else this.pending = null;
+      }
+      // With pending cleared, refresh() runs its normal drift-following: the
+      // world teleports to the destination's bound zone (when one exists) and
+      // announces the arrival — the feedback the polling path never gave.
+      void this.refresh(core, { countStale: false });
+      return;
+    }
+    if (detail.type === "spatial_transition_rejected") {
+      if (this.pending && data.commandId === this.pending.commandId) {
+        this.pending = null;
+        core.hud?.toast("Travel didn't happen — the story stayed put.");
+      }
+      void this.refresh(core, { countStale: false });
     }
   },
 
@@ -2415,7 +2467,11 @@ PF.spatial = {
       const ok = await core.host.sendMessage(text, undefined, transition);
       if (gen !== this._gen || core.chatId !== chatId) return;
       if (ok !== false) core.sim?.commitIntro?.();
-      if (ok === false) {
+      // Both post-await branches act only on THIS journey's pending entry: a
+      // 1.12 reject event may already have cleared it mid-await (a second,
+      // contradictory toast would follow), and the player may already have
+      // started journey B, which an unconditional clear would wipe (review).
+      if (ok === false && this.pending?.commandId === transition.commandId) {
         // The host refused the turn (e.g. session concluded) — nothing is in flight.
         this.pending = null;
         core.hud?.toast("The story isn't accepting turns right now.");
@@ -2423,9 +2479,11 @@ PF.spatial = {
     } catch (err) {
       console.warn("[pixelforge] travel failed", err);
       if (gen !== this._gen || core.chatId !== chatId) return;
-      this.pending = null;
-      core.hud?.toast("Travel could not start — the map may have changed. Try again.");
-      await this.refresh(core);
+      if (this.pending?.commandId === transition.commandId) {
+        this.pending = null;
+        core.hud?.toast("Travel could not start — the map may have changed. Try again.");
+        await this.refresh(core);
+      }
     }
   },
 };
@@ -3603,6 +3661,20 @@ PF.core = {
     if (!PF.core._pagehideBound) {
       PF.core._pagehideBound = true;
       window.addEventListener("pagehide", () => void PF.save.flush(PF.core, true));
+    }
+    if (!PF.core._capEventsBound) {
+      PF.core._capEventsBound = true;
+      // Capability API 1.12: the host addresses spatial transition events to
+      // the game-owning package. One always-on listener, guarded by the live
+      // chat id, so chat switches never leak or misroute a stale event.
+      window.addEventListener("marinara-capability-server-event", (ev) => {
+        const detail = ev?.detail;
+        const core = PF.core;
+        if (!detail || !core.chatId) return;
+        if (detail.packageId !== (typeof core.host?.packageId === "string" ? core.host.packageId : "pixelforge")) return;
+        if (detail.chatId !== core.chatId) return;
+        PF.spatial.onHostEvent(core, detail);
+      });
     }
   },
 

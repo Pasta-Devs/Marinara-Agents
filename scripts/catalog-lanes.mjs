@@ -153,8 +153,53 @@ export async function readCatalogFamily(repoRoot) {
   };
 }
 
+const GENERATED_AT_EPOCH = "1970-01-01T00:00:00.000Z";
+
+// Strict enough to match what the builders emit (toISOString) and what the
+// Engine catalog schema accepts (z.string().datetime()): a canonical UTC
+// ISO-8601 datetime. Date.parse alone is too lenient — it accepts date-only
+// strings and silently normalizes impossible calendar dates — so a malformed
+// committed value would be preserved and then rejected by the Engine. The
+// round-trip rejects anything that is not already canonical, restoring the
+// self-heal to the epoch fallback.
+function isCanonicalIsoDatetime(value) {
+  if (typeof value !== "string") return false;
+  const parsed = Date.parse(value);
+  return !Number.isNaN(parsed) && new Date(parsed).toISOString() === value;
+}
+
+async function readCommittedGeneratedAt(catalogDirectory) {
+  try {
+    const committed = JSON.parse(
+      await readFile(join(catalogDirectory, "catalog.json"), "utf8"),
+    );
+    if (isCanonicalIsoDatetime(committed.generatedAt)) {
+      return committed.generatedAt;
+    }
+  } catch {
+    // No committed catalog yet (first build) or unreadable — fall through.
+  }
+  return null;
+}
+
+// `generatedAt` is deliberately NOT refreshed on every build. A per-build
+// wall-clock stamp churns all three catalog files on no-op rebuilds and
+// produces a guaranteed one-line merge conflict between any two concurrently
+// regenerated catalogs, forcing every other open PR to rebase and re-run CI.
+// Preserve the committed value so rebuilds stay byte-deterministic; a publish
+// step opts into a fresh stamp with MARINARA_CATALOG_STAMP_GENERATED_AT=1. The
+// Engine catalog schema only requires a valid ISO-8601 datetime, which both the
+// preserved value and a fresh stamp satisfy.
+export async function resolveCatalogGeneratedAt(catalogDirectory) {
+  if (process.env.MARINARA_CATALOG_STAMP_GENERATED_AT === "1") {
+    return new Date().toISOString();
+  }
+  return (await readCommittedGeneratedAt(catalogDirectory)) ?? GENERATED_AT_EPOCH;
+}
+
 export async function writeCatalogFamily(repoRoot, catalog) {
   const catalogDirectory = join(repoRoot, "catalog");
+  catalog.generatedAt = await resolveCatalogGeneratedAt(catalogDirectory);
   const catalogsByMajor = createCatalogLanes(catalog);
   await mkdir(catalogDirectory, { recursive: true });
 
