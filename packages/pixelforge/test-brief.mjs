@@ -872,6 +872,106 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     assert.equal(mapsExport._doneKey, null, "the run does not mark itself complete");
   }
 
+  // 37. Adoption: a same-named root child authored before the export (hand
+  // edits, wizard map instructions) is bound instead of twinned; only truly
+  // new zones post. A location already bound to another zone never adopts.
+  {
+    const { w, core } = exportScaffold(2468, "chat-export-37");
+    const zoneIds = Object.keys(w.zones).filter((id) => id !== w.startZone);
+    const adoptedZone = zoneIds[0];
+    const adoptedName = w.zones[adoptedZone].name;
+    const posts = [];
+    let serverLocs = [
+      { id: "loc-root" },
+      { id: "authored-1", parentId: "loc-root", name: `  ${adoptedName.toUpperCase()}  ` },
+    ];
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision: 4, locations: serverLocs.slice() },
+      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async (chatId, body) => {
+      posts.push(body);
+      serverLocs = serverLocs.concat(body.locations.map((row) => ({ id: row.id })));
+      return { ok: true, status: 200, body: {} };
+    };
+    resetExportState();
+    await bindRoot(core);
+    await mapsExport.maybeSync(core);
+    assert.ok(
+      !posts.flatMap((p) => p.locations).some((row) => row.name === adoptedName),
+      "the adopted zone is never posted as a twin",
+    );
+    assert.equal(w.bindings["authored-1"], adoptedZone, "the authored location is bound (name match is trim+case-insensitive)");
+    assert.equal(w.zones[adoptedZone].spatialLocationId, "authored-1", "the zone records the adopted id");
+    for (const zoneId of zoneIds.slice(1)) {
+      assert.equal(w.bindings[mapsExport.idFor(w, zoneId)], zoneId, "non-adopted zones still create and bind pf ids");
+    }
+  }
+
+  // 37b. A restored save already carries a prior adoption: re-planning must
+  // KEEP adopting the location bound to the same zone, never flip back to
+  // creating a twin (live-found regression on the Kepler playtest).
+  {
+    const { w, core } = exportScaffold(2468, "chat-export-37b");
+    const zoneIds = Object.keys(w.zones).filter((id) => id !== w.startZone);
+    const adoptedZone = zoneIds[0];
+    const adoptedName = w.zones[adoptedZone].name;
+    const posts = [];
+    let serverLocs = [
+      { id: "loc-root" },
+      { id: "authored-1", parentId: "loc-root", name: adoptedName },
+    ];
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision: 4, locations: serverLocs.slice() },
+      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async (chatId, body) => {
+      posts.push(body);
+      serverLocs = serverLocs.concat(body.locations.map((row) => ({ id: row.id })));
+      return { ok: true, status: 200, body: {} };
+    };
+    resetExportState();
+    await bindRoot(core);
+    w.bindings["authored-1"] = adoptedZone; // the save restored last session's adoption
+    await mapsExport.maybeSync(core);
+    assert.ok(
+      !posts.flatMap((p) => p.locations).some((row) => row.name === adoptedName),
+      "an already-bound adoption never flips back to creating a twin",
+    );
+    assert.equal(w.bindings["authored-1"], adoptedZone, "the adoption binding survives");
+    // A location bound to a DIFFERENT zone is never stolen: it creates instead.
+    const otherZone = zoneIds[1];
+    if (otherZone) {
+      resetExportState();
+      w.bindings["authored-1"] = otherZone; // user rebound it (or a conflicting save)
+      delete w.bindings[mapsExport.idFor(w, adoptedZone)];
+      await mapsExport.maybeSync(core);
+      assert.equal(w.bindings["authored-1"], otherZone, "a foreign binding is never stolen");
+      assert.equal(w.bindings[mapsExport.idFor(w, adoptedZone)], adoptedZone, "the shadowed zone creates its own id instead");
+    }
+  }
+
+  // 38. An accepted batch whose rows never appear in the re-read (a proxy
+  // eating writes, a stale read replica) surrenders instead of posting
+  // forever — the regression that OOM'd the harness when first written.
+  {
+    const { core } = exportScaffold(3690, "chat-export-38");
+    const posts = [];
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision: 1, locations: [{ id: "loc-root" }] },
+      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async () => {
+      posts.push(1);
+      return { ok: true, status: 200, body: {} }; // accepted, but the GET never reflects it
+    };
+    resetExportState();
+    await bindRoot(core);
+    await mapsExport.maybeSync(core);
+    assert.equal(posts.length, 3, "three attempts with no visible progress, then surrender");
+    assert.ok(mapsExport._failed, "the failure is recorded for backoff");
+  }
+
   loadedPF.api.getSpatial = prevGetSpatial;
   loadedPF.api.postSpatialLocations = prevPostLocations;
   resetExportState();

@@ -2583,14 +2583,53 @@ PF.mapsExport = {
     return row;
   },
 
+  /** Map of trimmed lowercase name → location id for the root's children,
+   *  first occurrence wins. Lets a zone ADOPT a same-named location the user
+   *  (or the wizard's map instructions) already authored instead of creating
+   *  a twin — the additive route could never merge them afterwards. */
+  _adoptableByName(rootLoc) {
+    const locations = PF.spatial.data?.definition?.locations;
+    const byName = new Map();
+    for (const location of Array.isArray(locations) ? locations : []) {
+      if (location.parentId !== rootLoc || typeof location.name !== "string") continue;
+      const nameKey = location.name.trim().toLowerCase();
+      if (nameKey && !byName.has(nameKey)) byName.set(nameKey, location.id);
+    }
+    return byName;
+  },
+
+  /** locId per zone: its own seed-stable id when present, an adopted
+   *  same-named root child, else the seed-stable id (to be created). */
+  _plan(world, zoneIds, rootLoc) {
+    const existing = this._existingIds();
+    const adoptable = this._adoptableByName(rootLoc);
+    const claimed = new Set();
+    return zoneIds.map((zoneId) => {
+      const pfId = this.idFor(world, zoneId);
+      if (existing.has(pfId)) return { zoneId, locId: pfId, create: false };
+      const nameKey = String(world.zones[zoneId].name || "").trim().toLowerCase();
+      const adopted = nameKey ? adoptable.get(nameKey) : undefined;
+      // Adopt when the location is unclaimed OR already bound to THIS zone —
+      // a restored save carries prior adoptions, and refusing our own binding
+      // would flip the plan back to creation (live-found regression). Never
+      // steal a location bound to a different zone.
+      const boundTo = adopted !== undefined ? world.bindings[adopted] : undefined;
+      if (adopted && (boundTo === undefined || boundTo === zoneId) && !claimed.has(adopted)) {
+        claimed.add(adopted);
+        return { zoneId, locId: adopted, create: false };
+      }
+      return { zoneId, locId: pfId, create: true };
+    });
+  },
+
   async _sync(core, world, rootLoc, key) {
     // Chat-switch guard: same generation discipline refresh() uses — a switch
     // mid-await must never write into the new chat's world or map.
     const gen = PF.spatial._gen;
     const chatId = core.chatId;
     const zoneIds = Object.keys(world.zones).filter((zoneId) => zoneId !== world.startZone);
-    let existing = this._existingIds();
-    let missing = zoneIds.filter((zoneId) => !existing.has(this.idFor(world, zoneId)));
+    let plan = this._plan(world, zoneIds, rootLoc);
+    let missing = plan.filter((entry) => entry.create).map((entry) => entry.zoneId);
     let retriesWithoutProgress = 0;
 
     // The route caps a batch at 50; worlds are far smaller, but never assume.
@@ -2604,8 +2643,14 @@ PF.mapsExport = {
       if (res.ok) {
         await PF.spatial.refresh(core, { countStale: false });
         if (gen !== PF.spatial._gen || core.chatId !== chatId || !PF.spatial.available) return;
-        existing = this._existingIds();
-        missing = missing.filter((zoneId) => !existing.has(this.idFor(world, zoneId)));
+        const before = missing.length;
+        plan = this._plan(world, zoneIds, rootLoc);
+        missing = plan.filter((entry) => entry.create).map((entry) => entry.zoneId);
+        // An accepted batch whose rows never appear in the re-read (a proxy
+        // eating writes, a stale read replica) must not loop forever posting.
+        if (missing.length >= before && ++retriesWithoutProgress > 2) {
+          throw new Error("accepted locations never appeared in the definition");
+        }
         continue;
       }
       if (res.status === 404) {
@@ -2623,8 +2668,8 @@ PF.mapsExport = {
         await PF.spatial.refresh(core, { countStale: false });
         if (gen !== PF.spatial._gen || core.chatId !== chatId || !PF.spatial.available) return;
         const before = missing.length;
-        existing = this._existingIds();
-        missing = missing.filter((zoneId) => !existing.has(this.idFor(world, zoneId)));
+        plan = this._plan(world, zoneIds, rootLoc);
+        missing = plan.filter((entry) => entry.create).map((entry) => entry.zoneId);
         if (missing.length === before && ++retriesWithoutProgress > 2) {
           throw new Error("definition kept moving during export");
         }
@@ -2635,12 +2680,11 @@ PF.mapsExport = {
       throw new Error(`locations route → ${res.status}${code ? ` (${code})` : ""}`);
     }
 
-    // Bind every exported zone — including ids already present from an earlier
-    // session, which self-heals bindings a save may have lost. Bindings are
-    // what make travel and drift-following teleport into these zones.
+    // Bind every planned zone — created, adopted, or already present from an
+    // earlier session (which self-heals bindings a save may have lost).
+    // Bindings are what make travel and drift teleport into these zones.
     let changed = false;
-    for (const zoneId of zoneIds) {
-      const locId = this.idFor(world, zoneId);
+    for (const { zoneId, locId } of plan) {
       if (world.bindings[locId] !== zoneId) {
         world.bindings[locId] = zoneId;
         changed = true;

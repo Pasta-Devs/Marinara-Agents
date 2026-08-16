@@ -202,7 +202,10 @@ runs.*
 
 Once the exterior binds to its starting location (the §50-spatial seed binding), every other
 compiled zone registers as a **child of that bound location**: interiors as `kind: "building"`,
-wilds as `kind: "place"`, `description` from the zone's `flavor`. Location ids are seed-stable —
+wilds as `kind: "place"`, `description` from the zone's `flavor`. A root child that already
+carries a zone's name (trim + case-insensitive; hand edits or the wizard's map instructions
+often author these first) is **adopted** — bound instead of twinned — because the additive
+route could never merge duplicates later. Location ids for created rows are seed-stable —
 `pf.<fnv32(seed)>.<zoneId>` — and the map definition itself is the idempotency ledger: ids
 already present are diffed out before posting, so re-runs (new sessions, rebuilds from the same
 brief) add nothing and merely re-bind. The route is additive with revision CAS; a stale or
