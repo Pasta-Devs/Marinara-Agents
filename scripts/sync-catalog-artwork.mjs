@@ -5,6 +5,7 @@ import {
   catalogArtworkRelativePath,
   catalogArtworkUrl,
 } from "./catalog-artwork.mjs";
+import { resolveCatalogGeneratedAt } from "./catalog-lanes.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const catalogPath = join(repoRoot, "catalog/catalog.json");
@@ -16,6 +17,6 @@ for (const entry of catalog.packages) {
   entry.iconUrl = catalogArtworkUrl(packageId);
 }
 
-catalog.generatedAt = new Date().toISOString();
+catalog.generatedAt = await resolveCatalogGeneratedAt(join(repoRoot, "catalog"));
 await writeFile(catalogPath, `${JSON.stringify(catalog, null, 2)}\n`);
 console.log(`Catalog artwork synced: ${catalog.packages.length} packages.`);

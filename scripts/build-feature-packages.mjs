@@ -1671,6 +1671,7 @@ for (const feature of selectedFeatures) {
   }
 }
 
-catalog.generatedAt = new Date().toISOString();
 catalog.packages.sort((left, right) => left.manifest.name.localeCompare(right.manifest.name));
+// generatedAt is resolved centrally in writeCatalogFamily (preserved by
+// default; refreshed only when MARINARA_CATALOG_STAMP_GENERATED_AT=1).
 await writeCatalogFamily(repoRoot, catalog);
