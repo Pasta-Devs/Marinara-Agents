@@ -75,8 +75,8 @@
         },
         {
           "id": "ltx-director-video",
-          "name": "LTX Director Video",
-          "description": "Passes the Storyboard planner's complete image-to-video direction through the universal video prompt contract.",
+          "name": "Narration Passthrough",
+          "description": "Passes the current Storyboard motion direction through the universal video prompt contract without another planning call.",
           "promptTemplate": "${narrationSummary}"
         }
       ],
@@ -101,7 +101,7 @@
       "videoConnectionId": null,
       "autoGenerateMode": "illustration",
       "keyframeCount": 3,
-      "animationDurationSeconds": 6,
+      "animationDurationSeconds": 5,
       "viewerDisplayMode": "floating",
       "includeCharacterAppearance": true,
       "useAvatarReferences": true,
