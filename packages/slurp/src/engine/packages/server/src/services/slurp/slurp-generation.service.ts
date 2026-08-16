@@ -119,12 +119,12 @@ export function noodlerIdentityInstruction(
   publicIdentity: PublicIdentity | null,
 ): string {
   if (mode === "open" && publicIdentity) {
-    return `Disclosure is open. The linked public identity ${publicIdentity.displayName} (@${publicIdentity.handle}) may be named.`;
+    return `Disclosure is open. This is the same public creator. Use the linked identity ${publicIdentity.displayName} (@${publicIdentity.handle}) directly when relevant.`;
   }
   if (mode === "hinted") {
     return [
       "Disclosure is hinted. The creator's other public life is an open secret.",
-      "Tease it: allude to that life — the day job, the city, the schedule, the people around it, an event both accounts attended — often enough that a regular follower can put it together.",
+      "Use indirect clues from the same person's public life — appearance, voice, interests, routines, and recurring themes — so regular followers may recognize them.",
       "Never write the public name or handle. Never confirm a guess and never flatly deny one; deflect, joke, or change the subject.",
     ].join(" ");
   }

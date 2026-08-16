@@ -53,12 +53,8 @@ export async function pickRandomCharacterBannerUrl(
 }
 
 /**
- * Only OPEN inherits the literal source photo — republishing the source's actual image file is a
- * copy, not a stage presence, and a hinted creator is a separate account keeping up appearances
- * rather than the same profile twice. Hinted and secret both get null here and pick up freshly
- * generated artwork instead (see backfillNextNoodlerCreatorArtwork): hinted
- * generates through the appearance-referenced pipeline so it still looks like the same person
- * without being the same photo, secret gets no reference material at all.
+ * Only OPEN inherits the literal source photo. Hinted and secret create new artwork instead:
+ * hinted may use appearance references, while secret receives only redacted appearance text.
  */
 export async function resolveNoodlerCreatorArtwork(input: {
   characters: ReturnType<typeof createCharactersStorage>;

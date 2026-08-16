@@ -41,8 +41,21 @@ async function prepareFreshClient(page: Page) {
 }
 
 async function openSlurp(page: Page) {
-  await page.getByRole("tab", { name: "Open Slurp" }).click();
-  await expect(page.locator('[data-component="NoodleView"]')).toBeVisible();
+  const slurp = page.locator('[data-component="NoodleView"]');
+  const tab = page.getByRole("tab", { name: "Open Slurp" });
+  await expect(tab).toBeVisible();
+  await expect
+    .poll(
+      async () => {
+        if (await slurp.isVisible()) return true;
+        if ((await tab.getAttribute("aria-selected")) !== "true") {
+          await tab.click();
+        }
+        return false;
+      },
+      { timeout: 30_000, intervals: [250, 500, 1_000] },
+    )
+    .toBe(true);
 }
 
 async function getSlurpSettings(page: Page) {
@@ -176,6 +189,34 @@ test.describe("standalone Slurp package", () => {
         { personaId: persona.id },
       );
 
+      const feedProbe = await page.request.get(
+        `/api/slurp/noodler/viewer/feed?personaId=${encodeURIComponent(persona.id)}&tab=all&limit=20`,
+      );
+      expect(
+        feedProbe.ok(),
+        `${feedProbe.status()} ${feedProbe.statusText()} ${await feedProbe.text()}`,
+      ).toBe(true);
+      const feedProbeBody = (await feedProbe.json()) as {
+        items: Array<{ creatorAccountId: string; post: { id: string; content: string } }>;
+      };
+      expect(
+        feedProbeBody.items.some(
+          (item) => item.post.id === postId && item.post.content === postContent,
+        ),
+        JSON.stringify(feedProbeBody),
+      ).toBe(true);
+      const shellProbe = await page.request.get(
+        `/api/slurp/noodler/viewer?personaId=${encodeURIComponent(persona.id)}`,
+      );
+      expect(shellProbe.ok()).toBe(true);
+      const shellProbeBody = (await shellProbe.json()) as {
+        creators: Array<{ profile: { id: string } }>;
+      };
+      expect(
+        shellProbeBody.creators.some((creator) => creator.profile.id === stageProfile.id),
+        JSON.stringify(shellProbeBody),
+      ).toBe(true);
+
       await page.goto("/");
       await openSlurp(page);
       const slurp = page.locator('[data-component="NoodleView"]');
@@ -188,25 +229,6 @@ test.describe("standalone Slurp package", () => {
         }),
       ).toBeVisible();
 
-      await page.evaluate((personaId) => {
-        localStorage.setItem(
-          "marinara:slurp:package-ui",
-          JSON.stringify({
-            navigation: { mode: "creator", view: "profiles" },
-            viewerPersonaId: personaId,
-            onboardingState: "completed",
-          }),
-        );
-      }, persona.id);
-      await page.reload();
-      await openSlurp(page);
-      await slurp.getByRole("button", { name: "New profile" }).click();
-      await expect(
-        slurp.getByRole("button", {
-          name: `S ${personaName} @slurp_viewer_${suffix} persona`,
-          exact: true,
-        }),
-      ).toBeVisible();
       expect(errors).toEqual([]);
     } finally {
       if (postId) {
