@@ -1,14 +1,25 @@
 // ── Persistence ───────────────────────────────────────────────────────────────
-// One small `pixelforge` key in chat metadata via the queued PATCH route:
-// debounced, event-driven, flushed with keepalive on teardown — never
+// Two-tier, engine-version adaptive:
+//   routes mode (engine #5102+) — GET/PUT /api/game/:chatId/experience-state is
+//     the AUTHORITY: rows anchor to the visible message, so swipes, branches,
+//     and checkpoint loads rewind the world with the story. checkRewind() polls
+//     on each finished turn and rebuilds the sim when the server state moved
+//     under us. Metadata stays a write-through cache (instant synchronous boot
+//     + fallback if the chat later opens on an older engine).
+//   metadata mode (older engines) — the Phase-1 behavior: one small `pixelforge`
+//     key via the queued PATCH route, with the documented limitation that
+//     timeline seams do not rewind it.
+// Both: debounced, event-driven, flushed with keepalive on teardown — never
 // per-frame (Android whole-blob-rewrite shape, exploration R11/R28).
-// Known Phase-1 limitation (documented): checkpoint-load / branch / swipe do
-// not rewind this state; the durable home is game_engine_state via engine
-// issue #5077 / roadmap PR-E.
 PF.save = {
   _timer: 0,
   _lastSerialized: null,
   _flushChain: null,
+  /** null until adopt() probes; then "routes" | "metadata". */
+  mode: null,
+  /** Serialized last-known server-side route state (ours or adopted). */
+  _serverSerialized: null,
+  _rewindCheckInFlight: false,
 
   snapshot(core) {
     const sim = core.sim;
@@ -45,6 +56,11 @@ PF.save = {
   /** Restore a saved state into a freshly built world. Returns the sim. */
   restore(meta, chatId) {
     const saved = meta && typeof meta.pixelforge === "object" && meta.pixelforge !== null ? meta.pixelforge : null;
+    return this.simFromSaved(saved, meta, chatId);
+  },
+
+  /** Build a sim from a save object (route state or the metadata key). */
+  simFromSaved(saved, meta, chatId) {
     // Explicit null checks: 0 is a legitimate seed, so truthiness chaining would
     // silently rebuild a zero-seeded world from the wrong source.
     let seed = saved && typeof saved.seed === "number" ? saved.seed >>> 0 : null;
@@ -90,6 +106,88 @@ PF.save = {
     }
   },
 
+  /** Reset per-chat persistence state (chat switch). */
+  reset() {
+    if (this._timer) {
+      clearTimeout(this._timer);
+      this._timer = 0;
+    }
+    this._lastSerialized = null;
+    this.mode = null;
+    this._serverSerialized = null;
+    this._rewindCheckInFlight = false;
+  },
+
+  /** Probe the experience-state routes once per chat and pick the mode. In
+   *  routes mode the server row is the authority: if it differs from the
+   *  metadata-booted sim (e.g. the user swiped or loaded a checkpoint since the
+   *  last visit), the world is rebuilt from it; if the server has no row yet,
+   *  the current world (which may be a migrated legacy metadata save) is
+   *  written up. Any probe failure degrades to metadata mode. */
+  async adopt(core) {
+    if (!core.chatId || this.mode !== null) return;
+    try {
+      const probe = await PF.api.getExperienceState(core.chatId);
+      if (core.chatId !== (core.host && core.host.chatId)) return; // switched mid-probe
+      if (!probe.available) {
+        this.mode = "metadata";
+        return;
+      }
+      this.mode = "routes";
+      const body = probe.body || {};
+      if (body.exists && body.state && typeof body.state === "object") {
+        this._serverSerialized = JSON.stringify(body.state);
+        const current = this.snapshot(core);
+        if (current && JSON.stringify(current) !== this._serverSerialized) {
+          this._rebuild(core, body.state);
+        }
+      } else {
+        // No server row yet: adopt the in-memory world (implicitly migrating a
+        // legacy metadata save into the timeline-anchored store).
+        this._lastSerialized = null; // force the write even if metadata matched
+        this.markDirty(core);
+      }
+    } catch (err) {
+      this.mode = "metadata";
+      console.warn("[pixelforge] experience-state probe failed; using metadata saves", err);
+    }
+  },
+
+  /** Routes mode, on each finished turn: if the server state moved under us
+   *  (swipe, branch, checkpoint load — all rewrite the visible anchor), rebuild
+   *  the world from it. Our own writes keep _serverSerialized current, so this
+   *  only fires on external timeline changes. */
+  async checkRewind(core) {
+    if (this.mode !== "routes" || !core.chatId || this._rewindCheckInFlight) return;
+    this._rewindCheckInFlight = true;
+    try {
+      const probe = await PF.api.getExperienceState(core.chatId);
+      if (!probe.available || core.chatId !== (core.host && core.host.chatId)) return;
+      const body = probe.body || {};
+      if (!body.exists || !body.state || typeof body.state !== "object") return;
+      const serverSerialized = JSON.stringify(body.state);
+      if (this._serverSerialized !== null && serverSerialized !== this._serverSerialized) {
+        this._serverSerialized = serverSerialized;
+        this._rebuild(core, body.state);
+        core.hud?.toast("The world rewound with the story.");
+      } else {
+        this._serverSerialized = serverSerialized;
+      }
+    } catch {
+      // Transient; the next turn edge retries.
+    } finally {
+      this._rewindCheckInFlight = false;
+    }
+  },
+
+  _rebuild(core, saved) {
+    const meta = core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
+    core.sim = this.simFromSaved(saved, meta, core.chatId);
+    this._lastSerialized = JSON.stringify(this.snapshot(core));
+    core.render?.clearZones();
+    core.hud?.refreshChips();
+  },
+
   markDirty(core) {
     if (this._timer) return;
     this._timer = setTimeout(() => {
@@ -99,8 +197,8 @@ PF.save = {
   },
 
   /** Serialize flushes: a teardown flush and a debounced flush can otherwise
-   *  overlap and both send the same PATCH (the dedupe check reads
-   *  _lastSerialized, which is only written after the await). */
+   *  overlap and double-write (the dedupe check reads _lastSerialized, which is
+   *  only written after the awaits). */
   flush(core, teardown) {
     this._flushChain = (this._flushChain ?? Promise.resolve()).then(() => this._flushNow(core, teardown));
     return this._flushChain;
@@ -116,6 +214,21 @@ PF.save = {
     const serialized = JSON.stringify(snap);
     if (serialized === this._lastSerialized) return;
     try {
+      if (this.mode === "routes") {
+        // Route row first (the authority), metadata second as write-through
+        // boot cache + old-engine fallback. A metadata failure is non-fatal
+        // once the route write landed.
+        await PF.api.putExperienceState(core.chatId, snap, teardown);
+        this._serverSerialized = serialized;
+        this._lastSerialized = serialized;
+        if (core.sim) core.sim.dirty = false;
+        try {
+          await PF.api.patchMetadata(core.chatId, { pixelforge: snap }, teardown);
+        } catch (err) {
+          console.warn("[pixelforge] metadata cache save failed (route save landed)", err);
+        }
+        return;
+      }
       await PF.api.patchMetadata(core.chatId, { pixelforge: snap }, teardown);
       this._lastSerialized = serialized;
       if (core.sim) core.sim.dirty = false;

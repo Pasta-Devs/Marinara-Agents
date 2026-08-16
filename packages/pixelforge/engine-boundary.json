@@ -3,7 +3,7 @@
   "capabilityApi": { "major": 1, "minor": 10 },
   "builtAgainst": {
     "engineVersion": "2.4.3",
-    "engineCommit": "3fc2924291ede77e13d595ba0ea469b68419ab13"
+    "engineCommit": "92af241b1f33306680d1efc5fab06e113b7fbb47"
   },
   "privateEngineImports": []
 }

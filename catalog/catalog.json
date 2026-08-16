@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-16T10:22:35.544Z",
+  "generatedAt": "2026-08-16T10:37:44.557Z",
   "packages": [
     {
       "manifest": {
@@ -1182,11 +1182,11 @@
         },
         "builtAgainst": {
           "engineVersion": "2.4.3",
-          "engineCommit": "3fc2924291ede77e13d595ba0ea469b68419ab13"
+          "engineCommit": "92af241b1f33306680d1efc5fab06e113b7fbb47"
         },
         "id": "pixelforge",
         "name": "Pixelforge",
-        "version": "0.2.0",
+        "version": "0.3.0",
         "description": "A walkable pixel-art village RPG Experience for Game Mode: explore a closed world, talk to NPCs to drive the story, and let the GM narrate — with World Maps integration and the engine's own combat. Install it, then choose Pixelforge as the Experience when creating a Game Mode chat.",
         "engine": {
           "min": "2.4.3",
@@ -1214,7 +1214,8 @@
               "sprites/player.png",
               "sprites/mira.png",
               "sprites/tam.png",
-              "sprites/rook.png"
+              "sprites/rook.png",
+              "sprites/fen.png"
             ]
           }
         },
@@ -1226,8 +1227,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "bb83dcf233ca5996dd483eb5dea29205750cc3565501169a27c332730dea208e",
-            "bytes": 80482
+            "sha256": "2be648f0352f980b83d03eeb93c4232cfcc0f40ebf3419e716935fb1b09c977d",
+            "bytes": 89063
           },
           {
             "path": "tiles.png",
@@ -1241,8 +1242,8 @@
           },
           {
             "path": "sprites.json",
-            "sha256": "febd0c4c6b6d4433b2e6b5306a00ddc551fb10c96e84c23df760dc2e4a72385b",
-            "bytes": 269
+            "sha256": "6355b5d35a1350f9ed1c1ffea44871a04464190d27b1f9f43bcd712bd892a3c5",
+            "bytes": 299
           },
           {
             "path": "sprites/player.png",
@@ -1263,6 +1264,11 @@
             "path": "sprites/rook.png",
             "sha256": "1ca8a2b6069b5972adea2bcd115cf0efe1f284ac5f77a6febd1289d349a06a1f",
             "bytes": 423
+          },
+          {
+            "path": "sprites/fen.png",
+            "sha256": "5c27a49f7942c46a55e0c162112fdf9d6563a513e3c125df5c1fddf637676bf4",
+            "bytes": 423
           }
         ],
         "permissions": [
@@ -1273,9 +1279,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/pixelforge.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/pixelforge-0.2.0.zip",
-        "sha256": "abacac43474ded9c4e9792bc6fa096931cebacfcf89a4f0b9e806a83e0b09a8b",
-        "bytes": 88356
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/pixelforge-0.3.0.zip",
+        "sha256": "896a50ed15da5dd4ce7fc0ec387d04083a61fc5a7cad11f33e9e4347089577bf",
+        "bytes": 97672
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/pixelforge/README.md"
     },

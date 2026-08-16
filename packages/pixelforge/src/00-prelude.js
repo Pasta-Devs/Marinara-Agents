@@ -80,6 +80,26 @@ PF.api = {
     });
     if (!res.ok) throw new Error(`PATCH metadata → ${res.status}`);
   },
+  /** Host-owned per-timeline save slot (engine #5102). 404 = route absent (older
+   *  engine), 409 = chat not stamped for an Experience — both are mode signals,
+   *  not errors, so this never throws on them. */
+  async getExperienceState(chatId) {
+    const res = await fetch(`/api/game/${encodeURIComponent(chatId)}/experience-state`, {
+      headers: { Accept: "application/json" },
+    });
+    if (res.status === 404 || res.status === 409) return { available: false, status: res.status };
+    if (!res.ok) throw new Error(`GET experience-state → ${res.status}`);
+    return { available: true, status: res.status, body: await res.json() };
+  },
+  async putExperienceState(chatId, state, keepalive = false) {
+    const res = await fetch(`/api/game/${encodeURIComponent(chatId)}/experience-state`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "x-marinara-csrf": "1" },
+      body: JSON.stringify({ state }),
+      keepalive,
+    });
+    if (!res.ok) throw new Error(`PUT experience-state → ${res.status}`);
+  },
   async getSpatial(chatId) {
     const res = await fetch(`/api/chats/${encodeURIComponent(chatId)}/spatial-context`, {
       headers: { Accept: "application/json" },

@@ -1,4 +1,4 @@
-// Pixelforge 0.2.0 — Marinara Engine game-surface Experience (single-file client bundle)
+// Pixelforge 0.3.0 — Marinara Engine game-surface Experience (single-file client bundle)
 // Built from packages/pixelforge/src (11 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -84,6 +84,26 @@ PF.api = {
       keepalive,
     });
     if (!res.ok) throw new Error(`PATCH metadata → ${res.status}`);
+  },
+  /** Host-owned per-timeline save slot (engine #5102). 404 = route absent (older
+   *  engine), 409 = chat not stamped for an Experience — both are mode signals,
+   *  not errors, so this never throws on them. */
+  async getExperienceState(chatId) {
+    const res = await fetch(`/api/game/${encodeURIComponent(chatId)}/experience-state`, {
+      headers: { Accept: "application/json" },
+    });
+    if (res.status === 404 || res.status === 409) return { available: false, status: res.status };
+    if (!res.ok) throw new Error(`GET experience-state → ${res.status}`);
+    return { available: true, status: res.status, body: await res.json() };
+  },
+  async putExperienceState(chatId, state, keepalive = false) {
+    const res = await fetch(`/api/game/${encodeURIComponent(chatId)}/experience-state`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "x-marinara-csrf": "1" },
+      body: JSON.stringify({ state }),
+      keepalive,
+    });
+    if (!res.ok) throw new Error(`PUT experience-state → ${res.status}`);
   },
   async getSpatial(chatId) {
     const res = await fetch(`/api/chats/${encodeURIComponent(chatId)}/spatial-context`, {
@@ -566,9 +586,46 @@ PF.world = (() => {
     n.spawn = { x: 8, y: n.h - 2 };
     n.lights.push({ x: 4, y: 3 }, { x: 11, y: 5 });
 
-    // portals (two-way)
+    // ── The Whisperwood (forest, east of the village) ──
+    // Composed entirely from existing tiles: dense trees, a 2-wide path to a
+    // stone clearing with a standing stone, and a stream crossed by a ford.
+    const f = makeZone("forest", "The Whisperwood", 36, 24, "grass");
+    for (let i = 0; i < f.ground.length; i++) if (rnd() < 0.4) f.ground[i] = "grass2";
+    borderTrees(f);
+    fillRect(f, 1, 12, 19, 2, "ground", "path"); // west approach
+    fillRect(f, 20, 1, 2, 22, "ground", "water", true); // the stream
+    fillRect(f, 20, 12, 2, 2, "ground", "path", false); // the ford
+    fillRect(f, 22, 12, 4, 2, "ground", "path"); // east approach
+    fillRect(f, 26, 9, 6, 5, "ground", "stone"); // the clearing
+    put(f, 28, 11, "object", "wallStone", true); // the standing stone
+    f.lights.push({ x: 28, y: 11 });
+    scatterTrees(f, rnd, 60, [
+      { x: 1, y: 12 },
+      { x: 1, y: 13 },
+      { x: 20, y: 12 },
+      { x: 21, y: 13 },
+    ]);
+    f.spawn = { x: 3, y: 12 };
+
+    // portals (two-way). The village's east road runs off the map into the wood:
+    // extend the crossroad to the border and open a two-tile gap in the trees.
+    fillRect(v, 42, 14, 2, 2, "ground", "path");
+    for (const y of [14, 15]) {
+      put(v, 43, y, "object", null, false);
+      put(v, 43, y, "overhead", null);
+      put(f, 0, y - 2, "object", null, false); // forest west gap at y=12/13
+      put(f, 0, y - 2, "overhead", null);
+    }
     v.portals.push({ x: inn.doorX, y: inn.doorY, toZone: "inn", toX: n.spawn.x, toY: n.spawn.y, label: "Enter the inn" });
     n.portals.push({ x: 8, y: n.h - 1, toZone: "village", toX: inn.doorX, toY: inn.doorY + 1, label: "Step outside" });
+    v.portals.push(
+      { x: 43, y: 14, toZone: "forest", toX: 2, toY: 12, label: "Into the Whisperwood" },
+      { x: 43, y: 15, toZone: "forest", toX: 2, toY: 13, label: "Into the Whisperwood" },
+    );
+    f.portals.push(
+      { x: 0, y: 12, toZone: "village", toX: 42, toY: 14, label: "Back to Hearthvale" },
+      { x: 0, y: 13, toZone: "village", toX: 42, toY: 15, label: "Back to Hearthvale" },
+    );
 
     // NPCs — LLM characters in the story; sprites here are just their world tokens.
     v.npcs.push(
@@ -576,10 +633,11 @@ PF.world = (() => {
       { id: "rook", name: "Rook", role: "village guard", hue: 210, x: 21, y: 10, wander: { x0: 17, y0: 8, x1: 24, y1: 18 } },
     );
     n.npcs.push({ id: "mira", name: "Mira", role: "innkeeper", hue: 8, x: 5, y: 4, wander: { x0: 2, y0: 4, x1: 8, y1: 9 } });
+    f.npcs.push({ id: "fen", name: "Fen", role: "forager", hue: 140, x: 29, y: 12, wander: { x0: 26, y0: 9, x1: 31, y1: 13 } });
 
     return {
       seed,
-      zones: { village: v, inn: n },
+      zones: { village: v, inn: n, forest: f },
       startZone: "village",
       // The exterior binds to the campaign's starting World Maps location once known.
       bindings: {}, // spatialLocationId → zoneId
@@ -1048,16 +1106,27 @@ PF.spatial = {
 
 // ===== 60-save.js =====
 // ── Persistence ───────────────────────────────────────────────────────────────
-// One small `pixelforge` key in chat metadata via the queued PATCH route:
-// debounced, event-driven, flushed with keepalive on teardown — never
+// Two-tier, engine-version adaptive:
+//   routes mode (engine #5102+) — GET/PUT /api/game/:chatId/experience-state is
+//     the AUTHORITY: rows anchor to the visible message, so swipes, branches,
+//     and checkpoint loads rewind the world with the story. checkRewind() polls
+//     on each finished turn and rebuilds the sim when the server state moved
+//     under us. Metadata stays a write-through cache (instant synchronous boot
+//     + fallback if the chat later opens on an older engine).
+//   metadata mode (older engines) — the Phase-1 behavior: one small `pixelforge`
+//     key via the queued PATCH route, with the documented limitation that
+//     timeline seams do not rewind it.
+// Both: debounced, event-driven, flushed with keepalive on teardown — never
 // per-frame (Android whole-blob-rewrite shape, exploration R11/R28).
-// Known Phase-1 limitation (documented): checkpoint-load / branch / swipe do
-// not rewind this state; the durable home is game_engine_state via engine
-// issue #5077 / roadmap PR-E.
 PF.save = {
   _timer: 0,
   _lastSerialized: null,
   _flushChain: null,
+  /** null until adopt() probes; then "routes" | "metadata". */
+  mode: null,
+  /** Serialized last-known server-side route state (ours or adopted). */
+  _serverSerialized: null,
+  _rewindCheckInFlight: false,
 
   snapshot(core) {
     const sim = core.sim;
@@ -1094,6 +1163,11 @@ PF.save = {
   /** Restore a saved state into a freshly built world. Returns the sim. */
   restore(meta, chatId) {
     const saved = meta && typeof meta.pixelforge === "object" && meta.pixelforge !== null ? meta.pixelforge : null;
+    return this.simFromSaved(saved, meta, chatId);
+  },
+
+  /** Build a sim from a save object (route state or the metadata key). */
+  simFromSaved(saved, meta, chatId) {
     // Explicit null checks: 0 is a legitimate seed, so truthiness chaining would
     // silently rebuild a zero-seeded world from the wrong source.
     let seed = saved && typeof saved.seed === "number" ? saved.seed >>> 0 : null;
@@ -1139,6 +1213,88 @@ PF.save = {
     }
   },
 
+  /** Reset per-chat persistence state (chat switch). */
+  reset() {
+    if (this._timer) {
+      clearTimeout(this._timer);
+      this._timer = 0;
+    }
+    this._lastSerialized = null;
+    this.mode = null;
+    this._serverSerialized = null;
+    this._rewindCheckInFlight = false;
+  },
+
+  /** Probe the experience-state routes once per chat and pick the mode. In
+   *  routes mode the server row is the authority: if it differs from the
+   *  metadata-booted sim (e.g. the user swiped or loaded a checkpoint since the
+   *  last visit), the world is rebuilt from it; if the server has no row yet,
+   *  the current world (which may be a migrated legacy metadata save) is
+   *  written up. Any probe failure degrades to metadata mode. */
+  async adopt(core) {
+    if (!core.chatId || this.mode !== null) return;
+    try {
+      const probe = await PF.api.getExperienceState(core.chatId);
+      if (core.chatId !== (core.host && core.host.chatId)) return; // switched mid-probe
+      if (!probe.available) {
+        this.mode = "metadata";
+        return;
+      }
+      this.mode = "routes";
+      const body = probe.body || {};
+      if (body.exists && body.state && typeof body.state === "object") {
+        this._serverSerialized = JSON.stringify(body.state);
+        const current = this.snapshot(core);
+        if (current && JSON.stringify(current) !== this._serverSerialized) {
+          this._rebuild(core, body.state);
+        }
+      } else {
+        // No server row yet: adopt the in-memory world (implicitly migrating a
+        // legacy metadata save into the timeline-anchored store).
+        this._lastSerialized = null; // force the write even if metadata matched
+        this.markDirty(core);
+      }
+    } catch (err) {
+      this.mode = "metadata";
+      console.warn("[pixelforge] experience-state probe failed; using metadata saves", err);
+    }
+  },
+
+  /** Routes mode, on each finished turn: if the server state moved under us
+   *  (swipe, branch, checkpoint load — all rewrite the visible anchor), rebuild
+   *  the world from it. Our own writes keep _serverSerialized current, so this
+   *  only fires on external timeline changes. */
+  async checkRewind(core) {
+    if (this.mode !== "routes" || !core.chatId || this._rewindCheckInFlight) return;
+    this._rewindCheckInFlight = true;
+    try {
+      const probe = await PF.api.getExperienceState(core.chatId);
+      if (!probe.available || core.chatId !== (core.host && core.host.chatId)) return;
+      const body = probe.body || {};
+      if (!body.exists || !body.state || typeof body.state !== "object") return;
+      const serverSerialized = JSON.stringify(body.state);
+      if (this._serverSerialized !== null && serverSerialized !== this._serverSerialized) {
+        this._serverSerialized = serverSerialized;
+        this._rebuild(core, body.state);
+        core.hud?.toast("The world rewound with the story.");
+      } else {
+        this._serverSerialized = serverSerialized;
+      }
+    } catch {
+      // Transient; the next turn edge retries.
+    } finally {
+      this._rewindCheckInFlight = false;
+    }
+  },
+
+  _rebuild(core, saved) {
+    const meta = core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
+    core.sim = this.simFromSaved(saved, meta, core.chatId);
+    this._lastSerialized = JSON.stringify(this.snapshot(core));
+    core.render?.clearZones();
+    core.hud?.refreshChips();
+  },
+
   markDirty(core) {
     if (this._timer) return;
     this._timer = setTimeout(() => {
@@ -1148,8 +1304,8 @@ PF.save = {
   },
 
   /** Serialize flushes: a teardown flush and a debounced flush can otherwise
-   *  overlap and both send the same PATCH (the dedupe check reads
-   *  _lastSerialized, which is only written after the await). */
+   *  overlap and double-write (the dedupe check reads _lastSerialized, which is
+   *  only written after the awaits). */
   flush(core, teardown) {
     this._flushChain = (this._flushChain ?? Promise.resolve()).then(() => this._flushNow(core, teardown));
     return this._flushChain;
@@ -1165,6 +1321,21 @@ PF.save = {
     const serialized = JSON.stringify(snap);
     if (serialized === this._lastSerialized) return;
     try {
+      if (this.mode === "routes") {
+        // Route row first (the authority), metadata second as write-through
+        // boot cache + old-engine fallback. A metadata failure is non-fatal
+        // once the route write landed.
+        await PF.api.putExperienceState(core.chatId, snap, teardown);
+        this._serverSerialized = serialized;
+        this._lastSerialized = serialized;
+        if (core.sim) core.sim.dirty = false;
+        try {
+          await PF.api.patchMetadata(core.chatId, { pixelforge: snap }, teardown);
+        } catch (err) {
+          console.warn("[pixelforge] metadata cache save failed (route save landed)", err);
+        }
+        return;
+      }
       await PF.api.patchMetadata(core.chatId, { pixelforge: snap }, teardown);
       this._lastSerialized = serialized;
       if (core.sim) core.sim.dirty = false;
@@ -1712,10 +1883,13 @@ PF.core = {
     else if (combatState && !this._combatOverride) this.setMode("combat");
     else if (this.sim && (this.sim.mode === "replay" || this.sim.mode === "combat")) this.setMode(this._resumeMode);
 
-    // Turn finished → the GM may have moved the party or changed the world.
+    // Turn finished → the GM may have moved the party or changed the world —
+    // and the timeline may have moved under us (swipe/branch/checkpoint load):
+    // in routes mode the anchored server row is the authority, so check it.
     const narrationDone = p.narrationDone !== false;
     if (narrationDone && !this._narrationDoneWas) {
       void PF.spatial.refresh(this);
+      void PF.save.checkRewind(this);
       PF.save.markDirty(this);
     }
     this._narrationDoneWas = narrationDone;
@@ -1728,8 +1902,14 @@ PF.core = {
   _switchChat(p) {
     if (this.chatId) void PF.save.flush(this, false);
     PF.spatial.reset();
+    PF.save.reset();
     this.chatId = p.chatId;
+    // Synchronous boot from the metadata cache (instant world), then adopt()
+    // probes the experience-state routes (#5102) and, when available, promotes
+    // the timeline-anchored server row to authority — rebuilding if it differs.
     this.sim = PF.save.restore(p.chatMeta ?? {}, p.chatId);
+    this.host = p;
+    void PF.save.adopt(this);
     // New chat, new world: drop every cached zone composite — the cache is
     // keyed by zone id alone, so a stale entry would show the previous game.
     this.render?.clearZones();
@@ -1987,9 +2167,10 @@ if (!customElements.get(PF_TAG)) customElements.define(PF_TAG, PixelforgeElement
 // Debug/testing handle: lets automated playtests (and future Playwright smoke
 // lanes) inspect and step the world without relying on requestAnimationFrame,
 // which browsers pause for non-composited tabs. The package runs full-trust in
-// the main realm anyway, so this exposes nothing that wasn't already reachable —
-// but it is still gated behind an explicit opt-in so a shipped install doesn't
-// hand other page scripts a ready-made driving handle.
+// the main realm anyway, so this exposes nothing that wasn't already reachable.
+// Gated behind an explicit opt-in so a shipped install doesn't hand other page
+// scripts a ready-made driving handle (capability-equivalent to what any
+// same-document script already has, but no reason to pre-assemble it).
 try {
   if (globalThis.localStorage?.getItem("pixelforge-debug") === "1") globalThis.__pixelforge = PF;
 } catch {

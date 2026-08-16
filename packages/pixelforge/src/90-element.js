@@ -133,10 +133,13 @@ PF.core = {
     else if (combatState && !this._combatOverride) this.setMode("combat");
     else if (this.sim && (this.sim.mode === "replay" || this.sim.mode === "combat")) this.setMode(this._resumeMode);
 
-    // Turn finished → the GM may have moved the party or changed the world.
+    // Turn finished → the GM may have moved the party or changed the world —
+    // and the timeline may have moved under us (swipe/branch/checkpoint load):
+    // in routes mode the anchored server row is the authority, so check it.
     const narrationDone = p.narrationDone !== false;
     if (narrationDone && !this._narrationDoneWas) {
       void PF.spatial.refresh(this);
+      void PF.save.checkRewind(this);
       PF.save.markDirty(this);
     }
     this._narrationDoneWas = narrationDone;
@@ -149,8 +152,14 @@ PF.core = {
   _switchChat(p) {
     if (this.chatId) void PF.save.flush(this, false);
     PF.spatial.reset();
+    PF.save.reset();
     this.chatId = p.chatId;
+    // Synchronous boot from the metadata cache (instant world), then adopt()
+    // probes the experience-state routes (#5102) and, when available, promotes
+    // the timeline-anchored server row to authority — rebuilding if it differs.
     this.sim = PF.save.restore(p.chatMeta ?? {}, p.chatId);
+    this.host = p;
+    void PF.save.adopt(this);
     // New chat, new world: drop every cached zone composite — the cache is
     // keyed by zone id alone, so a stale entry would show the previous game.
     this.render?.clearZones();
@@ -408,9 +417,10 @@ if (!customElements.get(PF_TAG)) customElements.define(PF_TAG, PixelforgeElement
 // Debug/testing handle: lets automated playtests (and future Playwright smoke
 // lanes) inspect and step the world without relying on requestAnimationFrame,
 // which browsers pause for non-composited tabs. The package runs full-trust in
-// the main realm anyway, so this exposes nothing that wasn't already reachable —
-// but it is still gated behind an explicit opt-in so a shipped install doesn't
-// hand other page scripts a ready-made driving handle.
+// the main realm anyway, so this exposes nothing that wasn't already reachable.
+// Gated behind an explicit opt-in so a shipped install doesn't hand other page
+// scripts a ready-made driving handle (capability-equivalent to what any
+// same-document script already has, but no reason to pre-assemble it).
 try {
   if (globalThis.localStorage?.getItem("pixelforge-debug") === "1") globalThis.__pixelforge = PF;
 } catch {

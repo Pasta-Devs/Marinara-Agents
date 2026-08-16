@@ -238,7 +238,7 @@ export function buildArt() {
   );
 
   // Actors: player + the three villagers, hues matching the runtime tokens
-  const actors = { player: 158, mira: 8, tam: 96, rook: 210 };
+  const actors = { player: 158, mira: 8, tam: 96, rook: 210, fen: 140 };
   for (const [name, hue] of Object.entries(actors)) {
     const sheet = new Raster(4 * 12, 4 * 16);
     for (let facing = 0; facing < 4; facing++)
