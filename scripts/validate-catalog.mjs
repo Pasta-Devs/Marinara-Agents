@@ -695,8 +695,8 @@ if (JSON.stringify(guidanceIds) !== JSON.stringify([...ids].sort())) {
 
 const agentOnly = catalog.packages.filter((entry) => !entry.manifest.entrypoints.server).length;
 const features = catalog.packages.length - agentOnly;
-if (catalog.packages.length !== 33 || agentOnly !== 22 || features !== 11) {
-  throw new Error(`Expected 22 agents and 11 features, found ${agentOnly} and ${features}`);
+if (catalog.packages.length !== 34 || agentOnly !== 23 || features !== 11) {
+  throw new Error(`Expected 23 agents and 11 features, found ${agentOnly} and ${features}`);
 }
 console.log(`Catalog valid: ${catalog.packages.length} packages (${agentOnly} agents, ${features} features).`);
 console.log(
