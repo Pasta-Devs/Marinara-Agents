@@ -20,7 +20,13 @@ if (!existsSync(resolve(engineRoot, "package.json"))) {
   );
 }
 
-const dataRoot = resolve(agentsRoot, ".tmp", "package-browser", packageId);
+// Keep the engine data dir UNDER the engine's `packages/server/data`, which the engine dev script
+// excludes from its file watcher (`tsx watch --ignore ./data`). The engine writes package
+// capability snapshots to `<DATA_DIR>/capability-runtime-snapshots/...` and re-snapshots a package
+// shortly after boot; with the data dir outside `./data` (the previous `.tmp/...` location) that
+// re-snapshot unlinked the imported `server.mjs`, so `tsx watch` restarted the backend mid-suite and
+// tests raced an ECONNREFUSED window. `packages/server/data` is gitignored in the engine checkout.
+const dataRoot = resolve(engineRoot, "packages", "server", "data", "package-browser", packageId);
 const children = new Set();
 let shuttingDown = false;
 
