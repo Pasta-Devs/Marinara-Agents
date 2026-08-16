@@ -1,4 +1,4 @@
-// Pixelforge 0.4.0 — Marinara Engine game-surface Experience (single-file client bundle)
+// Pixelforge 0.4.1 — Marinara Engine game-surface Experience (single-file client bundle)
 // Built from packages/pixelforge/src (12 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -2300,10 +2300,11 @@ PF.Render = class {
 // teleport to the bound zone (or toast), never queue a compensating transition.
 //
 // Review-hardened: a generation counter guards cross-chat races (a refresh
-// started for chat A must never write into chat B's world), and `pending`
-// self-clears after two refreshes with no movement — the host reports
-// transition commits/rejects only as capability events addressed to
-// hierarchical-maps, which this package cannot hear.
+// started for chat A must never write into chat B's world). Transition
+// outcomes arrive two ways: engines with capability API 1.12 address the
+// commit/reject events to this package (onHostEvent — immediate), and on
+// older engines `pending` still self-clears after two refreshes with no
+// movement (the stale-count fallback; events simply never arrive there).
 PF.spatial = {
   data: null, // last SpatialContextResponse (or null: unbound / not fetched)
   available: false,
@@ -2386,6 +2387,36 @@ PF.spatial = {
     } catch (err) {
       // Network/parse trouble is not fatal to the world — stay on package state.
       console.warn("[pixelforge] spatial refresh failed", err);
+    }
+  },
+
+  /** Capability API 1.12 events, addressed to this package by the host. The
+   *  element's window listener has already matched packageId and chatId. */
+  onHostEvent(core, detail) {
+    if (detail.type === "spatial_context_refresh") {
+      void this.refresh(core);
+      return;
+    }
+    const data = detail.data && typeof detail.data === "object" ? detail.data : {};
+    if (detail.type === "spatial_transition_committed") {
+      if (this.pending && data.commandId === this.pending.commandId) {
+        // A step_by_step journey keeps its pending entry until the completing
+        // event (the host's own keep-pending rule for stepwise routes).
+        const travel = data.travel;
+        if (!(travel && travel.mode === "step_by_step" && travel.complete === false)) this.pending = null;
+      }
+      // With pending cleared, refresh() runs its normal drift-following: the
+      // world teleports to the destination's bound zone (when one exists) and
+      // announces the arrival — the feedback the polling path never gave.
+      void this.refresh(core);
+      return;
+    }
+    if (detail.type === "spatial_transition_rejected") {
+      if (this.pending && data.commandId === this.pending.commandId) {
+        this.pending = null;
+        core.hud?.toast("Travel didn't happen — the story stayed put.");
+      }
+      void this.refresh(core);
     }
   },
 
@@ -3603,6 +3634,20 @@ PF.core = {
     if (!PF.core._pagehideBound) {
       PF.core._pagehideBound = true;
       window.addEventListener("pagehide", () => void PF.save.flush(PF.core, true));
+    }
+    if (!PF.core._capEventsBound) {
+      PF.core._capEventsBound = true;
+      // Capability API 1.12: the host addresses spatial transition events to
+      // the game-owning package. One always-on listener, guarded by the live
+      // chat id, so chat switches never leak or misroute a stale event.
+      window.addEventListener("marinara-capability-server-event", (ev) => {
+        const detail = ev?.detail;
+        const core = PF.core;
+        if (!detail || !core.chatId) return;
+        if (detail.packageId !== (typeof core.host?.packageId === "string" ? core.host.packageId : "pixelforge")) return;
+        if (detail.chatId !== core.chatId) return;
+        PF.spatial.onHostEvent(core, detail);
+      });
     }
   },
 

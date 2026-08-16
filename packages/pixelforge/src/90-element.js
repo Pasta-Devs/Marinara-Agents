@@ -321,6 +321,20 @@ PF.core = {
       PF.core._pagehideBound = true;
       window.addEventListener("pagehide", () => void PF.save.flush(PF.core, true));
     }
+    if (!PF.core._capEventsBound) {
+      PF.core._capEventsBound = true;
+      // Capability API 1.12: the host addresses spatial transition events to
+      // the game-owning package. One always-on listener, guarded by the live
+      // chat id, so chat switches never leak or misroute a stale event.
+      window.addEventListener("marinara-capability-server-event", (ev) => {
+        const detail = ev?.detail;
+        const core = PF.core;
+        if (!detail || !core.chatId) return;
+        if (detail.packageId !== (typeof core.host?.packageId === "string" ? core.host.packageId : "pixelforge")) return;
+        if (detail.chatId !== core.chatId) return;
+        PF.spatial.onHostEvent(core, detail);
+      });
+    }
   },
 
   _unbindKeys() {
