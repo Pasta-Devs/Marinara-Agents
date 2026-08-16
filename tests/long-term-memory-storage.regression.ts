@@ -2084,6 +2084,23 @@ async function main() {
     });
     assert.deepEqual(Object.keys(updatedPartialSection.sections), ["facts", "history"]);
     assert.equal(updatedPartialSection.sections.history.text, "A retained history.");
+
+    const partialSourceUpdate = await storage.createNote({
+      ...noteInput,
+      id: "source_partial_section_update",
+      type: "source",
+      title: "Partial source update target",
+      provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "partial" },
+      sections: {
+        source: { text: "Source text.", updatedAt: timestamp },
+        metadata: { text: "Retained metadata.", updatedAt: timestamp },
+      },
+    });
+    const updatedPartialSource = await storage.updateNote(partialSourceUpdate.id, {
+      sections: { source: { text: "Refreshed source text.", updatedAt: timestamp } },
+    });
+    assert.deepEqual(Object.keys(updatedPartialSource.sections), ["source", "metadata"]);
+    assert.equal(updatedPartialSource.sections.metadata.text, "Retained metadata.");
     const invalidatedDraft = await draftStore.getDraft(deletionDraft.id);
     assert.equal(invalidatedDraft?.status, "invalidated");
     assert.match(invalidatedDraft?.invalidationReason ?? "", /targeted detail was removed/);

@@ -508,7 +508,7 @@ export class LongTermMemoryStorage {
           ? Object.fromEntries(
               Object.entries({ ...current.sections, ...notePatch.sections }).filter(
                 ([key]) => !removed.has(key),
-              ),
+              )
             )
           : removed.size
             ? Object.fromEntries(
@@ -516,27 +516,29 @@ export class LongTermMemoryStorage {
               )
             : undefined;
       const sections =
-        sectionInput && current.type !== "source"
-          ? Object.fromEntries(
-              Object.entries(sectionInput).map(([key, section]) => {
-                const previous = current.sections[key];
-                const { contributions: _previousContributions, ...previousFields } =
-                  previous ?? {};
-                const { contributions: _nextContributions, ...nextFields } = section;
-                if (
-                  previous &&
-                  JSON.stringify(previousFields) === JSON.stringify(nextFields)
-                )
-                  return [key, previous];
-                return [
-                  key,
-                  renderSectionContributions(
-                    [...sectionContributions(previous), manualContribution(section)],
-                    isAdditiveLtmSection(current, key),
-                  )!,
-                ];
-              }),
-            )
+        sectionInput
+          ? current.type === "source"
+            ? sectionInput
+            : Object.fromEntries(
+                Object.entries(sectionInput).map(([key, section]) => {
+                  const previous = current.sections[key];
+                  const { contributions: _previousContributions, ...previousFields } =
+                    previous ?? {};
+                  const { contributions: _nextContributions, ...nextFields } = section;
+                  if (
+                    previous &&
+                    JSON.stringify(previousFields) === JSON.stringify(nextFields)
+                  )
+                    return [key, previous];
+                  return [
+                    key,
+                    renderSectionContributions(
+                      [...sectionContributions(previous), manualContribution(section)],
+                      isAdditiveLtmSection(current, key),
+                    )!,
+                  ];
+                })
+              )
           : notePatch.sections;
       if (sections) assertWritableSections(sections);
       const next = ltmNoteSchema.parse({
