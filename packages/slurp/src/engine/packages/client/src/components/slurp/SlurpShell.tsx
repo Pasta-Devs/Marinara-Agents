@@ -1095,7 +1095,11 @@ export function NoodleShell({
               className="relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
             >
               <span className="relative flex h-8 w-12 items-center justify-center">
-                <Home size={22} strokeWidth={homeActive ? 2.8 : 2} />
+                <img
+                  src={NOODLE_LOGO_SRC}
+                  alt=""
+                  className="h-6 w-9 object-contain"
+                />
               </span>
               {homeActive && (
                 <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-accent)]" />
