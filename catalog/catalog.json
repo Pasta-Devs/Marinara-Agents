@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-16T10:22:35.544Z",
+  "generatedAt": "2026-08-16T12:22:09.832Z",
   "packages": [
     {
       "manifest": {
@@ -1038,7 +1038,7 @@
         "schemaVersion": 1,
         "id": "noodle",
         "name": "Noodle",
-        "version": "1.2.0",
+        "version": "1.2.1",
         "description": "Explore the Noodle public timeline as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
         "localizations": {
           "de": {
@@ -1098,13 +1098,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "2bee7244fc7f45f03e585d15200413938513375f0a56a48bf724d5d5c8cd52ee",
-            "bytes": 2337117
+            "sha256": "72acd02d9b5450419ba75e97f807139a8f9aa88aa5b60f06c75d4a24dc660c2a",
+            "bytes": 2343115
           },
           {
             "path": "client.js",
-            "sha256": "7fc182759e3697c00f76968004612388c3009a4a87360641890ded1f12658647",
-            "bytes": 2242613
+            "sha256": "63853ecaf930ed3072fd5d4b491cbcbc69bba19abc758df0bd142538766141f6",
+            "bytes": 2243228
           },
           {
             "path": "noodle-klusek.png",
@@ -1125,9 +1125,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.2.0.zip",
-        "sha256": "49c24d74fd1a971dab6d7e9640e2629eacb17bbe99ed8c9b71d3284d13e81e2a",
-        "bytes": 1153922
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.2.1.zip",
+        "sha256": "c12388294da936a6348bee70f0384b9f3c896d9d009ef05e1eb8fe2c74674bf6",
+        "bytes": 1155442
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },

@@ -56,12 +56,12 @@ test.beforeEach(async ({ page }) => {
 test.describe("standalone Slurp package", () => {
   test("opens as an enabled pink Creator surface", async ({ page }) => {
     const errors = collectUnexpectedErrors(page);
-    const bootstrapResponse = await page.request.get("/api/slurp");
-    expect(bootstrapResponse.ok()).toBe(true);
-    const bootstrap = (await bootstrapResponse.json()) as {
-      settings: { enableNoodler: boolean };
+    const settingsResponse = await page.request.get("/api/slurp/settings");
+    expect(settingsResponse.ok()).toBe(true);
+    const settings = (await settingsResponse.json()) as {
+      onboarding: string;
     };
-    expect(bootstrap.settings.enableNoodler).toBe(true);
+    expect(typeof settings.onboarding).toBe("string");
 
     await page.goto("/");
     await openSlurp(page);
@@ -103,23 +103,15 @@ test.describe("standalone Slurp package", () => {
     let stageProfileId: string | null = null;
     let postId: string | null = null;
     try {
-      const settingsResponse = await page.request.put("/api/slurp/settings", {
-        data: { noodlerOnboardingState: "completed" },
+      const settingsResponse = await page.request.patch("/api/slurp/settings", {
+        data: { onboarding: "completed" },
       });
       expect(settingsResponse.ok()).toBe(true);
 
-      const bootstrapResponse = await page.request.get("/api/slurp");
-      expect(bootstrapResponse.ok()).toBe(true);
-      const bootstrap = (await bootstrapResponse.json()) as {
-        accounts: Array<{ id: string; entityId: string }>;
-      };
-      const professorMari = bootstrap.accounts.find(
-        (account) => account.entityId === "__professor_mari__",
-      );
-      expect(professorMari).toBeTruthy();
-
+      // Professor Mari is a built-in character; the standalone Slurp package
+      // resolves a creator source directly by entity id.
       const stageProfileResponse = await page.request.post(
-        `/api/slurp/accounts/${professorMari!.id}/noodler`,
+        `/api/slurp/accounts/__professor_mari__/noodler`,
         {
           data: {
             stageProfile: {

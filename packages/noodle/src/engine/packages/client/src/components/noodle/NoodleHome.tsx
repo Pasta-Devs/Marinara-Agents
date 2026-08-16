@@ -674,7 +674,12 @@ interface NoodleHomeProps {
 
 export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const { t: localizeUi, i18n } = useUiTranslation();
-  const [selectedPersonaId, setSelectedPersonaId] = useState<string | null>(null);
+  const selectedPersonaId = useUIStore(
+    (state) => state.noodleSelectedPersonaId,
+  );
+  const setSelectedPersonaId = useUIStore(
+    (state) => state.setNoodleSelectedPersonaId,
+  );
   const { data, isLoading, isError } = useNoodle();
   // Freeze the seen marker while the current timeline remains visible:
   // the stored value advances as soon as the timeline is shown, which would otherwise erase
