@@ -42,8 +42,9 @@ async function prepareFreshClient(page: Page) {
 
 async function openSlurp(page: Page) {
   const slurp = page.locator('[data-component="NoodleView"]');
-  if (!(await slurp.isVisible())) {
-    await page.getByRole("tab", { name: "Open Slurp" }).click();
+  const tab = page.getByRole("tab", { name: "Open Slurp" });
+  if ((await tab.getAttribute("aria-selected")) !== "true") {
+    await tab.click();
   }
   await expect(slurp).toBeVisible();
 }
