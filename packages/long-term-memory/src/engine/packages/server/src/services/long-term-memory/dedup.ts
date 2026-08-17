@@ -3,10 +3,7 @@ import type {
   LtmExtractionDiagnostic,
   LtmNote,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import {
-  jaccardSimilarity,
-  tokenize,
-} from "../../../../shared/src/features/agents/long-term-memory/utils.js";
+import { jaccardSimilarity, tokenize } from "../../../../shared/src/features/agents/long-term-memory/utils.js";
 import { noteIdForEvidenceUnit } from "./evidence-unit-validation.js";
 
 type ExistingSectionCandidate = {
@@ -16,10 +13,7 @@ type ExistingSectionCandidate = {
   tokens: Set<string>;
 };
 
-export function deduplicateUnits(
-  units: LtmEvidenceUnit[],
-  existingNotes: LtmNote[],
-) {
+export function deduplicateUnits(units: LtmEvidenceUnit[], existingNotes: LtmNote[]) {
   const lexicalThreshold = 0.85;
   const diagnostics: LtmExtractionDiagnostic[] = [];
   const deduplicated: LtmEvidenceUnit[] = [];
@@ -31,18 +25,12 @@ export function deduplicateUnits(
     const unitText = normalizeText(unit.text);
     const unitTokens = tokenize(unit.text);
     const key = `${noteId}\u0000${unit.sectionKey}`;
-    const candidates = [
-      ...(seenInBatch.get(key) ?? []),
-      ...(existingCandidates.get(key) ?? []),
-    ];
+    const candidates = [...(seenInBatch.get(key) ?? []), ...(existingCandidates.get(key) ?? [])];
     const duplicate = candidates.find((candidate) => {
-      if (normalizeText(candidate.text) === unitText)
-        return true;
+      if (normalizeText(candidate.text) === unitText) return true;
       if (candidate.tokens.size === 0 || unitTokens.size === 0) return false;
       if (!hasTokenIntersection(unitTokens, candidate.tokens)) return false;
-      return (
-        jaccardSimilarity(unitTokens, candidate.tokens) >= lexicalThreshold
-      );
+      return jaccardSimilarity(unitTokens, candidate.tokens) >= lexicalThreshold;
     });
 
     if (duplicate) {
@@ -71,9 +59,7 @@ export function deduplicateUnits(
   return { deduplicated, diagnostics };
 }
 
-function existingSectionCandidates(
-  notes: LtmNote[],
-): Map<string, ExistingSectionCandidate[]> {
+function existingSectionCandidates(notes: LtmNote[]): Map<string, ExistingSectionCandidate[]> {
   const candidates = new Map<string, ExistingSectionCandidate[]>();
   for (const note of notes) {
     for (const [sectionKey, section] of Object.entries(note.sections)) {

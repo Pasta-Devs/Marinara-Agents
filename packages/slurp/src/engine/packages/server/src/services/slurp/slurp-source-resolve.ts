@@ -1,9 +1,6 @@
 // Split from noodle-noodler-source.ts so the identity-minimization helpers stay a
 // pure module that regressions can import without an Engine database.
-import type {
-  NoodleAccount,
-  NoodlerSourceSnapshot,
-} from "@marinara-engine/shared";
+import type { NoodleAccount, NoodlerSourceSnapshot } from "@marinara-engine/shared";
 import type { DB } from "../../db/connection.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
 import { parseRecord } from "./slurp-public-support.js";
@@ -14,10 +11,7 @@ function text(value: unknown): string {
 
 export async function resolveNoodlerSourceSnapshot(
   db: DB,
-  publicAccount: Pick<
-    NoodleAccount,
-    "kind" | "entityId" | "displayName" | "handle"
-  >,
+  publicAccount: Pick<NoodleAccount, "kind" | "entityId" | "displayName" | "handle">,
 ): Promise<NoodlerSourceSnapshot | null> {
   const characters = createCharactersStorage(db);
   if (publicAccount.kind === "character") {

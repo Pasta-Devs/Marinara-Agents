@@ -8,28 +8,17 @@ import { readFileSync } from "node:fs";
 // the feature ships a tone the README and onboarding deny. noodle.storage.ts cannot be imported
 // outside an Engine checkout (it resolves ../../db/file-query.js), so this reads the source.
 
-const storage = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts",
-  "utf8",
-);
-const home = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
-  "utf8",
-);
+const storage = readFileSync("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
+const home = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
 const settings = readFileSync(
   "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx",
   "utf8",
 );
 const readme = readFileSync("packages/slurp/README.md", "utf8");
-const enLocale = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/localization/locales/en.json",
-  "utf8",
-);
+const enLocale = readFileSync("packages/slurp/src/engine/packages/client/src/localization/locales/en.json", "utf8");
 
 function defaultGuidance(source: string): string {
-  const match = source.match(
-    /NOODLER_DEFAULT_GENERATION_GUIDANCE\s*(?::\s*string\s*)?=\s*\n?\s*"((?:[^"\\]|\\.)*)";/u,
-  );
+  const match = source.match(/NOODLER_DEFAULT_GENERATION_GUIDANCE\s*(?::\s*string\s*)?=\s*\n?\s*"((?:[^"\\]|\\.)*)";/u);
   assert.ok(match, "NOODLER_DEFAULT_GENERATION_GUIDANCE must be a single double-quoted literal");
   return match[1];
 }

@@ -66,8 +66,7 @@ export async function backfillNextNoodlerCreatorArtwork(db: DB): Promise<Noodler
     const connections = createConnectionsStorage(db);
     const mappedId = await resolveNoodlerImageConnectionId(db, target.id);
     const imageConnection =
-      (mappedId ? await connections.getWithKey(mappedId) : null) ??
-      (await connections.getDefaultForImageGeneration());
+      (mappedId ? await connections.getWithKey(mappedId) : null) ?? (await connections.getDefaultForImageGeneration());
     if (!imageConnection) return "unavailable" as const;
 
     const image = await generateNoodlerPostImage({

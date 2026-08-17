@@ -91,12 +91,21 @@ export function LocalMapCanvas({
   };
 
   const nudgeBackground = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (!backgroundEditing || !onBackgroundMove || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+    if (
+      !backgroundEditing ||
+      !onBackgroundMove ||
+      !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)
+    )
+      return;
     event.preventDefault();
     const step = event.shiftKey ? 5 : 1;
     onBackgroundMove({
-      x: clampCoordinate(backgroundPosition.x + (event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0)),
-      y: clampCoordinate(backgroundPosition.y + (event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0)),
+      x: clampCoordinate(
+        backgroundPosition.x + (event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0),
+      ),
+      y: clampCoordinate(
+        backgroundPosition.y + (event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0),
+      ),
     });
   };
 
@@ -121,7 +130,8 @@ export function LocalMapCanvas({
       onPointerUp={(event) => {
         if (!draggingBackground) return;
         backgroundFromPointer(event);
-        if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+        if (event.currentTarget.hasPointerCapture(event.pointerId))
+          event.currentTarget.releasePointerCapture(event.pointerId);
         setDraggingBackground(false);
       }}
       onPointerCancel={() => setDraggingBackground(false)}
@@ -244,7 +254,9 @@ export function LocalMapCanvas({
               onPointerCancel={() => setDraggingId(null)}
               aria-pressed={selected}
               data-marinara-map-selected-location={selected ? "true" : undefined}
-              aria-description={editing ? "Drag to reposition. Use arrow keys to nudge; hold Shift for five units." : undefined}
+              aria-description={
+                editing ? "Drag to reposition. Use arrow keys to nudge; hold Shift for five units." : undefined
+              }
               className={cn(
                 "flex min-h-11 w-full items-center gap-2 rounded-xl border bg-[var(--marinara-chat-chrome-panel-bg)] px-3 py-2 text-left shadow-md transition-[border-color,background-color,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--marinara-chat-chrome-focus-ring)]",
                 selected

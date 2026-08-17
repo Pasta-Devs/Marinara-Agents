@@ -36,11 +36,15 @@ import { isConnectionAdmissionFailure, admissionModeForRequest } from "../servic
 
 const accountQuery = z.object({ accountId: z.string().trim().min(1) });
 const noodleImagePromptConfirmationSchema = z.object({
-  prompts: z.array(z.object({
-    id: z.string().min(1),
-    prompt: z.string().trim().min(1).max(20_000),
-    negativePrompt: z.string().trim().max(20_000).optional(),
-  })).max(20),
+  prompts: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        prompt: z.string().trim().min(1).max(20_000),
+        negativePrompt: z.string().trim().max(20_000).optional(),
+      }),
+    )
+    .max(20),
   debugMode: z.boolean().optional(),
 });
 const noodleGenerationRequestSchema = z.object({
@@ -70,15 +74,24 @@ export async function noodleRoutes(app: FastifyInstance) {
   });
   app.put("/settings", async (request) => noodle.updateSettings(request.body as Record<string, unknown>));
   app.post("/ambient-profiles/reroll", async (request, reply) => {
-    const { rerollAmbientNoodleProfiles } = await import("../services/noodle/noodle-ambient-profile-generation.service.js");
+    const { rerollAmbientNoodleProfiles } =
+      await import("../services/noodle/noodle-ambient-profile-generation.service.js");
     const { createConnectionsStorage } = await import("../services/storage/connections.storage.js");
     const settings = await noodle.getSettings();
     const connectionId = String((settings as { generationConnectionId?: unknown }).generationConnectionId ?? "");
     const connection = connectionId ? await createConnectionsStorage(app.db).getWithKey(connectionId) : null;
     if (!connection) return reply.code(400).send({ error: "Select a Noodle generation connection first." });
-    const accountIds = ((request.body as { accountIds?: string[] }).accountIds ?? []);
-    const accounts = (await Promise.all(accountIds.map((id) => noodle.getAccountById(id)))).filter((account): account is NonNullable<typeof account> => Boolean(account));
-    return rerollAmbientNoodleProfiles({ db: app.db, noodle, accounts, connection, debugMode: Boolean((request.body as { debugMode?: boolean }).debugMode) });
+    const accountIds = (request.body as { accountIds?: string[] }).accountIds ?? [];
+    const accounts = (await Promise.all(accountIds.map((id) => noodle.getAccountById(id)))).filter(
+      (account): account is NonNullable<typeof account> => Boolean(account),
+    );
+    return rerollAmbientNoodleProfiles({
+      db: app.db,
+      noodle,
+      accounts,
+      connection,
+      debugMode: Boolean((request.body as { debugMode?: boolean }).debugMode),
+    });
   });
   app.put("/refresh-schedule", async (request, reply) => {
     const parsed = noodleRescheduleRefreshSchema.safeParse(request.body);
@@ -100,9 +113,7 @@ export async function noodleRoutes(app: FastifyInstance) {
     const account = await noodle.getAccountById(parsed.data.accountId);
     return account ?? reply.code(404).send({ error: "Noodle account not found" });
   });
-  app.get("/posts", async (request) =>
-    noodle.listPosts(request.query as { limit?: number; since?: string }),
-  );
+  app.get("/posts", async (request) => noodle.listPosts(request.query as { limit?: number; since?: string }));
   app.post("/posts", async (req, reply) => {
     if (req.body && typeof req.body === "object" && "title" in req.body) {
       return reply.code(400).send({ error: "Public Noodle posts do not support titles." });
@@ -202,10 +213,7 @@ export async function noodleRoutes(app: FastifyInstance) {
     const interaction = await noodle.createInteraction(id, {
       actorAccountId: actor.id,
       type: parsed.data.type,
-      content:
-        parsed.data.type === "vote"
-          ? (parsed.data.content?.trim() ?? null)
-          : (parsed.data.content ?? null),
+      content: parsed.data.type === "vote" ? (parsed.data.content?.trim() ?? null) : (parsed.data.content ?? null),
       imageUrl: parsed.data.imageUrl ?? null,
       parentInteractionId: parsed.data.parentInteractionId ?? null,
     });
@@ -357,28 +365,40 @@ export async function noodleRoutes(app: FastifyInstance) {
   });
   app.post("/invites/bulk", async (request) => {
     const ids = (request.body as { characterIds?: string[] }).characterIds ?? [];
-    return Promise.all((await Promise.all(ids.map((id) => characters.getById(id)))).filter(Boolean).map((character) => {
-      return noodle.upsertAccountFromProfile({
-        kind: "character",
-        entityId: character!.id,
-        displayName: characterNameFromRow(character!),
-        avatarUrl: character!.avatarPath ?? null,
-        avatarCrop: characterAvatarCrop(character!),
-        bio: String(parseRecord(character!.data).description ?? ""),
-        invited: true,
-      });
-    }));
+    return Promise.all(
+      (await Promise.all(ids.map((id) => characters.getById(id)))).filter(Boolean).map((character) => {
+        return noodle.upsertAccountFromProfile({
+          kind: "character",
+          entityId: character!.id,
+          displayName: characterNameFromRow(character!),
+          avatarUrl: character!.avatarPath ?? null,
+          avatarCrop: characterAvatarCrop(character!),
+          bio: String(parseRecord(character!.data).description ?? ""),
+          invited: true,
+        });
+      }),
+    );
   });
   app.delete("/invites", async () => {
-    await Promise.all((await noodle.listAccounts()).filter((account) => account.kind === "character").map((account) => noodle.updateAccountProfile(account.id, { invited: false })));
+    await Promise.all(
+      (await noodle.listAccounts())
+        .filter((account) => account.kind === "character")
+        .map((account) => noodle.updateAccountProfile(account.id, { invited: false })),
+    );
     return bootstrapVisibleNoodle(noodle, characters);
   });
   app.delete("/invites/:characterId", async (request, reply) => {
-    const account = await noodle.getAccountByEntity("character", (request.params as { characterId: string }).characterId);
+    const account = await noodle.getAccountByEntity(
+      "character",
+      (request.params as { characterId: string }).characterId,
+    );
     if (!account) return reply.code(404).send({ error: "Noodle character account not found" });
     return noodle.updateAccountProfile(account.id, { invited: false });
   });
-  app.delete("/timeline", async () => { await noodle.resetTimeline(); return bootstrapVisibleNoodle(noodle, characters); });
+  app.delete("/timeline", async () => {
+    await noodle.resetTimeline();
+    return bootstrapVisibleNoodle(noodle, characters);
+  });
   app.post("/refresh/images", async (request, reply) => {
     const parsed = noodleImagePromptConfirmationSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
@@ -399,10 +419,12 @@ export async function noodleRoutes(app: FastifyInstance) {
       const connection = await connections.getWithKey(connectionId);
       if (!connection) return reply.code(404).send({ error: "Noodle generation connection not found" });
       const imageCaptioning = await resolveImageCaptioningRuntime({
-        chatMeta: settings.imageCaptioningUseConnectionDefault ? {} : {
-          imageCaptioningEnabled: settings.imageCaptioningEnabled,
-          imageCaptioningConnectionId: settings.imageCaptioningConnectionId,
-        },
+        chatMeta: settings.imageCaptioningUseConnectionDefault
+          ? {}
+          : {
+              imageCaptioningEnabled: settings.imageCaptioningEnabled,
+              imageCaptioningConnectionId: settings.imageCaptioningConnectionId,
+            },
         fallbackConnectionId: connectionId,
         connections,
         admissionMode: admissionModeForRequest(request.headers),

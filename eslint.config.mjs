@@ -1,4 +1,5 @@
 import js from "@eslint/js";
+import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
@@ -50,6 +51,39 @@ export default tseslint.config(
         "warn",
         { argsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
+    },
+  },
+  {
+    files: ["**/*.tsx"],
+    plugins: {
+      "react-hooks": reactHooks,
+    },
+    rules: {
+      "react-hooks/exhaustive-deps": "warn",
+      "react-hooks/rules-of-hooks": "error",
+    },
+  },
+  {
+    files: ["**/*.{js,mjs}"],
+    rules: {
+      "@typescript-eslint/no-unused-vars": "off",
+    },
+  },
+  {
+    files: ["packages/pixelforge/src/**/*.js"],
+    languageOptions: {
+      globals: {
+        PF: "readonly",
+      },
+    },
+    rules: {
+      "no-control-regex": "off",
+    },
+  },
+  {
+    files: ["scripts/validate-pr-triage.mjs"],
+    rules: {
+      "no-regex-spaces": "off",
     },
   },
 );

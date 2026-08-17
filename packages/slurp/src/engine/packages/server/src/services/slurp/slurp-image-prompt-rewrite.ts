@@ -23,9 +23,7 @@ function parseRecord(value: unknown): Record<string, unknown> {
   if (start < 0 || end <= start) return {};
   try {
     const parsed: unknown = JSON.parse(text.slice(start, end + 1));
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
   } catch {
     return {};
   }
@@ -42,7 +40,8 @@ export async function rewriteNoodleImagePrompt(input: {
   const instructions = input.instructions?.trim().replace(/\s+/g, " ").slice(0, MAX_INSTRUCTIONS_LENGTH) || "";
   const prompt = input.prompt.trim().slice(0, MAX_REWRITTEN_PROMPT_LENGTH);
   if ((!instructions && !input.styleGuidance?.trim()) || !prompt) return null;
-  const characterContext = input.characterContext?.trim().slice(0, 8_000) || "No additional character context was provided.";
+  const characterContext =
+    input.characterContext?.trim().slice(0, 8_000) || "No additional character context was provided.";
   const styleGuidance = input.styleGuidance?.trim().slice(0, 5_000) || "";
 
   try {
@@ -52,9 +51,7 @@ export async function rewriteNoodleImagePrompt(input: {
       NOODLE_IMAGE_INTERPRET,
       {},
     );
-    const textConnection =
-      (await connections.getDefaultForAgents()) ??
-      (await connections.getFallbackForAgents());
+    const textConnection = (await connections.getDefaultForAgents()) ?? (await connections.getFallbackForAgents());
     if (!textConnection) return null;
 
     const runtime = await resolveIllustratorPromptRuntime({
@@ -77,7 +74,7 @@ export async function rewriteNoodleImagePrompt(input: {
               ? "Apply the supplied art-style guidance when the original prompt does not specify a style. Preserve an explicitly requested style in the original prompt or user instructions."
               : "",
             "Treat the user's instructions as guidance, not text to copy into the image prompt.",
-            "Return valid JSON only: {\"prompt\":\"provider-ready image prompt\"}.",
+            'Return valid JSON only: {"prompt":"provider-ready image prompt"}.',
           ].join("\n"),
         },
         {
@@ -89,7 +86,9 @@ export async function rewriteNoodleImagePrompt(input: {
             "<character_context>",
             characterContext,
             "</character_context>",
-            ...(instructions ? ["<image_prompting_instructions>", instructions, "</image_prompting_instructions>"] : []),
+            ...(instructions
+              ? ["<image_prompting_instructions>", instructions, "</image_prompting_instructions>"]
+              : []),
             ...(styleGuidance ? ["<art_style_guidance>", styleGuidance, "</art_style_guidance>"] : []),
           ].join("\n"),
         },
@@ -103,9 +102,8 @@ export async function rewriteNoodleImagePrompt(input: {
       },
     );
     const parsed = parseRecord(result.content);
-    const rewritten = typeof parsed.prompt === "string"
-      ? parsed.prompt.trim().slice(0, MAX_REWRITTEN_PROMPT_LENGTH)
-      : "";
+    const rewritten =
+      typeof parsed.prompt === "string" ? parsed.prompt.trim().slice(0, MAX_REWRITTEN_PROMPT_LENGTH) : "";
     return rewritten || null;
   } catch (error) {
     logger.warn(error, "[noodle] Image prompt instruction rewrite failed; using the original prompt");

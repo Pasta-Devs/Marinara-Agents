@@ -141,15 +141,14 @@ export function SpatialMapLibrary({
   const globalGalleryImages = useSpatialGlobalGalleryImages();
   const [isImporting, setIsImporting] = useState(false);
   const [importEntriesPrimed, setImportEntriesPrimed] = useState(false);
-  const [pendingPortableLoreImport, setPendingPortableLoreImport] =
-    useState<PendingLibraryPortableLoreImport | null>(null);
+  const [pendingPortableLoreImport, setPendingPortableLoreImport] = useState<PendingLibraryPortableLoreImport | null>(
+    null,
+  );
   const lorebooksQuery = useSpatialLorebooks();
   const { data: lorebooks = [] } = lorebooksQuery;
   const portableLorebookIds = useMemo(
     () =>
-      importEntriesPrimed || isImporting || pendingPortableLoreImport
-        ? lorebooks.map((lorebook) => lorebook.id)
-        : [],
+      importEntriesPrimed || isImporting || pendingPortableLoreImport ? lorebooks.map((lorebook) => lorebook.id) : [],
     [importEntriesPrimed, isImporting, lorebooks, pendingPortableLoreImport],
   );
   const lorebookEntriesQuery = useSpatialLorebookEntries(portableLorebookIds);
@@ -160,8 +159,7 @@ export function SpatialMapLibrary({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingSharedWorldId, setEditingSharedWorldId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [editingUnresolvedLoreReferences, setEditingUnresolvedLoreReferences] =
-    useState<PortableLoreReference[]>([]);
+  const [editingUnresolvedLoreReferences, setEditingUnresolvedLoreReferences] = useState<PortableLoreReference[]>([]);
   const [pendingConfirmation, setPendingConfirmation] = useState<LibraryConfirmationOptions | null>(null);
   const confirmationResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
   const confirmationDialogRef = useRef<HTMLDivElement>(null);
@@ -343,9 +341,7 @@ export function SpatialMapLibrary({
         const entries = lorebookEntriesQuery.entries;
         if (!entries) throw new Error("Lore entries are still loading. Try the import again in a moment.");
         const importedMapName =
-          typeof record?.name === "string" && record.name.trim()
-            ? record.name.trim()
-            : importedTemplateName(file.name);
+          typeof record?.name === "string" && record.name.trim() ? record.name.trim() : importedTemplateName(file.name);
         setPendingPortableLoreImport({
           record,
           data,
@@ -427,9 +423,7 @@ export function SpatialMapLibrary({
       importSummary = result;
     } catch (error) {
       if (!createdRecordId && createdLorebookIds.length > 0) {
-        await Promise.allSettled(
-          createdLorebookIds.map((lorebookId) => packageApi.delete(`/lorebooks/${lorebookId}`)),
-        );
+        await Promise.allSettled(createdLorebookIds.map((lorebookId) => packageApi.delete(`/lorebooks/${lorebookId}`)));
       }
       toast.error(error instanceof Error ? error.message : "The portable lore could not be restored.");
       setIsImporting(false);
@@ -518,7 +512,9 @@ export function SpatialMapLibrary({
     if (!supportedChat || !chatId || !spatial.data) return;
     const current = spatial.data.definition;
     const confirmed = await ask({
-      title: startOverReplacement ? "Break breadcrumb continuity and replace this map?" : "Link this chat to the shared world?",
+      title: startOverReplacement
+        ? "Break breadcrumb continuity and replace this map?"
+        : "Link this chat to the shared world?",
       message: startOverReplacement
         ? `Replace ${chatName || "this chat"} with “${world.name}”? Old messages remain, but prior map locations may no longer resolve. Game map bindings will be reset. The world definition and artwork stay account-owned.`
         : `Link ${chatName || "this chat"} to “${world.name}”? The world definition and artwork stay account-owned. This chat keeps its own current location, route history, snapshots, and Game bindings. Story discoveries remain unpublished until reviewed.`,
@@ -588,7 +584,11 @@ export function SpatialMapLibrary({
     if (!supportedChat || !chatId || !spatial.data) return;
     const existing = spatial.data.definition;
     const confirmed = await ask({
-      title: startOverReplacement ? "Break breadcrumb continuity and replace this map?" : existing ? "Replace with an independent copy?" : "Add an independent copy?",
+      title: startOverReplacement
+        ? "Break breadcrumb continuity and replace this map?"
+        : existing
+          ? "Replace with an independent copy?"
+          : "Add an independent copy?",
       message: startOverReplacement
         ? `Replace ${chatName || "this chat"} with an independent copy of “${world.name}”? Old messages remain, but prior map locations may no longer resolve. Game map bindings will be reset. Future edits to the shared world will not appear here.`
         : `Copy “${world.name}” into ${chatName || "this chat"}? Future edits to the shared world will not appear here. Shared artwork references remain account-wide.`,
@@ -651,7 +651,11 @@ export function SpatialMapLibrary({
     if (!supportedChat || !chatId || !spatial.data) return;
     const existing = spatial.data.definition;
     const confirmed = await ask({
-      title: startOverReplacement ? "Break breadcrumb continuity and replace this map?" : existing ? "Replace this chat's map?" : "Add map template to this chat?",
+      title: startOverReplacement
+        ? "Break breadcrumb continuity and replace this map?"
+        : existing
+          ? "Replace this chat's map?"
+          : "Add map template to this chat?",
       message: startOverReplacement
         ? `Replace ${chatName || "this chat"} with “${template.name}”? Old messages remain, but prior map locations may no longer resolve. Game map bindings will be reset. The saved template will stay unchanged.`
         : existing
@@ -694,7 +698,9 @@ export function SpatialMapLibrary({
         await updateSpatial.mutateAsync(request);
       }
       toast.success(
-        startOverReplacement ? `Replaced with “${template.name}”.` : `Added “${template.name}” to ${chatName || "the chat"}.`,
+        startOverReplacement
+          ? `Replaced with “${template.name}”.`
+          : `Added “${template.name}” to ${chatName || "the chat"}.`,
       );
       onAppliedToChat?.();
     } catch (error) {
@@ -993,8 +999,7 @@ export function SpatialMapLibrary({
                             type="button"
                             onClick={() => void selectSharedWorldForSetup(world)}
                             disabled={
-                              world.data.definition.locations.length === 0 ||
-                              !world.data.definition.startingLocationId
+                              world.data.definition.locations.length === 0 || !world.data.definition.startingLocationId
                             }
                             className="mari-editor-action mari-editor-action--primary inline-flex min-h-11 justify-center px-3 text-xs disabled:opacity-45"
                           >

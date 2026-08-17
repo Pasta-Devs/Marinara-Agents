@@ -7,23 +7,11 @@ import { readFileSync } from "node:fs";
 // opt-out must actually skip the request rather than just hiding its result, the choice must not
 // persist silently into the next comment, and Noodle must not grow a toggle it cannot honour.
 
-const card = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpPostCard.tsx",
-  "utf8",
-);
-const noodler = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
-  "utf8",
-);
-const noodle = readFileSync(
-  "packages/noodle/src/engine/packages/client/src/components/noodle/NoodleHome.tsx",
-  "utf8",
-);
+const card = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpPostCard.tsx", "utf8");
+const noodler = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
+const noodle = readFileSync("packages/noodle/src/engine/packages/client/src/components/noodle/NoodleHome.tsx", "utf8");
 const enLocale = JSON.parse(
-  readFileSync(
-    "packages/slurp/src/engine/packages/client/src/localization/locales/en.json",
-    "utf8",
-  ),
+  readFileSync("packages/slurp/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
 ) as Record<string, string>;
 
 // On by default, and reset with the composer so one opt-out never leaks into the next comment.

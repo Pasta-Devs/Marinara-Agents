@@ -1396,11 +1396,7 @@ export async function spatialContextRoutes(app: FastifyInstance) {
         "There is no existing map to replace. Create the first map instead.",
       );
     }
-    if (
-      operation === "replace" &&
-      spatial.hasCommittedSpatialHistory &&
-      body.breakHistoryContinuity !== true
-    ) {
+    if (operation === "replace" && spatial.hasCommittedSpatialHistory && body.breakHistoryContinuity !== true) {
       throw new SpatialMapPromptRequestError(
         409,
         "spatial_ai_replacement_protected",
@@ -1619,62 +1615,62 @@ export async function spatialContextRoutes(app: FastifyInstance) {
   app.get<{ Params: ChatSpatialCommandParams; Querystring: SpatialTurnRecoveryQuery }>(
     "/:chatId/spatial-context/turn/:commandId",
     async (req, reply) => {
-    const commandId = z.string().trim().min(1).max(200).safeParse(req.params.commandId);
-    if (!commandId.success) {
-      return reply.status(400).send({
-        error: "Choose a valid movement command.",
-        code: "spatial_request_invalid",
-      });
-    }
-    const snapshot = await persistence.spatialSnapshots.getByCommand(req.params.chatId, commandId.data);
-    if (!snapshot) {
-      return reply.status(404).send({
-        error: "This movement command has not been applied.",
-        code: "spatial_transition_not_applied",
-      });
-    }
-    let recoveredTravel;
-    const hasRecoveryQuery = Object.values(req.query).some((value) => value !== undefined);
-    if (hasRecoveryQuery) {
-      const expectedDefinitionRevision = Number(req.query.expectedDefinitionRevision);
-      const parsedTransition = pendingSpatialTransitionSchema.safeParse({
-        destinationId: req.query.destinationId,
-        ...(req.query.travelMode ? { travelMode: req.query.travelMode } : {}),
-        expectedDefinitionRevision,
-        expectedCurrentLocationId: req.query.expectedCurrentLocationId ?? null,
-        commandId: commandId.data,
-      });
-      if (!parsedTransition.success) {
+      const commandId = z.string().trim().min(1).max(200).safeParse(req.params.commandId);
+      if (!commandId.success) {
         return reply.status(400).send({
-          error: parsedTransition.error.issues[0]?.message ?? "Invalid movement recovery request.",
+          error: "Choose a valid movement command.",
           code: "spatial_request_invalid",
-          issues: parsedTransition.error.issues,
         });
       }
-      try {
-        const applied = await findAppliedSpatialOwnerTurn({
-          chatId: req.params.chatId,
-          transition: parsedTransition.data,
+      const snapshot = await persistence.spatialSnapshots.getByCommand(req.params.chatId, commandId.data);
+      if (!snapshot) {
+        return reply.status(404).send({
+          error: "This movement command has not been applied.",
+          code: "spatial_transition_not_applied",
         });
-        recoveredTravel = applied?.travel;
-      } catch (error) {
-        if (error instanceof SpatialOwnerTurnError) {
-          return reply.status(error.statusCode).send({
-            error: error.message,
-            code: error.code,
-            ...(error.details ?? {}),
+      }
+      let recoveredTravel;
+      const hasRecoveryQuery = Object.values(req.query).some((value) => value !== undefined);
+      if (hasRecoveryQuery) {
+        const expectedDefinitionRevision = Number(req.query.expectedDefinitionRevision);
+        const parsedTransition = pendingSpatialTransitionSchema.safeParse({
+          destinationId: req.query.destinationId,
+          ...(req.query.travelMode ? { travelMode: req.query.travelMode } : {}),
+          expectedDefinitionRevision,
+          expectedCurrentLocationId: req.query.expectedCurrentLocationId ?? null,
+          commandId: commandId.data,
+        });
+        if (!parsedTransition.success) {
+          return reply.status(400).send({
+            error: parsedTransition.error.issues[0]?.message ?? "Invalid movement recovery request.",
+            code: "spatial_request_invalid",
+            issues: parsedTransition.error.issues,
           });
         }
-        throw error;
+        try {
+          const applied = await findAppliedSpatialOwnerTurn({
+            chatId: req.params.chatId,
+            transition: parsedTransition.data,
+          });
+          recoveredTravel = applied?.travel;
+        } catch (error) {
+          if (error instanceof SpatialOwnerTurnError) {
+            return reply.status(error.statusCode).send({
+              error: error.message,
+              code: error.code,
+              ...(error.details ?? {}),
+            });
+          }
+          throw error;
+        }
       }
-    }
-    return {
-      applied: true,
-      messageId: snapshot.messageId,
-      currentLocationId: snapshot.currentLocationId,
-      definitionRevision: snapshot.definitionRevision,
-      ...(recoveredTravel ? { travel: recoveredTravel } : {}),
-    };
+      return {
+        applied: true,
+        messageId: snapshot.messageId,
+        currentLocationId: snapshot.currentLocationId,
+        definitionRevision: snapshot.definitionRevision,
+        ...(recoveredTravel ? { travel: recoveredTravel } : {}),
+      };
     },
   );
 

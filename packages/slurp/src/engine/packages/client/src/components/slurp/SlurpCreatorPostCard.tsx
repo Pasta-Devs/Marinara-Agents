@@ -75,10 +75,7 @@ export function LockedSlurpPostCard({
   onOpenProfile,
   demo,
 }: {
-  post: Pick<
-    NoodlerPostView,
-    "id" | "access" | "createdAt" | "title" | "imageUrl"
-  > &
+  post: Pick<NoodlerPostView, "id" | "access" | "createdAt" | "title" | "imageUrl"> &
     Partial<Pick<NoodlerPostView, "likeCount" | "replyCount" | "hasImage">>; // controller-locked managed posts carry no counts
   profile: NoodlerStageProfile;
   controllerOnly?: boolean;
@@ -104,19 +101,14 @@ export function LockedSlurpPostCard({
   const [demoUnlocked, setDemoUnlocked] = useState(false);
   const likeCount = post.likeCount ?? 0;
   const replyCount = post.replyCount ?? 0;
-  const openProfile = onOpenProfile
-    ? () => onOpenProfile(profile.id)
-    : undefined;
+  const openProfile = onOpenProfile ? () => onOpenProfile(profile.id) : undefined;
   const revealed = Boolean(demo && demoUnlocked);
   // A locked post's URL resolves to a server-blurred teaser, not the original bytes. Where no
   // teaser can be built the server sends nothing and only the frame renders.
-  const mediaSrc = useSlurpMediaSrc(
-    (revealed && demo?.unlockedImageUrl) || post.imageUrl || null,
-  );
+  const mediaSrc = useSlurpMediaSrc((revealed && demo?.unlockedImageUrl) || post.imageUrl || null);
   // No teaser could be built (the route 404s), so drop the broken <img> and keep the frame.
   const [failedMediaSrc, setFailedMediaSrc] = useState<string | null>(null);
-  const shownMediaSrc =
-    mediaSrc && mediaSrc !== failedMediaSrc ? mediaSrc : null;
+  const shownMediaSrc = mediaSrc && mediaSrc !== failedMediaSrc ? mediaSrc : null;
   return (
     <article
       data-noodle-post-id={post.id}
@@ -154,9 +146,7 @@ export function LockedSlurpPostCard({
               className="inline-flex items-center gap-1 rounded-md bg-[var(--noodle-accent)]/12 px-2 py-1 text-[0.68rem] font-bold text-[var(--noodle-accent)] ring-1 ring-inset ring-[var(--noodle-accent)]/20"
             >
               <Lock size={11} />
-              {revealed && demo
-                ? demo.unlockedLabel
-                : localizeUi("ui.noodle.postaccess.locked")}
+              {revealed && demo ? demo.unlockedLabel : localizeUi("ui.noodle.postaccess.locked")}
             </span>
           </div>
           <p className="text-xs font-medium !text-[var(--noodle-accent-foreground)]">
@@ -183,10 +173,7 @@ export function LockedSlurpPostCard({
                     ? localizeUi("ui.noodle.post.imageBy", {
                         name: profile.displayName,
                       })
-                    : localizeUi(
-                        "ui.noodle.lockednoodlerpostcard.lockedImageFrom",
-                        { name: profile.displayName },
-                      )
+                    : localizeUi("ui.noodle.lockednoodlerpostcard.lockedImageFrom", { name: profile.displayName })
                 }
                 className={cn(
                   "h-full w-full object-cover transition-[filter,transform] duration-500 motion-reduce:transition-none",
@@ -203,18 +190,10 @@ export function LockedSlurpPostCard({
                 })}
               </span>
             )}
-            {!revealed && (
-              <div
-                className="absolute inset-0 bg-black/35"
-                aria-hidden="true"
-              />
-            )}
+            {!revealed && <div className="absolute inset-0 bg-black/35" aria-hidden="true" />}
             {/* Icon only: the header badge already says "Locked", and the alt text carries it for AT. */}
             {!revealed && (
-              <span
-                className="absolute inset-0 flex items-center justify-center"
-                aria-hidden="true"
-              >
+              <span className="absolute inset-0 flex items-center justify-center" aria-hidden="true">
                 <span className="rounded-full bg-black/70 p-2.5 text-white ring-1 ring-white/15">
                   <Lock size={16} />
                 </span>
@@ -226,20 +205,13 @@ export function LockedSlurpPostCard({
         {/* Title */}
         {(() => {
           // The demo's real title is a punchline; showing it while locked spoils the reveal.
-          const title =
-            demo && !revealed ? (demo.lockedTitle ?? post.title) : post.title;
-          return (
-            title && (
-              <h3 className="mt-3 text-lg font-bold leading-snug">{title}</h3>
-            )
-          );
+          const title = demo && !revealed ? (demo.lockedTitle ?? post.title) : post.title;
+          return title && <h3 className="mt-3 text-lg font-bold leading-snug">{title}</h3>;
         })()}
 
         {/* Body: unreadable teaser until unlocked */}
         {revealed && demo ? (
-          <p className="mt-3 whitespace-pre-line text-sm leading-6">
-            {demo.body}
-          </p>
+          <p className="mt-3 whitespace-pre-line text-sm leading-6">{demo.body}</p>
         ) : (
           !controllerOnly && (
             <div className="mt-3 space-y-2 select-none" aria-hidden="true">
@@ -252,9 +224,7 @@ export function LockedSlurpPostCard({
         {/* CTA */}
         {controllerOnly ? (
           <p className="mt-3 text-xs text-[var(--muted-foreground)]">
-            {localizeUi(
-              "ui.noodle.lockednoodlerpostcard.openTheControllerToolsToManageThisPost",
-            )}
+            {localizeUi("ui.noodle.lockednoodlerpostcard.openTheControllerToolsToManageThisPost")}
           </p>
         ) : (
           !revealed && (
@@ -264,8 +234,7 @@ export function LockedSlurpPostCard({
               onClick={() => setUnlockSheetOpen(true)}
               className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md bg-[#ff7ec1] px-4 text-xs font-bold text-[#17121b] transition-[opacity,scale] hover:bg-[#ff9dce] active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:!text-[#17121b]"
             >
-              <Eye size={14} />{" "}
-              {localizeUi("ui.noodle.lockednoodlerpostcard.unlock")}
+              <Eye size={14} /> {localizeUi("ui.noodle.lockednoodlerpostcard.unlock")}
             </button>
           )
         )}
@@ -275,15 +244,11 @@ export function LockedSlurpPostCard({
           {/* The icons are decorative, so the counts carry their own labels for screen readers. */}
           <span className="flex items-center gap-1.5">
             <Heart size={18} aria-hidden="true" /> {likeCount}
-            <span className="sr-only">
-              {localizeUi("ui.noodle.noodlehome.likes")}
-            </span>
+            <span className="sr-only">{localizeUi("ui.noodle.noodlehome.likes")}</span>
           </span>
           <span className="flex items-center gap-1.5">
             <MessageCircle size={18} aria-hidden="true" /> {replyCount}
-            <span className="sr-only">
-              {localizeUi("ui.noodle.noodlehome.replies")}
-            </span>
+            <span className="sr-only">{localizeUi("ui.noodle.noodlehome.replies")}</span>
           </span>
           <div className="ml-auto flex items-center gap-3">
             {onManage && (
@@ -292,8 +257,7 @@ export function LockedSlurpPostCard({
                 onClick={onManage}
                 className="flex items-center gap-1.5 hover:text-[var(--foreground)]"
               >
-                <Pencil size={18} />{" "}
-                {localizeUi("ui.noodle.lockednoodlerpostcard.managePost")}
+                <Pencil size={18} /> {localizeUi("ui.noodle.lockednoodlerpostcard.managePost")}
               </button>
             )}
           </div>
@@ -312,10 +276,7 @@ export function LockedSlurpPostCard({
           "--accent": "rgba(255, 126, 193, 0.14)",
         }}
       >
-        <div
-          data-component="SlurpHome.UnlockSheet"
-          className="divide-y divide-[var(--noodle-divider)]"
-        >
+        <div data-component="SlurpHome.UnlockSheet" className="divide-y divide-[var(--noodle-divider)]">
           <button
             type="button"
             data-noodler-unlock-action="post"
@@ -331,9 +292,7 @@ export function LockedSlurpPostCard({
           >
             <Eye size={20} className="shrink-0 text-[var(--noodle-accent)]" />
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-bold">
-                {localizeUi("ui.noodle.unlocksheet.unlockThisPost")}
-              </span>
+              <span className="block text-sm font-bold">{localizeUi("ui.noodle.unlocksheet.unlockThisPost")}</span>
               <span className="block text-xs text-[var(--muted-foreground)]">
                 {localizeUi("ui.noodle.unlocksheet.unlockThisPostDetail")}
               </span>
@@ -355,9 +314,7 @@ export function LockedSlurpPostCard({
           >
             <Bell size={20} className="shrink-0 text-[var(--noodle-accent)]" />
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-bold">
-                {localizeUi("ui.noodle.unlocksheet.subscribe")}
-              </span>
+              <span className="block text-sm font-bold">{localizeUi("ui.noodle.unlocksheet.subscribe")}</span>
               <span className="block text-xs text-[var(--muted-foreground)]">
                 {localizeUi("ui.noodle.unlocksheet.subscribeDetail")}
               </span>
@@ -401,13 +358,7 @@ function NoodlerFictionalPrice({ amount }: { amount: number }) {
   );
 }
 
-export function SlurpCreatorPostCard({
-  post,
-  ctx,
-}: {
-  post: NoodlePostCardModel;
-  ctx: NoodlePostCardCtx;
-}) {
+export function SlurpCreatorPostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: NoodlePostCardCtx }) {
   const { t: localizeUi, i18n } = useUiTranslation();
   const {
     personaAccount,
@@ -449,8 +400,7 @@ export function SlurpCreatorPostCard({
     mentions,
   } = ctx;
   const accountById = ctx.accountById ?? new Map<string, NoodleAccount>();
-  const accountByHandle =
-    ctx.accountByHandle ?? new Map<string, NoodleAccount>();
+  const accountByHandle = ctx.accountByHandle ?? new Map<string, NoodleAccount>();
   const authorAccount = accountById.get(post.authorAccountId) ?? null;
   const author = authorAccount ?? post.authorSnapshot;
 
@@ -461,52 +411,38 @@ export function SlurpCreatorPostCard({
   // keep the () => {} fallbacks callable with their real signatures.
   const fallbackDivRef = useRef<HTMLDivElement | null>(null);
   const fallbackFileRef = useRef<HTMLInputElement | null>(null);
-  const openProfile: (account: NoodleAccount | null) => void =
-    ctx.openProfile ?? (() => {});
+  const openProfile: (account: NoodleAccount | null) => void = ctx.openProfile ?? (() => {});
   const canOpenAuthorProfile = Boolean(authorAccount || ctx.openAuthorProfile);
   const openPostAuthor = () => {
     if (authorAccount) openProfile(authorAccount);
     else ctx.openAuthorProfile?.(post.authorAccountId);
   };
-  const handleReplyKeyDown: (
-    event: React.KeyboardEvent<HTMLTextAreaElement>,
-  ) => void = ctx.handleReplyKeyDown ?? (() => {});
-  const voteInPoll: (
-    post: NoodlePostCardModel,
-    optionId: string,
-    selectedOptionId: string | null,
-  ) => void = ctx.voteInPoll ?? (() => {});
+  const handleReplyKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void =
+    ctx.handleReplyKeyDown ?? (() => {});
+  const voteInPoll: (post: NoodlePostCardModel, optionId: string, selectedOptionId: string | null) => void =
+    ctx.voteInPoll ?? (() => {});
   const disableReplyImage = !media;
-  const setImageLightbox: React.Dispatch<
-    React.SetStateAction<ChatImage | null>
-  > = ctx.setImageLightbox ?? media?.setImageLightbox ?? (() => {});
+  const setImageLightbox: React.Dispatch<React.SetStateAction<ChatImage | null>> =
+    ctx.setImageLightbox ?? media?.setImageLightbox ?? (() => {});
   const replyImageUrl = media?.replyImageUrl ?? "";
-  const setReplyImageUrl: React.Dispatch<React.SetStateAction<string>> =
-    media?.setReplyImageUrl ?? (() => {});
+  const setReplyImageUrl: React.Dispatch<React.SetStateAction<string>> = media?.setReplyImageUrl ?? (() => {});
   const replyImageUrlDraft = media?.replyImageUrlDraft ?? "";
   const setReplyImageUrlDraft: React.Dispatch<React.SetStateAction<string>> =
     media?.setReplyImageUrlDraft ?? (() => {});
   const replyImageToolRef = media?.replyImageToolRef ?? fallbackDivRef;
   const replyImageFileRef = media?.replyImageFileRef ?? fallbackFileRef;
-  const applyReplyImageUrl: () => void =
-    media?.applyReplyImageUrl ?? (() => {});
+  const applyReplyImageUrl: () => void = media?.applyReplyImageUrl ?? (() => {});
   const uploadGlobalImages = media?.uploadGlobalImages ?? { isPending: false };
   const editingReplyId = replyManagement?.editingReplyId ?? null;
   const editingReplyContent = replyManagement?.editingReplyContent ?? "";
   const setEditingReplyContent: React.Dispatch<React.SetStateAction<string>> =
     replyManagement?.setEditingReplyContent ?? (() => {});
-  const startEditingReply: (reply: NoodleInteraction) => void =
-    replyManagement?.startEditingReply ?? (() => {});
-  const cancelEditingReply: () => void =
-    replyManagement?.cancelEditingReply ?? (() => {});
-  const saveEditedReply: (
-    post: NoodlePostCardModel,
-    reply: NoodleInteraction,
-  ) => void = replyManagement?.saveEditedReply ?? (() => {});
-  const deleteNoodleReply: (
-    post: NoodlePostCardModel,
-    reply: NoodleInteraction,
-  ) => void = replyManagement?.deleteNoodleReply ?? (() => {});
+  const startEditingReply: (reply: NoodleInteraction) => void = replyManagement?.startEditingReply ?? (() => {});
+  const cancelEditingReply: () => void = replyManagement?.cancelEditingReply ?? (() => {});
+  const saveEditedReply: (post: NoodlePostCardModel, reply: NoodleInteraction) => void =
+    replyManagement?.saveEditedReply ?? (() => {});
+  const deleteNoodleReply: (post: NoodlePostCardModel, reply: NoodleInteraction) => void =
+    replyManagement?.deleteNoodleReply ?? (() => {});
   const updateInteraction = replyManagement?.updateInteraction ?? {
     isPending: false,
   };
@@ -517,125 +453,90 @@ export function SlurpCreatorPostCard({
   const activeReplyMention = mentions?.activeReplyMention ?? null;
   const activeReplyMentionIndex = mentions?.activeReplyMentionIndex ?? 0;
   const replyMentionSuggestions = mentions?.replyMentionSuggestions ?? [];
-  const selectReplyMention: (account: NoodleAccount) => void =
-    mentions?.selectReplyMention ?? (() => {});
+  const selectReplyMention: (account: NoodleAccount) => void = mentions?.selectReplyMention ?? (() => {});
 
   const { imageEditing, pollEditing } = ctx;
-  const isEditingPost =
-    Boolean(ctx.postManagement) && editingPostId === post.id;
+  const isEditingPost = Boolean(ctx.postManagement) && editingPostId === post.id;
   const imageCrop = readNoodlePostImageCrop(post.metadata);
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
   const postImageSrc = useSlurpMediaSrc(post.imageUrl);
-  const displayedImageUrl =
-    postImageSrc && postImageSrc !== failedImageUrl ? postImageSrc : null;
+  const displayedImageUrl = postImageSrc && postImageSrc !== failedImageUrl ? postImageSrc : null;
   // Distinct from displayedImageUrl: while postImageSrc is still resolving (the authenticated
   // fetch hasn't returned yet) there is no evidence the image is broken, so editing must not
   // drop it. Only a confirmed <img> render failure (postImageSrc resolved and then errored,
   // recorded in failedImageUrl) strips the image from what gets edited/saved.
   const editablePost =
-    post.imageUrl && (postImageSrc === null || postImageSrc !== failedImageUrl)
-      ? post
-      : { ...post, imageUrl: null };
+    post.imageUrl && (postImageSrc === null || postImageSrc !== failedImageUrl) ? post : { ...post, imageUrl: null };
   const postInteractions = post.interactions;
-  const rootPostInteractions = postInteractions.filter(
-    (interaction) => !interaction.parentInteractionId,
-  );
+  const rootPostInteractions = postInteractions.filter((interaction) => !interaction.parentInteractionId);
   const poll = readNoodlePollFromMetadata(post.metadata);
   const pollVotes = poll
     ? rootPostInteractions.filter(
         (interaction) =>
-          interaction.type === "vote" &&
-          poll.options.some((option) => option.id === interaction.content),
+          interaction.type === "vote" && poll.options.some((option) => option.id === interaction.content),
       )
     : [];
   const personaPollVote = personaAccount
-    ? (pollVotes.find(
-        (interaction) => interaction.actorAccountId === personaAccount.id,
-      )?.content ?? null)
+    ? (pollVotes.find((interaction) => interaction.actorAccountId === personaAccount.id)?.content ?? null)
     : null;
   const likedByPersona = personaAccount
     ? rootPostInteractions.some(
-        (interaction) =>
-          interaction.type === "like" &&
-          interaction.actorAccountId === personaAccount.id,
+        (interaction) => interaction.type === "like" && interaction.actorAccountId === personaAccount.id,
       )
     : false;
   const repostedByPersona = personaAccount
     ? rootPostInteractions.some(
-        (interaction) =>
-          interaction.type === "repost" &&
-          interaction.actorAccountId === personaAccount.id,
+        (interaction) => interaction.type === "repost" && interaction.actorAccountId === personaAccount.id,
       )
     : false;
-  const { replies, replyById, orderedReplies, replyLikesByParentId } =
-    useMemo(() => {
-      const nextReplies = postInteractions.filter(
-        (interaction) => interaction.type === "reply",
-      );
-      const nextReplyById = new Map(
-        nextReplies.map((reply) => [reply.id, reply]),
-      );
-      const childrenByParentId = new Map<string, NoodleInteraction[]>();
-      const nextReplyLikesByParentId = new Map<string, NoodleInteraction[]>();
-      for (const interaction of postInteractions) {
-        if (interaction.type === "reply" && interaction.parentInteractionId) {
-          const children =
-            childrenByParentId.get(interaction.parentInteractionId) ?? [];
-          children.push(interaction);
-          childrenByParentId.set(interaction.parentInteractionId, children);
-        }
-        if (interaction.type === "like" && interaction.parentInteractionId) {
-          const likes =
-            nextReplyLikesByParentId.get(interaction.parentInteractionId) ?? [];
-          likes.push(interaction);
-          nextReplyLikesByParentId.set(interaction.parentInteractionId, likes);
-        }
+  const { replies, replyById, orderedReplies, replyLikesByParentId } = useMemo(() => {
+    const nextReplies = postInteractions.filter((interaction) => interaction.type === "reply");
+    const nextReplyById = new Map(nextReplies.map((reply) => [reply.id, reply]));
+    const childrenByParentId = new Map<string, NoodleInteraction[]>();
+    const nextReplyLikesByParentId = new Map<string, NoodleInteraction[]>();
+    for (const interaction of postInteractions) {
+      if (interaction.type === "reply" && interaction.parentInteractionId) {
+        const children = childrenByParentId.get(interaction.parentInteractionId) ?? [];
+        children.push(interaction);
+        childrenByParentId.set(interaction.parentInteractionId, children);
       }
-      const nextOrderedReplies: NoodleInteraction[] = [];
-      const visitedReplyIds = new Set<string>();
-      const appendReplyBranch = (reply: NoodleInteraction) => {
-        if (visitedReplyIds.has(reply.id)) return;
-        visitedReplyIds.add(reply.id);
-        nextOrderedReplies.push(reply);
-        for (const child of childrenByParentId.get(reply.id) ?? [])
-          appendReplyBranch(child);
-      };
-      for (const reply of nextReplies) {
-        if (
-          !reply.parentInteractionId ||
-          !nextReplyById.has(reply.parentInteractionId)
-        )
-          appendReplyBranch(reply);
+      if (interaction.type === "like" && interaction.parentInteractionId) {
+        const likes = nextReplyLikesByParentId.get(interaction.parentInteractionId) ?? [];
+        likes.push(interaction);
+        nextReplyLikesByParentId.set(interaction.parentInteractionId, likes);
       }
-      for (const reply of nextReplies) appendReplyBranch(reply);
-      return {
-        replies: nextReplies,
-        replyById: nextReplyById,
-        orderedReplies: nextOrderedReplies,
-        replyLikesByParentId: nextReplyLikesByParentId,
-      };
-    }, [postInteractions]);
-  const replyTarget = replyParentInteractionId
-    ? (replyById.get(replyParentInteractionId) ?? null)
-    : null;
+    }
+    const nextOrderedReplies: NoodleInteraction[] = [];
+    const visitedReplyIds = new Set<string>();
+    const appendReplyBranch = (reply: NoodleInteraction) => {
+      if (visitedReplyIds.has(reply.id)) return;
+      visitedReplyIds.add(reply.id);
+      nextOrderedReplies.push(reply);
+      for (const child of childrenByParentId.get(reply.id) ?? []) appendReplyBranch(child);
+    };
+    for (const reply of nextReplies) {
+      if (!reply.parentInteractionId || !nextReplyById.has(reply.parentInteractionId)) appendReplyBranch(reply);
+    }
+    for (const reply of nextReplies) appendReplyBranch(reply);
+    return {
+      replies: nextReplies,
+      replyById: nextReplyById,
+      orderedReplies: nextOrderedReplies,
+      replyLikesByParentId: nextReplyLikesByParentId,
+    };
+  }, [postInteractions]);
+  const replyTarget = replyParentInteractionId ? (replyById.get(replyParentInteractionId) ?? null) : null;
   const replyTargetActor = replyTarget
     ? (accountById.get(replyTarget.actorAccountId) ?? replyTarget.actorSnapshot)
     : author;
   const postLikePending = reactionPendingFor(post.id, "like");
   const postRepostPending = reactionPendingFor(post.id, "repost");
-  const postReplyPending = createInteractionPendingFor(
-    post.id,
-    "reply",
-    replyParentInteractionId,
-  );
+  const postReplyPending = createInteractionPendingFor(post.id, "reply", replyParentInteractionId);
   const pollVotePending = createInteractionPendingFor(post.id, "vote");
   const editingExistingPoll = Boolean(poll && pollEditing);
-  const editingPollIsValid =
-    !editingExistingPoll ||
-    noodlePollInputSchema.safeParse(pollEditing?.value).success;
+  const editingPollIsValid = !editingExistingPoll || noodlePollInputSchema.safeParse(pollEditing?.value).success;
   const saveEditDisabled =
-    (!editingPostContent.trim() &&
-      !(ctx.allowPollOnlyEdits && editingPollIsValid && editingExistingPoll)) ||
+    (!editingPostContent.trim() && !(ctx.allowPollOnlyEdits && editingPollIsValid && editingExistingPoll)) ||
     !editingPollIsValid ||
     updatePostPending ||
     Boolean(imageEditing?.loading) ||
@@ -655,9 +556,7 @@ export function SlurpCreatorPostCard({
         disabled={saveEditDisabled}
         className="h-8 rounded-full bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {updatePostPending
-          ? localizeUi("ui.noodle.noodlehome.saving")
-          : localizeUi("ui.noodle.noodlehome.save")}
+        {updatePostPending ? localizeUi("ui.noodle.noodlehome.saving") : localizeUi("ui.noodle.noodlehome.save")}
       </button>
     </>
   );
@@ -665,17 +564,12 @@ export function SlurpCreatorPostCard({
     <div
       data-component="NoodleView.ReplyComposer"
       data-noodle-reply-parent-id={replyParentInteractionId ?? ""}
-      className={cn(
-        "border-[var(--noodle-divider)] py-3",
-        nested ? "ml-10 border-b" : "mt-3 border-y",
-      )}
+      className={cn("border-[var(--noodle-divider)] py-3", nested ? "ml-10 border-b" : "mt-3 border-y")}
     >
       {replyParentInteractionId && replyTargetActor && (
         <p className="mb-2 text-xs text-[var(--muted-foreground)]">
           {localizeUi("ui.noodle.noodlepostcard.replyingTo")}{" "}
-          <span className="font-semibold text-[var(--noodle-accent)]">
-            @{replyTargetActor.handle}
-          </span>
+          <span className="font-semibold text-[var(--noodle-accent)]">@{replyTargetActor.handle}</span>
         </p>
       )}
       <textarea
@@ -687,9 +581,7 @@ export function SlurpCreatorPostCard({
         className={cn(textareaClass, "min-h-16 resize-none bg-transparent")}
         placeholder={localizeUi("ui.noodle.noodlepostcard.leaveAComment")}
         aria-autocomplete="list"
-        aria-controls={
-          activeReplyMention ? "noodle-reply-mention-list" : undefined
-        }
+        aria-controls={activeReplyMention ? "noodle-reply-mention-list" : undefined}
         aria-expanded={Boolean(activeReplyMention)}
         aria-activedescendant={
           activeReplyMention && replyMentionSuggestions.length > 0
@@ -711,14 +603,7 @@ export function SlurpCreatorPostCard({
         <div className="relative mt-2 overflow-hidden rounded-xl border border-[var(--noodle-divider)]">
           <button
             type="button"
-            onClick={() =>
-              setImageLightbox(
-                createNoodleLightboxImage(
-                  `reply-draft-${post.id}`,
-                  replyImageUrl,
-                ),
-              )
-            }
+            onClick={() => setImageLightbox(createNoodleLightboxImage(`reply-draft-${post.id}`, replyImageUrl))}
             className="block w-full"
             title={localizeUi("ui.noodle.noodlepostcard.openAttachedImage")}
           >
@@ -746,11 +631,7 @@ export function SlurpCreatorPostCard({
               <NoodleToolButton
                 title={localizeUi("ui.noodle.noodlehome.attachImage")}
                 active={activeReplyComposerTool === "image"}
-                onClick={() =>
-                  setActiveReplyComposerTool((current) =>
-                    current === "image" ? null : "image",
-                  )
-                }
+                onClick={() => setActiveReplyComposerTool((current) => (current === "image" ? null : "image"))}
               >
                 <ImageIcon size={17} />
               </NoodleToolButton>
@@ -760,11 +641,7 @@ export function SlurpCreatorPostCard({
             <NoodleToolButton
               title={localizeUi("ui.noodle.noodlehome.emojiGifsAndStickers")}
               active={activeReplyComposerTool === "media"}
-              onClick={() =>
-                setActiveReplyComposerTool((current) =>
-                  current === "media" ? null : "media",
-                )
-              }
+              onClick={() => setActiveReplyComposerTool((current) => (current === "media" ? null : "media"))}
             >
               <Smile size={17} />
             </NoodleToolButton>
@@ -781,9 +658,7 @@ export function SlurpCreatorPostCard({
           <button
             type="button"
             className="h-8 rounded-full bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={
-              (!replyHasText && !replyImageUrl.trim()) || postReplyPending
-            }
+            disabled={(!replyHasText && !replyImageUrl.trim()) || postReplyPending}
             onClick={() => submitReply(post)}
           >
             {postReplyPending
@@ -819,9 +694,7 @@ export function SlurpCreatorPostCard({
               <span className="h-px flex-1 bg-[var(--noodle-divider)]" />
             </div>
             <label className="block space-y-1.5">
-              <span className={labelClass}>
-                {localizeUi("ui.noodle.noodlehome.imageUrl")}
-              </span>
+              <span className={labelClass}>{localizeUi("ui.noodle.noodlehome.imageUrl")}</span>
               <input
                 value={replyImageUrlDraft}
                 onChange={(event) => setReplyImageUrlDraft(event.target.value)}
@@ -842,11 +715,7 @@ export function SlurpCreatorPostCard({
       {activeReplyComposerTool === "media" && (
         <NoodleAnchoredPopover anchorRef={replyMediaToolRef} wide>
           <ConversationMediaPickerPanel
-            tabs={
-              disableReplyImage
-                ? NOODLE_TEXT_MEDIA_PICKER_TABS
-                : NOODLE_MEDIA_PICKER_TABS
-            }
+            tabs={disableReplyImage ? NOODLE_TEXT_MEDIA_PICKER_TABS : NOODLE_MEDIA_PICKER_TABS}
             activeTab={mediaPickerTab}
             onActiveTabChange={setMediaPickerTab}
             onClose={() => setActiveReplyComposerTool(null)}
@@ -901,41 +770,28 @@ export function SlurpCreatorPostCard({
                 disabled={!canOpenAuthorProfile}
                 className="font-semibold transition-colors enabled:hover:text-[var(--noodle-accent)] disabled:cursor-default"
               >
-                {author?.displayName ??
-                  localizeUi("ui.noodle.noodlepostcard.noodleUser")}
+                {author?.displayName ?? localizeUi("ui.noodle.noodlepostcard.noodleUser")}
               </button>
               {/* Locked cards reach this component only after access is granted; pre-unlock teasers use LockedSlurpPostCard. */}
               <span
                 title={localizeUi(
-                  post.access === "locked"
-                    ? "ui.noodle.postaccess.unlocked.hint"
-                    : "ui.noodle.postaccess.public.hint",
+                  post.access === "locked" ? "ui.noodle.postaccess.unlocked.hint" : "ui.noodle.postaccess.public.hint",
                 )}
                 className="rounded-full bg-[var(--noodle-accent)]/15 px-2 py-0.5 text-[0.68rem] font-bold text-[var(--noodle-accent)]"
               >
-                {localizeUi(
-                  post.access === "locked"
-                    ? "ui.noodle.postaccess.unlocked"
-                    : "ui.noodle.postaccess.public",
-                )}
+                {localizeUi(post.access === "locked" ? "ui.noodle.postaccess.unlocked" : "ui.noodle.postaccess.public")}
               </span>
             </div>
             <p className="text-xs font-medium !text-[var(--noodle-accent-foreground)]">
-              @
-              {author?.handle ??
-                localizeUi("ui.noodle.noodleshell.noodleHandle")}{" "}
-              · {formatTime(post.createdAt, i18n.language)}
+              @{author?.handle ?? localizeUi("ui.noodle.noodleshell.noodleHandle")} ·{" "}
+              {formatTime(post.createdAt, i18n.language)}
             </p>
           </div>
           {ctx.postManagement && (
             <div className="relative shrink-0">
               <button
                 type="button"
-                onClick={() =>
-                  setPostMenuId((current) =>
-                    current === post.id ? null : post.id,
-                  )
-                }
+                onClick={() => setPostMenuId((current) => (current === post.id ? null : post.id))}
                 className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10"
                 title={localizeUi("ui.noodle.noodlepostcard.postActions")}
                 aria-label={localizeUi("ui.noodle.noodlepostcard.postActions")}
@@ -972,13 +828,7 @@ export function SlurpCreatorPostCard({
           <button
             type="button"
             onClick={() =>
-              setImageLightbox(
-                createNoodleLightboxImage(
-                  post.id,
-                  displayedImageUrl,
-                  post.imagePrompt ?? "",
-                ),
-              )
+              setImageLightbox(createNoodleLightboxImage(post.id, displayedImageUrl, post.imagePrompt ?? ""))
             }
             className="mt-3 block w-full overflow-hidden rounded-lg text-left ring-1 ring-inset ring-white/10 ring-offset-[var(--background)] transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2"
             title={localizeUi("ui.noodle.noodlepostcard.openImage")}
@@ -990,9 +840,7 @@ export function SlurpCreatorPostCard({
                 onError={() => setFailedImageUrl(displayedImageUrl)}
                 crop={imageCrop}
                 alt={localizeUi("ui.noodle.post.imageBy", {
-                  name:
-                    author?.displayName ??
-                    localizeUi("ui.noodle.profile.fallbackUser"),
+                  name: author?.displayName ?? localizeUi("ui.noodle.profile.fallbackUser"),
                 })}
               />
             ) : (
@@ -1000,9 +848,7 @@ export function SlurpCreatorPostCard({
                 src={displayedImageUrl}
                 onError={() => setFailedImageUrl(displayedImageUrl)}
                 alt={localizeUi("ui.noodle.post.imageBy", {
-                  name:
-                    author?.displayName ??
-                    localizeUi("ui.noodle.profile.fallbackUser"),
+                  name: author?.displayName ?? localizeUi("ui.noodle.profile.fallbackUser"),
                 })}
                 className="aspect-[4/3] max-h-[32rem] w-full object-cover"
               />
@@ -1021,14 +867,10 @@ export function SlurpCreatorPostCard({
           <div className="mt-2 space-y-2">
             {titleEditing && (
               <label className="block space-y-1">
-                <span className={labelClass}>
-                  {localizeUi("ui.noodle.noodlepostcard.titleOptional")}
-                </span>
+                <span className={labelClass}>{localizeUi("ui.noodle.noodlepostcard.titleOptional")}</span>
                 <input
                   value={titleEditing.editingPostTitle}
-                  onChange={(event) =>
-                    titleEditing.setEditingPostTitle(event.target.value)
-                  }
+                  onChange={(event) => titleEditing.setEditingPostTitle(event.target.value)}
                   maxLength={titleEditing.maxLength}
                   className={fieldClass}
                   placeholder={localizeUi("ui.noodle.noodlepostcard.postTitle")}
@@ -1063,28 +905,18 @@ export function SlurpCreatorPostCard({
                 submitDisabled={saveEditDisabled}
                 disabled={updatePostPending}
                 title={localizeUi("ui.noodle.noodlehome.editPoll")}
-                closeLabel={localizeUi(
-                  "ui.noodle.noodlepostcard.cancelPostEditing",
-                )}
+                closeLabel={localizeUi("ui.noodle.noodlepostcard.cancelPostEditing")}
                 action={postEditActions}
               />
             )}
             {!imageEditing && !editingExistingPoll && (
-              <div className="flex flex-wrap justify-end gap-2">
-                {postEditActions}
-              </div>
+              <div className="flex flex-wrap justify-end gap-2">{postEditActions}</div>
             )}
           </div>
         ) : (
           <>
-            {post.title && (
-              <h3 className="mt-2 break-words text-lg font-bold leading-snug">
-                {post.title}
-              </h3>
-            )}
-            {!poll ||
-            ctx.deduplicatePollBody === false ||
-            post.content.trim() !== poll.question ? (
+            {post.title && <h3 className="mt-2 break-words text-lg font-bold leading-snug">{post.title}</h3>}
+            {!poll || ctx.deduplicatePollBody === false || post.content.trim() !== poll.question ? (
               <NoodleTextContent
                 content={post.content}
                 accountByHandle={accountByHandle}
@@ -1109,11 +941,7 @@ export function SlurpCreatorPostCard({
         <div className="mt-4 flex max-w-md items-center justify-between gap-1 tabular-nums">
           <button
             type="button"
-            className={cn(
-              noodleIconButtonClass,
-              "rounded-full",
-              likedByPersona && "bg-[var(--noodle-accent)]/10",
-            )}
+            className={cn(noodleIconButtonClass, "rounded-full", likedByPersona && "bg-[var(--noodle-accent)]/10")}
             disabled={!personaAccount || postLikePending}
             onClick={() => reactToPost(post, "like", likedByPersona)}
             title={
@@ -1121,11 +949,7 @@ export function SlurpCreatorPostCard({
                 ? localizeUi("ui.noodle.noodlepostcard.unlike")
                 : localizeUi("ui.noodle.noodlepostcard.like")
             }
-            aria-label={localizeUi(
-              likedByPersona
-                ? "ui.noodle.post.unlikeLabel"
-                : "ui.noodle.post.likeLabel",
-            )}
+            aria-label={localizeUi(likedByPersona ? "ui.noodle.post.unlikeLabel" : "ui.noodle.post.likeLabel")}
             aria-busy={postLikePending}
             data-noodle-reaction="like"
           >
@@ -1142,11 +966,7 @@ export function SlurpCreatorPostCard({
           </button>
           <button
             type="button"
-            className={cn(
-              noodleIconButtonClass,
-              "rounded-full",
-              repostedByPersona && "bg-[var(--noodle-accent)]/10",
-            )}
+            className={cn(noodleIconButtonClass, "rounded-full", repostedByPersona && "bg-[var(--noodle-accent)]/10")}
             disabled={!personaAccount || postRepostPending}
             onClick={() => reactToPost(post, "repost", repostedByPersona)}
             title={
@@ -1162,10 +982,7 @@ export function SlurpCreatorPostCard({
           </button>
           <button
             type="button"
-            className={cn(
-              noodleIconButtonClass,
-              "rounded-full hover:text-[var(--noodle-accent)]",
-            )}
+            className={cn(noodleIconButtonClass, "rounded-full hover:text-[var(--noodle-accent)]")}
             disabled={!personaAccount}
             onClick={() => openReplyComposer(post.id)}
             title={localizeUi("ui.noodle.noodlepostcard.reply")}
@@ -1175,38 +992,26 @@ export function SlurpCreatorPostCard({
           </button>
         </div>
 
-        {replyPostId === post.id &&
-          !replyParentInteractionId &&
-          renderReplyComposer(false)}
+        {replyPostId === post.id && !replyParentInteractionId && renderReplyComposer(false)}
 
         {replies.length > 0 && (
           <div className="mt-3 border-t border-[var(--noodle-divider)]">
             {orderedReplies.map((reply) => {
-              const actorAccount =
-                accountById.get(reply.actorAccountId) ?? null;
+              const actorAccount = accountById.get(reply.actorAccountId) ?? null;
               const actor = actorAccount ?? reply.actorSnapshot;
-              const parentReply = reply.parentInteractionId
-                ? (replyById.get(reply.parentInteractionId) ?? null)
-                : null;
-              const parentActorAccount = parentReply
-                ? (accountById.get(parentReply.actorAccountId) ?? null)
-                : null;
-              const parentActor =
-                parentActorAccount ?? parentReply?.actorSnapshot ?? null;
+              const parentReply = reply.parentInteractionId ? (replyById.get(reply.parentInteractionId) ?? null) : null;
+              const parentActorAccount = parentReply ? (accountById.get(parentReply.actorAccountId) ?? null) : null;
+              const parentActor = parentActorAccount ?? parentReply?.actorSnapshot ?? null;
               const replyLikes = replyLikesByParentId.get(reply.id) ?? [];
               const likedReplyByPersona = personaAccount
-                ? replyLikes.some(
-                    (interaction) =>
-                      interaction.actorAccountId === personaAccount.id,
-                  )
+                ? replyLikes.some((interaction) => interaction.actorAccountId === personaAccount.id)
                 : false;
               const canManageReply = canManageReplyOverride
                 ? canManageReplyOverride(reply)
                 : Boolean(
                     personaAccount &&
                     canManageNoodleReply({
-                      actorKind:
-                        actorAccount?.kind ?? reply.actorSnapshot?.kind,
+                      actorKind: actorAccount?.kind ?? reply.actorSnapshot?.kind,
                       actorAccountId: reply.actorAccountId,
                       personaAccountId: personaAccount.id,
                     }),
@@ -1238,9 +1043,7 @@ export function SlurpCreatorPostCard({
                       <Avatar
                         account={
                           actor ?? {
-                            displayName: localizeUi(
-                              "ui.noodle.noodlepostcard.noodleUser",
-                            ),
+                            displayName: localizeUi("ui.noodle.noodlepostcard.noodleUser"),
                             avatarUrl: null,
                           }
                         }
@@ -1258,8 +1061,7 @@ export function SlurpCreatorPostCard({
                           disabled={!actorAccount}
                           className="max-w-full truncate font-semibold !text-[var(--foreground)] transition-colors enabled:hover:!text-[var(--noodle-accent)] disabled:cursor-default"
                         >
-                          {actor?.displayName ??
-                            localizeUi("ui.noodle.noodlepostcard.noodleUser")}
+                          {actor?.displayName ?? localizeUi("ui.noodle.noodlepostcard.noodleUser")}
                         </button>
                         <span className="truncate !text-[var(--noodle-accent-foreground)]">
                           @{actor?.handle ?? "noodle"}
@@ -1276,36 +1078,24 @@ export function SlurpCreatorPostCard({
                               type="button"
                               onClick={() => openProfile(parentActorAccount)}
                               className="font-medium text-[var(--noodle-accent)] hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]/70"
-                              aria-label={localizeUi(
-                                "ui.noodle.profile.viewHandleProfile",
-                                {
-                                  handle: parentActorAccount.handle,
-                                },
-                              )}
+                              aria-label={localizeUi("ui.noodle.profile.viewHandleProfile", {
+                                handle: parentActorAccount.handle,
+                              })}
                             >
                               @{parentActorAccount.handle}
                             </button>
                           ) : (
-                            <span className="text-[var(--noodle-accent)]">
-                              @{parentActor.handle}
-                            </span>
+                            <span className="text-[var(--noodle-accent)]">@{parentActor.handle}</span>
                           )}
                         </p>
                       )}
                       {editingReplyId === reply.id ? (
-                        <div
-                          className="mt-2 space-y-2"
-                          data-component="NoodleView.CommentEditor"
-                        >
+                        <div className="mt-2 space-y-2" data-component="NoodleView.CommentEditor">
                           <textarea
                             value={editingReplyContent}
-                            onChange={(event) =>
-                              setEditingReplyContent(event.target.value)
-                            }
+                            onChange={(event) => setEditingReplyContent(event.target.value)}
                             className={cn(textareaClass, "min-h-20 resize-y")}
-                            placeholder={localizeUi(
-                              "ui.noodle.noodlepostcard.editComment",
-                            )}
+                            placeholder={localizeUi("ui.noodle.noodlepostcard.editComment")}
                             autoFocus
                           />
                           <div className="flex justify-end gap-2">
@@ -1320,11 +1110,7 @@ export function SlurpCreatorPostCard({
                             <button
                               type="button"
                               onClick={() => saveEditedReply(post, reply)}
-                              disabled={
-                                (!editingReplyContent.trim() &&
-                                  !reply.imageUrl) ||
-                                updateInteraction.isPending
-                              }
+                              disabled={(!editingReplyContent.trim() && !reply.imageUrl) || updateInteraction.isPending}
                               className="h-8 rounded-full bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               {updateInteraction.isPending
@@ -1345,34 +1131,17 @@ export function SlurpCreatorPostCard({
                         <button
                           type="button"
                           onClick={() =>
-                            setImageLightbox(
-                              createNoodleLightboxImage(
-                                reply.id,
-                                reply.imageUrl!,
-                                reply.content ?? "",
-                              ),
-                            )
+                            setImageLightbox(createNoodleLightboxImage(reply.id, reply.imageUrl!, reply.content ?? ""))
                           }
                           className="mt-2 block w-full overflow-hidden rounded-xl text-left ring-offset-[var(--background)] transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)] focus-visible:ring-offset-2"
-                          title={localizeUi(
-                            "ui.noodle.noodlepostcard.openImage",
-                          )}
-                          aria-label={localizeUi(
-                            "ui.noodle.noodlepostcard.openCommentImage",
-                          )}
+                          title={localizeUi("ui.noodle.noodlepostcard.openImage")}
+                          aria-label={localizeUi("ui.noodle.noodlepostcard.openCommentImage")}
                         >
                           <img
                             src={reply.imageUrl}
-                            alt={localizeUi(
-                              "ui.noodle.noodlepostcard.commentImageAlt",
-                              {
-                                name:
-                                  actor?.displayName ??
-                                  localizeUi(
-                                    "ui.noodle.noodlepostcard.noodleUser",
-                                  ),
-                              },
-                            )}
+                            alt={localizeUi("ui.noodle.noodlepostcard.commentImageAlt", {
+                              name: actor?.displayName ?? localizeUi("ui.noodle.noodlepostcard.noodleUser"),
+                            })}
                             className="max-h-72 w-full object-cover"
                           />
                         </button>
@@ -1380,33 +1149,19 @@ export function SlurpCreatorPostCard({
                       <div className="mt-1.5 flex items-center gap-3">
                         <button
                           type="button"
-                          onClick={() =>
-                            reactToReply(post, reply, likedReplyByPersona)
-                          }
-                          disabled={
-                            !personaAccount ||
-                            reactionPendingFor(post.id, "like", reply.id)
-                          }
+                          onClick={() => reactToReply(post, reply, likedReplyByPersona)}
+                          disabled={!personaAccount || reactionPendingFor(post.id, "like", reply.id)}
                           className={cn(
                             noodleCommentActionClass,
                             "px-2 font-medium",
-                            likedReplyByPersona &&
-                              "bg-[var(--noodle-accent)]/10",
+                            likedReplyByPersona && "bg-[var(--noodle-accent)]/10",
                           )}
                           title={
                             likedReplyByPersona
-                              ? localizeUi(
-                                  "ui.noodle.noodlepostcard.unlikeComment",
-                                )
-                              : localizeUi(
-                                  "ui.noodle.noodlepostcard.likeComment",
-                                )
+                              ? localizeUi("ui.noodle.noodlepostcard.unlikeComment")
+                              : localizeUi("ui.noodle.noodlepostcard.likeComment")
                           }
-                          aria-busy={reactionPendingFor(
-                            post.id,
-                            "like",
-                            reply.id,
-                          )}
+                          aria-busy={reactionPendingFor(post.id, "like", reply.id)}
                         >
                           <Heart
                             size={14}
@@ -1425,9 +1180,7 @@ export function SlurpCreatorPostCard({
                           disabled={!personaAccount}
                           className={cn(noodleCommentActionClass, "w-7")}
                           title={localizeUi("ui.noodle.noodlepostcard.reply")}
-                          aria-label={localizeUi(
-                            "ui.noodle.noodlepostcard.reply",
-                          )}
+                          aria-label={localizeUi("ui.noodle.noodlepostcard.reply")}
                         >
                           <MessageCircle size={14} />
                         </button>
@@ -1436,34 +1189,20 @@ export function SlurpCreatorPostCard({
                             <button
                               type="button"
                               onClick={() => startEditingReply(reply)}
-                              disabled={
-                                updateInteraction.isPending ||
-                                deleteInteraction.isPending
-                              }
+                              disabled={updateInteraction.isPending || deleteInteraction.isPending}
                               className={cn(noodleCommentActionClass, "w-7")}
-                              title={localizeUi(
-                                "ui.noodle.noodlepostcard.editComment",
-                              )}
-                              aria-label={localizeUi(
-                                "ui.noodle.noodlepostcard.editComment",
-                              )}
+                              title={localizeUi("ui.noodle.noodlepostcard.editComment")}
+                              aria-label={localizeUi("ui.noodle.noodlepostcard.editComment")}
                             >
                               <Pencil size={14} />
                             </button>
                             <button
                               type="button"
                               onClick={() => deleteNoodleReply(post, reply)}
-                              disabled={
-                                updateInteraction.isPending ||
-                                deleteInteraction.isPending
-                              }
+                              disabled={updateInteraction.isPending || deleteInteraction.isPending}
                               className={cn(noodleCommentActionClass, "w-7")}
-                              title={localizeUi(
-                                "ui.noodle.noodlepostcard.deleteComment",
-                              )}
-                              aria-label={localizeUi(
-                                "ui.noodle.noodlepostcard.deleteComment",
-                              )}
+                              title={localizeUi("ui.noodle.noodlepostcard.deleteComment")}
+                              aria-label={localizeUi("ui.noodle.noodlepostcard.deleteComment")}
                             >
                               <Trash2 size={14} />
                             </button>
@@ -1472,9 +1211,7 @@ export function SlurpCreatorPostCard({
                       </div>
                     </div>
                   </div>
-                  {replyPostId === post.id &&
-                    replyParentInteractionId === reply.id &&
-                    renderReplyComposer(true)}
+                  {replyPostId === post.id && replyParentInteractionId === reply.id && renderReplyComposer(true)}
                 </Fragment>
               );
             })}

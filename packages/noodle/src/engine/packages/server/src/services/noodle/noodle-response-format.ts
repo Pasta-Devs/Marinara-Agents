@@ -38,14 +38,7 @@ const timelineSchema = {
           attachGalleryImage: { type: "boolean" },
           poll: pollSchema,
         },
-        required: [
-          "tempId",
-          "authorHandle",
-          "content",
-          "imagePrompt",
-          "attachGalleryImage",
-          "poll",
-        ],
+        required: ["tempId", "authorHandle", "content", "imagePrompt", "attachGalleryImage", "poll"],
         additionalProperties: false,
       },
     },
@@ -122,10 +115,7 @@ export function noodleResponseFormat(
   const schema = kind === "timeline" ? timelineSchema : profilesSchema;
   return {
     type: "json_schema",
-    name:
-      kind === "timeline"
-        ? "noodle_timeline"
-        : "noodle_profiles",
+    name: kind === "timeline" ? "noodle_timeline" : "noodle_profiles",
     schema,
     strict: true,
   };

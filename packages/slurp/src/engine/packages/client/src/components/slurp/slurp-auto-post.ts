@@ -6,9 +6,11 @@ import type { NoodlerRefreshNowOutcome } from "@marinara-engine/shared";
  * run where every creator was busy or disabled reports the skip rather than "generated 0 posts".
  * Callers must localize the returned key via useUiTranslation before toasting.
  */
-export function summarizeRefreshOutcomes(
-  outcomes: NoodlerRefreshNowOutcome[],
-): { ok: boolean; key: string; params?: Record<string, number> } {
+export function summarizeRefreshOutcomes(outcomes: NoodlerRefreshNowOutcome[]): {
+  ok: boolean;
+  key: string;
+  params?: Record<string, number>;
+} {
   const generated = outcomes.filter((o) => o.status === "generated").length;
   const skipped = outcomes.filter((o) => o.status === "skipped").length;
   const failed = outcomes.length - generated - skipped;

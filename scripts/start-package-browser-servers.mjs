@@ -6,18 +6,14 @@ import { fileURLToPath } from "node:url";
 import { installPackageBrowserFixture } from "./install-package-browser-fixture.mjs";
 
 const agentsRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const engineRoot = resolve(
-  process.env.MARINARA_ENGINE_ROOT || resolve(agentsRoot, "../Marinara-Engine"),
-);
+const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || resolve(agentsRoot, "../Marinara-Engine"));
 const packageId = process.env.MARINARA_PACKAGE_ID;
 if (!packageId) throw new Error("MARINARA_PACKAGE_ID is required");
 if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(packageId)) {
   throw new Error(`Invalid MARINARA_PACKAGE_ID: ${packageId}`);
 }
 if (!existsSync(resolve(engineRoot, "package.json"))) {
-  throw new Error(
-    `Compatible Marinara Engine checkout not found at ${engineRoot}`,
-  );
+  throw new Error(`Compatible Marinara Engine checkout not found at ${engineRoot}`);
 }
 
 // Keep the engine data dir UNDER the engine's `packages/server/data`, which the engine dev script
@@ -51,9 +47,7 @@ function spawnChild(command, args, options = {}) {
   child.once("exit", () => children.delete(child));
   child.once("error", (error) => {
     children.delete(child);
-    console.error(
-      `Failed to start ${command}: ${error instanceof Error ? error.message : error}`,
-    );
+    console.error(`Failed to start ${command}: ${error instanceof Error ? error.message : error}`);
   });
   return child;
 }
@@ -77,19 +71,13 @@ function runPnpm(args) {
     child.once("error", reject);
     child.once("exit", (code, signal) => {
       if (code === 0) resolvePromise();
-      else
-        reject(
-          new Error(`pnpm ${args.join(" ")} exited with ${signal ?? code}`),
-        );
+      else reject(new Error(`pnpm ${args.join(" ")} exited with ${signal ?? code}`));
     });
   });
 }
 
 async function waitForUrl(url) {
-  const timeoutMs = Number.parseInt(
-    process.env.DEV_SERVER_READY_TIMEOUT_MS ?? "180000",
-    10,
-  );
+  const timeoutMs = Number.parseInt(process.env.DEV_SERVER_READY_TIMEOUT_MS ?? "180000", 10);
   const startedAt = Date.now();
   let lastError;
   while (!shuttingDown && Date.now() - startedAt < timeoutMs) {
@@ -102,9 +90,7 @@ async function waitForUrl(url) {
     }
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 500));
   }
-  throw new Error(
-    `Package browser server did not become ready at ${url}: ${String(lastError)}`,
-  );
+  throw new Error(`Package browser server did not become ready at ${url}: ${String(lastError)}`);
 }
 
 async function startProject(name, clientPort, serverPort) {
@@ -116,31 +102,27 @@ async function startProject(name, clientPort, serverPort) {
     dataDir,
     packageId,
   });
-  const child = spawnChild(
-    process.execPath,
-    [resolve(engineRoot, "scripts/dev.mjs")],
-    {
-      env: {
-        ...process.env,
-        AUTO_CREATE_DEFAULT_CONNECTION: "false",
-        AUTO_OPEN_BROWSER: "false",
-        DATA_DIR: dataDir,
-        DEV_PRESERVE_SHARED_DIST: "true",
-        DEV_SERVER_READY_TIMEOUT_MS: "180000",
-        DEV_SKIP_SHARED_BUILD: "true",
-        LOG_DISABLE_REQUEST_LOGGING: "true",
-        LOG_LEVEL: "silent",
-        MARINARA_E2E_DISABLE_RATE_LIMIT: "true",
-        MARINARA_ENV_FILE: resolve(dataDir, ".env"),
-        MARINARA_GIT_BRANCH: "staging",
-        PORT: String(serverPort),
-        SKIP_PWA: "true",
-        VITE_HOST: "127.0.0.1",
-        VITE_OPEN_BROWSER: "false",
-        VITE_PORT: String(clientPort),
-      },
+  const child = spawnChild(process.execPath, [resolve(engineRoot, "scripts/dev.mjs")], {
+    env: {
+      ...process.env,
+      AUTO_CREATE_DEFAULT_CONNECTION: "false",
+      AUTO_OPEN_BROWSER: "false",
+      DATA_DIR: dataDir,
+      DEV_PRESERVE_SHARED_DIST: "true",
+      DEV_SERVER_READY_TIMEOUT_MS: "180000",
+      DEV_SKIP_SHARED_BUILD: "true",
+      LOG_DISABLE_REQUEST_LOGGING: "true",
+      LOG_LEVEL: "silent",
+      MARINARA_E2E_DISABLE_RATE_LIMIT: "true",
+      MARINARA_ENV_FILE: resolve(dataDir, ".env"),
+      MARINARA_GIT_BRANCH: "staging",
+      PORT: String(serverPort),
+      SKIP_PWA: "true",
+      VITE_HOST: "127.0.0.1",
+      VITE_OPEN_BROWSER: "false",
+      VITE_PORT: String(clientPort),
     },
-  );
+  });
   child.once("exit", (code, signal) => {
     if (shuttingDown) return;
     stopChildren();

@@ -5,8 +5,7 @@ import { requireModelAnswer } from "../packages/slurp/src/engine/packages/server
 
 const root = join(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
-const slurpServices =
-  "packages/slurp/src/engine/packages/server/src/services/slurp/";
+const slurpServices = "packages/slurp/src/engine/packages/server/src/services/slurp/";
 const draft = read(`${slurpServices}slurp-stage-profile-draft.service.ts`);
 const parsers = Object.fromEntries(
   [
@@ -19,17 +18,12 @@ const parsers = Object.fromEntries(
     "slurp-public-profiles.service.ts",
   ].map((file) => [file, read(`${slurpServices}${file}`)] as const),
 );
-const routes = read(
-  "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts",
-);
-const panel = read(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx",
-);
-const en = JSON.parse(
-  read(
-    "packages/slurp/src/engine/packages/client/src/localization/locales/en.json",
-  ),
-) as Record<string, string>;
+const routes = read("packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts");
+const panel = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx");
+const en = JSON.parse(read("packages/slurp/src/engine/packages/client/src/localization/locales/en.json")) as Record<
+  string,
+  string
+>;
 
 // An empty provider answer used to reach JSON.parse and surface as "Unexpected end of JSON
 // input", which named neither the cause nor a fix.
@@ -54,11 +48,7 @@ assert.deepEqual(
 );
 for (const [file, source] of Object.entries(parsers)) {
   for (const call of source.match(/parseGameJsonish\([^)]*/gu) ?? []) {
-    assert.match(
-      call,
-      /requireModelAnswer\(/u,
-      `Unguarded parseGameJsonish call in ${file}`,
-    );
+    assert.match(call, /requireModelAnswer\(/u, `Unguarded parseGameJsonish call in ${file}`);
   }
 }
 assert.match(
@@ -75,29 +65,19 @@ assert.match(
   "Reasons must be recorded per creator, not as a bare list",
 );
 for (const call of routes.match(/noteReason\([\s\S]{0,40}/gu) ?? []) {
-  assert.match(
-    call,
-    /noteReason\(\s*noodleAccountId,/u,
-    "Every reason must name its creator",
-  );
+  assert.match(call, /noteReason\(\s*noodleAccountId,/u, "Every reason must name its creator");
 }
 assert.equal(
   (routes.match(/skipped\.push\(noodleAccountId\)/gu) ?? []).length,
-  (routes.match(/skipped\.push\(noodleAccountId\);\s*\n\s*noteReason\(/gu) ?? [])
-    .length,
+  (routes.match(/skipped\.push\(noodleAccountId\);\s*\n\s*noteReason\(/gu) ?? []).length,
   "Every skip must record a reason",
 );
 assert.equal(
   (routes.match(/failed\.push\(noodleAccountId\)/gu) ?? []).length,
-  (routes.match(/failed\.push\(noodleAccountId\);\s*\n\s*noteReason\(/gu) ?? [])
-    .length,
+  (routes.match(/failed\.push\(noodleAccountId\);\s*\n\s*noteReason\(/gu) ?? []).length,
   "Every failure must record a reason",
 );
-assert.match(
-  routes,
-  /skipped,\s*\n\s*failed,\s*\n\s*reasons,/u,
-  "The bulk response must return the reasons",
-);
+assert.match(routes, /skipped,\s*\n\s*failed,\s*\n\s*reasons,/u, "The bulk response must return the reasons");
 
 // Nothing created is a setup failure, not a first-post failure.
 assert.match(
@@ -105,11 +85,7 @@ assert.match(
   /input\.createdCount === 0 && input\.createFailures > 0\s*\n?\s*\? "creationFailed"/u,
   "A run that created nothing must not report a first-post failure",
 );
-assert.match(
-  panel,
-  /setCreationReasons\(result\.reasons \?\? \[\]\)/u,
-  "The wizard must keep the server reasons",
-);
+assert.match(panel, /setCreationReasons\(result\.reasons \?\? \[\]\)/u, "The wizard must keep the server reasons");
 assert.match(
   panel,
   /creationReasons\.length > 0 && \([\s\S]*?creationReasons\.map/u,
@@ -132,11 +108,7 @@ assert.match(
   /if \(settingsSaved && newIds\.length > 0\) onComplete\?\.\(\);/u,
   "Nothing created must not report the wizard as complete",
 );
-assert.match(
-  panel,
-  /\(creationFailed \|\| completion === "creationFailed"\)/u,
-  "A setup failure must offer a retry",
-);
+assert.match(panel, /\(creationFailed \|\| completion === "creationFailed"\)/u, "A setup failure must offer a retry");
 for (const key of [
   "ui.noodle.noodlerwizard.completion.creationFailed.title",
   "ui.noodle.noodlerwizard.completion.creationFailed.detail",

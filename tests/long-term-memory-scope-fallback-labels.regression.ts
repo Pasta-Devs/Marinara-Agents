@@ -41,12 +41,7 @@ for (const kind of ["chat", "character", "group"] as const) {
 }
 
 assert.equal(
-  scopeTargetLabel(
-    "persona",
-    "known-persona",
-    [{ id: "known-persona", label: "Known persona" }],
-    personaFallbacks,
-  ),
+  scopeTargetLabel("persona", "known-persona", [{ id: "known-persona", label: "Known persona" }], personaFallbacks),
   "Known persona",
   "a real target label takes precedence over every fallback",
 );
@@ -77,6 +72,4 @@ assert.match(
   "the persona scope pill provides the missing-persona override",
 );
 
-process.stdout.write(
-  "Long-Term Memory scope fallback regression: localized defaults and per-kind overrides ok\n",
-);
+process.stdout.write("Long-Term Memory scope fallback regression: localized defaults and per-kind overrides ok\n");

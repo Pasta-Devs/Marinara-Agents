@@ -9,32 +9,16 @@ const workDir = mkdtempSync(join(tmpdir(), "noodle-evaluator-"));
 function evaluate(samples: unknown, name: string) {
   const path = join(workDir, `${name}.json`);
   writeFileSync(path, JSON.stringify(samples));
-  const run = spawnSync(
-    process.execPath,
-    ["scripts/evaluate-noodle-generation.mjs", path],
-    { encoding: "utf8" },
-  );
+  const run = spawnSync(process.execPath, ["scripts/evaluate-noodle-generation.mjs", path], { encoding: "utf8" });
   return { ...run, report: run.stdout ? JSON.parse(run.stdout) : null };
 }
 
 // Malformed input is rejected, not silently scored.
-assert.match(
-  evaluate({ samples: [] }, "not-an-array").stderr,
-  /must contain a JSON array/u,
-);
+assert.match(evaluate({ samples: [] }, "not-an-array").stderr, /must contain a JSON array/u);
 assert.match(evaluate([null], "null-sample").stderr, /Sample 0 must be an object/u);
-assert.match(
-  evaluate([{ content: 42 }], "non-string-content").stderr,
-  /Sample 0 must have a string "content" field/u,
-);
-assert.match(
-  evaluate([{ content: "   " }], "empty-content").stderr,
-  /Sample 0 has empty content/u,
-);
-assert.match(
-  evaluate([{ content: "Fine.", kind: "poll" }], "bad-kind").stderr,
-  /unsupported kind "poll"/u,
-);
+assert.match(evaluate([{ content: 42 }], "non-string-content").stderr, /Sample 0 must have a string "content" field/u);
+assert.match(evaluate([{ content: "   " }], "empty-content").stderr, /Sample 0 has empty content/u);
+assert.match(evaluate([{ content: "Fine.", kind: "poll" }], "bad-kind").stderr, /unsupported kind "poll"/u);
 assert.equal(evaluate([], "empty-array").report?.pass, false);
 
 const ok = evaluate(

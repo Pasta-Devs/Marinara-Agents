@@ -20,9 +20,7 @@ export const noodleAccounts = fileTable(
     updatedAt: text("updated_at").notNull(),
   },
   {
-    uniqueBy: [
-      { keys: ["handle"] },
-    ],
+    uniqueBy: [{ keys: ["handle"] }],
   },
 );
 

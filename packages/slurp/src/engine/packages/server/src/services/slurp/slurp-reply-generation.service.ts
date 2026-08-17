@@ -31,9 +31,7 @@ import {
 } from "./slurp-generation.service.js";
 import { noodleResponseFormat } from "./slurp-response-format.js";
 
-type GenerationConnection = NonNullable<
-  Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>
->;
+type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
 export function buildNoodlerCreatorReplyMessages(input: {
   creator: NoodleAccount;
@@ -45,11 +43,7 @@ export function buildNoodlerCreatorReplyMessages(input: {
   generationGuidance: string;
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>
-    protectNoodlerGeneratedIdentity(
-      value,
-      input.disclosureMode,
-      input.publicIdentity,
-    ) ?? "";
+    protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
   const system = [
     "You write exactly one direct reply from one NoodleR creator to one real viewer comment on the creator's post.",
     "Write only as the supplied creator's stage persona. Address the viewer's comment naturally and do not write for the viewer.",
@@ -77,9 +71,7 @@ export function buildNoodlerCreatorReplyMessages(input: {
       displayName: protect(input.viewer.displayName),
       handle: protect(input.viewer.handle),
     },
-    viewerComment:
-      protect(input.parent.content) ||
-      (input.parent.imageUrl ? "[image reply]" : ""),
+    viewerComment: protect(input.parent.content) || (input.parent.imageUrl ? "[image reply]" : ""),
   };
   return [
     { role: "system", content: system },
@@ -115,17 +107,11 @@ export async function generateNoodlerCreatorReply(input: {
     ),
     primaryConnectionId: input.connection.id,
     fallbackConnection,
-    fallbackBaseUrl: fallbackConnection
-      ? resolveBaseUrl(fallbackConnection)
-      : "",
+    fallbackBaseUrl: fallbackConnection ? resolveBaseUrl(fallbackConnection) : "",
     category: "main",
   });
-  const disclosureMode =
-    input.creator.settings.privacy.identityDisclosure ?? "secret";
-  const publicIdentity = await resolveNoodlerPublicIdentity(
-    input.db,
-    input.creator,
-  );
+  const disclosureMode = input.creator.settings.privacy.identityDisclosure ?? "secret";
+  const publicIdentity = await resolveNoodlerPublicIdentity(input.db, input.creator);
   const settings = await createSlurpStorage(input.db).getSettings();
   const messages = buildNoodlerCreatorReplyMessages({
     ...input,
@@ -137,11 +123,7 @@ export async function generateNoodlerCreatorReply(input: {
   const options = {
     model: input.connection.model,
     ...noodleSamplingOptions(
-      resolveStoredChatOptions(
-        input.connection.defaultParameters,
-        input.connection.provider,
-        input.connection.model,
-      ),
+      resolveStoredChatOptions(input.connection.defaultParameters, input.connection.provider, input.connection.model),
       { temperature: 0.9, topP: 0.95 },
     ),
     maxTokens: clampGenerationMaxOutputTokens({
@@ -152,10 +134,7 @@ export async function generateNoodlerCreatorReply(input: {
     }),
     stream: false,
     debugMode,
-    responseFormat: noodleResponseFormat(
-      input.connection.model,
-      "noodler_reply",
-    ),
+    responseFormat: noodleResponseFormat(input.connection.model, "noodler_reply"),
   } as const;
   logDebugOverride(
     debugMode,
@@ -179,9 +158,6 @@ export async function generateNoodlerCreatorReply(input: {
     publicIdentity,
     NOODLER_REPLY_CONTENT_MAX_LENGTH,
   );
-  if (!protectedContent)
-    throw new Error(
-      "NoodleR creator reply generation returned no usable content.",
-    );
+  if (!protectedContent) throw new Error("NoodleR creator reply generation returned no usable content.");
   return protectedContent;
 }

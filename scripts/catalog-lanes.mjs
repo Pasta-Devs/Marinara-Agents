@@ -36,10 +36,7 @@ export function catalogMajorsForRange(minimum, maximumExclusive) {
   for (let major = minimumMajor; major <= maximumMajor; major += 1) {
     const laneMinimum = `${major}.0.0`;
     const laneMaximum = `${major + 1}.0.0`;
-    if (
-      compareEngineVersions(maximumExclusive, laneMinimum) > 0 &&
-      compareEngineVersions(minimum, laneMaximum) < 0
-    ) {
+    if (compareEngineVersions(maximumExclusive, laneMinimum) > 0 && compareEngineVersions(minimum, laneMaximum) < 0) {
       majors.push(major);
     }
   }
@@ -170,9 +167,7 @@ function isCanonicalIsoDatetime(value) {
 
 async function readCommittedGeneratedAt(catalogDirectory) {
   try {
-    const committed = JSON.parse(
-      await readFile(join(catalogDirectory, "catalog.json"), "utf8"),
-    );
+    const committed = JSON.parse(await readFile(join(catalogDirectory, "catalog.json"), "utf8"));
     if (isCanonicalIsoDatetime(committed.generatedAt)) {
       return committed.generatedAt;
     }

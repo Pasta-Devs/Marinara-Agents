@@ -1,7 +1,6 @@
 import type { LtmNote } from "./schema.js";
 
-type LtmKeywordNote = Pick<LtmNote, "keywords"> &
-  Partial<Pick<LtmNote, "manualKeywords" | "suppressedKeywords">>;
+type LtmKeywordNote = Pick<LtmNote, "keywords"> & Partial<Pick<LtmNote, "manualKeywords" | "suppressedKeywords">>;
 
 export function ltmKeywordKey(keyword: string) {
   return keyword.trim().toLowerCase();
@@ -37,9 +36,7 @@ export function getLtmKeywordIntent(note: LtmKeywordNote) {
 export function getLtmActiveKeywords(note: LtmKeywordNote) {
   const { generated, manual, suppressed } = getLtmKeywordIntent(note);
   const suppressedKeys = new Set(suppressed.map(ltmKeywordKey));
-  return uniqueLtmKeywords([...generated, ...manual]).filter(
-    (keyword) => !suppressedKeys.has(ltmKeywordKey(keyword)),
-  );
+  return uniqueLtmKeywords([...generated, ...manual]).filter((keyword) => !suppressedKeys.has(ltmKeywordKey(keyword)));
 }
 
 export function normalizeLtmKeywordIntent(note: LtmKeywordNote) {
@@ -70,8 +67,6 @@ export function removeLtmKeyword(note: LtmKeywordNote, keyword: string) {
   return {
     keywords: generated,
     manualKeywords: manual.filter((value) => ltmKeywordKey(value) !== key),
-    suppressedKeywords: generatedKeyword
-      ? uniqueLtmKeywords([...suppressed, generatedKeyword])
-      : suppressed,
+    suppressedKeywords: generatedKeyword ? uniqueLtmKeywords([...suppressed, generatedKeyword]) : suppressed,
   };
 }

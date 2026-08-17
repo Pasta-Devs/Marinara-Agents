@@ -12,7 +12,10 @@ export async function activate({
   app: FastifyInstance;
   api: {
     registerService<T>(key: string, service: T): () => void | Promise<void>;
-    registerPrivilegedRoutes(routes: FastifyPluginAsync, options: { prefix: string }): Promise<() => void | Promise<void>>;
+    registerPrivilegedRoutes(
+      routes: FastifyPluginAsync,
+      options: { prefix: string },
+    ): Promise<() => void | Promise<void>>;
   };
 }) {
   // Capability routes are registered through the host's revocable privileged route slots.

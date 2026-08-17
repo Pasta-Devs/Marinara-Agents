@@ -10,10 +10,7 @@ import { isDebugAgentsEnabled } from "../../config/runtime-config.js";
 import type { DB } from "../../db/connection.js";
 import { logDebugOverride } from "../../lib/logger.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
-import {
-  resolveStoredChatOptions,
-  resolveStoredMaxTokens,
-} from "../generation/generation-parameters.js";
+import { resolveStoredChatOptions, resolveStoredMaxTokens } from "../generation/generation-parameters.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
@@ -40,9 +37,7 @@ import { normalizeNoodlerStageProfileDraft } from "./slurp-stage-profile-normali
 import { parseRecord } from "./slurp-public-support.js";
 import { createNoodlerSourceRevisionToken } from "./slurp-source-revision.js";
 
-type GenerationConnection = NonNullable<
-  Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>
->;
+type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
 /** Hinted drafts preserve appearance and recognizable everyday texture without copying identity text. */
 export function noodlerHintedSourceText(data: unknown): string {
@@ -67,17 +62,13 @@ export function noodlerSecretSourceText(data: unknown): string {
       : typeof extensions.appearance === "string"
         ? extensions.appearance
         : "";
-  const themes = reviewedNoodlerTemperamentThemes(
-    typeof source.personality === "string" ? source.personality : "",
-  );
+  const themes = reviewedNoodlerTemperamentThemes(typeof source.personality === "string" ? source.personality : "");
   const physicalFacts = reviewedNoodlerPhysicalFacts(appearance);
   return [
     themes.length > 0
       ? `Approved source themes: ${themes.join(", ")}.`
       : "General temperament and creative interests from the source profile.",
-    physicalFacts.length > 0
-      ? `Approved physical facts: ${physicalFacts.join(", ")}.`
-      : "",
+    physicalFacts.length > 0 ? `Approved physical facts: ${physicalFacts.join(", ")}.` : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -98,10 +89,7 @@ export function noodlerSourceText(data: unknown): string {
     .join("\n");
 }
 
-function disclosureRules(
-  mode: NoodleIdentityDisclosure,
-  publicIdentity: { displayName: string; handle: string },
-) {
+function disclosureRules(mode: NoodleIdentityDisclosure, publicIdentity: { displayName: string; handle: string }) {
   if (mode === "open")
     return `This is the same public creator. Use exactly ${publicIdentity.displayName} as displayName and ${publicIdentity.handle} as handle. Keep the linked public bio unless the user gives a direct edit. Do not invent a stage identity.`;
   if (mode === "hinted")
@@ -110,30 +98,20 @@ function disclosureRules(
 }
 
 export function buildNoodlerStageProfileDraftMessages(input: {
-  request: Pick<
-    NoodleStageProfileDraftRequest,
-    "disclosureMode" | "guidance" | "currentDraft"
-  >;
+  request: Pick<NoodleStageProfileDraftRequest, "disclosureMode" | "guidance" | "currentDraft">;
   publicAccount: { displayName: string; handle: string; bio: string };
   source: {
     data: string | ({ name?: unknown } & Record<string, unknown>);
   } | null;
   sourceSnapshot: NoodlerSourceSnapshot | null;
 }): ChatMessage[] {
-  const identity = buildNoodlerPublicIdentity(
-    input.publicAccount,
-    input.source,
-  );
+  const identity = buildNoodlerPublicIdentity(input.publicAccount, input.source);
   const protectedDraft = input.request.currentDraft
     ? Object.fromEntries(
         Object.entries(input.request.currentDraft).map(([key, value]) => [
           key,
           typeof value === "string"
-            ? (protectNoodlerGeneratedIdentity(
-                value,
-                input.request.disclosureMode,
-                identity,
-              ) ?? "")
+            ? (protectNoodlerGeneratedIdentity(value, input.request.disclosureMode, identity) ?? "")
             : value,
         ]),
       )
@@ -155,8 +133,7 @@ export function buildNoodlerStageProfileDraftMessages(input: {
             "# Open-secret inspiration brief",
             "The stage identity is the same person as the source. Carry over look, vibe, interests, and daily life so a regular follower can recognize them.",
             "Never use the source name or handle, and never copy four or more consecutive words from the text below. Rewrite everything in the stage voice.",
-            noodlerHintedSourceText(input.source?.data) ||
-              hintedNoodlerSourceBrief(input.sourceSnapshot),
+            noodlerHintedSourceText(input.source?.data) || hintedNoodlerSourceBrief(input.sourceSnapshot),
           ].join("\n")
         : [
             "# Source character or persona",
@@ -170,14 +147,7 @@ export function buildNoodlerStageProfileDraftMessages(input: {
       ? rawSourceContext
       : rawSourceContext
           .split("\n")
-          .map(
-            (line) =>
-              protectNoodlerGeneratedIdentity(
-                line,
-                input.request.disclosureMode,
-                identity,
-              ) ?? "",
-          )
+          .map((line) => protectNoodlerGeneratedIdentity(line, input.request.disclosureMode, identity) ?? "")
           .join("\n");
   return [
     {
@@ -193,21 +163,16 @@ export function buildNoodlerStageProfileDraftMessages(input: {
       role: "user",
       content: [
         sourceContext,
-        ...(protectedDraft
-          ? ["", "# Current draft", JSON.stringify(protectedDraft)]
-          : []),
+        ...(protectedDraft ? ["", "# Current draft", JSON.stringify(protectedDraft)] : []),
         "",
         "# Creator guidance",
-        input.request.guidance ||
-          "Create a compelling stage identity with a clear voice.",
+        input.request.guidance || "Create a compelling stage identity with a clear voice.",
       ].join("\n"),
     },
   ];
 }
 
-const noodlerStageProfileDraftSchema = noodleStageProfileDraftResponseSchema
-  .omit({ disclosureMode: true })
-  .strip();
+const noodlerStageProfileDraftSchema = noodleStageProfileDraftResponseSchema.omit({ disclosureMode: true }).strip();
 
 export function parseNoodlerStageProfileDraft(content: string) {
   const normalized = normalizeNoodlerStageProfileDraft(
@@ -288,9 +253,7 @@ export async function generateNoodlerStageProfileDraft(
     ),
     primaryConnectionId: input.connection.id,
     fallbackConnection,
-    fallbackBaseUrl: fallbackConnection
-      ? resolveBaseUrl(fallbackConnection)
-      : "",
+    fallbackBaseUrl: fallbackConnection ? resolveBaseUrl(fallbackConnection) : "",
     category: "main",
   });
   const completionOptions = {
@@ -298,26 +261,16 @@ export async function generateNoodlerStageProfileDraft(
     maxTokens: clampGenerationMaxOutputTokens({
       provider: input.connection.provider as APIProvider,
       model: input.connection.model,
-      maxTokens: resolveStoredMaxTokens(
-        input.connection.defaultParameters,
-        1200,
-      ),
+      maxTokens: resolveStoredMaxTokens(input.connection.defaultParameters, 1200),
       maxTokensOverride: input.connection.maxTokensOverride,
     }),
     ...noodleSamplingOptions(
-      resolveStoredChatOptions(
-        input.connection.defaultParameters,
-        input.connection.provider,
-        input.connection.model,
-      ),
+      resolveStoredChatOptions(input.connection.defaultParameters, input.connection.provider, input.connection.model),
       { temperature: 0.7, topP: 0.9 },
     ),
     stream: false,
     debugMode,
-    responseFormat: noodleResponseFormat(
-      input.connection.model,
-      "noodler_profile",
-    ),
+    responseFormat: noodleResponseFormat(input.connection.model, "noodler_profile"),
   } as const;
   const response = await provider.chatComplete(messages, completionOptions);
   let parsedDraft: ReturnType<typeof parseNoodlerStageProfileDraft>;
@@ -331,9 +284,7 @@ export async function generateNoodlerStageProfileDraft(
       [
         ...messages,
         // An empty assistant turn is rejected by several providers, so only echo a real answer.
-        ...(response.content?.trim()
-          ? [{ role: "assistant" as const, content: response.content }]
-          : []),
+        ...(response.content?.trim() ? [{ role: "assistant" as const, content: response.content }] : []),
         {
           role: "user",
           content:
@@ -348,13 +299,8 @@ export async function generateNoodlerStageProfileDraft(
     ...parsedDraft,
     disclosureMode: input.request.disclosureMode,
   };
-  if (
-    input.request.disclosureMode !== "open" &&
-    stageProfileContainsPublicIdentity(draft, identity)
-  ) {
-    throw new Error(
-      "Generated stage draft included the linked public identity. Try again with different guidance.",
-    );
+  if (input.request.disclosureMode !== "open" && stageProfileContainsPublicIdentity(draft, identity)) {
+    throw new Error("Generated stage draft included the linked public identity. Try again with different guidance.");
   }
   return {
     ...draft,
@@ -365,17 +311,10 @@ export async function generateNoodlerStageProfileDraft(
           bio: input.request.currentDraft?.bio ?? publicAccount.bio,
         }
       : {}),
-    ...(input.request.disclosureMode === "open" && sourceSnapshot
-      ? { sourceSnapshot }
-      : {}),
-    ...(input.request.disclosureMode !== "open" &&
-    input.request.noodlerAccountId &&
-    sourceSnapshot
+    ...(input.request.disclosureMode === "open" && sourceSnapshot ? { sourceSnapshot } : {}),
+    ...(input.request.disclosureMode !== "open" && input.request.noodlerAccountId && sourceSnapshot
       ? {
-          sourceRevisionToken: createNoodlerSourceRevisionToken(
-            input.request.noodlerAccountId,
-            sourceSnapshot,
-          ),
+          sourceRevisionToken: createNoodlerSourceRevisionToken(input.request.noodlerAccountId, sourceSnapshot),
         }
       : {}),
   };

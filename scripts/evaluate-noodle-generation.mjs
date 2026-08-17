@@ -24,8 +24,7 @@ const negativeWords = new Set([
 const SAMPLE_KINDS = new Set(["post", "reply", "noodler"]);
 const normalized = parsed.map((sample, index) => {
   if (!sample || typeof sample !== "object") throw new Error(`Sample ${index} must be an object.`);
-  if (typeof sample.content !== "string")
-    throw new Error(`Sample ${index} must have a string "content" field.`);
+  if (typeof sample.content !== "string") throw new Error(`Sample ${index} must have a string "content" field.`);
   const content = sample.content.trim();
   if (!content) throw new Error(`Sample ${index} has empty content.`);
   if (sample.kind !== undefined && !SAMPLE_KINDS.has(sample.kind))

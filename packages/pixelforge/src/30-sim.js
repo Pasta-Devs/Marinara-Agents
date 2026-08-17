@@ -30,9 +30,14 @@ PF.Sim = class {
 
   /** Solid test for a feet-box in world pixels. */
   blocked(z, x, y) {
-    const HW = 5, HT = 3, HB = 7; // feet box: 10 wide, 10 tall biased low
+    const HW = 5,
+      HT = 3,
+      HB = 7; // feet box: 10 wide, 10 tall biased low
     for (const [px, py] of [
-      [x - HW, y - HT], [x + HW, y - HT], [x - HW, y + HB], [x + HW, y + HB],
+      [x - HW, y - HT],
+      [x + HW, y - HT],
+      [x - HW, y + HB],
+      [x + HW, y + HB],
     ]) {
       const tx = Math.floor(px / PF.TILE);
       const ty = Math.floor(py / PF.TILE);
@@ -122,7 +127,12 @@ PF.Sim = class {
       t.wait -= dt;
       if (t.wait <= 0) {
         const dirs = [
-          [0, 0], [0, 0], [1, 0], [-1, 0], [0, 1], [0, -1],
+          [0, 0],
+          [0, 0],
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
         ];
         const [dx, dy] = dirs[(this._rnd() * dirs.length) | 0];
         const nx = Math.round(t.fx) + dx;
@@ -167,7 +177,7 @@ PF.Sim = class {
   darkness() {
     const h = this.clockMin / 60;
     if (h >= 7 && h < 18) return 0;
-    if (h >= 18 && h < 21) return (h - 18) / 3 * 0.55;
+    if (h >= 18 && h < 21) return ((h - 18) / 3) * 0.55;
     if (h >= 21 || h < 5) return 0.55;
     return (1 - (h - 5) / 2) * 0.55; // 5..7 dawn
   }

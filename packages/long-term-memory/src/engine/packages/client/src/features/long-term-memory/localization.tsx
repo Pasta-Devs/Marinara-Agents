@@ -6,21 +6,13 @@ export type LtmLocalizationContext = {
   direction?: "ltr" | "rtl";
 };
 
-type TranslationValues = Record<
-  string,
-  string | number | boolean | null | undefined
->;
+type TranslationValues = Record<string, string | number | boolean | null | undefined>;
 type TranslationCatalog = Record<string, string>;
-export type LtmTranslationFunction = (
-  key: string,
-  values?: TranslationValues,
-) => string;
+export type LtmTranslationFunction = (key: string, values?: TranslationValues) => string;
 
 const catalogs: Record<string, TranslationCatalog> = {
   en: Object.fromEntries(
-    Object.entries(englishCatalog).filter(
-      ([key, value]) => key !== "_meta" && typeof value === "string",
-    ),
+    Object.entries(englishCatalog).filter(([key, value]) => key !== "_meta" && typeof value === "string"),
   ) as TranslationCatalog,
 };
 const pluralRulesByLocale = new Map<string, Intl.PluralRules>();
@@ -79,8 +71,7 @@ const defaultLocalization: LtmLocalizationValue = {
   t: (key, values) => translateLtm(undefined, key, values),
 };
 
-const LocalizationContext =
-  createContext<LtmLocalizationValue>(defaultLocalization);
+const LocalizationContext = createContext<LtmLocalizationValue>(defaultLocalization);
 
 export function LtmLocalizationProvider({
   localization,
@@ -99,11 +90,7 @@ export function LtmLocalizationProvider({
     }),
     [direction, locale],
   );
-  return (
-    <LocalizationContext.Provider value={value}>
-      {children}
-    </LocalizationContext.Provider>
-  );
+  return <LocalizationContext.Provider value={value}>{children}</LocalizationContext.Provider>;
 }
 
 export function useLtmTranslation() {

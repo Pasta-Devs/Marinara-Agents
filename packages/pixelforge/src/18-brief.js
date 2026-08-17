@@ -19,17 +19,42 @@ PF.brief = (() => {
   const PROSPERITY = ["struggling", "modest", "thriving"];
   const PLACE_KINDS = ["gathering", "workshop", "hall", "dwelling", "wilds"];
   const CAST_KINDS = [
-    "leader", "host", "grower", "maker", "merchant", "guard",
-    "healer", "scholar", "elder", "child", "wanderer", "folk",
+    "leader",
+    "host",
+    "grower",
+    "maker",
+    "merchant",
+    "guard",
+    "healer",
+    "scholar",
+    "elder",
+    "child",
+    "wanderer",
+    "folk",
   ];
   // Nine buckets cannot cluster; sprite legibility is an invariant, not a repair.
   const TINTS = {
-    red: 4, orange: 28, amber: 48, green: 110, teal: 168,
-    blue: 214, violet: 268, rose: 330, grey: 210,
+    red: 4,
+    orange: 28,
+    amber: 48,
+    green: 110,
+    teal: 168,
+    blue: 214,
+    violet: 268,
+    rose: 330,
+    grey: 210,
   };
   const FEATURE_TAGS = [
-    "water-feature", "crop-plots", "market-stalls", "workyard", "landmark-stone",
-    "shrine", "water-crossing", "dense-growth", "ruin", "lookout",
+    "water-feature",
+    "crop-plots",
+    "market-stalls",
+    "workyard",
+    "landmark-stone",
+    "shrine",
+    "water-crossing",
+    "dense-growth",
+    "ruin",
+    "lookout",
   ];
   // Which tags make sense per zone kind (invalid-for-zone drops at compile, not parse).
   const SETTLEMENT_TAGS = new Set(FEATURE_TAGS.filter((t) => t !== "water-crossing" && t !== "dense-growth"));
@@ -61,7 +86,8 @@ PF.brief = (() => {
       .replace(/\s+/g, " ")
       .trim();
   }
-  const segmenter = typeof Intl !== "undefined" && Intl.Segmenter ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : null;
+  const segmenter =
+    typeof Intl !== "undefined" && Intl.Segmenter ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : null;
   function graphemes(value) {
     if (segmenter) return [...segmenter.segment(value)].map((s) => s.segment);
     return [...value];
@@ -76,12 +102,7 @@ PF.brief = (() => {
     return (lastSpace > max * 0.5 ? cut.slice(0, lastSpace) : cut).trim();
   }
   const fold = (value) =>
-    sanitize(value)
-      .normalize("NFKD")
-      .replace(/[̀-ͯ]/g, "")
-      .toLowerCase()
-      .replace(/\s+/g, " ")
-      .trim();
+    sanitize(value).normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 
   // ── Enum folding ────────────────────────────────────────────────────────────
   function foldEnum(value, list, fallback) {
@@ -178,13 +199,15 @@ PF.brief = (() => {
       let candidate = name;
       let attempt = 0;
       while (usedNames.has(fold(candidate))) {
-        const suffix = attempt < DEDUPE_SUFFIXES.length
-          ? pick(seed, `${fieldPath}-dedupe-${attempt}`, DEDUPE_SUFFIXES)
-          : String(attempt - DEDUPE_SUFFIXES.length + 2);
+        const suffix =
+          attempt < DEDUPE_SUFFIXES.length
+            ? pick(seed, `${fieldPath}-dedupe-${attempt}`, DEDUPE_SUFFIXES)
+            : String(attempt - DEDUPE_SUFFIXES.length + 2);
         candidate = `${name} ${suffix}`;
         attempt++;
       }
-      if (candidate !== name) repairs.push(`${fieldPath}: duplicate name ${JSON.stringify(name)} -> ${JSON.stringify(candidate)}`);
+      if (candidate !== name)
+        repairs.push(`${fieldPath}: duplicate name ${JSON.stringify(name)} -> ${JSON.stringify(candidate)}`);
       usedNames.add(fold(candidate));
       return candidate;
     };
@@ -269,9 +292,15 @@ PF.brief = (() => {
         name: dedupeName(name, `cast[${brief.cast.length}]`),
         role: capText(item?.role, 24) || KIND_LABELS[kind],
         kind,
-        tint: foldEnum(item?.tint, Object.keys(TINTS), pick(seed, `cast-tint-${brief.cast.length}`, Object.keys(TINTS))),
+        tint: foldEnum(
+          item?.tint,
+          Object.keys(TINTS),
+          pick(seed, `cast-tint-${brief.cast.length}`, Object.keys(TINTS)),
+        ),
         home,
-        household: Number.isFinite(householdNumber) ? Math.max(1, Math.min(CAPS.household, Math.round(householdNumber))) : 1,
+        household: Number.isFinite(householdNumber)
+          ? Math.max(1, Math.min(CAPS.household, Math.round(householdNumber)))
+          : 1,
         persona: capText(item?.persona ?? item?.flavor, 100),
       });
     }
@@ -347,7 +376,8 @@ PF.brief = (() => {
     });
     let featureOrdinal = 1;
     for (const feature of brief.features) ids.features[`f${featureOrdinal++}`] = feature.name;
-    for (const place of brief.places) for (const feature of place.features ?? []) ids.features[`f${featureOrdinal++}`] = feature.name;
+    for (const place of brief.places)
+      for (const feature of place.features ?? []) ids.features[`f${featureOrdinal++}`] = feature.name;
     brief._ids = ids;
 
     // Global byte budget: truncate prose in reverse-leverage order. Measured
@@ -405,7 +435,7 @@ PF.brief = (() => {
     if (end >= 0) {
       candidate = text.slice(start, end + 1);
     } else {
-      let body = text.slice(start).replace(/,[^,{}\[\]]*$/, "");
+      let body = text.slice(start).replace(/,[^,{}[\]]*$/, "");
       const opens = [];
       inString = false;
       for (let i = 0; i < body.length; i++) {
@@ -420,7 +450,12 @@ PF.brief = (() => {
         else if (ch === "}" || ch === "]") opens.pop();
       }
       if (inString) body += '"';
-      candidate = body + opens.reverse().map((ch) => (ch === "{" ? "}" : "]")).join("");
+      candidate =
+        body +
+        opens
+          .reverse()
+          .map((ch) => (ch === "{" ? "}" : "]"))
+          .join("");
     }
     try {
       const parsed = JSON.parse(candidate);
@@ -459,9 +494,11 @@ PF.brief = (() => {
         // chat_busy ships Retry-After: 15 — wait it out once inside the budget
         // (busyWaitMs is a timer seam so the harness never sleeps for real).
         await new Promise((resolve) => setTimeout(resolve, busyWaitMs));
-        if (!controller.signal.aborted) response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
+        if (!controller.signal.aborted)
+          response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
       }
-      const rawOf = (r) => (r.status === 422 && r.body?.truncated && typeof r.body.raw === "string" ? r.body.raw : null);
+      const rawOf = (r) =>
+        r.status === 422 && r.body?.truncated && typeof r.body.raw === "string" ? r.body.raw : null;
       let bestRaw = rawOf(response);
       if (response.status === 422 && response.body?.truncated) {
         onProgress?.("Generating your world… (one more try)");
@@ -469,7 +506,12 @@ PF.brief = (() => {
         const retryRaw = rawOf(response);
         if (retryRaw && (!bestRaw || retryRaw.length > bestRaw.length)) bestRaw = retryRaw;
       }
-      if (response.status === 200 && response.body?.ok && response.body.data && typeof response.body.data === "object") {
+      if (
+        response.status === 200 &&
+        response.body?.ok &&
+        response.body.data &&
+        typeof response.body.data === "object"
+      ) {
         return validate(response.body.data, { theme, seed });
       }
       if (bestRaw) {
@@ -492,7 +534,8 @@ PF.brief = (() => {
     } catch (err) {
       // Network trouble and the budget timeout are both transient — leave the
       // chat unsealed rather than freezing the default world in forever.
-      if (!controller.signal.aborted) console.warn("[pixelforge] world generation failed (network); retrying next visit", err);
+      if (!controller.signal.aborted)
+        console.warn("[pixelforge] world generation failed (network); retrying next visit", err);
       else console.warn("[pixelforge] world generation timed out; retrying next visit");
       return null;
     } finally {
@@ -592,15 +635,37 @@ PF.brief = (() => {
 
   // ── Theme lexicon (the repair layer's per-theme content — §weakness 6) ──────
   const FEATURE_LABELS = {
-    "water-feature": "The Pool", "crop-plots": "The Plots", "market-stalls": "The Stalls",
-    workyard: "The Yard", "landmark-stone": "The Old Marker", shrine: "The Shrine",
-    "water-crossing": "The Crossing", "dense-growth": "The Thicket", ruin: "The Ruin", lookout: "The Lookout",
+    "water-feature": "The Pool",
+    "crop-plots": "The Plots",
+    "market-stalls": "The Stalls",
+    workyard: "The Yard",
+    "landmark-stone": "The Old Marker",
+    shrine: "The Shrine",
+    "water-crossing": "The Crossing",
+    "dense-growth": "The Thicket",
+    ruin: "The Ruin",
+    lookout: "The Lookout",
   };
-  const PLACE_LABELS = { gathering: "The Hearth", workshop: "The Works", hall: "The Hall", dwelling: "The House", wilds: "The Wilds" };
+  const PLACE_LABELS = {
+    gathering: "The Hearth",
+    workshop: "The Works",
+    hall: "The Hall",
+    dwelling: "The House",
+    wilds: "The Wilds",
+  };
   const KIND_LABELS = {
-    leader: "leader", host: "keeper", grower: "grower", maker: "artisan", merchant: "trader",
-    guard: "watch", healer: "healer", scholar: "archivist", elder: "elder", child: "youngster",
-    wanderer: "wanderer", folk: "resident",
+    leader: "leader",
+    host: "keeper",
+    grower: "grower",
+    maker: "artisan",
+    merchant: "trader",
+    guard: "watch",
+    healer: "healer",
+    scholar: "archivist",
+    elder: "elder",
+    child: "youngster",
+    wanderer: "wanderer",
+    folk: "resident",
   };
   const DEDUPE_SUFFIXES = ["Upper", "Lower", "Old", "New", "Far", "Near"];
   const DEFAULT_NAMES = {
@@ -627,7 +692,10 @@ PF.brief = (() => {
   };
   const DEFAULT_BRIEFS = {
     "cozy-village": {
-      scale: "village", surround: "woods", prosperity: "modest", name: "Hearthvale",
+      scale: "village",
+      surround: "woods",
+      prosperity: "modest",
+      name: "Hearthvale",
       flavor: "A cozy closed valley where the roads all end at somebody's gate.",
       situation: "",
       features: [
@@ -636,19 +704,45 @@ PF.brief = (() => {
       ],
       places: [
         { kind: "gathering", name: "The Amber Hearth Inn", flavor: "Low beams, warm bread, long memories." },
-        { kind: "wilds", name: "The Whisperwood", flavor: "Dense trees, a shallow stream, an old stone.",
-          features: [{ tag: "water-crossing", name: "The Stepping Stones" }, { tag: "landmark-stone", name: "The Old Marker" }] },
+        {
+          kind: "wilds",
+          name: "The Whisperwood",
+          flavor: "Dense trees, a shallow stream, an old stone.",
+          features: [
+            { tag: "water-crossing", name: "The Stepping Stones" },
+            { tag: "landmark-stone", name: "The Old Marker" },
+          ],
+        },
       ],
       cast: [
-        { name: "Mira", role: "innkeeper", kind: "host", tint: "rose", home: "The Amber Hearth Inn", household: 1, persona: "" },
+        {
+          name: "Mira",
+          role: "innkeeper",
+          kind: "host",
+          tint: "rose",
+          home: "The Amber Hearth Inn",
+          household: 1,
+          persona: "",
+        },
         { name: "Tam", role: "farmer", kind: "grower", tint: "green", home: "Hearthvale", household: 2, persona: "" },
         { name: "Rook", role: "guard", kind: "guard", tint: "blue", home: "Hearthvale", household: 3, persona: "" },
-        { name: "Fen", role: "forager", kind: "wanderer", tint: "teal", home: "The Whisperwood", household: 4, persona: "" },
+        {
+          name: "Fen",
+          role: "forager",
+          kind: "wanderer",
+          tint: "teal",
+          home: "The Whisperwood",
+          household: 4,
+          persona: "",
+        },
       ],
       backgroundPopulation: 30,
     },
     "sci-fi-colony": {
-      scale: "village", surround: "barren", prosperity: "modest", name: "Meridian Base",
+      scale: "village",
+      surround: "barren",
+      prosperity: "modest",
+      name: "Meridian Base",
       flavor: "A frontier colony under a sealed sky, humming at all hours.",
       situation: "",
       features: [
@@ -657,14 +751,53 @@ PF.brief = (() => {
       ],
       places: [
         { kind: "gathering", name: "The Meridian Cantina", flavor: "Recycled air, real coffee, questionable cards." },
-        { kind: "wilds", name: "The Mast Field", flavor: "Antenna rows marching into the dust.",
-          features: [{ tag: "water-crossing", name: "The Conduit Bridge" }, { tag: "landmark-stone", name: "The Beacon" }] },
+        {
+          kind: "wilds",
+          name: "The Mast Field",
+          flavor: "Antenna rows marching into the dust.",
+          features: [
+            { tag: "water-crossing", name: "The Conduit Bridge" },
+            { tag: "landmark-stone", name: "The Beacon" },
+          ],
+        },
       ],
       cast: [
-        { name: "Mira", role: "cantina keeper", kind: "host", tint: "rose", home: "The Meridian Cantina", household: 1, persona: "" },
-        { name: "Tam", role: "hydroponics lead", kind: "grower", tint: "green", home: "Meridian Base", household: 2, persona: "" },
-        { name: "Rook", role: "pad marshal", kind: "guard", tint: "blue", home: "Meridian Base", household: 3, persona: "" },
-        { name: "Fen", role: "salvage scout", kind: "wanderer", tint: "teal", home: "The Mast Field", household: 4, persona: "" },
+        {
+          name: "Mira",
+          role: "cantina keeper",
+          kind: "host",
+          tint: "rose",
+          home: "The Meridian Cantina",
+          household: 1,
+          persona: "",
+        },
+        {
+          name: "Tam",
+          role: "hydroponics lead",
+          kind: "grower",
+          tint: "green",
+          home: "Meridian Base",
+          household: 2,
+          persona: "",
+        },
+        {
+          name: "Rook",
+          role: "pad marshal",
+          kind: "guard",
+          tint: "blue",
+          home: "Meridian Base",
+          household: 3,
+          persona: "",
+        },
+        {
+          name: "Fen",
+          role: "salvage scout",
+          kind: "wanderer",
+          tint: "teal",
+          home: "The Mast Field",
+          household: 4,
+          persona: "",
+        },
       ],
       backgroundPopulation: 24,
     },

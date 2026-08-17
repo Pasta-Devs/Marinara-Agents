@@ -151,7 +151,6 @@ PF.api = {
 PF.fail = (elOrNull, err) => {
   const message = err && err.message ? `Pixelforge: ${err.message}` : `Pixelforge: ${String(err)}`;
   try {
-    // eslint-disable-next-line no-console
     console.error("[pixelforge]", err);
     elOrNull?.dispatchEvent(new CustomEvent("marinara-capability-runtime-error", { detail: { message } }));
   } catch {

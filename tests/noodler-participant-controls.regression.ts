@@ -4,8 +4,7 @@ import { readFile } from "node:fs/promises";
 const homePath = "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx";
 const hooksPath = "packages/noodle/src/engine/packages/client/src/hooks/use-noodle.ts";
 const creatorHooksPath = "packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts";
-const publishingSettingsPath =
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx";
+const publishingSettingsPath = "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx";
 
 async function main() {
   const [home, hooks, creatorHooks, publishingSettings] = await Promise.all([

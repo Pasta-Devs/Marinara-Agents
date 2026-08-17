@@ -26,7 +26,10 @@ async function main() {
   assert.match(navigation, /mode: "public"/);
   assert.doesNotMatch(navigation, /mode: "noodler"|tab\?: "noodle" \| "noodler"/);
   assert.match(serverEntry, /Creator routes run in Slurp/);
-  const serverBehavior = serverEntry.replace(/\/\/ Noodle exposes only the public timeline capability\. Creator routes run in Slurp\./, "");
+  const serverBehavior = serverEntry.replace(
+    /\/\/ Noodle exposes only the public timeline capability\. Creator routes run in Slurp\./,
+    "",
+  );
   assert.doesNotMatch(serverBehavior, /\bNoodleR\b|\bNoodler\b|(?:\/api\/slurp|creatorRoutes|slurpRoutes)/i);
   assert.match(serverEntry, /startNoodleRefreshScheduler\(app\)/);
   assert.match(serverEntry, /registerService\("noodle:backup"/);

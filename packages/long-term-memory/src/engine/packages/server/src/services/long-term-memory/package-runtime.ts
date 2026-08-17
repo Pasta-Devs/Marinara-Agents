@@ -23,16 +23,31 @@ export type CapabilityRuntimeHost = {
       model: string;
       maxContext: number | null;
       maxOutputTokens: number | null;
-      chatComplete(messages: Array<{ role: "system" | "user" | "assistant" | "tool"; content: string }>, options?: {
-        temperature?: number;
-        maxTokens?: number;
-        debugMode?: boolean;
-        reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
-        verbosity?: "low" | "medium" | "high";
-        signal?: AbortSignal;
-        responseFormat?: Readonly<{ type: string; [key: string]: unknown }>;
-      }): Promise<{ content: string | null; finishReason: string; usage?: { promptTokens?: number; completionTokens?: number; completionReasoningTokens?: number; totalTokens?: number } }>;
-      fitContext(messages: Array<{ role: "system" | "user" | "assistant" | "tool"; content: string }>, options?: { maxTokens?: number }): {
+      chatComplete(
+        messages: Array<{ role: "system" | "user" | "assistant" | "tool"; content: string }>,
+        options?: {
+          temperature?: number;
+          maxTokens?: number;
+          debugMode?: boolean;
+          reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
+          verbosity?: "low" | "medium" | "high";
+          signal?: AbortSignal;
+          responseFormat?: Readonly<{ type: string; [key: string]: unknown }>;
+        },
+      ): Promise<{
+        content: string | null;
+        finishReason: string;
+        usage?: {
+          promptTokens?: number;
+          completionTokens?: number;
+          completionReasoningTokens?: number;
+          totalTokens?: number;
+        };
+      }>;
+      fitContext(
+        messages: Array<{ role: "system" | "user" | "assistant" | "tool"; content: string }>,
+        options?: { maxTokens?: number },
+      ): {
         messages: Array<{ role: "system" | "user" | "assistant" | "tool"; content: string }>;
         maxTokens?: number;
         estimatedTokensBefore: number;
@@ -60,23 +75,21 @@ export type CapabilityRuntimeHost = {
       lastMessageAt: string | null;
       updatedAt: string;
     } | null>;
-    listChats(): Promise<Array<{
-      id: string;
-      name: string;
-      mode: string;
-      characterIds: string[];
-      groupId: string | null;
-      personaId: string | null;
-      connectionId: string | null;
-      metadata: unknown;
-      lastMessageAt: string | null;
-      updatedAt: string;
-    }>>;
-    updateChatMetadata(input: {
-      chatId: string;
-      metadata: Record<string, unknown>;
-      updatedAt: string;
-    }): Promise<void>;
+    listChats(): Promise<
+      Array<{
+        id: string;
+        name: string;
+        mode: string;
+        characterIds: string[];
+        groupId: string | null;
+        personaId: string | null;
+        connectionId: string | null;
+        metadata: unknown;
+        lastMessageAt: string | null;
+        updatedAt: string;
+      }>
+    >;
+    updateChatMetadata(input: { chatId: string; metadata: Record<string, unknown>; updatedAt: string }): Promise<void>;
   };
 };
 
@@ -147,9 +160,14 @@ export const logger = {
   debug: (message: string, ...args: RuntimeLogArgument[]) => host?.logger.debug(message, ...args),
   info: (message: string, ...args: RuntimeLogArgument[]) => host?.logger.info(message, ...args),
   warn: (first: unknown, second?: RuntimeLogArgument, ...args: RuntimeLogArgument[]) =>
-    host && (typeof first === "string"
+    host &&
+    (typeof first === "string"
       ? host.logger.warn(first, second, ...args)
-      : host.logger.warn(typeof second === "string" ? second : "Long-Term Memory warning", first as RuntimeLogArgument, ...args)),
+      : host.logger.warn(
+          typeof second === "string" ? second : "Long-Term Memory warning",
+          first as RuntimeLogArgument,
+          ...args,
+        )),
   error: (error: unknown, message: string, ...args: RuntimeLogArgument[]) =>
     host?.logger.error(error, message, ...args),
   debugOverride: (overrideEnabled: boolean, message: string, ...args: RuntimeLogArgument[]) => {
@@ -160,15 +178,16 @@ export const logger = {
   },
 };
 
-export async function withKeyedLock<T>(
-  locks: Map<string, Promise<void>>,
-  key: string,
-  operation: () => Promise<T>,
-) {
+export async function withKeyedLock<T>(locks: Map<string, Promise<void>>, key: string, operation: () => Promise<T>) {
   const previous = locks.get(key) ?? Promise.resolve();
   let release!: () => void;
-  const current = new Promise<void>((resolve) => { release = resolve; });
-  const tail = previous.then(() => current, () => current);
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const tail = previous.then(
+    () => current,
+    () => current,
+  );
   locks.set(key, tail);
   try {
     await previous.catch(() => {});

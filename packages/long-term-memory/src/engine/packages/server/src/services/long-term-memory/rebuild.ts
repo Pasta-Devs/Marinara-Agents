@@ -1,5 +1,11 @@
 import { readFile } from "node:fs/promises";
-import { ltmBm25IndexSchema, ltmEmbeddingIndexSchema, ltmGraphIndexSchema, ltmKeywordIndexSchema, ltmMetadataIndexSchema } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import {
+  ltmBm25IndexSchema,
+  ltmEmbeddingIndexSchema,
+  ltmGraphIndexSchema,
+  ltmKeywordIndexSchema,
+  ltmMetadataIndexSchema,
+} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { writeJsonAtomic } from "./atomic-json.js";
 import { buildLtmBm25Index } from "./bm25.js";
 import { chunkNotes, stableJsonHash } from "./chunking.js";
@@ -11,7 +17,12 @@ import { buildLtmMetadataIndex } from "./metadata-index.js";
 import { getLongTermMemoryDirectories, getLongTermMemoryRoot, safeJoin } from "./paths.js";
 import { LongTermMemoryStorage } from "./storage.js";
 import { getPackageEmbeddingAdapter } from "./package-runtime.js";
-import { markLtmIndexesBuilding, markLtmIndexesClean, markLtmIndexesFailed, writeLtmNoteSummary } from "./index-state.js";
+import {
+  markLtmIndexesBuilding,
+  markLtmIndexesClean,
+  markLtmIndexesFailed,
+  writeLtmNoteSummary,
+} from "./index-state.js";
 import { withLtmVaultLock } from "./vault-lock.js";
 
 const autoUpgradeFailures = new Set<string>();
@@ -96,51 +107,61 @@ export async function rebuildLongTermMemoryIndexes(
   options: MemoryRecallEmbeddingOptions & { root?: string; generatedAt?: string } = {},
 ) {
   const root = options.root ?? getLongTermMemoryRoot();
-  return withLtmVaultLock(root,async()=>{
+  return withLtmVaultLock(root, async () => {
     await markLtmIndexesBuilding(root);
     try {
-    const embeddingAdapter = options.embeddingAdapter ?? getPackageEmbeddingAdapter();
-    clearAutoUpgradeFailure(root, embeddingAdapter ?? null);
-    const notes = await new LongTermMemoryStorage(root).listNotes();
-    await writeLtmNoteSummary(root, notes);
-    const chunks = chunkNotes(notes, { includeSourceNotes: false });
-    const vectors = await embedLongTermMemoryTexts(chunks.map((chunk) => chunk.text), {
-      ...options,
-      embeddingAdapter,
-    });
-    const dimension = vectors?.[0]?.length ?? 0;
-    const usableVectors =
-      vectors?.length === chunks.length &&
-      dimension > 0 &&
-      vectors.every((vector) => isFiniteVector(vector, dimension))
-        ? vectors
-        : null;
-    const embeddings = ltmEmbeddingIndexSchema.parse({
-      version: 1,
-      ...(usableVectors ? { spaceId: embeddingAdapter?.spaceId } : {}),
-      model: embeddingAdapter?.label ?? "unavailable",
-      dimension: usableVectors?.[0]?.length ?? null,
-      embeddedChunkCount: usableVectors?.length ?? 0,
-      chunks: chunks.map((chunk, index) => ({
-        chunkId: chunk.id,
-        sourceHash: chunk.sourceHash,
-        ...(usableVectors?.[index] ? { vector: usableVectors[index] } : {}),
-      })),
-      byChunkId: Object.fromEntries(chunks.map((chunk, index) => [chunk.id, index])),
-    });
-    const index: LtmRecallIndex = {
-      version: 1,
-      generatedAt: options.generatedAt ?? new Date().toISOString(),
-      sourceHash: stableJsonHash(chunks),
-      metadata: buildLtmMetadataIndex(chunks),
-      bm25: buildLtmBm25Index(chunks),
-      graph: buildLtmGraphIndex(notes, chunks),
-      keywords: buildLtmKeywordIndex(chunks),
-      embeddings,
-    };
+      const embeddingAdapter = options.embeddingAdapter ?? getPackageEmbeddingAdapter();
+      clearAutoUpgradeFailure(root, embeddingAdapter ?? null);
+      const notes = await new LongTermMemoryStorage(root).listNotes();
+      await writeLtmNoteSummary(root, notes);
+      const chunks = chunkNotes(notes, { includeSourceNotes: false });
+      const vectors = await embedLongTermMemoryTexts(
+        chunks.map((chunk) => chunk.text),
+        {
+          ...options,
+          embeddingAdapter,
+        },
+      );
+      const dimension = vectors?.[0]?.length ?? 0;
+      const usableVectors =
+        vectors?.length === chunks.length &&
+        dimension > 0 &&
+        vectors.every((vector) => isFiniteVector(vector, dimension))
+          ? vectors
+          : null;
+      const embeddings = ltmEmbeddingIndexSchema.parse({
+        version: 1,
+        ...(usableVectors ? { spaceId: embeddingAdapter?.spaceId } : {}),
+        model: embeddingAdapter?.label ?? "unavailable",
+        dimension: usableVectors?.[0]?.length ?? null,
+        embeddedChunkCount: usableVectors?.length ?? 0,
+        chunks: chunks.map((chunk, index) => ({
+          chunkId: chunk.id,
+          sourceHash: chunk.sourceHash,
+          ...(usableVectors?.[index] ? { vector: usableVectors[index] } : {}),
+        })),
+        byChunkId: Object.fromEntries(chunks.map((chunk, index) => [chunk.id, index])),
+      });
+      const index: LtmRecallIndex = {
+        version: 1,
+        generatedAt: options.generatedAt ?? new Date().toISOString(),
+        sourceHash: stableJsonHash(chunks),
+        metadata: buildLtmMetadataIndex(chunks),
+        bm25: buildLtmBm25Index(chunks),
+        graph: buildLtmGraphIndex(notes, chunks),
+        keywords: buildLtmKeywordIndex(chunks),
+        embeddings,
+      };
       await writeJsonAtomic(longTermMemoryRecallIndexPath(root), index);
       await markLtmIndexesClean(root);
-      return { root,generatedAt:index.generatedAt,noteCount: notes.length, chunkCount: chunks.length,embeddedChunkCount:usableVectors?.length??0, embeddingsAvailable: Boolean(usableVectors) };
+      return {
+        root,
+        generatedAt: index.generatedAt,
+        noteCount: notes.length,
+        chunkCount: chunks.length,
+        embeddedChunkCount: usableVectors?.length ?? 0,
+        embeddingsAvailable: Boolean(usableVectors),
+      };
     } catch (error) {
       await markLtmIndexesFailed(root, error);
       throw error;

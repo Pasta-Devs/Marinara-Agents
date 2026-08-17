@@ -1,7 +1,4 @@
-import type {
-  NoodleIdentityDisclosure,
-  NoodlerManagedStageProfile,
-} from "@marinara-engine/shared";
+import type { NoodleIdentityDisclosure, NoodlerManagedStageProfile } from "@marinara-engine/shared";
 
 const DISCLOSURE_RANK: Record<NoodleIdentityDisclosure, number> = {
   secret: 0,
@@ -39,14 +36,13 @@ export function isNoodlerDisclosureDowngrade(
   return DISCLOSURE_RANK[next] < DISCLOSURE_RANK[current];
 }
 
-export function projectNoodlerAudienceProfile(
-  profile: NoodlerManagedStageProfile,
-): NoodlerAudienceProfile {
+export function projectNoodlerAudienceProfile(profile: NoodlerManagedStageProfile): NoodlerAudienceProfile {
   const open = profile.disclosureMode === "open";
   return {
-    ...(Object.fromEntries(
-      AUDIENCE_FIELDS.map((field) => [field, profile[field]]),
-    ) as Pick<NoodlerManagedStageProfile, (typeof AUDIENCE_FIELDS)[number]>),
+    ...(Object.fromEntries(AUDIENCE_FIELDS.map((field) => [field, profile[field]])) as Pick<
+      NoodlerManagedStageProfile,
+      (typeof AUDIENCE_FIELDS)[number]
+    >),
     slurpSourceAccountId: open ? profile.slurpSourceAccountId : null,
     publicIdentity: open ? profile.publicIdentity : null,
   };
@@ -72,31 +68,33 @@ export function noodlerDisclosureReviewReasons(input: {
   const plural = (count: number) => (count === 1 ? "" : "s");
   return [
     ...(input.postCount > 0
-      ? [{
-          code: "published_posts" as const,
-          count: input.postCount,
-          label: `${input.postCount} published post${plural(input.postCount)}`,
-        }]
+      ? [
+          {
+            code: "published_posts" as const,
+            count: input.postCount,
+            label: `${input.postCount} published post${plural(input.postCount)}`,
+          },
+        ]
       : []),
     ...(input.mediaCount > 0
-      ? [{
-          code: "published_media" as const,
-          count: input.mediaCount,
-          label: `${input.mediaCount} published media item${plural(input.mediaCount)}`,
-        }]
+      ? [
+          {
+            code: "published_media" as const,
+            count: input.mediaCount,
+            label: `${input.mediaCount} published media item${plural(input.mediaCount)}`,
+          },
+        ]
       : []),
-    ...(input.hasAvatar
-      ? [{ code: "creator_avatar" as const, count: 1, label: "the current creator avatar" }]
-      : []),
-    ...(input.hasBanner
-      ? [{ code: "creator_banner" as const, count: 1, label: "the current creator banner" }]
-      : []),
+    ...(input.hasAvatar ? [{ code: "creator_avatar" as const, count: 1, label: "the current creator avatar" }] : []),
+    ...(input.hasBanner ? [{ code: "creator_banner" as const, count: 1, label: "the current creator banner" }] : []),
     ...(input.preparedPostCount > 0
-      ? [{
-          code: "prepared_posts" as const,
-          count: input.preparedPostCount,
-          label: `${input.preparedPostCount} prepared automatic post${plural(input.preparedPostCount)}`,
-        }]
+      ? [
+          {
+            code: "prepared_posts" as const,
+            count: input.preparedPostCount,
+            label: `${input.preparedPostCount} prepared automatic post${plural(input.preparedPostCount)}`,
+          },
+        ]
       : []),
   ];
 }

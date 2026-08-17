@@ -74,9 +74,7 @@ export async function resolveScopedEvidenceUnitTargets({
 
   const targetNoteIds = Array.from(targetIndexes.keys());
   const targetNotesById = await storage.getNotesByIds(
-    targetNoteIds.filter(
-      (noteId) => ltmNoteIdSchema.safeParse(noteId).success && !safeExistingById.has(noteId),
-    ),
+    targetNoteIds.filter((noteId) => ltmNoteIdSchema.safeParse(noteId).success && !safeExistingById.has(noteId)),
   );
   const remaps = new Map<string, string>();
   const diagnostics: LtmExtractionDiagnostic[] = [];
@@ -99,7 +97,7 @@ export async function resolveScopedEvidenceUnitTargets({
     });
     remaps.set(noteId, resolvedNoteId);
 
-    const resolvedExisting = safeExistingById.get(resolvedNoteId) ?? await getNoteById(storage, resolvedNoteId);
+    const resolvedExisting = safeExistingById.get(resolvedNoteId) ?? (await getNoteById(storage, resolvedNoteId));
     if (resolvedExisting && !isSourceOrScene(resolvedExisting) && canUseEvidenceTarget(resolvedExisting, unit, scope)) {
       safeExistingById.set(resolvedExisting.id, resolvedExisting);
     }
@@ -148,9 +146,9 @@ async function resolveScopedVariantNoteId({
   for (let attempt = 0; attempt < 20; attempt += 1) {
     const candidate = scopedVariantNoteId(baseId, scope, attempt);
     const legacyCandidate = legacyScopedVariantNoteId(baseId, scope, attempt);
-    const legacyExisting = safeExistingById.get(legacyCandidate) ?? await getNoteById(storage, legacyCandidate);
+    const legacyExisting = safeExistingById.get(legacyCandidate) ?? (await getNoteById(storage, legacyCandidate));
     if (legacyExisting && canUseEvidenceTarget(legacyExisting, unit, scope)) return legacyCandidate;
-    const existing = safeExistingById.get(candidate) ?? await getNoteById(storage, candidate);
+    const existing = safeExistingById.get(candidate) ?? (await getNoteById(storage, candidate));
     if (!existing || canUseEvidenceTarget(existing, unit, scope)) return candidate;
   }
   throw new Error(`Unable to resolve scoped long-term memory note id for ${baseId}`);
@@ -213,7 +211,8 @@ function scopeIdentitySeed(scope: LtmScope) {
   if (chatIds.length > 0) return `ltm_scope_v2:chat:${chatIds.join(",")}:persona:${personaIds.join(",")}`;
 
   const characterIds = uniqueStrings(scope.characterIds ?? []).sort();
-  if (characterIds.length > 0) return `ltm_scope_v2:character:${characterIds.join(",")}:persona:${personaIds.join(",")}`;
+  if (characterIds.length > 0)
+    return `ltm_scope_v2:character:${characterIds.join(",")}:persona:${personaIds.join(",")}`;
 
   return `ltm_scope_v2:persona:${personaIds.length ? personaIds.join(",") : "<global>"}`;
 }

@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const hooks = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts",
-  "utf8",
-);
+const hooks = readFileSync("packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
 const unseenHook = hooks.slice(
   hooks.indexOf("export function useNoodlerUnseenCount"),
   hooks.indexOf("export function useToggleNoodlerSubscription"),
@@ -17,10 +14,7 @@ assert.doesNotMatch(unseenHook, /NoodlerViewerScope/u);
 assert.doesNotMatch(hooks, /useNoodle\(/u);
 assert.match(hooks, /\/slurp\/noodler\/viewer\?personaId=/u);
 
-const routes = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts",
-  "utf8",
-);
+const routes = readFileSync("packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
 const unseenRoute = routes.slice(
   routes.indexOf('app.get("/noodler/viewer/unseen-count"'),
   routes.indexOf('app.get("/noodler/viewer"'),
@@ -32,10 +26,7 @@ assert.doesNotMatch(unseenRoute, /listNoodlerInteractions/u);
 assert.match(routes, /listNoodlerPostPage/u);
 assert.match(routes, /listSubscriptionsForCreatorPage/u);
 
-const storage = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts",
-  "utf8",
-);
+const storage = readFileSync("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
 assert.match(storage, /async listNoodlerPostPage/u);
 assert.match(storage, /async listSubscriptionsForCreatorPage/u);
 assert.match(storage, /async getNoodlerViewerSignal/u);
@@ -55,15 +46,9 @@ const viewerHook = hooks.slice(
 assert.match(viewerHook, /noodler\/viewer\/feed/u);
 assert.match(viewerHook, /postsByCreator/u);
 assert.match(viewerHook, /refetchOnMount: "always"/u);
-assert.match(
-  viewerHook,
-  /while \(cursor\)[\s\S]*const scope = await api\.get<NoodlerViewerScope>/u,
-);
+assert.match(viewerHook, /while \(cursor\)[\s\S]*const scope = await api\.get<NoodlerViewerScope>/u);
 
-const home = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
-  "utf8",
-);
+const home = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
 assert.match(home, /NOODLER_FEED_WINDOW_SIZE = 20/u);
 assert.match(home, /feed\.slice\(0, visibleFeedCount\)/u);
 assert.match(home, /searchResults\.slice\(0, visibleFeedCount\)/u);

@@ -1,4 +1,7 @@
-import type { LtmKeywordIndex, LtmMemoryChunk } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import type {
+  LtmKeywordIndex,
+  LtmMemoryChunk,
+} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { normalizeKeywordTerms } from "./keyword-extract.js";
 
 function addKeyword(map: Map<string, string[]>, key: string, value: string) {
@@ -73,22 +76,14 @@ export function searchLtmKeywordIndex(
   const exactQueryMatches = Object.hasOwn(index.byKeyword, normalizedQuery)
     ? index.byKeyword[normalizedQuery]
     : undefined;
-  for (const chunkId of (exactQueryMatches ?? []).slice(
-    0,
-    maxCandidatesPerKeyword,
-  )) {
+  for (const chunkId of (exactQueryMatches ?? []).slice(0, maxCandidatesPerKeyword)) {
     add(chunkId, normalizedQuery, 4, `keyword:exact:${normalizedQuery}`);
   }
 
   for (const term of normalizedTerms) {
     if (term === normalizedQuery) continue;
-    const exactTermMatches = Object.hasOwn(index.byKeyword, term)
-      ? index.byKeyword[term]
-      : undefined;
-    for (const chunkId of (exactTermMatches ?? []).slice(
-      0,
-      maxCandidatesPerKeyword,
-    )) {
+    const exactTermMatches = Object.hasOwn(index.byKeyword, term) ? index.byKeyword[term] : undefined;
+    for (const chunkId of (exactTermMatches ?? []).slice(0, maxCandidatesPerKeyword)) {
       add(chunkId, term, 3, `keyword:exact:${term}`);
     }
   }

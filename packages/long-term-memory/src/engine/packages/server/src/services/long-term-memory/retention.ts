@@ -153,10 +153,7 @@ async function runLongTermMemoryRetentionUnsafe({
       // skip malformed receipt files
       continue;
     }
-    if (
-      receipt.dispatchedAt &&
-      new Date(receipt.dispatchedAt).getTime() < receiptCutoff
-    ) {
+    if (receipt.dispatchedAt && new Date(receipt.dispatchedAt).getTime() < receiptCutoff) {
       await rm(path, { force: true });
       receiptsRemoved++;
     }
@@ -199,7 +196,5 @@ async function runLongTermMemoryRetentionUnsafe({
 }
 
 export function runLongTermMemoryRetention(options: Parameters<typeof runLongTermMemoryRetentionUnsafe>[0] = {}) {
-  return withLtmVaultLock(options.root ?? getLongTermMemoryRoot(), () =>
-    runLongTermMemoryRetentionUnsafe(options),
-  );
+  return withLtmVaultLock(options.root ?? getLongTermMemoryRoot(), () => runLongTermMemoryRetentionUnsafe(options));
 }

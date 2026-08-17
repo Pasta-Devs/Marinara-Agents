@@ -60,11 +60,7 @@ export function setSlurpPackageStyles(styleText: string) {
 
 function requestedLanguage(element: CapabilityElement) {
   const localizationContext = element.capabilityProps?.localization;
-  if (
-    !localizationContext ||
-    typeof localizationContext !== "object" ||
-    Array.isArray(localizationContext)
-  ) {
+  if (!localizationContext || typeof localizationContext !== "object" || Array.isArray(localizationContext)) {
     return "en";
   }
 
@@ -81,18 +77,13 @@ function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
     configureSlurpPackageState(element.capabilityProps ?? {});
     const update = () => redraw((value) => value + 1);
     element.addEventListener("marinara-capability-props", update);
-    return () =>
-      element.removeEventListener("marinara-capability-props", update);
+    return () => element.removeEventListener("marinara-capability-props", update);
   }, [element]);
 
   useEffect(() => {
     const language = requestedLanguage(element);
-    const supportedLanguages = new Set(
-      Object.keys(localization.options.resources ?? {}),
-    );
-    void localization.changeLanguage(
-      supportedLanguages.has(language) ? language : "en",
-    );
+    const supportedLanguages = new Set(Object.keys(localization.options.resources ?? {}));
+    void localization.changeLanguage(supportedLanguages.has(language) ? language : "en");
   }, [element, revision]);
 
   return (

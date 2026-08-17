@@ -757,8 +757,7 @@ function diagnosticToDropReason(code: string): LtmExtractionDropReason | null {
   ) {
     return "unsupported_bucket";
   }
-  if (code === "overlong_evidence_unit" || code === "overlong_target_note_id")
-    return "too_long_to_keep_safely";
+  if (code === "overlong_evidence_unit" || code === "overlong_target_note_id") return "too_long_to_keep_safely";
   return null;
 }
 

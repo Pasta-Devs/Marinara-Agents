@@ -134,7 +134,15 @@ PF.world = (() => {
           }
     },
     ruin(z, x, y) {
-      for (const [dx, dy] of [[0, 0], [1, 0], [3, 0], [0, 1], [0, 3], [4, 1], [4, 2]]) {
+      for (const [dx, dy] of [
+        [0, 0],
+        [1, 0],
+        [3, 0],
+        [0, 1],
+        [0, 3],
+        [4, 1],
+        [4, 2],
+      ]) {
         put(z, x + dx, y + dy, "object", "wallStone", true);
       }
       fillRect(z, x + 1, y + 1, 3, 2, "ground", "stone", false);
@@ -265,7 +273,14 @@ PF.world = (() => {
       put(f, 0, y - 2, "object", null, false); // forest west gap at y=12/13
       put(f, 0, y - 2, "overhead", null);
     }
-    v.portals.push({ x: inn.doorX, y: inn.doorY, toZone: "inn", toX: n.spawn.x, toY: n.spawn.y, label: "Enter the inn" });
+    v.portals.push({
+      x: inn.doorX,
+      y: inn.doorY,
+      toZone: "inn",
+      toX: n.spawn.x,
+      toY: n.spawn.y,
+      label: "Enter the inn",
+    });
     n.portals.push({ x: 8, y: n.h - 1, toZone: "village", toX: inn.doorX, toY: inn.doorY + 1, label: "Step outside" });
     v.portals.push(
       { x: 43, y: 14, toZone: "forest", toX: 2, toY: 12, label: "Into the Whisperwood" },
@@ -279,10 +294,34 @@ PF.world = (() => {
     // NPCs — LLM characters in the story; sprites here are just their world tokens.
     v.npcs.push(
       { id: "tam", name: "Tam", role: "farmer", hue: 96, x: 8, y: 22, wander: { x0: 4, y0: 20, x1: 11, y1: 24 } },
-      { id: "rook", name: "Rook", role: "village guard", hue: 210, x: 21, y: 10, wander: { x0: 17, y0: 8, x1: 24, y1: 18 } },
+      {
+        id: "rook",
+        name: "Rook",
+        role: "village guard",
+        hue: 210,
+        x: 21,
+        y: 10,
+        wander: { x0: 17, y0: 8, x1: 24, y1: 18 },
+      },
     );
-    n.npcs.push({ id: "mira", name: "Mira", role: "innkeeper", hue: 8, x: 5, y: 4, wander: { x0: 2, y0: 4, x1: 8, y1: 9 } });
-    f.npcs.push({ id: "fen", name: "Fen", role: "forager", hue: 140, x: 29, y: 12, wander: { x0: 26, y0: 9, x1: 31, y1: 13 } });
+    n.npcs.push({
+      id: "mira",
+      name: "Mira",
+      role: "innkeeper",
+      hue: 8,
+      x: 5,
+      y: 4,
+      wander: { x0: 2, y0: 4, x1: 8, y1: 9 },
+    });
+    f.npcs.push({
+      id: "fen",
+      name: "Fen",
+      role: "forager",
+      hue: 140,
+      x: 29,
+      y: 12,
+      wander: { x0: 26, y0: 9, x1: 31, y1: 13 },
+    });
 
     v.mapKind = "settlement";
     n.mapKind = "building";
@@ -303,7 +342,14 @@ PF.world = (() => {
   // never depend on model-written names. See docs/brief-schema.md §4.5:
   // buildings derive from households + cast kinds, over-subscription MERGES
   // households into shared blocks — a named NPC's home is never dropped.
-  const SPECIAL_BUILDING_KINDS = { leader: "hall", host: "gathering", grower: "farm", guard: "post", merchant: "shop", maker: "shop" };
+  const SPECIAL_BUILDING_KINDS = {
+    leader: "hall",
+    host: "gathering",
+    grower: "farm",
+    guard: "post",
+    merchant: "shop",
+    maker: "shop",
+  };
   const INTERIOR_DIMS = { gathering: [16, 12], workshop: [16, 12], hall: [18, 12], dwelling: [14, 10] };
 
   function compile(brief, seed) {
@@ -416,7 +462,10 @@ PF.world = (() => {
     }));
     const intersects = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
     const featureAnchors = [
-      { x: 4, y: 3 }, { x: v.w - 12, y: 3 }, { x: v.w - 12, y: v.h - 8 }, { x: 4, y: v.h - 8 },
+      { x: 4, y: 3 },
+      { x: v.w - 12, y: 3 },
+      { x: v.w - 12, y: v.h - 8 },
+      { x: 4, y: v.h - 8 },
     ];
     const FEATURE_RECT = { w: 9, h: 6 };
     for (const feature of brief.features) {
@@ -429,8 +478,12 @@ PF.world = (() => {
       claimed.push({ x: anchor.x, y: anchor.y, ...FEATURE_RECT });
     }
     const doorRects = buildings.map((b) => ({ x: b.door.doorX, y: b.door.doorY }));
-    scatterTrees(v, rnd, { woods: 26, fields: 8, rocky: 10, water: 12, barren: 5 }[brief.surround] ?? 12,
-      doorRects.concat(doorRects.map((d) => ({ x: d.x, y: d.y + 1 }))));
+    scatterTrees(
+      v,
+      rnd,
+      { woods: 26, fields: 8, rocky: 10, water: 12, barren: 5 }[brief.surround] ?? 12,
+      doorRects.concat(doorRects.map((d) => ({ x: d.x, y: d.y + 1 }))),
+    );
     zones.z1 = v;
 
     // ── Interior zones ──
@@ -477,8 +530,22 @@ PF.world = (() => {
       zones[id] = zone;
       const facade = buildings.find((b) => b.boundPlace === place);
       if (facade) {
-        v.portals.push({ x: facade.door.doorX, y: facade.door.doorY, toZone: id, toX: zone.spawn.x, toY: zone.spawn.y, label: `Enter ${place.name}` });
-        zone.portals.push({ x: doorX, y: h - 1, toZone: "z1", toX: facade.door.doorX, toY: facade.door.doorY + 1, label: "Step outside" });
+        v.portals.push({
+          x: facade.door.doorX,
+          y: facade.door.doorY,
+          toZone: id,
+          toX: zone.spawn.x,
+          toY: zone.spawn.y,
+          label: `Enter ${place.name}`,
+        });
+        zone.portals.push({
+          x: doorX,
+          y: h - 1,
+          toZone: "z1",
+          toX: facade.door.doorX,
+          toY: facade.door.doorY + 1,
+          label: "Step outside",
+        });
       }
     }
 
@@ -504,15 +571,22 @@ PF.world = (() => {
       let anchorX = 26;
       for (const feature of place.features ?? []) {
         if (feature.tag === "water-crossing") continue;
-        PLACERS[feature.tag]?.(zone, anchorX, 8 + ((anchorX / 3) | 0) % 4);
+        PLACERS[feature.tag]?.(zone, anchorX, 8 + (((anchorX / 3) | 0) % 4));
         anchorX = Math.max(6, (anchorX + 9) % (zone.w - 10));
       }
       // Reserve BOTH sides' arrival tiles and spawns — the west-hung wilds'
       // arrival used to land inside scattered trunks on some seeds.
       scatterTrees(zone, rnd, tags.has("dense-growth") ? 70 : 45, [
-        { x: 1, y: wMidY }, { x: 1, y: wMidY + 1 }, { x: 2, y: wMidY }, { x: 3, y: wMidY },
-        { x: 20, y: wMidY }, { x: 21, y: wMidY + 1 },
-        { x: zone.w - 2, y: wMidY }, { x: zone.w - 2, y: wMidY + 1 }, { x: zone.w - 3, y: wMidY }, { x: zone.w - 4, y: wMidY },
+        { x: 1, y: wMidY },
+        { x: 1, y: wMidY + 1 },
+        { x: 2, y: wMidY },
+        { x: 3, y: wMidY },
+        { x: 20, y: wMidY },
+        { x: 21, y: wMidY + 1 },
+        { x: zone.w - 2, y: wMidY },
+        { x: zone.w - 2, y: wMidY + 1 },
+        { x: zone.w - 3, y: wMidY },
+        { x: zone.w - 4, y: wMidY },
       ]);
       zone.spawn = { x: 3, y: wMidY };
       // Two-tile edge portals: east edge of the settlement for the first wilds,
@@ -525,8 +599,22 @@ PF.world = (() => {
         put(v, vx, midY - 1 + dy, "overhead", null);
         put(zone, east ? 0 : zone.w - 1, wMidY + dy, "object", null, false);
         put(zone, east ? 0 : zone.w - 1, wMidY + dy, "overhead", null);
-        v.portals.push({ x: vx, y: midY - 1 + dy, toZone: id, toX: east ? 2 : zone.w - 3, toY: wMidY + dy, label: `Into ${place.name}` });
-        zone.portals.push({ x: east ? 0 : zone.w - 1, y: wMidY + dy, toZone: "z1", toX: vroadX, toY: midY - 1 + dy, label: `Back to ${brief.name}` });
+        v.portals.push({
+          x: vx,
+          y: midY - 1 + dy,
+          toZone: id,
+          toX: east ? 2 : zone.w - 3,
+          toY: wMidY + dy,
+          label: `Into ${place.name}`,
+        });
+        zone.portals.push({
+          x: east ? 0 : zone.w - 1,
+          y: wMidY + dy,
+          toZone: "z1",
+          toX: vroadX,
+          toY: midY - 1 + dy,
+          label: `Back to ${brief.name}`,
+        });
       }
       if (!east) zone.spawn = { x: zone.w - 4, y: wMidY };
       zone.flavor = place.flavor;
@@ -544,7 +632,12 @@ PF.world = (() => {
       const owned = buildings.find((b) => b.owner === member || (b.households ?? []).includes(member.household));
       let wander;
       if (zone === v && owned) {
-        wander = { x0: Math.max(2, owned.door.doorX - 4), y0: Math.max(2, owned.door.doorY), x1: Math.min(v.w - 3, owned.door.doorX + 4), y1: Math.min(v.h - 3, owned.door.doorY + 5) };
+        wander = {
+          x0: Math.max(2, owned.door.doorX - 4),
+          y0: Math.max(2, owned.door.doorY),
+          x1: Math.min(v.w - 3, owned.door.doorX + 4),
+          y1: Math.min(v.h - 3, owned.door.doorY + 5),
+        };
       } else if (zone === v) {
         wander = { x0: midX - 6, y0: midY - 5, x1: midX + 6, y1: midY + 5 };
       } else {

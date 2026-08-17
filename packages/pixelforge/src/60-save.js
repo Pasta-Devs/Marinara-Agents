@@ -48,9 +48,16 @@ PF.save = {
    *  own `experienceConfig.seed` lands two levels deep. Read every plausible
    *  depth so a future un-nesting doesn't strand old games. */
   _configSeed(meta) {
-    const setup = meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
-    const outer = setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null ? setup.experienceConfig : null;
-    const inner = outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null ? outer.experienceConfig : null;
+    const setup =
+      meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
+    const outer =
+      setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null
+        ? setup.experienceConfig
+        : null;
+    const inner =
+      outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null
+        ? outer.experienceConfig
+        : null;
     for (const candidate of [inner?.seed, outer?.seed]) {
       if (typeof candidate === "number") return candidate >>> 0;
     }
@@ -69,12 +76,20 @@ PF.save = {
    *  remains readable for chats sealed before the key moved. Absent on
    *  pre-0.4.0 games → legacy layout. */
   _configBrief(meta) {
-    const top = meta && typeof meta.pixelforgeBrief === "object" && meta.pixelforgeBrief !== null ? meta.pixelforgeBrief : null;
+    const top =
+      meta && typeof meta.pixelforgeBrief === "object" && meta.pixelforgeBrief !== null ? meta.pixelforgeBrief : null;
     if (top && Array.isArray(top.cast)) return top;
     if (top) return null; // a {skipped:true} marker: generation declined, stay legacy
-    const setup = meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
-    const outer = setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null ? setup.experienceConfig : null;
-    const inner = outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null ? outer.experienceConfig : null;
+    const setup =
+      meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
+    const outer =
+      setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null
+        ? setup.experienceConfig
+        : null;
+    const inner =
+      outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null
+        ? outer.experienceConfig
+        : null;
     for (const candidate of [inner?.brief, outer?.brief]) {
       if (candidate && typeof candidate === "object" && Array.isArray(candidate.cast)) return candidate;
     }
@@ -83,9 +98,16 @@ PF.save = {
 
   /** The wizard's opt-in for surface-side world generation (0.4.0 chats). */
   _configGenerate(meta) {
-    const setup = meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
-    const outer = setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null ? setup.experienceConfig : null;
-    const inner = outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null ? outer.experienceConfig : null;
+    const setup =
+      meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
+    const outer =
+      setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null
+        ? setup.experienceConfig
+        : null;
+    const inner =
+      outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null
+        ? outer.experienceConfig
+        : null;
     return inner?.generate === true || outer?.generate === true;
   },
 
@@ -98,7 +120,8 @@ PF.save = {
   async maybeGenerateBrief(core) {
     if (!core.chatId || this._generating) return;
     const chatId = core.chatId;
-    const meta = core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
+    const meta =
+      core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
     if (meta.pixelforgeBrief !== undefined) return;
     if (this._configBrief(meta)) return;
     if (!this._configGenerate(meta)) return;
@@ -152,9 +175,16 @@ PF.save = {
 
   /** The wizard's theme, from the same double-nested config home as the seed. */
   _configTheme(meta) {
-    const setup = meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
-    const outer = setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null ? setup.experienceConfig : null;
-    const inner = outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null ? outer.experienceConfig : null;
+    const setup =
+      meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
+    const outer =
+      setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null
+        ? setup.experienceConfig
+        : null;
+    const inner =
+      outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null
+        ? outer.experienceConfig
+        : null;
     for (const candidate of [inner?.theme, outer?.theme]) {
       if (typeof candidate === "string" && candidate) return candidate;
     }
@@ -327,7 +357,8 @@ PF.save = {
   },
 
   _rebuild(core, saved) {
-    const meta = core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
+    const meta =
+      core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
     core.sim = this.simFromSaved(saved, meta, core.chatId);
     this._lastSerialized = JSON.stringify(this.snapshot(core));
     core.render?.clearZones();
