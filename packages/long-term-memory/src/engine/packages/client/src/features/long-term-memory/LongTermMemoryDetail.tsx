@@ -823,7 +823,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                     review: pendingDrafts.data?.count,
                   }}
                 />
-                {(health !== "healthy" || embeddingsNeedAttention) && !needsHealthAttention ? (
+                {health !== "healthy" && !needsHealthAttention ? (
                   <div
                     aria-busy={status.isFetching}
                     data-ltm-surface="vault-health-pill"
