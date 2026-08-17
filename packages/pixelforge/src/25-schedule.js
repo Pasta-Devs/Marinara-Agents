@@ -1,0 +1,75 @@
+// ── NPC daypart schedules ────────────────────────────────────────────────────
+// Who is where, when. The compiler (20-world) bakes a `_sched` onto every NPC
+// holding pre-computed location HANDLES — geometry can only be built while the
+// buildings/stalls/zones are still in scope. This module owns the POLICY: a
+// small table of kind×standing -> daypart -> handle name, resolved at runtime
+// by the Sim as the clock crosses a daypart boundary.
+//
+// Deliberately sparse. A combo with nothing interesting to do names only
+// "post", so it behaves exactly as it did before schedules existed — standing
+// at its anchor around the clock. Any handle a template names that an NPC does
+// not have (no dwelling, no inn) falls back to `post`, so a template can never
+// strand an NPC nowhere.
+//
+// Schedules add ZERO save fields: they are a pure function of the clock, which
+// is already saved, so a restored chat re-resolves to the right daypart and a
+// timeline rewind rewinds the town with it.
+PF.schedule = (() => {
+  // Handle names: post = the working/day anchor, home = the sleep node,
+  // public = the settlement's plaza. See 20-world's cast loop for the geometry.
+  const TABLE = {
+    // The innkeeper never leaves the inn — it is the fixed point the evening
+    // crowd converges on, and it means the lit building is never empty.
+    "host:resident": { dawn: "post", day: "post", dusk: "post", night: "post" },
+    // The watch keeps the night, so the settlement never looks abandoned.
+    "guard:resident": { dawn: "home", day: "post", dusk: "post", night: "post" },
+    // Trades work their building through the day and sleep at their dwelling.
+    "leader:resident": { dawn: "home", day: "post", dusk: "post", night: "home" },
+    "grower:resident": { dawn: "home", day: "post", dusk: "post", night: "home" },
+    "maker:resident": { dawn: "home", day: "post", dusk: "post", night: "home" },
+    "merchant:resident": { dawn: "home", day: "post", dusk: "post", night: "home" },
+    // A travelling trader sleeps at the inn and tends the stall by day.
+    "merchant:transient": { dawn: "home", day: "post", dusk: "post", night: "home" },
+    // Everyone else with a roof: at the door at dawn, the square by day (the
+    // plaza should feel busiest in daylight and empty after dark), home at night.
+    "*:resident": { dawn: "home", day: "public", dusk: "home", night: "home" },
+    // Loiterers hold their public spot all day and take a bed at night.
+    "*:transient": { dawn: "post", day: "post", dusk: "post", night: "home" },
+    // Fringe NPCs stay out at the margins — meeting one means going to them.
+    "*:fringe": { dawn: "post", day: "post", dusk: "post", night: "post" },
+    // No bed to go to: the square, day and night.
+    "*:destitute": { dawn: "post", day: "post", dusk: "post", night: "post" },
+  };
+  const DEFAULT = { dawn: "post", day: "post", dusk: "post", night: "post" };
+
+  /** The handle an NPC should occupy at this daypart, or null when unscheduled. */
+  function resolve(sched, daypart) {
+    if (!sched) return null;
+    const template = TABLE[`${sched.kind}:${sched.standing}`] ?? TABLE[`*:${sched.standing}`] ?? DEFAULT;
+    return sched[template[daypart] ?? "post"] ?? sched.post ?? null;
+  }
+
+  /** Box center, nudged to the nearest open tile inside the box — the runtime
+   *  twin of the compiler's walkableSpawn, so a relocation can never drop an
+   *  NPC inside a wall or a tree. Deterministic: consumes no randomness. */
+  function walkableIn(zone, box) {
+    const cx = ((box.x0 + box.x1) / 2) | 0;
+    const cy = ((box.y0 + box.y1) / 2) | 0;
+    const open = (x, y) => x >= 0 && x < zone.w && y >= 0 && y < zone.h && !zone.solid[y * zone.w + x];
+    if (open(cx, cy)) return { x: cx, y: cy };
+    const maxR = Math.max(box.x1 - box.x0, box.y1 - box.y0);
+    for (let r = 1; r <= maxR; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          const x = cx + dx;
+          const y = cy + dy;
+          if (x >= box.x0 && x <= box.x1 && y >= box.y0 && y <= box.y1 && open(x, y)) return { x, y };
+        }
+      }
+    }
+    return { x: zone.spawn.x, y: zone.spawn.y };
+  }
+
+  return { TABLE, resolve, walkableIn };
+})();

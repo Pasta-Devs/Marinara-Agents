@@ -22,6 +22,10 @@ PF.Sim = class {
     this._npcTimers = new Map();
     this._rnd = PF.rng((world.seed ^ 0x9e3779b9) >>> 0);
     this.dirty = false; // save-worthy change happened
+    this._daypart = null;
+    // Place everyone for the starting clock. A restore overwrites clockMin
+    // AFTER construction and calls this again (see 60-save simFromSaved).
+    this.resolveSchedules();
   }
 
   zone() {
@@ -99,22 +103,101 @@ PF.Sim = class {
         }
       }
     }
-    // Clock + NPC wander run in walk AND dialogue (life goes on, time passes
-    // during conversations), never in combat/replay. Package-local clock only —
+    // NPCs keep wandering in walk AND dialogue (the world stays alive while you
+    // read), but the CLOCK only advances while walking: a conversation should
+    // never burn the afternoon, and a daypart boundary crossing mid-dialogue
+    // would relocate the very NPC you are talking to. Package-local clock only —
     // never the host time endpoints (issue #5076).
     if (this.mode === "walk" || this.mode === "dialogue") {
-      this._clockAcc += dt;
-      while (this._clockAcc >= PF.CLOCK_SECONDS_PER_GAME_MINUTE) {
-        this._clockAcc -= PF.CLOCK_SECONDS_PER_GAME_MINUTE;
-        this.clockMin++;
-        if (this.clockMin >= 24 * 60) {
-          this.clockMin = 0;
-          this.day++;
+      if (this.mode === "walk") {
+        let advanced = false;
+        this._clockAcc += dt;
+        while (this._clockAcc >= PF.CLOCK_SECONDS_PER_GAME_MINUTE) {
+          this._clockAcc -= PF.CLOCK_SECONDS_PER_GAME_MINUTE;
+          this.clockMin++;
+          advanced = true;
+          if (this.clockMin >= 24 * 60) {
+            this.clockMin = 0;
+            this.day++;
+          }
         }
+        // A fixed 1/60s step advances at most one game minute per ~300 frames,
+        // so a boundary can never be skipped between checks.
+        if (advanced && this.daypart() !== this._daypart) this.resolveSchedules();
       }
       this.stepNpcs(dt, z);
     }
     return { zoneChanged: false };
+  }
+
+  /** The four dayparts, aligned to the same thresholds darkness() tints by, so
+   *  NPCs move exactly as the light changes. */
+  daypart(min = this.clockMin) {
+    const h = min / 60;
+    if (h >= 7 && h < 18) return "day";
+    if (h >= 18 && h < 21) return "dusk";
+    if (h >= 5 && h < 7) return "dawn";
+    return "night";
+  }
+
+  /** Jump the clock to the next occurrence of a daypart's start (the "wait
+   *  until dusk" rest action). A JUMP, not an advance: NPCs re-place in one
+   *  shot. Walk mode only, so it can never collide with the dialogue freeze. */
+  waitUntil(target) {
+    const starts = { dawn: 5 * 60, day: 7 * 60, dusk: 18 * 60, night: 21 * 60 };
+    const at = starts[target];
+    if (at === undefined || this.mode !== "walk") return false;
+    if (at <= this.clockMin) this.day++;
+    this.clockMin = at;
+    this._clockAcc = 0;
+    this.resolveSchedules();
+    return true;
+  }
+
+  /** Re-place every scheduled NPC for the current daypart. Idempotent, O(cast),
+   *  and fires only on a boundary crossing (~4x/day) plus once per rebuild. */
+  resolveSchedules() {
+    this._daypart = this.daypart();
+    // Flatten first: splicing between zone arrays while iterating them would
+    // skip or double-process an NPC.
+    const all = [];
+    for (const zoneId in this.world.zones) {
+      for (const npc of this.world.zones[zoneId].npcs) all.push([zoneId, npc]);
+    }
+    for (const [fromId, npc] of all) {
+      if (!npc._sched || npc._hold) continue; // _hold reserves a GM override seam
+      const handle = PF.schedule.resolve(npc._sched, this._daypart);
+      if (!handle) continue;
+      const target = this.world.zones[handle.zoneId];
+      if (!target) continue;
+      const box = handle.wander;
+      if (handle.zoneId === fromId) {
+        // In-zone: swap the box, and only snap when the NPC is outside it —
+        // overlapping day/night boxes should not pop.
+        const inside = npc.x >= box.x0 && npc.x <= box.x1 && npc.y >= box.y0 && npc.y <= box.y1;
+        npc.wander = box;
+        if (!inside) {
+          const at = PF.schedule.walkableIn(target, box);
+          npc.x = at.x;
+          npc.y = at.y;
+        }
+      } else {
+        // Cross-zone: the renderer and talk-detection only walk the CURRENT
+        // zone's array, so a spliced NPC simply leaves one zone and appears in
+        // the other — no visibility flag needed.
+        const from = this.world.zones[fromId];
+        const index = from.npcs.indexOf(npc);
+        if (index >= 0) from.npcs.splice(index, 1);
+        target.npcs.push(npc);
+        npc.wander = box;
+        const at = PF.schedule.walkableIn(target, box);
+        npc.x = at.x;
+        npc.y = at.y;
+      }
+      // stepNpcs caches float fx/fy per id; a stale timer would drag the token
+      // back toward the old box. Dropping it re-seeds at the new position.
+      this._npcTimers.delete(npc.id);
+    }
   }
 
   stepNpcs(dt, z) {
@@ -186,7 +269,9 @@ PF.Sim = class {
   header() {
     const z = this.zone();
     const near = this.nearNpc ? `; near: ${this.nearNpc.name} (${this.nearNpc.role})` : "";
-    return `[World: ${z.name}; ${this.clockLabel()}${near}]`;
+    // The daypart word is one token and keeps the GM's light and "who is about"
+    // narration consistent with what we render and where NPCs actually are.
+    return `[World: ${z.name}; ${this.clockLabel()} (${this.daypart()})${near}]`;
   }
 
   /** The metered turn prefix (docs/brief-schema.md §7): name+role ride the

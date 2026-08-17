@@ -1,5 +1,5 @@
-// Pixelforge 0.6.3 — Marinara Engine game-surface Experience (single-file client bundle)
-// Built from packages/pixelforge/src (13 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
+// Pixelforge 0.7.0 — Marinara Engine game-surface Experience (single-file client bundle)
+// Built from packages/pixelforge/src (14 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
 // ===== 00-prelude.js =====
@@ -11,7 +11,10 @@ const PF = {
   VW: 480, // internal viewport width  (integer-scaled up to the container)
   VH: 270, // internal viewport height
   WALK_SPEED: 70, // px/s
-  CLOCK_SECONDS_PER_GAME_MINUTE: 1.2, // package-local clock (never /game/time/advance — issue #5076)
+  // Package-local clock (never /game/time/advance — issue #5076). 5s per game
+  // minute = 2 real hours of WALKING per in-game day; the clock also freezes
+  // during dialogue, so a played day stretches well past that. Tune here.
+  CLOCK_SECONDS_PER_GAME_MINUTE: 5,
 };
 
 /** Deterministic 32-bit string hash (FNV-1a). */
@@ -2321,15 +2324,27 @@ PF.world = (() => {
       }
       return { x: zone.spawn.x, y: zone.spawn.y };
     };
+    // A door apron box: the strip an NPC mills around in front of its building.
+    const doorBox = (door, reach) => ({
+      x0: Math.max(2, door.doorX - reach),
+      y0: Math.max(2, door.doorY),
+      x1: Math.min(v.w - 3, door.doorX + reach),
+      y1: Math.min(v.h - 3, door.doorY + (reach ? 5 : 1)),
+    });
     brief.cast.forEach((member, index) => {
       const npcId = `n${index + 1}`;
       const standing = member.standing ?? "resident";
       let zone = zones[zoneIdByName.get(member.home) ?? "z1"] ?? v;
       let wander;
+      // The sleep/off-duty node, when it differs from the working one (a shop
+      // owner's dwelling, a transient's inn bed). Left null when an NPC simply
+      // stays put — 30-sim's schedule resolver falls back to `post`.
+      let home = null;
       if (standing === "resident") {
         // Wander near the owner's building when they have one, else around the
         // zone's spawn; interiors wander their walkable middle.
         const owned = buildings.find((b) => b.owner === member || (b.households ?? []).includes(member.household));
+        const dwelling = buildings.find((b) => (b.households ?? []).includes(member.household));
         if (zone === v && owned) {
           wander = {
             x0: Math.max(2, owned.door.doorX - 4),
@@ -2337,6 +2352,11 @@ PF.world = (() => {
             x1: Math.min(v.w - 3, owned.door.doorX + 4),
             y1: Math.min(v.h - 3, owned.door.doorY + 5),
           };
+          // A special-building owner sleeps at their dwelling, not the workshop.
+          // Dwellings have no interiors, so "turned in for the night" reads as a
+          // one-tile spot at their own door rather than milling on the apron.
+          if (dwelling && dwelling !== owned) home = { zoneId: v.id, wander: doorBox(dwelling.door, 0) };
+          else home = { zoneId: v.id, wander: doorBox(owned.door, 0) };
         } else if (zone === v) {
           wander = plazaBox();
         } else {
@@ -2365,6 +2385,10 @@ PF.world = (() => {
         zone = v; // destitute: the town's public center
         wander = plazaBox();
       }
+      // Transients bed down at the inn when the settlement has one.
+      if (standing === "transient" && gatheringZoneId && zones[gatheringZoneId]) {
+        home = { zoneId: gatheringZoneId, wander: fullZoneBox(zones[gatheringZoneId]) };
+      }
       const spawnAt = walkableSpawn(zone, wander);
       zone.npcs.push({
         id: npcId,
@@ -2375,6 +2399,17 @@ PF.world = (() => {
         x: spawnAt.x,
         y: spawnAt.y,
         wander,
+        // Daypart schedule handles, resolved at runtime by 30-sim. Runtime-only
+        // (like facing/stepPhase): never serialized, re-baked on every compile,
+        // so schedules add ZERO save fields. `post` is the working/day anchor
+        // computed above; `home` is the sleep node when it differs.
+        _sched: {
+          kind: member.kind,
+          standing,
+          post: { zoneId: zone.id, wander },
+          home,
+          public: { zoneId: v.id, wander: plazaBox() },
+        },
       });
     });
 
@@ -2394,6 +2429,83 @@ PF.world = (() => {
   }
 
   return { build, idx };
+})();
+
+// ===== 25-schedule.js =====
+// ── NPC daypart schedules ────────────────────────────────────────────────────
+// Who is where, when. The compiler (20-world) bakes a `_sched` onto every NPC
+// holding pre-computed location HANDLES — geometry can only be built while the
+// buildings/stalls/zones are still in scope. This module owns the POLICY: a
+// small table of kind×standing -> daypart -> handle name, resolved at runtime
+// by the Sim as the clock crosses a daypart boundary.
+//
+// Deliberately sparse. A combo with nothing interesting to do names only
+// "post", so it behaves exactly as it did before schedules existed — standing
+// at its anchor around the clock. Any handle a template names that an NPC does
+// not have (no dwelling, no inn) falls back to `post`, so a template can never
+// strand an NPC nowhere.
+//
+// Schedules add ZERO save fields: they are a pure function of the clock, which
+// is already saved, so a restored chat re-resolves to the right daypart and a
+// timeline rewind rewinds the town with it.
+PF.schedule = (() => {
+  // Handle names: post = the working/day anchor, home = the sleep node,
+  // public = the settlement's plaza. See 20-world's cast loop for the geometry.
+  const TABLE = {
+    // The innkeeper never leaves the inn — it is the fixed point the evening
+    // crowd converges on, and it means the lit building is never empty.
+    "host:resident": { dawn: "post", day: "post", dusk: "post", night: "post" },
+    // The watch keeps the night, so the settlement never looks abandoned.
+    "guard:resident": { dawn: "home", day: "post", dusk: "post", night: "post" },
+    // Trades work their building through the day and sleep at their dwelling.
+    "leader:resident": { dawn: "home", day: "post", dusk: "post", night: "home" },
+    "grower:resident": { dawn: "home", day: "post", dusk: "post", night: "home" },
+    "maker:resident": { dawn: "home", day: "post", dusk: "post", night: "home" },
+    "merchant:resident": { dawn: "home", day: "post", dusk: "post", night: "home" },
+    // A travelling trader sleeps at the inn and tends the stall by day.
+    "merchant:transient": { dawn: "home", day: "post", dusk: "post", night: "home" },
+    // Everyone else with a roof: at the door at dawn, the square by day (the
+    // plaza should feel busiest in daylight and empty after dark), home at night.
+    "*:resident": { dawn: "home", day: "public", dusk: "home", night: "home" },
+    // Loiterers hold their public spot all day and take a bed at night.
+    "*:transient": { dawn: "post", day: "post", dusk: "post", night: "home" },
+    // Fringe NPCs stay out at the margins — meeting one means going to them.
+    "*:fringe": { dawn: "post", day: "post", dusk: "post", night: "post" },
+    // No bed to go to: the square, day and night.
+    "*:destitute": { dawn: "post", day: "post", dusk: "post", night: "post" },
+  };
+  const DEFAULT = { dawn: "post", day: "post", dusk: "post", night: "post" };
+
+  /** The handle an NPC should occupy at this daypart, or null when unscheduled. */
+  function resolve(sched, daypart) {
+    if (!sched) return null;
+    const template = TABLE[`${sched.kind}:${sched.standing}`] ?? TABLE[`*:${sched.standing}`] ?? DEFAULT;
+    return sched[template[daypart] ?? "post"] ?? sched.post ?? null;
+  }
+
+  /** Box center, nudged to the nearest open tile inside the box — the runtime
+   *  twin of the compiler's walkableSpawn, so a relocation can never drop an
+   *  NPC inside a wall or a tree. Deterministic: consumes no randomness. */
+  function walkableIn(zone, box) {
+    const cx = ((box.x0 + box.x1) / 2) | 0;
+    const cy = ((box.y0 + box.y1) / 2) | 0;
+    const open = (x, y) => x >= 0 && x < zone.w && y >= 0 && y < zone.h && !zone.solid[y * zone.w + x];
+    if (open(cx, cy)) return { x: cx, y: cy };
+    const maxR = Math.max(box.x1 - box.x0, box.y1 - box.y0);
+    for (let r = 1; r <= maxR; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          const x = cx + dx;
+          const y = cy + dy;
+          if (x >= box.x0 && x <= box.x1 && y >= box.y0 && y <= box.y1 && open(x, y)) return { x, y };
+        }
+      }
+    }
+    return { x: zone.spawn.x, y: zone.spawn.y };
+  }
+
+  return { TABLE, resolve, walkableIn };
 })();
 
 // ===== 30-sim.js =====
@@ -2421,6 +2533,10 @@ PF.Sim = class {
     this._npcTimers = new Map();
     this._rnd = PF.rng((world.seed ^ 0x9e3779b9) >>> 0);
     this.dirty = false; // save-worthy change happened
+    this._daypart = null;
+    // Place everyone for the starting clock. A restore overwrites clockMin
+    // AFTER construction and calls this again (see 60-save simFromSaved).
+    this.resolveSchedules();
   }
 
   zone() {
@@ -2498,22 +2614,101 @@ PF.Sim = class {
         }
       }
     }
-    // Clock + NPC wander run in walk AND dialogue (life goes on, time passes
-    // during conversations), never in combat/replay. Package-local clock only —
+    // NPCs keep wandering in walk AND dialogue (the world stays alive while you
+    // read), but the CLOCK only advances while walking: a conversation should
+    // never burn the afternoon, and a daypart boundary crossing mid-dialogue
+    // would relocate the very NPC you are talking to. Package-local clock only —
     // never the host time endpoints (issue #5076).
     if (this.mode === "walk" || this.mode === "dialogue") {
-      this._clockAcc += dt;
-      while (this._clockAcc >= PF.CLOCK_SECONDS_PER_GAME_MINUTE) {
-        this._clockAcc -= PF.CLOCK_SECONDS_PER_GAME_MINUTE;
-        this.clockMin++;
-        if (this.clockMin >= 24 * 60) {
-          this.clockMin = 0;
-          this.day++;
+      if (this.mode === "walk") {
+        let advanced = false;
+        this._clockAcc += dt;
+        while (this._clockAcc >= PF.CLOCK_SECONDS_PER_GAME_MINUTE) {
+          this._clockAcc -= PF.CLOCK_SECONDS_PER_GAME_MINUTE;
+          this.clockMin++;
+          advanced = true;
+          if (this.clockMin >= 24 * 60) {
+            this.clockMin = 0;
+            this.day++;
+          }
         }
+        // A fixed 1/60s step advances at most one game minute per ~300 frames,
+        // so a boundary can never be skipped between checks.
+        if (advanced && this.daypart() !== this._daypart) this.resolveSchedules();
       }
       this.stepNpcs(dt, z);
     }
     return { zoneChanged: false };
+  }
+
+  /** The four dayparts, aligned to the same thresholds darkness() tints by, so
+   *  NPCs move exactly as the light changes. */
+  daypart(min = this.clockMin) {
+    const h = min / 60;
+    if (h >= 7 && h < 18) return "day";
+    if (h >= 18 && h < 21) return "dusk";
+    if (h >= 5 && h < 7) return "dawn";
+    return "night";
+  }
+
+  /** Jump the clock to the next occurrence of a daypart's start (the "wait
+   *  until dusk" rest action). A JUMP, not an advance: NPCs re-place in one
+   *  shot. Walk mode only, so it can never collide with the dialogue freeze. */
+  waitUntil(target) {
+    const starts = { dawn: 5 * 60, day: 7 * 60, dusk: 18 * 60, night: 21 * 60 };
+    const at = starts[target];
+    if (at === undefined || this.mode !== "walk") return false;
+    if (at <= this.clockMin) this.day++;
+    this.clockMin = at;
+    this._clockAcc = 0;
+    this.resolveSchedules();
+    return true;
+  }
+
+  /** Re-place every scheduled NPC for the current daypart. Idempotent, O(cast),
+   *  and fires only on a boundary crossing (~4x/day) plus once per rebuild. */
+  resolveSchedules() {
+    this._daypart = this.daypart();
+    // Flatten first: splicing between zone arrays while iterating them would
+    // skip or double-process an NPC.
+    const all = [];
+    for (const zoneId in this.world.zones) {
+      for (const npc of this.world.zones[zoneId].npcs) all.push([zoneId, npc]);
+    }
+    for (const [fromId, npc] of all) {
+      if (!npc._sched || npc._hold) continue; // _hold reserves a GM override seam
+      const handle = PF.schedule.resolve(npc._sched, this._daypart);
+      if (!handle) continue;
+      const target = this.world.zones[handle.zoneId];
+      if (!target) continue;
+      const box = handle.wander;
+      if (handle.zoneId === fromId) {
+        // In-zone: swap the box, and only snap when the NPC is outside it —
+        // overlapping day/night boxes should not pop.
+        const inside = npc.x >= box.x0 && npc.x <= box.x1 && npc.y >= box.y0 && npc.y <= box.y1;
+        npc.wander = box;
+        if (!inside) {
+          const at = PF.schedule.walkableIn(target, box);
+          npc.x = at.x;
+          npc.y = at.y;
+        }
+      } else {
+        // Cross-zone: the renderer and talk-detection only walk the CURRENT
+        // zone's array, so a spliced NPC simply leaves one zone and appears in
+        // the other — no visibility flag needed.
+        const from = this.world.zones[fromId];
+        const index = from.npcs.indexOf(npc);
+        if (index >= 0) from.npcs.splice(index, 1);
+        target.npcs.push(npc);
+        npc.wander = box;
+        const at = PF.schedule.walkableIn(target, box);
+        npc.x = at.x;
+        npc.y = at.y;
+      }
+      // stepNpcs caches float fx/fy per id; a stale timer would drag the token
+      // back toward the old box. Dropping it re-seeds at the new position.
+      this._npcTimers.delete(npc.id);
+    }
   }
 
   stepNpcs(dt, z) {
@@ -2585,7 +2780,9 @@ PF.Sim = class {
   header() {
     const z = this.zone();
     const near = this.nearNpc ? `; near: ${this.nearNpc.name} (${this.nearNpc.role})` : "";
-    return `[World: ${z.name}; ${this.clockLabel()}${near}]`;
+    // The daypart word is one token and keeps the GM's light and "who is about"
+    // narration consistent with what we render and where NPCs actually are.
+    return `[World: ${z.name}; ${this.clockLabel()} (${this.daypart()})${near}]`;
   }
 
   /** The metered turn prefix (docs/brief-schema.md §7): name+role ride the
@@ -3453,6 +3650,11 @@ PF.save = {
       if (typeof saved.facing === "number") sim.facing = saved.facing & 3;
       if (typeof saved.clockMin === "number") sim.clockMin = PF.clamp(saved.clockMin | 0, 0, 24 * 60 - 1);
       if (typeof saved.day === "number") sim.day = Math.max(1, saved.day | 0);
+      // The world was built (and everyone placed at their compiled anchor) by
+      // the constructor above, which ran against the DEFAULT 08:00 clock. Now
+      // that the saved time is restored, re-place for the real daypart — else a
+      // chat reopened at midnight would show a town going about its morning.
+      sim.resolveSchedules();
       if (saved.intro && typeof saved.intro === "object") {
         sim.intro = {
           world: saved.intro.world === true,

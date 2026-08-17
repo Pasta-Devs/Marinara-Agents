@@ -220,6 +220,11 @@ PF.save = {
       if (typeof saved.facing === "number") sim.facing = saved.facing & 3;
       if (typeof saved.clockMin === "number") sim.clockMin = PF.clamp(saved.clockMin | 0, 0, 24 * 60 - 1);
       if (typeof saved.day === "number") sim.day = Math.max(1, saved.day | 0);
+      // The world was built (and everyone placed at their compiled anchor) by
+      // the constructor above, which ran against the DEFAULT 08:00 clock. Now
+      // that the saved time is restored, re-place for the real daypart — else a
+      // chat reopened at midnight would show a town going about its morning.
+      sim.resolveSchedules();
       if (saved.intro && typeof saved.intro === "object") {
         sim.intro = {
           world: saved.intro.world === true,

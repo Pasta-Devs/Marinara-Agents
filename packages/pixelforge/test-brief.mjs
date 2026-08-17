@@ -10,7 +10,17 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 // Mirror the real bundle: concatenate the modules into one scope (the prelude
 // declares `const PF` itself) and return PF. The DOM helpers stay unused.
-const source = ["00-prelude.js", "10-art.js", "15-assets.js", "18-brief.js", "20-world.js", "30-sim.js", "50-spatial.js", "55-maps-export.js"]
+const source = [
+  "00-prelude.js",
+  "10-art.js",
+  "15-assets.js",
+  "18-brief.js",
+  "20-world.js",
+  "25-schedule.js",
+  "30-sim.js",
+  "50-spatial.js",
+  "55-maps-export.js",
+]
   .map((file) => readFileSync(join(here, "src", file), "utf8"))
   .join("\n");
 const loadedPF = new Function(`"use strict";\n${source}\nreturn PF;`)();
@@ -632,6 +642,7 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     world: w, zoneId: "z1", nearNpc: null, dirty: false,
     zone() { return this.world.zones[this.zoneId]; },
     clockLabel: () => "Day 1 · 08:00",
+    daypart: () => "day",
   };
   // Borrow the real methods off the shipped Sim prototype.
   sim.header = loadedPF.Sim.prototype.header.bind(sim);
@@ -1485,6 +1496,169 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   loadedPF.api.postSpatialLocations = prevPostLocations;
   resetExportState();
   loadedPF.spatial.reset();
+}
+
+// 14. NPC daypart schedules. The compiler bakes location handles onto each NPC
+// and the Sim re-places them as the clock crosses a daypart boundary.
+{
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Dayhold",
+      places: [{ kind: "gathering", name: "The Lantern" }],
+      cast: [
+        { name: "Mira", role: "innkeep", kind: "host", tint: "amber", home: "The Lantern", household: 1 },
+        { name: "Tolm", role: "smith", kind: "maker", tint: "green", home: "Dayhold", household: 2 },
+        { name: "Gart", role: "watch", kind: "guard", tint: "red", home: "Dayhold", household: 3 },
+        { name: "Peb", role: "cooper", kind: "folk", tint: "blue", home: "Dayhold", household: 4 },
+        { name: "Wisp", role: "drifter", kind: "wanderer", tint: "rose", home: "Dayhold", household: 5, standing: "transient" },
+      ],
+    },
+    ctx,
+  );
+  const w = world.build(31, "cozy-village", sealed);
+  checkWorld(w, sealed, "schedules");
+  const innId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Lantern")[0];
+  const findNpc = (name) => {
+    for (const zoneId in w.zones) {
+      const npc = w.zones[zoneId].npcs.find((n) => n.name === name);
+      if (npc) return { zoneId, npc };
+    }
+    return null;
+  };
+
+  // Every NPC carries a schedule, and every handle points at a real zone.
+  for (const zoneId in w.zones) {
+    for (const npc of w.zones[zoneId].npcs) {
+      assert.ok(npc._sched, `${npc.name} carries a schedule`);
+      assert.ok(npc._sched.post && w.zones[npc._sched.post.zoneId], `${npc.name} post handle resolves to a zone`);
+      if (npc._sched.home) assert.ok(w.zones[npc._sched.home.zoneId], `${npc.name} home handle resolves to a zone`);
+    }
+  }
+
+  const sim = new loadedPF.Sim(w);
+  const dayOf = (min) => {
+    sim.clockMin = min;
+    sim.resolveSchedules();
+  };
+
+  // Daypart thresholds line up with the darkness() bands.
+  assert.equal(sim.daypart(8 * 60), "day", "08:00 is day");
+  assert.equal(sim.daypart(19 * 60), "dusk", "19:00 is dusk");
+  assert.equal(sim.daypart(23 * 60), "night", "23:00 is night");
+  assert.equal(sim.daypart(6 * 60), "dawn", "06:00 is dawn");
+
+  // Midday: the smith works the shop; at night he is at his dwelling door.
+  dayOf(12 * 60);
+  const smithDay = JSON.stringify(findNpc("Tolm").npc.wander);
+  dayOf(23 * 60);
+  const smithNight = JSON.stringify(findNpc("Tolm").npc.wander);
+  assert.notEqual(smithDay, smithNight, "the smith's night box differs from the working one");
+
+  // The watch keeps the night: same box by day and after dark.
+  dayOf(12 * 60);
+  const guardDay = JSON.stringify(findNpc("Gart").npc.wander);
+  dayOf(23 * 60);
+  assert.equal(JSON.stringify(findNpc("Gart").npc.wander), guardDay, "the guard keeps the night watch at their post");
+
+  // The innkeeper never leaves the inn, day or night.
+  for (const min of [8 * 60, 23 * 60]) {
+    dayOf(min);
+    assert.equal(findNpc("Mira").zoneId, innId, "the innkeeper stays in the inn");
+  }
+
+  // Cross-zone relocation: the drifter loiters in the settlement by day and
+  // takes a bed at the inn at night — spliced between zone arrays, exactly once.
+  dayOf(12 * 60);
+  const drifterDay = findNpc("Wisp");
+  dayOf(23 * 60);
+  const drifterNight = findNpc("Wisp");
+  assert.equal(drifterNight.zoneId, innId, "the drifter sleeps at the inn");
+  assert.notEqual(drifterDay.zoneId, drifterNight.zoneId, "the drifter actually changed zone");
+  let copies = 0;
+  for (const zoneId in w.zones) copies += w.zones[zoneId].npcs.filter((n) => n.name === "Wisp").length;
+  assert.equal(copies, 1, "a relocated NPC exists in exactly one zone (no splice duplication)");
+
+  // Relocation never drops an NPC on a solid tile, at any daypart.
+  for (const min of [6 * 60, 12 * 60, 19 * 60, 23 * 60]) {
+    dayOf(min);
+    for (const zoneId in w.zones) {
+      const z = w.zones[zoneId];
+      for (const npc of z.npcs) {
+        const x = Math.round(npc.x);
+        const y = Math.round(npc.y);
+        assert.ok(x >= 0 && x < z.w && y >= 0 && y < z.h, `${npc.name} in bounds at ${min}`);
+        assert.equal(z.solid[z.w * y + x], 0, `${npc.name} stands on open ground at ${min} in ${zoneId}`);
+      }
+    }
+  }
+
+  // Resolution is deterministic and idempotent: same clock, same placement.
+  dayOf(19 * 60);
+  const dusk = JSON.stringify(Object.keys(w.zones).map((id) => w.zones[id].npcs.map((n) => `${n.name}@${n.x},${n.y}`)));
+  sim.resolveSchedules();
+  const duskAgain = JSON.stringify(
+    Object.keys(w.zones).map((id) => w.zones[id].npcs.map((n) => `${n.name}@${n.x},${n.y}`)),
+  );
+  assert.equal(dusk, duskAgain, "re-resolving the same daypart changes nothing");
+
+  // A GM-held NPC is not yanked home by a boundary crossing.
+  dayOf(12 * 60);
+  const held = findNpc("Peb").npc;
+  held._hold = true;
+  const heldBox = JSON.stringify(held.wander);
+  dayOf(23 * 60);
+  assert.equal(JSON.stringify(held.wander), heldBox, "an NPC on GM hold ignores the schedule");
+  delete held._hold;
+
+  // The header carries the daypart so the GM narrates the light we render.
+  dayOf(19 * 60);
+  assert.ok(sim.header().includes("(dusk)"), `the header names the daypart (${sim.header()})`);
+
+  // Schedules are runtime-only state: `_sched` hangs off the live NPC object,
+  // which the snapshot never walks (60-save stores a fixed scalar field list and
+  // no NPC data at all), so schedules add zero save fields. What this harness
+  // can prove is the property that makes that safe — placement is a pure
+  // function of the clock, so a rebuild at a restored time reproduces it.
+  dayOf(23 * 60);
+  const nightPlacement = JSON.stringify(
+    Object.keys(w.zones).map((id) => w.zones[id].npcs.map((n) => `${n.name}@${n.x},${n.y}`)),
+  );
+  const rebuilt = world.build(31, "cozy-village", sealed);
+  const rebuiltSim = new loadedPF.Sim(rebuilt);
+  rebuiltSim.clockMin = 23 * 60;
+  rebuiltSim.resolveSchedules();
+  assert.equal(
+    JSON.stringify(Object.keys(rebuilt.zones).map((id) => rebuilt.zones[id].npcs.map((n) => `${n.name}@${n.x},${n.y}`))),
+    nightPlacement,
+    "a rebuild at the same clock reproduces placement exactly (no save fields needed)",
+  );
+}
+
+// 14b. The clock advances while walking and FREEZES during dialogue, so a
+// conversation never burns the afternoon or relocates the NPC being talked to.
+{
+  const sealed = brief.defaults("cozy-village", 12345);
+  const sim = new loadedPF.Sim(world.build(12345, "cozy-village", sealed));
+  sim.clockMin = 12 * 60;
+  sim.mode = "walk";
+  const before = sim.clockMin;
+  for (let i = 0; i < 600; i++) sim.step(1 / 60, {});
+  assert.ok(sim.clockMin > before, `walking advances the clock (${before} -> ${sim.clockMin})`);
+
+  sim.mode = "dialogue";
+  const frozen = sim.clockMin;
+  for (let i = 0; i < 600; i++) sim.step(1 / 60, {});
+  assert.equal(sim.clockMin, frozen, "dialogue freezes the clock");
+
+  // wait-until jumps to the next daypart boundary and re-places everyone.
+  sim.mode = "walk";
+  sim.clockMin = 12 * 60;
+  assert.ok(sim.waitUntil("night"), "wait-until succeeds in walk mode");
+  assert.equal(sim.clockMin, 21 * 60, "wait-until lands on the daypart boundary");
+  assert.equal(sim.daypart(), "night", "and the daypart follows");
+  sim.mode = "dialogue";
+  assert.equal(sim.waitUntil("dawn"), false, "wait-until refuses mid-conversation");
 }
 
 console.log("brief validator + compiler: all cases passed");

@@ -736,15 +736,27 @@ PF.world = (() => {
       }
       return { x: zone.spawn.x, y: zone.spawn.y };
     };
+    // A door apron box: the strip an NPC mills around in front of its building.
+    const doorBox = (door, reach) => ({
+      x0: Math.max(2, door.doorX - reach),
+      y0: Math.max(2, door.doorY),
+      x1: Math.min(v.w - 3, door.doorX + reach),
+      y1: Math.min(v.h - 3, door.doorY + (reach ? 5 : 1)),
+    });
     brief.cast.forEach((member, index) => {
       const npcId = `n${index + 1}`;
       const standing = member.standing ?? "resident";
       let zone = zones[zoneIdByName.get(member.home) ?? "z1"] ?? v;
       let wander;
+      // The sleep/off-duty node, when it differs from the working one (a shop
+      // owner's dwelling, a transient's inn bed). Left null when an NPC simply
+      // stays put — 30-sim's schedule resolver falls back to `post`.
+      let home = null;
       if (standing === "resident") {
         // Wander near the owner's building when they have one, else around the
         // zone's spawn; interiors wander their walkable middle.
         const owned = buildings.find((b) => b.owner === member || (b.households ?? []).includes(member.household));
+        const dwelling = buildings.find((b) => (b.households ?? []).includes(member.household));
         if (zone === v && owned) {
           wander = {
             x0: Math.max(2, owned.door.doorX - 4),
@@ -752,6 +764,11 @@ PF.world = (() => {
             x1: Math.min(v.w - 3, owned.door.doorX + 4),
             y1: Math.min(v.h - 3, owned.door.doorY + 5),
           };
+          // A special-building owner sleeps at their dwelling, not the workshop.
+          // Dwellings have no interiors, so "turned in for the night" reads as a
+          // one-tile spot at their own door rather than milling on the apron.
+          if (dwelling && dwelling !== owned) home = { zoneId: v.id, wander: doorBox(dwelling.door, 0) };
+          else home = { zoneId: v.id, wander: doorBox(owned.door, 0) };
         } else if (zone === v) {
           wander = plazaBox();
         } else {
@@ -780,6 +797,10 @@ PF.world = (() => {
         zone = v; // destitute: the town's public center
         wander = plazaBox();
       }
+      // Transients bed down at the inn when the settlement has one.
+      if (standing === "transient" && gatheringZoneId && zones[gatheringZoneId]) {
+        home = { zoneId: gatheringZoneId, wander: fullZoneBox(zones[gatheringZoneId]) };
+      }
       const spawnAt = walkableSpawn(zone, wander);
       zone.npcs.push({
         id: npcId,
@@ -790,6 +811,17 @@ PF.world = (() => {
         x: spawnAt.x,
         y: spawnAt.y,
         wander,
+        // Daypart schedule handles, resolved at runtime by 30-sim. Runtime-only
+        // (like facing/stepPhase): never serialized, re-baked on every compile,
+        // so schedules add ZERO save fields. `post` is the working/day anchor
+        // computed above; `home` is the sleep node when it differs.
+        _sched: {
+          kind: member.kind,
+          standing,
+          post: { zoneId: zone.id, wander },
+          home,
+          public: { zoneId: v.id, wander: plazaBox() },
+        },
       });
     });
 
