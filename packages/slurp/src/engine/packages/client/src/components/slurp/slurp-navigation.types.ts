@@ -5,7 +5,6 @@ export type SlurpProfileConnection = "followers" | "following";
 export type SlurpNavigationState =
   | { mode: "creator"; view: "hub"; onboarding?: boolean }
   | { mode: "creator"; view: "search" }
-  | { mode: "creator"; view: "notifications" }
   | {
       mode: "creator";
       view: "profile";
@@ -24,7 +23,7 @@ export type SlurpNavigationState =
   | {
       mode: "creator-settings";
       tab?: "creator";
-      section?: "general" | "creators" | "participants" | "advanced";
+      section?: "general" | "creators" | "images" | "audience" | "advanced";
       returnTo?: SlurpNavigationState;
     };
 

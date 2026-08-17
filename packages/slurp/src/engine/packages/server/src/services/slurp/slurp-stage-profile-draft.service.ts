@@ -28,11 +28,7 @@ import {
   stageProfileContainsPublicIdentity,
 } from "./slurp-generation.service.js";
 import { resolveNoodlerSourceSnapshot } from "./slurp-source-resolve.js";
-import {
-  hintedNoodlerSourceBrief,
-  reviewedNoodlerPhysicalFacts,
-  reviewedNoodlerTemperamentThemes,
-} from "./slurp-prompt-safety.js";
+import { hintedNoodlerSourceBrief, reviewedNoodlerTemperamentThemes } from "./slurp-prompt-safety.js";
 import { normalizeNoodlerStageProfileDraft } from "./slurp-stage-profile-normalize.js";
 import { parseRecord } from "./slurp-public-support.js";
 import { createNoodlerSourceRevisionToken } from "./slurp-source-revision.js";
@@ -52,23 +48,14 @@ export function noodlerHintedSourceText(data: unknown): string {
     .join("\n");
 }
 
-/** Secret drafts keep visual continuity and broad temperament, but no public-life details. */
+/** Secret drafts keep broad temperament and interests, but no identifying physical or public-life details. */
 export function noodlerSecretSourceText(data: unknown): string {
   const source = parseRecord(data);
-  const extensions = parseRecord(source.extensions);
-  const appearance =
-    typeof source.appearance === "string"
-      ? source.appearance
-      : typeof extensions.appearance === "string"
-        ? extensions.appearance
-        : "";
   const themes = reviewedNoodlerTemperamentThemes(typeof source.personality === "string" ? source.personality : "");
-  const physicalFacts = reviewedNoodlerPhysicalFacts(appearance);
   return [
     themes.length > 0
       ? `Approved source themes: ${themes.join(", ")}.`
       : "General temperament and creative interests from the source profile.",
-    physicalFacts.length > 0 ? `Approved physical facts: ${physicalFacts.join(", ")}.` : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -91,10 +78,10 @@ export function noodlerSourceText(data: unknown): string {
 
 function disclosureRules(mode: NoodleIdentityDisclosure, publicIdentity: { displayName: string; handle: string }) {
   if (mode === "open")
-    return `This is the same public creator. Use exactly ${publicIdentity.displayName} as displayName and ${publicIdentity.handle} as handle. Keep the linked public bio unless the user gives a direct edit. Do not invent a stage identity.`;
+    return `This is the same public creator. Use exactly ${publicIdentity.displayName} as displayName and ${publicIdentity.handle} as handle. Write a concise social profile bio that summarizes the linked source. Preserve a direct bio edit from the current draft. Do not invent a stage identity.`;
   if (mode === "hinted")
     return "Create the same person behind a different stage name and handle, as an open secret. Preserve species, body, age range, unusual anatomy, scars, missing or unusual features, clothing preferences, voice, interests, and recurring visual traits. Preserve indirect clues that regular followers may recognize. Never use the exact public name or handle, and never copy canonical biography sentences.";
-  return "Create a separate creator identity with a different display name and handle. Preserve fixed physical facts needed for visual continuity, including species, body, age range, unusual anatomy, scars, missing or unusual features, and other non-identifying appearance details. Do not use or imply the public name, handle, biography, occupation, relationships, locations, audience, signature phrases, or distinctive public-life clues.";
+  return "Create a careful hidden identity with a different display name and handle. Preserve only broad temperament, interests, voice, and creative style. Do not reveal or preserve the face, exact body details, species markers, scars, unusual anatomy, clothing markers, public name, handle, biography, occupation, relationships, locations, audience, signature phrases, or distinctive public-life clues.";
 }
 
 export function buildNoodlerStageProfileDraftMessages(input: {
@@ -124,8 +111,8 @@ export function buildNoodlerStageProfileDraftMessages(input: {
     input.request.disclosureMode === "secret"
       ? [
           "# Confidential appearance and temperament brief",
-          "Preserve concrete physical facts for visual continuity. These facts are not identity clues: species, body, age range, unusual anatomy, scars, missing or unusual features, hair, clothing preferences, and other stable appearance details.",
-          "Use general temperament only. Do not infer or reproduce canonical biography, occupation, relationships, locations, audience, signature phrases, or public-life details.",
+          "Preserve only broad temperament, interests, voice, and creative style.",
+          "Do not reveal or infer face, exact body details, species markers, scars, unusual anatomy, clothing markers, canonical biography, occupation, relationships, locations, audience, signature phrases, or public-life details.",
           noodlerSecretSourceText(input.source?.data) || hintedNoodlerSourceBrief(input.sourceSnapshot),
         ].join("\n")
       : hintedBrief
@@ -308,7 +295,7 @@ export async function generateNoodlerStageProfileDraft(
       ? {
           displayName: publicAccount.displayName,
           handle: publicAccount.handle,
-          bio: input.request.currentDraft?.bio ?? publicAccount.bio,
+          bio: input.request.currentDraft?.bio ?? parsedDraft.bio,
         }
       : {}),
     ...(input.request.disclosureMode === "open" && sourceSnapshot ? { sourceSnapshot } : {}),

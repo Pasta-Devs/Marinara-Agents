@@ -6,7 +6,10 @@ const PF = {
   VW: 480, // internal viewport width  (integer-scaled up to the container)
   VH: 270, // internal viewport height
   WALK_SPEED: 70, // px/s
-  CLOCK_SECONDS_PER_GAME_MINUTE: 1.2, // package-local clock (never /game/time/advance — issue #5076)
+  // Package-local clock (never /game/time/advance — issue #5076). 5s per game
+  // minute = 2 real hours of WALKING per in-game day; the clock also freezes
+  // during dialogue, so a played day stretches well past that. Tune here.
+  CLOCK_SECONDS_PER_GAME_MINUTE: 5,
 };
 
 /** Deterministic 32-bit string hash (FNV-1a). */

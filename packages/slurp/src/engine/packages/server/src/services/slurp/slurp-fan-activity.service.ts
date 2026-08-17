@@ -293,6 +293,8 @@ export async function generateNoodlerFanActivityBatch(input: {
 }
 
 export async function resolveNoodlerFanConnection(db: DB, settings: Pick<SlurpSettings, "generationConnectionId">) {
-  if (!settings.generationConnectionId) return null;
-  return createConnectionsStorage(db).getWithKey(settings.generationConnectionId);
+  const connections = createConnectionsStorage(db);
+  return settings.generationConnectionId
+    ? connections.getWithKey(settings.generationConnectionId)
+    : connections.getDefaultForAgents();
 }
