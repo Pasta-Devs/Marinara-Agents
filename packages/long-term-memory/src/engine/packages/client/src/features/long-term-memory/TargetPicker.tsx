@@ -40,10 +40,34 @@ export function AvailabilityTabRail({
   selectedIds: ReadonlySet<string>;
   tablistLabel: string;
   sectionCopy: {
-    character: { label: string; allLabel: string; searchPlaceholder: string; emptyLabel: string; accessibleLabel: (count: number) => string };
-    persona: { label: string; allLabel: string; searchPlaceholder: string; emptyLabel: string; accessibleLabel: (count: number) => string };
-    chat: { label: string; allLabel: string; searchPlaceholder: string; emptyLabel: string; accessibleLabel: (count: number) => string };
-    branch: { label: string; allLabel: string; searchPlaceholder: string; emptyLabel: string; accessibleLabel: (count: number) => string };
+    character: {
+      label: string;
+      allLabel: string;
+      searchPlaceholder: string;
+      emptyLabel: string;
+      accessibleLabel: (count: number) => string;
+    };
+    persona: {
+      label: string;
+      allLabel: string;
+      searchPlaceholder: string;
+      emptyLabel: string;
+      accessibleLabel: (count: number) => string;
+    };
+    chat: {
+      label: string;
+      allLabel: string;
+      searchPlaceholder: string;
+      emptyLabel: string;
+      accessibleLabel: (count: number) => string;
+    };
+    branch: {
+      label: string;
+      allLabel: string;
+      searchPlaceholder: string;
+      emptyLabel: string;
+      accessibleLabel: (count: number) => string;
+    };
   };
   onToggle: (kind: "character" | "persona" | "chat" | "branch", id: string) => void;
 }) {
@@ -62,14 +86,10 @@ export function AvailabilityTabRail({
   const activeCopy = sectionCopy[activeKind];
   const query = queries[activeKind] ?? "";
   const displayedTargetsFor = (kind: SectionKind, targets: readonly AvailabilityTarget[], allLabel: string) =>
-    kind === "chat" || kind === "branch"
-      ? [{ id: "all", label: allLabel }, ...targets]
-      : targets;
+    kind === "chat" || kind === "branch" ? [{ id: "all", label: allLabel }, ...targets] : targets;
   const displayedTargets = displayedTargetsFor(activeKind, activeTargets, activeCopy.allLabel);
   const filtered = displayedTargets.filter((target) =>
-    `${target.label} ${target.comment ?? ""}`
-      .toLocaleLowerCase()
-      .includes(query.trim().toLocaleLowerCase()),
+    `${target.label} ${target.comment ?? ""}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
   );
   const panelId = `${railId}-panel`;
   const handleTabKey = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
@@ -83,9 +103,7 @@ export function AvailabilityTabRail({
           : (index + (event.key === "ArrowRight" ? 1 : -1) + sections.length) % sections.length;
     const nextKind = sections[nextIndex]![0];
     setActiveSection(nextKind);
-    requestAnimationFrame(() =>
-      document.getElementById(`${railId}-${nextKind}-tab`)?.focus({ preventScroll: true }),
-    );
+    requestAnimationFrame(() => document.getElementById(`${railId}-${nextKind}-tab`)?.focus({ preventScroll: true }));
   };
 
   return (
@@ -151,8 +169,8 @@ export function AvailabilityTabRail({
         {sections.map(([kind, targets], index) => {
           const copy = sectionCopy[kind];
           const active = activeSection === kind;
-           const displayTargets = displayedTargetsFor(kind, targets, copy.allLabel);
-           const count = displayTargets.filter((target) => selectedIds.has(`${kind}:${target.id}`)).length;
+          const displayTargets = displayedTargetsFor(kind, targets, copy.allLabel);
+          const count = displayTargets.filter((target) => selectedIds.has(`${kind}:${target.id}`)).length;
           const tabId = `${railId}-${kind}-tab`;
           return (
             <button
@@ -197,9 +215,7 @@ export function AvailabilityTabRail({
             placeholder={activeCopy.searchPlaceholder}
             aria-label={activeCopy.searchPlaceholder}
             data-ltm-availability-search={activeKind}
-            onChange={(event) =>
-              setQueries((current) => ({ ...current, [activeKind]: event.target.value }))
-            }
+            onChange={(event) => setQueries((current) => ({ ...current, [activeKind]: event.target.value }))}
           />
         </label>
         <div className="max-h-52 overflow-y-auto">
@@ -235,9 +251,7 @@ export function AvailabilityTabRail({
               );
             })
           ) : (
-            <p className="px-3 py-2 text-xs text-[var(--marinara-editor-muted)]">
-              {activeCopy.emptyLabel}
-            </p>
+            <p className="px-3 py-2 text-xs text-[var(--marinara-editor-muted)]">{activeCopy.emptyLabel}</p>
           )}
         </div>
       </div>
@@ -308,15 +322,14 @@ export function TargetPicker({
           onChange={(event) => setQuery(event.target.value)}
         />
         {query ? (
-          <IconButton
-            icon={X}
-            label={clearLabel}
-            className="absolute right-1 top-1"
-            onClick={() => setQuery("")}
-          />
+          <IconButton icon={X} label={clearLabel} className="absolute right-1 top-1" onClick={() => setQuery("")} />
         ) : null}
       </label>
-      <div id={listId} role="list" className="max-h-52 overflow-y-auto rounded-md border border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-control-bg)]">
+      <div
+        id={listId}
+        role="list"
+        className="max-h-52 overflow-y-auto rounded-md border border-[var(--marinara-editor-divider)] bg-[var(--marinara-editor-control-bg)]"
+      >
         {filtered.length ? (
           filtered.map((target, index) => (
             <div key={`${target.kind}:${target.id}`} role="listitem">

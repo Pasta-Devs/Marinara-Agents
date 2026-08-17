@@ -1,13 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-  appendFile,
-  mkdir,
-  readFile,
-  rename,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { appendFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
   ltmDebugEventSchema,
@@ -16,17 +8,11 @@ import {
   type LtmDebugStatus,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { isEnoent } from "./ltm-utils.js";
-import {
-  getLongTermMemoryDirectories,
-  getLongTermMemoryRoot,
-} from "./paths.js";
+import { getLongTermMemoryDirectories, getLongTermMemoryRoot } from "./paths.js";
 import { logger } from "./package-runtime.js";
 import { withLtmVaultLock } from "./vault-lock.js";
 
-export type LtmDebugEventInput = Omit<
-  LtmDebugEvent,
-  "id" | "ts" | "operationId" | "error"
-> & {
+export type LtmDebugEventInput = Omit<LtmDebugEvent, "id" | "ts" | "operationId" | "error"> & {
   operationId?: string;
   error?: unknown;
   root?: string;
@@ -46,40 +32,26 @@ function truncate(value: string, maxLength: number) {
 }
 
 function boundUnknown(value: unknown, depth = 0): unknown {
-  if (typeof value === "string")
-    return truncate(value, MAX_NESTED_STRING_LENGTH);
+  if (typeof value === "string") return truncate(value, MAX_NESTED_STRING_LENGTH);
   if (value == null || typeof value === "boolean") return value;
-  if (typeof value === "number")
-    return Number.isFinite(value) ? value : String(value);
-  if (
-    typeof value === "bigint" ||
-    typeof value === "symbol" ||
-    typeof value === "function"
-  )
+  if (typeof value === "number") return Number.isFinite(value) ? value : String(value);
+  if (typeof value === "bigint" || typeof value === "symbol" || typeof value === "function")
     return truncate(String(value), MAX_NESTED_STRING_LENGTH);
   if (depth >= MAX_OBJECT_DEPTH) return "[truncated]";
-  if (Array.isArray(value))
-    return value
-      .slice(0, MAX_ARRAY_ITEMS)
-      .map((item) => boundUnknown(item, depth + 1));
+  if (Array.isArray(value)) return value.slice(0, MAX_ARRAY_ITEMS).map((item) => boundUnknown(item, depth + 1));
   if (value instanceof Date) return value.toISOString();
   if (typeof value === "object")
     return Object.fromEntries(
       Object.entries(value)
         .slice(0, MAX_OBJECT_KEYS)
-        .map(([key, item]) => [
-          truncate(key, 240),
-          boundUnknown(item, depth + 1),
-        ]),
+        .map(([key, item]) => [truncate(key, 240), boundUnknown(item, depth + 1)]),
     );
   return truncate(String(value), MAX_NESTED_STRING_LENGTH);
 }
 
 function serialize(error: unknown) {
-  if (!(error instanceof Error))
-    return { message: truncate(String(error), 2_000) };
-  const code =
-    "code" in error && typeof error.code === "string" ? error.code : undefined;
+  if (!(error instanceof Error)) return { message: truncate(String(error), 2_000) };
+  const code = "code" in error && typeof error.code === "string" ? error.code : undefined;
   return {
     name: truncate(error.name, 120),
     message: truncate(error.message, 2_000),
@@ -88,22 +60,13 @@ function serialize(error: unknown) {
   };
 }
 
-function boundedFields(
-  fields: Omit<LtmDebugEventInput, "root" | "operationId" | "error">,
-) {
+function boundedFields(fields: Omit<LtmDebugEventInput, "root" | "operationId" | "error">) {
   return {
     ...fields,
     action: truncate(fields.action, 120),
-    message:
-      fields.message === undefined
-        ? undefined
-        : truncate(fields.message, 2_000),
-    source:
-      fields.source === undefined ? undefined : truncate(fields.source, 120),
-    sourceId:
-      fields.sourceId === undefined
-        ? undefined
-        : truncate(fields.sourceId, 240),
+    message: fields.message === undefined ? undefined : truncate(fields.message, 2_000),
+    source: fields.source === undefined ? undefined : truncate(fields.source, 120),
+    sourceId: fields.sourceId === undefined ? undefined : truncate(fields.sourceId, 240),
     mutationIds: fields.mutationIds?.slice(0, 100),
     counts: fields.counts
       ? Object.fromEntries(
@@ -115,20 +78,11 @@ function boundedFields(
     diagnostics: fields.diagnostics
       ?.slice(0, MAX_ARRAY_ITEMS)
       .map((item) => boundUnknown(item) as Record<string, unknown>),
-    provider:
-      fields.provider === undefined
-        ? undefined
-        : truncate(fields.provider, 120),
+    provider: fields.provider === undefined ? undefined : truncate(fields.provider, 120),
     model: fields.model === undefined ? undefined : truncate(fields.model, 240),
-    details: fields.details
-      ? (boundUnknown(fields.details) as Record<string, unknown>)
-      : undefined,
-    chatId:
-      fields.chatId === undefined ? undefined : truncate(fields.chatId, 200),
-    uiSummary:
-      fields.uiSummary === undefined
-        ? undefined
-        : truncate(fields.uiSummary, 4_000),
+    details: fields.details ? (boundUnknown(fields.details) as Record<string, unknown>) : undefined,
+    chatId: fields.chatId === undefined ? undefined : truncate(fields.chatId, 200),
+    uiSummary: fields.uiSummary === undefined ? undefined : truncate(fields.uiSummary, 4_000),
   };
 }
 
@@ -138,13 +92,9 @@ function compactEvent(event: LtmDebugEvent) {
   if (Buffer.byteLength(line) <= LTM_DEBUG_MAX_EVENT_BYTES) return line;
   bounded = ltmDebugEventSchema.parse({
     ...bounded,
-    diagnostics: bounded.diagnostics?.length
-      ? [{ truncated: true }]
-      : undefined,
+    diagnostics: bounded.diagnostics?.length ? [{ truncated: true }] : undefined,
     details: bounded.details ? { truncated: true } : undefined,
-    uiSummary: bounded.uiSummary
-      ? truncate(bounded.uiSummary, 1_000)
-      : undefined,
+    uiSummary: bounded.uiSummary ? truncate(bounded.uiSummary, 1_000) : undefined,
     error: bounded.error
       ? {
           ...bounded.error,
@@ -161,9 +111,7 @@ function compactEvent(event: LtmDebugEvent) {
     phase: bounded.phase,
     action: bounded.action,
     status: bounded.status,
-    ...(bounded.durationMs === undefined
-      ? {}
-      : { durationMs: bounded.durationMs }),
+    ...(bounded.durationMs === undefined ? {} : { durationMs: bounded.durationMs }),
     ...(bounded.error
       ? {
           error: {
@@ -206,10 +154,7 @@ async function appendBounded(path: string, line: string) {
     if (isEnoent(error)) return "";
     throw error;
   });
-  const replacement = `${newestCompleteLines(
-    content,
-    LTM_DEBUG_MAX_LOG_BYTES - lineBytes,
-  )}${line}`;
+  const replacement = `${newestCompleteLines(content, LTM_DEBUG_MAX_LOG_BYTES - lineBytes)}${line}`;
   const temporary = `${path}.${randomUUID()}.tmp`;
   try {
     await writeFile(temporary, replacement, "utf8");
@@ -234,16 +179,9 @@ function queueAppend(path: string, line: string) {
   return queueWrite(path, () => appendBounded(path, line));
 }
 
-export async function recordLtmDebugEvent(
-  input: LtmDebugEventInput,
-): Promise<LtmDebugEvent | null> {
+export async function recordLtmDebugEvent(input: LtmDebugEventInput): Promise<LtmDebugEvent | null> {
   try {
-    const {
-      root = getLongTermMemoryRoot(),
-      operationId = randomUUID(),
-      error,
-      ...fields
-    } = input;
+    const { root = getLongTermMemoryRoot(), operationId = randomUUID(), error, ...fields } = input;
     const event = ltmDebugEventSchema.parse({
       id: randomUUID(),
       ts: new Date().toISOString(),
@@ -299,10 +237,7 @@ export async function readLtmDebugLog(
   } = {},
   root = getLongTermMemoryRoot(),
 ) {
-  const content = await readFile(
-    getLongTermMemoryDirectories(root).debugLog,
-    "utf8",
-  ).catch((e) => {
+  const content = await readFile(getLongTermMemoryDirectories(root).debugLog, "utf8").catch((e) => {
     if (isEnoent(e)) return "";
     throw e;
   });
@@ -317,28 +252,18 @@ export async function readLtmDebugLog(
         return [];
       }
     })
-    .filter(
-      (event) =>
-        !filter.operationId || event.operationId === filter.operationId,
-    )
-    .filter(
-      (event) =>
-        !filter.sourceNoteId || event.sourceNoteId === filter.sourceNoteId,
-    )
+    .filter((event) => !filter.operationId || event.operationId === filter.operationId)
+    .filter((event) => !filter.sourceNoteId || event.sourceNoteId === filter.sourceNoteId)
     .filter((event) => !filter.draftId || event.draftId === filter.draftId)
     .filter((event) => !filter.status || event.status === filter.status)
     .filter((event) => !filter.phase || event.phase === filter.phase);
-  return typeof filter.limit === "number"
-    ? events.slice(-filter.limit)
-    : events;
+  return typeof filter.limit === "number" ? events.slice(-filter.limit) : events;
 }
 export async function exportLtmDebugLog(root = getLongTermMemoryRoot()) {
-  return readFile(getLongTermMemoryDirectories(root).debugLog, "utf8").catch(
-    (e) => {
-      if (isEnoent(e)) return "";
-      throw e;
-    },
-  );
+  return readFile(getLongTermMemoryDirectories(root).debugLog, "utf8").catch((e) => {
+    if (isEnoent(e)) return "";
+    throw e;
+  });
 }
 export async function clearLtmDebugLog(root = getLongTermMemoryRoot()) {
   const path = getLongTermMemoryDirectories(root).debugLog;

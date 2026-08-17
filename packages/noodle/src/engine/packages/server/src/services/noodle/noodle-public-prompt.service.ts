@@ -11,11 +11,7 @@ import { createCharactersStorage } from "../storage/characters.storage.js";
 import { createChatsStorage } from "../storage/chats.storage.js";
 import { createNoodleStorage } from "../storage/noodle.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
-import {
-  loadPrompt,
-  NOODLE_TIMELINE_BASE,
-  NOODLE_TIMELINE_VOICE,
-} from "../prompt-overrides/index.js";
+import { loadPrompt, NOODLE_TIMELINE_BASE, NOODLE_TIMELINE_VOICE } from "../prompt-overrides/index.js";
 import { NOODLE_JSON_OUTPUT_HEADING } from "./noodle-response-format.js";
 import {
   collectNoodlePromptImageCandidates,
@@ -36,10 +32,7 @@ import {
   sampleNoodlePastMemoriesWeighted,
 } from "./noodle-prompt.js";
 import { processLorebooks } from "../lorebook/index.js";
-import {
-  buildPromptMacroContext,
-  resolveMacrosWithVariableSnapshot,
-} from "../prompt/index.js";
+import { buildPromptMacroContext, resolveMacrosWithVariableSnapshot } from "../prompt/index.js";
 import type { DB } from "../../db/connection.js";
 import {
   generateImageCaptionsForDataUrls,
@@ -60,10 +53,7 @@ import {
 } from "./noodle-public-support.js";
 import { noodleTimelinePostTargetInstruction } from "./noodle-post-target.js";
 import { areConversationSchedulesEnabled } from "../generation/conversation-context-utils.js";
-import {
-  getTodaySchedule,
-  scheduleNeedsRefresh,
-} from "../conversation/schedule.service.js";
+import { getTodaySchedule, scheduleNeedsRefresh } from "../conversation/schedule.service.js";
 import {
   normalizePromptTimeZone,
   resolveConversationTimeZone,
@@ -73,19 +63,11 @@ import {
 function parseWeekSchedule(value: unknown): WeekSchedule | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const schedule = value as Record<string, unknown>;
-  if (
-    typeof schedule.weekStart !== "string" ||
-    !schedule.days ||
-    typeof schedule.days !== "object"
-  )
-    return null;
+  if (typeof schedule.weekStart !== "string" || !schedule.days || typeof schedule.days !== "object") return null;
   return value as WeekSchedule;
 }
 
-export function formatNoodleCurrentTime(
-  now: Date = new Date(),
-  timeZone?: string,
-): string {
+export function formatNoodleCurrentTime(now: Date = new Date(), timeZone?: string): string {
   const normalizedTimeZone = normalizePromptTimeZone(timeZone);
   return new Intl.DateTimeFormat("en-US", {
     ...(normalizedTimeZone ? { timeZone: normalizedTimeZone } : {}),
@@ -106,19 +88,15 @@ export async function buildGeneratedCharacterScheduleContext(
   now: Date = new Date(),
 ): Promise<string> {
   const missingCharacterIds = new Set(characterNamesById.keys());
-  if (missingCharacterIds.size === 0)
-    return "No active character schedules are available.";
+  if (missingCharacterIds.size === 0) return "No active character schedules are available.";
 
   const scheduleLines: string[] = [];
   for (const chat of await chats.list()) {
-    if (chat.mode !== "conversation" || missingCharacterIds.size === 0)
-      continue;
+    if (chat.mode !== "conversation" || missingCharacterIds.size === 0) continue;
     const metadata = parseRecord(chat.metadata);
     if (!areConversationSchedulesEnabled(metadata)) continue;
     const schedules = parseRecord(metadata.characterSchedules);
-    const timeZone =
-      resolveConversationTimeZone(metadata) ??
-      normalizePromptTimeZone(fallbackTimeZone);
+    const timeZone = resolveConversationTimeZone(metadata) ?? normalizePromptTimeZone(fallbackTimeZone);
     const scheduleNow = toZonedWallClockDate(now, timeZone);
 
     for (const characterId of missingCharacterIds) {
@@ -126,16 +104,12 @@ export async function buildGeneratedCharacterScheduleContext(
       if (!schedule || scheduleNeedsRefresh(schedule, scheduleNow)) continue;
       const today = getTodaySchedule(schedule, scheduleNow);
       if (!today) continue;
-      scheduleLines.push(
-        `- ${characterNamesById.get(characterId) ?? "Character"}: ${today}`,
-      );
+      scheduleLines.push(`- ${characterNamesById.get(characterId) ?? "Character"}: ${today}`);
       missingCharacterIds.delete(characterId);
     }
   }
 
-  return scheduleLines.length > 0
-    ? scheduleLines.join("\n")
-    : "No generated schedules are available for today.";
+  return scheduleLines.length > 0 ? scheduleLines.join("\n") : "No generated schedules are available for today.";
 }
 
 /**
@@ -143,15 +117,11 @@ export async function buildGeneratedCharacterScheduleContext(
  * that chat), keyed by characterId. This is a plain metadata read, not a schedule recomputation —
  * cheap enough to attach to every opted-in chat_context block without a separate token budget.
  */
-function parseConversationCharacterStatuses(
-  metadata: unknown,
-): Record<string, { status: string; activity: string }> {
+function parseConversationCharacterStatuses(metadata: unknown): Record<string, { status: string; activity: string }> {
   const raw = parseRecord(metadata).conversationCharacterStatuses;
   if (!raw || typeof raw !== "object") return {};
   const result: Record<string, { status: string; activity: string }> = {};
-  for (const [characterId, value] of Object.entries(
-    raw as Record<string, unknown>,
-  )) {
+  for (const [characterId, value] of Object.entries(raw as Record<string, unknown>)) {
     if (!value || typeof value !== "object") continue;
     const status = (value as Record<string, unknown>).status;
     const activity = (value as Record<string, unknown>).activity;
@@ -162,12 +132,7 @@ function parseConversationCharacterStatuses(
   return result;
 }
 
-function personaNameFromRow(
-  row:
-    | { name?: string | null; convoDisplayName?: string | null }
-    | null
-    | undefined,
-) {
+function personaNameFromRow(row: { name?: string | null; convoDisplayName?: string | null } | null | undefined) {
   return row?.convoDisplayName?.trim() || row?.name?.trim() || "User";
 }
 
@@ -192,8 +157,7 @@ function personaContextFromRow(row: {
     ["Backstory", row.backstory],
     ["Appearance", row.appearance],
   ] as const) {
-    if (typeof value === "string" && value.trim())
-      lines.push(`${label}: ${value.trim()}`);
+    if (typeof value === "string" && value.trim()) lines.push(`${label}: ${value.trim()}`);
   }
   lines.push(`</persona>`);
   return lines.join("\n");
@@ -241,20 +205,12 @@ export async function buildOptedInChatContext(
   characters: ReturnType<typeof createCharactersStorage>,
   selectedCharacterIds: string[],
 ) {
-  if (selectedCharacterIds.length === 0)
-    return "No selected character chats are eligible for Noodle context.";
+  if (selectedCharacterIds.length === 0) return "No selected character chats are eligible for Noodle context.";
   const selected = new Set(selectedCharacterIds);
   const allChats = await chats.list();
   const relevant = allChats
-    .filter(
-      (chat) =>
-        parseRecord(chat.metadata).noodleTimelineContextEnabled === true,
-    )
-    .filter((chat) =>
-      parseStringArray(chat.characterIds).some((characterId) =>
-        selected.has(characterId),
-      ),
-    );
+    .filter((chat) => parseRecord(chat.metadata).noodleTimelineContextEnabled === true)
+    .filter((chat) => parseStringArray(chat.characterIds).some((characterId) => selected.has(characterId)));
   const blocks: string[] = [];
   const characterNameCache = new Map<string, string>();
   const personaNameCache = new Map<string, string>();
@@ -265,19 +221,13 @@ export async function buildOptedInChatContext(
       Promise.all(
         chatCharacterIds.map(async (characterId) => ({
           id: characterId,
-          name: await resolveCharacterName(
-            characters,
-            characterId,
-            characterNameCache,
-          ),
+          name: await resolveCharacterName(characters, characterId, characterNameCache),
         })),
       ),
       chats.listMessagesPaginated(chat.id, NOODLE_CHAT_CONTEXT_MESSAGE_LIMIT),
     ]);
     if (messages.length === 0) continue;
-    const speakerNameByCharacterId = new Map(
-      characterNames.map((character) => [character.id, character.name]),
-    );
+    const speakerNameByCharacterId = new Map(characterNames.map((character) => [character.id, character.name]));
     const participantLines = [
       `- User persona: ${personaName}`,
       ...characterNames.map((character) => `- Character: ${character.name}`),
@@ -290,28 +240,17 @@ export async function buildOptedInChatContext(
     const statusLines = characterNames
       .map((character) => {
         const status = characterStatuses[character.id];
-        return status
-          ? `- ${character.name}: currently ${status.status} (${status.activity})`
-          : null;
+        return status ? `- ${character.name}: currently ${status.status} (${status.activity})` : null;
       })
       .filter((line): line is string => Boolean(line));
     const messageLines = await Promise.all(
       messages.map(async (message) => {
         const role = messageRoleLabel(message.role);
-        let speaker =
-          role === "user"
-            ? personaName
-            : role === "narrator"
-              ? "Narrator"
-              : "Assistant";
+        let speaker = role === "user" ? personaName : role === "narrator" ? "Narrator" : "Assistant";
         if (message.characterId) {
           speaker =
             speakerNameByCharacterId.get(message.characterId) ??
-            (await resolveCharacterName(
-              characters,
-              message.characterId,
-              characterNameCache,
-            ));
+            (await resolveCharacterName(characters, message.characterId, characterNameCache));
         }
         const content = String(message.content ?? "")
           .replace(/\s+/g, " ")
@@ -327,9 +266,7 @@ export async function buildOptedInChatContext(
         )}" name="${escapePromptAttribute(chat.name)}">`,
         "Participants:",
         ...participantLines,
-        ...(statusLines.length > 0
-          ? ["Current status in this story:", ...statusLines]
-          : []),
+        ...(statusLines.length > 0 ? ["Current status in this story:", ...statusLines] : []),
         "Recent messages:",
         ...messageLines,
         `</chat_context>`,
@@ -355,57 +292,28 @@ export async function buildRefreshPrompt(input: {
   imageCaptioning: ImageCaptioningRuntime;
   debugMode: boolean;
 }) {
-  const activeCharacters = input.activeAccounts.filter(
-    (account) => account.kind === "character",
-  );
-  const activeRandomUsers = input.activeAccounts.filter(
-    (account) => account.kind === "random_user",
-  );
-  const selectedCharacterIds = activeCharacters.map(
-    (account) => account.entityId,
-  );
-  const characterRows = await Promise.all(
-    selectedCharacterIds.map((id) => input.characters.getById(id)),
-  );
+  const activeCharacters = input.activeAccounts.filter((account) => account.kind === "character");
+  const activeRandomUsers = input.activeAccounts.filter((account) => account.kind === "random_user");
+  const selectedCharacterIds = activeCharacters.map((account) => account.entityId);
+  const characterRows = await Promise.all(selectedCharacterIds.map((id) => input.characters.getById(id)));
   const characterNamesById = new Map(
-    activeCharacters.map(
-      (account) => [account.entityId, account.displayName] as const,
-    ),
+    activeCharacters.map((account) => [account.entityId, account.displayName] as const),
   );
-  const personaRow = input.personaAccount
-    ? await input.characters.getPersona(input.personaAccount.entityId)
-    : null;
+  const personaRow = input.personaAccount ? await input.characters.getPersona(input.personaAccount.entityId) : null;
   const recentCutoff = sinceHoursIso(48);
   const [recentCreatedPosts, recentPersonaComments] = await Promise.all([
     input.noodle.listPosts({ since: recentCutoff, limit: 100 }),
     input.personaAccount
-      ? input.noodle.listRepliesByActorSince(
-          input.personaAccount.id,
-          recentCutoff,
-          100,
-        )
+      ? input.noodle.listRepliesByActorSince(input.personaAccount.id, recentCutoff, 100)
       : Promise.resolve([]),
   ]);
-  const recentlyCommentedPostIds = noodlePersonaCommentPostIds(
-    recentPersonaComments,
-    input.personaAccount?.id,
-  );
+  const recentlyCommentedPostIds = noodlePersonaCommentPostIds(recentPersonaComments, input.personaAccount?.id);
   const recentlyCommentedPosts = (
-    await Promise.all(
-      recentlyCommentedPostIds.map((postId) =>
-        input.noodle.getPostById(postId),
-      ),
-    )
+    await Promise.all(recentlyCommentedPostIds.map((postId) => input.noodle.getPostById(postId)))
   ).filter((post): post is NoodlePost => Boolean(post));
-  const recentPostById = new Map(
-    [...recentCreatedPosts, ...recentlyCommentedPosts].map((post) => [
-      post.id,
-      post,
-    ]),
-  );
+  const recentPostById = new Map([...recentCreatedPosts, ...recentlyCommentedPosts].map((post) => [post.id, post]));
   const recentPosts = [...recentPostById.values()].sort(
-    (left, right) =>
-      new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+    (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
   );
   const enhancedTimelineWriting = input.settings.enableEnhancedTimelineWriting;
   const pastMemorySampleSize = enhancedTimelineWriting
@@ -417,23 +325,17 @@ export async function buildRefreshPrompt(input: {
       );
   const olderPosts =
     pastMemorySampleSize > 0
-      ? (await input.noodle.listPostsBefore(noodlePastMemoryCutoff())).filter(
-          (post) => !recentPostById.has(post.id),
-        )
+      ? (await input.noodle.listPostsBefore(noodlePastMemoryCutoff())).filter((post) => !recentPostById.has(post.id))
       : [];
   let recalledPosts: NoodlePost[];
   if (enhancedTimelineWriting) {
-    const activeAccountIds = new Set(
-      input.activeAccounts.map((account) => account.id),
-    );
+    const activeAccountIds = new Set(input.activeAccounts.map((account) => account.id));
     const activeAccountHandles = new Set(
       input.activeAccounts
         .map((account) => account.handle?.toLowerCase())
         .filter((handle): handle is string => Boolean(handle)),
     );
-    const recentAuthorIds = new Set(
-      recentPosts.map((post) => post.authorAccountId),
-    );
+    const recentAuthorIds = new Set(recentPosts.map((post) => post.authorAccountId));
     const recalledPostRelevanceWeight = (post: NoodlePost): number => {
       let weight = 0.25;
       if (activeAccountIds.has(post.authorAccountId)) weight += 2;
@@ -443,31 +345,14 @@ export async function buildRefreshPrompt(input: {
       if (recentAuthorIds.has(post.authorAccountId)) weight += 1;
       return weight;
     };
-    recalledPosts = sampleNoodlePastMemoriesWeighted(
-      olderPosts,
-      pastMemorySampleSize,
-      recalledPostRelevanceWeight,
-    );
+    recalledPosts = sampleNoodlePastMemoriesWeighted(olderPosts, pastMemorySampleSize, recalledPostRelevanceWeight);
   } else {
     recalledPosts = sampleNoodlePastMemories(olderPosts, pastMemorySampleSize);
   }
-  const [
-    chatContext,
-    characterScheduleContext,
-    recentInteractions,
-    recalledInteractions,
-  ] = await Promise.all([
-    buildOptedInChatContext(
-      input.chats,
-      input.characters,
-      selectedCharacterIds,
-    ),
+  const [chatContext, characterScheduleContext, recentInteractions, recalledInteractions] = await Promise.all([
+    buildOptedInChatContext(input.chats, input.characters, selectedCharacterIds),
     input.settings.includeCharacterSchedules
-      ? buildGeneratedCharacterScheduleContext(
-          input.chats,
-          characterNamesById,
-          input.timeZone,
-        )
+      ? buildGeneratedCharacterScheduleContext(input.chats, characterNamesById, input.timeZone)
       : Promise.resolve(""),
     input.noodle.listInteractions(recentPosts.map((post) => post.id)),
     input.noodle.listInteractions(recalledPosts.map((post) => post.id)),
@@ -488,8 +373,7 @@ export async function buildRefreshPrompt(input: {
     },
     lastGenerationType: "noodle",
   });
-  const resolveNoodleMacros = (value: string) =>
-    resolveMacros(value, promptMacroContext, { trimResult: false });
+  const resolveNoodleMacros = (value: string) => resolveMacros(value, promptMacroContext, { trimResult: false });
   const characterContext = characterRows
     .filter((row): row is NonNullable<typeof row> => !!row)
     .map((row) => resolveNoodleMacros(characterContextFromRow(row)))
@@ -505,16 +389,11 @@ export async function buildRefreshPrompt(input: {
   const personaContext = personaRow
     ? resolveNoodleMacros(personaContextFromRow(personaRow))
     : "No user persona is active.";
-  const activeAccountList = [
-    ...input.activeAccounts,
-    ...(input.personaAccount ? [input.personaAccount] : []),
-  ]
+  const activeAccountList = [...input.activeAccounts, ...(input.personaAccount ? [input.personaAccount] : [])]
     .map(
       (account) =>
         `- ${account.displayName} (@${account.handle}) kind=${account.kind} accountKey=${account.kind}:${account.entityId} generationRole=${
-          account.kind === "persona"
-            ? "reference-target-only"
-            : "allowed-author-and-actor"
+          account.kind === "persona" ? "reference-target-only" : "allowed-author-and-actor"
         }`,
     )
     .join("\n");
@@ -533,17 +412,12 @@ export async function buildRefreshPrompt(input: {
             .reverse()
             .map((post) => ({ role: "user", content: post.content })),
           ...recentInteractions
-            .filter(
-              (interaction) =>
-                interaction.type === "reply" && interaction.content,
-            )
+            .filter((interaction) => interaction.type === "reply" && interaction.content)
             .map((interaction) => ({
               role: "user",
               content: interaction.content ?? "",
             })),
-          ...(characterContext
-            ? [{ role: "user", content: characterContext }]
-            : []),
+          ...(characterContext ? [{ role: "user", content: characterContext }] : []),
         ],
         null,
         {
@@ -560,9 +434,7 @@ export async function buildRefreshPrompt(input: {
       )
     : null;
   const loreContext = lorebookResult
-    ? [lorebookResult.worldInfoBefore, lorebookResult.worldInfoAfter]
-        .filter(Boolean)
-        .join("\n")
+    ? [lorebookResult.worldInfoBefore, lorebookResult.worldInfoAfter].filter(Boolean).join("\n")
     : "";
 
   // The base timeline prompt and its voice/tone tail are independently editable. The base prompt
@@ -576,13 +448,8 @@ export async function buildRefreshPrompt(input: {
       allowRandomUsers: String(input.settings.allowRandomUsers),
     }),
   ]);
-  const system = composeNoodleTimelineSystemPrompt(
-    timelineBaseText,
-    timelineVoiceText,
-  );
-  const timelineFeatureInstructions = noodleTimelineFeatureInstructions(
-    input.settings,
-  );
+  const system = composeNoodleTimelineSystemPrompt(timelineBaseText, timelineVoiceText);
+  const timelineFeatureInstructions = noodleTimelineFeatureInstructions(input.settings);
 
   const visionCandidates = await prepareNoodleVisionAttachments([
     ...collectNoodlePromptImageCandidates(recentPosts, recentInteractions, {
@@ -607,14 +474,11 @@ export async function buildRefreshPrompt(input: {
     );
     visionAttachments = [];
     for (const result of captionResults) {
-      if (result.caption)
-        captionedImages.set(result.input.attachment.key, result.caption);
+      if (result.caption) captionedImages.set(result.input.attachment.key, result.caption);
       else visionAttachments.push(result.input.attachment);
     }
   }
-  const attachedImageKeys = new Set(
-    visionAttachments.map((attachment) => attachment.key),
-  );
+  const attachedImageKeys = new Set(visionAttachments.map((attachment) => attachment.key));
   const visionManifest = formatNoodleVisionManifest(visionAttachments);
 
   const buildContext = (
@@ -637,17 +501,9 @@ export async function buildRefreshPrompt(input: {
       "# Character Profiles",
       characterContext || "No character profiles.",
       "",
-      ...(characterScheduleContext
-        ? [
-            "# Today's Generated Character Schedules",
-            characterScheduleContext,
-            "",
-          ]
-        : []),
+      ...(characterScheduleContext ? ["# Today's Generated Character Schedules", characterScheduleContext, ""] : []),
       ...(loreContext ? ["# World / Lore", loreContext, ""] : []),
-      ...(randomUserContext
-        ? ["# Random User Profiles", randomUserContext, ""]
-        : []),
+      ...(randomUserContext ? ["# Random User Profiles", randomUserContext, ""] : []),
       "# Opted-In Chat Context",
       "Only chats whose Chat Settings allow Noodle references are included here.",
       chatContext,
@@ -663,9 +519,7 @@ export async function buildRefreshPrompt(input: {
         ? [
             "",
             "# Randomly Recalled Older Noodle Activity",
-            enhancedTimelineWriting
-              ? NOODLE_RECALLED_MEMORY_INSTRUCTION
-              : NOODLE_LEGACY_RECALLED_MEMORY_INSTRUCTION,
+            enhancedTimelineWriting ? NOODLE_RECALLED_MEMORY_INSTRUCTION : NOODLE_LEGACY_RECALLED_MEMORY_INSTRUCTION,
             formatNoodleTimelineForPrompt(recalledPosts, recalledInteractions, {
               emptyMessage: "No older Noodle activity was recalled.",
               includeTimestamp: true,
@@ -698,11 +552,7 @@ export async function buildRefreshPrompt(input: {
         : "gallery attachments: disabled; set attachGalleryImage false or omit it.",
     ].join("\n");
 
-  const context = buildContext(
-    attachedImageKeys,
-    visionManifest,
-    captionedImages,
-  );
+  const context = buildContext(attachedImageKeys, visionManifest, captionedImages);
   const textOnlyContext = buildContext(new Set(), "", captionedImages);
 
   const outputFormat = [
@@ -715,8 +565,7 @@ export async function buildRefreshPrompt(input: {
         posts: [
           {
             tempId: "local id used only inside this response",
-            authorHandle:
-              "exact @handle of a non-persona account allowed to author generated activity",
+            authorHandle: "exact @handle of a non-persona account allowed to author generated activity",
             content: "post text",
             poll: {
               question: "optional poll question",
@@ -728,13 +577,10 @@ export async function buildRefreshPrompt(input: {
         ],
         interactions: [
           {
-            actorHandle:
-              "exact @handle of a non-persona account allowed to perform generated activity",
-            targetTempId:
-              "tempId from posts, if targeting a newly created post",
+            actorHandle: "exact @handle of a non-persona account allowed to perform generated activity",
+            targetTempId: "tempId from posts, if targeting a newly created post",
             targetPostId: "existing post id, if targeting an existing post",
-            parentInteractionId:
-              "existing replyId when directly answering a comment, otherwise null",
+            parentInteractionId: "existing replyId when directly answering a comment, otherwise null",
             type: "like | repost | reply | vote",
             content: "required for reply, optional/null otherwise",
             pollOptionIndex: 1,
@@ -742,8 +588,7 @@ export async function buildRefreshPrompt(input: {
         ],
         follows: [
           {
-            actorHandle:
-              "exact @handle of a non-persona account allowed to perform generated activity",
+            actorHandle: "exact @handle of a non-persona account allowed to perform generated activity",
             targetHandle: "exact @handle from Active Noodle Accounts",
           },
         ],
@@ -758,9 +603,7 @@ export async function buildRefreshPrompt(input: {
     {
       role: "user" as const,
       content: context,
-      ...(visionAttachments.length > 0
-        ? { images: visionAttachments.map((attachment) => attachment.dataUrl) }
-        : {}),
+      ...(visionAttachments.length > 0 ? { images: visionAttachments.map((attachment) => attachment.dataUrl) } : {}),
     },
     { role: "user" as const, content: outputFormat },
   ] satisfies ChatMessage[];

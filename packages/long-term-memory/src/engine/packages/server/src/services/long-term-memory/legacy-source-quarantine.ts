@@ -14,10 +14,7 @@ function isCapturedTurnSource(value: unknown) {
 
 export async function quarantineLegacyCapturedTurnSources(root: string) {
   const sources = safeJoin(getLongTermMemoryDirectories(root).vault, "sources");
-  const quarantine = safeJoin(
-    root,
-    `quarantine/legacy-captured-turns-${Date.now()}-${randomUUID()}`,
-  );
+  const quarantine = safeJoin(root, `quarantine/legacy-captured-turns-${Date.now()}-${randomUUID()}`);
   let moved = 0;
   for (const entry of await readdir(sources, { withFileTypes: true })) {
     if (!entry.isFile() || !entry.name.endsWith(".json")) continue;

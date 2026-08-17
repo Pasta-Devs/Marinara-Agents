@@ -15,10 +15,7 @@ export function noodleTimelinePostTargetRange(
   selectedAuthorCount: number,
   maximumPostsPerRefresh: number,
 ): NoodleTimelinePostTargetRange {
-  const maximum = Math.min(
-    normalizedCount(selectedAuthorCount),
-    normalizedCount(maximumPostsPerRefresh),
-  );
+  const maximum = Math.min(normalizedCount(selectedAuthorCount), normalizedCount(maximumPostsPerRefresh));
   if (maximum === 0) return { minimum: 0, maximum: 0 };
   return {
     minimum: Math.max(1, Math.min(maximum - 1, Math.ceil((maximum * 2) / 3))),
@@ -26,10 +23,7 @@ export function noodleTimelinePostTargetRange(
   };
 }
 
-export function noodleTimelinePostTargetInstruction(
-  selectedAuthorCount: number,
-  maximumPostsPerRefresh: number,
-) {
+export function noodleTimelinePostTargetInstruction(selectedAuthorCount: number, maximumPostsPerRefresh: number) {
   const target = noodleTimelinePostTargetRange(selectedAuthorCount, maximumPostsPerRefresh);
   const amount =
     target.maximum === 0

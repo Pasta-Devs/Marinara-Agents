@@ -1,9 +1,5 @@
 import { createHmac, randomBytes } from "node:crypto";
-import type {
-  NoodleIdentityDisclosure,
-  NoodlerSourceSnapshot,
-  NoodlerSourceStatus,
-} from "@marinara-engine/shared";
+import type { NoodleIdentityDisclosure, NoodlerSourceSnapshot, NoodlerSourceStatus } from "@marinara-engine/shared";
 
 const HINTED_THEME_TOKENS = [
   "adventurous",
@@ -41,10 +37,7 @@ function sourceDigest(value: string, salt: string): string {
 }
 
 function saltFor(baselineField: string | undefined): string {
-  return (
-    (baselineField ? REVISION_TOKEN.exec(baselineField)?.[1] : undefined) ??
-    randomBytes(16).toString("base64url")
-  );
+  return (baselineField ? REVISION_TOKEN.exec(baselineField)?.[1] : undefined) ?? randomBytes(16).toString("base64url");
 }
 
 function hintedThemes(value: string): string {
@@ -61,21 +54,17 @@ export function minimizeNoodlerSourceSnapshot(
   return Object.fromEntries(
     (Object.keys(snapshot) as Array<keyof NoodlerSourceSnapshot>).map((field) => {
       const value = snapshot[field];
-      const themes = mode === "hinted" && field === "personality"
-        ? hintedThemes(value)
-        : "";
+      const themes = mode === "hinted" && field === "personality" ? hintedThemes(value) : "";
       const digest = sourceDigest(value, saltFor(baseline?.[field]));
       return [field, `${themes ? `${themes} ` : ""}revision:${digest}`];
     }),
   ) as NoodlerSourceSnapshot;
 }
 
-export function isMinimizedNoodlerSourceSnapshot(
-  snapshot: NoodlerSourceSnapshot,
-): boolean {
+export function isMinimizedNoodlerSourceSnapshot(snapshot: NoodlerSourceSnapshot): boolean {
   // Unsalted legacy tokens deliberately fail this test, so storage re-minimizes them.
-  return (Object.keys(snapshot) as Array<keyof NoodlerSourceSnapshot>).every(
-    (field) => REVISION_TOKEN.test(snapshot[field]),
+  return (Object.keys(snapshot) as Array<keyof NoodlerSourceSnapshot>).every((field) =>
+    REVISION_TOKEN.test(snapshot[field]),
   );
 }
 
@@ -83,16 +72,10 @@ export function compareNoodlerSourceSnapshots(
   baseline: NoodlerSourceSnapshot,
   current: NoodlerSourceSnapshot,
 ): NoodlerSourceStatus {
-  const changes = (
-    Object.keys(baseline) as Array<keyof NoodlerSourceSnapshot>
-  ).flatMap((field) =>
-    baseline[field] === current[field]
-      ? []
-      : [{ field, previous: baseline[field], current: current[field] }],
+  const changes = (Object.keys(baseline) as Array<keyof NoodlerSourceSnapshot>).flatMap((field) =>
+    baseline[field] === current[field] ? [] : [{ field, previous: baseline[field], current: current[field] }],
   );
-  return changes.length > 0
-    ? { state: "changed", changes }
-    : { state: "current" };
+  return changes.length > 0 ? { state: "changed", changes } : { state: "current" };
 }
 
 export function compareMinimizedNoodlerSourceSnapshot(

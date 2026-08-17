@@ -45,7 +45,10 @@ PF.Hud = class {
         "pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;",
     });
     const pads = [
-      ["up", "▲", 44, 0], ["left", "◀", 0, 44], ["right", "▶", 88, 44], ["down", "▼", 44, 88],
+      ["up", "▲", 44, 0],
+      ["left", "◀", 0, 44],
+      ["right", "▶", 88, 44],
+      ["down", "▼", 44, 88],
     ];
     for (const [dir, label, x, y] of pads) {
       const pad = PF.el("button", {

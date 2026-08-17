@@ -1,8 +1,5 @@
 import assert from "node:assert/strict";
-import {
-  assertManifestBuildProvenance,
-  catalogMajorsForRange,
-} from "./catalog-lanes.mjs";
+import { assertManifestBuildProvenance, catalogMajorsForRange } from "./catalog-lanes.mjs";
 
 assert.deepEqual(catalogMajorsForRange("2.3.0", "3.0.0"), [2]);
 assert.deepEqual(catalogMajorsForRange("2.3.0", "4.0.0"), [2, 3]);

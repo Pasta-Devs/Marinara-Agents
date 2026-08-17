@@ -122,7 +122,8 @@ function normalizedTargetLocationCount(value: string): number | null {
 }
 
 function sourceCopy(ownerMode: SpatialOwnerMode, standalone: boolean): string {
-  if (standalone) return "Uses only your instructions and any lorebooks you explicitly select. No chat or Game plot is used.";
+  if (standalone)
+    return "Uses only your instructions and any lorebooks you explicitly select. No chat or Game plot is used.";
   return ownerMode === "game"
     ? "Uses the game setup, world overview, and party characters. Turn history is not included."
     : "Uses the chat setup and character cards. Turn history is not included.";
@@ -213,12 +214,7 @@ export function SpatialMapAiBuilder({
   const promptLibraries = useSpatialGenerationPromptLibraries();
   const { t } = useSpatialMapTranslation();
   const generationPreferencesOverride = useMemo(
-    () =>
-      generationPreferencesWithPromptLibrary(
-        promptLibraries.data?.[ownerMode],
-        generationPreferences,
-        ownerMode,
-      ),
+    () => generationPreferencesWithPromptLibrary(promptLibraries.data?.[ownerMode], generationPreferences, ownerMode),
     [generationPreferences, ownerMode, promptLibraries.data],
   );
   const hasLocations = definition.locations.length > 0;
@@ -259,8 +255,8 @@ export function SpatialMapAiBuilder({
     initialSession?.hierarchyMode ?? (hasLocations ? hierarchyProfile.mode : "auto"),
   );
   const [hierarchyTemplateId, setHierarchyTemplateId] = useState("world");
-  const [workingHierarchyProfile, setWorkingHierarchyProfile] = useState<SpatialHierarchyProfile>(() =>
-    initialSession?.hierarchyProfile ?? normalizeHierarchyProfile(hierarchyProfile, definition),
+  const [workingHierarchyProfile, setWorkingHierarchyProfile] = useState<SpatialHierarchyProfile>(
+    () => initialSession?.hierarchyProfile ?? normalizeHierarchyProfile(hierarchyProfile, definition),
   );
   const [advancedOpen, setAdvancedOpen] = useState(initialOperation !== "expand");
   const [selectedPreviewId, setSelectedPreviewId] = useState<string | null>(null);
@@ -279,7 +275,10 @@ export function SpatialMapAiBuilder({
         .sort((left, right) => left.name.localeCompare(right.name)),
     [excludedLorebookIdSet, lorebooks],
   );
-  const existingIds = useMemo(() => new Set(definition.locations.map((location) => location.id)), [definition.locations]);
+  const existingIds = useMemo(
+    () => new Set(definition.locations.map((location) => location.id)),
+    [definition.locations],
+  );
   const previewLocations = useMemo(
     () =>
       result?.operation === "expand"
@@ -288,7 +287,10 @@ export function SpatialMapAiBuilder({
     [existingIds, result],
   );
   const previewIds = useMemo(() => new Set(previewLocations.map((location) => location.id)), [previewLocations]);
-  const previewById = useMemo(() => new Map(previewLocations.map((location) => [location.id, location])), [previewLocations]);
+  const previewById = useMemo(
+    () => new Map(previewLocations.map((location) => [location.id, location])),
+    [previewLocations],
+  );
   const previewChildrenByParent = useMemo(() => {
     const children = new Map<string | null, SpatialLocation[]>();
     for (const location of previewLocations) {
@@ -313,7 +315,9 @@ export function SpatialMapAiBuilder({
   const expandablePreviewIds = useMemo(
     () =>
       new Set(
-        previewLocations.filter((location) => (previewChildrenByParent.get(location.id)?.length ?? 0) > 0).map((location) => location.id),
+        previewLocations
+          .filter((location) => (previewChildrenByParent.get(location.id)?.length ?? 0) > 0)
+          .map((location) => location.id),
       ),
     [previewChildrenByParent, previewLocations],
   );
@@ -513,9 +517,7 @@ export function SpatialMapAiBuilder({
       setConnectionSaved(true);
     } catch (saveError) {
       setConnectionId(previousConnectionId);
-      setConnectionError(
-        saveError instanceof Error ? saveError.message : t("ui.worldMaps.connection.saveError"),
-      );
+      setConnectionError(saveError instanceof Error ? saveError.message : t("ui.worldMaps.connection.saveError"));
     }
   };
 
@@ -544,7 +546,8 @@ export function SpatialMapAiBuilder({
     (dirty && !allowDirtyGeneratedReplacement) ||
     normalizedTargetLocationCount(targetLocationCountInput) === null ||
     (operation === "expand" && targetLocationId.length === 0) ||
-    (operation !== "expand" && hierarchyMode === "custom" &&
+    (operation !== "expand" &&
+      hierarchyMode === "custom" &&
       (!workingHierarchyProfile.name.trim() || workingHierarchyProfile.types.some((type) => !type.label.trim()))) ||
     (groundingMode !== "setup" && sourceLorebookIds.length === 0);
   const resultHierarchyValid = Boolean(
@@ -608,7 +611,9 @@ export function SpatialMapAiBuilder({
                 {location.name || "Untitled location"}
               </span>
               <span className="flex flex-wrap items-center gap-x-1.5 text-[0.625rem] capitalize text-[var(--marinara-editor-muted)]">
-                <span>{result ? hierarchyTypeForLocation(result.hierarchyProfile, location).label : location.kind}</span>
+                <span>
+                  {result ? hierarchyTypeForLocation(result.hierarchyProfile, location).label : location.kind}
+                </span>
                 {children.length > 0 && <span>{children.length} direct</span>}
                 {isStartingLocation && (
                   <span className="inline-flex items-center gap-0.5 text-[var(--marinara-chat-chrome-button-text-active)]">
@@ -620,7 +625,9 @@ export function SpatialMapAiBuilder({
             </span>
           </button>
         </div>
-        {isExpanded && children.length > 0 && <ul role="group">{children.map((child) => renderPreviewLocation(child, depth + 1))}</ul>}
+        {isExpanded && children.length > 0 && (
+          <ul role="group">{children.map((child) => renderPreviewLocation(child, depth + 1))}</ul>
+        )}
       </li>
     );
   };
@@ -657,7 +664,10 @@ export function SpatialMapAiBuilder({
       <div className="mari-maps-ai-grid grid min-h-0 gap-px bg-[var(--marinara-editor-divider)]">
         <div className="bg-[var(--marinara-editor-bg)] p-4">
           <div className="mb-4">
-            <label className="text-xs font-semibold text-[var(--marinara-editor-title)]" htmlFor="spatial-ai-connection">
+            <label
+              className="text-xs font-semibold text-[var(--marinara-editor-title)]"
+              htmlFor="spatial-ai-connection"
+            >
               {t("ui.worldMaps.connection.aiLabel")}
             </label>
             <SpatialConnectionOverrideSelect
@@ -741,7 +751,9 @@ export function SpatialMapAiBuilder({
                         : "border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] text-[var(--marinara-editor-muted)]",
                     )}
                   >
-                    <span className="block font-semibold">{value === "expand" ? "Expand current map" : "Replace draft"}</span>
+                    <span className="block font-semibold">
+                      {value === "expand" ? "Expand current map" : "Replace draft"}
+                    </span>
                     <span className="mt-0.5 block text-[0.625rem]">
                       {value === "expand" ? "Keep existing location IDs" : "Available before campaign history"}
                     </span>
@@ -777,9 +789,12 @@ export function SpatialMapAiBuilder({
 
           {operation !== "expand" && (
             <fieldset className="mb-4">
-              <legend className="text-xs font-semibold text-[var(--marinara-editor-title)]">Hierarchy vocabulary</legend>
+              <legend className="text-xs font-semibold text-[var(--marinara-editor-title)]">
+                Hierarchy vocabulary
+              </legend>
               <p className="mt-1 text-[0.625rem] leading-relaxed text-[var(--marinara-editor-muted)]">
-                Choose whether AI names the location types, start from a template, or define your own. Semantic base kinds remain locked underneath for travel and validation.
+                Choose whether AI names the location types, start from a template, or define your own. Semantic base
+                kinds remain locked underneath for travel and validation.
               </p>
               <div className="mt-2 grid grid-cols-3 gap-2">
                 {(
@@ -799,7 +814,11 @@ export function SpatialMapAiBuilder({
                       if (option.value === "template") {
                         setWorkingHierarchyProfile(profileFromTemplate(hierarchyTemplateId, definition));
                       } else if (option.value === "custom") {
-                        setWorkingHierarchyProfile((current) => ({ ...current, mode: "custom", name: current.name || "Custom hierarchy" }));
+                        setWorkingHierarchyProfile((current) => ({
+                          ...current,
+                          mode: "custom",
+                          name: current.name || "Custom hierarchy",
+                        }));
                       }
                       resetResult();
                     }}
@@ -829,7 +848,9 @@ export function SpatialMapAiBuilder({
                     className="mt-1 min-h-11 w-full rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs outline-none focus:ring-2 focus:ring-[var(--marinara-chat-chrome-focus-ring)]"
                   >
                     {HIERARCHY_TEMPLATES.map((template) => (
-                      <option key={template.id} value={template.id}>{template.path}</option>
+                      <option key={template.id} value={template.id}>
+                        {template.path}
+                      </option>
                     ))}
                   </select>
                 </label>
@@ -842,7 +863,11 @@ export function SpatialMapAiBuilder({
                     value={workingHierarchyProfile.name}
                     maxLength={120}
                     onChange={(event) => {
-                      setWorkingHierarchyProfile((current) => ({ ...current, mode: "custom", name: event.target.value }));
+                      setWorkingHierarchyProfile((current) => ({
+                        ...current,
+                        mode: "custom",
+                        name: event.target.value,
+                      }));
                       resetResult();
                     }}
                     className="min-h-11 w-full rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 text-xs"
@@ -885,10 +910,15 @@ export function SpatialMapAiBuilder({
                         className="min-h-11 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-2 text-[0.625rem]"
                       >
                         {(["region", "settlement", "place", "building", "floor", "room"] as const).map((kind) => (
-                          <option key={kind} value={kind}>{kind}</option>
+                          <option key={kind} value={kind}>
+                            {kind}
+                          </option>
                         ))}
                       </select>
-                      <div className="col-span-2 flex items-center justify-end gap-1" aria-label={`Order ${type.label || "location type"}`}>
+                      <div
+                        className="col-span-2 flex items-center justify-end gap-1"
+                        aria-label={`Order ${type.label || "location type"}`}
+                      >
                         <button
                           type="button"
                           disabled={index === 0}
@@ -955,7 +985,10 @@ export function SpatialMapAiBuilder({
                         while (current.types.some((type) => type.id === id)) id = `${base}_${suffix++}`;
                         return {
                           ...current,
-                          types: [...current.types, { id, label: `Location type ${current.types.length + 1}`, baseKind: "place" }],
+                          types: [
+                            ...current.types,
+                            { id, label: `Location type ${current.types.length + 1}`, baseKind: "place" },
+                          ],
                         };
                       });
                       resetResult();
@@ -969,118 +1002,122 @@ export function SpatialMapAiBuilder({
             </fieldset>
           )}
 
-          {(operation !== "expand" || advancedOpen) && <fieldset className="mb-4">
-            <legend className="text-xs font-semibold text-[var(--marinara-editor-title)]">Build from</legend>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              {(
-                [
-                  {
-                    value: "setup",
-                    label: "Game setup",
-                    detail: "World and characters",
-                  },
-                  {
-                    value: "lore_strict",
-                    label: "Selected lore",
-                    detail: "Chosen source books",
-                  },
-                ] as const
-              ).map((option) => {
-                const selected = option.value === "setup" ? groundingMode === "setup" : groundingMode !== "setup";
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    aria-pressed={selected}
-                    disabled={generationPending || (option.value !== "setup" && eligibleLorebooks.length === 0)}
-                    onClick={() => {
-                      setGroundingMode(option.value);
-                      resetResult();
-                    }}
-                    className={cn(
-                      "min-h-12 rounded-lg border px-3 py-2 text-left text-xs transition-colors disabled:opacity-45",
-                      selected
-                        ? "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]"
-                        : "border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] text-[var(--marinara-editor-muted)]",
-                    )}
-                  >
-                    <span className="block font-semibold">{option.label}</span>
-                    <span className="mt-0.5 block text-[0.625rem]">{option.detail}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {groundingMode !== "setup" && (
-              <div className="mt-2 space-y-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] p-3">
-                <div className="grid grid-cols-2 gap-2">
-                  {(
-                    [
-                      {
-                        value: "lore_strict",
-                        label: "Strict canon",
-                        detail: "Only lore-backed places",
-                      },
-                      {
-                        value: "lore_expand",
-                        label: "Canon + expansion",
-                        detail: "AI may add fitting places",
-                      },
-                    ] as const
-                  ).map((option) => (
+          {(operation !== "expand" || advancedOpen) && (
+            <fieldset className="mb-4">
+              <legend className="text-xs font-semibold text-[var(--marinara-editor-title)]">Build from</legend>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {(
+                  [
+                    {
+                      value: "setup",
+                      label: "Game setup",
+                      detail: "World and characters",
+                    },
+                    {
+                      value: "lore_strict",
+                      label: "Selected lore",
+                      detail: "Chosen source books",
+                    },
+                  ] as const
+                ).map((option) => {
+                  const selected = option.value === "setup" ? groundingMode === "setup" : groundingMode !== "setup";
+                  return (
                     <button
                       key={option.value}
                       type="button"
-                      aria-pressed={groundingMode === option.value}
-                      disabled={generationPending}
+                      aria-pressed={selected}
+                      disabled={generationPending || (option.value !== "setup" && eligibleLorebooks.length === 0)}
                       onClick={() => {
                         setGroundingMode(option.value);
                         resetResult();
                       }}
                       className={cn(
-                        "min-h-11 rounded-lg px-2 py-2 text-left text-[0.625rem] ring-1 transition-colors disabled:opacity-45",
-                        groundingMode === option.value
-                          ? "bg-[var(--marinara-chat-chrome-highlight-bg)] text-[var(--marinara-chat-chrome-button-text-active)] ring-[var(--marinara-chat-chrome-button-border-active)]"
-                          : "text-[var(--marinara-editor-muted)] ring-[var(--marinara-chat-chrome-panel-border)]",
+                        "min-h-12 rounded-lg border px-3 py-2 text-left text-xs transition-colors disabled:opacity-45",
+                        selected
+                          ? "border-[var(--marinara-chat-chrome-button-border-active)] bg-[var(--marinara-chat-chrome-highlight-bg)]"
+                          : "border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] text-[var(--marinara-editor-muted)]",
                       )}
                     >
                       <span className="block font-semibold">{option.label}</span>
-                      <span className="mt-0.5 block">{option.detail}</span>
+                      <span className="mt-0.5 block text-[0.625rem]">{option.detail}</span>
                     </button>
-                  ))}
-                </div>
-                <p className="text-[0.625rem] text-[var(--marinara-editor-muted)]">
-                  Select the lorebooks the map generator may read. Disabled or chat-excluded books are unavailable.
-                </p>
-                <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
-                  {eligibleLorebooks.map((lorebook) => {
-                    const checked = sourceLorebookIds.includes(lorebook.id);
-                    return (
-                      <label
-                        key={lorebook.id}
-                        className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg px-2 text-xs hover:bg-[var(--marinara-chat-chrome-highlight-bg)]"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={generationPending}
-                          onChange={() => {
-                            setSourceLorebookIds((ids) => (checked ? ids.filter((id) => id !== lorebook.id) : [...ids, lorebook.id]));
-                            resetResult();
-                          }}
-                        />
-                        <BookOpen size="0.75rem" className="shrink-0 text-[var(--marinara-editor-muted)]" />
-                        <span className="min-w-0 flex-1 truncate">{lorebook.name}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-                {sourceLorebookIds.length === 0 && (
-                  <p className="text-[0.625rem] text-amber-300">Choose at least one lorebook to generate.</p>
-                )}
+                  );
+                })}
               </div>
-            )}
-          </fieldset>}
+
+              {groundingMode !== "setup" && (
+                <div className="mt-2 space-y-2 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] p-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    {(
+                      [
+                        {
+                          value: "lore_strict",
+                          label: "Strict canon",
+                          detail: "Only lore-backed places",
+                        },
+                        {
+                          value: "lore_expand",
+                          label: "Canon + expansion",
+                          detail: "AI may add fitting places",
+                        },
+                      ] as const
+                    ).map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        aria-pressed={groundingMode === option.value}
+                        disabled={generationPending}
+                        onClick={() => {
+                          setGroundingMode(option.value);
+                          resetResult();
+                        }}
+                        className={cn(
+                          "min-h-11 rounded-lg px-2 py-2 text-left text-[0.625rem] ring-1 transition-colors disabled:opacity-45",
+                          groundingMode === option.value
+                            ? "bg-[var(--marinara-chat-chrome-highlight-bg)] text-[var(--marinara-chat-chrome-button-text-active)] ring-[var(--marinara-chat-chrome-button-border-active)]"
+                            : "text-[var(--marinara-editor-muted)] ring-[var(--marinara-chat-chrome-panel-border)]",
+                        )}
+                      >
+                        <span className="block font-semibold">{option.label}</span>
+                        <span className="mt-0.5 block">{option.detail}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[0.625rem] text-[var(--marinara-editor-muted)]">
+                    Select the lorebooks the map generator may read. Disabled or chat-excluded books are unavailable.
+                  </p>
+                  <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
+                    {eligibleLorebooks.map((lorebook) => {
+                      const checked = sourceLorebookIds.includes(lorebook.id);
+                      return (
+                        <label
+                          key={lorebook.id}
+                          className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg px-2 text-xs hover:bg-[var(--marinara-chat-chrome-highlight-bg)]"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={generationPending}
+                            onChange={() => {
+                              setSourceLorebookIds((ids) =>
+                                checked ? ids.filter((id) => id !== lorebook.id) : [...ids, lorebook.id],
+                              );
+                              resetResult();
+                            }}
+                          />
+                          <BookOpen size="0.75rem" className="shrink-0 text-[var(--marinara-editor-muted)]" />
+                          <span className="min-w-0 flex-1 truncate">{lorebook.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {sourceLorebookIds.length === 0 && (
+                    <p className="text-[0.625rem] text-amber-300">Choose at least one lorebook to generate.</p>
+                  )}
+                </div>
+              )}
+            </fieldset>
+          )}
 
           <label className="text-xs font-semibold text-[var(--marinara-editor-title)]" htmlFor="spatial-ai-request">
             {operation === "expand" ? "What should be added?" : "What should this world include?"}
@@ -1136,7 +1173,10 @@ export function SpatialMapAiBuilder({
                 </button>
               ))}
             </div>
-            <label className="mt-3 block text-xs font-medium text-[var(--marinara-editor-title)]" htmlFor="spatial-ai-target-count">
+            <label
+              className="mt-3 block text-xs font-medium text-[var(--marinara-editor-title)]"
+              htmlFor="spatial-ai-target-count"
+            >
               Custom place target
               <input
                 id="spatial-ai-target-count"
@@ -1191,7 +1231,8 @@ export function SpatialMapAiBuilder({
           {hasCommittedSpatialHistory && startOver && (
             <p className="mt-2 flex items-start gap-2 text-xs text-amber-300">
               <AlertCircle size="0.75rem" className="mt-0.5 shrink-0" />
-              Saving this replacement starts a new map. Old messages remain, but historical map links may no longer resolve.
+              Saving this replacement starts a new map. Old messages remain, but historical map links may no longer
+              resolve.
             </p>
           )}
           {operation === "replace" && (
@@ -1238,7 +1279,10 @@ export function SpatialMapAiBuilder({
               <div className="h-12 animate-pulse rounded-lg bg-[var(--marinara-editor-surface)]" />
             </div>
           ) : error ? (
-            <div className="mt-4 rounded-lg border border-red-500/25 bg-red-500/10 p-3 text-xs text-red-300" role="alert">
+            <div
+              className="mt-4 rounded-lg border border-red-500/25 bg-red-500/10 p-3 text-xs text-red-300"
+              role="alert"
+            >
               <p className="flex items-start gap-2">
                 <AlertCircle size="0.8125rem" className="mt-0.5 shrink-0" />
                 <span>{error}</span>
@@ -1253,14 +1297,17 @@ export function SpatialMapAiBuilder({
                 <span className="text-[var(--marinara-editor-muted)]">
                   {previewLocations.length} {result.operation === "expand" ? "new " : ""}
                   {previewLocations.length === 1 ? "location" : "locations"} · {maxPreviewDepth}{" "}
-                  {maxPreviewDepth === 1 ? "level" : "levels"} · {result.operation === "expand" ? "not applied" : "not saved"}
+                  {maxPreviewDepth === 1 ? "level" : "levels"} ·{" "}
+                  {result.operation === "expand" ? "not applied" : "not saved"}
                 </span>
               </div>
               <div className="mt-3 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--marinara-chat-chrome-panel-bg)] p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <h4 className="text-[0.6875rem] font-semibold text-[var(--marinara-editor-title)]">Location types</h4>
                   <span className="text-[0.625rem] text-[var(--marinara-editor-muted)]">
-                    {result.hierarchyProfile.mode === "auto" ? "Chosen by AI · edit labels before applying" : result.hierarchyProfile.name}
+                    {result.hierarchyProfile.mode === "auto"
+                      ? "Chosen by AI · edit labels before applying"
+                      : result.hierarchyProfile.name}
                   </span>
                 </div>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -1279,7 +1326,9 @@ export function SpatialMapAiBuilder({
                                     ...current.hierarchyProfile,
                                     mode: "custom",
                                     types: current.hierarchyProfile.types.map((candidate) =>
-                                      candidate.id === type.id ? { ...candidate, label: event.target.value } : candidate,
+                                      candidate.id === type.id
+                                        ? { ...candidate, label: event.target.value }
+                                        : candidate,
                                     ),
                                   },
                                 }
@@ -1288,7 +1337,10 @@ export function SpatialMapAiBuilder({
                         }
                         className="min-h-10 min-w-0 rounded-lg border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-2.5 text-xs"
                       />
-                      <span className="truncate text-[0.5625rem] capitalize text-[var(--marinara-editor-muted)]" title={`Semantic base kind: ${type.baseKind}`}>
+                      <span
+                        className="truncate text-[0.5625rem] capitalize text-[var(--marinara-editor-muted)]"
+                        title={`Semantic base kind: ${type.baseKind}`}
+                      >
                         {type.baseKind}
                       </span>
                     </label>
@@ -1307,7 +1359,8 @@ export function SpatialMapAiBuilder({
                     {result.grounding.mode === "lore_strict" ? "Strict lore grounding" : "Lore-guided expansion"}
                   </p>
                   <p className="mt-1 leading-relaxed text-sky-200/80">
-                    Considered {result.grounding.consideredEntryCount} entries from {result.grounding.selectedLorebookCount}{" "}
+                    Considered {result.grounding.consideredEntryCount} entries from{" "}
+                    {result.grounding.selectedLorebookCount}{" "}
                     {result.grounding.selectedLorebookCount === 1 ? "book" : "books"}.
                     {result.grounding.omittedEntryCount > 0
                       ? ` ${result.grounding.omittedEntryCount} entries were omitted to keep the source packet bounded.`
@@ -1373,21 +1426,28 @@ export function SpatialMapAiBuilder({
                   <div className="mt-2 flex items-start gap-3">
                     <SpatialLocationIcon icon={selectedPreviewLocation.icon} className="text-xl" />
                     <div className="min-w-0 flex-1">
-                      <h4 className="text-sm font-semibold text-[var(--marinara-editor-title)]">{selectedPreviewLocation.name}</h4>
+                      <h4 className="text-sm font-semibold text-[var(--marinara-editor-title)]">
+                        {selectedPreviewLocation.name}
+                      </h4>
                       <p className="mt-0.5 text-[0.625rem] capitalize text-[var(--marinara-editor-muted)]">
-                        {hierarchyTypeForLocation(result.hierarchyProfile, selectedPreviewLocation).label} · {selectedPreviewLocation.childPresentation} children
+                        {hierarchyTypeForLocation(result.hierarchyProfile, selectedPreviewLocation).label} ·{" "}
+                        {selectedPreviewLocation.childPresentation} children
                       </p>
                     </div>
                   </div>
                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
                     <div>
-                      <h5 className="text-[0.6875rem] font-semibold text-[var(--marinara-editor-title)]">Public description</h5>
+                      <h5 className="text-[0.6875rem] font-semibold text-[var(--marinara-editor-title)]">
+                        Public description
+                      </h5>
                       <p className="mt-1 text-xs leading-relaxed text-[var(--marinara-editor-muted)]">
                         {selectedPreviewLocation.description || "No public description was generated."}
                       </p>
                     </div>
                     <div>
-                      <h5 className="text-[0.6875rem] font-semibold text-[var(--marinara-editor-title)]">Private model memory</h5>
+                      <h5 className="text-[0.6875rem] font-semibold text-[var(--marinara-editor-title)]">
+                        Private model memory
+                      </h5>
                       <p className="mt-1 text-xs leading-relaxed text-[var(--marinara-editor-muted)]">
                         {selectedPreviewLocation.modelMemory || "No private model memory was generated."}
                       </p>
@@ -1404,7 +1464,9 @@ export function SpatialMapAiBuilder({
                       </p>
                       {selectedPreviewProvenance.sources.length > 0 && (
                         <p className="mt-1 leading-relaxed text-[var(--marinara-editor-muted)]">
-                          {selectedPreviewProvenance.sources.map((source) => `${source.lorebookName}: ${source.entryName}`).join(" · ")}
+                          {selectedPreviewProvenance.sources
+                            .map((source) => `${source.lorebookName}: ${source.entryName}`)
+                            .join(" · ")}
                         </p>
                       )}
                     </div>
@@ -1418,7 +1480,11 @@ export function SpatialMapAiBuilder({
                   : "Review the complete generated hierarchy here. Continuing moves it into the editor as an unsaved working draft."}
               </p>
               <div className="mt-auto flex flex-wrap justify-end gap-2 pt-4">
-                <button type="button" onClick={onClose} className="mari-editor-action inline-flex min-h-11 px-3 text-xs">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="mari-editor-action inline-flex min-h-11 px-3 text-xs"
+                >
                   {setupReview ? "Skip map" : result.operation === "expand" ? "Keep current map" : "Discard draft"}
                 </button>
                 <button

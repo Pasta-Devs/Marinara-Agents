@@ -6,12 +6,7 @@ import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
 import { generateNoodlerPostImage } from "./slurp-images.service.js";
-import {
-  noodlerAvatarUrl,
-  noodlerBannerUrl,
-  unlinkNoodlerAvatar,
-  unlinkNoodlerBanner,
-} from "./slurp-avatar.js";
+import { noodlerAvatarUrl, noodlerBannerUrl, unlinkNoodlerAvatar, unlinkNoodlerBanner } from "./slurp-avatar.js";
 import { resolveNoodlerImageConnectionId } from "./slurp-image-connections.js";
 import { resolveNoodlerCreatorArtwork } from "./slurp-public-profiles.service.js";
 import { tryNoodlerAccountOperation } from "./slurp-account-operation-lock.js";
@@ -52,8 +47,7 @@ export async function generateNoodlerCreatorArtwork(
     const connections = createConnectionsStorage(db);
     const mappedId = await resolveNoodlerImageConnectionId(db, account.id);
     const imageConnection =
-      (mappedId ? await connections.getWithKey(mappedId) : null) ??
-      (await connections.getDefaultForImageGeneration());
+      (mappedId ? await connections.getWithKey(mappedId) : null) ?? (await connections.getDefaultForImageGeneration());
     if (!imageConnection) return "unavailable" as const;
     const settings = await noodle.getSettings();
     const guidance = input.guidance?.trim().slice(0, 2000);
@@ -69,7 +63,9 @@ export async function generateNoodlerCreatorArtwork(
           stagePersonality: account.settings.privacy.stagePersonality ?? "",
         }),
         guidance ? `User direction: ${guidance}` : "",
-      ].filter(Boolean).join("\n"),
+      ]
+        .filter(Boolean)
+        .join("\n"),
       settings,
       characters: createCharactersStorage(db),
       promptOverrides: createPromptOverridesStorage(db),
@@ -146,8 +142,7 @@ export async function backfillNextNoodlerCreatorArtwork(db: DB): Promise<Noodler
     const connections = createConnectionsStorage(db);
     const mappedId = await resolveNoodlerImageConnectionId(db, target.id);
     const imageConnection =
-      (mappedId ? await connections.getWithKey(mappedId) : null) ??
-      (await connections.getDefaultForImageGeneration());
+      (mappedId ? await connections.getWithKey(mappedId) : null) ?? (await connections.getDefaultForImageGeneration());
     if (!imageConnection) return "unavailable" as const;
 
     const image = await generateNoodlerPostImage({

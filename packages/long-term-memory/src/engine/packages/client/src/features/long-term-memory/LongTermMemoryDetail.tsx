@@ -1,24 +1,10 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  ArrowLeft,
-  CircleHelp,
-  Pencil,
-  Plus,
-  Settings2,
-  Sparkles,
-  TriangleAlert,
-  Upload,
-} from "lucide-react";
+import { ArrowLeft, CircleHelp, Pencil, Plus, Settings2, Sparkles, TriangleAlert, Upload } from "lucide-react";
 import type { LtmStatusResponse } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { queryKeys, request } from "./api";
 import { LongTermMemoryNavigation } from "./LongTermMemoryNavigation";
-import {
-  Button,
-  IconButton,
-  InfoPopover,
-  StatusSurface,
-} from "./shared-controls";
+import { Button, IconButton, InfoPopover, StatusSurface } from "./shared-controls";
 import type {
   CapabilityProps,
   LongTermMemoryDestination,
@@ -110,12 +96,8 @@ const destinationLabelKeys: Record<LongTermMemoryDestination, string> = {
 
 export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const { t: localizeUi } = useLtmTranslation();
-  const backToAgentsLabel = localizeUi(
-    "ui.longTermMemory.longtermmemorydetail.backToAgents",
-  );
-  const addMemoriesLabel = localizeUi(
-    "ui.longTermMemory.longtermmemorydetail.addMemories",
-  );
+  const backToAgentsLabel = localizeUi("ui.longTermMemory.longtermmemorydetail.backToAgents");
+  const addMemoriesLabel = localizeUi("ui.longTermMemory.longtermmemorydetail.addMemories");
   const status = useQuery({
     queryKey: queryKeys.status,
     queryFn: () => request<LtmStatusResponse>("/status"),
@@ -124,16 +106,13 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     queryKey: queryKeys.pendingDrafts,
     queryFn: () => request<{ count: number }>("/drafts/pending-count"),
   });
-  const [destination, setDestination] =
-    useState<LongTermMemoryDestination>("vault");
+  const [destination, setDestination] = useState<LongTermMemoryDestination>("vault");
   const [activationPending, setActivationPending] = useState(false);
   const [activationError, setActivationError] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const addMenuRef = useRef<HTMLDivElement>(null);
   const addTriggerRef = useRef<HTMLButtonElement>(null);
-  const [createMemoryRequest, setCreateMemoryRequest] = useState<number | null>(
-    null,
-  );
+  const [createMemoryRequest, setCreateMemoryRequest] = useState<number | null>(null);
   const [destinationDirty, setDestinationDirty] = useState(false);
   const destinationSaveRef = useRef<(() => Promise<boolean>) | null>(null);
   const navigationSaveInFlightRef = useRef(false);
@@ -143,11 +122,8 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const navigationResolveRef = useRef<((allow: boolean) => void) | null>(null);
   const navigationTriggerRef = useRef<HTMLElement | null>(null);
   const [openedNoteId, setOpenedNoteId] = useState<string | null>(null);
-  const [reviewSourceNoteId, setReviewSourceNoteId] = useState<string | null>(
-    null,
-  );
-  const [recoveryHandoff, setRecoveryHandoff] =
-    useState<LtmRecoveryHandoff | null>(null);
+  const [reviewSourceNoteId, setReviewSourceNoteId] = useState<string | null>(null);
+  const [recoveryHandoff, setRecoveryHandoff] = useState<LtmRecoveryHandoff | null>(null);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [requestedSource, setRequestedSource] = useState<{
@@ -156,11 +132,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   } | null>(null);
   const [selectedSource, setSelectedSource] = useState<SourceTab>("chats");
   const [openActivityRequest, setOpenActivityRequest] = useState(0);
-  const [onboardingSource, setOnboardingSource] =
-    useState<SourceTab>("chats");
+  const [onboardingSource, setOnboardingSource] = useState<SourceTab>("chats");
   const Destination = destinations[destination];
-  const destinationLabel = (value: LongTermMemoryDestination) =>
-    localizeUi(destinationLabelKeys[value]);
+  const destinationLabel = (value: LongTermMemoryDestination) => localizeUi(destinationLabelKeys[value]);
 
   useEffect(() => {
     if (!addOpen) return;
@@ -203,12 +177,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     if (stored === "complete") return;
     const match = onboardingStepPattern.exec(stored);
     const savedStep = match ? Number(match[1]) : null;
-    if (
-      savedStep !== null &&
-      Number.isInteger(savedStep) &&
-      savedStep >= 0 &&
-      savedStep < onboardingSteps.length
-    ) {
+    if (savedStep !== null && Number.isInteger(savedStep) && savedStep >= 0 && savedStep < onboardingSteps.length) {
       setOnboardingStep(savedStep);
       setOnboardingOpen(true);
       return;
@@ -239,32 +208,25 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       return new Promise<boolean>((resolve) => {
         navigationResolveRef.current?.(false);
         navigationResolveRef.current = resolve;
-        navigationTriggerRef.current = document.activeElement instanceof HTMLElement
-          ? document.activeElement
-          : null;
+        navigationTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
         setNavigationPrompt(next);
       });
     }
     const options = {
-      title: localizeUi(
-        "ui.longTermMemory.longtermmemorydetail.discardUnsavedChanges",
-      ),
-      message: localizeUi(
-        "ui.longTermMemory.longtermmemorydetail.unsavedChangesLostBeforeOpening",
-        { destination: next },
-      ),
-      confirmLabel: localizeUi(
-        "ui.longTermMemory.longtermmemorydetail.discardChanges",
-      ),
+      title: localizeUi("ui.longTermMemory.longtermmemorydetail.discardUnsavedChanges"),
+      message: localizeUi("ui.longTermMemory.longtermmemorydetail.unsavedChangesLostBeforeOpening", {
+        destination: next,
+      }),
+      confirmLabel: localizeUi("ui.longTermMemory.longtermmemorydetail.discardChanges"),
       tone: "destructive" as const,
     };
     return props.confirmAction
       ? await props.confirmAction(options)
       : window.confirm(
-          localizeUi(
-            "ui.longTermMemory.longtermmemorydetail.confirmationWithMessage",
-            { title: options.title, message: options.message },
-          ),
+          localizeUi("ui.longTermMemory.longtermmemorydetail.confirmationWithMessage", {
+            title: options.title,
+            message: options.message,
+          }),
         );
   };
   const finishNavigationPrompt = async (decision: "save" | "discard" | "stay") => {
@@ -299,12 +261,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     return true;
   };
   const close = async () => {
-    if (
-      !(await confirmDestinationChange(
-        localizeUi("ui.longTermMemory.longtermmemorydetail.agents"),
-      ))
-    )
-      return;
+    if (!(await confirmDestinationChange(localizeUi("ui.longTermMemory.longtermmemorydetail.agents")))) return;
     setDestinationDirty(false);
     props.onDirtyChange?.(false);
     props.onClose?.();
@@ -317,16 +274,18 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     setDestination("vault");
   };
   const openReview = async (sourceNoteId?: string) => {
-    if (!(await confirmDestinationChange(destinationLabel("review"))))
-      return false;
+    if (!(await confirmDestinationChange(destinationLabel("review")))) return false;
     setDestinationDirty(false);
     setReviewSourceNoteId(sourceNoteId ?? null);
     setDestination("review");
     return true;
   };
-  const recoverCandidate: NonNullable<
-    LongTermMemoryDestinationProps["onRecoverCandidate"]
-  > = async (candidate, scope, modes, rejectedSuggestionId) => {
+  const recoverCandidate: NonNullable<LongTermMemoryDestinationProps["onRecoverCandidate"]> = async (
+    candidate,
+    scope,
+    modes,
+    rejectedSuggestionId,
+  ) => {
     if (!(await confirmDestinationChange(destinationLabel("vault")))) return;
     setOpenedNoteId(null);
     setRecoveryHandoff({
@@ -340,8 +299,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
     setDestination("vault");
   };
   const openSources = async (source?: SourceTab) => {
-    if (!(await confirmDestinationChange(destinationLabel("sources"))))
-      return false;
+    if (!(await confirmDestinationChange(destinationLabel("sources")))) return false;
     setDestinationDirty(false);
     setAddOpen(false);
     if (source) {
@@ -367,9 +325,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       setActivationError(
         error instanceof Error
           ? error.message
-          : localizeUi(
-              "ui.longTermMemory.longtermmemorydetail.couldNotUpdateThisChat",
-            ),
+          : localizeUi("ui.longTermMemory.longtermmemorydetail.couldNotUpdateThisChat"),
       );
     } finally {
       setActivationPending(false);
@@ -394,15 +350,8 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       not_built: "ui.longTermMemory.longtermmemorydetail.vaultNotBuilt",
     }[health ?? "not_built"],
   );
-  const emptyUnbuiltVault =
-    health === "not_built" && (status.data?.notes.total ?? 0) === 0;
-  const needsHealthAttention = [
-    "building",
-    "degraded",
-    "stale",
-    "corrupt",
-    "failed",
-  ].includes(health ?? "");
+  const emptyUnbuiltVault = health === "not_built" && (status.data?.notes.total ?? 0) === 0;
+  const needsHealthAttention = ["building", "degraded", "stale", "corrupt", "failed"].includes(health ?? "");
   const healthTone =
     !status.data || emptyUnbuiltVault
       ? "bg-[var(--muted-foreground)]"
@@ -415,23 +364,14 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const indexedChunks = status.data?.indexes.chunkCount ?? "--";
   const healthInfo = (
     <div className="space-y-2">
-      <strong className="block text-[var(--marinara-editor-text)]">
-        {healthLabel}
-      </strong>
+      <strong className="block text-[var(--marinara-editor-text)]">{healthLabel}</strong>
       <p>
-        {indexedChunks}{" "}
-        {localizeUi("ui.longTermMemory.longtermmemorydetail.indexedChunks")}
+        {indexedChunks} {localizeUi("ui.longTermMemory.longtermmemorydetail.indexedChunks")}
       </p>
-      <p>
-        {localizeUi(
-          "ui.longTermMemory.longtermmemorydetail.checkSettingsMaintenanceReindexRecallData",
-        )}
-      </p>
+      <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.checkSettingsMaintenanceReindexRecallData")}</p>
     </div>
   );
-  const chatLabel =
-    props.chatName ??
-    localizeUi("ui.longTermMemory.longtermmemorydetail.thisChat");
+  const chatLabel = props.chatName ?? localizeUi("ui.longTermMemory.longtermmemorydetail.thisChat");
   const connectedChat = Boolean(props.chatId);
   const activeChat = connectedChat && props.enabledForChat === true;
   const openPromptPresetSections = () => {
@@ -459,9 +399,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       setActivationError(
         error instanceof Error
           ? error.message
-          : localizeUi(
-              "ui.longTermMemory.longtermmemorydetail.couldNotUpdateThisChat",
-            ),
+          : localizeUi("ui.longTermMemory.longtermmemorydetail.couldNotUpdateThisChat"),
       );
     } finally {
       setActivationPending(false);
@@ -643,9 +581,23 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
               {localizeUi("ui.longTermMemory.memoryvault.unsavedNavigationDescription", { action: navigationPrompt })}
             </p>
             <div className="flex flex-wrap justify-end gap-2">
-              <Button disabled={navigationSaveInFlight} data-ltm-destination-stay onClick={() => void finishNavigationPrompt("stay")}>{localizeUi("ui.longTermMemory.memoryvault.stay")}</Button>
-              <Button disabled={navigationSaveInFlight} destructive onClick={() => void finishNavigationPrompt("discard")}>{localizeUi("ui.longTermMemory.memoryvault.discardAndContinue")}</Button>
-              <Button disabled={navigationSaveInFlight} primary onClick={() => void finishNavigationPrompt("save")}>{localizeUi("ui.longTermMemory.memoryvault.saveAndContinue")}</Button>
+              <Button
+                disabled={navigationSaveInFlight}
+                data-ltm-destination-stay
+                onClick={() => void finishNavigationPrompt("stay")}
+              >
+                {localizeUi("ui.longTermMemory.memoryvault.stay")}
+              </Button>
+              <Button
+                disabled={navigationSaveInFlight}
+                destructive
+                onClick={() => void finishNavigationPrompt("discard")}
+              >
+                {localizeUi("ui.longTermMemory.memoryvault.discardAndContinue")}
+              </Button>
+              <Button disabled={navigationSaveInFlight} primary onClick={() => void finishNavigationPrompt("save")}>
+                {localizeUi("ui.longTermMemory.memoryvault.saveAndContinue")}
+              </Button>
             </div>
           </section>
         </dialog>
@@ -663,18 +615,11 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
             <ArrowLeft aria-hidden="true" size="1.125rem" />
           </button>
           <span className="mari-editor-icon-tile">
-            <Sparkles
-              aria-hidden="true"
-              size="1.125rem"
-              className="max-md:!h-[0.875rem] max-md:!w-[0.875rem]"
-            />
+            <Sparkles aria-hidden="true" size="1.125rem" className="max-md:!h-[0.875rem] max-md:!w-[0.875rem]" />
           </span>
           <div className="min-w-0 flex-1">
             <h1 id="ltm-detail-title" className="mari-editor-title truncate">
-              {props.agent?.name?.trim() ||
-                localizeUi(
-                  "ui.longTermMemory.longtermmemorydetail.longTermMemory",
-                )}
+              {props.agent?.name?.trim() || localizeUi("ui.longTermMemory.longtermmemorydetail.longTermMemory")}
             </h1>
             <p className="mari-editor-meta mt-0.5">
               {props.agent?.author?.trim() || "Pasta Devs"}
@@ -693,11 +638,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   ? "ui.longTermMemory.longtermmemorydetail.activeInValue1"
                   : "ui.longTermMemory.longtermmemorydetail.inactiveInValue1",
                 {
-                  value1:
-                    props.chatName ??
-                    localizeUi(
-                      "ui.longTermMemory.longtermmemorydetail.thisChat",
-                    ),
+                  value1: props.chatName ?? localizeUi("ui.longTermMemory.longtermmemorydetail.thisChat"),
                 },
               )}
               title={localizeUi(
@@ -705,11 +646,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   ? "ui.longTermMemory.longtermmemorydetail.activeInValue1"
                   : "ui.longTermMemory.longtermmemorydetail.inactiveInValue1",
                 {
-                  value1:
-                    props.chatName ??
-                    localizeUi(
-                      "ui.longTermMemory.longtermmemorydetail.thisChat",
-                    ),
+                  value1: props.chatName ?? localizeUi("ui.longTermMemory.longtermmemorydetail.thisChat"),
                 },
               )}
               data-ltm-control="activation"
@@ -724,10 +661,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                     : "ui.longTermMemory.longtermmemorydetail.inactive",
                 )}
               </span>
-              <span
-                aria-hidden="true"
-                data-ltm-activation-track
-              >
+              <span aria-hidden="true" data-ltm-activation-track>
                 <span data-ltm-activation-knob />
               </span>
             </button>
@@ -745,9 +679,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                 title={addMemoriesLabel}
               >
                 <Plus aria-hidden="true" size="0.75rem" />
-                <span className="hidden sm:inline">
-                  {addMemoriesLabel}
-                </span>
+                <span className="hidden sm:inline">{addMemoriesLabel}</span>
               </Button>
               {addOpen ? (
                 <div
@@ -758,18 +690,10 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   className="mari-editor-panel absolute right-0 z-30 mt-2 w-72 p-2 text-[var(--marinara-editor-text)] shadow-lg"
                 >
                   <div className="px-2 py-1">
-                    <h2
-                      id="ltm-add-menu-title"
-                      className="text-sm font-semibold"
-                    >
-                      {localizeUi(
-                        "ui.longTermMemory.longtermmemorydetail.addMemories",
-                      )}
+                    <h2 id="ltm-add-menu-title" className="text-sm font-semibold">
+                      {localizeUi("ui.longTermMemory.longtermmemorydetail.addMemories")}
                     </h2>
-                    <p
-                      id="ltm-add-menu-description"
-                      className="mt-0.5 text-xs text-[var(--muted-foreground)]"
-                    >
+                    <p id="ltm-add-menu-description" className="mt-0.5 text-xs text-[var(--muted-foreground)]">
                       {localizeUi(
                         "ui.longTermMemory.longtermmemorydetail.durableContextUsuallyStartsInAnExistingSource",
                       )}
@@ -780,26 +704,16 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                     onClick={() => void openSources()}
                     className="mari-editor-tab mt-1 flex min-h-16 w-full items-center gap-3 rounded-md p-3 text-left"
                   >
-                    <Upload
-                      aria-hidden="true"
-                      size="1rem"
-                      className="shrink-0 text-[var(--marinara-editor-accent)]"
-                    />
+                    <Upload aria-hidden="true" size="1rem" className="shrink-0 text-[var(--marinara-editor-accent)]" />
                     <span>
                       <strong className="block text-sm">
-                        {localizeUi(
-                          "ui.longTermMemory.longtermmemorydetail.importSources",
-                        )}
+                        {localizeUi("ui.longTermMemory.longtermmemorydetail.importSources")}
                       </strong>
                       <span className="block text-xs text-[var(--marinara-editor-accent)]">
-                        {localizeUi(
-                          "ui.longTermMemory.longtermmemorydetail.recommended",
-                        )}
+                        {localizeUi("ui.longTermMemory.longtermmemorydetail.recommended")}
                       </span>
                       <span className="block text-xs text-[var(--muted-foreground)]">
-                        {localizeUi(
-                          "ui.longTermMemory.longtermmemorydetail.charactersLorebooksAndChatSummaries",
-                        )}
+                        {localizeUi("ui.longTermMemory.longtermmemorydetail.charactersLorebooksAndChatSummaries")}
                       </span>
                     </span>
                   </button>
@@ -812,21 +726,13 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                     }}
                     className="mari-editor-tab flex min-h-14 w-full items-center gap-3 rounded-md p-3 text-left"
                   >
-                    <Pencil
-                      aria-hidden="true"
-                      size="1rem"
-                      className="shrink-0"
-                    />
+                    <Pencil aria-hidden="true" size="1rem" className="shrink-0" />
                     <span>
                       <strong className="block text-sm">
-                        {localizeUi(
-                          "ui.longTermMemory.longtermmemorydetail.createManually",
-                        )}
+                        {localizeUi("ui.longTermMemory.longtermmemorydetail.createManually")}
                       </strong>
                       <span className="block text-xs text-[var(--muted-foreground)]">
-                        {localizeUi(
-                          "ui.longTermMemory.longtermmemorydetail.oneOffDurableContext",
-                        )}
+                        {localizeUi("ui.longTermMemory.longtermmemorydetail.oneOffDurableContext")}
                       </span>
                     </span>
                   </button>
@@ -836,9 +742,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           ) : null}
           <IconButton
             icon={CircleHelp}
-            label={localizeUi(
-              "ui.longTermMemory.longtermmemorydetail.showSetupGuide",
-            )}
+            label={localizeUi("ui.longTermMemory.longtermmemorydetail.showSetupGuide")}
             onClick={() => {
               setOnboardingStep(0);
               setOnboardingOpen(true);
@@ -848,9 +752,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           {props.onManagePackage ? (
             <IconButton
               icon={Settings2}
-              label={localizeUi(
-                "ui.longTermMemory.longtermmemorydetail.managePackage",
-              )}
+              label={localizeUi("ui.longTermMemory.longtermmemorydetail.managePackage")}
               data-ltm-control="manage-package"
               onClick={props.onManagePackage}
               className="h-11 min-h-11 w-11 min-w-11"
@@ -880,56 +782,43 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                     data-ltm-surface="vault-health-pill"
                     className="mari-editor-panel mari-editor-panel--soft hidden min-h-11 shrink-0 items-center gap-2 px-3 text-xs text-[var(--marinara-editor-muted)] md:flex"
                   >
-                    <span
-                      aria-hidden="true"
-                      className={`h-1.5 w-1.5 rounded-full ${healthTone}`}
-                    />
+                    <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${healthTone}`} />
                     <span aria-live="polite" aria-atomic="true">
                       {status.isError
-                        ? localizeUi(
-                            "ui.longTermMemory.longtermmemorydetail.statusUnavailable",
-                          )
+                        ? localizeUi("ui.longTermMemory.longtermmemorydetail.statusUnavailable")
                         : status.data
                           ? healthLabel
-                          : localizeUi(
-                              "ui.longTermMemory.longtermmemorydetail.loadingStatus",
-                            )}
+                          : localizeUi("ui.longTermMemory.longtermmemorydetail.loadingStatus")}
                     </span>
                     {needsHealthAttention ? null : (
-                    <InfoPopover
-                      label={localizeUi(
-                        "ui.longTermMemory.longtermmemorydetail.howToRepairVaultHealth",
-                      )}
-                      content={healthInfo}
-                      compact
-                    />
+                      <InfoPopover
+                        label={localizeUi("ui.longTermMemory.longtermmemorydetail.howToRepairVaultHealth")}
+                        content={healthInfo}
+                        compact
+                      />
                     )}
                   </div>
                 ) : null}
               </div>
-                {needsHealthAttention ? (
-                  <StatusSurface
-                    tone={healthNeedsDangerTone ? "danger" : "warning"}
-                    data-ltm-surface="vault-health-warning"
-                    className="min-h-12 justify-between px-3 py-2 text-sm font-medium"
-                  >
-                    <span className="flex min-w-0 items-center gap-2">
-                      <TriangleAlert
-                        aria-hidden="true"
-                        size="1rem"
-                        className="shrink-0 !text-[var(--marinara-editor-warning)]"
-                      />
-                      <span className="font-semibold">{healthLabel}</span>
+              {needsHealthAttention ? (
+                <StatusSurface
+                  tone={healthNeedsDangerTone ? "danger" : "warning"}
+                  data-ltm-surface="vault-health-warning"
+                  className="min-h-12 justify-between px-3 py-2 text-sm font-medium"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <TriangleAlert
+                      aria-hidden="true"
+                      size="1rem"
+                      className="shrink-0 !text-[var(--marinara-editor-warning)]"
+                    />
+                    <span className="font-semibold">{healthLabel}</span>
                     <span className="hidden truncate sm:inline">
-                      {localizeUi(
-                        "ui.longTermMemory.longtermmemorydetail.checkSettingsMaintenanceReindexRecallData",
-                      )}
+                      {localizeUi("ui.longTermMemory.longtermmemorydetail.checkSettingsMaintenanceReindexRecallData")}
                     </span>
                   </span>
                   <InfoPopover
-                    label={localizeUi(
-                      "ui.longTermMemory.longtermmemorydetail.howToRepairVaultHealth",
-                    )}
+                    label={localizeUi("ui.longTermMemory.longtermmemorydetail.howToRepairVaultHealth")}
                     content={healthInfo}
                   />
                 </StatusSurface>
@@ -944,14 +833,10 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   containerType: "inline-size",
                 }}
               >
-                {activationError ? (
-                  <StatusSurface tone="danger">{activationError}</StatusSurface>
-                ) : null}
+                {activationError ? <StatusSurface tone="danger">{activationError}</StatusSurface> : null}
                 {status.isError ? (
                   <StatusSurface tone="danger">
-                    {localizeUi(
-                      "ui.longTermMemory.longtermmemorydetail.longTermMemoryStatusCouldNotLoad",
-                    )}
+                    {localizeUi("ui.longTermMemory.longtermmemorydetail.longTermMemoryStatusCouldNotLoad")}
                   </StatusSurface>
                 ) : null}
                 {onboardingOpen ? (
@@ -1057,37 +942,21 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                         className="h-10 w-10 shrink-0 object-contain"
                       />
                       <p className="min-w-0 flex-1 text-xs font-semibold">
-                        {localizeUi(
-                          "ui.longTermMemory.longtermmemorydetail.professorMariSSetupGuide",
-                        )}
+                        {localizeUi("ui.longTermMemory.longtermmemorydetail.professorMariSSetupGuide")}
                       </p>
                       <p className="shrink-0 text-xs text-[var(--muted-foreground)]">
-                        {localizeUi(
-                          "ui.longTermMemory.longtermmemorydetail.stepProgress",
-                          {
-                            current: onboardingStep + 1,
-                            total: onboardingSteps.length,
-                            label: localizeUi(
-                              onboardingSteps[onboardingStep].labelKey,
-                            ),
-                          },
-                        )}
+                        {localizeUi("ui.longTermMemory.longtermmemorydetail.stepProgress", {
+                          current: onboardingStep + 1,
+                          total: onboardingSteps.length,
+                          label: localizeUi(onboardingSteps[onboardingStep].labelKey),
+                        })}
                       </p>
                     </div>
                     <div data-ltm-onboarding-body className="p-4 sm:p-6">
                       <div className="space-y-4">
-                        <div
-                          className="space-y-2"
-                          aria-live="polite"
-                          aria-atomic="true"
-                        >
-                          <h2
-                            id="ltm-onboarding-title"
-                            className="text-lg font-semibold"
-                          >
-                            {localizeUi(
-                              onboardingSteps[onboardingStep].titleKey,
-                            )}
+                        <div className="space-y-2" aria-live="polite" aria-atomic="true">
+                          <h2 id="ltm-onboarding-title" className="text-lg font-semibold">
+                            {localizeUi(onboardingSteps[onboardingStep].titleKey)}
                           </h2>
                           <div
                             id="ltm-onboarding-description"
@@ -1095,46 +964,28 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                           >
                             {onboardingStep === 0 ? (
                               <>
-                                <p>
-                                  {localizeUi(
-                                    "ui.longTermMemory.longtermmemorydetail.memoryStatesIntro",
-                                  )}
-                                </p>
+                                <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.memoryStatesIntro")}</p>
                                 <dl className="space-y-4">
                                   <div>
                                     <dt className="font-semibold text-[var(--foreground)]">
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.sourceNote",
-                                      )}
+                                      {localizeUi("ui.longTermMemory.longtermmemorydetail.sourceNote")}
+                                    </dt>
+                                    <dd>{localizeUi("ui.longTermMemory.longtermmemorydetail.sourceNoteDefinition")}</dd>
+                                  </div>
+                                  <div>
+                                    <dt className="font-semibold text-[var(--foreground)]">
+                                      {localizeUi("ui.longTermMemory.longtermmemorydetail.proposedMemory")}
                                     </dt>
                                     <dd>
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.sourceNoteDefinition",
-                                      )}
+                                      {localizeUi("ui.longTermMemory.longtermmemorydetail.proposedMemoryDefinition")}
                                     </dd>
                                   </div>
                                   <div>
                                     <dt className="font-semibold text-[var(--foreground)]">
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.proposedMemory",
-                                      )}
+                                      {localizeUi("ui.longTermMemory.longtermmemorydetail.savedMemory")}
                                     </dt>
                                     <dd>
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.proposedMemoryDefinition",
-                                      )}
-                                    </dd>
-                                  </div>
-                                  <div>
-                                    <dt className="font-semibold text-[var(--foreground)]">
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.savedMemory",
-                                      )}
-                                    </dt>
-                                    <dd>
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.savedMemoryDefinition",
-                                      )}
+                                      {localizeUi("ui.longTermMemory.longtermmemorydetail.savedMemoryDefinition")}
                                     </dd>
                                   </div>
                                 </dl>
@@ -1143,85 +994,49 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                               <>
                                 <p>
                                   <strong className="font-semibold text-[var(--foreground)]">
-                                    {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.recalledMemory",
-                                    )}
+                                    {localizeUi("ui.longTermMemory.longtermmemorydetail.recalledMemory")}
                                   </strong>{" "}
-                                  {localizeUi(
-                                    "ui.longTermMemory.longtermmemorydetail.recalledMemoryDefinition",
-                                  )}
+                                  {localizeUi("ui.longTermMemory.longtermmemorydetail.recalledMemoryDefinition")}
                                 </p>
-                                <p>
-                                  {localizeUi(
-                                    "ui.longTermMemory.longtermmemorydetail.recallNotEveryReply",
-                                  )}
-                                </p>
-                                <p>
-                                  {localizeUi(
-                                    "ui.longTermMemory.longtermmemorydetail.recallMatchmaker",
-                                  )}
-                                </p>
+                                <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.recallNotEveryReply")}</p>
+                                <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.recallMatchmaker")}</p>
                               </>
                             ) : onboardingStep === 2 ? (
                               <>
                                 {activeChat ? (
                                   <>
                                     <p>
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.activeChatStatus",
-                                        { value1: chatLabel },
-                                      )}
+                                      {localizeUi("ui.longTermMemory.longtermmemorydetail.activeChatStatus", {
+                                        value1: chatLabel,
+                                      })}
                                     </p>
-                                    <p>
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.activeChatBehavior",
-                                      )}
-                                    </p>
+                                    <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.activeChatBehavior")}</p>
                                   </>
                                 ) : connectedChat ? (
                                   <>
                                     <p>
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.inactiveChatStatus",
-                                        { value1: chatLabel },
-                                      )}
+                                      {localizeUi("ui.longTermMemory.longtermmemorydetail.inactiveChatStatus", {
+                                        value1: chatLabel,
+                                      })}
+                                    </p>
+                                    <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.inactiveChatAction")}</p>
+                                    <p>
+                                      {localizeUi("ui.longTermMemory.longtermmemorydetail.inactiveChatAvailability")}
                                     </p>
                                     <p>
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.inactiveChatAction",
-                                      )}
-                                    </p>
-                                    <p>
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.inactiveChatAvailability",
-                                      )}
-                                    </p>
-                                    <p>
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.inactiveChatVerification",
-                                      )}
+                                      {localizeUi("ui.longTermMemory.longtermmemorydetail.inactiveChatVerification")}
                                     </p>
                                   </>
                                 ) : (
                                   <>
-                                    <p>
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.noChatAvailability",
-                                      )}
-                                    </p>
-                                    <p>
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.noChatActivationPath",
-                                      )}
-                                    </p>
+                                    <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.noChatAvailability")}</p>
+                                    <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.noChatActivationPath")}</p>
                                   </>
                                 )}
                                 {props.chatMode === "conversation" ? (
                                   <>
                                     <p>
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.conversationPlacementLead",
-                                      )}
+                                      {localizeUi("ui.longTermMemory.longtermmemorydetail.conversationPlacementLead")}
                                     </p>
                                     <p>
                                       {localizeUi(
@@ -1237,8 +1052,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                       )}
                                     </p>
                                   </>
-                                ) : props.chatMode === "roleplay" ||
-                                  props.chatMode === "game" ? (
+                                ) : props.chatMode === "roleplay" || props.chatMode === "game" ? (
                                   <>
                                     <ol className="list-decimal list-outside space-y-1 ps-6">
                                       <li>
@@ -1272,133 +1086,72 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                               </>
                             ) : onboardingStep === 3 ? (
                               <>
-                                <p>
-                                  {localizeUi(
-                                    "ui.longTermMemory.longtermmemorydetail.sourceChoiceIntro",
-                                  )}
-                                </p>
+                                <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.sourceChoiceIntro")}</p>
                                 <ul className="list-disc list-outside space-y-1 ps-6">
                                   <li>
                                     <strong className="font-semibold text-[var(--foreground)]">
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.sourceChats",
-                                      )}
+                                      {localizeUi("ui.longTermMemory.longtermmemorydetail.sourceChats")}
                                     </strong>{" "}
-                                    {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.sourceChatDescription",
-                                    )}
+                                    {localizeUi("ui.longTermMemory.longtermmemorydetail.sourceChatDescription")}
                                   </li>
                                   <li>
                                     <strong className="font-semibold text-[var(--foreground)]">
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.sourceLorebooks",
-                                      )}
+                                      {localizeUi("ui.longTermMemory.longtermmemorydetail.sourceLorebooks")}
                                     </strong>{" "}
-                                    {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.sourceLorebookDescription",
-                                    )}
+                                    {localizeUi("ui.longTermMemory.longtermmemorydetail.sourceLorebookDescription")}
                                   </li>
                                   <li>
                                     <strong className="font-semibold text-[var(--foreground)]">
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.sourceCharacters",
-                                      )}
+                                      {localizeUi("ui.longTermMemory.longtermmemorydetail.sourceCharacters")}
                                     </strong>{" "}
-                                    {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.sourceCharacterDescription",
-                                    )}
+                                    {localizeUi("ui.longTermMemory.longtermmemorydetail.sourceCharacterDescription")}
                                   </li>
                                 </ul>
-                                <p>
-                                  {localizeUi(
-                                    "ui.longTermMemory.longtermmemorydetail.sourceChoiceAfterList",
-                                  )}
-                                </p>
+                                <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.sourceChoiceAfterList")}</p>
                               </>
                             ) : onboardingStep === 4 ? (
                               <>
-                                <p>
-                                  {localizeUi(
-                                    "ui.longTermMemory.longtermmemorydetail.reviewIntro",
-                                  )}
-                                </p>
+                                <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.reviewIntro")}</p>
                                 <ul className="list-disc list-outside space-y-1 ps-6">
                                   <li>
                                     <strong className="font-semibold text-[var(--foreground)]">
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.reviewAccept",
-                                      )}
+                                      {localizeUi("ui.longTermMemory.longtermmemorydetail.reviewAccept")}
                                     </strong>{" "}
-                                    {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.reviewAcceptConsequence",
-                                    )}
+                                    {localizeUi("ui.longTermMemory.longtermmemorydetail.reviewAcceptConsequence")}
                                   </li>
                                   <li>
                                     <strong className="font-semibold text-[var(--foreground)]">
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.reviewEdit",
-                                      )}
+                                      {localizeUi("ui.longTermMemory.longtermmemorydetail.reviewEdit")}
                                     </strong>{" "}
-                                    {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.reviewEditConsequence",
-                                    )}
+                                    {localizeUi("ui.longTermMemory.longtermmemorydetail.reviewEditConsequence")}
                                   </li>
                                   <li>
                                     <strong className="font-semibold text-[var(--foreground)]">
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.reviewSkip",
-                                      )}
+                                      {localizeUi("ui.longTermMemory.longtermmemorydetail.reviewSkip")}
                                     </strong>{" "}
-                                    {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.reviewSkipConsequence",
-                                    )}
+                                    {localizeUi("ui.longTermMemory.longtermmemorydetail.reviewSkipConsequence")}
                                   </li>
                                 </ul>
-                                <p>
-                                  {localizeUi(
-                                    "ui.longTermMemory.longtermmemorydetail.reviewStableAppearance",
-                                  )}
-                                </p>
-                                <p>
-                                  {localizeUi(
-                                    "ui.longTermMemory.longtermmemorydetail.reviewRecallEligibility",
-                                  )}
-                                </p>
+                                <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.reviewStableAppearance")}</p>
+                                <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.reviewRecallEligibility")}</p>
                               </>
                             ) : onboardingStep === 5 ? (
                               activeChat ? (
                                 <>
-                                  <p>
-                                    {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.verifyIntro",
-                                    )}
-                                  </p>
+                                  <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.verifyIntro")}</p>
                                   <ol className="list-decimal list-outside space-y-1 ps-6">
                                     <li>
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.verifySendMessage",
-                                        { value1: chatLabel },
-                                      )}
+                                      {localizeUi("ui.longTermMemory.longtermmemorydetail.verifySendMessage", {
+                                        value1: chatLabel,
+                                      })}
                                     </li>
-                                    <li>
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.verifyPeekPrompt",
-                                      )}
-                                    </li>
+                                    <li>{localizeUi("ui.longTermMemory.longtermmemorydetail.verifyPeekPrompt")}</li>
                                   </ol>
-                                  <p>
-                                    {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.verifyZeroResults",
-                                    )}
-                                  </p>
+                                  <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.verifyZeroResults")}</p>
                                 </>
                               ) : (
                                 <>
-                                  <p>
-                                    {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.verifyPrerequisite",
-                                    )}
-                                  </p>
+                                  <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.verifyPrerequisite")}</p>
                                   <ol className="list-decimal list-outside space-y-1 ps-6">
                                     <li>
                                       {localizeUi(
@@ -1415,16 +1168,10 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                               )
                             ) : onboardingStep === 6 ? (
                               <>
-                                <p>
-                                  {localizeUi(
-                                    "ui.longTermMemory.longtermmemorydetail.underTheHoodIntro",
-                                  )}
-                                </p>
+                                <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.underTheHoodIntro")}</p>
                                 <details className="rounded-md border border-[var(--border)] px-3 py-2">
                                   <summary className="cursor-pointer font-semibold text-[var(--foreground)]">
-                                    {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.underTheHoodExtraction",
-                                    )}
+                                    {localizeUi("ui.longTermMemory.longtermmemorydetail.underTheHoodExtraction")}
                                   </summary>
                                   <div className="mt-3 space-y-3 text-sm leading-6 text-[var(--muted-foreground)]">
                                     <p>
@@ -1433,9 +1180,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                           "ui.longTermMemory.longtermmemorydetail.underTheHoodSourceNotesLabel",
                                         )}
                                       </strong>{" "}
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.underTheHoodSourceNotes",
-                                      )}
+                                      {localizeUi("ui.longTermMemory.longtermmemorydetail.underTheHoodSourceNotes")}
                                     </p>
                                     <p>
                                       <strong className="font-semibold text-[var(--foreground)]">
@@ -1443,9 +1188,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                           "ui.longTermMemory.longtermmemorydetail.underTheHoodFingerprintsLabel",
                                         )}
                                       </strong>{" "}
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.underTheHoodFingerprints",
-                                      )}
+                                      {localizeUi("ui.longTermMemory.longtermmemorydetail.underTheHoodFingerprints")}
                                     </p>
                                     <p>
                                       <strong className="font-semibold text-[var(--foreground)]">
@@ -1453,19 +1196,13 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                           "ui.longTermMemory.longtermmemorydetail.underTheHoodCandidatesLabel",
                                         )}
                                       </strong>{" "}
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.underTheHoodCandidates",
-                                      )}
+                                      {localizeUi("ui.longTermMemory.longtermmemorydetail.underTheHoodCandidates")}
                                     </p>
                                     <p>
                                       <strong className="font-semibold text-[var(--foreground)]">
-                                        {localizeUi(
-                                          "ui.longTermMemory.longtermmemorydetail.underTheHoodEvidenceLabel",
-                                        )}
+                                        {localizeUi("ui.longTermMemory.longtermmemorydetail.underTheHoodEvidenceLabel")}
                                       </strong>{" "}
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.underTheHoodEvidence",
-                                      )}
+                                      {localizeUi("ui.longTermMemory.longtermmemorydetail.underTheHoodEvidence")}
                                     </p>
                                     <p>
                                       <strong className="font-semibold text-[var(--foreground)]">
@@ -1473,27 +1210,19 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                           "ui.longTermMemory.longtermmemorydetail.underTheHoodDuplicatesLabel",
                                         )}
                                       </strong>{" "}
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.underTheHoodDuplicates",
-                                      )}
+                                      {localizeUi("ui.longTermMemory.longtermmemorydetail.underTheHoodDuplicates")}
                                     </p>
                                     <p>
                                       <strong className="font-semibold text-[var(--foreground)]">
-                                        {localizeUi(
-                                          "ui.longTermMemory.longtermmemorydetail.underTheHoodReviewLabel",
-                                        )}
+                                        {localizeUi("ui.longTermMemory.longtermmemorydetail.underTheHoodReviewLabel")}
                                       </strong>{" "}
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.underTheHoodReview",
-                                      )}
+                                      {localizeUi("ui.longTermMemory.longtermmemorydetail.underTheHoodReview")}
                                     </p>
                                   </div>
                                 </details>
                                 <details className="rounded-md border border-[var(--border)] px-3 py-2">
                                   <summary className="cursor-pointer font-semibold text-[var(--foreground)]">
-                                    {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.underTheHoodRecall",
-                                    )}
+                                    {localizeUi("ui.longTermMemory.longtermmemorydetail.underTheHoodRecall")}
                                   </summary>
                                   <div className="mt-3 space-y-3 text-sm leading-6 text-[var(--muted-foreground)]">
                                     <ul className="list-disc list-outside space-y-2 ps-6">
@@ -1503,9 +1232,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                             "ui.longTermMemory.longtermmemorydetail.underTheHoodDirectMatchesLabel",
                                           )}
                                         </strong>{" "}
-                                        {localizeUi(
-                                          "ui.longTermMemory.longtermmemorydetail.underTheHoodDirectMatches",
-                                        )}
+                                        {localizeUi("ui.longTermMemory.longtermmemorydetail.underTheHoodDirectMatches")}
                                       </li>
                                       <li>
                                         <strong className="font-semibold text-[var(--foreground)]">
@@ -1513,9 +1240,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                             "ui.longTermMemory.longtermmemorydetail.underTheHoodWordMatchingLabel",
                                           )}
                                         </strong>{" "}
-                                        {localizeUi(
-                                          "ui.longTermMemory.longtermmemorydetail.underTheHoodWordMatching",
-                                        )}
+                                        {localizeUi("ui.longTermMemory.longtermmemorydetail.underTheHoodWordMatching")}
                                       </li>
                                       <li>
                                         <strong className="font-semibold text-[var(--foreground)]">
@@ -1523,9 +1248,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                             "ui.longTermMemory.longtermmemorydetail.underTheHoodKeywordsLabel",
                                           )}
                                         </strong>{" "}
-                                        {localizeUi(
-                                          "ui.longTermMemory.longtermmemorydetail.underTheHoodKeywords",
-                                        )}
+                                        {localizeUi("ui.longTermMemory.longtermmemorydetail.underTheHoodKeywords")}
                                       </li>
                                       <li>
                                         <strong className="font-semibold text-[var(--foreground)]">
@@ -1543,21 +1266,11 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                             "ui.longTermMemory.longtermmemorydetail.underTheHoodMeaningLabel",
                                           )}
                                         </strong>{" "}
-                                        {localizeUi(
-                                          "ui.longTermMemory.longtermmemorydetail.underTheHoodMeaning",
-                                        )}
+                                        {localizeUi("ui.longTermMemory.longtermmemorydetail.underTheHoodMeaning")}
                                       </li>
                                     </ul>
-                                    <p>
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.underTheHoodFusion",
-                                      )}
-                                    </p>
-                                    <p>
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.underTheHoodCooldown",
-                                      )}
-                                    </p>
+                                    <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.underTheHoodFusion")}</p>
+                                    <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.underTheHoodCooldown")}</p>
                                   </div>
                                 </details>
                               </>
@@ -1568,13 +1281,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                               <div
                                 data-ltm-source-choice
                                 role="group"
-                                aria-label={localizeUi(
-                                  "ui.longTermMemory.longtermmemorydetail.sourceChoice",
-                                )}
+                                aria-label={localizeUi("ui.longTermMemory.longtermmemorydetail.sourceChoice")}
                               >
-                                {(
-                                  ["chats", "lorebooks", "characters"] as const
-                                ).map((source) => (
+                                {(["chats", "lorebooks", "characters"] as const).map((source) => (
                                   <Button
                                     key={source}
                                     primary={onboardingSource === source}
@@ -1589,16 +1298,8 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                               </div>
                               {onboardingSource === "chats" ? (
                                 <div className="max-w-[65ch] space-y-4 text-sm leading-6 text-[var(--muted-foreground)]">
-                                  <p>
-                                    {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.chatSummarySetupIntro",
-                                    )}
-                                  </p>
-                                  <p>
-                                    {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.chatSummarySetupOpen",
-                                    )}
-                                  </p>
+                                  <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.chatSummarySetupIntro")}</p>
+                                  <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.chatSummarySetupOpen")}</p>
                                 </div>
                               ) : null}
                             </>
@@ -1615,38 +1316,27 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                 })
                               }
                             >
-                              {localizeUi(
-                                "ui.longTermMemory.longtermmemorydetail.back",
-                              )}
+                              {localizeUi("ui.longTermMemory.longtermmemorydetail.back")}
                             </Button>
                           ) : null}
                           {onboardingStep === 0 ? (
                             <Button primary onClick={advanceOnboarding}>
-                              {localizeUi(
-                                "ui.longTermMemory.longtermmemorydetail.nextHowRecallWorks",
-                              )}
+                              {localizeUi("ui.longTermMemory.longtermmemorydetail.nextHowRecallWorks")}
                             </Button>
                           ) : onboardingStep === 1 ? (
                             <Button primary onClick={advanceOnboarding}>
-                              {localizeUi(
-                                "ui.longTermMemory.longtermmemorydetail.nextTurnItOn",
-                              )}
+                              {localizeUi("ui.longTermMemory.longtermmemorydetail.nextTurnItOn")}
                             </Button>
                           ) : onboardingStep === 2 ? (
                             activeChat ? (
                               <>
                                 <Button primary onClick={advanceOnboarding}>
-                                  {localizeUi(
-                                    "ui.longTermMemory.longtermmemorydetail.nextChooseASource",
-                                  )}
+                                  {localizeUi("ui.longTermMemory.longtermmemorydetail.nextChooseASource")}
                                 </Button>
-                                {(props.chatMode === "roleplay" ||
-                                  props.chatMode === "game") &&
+                                {(props.chatMode === "roleplay" || props.chatMode === "game") &&
                                 props.onOpenActivePromptPresetEditor ? (
                                   <Button onClick={openPromptPresetSections}>
-                                    {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.openPromptPresetSections",
-                                    )}
+                                    {localizeUi("ui.longTermMemory.longtermmemorydetail.openPromptPresetSections")}
                                   </Button>
                                 ) : null}
                               </>
@@ -1654,53 +1344,36 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                               <>
                                 <Button
                                   primary
-                                  disabled={
-                                    activationPending ||
-                                    !props.onEnabledForChatChange
-                                  }
+                                  disabled={activationPending || !props.onEnabledForChatChange}
                                   onClick={() => void activateForOnboarding()}
                                 >
-                                  {localizeUi(
-                                    "ui.longTermMemory.longtermmemorydetail.turnOnForThisChat",
-                                  )}
+                                  {localizeUi("ui.longTermMemory.longtermmemorydetail.turnOnForThisChat")}
                                 </Button>
                                 <Button onClick={advanceOnboarding}>
-                                  {localizeUi(
-                                    "ui.longTermMemory.longtermmemorydetail.continueWithoutActivating",
-                                  )}
+                                  {localizeUi("ui.longTermMemory.longtermmemorydetail.continueWithoutActivating")}
                                 </Button>
-                                {(props.chatMode === "roleplay" ||
-                                  props.chatMode === "game") &&
+                                {(props.chatMode === "roleplay" || props.chatMode === "game") &&
                                 props.onOpenActivePromptPresetEditor ? (
                                   <Button onClick={openPromptPresetSections}>
-                                    {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.openPromptPresetSections",
-                                    )}
+                                    {localizeUi("ui.longTermMemory.longtermmemorydetail.openPromptPresetSections")}
                                   </Button>
                                 ) : null}
                               </>
                             ) : (
                               <Button primary onClick={advanceOnboarding}>
-                                {localizeUi(
-                                  "ui.longTermMemory.longtermmemorydetail.continueWithoutAChat",
-                                )}
+                                {localizeUi("ui.longTermMemory.longtermmemorydetail.continueWithoutAChat")}
                               </Button>
                             )
                           ) : onboardingStep === 3 ? (
                             <>
                               <Button onClick={advanceOnboarding}>
-                                {localizeUi(
-                                  "ui.longTermMemory.longtermmemorydetail.continueToReview",
-                                )}
+                                {localizeUi("ui.longTermMemory.longtermmemorydetail.continueToReview")}
                               </Button>
                               {onboardingSource === "chats" ? (
                                 <>
-                                  {props.chatMode === "roleplay" &&
-                                  props.onOpenChatSummarySettings ? (
+                                  {props.chatMode === "roleplay" && props.onOpenChatSummarySettings ? (
                                     <Button onClick={openChatSummarySettings}>
-                                      {localizeUi(
-                                        "ui.longTermMemory.longtermmemorydetail.openChatSummarySettings",
-                                      )}
+                                      {localizeUi("ui.longTermMemory.longtermmemorydetail.openChatSummarySettings")}
                                     </Button>
                                   ) : null}
                                   <Button
@@ -1709,9 +1382,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                                       await openSources("chats");
                                     }}
                                   >
-                                    {localizeUi(
-                                      "ui.longTermMemory.longtermmemorydetail.openChatSources",
-                                    )}
+                                    {localizeUi("ui.longTermMemory.longtermmemorydetail.openChatSources")}
                                   </Button>
                                 </>
                               ) : (
@@ -1732,9 +1403,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                           ) : onboardingStep === 4 ? (
                             <>
                               <Button onClick={advanceOnboarding}>
-                                {localizeUi(
-                                  "ui.longTermMemory.longtermmemorydetail.continueToCheck",
-                                )}
+                                {localizeUi("ui.longTermMemory.longtermmemorydetail.continueToCheck")}
                               </Button>
                               <Button
                                 primary
@@ -1753,14 +1422,11 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                           ) : onboardingStep === 5 ? (
                             <>
                               <Button primary onClick={advanceOnboarding}>
-                                {localizeUi(
-                                  "ui.longTermMemory.longtermmemorydetail.nextUnderTheHood",
-                                )}
+                                {localizeUi("ui.longTermMemory.longtermmemorydetail.nextUnderTheHood")}
                               </Button>
                               <Button
                                 onClick={async () => {
-                                  if (status.data?.notes.total)
-                                    await selectDestination("vault");
+                                  if (status.data?.notes.total) await selectDestination("vault");
                                   else await openSources("characters");
                                 }}
                               >
@@ -1775,8 +1441,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                             <Button
                               primary
                               onClick={async () => {
-                                if (status.data?.notes.total)
-                                  await selectDestination("vault");
+                                if (status.data?.notes.total) await selectDestination("vault");
                                 else await openSources("characters");
                               }}
                             >
@@ -1799,36 +1464,19 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                             src={`/sprites/mari/${onboardingSteps[onboardingStep].mobileSprite}`}
                             alt={onboardingSteps[onboardingStep].alt}
                             draggable={false}
-                            data-ltm-onboarding-sprite={
-                              onboardingSteps[onboardingStep].mobileSprite
-                            }
-                            data-ltm-onboarding-mobile-flip={
-                              onboardingSteps[onboardingStep].mobileFlip ||
-                              undefined
-                            }
-                            data-ltm-onboarding-mobile-shift={
-                              onboardingStep === 4 ? "left-40" : undefined
-                            }
+                            data-ltm-onboarding-sprite={onboardingSteps[onboardingStep].mobileSprite}
+                            data-ltm-onboarding-mobile-flip={onboardingSteps[onboardingStep].mobileFlip || undefined}
+                            data-ltm-onboarding-mobile-shift={onboardingStep === 4 ? "left-40" : undefined}
                           />
                         </picture>
                       </div>
                     </div>
-                    <div
-                      data-ltm-onboarding-footer
-                      className="items-center gap-3"
-                    >
-                      <Button
-                        data-ltm-onboarding-close
-                        onClick={completeOnboarding}
-                      >
-                        {localizeUi(
-                          "ui.longTermMemory.longtermmemorydetail.close",
-                        )}
+                    <div data-ltm-onboarding-footer className="items-center gap-3">
+                      <Button data-ltm-onboarding-close onClick={completeOnboarding}>
+                        {localizeUi("ui.longTermMemory.longtermmemorydetail.close")}
                       </Button>
                       <p className="text-xs text-[var(--muted-foreground)]">
-                        {localizeUi(
-                          "ui.longTermMemory.longtermmemorydetail.youCanReplayThisGuideWithTheHelpButton",
-                        )}
+                        {localizeUi("ui.longTermMemory.longtermmemorydetail.youCanReplayThisGuideWithTheHelpButton")}
                       </p>
                     </div>
                   </section>
@@ -1836,10 +1484,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                 <Suspense
                   fallback={
                     <StatusSurface busy>
-                      {localizeUi(
-                        "ui.longTermMemory.longtermmemorydetail.loadingDestination",
-                        { destination: destinationLabel(destination) },
-                      )}
+                      {localizeUi("ui.longTermMemory.longtermmemorydetail.loadingDestination", {
+                        destination: destinationLabel(destination),
+                      })}
                     </StatusSurface>
                   }
                 >
@@ -1859,9 +1506,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                     onRecoverCandidate={recoverCandidate}
                     openedNoteId={openedNoteId}
                     createMemoryRequest={createMemoryRequest}
-                    onCreateMemoryRequestHandled={() =>
-                      setCreateMemoryRequest(null)
-                    }
+                    onCreateMemoryRequestHandled={() => setCreateMemoryRequest(null)}
                     reviewSourceNoteId={reviewSourceNoteId}
                     recoveryHandoff={recoveryHandoff}
                     requestedSource={requestedSource}

@@ -8,15 +8,7 @@ const DRAFT_FIELD_ALIASES: Record<string, readonly string[]> = {
   displayName: ["display_name", "name", "stageName", "stage_name", "profileName"],
   handle: ["username", "user_name", "stageHandle", "stage_handle", "screenName"],
   bio: ["biography", "description", "about", "tagline", "summary"],
-  stagePersonality: [
-    "stage_personality",
-    "personality",
-    "stageVoice",
-    "stage_voice",
-    "voice",
-    "persona",
-    "tone",
-  ],
+  stagePersonality: ["stage_personality", "personality", "stageVoice", "stage_voice", "voice", "persona", "tone"],
 };
 
 function unwrapDraftCandidate(value: unknown): unknown {
@@ -57,7 +49,10 @@ export function normalizeNoodlerStageProfileDraft(value: unknown): Record<string
   }
   // A missing handle is derivable; the name is the only field worth failing over.
   if (!normalized.handle && typeof normalized.displayName === "string") {
-    normalized.handle = normalized.displayName.toLocaleLowerCase().replace(/[^a-z0-9_]+/gu, "_").slice(0, 24);
+    normalized.handle = normalized.displayName
+      .toLocaleLowerCase()
+      .replace(/[^a-z0-9_]+/gu, "_")
+      .slice(0, 24);
   }
   if (!normalized.bio) normalized.bio = "";
   if (!normalized.stagePersonality) normalized.stagePersonality = "";

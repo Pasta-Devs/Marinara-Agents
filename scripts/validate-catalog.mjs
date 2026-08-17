@@ -4,11 +4,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import {
-  CATALOG_ARTWORK_SIZE,
-  catalogArtworkRelativePath,
-  catalogArtworkUrl,
-} from "./catalog-artwork.mjs";
+import { CATALOG_ARTWORK_SIZE, catalogArtworkRelativePath, catalogArtworkUrl } from "./catalog-artwork.mjs";
 import {
   LEGACY_CATALOG_MAJOR,
   assertManifestBuildProvenance,
@@ -110,10 +106,7 @@ const pixelforgeBoundary = await assertPackagePrivateImportBoundary({
   capabilityApi: { major: 1, minor: 10 },
 });
 
-const hierarchicalMapsClientSourceRoot = join(
-  repoRoot,
-  "packages/hierarchical-maps/src/engine/packages/client/src",
-);
+const hierarchicalMapsClientSourceRoot = join(repoRoot, "packages/hierarchical-maps/src/engine/packages/client/src");
 const forbiddenHierarchicalMapsPinkText =
   /text-(?:pink|rose|fuchsia)-|text-\[var\(--(?:primary|muted-foreground)\)\](?:\/\d+)?|#(?:d4acfb|d4adfc|7a64a0)\b/iu;
 async function assertHierarchicalMapsUsesChromaText(path) {
@@ -289,10 +282,7 @@ for (const entry of catalog.packages) {
   if (!Array.isArray(manifest.files)) throw new Error(`Missing file declarations for ${manifest.id}`);
   const declaredPaths = new Set();
   for (const [index, declared] of manifest.files.entries()) {
-    const declaredPath = assertPortableRelativePath(
-      declared?.path,
-      `Declared file ${index + 1} for ${manifest.id}`,
-    );
+    const declaredPath = assertPortableRelativePath(declared?.path, `Declared file ${index + 1} for ${manifest.id}`);
     if (declaredPaths.has(declaredPath)) {
       throw new Error(`Duplicate declared file ${declaredPath} for ${manifest.id}`);
     }
@@ -347,25 +337,19 @@ for (const entry of catalog.packages) {
       const localization = manifest.localizations[locale];
       if (
         !localization ||
-        JSON.stringify(Object.keys(localization).sort()) !==
-          JSON.stringify(["description", "homeBrowserTab", "name"])
+        JSON.stringify(Object.keys(localization).sort()) !== JSON.stringify(["description", "homeBrowserTab", "name"])
       ) {
         throw new Error(`Noodle ${locale} must contain only package and Home tab display metadata`);
       }
       if (
-        JSON.stringify(Object.keys(localization.homeBrowserTab ?? {}).sort()) !==
-        JSON.stringify(["ariaLabel", "label"])
+        JSON.stringify(Object.keys(localization.homeBrowserTab ?? {}).sort()) !== JSON.stringify(["ariaLabel", "label"])
       ) {
         throw new Error(`Noodle ${locale} must localize its Home tab label and accessibility label`);
       }
       assertLocalizedField(localization.name, 120, `Noodle ${locale} name`);
       assertLocalizedField(localization.description, 2_000, `Noodle ${locale} description`);
       assertLocalizedField(localization.homeBrowserTab.label, 40, `Noodle ${locale} Home tab label`);
-      assertLocalizedField(
-        localization.homeBrowserTab.ariaLabel,
-        100,
-        `Noodle ${locale} Home tab accessibility label`,
-      );
+      assertLocalizedField(localization.homeBrowserTab.ariaLabel, 100, `Noodle ${locale} Home tab accessibility label`);
       if (
         localization.description === manifest.description ||
         localization.homeBrowserTab.ariaLabel === manifest.contributions?.homeBrowserTab?.ariaLabel
@@ -384,25 +368,19 @@ for (const entry of catalog.packages) {
       const localization = manifest.localizations[locale];
       if (
         !localization ||
-        JSON.stringify(Object.keys(localization).sort()) !==
-          JSON.stringify(["description", "homeBrowserTab", "name"])
+        JSON.stringify(Object.keys(localization).sort()) !== JSON.stringify(["description", "homeBrowserTab", "name"])
       ) {
         throw new Error(`Slurp ${locale} must contain only package and Home tab display metadata`);
       }
       if (
-        JSON.stringify(Object.keys(localization.homeBrowserTab ?? {}).sort()) !==
-        JSON.stringify(["ariaLabel", "label"])
+        JSON.stringify(Object.keys(localization.homeBrowserTab ?? {}).sort()) !== JSON.stringify(["ariaLabel", "label"])
       ) {
         throw new Error(`Slurp ${locale} must localize its Home tab label and accessibility label`);
       }
       assertLocalizedField(localization.name, 120, `Slurp ${locale} name`);
       assertLocalizedField(localization.description, 2_000, `Slurp ${locale} description`);
       assertLocalizedField(localization.homeBrowserTab.label, 40, `Slurp ${locale} Home tab label`);
-      assertLocalizedField(
-        localization.homeBrowserTab.ariaLabel,
-        100,
-        `Slurp ${locale} Home tab accessibility label`,
-      );
+      assertLocalizedField(localization.homeBrowserTab.ariaLabel, 100, `Slurp ${locale} Home tab accessibility label`);
       if (
         localization.description === manifest.description ||
         localization.homeBrowserTab.ariaLabel === manifest.contributions?.homeBrowserTab?.ariaLabel
@@ -449,8 +427,7 @@ for (const entry of catalog.packages) {
     throw new Error(`Missing or invalid catalog artwork URL for ${manifest.id}`);
   }
   const expectedArtifactName = packageArtifactName(manifest.id, manifest.version);
-  const expectedArtifactUrl =
-    `https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/${expectedArtifactName}`;
+  const expectedArtifactUrl = `https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/${expectedArtifactName}`;
   if (artifact.url !== expectedArtifactUrl) {
     throw new Error(`Artifact URL for ${manifest.id} must be ${expectedArtifactUrl}`);
   }
@@ -732,11 +709,7 @@ for (const entry of catalog.packages) {
         ),
         "utf8",
       );
-      for (const marker of [
-        "data-marinara-call-video-fit",
-        "data-marinara-call-stage",
-        "data-marinara-call-chat",
-      ]) {
+      for (const marker of ["data-marinara-call-video-fit", "data-marinara-call-stage", "data-marinara-call-chat"]) {
         if (!clientSource.includes(marker)) {
           throw new Error(`${manifest.id} client runtime is missing the ${marker} layout contract`);
         }
@@ -752,8 +725,8 @@ if (JSON.stringify(guidanceIds) !== JSON.stringify([...ids].sort())) {
 
 const agentOnly = catalog.packages.filter((entry) => !entry.manifest.entrypoints.server).length;
 const features = catalog.packages.length - agentOnly;
-if (catalog.packages.length !== 35 || agentOnly !== 24 || features !== 11) {
-  throw new Error(`Expected 24 agents and 11 features, found ${agentOnly} and ${features}`);
+if (catalog.packages.length !== 36 || agentOnly !== 25 || features !== 11) {
+  throw new Error(`Expected 25 agents and 11 features, found ${agentOnly} and ${features}`);
 }
 console.log(`Catalog valid: ${catalog.packages.length} packages (${agentOnly} agents, ${features} features).`);
 console.log(

@@ -31,6 +31,9 @@ jobs:
       - name: Install locked test dependencies
         run: npm ci
 
+      - name: Check formatting and lint
+        run: npm run check
+
       - name: Test package security invariants
         run: npm run test:security
 

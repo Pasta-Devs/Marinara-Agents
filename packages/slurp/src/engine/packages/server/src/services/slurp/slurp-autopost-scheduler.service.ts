@@ -2,10 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { logger } from "../../lib/logger.js";
 import { sweepStagedImages } from "../image/image-generation.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
-import {
-  prepareNextNoodlerReservePost,
-  reconcileNoodlerReserve,
-} from "./slurp-reserve.operation.js";
+import { prepareNextNoodlerReservePost, reconcileNoodlerReserve } from "./slurp-reserve.operation.js";
 import { tryBackfillNextNoodlerCreatorArtwork } from "./slurp-artwork.operation.js";
 
 const INITIAL_DELAY_MS = 30_000;
@@ -19,9 +16,7 @@ const POLL_MS = 60_000;
 let pauseDepth = 0;
 let activePoll: Promise<void> = Promise.resolve();
 
-export async function withNoodleAutoPostPaused<T>(
-  run: () => Promise<T>,
-): Promise<T> {
+export async function withNoodleAutoPostPaused<T>(run: () => Promise<T>): Promise<T> {
   pauseDepth += 1;
   try {
     await activePoll.catch(() => {});
@@ -32,9 +27,7 @@ export async function withNoodleAutoPostPaused<T>(
 }
 
 /** True when nothing can be prepared or published, so the poll only has existing rows to tidy. */
-export function noodlerReservePollIsIdle(settings: {
-  autoPostingScheduleEnabled: boolean;
-}): boolean {
+export function noodlerReservePollIsIdle(settings: { autoPostingScheduleEnabled: boolean }): boolean {
   return !settings.autoPostingScheduleEnabled;
 }
 
@@ -70,15 +63,10 @@ export function startNoodleAutoPostScheduler(app: FastifyInstance) {
       const artwork = await tryBackfillNextNoodlerCreatorArtwork(app.db);
       if (artwork !== "idle" && artwork !== "unavailable")
         logger.info("[noodle-autopost] Filled in a creator %s", artwork);
-      if (
-        noodlerReservePollIsIdle(settings) &&
-        !(await noodle.hasNoodlerPreparedPosts())
-      )
-        return;
+      if (noodlerReservePollIsIdle(settings) && !(await noodle.hasNoodlerPreparedPosts())) return;
       await reconcileNoodlerReserve(app.db);
       const outcome = await prepareNextNoodlerReservePost(app.db);
-      if (outcome === "prepared")
-        logger.info("[noodle-autopost] Prepared one future NoodleR post");
+      if (outcome === "prepared") logger.info("[noodle-autopost] Prepared one future NoodleR post");
     } catch (error) {
       logger.error(error, "[noodle-autopost] Reserve poll failed");
     } finally {
@@ -91,13 +79,10 @@ export function startNoodleAutoPostScheduler(app: FastifyInstance) {
   running = (async () => {
     // Images staged by a process that was killed mid-preparation are referenced by nothing.
     const swept = sweepStagedImages();
-    if (swept > 0)
-      logger.info("[noodle-autopost] Reclaimed %d staged image file(s)", swept);
+    if (swept > 0) logger.info("[noodle-autopost] Reclaimed %d staged image file(s)", swept);
     await createSlurpStorage(app.db).ensureNoodlerReserveState();
     await reconcileNoodlerReserve(app.db);
-  })().catch((error) =>
-    logger.error(error, "[noodle-autopost] Startup reconciliation failed"),
-  );
+  })().catch((error) => logger.error(error, "[noodle-autopost] Startup reconciliation failed"));
   activePoll = running;
   schedule(INITIAL_DELAY_MS);
   app.addHook("onClose", async () => {

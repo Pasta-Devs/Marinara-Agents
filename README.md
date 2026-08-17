@@ -4,7 +4,7 @@ Official downloadable agents and capability packages for [Marinara Engine](https
 
 Marinara Engine starts lightweight: a fresh installation contains no optional agents. Open **Agents → Download Agents** on desktop or mobile to browse this catalog, read what each package does, and install only the features you want. Installed packages appear in the normal Agents panel and the chat modes they support. You can update or uninstall them from the same catalog. Restart Marinara Engine when the installer asks you to do so.
 
-Across its Engine compatibility lanes, the catalog currently contains **35 first-party packages**: 6 Writer Agents, 9 Tracker Agents, and 20 Misc Agents. Most packages support **Marinara Engine v2.3.0+**; Long-Term Memory requires **v2.4.1**; World Maps, Storyboard, and Noodle require **v2.4.2**; and Inventory Tracker, Haptic Feedback, Slurp, and Pixelforge require **v2.4.3**. Every package accepts compatible Engine v2 and v3 releases below **v4.0.0**. Each Engine release sees only the packages compatible with its major version. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
+Across its Engine compatibility lanes, the catalog currently contains **36 first-party packages**: 6 Writer Agents, 10 Tracker Agents, and 20 Misc Agents. Most packages support **Marinara Engine v2.3.0+**; Long-Term Memory requires **v2.4.1**; World Maps, Storyboard, and Noodle require **v2.4.2**; and Beholder, Inventory Tracker, Haptic Feedback, Slurp, and Pixelforge require **v2.4.3**. Every package accepts compatible Engine v2 and v3 releases below **v4.0.0**. Each Engine release sees only the packages compatible with its major version. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
 
 ## Official catalog
 
@@ -24,6 +24,7 @@ Across its Engine compatibility lanes, the catalog currently contains **35 first
 | Agent | Package | What it does |
 | --- | --- | --- |
 | Background | [`background`](packages/background/manifest.json) | Selects the best existing scene background from your library. |
+| Beholder | [`beholder`](packages/beholder/manifest.json) | Tracks clothing by body slot, held items, wounds, missing parts, bare slots, and species. Recommended for OpenAI GPT-5.5+, Claude Opus 4.8+, or Kimi K3+. |
 | Character Tracker | [`character-tracker`](packages/character-tracker/manifest.json) | Tracks present characters, moods, actions, appearance, thoughts, and character stats. |
 | Custom Tracker | [`custom-tracker`](packages/custom-tracker/manifest.json) | Tracks user-defined currencies, counters, flags, and other custom fields. |
 | Expression Engine | [`expression`](packages/expression/manifest.json) | Detects character emotions and selects matching Visual Novel sprites or expressions. |

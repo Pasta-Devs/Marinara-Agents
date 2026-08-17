@@ -85,7 +85,10 @@ assert.match(
   "secret Slurp profile prompts must use reviewed temperament themes",
 );
 assert.doesNotMatch(
-  stageProfileDraft.slice(stageProfileDraft.indexOf("function noodlerSecretSourceText"), stageProfileDraft.indexOf("export function noodlerSourceText")),
+  stageProfileDraft.slice(
+    stageProfileDraft.indexOf("function noodlerSecretSourceText"),
+    stageProfileDraft.indexOf("export function noodlerSourceText"),
+  ),
   /reviewedNoodlerPhysicalFacts/u,
   "secret Slurp profile prompts must not include identifying physical facts",
 );

@@ -33,7 +33,9 @@ export function validateNoodleGeneratedRefresh(
 
   const hasUsableAttribution =
     refresh.posts.some((post) => allowedActorHandles.has(normalizeNoodleHandle(post.authorHandle))) ||
-    refresh.interactions.some((interaction) => allowedActorHandles.has(normalizeNoodleHandle(interaction.actorHandle))) ||
+    refresh.interactions.some((interaction) =>
+      allowedActorHandles.has(normalizeNoodleHandle(interaction.actorHandle)),
+    ) ||
     refresh.follows.some(
       (follow) =>
         allowedActorHandles.has(normalizeNoodleHandle(follow.actorHandle)) &&
@@ -122,7 +124,8 @@ export function parseNoodleGeneratedRefresh(value: unknown): {
   refresh: NoodleGeneratedRefresh;
   rejected: RejectedNoodleGeneratedRefreshItem[];
 } {
-  const record = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+  const record =
+    value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
   if (!record) {
     noodleGeneratedRefreshSchema.parse(value);
     return { refresh: { posts: [], interactions: [], follows: [], digests: [] }, rejected: [] };

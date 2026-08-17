@@ -9,19 +9,42 @@
 // colony; the semantic layer is what the world compiler targets.
 PF.art = (() => {
   const BASE_PAL = {
-    grass1: "#3e7a44", grass2: "#356b3c", grass3: "#4b8a4f",
-    leaf: "#2c5a33", leafHi: "#5aa25e", trunk: "#5b4432",
-    path1: "#b39764", path2: "#a3875a", pathFleck: "#c7ab74",
-    dirt: "#7a5f43", crop: "#7fae52", cropRipe: "#d9a03c",
-    water1: "#2e5f8a", water2: "#39719e", waterHi: "#6fa3c8",
-    wall: "#8a7561", wallDark: "#6e5c4b", plaster: "#cfc3a8", beam: "#6b4f38",
-    roof1: "#9e4a3f", roof2: "#8a3f36", roofHi: "#b85e4d",
-    floor1: "#8a6a4a", floor2: "#7d5f41", rug: "#93404a",
-    stone: "#8d8d94", stoneDark: "#73737a",
-    fence: "#7d6142", door: "#5d4530", doorKnob: "#d9c07a",
-    well: "#6f6f78", counter: "#725539",
-    night: "#1a2340", windowGlow: "#ffd98a",
-    ink: "#22261f", white: "#f3efe2",
+    grass1: "#3e7a44",
+    grass2: "#356b3c",
+    grass3: "#4b8a4f",
+    leaf: "#2c5a33",
+    leafHi: "#5aa25e",
+    trunk: "#5b4432",
+    path1: "#b39764",
+    path2: "#a3875a",
+    pathFleck: "#c7ab74",
+    dirt: "#7a5f43",
+    crop: "#7fae52",
+    cropRipe: "#d9a03c",
+    water1: "#2e5f8a",
+    water2: "#39719e",
+    waterHi: "#6fa3c8",
+    wall: "#8a7561",
+    wallDark: "#6e5c4b",
+    plaster: "#cfc3a8",
+    beam: "#6b4f38",
+    roof1: "#9e4a3f",
+    roof2: "#8a3f36",
+    roofHi: "#b85e4d",
+    floor1: "#8a6a4a",
+    floor2: "#7d5f41",
+    rug: "#93404a",
+    stone: "#8d8d94",
+    stoneDark: "#73737a",
+    fence: "#7d6142",
+    door: "#5d4530",
+    doorKnob: "#d9c07a",
+    well: "#6f6f78",
+    counter: "#725539",
+    night: "#1a2340",
+    windowGlow: "#ffd98a",
+    ink: "#22261f",
+    white: "#f3efe2",
   };
 
   // Painters read PAL by reference, so themes swap colours by mutating this one
@@ -46,7 +69,10 @@ PF.art = (() => {
     c = PF.offscreen(T, T);
     const g = c.getContext("2d");
     const themePainters = THEMES[activeTheme]?.painters;
-    ((themePainters && themePainters[id]) || PAINTERS[id] || PAINTERS.grass)(g, PF.rng(PF.hashStr(`tile:${activeTheme}:${id}`)));
+    ((themePainters && themePainters[id]) || PAINTERS[id] || PAINTERS.grass)(
+      g,
+      PF.rng(PF.hashStr(`tile:${activeTheme}:${id}`)),
+    );
     tileCache.set(cacheKey, c);
     return c;
   }
@@ -104,8 +130,7 @@ PF.art = (() => {
     wallStone(g, rnd) {
       px(g, 0, 0, T, T, PAL.wallDark);
       for (let r = 0; r < 4; r++)
-        for (let cx = 0; cx < 2; cx++)
-          px(g, cx * 8 + ((r % 2) * 4), r * 4, 7, 3, rnd() > 0.5 ? PAL.wall : PAL.wallDark);
+        for (let cx = 0; cx < 2; cx++) px(g, cx * 8 + (r % 2) * 4, r * 4, 7, 3, rnd() > 0.5 ? PAL.wall : PAL.wallDark);
     },
     window(g) {
       PAINTERS.wall(g);
@@ -190,18 +215,40 @@ PF.art = (() => {
       label: "Sci-fi colony",
       palette: {
         // regolith ground, steel decking, hull walls, glass domes, coolant water
-        grass1: "#5a4a44", grass2: "#4e403b", grass3: "#6a5850",
-        leaf: "#3e6d74", leafHi: "#7fd4d4", trunk: "#8e99a6",
-        path1: "#7d8894", path2: "#6b7580", pathFleck: "#9aa5b1",
-        dirt: "#4a3f3a", crop: "#59c08a", cropRipe: "#b6e86a",
-        water1: "#1f8a8a", water2: "#2aa3a0", waterHi: "#8ff0e8",
-        wall: "#8b95a3", wallDark: "#5d6672", plaster: "#aeb7c2", beam: "#3f4854",
-        roof1: "#4a6a8a", roof2: "#3d5871", roofHi: "#7fb0d4",
-        floor1: "#59616c", floor2: "#4d545e", rug: "#2a6a8a",
-        stone: "#767e88", stoneDark: "#5a626c",
-        fence: "#5d6672", door: "#3f4854", doorKnob: "#8ff0e8",
-        well: "#4d545e", counter: "#3f4854",
-        night: "#101726", windowGlow: "#8fd4ff",
+        grass1: "#5a4a44",
+        grass2: "#4e403b",
+        grass3: "#6a5850",
+        leaf: "#3e6d74",
+        leafHi: "#7fd4d4",
+        trunk: "#8e99a6",
+        path1: "#7d8894",
+        path2: "#6b7580",
+        pathFleck: "#9aa5b1",
+        dirt: "#4a3f3a",
+        crop: "#59c08a",
+        cropRipe: "#b6e86a",
+        water1: "#1f8a8a",
+        water2: "#2aa3a0",
+        waterHi: "#8ff0e8",
+        wall: "#8b95a3",
+        wallDark: "#5d6672",
+        plaster: "#aeb7c2",
+        beam: "#3f4854",
+        roof1: "#4a6a8a",
+        roof2: "#3d5871",
+        roofHi: "#7fb0d4",
+        floor1: "#59616c",
+        floor2: "#4d545e",
+        rug: "#2a6a8a",
+        stone: "#767e88",
+        stoneDark: "#5a626c",
+        fence: "#5d6672",
+        door: "#3f4854",
+        doorKnob: "#8ff0e8",
+        well: "#4d545e",
+        counter: "#3f4854",
+        night: "#101726",
+        windowGlow: "#8fd4ff",
       },
       painters: {
         // hab wall: smooth panel with a seam and rivets instead of timber framing
@@ -364,5 +411,15 @@ PF.art = (() => {
     ctx.drawImage(strip.frames[facing][frame], dx, dy);
   }
 
-  return { PAL, tile, actor, drawActor, setTheme, themeIds, get theme() { return activeTheme; } };
+  return {
+    PAL,
+    tile,
+    actor,
+    drawActor,
+    setTheme,
+    themeIds,
+    get theme() {
+      return activeTheme;
+    },
+  };
 })();

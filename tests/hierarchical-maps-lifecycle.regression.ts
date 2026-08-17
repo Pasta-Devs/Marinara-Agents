@@ -1,22 +1,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
-const engineRoot = resolve(
-  process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"),
-);
+const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"));
 const dataDir = mkdtempSync(join(tmpdir(), "marinara-maps-lifecycle-"));
 const catalogUrl = "https://1.1.1.1/catalog/catalog.json";
 const generationProviderBaseUrl = "http://127.0.0.1:9/v1";
@@ -72,14 +63,9 @@ function sha256(value: Buffer): string {
 
 function artifactFixture(version: string): ArtifactFixture {
   const path = join(repoRoot, "artifacts", `hierarchical-maps-${version}.zip`);
-  assert.ok(
-    existsSync(path),
-    `Missing exact Maps ${version} artifact at ${path}`,
-  );
+  assert.ok(existsSync(path), `Missing exact Maps ${version} artifact at ${path}`);
   const bytes = readFileSync(path);
-  const manifest = JSON.parse(
-    execFileSync("unzip", ["-p", path, "manifest.json"], { encoding: "utf8" }),
-  ) as Manifest;
+  const manifest = JSON.parse(execFileSync("unzip", ["-p", path, "manifest.json"], { encoding: "utf8" })) as Manifest;
   assert.equal(manifest.id, "hierarchical-maps");
   assert.equal(manifest.version, version);
   if (
@@ -233,13 +219,7 @@ assert.deepEqual(currentFixture.manifest.builtAgainst, {
 function seedInstalledProfile(version: string) {
   const fixture = fixtures.get(version);
   assert.ok(fixture, `Missing installed-profile fixture for Maps ${version}`);
-  const packageRoot = join(
-    dataDir,
-    "capability-packages",
-    "versions",
-    fixture.manifest.id,
-    fixture.manifest.version,
-  );
+  const packageRoot = join(dataDir, "capability-packages", "versions", fixture.manifest.id, fixture.manifest.version);
   mkdirSync(packageRoot, { recursive: true });
   execFileSync("unzip", ["-q", fixture.path, "-d", packageRoot]);
   const registryPath = join(dataDir, "capability-packages", "installed.json");
@@ -304,12 +284,7 @@ function catalogFixture(version: string) {
 }
 
 globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-  const url =
-    typeof input === "string"
-      ? input
-      : input instanceof URL
-        ? input.toString()
-        : input.url;
+  const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
   if (url === `${generationProviderBaseUrl}/chat/completions`) {
     generationProviderRequestCount += 1;
     const body =
@@ -327,7 +302,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
     }
     const providerPrompt = capturedProviderPrompt(body);
     const responseContent = providerPrompt.includes("You design practical hierarchical world maps")
-        ? JSON.stringify({
+      ? JSON.stringify({
           worldName: "Route Test World",
           hierarchyName: "Harbor city",
           locationTypes: [
@@ -338,37 +313,72 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
           startingLocationKey: "route_world",
           locations: [
             {
-              key: "route_world", parentKey: null, name: "Route Test World", typeKey: "world", kind: "region",
+              key: "route_world",
+              parentKey: null,
+              name: "Route Test World",
+              typeKey: "world",
+              kind: "region",
               description: "A compact world used to prove generated routes.",
               modelMemory: "The route graph must stay sparse and connected.",
               awarenessSummary: "Old Town, Market Square, and Harbor share practical roads.",
-              icon: "🗺️", sourceKeys: [], origin: "added_by_ai", childPresentation: "map",
-              placement: null, layerOrder: null, links: [],
+              icon: "🗺️",
+              sourceKeys: [],
+              origin: "added_by_ai",
+              childPresentation: "map",
+              placement: null,
+              layerOrder: null,
+              links: [],
             },
             {
-              key: "old_town", parentKey: "route_world", name: "Old Town", typeKey: "type_city", kind: "place",
+              key: "old_town",
+              parentKey: "route_world",
+              name: "Old Town",
+              typeKey: "type_city",
+              kind: "place",
               description: "A walled neighborhood west of the market.",
               modelMemory: "The market road is the ordinary eastern exit.",
               awarenessSummary: "Market Street leads east.",
-              icon: "🏘️", sourceKeys: [], origin: "added_by_ai", childPresentation: "list",
-              placement: { x: 20, y: 50 }, layerOrder: null,
+              icon: "🏘️",
+              sourceKeys: [],
+              origin: "added_by_ai",
+              childPresentation: "list",
+              placement: { x: 20, y: 50 },
+              layerOrder: null,
               links: [{ targetKey: "market_square", label: "Market Street", bidirectional: true, state: "available" }],
             },
             {
-              key: "market_square", parentKey: "route_world", name: "Market Square", typeKey: "type_city", kind: "place",
+              key: "market_square",
+              parentKey: "route_world",
+              name: "Market Square",
+              typeKey: "type_city",
+              kind: "place",
               description: "The city market between Old Town and the harbor road.",
               modelMemory: "Merchants know every public route through the city.",
               awarenessSummary: "Old Town lies west and the harbor lies east.",
-              icon: "🏪", sourceKeys: [], origin: "added_by_ai", childPresentation: "list",
-              placement: { x: 50, y: 50 }, layerOrder: null, links: [],
+              icon: "🏪",
+              sourceKeys: [],
+              origin: "added_by_ai",
+              childPresentation: "list",
+              placement: { x: 50, y: 50 },
+              layerOrder: null,
+              links: [],
             },
             {
-              key: "harbor", parentKey: "route_world", name: "Harbor", typeKey: "type_city", kind: "place",
+              key: "harbor",
+              parentKey: "route_world",
+              name: "Harbor",
+              typeKey: "type_city",
+              kind: "place",
               description: "A working harbor east of the market.",
               modelMemory: "A canal bridge can support future expansion.",
               awarenessSummary: "The market road returns west.",
-              icon: "⚓", sourceKeys: [], origin: "added_by_ai", childPresentation: "list",
-              placement: { x: 80, y: 50 }, layerOrder: null, links: [],
+              icon: "⚓",
+              sourceKeys: [],
+              origin: "added_by_ai",
+              childPresentation: "list",
+              placement: { x: 80, y: 50 },
+              layerOrder: null,
+              links: [],
             },
           ],
         })
@@ -376,21 +386,43 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
         ? JSON.stringify({
             locations: [
               {
-                key: "canal_ward", parentKey: null, name: "Canal Ward", kind: "place",
+                key: "canal_ward",
+                parentKey: null,
+                name: "Canal Ward",
+                kind: "place",
                 description: "A canal district reached from the existing harbor.",
                 modelMemory: "The canal bridge is the ward's main approach.",
                 awarenessSummary: "Canal Bridge returns to Harbor.",
-                icon: "🌉", sourceKeys: [], origin: "added_by_ai", childPresentation: "list",
-                placement: { x: 88, y: 72 }, layerOrder: null,
-                links: [{ targetKey: mapExpansionExistingTargetId, label: "Canal Bridge", bidirectional: true, state: "available" }],
+                icon: "🌉",
+                sourceKeys: [],
+                origin: "added_by_ai",
+                childPresentation: "list",
+                placement: { x: 88, y: 72 },
+                layerOrder: null,
+                links: [
+                  {
+                    targetKey: mapExpansionExistingTargetId,
+                    label: "Canal Bridge",
+                    bidirectional: true,
+                    state: "available",
+                  },
+                ],
               },
               {
-                key: "canal_house", parentKey: "canal_ward", name: "Canal House", kind: "building",
+                key: "canal_house",
+                parentKey: "canal_ward",
+                name: "Canal House",
+                kind: "building",
                 description: "A ferryman's house beside the canal lock.",
                 modelMemory: "The ferryman maintains the bridge winch.",
                 awarenessSummary: "The front door opens onto Canal Ward.",
-                icon: "🏠", sourceKeys: [], origin: "added_by_ai", childPresentation: "list",
-                placement: null, layerOrder: null, links: [],
+                icon: "🏠",
+                sourceKeys: [],
+                origin: "added_by_ai",
+                childPresentation: "list",
+                placement: null,
+                layerOrder: null,
+                links: [],
               },
             ],
           })
@@ -398,7 +430,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
           ? "RETRY_PROVIDER_RESPONSE_SHOULD_NOT_PERSIST"
           : providerPrompt.includes("Move into Lifecycle Harbor.")
             ? 'GAME_HISTORY_PROVIDER_RESPONSE: The party reaches Lifecycle Harbor.\n[spatial_move: destination_id="lifecycle_harbor"]'
-          : "GAME_HISTORY_PROVIDER_RESPONSE: The party surveys the wider Existing World.";
+            : "GAME_HISTORY_PROVIDER_RESPONSE: The party surveys the wider Existing World.";
     return new Response(
       JSON.stringify({
         id: `chatcmpl-maps-lifecycle-${generationProviderRequestCount}`,
@@ -427,9 +459,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
       headers: { "content-type": "application/json" },
     });
   }
-  const fixture = [...fixtures.values()].find(
-    (candidate) => candidate.url === url,
-  );
+  const fixture = [...fixtures.values()].find((candidate) => candidate.url === url);
   if (fixture) {
     return new Response(fixture.bytes, {
       status: 200,
@@ -441,9 +471,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
 
 function capturedProviderPrompt(request: (typeof generationProviderRequests)[number] | undefined): string {
   return (request?.messages ?? [])
-    .map((message) =>
-      typeof message.content === "string" ? message.content : JSON.stringify(message.content),
-    )
+    .map((message) => (typeof message.content === "string" ? message.content : JSON.stringify(message.content)))
     .join("\n\n");
 }
 
@@ -454,9 +482,7 @@ async function importEngine<T>(relativePath: string): Promise<T> {
 
 async function expectJson(
   app: {
-    inject(
-      options: Record<string, unknown>,
-    ): Promise<{ statusCode: number; body: string }>;
+    inject(options: Record<string, unknown>): Promise<{ statusCode: number; body: string }>;
   },
   options: Record<string, unknown>,
   statusCode = 200,
@@ -467,14 +493,11 @@ async function expectJson(
 }
 
 function metadata(value: unknown): Record<string, unknown> {
-  if (value && typeof value === "object" && !Array.isArray(value))
-    return value as Record<string, unknown>;
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
   if (typeof value !== "string") return {};
   try {
     const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
   } catch {
     return {};
   }
@@ -581,11 +604,8 @@ const definition = {
 };
 
 async function main() {
-  let app: Awaited<
-    ReturnType<
-      (typeof import("../../Marinara-Engine/packages/server/src/app.js"))["buildApp"]
-    >
-  > | null = null;
+  let app: Awaited<ReturnType<(typeof import("../../Marinara-Engine/packages/server/src/app.js"))["buildApp"]>> | null =
+    null;
 
   try {
     const { capabilityPackageManager, findCompatibleCapabilityPackageUpdates } = await importEngine<{
@@ -609,9 +629,7 @@ async function main() {
         catalog: ReturnType<typeof catalogFixture>,
         engineVersion?: string,
       ): unknown[];
-    }>(
-      "packages/server/src/services/capability-packages/package-manager.service.ts",
-    );
+    }>("packages/server/src/services/capability-packages/package-manager.service.ts");
     const { buildApp } = await importEngine<{
       buildApp(): Promise<NonNullable<typeof app>>;
     }>("packages/server/src/app.ts");
@@ -683,49 +701,16 @@ async function main() {
     assert.equal(installedProfile.length, 1);
     assert.equal(installedProfile[0]?.version, "1.0.6");
     assert.equal(installedProfile[0]?.status, "active");
-    assert.equal(
-      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.7"), "2.3.1").length,
-      0,
-    );
-    assert.equal(
-      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.7"), "2.3.2").length,
-      0,
-    );
-    assert.equal(
-      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.7"), "2.3.3").length,
-      1,
-    );
-    assert.equal(
-      findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.7"), "3.0.0").length,
-      0,
-    );
+    assert.equal(findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.7"), "2.3.1").length, 0);
+    assert.equal(findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.7"), "2.3.2").length, 0);
+    assert.equal(findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.7"), "2.3.3").length, 1);
+    assert.equal(findCompatibleCapabilityPackageUpdates(installedProfile, catalogFixture("1.1.7"), "3.0.0").length, 0);
 
-    const installed117 =
-      await capabilityPackageManager.install("hierarchical-maps");
+    const installed117 = await capabilityPackageManager.install("hierarchical-maps");
     assert.equal(installed117.version, "1.1.7");
     assert.equal(installed117.previousVersion, "1.0.6");
-    assert.ok(
-      existsSync(
-        join(
-          dataDir,
-          "capability-packages",
-          "versions",
-          "hierarchical-maps",
-          "1.1.7",
-        ),
-      ),
-    );
-    assert.ok(
-      existsSync(
-        join(
-          dataDir,
-          "capability-packages",
-          "versions",
-          "hierarchical-maps",
-          "1.0.6",
-        ),
-      ),
-    );
+    assert.ok(existsSync(join(dataDir, "capability-packages", "versions", "hierarchical-maps", "1.1.7")));
+    assert.ok(existsSync(join(dataDir, "capability-packages", "versions", "hierarchical-maps", "1.0.6")));
 
     catalogOnline = false;
     app = await buildApp();
@@ -739,20 +724,11 @@ async function main() {
     };
     const materializeAssistantSpatialState = async (
       input: Parameters<typeof materializeAssistantSpatialStateHost>[0],
-    ) =>
-      materializeAssistantSpatialStateHost(
-        input,
-        await getChatMetadata(input.chatId),
-      );
+    ) => materializeAssistantSpatialStateHost(input, await getChatMetadata(input.chatId));
     const resolveEffectiveSpatialState = async (
       chatId: string,
       options: { exactAnchor?: { messageId: string; swipeIndex: number } } = {},
-    ) =>
-      resolveEffectiveSpatialStateHost(
-        chatId,
-        options,
-        await getChatMetadata(chatId),
-      );
+    ) => resolveEffectiveSpatialStateHost(chatId, options, await getChatMetadata(chatId));
     const firstHealth = (await expectJson(app, {
       method: "GET",
       url: "/api/health",
@@ -787,8 +763,7 @@ async function main() {
       headers: csrfHeaders,
       payload: {
         name: "Hierarchical Maps location-lore fixture",
-        description:
-          "Proves exact-location lore reaches every prompt preview path.",
+        description: "Proves exact-location lore reaches every prompt preview path.",
         category: "world",
         enabled: true,
       },
@@ -799,8 +774,7 @@ async function main() {
       headers: csrfHeaders,
       payload: {
         name: "Lifecycle Harbor location truth",
-        content:
-          "LOCATION_LORE_PARITY: Lifecycle Harbor smells of salt and cedar.",
+        content: "LOCATION_LORE_PARITY: Lifecycle Harbor smells of salt and cedar.",
       },
     })) as { id: string };
     const gameGenerationConnection = (await expectJson(app, {
@@ -821,8 +795,7 @@ async function main() {
       id: "existing-campaign-map",
       type: "node",
       name: "Existing World",
-      description:
-        "A legacy world map that must remain intact during reconciliation.",
+      description: "A legacy world map that must remain intact during reconciliation.",
       nodes: [
         {
           id: "existing-harbor",
@@ -1070,9 +1043,7 @@ async function main() {
       };
     };
     assert.equal(beforeMetadata.gameMap.spatialLocationId, undefined);
-    assert.ok(
-      beforeMetadata.gameMap.nodes.every((node) => !node.spatialLocationId),
-    );
+    assert.ok(beforeMetadata.gameMap.nodes.every((node) => !node.spatialLocationId));
 
     type ReconciliationTarget =
       | { target: "map"; mapId: string; mapName: string; targetName: string }
@@ -1109,10 +1080,7 @@ async function main() {
       url: `/api/chats/${existingGame.id}/spatial-context/game-map-bindings/reconciliation`,
     })) as ReconciliationPreview;
     assert.deepEqual(
-      preview.suggestions.map((suggestion) => [
-        suggestion.sourceName,
-        suggestion.spatialLocationId,
-      ]),
+      preview.suggestions.map((suggestion) => [suggestion.sourceName, suggestion.spatialLocationId]),
       [
         ["Existing World", "existing_world"],
         ["Existing Harbor", "existing_harbor"],
@@ -1168,10 +1136,7 @@ async function main() {
         headers: csrfHeaders,
         payload: {
           expectedDefinitionRevision: 1,
-          bindings: [
-            reviewedBindings[0]!,
-            { ...reviewedBindings[1]!, spatialLocationId: "east_crossroads" },
-          ],
+          bindings: [reviewedBindings[0]!, { ...reviewedBindings[1]!, spatialLocationId: "east_crossroads" }],
         },
       },
       409,
@@ -1187,9 +1152,7 @@ async function main() {
       };
     };
     assert.equal(rejectedMetadata.gameMap.spatialLocationId, undefined);
-    assert.ok(
-      rejectedMetadata.gameMap.nodes.every((node) => !node.spatialLocationId),
-    );
+    assert.ok(rejectedMetadata.gameMap.nodes.every((node) => !node.spatialLocationId));
 
     const applied = (await expectJson(app, {
       method: "POST",
@@ -1226,21 +1189,10 @@ async function main() {
         nodes: Array<{ id: string; spatialLocationId?: string }>;
       }>;
     };
-    assert.equal(
-      reconciledMetadata.gameMap.spatialLocationId,
-      "existing_world",
-    );
-    assert.equal(
-      reconciledMetadata.gameMaps[0]?.spatialLocationId,
-      "existing_world",
-    );
+    assert.equal(reconciledMetadata.gameMap.spatialLocationId, "existing_world");
+    assert.equal(reconciledMetadata.gameMaps[0]?.spatialLocationId, "existing_world");
     assert.deepEqual(
-      Object.fromEntries(
-        reconciledMetadata.gameMap.nodes.map((node) => [
-          node.id,
-          node.spatialLocationId,
-        ]),
-      ),
+      Object.fromEntries(reconciledMetadata.gameMap.nodes.map((node) => [node.id, node.spatialLocationId])),
       {
         "existing-harbor": "existing_harbor",
         "ambiguous-crossroads": undefined,
@@ -1278,13 +1230,8 @@ async function main() {
     };
     assert.equal(gamePeek.source, "live_preview");
     assert.equal(gamePeek.exact, false);
-    const gamePeekText = gamePeek.messages
-      .map((message) => message.content)
-      .join("\n");
-    assert.match(
-      gamePeekText,
-      /LOCATION_LORE_PARITY: Lifecycle Harbor smells of salt and cedar\./u,
-    );
+    const gamePeekText = gamePeek.messages.map((message) => message.content).join("\n");
+    assert.match(gamePeekText, /LOCATION_LORE_PARITY: Lifecycle Harbor smells of salt and cedar\./u);
     assert.match(gamePeekText, /Existing Harbor/u);
     assert.match(gamePeekText, /GAME_CUSTOM_TURN_TEMPLATE/u);
 
@@ -1297,19 +1244,14 @@ async function main() {
         content: "The existing harbor watch records the party's arrival.",
       },
     })) as { id: string; activeSwipeIndex: number };
-    const normalGameAssistantSnapshot = await materializeAssistantSpatialState(
-      {
-        chatId: existingGame.id,
-        messageId: gameAssistantAtHarbor.id,
-        swipeIndex: 0,
-        regenerate: false,
-        continuation: false,
-      },
-    );
-    assert.equal(
-      normalGameAssistantSnapshot?.currentLocationId,
-      "existing_harbor",
-    );
+    const normalGameAssistantSnapshot = await materializeAssistantSpatialState({
+      chatId: existingGame.id,
+      messageId: gameAssistantAtHarbor.id,
+      swipeIndex: 0,
+      regenerate: false,
+      continuation: false,
+    });
+    assert.equal(normalGameAssistantSnapshot?.currentLocationId, "existing_harbor");
 
     const gameWorldGenerationRequestIndex = generationProviderRequests.length;
     const gameGeneration = await app.inject({
@@ -1350,15 +1292,10 @@ async function main() {
       createdAt: string;
     }>;
     const gameWorldTurn = gameMessages.find(
-      (message) =>
-        message.role === "user" &&
-        message.content ===
-          "The party returns to the Existing World overview.",
+      (message) => message.role === "user" && message.content === "The party returns to the Existing World overview.",
     );
     const gameAssistantAtWorld = gameMessages.find(
-      (message) =>
-        message.role === "assistant" &&
-        message.content.includes("GAME_HISTORY_PROVIDER_RESPONSE"),
+      (message) => message.role === "assistant" && message.content.includes("GAME_HISTORY_PROVIDER_RESPONSE"),
     );
     assert.ok(gameWorldTurn);
     assert.ok(gameAssistantAtWorld);
@@ -1401,9 +1338,7 @@ async function main() {
     });
     assert.equal(gameRetry.statusCode, 200, gameRetry.body);
     assert.match(gameRetry.body, /message_saved/u);
-    const gameRetryPrompt = capturedProviderPrompt(
-      generationProviderRequests[gameRetryRequestIndex],
-    );
+    const gameRetryPrompt = capturedProviderPrompt(generationProviderRequests[gameRetryRequestIndex]);
     assert.match(gameRetryPrompt, /Current location ID: existing_harbor/u);
     assert.doesNotMatch(gameRetryPrompt, /Current location ID: existing_world/u);
     assert.match(gameRetryPrompt, /HARBOR_HISTORY_GAME_STATE/u);
@@ -1416,9 +1351,7 @@ async function main() {
       method: "GET",
       url: `/api/chats/${existingGame.id}/messages`,
     })) as Array<{ id: string; activeSwipeIndex: number }>;
-    const retriedGameMessage = gameMessagesAfterRetry.find(
-      (message) => message.id === gameAssistantAtHarbor.id,
-    );
+    const retriedGameMessage = gameMessagesAfterRetry.find((message) => message.id === gameAssistantAtHarbor.id);
     assert.equal(retriedGameMessage?.activeSwipeIndex, 1);
     const gameRetryCached = (await expectJson(app, {
       method: "POST",
@@ -1432,10 +1365,7 @@ async function main() {
     };
     assert.equal(gameRetryCached.source, "cached");
     assert.equal(gameRetryCached.exact, true);
-    assert.equal(
-      gameRetryCached.messages.map((message) => message.content).join("\n\n"),
-      gameRetryPrompt,
-    );
+    assert.equal(gameRetryCached.messages.map((message) => message.content).join("\n\n"), gameRetryPrompt);
 
     const gameContinuationRequestIndex = generationProviderRequests.length;
     const gameContinuation = await app.inject({
@@ -1453,17 +1383,12 @@ async function main() {
     });
     assert.equal(gameContinuation.statusCode, 200, gameContinuation.body);
     assert.match(gameContinuation.body, /message_saved/u);
-    const gameContinuationPrompt = capturedProviderPrompt(
-      generationProviderRequests[gameContinuationRequestIndex],
-    );
+    const gameContinuationPrompt = capturedProviderPrompt(generationProviderRequests[gameContinuationRequestIndex]);
     assert.match(gameContinuationPrompt, /Current location ID: existing_world/u);
     assert.doesNotMatch(gameContinuationPrompt, /Current location ID: existing_harbor/u);
     assert.match(gameContinuationPrompt, /WORLD_CURRENT_GAME_STATE/u);
     assert.doesNotMatch(gameContinuationPrompt, /HARBOR_HISTORY_GAME_STATE/u);
-    assert.doesNotMatch(
-      gameContinuationPrompt,
-      /LOCATION_LORE_PARITY: Lifecycle Harbor smells of salt and cedar\./u,
-    );
+    assert.doesNotMatch(gameContinuationPrompt, /LOCATION_LORE_PARITY: Lifecycle Harbor smells of salt and cedar\./u);
     const gameContinuationCached = (await expectJson(app, {
       method: "POST",
       url: `/api/chats/${existingGame.id}/peek-prompt`,
@@ -1481,35 +1406,23 @@ async function main() {
       gameContinuationPrompt,
     );
 
-    const exactRegeneratedGameState = await resolveEffectiveSpatialState(
-      existingGame.id,
-      {
-        exactAnchor: { messageId: gameAssistantAtHarbor.id, swipeIndex: 1 },
-      },
-    );
-    assert.equal(
-      exactRegeneratedGameState.currentLocationId,
-      "existing_harbor",
-    );
+    const exactRegeneratedGameState = await resolveEffectiveSpatialState(existingGame.id, {
+      exactAnchor: { messageId: gameAssistantAtHarbor.id, swipeIndex: 1 },
+    });
+    assert.equal(exactRegeneratedGameState.currentLocationId, "existing_harbor");
 
     await expectJson(app, {
       method: "DELETE",
       url: `/api/chats/${existingGame.id}/messages/${gameAssistantAtHarbor.id}/swipes/0`,
       headers: csrfHeaders,
     });
-    const shiftedGameSwipeState = await resolveEffectiveSpatialState(
-      existingGame.id,
-      {
-        exactAnchor: { messageId: gameAssistantAtHarbor.id, swipeIndex: 0 },
-      },
-    );
+    const shiftedGameSwipeState = await resolveEffectiveSpatialState(existingGame.id, {
+      exactAnchor: { messageId: gameAssistantAtHarbor.id, swipeIndex: 0 },
+    });
     assert.equal(shiftedGameSwipeState.currentLocationId, "existing_harbor");
-    const removedGameSwipeState = await resolveEffectiveSpatialState(
-      existingGame.id,
-      {
-        exactAnchor: { messageId: gameAssistantAtHarbor.id, swipeIndex: 1 },
-      },
-    );
+    const removedGameSwipeState = await resolveEffectiveSpatialState(existingGame.id, {
+      exactAnchor: { messageId: gameAssistantAtHarbor.id, swipeIndex: 1 },
+    });
     assert.equal(removedGameSwipeState.snapshot, null);
 
     const gameBranch = (await expectJson(app, {
@@ -1528,14 +1441,8 @@ async function main() {
       method: "GET",
       url: `/api/chats/${gameBranch.id}/export?format=jsonl`,
     });
-    assert.equal(
-      exportedGameBranch.statusCode,
-      200,
-      exportedGameBranch.body,
-    );
-    const gameExportHeader = JSON.parse(
-      exportedGameBranch.body.split("\n")[0]!,
-    ) as {
+    assert.equal(exportedGameBranch.statusCode, 200, exportedGameBranch.body);
+    const gameExportHeader = JSON.parse(exportedGameBranch.body.split("\n")[0]!) as {
       chat_metadata: {
         marinara_metadata: {
           spatialContextHistory: Array<{ currentLocationId: string }>;
@@ -1566,11 +1473,7 @@ async function main() {
       },
       payload: gameImportBody,
     });
-    assert.equal(
-      importedGameResponse.statusCode,
-      200,
-      importedGameResponse.body,
-    );
+    assert.equal(importedGameResponse.statusCode, 200, importedGameResponse.body);
     const importedGame = JSON.parse(importedGameResponse.body) as {
       success: boolean;
       chatId: string;
@@ -2224,55 +2127,63 @@ async function main() {
 
     const oversizedVariableReferences = Array.from({ length: 8 }, () => "${oversized}").join("\n");
     const oversizedPromptRequestCount = generationProviderRequests.length;
-    const oversizedPromptResponse = (await expectJson(app, {
-      method: "POST",
-      url: `/api/chats/${routeGraphChat.id}/spatial-context/generation-prompt/preview`,
-      headers: csrfHeaders,
-      payload: {
-        operation: "create",
-        size: "small",
-        instructions: "Create a compact city with practical streets.",
-        groundingMode: "setup",
-        sourceLorebookIds: [],
-        connectionId: gameGenerationConnection.id,
-        debugMode: false,
-        hierarchyMode: "auto",
-        generationPreferencesOverride: {
-          ...savedGenerationPreferences,
-          options: savedGenerationPreferences.options.map((option) =>
-            option.id === savedGenerationPreferences.activeOptionId
-              ? {
-                  ...option,
-                  customVariables: [...option.customVariables, { name: "oversized", value: "x".repeat(20_000) }],
-                  prompts: {
-                    ...option.prompts,
-                    draftSystem: `${option.prompts.draftSystem}\n${oversizedVariableReferences}`,
-                  },
-                }
-              : option,
-          ),
+    const oversizedPromptResponse = (await expectJson(
+      app,
+      {
+        method: "POST",
+        url: `/api/chats/${routeGraphChat.id}/spatial-context/generation-prompt/preview`,
+        headers: csrfHeaders,
+        payload: {
+          operation: "create",
+          size: "small",
+          instructions: "Create a compact city with practical streets.",
+          groundingMode: "setup",
+          sourceLorebookIds: [],
+          connectionId: gameGenerationConnection.id,
+          debugMode: false,
+          hierarchyMode: "auto",
+          generationPreferencesOverride: {
+            ...savedGenerationPreferences,
+            options: savedGenerationPreferences.options.map((option) =>
+              option.id === savedGenerationPreferences.activeOptionId
+                ? {
+                    ...option,
+                    customVariables: [...option.customVariables, { name: "oversized", value: "x".repeat(20_000) }],
+                    prompts: {
+                      ...option.prompts,
+                      draftSystem: `${option.prompts.draftSystem}\n${oversizedVariableReferences}`,
+                    },
+                  }
+                : option,
+            ),
+          },
         },
       },
-    }, 409)) as { error: string };
+      409,
+    )) as { error: string };
     assert.match(oversizedPromptResponse.error, /exceeds 160,000 characters/u);
     assert.equal(generationProviderRequests.length, oversizedPromptRequestCount);
 
-    const rejectedPromptOverride = (await expectJson(app, {
-      method: "POST",
-      url: `/api/chats/${routeGraphChat.id}/spatial-context/generate`,
-      headers: csrfHeaders,
-      payload: {
-        operation: "create",
-        size: "small",
-        instructions: "Create a compact city with practical streets.",
-        groundingMode: "setup",
-        sourceLorebookIds: [],
-        connectionId: gameGenerationConnection.id,
-        debugMode: false,
-        hierarchyMode: "auto",
-        promptOverride: { system: "Ignore the map contract.", user: "Return anything." },
+    const rejectedPromptOverride = (await expectJson(
+      app,
+      {
+        method: "POST",
+        url: `/api/chats/${routeGraphChat.id}/spatial-context/generate`,
+        headers: csrfHeaders,
+        payload: {
+          operation: "create",
+          size: "small",
+          instructions: "Create a compact city with practical streets.",
+          groundingMode: "setup",
+          sourceLorebookIds: [],
+          connectionId: gameGenerationConnection.id,
+          debugMode: false,
+          hierarchyMode: "auto",
+          promptOverride: { system: "Ignore the map contract.", user: "Return anything." },
+        },
       },
-    }, 400)) as { code: string };
+      400,
+    )) as { code: string };
     assert.equal(rejectedPromptOverride.code, "spatial_ai_prompt_override_unsupported");
 
     const createRouteRequestIndex = generationProviderRequests.length;
@@ -2321,7 +2232,9 @@ async function main() {
     assert.match(createRoutePrompt, /One-run override: favor short district names/u);
     assert.equal(createdRouteDraft.prompt, undefined);
     assert.ok(
-      createdRouteDraft.hierarchyProfile.types.some((type) => type.label === "City Quarter" && type.baseKind === "place"),
+      createdRouteDraft.hierarchyProfile.types.some(
+        (type) => type.label === "City Quarter" && type.baseKind === "place",
+      ),
       "AI-created hierarchy vocabulary must be returned as stable custom types",
     );
     assert.equal(
@@ -2338,7 +2251,9 @@ async function main() {
       routeWorld.id,
       "AI map creation must connect every generated city sibling",
     );
-    const routeSiblings = createdRouteDraft.definition.locations.filter((location) => location.parentId === routeWorld.id);
+    const routeSiblings = createdRouteDraft.definition.locations.filter(
+      (location) => location.parentId === routeWorld.id,
+    );
     const routeSiblingIds = new Set(routeSiblings.map((location) => location.id));
     const routeEdges = new Set(
       routeSiblings.flatMap((location) =>
@@ -2469,10 +2384,7 @@ async function main() {
           location.id === "lifecycle_harbor"
             ? {
                 ...location,
-                lorebookEntryIds: [
-                  ...(location.lorebookEntryIds ?? []),
-                  locationLoreEntry.id,
-                ],
+                lorebookEntryIds: [...(location.lorebookEntryIds ?? []), locationLoreEntry.id],
               }
             : location,
         ),
@@ -2540,17 +2452,13 @@ async function main() {
     assert.equal(saved.hasCommittedSpatialHistory, true);
     assert.ok(
       saved.warnings.some(
-        (warning) =>
-          warning.code === "lorebook_entry_missing" &&
-          warning.locationId === "lifecycle_harbor",
+        (warning) => warning.code === "lorebook_entry_missing" && warning.locationId === "lifecycle_harbor",
       ),
       "Definition reads must report missing lore links through the host persistence facade",
     );
     assert.ok(
       saved.warnings.some(
-        (warning) =>
-          warning.code === "lorebook_entry_missing" &&
-          warning.locationId === "lifecycle_archived_region",
+        (warning) => warning.code === "lorebook_entry_missing" && warning.locationId === "lifecycle_archived_region",
       ),
       "The prior artifact must reproduce archived-location lore warnings before update",
     );
@@ -2573,10 +2481,7 @@ async function main() {
     };
     assert.equal(ownerTurn.message.chatId, chatId);
     assert.equal(ownerTurn.message.role, "user");
-    assert.equal(
-      ownerTurn.message.content,
-      "I follow the road into Lifecycle Harbor.",
-    );
+    assert.equal(ownerTurn.message.content, "I follow the road into Lifecycle Harbor.");
     assert.equal(ownerTurn.spatial.currentLocationId, "lifecycle_harbor");
     const roleplayPeek = (await expectJson(app, {
       method: "POST",
@@ -2590,22 +2495,16 @@ async function main() {
     };
     assert.equal(roleplayPeek.source, "live_preview");
     assert.equal(roleplayPeek.exact, false);
-    const roleplayPeekText = roleplayPeek.messages
-      .map((message) => message.content)
-      .join("\n");
-    assert.match(
-      roleplayPeekText,
-      /LOCATION_LORE_PARITY: Lifecycle Harbor smells of salt and cedar\./u,
-    );
+    const roleplayPeekText = roleplayPeek.messages.map((message) => message.content).join("\n");
+    assert.match(roleplayPeekText, /LOCATION_LORE_PARITY: Lifecycle Harbor smells of salt and cedar\./u);
     assert.match(roleplayPeekText, /Lifecycle Harbor/u);
     assert.match(roleplayPeekText, /ROLEPLAY_CUSTOM_TURN_TEMPLATE/u);
 
     const oversizedResolvedRoleplayTemplates = {
       ...customizedGlobalTurnTemplates,
-      roleplay: `${defaultTurnPromptTemplate}\n${Array.from(
-        { length: 500 },
-        () => "${privateModelContextBlock}",
-      ).join("\n")}`,
+      roleplay: `${defaultTurnPromptTemplate}\n${Array.from({ length: 500 }, () => "${privateModelContextBlock}").join(
+        "\n",
+      )}`,
     };
     await expectJson(app, {
       method: "PUT",
@@ -2619,9 +2518,7 @@ async function main() {
       headers: csrfHeaders,
       payload: {},
     })) as { messages: Array<{ content: string }> };
-    const oversizedTemplatePeekText = oversizedTemplatePeek.messages
-      .map((message) => message.content)
-      .join("\n");
+    const oversizedTemplatePeekText = oversizedTemplatePeek.messages.map((message) => message.content).join("\n");
     assert.match(oversizedTemplatePeekText, /<spatial_context mode="roleplay" authority="application">/u);
     assert.equal(
       oversizedTemplatePeekText.match(/Private model context:/gu)?.length,
@@ -2663,15 +2560,13 @@ async function main() {
         content: "The harbor bells answer across the water.",
       },
     })) as { id: string; activeSwipeIndex: number };
-    const normalAssistantSnapshot = await materializeAssistantSpatialState(
-      {
-        chatId,
-        messageId: assistantAtHarbor.id,
-        swipeIndex: 0,
-        regenerate: false,
-        continuation: false,
-      },
-    );
+    const normalAssistantSnapshot = await materializeAssistantSpatialState({
+      chatId,
+      messageId: assistantAtHarbor.id,
+      swipeIndex: 0,
+      regenerate: false,
+      continuation: false,
+    });
     assert.equal(normalAssistantSnapshot?.currentLocationId, "lifecycle_harbor");
 
     const worldTurn = (await expectJson(app, {
@@ -2701,15 +2596,13 @@ async function main() {
       assistantAtWorld.createdAt > worldTurn.message.createdAt,
       "Live assistant messages must sort after the owner turn they answer",
     );
-    const continuationSnapshot = await materializeAssistantSpatialState(
-      {
-        chatId,
-        messageId: assistantAtWorld.id,
-        swipeIndex: 0,
-        regenerate: false,
-        continuation: true,
-      },
-    );
+    const continuationSnapshot = await materializeAssistantSpatialState({
+      chatId,
+      messageId: assistantAtWorld.id,
+      swipeIndex: 0,
+      regenerate: false,
+      continuation: true,
+    });
     assert.equal(continuationSnapshot?.currentLocationId, "lifecycle_world");
 
     const regeneratedSwipe = (await expectJson(app, {
@@ -2719,15 +2612,13 @@ async function main() {
       payload: { content: "A second harbor answer rolls in with the tide." },
     })) as { index: number };
     assert.equal(regeneratedSwipe.index, 1);
-    const regeneratedSnapshot = await materializeAssistantSpatialState(
-      {
-        chatId,
-        messageId: assistantAtHarbor.id,
-        swipeIndex: regeneratedSwipe.index,
-        regenerate: true,
-        continuation: false,
-      },
-    );
+    const regeneratedSnapshot = await materializeAssistantSpatialState({
+      chatId,
+      messageId: assistantAtHarbor.id,
+      swipeIndex: regeneratedSwipe.index,
+      regenerate: true,
+      continuation: false,
+    });
     assert.equal(regeneratedSnapshot?.currentLocationId, "lifecycle_harbor");
     const exactRegeneratedState = await resolveEffectiveSpatialState(chatId, {
       exactAnchor: { messageId: assistantAtHarbor.id, swipeIndex: 1 },
@@ -3262,9 +3153,7 @@ async function main() {
     );
     assert.equal(
       upgradedBranchSpatial.warnings.some(
-        (warning) =>
-          warning.code === "lorebook_entry_missing" &&
-          warning.locationId === "lifecycle_archived_region",
+        (warning) => warning.code === "lorebook_entry_missing" && warning.locationId === "lifecycle_archived_region",
       ),
       false,
       "The updated artifact must ignore missing lore links retained only on archived locations",
@@ -3597,10 +3486,7 @@ async function main() {
     assert.match(narratedPromptText, /We discover a hidden room/u);
     assert.match(narratedPromptText, /your own narration alone never authorizes either command/u);
     assert.match(narratedPromptText, /NPC-only movement/u);
-    assert.match(
-      narratedPromptText,
-      /Lifecycle World > Level 5 — Prism Caverns \[lifecycle_level_5\]/u,
-    );
+    assert.match(narratedPromptText, /Lifecycle World > Level 5 — Prism Caverns \[lifecycle_level_5\]/u);
 
     const narratedMoveMessage = (await expectJson(app, {
       method: "POST",
@@ -3930,11 +3816,7 @@ async function main() {
       definition: { locations: Array<{ id: string }> };
     };
     assert.equal(restarted.currentLocationId, "lifecycle_world");
-    assert.ok(
-      restarted.definition.locations.some(
-        (location) => location.id === "lifecycle_harbor",
-      ),
-    );
+    assert.ok(restarted.definition.locations.some((location) => location.id === "lifecycle_harbor"));
 
     const backupResponse = await app.inject({
       method: "POST",
@@ -3962,10 +3844,7 @@ async function main() {
       metadata: unknown;
     };
     const retainedMetadata = metadata(chatAfterRemoval.metadata);
-    assert.ok(
-      retainedMetadata.spatialContext,
-      "Uninstall must retain the spatial definition in chat metadata",
-    );
+    assert.ok(retainedMetadata.spatialContext, "Uninstall must retain the spatial definition in chat metadata");
     assert.deepEqual(
       retainedMetadata.activeAgentIds,
       [],
@@ -3975,11 +3854,7 @@ async function main() {
     await app.close();
     app = null;
     app = await buildApp();
-    await expectJson(
-      app,
-      { method: "GET", url: `/api/chats/${chatId}/spatial-context` },
-      404,
-    );
+    await expectJson(app, { method: "GET", url: `/api/chats/${chatId}/spatial-context` }, 404);
     const unavailableChat = (await expectJson(app, {
       method: "GET",
       url: `/api/chats/${chatId}`,
@@ -3991,8 +3866,7 @@ async function main() {
     app = null;
 
     catalogOnline = true;
-    const reinstalled =
-      await capabilityPackageManager.install("hierarchical-maps");
+    const reinstalled = await capabilityPackageManager.install("hierarchical-maps");
     assert.equal(reinstalled.version, "1.3.6");
     assert.equal(reinstalled.status, "restart-required");
     catalogOnline = false;
@@ -4020,11 +3894,7 @@ async function main() {
     );
     const multipartSuffix = Buffer.from(`\r\n--${boundary}--\r\n`);
     const backupBytes = readFileSync(backupPath);
-    const multipartBody = Buffer.concat([
-      multipartPrefix,
-      backupBytes,
-      multipartSuffix,
-    ]);
+    const multipartBody = Buffer.concat([multipartPrefix, backupBytes, multipartSuffix]);
     const restored = (await expectJson(app, {
       method: "POST",
       url: "/api/backup/import-profile",
@@ -4044,9 +3914,7 @@ async function main() {
       id: string;
       name: string;
     }>;
-    const restoredChat = chats.find(
-      (chat) => chat.name === "Hierarchical Maps lifecycle fixture",
-    );
+    const restoredChat = chats.find((chat) => chat.name === "Hierarchical Maps lifecycle fixture");
     assert.ok(restoredChat, "Full backup restore must recreate the Maps chat");
     const restoredState = (await expectJson(app, {
       method: "GET",
@@ -4060,11 +3928,7 @@ async function main() {
       };
     };
     assert.equal(restoredState.currentLocationId, "lifecycle_world");
-    assert.ok(
-      restoredState.definition.locations.some(
-        (location) => location.id === "lifecycle_harbor",
-      ),
-    );
+    assert.ok(restoredState.definition.locations.some((location) => location.id === "lifecycle_harbor"));
     assert.equal(restoredState.hierarchyProfile.showConnections, false);
     assert.deepEqual(restoredState.hierarchyProfile.linkPresentations[presentationKey], {
       color: "#22C55E",

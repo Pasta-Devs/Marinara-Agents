@@ -10,10 +10,7 @@ import { readFileSync } from "node:fs";
 
 const schemaPath = "sources/engine/packages/shared/dist/schemas/noodle.schema.js";
 const schema = readFileSync(schemaPath, "utf8");
-assert.match(
-  schema,
-  /noodlerContentFormatSchema = z\.enum\(\["caption", "teaser", "announcement", "long_form"\]\)/u,
-);
+assert.match(schema, /noodlerContentFormatSchema = z\.enum\(\["caption", "teaser", "announcement", "long_form"\]\)/u);
 assert.match(schema, /DEFAULT_NOODLER_CONTENT_FORMAT = "caption"/u);
 assert.match(schema, /caption: \{ title: "optional", targetMin: 40, targetMax: 500 \}/u);
 assert.match(schema, /teaser: \{ title: "optional", targetMin: 40, targetMax: 280 \}/u);
@@ -40,10 +37,7 @@ const responseFormat = readFileSync(
   "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-response-format.ts",
   "utf8",
 );
-const composer = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
-  "utf8",
-);
+const composer = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
 
 assert.match(generation, /NOODLER_FORMAT_PROMPTS\[format\]/u);
 // Every generated NoodleR post carries a title, whatever the format.

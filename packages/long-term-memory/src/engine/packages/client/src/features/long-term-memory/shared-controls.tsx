@@ -15,8 +15,7 @@ import { useLtmTranslation } from "./localization";
 let activePopover: { id: string; close: () => void } | null = null;
 
 export const inputClass = "mari-editor-field min-h-11 w-full px-3 text-sm";
-export const compactInputClass =
-  "mari-editor-field min-h-8 w-full px-2.5 text-[0.6875rem]";
+export const compactInputClass = "mari-editor-field min-h-8 w-full px-2.5 text-[0.6875rem]";
 
 export const Button = forwardRef<
   HTMLButtonElement,
@@ -25,33 +24,15 @@ export const Button = forwardRef<
     primary?: boolean;
     destructive?: boolean;
   }
->(function Button(
-  {
-    children,
-    primary = false,
-    destructive = false,
-    className = "",
-    style,
-    ...props
-  },
-  ref,
-) {
-  const tone = primary
-    ? "mari-editor-action--primary"
-    : destructive
-      ? "mari-editor-action--danger"
-      : "";
+>(function Button({ children, primary = false, destructive = false, className = "", style, ...props }, ref) {
+  const tone = primary ? "mari-editor-action--primary" : destructive ? "mari-editor-action--danger" : "";
   return (
     <button
       ref={ref}
       type="button"
       data-ltm-control="button"
       className={`mari-editor-action min-h-11 px-3 ${tone} ${className}`}
-      style={
-        className.includes("mari-editor-action--compact")
-          ? style
-          : { minHeight: "2.75rem", ...style }
-      }
+      style={className.includes("mari-editor-action--compact") ? style : { minHeight: "2.75rem", ...style }}
       {...props}
     >
       {children}
@@ -86,10 +67,7 @@ export function IconButton({
   );
 }
 
-export function ClickSurface({
-  className = "",
-  ...props
-}: HTMLAttributes<HTMLDivElement>) {
+export function ClickSurface({ className = "", ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={`focus-within:outline-none focus-within:ring-2 focus-within:ring-[var(--ring)] ${className}`}
@@ -126,8 +104,7 @@ export function InfoPopover({
     clearCloseTimer();
     setOpen(false);
     setPinned(false);
-    if (restoreFocus)
-      requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
+    if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
   };
   closeRef.current = close;
   const show = () => {
@@ -150,15 +127,9 @@ export function InfoPopover({
       const width = panelRef.current?.offsetWidth ?? (wide ? 416 : 288);
       const height = panelRef.current?.offsetHeight ?? 160;
       const gap = 8;
-      const left = Math.min(
-        Math.max(8, trigger.left),
-        Math.max(8, window.innerWidth - width - 8),
-      );
+      const left = Math.min(Math.max(8, trigger.left), Math.max(8, window.innerWidth - width - 8));
       const below = trigger.bottom + gap;
-      const top =
-        below + height <= window.innerHeight - 8
-          ? below
-          : Math.max(8, trigger.top - gap - height);
+      const top = below + height <= window.innerHeight - 8 ? below : Math.max(8, trigger.top - gap - height);
       setPosition({ top, left });
     };
     updatePosition();
@@ -177,11 +148,7 @@ export function InfoPopover({
     };
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (
-        !triggerRef.current?.contains(target) &&
-        !panelRef.current?.contains(target)
-      )
-        closeRef.current();
+      if (!triggerRef.current?.contains(target) && !panelRef.current?.contains(target)) closeRef.current();
     };
     document.addEventListener("keydown", onKeyDown);
     document.addEventListener("pointerdown", onPointerDown);
@@ -218,8 +185,7 @@ export function InfoPopover({
         onMouseLeave={scheduleClose}
         onFocus={show}
         onBlur={(event) => {
-          if (!panelRef.current?.contains(event.relatedTarget as Node))
-            scheduleClose();
+          if (!panelRef.current?.contains(event.relatedTarget as Node)) scheduleClose();
         }}
         onClick={() => {
           if (pinned) close();
@@ -299,14 +265,10 @@ export function NumberField({
     committedText.current = String(value);
   }, [value]);
   return (
-    <div
-      className={`space-y-1 font-medium text-[var(--muted-foreground)] ${compact ? "text-[0.625rem]" : "text-xs"}`}
-    >
+    <div className={`space-y-1 font-medium text-[var(--muted-foreground)] ${compact ? "text-[0.625rem]" : "text-xs"}`}>
       <span className="flex items-center gap-1">
         <span id={`${id}-label`}>{label}</span>
-        {help ? (
-          <InfoPopover label={label} content={help} compact={compact} />
-        ) : null}
+        {help ? <InfoPopover label={label} content={help} compact={compact} /> : null}
       </span>
       <input
         id={id}
@@ -351,10 +313,8 @@ export function StatusSurface({
 } & HTMLAttributes<HTMLDivElement>) {
   const toneClass = {
     neutral: "text-[var(--marinara-editor-muted)]",
-    success:
-      "border-[var(--marinara-editor-accent)]/35 text-[var(--marinara-editor-accent)]",
-    warning:
-      "border-[var(--marinara-editor-warning)]/40 text-[var(--marinara-editor-warning)]",
+    success: "border-[var(--marinara-editor-accent)]/35 text-[var(--marinara-editor-accent)]",
+    warning: "border-[var(--marinara-editor-warning)]/40 text-[var(--marinara-editor-warning)]",
     danger: "border-[var(--destructive)]/35 text-[var(--destructive)]",
   }[tone];
   return (
@@ -365,13 +325,7 @@ export function StatusSurface({
       className={`mari-editor-panel mari-editor-panel--soft flex items-center gap-2 ${compact ? "px-2 py-1.5 text-[0.625rem]" : "min-h-11 px-3 text-xs"} ${toneClass} ${className}`}
       {...props}
     >
-      {busy ? (
-        <Loader2
-          aria-hidden="true"
-          size="0.875rem"
-          className="animate-spin motion-reduce:animate-none"
-        />
-      ) : null}
+      {busy ? <Loader2 aria-hidden="true" size="0.875rem" className="animate-spin motion-reduce:animate-none" /> : null}
       {children}
     </div>
   );

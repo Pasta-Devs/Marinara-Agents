@@ -107,9 +107,7 @@ function notePreviewText(note: LtmNote, limit = 320) {
     Object.values(note.sections)[0]?.text.trim() ||
     "";
   const compact = text.replace(/\s+/g, " ").trim();
-  return compact.length > limit
-    ? `${compact.slice(0, limit - 1).trim()}...`
-    : compact;
+  return compact.length > limit ? `${compact.slice(0, limit - 1).trim()}...` : compact;
 }
 
 function noteDisplayTitle(note: LtmNote) {
@@ -125,11 +123,7 @@ function normalizedPreviewText(note: LtmNote) {
 }
 
 function noteSourceNoteIds(note: Pick<LtmNote, "links">) {
-  return uniqueStrings(
-    note.links
-      .filter((link) => link.relation === "extracted_from")
-      .map((link) => link.target),
-  );
+  return uniqueStrings(note.links.filter((link) => link.relation === "extracted_from").map((link) => link.target));
 }
 
 function lineageForNote(noteById: Map<string, LtmNote>, noteId: string) {
@@ -158,14 +152,8 @@ function normalizedScopeForComparison(scope: LtmScope | null | undefined) {
   } satisfies LtmScope;
 }
 
-function scopesEqual(
-  left: LtmScope | null | undefined,
-  right: LtmScope | null | undefined,
-) {
-  return (
-    JSON.stringify(normalizedScopeForComparison(left)) ===
-    JSON.stringify(normalizedScopeForComparison(right))
-  );
+function scopesEqual(left: LtmScope | null | undefined, right: LtmScope | null | undefined) {
+  return JSON.stringify(normalizedScopeForComparison(left)) === JSON.stringify(normalizedScopeForComparison(right));
 }
 
 function scopeForCopy(note: LtmNote, destinationScope: LtmScope) {
@@ -186,12 +174,7 @@ function extractedChildrenForNoteIds(notes: LtmNote[], noteIds: string[]) {
     changed = false;
     for (const note of notes) {
       const sourceNoteIds = noteSourceNoteIds(note);
-      if (
-        !sourceNoteIds.some(
-          (sourceNoteId) => selected.has(sourceNoteId) || descendants.has(sourceNoteId),
-        )
-      )
-        continue;
+      if (!sourceNoteIds.some((sourceNoteId) => selected.has(sourceNoteId) || descendants.has(sourceNoteId))) continue;
       if (selected.has(note.id) || descendants.has(note.id)) continue;
       descendants.add(note.id);
       changed = true;
@@ -223,12 +206,8 @@ function lexicalSimilarity(left: Set<string>, right: Set<string>) {
   return { score: Math.max(overlap, (overlap + jaccard) / 2), sharedCount };
 }
 
-function compareConflicts(
-  left: LtmNoteTransferConflict,
-  right: LtmNoteTransferConflict,
-) {
-  const severityWeight = (value: LtmNoteTransferConflict["severity"]) =>
-    value === "hard" ? 2 : 1;
+function compareConflicts(left: LtmNoteTransferConflict, right: LtmNoteTransferConflict) {
+  const severityWeight = (value: LtmNoteTransferConflict["severity"]) => (value === "hard" ? 2 : 1);
   return (
     severityWeight(right.severity) - severityWeight(left.severity) ||
     (right.score ?? 0) - (left.score ?? 0) ||
@@ -239,20 +218,14 @@ function compareConflicts(
 function conflictReasonSummary(conflicts: LtmNoteTransferConflict[]) {
   const top = conflicts[0];
   if (!top) return undefined;
-  if (top.severity === "hard")
-    return "Destination already has a matching memory.";
+  if (top.severity === "hard") return "Destination already has a matching memory.";
   return "Destination already has a similar memory.";
 }
 
-function previewItemReasonForNoOp(
-  mode: LtmNoteTransferMode,
-  note: LtmNote,
-  destinationScope: LtmScope,
-) {
+function previewItemReasonForNoOp(mode: LtmNoteTransferMode, note: LtmNote, destinationScope: LtmScope) {
   if (mode === "copy") {
     if (isGlobalLtmScope(note.scope)) return "Already available everywhere.";
-    if (matchesLtmScope(note, { scope: destinationScope }))
-      return "Already visible in the destination branch.";
+    if (matchesLtmScope(note, { scope: destinationScope })) return "Already visible in the destination branch.";
     return "No scope change needed.";
   }
   return "Already scoped to the destination branch.";
@@ -268,9 +241,7 @@ function targetConflictForNotes(
   noteLineage: Set<string>,
   targetLineage: Set<string>,
 ): LtmNoteTransferConflict | null {
-  const sharedSourceType =
-    [...noteLineage].some((id) => targetLineage.has(id)) &&
-    note.type === target.type;
+  const sharedSourceType = [...noteLineage].some((id) => targetLineage.has(id)) && note.type === target.type;
 
   if (noteNormalizedText && noteNormalizedText === targetNormalizedText) {
     return {
@@ -299,10 +270,7 @@ function targetConflictForNotes(
   }
 
   const similarity = lexicalSimilarity(noteTokens, targetTokens);
-  if (
-    similarity.sharedCount < SOFT_CONFLICT_SHARED_TOKEN_MIN ||
-    similarity.score < LEXICAL_SIMILARITY_THRESHOLD
-  ) {
+  if (similarity.sharedCount < SOFT_CONFLICT_SHARED_TOKEN_MIN || similarity.score < LEXICAL_SIMILARITY_THRESHOLD) {
     return null;
   }
 
@@ -329,24 +297,13 @@ async function buildTransferPlan(
   const requestedNoteIds = uniqueStrings(request.noteIds);
   if (requestedNoteIds.length !== request.noteIds.length)
     throw new LtmNoteTransferError("Transfer note IDs must be unique.", 400);
-  const missingNoteIds = requestedNoteIds.filter(
-    (noteId) => !noteLookup.has(noteId),
-  );
+  const missingNoteIds = requestedNoteIds.filter((noteId) => !noteLookup.has(noteId));
   if (missingNoteIds.length > 0) {
-    logger.warn(
-      missingNoteIds,
-      `[ltm] Transfer requested non-existent notes: ${missingNoteIds.join(", ")}`,
-    );
-    throw new LtmNoteTransferError(
-      `Long-term memory note not found: ${missingNoteIds.join(", ")}`,
-      404,
-    );
+    logger.warn(missingNoteIds, `[ltm] Transfer requested non-existent notes: ${missingNoteIds.join(", ")}`);
+    throw new LtmNoteTransferError(`Long-term memory note not found: ${missingNoteIds.join(", ")}`, 404);
   }
 
-  const availableDerivedIds = extractedChildrenForNoteIds(
-    notes,
-    requestedNoteIds,
-  );
+  const availableDerivedIds = extractedChildrenForNoteIds(notes, requestedNoteIds);
   const derivedNoteIds = request.derivedNoteIds
     ? uniqueStrings(request.derivedNoteIds)
     : request.includeDerived === false
@@ -354,23 +311,16 @@ async function buildTransferPlan(
       : availableDerivedIds;
   if (derivedNoteIds.some((id) => !availableDerivedIds.includes(id)))
     throw new LtmNoteTransferError("Transfer includes an invalid derived note.", 400);
-  const transferNoteIds = uniqueStrings([
-    ...requestedNoteIds,
-    ...derivedNoteIds,
-  ]);
+  const transferNoteIds = uniqueStrings([...requestedNoteIds, ...derivedNoteIds]);
   const selectedSet = new Set(transferNoteIds);
   const destinationScope = resolveChatLtmScope(destinationChat);
   const destinationCandidates = notes.filter(
-    (note) =>
-      !selectedSet.has(note.id) &&
-      matchesLtmScope(note, { scope: destinationScope }),
+    (note) => !selectedSet.has(note.id) && matchesLtmScope(note, { scope: destinationScope }),
   );
   const destinationNormalizedText = new Map(
     destinationCandidates.map((note) => [note.id, normalizedPreviewText(note)]),
   );
-  const destinationTokens = new Map(
-    destinationCandidates.map((note) => [note.id, tokenizeForSimilarity(note)]),
-  );
+  const destinationTokens = new Map(destinationCandidates.map((note) => [note.id, tokenizeForSimilarity(note)]));
   const noteLineages = new Map(notes.map((note) => [note.id, lineageForNote(noteLookup, note.id)]));
 
   const items = transferNoteIds
@@ -378,14 +328,10 @@ async function buildTransferPlan(
       const note = noteLookup.get(noteId)!;
       const sourceNoteIds = noteSourceNoteIds(note);
       const derived = !requestedNoteIds.includes(noteId);
-      const nextScope =
-        request.mode === "copy"
-          ? scopeForCopy(note, destinationScope)
-          : destinationScope;
+      const nextScope = request.mode === "copy" ? scopeForCopy(note, destinationScope) : destinationScope;
       const noOp =
         request.mode === "copy"
-          ? isGlobalLtmScope(note.scope) ||
-            matchesLtmScope(note, { scope: destinationScope })
+          ? isGlobalLtmScope(note.scope) || matchesLtmScope(note, { scope: destinationScope })
           : scopesEqual(note.scope, destinationScope);
 
       if (noOp) {
@@ -397,16 +343,10 @@ async function buildTransferPlan(
           scope: note.scope,
           nextScope,
           derived,
-          ...(sourceNoteIds.length
-            ? { sourceNoteId: sourceNoteIds[0], sourceNoteIds }
-            : {}),
+          ...(sourceNoteIds.length ? { sourceNoteId: sourceNoteIds[0], sourceNoteIds } : {}),
           classification: "no_op",
           defaultIncluded: false,
-          reason: previewItemReasonForNoOp(
-            request.mode,
-            note,
-            destinationScope,
-          ),
+          reason: previewItemReasonForNoOp(request.mode, note, destinationScope),
           conflicts: [],
         };
       }
@@ -438,29 +378,19 @@ async function buildTransferPlan(
         scope: note.scope,
         nextScope,
         derived,
-          ...(sourceNoteIds.length
-            ? { sourceNoteId: sourceNoteIds[0], sourceNoteIds }
-          : {}),
+        ...(sourceNoteIds.length ? { sourceNoteId: sourceNoteIds[0], sourceNoteIds } : {}),
         classification: conflicts.length > 0 ? "conflict" : "ready",
         defaultIncluded: conflicts.length === 0,
-        ...(conflicts.length > 0
-          ? { reason: conflictReasonSummary(conflicts) }
-          : {}),
+        ...(conflicts.length > 0 ? { reason: conflictReasonSummary(conflicts) } : {}),
         conflicts,
       };
     })
     .filter(Boolean);
 
   const buckets = {
-    ready: items
-      .filter((item) => item.classification === "ready")
-      .map((item) => item.noteId),
-    noOp: items
-      .filter((item) => item.classification === "no_op")
-      .map((item) => item.noteId),
-    conflict: items
-      .filter((item) => item.classification === "conflict")
-      .map((item) => item.noteId),
+    ready: items.filter((item) => item.classification === "ready").map((item) => item.noteId),
+    noOp: items.filter((item) => item.classification === "no_op").map((item) => item.noteId),
+    conflict: items.filter((item) => item.classification === "conflict").map((item) => item.noteId),
   } satisfies LtmNoteTransferPreviewResponse["buckets"];
 
   return {
@@ -487,8 +417,7 @@ export async function previewLtmNoteTransfer(
       totalNoteCount: plan.items.length,
       requestedNoteIds: plan.requestedNoteIds,
       availableDerivedCount: plan.availableDerivedNoteIds.length,
-      includedDerivedCount:
-        request.includeDerived === false ? 0 : plan.derivedNoteIds.length,
+      includedDerivedCount: request.includeDerived === false ? 0 : plan.derivedNoteIds.length,
       derivedNoteIds: plan.derivedNoteIds,
       includeDerived: request.includeDerived !== false,
     },
@@ -501,18 +430,20 @@ export async function applyLtmNoteTransfer<TRebuild = unknown>(
   request: LtmNoteTransferApplyRequest,
   destinationChat: TransferChat,
   options: ApplyTransferOptions<TRebuild> = {},
-): Promise<
-  Omit<LtmNoteTransferApplyResponse, "rebuild"> & { rebuild: TRebuild | null }
-> {
+): Promise<Omit<LtmNoteTransferApplyResponse, "rebuild"> & { rebuild: TRebuild | null }> {
   const storage = transferStorage(options);
   return withLtmVaultLock(storage.root, async () => {
-    const plan = await buildTransferPlan({
-      noteIds: request.requestedNoteIds,
-      mode: request.mode,
-      destinationChatId: request.destinationChatId,
-      includeDerived: false,
-      derivedNoteIds: request.derivedNoteIds,
-    }, destinationChat, options);
+    const plan = await buildTransferPlan(
+      {
+        noteIds: request.requestedNoteIds,
+        mode: request.mode,
+        destinationChatId: request.destinationChatId,
+        includeDerived: false,
+        derivedNoteIds: request.derivedNoteIds,
+      },
+      destinationChat,
+      options,
+    );
     const updatedNoteIds: string[] = [];
     const skippedNoteIds: string[] = [];
     const derivedNoteIdsTouched: string[] = [];
@@ -543,8 +474,7 @@ export async function applyLtmNoteTransfer<TRebuild = unknown>(
         continue;
       }
 
-      const nextScope =
-        request.mode === "copy" ? item.nextScope : plan.destinationScope;
+      const nextScope = request.mode === "copy" ? item.nextScope : plan.destinationScope;
       if (scopesEqual(item.scope, nextScope)) {
         skippedNoteIds.push(item.noteId);
         continue;
@@ -555,8 +485,7 @@ export async function applyLtmNoteTransfer<TRebuild = unknown>(
       if (item.derived) derivedNoteIdsTouched.push(note.id);
     }
 
-    const rebuild =
-      updatedNoteIds.length > 0 ? ((await options.rebuild?.()) ?? null) : null;
+    const rebuild = updatedNoteIds.length > 0 ? ((await options.rebuild?.()) ?? null) : null;
 
     return {
       mode: request.mode,

@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const manifest = JSON.parse(
-  readFileSync("packages/slurp/manifest.json", "utf8"),
-) as {
+const manifest = JSON.parse(readFileSync("packages/slurp/manifest.json", "utf8")) as {
   id: string;
   name: string;
   description: string;
@@ -16,9 +14,11 @@ const manifest = JSON.parse(
     };
   };
 };
-const agents = JSON.parse(
-  readFileSync("packages/slurp/agents.json", "utf8"),
-) as Array<{ id: string; name: string; description: string }>;
+const agents = JSON.parse(readFileSync("packages/slurp/agents.json", "utf8")) as Array<{
+  id: string;
+  name: string;
+  description: string;
+}>;
 const catalog = JSON.parse(readFileSync("catalog/catalog.json", "utf8")) as {
   packages: Array<{
     iconUrl: string;
@@ -41,9 +41,7 @@ const agent = agents.find((entry) => entry.id === "slurp");
 assert.ok(agent, "Slurp must be present in its package Agents list");
 assert.match(agent.description, /standalone successor to NoodleR/i);
 
-const catalogEntry = catalog.packages.find(
-  (entry) => entry.manifest.id === "slurp",
-);
+const catalogEntry = catalog.packages.find((entry) => entry.manifest.id === "slurp");
 assert.ok(catalogEntry, "Slurp must be present in the downloadable catalog");
 assert.equal(catalogEntry.manifest.description, manifest.description);
 assert.match(catalogEntry.iconUrl, /artwork\/agent-covers\/slurp\.png$/);

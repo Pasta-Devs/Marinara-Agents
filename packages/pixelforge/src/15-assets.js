@@ -75,11 +75,18 @@ PF.assets = {
     try {
       if (firstLoad) {
         const [atlas, sprites] = await Promise.all([
-          fetch(this._url(core, "atlas.json")).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`atlas ${r.status}`)))),
-          fetch(this._url(core, "sprites.json")).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`sprites ${r.status}`)))),
+          fetch(this._url(core, "atlas.json")).then((r) =>
+            r.ok ? r.json() : Promise.reject(new Error(`atlas ${r.status}`)),
+          ),
+          fetch(this._url(core, "sprites.json")).then((r) =>
+            r.ok ? r.json() : Promise.reject(new Error(`sprites ${r.status}`)),
+          ),
         ]);
         const sheets = await Promise.all(
-          Object.entries(sprites.actors ?? {}).map(async ([name, path]) => [name, await this._image(this._url(core, path))]),
+          Object.entries(sprites.actors ?? {}).map(async ([name, path]) => [
+            name,
+            await this._image(this._url(core, path)),
+          ]),
         );
         this.atlas = atlas;
         this.sprites = sprites;
@@ -148,7 +155,17 @@ PF.assets = {
     if (!sheet || !this.sprites) return false;
     const { frameWidth, frameHeight, frames } = this.sprites;
     const frame = moving ? Math.floor(phase) % frames : 0;
-    ctx.drawImage(sheet, frame * frameWidth, facing * frameHeight, frameWidth, frameHeight, dx, dy, frameWidth, frameHeight);
+    ctx.drawImage(
+      sheet,
+      frame * frameWidth,
+      facing * frameHeight,
+      frameWidth,
+      frameHeight,
+      dx,
+      dy,
+      frameWidth,
+      frameHeight,
+    );
     return true;
   },
 };

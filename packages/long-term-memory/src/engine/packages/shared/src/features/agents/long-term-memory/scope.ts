@@ -9,35 +9,24 @@ export type LtmScopeMatcherInput = {
   includeGlobal?: boolean;
 };
 
-export function getLtmScopeChatIds(
-  scope: Pick<LtmScope, "chatId" | "chatIds"> | null | undefined,
-): string[] {
+export function getLtmScopeChatIds(scope: Pick<LtmScope, "chatId" | "chatIds"> | null | undefined): string[] {
   return uniqueStrings([scope?.chatId, ...(scope?.chatIds ?? [])]);
 }
 
-export function getLtmScopeGroupIds(
-  scope: Pick<LtmScope, "groupId" | "groupIds"> | null | undefined,
-): string[] {
+export function getLtmScopeGroupIds(scope: Pick<LtmScope, "groupId" | "groupIds"> | null | undefined): string[] {
   return uniqueStrings([scope?.groupId, ...(scope?.groupIds ?? [])]);
 }
 
-export function getLtmScopePersonaIds(
-  scope: Pick<LtmScope, "personaId" | "personaIds"> | null | undefined,
-): string[] {
+export function getLtmScopePersonaIds(scope: Pick<LtmScope, "personaId" | "personaIds"> | null | undefined): string[] {
   return uniqueStrings([scope?.personaId, ...(scope?.personaIds ?? [])]);
 }
 
 export function normalizeLtmScope(scope: LtmScope | null | undefined): LtmScope {
-  const chatIds = scope?.chatIds !== undefined
-    ? uniqueStrings(scope.chatIds)
-    : uniqueStrings([scope?.chatId]);
-  const groupIds = scope?.groupIds !== undefined
-    ? uniqueStrings(scope.groupIds)
-    : uniqueStrings([scope?.groupId]);
+  const chatIds = scope?.chatIds !== undefined ? uniqueStrings(scope.chatIds) : uniqueStrings([scope?.chatId]);
+  const groupIds = scope?.groupIds !== undefined ? uniqueStrings(scope.groupIds) : uniqueStrings([scope?.groupId]);
   const characterIds = uniqueStrings(scope?.characterIds ?? []);
-  const personaIds = scope?.personaIds !== undefined
-    ? uniqueStrings(scope.personaIds)
-    : uniqueStrings([scope?.personaId]);
+  const personaIds =
+    scope?.personaIds !== undefined ? uniqueStrings(scope.personaIds) : uniqueStrings([scope?.personaId]);
   return {
     ...(chatIds.length ? { chatId: chatIds[0], chatIds } : {}),
     ...(groupIds.length ? { groupId: groupIds[0], groupIds } : {}),
@@ -63,10 +52,7 @@ export function hasExplicitLtmAvailability(scope: LtmScope | null | undefined): 
   return !isGlobalLtmScope(scope);
 }
 
-export function validateLtmExplicitAvailability(
-  scope: LtmScope | null | undefined,
-  modes: readonly LtmMode[],
-) {
+export function validateLtmExplicitAvailability(scope: LtmScope | null | undefined, modes: readonly LtmMode[]) {
   if (!hasExplicitLtmAvailability(scope)) return "Choose at least one place where this memory is available.";
   if (modes.length === 0) return "Choose at least one chat mode.";
   return null;
@@ -99,9 +85,7 @@ export function ltmScopesOverlap(
   ]);
 
   const targetIsGlobal =
-    isGlobalLtmScope(targetScope) &&
-    targetCharacterIds.length === 0 &&
-    targetPersonaIds.length === 0;
+    isGlobalLtmScope(targetScope) && targetCharacterIds.length === 0 && targetPersonaIds.length === 0;
   if (isGlobalLtmScope(noteScope) || targetIsGlobal) {
     return includeGlobal;
   }
@@ -118,9 +102,7 @@ export function ltmScopesOverlap(
     intersects(noteGroupIds, targetGroupIds) ||
     intersects(noteCharacterIds, targetCharacterIds) ||
     intersects(notePersonaIds, targetPersonaIds) ||
-    (options.noteType === "character" &&
-      options.noteId !== undefined &&
-      targetCharacterIds.includes(options.noteId))
+    (options.noteType === "character" && options.noteId !== undefined && targetCharacterIds.includes(options.noteId))
   );
 }
 
@@ -128,12 +110,7 @@ export function matchesLtmScope(
   note: { id: string; type: string; scope: LtmScope },
   input: LtmScopeMatcherInput | null | undefined,
 ): boolean {
-  if (
-    !input?.scope &&
-    !input?.characterIds?.length &&
-    !input?.personaId &&
-    !input?.personaIds?.length
-  ) {
+  if (!input?.scope && !input?.characterIds?.length && !input?.personaId && !input?.personaIds?.length) {
     return input?.includeGlobal === false ? !isGlobalLtmScope(note.scope) : true;
   }
 
@@ -144,10 +121,7 @@ export function matchesLtmScope(
     input.personaId,
     ...(input.personaIds ?? []),
   ]);
-  const hasTargetScope =
-    !isGlobalLtmScope(targetScope) ||
-    targetCharacterIds.length > 0 ||
-    targetPersonaIds.length > 0;
+  const hasTargetScope = !isGlobalLtmScope(targetScope) || targetCharacterIds.length > 0 || targetPersonaIds.length > 0;
   const noteHasScope = !isGlobalLtmScope(note.scope);
 
   if (!hasTargetScope) {
@@ -182,10 +156,6 @@ export function withMergedLtmScopeLinks(
     chatIds: uniqueStrings([...getLtmScopeChatIds(scope), ...(links.chatIds ?? [])]),
     groupIds: uniqueStrings([...getLtmScopeGroupIds(scope), ...(links.groupIds ?? [])]),
     characterIds: uniqueStrings([...(scope?.characterIds ?? []), ...(links.characterIds ?? [])]),
-    personaIds: uniqueStrings([
-      ...getLtmScopePersonaIds(scope),
-      links.personaId,
-      ...(links.personaIds ?? []),
-    ]),
+    personaIds: uniqueStrings([...getLtmScopePersonaIds(scope), links.personaId, ...(links.personaIds ?? [])]),
   });
 }

@@ -11,10 +11,7 @@ const panel = readFileSync(
   "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx",
   "utf8",
 );
-const home = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
-  "utf8",
-);
+const home = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
 
 // Dismissing the modal closes it and records nothing.
 assert.match(panel, /<Modal\s+open=\{open\}\s+onClose=\{onClose\}/u);
@@ -27,10 +24,13 @@ assert.match(panel, /intro === null \? void skip\(\) : setIntro\(null\)/u);
 
 // "zero" is only ever written by that skip. The other saveSettings call decides between "zero"
 // and "completed" from how many creators the run actually produced.
-assert.match(panel, /const skip = async \(\) => \{[\s\S]*?saveSettings\("zero"\)[\s\S]*?onSkipped\?\.\(\)[\s\S]*?onClose\(\);/u);
 assert.match(
   panel,
-  /await saveSettings\(\s*selected\.size === 0 \|\| newIds\.length === 0 \? "zero" : "completed",\s*\);/u,
+  /const skip = async \(\) => \{[\s\S]*?saveSettings\("zero"\)[\s\S]*?onSkipped\?\.\(\)[\s\S]*?onClose\(\);/u,
+);
+assert.match(
+  panel,
+  /await saveSettings\(\s*selected\.size === 0 \|\| newIds\.length === 0 \? "zero" : "completed",?\s*\);/u,
 );
 
 // Adding creators later reuses this wizard; its settings write remains Slurp-owned.
@@ -45,10 +45,10 @@ assert.doesNotMatch(home, /noodlerOnboardingState/u);
 assert.match(panel, /setStep\(setupLane === "easy" \? 1 : \(\(step - 1\) as Step\)\)/u);
 
 // The joke card must not read as a real payment.
-const enLocale = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/localization/locales/en.json",
-  "utf8",
+const enLocale = readFileSync("packages/slurp/src/engine/packages/client/src/localization/locales/en.json", "utf8");
+assert.match(
+  enLocale,
+  /"ui\.noodle\.agegate\.cardSub": "The card is fake[^"]*Nothing is charged and nothing leaves your computer\."/u,
 );
-assert.match(enLocale, /"ui\.noodle\.agegate\.cardSub": "The card is fake[^"]*Nothing is charged and nothing leaves your computer\."/u);
 
 console.log("NoodleR onboarding navigation regressions passed.");

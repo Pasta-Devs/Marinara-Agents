@@ -33,9 +33,7 @@ function isSlurpNavigation(value: unknown): value is SlurpNavigationState {
     return (
       (value.tab === undefined || value.tab === "creator") &&
       (value.section === undefined ||
-        ["general", "creators", "images", "audience", "advanced"].includes(
-          value.section as string,
-        )) &&
+        ["general", "creators", "images", "audience", "advanced"].includes(value.section as string)) &&
       (value.returnTo === undefined || isSlurpNavigation(value.returnTo))
     );
   }
@@ -48,8 +46,10 @@ function isSlurpNavigation(value: unknown): value is SlurpNavigationState {
     case "profile":
       return (
         (value.accountId === null || typeof value.accountId === "string") &&
-        (value.connection === undefined || value.connection === null ||
-          value.connection === "followers" || value.connection === "following") &&
+        (value.connection === undefined ||
+          value.connection === null ||
+          value.connection === "followers" ||
+          value.connection === "following") &&
         (value.edit === undefined || typeof value.edit === "boolean") &&
         (value.returnToSettings === undefined || isSlurpNavigation(value.returnToSettings))
       );
@@ -67,32 +67,19 @@ function isSlurpNavigation(value: unknown): value is SlurpNavigationState {
 
 function readRecord(key: string): Record<string, unknown> | null {
   try {
-    const parsed = JSON.parse(
-      window.localStorage.getItem(key) ?? "null",
-    ) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null;
+    const parsed = JSON.parse(window.localStorage.getItem(key) ?? "null") as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
   } catch {
     return null;
   }
 }
 
-function validatedPersistedState(
-  state: Record<string, unknown>,
-): PersistedSlurpState {
+function validatedPersistedState(state: Record<string, unknown>): PersistedSlurpState {
   const validated: PersistedSlurpState = {};
-  if (
-    state.navigation &&
-    typeof state.navigation === "object" &&
-    !Array.isArray(state.navigation)
-  ) {
+  if (state.navigation && typeof state.navigation === "object" && !Array.isArray(state.navigation)) {
     if (isSlurpNavigation(state.navigation)) validated.navigation = state.navigation;
   }
-  if (
-    typeof state.viewerPersonaId === "string" ||
-    state.viewerPersonaId === null
-  ) {
+  if (typeof state.viewerPersonaId === "string" || state.viewerPersonaId === null) {
     validated.viewerPersonaId = state.viewerPersonaId;
   }
   if (
@@ -111,12 +98,7 @@ function readInitialState(): PersistedSlurpState {
   return {};
 }
 
-function persistSlurpState(
-  state: Pick<
-    SlurpPackageState,
-    "navigation" | "viewerPersonaId" | "onboardingState"
-  >,
-) {
+function persistSlurpState(state: Pick<SlurpPackageState, "navigation" | "viewerPersonaId" | "onboardingState">) {
   try {
     window.localStorage.setItem(PACKAGE_STATE_KEY, JSON.stringify(state));
   } catch {
@@ -161,10 +143,7 @@ export const useSlurpUIStore = create<SlurpPackageState>((set, get) => ({
 
 export function configureSlurpPackageState(props: Record<string, unknown>) {
   useSlurpUIStore.setState({
-    conversationTimeZone:
-      typeof props.conversationTimeZone === "string"
-        ? props.conversationTimeZone
-        : "",
+    conversationTimeZone: typeof props.conversationTimeZone === "string" ? props.conversationTimeZone : "",
     debugMode: props.debugMode === true,
     reviewImagePromptsBeforeSend: props.reviewImagePromptsBeforeSend === true,
   });

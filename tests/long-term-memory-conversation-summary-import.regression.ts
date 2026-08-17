@@ -43,9 +43,7 @@ const gameChat = {
   id: "chat-game",
   mode: "game",
   metadata: {
-    gamePreviousSessionSummaries: [
-      { sessionNumber: 1, summary: "The party reached the Moon Vault." },
-    ],
+    gamePreviousSessionSummaries: [{ sessionNumber: 1, summary: "The party reached the Moon Vault." }],
   },
 };
 
@@ -88,11 +86,7 @@ async function main() {
       assert.equal(candidates.draftable, 3);
       assert.deepEqual(
         candidates.samples.map((candidate) => candidate.sourceId),
-        [
-          "chat-conversation:day:27.07.2026",
-          "chat-conversation:week:27.07.2026",
-          "chat-conversation:day:02.08.2026",
-        ],
+        ["chat-conversation:day:27.07.2026", "chat-conversation:week:27.07.2026", "chat-conversation:day:02.08.2026"],
         "day and week DD.MM.YYYY keys must share one chronological order",
       );
       const limitedCandidates = await previewPackageInterop(
@@ -101,16 +95,12 @@ async function main() {
       );
       assert.deepEqual(
         limitedCandidates.samples.map((candidate) => candidate.sourceId),
-        [
-          "chat-conversation:day:27.07.2026",
-          "chat-conversation:week:27.07.2026",
-        ],
+        ["chat-conversation:day:27.07.2026", "chat-conversation:week:27.07.2026"],
         "preview limits must preserve the globally earliest summaries",
       );
       assert.ok(
         candidates.samples.some(
-          (candidate) =>
-            candidate.snippet.includes("mild") && candidate.snippet.includes("no chili"),
+          (candidate) => candidate.snippet.includes("mild") && candidate.snippet.includes("no chili"),
         ),
         "keyDetails must be flattened into sourceText",
       );
@@ -125,10 +115,7 @@ async function main() {
         game: gameChat,
       };
       const declaredModes = agents[0]?.modeAllowlist ?? [];
-      assert.ok(
-        declaredModes.length > 0,
-        "agents.json must declare a non-empty modeAllowlist for mode coverage",
-      );
+      assert.ok(declaredModes.length > 0, "agents.json must declare a non-empty modeAllowlist for mode coverage");
       for (const mode of declaredModes) {
         const chat = fixtureByMode[mode];
         assert.ok(chat, `missing fixture for declared mode ${mode}`);
@@ -136,10 +123,7 @@ async function main() {
           { source: "chats", chatId: chat.id, mode: mode as "conversation" | "roleplay" | "game", limit: 100 },
           join(dataDir, "long-term-memory"),
         );
-        assert.ok(
-          modeCandidates.scanned > 0,
-          `mode ${mode} declared in modeAllowlist yields no import candidates`,
-        );
+        assert.ok(modeCandidates.scanned > 0, `mode ${mode} declared in modeAllowlist yields no import candidates`);
       }
 
       const sourceIds = candidates.samples.map((candidate) => candidate.sourceId);
@@ -153,9 +137,7 @@ async function main() {
       const storage = new LongTermMemoryStorage(join(dataDir, "long-term-memory"));
       const notes = await storage.listNotes({ type: "source" });
       assert.equal(notes.length, 3);
-      const dayNote = notes.find(
-        (note) => note.provenance?.entryId === "day:27.07.2026",
-      );
+      const dayNote = notes.find((note) => note.provenance?.entryId === "day:27.07.2026");
       assert.equal(dayNote?.modes[0], "conversation");
       assert.match(dayNote?.sections.source.text ?? "", /Discussed nikujaga\.\n\nmild\n\nno chili/u);
 
@@ -169,10 +151,7 @@ async function main() {
       assert.ok(importedAgain.imported.every((item) => !item.created));
       assert.equal((await storage.listNotes({ type: "source" })).length, 3);
     },
-    [
-      () => releaseRuntime?.(),
-      () => rm(dataDir, { recursive: true, force: true }),
-    ],
+    [() => releaseRuntime?.(), () => rm(dataDir, { recursive: true, force: true })],
   );
   process.stdout.write(
     "Long-Term Memory Conversation summary import regression: coercion, ordering, mode coverage, and idempotency ok\n",

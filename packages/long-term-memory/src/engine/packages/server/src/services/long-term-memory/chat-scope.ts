@@ -12,7 +12,9 @@ export function normalizeLtmChatCharacterIds(value: unknown) {
     const parsed = JSON.parse(value);
     return Array.isArray(parsed)
       ? uniqueStrings(parsed.filter((id): id is string => typeof id === "string"))
-      : value.trim() ? [value.trim()] : [];
+      : value.trim()
+        ? [value.trim()]
+        : [];
   } catch {
     return value.trim() ? [value.trim()] : [];
   }
@@ -22,7 +24,12 @@ export function ltmModeForChatMode(mode: unknown): LtmMode {
   return sharedLtmModeForChatMode(mode);
 }
 
-export function resolveChatLtmScope(chat: { id: string; groupId?: string | null; personaId?: string | null; characterIds?: unknown }) {
+export function resolveChatLtmScope(chat: {
+  id: string;
+  groupId?: string | null;
+  personaId?: string | null;
+  characterIds?: unknown;
+}) {
   const characterIds = normalizeLtmChatCharacterIds(chat.characterIds);
   return withMergedLtmScopeLinks(
     {

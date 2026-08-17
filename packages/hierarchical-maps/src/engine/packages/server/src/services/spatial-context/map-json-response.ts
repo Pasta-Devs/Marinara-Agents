@@ -21,9 +21,7 @@ export interface SpatialMapJsonParseError {
   repairError?: string;
 }
 
-export type SpatialMapJsonParseResult =
-  | SpatialMapJsonParseSuccess
-  | SpatialMapJsonParseError;
+export type SpatialMapJsonParseResult = SpatialMapJsonParseSuccess | SpatialMapJsonParseError;
 
 export interface SpatialMapJsonErrorPayload {
   error: string;
@@ -44,12 +42,7 @@ export interface SpatialMapJsonErrorPayload {
   };
 }
 
-const OUTPUT_LIMIT_FINISH_REASONS = new Set([
-  "length",
-  "max_tokens",
-  "max_output_tokens",
-  "token_limit",
-]);
+const OUTPUT_LIMIT_FINISH_REASONS = new Set(["length", "max_tokens", "max_output_tokens", "token_limit"]);
 
 function errorDetail(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
@@ -57,9 +50,7 @@ function errorDetail(error: unknown): string {
 }
 
 function normalizedFinishReason(finishReason: unknown): string {
-  return typeof finishReason === "string" && finishReason.trim()
-    ? finishReason.trim()
-    : "unknown";
+  return typeof finishReason === "string" && finishReason.trim() ? finishReason.trim() : "unknown";
 }
 
 export function hasIncompleteJsonStructure(raw: string): boolean {
@@ -106,10 +97,7 @@ export function classifySpatialMapJsonParseFailure(options: {
   const structurallyIncomplete = hasIncompleteJsonStructure(options.raw);
   return {
     kind:
-      OUTPUT_LIMIT_FINISH_REASONS.has(finishReason.toLowerCase()) ||
-      structurallyIncomplete
-        ? "truncated"
-        : "malformed",
+      OUTPUT_LIMIT_FINISH_REASONS.has(finishReason.toLowerCase()) || structurallyIncomplete ? "truncated" : "malformed",
     finishReason,
     responseLength: options.raw.length,
     parserDetail: errorDetail(options.error),
@@ -211,9 +199,7 @@ export async function parseSpatialMapJsonWithRepair(options: {
   }
 }
 
-export function spatialMapJsonErrorPayload(
-  result: SpatialMapJsonParseError,
-): SpatialMapJsonErrorPayload {
+export function spatialMapJsonErrorPayload(result: SpatialMapJsonParseError): SpatialMapJsonErrorPayload {
   const repairFailure =
     result.repairAttempted && result.failure !== result.primaryFailure
       ? {
@@ -230,10 +216,7 @@ export function spatialMapJsonErrorPayload(
         : result.repairAttempted
           ? "The model returned malformed World Map JSON, and one formatting repair could not correct it. Try generating the map again."
           : "The model returned malformed World Map JSON. Try generating the map again.",
-    code:
-      result.failure.kind === "truncated"
-        ? "spatial_ai_output_truncated"
-        : "spatial_ai_json_invalid",
+    code: result.failure.kind === "truncated" ? "spatial_ai_output_truncated" : "spatial_ai_json_invalid",
     details: {
       finishReason: result.primaryFailure.finishReason,
       responseLength: result.primaryFailure.responseLength,

@@ -299,10 +299,7 @@ type PreparedLtmSubjectIdentityContext = {
   sourceBackedNpcSourceTitle?: string;
 };
 
-export async function loadTrustedLtmSubjectCatalog(
-  scope: LtmScope,
-  root?: string,
-): Promise<TrustedLtmSubjectCatalog> {
+export async function loadTrustedLtmSubjectCatalog(scope: LtmScope, root?: string): Promise<TrustedLtmSubjectCatalog> {
   const persistence = getPackagePersistence();
   const resources = getPackageResources();
   const chatIds = getLtmScopeChatIds(scope);
@@ -314,12 +311,8 @@ export async function loadTrustedLtmSubjectCatalog(
   const chats = [
     ...new Map(
       [
-        ...explicitChats.filter(
-          (chat): chat is NonNullable<typeof chat> => Boolean(chat),
-        ),
-        ...allChats.filter(
-          (chat) => chat.groupId && groupIds.includes(chat.groupId),
-        ),
+        ...explicitChats.filter((chat): chat is NonNullable<typeof chat> => Boolean(chat)),
+        ...allChats.filter((chat) => chat.groupId && groupIds.includes(chat.groupId)),
       ].map((chat) => [chat.id, chat]),
     ).values(),
   ];
@@ -405,8 +398,7 @@ export function buildTrustedLtmSubjectCatalog({
         mutable.get(subject.key) ??
         (subject.ref
           ? [...mutable.values()].find(
-              (entry) =>
-                entry.subject.ref && subjectRefKey(entry.subject.ref) === subjectRefKey(subject.ref!),
+              (entry) => entry.subject.ref && subjectRefKey(entry.subject.ref) === subjectRefKey(subject.ref!),
             )
           : undefined);
       const noteName = note.type === "character" && subjects.length === 1 ? subjectNameFromNote(note) : "";
@@ -482,8 +474,7 @@ export function analyzeTrustedLtmNoteSubjects(catalog: TrustedLtmSubjectCatalog)
     if (note.subjects) {
       const entries = note.subjects.map(
         (subject) =>
-          index.byKey.get(subject.key) ??
-          (subject.ref ? index.byRef.get(subjectRefKey(subject.ref)) : undefined),
+          index.byKey.get(subject.key) ?? (subject.ref ? index.byRef.get(subjectRefKey(subject.ref)) : undefined),
       );
       if (
         note.subjects.length !== expectedSubjects ||

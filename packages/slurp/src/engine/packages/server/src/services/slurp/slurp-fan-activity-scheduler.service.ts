@@ -1,9 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { logger } from "../../lib/logger.js";
-import {
-  runNoodlerFanActivity,
-  type NoodlerFanRunResult,
-} from "./slurp-fan-activity.operation.js";
+import { runNoodlerFanActivity, type NoodlerFanRunResult } from "./slurp-fan-activity.operation.js";
 
 const INITIAL_DELAY_MS = 45_000;
 const POLL_MS = 60_000;
@@ -26,11 +23,7 @@ export function startNoodlerFanActivityScheduler(app: FastifyInstance) {
     try {
       const result = await active;
       if (result.status === "generated" || result.status === "resumed") {
-        logger.info(
-          "[noodler-fan] Audience run %s created %d interactions",
-          result.status,
-          result.created,
-        );
+        logger.info("[noodler-fan] Audience run %s created %d interactions", result.status, result.created);
       }
     } catch (error) {
       logger.warn(error, "[noodler-fan] Automatic audience activity failed");

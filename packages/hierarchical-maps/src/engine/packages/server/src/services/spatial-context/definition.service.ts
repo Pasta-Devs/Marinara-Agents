@@ -625,7 +625,7 @@ export function createSpatialContextService() {
 
         const byId = buildSpatialLocationIndex(definition);
         const currentStillActive = currentLocationId === null || byId.get(currentLocationId)?.status === "active";
-        let nextCurrentLocationId =
+        const nextCurrentLocationId =
           input.replacementCurrentLocationId === undefined ? currentLocationId : input.replacementCurrentLocationId;
         if (!currentStillActive && input.replacementCurrentLocationId === undefined) {
           throw new SpatialContextServiceError(

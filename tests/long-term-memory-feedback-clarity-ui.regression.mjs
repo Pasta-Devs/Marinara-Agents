@@ -281,7 +281,7 @@ assert.match(sharedControls, /aria-live="polite"/u);
 assert.match(targetPicker, /<button[\s\S]*type="button"/u);
 assert.doesNotMatch(targetPicker, /role="listbox"|role="option"|aria-activedescendant|ArrowDown|ArrowUp/u);
 assert.doesNotMatch(targetPicker, /className="mari-editor-tab-rail grid w-full grid-cols-4"/u);
-assert.match(targetPicker, /id=\{listId\} role="list"/u);
+assert.match(targetPicker, /id=\{listId\}\s+role="list"/u);
 assert.match(targetPicker, /<div key=\{`\$\{target\.kind\}:\$\{target\.id\}`\} role="listitem">/u);
 assert.match(sharedControls, /Escape[\s\S]*closeRef\.current\(true\)/u);
 assert.match(sharedControls, /focus\(\{ preventScroll: true \}\)/u);
@@ -299,10 +299,7 @@ assert.match(detail, /aria-modal="true"/u);
 assert.match(detail, /event\.key !== "Tab"/u);
 
 const localeRoot = fileURLToPath(
-  new URL(
-    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/",
-    import.meta.url,
-  ),
+  new URL("../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/", import.meta.url),
 );
 const sourceFiles = [];
 const usedKeys = new Set();
@@ -327,7 +324,7 @@ const vaultLocaleValues = Object.entries(locale)
 assert.doesNotMatch(vaultLocaleValues, /\b(?:Metadata|Scope|Derived memories|Connections)\b/u);
 assert.match(workspace, /function SourceOperationWorkbench/u);
 assert.match(workspace, /!previewed \|\| busy \|\| result/u);
-assert.match(workspace, /disabled=\{Boolean\(result\)/u);
+assert.match(workspace, /disabled=\{\s*Boolean\(result\)/u);
 assert.match(workspace, /confirmAction=\{props\.confirmAction\}/u);
 assert.match(workspace, /key=\{sourceOperation\.id\}/u);
 assert.match(workspace, /data-ltm-linked-memory-selection/u);
@@ -338,11 +335,19 @@ assert.match(workspace, /data-ltm-source-operation-preview/u);
 assert.match(workspace, /data-ltm-source-operation-excluded/u);
 assert.match(workspace, /data-ltm-source-operation-result/u);
 assert.equal(locale["ui.longTermMemory.sourceoperation.clearAll"], "Clear all");
-assert.equal(locale["ui.longTermMemory.sourceoperation.confirmArchive"], "Archive the source and {{count}} selected linked memories?");
-assert.equal(locale["ui.longTermMemory.sourceoperation.confirmDelete"], "Permanently delete the source and {{count}} selected linked memories?");
+assert.equal(
+  locale["ui.longTermMemory.sourceoperation.confirmArchive"],
+  "Archive the source and {{count}} selected linked memories?",
+);
+assert.equal(
+  locale["ui.longTermMemory.sourceoperation.confirmDelete"],
+  "Permanently delete the source and {{count}} selected linked memories?",
+);
 assert.match(types, /onOpenSources\?: \(source\?: SourceTab\) => boolean \| Promise<boolean>/u);
 assert.match(reviewQueue, /item\.draft\.status === "pending"/u);
 assert.match(reviewQueue, /skippableSelectedRows/u);
 assert.match(locale["ui.longTermMemory.sourceoperation.deleteDetachment"], /detached/u);
 
-process.stdout.write("Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, and defaults ok\n");
+process.stdout.write(
+  "Long-Term Memory feedback clarity UI regression: labels, outcomes, usage, warnings, and defaults ok\n",
+);

@@ -156,7 +156,6 @@ PF.api = {
 PF.fail = (elOrNull, err) => {
   const message = err && err.message ? `Pixelforge: ${err.message}` : `Pixelforge: ${String(err)}`;
   try {
-    // eslint-disable-next-line no-console
     console.error("[pixelforge]", err);
     elOrNull?.dispatchEvent(new CustomEvent("marinara-capability-runtime-error", { detail: { message } }));
   } catch {
@@ -176,19 +175,42 @@ PF.fail = (elOrNull, err) => {
 // colony; the semantic layer is what the world compiler targets.
 PF.art = (() => {
   const BASE_PAL = {
-    grass1: "#3e7a44", grass2: "#356b3c", grass3: "#4b8a4f",
-    leaf: "#2c5a33", leafHi: "#5aa25e", trunk: "#5b4432",
-    path1: "#b39764", path2: "#a3875a", pathFleck: "#c7ab74",
-    dirt: "#7a5f43", crop: "#7fae52", cropRipe: "#d9a03c",
-    water1: "#2e5f8a", water2: "#39719e", waterHi: "#6fa3c8",
-    wall: "#8a7561", wallDark: "#6e5c4b", plaster: "#cfc3a8", beam: "#6b4f38",
-    roof1: "#9e4a3f", roof2: "#8a3f36", roofHi: "#b85e4d",
-    floor1: "#8a6a4a", floor2: "#7d5f41", rug: "#93404a",
-    stone: "#8d8d94", stoneDark: "#73737a",
-    fence: "#7d6142", door: "#5d4530", doorKnob: "#d9c07a",
-    well: "#6f6f78", counter: "#725539",
-    night: "#1a2340", windowGlow: "#ffd98a",
-    ink: "#22261f", white: "#f3efe2",
+    grass1: "#3e7a44",
+    grass2: "#356b3c",
+    grass3: "#4b8a4f",
+    leaf: "#2c5a33",
+    leafHi: "#5aa25e",
+    trunk: "#5b4432",
+    path1: "#b39764",
+    path2: "#a3875a",
+    pathFleck: "#c7ab74",
+    dirt: "#7a5f43",
+    crop: "#7fae52",
+    cropRipe: "#d9a03c",
+    water1: "#2e5f8a",
+    water2: "#39719e",
+    waterHi: "#6fa3c8",
+    wall: "#8a7561",
+    wallDark: "#6e5c4b",
+    plaster: "#cfc3a8",
+    beam: "#6b4f38",
+    roof1: "#9e4a3f",
+    roof2: "#8a3f36",
+    roofHi: "#b85e4d",
+    floor1: "#8a6a4a",
+    floor2: "#7d5f41",
+    rug: "#93404a",
+    stone: "#8d8d94",
+    stoneDark: "#73737a",
+    fence: "#7d6142",
+    door: "#5d4530",
+    doorKnob: "#d9c07a",
+    well: "#6f6f78",
+    counter: "#725539",
+    night: "#1a2340",
+    windowGlow: "#ffd98a",
+    ink: "#22261f",
+    white: "#f3efe2",
   };
 
   // Painters read PAL by reference, so themes swap colours by mutating this one
@@ -213,7 +235,10 @@ PF.art = (() => {
     c = PF.offscreen(T, T);
     const g = c.getContext("2d");
     const themePainters = THEMES[activeTheme]?.painters;
-    ((themePainters && themePainters[id]) || PAINTERS[id] || PAINTERS.grass)(g, PF.rng(PF.hashStr(`tile:${activeTheme}:${id}`)));
+    ((themePainters && themePainters[id]) || PAINTERS[id] || PAINTERS.grass)(
+      g,
+      PF.rng(PF.hashStr(`tile:${activeTheme}:${id}`)),
+    );
     tileCache.set(cacheKey, c);
     return c;
   }
@@ -271,8 +296,7 @@ PF.art = (() => {
     wallStone(g, rnd) {
       px(g, 0, 0, T, T, PAL.wallDark);
       for (let r = 0; r < 4; r++)
-        for (let cx = 0; cx < 2; cx++)
-          px(g, cx * 8 + ((r % 2) * 4), r * 4, 7, 3, rnd() > 0.5 ? PAL.wall : PAL.wallDark);
+        for (let cx = 0; cx < 2; cx++) px(g, cx * 8 + (r % 2) * 4, r * 4, 7, 3, rnd() > 0.5 ? PAL.wall : PAL.wallDark);
     },
     window(g) {
       PAINTERS.wall(g);
@@ -357,18 +381,40 @@ PF.art = (() => {
       label: "Sci-fi colony",
       palette: {
         // regolith ground, steel decking, hull walls, glass domes, coolant water
-        grass1: "#5a4a44", grass2: "#4e403b", grass3: "#6a5850",
-        leaf: "#3e6d74", leafHi: "#7fd4d4", trunk: "#8e99a6",
-        path1: "#7d8894", path2: "#6b7580", pathFleck: "#9aa5b1",
-        dirt: "#4a3f3a", crop: "#59c08a", cropRipe: "#b6e86a",
-        water1: "#1f8a8a", water2: "#2aa3a0", waterHi: "#8ff0e8",
-        wall: "#8b95a3", wallDark: "#5d6672", plaster: "#aeb7c2", beam: "#3f4854",
-        roof1: "#4a6a8a", roof2: "#3d5871", roofHi: "#7fb0d4",
-        floor1: "#59616c", floor2: "#4d545e", rug: "#2a6a8a",
-        stone: "#767e88", stoneDark: "#5a626c",
-        fence: "#5d6672", door: "#3f4854", doorKnob: "#8ff0e8",
-        well: "#4d545e", counter: "#3f4854",
-        night: "#101726", windowGlow: "#8fd4ff",
+        grass1: "#5a4a44",
+        grass2: "#4e403b",
+        grass3: "#6a5850",
+        leaf: "#3e6d74",
+        leafHi: "#7fd4d4",
+        trunk: "#8e99a6",
+        path1: "#7d8894",
+        path2: "#6b7580",
+        pathFleck: "#9aa5b1",
+        dirt: "#4a3f3a",
+        crop: "#59c08a",
+        cropRipe: "#b6e86a",
+        water1: "#1f8a8a",
+        water2: "#2aa3a0",
+        waterHi: "#8ff0e8",
+        wall: "#8b95a3",
+        wallDark: "#5d6672",
+        plaster: "#aeb7c2",
+        beam: "#3f4854",
+        roof1: "#4a6a8a",
+        roof2: "#3d5871",
+        roofHi: "#7fb0d4",
+        floor1: "#59616c",
+        floor2: "#4d545e",
+        rug: "#2a6a8a",
+        stone: "#767e88",
+        stoneDark: "#5a626c",
+        fence: "#5d6672",
+        door: "#3f4854",
+        doorKnob: "#8ff0e8",
+        well: "#4d545e",
+        counter: "#3f4854",
+        night: "#101726",
+        windowGlow: "#8fd4ff",
       },
       painters: {
         // hab wall: smooth panel with a seam and rivets instead of timber framing
@@ -531,7 +577,17 @@ PF.art = (() => {
     ctx.drawImage(strip.frames[facing][frame], dx, dy);
   }
 
-  return { PAL, tile, actor, drawActor, setTheme, themeIds, get theme() { return activeTheme; } };
+  return {
+    PAL,
+    tile,
+    actor,
+    drawActor,
+    setTheme,
+    themeIds,
+    get theme() {
+      return activeTheme;
+    },
+  };
 })();
 
 // ===== 15-assets.js =====
@@ -612,11 +668,18 @@ PF.assets = {
     try {
       if (firstLoad) {
         const [atlas, sprites] = await Promise.all([
-          fetch(this._url(core, "atlas.json")).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`atlas ${r.status}`)))),
-          fetch(this._url(core, "sprites.json")).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`sprites ${r.status}`)))),
+          fetch(this._url(core, "atlas.json")).then((r) =>
+            r.ok ? r.json() : Promise.reject(new Error(`atlas ${r.status}`)),
+          ),
+          fetch(this._url(core, "sprites.json")).then((r) =>
+            r.ok ? r.json() : Promise.reject(new Error(`sprites ${r.status}`)),
+          ),
         ]);
         const sheets = await Promise.all(
-          Object.entries(sprites.actors ?? {}).map(async ([name, path]) => [name, await this._image(this._url(core, path))]),
+          Object.entries(sprites.actors ?? {}).map(async ([name, path]) => [
+            name,
+            await this._image(this._url(core, path)),
+          ]),
         );
         this.atlas = atlas;
         this.sprites = sprites;
@@ -685,7 +748,17 @@ PF.assets = {
     if (!sheet || !this.sprites) return false;
     const { frameWidth, frameHeight, frames } = this.sprites;
     const frame = moving ? Math.floor(phase) % frames : 0;
-    ctx.drawImage(sheet, frame * frameWidth, facing * frameHeight, frameWidth, frameHeight, dx, dy, frameWidth, frameHeight);
+    ctx.drawImage(
+      sheet,
+      frame * frameWidth,
+      facing * frameHeight,
+      frameWidth,
+      frameHeight,
+      dx,
+      dy,
+      frameWidth,
+      frameHeight,
+    );
     return true;
   },
 };
@@ -712,17 +785,42 @@ PF.brief = (() => {
   const PROSPERITY = ["struggling", "modest", "thriving"];
   const PLACE_KINDS = ["gathering", "workshop", "hall", "dwelling", "wilds"];
   const CAST_KINDS = [
-    "leader", "host", "grower", "maker", "merchant", "guard",
-    "healer", "scholar", "elder", "child", "wanderer", "folk",
+    "leader",
+    "host",
+    "grower",
+    "maker",
+    "merchant",
+    "guard",
+    "healer",
+    "scholar",
+    "elder",
+    "child",
+    "wanderer",
+    "folk",
   ];
   // Nine buckets cannot cluster; sprite legibility is an invariant, not a repair.
   const TINTS = {
-    red: 4, orange: 28, amber: 48, green: 110, teal: 168,
-    blue: 214, violet: 268, rose: 330, grey: 210,
+    red: 4,
+    orange: 28,
+    amber: 48,
+    green: 110,
+    teal: 168,
+    blue: 214,
+    violet: 268,
+    rose: 330,
+    grey: 210,
   };
   const FEATURE_TAGS = [
-    "water-feature", "crop-plots", "market-stalls", "workyard", "landmark-stone",
-    "shrine", "water-crossing", "dense-growth", "ruin", "lookout",
+    "water-feature",
+    "crop-plots",
+    "market-stalls",
+    "workyard",
+    "landmark-stone",
+    "shrine",
+    "water-crossing",
+    "dense-growth",
+    "ruin",
+    "lookout",
   ];
   // Which tags make sense per zone kind (invalid-for-zone drops at compile, not parse).
   const SETTLEMENT_TAGS = new Set(FEATURE_TAGS.filter((t) => t !== "water-crossing" && t !== "dense-growth"));
@@ -754,7 +852,8 @@ PF.brief = (() => {
       .replace(/\s+/g, " ")
       .trim();
   }
-  const segmenter = typeof Intl !== "undefined" && Intl.Segmenter ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : null;
+  const segmenter =
+    typeof Intl !== "undefined" && Intl.Segmenter ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : null;
   function graphemes(value) {
     if (segmenter) return [...segmenter.segment(value)].map((s) => s.segment);
     return [...value];
@@ -769,12 +868,7 @@ PF.brief = (() => {
     return (lastSpace > max * 0.5 ? cut.slice(0, lastSpace) : cut).trim();
   }
   const fold = (value) =>
-    sanitize(value)
-      .normalize("NFKD")
-      .replace(/[̀-ͯ]/g, "")
-      .toLowerCase()
-      .replace(/\s+/g, " ")
-      .trim();
+    sanitize(value).normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 
   // ── Enum folding ────────────────────────────────────────────────────────────
   function foldEnum(value, list, fallback) {
@@ -871,13 +965,15 @@ PF.brief = (() => {
       let candidate = name;
       let attempt = 0;
       while (usedNames.has(fold(candidate))) {
-        const suffix = attempt < DEDUPE_SUFFIXES.length
-          ? pick(seed, `${fieldPath}-dedupe-${attempt}`, DEDUPE_SUFFIXES)
-          : String(attempt - DEDUPE_SUFFIXES.length + 2);
+        const suffix =
+          attempt < DEDUPE_SUFFIXES.length
+            ? pick(seed, `${fieldPath}-dedupe-${attempt}`, DEDUPE_SUFFIXES)
+            : String(attempt - DEDUPE_SUFFIXES.length + 2);
         candidate = `${name} ${suffix}`;
         attempt++;
       }
-      if (candidate !== name) repairs.push(`${fieldPath}: duplicate name ${JSON.stringify(name)} -> ${JSON.stringify(candidate)}`);
+      if (candidate !== name)
+        repairs.push(`${fieldPath}: duplicate name ${JSON.stringify(name)} -> ${JSON.stringify(candidate)}`);
       usedNames.add(fold(candidate));
       return candidate;
     };
@@ -962,9 +1058,15 @@ PF.brief = (() => {
         name: dedupeName(name, `cast[${brief.cast.length}]`),
         role: capText(item?.role, 24) || KIND_LABELS[kind],
         kind,
-        tint: foldEnum(item?.tint, Object.keys(TINTS), pick(seed, `cast-tint-${brief.cast.length}`, Object.keys(TINTS))),
+        tint: foldEnum(
+          item?.tint,
+          Object.keys(TINTS),
+          pick(seed, `cast-tint-${brief.cast.length}`, Object.keys(TINTS)),
+        ),
         home,
-        household: Number.isFinite(householdNumber) ? Math.max(1, Math.min(CAPS.household, Math.round(householdNumber))) : 1,
+        household: Number.isFinite(householdNumber)
+          ? Math.max(1, Math.min(CAPS.household, Math.round(householdNumber)))
+          : 1,
         persona: capText(item?.persona ?? item?.flavor, 100),
       });
     }
@@ -1040,7 +1142,8 @@ PF.brief = (() => {
     });
     let featureOrdinal = 1;
     for (const feature of brief.features) ids.features[`f${featureOrdinal++}`] = feature.name;
-    for (const place of brief.places) for (const feature of place.features ?? []) ids.features[`f${featureOrdinal++}`] = feature.name;
+    for (const place of brief.places)
+      for (const feature of place.features ?? []) ids.features[`f${featureOrdinal++}`] = feature.name;
     brief._ids = ids;
 
     // Global byte budget: truncate prose in reverse-leverage order. Measured
@@ -1098,7 +1201,7 @@ PF.brief = (() => {
     if (end >= 0) {
       candidate = text.slice(start, end + 1);
     } else {
-      let body = text.slice(start).replace(/,[^,{}\[\]]*$/, "");
+      let body = text.slice(start).replace(/,[^,{}[\]]*$/, "");
       const opens = [];
       inString = false;
       for (let i = 0; i < body.length; i++) {
@@ -1113,7 +1216,12 @@ PF.brief = (() => {
         else if (ch === "}" || ch === "]") opens.pop();
       }
       if (inString) body += '"';
-      candidate = body + opens.reverse().map((ch) => (ch === "{" ? "}" : "]")).join("");
+      candidate =
+        body +
+        opens
+          .reverse()
+          .map((ch) => (ch === "{" ? "}" : "]"))
+          .join("");
     }
     try {
       const parsed = JSON.parse(candidate);
@@ -1152,9 +1260,11 @@ PF.brief = (() => {
         // chat_busy ships Retry-After: 15 — wait it out once inside the budget
         // (busyWaitMs is a timer seam so the harness never sleeps for real).
         await new Promise((resolve) => setTimeout(resolve, busyWaitMs));
-        if (!controller.signal.aborted) response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
+        if (!controller.signal.aborted)
+          response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
       }
-      const rawOf = (r) => (r.status === 422 && r.body?.truncated && typeof r.body.raw === "string" ? r.body.raw : null);
+      const rawOf = (r) =>
+        r.status === 422 && r.body?.truncated && typeof r.body.raw === "string" ? r.body.raw : null;
       let bestRaw = rawOf(response);
       if (response.status === 422 && response.body?.truncated) {
         onProgress?.("Generating your world… (one more try)");
@@ -1162,7 +1272,12 @@ PF.brief = (() => {
         const retryRaw = rawOf(response);
         if (retryRaw && (!bestRaw || retryRaw.length > bestRaw.length)) bestRaw = retryRaw;
       }
-      if (response.status === 200 && response.body?.ok && response.body.data && typeof response.body.data === "object") {
+      if (
+        response.status === 200 &&
+        response.body?.ok &&
+        response.body.data &&
+        typeof response.body.data === "object"
+      ) {
         return validate(response.body.data, { theme, seed });
       }
       if (bestRaw) {
@@ -1185,7 +1300,8 @@ PF.brief = (() => {
     } catch (err) {
       // Network trouble and the budget timeout are both transient — leave the
       // chat unsealed rather than freezing the default world in forever.
-      if (!controller.signal.aborted) console.warn("[pixelforge] world generation failed (network); retrying next visit", err);
+      if (!controller.signal.aborted)
+        console.warn("[pixelforge] world generation failed (network); retrying next visit", err);
       else console.warn("[pixelforge] world generation timed out; retrying next visit");
       return null;
     } finally {
@@ -1285,15 +1401,37 @@ PF.brief = (() => {
 
   // ── Theme lexicon (the repair layer's per-theme content — §weakness 6) ──────
   const FEATURE_LABELS = {
-    "water-feature": "The Pool", "crop-plots": "The Plots", "market-stalls": "The Stalls",
-    workyard: "The Yard", "landmark-stone": "The Old Marker", shrine: "The Shrine",
-    "water-crossing": "The Crossing", "dense-growth": "The Thicket", ruin: "The Ruin", lookout: "The Lookout",
+    "water-feature": "The Pool",
+    "crop-plots": "The Plots",
+    "market-stalls": "The Stalls",
+    workyard: "The Yard",
+    "landmark-stone": "The Old Marker",
+    shrine: "The Shrine",
+    "water-crossing": "The Crossing",
+    "dense-growth": "The Thicket",
+    ruin: "The Ruin",
+    lookout: "The Lookout",
   };
-  const PLACE_LABELS = { gathering: "The Hearth", workshop: "The Works", hall: "The Hall", dwelling: "The House", wilds: "The Wilds" };
+  const PLACE_LABELS = {
+    gathering: "The Hearth",
+    workshop: "The Works",
+    hall: "The Hall",
+    dwelling: "The House",
+    wilds: "The Wilds",
+  };
   const KIND_LABELS = {
-    leader: "leader", host: "keeper", grower: "grower", maker: "artisan", merchant: "trader",
-    guard: "watch", healer: "healer", scholar: "archivist", elder: "elder", child: "youngster",
-    wanderer: "wanderer", folk: "resident",
+    leader: "leader",
+    host: "keeper",
+    grower: "grower",
+    maker: "artisan",
+    merchant: "trader",
+    guard: "watch",
+    healer: "healer",
+    scholar: "archivist",
+    elder: "elder",
+    child: "youngster",
+    wanderer: "wanderer",
+    folk: "resident",
   };
   const DEDUPE_SUFFIXES = ["Upper", "Lower", "Old", "New", "Far", "Near"];
   const DEFAULT_NAMES = {
@@ -1320,7 +1458,10 @@ PF.brief = (() => {
   };
   const DEFAULT_BRIEFS = {
     "cozy-village": {
-      scale: "village", surround: "woods", prosperity: "modest", name: "Hearthvale",
+      scale: "village",
+      surround: "woods",
+      prosperity: "modest",
+      name: "Hearthvale",
       flavor: "A cozy closed valley where the roads all end at somebody's gate.",
       situation: "",
       features: [
@@ -1329,19 +1470,45 @@ PF.brief = (() => {
       ],
       places: [
         { kind: "gathering", name: "The Amber Hearth Inn", flavor: "Low beams, warm bread, long memories." },
-        { kind: "wilds", name: "The Whisperwood", flavor: "Dense trees, a shallow stream, an old stone.",
-          features: [{ tag: "water-crossing", name: "The Stepping Stones" }, { tag: "landmark-stone", name: "The Old Marker" }] },
+        {
+          kind: "wilds",
+          name: "The Whisperwood",
+          flavor: "Dense trees, a shallow stream, an old stone.",
+          features: [
+            { tag: "water-crossing", name: "The Stepping Stones" },
+            { tag: "landmark-stone", name: "The Old Marker" },
+          ],
+        },
       ],
       cast: [
-        { name: "Mira", role: "innkeeper", kind: "host", tint: "rose", home: "The Amber Hearth Inn", household: 1, persona: "" },
+        {
+          name: "Mira",
+          role: "innkeeper",
+          kind: "host",
+          tint: "rose",
+          home: "The Amber Hearth Inn",
+          household: 1,
+          persona: "",
+        },
         { name: "Tam", role: "farmer", kind: "grower", tint: "green", home: "Hearthvale", household: 2, persona: "" },
         { name: "Rook", role: "guard", kind: "guard", tint: "blue", home: "Hearthvale", household: 3, persona: "" },
-        { name: "Fen", role: "forager", kind: "wanderer", tint: "teal", home: "The Whisperwood", household: 4, persona: "" },
+        {
+          name: "Fen",
+          role: "forager",
+          kind: "wanderer",
+          tint: "teal",
+          home: "The Whisperwood",
+          household: 4,
+          persona: "",
+        },
       ],
       backgroundPopulation: 30,
     },
     "sci-fi-colony": {
-      scale: "village", surround: "barren", prosperity: "modest", name: "Meridian Base",
+      scale: "village",
+      surround: "barren",
+      prosperity: "modest",
+      name: "Meridian Base",
       flavor: "A frontier colony under a sealed sky, humming at all hours.",
       situation: "",
       features: [
@@ -1350,14 +1517,53 @@ PF.brief = (() => {
       ],
       places: [
         { kind: "gathering", name: "The Meridian Cantina", flavor: "Recycled air, real coffee, questionable cards." },
-        { kind: "wilds", name: "The Mast Field", flavor: "Antenna rows marching into the dust.",
-          features: [{ tag: "water-crossing", name: "The Conduit Bridge" }, { tag: "landmark-stone", name: "The Beacon" }] },
+        {
+          kind: "wilds",
+          name: "The Mast Field",
+          flavor: "Antenna rows marching into the dust.",
+          features: [
+            { tag: "water-crossing", name: "The Conduit Bridge" },
+            { tag: "landmark-stone", name: "The Beacon" },
+          ],
+        },
       ],
       cast: [
-        { name: "Mira", role: "cantina keeper", kind: "host", tint: "rose", home: "The Meridian Cantina", household: 1, persona: "" },
-        { name: "Tam", role: "hydroponics lead", kind: "grower", tint: "green", home: "Meridian Base", household: 2, persona: "" },
-        { name: "Rook", role: "pad marshal", kind: "guard", tint: "blue", home: "Meridian Base", household: 3, persona: "" },
-        { name: "Fen", role: "salvage scout", kind: "wanderer", tint: "teal", home: "The Mast Field", household: 4, persona: "" },
+        {
+          name: "Mira",
+          role: "cantina keeper",
+          kind: "host",
+          tint: "rose",
+          home: "The Meridian Cantina",
+          household: 1,
+          persona: "",
+        },
+        {
+          name: "Tam",
+          role: "hydroponics lead",
+          kind: "grower",
+          tint: "green",
+          home: "Meridian Base",
+          household: 2,
+          persona: "",
+        },
+        {
+          name: "Rook",
+          role: "pad marshal",
+          kind: "guard",
+          tint: "blue",
+          home: "Meridian Base",
+          household: 3,
+          persona: "",
+        },
+        {
+          name: "Fen",
+          role: "salvage scout",
+          kind: "wanderer",
+          tint: "teal",
+          home: "The Mast Field",
+          household: 4,
+          persona: "",
+        },
       ],
       backgroundPopulation: 24,
     },
@@ -1503,7 +1709,15 @@ PF.world = (() => {
           }
     },
     ruin(z, x, y) {
-      for (const [dx, dy] of [[0, 0], [1, 0], [3, 0], [0, 1], [0, 3], [4, 1], [4, 2]]) {
+      for (const [dx, dy] of [
+        [0, 0],
+        [1, 0],
+        [3, 0],
+        [0, 1],
+        [0, 3],
+        [4, 1],
+        [4, 2],
+      ]) {
         put(z, x + dx, y + dy, "object", "wallStone", true);
       }
       fillRect(z, x + 1, y + 1, 3, 2, "ground", "stone", false);
@@ -1634,7 +1848,14 @@ PF.world = (() => {
       put(f, 0, y - 2, "object", null, false); // forest west gap at y=12/13
       put(f, 0, y - 2, "overhead", null);
     }
-    v.portals.push({ x: inn.doorX, y: inn.doorY, toZone: "inn", toX: n.spawn.x, toY: n.spawn.y, label: "Enter the inn" });
+    v.portals.push({
+      x: inn.doorX,
+      y: inn.doorY,
+      toZone: "inn",
+      toX: n.spawn.x,
+      toY: n.spawn.y,
+      label: "Enter the inn",
+    });
     n.portals.push({ x: 8, y: n.h - 1, toZone: "village", toX: inn.doorX, toY: inn.doorY + 1, label: "Step outside" });
     v.portals.push(
       { x: 43, y: 14, toZone: "forest", toX: 2, toY: 12, label: "Into the Whisperwood" },
@@ -1648,10 +1869,34 @@ PF.world = (() => {
     // NPCs — LLM characters in the story; sprites here are just their world tokens.
     v.npcs.push(
       { id: "tam", name: "Tam", role: "farmer", hue: 96, x: 8, y: 22, wander: { x0: 4, y0: 20, x1: 11, y1: 24 } },
-      { id: "rook", name: "Rook", role: "village guard", hue: 210, x: 21, y: 10, wander: { x0: 17, y0: 8, x1: 24, y1: 18 } },
+      {
+        id: "rook",
+        name: "Rook",
+        role: "village guard",
+        hue: 210,
+        x: 21,
+        y: 10,
+        wander: { x0: 17, y0: 8, x1: 24, y1: 18 },
+      },
     );
-    n.npcs.push({ id: "mira", name: "Mira", role: "innkeeper", hue: 8, x: 5, y: 4, wander: { x0: 2, y0: 4, x1: 8, y1: 9 } });
-    f.npcs.push({ id: "fen", name: "Fen", role: "forager", hue: 140, x: 29, y: 12, wander: { x0: 26, y0: 9, x1: 31, y1: 13 } });
+    n.npcs.push({
+      id: "mira",
+      name: "Mira",
+      role: "innkeeper",
+      hue: 8,
+      x: 5,
+      y: 4,
+      wander: { x0: 2, y0: 4, x1: 8, y1: 9 },
+    });
+    f.npcs.push({
+      id: "fen",
+      name: "Fen",
+      role: "forager",
+      hue: 140,
+      x: 29,
+      y: 12,
+      wander: { x0: 26, y0: 9, x1: 31, y1: 13 },
+    });
 
     v.mapKind = "settlement";
     n.mapKind = "building";
@@ -1672,7 +1917,14 @@ PF.world = (() => {
   // never depend on model-written names. See docs/brief-schema.md §4.5:
   // buildings derive from households + cast kinds, over-subscription MERGES
   // households into shared blocks — a named NPC's home is never dropped.
-  const SPECIAL_BUILDING_KINDS = { leader: "hall", host: "gathering", grower: "farm", guard: "post", merchant: "shop", maker: "shop" };
+  const SPECIAL_BUILDING_KINDS = {
+    leader: "hall",
+    host: "gathering",
+    grower: "farm",
+    guard: "post",
+    merchant: "shop",
+    maker: "shop",
+  };
   const INTERIOR_DIMS = { gathering: [16, 12], workshop: [16, 12], hall: [18, 12], dwelling: [14, 10] };
 
   function compile(brief, seed) {
@@ -1785,7 +2037,10 @@ PF.world = (() => {
     }));
     const intersects = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
     const featureAnchors = [
-      { x: 4, y: 3 }, { x: v.w - 12, y: 3 }, { x: v.w - 12, y: v.h - 8 }, { x: 4, y: v.h - 8 },
+      { x: 4, y: 3 },
+      { x: v.w - 12, y: 3 },
+      { x: v.w - 12, y: v.h - 8 },
+      { x: 4, y: v.h - 8 },
     ];
     const FEATURE_RECT = { w: 9, h: 6 };
     for (const feature of brief.features) {
@@ -1798,8 +2053,12 @@ PF.world = (() => {
       claimed.push({ x: anchor.x, y: anchor.y, ...FEATURE_RECT });
     }
     const doorRects = buildings.map((b) => ({ x: b.door.doorX, y: b.door.doorY }));
-    scatterTrees(v, rnd, { woods: 26, fields: 8, rocky: 10, water: 12, barren: 5 }[brief.surround] ?? 12,
-      doorRects.concat(doorRects.map((d) => ({ x: d.x, y: d.y + 1 }))));
+    scatterTrees(
+      v,
+      rnd,
+      { woods: 26, fields: 8, rocky: 10, water: 12, barren: 5 }[brief.surround] ?? 12,
+      doorRects.concat(doorRects.map((d) => ({ x: d.x, y: d.y + 1 }))),
+    );
     zones.z1 = v;
 
     // ── Interior zones ──
@@ -1846,8 +2105,22 @@ PF.world = (() => {
       zones[id] = zone;
       const facade = buildings.find((b) => b.boundPlace === place);
       if (facade) {
-        v.portals.push({ x: facade.door.doorX, y: facade.door.doorY, toZone: id, toX: zone.spawn.x, toY: zone.spawn.y, label: `Enter ${place.name}` });
-        zone.portals.push({ x: doorX, y: h - 1, toZone: "z1", toX: facade.door.doorX, toY: facade.door.doorY + 1, label: "Step outside" });
+        v.portals.push({
+          x: facade.door.doorX,
+          y: facade.door.doorY,
+          toZone: id,
+          toX: zone.spawn.x,
+          toY: zone.spawn.y,
+          label: `Enter ${place.name}`,
+        });
+        zone.portals.push({
+          x: doorX,
+          y: h - 1,
+          toZone: "z1",
+          toX: facade.door.doorX,
+          toY: facade.door.doorY + 1,
+          label: "Step outside",
+        });
       }
     }
 
@@ -1873,15 +2146,22 @@ PF.world = (() => {
       let anchorX = 26;
       for (const feature of place.features ?? []) {
         if (feature.tag === "water-crossing") continue;
-        PLACERS[feature.tag]?.(zone, anchorX, 8 + ((anchorX / 3) | 0) % 4);
+        PLACERS[feature.tag]?.(zone, anchorX, 8 + (((anchorX / 3) | 0) % 4));
         anchorX = Math.max(6, (anchorX + 9) % (zone.w - 10));
       }
       // Reserve BOTH sides' arrival tiles and spawns — the west-hung wilds'
       // arrival used to land inside scattered trunks on some seeds.
       scatterTrees(zone, rnd, tags.has("dense-growth") ? 70 : 45, [
-        { x: 1, y: wMidY }, { x: 1, y: wMidY + 1 }, { x: 2, y: wMidY }, { x: 3, y: wMidY },
-        { x: 20, y: wMidY }, { x: 21, y: wMidY + 1 },
-        { x: zone.w - 2, y: wMidY }, { x: zone.w - 2, y: wMidY + 1 }, { x: zone.w - 3, y: wMidY }, { x: zone.w - 4, y: wMidY },
+        { x: 1, y: wMidY },
+        { x: 1, y: wMidY + 1 },
+        { x: 2, y: wMidY },
+        { x: 3, y: wMidY },
+        { x: 20, y: wMidY },
+        { x: 21, y: wMidY + 1 },
+        { x: zone.w - 2, y: wMidY },
+        { x: zone.w - 2, y: wMidY + 1 },
+        { x: zone.w - 3, y: wMidY },
+        { x: zone.w - 4, y: wMidY },
       ]);
       zone.spawn = { x: 3, y: wMidY };
       // Two-tile edge portals: east edge of the settlement for the first wilds,
@@ -1894,8 +2174,22 @@ PF.world = (() => {
         put(v, vx, midY - 1 + dy, "overhead", null);
         put(zone, east ? 0 : zone.w - 1, wMidY + dy, "object", null, false);
         put(zone, east ? 0 : zone.w - 1, wMidY + dy, "overhead", null);
-        v.portals.push({ x: vx, y: midY - 1 + dy, toZone: id, toX: east ? 2 : zone.w - 3, toY: wMidY + dy, label: `Into ${place.name}` });
-        zone.portals.push({ x: east ? 0 : zone.w - 1, y: wMidY + dy, toZone: "z1", toX: vroadX, toY: midY - 1 + dy, label: `Back to ${brief.name}` });
+        v.portals.push({
+          x: vx,
+          y: midY - 1 + dy,
+          toZone: id,
+          toX: east ? 2 : zone.w - 3,
+          toY: wMidY + dy,
+          label: `Into ${place.name}`,
+        });
+        zone.portals.push({
+          x: east ? 0 : zone.w - 1,
+          y: wMidY + dy,
+          toZone: "z1",
+          toX: vroadX,
+          toY: midY - 1 + dy,
+          label: `Back to ${brief.name}`,
+        });
       }
       if (!east) zone.spawn = { x: zone.w - 4, y: wMidY };
       zone.flavor = place.flavor;
@@ -1913,7 +2207,12 @@ PF.world = (() => {
       const owned = buildings.find((b) => b.owner === member || (b.households ?? []).includes(member.household));
       let wander;
       if (zone === v && owned) {
-        wander = { x0: Math.max(2, owned.door.doorX - 4), y0: Math.max(2, owned.door.doorY), x1: Math.min(v.w - 3, owned.door.doorX + 4), y1: Math.min(v.h - 3, owned.door.doorY + 5) };
+        wander = {
+          x0: Math.max(2, owned.door.doorX - 4),
+          y0: Math.max(2, owned.door.doorY),
+          x1: Math.min(v.w - 3, owned.door.doorX + 4),
+          y1: Math.min(v.h - 3, owned.door.doorY + 5),
+        };
       } else if (zone === v) {
         wander = { x0: midX - 6, y0: midY - 5, x1: midX + 6, y1: midY + 5 };
       } else {
@@ -1982,9 +2281,14 @@ PF.Sim = class {
 
   /** Solid test for a feet-box in world pixels. */
   blocked(z, x, y) {
-    const HW = 5, HT = 3, HB = 7; // feet box: 10 wide, 10 tall biased low
+    const HW = 5,
+      HT = 3,
+      HB = 7; // feet box: 10 wide, 10 tall biased low
     for (const [px, py] of [
-      [x - HW, y - HT], [x + HW, y - HT], [x - HW, y + HB], [x + HW, y + HB],
+      [x - HW, y - HT],
+      [x + HW, y - HT],
+      [x - HW, y + HB],
+      [x + HW, y + HB],
     ]) {
       const tx = Math.floor(px / PF.TILE);
       const ty = Math.floor(py / PF.TILE);
@@ -2074,7 +2378,12 @@ PF.Sim = class {
       t.wait -= dt;
       if (t.wait <= 0) {
         const dirs = [
-          [0, 0], [0, 0], [1, 0], [-1, 0], [0, 1], [0, -1],
+          [0, 0],
+          [0, 0],
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
         ];
         const [dx, dy] = dirs[(this._rnd() * dirs.length) | 0];
         const nx = Math.round(t.fx) + dx;
@@ -2119,7 +2428,7 @@ PF.Sim = class {
   darkness() {
     const h = this.clockMin / 60;
     if (h >= 7 && h < 18) return 0;
-    if (h >= 18 && h < 21) return (h - 18) / 3 * 0.55;
+    if (h >= 18 && h < 21) return ((h - 18) / 3) * 0.55;
     if (h >= 21 || h < 5) return 0.55;
     return (1 - (h - 5) / 2) * 0.55; // 5..7 dawn
   }
@@ -2644,7 +2953,9 @@ PF.mapsExport = {
     return zoneIds.map((zoneId) => {
       const pfId = this.idFor(world, zoneId);
       if (existing.has(pfId)) return { zoneId, locId: pfId, create: false };
-      const nameKey = String(world.zones[zoneId].name || "").trim().toLowerCase();
+      const nameKey = String(world.zones[zoneId].name || "")
+        .trim()
+        .toLowerCase();
       const adopted = nameKey ? adoptable.get(nameKey) : undefined;
       // Adopt when the location is unclaimed OR already bound to THIS zone —
       // a restored save carries prior adoptions, and refusing our own binding
@@ -2740,7 +3051,9 @@ PF.mapsExport = {
         // no 60-second drumbeat. A rebuild or reload starts fresh.
         this._done.add(world);
         if (res.status !== 404) {
-          console.warn(`[pixelforge] World Maps export refused (${res.status}${code ? ` ${code}` : ""}); skipping this session`);
+          console.warn(
+            `[pixelforge] World Maps export refused (${res.status}${code ? ` ${code}` : ""}); skipping this session`,
+          );
         }
         return;
       }
@@ -2820,9 +3133,16 @@ PF.save = {
    *  own `experienceConfig.seed` lands two levels deep. Read every plausible
    *  depth so a future un-nesting doesn't strand old games. */
   _configSeed(meta) {
-    const setup = meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
-    const outer = setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null ? setup.experienceConfig : null;
-    const inner = outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null ? outer.experienceConfig : null;
+    const setup =
+      meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
+    const outer =
+      setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null
+        ? setup.experienceConfig
+        : null;
+    const inner =
+      outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null
+        ? outer.experienceConfig
+        : null;
     for (const candidate of [inner?.seed, outer?.seed]) {
       if (typeof candidate === "number") return candidate >>> 0;
     }
@@ -2841,12 +3161,20 @@ PF.save = {
    *  remains readable for chats sealed before the key moved. Absent on
    *  pre-0.4.0 games → legacy layout. */
   _configBrief(meta) {
-    const top = meta && typeof meta.pixelforgeBrief === "object" && meta.pixelforgeBrief !== null ? meta.pixelforgeBrief : null;
+    const top =
+      meta && typeof meta.pixelforgeBrief === "object" && meta.pixelforgeBrief !== null ? meta.pixelforgeBrief : null;
     if (top && Array.isArray(top.cast)) return top;
     if (top) return null; // a {skipped:true} marker: generation declined, stay legacy
-    const setup = meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
-    const outer = setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null ? setup.experienceConfig : null;
-    const inner = outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null ? outer.experienceConfig : null;
+    const setup =
+      meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
+    const outer =
+      setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null
+        ? setup.experienceConfig
+        : null;
+    const inner =
+      outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null
+        ? outer.experienceConfig
+        : null;
     for (const candidate of [inner?.brief, outer?.brief]) {
       if (candidate && typeof candidate === "object" && Array.isArray(candidate.cast)) return candidate;
     }
@@ -2855,9 +3183,16 @@ PF.save = {
 
   /** The wizard's opt-in for surface-side world generation (0.4.0 chats). */
   _configGenerate(meta) {
-    const setup = meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
-    const outer = setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null ? setup.experienceConfig : null;
-    const inner = outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null ? outer.experienceConfig : null;
+    const setup =
+      meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
+    const outer =
+      setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null
+        ? setup.experienceConfig
+        : null;
+    const inner =
+      outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null
+        ? outer.experienceConfig
+        : null;
     return inner?.generate === true || outer?.generate === true;
   },
 
@@ -2870,7 +3205,8 @@ PF.save = {
   async maybeGenerateBrief(core) {
     if (!core.chatId || this._generating) return;
     const chatId = core.chatId;
-    const meta = core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
+    const meta =
+      core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
     if (meta.pixelforgeBrief !== undefined) return;
     if (this._configBrief(meta)) return;
     if (!this._configGenerate(meta)) return;
@@ -2924,9 +3260,16 @@ PF.save = {
 
   /** The wizard's theme, from the same double-nested config home as the seed. */
   _configTheme(meta) {
-    const setup = meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
-    const outer = setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null ? setup.experienceConfig : null;
-    const inner = outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null ? outer.experienceConfig : null;
+    const setup =
+      meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
+    const outer =
+      setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null
+        ? setup.experienceConfig
+        : null;
+    const inner =
+      outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null
+        ? outer.experienceConfig
+        : null;
     for (const candidate of [inner?.theme, outer?.theme]) {
       if (typeof candidate === "string" && candidate) return candidate;
     }
@@ -3099,7 +3442,8 @@ PF.save = {
   },
 
   _rebuild(core, saved) {
-    const meta = core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
+    const meta =
+      core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
     core.sim = this.simFromSaved(saved, meta, core.chatId);
     this._lastSerialized = JSON.stringify(this.snapshot(core));
     core.render?.clearZones();
@@ -3219,7 +3563,10 @@ PF.Hud = class {
         "pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none;",
     });
     const pads = [
-      ["up", "▲", 44, 0], ["left", "◀", 0, 44], ["right", "▶", 88, 44], ["down", "▼", 44, 88],
+      ["up", "▲", 44, 0],
+      ["left", "◀", 0, 44],
+      ["right", "▶", 88, 44],
+      ["down", "▼", 44, 88],
     ];
     for (const [dir, label, x, y] of pads) {
       const pad = PF.el("button", {
@@ -3388,8 +3735,7 @@ PF.mountSetup = (el, props) => {
       "width:100%;box-sizing:border-box;background:var(--background,#1b201b);color:var(--foreground,#e6e8e0);" +
       "border:1px solid var(--border,#444);border-radius:8px;padding:8px 10px;font:13px/1.4 inherit;",
     row: "display:flex;gap:10px;",
-    btn:
-      "min-height:44px;border-radius:8px;padding:0 16px;font:700 13px/1 inherit;cursor:pointer;border:1px solid var(--border,#444);",
+    btn: "min-height:44px;border-radius:8px;padding:0 16px;font:700 13px/1 inherit;cursor:pointer;border:1px solid var(--border,#444);",
   };
   const field = (labelText, node) => PF.el("div", null, [PF.el("label", { style: S.label, text: labelText }), node]);
   const input = (value) => PF.el("input", { style: S.input, value });
@@ -3524,7 +3870,7 @@ PF.mountSetup = (el, props) => {
         ...list.map((c) =>
           PF.el("option", {
             value: typeof c?.id === "string" ? c.id : "",
-            text: typeof c?.name === "string" ? c.name : (typeof c?.label === "string" ? c.label : String(c?.id ?? "?")),
+            text: typeof c?.name === "string" ? c.name : typeof c?.label === "string" ? c.label : String(c?.id ?? "?"),
           }),
         ),
       );
@@ -3541,11 +3887,7 @@ PF.mountSetup = (el, props) => {
         const id = typeof c?.id === "string" ? c.id : null;
         if (!id) continue;
         const name =
-          typeof c?.name === "string" && c.name
-            ? c.name
-            : typeof c?.data?.name === "string"
-              ? c.data.name
-              : id;
+          typeof c?.name === "string" && c.name ? c.name : typeof c?.data?.name === "string" ? c.data.name : id;
         const cb = PF.el("input", { type: "checkbox", value: id });
         partyChecks.push(cb);
         partyBox.appendChild(
@@ -3555,7 +3897,8 @@ PF.mountSetup = (el, props) => {
           ]),
         );
       }
-      if (!partyBox.children.length) partyBox.textContent = "No characters yet — that's fine, the GM plays the villagers.";
+      if (!partyBox.children.length)
+        partyBox.textContent = "No characters yet — that's fine, the GM plays the villagers.";
     } catch {
       partyBox.textContent = "Could not load characters (the GM will play the villagers).";
     }
@@ -3615,7 +3958,8 @@ PF.mountSetup = (el, props) => {
         }
       }
     } catch (err) {
-      errEl.textContent = err && err.message ? String(err.message) : "Launch failed — check the connection and try again.";
+      errEl.textContent =
+        err && err.message ? String(err.message) : "Launch failed — check the connection and try again.";
       errEl.style.display = "block";
       launchBtn.disabled = false;
       cancelBtn.disabled = false;
@@ -3912,8 +4256,14 @@ PF.core = {
     if (this._keysBound) return;
     this._keysBound = true;
     const DIRS = {
-      w: "up", arrowup: "up", s: "down", arrowdown: "down",
-      a: "left", arrowleft: "left", d: "right", arrowright: "right",
+      w: "up",
+      arrowup: "up",
+      s: "down",
+      arrowdown: "down",
+      a: "left",
+      arrowleft: "left",
+      d: "right",
+      arrowright: "right",
     };
     this._keyDown = (ev) => {
       if (!this.sim || !this._mainEl) return;
@@ -3958,7 +4308,8 @@ PF.core = {
         const detail = ev?.detail;
         const core = PF.core;
         if (!detail || !core.chatId) return;
-        if (detail.packageId !== (typeof core.host?.packageId === "string" ? core.host.packageId : "pixelforge")) return;
+        if (detail.packageId !== (typeof core.host?.packageId === "string" ? core.host.packageId : "pixelforge"))
+          return;
         if (detail.chatId !== core.chatId) return;
         PF.spatial.onHostEvent(core, detail);
       });

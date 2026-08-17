@@ -20,28 +20,15 @@ export interface PersistedNoodleRefreshSchedule {
 type RandomSource = () => number;
 
 function isIsoTimestamp(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    Number.isFinite(Date.parse(value))
-  );
+  return typeof value === "string" && value.length > 0 && Number.isFinite(Date.parse(value));
 }
 
 function nullableIsoTimestamp(value: unknown): string | null {
   return isIsoTimestamp(value) ? value : null;
 }
 
-function integerInRange(
-  value: unknown,
-  min: number,
-  max: number,
-): number | null {
-  return typeof value === "number" &&
-    Number.isInteger(value) &&
-    value >= min &&
-    value <= max
-    ? value
-    : null;
+function integerInRange(value: unknown, min: number, max: number): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= min && value <= max ? value : null;
 }
 
 function normalizedRandom(random: RandomSource): number {
@@ -69,16 +56,8 @@ export function generateNoodleRefreshTimes(
   const count = Math.max(0, Math.min(24, Math.floor(refreshesPerDay)));
   if (count === 0) return [];
 
-  const dayStart = new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate(),
-  ).getTime();
-  const dayEnd = new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate() + 1,
-  ).getTime();
+  const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1).getTime();
   const windowSize = (dayEnd - dayStart) / count;
 
   return Array.from({ length: count }, (_, index) => {
@@ -86,43 +65,22 @@ export function generateNoodleRefreshTimes(
     // Keep each refresh away from the exact window boundaries. This still feels
     // organic while preventing adjacent slots from clustering around one instant.
     const positionWithinWindow = 0.15 + normalizedRandom(random) * 0.7;
-    return new Date(
-      windowStart + windowSize * positionWithinWindow,
-    ).toISOString();
+    return new Date(windowStart + windowSize * positionWithinWindow).toISOString();
   });
 }
 
-export function parsePersistedNoodleRefreshSchedule(
-  value: unknown,
-): PersistedNoodleRefreshSchedule | null {
+export function parsePersistedNoodleRefreshSchedule(value: unknown): PersistedNoodleRefreshSchedule | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   if (record.version !== NOODLE_REFRESH_SCHEDULE_VERSION) return null;
-  if (
-    typeof record.scheduleDate !== "string" ||
-    !/^\d{4}-\d{2}-\d{2}$/u.test(record.scheduleDate)
-  )
-    return null;
+  if (typeof record.scheduleDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/u.test(record.scheduleDate)) return null;
   if (typeof record.timezone !== "string" || !record.timezone) return null;
   const refreshesPerDay = integerInRange(record.refreshesPerDay, 0, 24);
   const successfulRefreshes = integerInRange(record.successfulRefreshes, 0, 24);
   const failureAttempts = integerInRange(record.failureAttempts, 0, 10_000);
-  if (
-    refreshesPerDay === null ||
-    successfulRefreshes === null ||
-    failureAttempts === null
-  )
-    return null;
-  if (
-    !Array.isArray(record.scheduledTimes) ||
-    !record.scheduledTimes.every(isIsoTimestamp)
-  )
-    return null;
-  if (
-    !Array.isArray(record.completedTimes) ||
-    !record.completedTimes.every(isIsoTimestamp)
-  )
-    return null;
+  if (refreshesPerDay === null || successfulRefreshes === null || failureAttempts === null) return null;
+  if (!Array.isArray(record.scheduledTimes) || !record.scheduledTimes.every(isIsoTimestamp)) return null;
+  if (!Array.isArray(record.completedTimes) || !record.completedTimes.every(isIsoTimestamp)) return null;
 
   const scheduledTimes = Array.from(new Set(record.scheduledTimes)).sort();
   const scheduledSet = new Set(scheduledTimes);
@@ -143,10 +101,7 @@ export function parsePersistedNoodleRefreshSchedule(
     nextAttemptAt: nullableIsoTimestamp(record.nextAttemptAt),
     lastAutomaticRefreshAt: nullableIsoTimestamp(record.lastAutomaticRefreshAt),
     lastAttemptAt: nullableIsoTimestamp(record.lastAttemptAt),
-    lastError:
-      typeof record.lastError === "string" && record.lastError
-        ? record.lastError.slice(0, 500)
-        : null,
+    lastError: typeof record.lastError === "string" && record.lastError ? record.lastError.slice(0, 500) : null,
   };
 }
 
@@ -169,12 +124,9 @@ export function reconcileNoodleRefreshSchedule(
     return current;
   }
 
-  const sameLocalDay =
-    current?.scheduleDate === scheduleDate && current.timezone === timezone;
+  const sameLocalDay = current?.scheduleDate === scheduleDate && current.timezone === timezone;
   const scheduledTimes = generateNoodleRefreshTimes(at, count, random);
-  const preservedCompletedCount = sameLocalDay
-    ? Math.min(current?.completedTimes.length ?? 0, count)
-    : 0;
+  const preservedCompletedCount = sameLocalDay ? Math.min(current?.completedTimes.length ?? 0, count) : 0;
   return {
     version: NOODLE_REFRESH_SCHEDULE_VERSION,
     scheduleDate,
@@ -182,9 +134,7 @@ export function reconcileNoodleRefreshSchedule(
     refreshesPerDay: count,
     scheduledTimes,
     completedTimes: scheduledTimes.slice(0, preservedCompletedCount),
-    successfulRefreshes: sameLocalDay
-      ? Math.min(current?.successfulRefreshes ?? 0, preservedCompletedCount)
-      : 0,
+    successfulRefreshes: sameLocalDay ? Math.min(current?.successfulRefreshes ?? 0, preservedCompletedCount) : 0,
     failureAttempts: 0,
     nextAttemptAt: null,
     lastAutomaticRefreshAt: current?.lastAutomaticRefreshAt ?? null,
@@ -193,20 +143,13 @@ export function reconcileNoodleRefreshSchedule(
   };
 }
 
-export function dueNoodleRefreshTimes(
-  schedule: PersistedNoodleRefreshSchedule,
-  at: Date,
-): string[] {
+export function dueNoodleRefreshTimes(schedule: PersistedNoodleRefreshSchedule, at: Date): string[] {
   const completed = new Set(schedule.completedTimes);
   const now = at.getTime();
-  return schedule.scheduledTimes.filter(
-    (time) => !completed.has(time) && Date.parse(time) <= now,
-  );
+  return schedule.scheduledTimes.filter((time) => !completed.has(time) && Date.parse(time) <= now);
 }
 
-export function nextNoodleRefreshTime(
-  schedule: PersistedNoodleRefreshSchedule,
-): string | null {
+export function nextNoodleRefreshTime(schedule: PersistedNoodleRefreshSchedule): string | null {
   const completed = new Set(schedule.completedTimes);
   return schedule.scheduledTimes.find((time) => !completed.has(time)) ?? null;
 }
@@ -230,15 +173,8 @@ export function rescheduleNoodleRefreshTime(
   }
   const timeMatch = /^(\d{2}):(\d{2})$/u.exec(time);
   if (!timeMatch) throw new Error("Choose a valid time.");
-  if (
-    schedule.scheduledTimes.some(
-      (candidate) =>
-        candidate !== scheduledTime && localClockTime(candidate) === time,
-    )
-  ) {
-    throw new Error(
-      "Another automatic refresh is already planned for that time.",
-    );
+  if (schedule.scheduledTimes.some((candidate) => candidate !== scheduledTime && localClockTime(candidate) === time)) {
+    throw new Error("Another automatic refresh is already planned for that time.");
   }
 
   const dateParts = schedule.scheduleDate.split("-").map(Number);
@@ -271,9 +207,7 @@ export function rescheduleNoodleRefreshTime(
   return {
     ...schedule,
     scheduledTimes: schedule.scheduledTimes
-      .map((candidate) =>
-        candidate === scheduledTime ? replacement.toISOString() : candidate,
-      )
+      .map((candidate) => (candidate === scheduledTime ? replacement.toISOString() : candidate))
       .sort(),
     failureAttempts: 0,
     nextAttemptAt: null,
@@ -300,9 +234,7 @@ export function markNoodleRefreshSuccess(
   const scheduled = new Set(schedule.scheduledTimes);
   const alreadyCompleted = new Set(schedule.completedTimes);
   const matchedTimes = consumedTimes.filter((time) => scheduled.has(time));
-  const fallbackTime = schedule.scheduledTimes.find(
-    (time) => !alreadyCompleted.has(time),
-  );
+  const fallbackTime = schedule.scheduledTimes.find((time) => !alreadyCompleted.has(time));
   const completedTimes = Array.from(
     new Set([
       ...schedule.completedTimes,
@@ -313,10 +245,7 @@ export function markNoodleRefreshSuccess(
   return {
     ...schedule,
     completedTimes,
-    successfulRefreshes: Math.min(
-      schedule.refreshesPerDay,
-      schedule.successfulRefreshes + 1,
-    ),
+    successfulRefreshes: Math.min(schedule.refreshesPerDay, schedule.successfulRefreshes + 1),
     failureAttempts: 0,
     nextAttemptAt: null,
     lastAutomaticRefreshAt: at.toISOString(),
@@ -334,17 +263,13 @@ export function markNoodleRefreshFailure(
   return {
     ...schedule,
     failureAttempts: schedule.failureAttempts + 1,
-    nextAttemptAt: new Date(
-      at.getTime() + Math.max(1_000, retryDelayMs),
-    ).toISOString(),
+    nextAttemptAt: new Date(at.getTime() + Math.max(1_000, retryDelayMs)).toISOString(),
     lastAttemptAt: at.toISOString(),
     lastError: error.slice(0, 500),
   };
 }
 
-export function clearNoodleRefreshFailure(
-  schedule: PersistedNoodleRefreshSchedule,
-): PersistedNoodleRefreshSchedule {
+export function clearNoodleRefreshFailure(schedule: PersistedNoodleRefreshSchedule): PersistedNoodleRefreshSchedule {
   return {
     ...schedule,
     failureAttempts: 0,
@@ -358,9 +283,7 @@ export function noodleRefreshSchedulerStatus(
   at: Date,
 ): NoodleRefreshSchedulerStatus {
   const nextRefreshAt = nextNoodleRefreshTime(schedule);
-  const retryAt = schedule.nextAttemptAt
-    ? Date.parse(schedule.nextAttemptAt)
-    : null;
+  const retryAt = schedule.nextAttemptAt ? Date.parse(schedule.nextAttemptAt) : null;
   const due = dueNoodleRefreshTimes(schedule, at).length > 0;
   const state: NoodleRefreshSchedulerStatus["state"] =
     schedule.refreshesPerDay === 0
@@ -381,10 +304,7 @@ export function noodleRefreshSchedulerStatus(
     completedTimes: schedule.completedTimes,
     completedSlots: schedule.completedTimes.length,
     successfulRefreshes: schedule.successfulRefreshes,
-    skippedSlots: Math.max(
-      0,
-      schedule.completedTimes.length - schedule.successfulRefreshes,
-    ),
+    skippedSlots: Math.max(0, schedule.completedTimes.length - schedule.successfulRefreshes),
     nextRefreshAt,
     nextAttemptAt: schedule.nextAttemptAt,
     lastAutomaticRefreshAt: schedule.lastAutomaticRefreshAt,

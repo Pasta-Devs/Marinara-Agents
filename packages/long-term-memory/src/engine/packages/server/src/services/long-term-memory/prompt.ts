@@ -89,13 +89,15 @@ export function serializeLongTermMemoryPrompt(
         groups.set(label, [...(groups.get(label) ?? []), formatted]);
       }
     }
-    const body = sectionOrder.map((label) => {
-      const titled = titledGroups.get(label);
-      if (titled) {
-        return `[${label}]\n${Array.from(titled.values(), ({ title, bullets }) => `${escapeXml(title)}:\n${bullets.join("\n")}`).join("\n\n")}`;
-      }
-      return `[${label}]\n${groups.get(label)!.join("\n")}`;
-    }).join("\n\n");
+    const body = sectionOrder
+      .map((label) => {
+        const titled = titledGroups.get(label);
+        if (titled) {
+          return `[${label}]\n${Array.from(titled.values(), ({ title, bullets }) => `${escapeXml(title)}:\n${bullets.join("\n")}`).join("\n\n")}`;
+        }
+        return `[${label}]\n${groups.get(label)!.join("\n")}`;
+      })
+      .join("\n\n");
     const preamble = options.preamble?.trim();
     const content = [preamble ? escapeXml(preamble) : "", REFERENCE_DATA_FRAMING, body].filter(Boolean).join("\n\n");
     const finalTokens = Math.ceil(content.length / 4) + 6;

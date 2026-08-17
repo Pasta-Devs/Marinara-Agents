@@ -4,40 +4,22 @@ import { join } from "node:path";
 
 const root = join(import.meta.dirname, "..");
 const panel = readFileSync(
-  join(
-    root,
-    "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx",
-  ),
+  join(root, "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx"),
   "utf8",
 );
 const home = readFileSync(
-  join(
-    root,
-    "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
-  ),
+  join(root, "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx"),
   "utf8",
 );
 const settings = readFileSync(
-  join(
-    root,
-    "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx",
-  ),
+  join(root, "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx"),
   "utf8",
 );
 const storage = readFileSync(
-  join(
-    root,
-    "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts",
-  ),
+  join(root, "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts"),
   "utf8",
 );
-const routes = readFileSync(
-  join(
-    root,
-    "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts",
-  ),
-  "utf8",
-);
+const routes = readFileSync(join(root, "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts"), "utf8");
 
 assert.match(
   panel,
@@ -87,11 +69,7 @@ assert.match(
   /setImagesEnabled\(settings\.autoPostingImagesEnabled\)/u,
   "The wizard must restore the saved image-post preference",
 );
-assert.match(
-  panel,
-  /autoPostingImagesEnabled: imagesEnabled/u,
-  "The wizard must save the image-post preference",
-);
+assert.match(panel, /autoPostingImagesEnabled: imagesEnabled/u, "The wizard must save the image-post preference");
 assert.doesNotMatch(
   panel,
   /imageGenerationUseAvatarReferences: imagesEnabled/u,
@@ -124,7 +102,11 @@ assert.match(
   /const closeOnboarding = \(\) => \{[\s\S]*?onboardingMode === "first-run"[\s\S]*?setOnboardingState\("completed"\)[\s\S]*?setOnboardingMode\(null\)/u,
   "Closing first-run setup must persist completion",
 );
-assert.match(home, /const viewingOwnCreator = profile\.sourceAccountId === viewerAccount\?\.entityId/u, "Profile ownership must follow the active persona");
+assert.match(
+  home,
+  /const viewingOwnCreator = profile\.sourceAccountId === viewerAccount\?\.entityId/u,
+  "Profile ownership must follow the active persona",
+);
 assert.match(
   home,
   /onRefresh=\{\(\) =>[\s\S]*?viewerQuery\.refetch\(\)[\s\S]*?noodleTimelineRefreshed/u,

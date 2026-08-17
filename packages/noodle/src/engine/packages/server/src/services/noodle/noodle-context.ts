@@ -16,14 +16,9 @@ export const NOODLE_CARRYOVER_TOKEN_BUDGET = 8192;
 const NOODLE_CARRYOVER_CHARACTER_BUDGET = NOODLE_CARRYOVER_TOKEN_BUDGET * 4;
 const NOODLE_DIGEST_CONTENT_LIMIT = 1200;
 
-function modeAllowed(
-  carryoverModes: readonly NoodleCarryoverTarget[],
-  chatMode: ChatMode,
-) {
-  if (carryoverModes.includes("conversation") && chatMode === "conversation")
-    return true;
-  if (carryoverModes.includes("roleplay") && chatMode === "roleplay")
-    return true;
+function modeAllowed(carryoverModes: readonly NoodleCarryoverTarget[], chatMode: ChatMode) {
+  if (carryoverModes.includes("conversation") && chatMode === "conversation") return true;
+  if (carryoverModes.includes("roleplay") && chatMode === "roleplay") return true;
   if (carryoverModes.includes("game") && chatMode === "game") return true;
   return false;
 }
@@ -39,11 +34,7 @@ export function buildNoodleCarryoverBlock(
 ): string | null {
   const selected: string[] = [];
   const itemLimit = Math.max(0, Math.floor(maxItems));
-  const sampleWrappedLength = wrapContent(
-    "x",
-    "Recent Social Media Activity",
-    wrapFormat,
-  ).length;
+  const sampleWrappedLength = wrapContent("x", "Recent Social Media Activity", wrapFormat).length;
   const wrapperOverhead = sampleWrappedLength - 1;
   let bodyLength = 0;
   let nonEmptyLineCount = 0;
@@ -51,22 +42,12 @@ export function buildNoodleCarryoverBlock(
     const content = digest.content.trim().slice(0, NOODLE_DIGEST_CONTENT_LIMIT);
     if (!content) continue;
     const line = `- ${content}`;
-    const renderedLineLength =
-      selected.length === 0 ? line.trimEnd().length : line.length;
-    const candidateBodyLength =
-      bodyLength + (selected.length > 0 ? 1 : 0) + renderedLineLength;
+    const renderedLineLength = selected.length === 0 ? line.trimEnd().length : line.length;
+    const candidateBodyLength = bodyLength + (selected.length > 0 ? 1 : 0) + renderedLineLength;
     const candidateNonEmptyLineCount =
-      nonEmptyLineCount +
-      line.split("\n").filter((part) => part.trim().length > 0).length;
-    const xmlIndentLength =
-      wrapFormat === "xml"
-        ? Math.max(0, candidateNonEmptyLineCount - 1) * 4
-        : 0;
-    if (
-      wrapperOverhead + candidateBodyLength + xmlIndentLength >
-      NOODLE_CARRYOVER_CHARACTER_BUDGET
-    )
-      break;
+      nonEmptyLineCount + line.split("\n").filter((part) => part.trim().length > 0).length;
+    const xmlIndentLength = wrapFormat === "xml" ? Math.max(0, candidateNonEmptyLineCount - 1) * 4 : 0;
+    if (wrapperOverhead + candidateBodyLength + xmlIndentLength > NOODLE_CARRYOVER_CHARACTER_BUDGET) break;
     selected.push(content);
     bodyLength = candidateBodyLength;
     nonEmptyLineCount = candidateNonEmptyLineCount;
@@ -76,11 +57,7 @@ export function buildNoodleCarryoverBlock(
     .slice()
     .reverse()
     .map((content) => `- ${content}`);
-  return wrapContent(
-    lines.join("\n"),
-    "Recent Social Media Activity",
-    wrapFormat,
-  );
+  return wrapContent(lines.join("\n"), "Recent Social Media Activity", wrapFormat);
 }
 
 export async function buildRecentSocialMediaActivityBlock(input: {
@@ -95,20 +72,13 @@ export async function buildRecentSocialMediaActivityBlock(input: {
   if (!modeAllowed(settings.carryoverModes, input.chatMode)) return null;
 
   const accountIds = new Set<string>();
-  const characterAccounts = await noodle.getAccountsByEntities(
-    "character",
-    input.characterIds,
-  );
+  const characterAccounts = await noodle.getAccountsByEntities("character", input.characterIds);
   for (const account of characterAccounts) {
-    if (account.entityId === PROFESSOR_MARI_ID && !settings.allowProfessorMari)
-      continue;
+    if (account.entityId === PROFESSOR_MARI_ID && !settings.allowProfessorMari) continue;
     if (account.invited) accountIds.add(account.id);
   }
   if (input.personaId) {
-    const personaAccount = await noodle.getAccountByEntity(
-      "persona",
-      input.personaId,
-    );
+    const personaAccount = await noodle.getAccountByEntity("persona", input.personaId);
     if (personaAccount) accountIds.add(personaAccount.id);
   }
   if (accountIds.size === 0) return null;
@@ -117,12 +87,6 @@ export async function buildRecentSocialMediaActivityBlock(input: {
     since: sinceHoursIso(settings.carryoverHours),
     limit: Math.max(settings.carryoverMaxItems * 4, 20),
   });
-  const relevant = digests.filter((digest) =>
-    digest.accountIds.some((id) => accountIds.has(id)),
-  );
-  return buildNoodleCarryoverBlock(
-    relevant,
-    settings.carryoverMaxItems,
-    input.wrapFormat,
-  );
+  const relevant = digests.filter((digest) => digest.accountIds.some((id) => accountIds.has(id)));
+  return buildNoodleCarryoverBlock(relevant, settings.carryoverMaxItems, input.wrapFormat);
 }

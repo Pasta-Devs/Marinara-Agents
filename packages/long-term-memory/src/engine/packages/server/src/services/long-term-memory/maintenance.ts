@@ -25,11 +25,7 @@ import {
   safeJoin,
   vaultFolderForNoteType,
 } from "./paths.js";
-import {
-  longTermMemoryRecallIndexPath,
-  parseLtmRecallIndex,
-  rebuildLongTermMemoryIndexes,
-} from "./rebuild.js";
+import { longTermMemoryRecallIndexPath, parseLtmRecallIndex, rebuildLongTermMemoryIndexes } from "./rebuild.js";
 import { LongTermMemoryStorage } from "./storage.js";
 import { parseStoredLtmNote } from "./stored-note.js";
 import { withLtmVaultLock } from "./vault-lock.js";
@@ -58,7 +54,9 @@ async function listVaultFiles(root: string): Promise<VaultFile[]> {
 }
 
 function publicPath(root: string, path: string) {
-  return relative(root, path).split(/[\\/]+/).join("/");
+  return relative(root, path)
+    .split(/[\\/]+/)
+    .join("/");
 }
 
 async function checkEventLog(root: string, issues: LtmIntegrityIssue[]) {
@@ -79,9 +77,7 @@ async function checkEventLog(root: string, issues: LtmIntegrityIssue[]) {
           code: "malformed_event",
           path: displayPath,
           message:
-            error instanceof Error
-              ? `Line ${index}: ${error.message}`
-              : `Line ${index}: Event failed validation.`,
+            error instanceof Error ? `Line ${index}: ${error.message}` : `Line ${index}: Event failed validation.`,
         });
       }
     }
@@ -191,15 +187,11 @@ async function checkRecallIndex(root: string, notes: LtmNote[], issues: LtmInteg
   return health;
 }
 
-export async function checkLongTermMemoryIntegrity(
-  root = getLongTermMemoryRoot(),
-): Promise<LtmIntegrityResponse> {
+export async function checkLongTermMemoryIntegrity(root = getLongTermMemoryRoot()): Promise<LtmIntegrityResponse> {
   return withLtmVaultLock(root, () => checkLongTermMemoryIntegrityUnlocked(root));
 }
 
-async function checkLongTermMemoryIntegrityUnlocked(
-  root: string,
-): Promise<LtmIntegrityResponse> {
+async function checkLongTermMemoryIntegrityUnlocked(root: string): Promise<LtmIntegrityResponse> {
   const issues: LtmIntegrityIssue[] = [];
   const notesById = new Map<string, LtmNote>();
 
@@ -294,7 +286,10 @@ function stripImportPrefix(value: string) {
 
 function importedSourceTitleFromNote(note: LtmNote) {
   const evidence = note.sections.source?.evidence ?? [];
-  const chatName = evidence.find((entry) => entry.startsWith("chat_name:"))?.slice("chat_name:".length).trim();
+  const chatName = evidence
+    .find((entry) => entry.startsWith("chat_name:"))
+    ?.slice("chat_name:".length)
+    .trim();
   const messageRange = evidence
     .find((entry) => entry.startsWith("message_range:"))
     ?.slice("message_range:".length)
@@ -347,8 +342,7 @@ export async function repairLongTermMemory(
       }
     }
 
-    const rebuildNeeded =
-      actions.includes("rebuild_indexes") || quarantined > 0 || backfilled > 0;
+    const rebuildNeeded = actions.includes("rebuild_indexes") || quarantined > 0 || backfilled > 0;
     const rebuilt = rebuildNeeded ? await rebuildCurrentIndexes(root) : null;
     const results: LtmRepairResponse["actions"] = actions.map((action) => {
       if (action === "rebuild_indexes") {

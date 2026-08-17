@@ -5,41 +5,26 @@ import { join } from "node:path";
 const root = join(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 const routes = read("packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts");
-const publicSupport = read(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-public-support.ts",
-);
+const publicSupport = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-public-support.ts");
 const replyOperation = read(
   "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-creator-reply.operation.ts",
 );
 const imageConnections = read(
   "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-image-connections.ts",
 );
-const home = read(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
-);
-const storage = read(
-  "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts",
-);
-const settings = read(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx",
-);
-const profileSurface = read(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpProfileSurface.tsx",
-);
-const artwork = read(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-artwork.operation.ts",
-);
-const shell = read(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpShell.tsx",
-);
+const home = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx");
+const storage = read("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts");
+const settings = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx");
+const profileSurface = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpProfileSurface.tsx");
+const artwork = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-artwork.operation.ts");
+const shell = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpShell.tsx");
 
 const updateRoute = routes.slice(
   routes.indexOf('app.put("/noodler/accounts/:id/stage-profile"'),
   routes.indexOf('app.post("/noodler/accounts/:id/source/dismiss"'),
 );
 assert.ok(
-  updateRoute.indexOf("source_revision_conflict") <
-    updateRoute.indexOf("discardNoodlerPreparedPost"),
+  updateRoute.indexOf("source_revision_conflict") < updateRoute.indexOf("discardNoodlerPreparedPost"),
   "source revision conflicts must be checked before prepared posts are discarded",
 );
 assert.match(
@@ -71,11 +56,13 @@ assert.doesNotMatch(home, /findLastIndex/u, "Slurp hub must support the Engine E
 assert.match(home, /function profileAccent\(_profileId: string\): string \{\s*return NOODLE_PINK;/u);
 assert.doesNotMatch(home, /#7ED6A5/u, "Creator profiles must not override Slurp with a green accent");
 assert.ok(
-  home.indexOf("const [draftNoodleAccountId, setDraftNoodleAccountId]") <
-    home.indexOf("useNoodlerEligibleAccounts("),
+  home.indexOf("const [draftNoodleAccountId, setDraftNoodleAccountId]") < home.indexOf("useNoodlerEligibleAccounts("),
   "profile source state must be declared before first-render query evaluation",
 );
-assert.match(storage, /cleanupRetiredViewer[\s\S]*?noodleAccountSubscriptions[\s\S]*?noodlePostUnlocks[\s\S]*?slurpViewerSettingsKey/u);
+assert.match(
+  storage,
+  /cleanupRetiredViewer[\s\S]*?noodleAccountSubscriptions[\s\S]*?noodlePostUnlocks[\s\S]*?slurpViewerSettingsKey/u,
+);
 assert.match(settings, /Linked source changes need review/u);
 assert.match(settings, /onRedraftCreator/u);
 assert.match(settings, /import \{ Avatar, getNoodleAccentStyle, NOODLE_PINK \} from "\.\/SlurpShell"/u);
@@ -96,7 +83,10 @@ assert.match(artwork, /height: kind === "banner" \? 512 : 1024/u);
 assert.match(settings, /Refresh Slurp now/u);
 assert.match(settings, /title="Refresh Slurp now"/u);
 assert.match(settings, /open=\{refreshModalOpen\}[\s\S]*?panelStyle=\{getNoodleAccentStyle\(NOODLE_PINK/u);
-assert.match(settings, /refreshCreators\.mutate\(\{ accountIds: \[\.\.\.refreshAccountIds\], access: refreshAccess \}/u);
+assert.match(
+  settings,
+  /refreshCreators\.mutate\(\s*\{ accountIds: \[\.\.\.refreshAccountIds\], access: refreshAccess \}/u,
+);
 assert.doesNotMatch(home, /refreshAllNow/u, "bulk refresh belongs in Creator settings");
 assert.match(
   shell,

@@ -1,19 +1,13 @@
 import type { DB } from "../../db/connection.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { resolveNoodlerImageConnectionId } from "./slurp-image-connections.js";
-import {
-  createSlurpStorage,
-  noodlerReservePolicyFingerprint,
-} from "../storage/slurp.storage.js";
+import { createSlurpStorage, noodlerReservePolicyFingerprint } from "../storage/slurp.storage.js";
 import { generateNoodlerPost } from "./slurp-generation.service.js";
 import { generateNoodlerPostImage } from "./slurp-images.service.js";
 import { tryNoodlerAccountOperation } from "./slurp-account-operation-lock.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
-import {
-  BackgroundConnectionBusyError,
-  ConnectionAttemptRejectedError,
-} from "../generation/connection-admission.js";
+import { BackgroundConnectionBusyError, ConnectionAttemptRejectedError } from "../generation/connection-admission.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -38,23 +32,10 @@ export function isNoodlerNightQuietTime(at: Date): boolean {
 export async function prepareNextNoodlerReservePost(
   db: DB,
   at = new Date(),
-): Promise<
-  | "prepared"
-  | "covered"
-  | "disabled"
-  | "holding"
-  | "exhausted"
-  | "busy"
-  | "ineligible"
-  | "missed"
-> {
+): Promise<"prepared" | "covered" | "disabled" | "holding" | "exhausted" | "busy" | "ineligible" | "missed"> {
   const noodle = createSlurpStorage(db);
   const settings = await noodle.getSettings();
-  if (
-    !settings.autoPostingScheduleEnabled ||
-    settings.postsPerDay <= 0
-  )
-    return "disabled";
+  if (!settings.autoPostingScheduleEnabled || settings.postsPerDay <= 0) return "disabled";
   const state = await noodle.ensureNoodlerReserveState(at);
   if (at.getTime() < Date.parse(state.preparationNotBefore)) return "holding";
 
@@ -62,29 +43,19 @@ export async function prepareNextNoodlerReservePost(
     noodle.listNoodlerPreparedPosts(),
     noodle.listAutoPostEnabledAccounts(),
   ]);
-  const validPrepared = items.filter(
-    (item) =>
-      item.state === "prepared" && Date.parse(item.publishAt) > at.getTime(),
-  );
+  const validPrepared = items.filter((item) => item.state === "prepared" && Date.parse(item.publishAt) > at.getTime());
   const covered = new Set(validPrepared.map((item) => item.publishAt));
   const publishAt = plannedPublicationTimes(at, settings.postsPerDay).find(
     (candidate) =>
       ![...covered].some(
-        (existing) =>
-          Math.abs(Date.parse(existing) - Date.parse(candidate)) <
-          DAY_MS / settings.postsPerDay / 2,
+        (existing) => Math.abs(Date.parse(existing) - Date.parse(candidate)) < DAY_MS / settings.postsPerDay / 2,
       ),
   );
   if (!publishAt) return "covered";
   if (accounts.length === 0) return "ineligible";
   let eligibleAccounts = accounts;
-  if (
-    settings.nightQuiet &&
-    isNoodlerNightQuietTime(new Date(publishAt))
-  ) {
-    eligibleAccounts = accounts.filter(
-      (account) => account.kind !== "character",
-    );
+  if (settings.nightQuiet && isNoodlerNightQuietTime(new Date(publishAt))) {
+    eligibleAccounts = accounts.filter((account) => account.kind !== "character");
   }
   if (eligibleAccounts.length === 0) return "ineligible";
 
@@ -104,9 +75,7 @@ export async function prepareNextNoodlerReservePost(
     ),
   );
   const account = [...eligibleAccounts].sort(
-    (a, b) =>
-      (lastActivity.get(a.id) ?? 0) - (lastActivity.get(b.id) ?? 0) ||
-      a.id.localeCompare(b.id),
+    (a, b) => (lastActivity.get(a.id) ?? 0) - (lastActivity.get(b.id) ?? 0) || a.id.localeCompare(b.id),
   )[0]!;
 
   const locked = await tryNoodlerAccountOperation(account.id, async () => {
@@ -123,15 +92,9 @@ export async function prepareNextNoodlerReservePost(
         admissionMode: {
           kind: "background",
           beforeAttempt: async () => {
-            const claim = await noodle.claimNoodlerAutomaticAttempt(
-              "text",
-              settings.postsPerDay,
-              at,
-            );
-            if (claim.status !== "claimed")
-              throw new NoodlerAttemptUnavailableError(claim.status);
-            return (outcome) =>
-              noodle.completeNoodlerAutomaticAttempt(claim.claimId, outcome);
+            const claim = await noodle.claimNoodlerAutomaticAttempt("text", settings.postsPerDay, at);
+            if (claim.status !== "claimed") throw new NoodlerAttemptUnavailableError(claim.status);
+            return (outcome) => noodle.completeNoodlerAutomaticAttempt(claim.claimId, outcome);
           },
         },
         request: {
@@ -142,28 +105,22 @@ export async function prepareNextNoodlerReservePost(
           noodlerPostGuide: `Write a standalone post appropriate for publication at ${publishAt}. Do not refer to events after the current moment.`,
         },
       });
-      let stagedMedia: { promote: () => void; compensate: () => void } | null =
-        null;
-      if (
-        account.settings.scheduler.autoPosting?.imagesEnabled &&
-        payload.imagePrompt
-      ) {
+      let stagedMedia: { promote: () => void; compensate: () => void } | null = null;
+      if (account.settings.scheduler.autoPosting?.imagesEnabled && payload.imagePrompt) {
         const imageConnectionId = await resolveNoodlerImageConnectionId(db, account.id);
         // Fall back to the default image connection when a creator's mapped
         // override was deleted (getWithKey returns null), instead of silently
         // skipping scheduled image generation.
         const imageConnection =
-          (imageConnectionId
-            ? await createConnectionsStorage(db).getWithKey(imageConnectionId)
-            : null) ?? (await createConnectionsStorage(db).getDefaultForImageGeneration());
+          (imageConnectionId ? await createConnectionsStorage(db).getWithKey(imageConnectionId) : null) ??
+          (await createConnectionsStorage(db).getDefaultForImageGeneration());
         if (imageConnection) {
           try {
             const linkedPublicAccount = await noodle.resolveAccountSource(account);
             const image = await generateNoodlerPostImage({
               account,
               linkedPublicAccount,
-              disclosureMode:
-                account.settings.privacy.identityDisclosure ?? "secret",
+              disclosureMode: account.settings.privacy.identityDisclosure ?? "secret",
               postContent: payload.content,
               draftPrompt: payload.imagePrompt,
               settings,
@@ -191,8 +148,7 @@ export async function prepareNextNoodlerReservePost(
           } catch (error) {
             if (
               error instanceof BackgroundConnectionBusyError ||
-              (error instanceof ConnectionAttemptRejectedError &&
-                error.cause instanceof NoodlerAttemptUnavailableError)
+              (error instanceof ConnectionAttemptRejectedError && error.cause instanceof NoodlerAttemptUnavailableError)
             ) {
               payload = {
                 ...payload,
@@ -214,8 +170,7 @@ export async function prepareNextNoodlerReservePost(
             metadata: {
               ...payload.metadata,
               imageGenerationFailed: true,
-              imageGenerationError:
-                "No image generation connection is configured.",
+              imageGenerationError: "No image generation connection is configured.",
             },
           };
         }
@@ -247,12 +202,8 @@ export async function prepareNextNoodlerReservePost(
       stagedMedia?.promote();
       return "prepared" as const;
     } catch (error) {
-      if (error instanceof BackgroundConnectionBusyError)
-        return "busy" as const;
-      if (
-        error instanceof ConnectionAttemptRejectedError &&
-        error.cause instanceof NoodlerAttemptUnavailableError
-      ) {
+      if (error instanceof BackgroundConnectionBusyError) return "busy" as const;
+      if (error instanceof ConnectionAttemptRejectedError && error.cause instanceof NoodlerAttemptUnavailableError) {
         return error.cause.status;
       }
       throw error;
@@ -261,10 +212,7 @@ export async function prepareNextNoodlerReservePost(
   return locked.acquired ? locked.value : "busy";
 }
 
-export async function reconcileNoodlerReserve(
-  db: DB,
-  at = new Date(),
-): Promise<number> {
+export async function reconcileNoodlerReserve(db: DB, at = new Date()): Promise<number> {
   const noodle = createSlurpStorage(db);
   await noodle.reconcileNoodlerPreparedPosts(at);
   return noodle.publishDueNoodlerPreparedPosts(at);

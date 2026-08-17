@@ -12,7 +12,10 @@ export async function activate({
   app: FastifyInstance;
   api: {
     registerService<T>(key: string, service: T): () => void | Promise<void>;
-    registerPrivilegedRoutes(routes: FastifyPluginAsync, options: { prefix: string }): Promise<() => void | Promise<void>>;
+    registerPrivilegedRoutes(
+      routes: FastifyPluginAsync,
+      options: { prefix: string },
+    ): Promise<() => void | Promise<void>>;
   };
 }) {
   // Capability routes are registered through the host's revocable privileged route slots.
@@ -26,9 +29,7 @@ export async function activate({
     api.registerService("noodle:backup", { pause: async <T>(run: () => Promise<T>) => run() }),
     api.registerService("noodle:prompt-context", { build: buildRecentSocialMediaActivityBlock }),
   ];
-  const schedulers = [
-    startNoodleRefreshScheduler(app),
-  ];
+  const schedulers = [startNoodleRefreshScheduler(app)];
   active = true;
   return async () => {
     active = false;

@@ -1,13 +1,4 @@
-import {
-  FileText,
-  Loader2,
-  Pencil,
-  RefreshCw,
-  RotateCcw,
-  Save,
-  Trash2,
-  UsersRound,
-} from "lucide-react";
+import { FileText, Loader2, Pencil, RefreshCw, RotateCcw, Save, Trash2, UsersRound } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -49,14 +40,7 @@ type SlurpSettingsProps = {
   onRestartOnboarding: () => void;
 };
 
-const archetypes = [
-  "ordinary",
-  "eccentric",
-  "crossFandom",
-  "raider",
-  "organicDiscovery",
-  "freeResource",
-] as const;
+const archetypes = ["ordinary", "eccentric", "crossFandom", "raider", "organicDiscovery", "freeResource"] as const;
 const archetypeLabels: Record<(typeof archetypes)[number], string> = {
   ordinary: "Regular readers",
   eccentric: "Unusual personalities",
@@ -122,8 +106,7 @@ export function SlurpSettings({
   const updateSettings = useUpdateSlurpSettings();
   const settings = settingsQuery.data;
   const [generationGuidanceDraft, setGenerationGuidanceDraft] = useState("");
-  const [generationGuidanceEditorOpen, setGenerationGuidanceEditorOpen] =
-    useState(false);
+  const [generationGuidanceEditorOpen, setGenerationGuidanceEditorOpen] = useState(false);
   const [imagePromptDraft, setImagePromptDraft] = useState("");
   const [imagePromptEditorOpen, setImagePromptEditorOpen] = useState(false);
   const [refreshModalOpen, setRefreshModalOpen] = useState(false);
@@ -131,10 +114,8 @@ export function SlurpSettings({
   const [refreshAccess, setRefreshAccess] = useState<"public" | "locked">("locked");
   useEffect(() => {
     if (settings) {
-      if (!generationGuidanceEditorOpen)
-        setGenerationGuidanceDraft(settings.generationGuidance);
-      if (!imagePromptEditorOpen)
-        setImagePromptDraft(settings.imageGenerationPrompt);
+      if (!generationGuidanceEditorOpen) setGenerationGuidanceDraft(settings.generationGuidance);
+      if (!imagePromptEditorOpen) setImagePromptDraft(settings.imageGenerationPrompt);
     }
   }, [
     generationGuidanceEditorOpen,
@@ -152,12 +133,9 @@ export function SlurpSettings({
       return false;
     }
   };
-  const update = (key: keyof SlurpSettings, value: unknown) =>
-    save({ [key]: value } as Partial<SlurpSettings>);
+  const update = (key: keyof SlurpSettings, value: unknown) => save({ [key]: value } as Partial<SlurpSettings>);
   const accountsQuery = useNoodlerAccounts(section === "creators" || section === "general");
-  const imageSettingsQuery = useSlurpImageConnections(
-    section === "images" || section === "creators",
-  );
+  const imageSettingsQuery = useSlurpImageConnections(section === "images" || section === "creators");
   const fanStatusQuery = useNoodlerFanActivityStatus(section === "audience");
   const reserveStatusQuery = useNoodlerReserveStatus(section === "creators");
   const updateAuto = useUpdateNoodlerAutoPosting();
@@ -167,22 +145,15 @@ export function SlurpSettings({
   const deleteCreator = useDeleteNoodlerStageProfile();
   const adoptSourceIdentity = useAdoptNoodlerSourceIdentity();
   const dismissSourceChanges = useDismissNoodlerSourceChanges();
-  const connectionsQuery = useSlurpConnections(
-    section === "general" || section === "images" || section === "creators",
-  );
+  const connectionsQuery = useSlurpConnections(section === "general" || section === "images" || section === "creators");
   const imageConnections = (connectionsQuery.data ?? []).filter(
     (connection) => connection.provider === "image_generation",
   );
   const imageSettings = imageSettingsQuery.data;
-  const generationGuidanceIsDefault =
-    settings?.generationGuidance === DEFAULT_SLURP_GENERATION_GUIDANCE;
-  const imagePromptIsDefault =
-    settings?.imageGenerationPrompt === DEFAULT_SLURP_IMAGE_GENERATION_PROMPT;
+  const generationGuidanceIsDefault = settings?.generationGuidance === DEFAULT_SLURP_GENERATION_GUIDANCE;
+  const imagePromptIsDefault = settings?.imageGenerationPrompt === DEFAULT_SLURP_IMAGE_GENERATION_PROMPT;
   const activityPreset = settings && slurpActivityPresetForSettings(settings);
-  const restore = async (
-    patch: Partial<SlurpSettings>,
-    message = "Settings saved.",
-  ) => {
+  const restore = async (patch: Partial<SlurpSettings>, message = "Settings saved.") => {
     try {
       await updateSettings.mutateAsync(patch);
       toast.success(message);
@@ -193,17 +164,10 @@ export function SlurpSettings({
     }
   };
   const restoreDefaultImagePrompt = () =>
-    restore(
-      { imageGenerationPrompt: DEFAULT_SLURP_IMAGE_GENERATION_PROMPT },
-      "Default image prompt restored.",
-    );
-  const saveImagePrompt = () =>
-    restore({ imageGenerationPrompt: imagePromptDraft }, "Image prompt saved.");
+    restore({ imageGenerationPrompt: DEFAULT_SLURP_IMAGE_GENERATION_PROMPT }, "Default image prompt restored.");
+  const saveImagePrompt = () => restore({ imageGenerationPrompt: imagePromptDraft }, "Image prompt saved.");
   const saveGenerationGuidance = () =>
-    restore(
-      { generationGuidance: generationGuidanceDraft },
-      "Generation guidance saved.",
-    );
+    restore({ generationGuidance: generationGuidanceDraft }, "Generation guidance saved.");
 
   if (settingsQuery.isError)
     return (
@@ -233,26 +197,19 @@ export function SlurpSettings({
         <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 p-5 sm:p-8">
           <header className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--border)] pb-6">
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--noodle-accent)]">
-                Slurp
-              </p>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--noodle-accent)]">Slurp</p>
               <h1 className="mt-1 text-2xl font-bold">Creator settings</h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
-                Control how creators publish, how images are made, and how
-                audience activity appears.
+                Control how creators publish, how images are made, and how audience activity appears.
               </p>
             </div>
-            <p className="text-xs text-[var(--muted-foreground)]">
-              Changes save automatically.
-            </p>
+            <p className="text-xs text-[var(--muted-foreground)]">Changes save automatically.</p>
           </header>
           <nav
             className="flex gap-2 overflow-x-auto border-b border-[var(--border)] pb-4"
             aria-label="Creator settings sections"
           >
-            {(
-              ["general", "creators", "images", "audience", "advanced"] as const
-            ).map((item) => (
+            {(["general", "creators", "images", "audience", "advanced"] as const).map((item) => (
               <button
                 key={item}
                 type="button"
@@ -260,9 +217,7 @@ export function SlurpSettings({
                 onClick={() => onNavigate({ ...navigation, section: item })}
                 className={`min-h-10 shrink-0 rounded-md border px-4 text-sm font-semibold ${section === item ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]" : "border-[var(--border)] hover:bg-[var(--accent)]"}`}
               >
-                {item === "general"
-                  ? "Publishing"
-                  : item[0].toUpperCase() + item.slice(1)}
+                {item === "general" ? "Publishing" : item[0].toUpperCase() + item.slice(1)}
               </button>
             ))}
           </nav>
@@ -286,7 +241,9 @@ export function SlurpSettings({
                   onClick={() => {
                     const creators = accountsQuery.data ?? [];
                     const enabled = creators.filter((creator) => creator.autoPosting.enabled);
-                    setRefreshAccountIds(new Set((enabled.length > 0 ? enabled : creators).map((creator) => creator.id)));
+                    setRefreshAccountIds(
+                      new Set((enabled.length > 0 ? enabled : creators).map((creator) => creator.id)),
+                    );
                     setRefreshAccess("locked");
                     setRefreshModalOpen(true);
                   }}
@@ -332,9 +289,7 @@ export function SlurpSettings({
                   label="Automatic creator posting"
                   detail="Allow enabled creators to publish on schedule."
                   value={settings.autoPostingScheduleEnabled}
-                  onChange={(value) =>
-                    update("autoPostingScheduleEnabled", value)
-                  }
+                  onChange={(value) => update("autoPostingScheduleEnabled", value)}
                 />
                 <Toggle
                   label="Quiet hours for character creators"
@@ -352,38 +307,20 @@ export function SlurpSettings({
                   setGenerationGuidanceEditorOpen(true);
                 }}
                 onRestore={() =>
-                  void restore(
-                    { generationGuidance: DEFAULT_SLURP_GENERATION_GUIDANCE },
-                    "Default guidance restored.",
-                  )
+                  void restore({ generationGuidance: DEFAULT_SLURP_GENERATION_GUIDANCE }, "Default guidance restored.")
                 }
               />
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field
-                  label="Creator text connection"
-                  detail="Used for creator posts, replies, and audience activity."
-                >
+                <Field label="Creator text connection" detail="Used for creator posts, replies, and audience activity.">
                   <select
                     value={settings.generationConnectionId ?? ""}
-                    disabled={
-                      connectionsQuery.isLoading ||
-                      connectionsQuery.isError ||
-                      updateSettings.isPending
-                    }
-                    onChange={(event) =>
-                      void update(
-                        "generationConnectionId",
-                        event.target.value || null,
-                      )
-                    }
+                    disabled={connectionsQuery.isLoading || connectionsQuery.isError || updateSettings.isPending}
+                    onChange={(event) => void update("generationConnectionId", event.target.value || null)}
                     className="h-10 w-full rounded-md border border-[var(--border)] bg-transparent px-3 text-sm disabled:opacity-50"
                   >
                     <option value="">Engine default language connection</option>
                     {(connectionsQuery.data ?? [])
-                      .filter(
-                        (connection) =>
-                          connection.provider !== "image_generation",
-                      )
+                      .filter((connection) => connection.provider !== "image_generation")
                       .map((connection) => (
                         <option key={connection.id} value={connection.id}>
                           {connection.name ?? connection.model ?? connection.id}
@@ -391,20 +328,13 @@ export function SlurpSettings({
                       ))}
                   </select>
                   {connectionsQuery.isLoading && (
-                    <p className="text-xs font-normal text-[var(--muted-foreground)]">
-                      Loading connections...
-                    </p>
+                    <p className="text-xs font-normal text-[var(--muted-foreground)]">Loading connections...</p>
                   )}
                   {connectionsQuery.isError && (
-                    <p className="text-xs font-normal text-red-400">
-                      Connections could not be loaded.
-                    </p>
+                    <p className="text-xs font-normal text-red-400">Connections could not be loaded.</p>
                   )}
                 </Field>
-                <Field
-                  label="Posts per day"
-                  detail="Use a custom value only when the presets do not fit."
-                >
+                <Field label="Posts per day" detail="Use a custom value only when the presets do not fit.">
                   <NumberSetting
                     value={settings.postsPerDay}
                     min={1}
@@ -454,16 +384,11 @@ export function SlurpSettings({
                     </option>
                   ))}
                 </select>
-                {(imageSettingsQuery.isLoading ||
-                  connectionsQuery.isLoading) && (
-                  <p className="text-xs font-normal text-[var(--muted-foreground)]">
-                    Loading image settings...
-                  </p>
+                {(imageSettingsQuery.isLoading || connectionsQuery.isLoading) && (
+                  <p className="text-xs font-normal text-[var(--muted-foreground)]">Loading image settings...</p>
                 )}
                 {(imageSettingsQuery.isError || connectionsQuery.isError) && (
-                  <p className="text-xs font-normal text-red-400">
-                    Image settings could not be loaded.
-                  </p>
+                  <p className="text-xs font-normal text-red-400">Image settings could not be loaded.</p>
                 )}
               </Field>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -471,25 +396,19 @@ export function SlurpSettings({
                   label="Use avatar references"
                   detail="Give the image model the creator avatar when policy allows it."
                   value={settings.imageGenerationUseAvatarReferences}
-                  onChange={(value) =>
-                    update("imageGenerationUseAvatarReferences", value)
-                  }
+                  onChange={(value) => update("imageGenerationUseAvatarReferences", value)}
                 />
                 <Toggle
                   label="Include creator descriptions"
                   detail="Add source appearance details to image prompts."
                   value={settings.imageGenerationIncludeDescriptions}
-                  onChange={(value) =>
-                    update("imageGenerationIncludeDescriptions", value)
-                  }
+                  onChange={(value) => update("imageGenerationIncludeDescriptions", value)}
                 />
                 <Toggle
                   label="Enable images for new creators"
                   detail="This changes creator setup defaults. It does not change existing creators."
                   value={settings.autoPostingImagesEnabled}
-                  onChange={(value) =>
-                    update("autoPostingImagesEnabled", value)
-                  }
+                  onChange={(value) => update("autoPostingImagesEnabled", value)}
                 />
               </div>
               <PromptCard
@@ -539,139 +458,122 @@ export function SlurpSettings({
               ) : accountsQuery.data?.length ? (
                 <div className="divide-y divide-[var(--border)] rounded-md border border-[var(--border)] px-4">
                   {accountsQuery.data.map((creator) => {
-                    const status = reserveStatusQuery.data?.creators.find(
-                      (entry) => entry.accountId === creator.id,
-                    );
+                    const status = reserveStatusQuery.data?.creators.find((entry) => entry.accountId === creator.id);
                     return (
                       <div key={creator.id} className="py-4">
                         <div className="flex flex-wrap items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onNavigate({
-                              mode: "creator",
-                              view: "profile",
-                              accountId: creator.id,
-                              returnToSettings: navigation,
-                            })
-                          }
-                          className="flex min-w-52 flex-1 items-center gap-3 text-left"
-                        >
-                          <Avatar account={creator} size="sm" />
-                          <span className="min-w-0">
-                            <span className="block truncate text-sm font-semibold">
-                              {creator.displayName}
-                            </span>
-                            <span className="mt-1 block truncate text-xs text-[var(--muted-foreground)]">
-                              @{creator.handle} ·{" "}
-                              {status?.nextPreparedAt
-                                ? `Next ${new Date(status.nextPreparedAt).toLocaleString()}`
-                                : creator.sourceStatus.state}
-                            </span>
-                          </span>
-                        </button>
-                        <Toggle
-                          label="Auto-post"
-                          value={creator.autoPosting.enabled}
-                          compact
-                          onChange={(value) =>
-                            updateAuto.mutate(
-                              { accountId: creator.id, enabled: value },
-                              {
-                                onError: (error) =>
-                                  toast.error(errorMessage(error)),
-                              },
-                            )
-                          }
-                        />
-                        <Toggle
-                          label="Images"
-                          value={creator.autoPosting.imagesEnabled}
-                          compact
-                          onChange={(value) =>
-                            updateAuto.mutate(
-                              { accountId: creator.id, imagesEnabled: value },
-                              {
-                                onError: (error) =>
-                                  toast.error(errorMessage(error)),
-                              },
-                            )
-                          }
-                        />
-                        <select
-                          aria-label={`Image connection for ${creator.displayName}`}
-                          disabled={
-                            imageSettingsQuery.isLoading ||
-                            imageSettingsQuery.isError ||
-                            connectionsQuery.isLoading ||
-                            connectionsQuery.isError ||
-                            updateImages.isPending
-                          }
-                          value={
-                            imageSettings?.creatorConnectionIds[creator.id] ??
-                            ""
-                          }
-                          onChange={(event) =>
-                            updateImages.mutate(
-                              {
-                                creatorId: creator.id,
-                                connectionId: event.target.value || null,
-                              },
-                              {
-                                onError: (error) =>
-                                  toast.error(errorMessage(error)),
-                              },
-                            )
-                          }
-                          className="h-10 min-w-40 rounded-md border border-[var(--border)] bg-transparent px-2 text-xs disabled:opacity-50"
-                        >
-                          <option value="">
-                            Inherit global image connection
-                          </option>
-                          {imageConnections.map((connection) => (
-                            <option key={connection.id} value={connection.id}>
-                              {connection.name ??
-                                connection.model ??
-                                connection.id}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          aria-label={`Edit ${creator.displayName}`}
-                          onClick={() => onEditCreator(creator)}
-                          className="flex h-10 w-10 items-center justify-center rounded-md border border-[var(--border)] hover:bg-[var(--accent)]"
-                        >
-                          <Pencil size={15} />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={`Delete ${creator.displayName}`}
-                          disabled={deleteCreator.isPending}
-                          onClick={async () => {
-                            if (
-                              await showConfirmDialog({
-                                title: "Delete creator profile?",
-                                message: `Delete ${creator.displayName} and its Slurp profile?`,
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onNavigate({
+                                mode: "creator",
+                                view: "profile",
+                                accountId: creator.id,
+                                returnToSettings: navigation,
                               })
-                            )
-                              deleteCreator.mutate(creator.id, {
-                                onSuccess: () =>
-                                  toast.success(
-                                    `${creator.displayName} deleted.`,
-                                  ),
-                                onError: (error) =>
-                                  toast.error(errorMessage(error)),
-                              });
-                          }}
-                          className="flex h-10 w-10 items-center justify-center rounded-md text-red-400 hover:bg-red-400/10 disabled:opacity-50"
-                        >
-                          <Trash2 size={15} />
-                        </button>
+                            }
+                            className="flex min-w-52 flex-1 items-center gap-3 text-left"
+                          >
+                            <Avatar account={creator} size="sm" />
+                            <span className="min-w-0">
+                              <span className="block truncate text-sm font-semibold">{creator.displayName}</span>
+                              <span className="mt-1 block truncate text-xs text-[var(--muted-foreground)]">
+                                @{creator.handle} ·{" "}
+                                {status?.nextPreparedAt
+                                  ? `Next ${new Date(status.nextPreparedAt).toLocaleString()}`
+                                  : creator.sourceStatus.state}
+                              </span>
+                            </span>
+                          </button>
+                          <Toggle
+                            label="Auto-post"
+                            value={creator.autoPosting.enabled}
+                            compact
+                            onChange={(value) =>
+                              updateAuto.mutate(
+                                { accountId: creator.id, enabled: value },
+                                {
+                                  onError: (error) => toast.error(errorMessage(error)),
+                                },
+                              )
+                            }
+                          />
+                          <Toggle
+                            label="Images"
+                            value={creator.autoPosting.imagesEnabled}
+                            compact
+                            onChange={(value) =>
+                              updateAuto.mutate(
+                                { accountId: creator.id, imagesEnabled: value },
+                                {
+                                  onError: (error) => toast.error(errorMessage(error)),
+                                },
+                              )
+                            }
+                          />
+                          <select
+                            aria-label={`Image connection for ${creator.displayName}`}
+                            disabled={
+                              imageSettingsQuery.isLoading ||
+                              imageSettingsQuery.isError ||
+                              connectionsQuery.isLoading ||
+                              connectionsQuery.isError ||
+                              updateImages.isPending
+                            }
+                            value={imageSettings?.creatorConnectionIds[creator.id] ?? ""}
+                            onChange={(event) =>
+                              updateImages.mutate(
+                                {
+                                  creatorId: creator.id,
+                                  connectionId: event.target.value || null,
+                                },
+                                {
+                                  onError: (error) => toast.error(errorMessage(error)),
+                                },
+                              )
+                            }
+                            className="h-10 min-w-40 rounded-md border border-[var(--border)] bg-transparent px-2 text-xs disabled:opacity-50"
+                          >
+                            <option value="">Inherit global image connection</option>
+                            {imageConnections.map((connection) => (
+                              <option key={connection.id} value={connection.id}>
+                                {connection.name ?? connection.model ?? connection.id}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            aria-label={`Edit ${creator.displayName}`}
+                            onClick={() => onEditCreator(creator)}
+                            className="flex h-10 w-10 items-center justify-center rounded-md border border-[var(--border)] hover:bg-[var(--accent)]"
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Delete ${creator.displayName}`}
+                            disabled={deleteCreator.isPending}
+                            onClick={async () => {
+                              if (
+                                await showConfirmDialog({
+                                  title: "Delete creator profile?",
+                                  message: `Delete ${creator.displayName} and its Slurp profile?`,
+                                })
+                              )
+                                deleteCreator.mutate(creator.id, {
+                                  onSuccess: () => toast.success(`${creator.displayName} deleted.`),
+                                  onError: (error) => toast.error(errorMessage(error)),
+                                });
+                            }}
+                            className="flex h-10 w-10 items-center justify-center rounded-md text-red-400 hover:bg-red-400/10 disabled:opacity-50"
+                          >
+                            <Trash2 size={15} />
+                          </button>
                         </div>
                         {creator.sourceStatus.state === "missing" && (
                           <p className="mt-3 rounded-md border border-red-400/30 bg-red-400/5 p-3 text-xs text-red-300">
-                            The linked source is missing. This Creator and its posts are retained, but source-based generation and automatic posting are paused.
+                            The linked source is missing. This Creator and its posts are retained, but source-based
+                            generation and automatic posting are paused.
                           </p>
                         )}
                         {creator.sourceStatus.state === "changed" && (
@@ -679,10 +581,38 @@ export function SlurpSettings({
                             <p className="text-xs font-semibold">Linked source changes need review.</p>
                             <div className="mt-2 flex flex-wrap gap-2">
                               {creator.disclosureMode === "open" && (
-                                <button type="button" disabled={adoptSourceIdentity.isPending} onClick={() => adoptSourceIdentity.mutate(creator.id, { onError: (error) => toast.error(errorMessage(error)) })} className="min-h-9 rounded-md bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50">Accept identity</button>
+                                <button
+                                  type="button"
+                                  disabled={adoptSourceIdentity.isPending}
+                                  onClick={() =>
+                                    adoptSourceIdentity.mutate(creator.id, {
+                                      onError: (error) => toast.error(errorMessage(error)),
+                                    })
+                                  }
+                                  className="min-h-9 rounded-md bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
+                                >
+                                  Accept identity
+                                </button>
                               )}
-                              <button type="button" onClick={() => onRedraftCreator(creator)} className="min-h-9 rounded-md border border-[var(--border)] px-3 text-xs font-semibold">Review and redraft</button>
-                              <button type="button" disabled={dismissSourceChanges.isPending} onClick={() => dismissSourceChanges.mutate(creator.id, { onError: (error) => toast.error(errorMessage(error)) })} className="min-h-9 rounded-md border border-[var(--border)] px-3 text-xs font-semibold disabled:opacity-50">Dismiss</button>
+                              <button
+                                type="button"
+                                onClick={() => onRedraftCreator(creator)}
+                                className="min-h-9 rounded-md border border-[var(--border)] px-3 text-xs font-semibold"
+                              >
+                                Review and redraft
+                              </button>
+                              <button
+                                type="button"
+                                disabled={dismissSourceChanges.isPending}
+                                onClick={() =>
+                                  dismissSourceChanges.mutate(creator.id, {
+                                    onError: (error) => toast.error(errorMessage(error)),
+                                  })
+                                }
+                                className="min-h-9 rounded-md border border-[var(--border)] px-3 text-xs font-semibold disabled:opacity-50"
+                              >
+                                Dismiss
+                              </button>
                             </div>
                           </div>
                         )}
@@ -700,16 +630,12 @@ export function SlurpSettings({
 
           {section === "advanced" && (
             <div className="space-y-5">
-              <SectionTitle
-                title="Advanced"
-                detail="Maintenance actions and settings for experienced users."
-              />
+              <SectionTitle title="Advanced" detail="Maintenance actions and settings for experienced users." />
               <div className="rounded-md border border-[var(--border)] p-4">
                 <h2 className="text-sm font-semibold">Run setup again</h2>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
-                  Use setup again to review your creators, publishing pace,
-                  image defaults, and audience choices. Existing creator
-                  profiles are not deleted.
+                  Use setup again to review your creators, publishing pace, image defaults, and audience choices.
+                  Existing creator profiles are not deleted.
                 </p>
                 <button
                   type="button"
@@ -743,15 +669,10 @@ export function SlurpSettings({
                       onError: (error) => toast.error(errorMessage(error)),
                     })
                   }
-                  disabled={
-                    refreshFans.isPending || !settings.fanActivityEnabled
-                  }
+                  disabled={refreshFans.isPending || !settings.fanActivityEnabled}
                   className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
                 >
-                  <RefreshCw
-                    size={14}
-                    className={refreshFans.isPending ? "animate-spin" : ""}
-                  />
+                  <RefreshCw size={14} className={refreshFans.isPending ? "animate-spin" : ""} />
                   Refresh now
                 </button>
               </div>
@@ -762,10 +683,7 @@ export function SlurpSettings({
                 onChange={(value) => update("fanActivityEnabled", value)}
               />
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field
-                  label="Runs per day"
-                  detail="How often Slurp creates audience activity."
-                >
+                <Field label="Runs per day" detail="How often Slurp creates audience activity.">
                   <NumberSetting
                     value={settings.fanActivityRunsPerDay}
                     min={1}
@@ -816,8 +734,7 @@ export function SlurpSettings({
               <div>
                 <h2 className="text-sm font-semibold">Audience mix</h2>
                 <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                  Higher values make an audience type more likely. Zero disables
-                  it.
+                  Higher values make an audience type more likely. Zero disables it.
                 </p>
                 <div className="mt-3 grid gap-4 sm:grid-cols-2">
                   {archetypes.map((key) => (
@@ -831,12 +748,8 @@ export function SlurpSettings({
                             ...settings.fanArchetypeWeights,
                             [key]: value,
                           };
-                          if (
-                            !Object.values(next).some((weight) => weight > 0)
-                          ) {
-                            toast.error(
-                              "At least one audience type must remain enabled.",
-                            );
+                          if (!Object.values(next).some((weight) => weight > 0)) {
+                            toast.error("At least one audience type must remain enabled.");
                             return;
                           }
                           update("fanArchetypeWeights", next);
@@ -870,17 +783,49 @@ export function SlurpSettings({
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-sm font-semibold">Creators</h3>
               <div className="flex gap-2 text-xs">
-                <button type="button" onClick={() => setRefreshAccountIds(new Set((accountsQuery.data ?? []).map((creator) => creator.id)))} className="text-[var(--noodle-accent)] hover:underline">Select all</button>
-                <button type="button" onClick={() => setRefreshAccountIds(new Set())} className="text-[var(--muted-foreground)] hover:underline">Clear</button>
+                <button
+                  type="button"
+                  onClick={() => setRefreshAccountIds(new Set((accountsQuery.data ?? []).map((creator) => creator.id)))}
+                  className="text-[var(--noodle-accent)] hover:underline"
+                >
+                  Select all
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRefreshAccountIds(new Set())}
+                  className="text-[var(--muted-foreground)] hover:underline"
+                >
+                  Clear
+                </button>
               </div>
             </div>
             <div className="mt-2 max-h-64 divide-y divide-[var(--border)] overflow-y-auto rounded-md border border-[var(--border)]">
               {(accountsQuery.data ?? []).map((creator) => (
-                <label key={creator.id} className="flex min-h-12 cursor-pointer items-center gap-3 px-3 py-2 hover:bg-[var(--accent)]/40">
-                  <input type="checkbox" checked={refreshAccountIds.has(creator.id)} onChange={(event) => setRefreshAccountIds((current) => { const next = new Set(current); if (event.target.checked) next.add(creator.id); else next.delete(creator.id); return next; })} className="h-4 w-4 accent-[var(--noodle-accent)]" />
+                <label
+                  key={creator.id}
+                  className="flex min-h-12 cursor-pointer items-center gap-3 px-3 py-2 hover:bg-[var(--accent)]/40"
+                >
+                  <input
+                    type="checkbox"
+                    checked={refreshAccountIds.has(creator.id)}
+                    onChange={(event) =>
+                      setRefreshAccountIds((current) => {
+                        const next = new Set(current);
+                        if (event.target.checked) next.add(creator.id);
+                        else next.delete(creator.id);
+                        return next;
+                      })
+                    }
+                    className="h-4 w-4 accent-[var(--noodle-accent)]"
+                  />
                   <Avatar account={creator} size="sm" />
-                  <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{creator.displayName}</span><span className="block truncate text-xs text-[var(--muted-foreground)]">@{creator.handle}</span></span>
-                  {creator.autoPosting.enabled && <span className="text-[0.625rem] font-semibold text-[var(--noodle-accent)]">Auto-post</span>}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold">{creator.displayName}</span>
+                    <span className="block truncate text-xs text-[var(--muted-foreground)]">@{creator.handle}</span>
+                  </span>
+                  {creator.autoPosting.enabled && (
+                    <span className="text-[0.625rem] font-semibold text-[var(--noodle-accent)]">Auto-post</span>
+                  )}
                 </label>
               ))}
             </div>
@@ -889,16 +834,56 @@ export function SlurpSettings({
             <legend className="text-sm font-semibold">Post access</legend>
             <div className="mt-2 grid grid-cols-2 rounded-md border border-[var(--border)] p-1">
               {(["public", "locked"] as const).map((access) => (
-                <button key={access} type="button" aria-pressed={refreshAccess === access} onClick={() => setRefreshAccess(access)} className={`min-h-10 rounded-md text-sm font-semibold capitalize ${refreshAccess === access ? "bg-[var(--noodle-accent)] text-zinc-950" : "text-[var(--muted-foreground)] hover:bg-[var(--accent)]"}`}>{access}</button>
+                <button
+                  key={access}
+                  type="button"
+                  aria-pressed={refreshAccess === access}
+                  onClick={() => setRefreshAccess(access)}
+                  className={`min-h-10 rounded-md text-sm font-semibold capitalize ${refreshAccess === access ? "bg-[var(--noodle-accent)] text-zinc-950" : "text-[var(--muted-foreground)] hover:bg-[var(--accent)]"}`}
+                >
+                  {access}
+                </button>
               ))}
             </div>
           </fieldset>
           <p className="text-xs leading-5 text-[var(--muted-foreground)]">
-            Each selected Creator generates one post. This runs immediately and does not wait for the automatic publishing schedule.
+            Each selected Creator generates one post. This runs immediately and does not wait for the automatic
+            publishing schedule.
           </p>
           <div className="flex justify-end gap-2 border-t border-[var(--border)] pt-4">
-            <button type="button" disabled={refreshCreators.isPending} onClick={() => setRefreshModalOpen(false)} className="min-h-10 rounded-md border border-[var(--border)] px-4 text-xs font-semibold">Cancel</button>
-            <button type="button" disabled={refreshCreators.isPending || refreshAccountIds.size === 0} onClick={() => refreshCreators.mutate({ accountIds: [...refreshAccountIds], access: refreshAccess }, { onSuccess: ({ outcomes }) => { const generated = outcomes.filter((outcome) => outcome.status === "generated").length; const skipped = outcomes.filter((outcome) => outcome.status === "skipped").length; const failed = outcomes.length - generated - skipped; setRefreshModalOpen(false); toast.success(`${generated} published${skipped ? `, ${skipped} skipped` : ""}${failed ? `, ${failed} failed` : ""}.`); }, onError: (error) => toast.error(errorMessage(error)) })} className="inline-flex min-h-10 items-center gap-2 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-50">{refreshCreators.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}Generate {refreshAccountIds.size || ""}</button>
+            <button
+              type="button"
+              disabled={refreshCreators.isPending}
+              onClick={() => setRefreshModalOpen(false)}
+              className="min-h-10 rounded-md border border-[var(--border)] px-4 text-xs font-semibold"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={refreshCreators.isPending || refreshAccountIds.size === 0}
+              onClick={() =>
+                refreshCreators.mutate(
+                  { accountIds: [...refreshAccountIds], access: refreshAccess },
+                  {
+                    onSuccess: ({ outcomes }) => {
+                      const generated = outcomes.filter((outcome) => outcome.status === "generated").length;
+                      const skipped = outcomes.filter((outcome) => outcome.status === "skipped").length;
+                      const failed = outcomes.length - generated - skipped;
+                      setRefreshModalOpen(false);
+                      toast.success(
+                        `${generated} published${skipped ? `, ${skipped} skipped` : ""}${failed ? `, ${failed} failed` : ""}.`,
+                      );
+                    },
+                    onError: (error) => toast.error(errorMessage(error)),
+                  },
+                )
+              }
+              className="inline-flex min-h-10 items-center gap-2 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-50"
+            >
+              {refreshCreators.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              Generate {refreshAccountIds.size || ""}
+            </button>
           </div>
         </div>
       </Modal>
@@ -912,12 +897,9 @@ export function SlurpSettings({
           setGenerationGuidanceEditorOpen(false);
         }}
         onSave={async () => {
-          if (await saveGenerationGuidance())
-            setGenerationGuidanceEditorOpen(false);
+          if (await saveGenerationGuidance()) setGenerationGuidanceEditorOpen(false);
         }}
-        onRestore={() =>
-          setGenerationGuidanceDraft(DEFAULT_SLURP_GENERATION_GUIDANCE)
-        }
+        onRestore={() => setGenerationGuidanceDraft(DEFAULT_SLURP_GENERATION_GUIDANCE)}
         pending={updateSettings.isPending}
       />
       <PromptEditor
@@ -932,9 +914,7 @@ export function SlurpSettings({
         onSave={async () => {
           if (await saveImagePrompt()) setImagePromptEditorOpen(false);
         }}
-        onRestore={() =>
-          setImagePromptDraft(DEFAULT_SLURP_IMAGE_GENERATION_PROMPT)
-        }
+        onRestore={() => setImagePromptDraft(DEFAULT_SLURP_IMAGE_GENERATION_PROMPT)}
         pending={updateSettings.isPending}
       />
     </>
@@ -945,41 +925,23 @@ function SectionTitle({ title, detail }: { title: string; detail: string }) {
   return (
     <div>
       <h2 className="text-base font-bold">{title}</h2>
-      <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
-        {detail}
-      </p>
+      <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">{detail}</p>
     </div>
   );
 }
 function GuidanceBox({ title, detail }: { title: string; detail: string }) {
   return (
     <div className="rounded-md border border-[var(--noodle-accent)]/30 bg-[var(--noodle-accent)]/[0.06] p-4">
-      <p className="text-sm font-semibold text-[var(--noodle-accent)]">
-        {title}
-      </p>
-      <p className="mt-1 text-sm leading-6 text-[var(--muted-foreground)]">
-        {detail}
-      </p>
+      <p className="text-sm font-semibold text-[var(--noodle-accent)]">{title}</p>
+      <p className="mt-1 text-sm leading-6 text-[var(--muted-foreground)]">{detail}</p>
     </div>
   );
 }
-function Field({
-  label,
-  detail,
-  children,
-}: {
-  label: string;
-  detail?: string;
-  children: ReactNode;
-}) {
+function Field({ label, detail, children }: { label: string; detail?: string; children: ReactNode }) {
   return (
     <label className="block space-y-1.5 text-sm font-semibold">
       <span className="block">{label}</span>
-      {detail && (
-        <span className="block text-xs font-normal leading-5 text-[var(--muted-foreground)]">
-          {detail}
-        </span>
-      )}
+      {detail && <span className="block text-xs font-normal leading-5 text-[var(--muted-foreground)]">{detail}</span>}
       {children}
     </label>
   );
@@ -1004,9 +966,7 @@ function Toggle({
       <span className="min-w-0">
         <span className="block font-semibold">{label}</span>
         {detail && (
-          <span className="mt-1 block text-xs font-normal leading-5 text-[var(--muted-foreground)]">
-            {detail}
-          </span>
+          <span className="mt-1 block text-xs font-normal leading-5 text-[var(--muted-foreground)]">{detail}</span>
         )}
       </span>
       <input
@@ -1091,13 +1051,7 @@ function PromptEditor({
   pending: boolean;
 }) {
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title={title}
-      width="max-w-3xl"
-      closeDisabled={pending}
-    >
+    <Modal open={open} onClose={onClose} title={title} width="max-w-3xl" closeDisabled={pending}>
       <div className="space-y-4">
         <label className="block text-sm font-semibold">
           <span className="sr-only">{title}</span>
@@ -1133,11 +1087,7 @@ function PromptEditor({
               disabled={!value.trim() || pending}
               className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-45"
             >
-              {pending ? (
-                <Loader2 size={13} className="animate-spin" />
-              ) : (
-                <Save size={13} />
-              )}
+              {pending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
               Save prompt
             </button>
           </div>

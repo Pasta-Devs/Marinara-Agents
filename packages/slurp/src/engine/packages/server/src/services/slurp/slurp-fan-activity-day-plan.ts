@@ -78,11 +78,7 @@ function timezone(): string {
 }
 
 function creatorList(creatorIds: string[]): string[] {
-  return [
-    ...new Set(
-      creatorIds.filter((id) => typeof id === "string" && id.length > 0),
-    ),
-  ].sort();
+  return [...new Set(creatorIds.filter((id) => typeof id === "string" && id.length > 0))].sort();
 }
 
 function validAuthorSnapshot(value: unknown): value is NoodleAuthorSnapshot {
@@ -90,15 +86,12 @@ function validAuthorSnapshot(value: unknown): value is NoodleAuthorSnapshot {
   const row = value as Record<string, unknown>;
   return (
     typeof row.id === "string" &&
-    (row.kind === "persona" ||
-      row.kind === "character" ||
-      row.kind === "random_user") &&
+    (row.kind === "persona" || row.kind === "character" || row.kind === "random_user") &&
     typeof row.entityId === "string" &&
     typeof row.handle === "string" &&
     typeof row.displayName === "string" &&
     (row.avatarUrl === null || typeof row.avatarUrl === "string") &&
-    (row.avatarCrop === null ||
-      (typeof row.avatarCrop === "object" && !Array.isArray(row.avatarCrop)))
+    (row.avatarCrop === null || (typeof row.avatarCrop === "object" && !Array.isArray(row.avatarCrop)))
   );
 }
 
@@ -135,28 +128,15 @@ function validRun(value: unknown): value is NoodleFanActivityDayPlanRun {
   );
 }
 
-export function parsePersistedNoodleFanActivityDayPlan(
-  value: unknown,
-): PersistedNoodleFanActivityDayPlan | null {
+export function parsePersistedNoodleFanActivityDayPlan(value: unknown): PersistedNoodleFanActivityDayPlan | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const row = value as Record<string, unknown>;
   if (row.version !== NOODLE_FAN_ACTIVITY_DAY_PLAN_VERSION) return null;
-  if (
-    typeof row.localDate !== "string" ||
-    !/^\d{4}-\d{2}-\d{2}$/u.test(row.localDate)
-  )
-    return null;
-  if (
-    typeof row.timezone !== "string" ||
-    !row.timezone ||
-    !Array.isArray(row.runs)
-  )
-    return null;
+  if (typeof row.localDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/u.test(row.localDate)) return null;
+  if (typeof row.timezone !== "string" || !row.timezone || !Array.isArray(row.runs)) return null;
   const validRuns = row.runs.every(validRun);
   const manualRunCount = validRuns
-    ? row.runs.filter(
-        (run) => (run as NoodleFanActivityDayPlanRun).manual === true,
-      ).length
+    ? row.runs.filter((run) => (run as NoodleFanActivityDayPlanRun).manual === true).length
     : 0;
   const automaticRunCount = validRuns ? row.runs.length - manualRunCount : 0;
   if (
@@ -183,16 +163,11 @@ export function parsePersistedNoodleFanActivityDayPlan(
   };
 }
 
-function scheduledRuns(
-  at: Date,
-  runsPerDay: number = NOODLE_FAN_ACTIVITY_RUNS_PER_DAY,
-): NoodleFanActivityDayPlanRun[] {
+function scheduledRuns(at: Date, runsPerDay: number = NOODLE_FAN_ACTIVITY_RUNS_PER_DAY): NoodleFanActivityDayPlanRun[] {
   const start = new Date(at.getFullYear(), at.getMonth(), at.getDate());
   return Array.from({ length: runsPerDay }, (_, index) => ({
     id: `${localDate(at)}-run-${index + 1}`,
-    scheduledAt: new Date(
-      start.getTime() + (index * 24 * 60 * 60 * 1000) / runsPerDay,
-    ).toISOString(),
+    scheduledAt: new Date(start.getTime() + (index * 24 * 60 * 60 * 1000) / runsPerDay).toISOString(),
     creatorIds: [],
     status: "scheduled" as const,
     acceptedActivities: [],
@@ -211,57 +186,29 @@ export function reconcileNoodleFanActivityDayPlan(
   const date = localDate(at);
   const zone = timezone();
   if (current?.localDate === date && current.timezone === zone) {
-    const targetRuns = Math.max(
-      1,
-      Math.min(NOODLE_FAN_ACTIVITY_MAX_RUNS_PER_DAY, runsPerDay),
-    );
+    const targetRuns = Math.max(1, Math.min(NOODLE_FAN_ACTIVITY_MAX_RUNS_PER_DAY, runsPerDay));
     const manualRuns = current.runs.filter((run) => run.manual);
     const automaticRuns = current.runs.filter((run) => !run.manual);
     const usedRuns = automaticRuns.filter((run) => run.status !== "scheduled");
     const scheduledRunsById = new Map(
-      automaticRuns
-        .filter((run) => run.status === "scheduled")
-        .map((run) => [run.id, run]),
+      automaticRuns.filter((run) => run.status === "scheduled").map((run) => [run.id, run]),
     );
-    const retainedScheduledRuns = [...scheduledRunsById.values()].slice(
-      0,
-      Math.max(0, targetRuns - usedRuns.length),
-    );
-    const retainedIds = new Set(
-      [...usedRuns, ...retainedScheduledRuns].map((run) => run.id),
-    );
+    const retainedScheduledRuns = [...scheduledRunsById.values()].slice(0, Math.max(0, targetRuns - usedRuns.length));
+    const retainedIds = new Set([...usedRuns, ...retainedScheduledRuns].map((run) => run.id));
     const addedRuns = scheduledRuns(at, targetRuns)
       .filter((run) => !retainedIds.has(run.id))
-      .slice(
-        0,
-        Math.max(
-          0,
-          targetRuns - usedRuns.length - retainedScheduledRuns.length,
-        ),
-      );
+      .slice(0, Math.max(0, targetRuns - usedRuns.length - retainedScheduledRuns.length));
     const creators = creatorList(creatorIds);
-    let offset =
-      creators.length === 0 ? 0 : current.nextCreatorOffset % creators.length;
+    let offset = creators.length === 0 ? 0 : current.nextCreatorOffset % creators.length;
     for (const run of addedRuns) {
-      const count = Math.min(
-        NOODLE_FAN_ACTIVITY_MAX_CREATORS_PER_RUN,
-        creators.length,
-      );
-      run.creatorIds = Array.from(
-        { length: count },
-        (_, index) => creators[(offset + index) % creators.length]!,
-      );
+      const count = Math.min(NOODLE_FAN_ACTIVITY_MAX_CREATORS_PER_RUN, creators.length);
+      run.creatorIds = Array.from({ length: count }, (_, index) => creators[(offset + index) % creators.length]!);
       offset = creators.length === 0 ? 0 : (offset + count) % creators.length;
     }
     return reconcileOverdueNoodleFanActivityRuns(
       {
         ...current,
-        runs: [
-          ...usedRuns,
-          ...retainedScheduledRuns,
-          ...addedRuns,
-          ...manualRuns,
-        ],
+        runs: [...usedRuns, ...retainedScheduledRuns, ...addedRuns, ...manualRuns],
         nextCreatorOffset: offset,
       },
       at,
@@ -269,23 +216,11 @@ export function reconcileNoodleFanActivityDayPlan(
   }
 
   const creators = creatorList(creatorIds);
-  const runs = scheduledRuns(
-    at,
-    Math.max(1, Math.min(NOODLE_FAN_ACTIVITY_MAX_RUNS_PER_DAY, runsPerDay)),
-  );
-  let offset =
-    creators.length === 0
-      ? 0
-      : (current?.nextCreatorOffset ?? 0) % creators.length;
+  const runs = scheduledRuns(at, Math.max(1, Math.min(NOODLE_FAN_ACTIVITY_MAX_RUNS_PER_DAY, runsPerDay)));
+  let offset = creators.length === 0 ? 0 : (current?.nextCreatorOffset ?? 0) % creators.length;
   for (const run of runs) {
-    const count = Math.min(
-      NOODLE_FAN_ACTIVITY_MAX_CREATORS_PER_RUN,
-      creators.length,
-    );
-    run.creatorIds = Array.from(
-      { length: count },
-      (_, index) => creators[(offset + index) % creators.length]!,
-    );
+    const count = Math.min(NOODLE_FAN_ACTIVITY_MAX_CREATORS_PER_RUN, creators.length);
+    run.creatorIds = Array.from({ length: count }, (_, index) => creators[(offset + index) % creators.length]!);
     offset = creators.length === 0 ? 0 : (offset + count) % creators.length;
   }
   return {
@@ -307,9 +242,7 @@ function reconcileOverdueNoodleFanActivityRuns(
   return {
     ...plan,
     runs: plan.runs.map((run) =>
-      run.status === "scheduled" &&
-      Date.parse(run.scheduledAt) <= at.getTime() &&
-      run.id !== newest
+      run.status === "scheduled" && Date.parse(run.scheduledAt) <= at.getTime() && run.id !== newest
         ? { ...run, status: "skipped", finishedAt: at.toISOString() }
         : run,
     ),
@@ -323,20 +256,10 @@ export function dueNoodleFanActivityRun(
   return dueScheduledRuns(plan, at).at(-1) ?? null;
 }
 
-function dueScheduledRuns(
-  plan: PersistedNoodleFanActivityDayPlan,
-  at: Date,
-): NoodleFanActivityDayPlanRun[] {
+function dueScheduledRuns(plan: PersistedNoodleFanActivityDayPlan, at: Date): NoodleFanActivityDayPlanRun[] {
   return plan.runs
-    .filter(
-      (run) =>
-        run.status === "scheduled" &&
-        Date.parse(run.scheduledAt) <= at.getTime(),
-    )
-    .sort(
-      (left, right) =>
-        Date.parse(left.scheduledAt) - Date.parse(right.scheduledAt),
-    );
+    .filter((run) => run.status === "scheduled" && Date.parse(run.scheduledAt) <= at.getTime())
+    .sort((left, right) => Date.parse(left.scheduledAt) - Date.parse(right.scheduledAt));
 }
 
 export function claimNoodleFanActivityRun(
@@ -346,21 +269,13 @@ export function claimNoodleFanActivityRun(
 ): PersistedNoodleFanActivityDayPlan {
   const reconciled = reconcileOverdueNoodleFanActivityRuns(plan, at);
   const run = reconciled.runs.find((candidate) => candidate.id === runId);
-  if (
-    !run ||
-    run.status !== "scheduled" ||
-    Date.parse(run.scheduledAt) > at.getTime()
-  ) {
-    throw new Error(
-      "That Noodle fan activity run is not due or is no longer available.",
-    );
+  if (!run || run.status !== "scheduled" || Date.parse(run.scheduledAt) > at.getTime()) {
+    throw new Error("That Noodle fan activity run is not due or is no longer available.");
   }
   return {
     ...reconciled,
     runs: reconciled.runs.map((candidate) =>
-      candidate.id === runId
-        ? { ...candidate, status: "generating", claimedAt: at.toISOString() }
-        : candidate,
+      candidate.id === runId ? { ...candidate, status: "generating", claimedAt: at.toISOString() } : candidate,
     ),
   };
 }
@@ -406,9 +321,7 @@ export function markNoodleFanActivityApplied(
         : {
             ...run,
             acceptedActivities: run.acceptedActivities.map((activity) =>
-              activity.id === activityId
-                ? { ...activity, applied: true }
-                : activity,
+              activity.id === activityId ? { ...activity, applied: true } : activity,
             ),
           },
     ),
@@ -421,18 +334,12 @@ export function finishNoodleFanActivityRun(
   status: "completed" | "skipped" | "abandoned",
   at: Date,
 ): PersistedNoodleFanActivityDayPlan {
-  if (
-    status !== "completed" &&
-    status !== "skipped" &&
-    status !== "abandoned"
-  ) {
+  if (status !== "completed" && status !== "skipped" && status !== "abandoned") {
     throw new Error("Invalid Noodle fan activity finish status.");
   }
   return {
     ...plan,
-    runs: plan.runs.map((run) =>
-      run.id === runId ? { ...run, status, finishedAt: at.toISOString() } : run,
-    ),
+    runs: plan.runs.map((run) => (run.id === runId ? { ...run, status, finishedAt: at.toISOString() } : run)),
   };
 }
 
@@ -450,15 +357,14 @@ export function claimManualNoodleFanActivityRun(
   run: NoodleFanActivityDayPlanRun;
 } {
   const automaticRuns = plan.runs.filter((run) => !run.manual);
-  const manualRuns = plan.runs
-    .filter((run) => run.manual)
-    .slice(-(NOODLE_FAN_ACTIVITY_MAX_MANUAL_RUNS - 1));
+  const manualRuns = plan.runs.filter((run) => run.manual).slice(-(NOODLE_FAN_ACTIVITY_MAX_MANUAL_RUNS - 1));
   const run: NoodleFanActivityDayPlanRun = {
     id: `${plan.localDate}-manual-${at.getTime()}`,
     scheduledAt: at.toISOString(),
-    creatorIds: [
-      ...new Set(automaticRuns.flatMap((candidate) => candidate.creatorIds)),
-    ].slice(0, NOODLE_FAN_ACTIVITY_MAX_CREATORS_PER_RUN),
+    creatorIds: [...new Set(automaticRuns.flatMap((candidate) => candidate.creatorIds))].slice(
+      0,
+      NOODLE_FAN_ACTIVITY_MAX_CREATORS_PER_RUN,
+    ),
     status: "generating",
     acceptedActivities: [],
     claimedAt: at.toISOString(),

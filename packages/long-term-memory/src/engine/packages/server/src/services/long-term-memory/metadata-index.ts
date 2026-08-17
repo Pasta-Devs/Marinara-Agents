@@ -6,11 +6,7 @@ import type { LtmMemoryChunk } from "../../../../shared/src/features/agents/long
 
 export type { LtmMetadataIndex } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 
-function addToBucket(
-  index: Map<string, string[]>,
-  key: string | undefined,
-  chunkId: string,
-) {
+function addToBucket(index: Map<string, string[]>, key: string | undefined, chunkId: string) {
   if (!key) return;
   const bucket = index.get(key) ?? [];
   bucket.push(chunkId);
@@ -25,9 +21,7 @@ function sortBuckets(record: Map<string, string[]>) {
   );
 }
 
-export function buildLtmMetadataIndex(
-  chunks: LtmMemoryChunk[],
-): LtmMetadataIndex {
+export function buildLtmMetadataIndex(chunks: LtmMemoryChunk[]): LtmMetadataIndex {
   const chunksById = new Map<string, LtmMemoryChunk>();
   const byNoteId = new Map<string, string[]>();
   const byTag = new Map<string, string[]>();
@@ -40,9 +34,7 @@ export function buildLtmMetadataIndex(
 
   return ltmMetadataIndexSchema.parse({
     version: 1,
-    chunks: Object.fromEntries(
-      Array.from(chunksById.entries()).sort(([a], [b]) => a.localeCompare(b)),
-    ),
+    chunks: Object.fromEntries(Array.from(chunksById.entries()).sort(([a], [b]) => a.localeCompare(b))),
     byNoteId: sortBuckets(byNoteId),
     byTag: sortBuckets(byTag),
   });
@@ -69,21 +61,12 @@ export function getLtmMetadataMatches(
   }
 
   for (const noteId of query.noteIds ?? []) {
-    const matches = Object.hasOwn(index.byNoteId, noteId)
-      ? index.byNoteId[noteId]
-      : undefined;
-    for (const chunkId of (matches ?? []).slice(
-      0,
-      maxBucketEntries,
-    ))
-      add(chunkId, 1, `note:${noteId}`);
+    const matches = Object.hasOwn(index.byNoteId, noteId) ? index.byNoteId[noteId] : undefined;
+    for (const chunkId of (matches ?? []).slice(0, maxBucketEntries)) add(chunkId, 1, `note:${noteId}`);
   }
   for (const tag of query.tags ?? []) {
-    const matches = Object.hasOwn(index.byTag, tag)
-      ? index.byTag[tag]
-      : undefined;
-    for (const chunkId of (matches ?? []).slice(0, maxBucketEntries))
-      add(chunkId, 0.8, `tag:${tag}`);
+    const matches = Object.hasOwn(index.byTag, tag) ? index.byTag[tag] : undefined;
+    for (const chunkId of (matches ?? []).slice(0, maxBucketEntries)) add(chunkId, 0.8, `tag:${tag}`);
   }
 
   return Array.from(scores.entries())

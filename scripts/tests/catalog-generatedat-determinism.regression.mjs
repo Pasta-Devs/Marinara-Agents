@@ -58,10 +58,7 @@ await withTempRepo(async (repoRoot) => {
 for (const malformed of ["2026-08-16", "2026-13-45T00:00:00.000Z", "2026-02-30T00:00:00.000Z", "not-a-date", ""]) {
   await withTempRepo(async (repoRoot) => {
     await mkdir(join(repoRoot, "catalog"), { recursive: true });
-    await writeFile(
-      join(repoRoot, "catalog/catalog.json"),
-      `${JSON.stringify(sampleCatalog(malformed), null, 2)}\n`,
-    );
+    await writeFile(join(repoRoot, "catalog/catalog.json"), `${JSON.stringify(sampleCatalog(malformed), null, 2)}\n`);
     assert.equal(
       await resolveCatalogGeneratedAt(join(repoRoot, "catalog")),
       EPOCH,
@@ -74,10 +71,7 @@ for (const malformed of ["2026-08-16", "2026-13-45T00:00:00.000Z", "2026-02-30T0
 // carries a different (fresh) value from the build.
 await withTempRepo(async (repoRoot) => {
   await mkdir(join(repoRoot, "catalog"), { recursive: true });
-  await writeFile(
-    join(repoRoot, "catalog/catalog.json"),
-    `${JSON.stringify(sampleCatalog(COMMITTED), null, 2)}\n`,
-  );
+  await writeFile(join(repoRoot, "catalog/catalog.json"), `${JSON.stringify(sampleCatalog(COMMITTED), null, 2)}\n`);
 
   await writeCatalogFamily(repoRoot, sampleCatalog("2099-12-31T23:59:59.000Z"));
   assert.equal(await readLaneGeneratedAt(repoRoot, "catalog/catalog.json"), COMMITTED);
@@ -93,10 +87,7 @@ await withTempRepo(async (repoRoot) => {
 // The publish opt-in refreshes the stamp to a fresh, valid ISO datetime.
 await withTempRepo(async (repoRoot) => {
   await mkdir(join(repoRoot, "catalog"), { recursive: true });
-  await writeFile(
-    join(repoRoot, "catalog/catalog.json"),
-    `${JSON.stringify(sampleCatalog(COMMITTED), null, 2)}\n`,
-  );
+  await writeFile(join(repoRoot, "catalog/catalog.json"), `${JSON.stringify(sampleCatalog(COMMITTED), null, 2)}\n`);
 
   process.env.MARINARA_CATALOG_STAMP_GENERATED_AT = "1";
   try {
@@ -108,10 +99,7 @@ await withTempRepo(async (repoRoot) => {
   const stamped = await readLaneGeneratedAt(repoRoot, "catalog/catalog.json");
   assert.notEqual(stamped, COMMITTED);
   assert.notEqual(stamped, EPOCH);
-  assert.ok(
-    !Number.isNaN(Date.parse(stamped)),
-    "stamped generatedAt must be a valid ISO datetime",
-  );
+  assert.ok(!Number.isNaN(Date.parse(stamped)), "stamped generatedAt must be a valid ISO datetime");
   assert.ok(Date.parse(stamped) > Date.parse(COMMITTED));
 });
 

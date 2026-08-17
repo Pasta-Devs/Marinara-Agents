@@ -36,7 +36,10 @@ const retainedFinished = retained
 assert.equal(retainedFinished.length, NOODLE_FINISHED_REFRESH_RUN_RETENTION_LIMIT);
 assert.deepEqual(
   retainedFinished.map((row) => row.id),
-  finished.slice(-NOODLE_FINISHED_REFRESH_RUN_RETENTION_LIMIT).reverse().map((row) => row.id),
+  finished
+    .slice(-NOODLE_FINISHED_REFRESH_RUN_RETENTION_LIMIT)
+    .reverse()
+    .map((row) => row.id),
   "retention must keep the newest finished runs first",
 );
 assert.deepEqual(

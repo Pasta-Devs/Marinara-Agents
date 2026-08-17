@@ -33,9 +33,7 @@ export type InvitedNoodlePostDraft = {
 
 function parseDraft(content: string) {
   const parsed = parseGameJsonish(requireModelAnswer(content, "an invited post draft"));
-  return noodleGeneratedNoodlerPostSchema.parse(
-    Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed,
-  );
+  return noodleGeneratedNoodlerPostSchema.parse(Array.isArray(parsed) && parsed.length === 1 ? parsed[0] : parsed);
 }
 
 export async function generateInvitedNoodlePostDraft(
@@ -98,11 +96,7 @@ export async function generateInvitedNoodlePostDraft(
   const completionOptions = {
     model: connection.model,
     ...noodleSamplingOptions(
-      resolveStoredChatOptions(
-        connection.defaultParameters,
-        connection.provider,
-        connection.model,
-      ),
+      resolveStoredChatOptions(connection.defaultParameters, connection.provider, connection.model),
       { temperature: 0.9, topP: 0.95 },
     ),
     maxTokens: clampGenerationMaxOutputTokens({
@@ -118,7 +112,7 @@ export async function generateInvitedNoodlePostDraft(
     responseFormat: noodleResponseFormat(connection.model, "noodler_post", { allowImagePrompt: true }),
   } as const;
   let response = await provider.chatComplete(messages, completionOptions);
-  let raw = response.content ?? "";
+  const raw = response.content ?? "";
   let generated;
   try {
     generated = parseDraft(raw);
@@ -129,7 +123,11 @@ export async function generateInvitedNoodlePostDraft(
       // Some providers reject an empty assistant turn; only echo the prior
       // response back when it actually had content.
       ...(raw.trim() ? [{ role: "assistant" as const, content: raw }] : []),
-      { role: "user", content: "Return exactly one valid JSON object with title, content, and imagePrompt set to null. Return JSON only." },
+      {
+        role: "user",
+        content:
+          "Return exactly one valid JSON object with title, content, and imagePrompt set to null. Return JSON only.",
+      },
     ];
     response = await provider.chatComplete(correctionMessages, completionOptions);
     generated = parseDraft(response.content ?? "");

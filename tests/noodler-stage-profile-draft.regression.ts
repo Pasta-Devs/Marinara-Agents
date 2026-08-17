@@ -27,10 +27,7 @@ const wrapped = normalizeNoodlerStageProfileDraft({
   profile: { displayName: "Nine", handle: "nine", bio: "", stagePersonality: "" },
 });
 assert.equal(wrapped?.displayName, "Nine");
-assert.equal(
-  normalizeNoodlerStageProfileDraft([{ displayName: "Nine", handle: "nine" }])?.handle,
-  "nine",
-);
+assert.equal(normalizeNoodlerStageProfileDraft([{ displayName: "Nine", handle: "nine" }])?.handle, "nine");
 assert.equal(
   normalizeNoodlerStageProfileDraft({ profiles: [{ displayName: "Nine", handle: "nine" }] })?.handle,
   "nine",
@@ -47,10 +44,7 @@ assert.equal(preferred?.bio, "");
 assert.equal(preferred?.stagePersonality, "");
 
 // A missing handle is derived from the name rather than failing the creator.
-assert.equal(
-  normalizeNoodlerStageProfileDraft({ displayName: "Velvet Hours!" })?.handle,
-  "velvet_hours_",
-);
+assert.equal(normalizeNoodlerStageProfileDraft({ displayName: "Velvet Hours!" })?.handle, "velvet_hours_");
 
 // Non-objects still fail, so a prose answer reaches the retry instead of being accepted.
 assert.equal(normalizeNoodlerStageProfileDraft("Sure, here is a profile"), null);

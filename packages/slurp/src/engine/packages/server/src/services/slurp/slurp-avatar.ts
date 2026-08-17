@@ -1,10 +1,6 @@
 import { basename } from "node:path";
 import type { NoodlerPostMediaUpload } from "./slurp-media.js";
-import {
-  NOODLER_MEDIA_PREFIX,
-  resolveNoodlerMediaAbsolutePath,
-  unlinkNoodlerMedia,
-} from "./slurp-media.js";
+import { NOODLER_MEDIA_PREFIX, resolveNoodlerMediaAbsolutePath, unlinkNoodlerMedia } from "./slurp-media.js";
 import { stageImageToDisk } from "../image/image-generation.js";
 
 const NOODLER_AVATAR_URL_PREFIX = "/api/slurp/noodler/accounts/";
@@ -28,9 +24,7 @@ export function noodlerBannerUrl(accountId: string, mediaPath: string): string {
 export function readNoodlerAccountMediaPath(accountId: string, url: string | null): string | null {
   if (!url) return null;
   const base = `${NOODLER_AVATAR_URL_PREFIX}${encodeURIComponent(accountId)}/`;
-  const prefix = ["avatar/", "banner/"]
-    .map((kind) => `${base}${kind}`)
-    .find((candidate) => url.startsWith(candidate));
+  const prefix = ["avatar/", "banner/"].map((kind) => `${base}${kind}`).find((candidate) => url.startsWith(candidate));
   if (!prefix) return null;
   const encodedName = url.slice(prefix.length);
   let fileName: string;

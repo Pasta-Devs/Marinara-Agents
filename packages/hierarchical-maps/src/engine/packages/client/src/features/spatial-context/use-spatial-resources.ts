@@ -28,8 +28,10 @@ export interface SpatialGlobalGalleryImage extends Omit<SpatialGalleryImage, "ch
   folderId: string | null;
 }
 
-export interface SpatialArtworkImage
-  extends Pick<SpatialGalleryImage, "id" | "filePath" | "prompt" | "provider" | "model" | "width" | "height" | "createdAt" | "url"> {
+export interface SpatialArtworkImage extends Pick<
+  SpatialGalleryImage,
+  "id" | "filePath" | "prompt" | "provider" | "model" | "width" | "height" | "createdAt" | "url"
+> {
   referenceId: string;
   source: "chat" | "global";
 }
@@ -228,8 +230,7 @@ export function useGenerateSpatialGalleryImage(chatId: string) {
       promptOverride?: string;
       negativePromptOverride?: string;
       debugMode?: boolean;
-    }) =>
-      packageApi.post<SpatialGalleryImage>(`/gallery/${chatId}/generate-image`, input),
+    }) => packageApi.post<SpatialGalleryImage>(`/gallery/${chatId}/generate-image`, input),
     onSuccess: (image) => {
       queryClient.setQueryData<SpatialGalleryImage[]>(spatialResourceKeys.gallery(chatId), (current = []) => [
         image,
@@ -249,8 +250,7 @@ export function usePreviewSpatialGalleryImages(chatId: string) {
         mapsArtworkContext?: SpatialMapsArtworkContext;
       }>;
       debugMode?: boolean;
-    }) =>
-      packageApi.post<SpatialGalleryImagePromptPreview>(`/gallery/${chatId}/generate-image/preview`, input),
+    }) => packageApi.post<SpatialGalleryImagePromptPreview>(`/gallery/${chatId}/generate-image/preview`, input),
   });
 }
 
@@ -292,9 +292,7 @@ function parseMetadata(value: unknown): Record<string, unknown> {
   if (typeof value !== "string") return {};
   try {
     const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
   } catch {
     return {};
   }

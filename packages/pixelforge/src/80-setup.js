@@ -26,8 +26,7 @@ PF.mountSetup = (el, props) => {
       "width:100%;box-sizing:border-box;background:var(--background,#1b201b);color:var(--foreground,#e6e8e0);" +
       "border:1px solid var(--border,#444);border-radius:8px;padding:8px 10px;font:13px/1.4 inherit;",
     row: "display:flex;gap:10px;",
-    btn:
-      "min-height:44px;border-radius:8px;padding:0 16px;font:700 13px/1 inherit;cursor:pointer;border:1px solid var(--border,#444);",
+    btn: "min-height:44px;border-radius:8px;padding:0 16px;font:700 13px/1 inherit;cursor:pointer;border:1px solid var(--border,#444);",
   };
   const field = (labelText, node) => PF.el("div", null, [PF.el("label", { style: S.label, text: labelText }), node]);
   const input = (value) => PF.el("input", { style: S.input, value });
@@ -162,7 +161,7 @@ PF.mountSetup = (el, props) => {
         ...list.map((c) =>
           PF.el("option", {
             value: typeof c?.id === "string" ? c.id : "",
-            text: typeof c?.name === "string" ? c.name : (typeof c?.label === "string" ? c.label : String(c?.id ?? "?")),
+            text: typeof c?.name === "string" ? c.name : typeof c?.label === "string" ? c.label : String(c?.id ?? "?"),
           }),
         ),
       );
@@ -179,11 +178,7 @@ PF.mountSetup = (el, props) => {
         const id = typeof c?.id === "string" ? c.id : null;
         if (!id) continue;
         const name =
-          typeof c?.name === "string" && c.name
-            ? c.name
-            : typeof c?.data?.name === "string"
-              ? c.data.name
-              : id;
+          typeof c?.name === "string" && c.name ? c.name : typeof c?.data?.name === "string" ? c.data.name : id;
         const cb = PF.el("input", { type: "checkbox", value: id });
         partyChecks.push(cb);
         partyBox.appendChild(
@@ -193,7 +188,8 @@ PF.mountSetup = (el, props) => {
           ]),
         );
       }
-      if (!partyBox.children.length) partyBox.textContent = "No characters yet — that's fine, the GM plays the villagers.";
+      if (!partyBox.children.length)
+        partyBox.textContent = "No characters yet — that's fine, the GM plays the villagers.";
     } catch {
       partyBox.textContent = "Could not load characters (the GM will play the villagers).";
     }
@@ -253,7 +249,8 @@ PF.mountSetup = (el, props) => {
         }
       }
     } catch (err) {
-      errEl.textContent = err && err.message ? String(err.message) : "Launch failed — check the connection and try again.";
+      errEl.textContent =
+        err && err.message ? String(err.message) : "Launch failed — check the connection and try again.";
       errEl.style.display = "block";
       launchBtn.disabled = false;
       cancelBtn.disabled = false;
