@@ -456,17 +456,26 @@ PF.world = (() => {
       buildings.push({ door: b, rect: { x: slot.x, y: slot.y, w: width, h: 4 }, households: group });
     }
 
+    // ── Transient merchants set up a light market stall in a free lot (never a
+    // permanent shop). They tend it; with no free lot they fall back to the
+    // public rest spot in the cast loop. Other non-resident kinds build nothing.
+    const stalls = [];
+    for (const member of brief.cast) {
+      if ((member.standing ?? "resident") !== "transient" || member.kind !== "merchant") continue;
+      const slot = takeSlot();
+      if (!slot) break;
+      PLACERS["market-stalls"](v, slot.x, slot.y);
+      stalls.push({ owner: member, x: slot.x, y: slot.y });
+    }
+
     // ── Features: corner anchors, but NEVER over a building or another
     // feature. Buildings claim their footprint plus the roof overhang above and
     // a door apron below — a placer that fenced over a hall's only door
     // orphaned the zone and the NPC inside it (review blocker). A feature with
     // no clear anchor is dropped: a plainer settlement, never a sealed one.
-    const claimed = buildings.map((b) => ({
-      x: b.rect.x - 1,
-      y: b.rect.y - 3,
-      w: b.rect.w + 2,
-      h: b.rect.h + 5,
-    }));
+    const claimed = buildings
+      .map((b) => ({ x: b.rect.x - 1, y: b.rect.y - 3, w: b.rect.w + 2, h: b.rect.h + 5 }))
+      .concat(stalls.map((s) => ({ x: s.x - 1, y: s.y - 1, w: 7, h: 5 })));
     const intersects = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
     const featureAnchors = [
       { x: 4, y: 3 },
@@ -485,11 +494,24 @@ PF.world = (() => {
       claimed.push({ x: anchor.x, y: anchor.y, ...FEATURE_RECT });
     }
     const doorRects = buildings.map((b) => ({ x: b.door.doorX, y: b.door.doorY }));
+    const stallReserved = stalls.flatMap((s) => [
+      { x: s.x, y: s.y + 1 },
+      { x: s.x + 2, y: s.y + 1 },
+      { x: s.x + 4, y: s.y + 1 },
+    ]);
+    // Keep the strip beside each shop door clear so an outside loiterer has ground.
+    const shopFrontReserved = buildings
+      .filter((b) => b.special === "shop" || b.boundPlace?.kind === "workshop")
+      .map((b) => ({ x: b.door.doorX + 2, y: b.door.doorY + 1 }));
     scatterTrees(
       v,
       rnd,
       { woods: 26, fields: 8, rocky: 10, water: 12, barren: 5 }[brief.surround] ?? 12,
-      doorRects.concat(doorRects.map((d) => ({ x: d.x, y: d.y + 1 }))),
+      doorRects.concat(
+        doorRects.map((d) => ({ x: d.x, y: d.y + 1 })),
+        stallReserved,
+        shopFrontReserved,
+      ),
     );
     zones.z1 = v;
 
@@ -640,6 +662,40 @@ PF.world = (() => {
     const wildsZoneId = wildsPlaces.length ? zoneIdForPlace(wildsPlaces[0]) : null;
     const plazaBox = () => ({ x0: midX - 6, y0: midY - 5, x1: midX + 6, y1: midY + 5 });
     const fullZoneBox = (z) => ({ x0: 2, y0: 2, x1: z.w - 3, y1: z.h - 3 });
+    // Transients loiter at a public spot — the inn, an existing resident shop's
+    // front, or the plaza — spread across whatever the settlement has (seeded).
+    const shopSpots = buildings
+      .filter((b) => b.special === "shop" || b.boundPlace?.kind === "workshop")
+      .map((b) => ({ door: b.door, interiorZoneId: b.boundPlace ? zoneIdForPlace(b.boundPlace) : null }));
+    const loiterSpots = [];
+    if (gatheringZoneId && zones[gatheringZoneId]) loiterSpots.push({ kind: "inn" });
+    for (const shop of shopSpots)
+      loiterSpots.push({ kind: "shop", door: shop.door, interiorZoneId: shop.interiorZoneId });
+    loiterSpots.push({ kind: "plaza" });
+    const loiterStart = PF.hashStr(`${seed >>> 0}|loiter`) % loiterSpots.length;
+    let loiterN = 0;
+    const loiterAnchor = () => {
+      const spot = loiterSpots[(loiterStart + loiterN++) % loiterSpots.length];
+      if (spot.kind === "inn") return { zone: zones[gatheringZoneId], wander: fullZoneBox(zones[gatheringZoneId]) };
+      if (spot.kind === "shop") {
+        // A shop with an interior (a workshop) — browse inside, like the inn.
+        if (spot.interiorZoneId && zones[spot.interiorZoneId]) {
+          const z = zones[spot.interiorZoneId];
+          return { zone: z, wander: fullZoneBox(z) };
+        }
+        // A facade shop — loiter just BESIDE the door, never in the doorway.
+        return {
+          zone: v,
+          wander: {
+            x0: Math.min(v.w - 3, spot.door.doorX + 1),
+            y0: Math.min(v.h - 3, spot.door.doorY + 1),
+            x1: Math.min(v.w - 3, spot.door.doorX + 3),
+            y1: Math.min(v.h - 3, spot.door.doorY + 1),
+          },
+        };
+      }
+      return { zone: v, wander: plazaBox() };
+    };
     brief.cast.forEach((member, index) => {
       const npcId = `n${index + 1}`;
       const standing = member.standing ?? "resident";
@@ -661,9 +717,19 @@ PF.world = (() => {
         } else {
           wander = fullZoneBox(zone);
         }
-      } else if (standing === "transient" && gatheringZoneId && zones[gatheringZoneId]) {
-        zone = zones[gatheringZoneId];
-        wander = fullZoneBox(zone);
+      } else if (standing === "transient" && stalls.some((s) => s.owner === member)) {
+        const stall = stalls.find((s) => s.owner === member);
+        zone = v; // tend the stall in the settlement
+        wander = {
+          x0: Math.max(2, stall.x),
+          y0: Math.min(v.h - 3, stall.y + 1),
+          x1: Math.min(v.w - 3, stall.x + 4),
+          y1: Math.min(v.h - 3, stall.y + 2),
+        };
+      } else if (standing === "transient") {
+        const spot = loiterAnchor();
+        zone = spot.zone;
+        wander = spot.wander;
       } else if (standing === "fringe" && wildsZoneId && zones[wildsZoneId]) {
         zone = zones[wildsZoneId];
         wander = fullZoneBox(zone);
@@ -671,7 +737,7 @@ PF.world = (() => {
         zone = v; // no wilds to retreat to — the settlement's outer margin
         wander = { x0: 3, y0: v.h - 6, x1: v.w - 4, y1: v.h - 3 };
       } else {
-        zone = v; // destitute (or a transient with no inn): the public center
+        zone = v; // destitute: the town's public center
         wander = plazaBox();
       }
       zone.npcs.push({

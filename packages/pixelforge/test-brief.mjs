@@ -262,7 +262,7 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
 }
 
 // 11b. Standing: non-residents get no dwelling and anchor to a rest spot —
-// transient → the inn interior, fringe → the wilds, destitute → the plaza.
+// transient → a public loiter spot, fringe → the wilds, destitute → the plaza.
 {
   const sealed = brief.validate(
     {
@@ -271,7 +271,7 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
       cast: [
         { name: "Alder", role: "reeve", kind: "leader", tint: "blue", home: "Crossford", household: 1 },
         { name: "Bram", role: "smith", kind: "maker", tint: "amber", home: "Crossford", household: 2 },
-        { name: "Sil", role: "trader", kind: "merchant", tint: "green", home: "Crossford", household: 3, standing: "transient" },
+        { name: "Sil", role: "wayfarer", kind: "wanderer", tint: "green", home: "Crossford", household: 3, standing: "transient" },
         { name: "Wyn", role: "hermit", kind: "wanderer", tint: "teal", home: "Crossford", household: 4, standing: "fringe" },
         { name: "Gad", role: "beggar", kind: "folk", tint: "rose", home: "Crossford", household: 5, standing: "destitute" },
         { name: "Rue", role: "weaver", kind: "elder", tint: "violet", home: "Crossford", household: 2, standing: "nonsense" },
@@ -293,7 +293,6 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   const innId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Ford Inn")?.[0];
   const woodsId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Reach")?.[0];
   assert.ok(innId && woodsId, "the inn and the wilds have ordinal ids");
-  assert.ok(w.zones[innId].npcs.some((n) => n.name === "Sil"), "transient rests in the inn interior");
   assert.ok(w.zones[woodsId].npcs.some((n) => n.name === "Wyn"), "fringe retreats to the wilds");
   const gad = v.npcs.find((n) => n.name === "Gad");
   assert.ok(gad, "destitute stays in the settlement");
@@ -304,10 +303,7 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     { x0: mX - 6, y0: mY - 5, x1: mX + 6, y1: mY + 5 },
     "destitute anchors to the public center, never a house",
   );
-  assert.ok(
-    !v.npcs.some((n) => n.name === "Sil" || n.name === "Wyn"),
-    "non-residents are not housed among the settlement rows",
-  );
+  assert.ok(!v.npcs.some((n) => n.name === "Wyn"), "the fringe NPC leaves the settlement for the wilds");
 }
 
 // 11c. Standing SUPPRESSION + the no-inn / no-wilds fallbacks. A non-resident
@@ -320,7 +316,7 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     {
       scale: "village",
       name: "Wayrest",
-      places: [{ kind: "workshop", name: "The Works" }],
+      places: [{ kind: "hall", name: "The Moot Hall" }],
       cast: [
         { name: "Ada", role: "elder", kind: "folk", tint: "blue", home: "Wayrest", household: 1 },
         { name: "Ben", role: "cooper", kind: "folk", tint: "amber", home: "Wayrest", household: 2 },
@@ -335,11 +331,12 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   const w = world.build(4242, "cozy-village", sealed);
   checkWorld(w, sealed, "standing-suppression");
   const v = w.zones.z1;
-  // 3 resident dwellings + 1 workshop facade = 4 doors. The transient guard's
+  // 3 resident dwellings + 1 hall facade = 4 doors. The transient guard's
   // "post" is suppressed and no non-resident household adds a dwelling; deleting
   // either the specials gate or the households filter would raise this count.
   const doorCount = v.object.filter((t) => t === "door").length;
   assert.equal(doorCount, 4, `only residents build (got ${doorCount} doors, expected 4)`);
+  assert.equal(v.object.filter((t) => t === "table").length, 0, "a transient non-merchant lays no stall");
   assert.ok(!Object.values(w.zones).some((z) => z.mapKind === "place"), "no wilds synthesized (places is non-empty)");
   const mX = (v.w / 2) | 0;
   const mY = (v.h / 2) | 0;
@@ -352,6 +349,132 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     "fringe with no wilds falls back to the outer margin",
   );
   assert.deepEqual(wander("Fyn"), plaza, "destitute anchors to the public center");
+}
+
+// 11d. Transient merchants set up a light market stall (a 3-table structure,
+// never a permanent shop) and tend it. A transient non-merchant, or a merchant
+// with no free lot, does not.
+{
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Fairmarket",
+      cast: [
+        { name: "Ona", role: "elder", kind: "folk", tint: "blue", home: "Fairmarket", household: 1 },
+        { name: "Pel", role: "cooper", kind: "folk", tint: "green", home: "Fairmarket", household: 2 },
+        { name: "Rin", role: "weaver", kind: "folk", tint: "amber", home: "Fairmarket", household: 3 },
+        { name: "Sol", role: "spice trader", kind: "merchant", tint: "rose", home: "Fairmarket", household: 4, standing: "transient" },
+      ],
+    },
+    ctx,
+  );
+  const w = world.build(4242, "cozy-village", sealed);
+  checkWorld(w, sealed, "merchant-stall");
+  const v = w.zones.z1;
+  // One transient merchant -> exactly one 3-table stall in the settlement.
+  const tables = v.object.filter((t) => t === "table").length;
+  assert.equal(tables, 3, `the transient merchant set up a 3-table stall (got ${tables})`);
+  const sol = v.npcs.find((n) => n.name === "Sol");
+  assert.ok(sol, "the transient merchant tends the stall in the settlement");
+  // Tending it: the tile directly above the merchant's counter is a stall table.
+  assert.equal(v.object[v.w * (sol.y - 1) + sol.x], "table", "the merchant stands at their stall counter");
+}
+
+// 11e. Transients loiter at PUBLIC spots and spread across them. With an inn, a
+// resident shop, and three transients (three spots), the seeded round-robin puts
+// one inside the inn, one at the shop front, and one in the plaza.
+{
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Tradeholm",
+      places: [{ kind: "gathering", name: "The Rest" }],
+      cast: [
+        { name: "Ada", role: "elder", kind: "folk", tint: "blue", home: "Tradeholm", household: 1 },
+        { name: "Ben", role: "farmer", kind: "folk", tint: "green", home: "Tradeholm", household: 2 },
+        { name: "Cor", role: "shopkeep", kind: "merchant", tint: "amber", home: "Tradeholm", household: 3 },
+        { name: "Vye", role: "pilgrim", kind: "scholar", tint: "teal", home: "Tradeholm", household: 4, standing: "transient" },
+        { name: "Wil", role: "drifter", kind: "wanderer", tint: "rose", home: "Tradeholm", household: 5, standing: "transient" },
+        { name: "Xio", role: "envoy", kind: "elder", tint: "violet", home: "Tradeholm", household: 6, standing: "transient" },
+      ],
+    },
+    ctx,
+  );
+  const w = world.build(99, "cozy-village", sealed);
+  checkWorld(w, sealed, "loiter-spread");
+  const v = w.zones.z1;
+  const innId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Rest")?.[0];
+  const mX = (v.w / 2) | 0;
+  const mY = (v.h / 2) | 0;
+  const plaza = JSON.stringify({ x0: mX - 6, y0: mY - 5, x1: mX + 6, y1: mY + 5 });
+  const names = ["Vye", "Wil", "Xio"];
+  const inInn = names.filter((n) => w.zones[innId].npcs.some((x) => x.name === n));
+  assert.equal(inInn.length, 1, "one transient loiters inside the inn");
+  const inV = names.filter((n) => v.npcs.some((x) => x.name === n)).map((n) => v.npcs.find((x) => x.name === n));
+  assert.equal(inV.length, 2, "the other two loiter out in the settlement");
+  assert.equal(inV.filter((t) => JSON.stringify(t.wander) === plaza).length, 1, "one loiters in the plaza");
+  const atShop = inV.filter((t) => JSON.stringify(t.wander) !== plaza);
+  assert.equal(atShop.length, 1, "one loiters at the shop front");
+  const s = atShop[0];
+  // Beside the door, not in it: the shop door sits up-and-left of the loiter box.
+  assert.equal(
+    v.object[v.w * (s.wander.y0 - 1) + (s.wander.x0 - 1)],
+    "door",
+    "the shop-loiterer stands beside a shop door, not in the doorway",
+  );
+}
+
+// 11f. A transient merchant with NO free lot lays no stall and still loiters at
+// a public spot (here the residents' buildings consume every lot).
+{
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Fullford",
+      cast: [
+        { name: "Ona", role: "reeve", kind: "leader", tint: "blue", home: "Fullford", household: 1 },
+        { name: "Pel", role: "farmer", kind: "grower", tint: "green", home: "Fullford", household: 2 },
+        { name: "Gar", role: "watch", kind: "guard", tint: "red", home: "Fullford", household: 3 },
+        { name: "Sol", role: "peddler", kind: "merchant", tint: "rose", home: "Fullford", household: 4, standing: "transient" },
+      ],
+    },
+    ctx,
+  );
+  const w = world.build(4242, "cozy-village", sealed);
+  checkWorld(w, sealed, "stall-no-lot");
+  const v = w.zones.z1;
+  assert.equal(v.object.filter((t) => t === "table").length, 0, "no free lot -> the transient merchant lays no stall");
+  const sol = v.npcs.find((n) => n.name === "Sol");
+  assert.ok(sol, "the merchant still loiters at a public spot");
+  const mX = (v.w / 2) | 0;
+  const mY = (v.h / 2) | 0;
+  assert.deepEqual(sol.wander, { x0: mX - 6, y0: mY - 5, x1: mX + 6, y1: mY + 5 }, "falls back to the plaza");
+}
+
+// 11g. A shop with an interior (a workshop) — a loitering transient browses
+// INSIDE it (the mechanism the inn already uses); facade shops keep them outside.
+{
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Forgeton",
+      places: [{ kind: "workshop", name: "The Forge" }],
+      cast: [
+        { name: "Ada", role: "elder", kind: "folk", tint: "blue", home: "Forgeton", household: 1 },
+        { name: "Ben", role: "cooper", kind: "folk", tint: "green", home: "Forgeton", household: 2 },
+        { name: "Cor", role: "smith", kind: "maker", tint: "amber", home: "The Forge", household: 3 },
+        { name: "Vye", role: "pilgrim", kind: "scholar", tint: "teal", home: "Forgeton", household: 4, standing: "transient" },
+        { name: "Wil", role: "drifter", kind: "wanderer", tint: "rose", home: "Forgeton", household: 5, standing: "transient" },
+      ],
+    },
+    ctx,
+  );
+  const w = world.build(99, "cozy-village", sealed);
+  checkWorld(w, sealed, "shop-interior");
+  const forgeId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Forge")?.[0];
+  assert.ok(forgeId, "the workshop shop has an ordinal id");
+  const inForge = ["Vye", "Wil"].filter((n) => w.zones[forgeId].npcs.some((x) => x.name === n));
+  assert.equal(inForge.length, 1, "one transient browses inside the workshop shop; the other loiters elsewhere");
 }
 
 // 12. Determinism: same brief + seed → structurally identical world.

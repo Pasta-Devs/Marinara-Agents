@@ -73,8 +73,10 @@ through the derivations below.
       standing: "resident" }, // OPTIONAL ENUM resident (default) | transient | fringe | destitute.
                             // How rooted they are — orthogonal to kind. Only a RESIDENT gets a
                             // dwelling; a non-resident anchors to a predictable rest spot instead:
-                            // transient → the inn (gathering interior), fringe → the wilds (else
-                            // the settlement's outer margin), destitute → the town's public center.
+                            // transient → a public spot (inn, a resident shop's front, or plaza;
+                            // a `merchant` sets up a market stall when a lot is free), fringe →
+                            // the wilds (else the settlement's outer margin), destitute → the
+                            // town's public center.
                             // Does NOT affect the sprite. Settled-outsiders (a resident turned
                             // pariah) stay a GM-runtime matter; wealth/class is a separate layer.
   ],
@@ -132,7 +134,9 @@ response is **never stored** (checkpoints capture by value — see #5110).
      never gets a dwelling — it anchors to its standing rest spot (transient → the inn, fringe →
      the wilds/margin, destitute → the public center);
    - special buildings from a **resident**'s `kind` (never a duplicate hall; extra specials demote
-     to workyard markers); a non-resident with a special kind builds nothing;
+     to workyard markers); a non-resident with a special kind builds nothing — except a
+     **transient `merchant`**, who sets up a light market stall (3 tables, no walls) when a lot is
+     free (else it loiters at a public spot like any transient);
    - residential filler = `clamp(BASE[scale] − dwellings − specials, 0, ∞)`,
      area cap `floor(buildableArea / 56)`;
    - **over-subscription MERGES households into multi-family blocks — a named NPC's home is
