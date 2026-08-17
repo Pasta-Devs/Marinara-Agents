@@ -1,4 +1,4 @@
-// Pixelforge 0.5.0 — Marinara Engine game-surface Experience (single-file client bundle)
+// Pixelforge 0.5.1 — Marinara Engine game-surface Experience (single-file client bundle)
 // Built from packages/pixelforge/src (13 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";

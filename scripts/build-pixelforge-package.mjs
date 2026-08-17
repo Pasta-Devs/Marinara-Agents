@@ -23,7 +23,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = join(repoRoot, "packages/pixelforge");
 const artifactsDir = join(repoRoot, "artifacts");
 
-const VERSION = "0.5.0";
+const VERSION = "0.5.1";
 const CAPABILITY_API = Object.freeze({ major: 1, minor: 10 });
 const ENGINE_MIN = "2.4.3"; // first Engine release with contributions.assets (capability API 1.10)
 const MAX_ENGINE_EXCLUSIVE = "4.0.0";
@@ -124,7 +124,10 @@ const manifest = {
       bytes: asset.buffer.byteLength,
     })),
   ],
-  permissions: ["ui"],
+  // Pixelforge reads chat context and persists its world state through the
+  // Engine's same-origin chat APIs. These permissions disclose that existing
+  // access to users; package behavior is unchanged.
+  permissions: ["chat-read", "chat-write", "ui"],
   restartRequired: false,
 };
 

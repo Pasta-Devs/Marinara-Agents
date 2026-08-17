@@ -1186,7 +1186,7 @@
         },
         "id": "pixelforge",
         "name": "Pixelforge",
-        "version": "0.5.0",
+        "version": "0.5.1",
         "description": "A walkable pixel-art RPG Experience for Game Mode: your setup preferences generate the world — a cozy village or a sci-fi colony — then explore it, talk to NPCs to drive the story, and let the GM narrate, with World Maps integration and the engine's own combat. Install it, then choose Pixelforge as the Experience when creating a Game Mode chat.",
         "engine": {
           "min": "2.4.3",
@@ -1228,7 +1228,7 @@
           },
           {
             "path": "client.js",
-            "sha256": "0f43ac0879dc201ad21065052ccf84de2c0b61b61d1a3308df5c786850607a03",
+            "sha256": "062e6368c1b47cc1d0b962d27f04f29609479df58784fc1a2ce7b6efff730a25",
             "bytes": 182721
           },
           {
@@ -1278,6 +1278,8 @@
           }
         ],
         "permissions": [
+          "chat-read",
+          "chat-write",
           "ui"
         ],
         "restartRequired": false
@@ -1285,9 +1287,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/pixelforge.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/pixelforge-0.5.0.zip",
-        "sha256": "1f96daf7dbbea4e1fbbbf3cec18ab15532e98ec2b9e5873c08087bf852790682",
-        "bytes": 193003
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/pixelforge-0.5.1.zip",
+        "sha256": "93c1abe79c5fd1b40a7d4e44ec09189eca7dce08c584abfed642958c6c0045a9",
+        "bytes": 193038
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/pixelforge/README.md"
     },
