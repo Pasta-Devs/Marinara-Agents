@@ -80,31 +80,56 @@ PF.schedule = (() => {
    *  probability. Still deterministic: occupancy is a function of the order
    *  the caller places its NPCs in, which is itself fixed. */
   function walkableIn(zone, box, key, taken) {
-    let cx = ((box.x0 + box.x1) / 2) | 0;
-    let cy = ((box.y0 + box.y1) / 2) | 0;
-    if (key) {
-      const spanX = box.x1 - box.x0 + 1;
-      const spanY = box.y1 - box.y0 + 1;
+    // Normalize the corners rather than trusting them. An inverted box makes a
+    // span of zero, `hash % 0` is NaN, and standable()'s bounds test is false
+    // for every NaN comparison — so a NaN tile would sail out as a valid
+    // placement instead of throwing anywhere near the mistake. Nothing produces
+    // one today; this is input validation, not a live bug.
+    const x0 = Math.min(box.x0, box.x1);
+    const x1 = Math.max(box.x0, box.x1);
+    const y0 = Math.min(box.y0, box.y1);
+    const y1 = Math.max(box.y0, box.y1);
+    let cx = ((x0 + x1) / 2) | 0;
+    let cy = ((y0 + y1) / 2) | 0;
+    const spanX = x1 - x0 + 1;
+    const spanY = y1 - y0 + 1;
+    // `> 0` is also the non-finite guard: it is false for NaN, which leaves the
+    // `| 0`-ed center in place, so no NaN ever reaches standable().
+    if (key && spanX > 0 && spanY > 0) {
       const hash = PF.hashStr(String(key));
-      cx = box.x0 + (hash % spanX);
-      cy = box.y0 + (((hash / 7) | 0) % spanY);
+      cx = x0 + (hash % spanX);
+      cy = y0 + (((hash / 7) | 0) % spanY);
     }
     const open = (x, y) => standable(zone, x, y) && !(taken && taken(x, y));
     if (open(cx, cy)) return { x: cx, y: cy };
-    // Sum, not max: an off-center hashed start still has to be able to reach
-    // the far corner of the box.
-    const maxR = box.x1 - box.x0 + (box.y1 - box.y0);
-    for (let r = 1; r <= maxR; r++) {
-      for (let dy = -r; dy <= r; dy++) {
-        for (let dx = -r; dx <= r; dx++) {
-          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-          const x = cx + dx;
-          const y = cy + dy;
-          if (x >= box.x0 && x <= box.x1 && y >= box.y0 && y <= box.y1 && open(x, y)) return { x, y };
+    /** Deterministic outward ring scan from the start tile, clipped to a rect. */
+    const ring = (maxR, lox, hix, loy, hiy) => {
+      for (let r = 1; r <= maxR; r++) {
+        for (let dy = -r; dy <= r; dy++) {
+          for (let dx = -r; dx <= r; dx++) {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+            const x = cx + dx;
+            const y = cy + dy;
+            if (x >= lox && x <= hix && y >= loy && y <= hiy && open(x, y)) return { x, y };
+          }
         }
       }
-    }
-    return { x: zone.spawn.x, y: zone.spawn.y };
+      return null;
+    };
+    // Sum, not max: an off-center hashed start still has to be able to reach
+    // the far corner of the box.
+    const inBox = ring(x1 - x0 + (y1 - y0), x0, x1, y0, y1);
+    if (inBox) return inBox;
+    // The box is FULL. Widen to the zone before giving up. The old fallback
+    // dropped straight onto zone.spawn — ONE fixed tile that honours neither
+    // `taken` nor standable() — so every NPC overflowing the same box in a
+    // single pass landed on top of the last. A household at the CAPS.household
+    // cap of 6 shares a 3x2 door apron whose door tile standable() excludes, so
+    // it overflowed on every seed tried, and the losers were both un-talkable
+    // (nearest wins on a strict <) and frozen: their wander box is the very box
+    // they could not fit in, so every candidate step fails its bounds test.
+    // Standing just outside it is the honest outcome — spare, but reachable.
+    return ring(zone.w + zone.h, 0, zone.w - 1, 0, zone.h - 1) ?? { x: zone.spawn.x, y: zone.spawn.y };
   }
 
   return { TABLE, resolve, walkableIn, standable };

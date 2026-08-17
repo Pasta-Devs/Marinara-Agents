@@ -1914,6 +1914,73 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   }
 }
 
+// 14j. A box that OVERFLOWS must not dump the remainder on one tile. The ring
+// scan honoured occupancy, but when it exhausted the box the fallback returned
+// zone.spawn — a single fixed tile that checks neither occupancy nor standable.
+// The suite had no household-at-the-cap fixture, which is exactly where this
+// lives: CAPS.household is 6, and a resident's night `home` handle is a 3x2 door
+// apron whose door tile standable() excludes, leaving ~3 usable tiles. Three
+// members overflowed onto the spawn on EVERY seed tried, and stacked NPCs are
+// both un-talkable and frozen — their wander box is the one they failed to fit
+// in, so every candidate step fails its bounds test.
+{
+  const cast = [];
+  for (let i = 0; i < 6; i++) {
+    cast.push({
+      name: `Hearth${i}`,
+      role: "weaver",
+      kind: "maker",
+      tint: ["blue", "green", "amber", "rose", "teal", "violet"][i],
+      home: "Fullhouse",
+      household: 1, // one roof, at the CAPS.household cap
+    });
+  }
+  cast.push({ name: "Lamplight", role: "innkeep", kind: "host", tint: "orange", home: "The Lamp", household: 2 });
+  const sealed = brief.validate(
+    { scale: "village", name: "Fullhouse", places: [{ kind: "gathering", name: "The Lamp" }], cast },
+    ctx,
+  );
+  // Guard against a vacuous pass: the repair passes must have KEPT one roof.
+  const roof = sealed.cast.filter((c) => c.household === sealed.cast[0].household);
+  assert.equal(roof.length, 6, `the household survives validation at the cap (${roof.length})`);
+  for (const seed of [1, 2, 3, 7, 11]) {
+    const w = world.build(seed, "cozy-village", sealed);
+    const sim = new loadedPF.Sim(w);
+    sim.clockMin = 23 * 60; // night: the whole household resolves to one door apron
+    sim.resolveSchedules();
+    for (const zoneId in w.zones) {
+      const z = w.zones[zoneId];
+      const seen = new Map();
+      for (const npc of z.npcs) {
+        const x = Math.round(npc.x);
+        const y = Math.round(npc.y);
+        const tile = `${x},${y}`;
+        assert.ok(
+          !seen.has(tile),
+          `seed ${seed}: ${npc.name} overflowed onto ${seen.get(tile)} at ${tile} in ${zoneId}`,
+        );
+        seen.set(tile, npc.name);
+        // The overflow tile still has to be somewhere an NPC may legally stand.
+        assert.ok(loadedPF.schedule.standable(z, x, y), `seed ${seed}: ${npc.name} overflows onto a standable tile`);
+      }
+    }
+  }
+
+  // And a degenerate box never escapes as a NaN placement. `hash % 0` is NaN and
+  // standable()'s bounds test is false for every NaN comparison, so an inverted
+  // box would return {x: NaN} as if it were a real tile. Nothing builds one
+  // today — this pins the guard, not a live path.
+  const z = world.build(5, "cozy-village", sealed).zones.z1;
+  for (const box of [
+    { x0: 9, y0: 9, x1: 4, y1: 4 }, // inverted on both axes
+    { x0: 9, y0: 4, x1: 4, y1: 9 }, // inverted on one
+  ]) {
+    const at = loadedPF.schedule.walkableIn(z, box, "n1");
+    assert.ok(Number.isInteger(at.x) && Number.isInteger(at.y), `an inverted box yields real tiles (${at.x},${at.y})`);
+    assert.ok(loadedPF.schedule.standable(z, at.x, at.y), "an inverted box yields a standable tile");
+  }
+}
+
 // 14h. A save whose zone no longer exists lands the player at the start zone's
 // SPAWN, not at the old interior coordinates clamped into a much bigger map.
 // The solid-tile rescue only fires if those coordinates hit a wall, so without
