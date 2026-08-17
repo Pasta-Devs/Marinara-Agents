@@ -177,7 +177,7 @@ PF.Sim = class {
         const inside = npc.x >= box.x0 && npc.x <= box.x1 && npc.y >= box.y0 && npc.y <= box.y1;
         npc.wander = box;
         if (!inside) {
-          const at = PF.schedule.walkableIn(target, box);
+          const at = PF.schedule.walkableIn(target, box, handle.spread === false ? null : npc.id);
           npc.x = at.x;
           npc.y = at.y;
         }
@@ -224,6 +224,8 @@ PF.Sim = class {
         if (nx >= w.x0 && nx <= w.x1 && ny >= w.y0 && ny <= w.y1 && !z.solid[ny * z.w + nx]) {
           t.dx = dx;
           t.dy = dy;
+          t.tx = nx; // remember the DESTINATION — see the arrival test below
+          t.ty = ny;
         } else {
           t.dx = 0;
           t.dy = 0;
@@ -236,9 +238,17 @@ PF.Sim = class {
         t.fy += t.dy * speed;
         npc.facing = t.dx < 0 ? 2 : t.dx > 0 ? 3 : t.dy < 0 ? 1 : 0;
         npc.stepPhase = (npc.stepPhase || 0) + dt * 6;
-        if (Math.abs(t.fx - Math.round(t.fx)) < 0.05 && Math.abs(t.fy - Math.round(t.fy)) < 0.05) {
-          t.fx = Math.round(t.fx);
-          t.fy = Math.round(t.fy);
+        // Arrival is reaching the DESTINATION tile, not merely being near an
+        // integer: NPCs always start on an exact tile, and at the fixed 1/60s
+        // step one move covers 1.6/60 = 0.027 tiles, so a "near any integer"
+        // test matched the tile they were still standing on and cancelled every
+        // move on its first frame — the wander has never actually moved anyone.
+        if ((t.dx > 0 && t.fx >= t.tx) || (t.dx < 0 && t.fx <= t.tx)) {
+          t.fx = t.tx;
+          t.dx = 0;
+          t.dy = 0;
+        } else if ((t.dy > 0 && t.fy >= t.ty) || (t.dy < 0 && t.fy <= t.ty)) {
+          t.fy = t.ty;
           t.dx = 0;
           t.dy = 0;
         }

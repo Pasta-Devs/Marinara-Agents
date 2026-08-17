@@ -2123,6 +2123,13 @@ PF.world = (() => {
     for (const place of interiorPlaces) {
       const id = zoneIdForPlace(place);
       if (!id) continue;
+      // An interior only exists if it claimed a facade: its door IS the portal.
+      // The facade loop above stops when the building lots run dry (a small
+      // outpost has fewer lots than CAPS.places allows), and compiling the zone
+      // anyway produced a named, NPC-populated room with no door in either
+      // direction — anyone homed there was stranded and un-talkable forever.
+      // Same policy as an unanchorable feature: dropped, never sealed.
+      if (!buildings.some((b) => b.boundPlace === place)) continue;
       const [w, h] = INTERIOR_DIMS[place.kind] || INTERIOR_DIMS.dwelling;
       const zone = makeZone(id, place.name, w, h, "floor");
       for (let x = 0; x < w; x++) {
@@ -2306,12 +2313,19 @@ PF.world = (() => {
     // spawn renders the NPC inside the trunk until it happens to step off
     // (review finding — seed 6 pins it). Deterministic outward ring scan over
     // the wander box; the zone's own spawn tile is the last resort.
-    const walkableSpawn = (zone, wander) => {
-      const cx = ((wander.x0 + wander.x1) / 2) | 0;
-      const cy = ((wander.y0 + wander.y1) / 2) | 0;
+    // `key` spreads NPCs that share a box (a household, the plaza) instead of
+    // stacking them all on its center where only the top sprite is talkable.
+    const walkableSpawn = (zone, wander, key) => {
+      let cx = ((wander.x0 + wander.x1) / 2) | 0;
+      let cy = ((wander.y0 + wander.y1) / 2) | 0;
+      if (key) {
+        const hash = PF.hashStr(String(key));
+        cx = wander.x0 + (hash % (wander.x1 - wander.x0 + 1));
+        cy = wander.y0 + (((hash / 7) | 0) % (wander.y1 - wander.y0 + 1));
+      }
       const open = (x, y) => x >= 0 && x < zone.w && y >= 0 && y < zone.h && !zone.solid[idx(zone, x, y)];
       if (open(cx, cy)) return { x: cx, y: cy };
-      const maxR = Math.max(wander.x1 - wander.x0, wander.y1 - wander.y0);
+      const maxR = wander.x1 - wander.x0 + (wander.y1 - wander.y0);
       for (let r = 1; r <= maxR; r++) {
         for (let dy = -r; dy <= r; dy++) {
           for (let dx = -r; dx <= r; dx++) {
@@ -2325,11 +2339,11 @@ PF.world = (() => {
       return { x: zone.spawn.x, y: zone.spawn.y };
     };
     // A door apron box: the strip an NPC mills around in front of its building.
-    const doorBox = (door, reach) => ({
+    const doorBox = (door, reach, depth) => ({
       x0: Math.max(2, door.doorX - reach),
       y0: Math.max(2, door.doorY),
       x1: Math.min(v.w - 3, door.doorX + reach),
-      y1: Math.min(v.h - 3, door.doorY + (reach ? 5 : 1)),
+      y1: Math.min(v.h - 3, door.doorY + depth),
     });
     brief.cast.forEach((member, index) => {
       const npcId = `n${index + 1}`;
@@ -2340,6 +2354,10 @@ PF.world = (() => {
       // owner's dwelling, a transient's inn bed). Left null when an NPC simply
       // stays put — 30-sim's schedule resolver falls back to `post`.
       let home = null;
+      // Households, the plaza and the inn are SHARED boxes, so spawn each NPC
+      // at its own hashed tile inside the box; anyone stacked under another
+      // sprite can never be selected by talk-targeting (review finding).
+      let spread = true;
       if (standing === "resident") {
         // Wander near the owner's building when they have one, else around the
         // zone's spawn; interiors wander their walkable middle.
@@ -2353,10 +2371,11 @@ PF.world = (() => {
             y1: Math.min(v.h - 3, owned.door.doorY + 5),
           };
           // A special-building owner sleeps at their dwelling, not the workshop.
-          // Dwellings have no interiors, so "turned in for the night" reads as a
-          // one-tile spot at their own door rather than milling on the apron.
-          if (dwelling && dwelling !== owned) home = { zoneId: v.id, wander: doorBox(dwelling.door, 0) };
-          else home = { zoneId: v.id, wander: doorBox(owned.door, 0) };
+          // Dwellings have no interiors, so "turned in for the night" reads as
+          // hugging their own door rather than roaming the apron — but keep it
+          // wide enough for a whole household to stand at it without stacking.
+          const bed = dwelling && dwelling !== owned ? dwelling : owned;
+          home = { zoneId: v.id, wander: doorBox(bed.door, 1, 1) };
         } else if (zone === v) {
           wander = plazaBox();
         } else {
@@ -2365,6 +2384,9 @@ PF.world = (() => {
       } else if (standing === "transient" && stalls.some((s) => s.owner === member)) {
         const stall = stalls.find((s) => s.owner === member);
         zone = v; // tend the stall in the settlement
+        // A stall is one merchant's own pitch, not shared geometry, and the
+        // center of the box IS the counter — so keep the exact placement.
+        spread = false;
         wander = {
           x0: Math.max(2, stall.x),
           y0: Math.min(v.h - 3, stall.y + 1),
@@ -2389,7 +2411,7 @@ PF.world = (() => {
       if (standing === "transient" && gatheringZoneId && zones[gatheringZoneId]) {
         home = { zoneId: gatheringZoneId, wander: fullZoneBox(zones[gatheringZoneId]) };
       }
-      const spawnAt = walkableSpawn(zone, wander);
+      const spawnAt = walkableSpawn(zone, wander, spread ? npcId : null);
       zone.npcs.push({
         id: npcId,
         name: member.name,
@@ -2406,7 +2428,9 @@ PF.world = (() => {
         _sched: {
           kind: member.kind,
           standing,
-          post: { zoneId: zone.id, wander },
+          // spread:false keeps a private, meaningful placement (a merchant's own
+          // stall counter); shared boxes disperse by NPC id.
+          post: { zoneId: zone.id, wander, spread },
           home,
           public: { zoneId: v.id, wander: plazaBox() },
         },
@@ -2483,15 +2507,30 @@ PF.schedule = (() => {
     return sched[template[daypart] ?? "post"] ?? sched.post ?? null;
   }
 
-  /** Box center, nudged to the nearest open tile inside the box — the runtime
-   *  twin of the compiler's walkableSpawn, so a relocation can never drop an
-   *  NPC inside a wall or a tree. Deterministic: consumes no randomness. */
-  function walkableIn(zone, box) {
-    const cx = ((box.x0 + box.x1) / 2) | 0;
-    const cy = ((box.y0 + box.y1) / 2) | 0;
+  /** An open tile inside the box, nudged off anything solid — the runtime twin
+   *  of the compiler's walkableSpawn, so a relocation can never drop an NPC
+   *  inside a wall or a tree. Deterministic: consumes no randomness.
+   *
+   *  `key` spreads a SHARED box. Most residents resolve to the same `public`
+   *  handle by day and a household shares one `home`, so a plain box-center
+   *  placement stacked the cast onto a single tile — and because talk-targeting
+   *  picks the nearest with a strict <, everyone under the top sprite became
+   *  unreachable. A stable per-NPC hash picks each one its own starting tile. */
+  function walkableIn(zone, box, key) {
+    let cx = ((box.x0 + box.x1) / 2) | 0;
+    let cy = ((box.y0 + box.y1) / 2) | 0;
+    if (key) {
+      const spanX = box.x1 - box.x0 + 1;
+      const spanY = box.y1 - box.y0 + 1;
+      const hash = PF.hashStr(String(key));
+      cx = box.x0 + (hash % spanX);
+      cy = box.y0 + (((hash / 7) | 0) % spanY);
+    }
     const open = (x, y) => x >= 0 && x < zone.w && y >= 0 && y < zone.h && !zone.solid[y * zone.w + x];
     if (open(cx, cy)) return { x: cx, y: cy };
-    const maxR = Math.max(box.x1 - box.x0, box.y1 - box.y0);
+    // Sum, not max: an off-center hashed start still has to be able to reach
+    // the far corner of the box.
+    const maxR = box.x1 - box.x0 + (box.y1 - box.y0);
     for (let r = 1; r <= maxR; r++) {
       for (let dy = -r; dy <= r; dy++) {
         for (let dx = -r; dx <= r; dx++) {
@@ -2688,7 +2727,7 @@ PF.Sim = class {
         const inside = npc.x >= box.x0 && npc.x <= box.x1 && npc.y >= box.y0 && npc.y <= box.y1;
         npc.wander = box;
         if (!inside) {
-          const at = PF.schedule.walkableIn(target, box);
+          const at = PF.schedule.walkableIn(target, box, handle.spread === false ? null : npc.id);
           npc.x = at.x;
           npc.y = at.y;
         }
@@ -2735,6 +2774,8 @@ PF.Sim = class {
         if (nx >= w.x0 && nx <= w.x1 && ny >= w.y0 && ny <= w.y1 && !z.solid[ny * z.w + nx]) {
           t.dx = dx;
           t.dy = dy;
+          t.tx = nx; // remember the DESTINATION — see the arrival test below
+          t.ty = ny;
         } else {
           t.dx = 0;
           t.dy = 0;
@@ -2747,9 +2788,17 @@ PF.Sim = class {
         t.fy += t.dy * speed;
         npc.facing = t.dx < 0 ? 2 : t.dx > 0 ? 3 : t.dy < 0 ? 1 : 0;
         npc.stepPhase = (npc.stepPhase || 0) + dt * 6;
-        if (Math.abs(t.fx - Math.round(t.fx)) < 0.05 && Math.abs(t.fy - Math.round(t.fy)) < 0.05) {
-          t.fx = Math.round(t.fx);
-          t.fy = Math.round(t.fy);
+        // Arrival is reaching the DESTINATION tile, not merely being near an
+        // integer: NPCs always start on an exact tile, and at the fixed 1/60s
+        // step one move covers 1.6/60 = 0.027 tiles, so a "near any integer"
+        // test matched the tile they were still standing on and cancelled every
+        // move on its first frame — the wander has never actually moved anyone.
+        if ((t.dx > 0 && t.fx >= t.tx) || (t.dx < 0 && t.fx <= t.tx)) {
+          t.fx = t.tx;
+          t.dx = 0;
+          t.dy = 0;
+        } else if ((t.dy > 0 && t.fy >= t.ty) || (t.dy < 0 && t.fy <= t.ty)) {
+          t.fy = t.ty;
           t.dx = 0;
           t.dy = 0;
         }

@@ -49,15 +49,30 @@ PF.schedule = (() => {
     return sched[template[daypart] ?? "post"] ?? sched.post ?? null;
   }
 
-  /** Box center, nudged to the nearest open tile inside the box — the runtime
-   *  twin of the compiler's walkableSpawn, so a relocation can never drop an
-   *  NPC inside a wall or a tree. Deterministic: consumes no randomness. */
-  function walkableIn(zone, box) {
-    const cx = ((box.x0 + box.x1) / 2) | 0;
-    const cy = ((box.y0 + box.y1) / 2) | 0;
+  /** An open tile inside the box, nudged off anything solid — the runtime twin
+   *  of the compiler's walkableSpawn, so a relocation can never drop an NPC
+   *  inside a wall or a tree. Deterministic: consumes no randomness.
+   *
+   *  `key` spreads a SHARED box. Most residents resolve to the same `public`
+   *  handle by day and a household shares one `home`, so a plain box-center
+   *  placement stacked the cast onto a single tile — and because talk-targeting
+   *  picks the nearest with a strict <, everyone under the top sprite became
+   *  unreachable. A stable per-NPC hash picks each one its own starting tile. */
+  function walkableIn(zone, box, key) {
+    let cx = ((box.x0 + box.x1) / 2) | 0;
+    let cy = ((box.y0 + box.y1) / 2) | 0;
+    if (key) {
+      const spanX = box.x1 - box.x0 + 1;
+      const spanY = box.y1 - box.y0 + 1;
+      const hash = PF.hashStr(String(key));
+      cx = box.x0 + (hash % spanX);
+      cy = box.y0 + (((hash / 7) | 0) % spanY);
+    }
     const open = (x, y) => x >= 0 && x < zone.w && y >= 0 && y < zone.h && !zone.solid[y * zone.w + x];
     if (open(cx, cy)) return { x: cx, y: cy };
-    const maxR = Math.max(box.x1 - box.x0, box.y1 - box.y0);
+    // Sum, not max: an off-center hashed start still has to be able to reach
+    // the far corner of the box.
+    const maxR = box.x1 - box.x0 + (box.y1 - box.y0);
     for (let r = 1; r <= maxR; r++) {
       for (let dy = -r; dy <= r; dy++) {
         for (let dx = -r; dx <= r; dx++) {

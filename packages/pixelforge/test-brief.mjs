@@ -1615,6 +1615,22 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   dayOf(19 * 60);
   assert.ok(sim.header().includes("(dusk)"), `the header names the daypart (${sim.header()})`);
 
+  // NPCs sharing a destination box must not stack: talk-targeting picks the
+  // nearest with a strict <, so anyone underneath the top sprite would be
+  // permanently unreachable. Review finding — a plain box-center placement put
+  // most of the cast on one plaza tile at midday.
+  for (const min of [12 * 60, 23 * 60]) {
+    dayOf(min);
+    for (const zoneId in w.zones) {
+      const seen = new Map();
+      for (const npc of w.zones[zoneId].npcs) {
+        const tile = `${Math.round(npc.x)},${Math.round(npc.y)}`;
+        assert.ok(!seen.has(tile), `${npc.name} and ${seen.get(tile)} share tile ${tile} in ${zoneId} at ${min}`);
+        seen.set(tile, npc.name);
+      }
+    }
+  }
+
   // Schedules are runtime-only state: `_sched` hangs off the live NPC object,
   // which the snapshot never walks (60-save stores a fixed scalar field list and
   // no NPC data at all), so schedules add zero save fields. What this harness
@@ -1659,6 +1675,85 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   assert.equal(sim.daypart(), "night", "and the daypart follows");
   sim.mode = "dialogue";
   assert.equal(sim.waitUntil("dawn"), false, "wait-until refuses mid-conversation");
+}
+
+// 14c. NPCs actually WALK. The arrival snap used to test "near any integer",
+// which matched the tile an NPC was still standing on — at the shipped fixed
+// 1/60s step one move covers 0.027 tiles, so every move was cancelled on its
+// first frame and the wander had never moved anyone. Drive the real fixed step.
+{
+  const sealed = brief.defaults("cozy-village", 909);
+  const w = world.build(909, "cozy-village", sealed);
+  const sim = new loadedPF.Sim(w);
+  sim.mode = "walk";
+  const z = sim.zone();
+  assert.ok(z.npcs.length > 0, "the settlement has NPCs to move");
+  const start = z.npcs.map((n) => `${n.name}@${Math.round(n.x)},${Math.round(n.y)}`).join("|");
+  // Two in-game hours at the shipped 1/60s timestep.
+  for (let i = 0; i < 60 * 60 * 2; i++) sim.step(1 / 60, {});
+  const moved = z.npcs.filter((n) => {
+    const at = `${n.name}@${Math.round(n.x)},${Math.round(n.y)}`;
+    return !start.includes(at);
+  });
+  assert.ok(moved.length > 0, `at least one NPC wandered to a new tile (start ${start})`);
+  // And wandering never walks anyone through a wall or out of their box.
+  for (const npc of z.npcs) {
+    const x = Math.round(npc.x);
+    const y = Math.round(npc.y);
+    assert.equal(z.solid[z.w * y + x], 0, `${npc.name} never wanders onto a solid tile`);
+    assert.ok(
+      x >= npc.wander.x0 - 1 && x <= npc.wander.x1 + 1 && y >= npc.wander.y0 - 1 && y <= npc.wander.y1 + 1,
+      `${npc.name} stays in its wander box`,
+    );
+  }
+}
+
+// 14d. Every compiled zone is reachable from the start zone. An interior place
+// that never claimed a building lot used to compile a named, NPC-populated room
+// with no portal in either direction — whoever was homed there was stranded and
+// un-talkable forever (review finding: 200/200 outposts on the pinned brief).
+{
+  const sealed = brief.validate(
+    {
+      scale: "outpost",
+      name: "Stonewatch",
+      places: [
+        { kind: "gathering", name: "The Kettle" },
+        { kind: "hall", name: "The Moot" },
+        { kind: "workshop", name: "The Forge" },
+      ],
+      cast: [
+        { name: "Alder", role: "reeve", kind: "leader", tint: "blue", home: "Stonewatch", household: 1 },
+        { name: "Perrin", role: "innkeep", kind: "host", tint: "amber", home: "The Kettle", household: 2 },
+        { name: "Bram", role: "smith", kind: "maker", tint: "green", home: "The Forge", household: 3 },
+        { name: "Sera", role: "elder", kind: "elder", tint: "rose", home: "Stonewatch", household: 4 },
+      ],
+    },
+    ctx,
+  );
+  for (const seed of [1, 2, 3, 4, 5]) {
+    const w = world.build(seed, "cozy-village", sealed);
+    // Flood the portal graph from the start zone.
+    const reached = new Set([w.startZone]);
+    const queue = [w.startZone];
+    while (queue.length) {
+      for (const portal of w.zones[queue.pop()].portals) {
+        if (!reached.has(portal.toZone)) {
+          reached.add(portal.toZone);
+          queue.push(portal.toZone);
+        }
+      }
+    }
+    for (const zoneId in w.zones) {
+      assert.ok(reached.has(zoneId), `seed ${seed}: zone ${zoneId} (${w.zones[zoneId].name}) is reachable`);
+    }
+    // And nobody is left in a zone that no longer exists.
+    for (const zoneId in w.zones) {
+      for (const npc of w.zones[zoneId].npcs) {
+        assert.ok(reached.has(zoneId), `seed ${seed}: ${npc.name} is not stranded in ${zoneId}`);
+      }
+    }
+  }
 }
 
 console.log("brief validator + compiler: all cases passed");
