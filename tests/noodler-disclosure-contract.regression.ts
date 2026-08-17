@@ -103,28 +103,15 @@ assert.equal(isMinimizedNoodlerSourceSnapshot(hinted), true);
 // The themes prefix pushes the token off the start of the string, so the salt has to be
 // read through the leading-space branch of the pattern. Without it a hinted personality
 // would draw a fresh salt on every comparison and report as changed forever.
-assert.deepEqual(
-  compareMinimizedNoodlerSourceSnapshot(hinted, snapshot, "hinted"),
-  { state: "current" },
-);
-assert.equal(
-  minimizeNoodlerSourceSnapshot(snapshot, "hinted", hinted).personality,
-  hinted.personality,
-);
+assert.deepEqual(compareMinimizedNoodlerSourceSnapshot(hinted, snapshot, "hinted"), { state: "current" });
+assert.equal(minimizeNoodlerSourceSnapshot(snapshot, "hinted", hinted).personality, hinted.personality);
 
 // Each minimization salts independently, so two stores of the same source do not
 // produce the same token — but a comparison against a baseline reuses its salt.
 assert.notEqual(minimizeNoodlerSourceSnapshot(snapshot, "secret").name, secret.name);
+assert.deepEqual(compareMinimizedNoodlerSourceSnapshot(secret, snapshot, "secret"), { state: "current" });
 assert.deepEqual(
-  compareMinimizedNoodlerSourceSnapshot(secret, snapshot, "secret"),
-  { state: "current" },
-);
-assert.deepEqual(
-  compareMinimizedNoodlerSourceSnapshot(
-    secret,
-    { ...snapshot, backstory: "Came back last spring" },
-    "secret",
-  ),
+  compareMinimizedNoodlerSourceSnapshot(secret, { ...snapshot, backstory: "Came back last spring" }, "secret"),
   {
     state: "changed",
     changes: [
@@ -156,7 +143,10 @@ const imagesPrivacy = readFileSync(
   "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-images.service.ts",
   "utf8",
 );
-assert.match(imagesPrivacy, /input\.disclosureMode !== "secret" &&\s+input\.linkedPublicAccount\?\.kind === "character"/u);
+assert.match(
+  imagesPrivacy,
+  /input\.disclosureMode !== "secret" &&\s+input\.linkedPublicAccount\?\.kind === "character"/u,
+);
 
 const draftPrivacy = readFileSync(
   "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-stage-profile-draft.service.ts",
@@ -166,7 +156,10 @@ assert.match(draftPrivacy, /# Open-secret inspiration brief/u);
 assert.match(draftPrivacy, /noodlerHintedSourceText\(input\.source\?\.data\)/u);
 // The hinted brief still withholds the canonical story beats.
 assert.doesNotMatch(
-  draftPrivacy.slice(draftPrivacy.indexOf("export function noodlerHintedSourceText"), draftPrivacy.indexOf("export function noodlerSourceText")),
+  draftPrivacy.slice(
+    draftPrivacy.indexOf("export function noodlerHintedSourceText"),
+    draftPrivacy.indexOf("export function noodlerSourceText"),
+  ),
   /scenario|backstory|source\.name/u,
 );
 

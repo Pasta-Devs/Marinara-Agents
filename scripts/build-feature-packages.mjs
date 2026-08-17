@@ -258,8 +258,7 @@ const features = [
     minEngineVersion: "2.4.2",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
-    description:
-      "Explore the Noodle public timeline as an optional local social world.",
+    description: "Explore the Noodle public timeline as an optional local social world.",
     localizations: {
       de: {
         name: "Noodle",
@@ -356,13 +355,13 @@ const features = [
     packageSourceRoot: slurpSourceRoot,
     ownedSourcePaths: slurpOwnedSourcePaths,
     libraryHidden: true,
-     assetPaths: ["slurp-logo.png", "slurpagent.png"],
+    assetPaths: ["slurp-logo.png", "slurpagent.png"],
     contributions: {
       slots: ["home-browser-tab"],
       homeBrowserTab: {
         label: "Slurp",
         ariaLabel: "Open Slurp",
-         iconPaths: ["slurp-logo.png"],
+        iconPaths: ["slurp-logo.png"],
       },
     },
   },
@@ -636,9 +635,7 @@ export async function selfCheck() {
     if (feature.ownedSourcePaths?.length) {
       await capturePackageSources(metafile, prepared.buildRoot, feature.ownedSourcePaths);
       if (feature.id === "slurp") {
-        await removeOwnedSourceSnapshots([
-          "packages/client/src/localization/locales",
-        ]);
+        await removeOwnedSourceSnapshots(["packages/client/src/localization/locales"]);
       }
     } else {
       await captureEngineSources(
@@ -808,10 +805,7 @@ async function bundleSpecialClient(feature, output) {
       const worldMap = resolve(prepared.buildRoot, "packages/client/src/components/game/GameWorldMap.tsx");
       const spatialHooks = resolve(prepared.buildRoot, "packages/client/src/hooks/use-spatial-context.ts");
       const packageApi = resolve(prepared.buildRoot, "packages/client/src/features/spatial-context/package-api.ts");
-      const localization = resolve(
-        prepared.buildRoot,
-        "packages/client/src/features/spatial-context/localization.tsx",
-      );
+      const localization = resolve(prepared.buildRoot, "packages/client/src/features/spatial-context/localization.tsx");
       const pendingTransitions = resolve(
         prepared.buildRoot,
         "packages/client/src/features/spatial-context/pending-spatial-transitions.ts",

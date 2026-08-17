@@ -4,23 +4,14 @@ import { dirname, extname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-export const hierarchicalMapsSourceRoot = resolve(
-  repoRoot,
-  "packages/hierarchical-maps/src/engine",
-);
-export const hierarchicalMapsBoundaryPath = resolve(
-  repoRoot,
-  "packages/hierarchical-maps/engine-boundary.json",
-);
+export const hierarchicalMapsSourceRoot = resolve(repoRoot, "packages/hierarchical-maps/src/engine");
+export const hierarchicalMapsBoundaryPath = resolve(repoRoot, "packages/hierarchical-maps/engine-boundary.json");
 
 const sourceExtensions = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
 
 function isWithin(root, path) {
   const pathFromRoot = relative(root, path);
-  return (
-    pathFromRoot === "" ||
-    (!pathFromRoot.startsWith(`..${sep}`) && pathFromRoot !== "..")
-  );
+  return pathFromRoot === "" || (!pathFromRoot.startsWith(`..${sep}`) && pathFromRoot !== "..");
 }
 
 async function listSourceFiles(root) {
@@ -55,8 +46,7 @@ function packageOwnedTargetExists(importer, specifier, sourceRoot) {
 
 function importSpecifiers(source) {
   const specifiers = new Set();
-  const staticImport =
-    /\b(?:import|export)\s+(?:type\s+)?(?:[^"'`;]*?\s+from\s*)?["']([^"']+)["']/gsu;
+  const staticImport = /\b(?:import|export)\s+(?:type\s+)?(?:[^"'`;]*?\s+from\s*)?["']([^"']+)["']/gsu;
   const dynamicImport = /\bimport\s*\(\s*["']([^"']+)["']\s*\)/gu;
   for (const pattern of [staticImport, dynamicImport]) {
     for (const match of source.matchAll(pattern)) specifiers.add(match[1]);
@@ -64,9 +54,7 @@ function importSpecifiers(source) {
   return [...specifiers];
 }
 
-export async function findHierarchicalMapsPrivateEngineImports(
-  sourceRoot = hierarchicalMapsSourceRoot,
-) {
+export async function findHierarchicalMapsPrivateEngineImports(sourceRoot = hierarchicalMapsSourceRoot) {
   const imports = [];
   for (const file of await listSourceFiles(sourceRoot)) {
     const source = await readFile(file, "utf8");
@@ -80,42 +68,24 @@ export async function findHierarchicalMapsPrivateEngineImports(
     }
   }
   return imports.sort((left, right) =>
-    `${left.source}\0${left.specifier}`.localeCompare(
-      `${right.source}\0${right.specifier}`,
-    ),
+    `${left.source}\0${left.specifier}`.localeCompare(`${right.source}\0${right.specifier}`),
   );
 }
 
 export async function readHierarchicalMapsBoundary() {
-  const boundary = JSON.parse(
-    await readFile(hierarchicalMapsBoundaryPath, "utf8"),
-  );
-  if (boundary.schemaVersion !== 1)
-    throw new Error("Unsupported Hierarchical Maps boundary schema");
-  if (
-    boundary.capabilityApi?.major !== 1 ||
-    boundary.capabilityApi?.minor !== 4
-  ) {
+  const boundary = JSON.parse(await readFile(hierarchicalMapsBoundaryPath, "utf8"));
+  if (boundary.schemaVersion !== 1) throw new Error("Unsupported Hierarchical Maps boundary schema");
+  if (boundary.capabilityApi?.major !== 1 || boundary.capabilityApi?.minor !== 4) {
     throw new Error("Hierarchical Maps must target capability API 1.4");
   }
-  if (
-    !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(
-      boundary.builtAgainst?.engineVersion ?? "",
-    )
-  ) {
-    throw new Error(
-      "Hierarchical Maps boundary is missing a valid Engine version",
-    );
+  if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(boundary.builtAgainst?.engineVersion ?? "")) {
+    throw new Error("Hierarchical Maps boundary is missing a valid Engine version");
   }
   if (!/^[a-f0-9]{40}$/u.test(boundary.builtAgainst?.engineCommit ?? "")) {
-    throw new Error(
-      "Hierarchical Maps boundary is missing a full Engine commit",
-    );
+    throw new Error("Hierarchical Maps boundary is missing a full Engine commit");
   }
   if (!Array.isArray(boundary.privateEngineImports)) {
-    throw new Error(
-      "Hierarchical Maps boundary is missing its private Engine import inventory",
-    );
+    throw new Error("Hierarchical Maps boundary is missing its private Engine import inventory");
   }
   return boundary;
 }
@@ -127,9 +97,7 @@ export async function assertHierarchicalMapsPrivateImportBoundary() {
   ]);
   const expected = boundary.privateEngineImports;
   if (expected.length > 0) {
-    throw new Error(
-      "Hierarchical Maps must not record private Engine imports after package isolation",
-    );
+    throw new Error("Hierarchical Maps must not record private Engine imports after package isolation");
   }
   if (JSON.stringify(actual) === JSON.stringify(expected)) return boundary;
 
@@ -147,11 +115,6 @@ export async function assertHierarchicalMapsPrivateImportBoundary() {
   );
 }
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-) {
-  process.stdout.write(
-    `${JSON.stringify(await findHierarchicalMapsPrivateEngineImports(), null, 2)}\n`,
-  );
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  process.stdout.write(`${JSON.stringify(await findHierarchicalMapsPrivateEngineImports(), null, 2)}\n`);
 }

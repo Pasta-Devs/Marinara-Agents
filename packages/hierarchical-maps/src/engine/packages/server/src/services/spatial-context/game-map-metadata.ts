@@ -25,28 +25,18 @@ function isGameMap(value: unknown): value is GameMap {
   return map.type === "grid" || map.type === "node";
 }
 
-export function getGameMapId(
-  map: GameMap | null | undefined,
-  fallbackIndex = 0,
-): string | null {
+export function getGameMapId(map: GameMap | null | undefined, fallbackIndex = 0): string | null {
   if (!map) return null;
   const explicit = map.id?.trim();
   if (explicit) return explicit;
   return slugifyGameMapId(map.name || "") || `map-${fallbackIndex + 1}`;
 }
 
-function ensureGameMapId(
-  map: GameMap,
-  existingMaps: readonly GameMap[] = [],
-): GameMap {
+function ensureGameMapId(map: GameMap, existingMaps: readonly GameMap[] = []): GameMap {
   const explicit = map.id?.trim();
   if (explicit) return explicit === map.id ? map : { ...map, id: explicit };
 
-  const usedIds = new Set(
-    existingMaps
-      .map((entry, index) => getGameMapId(entry, index))
-      .filter(Boolean) as string[],
-  );
+  const usedIds = new Set(existingMaps.map((entry, index) => getGameMapId(entry, index)).filter(Boolean) as string[]);
   const base = slugifyGameMapId(map.name || "") || "map";
   let id = base;
   let suffix = 2;
@@ -59,10 +49,7 @@ function upsertGameMap(maps: readonly GameMap[], map: GameMap): GameMap[] {
   const normalizedName = normalizeGameMapName(map.name || "");
   const existingIndex = maps.findIndex((entry, index) => {
     if (explicitId) return getGameMapId(entry, index) === explicitId;
-    return (
-      normalizedName !== "" &&
-      normalizeGameMapName(entry.name || "") === normalizedName
-    );
+    return normalizedName !== "" && normalizeGameMapName(entry.name || "") === normalizedName;
   });
 
   const mapWithId =
@@ -81,21 +68,15 @@ function upsertGameMap(maps: readonly GameMap[], map: GameMap): GameMap[] {
 
 export function getGameMapsFromMeta(meta: Record<string, unknown>): GameMap[] {
   const rawMaps = Array.isArray(meta.gameMaps) ? meta.gameMaps : [];
-  const maps = rawMaps
-    .filter(isGameMap)
-    .reduce<GameMap[]>((acc, map) => upsertGameMap(acc, map), []);
+  const maps = rawMaps.filter(isGameMap).reduce<GameMap[]>((acc, map) => upsertGameMap(acc, map), []);
   const activeMap = isGameMap(meta.gameMap) ? meta.gameMap : null;
   return activeMap ? upsertGameMap(maps, activeMap) : maps;
 }
 
-export function withActiveGameMapMeta(
-  meta: Record<string, unknown>,
-  map: GameMap,
-): Record<string, unknown> {
+export function withActiveGameMapMeta(meta: Record<string, unknown>, map: GameMap): Record<string, unknown> {
   const maps = upsertGameMap(getGameMapsFromMeta(meta), map);
   const mapId = getGameMapId(map);
-  const activeMap =
-    maps.find((entry, index) => getGameMapId(entry, index) === mapId) ?? map;
+  const activeMap = maps.find((entry, index) => getGameMapId(entry, index) === mapId) ?? map;
   return {
     ...meta,
     gameMap: activeMap,

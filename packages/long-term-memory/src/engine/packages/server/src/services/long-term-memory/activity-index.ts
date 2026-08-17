@@ -20,10 +20,7 @@ function activityIndexStatePath(root: string) {
 }
 
 function activityPath(root: string, noteId: string) {
-  return safeJoin(
-    getLongTermMemoryDirectories(root).indexes,
-    `activity/${ltmNoteIdSchema.parse(noteId)}.json`,
-  );
+  return safeJoin(getLongTermMemoryDirectories(root).indexes, `activity/${ltmNoteIdSchema.parse(noteId)}.json`);
 }
 
 async function readActivityFile(root: string, noteId: string) {
@@ -42,19 +39,12 @@ async function readActivityFile(root: string, noteId: string) {
   }
 }
 
-export async function readLtmActivityEvents(
-  root: string,
-  noteId: string,
-  limit: number,
-) {
+export async function readLtmActivityEvents(root: string, noteId: string, limit: number) {
   const events = await readActivityFile(root, noteId);
   return events.slice(-limit).reverse();
 }
 
-export async function appendLtmActivityEvents(
-  root: string,
-  events: readonly LtmEvent[],
-) {
+export async function appendLtmActivityEvents(root: string, events: readonly LtmEvent[]) {
   const grouped = new Map<string, LtmEvent[]>();
   for (const event of events) {
     if (!event.target) continue;
@@ -65,10 +55,7 @@ export async function appendLtmActivityEvents(
   for (const [noteId, incoming] of grouped) {
     const existing = await readActivityFile(root, noteId);
     const seen = new Set(existing.map((event) => event.id));
-    const next = [
-      ...existing,
-      ...incoming.filter((event) => !seen.has(event.id)),
-    ].slice(-MAX_ACTIVITY_EVENTS);
+    const next = [...existing, ...incoming.filter((event) => !seen.has(event.id))].slice(-MAX_ACTIVITY_EVENTS);
     await writeJsonAtomic(activityPath(root, noteId), next);
   }
 }
@@ -99,8 +86,7 @@ export async function rebuildLtmActivityIndex(root: string) {
   const dirs = getLongTermMemoryDirectories(root);
   await rm(dirs.activityIndex, { recursive: true, force: true });
   await mkdir(dirs.activityIndex, { recursive: true });
-  for (const [noteId, events] of grouped)
-    await writeJsonAtomic(activityPath(root, noteId), events);
+  for (const [noteId, events] of grouped) await writeJsonAtomic(activityPath(root, noteId), events);
   await writeJsonAtomic(activityIndexStatePath(root), { version: 1 });
 }
 
@@ -111,8 +97,7 @@ export async function ensureLtmActivityIndex(root: string) {
   } catch {
     // Rebuild a malformed derived index from the durable event log.
   }
-  if (!activityIndexStateSchema.safeParse(state).success)
-    await rebuildLtmActivityIndex(root);
+  if (!activityIndexStateSchema.safeParse(state).success) await rebuildLtmActivityIndex(root);
 }
 
 export async function pruneLtmActivityIndex(root: string, cutoff: number) {
@@ -126,8 +111,9 @@ export async function pruneLtmActivityIndex(root: string, cutoff: number) {
     const events = await readActivityFile(root, noteId);
     const retained = events.filter((event) => Date.parse(event.ts) >= cutoff);
     if (retained.length) await writeJsonAtomic(activityPath(root, noteId), retained);
-    else await unlink(activityPath(root, noteId)).catch((error) => {
-      if (!isEnoent(error)) throw error;
-    });
+    else
+      await unlink(activityPath(root, noteId)).catch((error) => {
+        if (!isEnoent(error)) throw error;
+      });
   }
 }

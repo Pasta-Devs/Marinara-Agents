@@ -11,26 +11,18 @@ import {
 // Zod 3 intentionally omits an own "__proto__" key while parsing z.record.
 // Validate records as entries so every valid user key survives without ever
 // being assigned through an object's prototype setter.
-function ltmStringRecordSchema<T extends z.ZodTypeAny>(
-  keySchema: z.ZodString,
-  valueSchema: T,
-) {
+function ltmStringRecordSchema<T extends z.ZodTypeAny>(keySchema: z.ZodString, valueSchema: T) {
   return z
     .preprocess(
       (value) =>
-        value && typeof value === "object" && !Array.isArray(value)
-          ? { entries: Object.entries(value) }
-          : value,
+        value && typeof value === "object" && !Array.isArray(value) ? { entries: Object.entries(value) } : value,
       z
         .object({
           entries: z.array(z.tuple([keySchema, valueSchema])),
         })
         .strict(),
     )
-    .transform(
-      ({ entries }) =>
-        Object.fromEntries(entries) as Record<string, z.infer<T>>,
-    );
+    .transform(({ entries }) => Object.fromEntries(entries) as Record<string, z.infer<T>>);
 }
 
 export const ltmNoteTypeSchema = z.enum([
@@ -49,12 +41,7 @@ export const ltmEvidenceUnitTitleSchema = z.string().trim().min(1).max(80);
 
 export const ltmStatusSchema = z.enum(["active", "resolved", "archived"]);
 
-export const ltmEvidenceUnitStatusSchema = z.enum([
-  "active",
-  "resolved",
-  "archived",
-  "developing",
-]);
+export const ltmEvidenceUnitStatusSchema = z.enum(["active", "resolved", "archived", "developing"]);
 
 export const ltmEvidenceUnitBucketSchema = z.enum([
   "timeline_event",
@@ -81,77 +68,30 @@ export const ltmModeSchema = z.preprocess(
 );
 const LTM_EXTRACTION_MODES = ltmModeEnumSchema.options;
 
-export const ltmExtractionReasoningEffortSchema = z.enum([
-  "none",
-  "low",
-  "medium",
-  "high",
-]);
+export const ltmExtractionReasoningEffortSchema = z.enum(["none", "low", "medium", "high"]);
 
-export const ltmExtractionVerbositySchema = z.enum([
-  "none",
-  "low",
-  "medium",
-  "high",
-]);
+export const ltmExtractionVerbositySchema = z.enum(["none", "low", "medium", "high"]);
 
 const ltmGlobalSettingsShape = z
   .object({
     version: z.literal(1).default(1),
     enableLongTermMemory: z.boolean().optional(),
-    longTermMemoryBudgetTokens: z
-      .number()
-      .int()
-      .min(128)
-      .max(16_384)
-      .optional(),
+    longTermMemoryBudgetTokens: z.number().int().min(128).max(16_384).optional(),
     longTermMemoryMaxChunks: z.number().int().min(1).max(100).optional(),
     longTermMemoryScoreThreshold: z.number().finite().min(0).max(1).optional(),
-    longTermMemoryRecallContextMessages: z
-      .number()
-      .int()
-      .min(1)
-      .max(20)
-      .optional(),
-    longTermMemoryRecallStyle: z
-      .enum(["balanced", "exact", "broad", "story", "custom"])
-      .optional(),
-    longTermMemorySemanticWeight: z
-      .number()
-      .finite()
-      .min(0)
-      .max(1)
-      .nullable()
-      .optional(),
-    longTermMemoryLexicalWeight: z
-      .number()
-      .finite()
-      .min(0)
-      .max(1)
-      .nullable()
-      .optional(),
-    longTermMemoryGraphWeight: z
-      .number()
-      .finite()
-      .min(0)
-      .max(1)
-      .nullable()
-      .optional(),
-    longTermMemoryKeywordWeight: z
-      .number()
-      .finite()
-      .min(0)
-      .max(1)
-      .nullable()
-      .optional(),
+    longTermMemoryRecallContextMessages: z.number().int().min(1).max(20).optional(),
+    longTermMemoryRecallStyle: z.enum(["balanced", "exact", "broad", "story", "custom"]).optional(),
+    longTermMemorySemanticWeight: z.number().finite().min(0).max(1).nullable().optional(),
+    longTermMemoryLexicalWeight: z.number().finite().min(0).max(1).nullable().optional(),
+    longTermMemoryGraphWeight: z.number().finite().min(0).max(1).nullable().optional(),
+    longTermMemoryKeywordWeight: z.number().finite().min(0).max(1).nullable().optional(),
     longTermMemoryIncludeResolved: z.boolean().optional(),
     longTermMemoryRecallPreamble: z.string().max(500).optional(),
     longTermMemoryDebug: z.boolean().optional(),
   })
   .strict();
 
-const LTM_GLOBAL_LEGACY_KEYS =
-  /^(importConcurrency|connectionId|model|instruction|autoApplyLowRisk)$/;
+const LTM_GLOBAL_LEGACY_KEYS = /^(importConcurrency|connectionId|model|instruction|autoApplyLowRisk)$/;
 
 export const ltmGlobalSettingsSchema = z.preprocess((value) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
@@ -183,13 +123,7 @@ export const ltmResolvedGlobalSettingsSchema = z
     longTermMemoryMaxChunks: z.number().int().min(1).max(100),
     longTermMemoryScoreThreshold: z.number().finite().min(0).max(1),
     longTermMemoryRecallContextMessages: z.number().int().min(1).max(20),
-    longTermMemoryRecallStyle: z.enum([
-      "balanced",
-      "exact",
-      "broad",
-      "story",
-      "custom",
-    ]),
+    longTermMemoryRecallStyle: z.enum(["balanced", "exact", "broad", "story", "custom"]),
     longTermMemorySemanticWeight: z.number().finite().min(0).max(1),
     longTermMemoryLexicalWeight: z.number().finite().min(0).max(1),
     longTermMemoryGraphWeight: z.number().finite().min(0).max(1),
@@ -200,24 +134,22 @@ export const ltmResolvedGlobalSettingsSchema = z
   })
   .strict();
 
-export const DEFAULT_LTM_GLOBAL_SETTINGS =
-  ltmResolvedGlobalSettingsSchema.parse({
-    version: 1,
-    enableLongTermMemory: true,
-    longTermMemoryBudgetTokens: 4096,
-    longTermMemoryMaxChunks: 20,
-    longTermMemoryScoreThreshold: 0,
-    longTermMemoryRecallContextMessages: 4,
-    longTermMemoryRecallStyle: DEFAULT_LTM_RECALL_STYLE,
-    longTermMemorySemanticWeight:
-      DEFAULT_LTM_RECALL_STYLE_WEIGHTS.semanticWeight,
-    longTermMemoryLexicalWeight: DEFAULT_LTM_RECALL_STYLE_WEIGHTS.lexicalWeight,
-    longTermMemoryGraphWeight: DEFAULT_LTM_RECALL_STYLE_WEIGHTS.graphWeight,
-    longTermMemoryKeywordWeight: DEFAULT_LTM_RECALL_STYLE_WEIGHTS.keywordWeight,
-    longTermMemoryIncludeResolved: false,
-    longTermMemoryRecallPreamble: DEFAULT_LTM_RECALL_PREAMBLE,
-    longTermMemoryDebug: false,
-  });
+export const DEFAULT_LTM_GLOBAL_SETTINGS = ltmResolvedGlobalSettingsSchema.parse({
+  version: 1,
+  enableLongTermMemory: true,
+  longTermMemoryBudgetTokens: 4096,
+  longTermMemoryMaxChunks: 20,
+  longTermMemoryScoreThreshold: 0,
+  longTermMemoryRecallContextMessages: 4,
+  longTermMemoryRecallStyle: DEFAULT_LTM_RECALL_STYLE,
+  longTermMemorySemanticWeight: DEFAULT_LTM_RECALL_STYLE_WEIGHTS.semanticWeight,
+  longTermMemoryLexicalWeight: DEFAULT_LTM_RECALL_STYLE_WEIGHTS.lexicalWeight,
+  longTermMemoryGraphWeight: DEFAULT_LTM_RECALL_STYLE_WEIGHTS.graphWeight,
+  longTermMemoryKeywordWeight: DEFAULT_LTM_RECALL_STYLE_WEIGHTS.keywordWeight,
+  longTermMemoryIncludeResolved: false,
+  longTermMemoryRecallPreamble: DEFAULT_LTM_RECALL_PREAMBLE,
+  longTermMemoryDebug: false,
+});
 
 const ltmExtractionPromptTemplateIdSchema = z.string().trim().min(1).max(64);
 
@@ -239,12 +171,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
-function isLtmExtractionMode(
-  value: unknown,
-): value is (typeof LTM_EXTRACTION_MODES)[number] {
-  return (
-    value === "roleplay" || value === "conversation" || value === "game"
-  );
+function isLtmExtractionMode(value: unknown): value is (typeof LTM_EXTRACTION_MODES)[number] {
+  return value === "roleplay" || value === "conversation" || value === "game";
 }
 
 function stripLegacyPromptTemplateMode(template: unknown) {
@@ -253,10 +181,7 @@ function stripLegacyPromptTemplateMode(template: unknown) {
   return rest;
 }
 
-function nextLegacyPromptTemplateId(
-  mode: (typeof LTM_EXTRACTION_MODES)[number],
-  usedIds: Set<string>,
-) {
+function nextLegacyPromptTemplateId(mode: (typeof LTM_EXTRACTION_MODES)[number], usedIds: Set<string>) {
   const base = `legacy_${mode}_system_prompt`;
   if (!usedIds.has(base)) {
     usedIds.add(base);
@@ -279,10 +204,7 @@ function foldRetiredVisualNovelMode(value: Record<string, unknown>) {
     const record = folded[key];
     if (!isRecord(record) || !("visual_novel" in record)) continue;
     const { visual_novel: legacyValue, ...rest } = record;
-    folded[key] =
-      rest.roleplay === undefined && legacyValue !== undefined
-        ? { ...rest, roleplay: legacyValue }
-        : rest;
+    folded[key] = rest.roleplay === undefined && legacyValue !== undefined ? { ...rest, roleplay: legacyValue } : rest;
   }
   return folded;
 }
@@ -291,10 +213,7 @@ function normalizeLegacyExtractionSettings(value: unknown) {
   if (!isRecord(value)) return value;
   const input = foldRetiredVisualNovelMode(value);
   const normalized: Record<string, unknown> = { ...input };
-  if (
-    typeof input.useExtractionAgentOnGameMode !== "boolean" &&
-    typeof input.refinePass === "boolean"
-  ) {
+  if (typeof input.useExtractionAgentOnGameMode !== "boolean" && typeof input.refinePass === "boolean") {
     normalized.useExtractionAgentOnGameMode = input.refinePass;
   }
   delete normalized.refinePass;
@@ -303,38 +222,22 @@ function normalizeLegacyExtractionSettings(value: unknown) {
   delete normalized.systemPromptsByMode;
   delete normalized.activePromptTemplateId;
 
-  const rawTemplates = Array.isArray(input.promptTemplates)
-    ? input.promptTemplates
-    : [];
+  const rawTemplates = Array.isArray(input.promptTemplates) ? input.promptTemplates : [];
   const promptTemplates = rawTemplates.map(stripLegacyPromptTemplateMode);
   const templateIds = new Set<string>();
-  const legacyTemplateModes = new Map<
-    string,
-    (typeof LTM_EXTRACTION_MODES)[number]
-  >();
+  const legacyTemplateModes = new Map<string, (typeof LTM_EXTRACTION_MODES)[number]>();
   for (const template of rawTemplates) {
     if (!isRecord(template) || typeof template.id !== "string") continue;
     templateIds.add(template.id);
-    if (isLtmExtractionMode(template.mode))
-      legacyTemplateModes.set(template.id, template.mode);
+    if (isLtmExtractionMode(template.mode)) legacyTemplateModes.set(template.id, template.mode);
   }
 
   if (rawTemplates.length > 0) normalized.promptTemplates = promptTemplates;
 
-  const modeIds = isRecord(input.activePromptTemplateIdsByMode)
-    ? input.activePromptTemplateIdsByMode
-    : {};
-  const legacyActiveId =
-    typeof input.activePromptTemplateId === "string"
-      ? input.activePromptTemplateId
-      : null;
-  const hasLegacyPromptOverrides =
-    typeof input.systemPrompt === "string" ||
-    isRecord(input.systemPromptsByMode);
-  const hasLegacyActiveShape =
-    Boolean(legacyActiveId) ||
-    legacyTemplateModes.size > 0 ||
-    hasLegacyPromptOverrides;
+  const modeIds = isRecord(input.activePromptTemplateIdsByMode) ? input.activePromptTemplateIdsByMode : {};
+  const legacyActiveId = typeof input.activePromptTemplateId === "string" ? input.activePromptTemplateId : null;
+  const hasLegacyPromptOverrides = typeof input.systemPrompt === "string" || isRecord(input.systemPromptsByMode);
+  const hasLegacyActiveShape = Boolean(legacyActiveId) || legacyTemplateModes.size > 0 || hasLegacyPromptOverrides;
   let activePromptTemplateIdsByMode: Record<string, string | null> = {};
 
   if (hasLegacyActiveShape) {
@@ -344,8 +247,7 @@ function normalizeLegacyExtractionSettings(value: unknown) {
       if (
         typeof modeId === "string" &&
         templateIds.has(modeId) &&
-        (!legacyTemplateModes.has(modeId) ||
-          legacyTemplateModes.get(modeId) === mode)
+        (!legacyTemplateModes.has(modeId) || legacyTemplateModes.get(modeId) === mode)
       ) {
         activePromptTemplateIdsByMode[mode] = modeId;
       } else if (modeId === null) {
@@ -354,8 +256,7 @@ function normalizeLegacyExtractionSettings(value: unknown) {
         !hasModeId &&
         legacyActiveId &&
         templateIds.has(legacyActiveId) &&
-        (!legacyTemplateModes.has(legacyActiveId) ||
-          legacyTemplateModes.get(legacyActiveId) === mode)
+        (!legacyTemplateModes.has(legacyActiveId) || legacyTemplateModes.get(legacyActiveId) === mode)
       ) {
         activePromptTemplateIdsByMode[mode] = legacyActiveId;
       }
@@ -366,22 +267,15 @@ function normalizeLegacyExtractionSettings(value: unknown) {
     } as Record<string, string | null>;
   }
 
-  const systemPromptsByMode = isRecord(input.systemPromptsByMode)
-    ? input.systemPromptsByMode
-    : {};
-  const legacySystemPrompt =
-    typeof input.systemPrompt === "string" ? input.systemPrompt.trim() : "";
+  const systemPromptsByMode = isRecord(input.systemPromptsByMode) ? input.systemPromptsByMode : {};
+  const legacySystemPrompt = typeof input.systemPrompt === "string" ? input.systemPrompt.trim() : "";
   const migratedTemplates = [...promptTemplates];
   for (const mode of LTM_EXTRACTION_MODES) {
-    const modePrompt =
-      typeof systemPromptsByMode[mode] === "string"
-        ? systemPromptsByMode[mode].trim()
-        : "";
+    const modePrompt = typeof systemPromptsByMode[mode] === "string" ? systemPromptsByMode[mode].trim() : "";
     const prompt =
       modePrompt && modePrompt !== DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE[mode]
         ? modePrompt
-        : legacySystemPrompt &&
-            legacySystemPrompt !== DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE[mode]
+        : legacySystemPrompt && legacySystemPrompt !== DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE[mode]
           ? legacySystemPrompt
           : "";
     if (!prompt || migratedTemplates.length >= 50) continue;
@@ -391,12 +285,10 @@ function normalizeLegacyExtractionSettings(value: unknown) {
       name: `Legacy ${LTM_EXTRACTION_MODE_LABELS[mode]} prompt`,
       prompt,
     });
-    if (!activePromptTemplateIdsByMode[mode])
-      activePromptTemplateIdsByMode[mode] = id;
+    if (!activePromptTemplateIdsByMode[mode]) activePromptTemplateIdsByMode[mode] = id;
   }
 
-  if (migratedTemplates.length > 0)
-    normalized.promptTemplates = migratedTemplates;
+  if (migratedTemplates.length > 0) normalized.promptTemplates = migratedTemplates;
   if (Object.keys(activePromptTemplateIdsByMode).length > 0) {
     normalized.activePromptTemplateIdsByMode = activePromptTemplateIdsByMode;
   } else {
@@ -418,9 +310,7 @@ const ltmPromptTemplatesSchema = z
   .array(ltmExtractionPromptTemplateSchema)
   .max(50)
   .refine(
-    (templates) =>
-      new Set(templates.map((template) => template.id)).size ===
-      templates.length,
+    (templates) => new Set(templates.map((template) => template.id)).size === templates.length,
     "Prompt template IDs must be unique.",
   )
   .optional();
@@ -437,8 +327,7 @@ const ltmExtractionSettingsFields = {
   existingNoteMaxChunks: z.number().int().min(1).max(100).optional(),
   existingNoteMaxTokens: z.number().int().min(128).max(32_768).optional(),
   promptTemplates: ltmPromptTemplatesSchema,
-  activePromptTemplateIdsByMode:
-    ltmActivePromptTemplateIdsByModeSchema.optional(),
+  activePromptTemplateIdsByMode: ltmActivePromptTemplateIdsByModeSchema.optional(),
   aiKeywordExtraction: z.boolean().optional(),
   useExtractionAgentOnGameMode: z.boolean().optional(),
 };
@@ -447,9 +336,7 @@ const ltmExtractionSettingsShape = z
   .object(ltmExtractionSettingsFields)
   .strict()
   .superRefine((settings, ctx) => {
-    const templateIds = new Set(
-      settings.promptTemplates?.map((template) => template.id) ?? [],
-    );
+    const templateIds = new Set(settings.promptTemplates?.map((template) => template.id) ?? []);
     for (const mode of LTM_EXTRACTION_MODES) {
       const templateId = settings.activePromptTemplateIdsByMode?.[mode];
       if (templateId && !templateIds.has(templateId)) {
@@ -513,10 +400,7 @@ export const LTM_NOTE_TYPE_TO_VAULT_FOLDER = {
   thread: "threads",
   world: "world",
   tone: "tone",
-} as const satisfies Record<
-  z.infer<typeof ltmNoteTypeSchema>,
-  z.infer<typeof ltmVaultFolderSchema>
->;
+} as const satisfies Record<z.infer<typeof ltmNoteTypeSchema>, z.infer<typeof ltmVaultFolderSchema>>;
 
 export const LTM_NOTE_ID_PREFIXES_BY_TYPE = {
   source: ["source_"],
@@ -527,57 +411,36 @@ export const LTM_NOTE_ID_PREFIXES_BY_TYPE = {
   thread: ["thread_"],
   world: ["world_", "faction_", "location_", "rule_", "rules"],
   tone: ["tone_"],
-} as const satisfies Record<
-  z.infer<typeof ltmNoteTypeSchema>,
-  readonly string[]
->;
+} as const satisfies Record<z.infer<typeof ltmNoteTypeSchema>, readonly string[]>;
 
 function allowedStoredNoteIdPrefixes(type: z.infer<typeof ltmNoteTypeSchema>) {
   return LTM_NOTE_ID_PREFIXES_BY_TYPE[type];
 }
 
-const LTM_SOURCE_SUMMARY_SCENE_TAGS = [
-  "source_summary",
-  "chat_summary",
-] as const;
+const LTM_SOURCE_SUMMARY_SCENE_TAGS = ["source_summary", "chat_summary"] as const;
 
 export function hasLtmSourceSummarySceneTag(tags: readonly string[]) {
   return LTM_SOURCE_SUMMARY_SCENE_TAGS.some((tag) => tags.includes(tag));
 }
 
-export function isLtmSourceLikeNote(note: {
-  type: z.infer<typeof ltmNoteTypeSchema>;
-  tags: readonly string[];
-}) {
+export function isLtmSourceLikeNote(note: { type: z.infer<typeof ltmNoteTypeSchema>; tags: readonly string[] }) {
   return note.type === "source";
 }
 
 export const ltmIsoTimestampSchema = z
   .string()
   .datetime({ offset: true })
-  .refine(
-    (value) => !Number.isNaN(Date.parse(value)),
-    "Timestamp must be parseable ISO-8601.",
-  );
+  .refine((value) => !Number.isNaN(Date.parse(value)), "Timestamp must be parseable ISO-8601.");
 
 export const ltmSafeRelativePathSchema = z
   .string()
   .min(1)
   .max(240)
   .refine((value) => !value.includes("\0"), "Path cannot contain NUL bytes.")
+  .refine((value) => !value.startsWith("/") && !value.startsWith("\\"), "Path must be relative.")
+  .refine((value) => !/^[A-Za-z]:[\\/]/.test(value), "Path must not include a Windows drive prefix.")
   .refine(
-    (value) => !value.startsWith("/") && !value.startsWith("\\"),
-    "Path must be relative.",
-  )
-  .refine(
-    (value) => !/^[A-Za-z]:[\\/]/.test(value),
-    "Path must not include a Windows drive prefix.",
-  )
-  .refine(
-    (value) =>
-      value
-        .split(/[\\/]+/)
-        .every((part) => part.length > 0 && part !== "." && part !== ".."),
+    (value) => value.split(/[\\/]+/).every((part) => part.length > 0 && part !== "." && part !== ".."),
     "Path must not contain empty, current, or parent segments.",
   );
 
@@ -585,10 +448,7 @@ const ltmIdentifierSchema = z
   .string()
   .min(1)
   .max(120)
-  .regex(
-    /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/,
-    "Identifier must be lowercase snake_case.",
-  );
+  .regex(/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/, "Identifier must be lowercase snake_case.");
 
 export const ltmNoteIdSchema = ltmIdentifierSchema;
 
@@ -606,10 +466,7 @@ export const ltmSubjectSchema = z
       .trim()
       .min(1)
       .max(240)
-      .refine(
-        (value) => !/[\u0000-\u001f\u007f]/.test(value),
-        "Subject keys cannot contain control characters.",
-      ),
+      .refine((value) => !/[\u0000-\u001f\u007f]/.test(value), "Subject keys cannot contain control characters."),
     ref: ltmSubjectReferenceSchema.optional(),
   })
   .strict();
@@ -618,23 +475,12 @@ export const ltmSubjectsSchema = z
   .array(ltmSubjectSchema)
   .min(1)
   .max(2)
-  .refine(
-    (subjects) =>
-      new Set(subjects.map((subject) => subject.key)).size === subjects.length,
-    {
-      message: "Subjects must be distinct.",
-    },
-  )
-  .refine(
-    (subjects) =>
-      subjects.every(
-        (subject, index) =>
-          index === 0 || subjects[index - 1]!.key < subject.key,
-      ),
-    {
-      message: "Subjects must be sorted by stable key.",
-    },
-  );
+  .refine((subjects) => new Set(subjects.map((subject) => subject.key)).size === subjects.length, {
+    message: "Subjects must be distinct.",
+  })
+  .refine((subjects) => subjects.every((subject, index) => index === 0 || subjects[index - 1]!.key < subject.key), {
+    message: "Subjects must be sorted by stable key.",
+  });
 
 export const ltmSourceProvenanceSchema = z
   .object({
@@ -648,10 +494,7 @@ export const ltmSectionKeySchema = z
   .string()
   .min(1)
   .max(80)
-  .regex(
-    /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/,
-    "Section key must be lowercase snake_case.",
-  );
+  .regex(/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/, "Section key must be lowercase snake_case.");
 
 const ltmUsageChunkSchema = z
   .object({
@@ -673,17 +516,14 @@ export const ltmUsageSchema = z
       z.string().min(1).max(120),
       z
         .object({
-          chunks: ltmStringRecordSchema(
-            z.string().min(1).max(240),
-            ltmUsageChunkSchema,
-          ),
+          chunks: ltmStringRecordSchema(z.string().min(1).max(240), ltmUsageChunkSchema),
         })
         .strict(),
     ),
     acceptedReceipts: ltmStringRecordSchema(
-        z.string().min(1).max(240),
-        z.union([ltmIsoTimestampSchema, z.literal(true)]),
-      ).optional(),
+      z.string().min(1).max(240),
+      z.union([ltmIsoTimestampSchema, z.literal(true)]),
+    ).optional(),
   })
   .strict();
 
@@ -719,16 +559,14 @@ export function ltmScopeAliasConflict(
     [scope?.groupId, scope?.groupIds, "groupId/groupIds"],
     [scope?.personaId, scope?.personaIds, "personaId/personaIds"],
   ] as const) {
-    if (scalar && values !== undefined && !values.includes(scalar))
-      return `${label} must identify the same scope.`;
+    if (scalar && values !== undefined && !values.includes(scalar)) return `${label} must identify the same scope.`;
   }
   return null;
 }
 
 export const ltmWriteScopeSchema = ltmScopeSchema.superRefine((scope, ctx) => {
   const conflict = ltmScopeAliasConflict(scope);
-  if (conflict)
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: [], message: conflict });
+  if (conflict) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [], message: conflict });
 });
 
 /**
@@ -751,11 +589,7 @@ export const ltmNoteTransferModeSchema = z.enum(["copy", "move"]);
 
 export const ltmNoteTransferConflictSeveritySchema = z.enum(["hard", "soft"]);
 
-export const ltmNoteTransferConflictReasonSchema = z.enum([
-  "exact_text",
-  "same_source_type",
-  "lexical_overlap",
-]);
+export const ltmNoteTransferConflictReasonSchema = z.enum(["exact_text", "same_source_type", "lexical_overlap"]);
 
 export const ltmNoteTransferConflictSchema = z
   .object({
@@ -796,10 +630,7 @@ export const ltmNoteTransferPreviewRequestSchema = z
     derivedNoteIds: z
       .array(ltmNoteIdSchema)
       .max(500)
-      .refine(
-        (ids) => new Set(ids).size === ids.length,
-        "Derived note IDs must be unique.",
-      )
+      .refine((ids) => new Set(ids).size === ids.length, "Derived note IDs must be unique.")
       .optional(),
     includeDerived: z.boolean().optional(),
   })
@@ -846,26 +677,17 @@ export const ltmNoteTransferApplyRequestSchema = z
       .array(ltmNoteIdSchema)
       .min(1)
       .max(500)
-      .refine(
-        (ids) => new Set(ids).size === ids.length,
-        "Requested note IDs must be unique.",
-      ),
+      .refine((ids) => new Set(ids).size === ids.length, "Requested note IDs must be unique."),
     derivedNoteIds: z
       .array(ltmNoteIdSchema)
       .max(500)
       .default([])
-      .refine(
-        (ids) => new Set(ids).size === ids.length,
-        "Derived note IDs must be unique.",
-      ),
+      .refine((ids) => new Set(ids).size === ids.length, "Derived note IDs must be unique."),
     applyNoteIds: z
       .array(ltmNoteIdSchema)
       .min(1)
       .max(500)
-      .refine(
-        (ids) => new Set(ids).size === ids.length,
-        "Applied note IDs must be unique.",
-      ),
+      .refine((ids) => new Set(ids).size === ids.length, "Applied note IDs must be unique."),
     mode: ltmNoteTransferModeSchema,
     destinationChatId: z.string().min(1).max(120),
   })
@@ -882,10 +704,7 @@ export const ltmNoteTransferApplyRequestSchema = z
         code: z.ZodIssueCode.custom,
         message: "Requested and derived transfer IDs must be disjoint.",
       });
-    const available = new Set([
-      ...value.requestedNoteIds,
-      ...value.derivedNoteIds,
-    ]);
+    const available = new Set([...value.requestedNoteIds, ...value.derivedNoteIds]);
     if (value.applyNoteIds.some((id) => !available.has(id)))
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -940,12 +759,7 @@ export const ltmLinkSchema = z
  * Structured extraction importance. Used by compilation, UI editing, and
  * retrieval weighting instead of encoding markers into section text.
  */
-export const ltmImportanceSchema = z.enum([
-  "critical",
-  "major",
-  "moderate",
-  "minor",
-]);
+export const ltmImportanceSchema = z.enum(["critical", "major", "moderate", "minor"]);
 
 /**
  * Relationship dimensions are optional 0-100 scores. Omitted values are treated
@@ -1090,11 +904,7 @@ export const ltmNoteSchema = z
   .strict()
   .superRefine((note, ctx) => {
     const allowedPrefixes = allowedStoredNoteIdPrefixes(note.type);
-    if (
-      !allowedPrefixes.some(
-        (prefix) => note.id === prefix || note.id.startsWith(prefix),
-      )
-    ) {
+    if (!allowedPrefixes.some((prefix) => note.id === prefix || note.id.startsWith(prefix))) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["id"],
@@ -1157,21 +967,18 @@ export const ltmNoteSchema = z
     }
   });
 
-export const ltmBulkNoteArchiveActionSchema = z.enum([
-  "notes_only",
-  "with_derived",
-]);
+export const ltmBulkNoteArchiveActionSchema = z.enum(["notes_only", "with_derived"]);
 
 const ltmAvailabilityScopePatchSchema = ltmWriteScopeSchema.refine(
   (scope) =>
     Boolean(
       scope.chatId ||
-        scope.chatIds?.length ||
-        scope.groupId ||
-        scope.groupIds?.length ||
-        scope.characterIds?.length ||
-        scope.personaId ||
-        scope.personaIds?.length,
+      scope.chatIds?.length ||
+      scope.groupId ||
+      scope.groupIds?.length ||
+      scope.characterIds?.length ||
+      scope.personaId ||
+      scope.personaIds?.length,
     ),
   "Choose at least one place.",
 );
@@ -1182,19 +989,13 @@ export const ltmBulkNoteRequestSchema = z
       .array(ltmNoteIdSchema)
       .min(1)
       .max(100)
-      .refine(
-        (ids) => new Set(ids).size === ids.length,
-        "Note IDs must be unique.",
-      ),
+      .refine((ids) => new Set(ids).size === ids.length, "Note IDs must be unique."),
     status: ltmStatusSchema.optional(),
     modes: z
       .array(ltmModeSchema)
       .min(1)
       .max(8)
-      .refine(
-        (modes) => new Set(modes).size === modes.length,
-        "Modes must be unique.",
-      )
+      .refine((modes) => new Set(modes).size === modes.length, "Modes must be unique.")
       .optional(),
     enableModes: z.array(ltmModeSchema).min(1).max(8).optional(),
     disableModes: z.array(ltmModeSchema).min(1).max(8).optional(),
@@ -1203,18 +1004,12 @@ export const ltmBulkNoteRequestSchema = z
     addTags: z
       .array(ltmIdentifierSchema)
       .max(100)
-      .refine(
-        (tags) => new Set(tags).size === tags.length,
-        "Tags to add must be unique.",
-      )
+      .refine((tags) => new Set(tags).size === tags.length, "Tags to add must be unique.")
       .optional(),
     removeTags: z
       .array(ltmIdentifierSchema)
       .max(100)
-      .refine(
-        (tags) => new Set(tags).size === tags.length,
-        "Tags to remove must be unique.",
-      )
+      .refine((tags) => new Set(tags).size === tags.length, "Tags to remove must be unique.")
       .optional(),
     archive: ltmBulkNoteArchiveActionSchema.optional(),
   })
@@ -1240,8 +1035,7 @@ export const ltmBulkNoteRequestSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["status"],
-        message:
-          "Archive actions require archived status when a status is supplied.",
+        message: "Archive actions require archived status when a status is supplied.",
       });
     }
     const addTags = new Set(request.addTags ?? []);
@@ -1250,8 +1044,7 @@ export const ltmBulkNoteRequestSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["removeTags", index],
-          message:
-            "A tag cannot be added and removed in the same bulk request.",
+          message: "A tag cannot be added and removed in the same bulk request.",
         });
       }
     }
@@ -1272,24 +1065,35 @@ export const ltmBulkNoteRequestSchema = z
     const addScope = request.addScope;
     const removeScope = request.removeScope;
     const dimensions = [
-      ["chat", [...(addScope?.chatIds ?? []), ...(addScope?.chatId ? [addScope.chatId] : [])], [...(removeScope?.chatIds ?? []), ...(removeScope?.chatId ? [removeScope.chatId] : [])]],
-      ["group", [...(addScope?.groupIds ?? []), ...(addScope?.groupId ? [addScope.groupId] : [])], [...(removeScope?.groupIds ?? []), ...(removeScope?.groupId ? [removeScope.groupId] : [])]],
+      [
+        "chat",
+        [...(addScope?.chatIds ?? []), ...(addScope?.chatId ? [addScope.chatId] : [])],
+        [...(removeScope?.chatIds ?? []), ...(removeScope?.chatId ? [removeScope.chatId] : [])],
+      ],
+      [
+        "group",
+        [...(addScope?.groupIds ?? []), ...(addScope?.groupId ? [addScope.groupId] : [])],
+        [...(removeScope?.groupIds ?? []), ...(removeScope?.groupId ? [removeScope.groupId] : [])],
+      ],
       ["character", addScope?.characterIds ?? [], removeScope?.characterIds ?? []],
-      ["persona", [...(addScope?.personaIds ?? []), ...(addScope?.personaId ? [addScope.personaId] : [])], [...(removeScope?.personaIds ?? []), ...(removeScope?.personaId ? [removeScope.personaId] : [])]],
+      [
+        "persona",
+        [...(addScope?.personaIds ?? []), ...(addScope?.personaId ? [addScope.personaId] : [])],
+        [...(removeScope?.personaIds ?? []), ...(removeScope?.personaId ? [removeScope.personaId] : [])],
+      ],
     ] as const;
     for (const [dimension, added, removed] of dimensions) {
       const overlap = new Set(added.filter((id) => removed.includes(id)));
       if (overlap.size)
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["addScope"], message: `Scope ${dimension} IDs cannot be added and removed in the same request: ${[...overlap].join(", ")}` });
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["addScope"],
+          message: `Scope ${dimension} IDs cannot be added and removed in the same request: ${[...overlap].join(", ")}`,
+        });
     }
   });
 
-export const ltmBulkNoteResultStatusSchema = z.enum([
-  "complete",
-  "partial",
-  "no_changes",
-  "failed",
-]);
+export const ltmBulkNoteResultStatusSchema = z.enum(["complete", "partial", "no_changes", "failed"]);
 
 export const ltmBulkNoteResultSchema = z
   .object({
@@ -1328,12 +1132,7 @@ export const ltmBulkNoteResultSchema = z
       }
     }
     for (const id of requested) {
-      if (
-        Number(updated.has(id)) +
-          Number(skipped.has(id)) +
-          Number(failed.has(id)) !==
-        1
-      ) {
+      if (Number(updated.has(id)) + Number(skipped.has(id)) + Number(failed.has(id)) !== 1) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: "Each requested note ID must have exactly one outcome.",
@@ -1399,13 +1198,7 @@ export const ltmEventSchema = z
   })
   .strict();
 
-export const ltmDebugStatusSchema = z.enum([
-  "started",
-  "ok",
-  "skipped",
-  "warning",
-  "error",
-]);
+export const ltmDebugStatusSchema = z.enum(["started", "ok", "skipped", "warning", "error"]);
 
 export const ltmDebugPhaseSchema = z.enum([
   "import",
@@ -1461,8 +1254,7 @@ export const ltmDebugEventSchema = z
 
 const ltmPolicySchema = z.preprocess(
   (value) => {
-    if (!value || typeof value !== "object" || Array.isArray(value))
-      return value;
+    if (!value || typeof value !== "object" || Array.isArray(value)) return value;
     const {
       updateBehavior: _updateBehavior,
       reconcileEvery: _reconcileEvery,
@@ -1476,13 +1268,9 @@ const ltmPolicySchema = z.preprocess(
   z
     .object({
       type: ltmNoteTypeSchema,
-      injection: z
-        .enum(["always_for_active_characters", "on_relevance", "never"])
-        .default("on_relevance"),
+      injection: z.enum(["always_for_active_characters", "on_relevance", "never"]).default("on_relevance"),
       sectionsAlways: z.array(ltmSectionKeySchema).default([]),
-      sectionsOnRelevance: z
-        .array(z.union([ltmSectionKeySchema, z.literal("*")]))
-        .default(["*"]),
+      sectionsOnRelevance: z.array(z.union([ltmSectionKeySchema, z.literal("*")])).default(["*"]),
     })
     .strict(),
 );
@@ -1513,12 +1301,7 @@ const ltmRetrievalConfigShape = z
   })
   .strict()
   .refine(
-    (value) =>
-      value.semanticWeight +
-        value.lexicalWeight +
-        value.graphWeight +
-        value.keywordWeight >
-      0,
+    (value) => value.semanticWeight + value.lexicalWeight + value.graphWeight + value.keywordWeight > 0,
     "At least one retrieval weight must be positive.",
   );
 
@@ -1535,12 +1318,7 @@ export const ltmRetentionConfigSchema = z
     usageRetentionDays: z.number().int().min(1).max(3_650).default(180),
     receiptRetentionDays: z.number().int().min(1).max(3_650).default(180),
     eventRetentionDays: z.number().int().min(1).max(3_650).default(180),
-    incompleteGenerationRetentionDays: z
-      .number()
-      .int()
-      .min(1)
-      .max(3_650)
-      .default(30),
+    incompleteGenerationRetentionDays: z.number().int().min(1).max(3_650).default(30),
     quarantineRetentionDays: z.number().int().min(1).max(3_650).default(90),
   })
   .strict()
@@ -1562,13 +1340,7 @@ export const ltmRetentionConfigSchema = z
     }
   });
 
-export const ltmIndexHealthSchema = z.enum([
-  "not_built",
-  "healthy",
-  "degraded",
-  "stale",
-  "corrupt",
-]);
+export const ltmIndexHealthSchema = z.enum(["not_built", "healthy", "degraded", "stale", "corrupt"]);
 
 export const ltmMemoryChunkSchema = z
   .object({
@@ -1610,9 +1382,7 @@ export const ltmEmbeddingIndexSchema = z
     embeddedChunkCount: z.number().int().min(0),
     chunks: z.array(ltmEmbeddingIndexEntrySchema),
     /** Optional for pre-Phase 10 generations. New generations index entries by chunk ID. */
-    byChunkId: z
-      .record(z.string().min(1).max(240), z.number().int().min(0))
-      .optional(),
+    byChunkId: z.record(z.string().min(1).max(240), z.number().int().min(0)).optional(),
   })
   .strict()
   .superRefine((index, ctx) => {
@@ -1655,8 +1425,7 @@ export const ltmEmbeddingIndexSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["spaceId"],
-        message:
-          "Embedding spaceId must be omitted when no vectors are stored.",
+        message: "Embedding spaceId must be omitted when no vectors are stored.",
       });
     }
     if (vectorCount > 0 && !index.spaceId) {
@@ -1671,8 +1440,7 @@ export const ltmEmbeddingIndexSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["byChunkId"],
-          message:
-            "Embedding chunk catalog must contain every embedding entry.",
+          message: "Embedding chunk catalog must contain every embedding entry.",
         });
       }
       for (const [chunkId, entryIndex] of Object.entries(index.byChunkId)) {
@@ -1755,10 +1523,7 @@ export const ltmKeywordIndexSchema = z
 const ltmMetadataIndexShape = z
   .object({
     version: z.literal(1),
-    chunks: ltmStringRecordSchema(
-      z.string().min(1).max(240),
-      ltmMemoryChunkSchema,
-    ),
+    chunks: ltmStringRecordSchema(z.string().min(1).max(240), ltmMemoryChunkSchema),
     byNoteId: ltmIndexStringBucketsSchema,
     byTag: ltmIndexStringBucketsSchema,
   })
@@ -1776,11 +1541,7 @@ export const ltmMetadataIndexSchema = z.preprocess((value) => {
   return rest;
 }, ltmMetadataIndexShape);
 
-export const ltmIndexRebuildStateSchema = z.enum([
-  "idle",
-  "building",
-  "failed",
-]);
+export const ltmIndexRebuildStateSchema = z.enum(["idle", "building", "failed"]);
 
 const ltmIndexStateShape = z
   .object({
@@ -1797,8 +1558,7 @@ const ltmIndexStateShape = z
 
 export const ltmIndexStateSchema = z.preprocess((value) => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
-  const { lastPublishedGenerationId: _lastPublishedGenerationId, ...rest } =
-    value as Record<string, unknown>;
+  const { lastPublishedGenerationId: _lastPublishedGenerationId, ...rest } = value as Record<string, unknown>;
   return rest;
 }, ltmIndexStateShape);
 
@@ -1881,23 +1641,14 @@ export const ltmRepairRequestSchema = z
       .array(ltmRepairActionSchema)
       .min(1)
       .max(3)
-      .refine(
-        (actions) => new Set(actions).size === actions.length,
-        "Repair actions must be unique.",
-      ),
+      .refine((actions) => new Set(actions).size === actions.length, "Repair actions must be unique."),
   })
   .strict();
 
 export const ltmRepairActionResultSchema = z
   .object({
     action: ltmRepairActionSchema,
-    result: z.enum([
-      "rebuilt",
-      "backfilled",
-      "no_titles_to_backfill",
-      "quarantined",
-      "no_malformed_notes",
-    ]),
+    result: z.enum(["rebuilt", "backfilled", "no_titles_to_backfill", "quarantined", "no_malformed_notes"]),
     count: z.number().int().min(0).optional(),
   })
   .strict();
@@ -1963,9 +1714,7 @@ export const ltmIdentityRepairCandidateSchema = z
     notes: z.array(ltmIdentityRepairNoteMatchSchema).min(1).max(500),
     matchBasis: z.array(ltmIdentityMatchBasisSchema).min(1).max(5),
     additiveContent: z.array(ltmIdentityRepairAdditiveContentSchema).max(100),
-    supersedingConflicts: z
-      .array(ltmIdentityRepairSupersedingConflictSchema)
-      .max(100),
+    supersedingConflicts: z.array(ltmIdentityRepairSupersedingConflictSchema).max(100),
     blockingReasons: z.array(z.string().min(1).max(500)).max(100),
   })
   .strict();
@@ -1977,10 +1726,7 @@ export const ltmIdentityRepairUnresolvedSchema = z
     title: z.string().min(1).max(240),
     reason: z.enum(["ambiguous", "untrusted", "invalid_cardinality"]),
     basis: z.string().min(1).max(120),
-    candidateSubjectKeys: z
-      .array(z.string().min(1).max(240))
-      .max(20)
-      .default([]),
+    candidateSubjectKeys: z.array(z.string().min(1).max(240)).max(20).default([]),
   })
   .strict();
 
@@ -2017,10 +1763,7 @@ export const ltmIdentityRepairSelectionSchema = z
       .array(ltmNoteIdSchema)
       .max(499)
       .default([])
-      .refine(
-        (ids) => new Set(ids).size === ids.length,
-        "Excluded note IDs must be unique.",
-      ),
+      .refine((ids) => new Set(ids).size === ids.length, "Excluded note IDs must be unique."),
     sectionChoices: z
       .array(
         z
@@ -2033,21 +1776,15 @@ export const ltmIdentityRepairSelectionSchema = z
       .max(100)
       .default([])
       .refine(
-        (choices) =>
-          new Set(choices.map((choice) => choice.sectionKey)).size ===
-          choices.length,
+        (choices) => new Set(choices.map((choice) => choice.sectionKey)).size === choices.length,
         "Section choices must be unique.",
       ),
   })
   .strict()
-  .refine(
-    (selection) =>
-      !selection.excludedNoteIds.includes(selection.canonicalNoteId),
-    {
-      path: ["excludedNoteIds"],
-      message: "The canonical note cannot be excluded.",
-    },
-  );
+  .refine((selection) => !selection.excludedNoteIds.includes(selection.canonicalNoteId), {
+    path: ["excludedNoteIds"],
+    message: "The canonical note cannot be excluded.",
+  });
 
 export const ltmIdentityRepairApplyRequestSchema = z
   .object({
@@ -2057,9 +1794,7 @@ export const ltmIdentityRepairApplyRequestSchema = z
       .min(1)
       .max(500)
       .refine(
-        (repairs) =>
-          new Set(repairs.map((repair) => repair.candidateId)).size ===
-          repairs.length,
+        (repairs) => new Set(repairs.map((repair) => repair.candidateId)).size === repairs.length,
         "Repair candidates must be unique.",
       ),
   })
@@ -2118,10 +1853,7 @@ export const ltmRenameNoteSectionRequestSchema = z
     toSectionKey: ltmSectionKeySchema,
   })
   .strict()
-  .refine(
-    (value) => value.fromSectionKey !== value.toSectionKey,
-    "Section keys must be different.",
-  );
+  .refine((value) => value.fromSectionKey !== value.toSectionKey, "Section keys must be different.");
 
 export const ltmRenameNoteSectionPreviewResponseSchema = z
   .object({
@@ -2143,9 +1875,7 @@ const ltmSectionRebuildSchema = z.discriminatedUnion("status", [
       embeddingsAvailable: z.boolean(),
     })
     .strict(),
-  z
-    .object({ status: z.literal("deferred"), error: z.string().min(1) })
-    .strict(),
+  z.object({ status: z.literal("deferred"), error: z.string().min(1) }).strict(),
 ]);
 
 export const ltmRenameNoteSectionResponseSchema = z
@@ -2164,26 +1894,11 @@ export const ltmDeleteNoteSectionResponseSchema = z
   })
   .strict();
 
-export const ltmDraftStatusSchema = z.enum([
-  "pending",
-  "accepted",
-  "auto_applied",
-  "superseded",
-  "invalidated",
-]);
+export const ltmDraftStatusSchema = z.enum(["pending", "accepted", "auto_applied", "superseded", "invalidated"]);
 
-export const ltmDraftApplyStateSchema = z.enum([
-  "not_started",
-  "applying",
-  "complete",
-]);
+export const ltmDraftApplyStateSchema = z.enum(["not_started", "applying", "complete"]);
 
-export const ltmDraftIndexRebuildStatusSchema = z.enum([
-  "not_requested",
-  "pending",
-  "succeeded",
-  "failed",
-]);
+export const ltmDraftIndexRebuildStatusSchema = z.enum(["not_requested", "pending", "succeeded", "failed"]);
 
 export const ltmDraftRiskSchema = z.enum(["low", "medium", "high"]);
 
@@ -2225,11 +1940,7 @@ export const ltmDraftNoteInputSchema = z
   .strip()
   .superRefine((note, ctx) => {
     const allowedPrefixes = LTM_NOTE_ID_PREFIXES_BY_TYPE[note.type];
-    if (
-      !allowedPrefixes.some(
-        (prefix) => note.id === prefix || note.id.startsWith(prefix),
-      )
-    ) {
+    if (!allowedPrefixes.some((prefix) => note.id === prefix || note.id.startsWith(prefix))) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["id"],
@@ -2359,11 +2070,7 @@ export const ltmRejectedSuggestionSchema = z
   })
   .strict();
 
-export const ltmExtractionOutcomeStateSchema = z.enum([
-  "success",
-  "partial_success",
-  "no_suggestions_created",
-]);
+export const ltmExtractionOutcomeStateSchema = z.enum(["success", "partial_success", "no_suggestions_created"]);
 
 export const ltmExtractionOutcomeSchema = z
   .object({
@@ -2390,12 +2097,7 @@ export const ltmExtractionDiagnosticSchema = z
   .object({
     severity: z.enum(["warning", "error"]),
     code: z.string().min(1).max(120),
-    candidateIndex: z
-      .number()
-      .int()
-      .min(0)
-      .max(LTM_EXTRACTION_MAX_CANDIDATES)
-      .optional(),
+    candidateIndex: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES).optional(),
     mutationId: z.string().uuid().optional(),
     noteId: ltmNoteIdSchema.optional(),
     message: z.string().min(1).max(2_000),
@@ -2405,38 +2107,18 @@ export const ltmExtractionDiagnosticSchema = z
 
 export const ltmExtractionAccountingSchema = z
   .object({
-    providerCandidates: z
-      .number()
-      .int()
-      .min(0)
-      .max(LTM_EXTRACTION_MAX_CANDIDATES),
-    normalizedAdditions: z
-      .number()
-      .int()
-      .min(0)
-      .max(LTM_EXTRACTION_MAX_CANDIDATES),
-    parserRejections: z
-      .number()
-      .int()
-      .min(0)
-      .max(LTM_EXTRACTION_MAX_CANDIDATES),
-    validationRejections: z
-      .number()
-      .int()
-      .min(0)
-      .max(LTM_EXTRACTION_MAX_CANDIDATES),
+    providerCandidates: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
+    normalizedAdditions: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
+    parserRejections: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
+    validationRejections: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
     deduplications: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
     keptUnits: z.number().int().min(0).max(LTM_EXTRACTION_MAX_CANDIDATES),
   })
   .strict()
   .superRefine((accounting, ctx) => {
-    const candidates =
-      accounting.providerCandidates + accounting.normalizedAdditions;
+    const candidates = accounting.providerCandidates + accounting.normalizedAdditions;
     const dispositions =
-      accounting.parserRejections +
-      accounting.validationRejections +
-      accounting.deduplications +
-      accounting.keptUnits;
+      accounting.parserRejections + accounting.validationRejections + accounting.deduplications + accounting.keptUnits;
     if (candidates !== dispositions) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -2450,8 +2132,7 @@ export const ltmExtractionDraftSchema = z
     id: z.string().uuid(),
     status: ltmDraftStatusSchema.default("pending"),
     applyState: ltmDraftApplyStateSchema.default("not_started"),
-    indexRebuildStatus:
-      ltmDraftIndexRebuildStatusSchema.default("not_requested"),
+    indexRebuildStatus: ltmDraftIndexRebuildStatusSchema.default("not_requested"),
     indexRebuildAt: ltmIsoTimestampSchema.optional(),
     indexRebuildError: z.string().min(1).max(2_000).optional(),
     createdAt: ltmIsoTimestampSchema,
@@ -2612,11 +2293,7 @@ export const ltmExtractSourceNoteResponseSchema = z
   })
   .strict();
 
-export const ltmInteropSourceSchema = z.enum([
-  "characters",
-  "lorebooks",
-  "chats",
-]);
+export const ltmInteropSourceSchema = z.enum(["characters", "lorebooks", "chats"]);
 
 export const ltmInteropPreviewRequestSchema = z
   .object({
@@ -2670,9 +2347,7 @@ export const ltmInteropPreviewResponseSchema = z
   })
   .strict()
   .superRefine((response, ctx) => {
-    const pending = response.samples.filter(
-      (sample) => sample.status === "pending",
-    ).length;
+    const pending = response.samples.filter((sample) => sample.status === "pending").length;
     const imported = response.samples.length - pending;
     for (const [key, actual, expected] of [
       ["scanned", response.scanned, response.samples.length],
@@ -2763,12 +2438,8 @@ export const ltmLorebookPreviewBookSchema = z
       {
         entries: book.entries.length,
         candidates: candidates.length,
-        pending: candidates.filter(
-          (candidate) => candidate.status === "pending",
-        ).length,
-        imported: candidates.filter(
-          (candidate) => candidate.status === "imported",
-        ).length,
+        pending: candidates.filter((candidate) => candidate.status === "pending").length,
+        imported: candidates.filter((candidate) => candidate.status === "imported").length,
       },
       ctx,
     );
@@ -2786,22 +2457,10 @@ export const ltmLorebookPreviewResponseSchema = z
     validateLorebookPreviewCounts(
       response.counts,
       {
-        entries: response.books.reduce(
-          (total, book) => total + book.counts.entries,
-          0,
-        ),
-        candidates: response.books.reduce(
-          (total, book) => total + book.counts.candidates,
-          0,
-        ),
-        pending: response.books.reduce(
-          (total, book) => total + book.counts.pending,
-          0,
-        ),
-        imported: response.books.reduce(
-          (total, book) => total + book.counts.imported,
-          0,
-        ),
+        entries: response.books.reduce((total, book) => total + book.counts.entries, 0),
+        candidates: response.books.reduce((total, book) => total + book.counts.candidates, 0),
+        pending: response.books.reduce((total, book) => total + book.counts.pending, 0),
+        imported: response.books.reduce((total, book) => total + book.counts.imported, 0),
       },
       ctx,
     );
@@ -2820,10 +2479,7 @@ export const ltmImportSourceNotesRequestSchema = z
       .array(z.string().min(1).max(120))
       .min(1)
       .max(100)
-      .refine(
-        (sourceIds) => new Set(sourceIds).size === sourceIds.length,
-        "Source ids must be unique.",
-      ),
+      .refine((sourceIds) => new Set(sourceIds).size === sourceIds.length, "Source ids must be unique."),
     limit: z.number().int().min(1).max(100).default(100),
     scope: ltmScopeSchema.optional(),
     connectionId: z.string().min(1).max(120).optional(),
@@ -2902,8 +2558,7 @@ export const ltmImportedSourceResultSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["sourceWriteStatus"],
-        message:
-          "Source write status must agree with whether the note was created or refreshed.",
+        message: "Source write status must agree with whether the note was created or refreshed.",
       });
     }
   });
@@ -2924,12 +2579,7 @@ export const ltmImportSourceWriteFailureSchema = z
   })
   .strict();
 
-export const ltmImportSourceNotesBatchStatusSchema = z.enum([
-  "success",
-  "partial_success",
-  "failed",
-  "cancelled",
-]);
+export const ltmImportSourceNotesBatchStatusSchema = z.enum(["success", "partial_success", "failed", "cancelled"]);
 
 export const ltmImportSourceNotesResponseSchema = z
   .object({
@@ -2954,20 +2604,11 @@ export const ltmImportSourceNotesResponseSchema = z
   .strict()
   .superRefine((response, ctx) => {
     const expected = {
-      requested:
-        response.imported.length +
-        response.writeFailures.length +
-        response.missingSourceIds.length,
+      requested: response.imported.length + response.writeFailures.length + response.missingSourceIds.length,
       sourceNotesWritten: response.imported.length,
-      succeeded: response.imported.filter(
-        (item) => item.extractionStatus === "succeeded",
-      ).length,
-      failed: response.imported.filter(
-        (item) => item.extractionStatus === "failed",
-      ).length,
-      cancelled: response.imported.filter(
-        (item) => item.extractionStatus === "cancelled",
-      ).length,
+      succeeded: response.imported.filter((item) => item.extractionStatus === "succeeded").length,
+      failed: response.imported.filter((item) => item.extractionStatus === "failed").length,
+      cancelled: response.imported.filter((item) => item.extractionStatus === "cancelled").length,
       missing: response.missingSourceIds.length,
       sourceWriteFailed: response.writeFailures.length,
     };
@@ -2981,10 +2622,7 @@ export const ltmImportSourceNotesResponseSchema = z
       }
     }
     const incomplete =
-      response.counts.failed +
-      response.counts.cancelled +
-      response.counts.missing +
-      response.counts.sourceWriteFailed;
+      response.counts.failed + response.counts.cancelled + response.counts.missing + response.counts.sourceWriteFailed;
     const expectedBatchStatus =
       incomplete === 0
         ? "success"
@@ -3008,10 +2646,7 @@ export const ltmImportSourceNotesResponseSchema = z
 export const ltmEvidenceUnitExtractionResponseSchema = z
   .object({
     summary: z.string().max(2_000).default(""),
-    units: z
-      .array(ltmEvidenceUnitSchema)
-      .max(LTM_EXTRACTION_MAX_CANDIDATES)
-      .default([]),
+    units: z.array(ltmEvidenceUnitSchema).max(LTM_EXTRACTION_MAX_CANDIDATES).default([]),
   })
   .strict();
 
@@ -3042,72 +2677,36 @@ export type LtmStatus = z.infer<typeof ltmStatusSchema>;
 export type LtmEvidenceUnitStatus = z.infer<typeof ltmEvidenceUnitStatusSchema>;
 export type LtmEvidenceUnitBucket = z.infer<typeof ltmEvidenceUnitBucketSchema>;
 export type LtmImportance = z.infer<typeof ltmImportanceSchema>;
-export type LtmRelationshipDimensions = z.infer<
-  typeof ltmRelationshipDimensionsSchema
->;
-export type LtmRelationshipDimensionChanges = z.infer<
-  typeof ltmRelationshipDimensionChangesSchema
->;
-export type LtmExtractionReasoningEffort = z.infer<
-  typeof ltmExtractionReasoningEffortSchema
->;
-export type LtmExtractionVerbosity = z.infer<
-  typeof ltmExtractionVerbositySchema
->;
+export type LtmRelationshipDimensions = z.infer<typeof ltmRelationshipDimensionsSchema>;
+export type LtmRelationshipDimensionChanges = z.infer<typeof ltmRelationshipDimensionChangesSchema>;
+export type LtmExtractionReasoningEffort = z.infer<typeof ltmExtractionReasoningEffortSchema>;
+export type LtmExtractionVerbosity = z.infer<typeof ltmExtractionVerbositySchema>;
 export type LtmGlobalSettings = z.infer<typeof ltmGlobalSettingsSchema>;
-export type LtmResolvedGlobalSettings = z.infer<
-  typeof ltmResolvedGlobalSettingsSchema
->;
+export type LtmResolvedGlobalSettings = z.infer<typeof ltmResolvedGlobalSettingsSchema>;
 export type LtmExtractionSettings = z.infer<typeof ltmExtractionSettingsSchema>;
-export type LtmExtractionSettingsPatch = z.infer<
-  typeof ltmExtractionSettingsPatchSchema
->;
-export type LtmResolvedExtractionSettings = z.infer<
-  typeof ltmResolvedExtractionSettingsSchema
->;
+export type LtmExtractionSettingsPatch = z.infer<typeof ltmExtractionSettingsPatchSchema>;
+export type LtmResolvedExtractionSettings = z.infer<typeof ltmResolvedExtractionSettingsSchema>;
 export type LtmMode = z.infer<typeof ltmModeSchema>;
 export type LtmScope = z.infer<typeof ltmScopeSchema>;
-export type LtmExtractionFingerprint = z.infer<
-  typeof ltmExtractionFingerprintSchema
->;
+export type LtmExtractionFingerprint = z.infer<typeof ltmExtractionFingerprintSchema>;
 export type LtmSubjectReference = z.infer<typeof ltmSubjectReferenceSchema>;
 export type LtmSubject = z.infer<typeof ltmSubjectSchema>;
 export type LtmNoteTransferMode = z.infer<typeof ltmNoteTransferModeSchema>;
-export type LtmNoteTransferConflict = z.infer<
-  typeof ltmNoteTransferConflictSchema
->;
-export type LtmNoteTransferPreviewItem = z.infer<
-  typeof ltmNoteTransferPreviewItemSchema
->;
-export type LtmNoteTransferPreviewRequest = z.infer<
-  typeof ltmNoteTransferPreviewRequestSchema
->;
-export type LtmNoteTransferPreviewResponse = z.infer<
-  typeof ltmNoteTransferPreviewResponseSchema
->;
-export type LtmNoteTransferApplyRequest = z.infer<
-  typeof ltmNoteTransferApplyRequestSchema
->;
-export type LtmSourceDerivedMemory = z.infer<
-  typeof ltmSourceDerivedMemorySchema
->;
-export type LtmSourceDerivedMemoriesResponse = z.infer<
-  typeof ltmSourceDerivedMemoriesResponseSchema
->;
+export type LtmNoteTransferConflict = z.infer<typeof ltmNoteTransferConflictSchema>;
+export type LtmNoteTransferPreviewItem = z.infer<typeof ltmNoteTransferPreviewItemSchema>;
+export type LtmNoteTransferPreviewRequest = z.infer<typeof ltmNoteTransferPreviewRequestSchema>;
+export type LtmNoteTransferPreviewResponse = z.infer<typeof ltmNoteTransferPreviewResponseSchema>;
+export type LtmNoteTransferApplyRequest = z.infer<typeof ltmNoteTransferApplyRequestSchema>;
+export type LtmSourceDerivedMemory = z.infer<typeof ltmSourceDerivedMemorySchema>;
+export type LtmSourceDerivedMemoriesResponse = z.infer<typeof ltmSourceDerivedMemoriesResponseSchema>;
 export type LtmLink = z.infer<typeof ltmLinkSchema>;
-export type LtmSectionContribution = z.infer<
-  typeof ltmSectionContributionSchema
->;
+export type LtmSectionContribution = z.infer<typeof ltmSectionContributionSchema>;
 export type LtmSection = z.infer<typeof ltmSectionSchema>;
 export type LtmConflict = z.infer<typeof ltmConflictSchema>;
 export type LtmNote = z.infer<typeof ltmNoteSchema>;
-export type LtmBulkNoteArchiveAction = z.infer<
-  typeof ltmBulkNoteArchiveActionSchema
->;
+export type LtmBulkNoteArchiveAction = z.infer<typeof ltmBulkNoteArchiveActionSchema>;
 export type LtmBulkNoteRequest = z.infer<typeof ltmBulkNoteRequestSchema>;
-export type LtmBulkNoteResultStatus = z.infer<
-  typeof ltmBulkNoteResultStatusSchema
->;
+export type LtmBulkNoteResultStatus = z.infer<typeof ltmBulkNoteResultStatusSchema>;
 export type LtmBulkNoteResult = z.infer<typeof ltmBulkNoteResultSchema>;
 export type LtmSourceProvenance = z.infer<typeof ltmSourceProvenanceSchema>;
 export type LtmEvent = z.infer<typeof ltmEventSchema>;
@@ -3118,9 +2717,7 @@ export type LtmDebugEvent = z.infer<typeof ltmDebugEventSchema>;
 export type LtmRetentionConfig = z.infer<typeof ltmRetentionConfigSchema>;
 export type LtmIndexHealth = z.infer<typeof ltmIndexHealthSchema>;
 export type LtmMemoryChunk = z.infer<typeof ltmMemoryChunkSchema>;
-export type LtmEmbeddingIndexEntry = z.infer<
-  typeof ltmEmbeddingIndexEntrySchema
->;
+export type LtmEmbeddingIndexEntry = z.infer<typeof ltmEmbeddingIndexEntrySchema>;
 export type LtmEmbeddingIndex = z.infer<typeof ltmEmbeddingIndexSchema>;
 export type LtmBm25Posting = z.infer<typeof ltmBm25PostingSchema>;
 export type LtmBm25Index = z.infer<typeof ltmBm25IndexSchema>;
@@ -3138,169 +2735,73 @@ export type LtmRepairRequest = z.infer<typeof ltmRepairRequestSchema>;
 export type LtmRepairActionResult = z.infer<typeof ltmRepairActionResultSchema>;
 export type LtmRepairResponse = z.infer<typeof ltmRepairResponseSchema>;
 export type LtmIdentityMatchBasis = z.infer<typeof ltmIdentityMatchBasisSchema>;
-export type LtmIdentityRepairNoteMatch = z.infer<
-  typeof ltmIdentityRepairNoteMatchSchema
->;
-export type LtmIdentityRepairAdditiveContent = z.infer<
-  typeof ltmIdentityRepairAdditiveContentSchema
->;
-export type LtmIdentityRepairSupersedingOption = z.infer<
-  typeof ltmIdentityRepairSupersedingOptionSchema
->;
-export type LtmIdentityRepairSupersedingConflict = z.infer<
-  typeof ltmIdentityRepairSupersedingConflictSchema
->;
-export type LtmIdentityRepairCandidate = z.infer<
-  typeof ltmIdentityRepairCandidateSchema
->;
-export type LtmIdentityRepairUnresolved = z.infer<
-  typeof ltmIdentityRepairUnresolvedSchema
->;
-export type LtmIdentityRepairPreviewRequest = z.infer<
-  typeof ltmIdentityRepairPreviewRequestSchema
->;
-export type LtmIdentityRepairPreviewResponse = z.infer<
-  typeof ltmIdentityRepairPreviewResponseSchema
->;
-export type LtmIdentityRepairSelection = z.infer<
-  typeof ltmIdentityRepairSelectionSchema
->;
-export type LtmIdentityRepairApplyRequest = z.infer<
-  typeof ltmIdentityRepairApplyRequestSchema
->;
-export type LtmIdentityRepairApplyResult = z.infer<
-  typeof ltmIdentityRepairApplyResultSchema
->;
-export type LtmIdentityRepairApplyResponse = z.infer<
-  typeof ltmIdentityRepairApplyResponseSchema
->;
-export type LtmTransferRebuildSummary = z.infer<
-  typeof ltmTransferRebuildSummarySchema
->;
-export type LtmNoteTransferApplyResponse = z.infer<
-  typeof ltmNoteTransferApplyResponseSchema
->;
-export type LtmRenameNoteSectionRequest = z.infer<
-  typeof ltmRenameNoteSectionRequestSchema
->;
-export type LtmRenameNoteSectionPreviewResponse = z.infer<
-  typeof ltmRenameNoteSectionPreviewResponseSchema
->;
-export type LtmRenameNoteSectionResponse = z.infer<
-  typeof ltmRenameNoteSectionResponseSchema
->;
-export type LtmDeleteNoteSectionResponse = z.infer<
-  typeof ltmDeleteNoteSectionResponseSchema
->;
+export type LtmIdentityRepairNoteMatch = z.infer<typeof ltmIdentityRepairNoteMatchSchema>;
+export type LtmIdentityRepairAdditiveContent = z.infer<typeof ltmIdentityRepairAdditiveContentSchema>;
+export type LtmIdentityRepairSupersedingOption = z.infer<typeof ltmIdentityRepairSupersedingOptionSchema>;
+export type LtmIdentityRepairSupersedingConflict = z.infer<typeof ltmIdentityRepairSupersedingConflictSchema>;
+export type LtmIdentityRepairCandidate = z.infer<typeof ltmIdentityRepairCandidateSchema>;
+export type LtmIdentityRepairUnresolved = z.infer<typeof ltmIdentityRepairUnresolvedSchema>;
+export type LtmIdentityRepairPreviewRequest = z.infer<typeof ltmIdentityRepairPreviewRequestSchema>;
+export type LtmIdentityRepairPreviewResponse = z.infer<typeof ltmIdentityRepairPreviewResponseSchema>;
+export type LtmIdentityRepairSelection = z.infer<typeof ltmIdentityRepairSelectionSchema>;
+export type LtmIdentityRepairApplyRequest = z.infer<typeof ltmIdentityRepairApplyRequestSchema>;
+export type LtmIdentityRepairApplyResult = z.infer<typeof ltmIdentityRepairApplyResultSchema>;
+export type LtmIdentityRepairApplyResponse = z.infer<typeof ltmIdentityRepairApplyResponseSchema>;
+export type LtmTransferRebuildSummary = z.infer<typeof ltmTransferRebuildSummarySchema>;
+export type LtmNoteTransferApplyResponse = z.infer<typeof ltmNoteTransferApplyResponseSchema>;
+export type LtmRenameNoteSectionRequest = z.infer<typeof ltmRenameNoteSectionRequestSchema>;
+export type LtmRenameNoteSectionPreviewResponse = z.infer<typeof ltmRenameNoteSectionPreviewResponseSchema>;
+export type LtmRenameNoteSectionResponse = z.infer<typeof ltmRenameNoteSectionResponseSchema>;
+export type LtmDeleteNoteSectionResponse = z.infer<typeof ltmDeleteNoteSectionResponseSchema>;
 export type LtmDraftStatus = z.infer<typeof ltmDraftStatusSchema>;
 export type LtmDraftApplyState = z.infer<typeof ltmDraftApplyStateSchema>;
-export type LtmDraftIndexRebuildStatus = z.infer<
-  typeof ltmDraftIndexRebuildStatusSchema
->;
+export type LtmDraftIndexRebuildStatus = z.infer<typeof ltmDraftIndexRebuildStatusSchema>;
 export type LtmDraftRisk = z.infer<typeof ltmDraftRiskSchema>;
 export type LtmClaimKind = z.infer<typeof ltmClaimKindSchema>;
 export type LtmDraftSource = z.infer<typeof ltmDraftSourceSchema>;
 export type LtmDraftNoteInput = z.infer<typeof ltmDraftNoteInputSchema>;
 export type LtmDraftMutation = z.infer<typeof ltmDraftMutationSchema>;
 export type LtmExtractionDraft = z.infer<typeof ltmExtractionDraftSchema>;
-export type LtmExtractionDropReason = z.infer<
-  typeof ltmExtractionDropReasonSchema
->;
-export type LtmExtractionRecoveryHint = z.infer<
-  typeof ltmExtractionRecoveryHintSchema
->;
-export type LtmExtractionDroppedCandidate = z.infer<
-  typeof ltmExtractionDroppedCandidateSchema
->;
+export type LtmExtractionDropReason = z.infer<typeof ltmExtractionDropReasonSchema>;
+export type LtmExtractionRecoveryHint = z.infer<typeof ltmExtractionRecoveryHintSchema>;
+export type LtmExtractionDroppedCandidate = z.infer<typeof ltmExtractionDroppedCandidateSchema>;
 export type LtmRejectedSuggestion = z.infer<typeof ltmRejectedSuggestionSchema>;
-export type LtmExtractionOutcomeState = z.infer<
-  typeof ltmExtractionOutcomeStateSchema
->;
+export type LtmExtractionOutcomeState = z.infer<typeof ltmExtractionOutcomeStateSchema>;
 export type LtmExtractionOutcome = z.infer<typeof ltmExtractionOutcomeSchema>;
 export type LtmExtractionResponse = z.infer<typeof ltmExtractionResponseSchema>;
-export type LtmExtractionDiagnostic = z.infer<
-  typeof ltmExtractionDiagnosticSchema
->;
-export type LtmExtractionAccounting = z.infer<
-  typeof ltmExtractionAccountingSchema
->;
+export type LtmExtractionDiagnostic = z.infer<typeof ltmExtractionDiagnosticSchema>;
+export type LtmExtractionAccounting = z.infer<typeof ltmExtractionAccountingSchema>;
 export type LtmDraftFreshness = z.infer<typeof ltmDraftFreshnessSchema>;
 export type LtmDraftBlockReason = z.infer<typeof ltmDraftBlockReasonSchema>;
-export type LtmMutationDisposition = z.infer<
-  typeof ltmMutationDispositionSchema
->;
+export type LtmMutationDisposition = z.infer<typeof ltmMutationDispositionSchema>;
 export type LtmDraftReviewChange = z.infer<typeof ltmDraftReviewChangeSchema>;
-export type LtmDraftReviewMutation = z.infer<
-  typeof ltmDraftReviewMutationSchema
->;
+export type LtmDraftReviewMutation = z.infer<typeof ltmDraftReviewMutationSchema>;
 export type LtmDraftReviewTarget = z.infer<typeof ltmDraftReviewTargetSchema>;
 export type LtmDraftReviewDraft = z.infer<typeof ltmDraftReviewDraftSchema>;
 export type LtmDraftReviewSource = z.infer<typeof ltmDraftReviewSourceSchema>;
-export type LtmDraftReviewResponse = z.infer<
-  typeof ltmDraftReviewResponseSchema
->;
-export type LtmRejectedSuggestionsResponse = z.infer<
-  typeof ltmRejectedSuggestionsResponseSchema
->;
-export type LtmExtractSourceNoteRequest = z.infer<
-  typeof ltmExtractSourceNoteRequestSchema
->;
-export type LtmExtractSourceNoteResponse = z.infer<
-  typeof ltmExtractSourceNoteResponseSchema
->;
+export type LtmDraftReviewResponse = z.infer<typeof ltmDraftReviewResponseSchema>;
+export type LtmRejectedSuggestionsResponse = z.infer<typeof ltmRejectedSuggestionsResponseSchema>;
+export type LtmExtractSourceNoteRequest = z.infer<typeof ltmExtractSourceNoteRequestSchema>;
+export type LtmExtractSourceNoteResponse = z.infer<typeof ltmExtractSourceNoteResponseSchema>;
 export type LtmInteropSource = z.infer<typeof ltmInteropSourceSchema>;
-export type LtmInteropPreviewRequest = z.infer<
-  typeof ltmInteropPreviewRequestSchema
->;
-export type LtmInteropPreviewSample = z.infer<
-  typeof ltmInteropPreviewSampleSchema
->;
-export type LtmInteropPreviewFreshness = z.infer<
-  typeof ltmInteropPreviewFreshnessSchema
->;
-export type LtmInteropPreviewResponse = z.infer<
-  typeof ltmInteropPreviewResponseSchema
->;
-export type LtmLorebookPreviewRequest = z.infer<
-  typeof ltmLorebookPreviewRequestSchema
->;
-export type LtmLorebookPreviewEntry = z.infer<
-  typeof ltmLorebookPreviewEntrySchema
->;
-export type LtmLorebookPreviewBook = z.infer<
-  typeof ltmLorebookPreviewBookSchema
->;
-export type LtmLorebookPreviewResponse = z.infer<
-  typeof ltmLorebookPreviewResponseSchema
->;
-export type LtmImportSourceNotesRequest = z.infer<
-  typeof ltmImportSourceNotesRequestSchema
->;
-export type LtmImportedSourceResult = z.infer<
-  typeof ltmImportedSourceResultSchema
->;
-export type LtmImportSourceWriteFailure = z.infer<
-  typeof ltmImportSourceWriteFailureSchema
->;
-export type LtmImportSourceNotesBatchStatus = z.infer<
-  typeof ltmImportSourceNotesBatchStatusSchema
->;
-export type LtmImportSourceNotesResponse = z.infer<
-  typeof ltmImportSourceNotesResponseSchema
->;
+export type LtmInteropPreviewRequest = z.infer<typeof ltmInteropPreviewRequestSchema>;
+export type LtmInteropPreviewSample = z.infer<typeof ltmInteropPreviewSampleSchema>;
+export type LtmInteropPreviewFreshness = z.infer<typeof ltmInteropPreviewFreshnessSchema>;
+export type LtmInteropPreviewResponse = z.infer<typeof ltmInteropPreviewResponseSchema>;
+export type LtmLorebookPreviewRequest = z.infer<typeof ltmLorebookPreviewRequestSchema>;
+export type LtmLorebookPreviewEntry = z.infer<typeof ltmLorebookPreviewEntrySchema>;
+export type LtmLorebookPreviewBook = z.infer<typeof ltmLorebookPreviewBookSchema>;
+export type LtmLorebookPreviewResponse = z.infer<typeof ltmLorebookPreviewResponseSchema>;
+export type LtmImportSourceNotesRequest = z.infer<typeof ltmImportSourceNotesRequestSchema>;
+export type LtmImportedSourceResult = z.infer<typeof ltmImportedSourceResultSchema>;
+export type LtmImportSourceWriteFailure = z.infer<typeof ltmImportSourceWriteFailureSchema>;
+export type LtmImportSourceNotesBatchStatus = z.infer<typeof ltmImportSourceNotesBatchStatusSchema>;
+export type LtmImportSourceNotesResponse = z.infer<typeof ltmImportSourceNotesResponseSchema>;
 export type LtmEvidenceUnit = z.infer<typeof ltmEvidenceUnitSchema>;
-export type LtmEvidenceUnitExtractionResponse = z.infer<
-  typeof ltmEvidenceUnitExtractionResponseSchema
->;
-export type LtmLastInjectionMemory = z.infer<
-  typeof ltmLastInjectionMemorySchema
->;
-export type LtmLastInjectionResponse = z.infer<
-  typeof ltmLastInjectionResponseSchema
->;
-export type LtmPendingDraftsCountResponse = z.infer<
-  typeof ltmPendingDraftsCountResponseSchema
->;
+export type LtmEvidenceUnitExtractionResponse = z.infer<typeof ltmEvidenceUnitExtractionResponseSchema>;
+export type LtmLastInjectionMemory = z.infer<typeof ltmLastInjectionMemorySchema>;
+export type LtmLastInjectionResponse = z.infer<typeof ltmLastInjectionResponseSchema>;
+export type LtmPendingDraftsCountResponse = z.infer<typeof ltmPendingDraftsCountResponseSchema>;
 
 /**
  * Settings stored in agent_configs.settings when type === "long-term-memory".

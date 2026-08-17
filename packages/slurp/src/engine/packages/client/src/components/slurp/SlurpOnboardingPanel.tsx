@@ -57,15 +57,10 @@ const LAST_INTRO = 3;
 type CompletionKind = NoodlerOnboardingCompletion | "creationFailed";
 
 const clampPostsPerDay = (raw: string) =>
-  Math.max(
-    1,
-    Math.min(NOODLER_POSTS_PER_DAY_MAX, Math.round(Number(raw)) || 1),
-  );
+  Math.max(1, Math.min(NOODLER_POSTS_PER_DAY_MAX, Math.round(Number(raw)) || 1));
 
 const DISCLOSURES: NoodleIdentityDisclosure[] = ["open", "hinted", "secret"];
-const DEFAULT_ACTIVITY_PATCH = slurpActivityPresetPatch(
-  SLURP_DEFAULT_ACTIVITY_PRESET,
-);
+const DEFAULT_ACTIVITY_PATCH = slurpActivityPresetPatch(SLURP_DEFAULT_ACTIVITY_PRESET);
 const DEFAULT_POSTS_PER_DAY = DEFAULT_ACTIVITY_PATCH.postsPerDay!;
 
 // The intro uses the real locked post card for a staged walkthrough. Mari is demonstrating
@@ -84,10 +79,7 @@ const DEMO_PROFILE: NoodlerStageProfile = {
   createdAt: "",
   updatedAt: "",
 };
-const DEMO_POST: Pick<
-  NoodlerPostView,
-  "id" | "access" | "createdAt" | "title" | "imageUrl"
-> &
+const DEMO_POST: Pick<NoodlerPostView, "id" | "access" | "createdAt" | "title" | "imageUrl"> &
   Partial<Pick<NoodlerPostView, "likeCount" | "replyCount">> = {
   id: "onboarding-demo-post",
   access: "locked",
@@ -109,20 +101,11 @@ interface WizardProps {
   onSkipped?: () => void;
 }
 
-function disclosureLabel(
-  value: NoodleIdentityDisclosure,
-  t: ReturnType<typeof useUiTranslation>["t"],
-) {
+function disclosureLabel(value: NoodleIdentityDisclosure, t: ReturnType<typeof useUiTranslation>["t"]) {
   return t(`ui.noodle.noodlerwizard.disclosure.${value}.title`);
 }
 
-export function SlurpOnboardingWizard({
-  open,
-  selectionOnly = false,
-  onClose,
-  onComplete,
-  onSkipped,
-}: WizardProps) {
+export function SlurpOnboardingWizard({ open, selectionOnly = false, onClose, onComplete, onSkipped }: WizardProps) {
   const { t } = useUiTranslation();
   const eligible = useNoodlerEligibleAccounts("", "character", open);
   const bulkCreate = useBulkCreateNoodlerStageProfiles();
@@ -130,30 +113,21 @@ export function SlurpOnboardingWizard({
   const updateSlurpSettings = useUpdateSlurpSettings();
   const connectionsQuery = useSlurpConnections(open);
   const settingsQuery = useSlurpSettings();
-  const accounts = useMemo(
-    () => eligible.data?.pages.flatMap((page) => page.items) ?? [],
-    [eligible.data?.pages],
-  );
+  const accounts = useMemo(() => eligible.data?.pages.flatMap((page) => page.items) ?? [], [eligible.data?.pages]);
   const [step, setStep] = useState<Step>(1);
   const [intro, setIntro] = useState<Intro>(selectionOnly ? null : 0);
   const [setupLane, setSetupLane] = useState<SetupLane>(selectionOnly ? "easy" : null);
   const [postExplored, setPostExplored] = useState(false);
-  const [activityChoice, setActivityChoice] =
-    useState<SlurpActivityPreset | null>(SLURP_DEFAULT_ACTIVITY_PRESET);
+  const [activityChoice, setActivityChoice] = useState<SlurpActivityPreset | null>(SLURP_DEFAULT_ACTIVITY_PRESET);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectionInitialized, setSelectionInitialized] = useState(false);
-  const [disclosure, setDisclosure] =
-    useState<NoodleIdentityDisclosure>("hinted");
-  const [exceptions, setExceptions] = useState<
-    Record<string, NoodleIdentityDisclosure>
-  >({});
+  const [disclosure, setDisclosure] = useState<NoodleIdentityDisclosure>("hinted");
+  const [exceptions, setExceptions] = useState<Record<string, NoodleIdentityDisclosure>>({});
   const [autoPostingEnabled, setAutoPostingEnabled] = useState(true);
   const [postsPerDay, setPostsPerDay] = useState(DEFAULT_POSTS_PER_DAY);
   // Typed value kept apart from the committed one: clamping per keystroke made the first digit
   // of a two-digit pace snap back to 1, and the field impossible to clear.
-  const [postsPerDayDraft, setPostsPerDayDraft] = useState(
-    String(DEFAULT_POSTS_PER_DAY),
-  );
+  const [postsPerDayDraft, setPostsPerDayDraft] = useState(String(DEFAULT_POSTS_PER_DAY));
   const [nightQuiet, setNightQuiet] = useState(true);
   const [imagesEnabled, setImagesEnabled] = useState(false);
   const [generateNow, setGenerateNow] = useState(true);
@@ -162,9 +136,7 @@ export function SlurpOnboardingWizard({
   const [settingsFailed, setSettingsFailed] = useState(false);
   const [creationFailed, setCreationFailed] = useState(false);
   const [creationError, setCreationError] = useState<string | null>(null);
-  const [creationReasons, setCreationReasons] = useState<
-    { accountId: string; reason: string }[]
-  >([]);
+  const [creationReasons, setCreationReasons] = useState<{ accountId: string; reason: string }[]>([]);
   const [generationConnectionId, setGenerationConnectionId] = useState("");
   const [settingsSeeded, setSettingsSeeded] = useState(false);
   const [outcomes, setOutcomes] = useState<NoodlerRefreshNowOutcome[]>([]);
@@ -185,8 +157,7 @@ export function SlurpOnboardingWizard({
         : disclosure === "hinted"
           ? t("ui.noodle.noodlerwizard.identityPreview.hintedHandle")
           : t("ui.noodle.noodlerwizard.identityPreview.secretHandle"),
-    avatarUrl:
-      disclosure === "secret" ? null : "/sprites/mari/chibi-professor-mari.png",
+    avatarUrl: disclosure === "secret" ? null : "/sprites/mari/chibi-professor-mari.png",
     disclosureMode: disclosure,
   };
 
@@ -234,9 +205,7 @@ export function SlurpOnboardingWizard({
     setActivityChoice(slurpActivityPresetForSettings(settings));
     setNightQuiet(settings.nightQuiet);
     setImagesEnabled(settings.autoPostingImagesEnabled);
-    setGenerationConnectionId(
-      settings.generationConnectionId ?? defaultLanguageConnection?.id ?? "",
-    );
+    setGenerationConnectionId(settings.generationConnectionId ?? defaultLanguageConnection?.id ?? "");
     setSettingsSeeded(true);
   }, [connectionsQuery.data, open, settingsQuery.data, settingsSeeded]);
 
@@ -247,22 +216,10 @@ export function SlurpOnboardingWizard({
   }, [fetchNextPage, hasNextPage, isFetching, open]);
 
   useEffect(() => {
-    if (
-      !open ||
-      selectionInitialized ||
-      eligible.isLoading ||
-      eligible.hasNextPage
-    )
-      return;
+    if (!open || selectionInitialized || eligible.isLoading || eligible.hasNextPage) return;
     setSelected(new Set());
     setSelectionInitialized(true);
-  }, [
-    accounts,
-    eligible.hasNextPage,
-    eligible.isLoading,
-    open,
-    selectionInitialized,
-  ]);
+  }, [accounts, eligible.hasNextPage, eligible.isLoading, open, selectionInitialized]);
 
   // One bulk request carries at most NOODLER_BULK_ACCOUNT_MAX accounts, so the selection is
   // capped here: rejecting the whole request after the fact loses every choice the user made.
@@ -284,13 +241,9 @@ export function SlurpOnboardingWizard({
       setPostsPerDayDraft(String(patch.postsPerDay));
     }
   };
-  const failedIds = outcomes
-    .filter((outcome) => outcome.status !== "generated")
-    .map((outcome) => outcome.accountId);
+  const failedIds = outcomes.filter((outcome) => outcome.status !== "generated").map((outcome) => outcome.accountId);
   const failedCount = creationFailures + failedIds.length;
-  const generatedCount = outcomes.filter(
-    (outcome) => outcome.status === "generated",
-  ).length;
+  const generatedCount = outcomes.filter((outcome) => outcome.status === "generated").length;
   // Nothing was created, so the run failed before first posts: say that instead of blaming
   // generation.
   const resolveCompletion = (input: {
@@ -299,9 +252,7 @@ export function SlurpOnboardingWizard({
     createFailures: number;
     outcomes: NoodlerRefreshNowOutcome[] | null;
   }): CompletionKind =>
-    input.createdCount === 0 && input.createFailures > 0
-      ? "creationFailed"
-      : resolveNoodlerOnboardingCompletion(input);
+    input.createdCount === 0 && input.createFailures > 0 ? "creationFailed" : resolveNoodlerOnboardingCompletion(input);
   const finalizeOutcomes = (
     next: NoodlerRefreshNowOutcome[],
     createFailures = creationFailures,
@@ -321,14 +272,9 @@ export function SlurpOnboardingWizard({
     );
     setStep(5);
   };
-  const runGeneration = async (
-    ids: string[],
-    createFailures = creationFailures,
-  ) => {
+  const runGeneration = async (ids: string[], createFailures = creationFailures) => {
     const retriedIds = new Set(ids);
-    const kept = outcomes.filter(
-      (outcome) => !retriedIds.has(outcome.accountId),
-    );
+    const kept = outcomes.filter((outcome) => !retriedIds.has(outcome.accountId));
     try {
       const result = await refreshTargeted.mutateAsync({
         accountIds: ids,
@@ -337,13 +283,7 @@ export function SlurpOnboardingWizard({
       finalizeOutcomes([...kept, ...result.outcomes], createFailures);
     } catch (error) {
       // The profiles still exist; only generation fell over, so they stay retryable.
-      finalizeOutcomes(
-        [
-          ...kept,
-          ...ids.map((accountId) => ({ accountId, status: "error" as const })),
-        ],
-        createFailures,
-      );
+      finalizeOutcomes([...kept, ...ids.map((accountId) => ({ accountId, status: "error" as const }))], createFailures);
     }
   };
   const saveSettings = async (state: "zero" | "completed") => {
@@ -357,8 +297,7 @@ export function SlurpOnboardingWizard({
         ...(selectionOnly
           ? {}
           : {
-              onboarding:
-                state === "completed" ? "completed" : "not_started",
+              onboarding: state === "completed" ? "completed" : "not_started",
               generationGuidance:
                 state === "completed"
                   ? "The Creator should publish in its own voice and balance public updates with locked posts."
@@ -390,8 +329,7 @@ export function SlurpOnboardingWizard({
         });
         newIds = result.created.map((profile) => profile.id);
         setCreatedIds(newIds);
-        createFailureCount =
-          result.skipped.length + (result.failed?.length ?? 0);
+        createFailureCount = result.skipped.length + (result.failed?.length ?? 0);
         setCreationFailures(createFailureCount);
         setCreationReasons(result.reasons ?? []);
       }
@@ -411,9 +349,7 @@ export function SlurpOnboardingWizard({
     // still write their first posts so the run is not stranded halfway.
     // Nothing was created, so onboarding is not complete: writing "completed" here would
     // close the wizard for good on a run that produced no creator at all.
-    const settingsSaved = await saveSettings(
-      selected.size === 0 || newIds.length === 0 ? "zero" : "completed",
-    );
+    const settingsSaved = await saveSettings(selected.size === 0 || newIds.length === 0 ? "zero" : "completed");
     setSettingsFailed(!settingsSaved);
     if (newIds.length === 0 || !generateNow) {
       setCompletion(
@@ -435,12 +371,7 @@ export function SlurpOnboardingWizard({
         accountIds: newIds,
         executionId,
       });
-      finalizeOutcomes(
-        result.outcomes,
-        createFailureCount,
-        newIds.length,
-        settingsSaved,
-      );
+      finalizeOutcomes(result.outcomes, createFailureCount, newIds.length, settingsSaved);
       if (settingsSaved) onComplete?.();
     } catch {
       // The profiles exist; only generation fell over, so every one of them is retryable.
@@ -453,10 +384,7 @@ export function SlurpOnboardingWizard({
       if (settingsSaved) onComplete?.();
     }
   };
-  const pending =
-    bulkCreate.isPending ||
-    updateSlurpSettings.isPending ||
-    refreshTargeted.isPending;
+  const pending = bulkCreate.isPending || updateSlurpSettings.isPending || refreshTargeted.isPending;
   const summaries =
     setupLane === "easy"
       ? [
@@ -498,9 +426,7 @@ export function SlurpOnboardingWizard({
           {
             step: 4 as Step,
             label: t("ui.noodle.noodlerwizard.images"),
-            value: imagesEnabled
-              ? t("ui.noodle.noodlerwizard.on")
-              : t("ui.noodle.noodlerwizard.off"),
+            value: imagesEnabled ? t("ui.noodle.noodlerwizard.on") : t("ui.noodle.noodlerwizard.off"),
           },
         ];
 
@@ -513,11 +439,7 @@ export function SlurpOnboardingWizard({
       open={open}
       onClose={onClose}
       closeDisabled={pending}
-      title={
-        selectionOnly
-          ? t("ui.noodle.noodlerwizard.addCreators")
-          : t("ui.noodle.noodlerwizard.title")
-      }
+      title={selectionOnly ? t("ui.noodle.noodlerwizard.addCreators") : t("ui.noodle.noodlerwizard.title")}
       width="max-w-3xl"
       mobileFullscreen
       contentClassName="max-sm:flex max-sm:flex-col max-sm:overflow-hidden max-sm:px-4 max-sm:py-2"
@@ -540,9 +462,7 @@ export function SlurpOnboardingWizard({
                 key={dot}
                 className={cn(
                   "h-1.5 rounded-full transition-all",
-                  dot === intro
-                    ? "w-6 bg-[#ff7ec1]"
-                    : "w-1.5 bg-[#5b3a52]",
+                  dot === intro ? "w-6 bg-[#ff7ec1]" : "w-1.5 bg-[#5b3a52]",
                 )}
               />
             ))}
@@ -563,27 +483,17 @@ export function SlurpOnboardingWizard({
                       onClick={() => setStep(item.step)}
                       className={cn(
                         "w-full min-w-0 rounded-md px-2 pb-1.5 pt-2 text-left transition-colors max-sm:px-1 max-sm:pb-1 max-sm:pt-1.5",
-                        reachable
-                          ? "hover:bg-[#3a2335]"
-                          : "cursor-default opacity-45",
+                        reachable ? "hover:bg-[#3a2335]" : "cursor-default opacity-45",
                       )}
                     >
                       <span
                         className={cn(
                           "block h-1 rounded-full transition-colors",
-                          step === item.step
-                            ? "bg-[#ff7ec1]"
-                            : item.step < step
-                              ? "bg-[#ff7ec1]/45"
-                              : "bg-[#5b3a52]",
+                          step === item.step ? "bg-[#ff7ec1]" : item.step < step ? "bg-[#ff7ec1]/45" : "bg-[#5b3a52]",
                         )}
                       />
-                      <span className="mt-1.5 block truncate text-[0.7rem] font-bold max-sm:mt-1">
-                        {item.label}
-                      </span>
-                      <span className="block truncate text-[0.7rem] text-[#d8c9d4] max-sm:hidden">
-                        {item.value}
-                      </span>
+                      <span className="mt-1.5 block truncate text-[0.7rem] font-bold max-sm:mt-1">{item.label}</span>
+                      <span className="block truncate text-[0.7rem] text-[#d8c9d4] max-sm:hidden">{item.value}</span>
                     </button>
                   </li>
                 );
@@ -607,24 +517,13 @@ export function SlurpOnboardingWizard({
                   className="h-36 w-auto shrink-0 object-contain max-sm:h-24"
                 />
                 <div className="space-y-3 text-sm leading-6 max-sm:space-y-1.5 max-sm:leading-5">
-                  <p className="font-semibold">
-                    {t("ui.noodle.noodlerwizard.intro.welcome.lead")}
-                  </p>
-                  <p className="text-[#d8c9d4]">
-                    {t("ui.noodle.noodlerwizard.intro.welcome.detail")}
-                  </p>
+                  <p className="font-semibold">{t("ui.noodle.noodlerwizard.intro.welcome.lead")}</p>
+                  <p className="text-[#d8c9d4]">{t("ui.noodle.noodlerwizard.intro.welcome.detail")}</p>
                 </div>
               </div>
               <div className="flex items-start gap-2 rounded-lg border border-[#ff7ec1]/35 bg-[#ff7ec1]/10 px-3 py-2 text-xs leading-5 text-[#d8c9d4]">
-                <AlertTriangle
-                  size={14}
-                  className="mt-0.5 shrink-0 text-[#ff7ec1]"
-                />
-                <p>
-                  {t(
-                    "ui.noodle.noodlehome.noodlerIsStillBeingImplementedAndIsNotUsable",
-                  )}
-                </p>
+                <AlertTriangle size={14} className="mt-0.5 shrink-0 text-[#ff7ec1]" />
+                <p>{t("ui.noodle.noodlehome.noodlerIsStillBeingImplementedAndIsNotUsable")}</p>
               </div>
             </div>
           )}
@@ -646,16 +545,10 @@ export function SlurpOnboardingWizard({
                     }}
                     size="lg"
                   />
-                  <p className="mt-3 font-bold max-sm:mt-2 max-sm:text-xs">
-                    {demoProfile.displayName}
-                  </p>
-                  <p className="text-xs text-[#d8c9d4]">
-                    @{demoProfile.handle}
-                  </p>
+                  <p className="mt-3 font-bold max-sm:mt-2 max-sm:text-xs">{demoProfile.displayName}</p>
+                  <p className="text-xs text-[#d8c9d4]">@{demoProfile.handle}</p>
                   <p className="mt-2 text-xs font-semibold text-[#ff7ec1] max-sm:mt-1 max-sm:text-[0.625rem]">
-                    {t(
-                      `ui.noodle.noodlerwizard.identityPreview.${disclosure}.connection`,
-                    )}
+                    {t(`ui.noodle.noodlerwizard.identityPreview.${disclosure}.connection`)}
                   </p>
                 </div>
                 <div className="space-y-2">
@@ -672,7 +565,7 @@ export function SlurpOnboardingWizard({
                         "w-full rounded-lg border px-3 py-2.5 text-left transition-colors max-sm:px-2.5 max-sm:py-2",
                         disclosure === value
                           ? "border-[#ff7ec1] bg-[#ff7ec1]/15 text-[#fff7fc] ring-2 ring-[#ff7ec1]/45"
-                           : "border-[#5b3a52] hover:border-[#ff7ec1]/40 hover:bg-[#ff7ec1]/8",
+                          : "border-[#5b3a52] hover:border-[#ff7ec1]/40 hover:bg-[#ff7ec1]/8",
                       )}
                     >
                       <span className="flex items-center justify-between gap-2 text-sm font-bold">
@@ -680,9 +573,7 @@ export function SlurpOnboardingWizard({
                         {disclosure === value && <Check size={15} className="shrink-0 text-[#ff7ec1]" />}
                       </span>
                       <span className="mt-0.5 block text-xs leading-5 text-[#d8c9d4] max-sm:line-clamp-2 max-sm:leading-4">
-                        {t(
-                          `ui.noodle.noodlerwizard.disclosure.${value}.detail`,
-                        )}
+                        {t(`ui.noodle.noodlerwizard.disclosure.${value}.detail`)}
                       </span>
                     </button>
                   ))}
@@ -705,9 +596,7 @@ export function SlurpOnboardingWizard({
                   key={disclosure}
                   post={{
                     ...DEMO_POST,
-                    title: t(
-                      "ui.noodle.noodlerwizard.demoPost.walkthrough.title",
-                    ),
+                    title: t("ui.noodle.noodlerwizard.demoPost.walkthrough.title"),
                     imageUrl: DEMO_POST.imageUrl,
                   }}
                   profile={DEMO_PROFILE}
@@ -717,15 +606,10 @@ export function SlurpOnboardingWizard({
                   onUnlock={() => {}}
                   onToggleSubscription={() => {}}
                   demo={{
-                    body: t(
-                      "ui.noodle.noodlerwizard.demoPost.walkthrough.body",
-                    ),
-                    lockedTitle: t(
-                      "ui.noodle.noodlerwizard.demoPost.walkthrough.lockedTitle",
-                    ),
+                    body: t("ui.noodle.noodlerwizard.demoPost.walkthrough.body"),
+                    lockedTitle: t("ui.noodle.noodlerwizard.demoPost.walkthrough.lockedTitle"),
                     unlockedLabel: t("ui.noodle.postaccess.unlocked"),
-                    unlockedImageUrl:
-                      "/sprites/mari/Mari_noodler_teaser_unlocked.webp",
+                    unlockedImageUrl: "/sprites/mari/Mari_noodler_teaser_unlocked.webp",
                     onReveal: () => setPostExplored(true),
                   }}
                 />
@@ -750,18 +634,14 @@ export function SlurpOnboardingWizard({
                       "rounded-lg border px-3 py-2.5 text-left transition-colors max-sm:py-2",
                       activityChoice === choice
                         ? "border-[#ff7ec1] bg-[#ff7ec1]/10"
-                         : "border-[#5b3a52] hover:border-[#ff7ec1]/40 hover:bg-[#ff7ec1]/8",
+                        : "border-[#5b3a52] hover:border-[#ff7ec1]/40 hover:bg-[#ff7ec1]/8",
                     )}
                   >
                     <span className="block text-sm font-bold">
-                      {t(
-                        `ui.noodle.noodlerwizard.activityChoice.${choice}.title`,
-                      )}
+                      {t(`ui.noodle.noodlerwizard.activityChoice.${choice}.title`)}
                     </span>
                     <span className="mt-0.5 block text-xs leading-5 text-[#d8c9d4]">
-                      {t(
-                        `ui.noodle.noodlerwizard.activityChoice.${choice}.detail`,
-                      )}
+                      {t(`ui.noodle.noodlerwizard.activityChoice.${choice}.detail`)}
                     </span>
                   </button>
                 ))}
@@ -820,10 +700,7 @@ export function SlurpOnboardingWizard({
                   className="group rounded-xl border border-[#ff7ec1]/60 bg-gradient-to-br from-[#ff7ec1]/22 to-[#ff7ec1]/6 p-5 text-left shadow-sm shadow-[#ff7ec1]/15 transition-[transform,box-shadow,background-color] hover:-translate-y-0.5 hover:shadow-md hover:shadow-[#ff7ec1]/25 motion-reduce:transform-none"
                 >
                   <span className="flex items-center gap-2 text-base font-bold">
-                    <Sparkles
-                      size={17}
-                      className="text-[#ff7ec1]"
-                    />
+                    <Sparkles size={17} className="text-[#ff7ec1]" />
                     {t("ui.noodle.noodlerwizard.handoff.easy.title")}
                   </span>
                   <span className="mt-2 block text-sm leading-6 text-[#d8c9d4]">
@@ -871,9 +748,7 @@ export function SlurpOnboardingWizard({
                 {selectionOnly && (
                   <button
                     type="button"
-                    onClick={() =>
-                      setSetupLane(setupLane === "easy" ? "customize" : "easy")
-                    }
+                    onClick={() => setSetupLane(setupLane === "easy" ? "customize" : "easy")}
                     className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-full border border-[#ff7ec1]/40 px-3 text-xs font-bold text-[#ff7ec1] transition-colors hover:bg-[#ff7ec1]/10"
                   >
                     <SlidersHorizontal size={13} />
@@ -900,9 +775,7 @@ export function SlurpOnboardingWizard({
                         new Set(
                           selected.size > 0
                             ? []
-                            : accounts
-                                .slice(0, NOODLER_BULK_ACCOUNT_MAX)
-                                .map((account) => account.id),
+                            : accounts.slice(0, NOODLER_BULK_ACCOUNT_MAX).map((account) => account.id),
                         ),
                       )
                     }
@@ -916,9 +789,7 @@ export function SlurpOnboardingWizard({
               )}
               {eligible.isError && accounts.length === 0 ? (
                 <div className="py-8 text-center">
-                  <p className="text-sm text-[#d8c9d4]">
-                    {t("ui.noodle.noodlerwizard.loadFailed")}
-                  </p>
+                  <p className="text-sm text-[#d8c9d4]">{t("ui.noodle.noodlerwizard.loadFailed")}</p>
                   <button
                     type="button"
                     onClick={() => void eligible.refetch()}
@@ -927,9 +798,7 @@ export function SlurpOnboardingWizard({
                     {t("capabilities.actions.tryAgain")}
                   </button>
                 </div>
-              ) : accounts.length === 0 &&
-                !eligible.isLoading &&
-                !eligible.hasNextPage ? (
+              ) : accounts.length === 0 && !eligible.isLoading && !eligible.hasNextPage ? (
                 <div className="flex flex-col items-center py-8 text-center">
                   <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#ff7ec1]/12 text-[#ff7ec1]">
                     <Users size={22} />
@@ -953,9 +822,7 @@ export function SlurpOnboardingWizard({
                         selected.has(account.id)
                           ? "border-[#ff7ec1] bg-gradient-to-r from-[#ff7ec1]/20 to-[#ff7ec1]/5 shadow-sm shadow-[#ff7ec1]/20 ring-1 ring-[#ff7ec1]/35"
                           : "border-[#5b3a52] hover:border-[#ff7ec1]/40 hover:bg-[#ff7ec1]/[0.06]",
-                        selectionFull &&
-                          !selected.has(account.id) &&
-                          "opacity-40",
+                        selectionFull && !selected.has(account.id) && "opacity-40",
                       )}
                     >
                       <Avatar
@@ -967,20 +834,14 @@ export function SlurpOnboardingWizard({
                         size="md"
                       />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold">
-                          {account.displayName}
-                        </span>
-                        <span className="block truncate text-xs text-[#d8c9d4]">
-                          @{account.handle}
-                        </span>
+                        <span className="block truncate text-sm font-semibold">{account.displayName}</span>
+                        <span className="block truncate text-xs text-[#d8c9d4]">@{account.handle}</span>
                       </span>
                       <span
                         aria-hidden="true"
                         className={cn(
                           "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
-                          selected.has(account.id)
-                            ? "border-[#ff7ec1] bg-[#ff7ec1] text-zinc-950"
-                            : "border-[#5b3a52]",
+                          selected.has(account.id) ? "border-[#ff7ec1] bg-[#ff7ec1] text-zinc-950" : "border-[#5b3a52]",
                         )}
                       >
                         {selected.has(account.id) && <Check size={13} />}
@@ -993,18 +854,13 @@ export function SlurpOnboardingWizard({
                         key={`skeleton-${index}`}
                         className="min-h-14 animate-pulse rounded-lg border border-[#5b3a52] bg-[#3a2335]/40"
                       >
-                        <span className="sr-only">
-                          {t("ui.noodle.noodlerwizard.loadingCharacters")}
-                        </span>
+                        <span className="sr-only">{t("ui.noodle.noodlerwizard.loadingCharacters")}</span>
                       </span>
                     ))}
                 </div>
               )}
               {selectionFull && (
-                <p
-                  aria-live="polite"
-                  className="text-xs font-semibold text-[#d8c9d4]"
-                >
+                <p aria-live="polite" className="text-xs font-semibold text-[#d8c9d4]">
                   {t("ui.noodle.noodlerwizard.selectionLimit", {
                     count: NOODLER_BULK_ACCOUNT_MAX,
                   })}
@@ -1028,9 +884,7 @@ export function SlurpOnboardingWizard({
                     onClick={() => setDisclosure(value)}
                     className={cn(
                       "w-full rounded-md border p-3 text-left",
-                      disclosure === value
-                        ? "border-[#ff7ec1] bg-[#ff7ec1]/10"
-                        : "border-[#5b3a52] hover:bg-[#3a2335]",
+                      disclosure === value ? "border-[#ff7ec1] bg-[#ff7ec1]/10" : "border-[#5b3a52] hover:bg-[#3a2335]",
                     )}
                   >
                     <span className="block text-sm font-bold">
@@ -1044,31 +898,23 @@ export function SlurpOnboardingWizard({
               </div>
               {setupLane === "customize" && selected.size > 0 && (
                 <div>
-                  <h4 className="mb-2 text-sm font-bold">
-                    {t("ui.noodle.noodlerwizard.exceptions")}
-                  </h4>
+                  <h4 className="mb-2 text-sm font-bold">{t("ui.noodle.noodlerwizard.exceptions")}</h4>
                   <div className="divide-y divide-[#ff7ec1]/20 rounded-md border border-[#ff7ec1]/30">
                     {accounts
                       .filter((account) => selected.has(account.id))
                       .map((account) => (
-                        <label
-                          key={account.id}
-                          className="flex min-h-11 items-center gap-3 px-3 text-xs"
-                        >
-                          <span className="min-w-0 flex-1 truncate font-semibold">
-                            {account.displayName}
-                          </span>
+                        <label key={account.id} className="flex min-h-11 items-center gap-3 px-3 text-xs">
+                          <span className="min-w-0 flex-1 truncate font-semibold">{account.displayName}</span>
                           <select
                             value={exceptions[account.id] ?? disclosure}
-                             onChange={(event) =>
-                               setExceptions((current) => ({
+                            onChange={(event) =>
+                              setExceptions((current) => ({
                                 ...current,
-                                [account.id]: event.target
-                                  .value as NoodleIdentityDisclosure,
-                               }))
-                             }
-                             style={{ colorScheme: "dark" }}
-                             className="h-8 rounded-md border border-[#ff7ec1]/45 bg-[#17121b] px-2 text-[#fff7fc] color-scheme-dark"
+                                [account.id]: event.target.value as NoodleIdentityDisclosure,
+                              }))
+                            }
+                            style={{ colorScheme: "dark" }}
+                            className="h-8 rounded-md border border-[#ff7ec1]/45 bg-[#17121b] px-2 text-[#fff7fc] color-scheme-dark"
                           >
                             {DISCLOSURES.map((value) => (
                               <option key={value} value={value}>
@@ -1099,18 +945,12 @@ export function SlurpOnboardingWizard({
                   <input
                     type="checkbox"
                     checked={autoPostingEnabled}
-                    onChange={(event) =>
-                      setAutoPostingEnabled(event.target.checked)
-                    }
+                    onChange={(event) => setAutoPostingEnabled(event.target.checked)}
                     className="h-4 w-4 accent-[#ff7ec1]"
                   />
                   <span>
-                    <span className="block text-sm font-semibold">
-                      {t("ui.noodle.noodlerwizard.autoPosting")}
-                    </span>
-                    <span className="block text-xs text-[#d8c9d4]">
-                      {t("ui.noodle.noodlerwizard.autoPostingHelp")}
-                    </span>
+                    <span className="block text-sm font-semibold">{t("ui.noodle.noodlerwizard.autoPosting")}</span>
+                    <span className="block text-xs text-[#d8c9d4]">{t("ui.noodle.noodlerwizard.autoPostingHelp")}</span>
                   </span>
                 </label>
                 {autoPostingEnabled && (
@@ -1123,28 +963,24 @@ export function SlurpOnboardingWizard({
                         max={NOODLER_POSTS_PER_DAY_MAX}
                         value={postsPerDayDraft}
                         onChange={(event) => setPostsPerDayDraft(event.target.value)}
-                         onBlur={() => {
+                        onBlur={() => {
                           const value = clampPostsPerDay(postsPerDayDraft);
                           setPostsPerDay(value);
                           setPostsPerDayDraft(String(value));
                         }}
-                         style={{ colorScheme: "dark" }}
-                         className="mt-2 h-11 w-28 rounded-md border border-[#ff7ec1]/45 bg-[#17121b] px-3 text-[#fff7fc] color-scheme-dark"
+                        style={{ colorScheme: "dark" }}
+                        className="mt-2 h-11 w-28 rounded-md border border-[#ff7ec1]/45 bg-[#17121b] px-3 text-[#fff7fc] color-scheme-dark"
                       />
                     </label>
                     <label className="flex min-h-12 items-center gap-3 rounded-md border border-[#5b3a52] px-3">
                       <input
                         type="checkbox"
                         checked={nightQuiet}
-                       onChange={(event) =>
-                          setNightQuiet(event.target.checked)
-                        }
+                        onChange={(event) => setNightQuiet(event.target.checked)}
                         className="h-4 w-4 accent-[#ff7ec1]"
                       />
                       <span>
-                        <span className="block text-sm font-semibold">
-                          {t("ui.noodle.noodlerwizard.nightQuiet")}
-                        </span>
+                        <span className="block text-sm font-semibold">{t("ui.noodle.noodlerwizard.nightQuiet")}</span>
                         <span className="block text-xs text-[#d8c9d4]">
                           {t("ui.noodle.noodlerwizard.nightQuietHelp")}
                         </span>
@@ -1161,9 +997,7 @@ export function SlurpOnboardingWizard({
               <StepHeading
                 icon={<ImageIcon size={18} />}
                 title={
-                  setupLane === "easy"
-                    ? t("ui.noodle.noodlerwizard.reviewTitle")
-                    : t("ui.noodle.noodlerwizard.images")
+                  setupLane === "easy" ? t("ui.noodle.noodlerwizard.reviewTitle") : t("ui.noodle.noodlerwizard.images")
                 }
                 help={
                   setupLane === "easy"
@@ -1174,9 +1008,7 @@ export function SlurpOnboardingWizard({
               {setupLane === "customize" && (
                 <label className="flex min-h-12 items-center justify-between gap-4 rounded-md border border-[#5b3a52] px-3">
                   <span className="min-w-0">
-                    <span className="block text-sm font-semibold">
-                      {t("ui.noodle.noodlerwizard.images")}
-                    </span>
+                    <span className="block text-sm font-semibold">{t("ui.noodle.noodlerwizard.images")}</span>
                     <span className="block text-xs leading-5 text-[#d8c9d4]">
                       {t("ui.noodle.noodlerwizard.imagesHelp")}
                     </span>
@@ -1193,20 +1025,31 @@ export function SlurpOnboardingWizard({
               <label className="flex min-h-14 items-center justify-between gap-4 rounded-md border border-[#5b3a52] px-3 py-2">
                 <span className="min-w-0">
                   <span className="block text-sm font-semibold">Generation connection</span>
-                  <span className="block text-xs leading-5 text-[#d8c9d4]">Choose the language model that writes creator posts.</span>
+                  <span className="block text-xs leading-5 text-[#d8c9d4]">
+                    Choose the language model that writes creator posts.
+                  </span>
                 </span>
-                <select value={generationConnectionId} onChange={(event) => setGenerationConnectionId(event.target.value)} className="h-9 max-w-[55%] rounded-md border border-[#ff7ec1]/45 bg-[#17121b] px-2 text-sm text-[#fff7fc]" disabled={connectionsQuery.isLoading}>
+                <select
+                  value={generationConnectionId}
+                  onChange={(event) => setGenerationConnectionId(event.target.value)}
+                  className="h-9 max-w-[55%] rounded-md border border-[#ff7ec1]/45 bg-[#17121b] px-2 text-sm text-[#fff7fc]"
+                  disabled={connectionsQuery.isLoading}
+                >
                   <option value="">Select a connection</option>
-                  {(connectionsQuery.data ?? []).filter((connection) => connection.provider !== "image_generation").map((connection) => <option key={connection.id} value={connection.id}>{connection.name ?? connection.model ?? connection.id}</option>)}
+                  {(connectionsQuery.data ?? [])
+                    .filter((connection) => connection.provider !== "image_generation")
+                    .map((connection) => (
+                      <option key={connection.id} value={connection.id}>
+                        {connection.name ?? connection.model ?? connection.id}
+                      </option>
+                    ))}
                 </select>
               </label>
               {setupLane === "easy" ? (
                 <div className="divide-y divide-[#ff7ec1]/20 rounded-lg border border-[#ff7ec1]/30 bg-[#ff7ec1]/[0.06]">
                   <div className="flex min-h-14 items-center justify-between gap-4 px-3 py-2.5">
                     <span>
-                      <span className="block text-sm font-semibold">
-                        {t("ui.noodle.noodlerwizard.characters")}
-                      </span>
+                      <span className="block text-sm font-semibold">{t("ui.noodle.noodlerwizard.characters")}</span>
                       <span className="block text-xs text-[#d8c9d4]">
                         {t("ui.noodle.noodlerwizard.selectedCount", {
                           count: selected.size,
@@ -1222,18 +1065,12 @@ export function SlurpOnboardingWizard({
                     </button>
                   </div>
                   <label className="flex min-h-14 items-center justify-between gap-4 px-3 py-2.5">
-                    <span className="text-sm font-semibold">
-                      {t("ui.noodle.noodlerwizard.identity")}
-                    </span>
+                    <span className="text-sm font-semibold">{t("ui.noodle.noodlerwizard.identity")}</span>
                     <select
                       value={disclosure}
-                      onChange={(event) =>
-                        setDisclosure(
-                          event.target.value as NoodleIdentityDisclosure,
-                         )
-                       }
-                       style={{ colorScheme: "dark" }}
-                       className="h-9 min-w-0 max-w-[65%] rounded-md border border-[#ff7ec1]/45 bg-[#17121b] px-2 text-sm text-[#fff7fc] color-scheme-dark"
+                      onChange={(event) => setDisclosure(event.target.value as NoodleIdentityDisclosure)}
+                      style={{ colorScheme: "dark" }}
+                      className="h-9 min-w-0 max-w-[65%] rounded-md border border-[#ff7ec1]/45 bg-[#17121b] px-2 text-sm text-[#fff7fc] color-scheme-dark"
                     >
                       {DISCLOSURES.map((value) => (
                         <option key={value} value={value}>
@@ -1244,24 +1081,18 @@ export function SlurpOnboardingWizard({
                   </label>
                   <div className="space-y-3 px-3 py-3">
                     <label className="flex min-h-9 items-center justify-between gap-4">
-                      <span className="text-sm font-semibold">
-                        {t("ui.noodle.noodlerwizard.activity")}
-                      </span>
+                      <span className="text-sm font-semibold">{t("ui.noodle.noodlerwizard.activity")}</span>
                       <input
                         type="checkbox"
                         role="switch"
                         checked={autoPostingEnabled}
-                        onChange={(event) =>
-                          setAutoPostingEnabled(event.target.checked)
-                        }
+                        onChange={(event) => setAutoPostingEnabled(event.target.checked)}
                         className="h-5 w-5 shrink-0 accent-[#ff7ec1]"
                       />
                     </label>
                     {autoPostingEnabled && (
                       <label className="flex items-center justify-between gap-4 text-xs text-[#d8c9d4]">
-                        <span>
-                          {t("ui.noodle.noodlerwizard.easyPostingPace")}
-                        </span>
+                        <span>{t("ui.noodle.noodlerwizard.easyPostingPace")}</span>
                         <span className="flex shrink-0 items-center gap-2">
                           <input
                             type="number"
@@ -1274,9 +1105,7 @@ export function SlurpOnboardingWizard({
                               setPostsPerDay(value);
                               setPostsPerDayDraft(String(value));
                             }}
-                            aria-label={t(
-                              "ui.noodle.noodlerwizard.postsPerDay",
-                            )}
+                            aria-label={t("ui.noodle.noodlerwizard.postsPerDay")}
                             className="h-9 w-16 rounded-md border border-[#5b3a52] bg-[var(--background)] px-2 text-center text-sm text-[#fff7fc]"
                           />
                           {t("ui.noodle.noodlerwizard.postsPerDayShort")}
@@ -1285,9 +1114,7 @@ export function SlurpOnboardingWizard({
                     )}
                   </div>
                   <label className="flex min-h-14 items-center justify-between gap-4 px-3 py-2.5">
-                    <span className="text-sm font-semibold">
-                      {t("ui.noodle.noodlerwizard.nightQuiet")}
-                    </span>
+                    <span className="text-sm font-semibold">{t("ui.noodle.noodlerwizard.nightQuiet")}</span>
                     <input
                       type="checkbox"
                       role="switch"
@@ -1297,16 +1124,12 @@ export function SlurpOnboardingWizard({
                     />
                   </label>
                   <label className="flex min-h-14 items-center justify-between gap-4 px-3 py-2.5">
-                    <span className="text-sm font-semibold">
-                      {t("ui.noodle.noodlerwizard.images")}
-                    </span>
+                    <span className="text-sm font-semibold">{t("ui.noodle.noodlerwizard.images")}</span>
                     <input
                       type="checkbox"
                       role="switch"
                       checked={imagesEnabled}
-                      onChange={(event) =>
-                        setImagesEnabled(event.target.checked)
-                      }
+                      onChange={(event) => setImagesEnabled(event.target.checked)}
                       className="h-5 w-5 shrink-0 accent-[#ff7ec1]"
                     />
                   </label>
@@ -1320,10 +1143,7 @@ export function SlurpOnboardingWizard({
                         count: selected.size,
                       }),
                     ],
-                    [
-                      t("ui.noodle.noodlerwizard.identity"),
-                      disclosureLabel(disclosure, t),
-                    ],
+                    [t("ui.noodle.noodlerwizard.identity"), disclosureLabel(disclosure, t)],
                     [
                       t("ui.noodle.noodlerwizard.activity"),
                       autoPostingEnabled
@@ -1334,25 +1154,16 @@ export function SlurpOnboardingWizard({
                     ],
                     [
                       t("ui.noodle.noodlerwizard.nightQuiet"),
-                      nightQuiet
-                        ? t("ui.noodle.noodlerwizard.on")
-                        : t("ui.noodle.noodlerwizard.off"),
+                      nightQuiet ? t("ui.noodle.noodlerwizard.on") : t("ui.noodle.noodlerwizard.off"),
                     ],
                     [
                       t("ui.noodle.noodlerwizard.images"),
-                      imagesEnabled
-                        ? t("ui.noodle.noodlerwizard.on")
-                        : t("ui.noodle.noodlerwizard.off"),
+                      imagesEnabled ? t("ui.noodle.noodlerwizard.on") : t("ui.noodle.noodlerwizard.off"),
                     ],
                   ].map(([label, value]) => (
-                    <div
-                      key={label}
-                      className="flex items-start justify-between gap-4 px-3 py-2.5 text-sm"
-                    >
+                    <div key={label} className="flex items-start justify-between gap-4 px-3 py-2.5 text-sm">
                       <span className="font-semibold">{label}</span>
-                      <span className="max-w-[65%] text-right text-[#d8c9d4]">
-                        {value}
-                      </span>
+                      <span className="max-w-[65%] text-right text-[#d8c9d4]">{value}</span>
                     </div>
                   ))}
                 </div>
@@ -1366,9 +1177,7 @@ export function SlurpOnboardingWizard({
                     className="h-5 w-5 accent-[#ff7ec1]"
                   />
                   <span>
-                    <span className="block text-sm font-semibold">
-                      {t("ui.noodle.noodlerwizard.generateNow")}
-                    </span>
+                    <span className="block text-sm font-semibold">{t("ui.noodle.noodlerwizard.generateNow")}</span>
                     <span className="block text-xs leading-5 text-[#d8c9d4]">
                       {t("ui.noodle.noodlerwizard.generateNowHelp")}
                     </span>
@@ -1398,11 +1207,7 @@ export function SlurpOnboardingWizard({
                   <Users size={24} />
                 )}
               </div>
-              <h3
-                ref={completionHeadingRef}
-                tabIndex={-1}
-                className="mt-4 text-xl font-bold outline-none"
-              >
+              <h3 ref={completionHeadingRef} tabIndex={-1} className="mt-4 text-xl font-bold outline-none">
                 {t(`ui.noodle.noodlerwizard.completion.${completion}.title`)}
               </h3>
               <p className="mt-2 max-w-md text-sm leading-6 text-[#d8c9d4]">
@@ -1419,9 +1224,7 @@ export function SlurpOnboardingWizard({
                   {creationReasons.map((entry) => {
                     // The eligible list is the same source the selection came from, so the name
                     // is normally known. An unnamed creator still shows its reason.
-                    const name = accounts.find(
-                      (account) => account.id === entry.accountId,
-                    )?.displayName;
+                    const name = accounts.find((account) => account.id === entry.accountId)?.displayName;
                     return (
                       <li key={`${entry.accountId}:${entry.reason}`}>
                         {name ? (
@@ -1460,12 +1263,7 @@ export function SlurpOnboardingWizard({
                   type="button"
                   onClick={() => {
                     void (async () => {
-                      if (
-                        !(await saveSettings(
-                          createdIds.length === 0 ? "zero" : "completed",
-                        ))
-                      )
-                        return;
+                      if (!(await saveSettings(createdIds.length === 0 ? "zero" : "completed"))) return;
                       setSettingsFailed(false);
                       onComplete?.();
                       setCompletion(
@@ -1473,20 +1271,14 @@ export function SlurpOnboardingWizard({
                           selectedCount: selected.size,
                           createdCount: createdIds.length,
                           createFailures: creationFailures,
-                          outcomes:
-                            generateNow && createdIds.length > 0
-                              ? outcomes
-                              : null,
+                          outcomes: generateNow && createdIds.length > 0 ? outcomes : null,
                         }),
                       );
                     })();
                   }}
                   className="mt-5 flex min-h-10 items-center gap-2 rounded-md border border-[#ff7ec1]/40 px-4 text-sm font-bold text-[#ff7ec1] disabled:opacity-50"
                 >
-                  <RefreshCw
-                    size={15}
-                    className=""
-                  />
+                  <RefreshCw size={15} className="" />
                   {t("ui.noodle.noodlerwizard.retrySettings")}
                 </button>
               )}
@@ -1515,10 +1307,7 @@ export function SlurpOnboardingWizard({
                   onClick={() => void runGeneration(failedIds)}
                   className="mt-5 flex min-h-10 items-center gap-2 rounded-md border border-[#ff7ec1]/40 px-4 text-sm font-bold text-[#ff7ec1] disabled:opacity-50"
                 >
-                  <RefreshCw
-                    size={15}
-                    className={refreshTargeted.isPending ? "animate-spin" : ""}
-                  />
+                  <RefreshCw size={15} className={refreshTargeted.isPending ? "animate-spin" : ""} />
                   {t("ui.noodle.noodlerwizard.retryFailed")}
                 </button>
               )}
@@ -1542,57 +1331,42 @@ export function SlurpOnboardingWizard({
               {intro === null && setupLane !== null && step > 1 && step < 5 && (
                 <button
                   type="button"
-                  onClick={() =>
-                    setStep(setupLane === "easy" ? 1 : ((step - 1) as Step))
-                  }
+                  onClick={() => setStep(setupLane === "easy" ? 1 : ((step - 1) as Step))}
                   className="flex min-h-10 items-center gap-1 rounded-md border border-[#5b3a52] px-3 text-sm font-bold max-sm:px-2"
                 >
                   <ChevronLeft size={15} />
                   {t("ui.noodle.noodlerwizard.back")}
                 </button>
               )}
-              {intro === null &&
-                setupLane !== null &&
-                step === 1 &&
-                !selectionOnly && (
-                  <button
-                    type="button"
-                    onClick={() => setSetupLane(null)}
-                    className="flex min-h-10 items-center gap-1 rounded-md border border-[#5b3a52] px-3 text-sm font-bold max-sm:px-2"
-                  >
-                    <ChevronLeft size={15} />
-                    {t("ui.noodle.noodlerwizard.back")}
-                  </button>
-                )}
-              {!selectionOnly &&
-                step < 5 &&
-                (intro !== null || setupLane !== null) && (
-                  <button
-                    type="button"
-                    disabled={pending}
-                    onClick={() =>
-                      intro === null ? void skip() : setIntro(null)
-                    }
-                    className="min-h-10 rounded-md px-2 text-sm font-semibold text-[#d8c9d4] hover:text-[#fff7fc] disabled:opacity-50 max-sm:px-1.5 max-sm:text-xs"
-                  >
-                    {intro === null
-                      ? t("ui.noodle.noodlerwizard.skip")
-                      : t("ui.noodle.noodlerwizard.skipIntro")}
-                  </button>
-                )}
+              {intro === null && setupLane !== null && step === 1 && !selectionOnly && (
+                <button
+                  type="button"
+                  onClick={() => setSetupLane(null)}
+                  className="flex min-h-10 items-center gap-1 rounded-md border border-[#5b3a52] px-3 text-sm font-bold max-sm:px-2"
+                >
+                  <ChevronLeft size={15} />
+                  {t("ui.noodle.noodlerwizard.back")}
+                </button>
+              )}
+              {!selectionOnly && step < 5 && (intro !== null || setupLane !== null) && (
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => (intro === null ? void skip() : setIntro(null))}
+                  className="min-h-10 rounded-md px-2 text-sm font-semibold text-[#d8c9d4] hover:text-[#fff7fc] disabled:opacity-50 max-sm:px-1.5 max-sm:text-xs"
+                >
+                  {intro === null ? t("ui.noodle.noodlerwizard.skip") : t("ui.noodle.noodlerwizard.skipIntro")}
+                </button>
+              )}
             </div>
             {intro !== null ? (
               <button
                 type="button"
                 disabled={intro === 2 && !postExplored}
-                onClick={() =>
-                  setIntro(intro < LAST_INTRO ? ((intro + 1) as Intro) : null)
-                }
+                onClick={() => setIntro(intro < LAST_INTRO ? ((intro + 1) as Intro) : null)}
                 className="flex min-h-10 items-center gap-2 rounded-md bg-[#ff7ec1] px-4 text-sm font-bold text-zinc-950 disabled:opacity-50 max-sm:px-3"
               >
-                {intro < LAST_INTRO
-                  ? t("ui.noodle.noodlerwizard.continue")
-                  : t("ui.noodle.noodlerwizard.introDone")}
+                {intro < LAST_INTRO ? t("ui.noodle.noodlerwizard.continue") : t("ui.noodle.noodlerwizard.introDone")}
                 <ChevronRight size={15} />
               </button>
             ) : setupLane === null ? null : step < 5 ? (
@@ -1633,10 +1407,7 @@ export function SlurpOnboardingWizard({
             )}
           </div>
           {/* Creating profiles then writing first posts can take a while; say which half we are in. */}
-          <p
-            aria-live="polite"
-            className="mt-2 min-h-4 text-xs text-[#d8c9d4] max-sm:mt-1"
-          >
+          <p aria-live="polite" className="mt-2 min-h-4 text-xs text-[#d8c9d4] max-sm:mt-1">
             {bulkCreate.isPending
               ? t("ui.noodle.noodlerwizard.progressCreating")
               : refreshTargeted.isPending
@@ -1649,27 +1420,15 @@ export function SlurpOnboardingWizard({
   );
 }
 
-function StepHeading({
-  icon,
-  title,
-  help,
-}: {
-  icon: ReactNode;
-  title: string;
-  help: string;
-}) {
+function StepHeading({ icon, title, help }: { icon: ReactNode; title: string; help: string }) {
   return (
     <div className="flex gap-3 max-sm:gap-2">
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#ff7ec1] to-[#ff7ec1]/70 text-zinc-950 shadow-sm shadow-[#ff7ec1]/30 max-sm:h-8 max-sm:w-8">
         {icon}
       </span>
       <div className="min-w-0">
-        <h3 className="text-xl font-bold leading-snug max-sm:text-lg">
-          {title}
-        </h3>
-        <p className="mt-1 max-w-[70ch] text-sm leading-6 text-[#d8c9d4] max-sm:leading-5">
-          {help}
-        </p>
+        <h3 className="text-xl font-bold leading-snug max-sm:text-lg">{title}</h3>
+        <p className="mt-1 max-w-[70ch] text-sm leading-6 text-[#d8c9d4] max-sm:leading-5">{help}</p>
       </div>
     </div>
   );

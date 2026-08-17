@@ -1,8 +1,6 @@
 const activeAccountOperations = new Set<string>();
 
-export type NoodlerAccountOperationResult<T> =
-  | { acquired: true; value: T }
-  | { acquired: false };
+export type NoodlerAccountOperationResult<T> = { acquired: true; value: T } | { acquired: false };
 
 /**
  * Serializes identity-sensitive work for one NoodleR account in this server process.

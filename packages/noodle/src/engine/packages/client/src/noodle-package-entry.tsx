@@ -61,29 +61,19 @@ function NoodlePackageRoot({ element }: { element: CapabilityElement }) {
   useEffect(() => {
     const update = () => redraw((value) => value + 1);
     element.addEventListener("marinara-capability-props", update);
-    return () =>
-      element.removeEventListener("marinara-capability-props", update);
+    return () => element.removeEventListener("marinara-capability-props", update);
   }, [element]);
   useEffect(() => {
     const props = element.capabilityProps ?? {};
     configureNoodlePackageState(props);
     const localizationContext = props.localization;
     const requestedLocale =
-      localizationContext &&
-      typeof localizationContext === "object" &&
-      !Array.isArray(localizationContext)
+      localizationContext && typeof localizationContext === "object" && !Array.isArray(localizationContext)
         ? (localizationContext as Record<string, unknown>).locale
         : null;
-    const language =
-      typeof requestedLocale === "string"
-        ? requestedLocale.split("-")[0]
-        : "en";
-    const supportedLanguages = new Set(
-      Object.keys(localization.options.resources ?? {}),
-    );
-    void localization.changeLanguage(
-      language && supportedLanguages.has(language) ? language : "en",
-    );
+    const language = typeof requestedLocale === "string" ? requestedLocale.split("-")[0] : "en";
+    const supportedLanguages = new Set(Object.keys(localization.options.resources ?? {}));
+    void localization.changeLanguage(language && supportedLanguages.has(language) ? language : "en");
   }, [element, revision]);
   return (
     <I18nextProvider i18n={localization}>

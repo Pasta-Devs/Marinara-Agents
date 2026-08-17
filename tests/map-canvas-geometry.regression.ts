@@ -23,7 +23,11 @@ assert.match(localCanvas, /h-full w-full object-cover/u, "Editor background must
 assert.match(runtimeCanvas, /h-full w-full object-cover/u, "Runtime background must use the shared cover projection");
 assert.doesNotMatch(localCanvas, /min-h-\[22rem\]/u, "Editor height must not change the saved coordinate projection");
 assert.doesNotMatch(runtimeCanvas, /function displayCoordinate/u, "Runtime must not apply a private safe-area clamp");
-assert.doesNotMatch(runtimeCanvas, /compact \? "h-56" : "h-52"/u, "Runtime must not use a different fixed canvas shape");
+assert.doesNotMatch(
+  runtimeCanvas,
+  /compact \? "h-56" : "h-52"/u,
+  "Runtime must not use a different fixed canvas shape",
+);
 assert.match(
   packageBuilder,
   /\[data-marinara-maps-world-canvas\] \{\s*aspect-ratio: 16 \/ 9;\s*height: auto;\s*width: 100%;\s*\}/u,

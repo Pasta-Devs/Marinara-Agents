@@ -70,7 +70,10 @@ export function useMapConfirmation() {
             {pendingConfirmation.title}
           </h2>
         </div>
-        <p id={messageId} className="whitespace-pre-wrap px-4 py-4 text-sm leading-relaxed text-[var(--foreground)] sm:px-5">
+        <p
+          id={messageId}
+          className="whitespace-pre-wrap px-4 py-4 text-sm leading-relaxed text-[var(--foreground)] sm:px-5"
+        >
           {pendingConfirmation.message}
         </p>
         <div className="flex flex-col gap-2 border-t border-[var(--border)] px-4 py-4 sm:flex-row sm:justify-end sm:px-5">

@@ -20,18 +20,12 @@ const NOODLER_UNLOCK_PRICE_METADATA_KEY = "noodlerUnlockPrice";
  * Imported or hand-edited state can carry anything, so a non-integer or negative value falls
  * back rather than rendering as NaN.
  */
-export function noodlerUnlockPriceFromMetadata(
-  metadata: Record<string, unknown> | null | undefined,
-): number {
+export function noodlerUnlockPriceFromMetadata(metadata: Record<string, unknown> | null | undefined): number {
   const stored = metadata?.[NOODLER_UNLOCK_PRICE_METADATA_KEY];
-  return typeof stored === "number" && Number.isInteger(stored) && stored >= 0
-    ? stored
-    : NOODLER_UNLOCK_COST;
+  return typeof stored === "number" && Number.isInteger(stored) && stored >= 0 ? stored : NOODLER_UNLOCK_COST;
 }
 
 /** Metadata patch that stores the current default price on a newly created locked post. */
-export function noodlerUnlockPriceMetadata(
-  price: number = NOODLER_UNLOCK_COST,
-): Record<string, unknown> {
+export function noodlerUnlockPriceMetadata(price: number = NOODLER_UNLOCK_COST): Record<string, unknown> {
   return { [NOODLER_UNLOCK_PRICE_METADATA_KEY]: price };
 }

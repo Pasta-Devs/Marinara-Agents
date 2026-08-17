@@ -6,10 +6,7 @@ import {
 } from "@marinara-engine/shared";
 import { logDebugOverride, logger } from "../../lib/logger.js";
 import { resolveBaseUrl } from "../generation/connection-base-url.js";
-import {
-  resolveStoredChatOptions,
-  resolveStoredMaxTokens,
-} from "../generation/generation-parameters.js";
+import { resolveStoredChatOptions, resolveStoredMaxTokens } from "../generation/generation-parameters.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
 import { noodleSamplingOptions } from "./noodle-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
@@ -159,11 +156,7 @@ export async function rerollAmbientNoodleProfiles(input: {
       maxTokensOverride: input.connection.maxTokensOverride,
     }),
     ...noodleSamplingOptions(
-      resolveStoredChatOptions(
-        input.connection.defaultParameters,
-        input.connection.provider,
-        input.connection.model,
-      ),
+      resolveStoredChatOptions(input.connection.defaultParameters, input.connection.provider, input.connection.model),
       { temperature: 0.95, topP: 0.95 },
     ),
     stream: false,

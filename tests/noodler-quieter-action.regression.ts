@@ -8,10 +8,7 @@ const wizard = readFileSync(
   "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx",
   "utf8",
 );
-const hooks = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts",
-  "utf8",
-);
+const hooks = readFileSync("packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
 const settings = readFileSync(
   "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx",
   "utf8",

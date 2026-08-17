@@ -3,11 +3,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ChatSettings } from "./ChatSettings";
 import { LongTermMemoryDetail } from "./LongTermMemoryDetail";
-import {
-  LtmLocalizationProvider,
-  translateLtm,
-  useLtmTranslation,
-} from "./localization";
+import { LtmLocalizationProvider, translateLtm, useLtmTranslation } from "./localization";
 import type { CapabilityElement } from "./types";
 
 const queryClient = new QueryClient({
@@ -26,11 +22,7 @@ class CapabilityClientErrorBoundary extends React.Component<
 
   componentDidCatch(error: Error) {
     const message =
-      error.message ||
-      translateLtm(
-        this.props.element.capabilityProps?.localization,
-        "errors.interfaceStopped",
-      );
+      error.message || translateLtm(this.props.element.capabilityProps?.localization, "errors.interfaceStopped");
     this.props.element.capabilityRuntimeError = message;
     this.props.element.dispatchEvent(
       new CustomEvent("marinara-capability-runtime-error", {
@@ -59,11 +51,7 @@ function CapabilityClientErrorState({ onRetry }: { onRetry: () => void }) {
   return (
     <div role="alert" className="mari-editor-panel m-4 space-y-3 p-4 text-sm">
       <p className="font-semibold">{t("errors.interfaceStoppedMessage")}</p>
-      <button
-        type="button"
-        className="mari-editor-action min-h-11 px-3 font-semibold"
-        onClick={onRetry}
-      >
+      <button type="button" className="mari-editor-action min-h-11 px-3 font-semibold" onClick={onRetry}>
         {t("errors.tryAgain")}
       </button>
     </div>
@@ -75,8 +63,7 @@ function LocalizedCapabilityRoot({ element }: { element: CapabilityElement }) {
   useEffect(() => {
     const update = () => redraw((value) => value + 1);
     element.addEventListener("marinara-capability-props", update);
-    return () =>
-      element.removeEventListener("marinara-capability-props", update);
+    return () => element.removeEventListener("marinara-capability-props", update);
   }, [element]);
 
   const props = element.capabilityProps ?? {};
@@ -91,8 +78,7 @@ function LocalizedCapabilityRoot({ element }: { element: CapabilityElement }) {
 
 function CapabilityRoot({ element }: { element: CapabilityElement }) {
   const props = element.capabilityProps ?? {};
-  if (element.getAttribute("view") === "settings")
-    return <ChatSettings props={props} />;
+  if (element.getAttribute("view") === "settings") return <ChatSettings props={props} />;
   if (element.getAttribute("view") !== "detail") return null;
   return <LongTermMemoryDetail props={props} />;
 }
@@ -104,11 +90,7 @@ class LongTermMemoryElement extends HTMLElement {
 
   static observedAttributes = ["view"];
 
-  attributeChangedCallback(
-    name: string,
-    oldValue: string | null,
-    newValue: string | null,
-  ) {
+  attributeChangedCallback(name: string, oldValue: string | null, newValue: string | null) {
     if (name === "view" && oldValue !== newValue && this.__root) this.render();
   }
 

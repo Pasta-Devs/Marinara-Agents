@@ -29,10 +29,7 @@ function extractJob(workflow, jobId) {
 }
 
 export function validatePullRequestTriage() {
-  const triageWorkflow = readFileSync(
-    new URL("../.github/workflows/pull-request-triage.yml", import.meta.url),
-    "utf8",
-  );
+  const triageWorkflow = readFileSync(new URL("../.github/workflows/pull-request-triage.yml", import.meta.url), "utf8");
   const reviewSignal = readFileSync(
     new URL("../.github/workflows/owner-approval-review-signal.yml", import.meta.url),
     "utf8",
@@ -56,9 +53,7 @@ export function validatePullRequestTriage() {
   );
 
   const jobIds = [
-    ...triageWorkflow
-      .slice(jobsSectionStart + "\njobs:\n".length)
-      .matchAll(/^  ([A-Za-z_][A-Za-z0-9_-]*):\s*$/gmu),
+    ...triageWorkflow.slice(jobsSectionStart + "\njobs:\n".length).matchAll(/^  ([A-Za-z_][A-Za-z0-9_-]*):\s*$/gmu),
   ].map((match) => match[1]);
   assert.ok(jobIds.includes("branch-policy"));
   assert.ok(jobIds.includes("owner-approval"));
@@ -73,10 +68,7 @@ export function validatePullRequestTriage() {
   assert.match(ownerApprovalJob, /run: node scripts\/evaluate-owner-approval\.mjs/u);
   assert.doesNotMatch(ownerApprovalJob, /github\.event\.pull_request\.head/u);
 
-  assert.match(
-    reviewSignal,
-    /on:\n  pull_request_review:\n    types: \[submitted, edited, dismissed\]/u,
-  );
+  assert.match(reviewSignal, /on:\n  pull_request_review:\n    types: \[submitted, edited, dismissed\]/u);
   assert.match(reviewSignal, /permissions: \{\}/u);
   assert.doesNotMatch(reviewSignal, /secrets\.|github\.token|actions\/checkout|PASTA_DEVS_MEMBERS_TOKEN/u);
 
@@ -94,10 +86,7 @@ export function validatePullRequestTriage() {
   assert.match(reviewEvaluator, /commit_sha: context\.payload\.workflow_run\.head_sha/u);
   assert.match(reviewEvaluator, /GET \/search\/issues/u);
   assert.match(reviewEvaluator, /type:pr repo:/u);
-  assert.match(
-    reviewEvaluator,
-    /candidate\.data\.head\.sha === context\.payload\.workflow_run\.head_sha/u,
-  );
+  assert.match(reviewEvaluator, /candidate\.data\.head\.sha === context\.payload\.workflow_run\.head_sha/u);
   assert.match(reviewEvaluator, /PASTA_DEVS_MEMBERS_TOKEN/u);
   assert.match(reviewEvaluator, /run: node scripts\/evaluate-owner-approval\.mjs/u);
   assert.doesNotMatch(reviewEvaluator, /ref:.*workflow_run|head_repository/u);

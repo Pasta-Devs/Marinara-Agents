@@ -18,12 +18,7 @@ export function noodleImageExtension(base64: string, fallback: string): string {
   }
   if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return "gif";
   if (bytes[0] === 0x42 && bytes[1] === 0x4d) return "bmp";
-  if (
-    bytes[4] === 0x66 &&
-    bytes[5] === 0x74 &&
-    bytes[6] === 0x79 &&
-    bytes[7] === 0x70
-  ) {
+  if (bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70) {
     const majorBrand = bytes.subarray(8, 12).toString("ascii").toLowerCase();
     if (majorBrand === "avif" || majorBrand === "avis") return "avif";
     for (let offset = 16; offset + 4 <= bytes.length; offset += 4) {

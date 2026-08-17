@@ -341,7 +341,10 @@ export const spatialHierarchyTypeSchema = z
 
 export const spatialLinkPresentationSchema = z
   .object({
-    color: z.string().regex(/^#[0-9A-Fa-f]{6}$/u, "Choose a six-digit hex color.").optional(),
+    color: z
+      .string()
+      .regex(/^#[0-9A-Fa-f]{6}$/u, "Choose a six-digit hex color.")
+      .optional(),
     lineStyle: z.enum(SPATIAL_LINK_LINE_STYLES).optional(),
   })
   .strict();
@@ -359,27 +362,27 @@ const spatialHierarchyProfileBaseSchema = z
   .strict();
 
 export const spatialHierarchyProfileSchema = spatialHierarchyProfileBaseSchema.superRefine((profile, context) => {
-    const ids = new Set<string>();
-    for (const [index, type] of profile.types.entries()) {
-      if (ids.has(type.id)) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `Hierarchy type ID ${type.id} is duplicated.`,
-          path: ["types", index, "id"],
-        });
-      }
-      ids.add(type.id);
+  const ids = new Set<string>();
+  for (const [index, type] of profile.types.entries()) {
+    if (ids.has(type.id)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Hierarchy type ID ${type.id} is duplicated.`,
+        path: ["types", index, "id"],
+      });
     }
-    for (const [locationId, typeId] of Object.entries(profile.locationTypeIds)) {
-      if (!ids.has(typeId)) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `Location ${locationId} references unknown hierarchy type ${typeId}.`,
-          path: ["locationTypeIds", locationId],
-        });
-      }
+    ids.add(type.id);
+  }
+  for (const [locationId, typeId] of Object.entries(profile.locationTypeIds)) {
+    if (!ids.has(typeId)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Location ${locationId} references unknown hierarchy type ${typeId}.`,
+        path: ["locationTypeIds", locationId],
+      });
     }
-  });
+  }
+});
 
 const spatialGenerationPromptTemplatesSchema = z
   .object({

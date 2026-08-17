@@ -6,23 +6,11 @@ import { readFileSync } from "node:fs";
 // source picker. This entry point is the separate persona path, and it must stay separate from
 // character creation rather than being folded back into the bulk list.
 
-const home = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
-  "utf8",
-);
-const routes = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts",
-  "utf8",
-);
-const storage = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts",
-  "utf8",
-);
+const home = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
+const routes = readFileSync("packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
+const storage = readFileSync("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
 const enLocale = JSON.parse(
-  readFileSync(
-    "packages/slurp/src/engine/packages/client/src/localization/locales/en.json",
-    "utf8",
-  ),
+  readFileSync("packages/slurp/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
 ) as Record<string, string>;
 
 // The persona's own Creator is found by the link back to its Noodle account, not by name.
@@ -67,10 +55,7 @@ assert.match(enLocale["ui.noodle.noodlerhome.myCreatorProfileDetail"], /\{\{pers
 
 // A persona that already has a Creator is filtered out by the direct source key, so the create
 // branch cannot be reached for one — the button must be showing "My Creator profile" by then.
-assert.match(
-  routes,
-  /linkedIds\.has\(`\$\{account\.kind\}:\$\{account\.entityId\}`\)/u,
-);
+assert.match(routes, /linkedIds\.has\(`\$\{account\.kind\}:\$\{account\.entityId\}`\)/u);
 
 // Bulk onboarding stays character-only; this path is what covers personas.
 const bulk = readFileSync(

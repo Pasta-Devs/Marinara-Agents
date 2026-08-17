@@ -124,7 +124,9 @@ PF.mapsExport = {
     return zoneIds.map((zoneId) => {
       const pfId = this.idFor(world, zoneId);
       if (existing.has(pfId)) return { zoneId, locId: pfId, create: false };
-      const nameKey = String(world.zones[zoneId].name || "").trim().toLowerCase();
+      const nameKey = String(world.zones[zoneId].name || "")
+        .trim()
+        .toLowerCase();
       const adopted = nameKey ? adoptable.get(nameKey) : undefined;
       // Adopt when the location is unclaimed OR already bound to THIS zone —
       // a restored save carries prior adoptions, and refusing our own binding
@@ -220,7 +222,9 @@ PF.mapsExport = {
         // no 60-second drumbeat. A rebuild or reload starts fresh.
         this._done.add(world);
         if (res.status !== 404) {
-          console.warn(`[pixelforge] World Maps export refused (${res.status}${code ? ` ${code}` : ""}); skipping this session`);
+          console.warn(
+            `[pixelforge] World Maps export refused (${res.status}${code ? ` ${code}` : ""}); skipping this session`,
+          );
         }
         return;
       }

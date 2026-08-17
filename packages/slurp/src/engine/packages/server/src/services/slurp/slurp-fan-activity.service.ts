@@ -183,11 +183,7 @@ async function generateFanActivity(input: {
   const response = await provider.chatComplete(messages, {
     model: input.connection.model,
     ...noodleSamplingOptions(
-      resolveStoredChatOptions(
-        input.connection.defaultParameters,
-        input.connection.provider,
-        input.connection.model,
-      ),
+      resolveStoredChatOptions(input.connection.defaultParameters, input.connection.provider, input.connection.model),
       { temperature: 0.8, topP: 0.95 },
     ),
     maxTokens: clampGenerationMaxOutputTokens({
@@ -206,9 +202,7 @@ async function generateFanActivity(input: {
     "[debug/noodler-fan] Model response received (%d characters); content is redacted.",
     content.length,
   );
-  const parsed = parseGeneratedFanActivityResponse(
-    parseGameJsonish(requireModelAnswer(content, "fan activity")),
-  );
+  const parsed = parseGeneratedFanActivityResponse(parseGameJsonish(requireModelAnswer(content, "fan activity")));
   if (parsed.rejected > 0) {
     logger.warn("Ignored %d malformed generated NoodleR fan activities", parsed.rejected);
   }
@@ -257,15 +251,13 @@ export async function prepareNoodlerFanCreatorCandidates(input: {
   return creators.flatMap((creator) => {
     const policy = resolveNoodlerFanActivityPolicy(input.settings, creator);
     if (!policy.enabled) return [];
-    const posts = (postsByCreator.get(creator.id) ?? [])
-      .slice(0, MAX_FAN_POSTS_PER_CREATOR)
-      .map((post) => ({
-        id: post.id,
-        creatorAccountId: creator.id,
-        title: post.title,
-        content: post.content,
-        access: post.access,
-      }));
+    const posts = (postsByCreator.get(creator.id) ?? []).slice(0, MAX_FAN_POSTS_PER_CREATOR).map((post) => ({
+      id: post.id,
+      creatorAccountId: creator.id,
+      title: post.title,
+      content: post.content,
+      access: post.access,
+    }));
     const identities = provider.resolve(policy.archetypeWeights);
     return posts.length > 0 && identities.length > 0 ? [{ creator, policy, posts, identities }] : [];
   });
@@ -300,10 +292,7 @@ export async function generateNoodlerFanActivityBatch(input: {
   });
 }
 
-export async function resolveNoodlerFanConnection(
-  db: DB,
-  settings: Pick<SlurpSettings, "generationConnectionId">,
-) {
+export async function resolveNoodlerFanConnection(db: DB, settings: Pick<SlurpSettings, "generationConnectionId">) {
   if (!settings.generationConnectionId) return null;
   return createConnectionsStorage(db).getWithKey(settings.generationConnectionId);
 }

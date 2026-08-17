@@ -1,10 +1,7 @@
 import { access, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  catalogArtworkRelativePath,
-  catalogArtworkUrl,
-} from "./catalog-artwork.mjs";
+import { catalogArtworkRelativePath, catalogArtworkUrl } from "./catalog-artwork.mjs";
 import { resolveCatalogGeneratedAt } from "./catalog-lanes.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");

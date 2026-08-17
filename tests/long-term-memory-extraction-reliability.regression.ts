@@ -5,12 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 async function main() {
-  const source =
-    "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
+  const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
   const { configurePackageRuntime } = await import(`${source}/package-runtime.ts`);
-  const { runLongTermMemoryEvidenceUnitExtraction } = await import(
-    `${source}/evidence-unit-extraction.ts`,
-  );
+  const { runLongTermMemoryEvidenceUnitExtraction } = await import(`${source}/evidence-unit-extraction.ts`);
   const { sourceHashForLtmSourceNote } = await import(`${source}/source-hash.ts`);
   const root = await mkdtemp(join(tmpdir(), "marinara-ltm-extraction-reliability-"));
   const timestamp = "2026-08-09T00:00:00.000Z";
@@ -70,7 +67,13 @@ async function main() {
       maxContext: null,
       maxOutputTokens: null,
       fitContext(messages: any[], fitOptions: any) {
-        return { messages, maxTokens: fitOptions.maxTokens, estimatedTokensBefore: 20, estimatedTokensAfter: 20, trimmed: false };
+        return {
+          messages,
+          maxTokens: fitOptions.maxTokens,
+          estimatedTokensBefore: 20,
+          estimatedTokensAfter: 20,
+          trimmed: false,
+        };
       },
       async chatComplete(_messages: any[], chatOptions: any) {
         calls.push(chatOptions);
@@ -110,8 +113,7 @@ async function main() {
     };
     await assert.rejects(
       () => runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() }),
-      (error: any) =>
-        error.code === "ltm_model_output_unusable" && /maximum is/u.test(error.message),
+      (error: any) => error.code === "ltm_model_output_unusable" && /maximum is/u.test(error.message),
     );
     assert.equal(calls.length, 1, "oversized output must not trigger a repair call");
 
@@ -124,7 +126,11 @@ async function main() {
     assert.equal(calls.length, 1, "truncated output must not trigger a repair call");
 
     calls.length = 0;
-    response = { content: JSON.stringify({ units: [validUnit, null] }), finishReason: "stop", usage: { promptTokens: 40, completionTokens: 12, completionReasoningTokens: 8, totalTokens: 60 } };
+    response = {
+      content: JSON.stringify({ units: [validUnit, null] }),
+      finishReason: "stop",
+      usage: { promptTokens: 40, completionTokens: 12, completionReasoningTokens: 8, totalTokens: 60 },
+    };
     const mixed = await runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() });
     assert.equal(calls.length, 1);
     assert.equal(mixed.response.units.length, 1);
@@ -138,7 +144,11 @@ async function main() {
       calls.push(chatOptions);
       fallbackCalls += 1;
       if (fallbackCalls <= 2) throw new Error("400 response_format unsupported");
-      return { content: validContent, finishReason: "stop", usage: { promptTokens: 40, completionTokens: 12, totalTokens: 52 } };
+      return {
+        content: validContent,
+        finishReason: "stop",
+        usage: { promptTokens: 40, completionTokens: 12, totalTokens: 52 },
+      };
     };
     await assert.rejects(
       () => runLongTermMemoryEvidenceUnitExtraction({ ...options, operationId: randomUUID() }),
@@ -150,7 +160,9 @@ async function main() {
     release();
     await rm(root, { recursive: true, force: true });
   }
-  process.stdout.write("Long-Term Memory extraction reliability regression: terminal responses, bounded fallback, usage, and candidate isolation ok\n");
+  process.stdout.write(
+    "Long-Term Memory extraction reliability regression: terminal responses, bounded fallback, usage, and candidate isolation ok\n",
+  );
 }
 
 void main().catch((error) => {

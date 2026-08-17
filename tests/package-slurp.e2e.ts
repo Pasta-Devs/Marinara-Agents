@@ -93,21 +93,13 @@ test.describe("standalone Slurp package", () => {
 
     const slurp = page.locator('[data-component="NoodleView"]');
     await expect
-      .poll(() =>
-        slurp.evaluate((element) =>
-          getComputedStyle(element).getPropertyValue("--noodle-accent").trim(),
-        ),
-      )
+      .poll(() => slurp.evaluate((element) => getComputedStyle(element).getPropertyValue("--noodle-accent").trim()))
       .toBe("#FF7EC1");
-    await expect(
-      slurp.locator('img[src$="/slurp-logo.png"]:visible').first(),
-    ).toBeVisible();
+    await expect(slurp.locator('img[src$="/slurp-logo.png"]:visible').first()).toBeVisible();
     expect(errors).toEqual([]);
   });
 
-  test("creates package-owned profiles and shows their viewer feed", async ({
-    page,
-  }, testInfo) => {
+  test("creates package-owned profiles and shows their viewer feed", async ({ page }, testInfo) => {
     test.skip(
       !testInfo.project.name.includes("desktop"),
       "The complete standalone Creator flow is covered on desktop.",
@@ -116,12 +108,9 @@ test.describe("standalone Slurp package", () => {
     const errors = collectUnexpectedErrors(page);
     const suffix = Date.now();
     const personaName = `Slurp viewer ${suffix}`;
-    const personaResponse = await page.request.post(
-      "/api/characters/personas",
-      {
-        data: { name: personaName },
-      },
-    );
+    const personaResponse = await page.request.post("/api/characters/personas", {
+      data: { name: personaName },
+    });
     expect(personaResponse.ok()).toBe(true);
     const persona = (await personaResponse.json()) as { id: string };
 
@@ -136,20 +125,17 @@ test.describe("standalone Slurp package", () => {
 
       // Professor Mari is a built-in character; the standalone Slurp package
       // resolves a creator source directly by entity id.
-      const stageProfileResponse = await page.request.post(
-        `/api/slurp/accounts/__professor_mari__/noodler`,
-        {
-          data: {
-            stageProfile: {
-              displayName: `Slurp Professor Mari ${suffix}`,
-              handle: `slurp_mari_${suffix}`,
-              bio: "Standalone Slurp package browser proof.",
-              stagePersonality: "Knowing, playful, and scientifically precise.",
-              disclosureMode: "open",
-            },
+      const stageProfileResponse = await page.request.post(`/api/slurp/accounts/__professor_mari__/noodler`, {
+        data: {
+          stageProfile: {
+            displayName: `Slurp Professor Mari ${suffix}`,
+            handle: `slurp_mari_${suffix}`,
+            bio: "Standalone Slurp package browser proof.",
+            stagePersonality: "Knowing, playful, and scientifically precise.",
+            disclosureMode: "open",
           },
         },
-      );
+      });
       expect(stageProfileResponse.ok()).toBe(true);
       const stageProfile = (await stageProfileResponse.json()) as {
         id: string;
@@ -192,17 +178,12 @@ test.describe("standalone Slurp package", () => {
       const feedProbe = await page.request.get(
         `/api/slurp/noodler/viewer/feed?personaId=${encodeURIComponent(persona.id)}&tab=all&limit=20`,
       );
-      expect(
-        feedProbe.ok(),
-        `${feedProbe.status()} ${feedProbe.statusText()} ${await feedProbe.text()}`,
-      ).toBe(true);
+      expect(feedProbe.ok(), `${feedProbe.status()} ${feedProbe.statusText()} ${await feedProbe.text()}`).toBe(true);
       const feedProbeBody = (await feedProbe.json()) as {
         items: Array<{ creatorAccountId: string; post: { id: string; content: string } }>;
       };
       expect(
-        feedProbeBody.items.some(
-          (item) => item.post.id === postId && item.post.content === postContent,
-        ),
+        feedProbeBody.items.some((item) => item.post.id === postId && item.post.content === postContent),
         JSON.stringify(feedProbeBody),
       ).toBe(true);
       const shellProbe = await page.request.get(
@@ -232,9 +213,7 @@ test.describe("standalone Slurp package", () => {
       expect(errors).toEqual([]);
     } finally {
       if (postId) {
-        await page.request
-          .delete(`/api/slurp/noodler/posts/${postId}`, { timeout: 5_000 })
-          .catch(() => undefined);
+        await page.request.delete(`/api/slurp/noodler/posts/${postId}`, { timeout: 5_000 }).catch(() => undefined);
       }
       if (stageProfileId) {
         await page.request
@@ -243,9 +222,7 @@ test.describe("standalone Slurp package", () => {
           })
           .catch(() => undefined);
       }
-      await page.request
-        .delete(`/api/characters/personas/${persona.id}`, { timeout: 5_000 })
-        .catch(() => undefined);
+      await page.request.delete(`/api/characters/personas/${persona.id}`, { timeout: 5_000 }).catch(() => undefined);
     }
   });
 });

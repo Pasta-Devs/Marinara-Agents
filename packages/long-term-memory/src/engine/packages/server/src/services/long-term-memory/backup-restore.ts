@@ -10,12 +10,8 @@ import {
   ltmRetentionConfigSchema,
   type LtmBackup,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import {
-  DEFAULT_LTM_EXTRACTION_CONFIG,
-} from "./extraction-config.js";
-import {
-  DEFAULT_LTM_RETENTION_CONFIG,
-} from "./default-config.js";
+import { DEFAULT_LTM_EXTRACTION_CONFIG } from "./extraction-config.js";
+import { DEFAULT_LTM_RETENTION_CONFIG } from "./default-config.js";
 import { readJsonFile, writeJsonAtomic } from "./atomic-json.js";
 import {
   createLtmBackupRestoreJournal,
@@ -25,12 +21,7 @@ import {
   withActiveLtmBackupRestore,
   writeLtmBackupRestoreJournal,
 } from "./restore-recovery.js";
-import {
-  getLongTermMemoryDirectories,
-  getLongTermMemoryRoot,
-  notePathForId,
-  safeJoin,
-} from "./paths.js";
+import { getLongTermMemoryDirectories, getLongTermMemoryRoot, notePathForId, safeJoin } from "./paths.js";
 import { getLtmGlobalSettings, ltmSettingsPath } from "./settings.js";
 import { ltmExtractionConfigPath } from "./extraction-config.js";
 import { longTermMemoryRetentionConfigPath } from "./retention.js";
@@ -39,10 +30,7 @@ import { LongTermMemoryStorage } from "./storage.js";
 import { rebuildLongTermMemoryIndexes } from "./rebuild.js";
 import { checkLongTermMemoryIntegrity } from "./maintenance.js";
 import { withLtmVaultLock } from "./vault-lock.js";
-import {
-  readAllRejectedSuggestions,
-  writeRejectedSuggestions,
-} from "./rejected-suggestions.js";
+import { readAllRejectedSuggestions, writeRejectedSuggestions } from "./rejected-suggestions.js";
 
 const backupFormat = "marinara-long-term-memory" as const;
 
@@ -86,14 +74,24 @@ export function previewLongTermMemoryBackup(value: unknown, root = getLongTermMe
     format: backup.format,
     version: backup.version,
     exportedAt: backup.exportedAt,
-    incoming: { notes: backup.notes.length, drafts: backup.drafts.length, rejectedSuggestions: backup.rejectedSuggestions.length },
-    current: { notes: current.notes.length, drafts: current.drafts.length, rejectedSuggestions: current.rejectedSuggestions.length },
+    incoming: {
+      notes: backup.notes.length,
+      drafts: backup.drafts.length,
+      rejectedSuggestions: backup.rejectedSuggestions.length,
+    },
+    current: {
+      notes: current.notes.length,
+      drafts: current.drafts.length,
+      rejectedSuggestions: current.rejectedSuggestions.length,
+    },
     settings: Object.keys(backup.settings),
   }));
 }
 
 async function pathExists(path: string) {
-  return stat(path).then(() => true).catch(() => false);
+  return stat(path)
+    .then(() => true)
+    .catch(() => false);
 }
 
 async function writeBackupRoot(root: string, backup: LtmBackup) {
@@ -106,8 +104,7 @@ async function writeBackupRoot(root: string, backup: LtmBackup) {
     rm(dirs.drafts, { recursive: true, force: true }),
   ]);
   await storage.initializeLtmStore();
-  for (const note of backup.notes)
-    await writeJsonAtomic(notePathForId(note.id, note.type, root), note);
+  for (const note of backup.notes) await writeJsonAtomic(notePathForId(note.id, note.type, root), note);
   for (const draft of backup.drafts)
     await writeJsonAtomic(safeJoin(dirs.drafts, `${draft.id}.json`), ltmExtractionDraftSchema.parse(draft));
   await writeRejectedSuggestions(backup.rejectedSuggestions, root);
@@ -128,67 +125,77 @@ async function writeBackupRoot(root: string, backup: LtmBackup) {
 
 export async function replaceLongTermMemoryData(value: unknown, root = getLongTermMemoryRoot()) {
   const backup = parseLongTermMemoryBackup(value);
-  return withLtmVaultLock(root, () => withActiveLtmBackupRestore(root, async () => {
-    const id = randomUUID();
-    const staging = ltmBackupRestoreWorkspacePath(root, "restore-staging", id);
-    const previous = ltmBackupRestoreWorkspacePath(root, "restore-previous", id);
-    let journal: ReturnType<typeof createLtmBackupRestoreJournal> | undefined;
-    let journalWritten = false;
-    try {
-      await rm(staging, { recursive: true, force: true });
-      await rm(previous, { recursive: true, force: true });
-      journal = createLtmBackupRestoreJournal(await pathExists(root));
-      await writeBackupRoot(staging, backup);
-      const stagedRebuild = await rebuildLongTermMemoryIndexes({ root: staging });
-      const stagedIntegrity = await checkLongTermMemoryIntegrity(staging);
-      if (!stagedIntegrity.ok)
-        throw new Error("Imported Long-Term Memory data failed integrity verification.");
-      await writeLtmBackupRestoreJournal(root, journal);
-      journalWritten = true;
-      const activeStorage = new LongTermMemoryStorage(root);
-      await activeStorage.cleanup();
-      if (journal.hadPreviousRoot) await rename(root, previous);
-      await writeLtmBackupRestoreJournal(root, { ...journal, phase: "current_root_moved" });
-      await rename(staging, root);
-      await writeLtmBackupRestoreJournal(root, { ...journal, phase: "published" });
-      const restoredStorage = new LongTermMemoryStorage(root);
-      await restoredStorage.initializeLtmStore();
-      const integrity = await checkLongTermMemoryIntegrity(root);
-      if (!integrity.ok) throw new Error("Imported Long-Term Memory data failed integrity verification.");
-      await writeLtmBackupRestoreJournal(root, { ...journal, phase: "verified" });
-      await rm(previous, { recursive: true, force: true });
-      await removeLtmBackupRestoreJournal(root);
-       return { notes: backup.notes.length, drafts: backup.drafts.length, rejectedSuggestions: backup.rejectedSuggestions.length, rebuild: stagedRebuild, integrity };
-    } catch (error) {
-      if (journalWritten && journal) {
-        try {
-          await recoverInterruptedLtmBackupRestore(root, { rollbackPublished: true });
-        } catch (recoveryError) {
-          throw new AggregateError([error, recoveryError], "Long-Term Memory restore and rollback both failed.");
+  return withLtmVaultLock(root, () =>
+    withActiveLtmBackupRestore(root, async () => {
+      const id = randomUUID();
+      const staging = ltmBackupRestoreWorkspacePath(root, "restore-staging", id);
+      const previous = ltmBackupRestoreWorkspacePath(root, "restore-previous", id);
+      let journal: ReturnType<typeof createLtmBackupRestoreJournal> | undefined;
+      let journalWritten = false;
+      try {
+        await rm(staging, { recursive: true, force: true });
+        await rm(previous, { recursive: true, force: true });
+        journal = createLtmBackupRestoreJournal(await pathExists(root));
+        await writeBackupRoot(staging, backup);
+        const stagedRebuild = await rebuildLongTermMemoryIndexes({ root: staging });
+        const stagedIntegrity = await checkLongTermMemoryIntegrity(staging);
+        if (!stagedIntegrity.ok) throw new Error("Imported Long-Term Memory data failed integrity verification.");
+        await writeLtmBackupRestoreJournal(root, journal);
+        journalWritten = true;
+        const activeStorage = new LongTermMemoryStorage(root);
+        await activeStorage.cleanup();
+        if (journal.hadPreviousRoot) await rename(root, previous);
+        await writeLtmBackupRestoreJournal(root, { ...journal, phase: "current_root_moved" });
+        await rename(staging, root);
+        await writeLtmBackupRestoreJournal(root, { ...journal, phase: "published" });
+        const restoredStorage = new LongTermMemoryStorage(root);
+        await restoredStorage.initializeLtmStore();
+        const integrity = await checkLongTermMemoryIntegrity(root);
+        if (!integrity.ok) throw new Error("Imported Long-Term Memory data failed integrity verification.");
+        await writeLtmBackupRestoreJournal(root, { ...journal, phase: "verified" });
+        await rm(previous, { recursive: true, force: true });
+        await removeLtmBackupRestoreJournal(root);
+        return {
+          notes: backup.notes.length,
+          drafts: backup.drafts.length,
+          rejectedSuggestions: backup.rejectedSuggestions.length,
+          rebuild: stagedRebuild,
+          integrity,
+        };
+      } catch (error) {
+        if (journalWritten && journal) {
+          try {
+            await recoverInterruptedLtmBackupRestore(root, { rollbackPublished: true });
+          } catch (recoveryError) {
+            throw new AggregateError([error, recoveryError], "Long-Term Memory restore and rollback both failed.");
+          }
+          await new LongTermMemoryStorage(root).cleanup();
+        } else {
+          await Promise.allSettled([
+            rm(staging, { recursive: true, force: true }),
+            rm(previous, { recursive: true, force: true }),
+            removeLtmBackupRestoreJournal(root),
+          ]);
         }
-        await new LongTermMemoryStorage(root).cleanup();
-      } else {
-        await Promise.allSettled([
-          rm(staging, { recursive: true, force: true }),
-          rm(previous, { recursive: true, force: true }),
-          removeLtmBackupRestoreJournal(root),
-        ]);
+        throw error;
       }
-      throw error;
-    }
-  }));
+    }),
+  );
 }
 
 export async function deleteAllLongTermMemoryData(root = getLongTermMemoryRoot()) {
   return withLtmVaultLock(root, async () => {
     const backup = await exportLongTermMemoryData(root);
-    return replaceLongTermMemoryData({
-      ...backup,
-      exportedAt: new Date().toISOString(),
-      notes: [],
-      drafts: [],
-      rejectedSuggestions: [],
-    }, root);
+    return replaceLongTermMemoryData(
+      {
+        ...backup,
+        exportedAt: new Date().toISOString(),
+        notes: [],
+        drafts: [],
+        rejectedSuggestions: [],
+      },
+      root,
+    );
   });
 }
 

@@ -6,9 +6,7 @@ import { RELATIONSHIP_DIMENSIONS } from "../../../../shared/src/features/agents/
 import { cleanLongTermMemoryChunkText } from "./chunking.js";
 import type { LtmMemoryChunk } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 
-const RELATIONSHIP_DIMENSION_ORDER = new Map(
-  RELATIONSHIP_DIMENSIONS.map((dimension, index) => [dimension, index]),
-);
+const RELATIONSHIP_DIMENSION_ORDER = new Map(RELATIONSHIP_DIMENSIONS.map((dimension, index) => [dimension, index]));
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
@@ -31,14 +29,9 @@ function orderedRelationshipDimensionNames(
   }
 
   return Array.from(names).sort((left, right) => {
-    const leftOrder = RELATIONSHIP_DIMENSION_ORDER.get(
-      left as (typeof RELATIONSHIP_DIMENSIONS)[number],
-    );
-    const rightOrder = RELATIONSHIP_DIMENSION_ORDER.get(
-      right as (typeof RELATIONSHIP_DIMENSIONS)[number],
-    );
-    if (leftOrder !== undefined && rightOrder !== undefined)
-      return leftOrder - rightOrder;
+    const leftOrder = RELATIONSHIP_DIMENSION_ORDER.get(left as (typeof RELATIONSHIP_DIMENSIONS)[number]);
+    const rightOrder = RELATIONSHIP_DIMENSION_ORDER.get(right as (typeof RELATIONSHIP_DIMENSIONS)[number]);
+    if (leftOrder !== undefined && rightOrder !== undefined) return leftOrder - rightOrder;
     if (leftOrder !== undefined) return -1;
     if (rightOrder !== undefined) return 1;
     return left.localeCompare(right);
@@ -51,18 +44,13 @@ export function formatLtmRelationshipScoresLine(
 ) {
   const dimensionRecord = dimensions as Record<string, unknown> | undefined;
   const changeRecord = dimensionChanges as Record<string, unknown> | undefined;
-  const entries = orderedRelationshipDimensionNames(
-    dimensions,
-    dimensionChanges,
-  ).flatMap((dimension) => {
+  const entries = orderedRelationshipDimensionNames(dimensions, dimensionChanges).flatMap((dimension) => {
     const score = dimensionRecord?.[dimension];
     const delta = changeRecord?.[dimension];
     const hasScore = isFiniteNumber(score);
     const hasDelta = isFiniteNumber(delta) && delta !== 0;
     if (hasScore) {
-      return [
-        `${dimension} ${score}/100${hasDelta ? ` (${formatSignedDelta(delta)})` : ""}`,
-      ];
+      return [`${dimension} ${score}/100${hasDelta ? ` (${formatSignedDelta(delta)})` : ""}`];
     }
     if (hasDelta) {
       return [`${dimension} change ${formatSignedDelta(delta)}`];
@@ -78,10 +66,7 @@ export function formatLtmChunkPromptText(chunk: LtmMemoryChunk) {
   if (!text) return "";
 
   if (chunk.noteType === "relationship") {
-    const scoresLine = formatLtmRelationshipScoresLine(
-      chunk.dimensions,
-      chunk.dimensionChanges,
-    );
+    const scoresLine = formatLtmRelationshipScoresLine(chunk.dimensions, chunk.dimensionChanges);
     return scoresLine ? `${scoresLine}\n${text}` : text;
   }
 

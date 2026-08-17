@@ -39,14 +39,7 @@ const timelineSchema = {
           attachGalleryImage: { type: "boolean" },
           poll: pollSchema,
         },
-        required: [
-          "tempId",
-          "authorHandle",
-          "content",
-          "imagePrompt",
-          "attachGalleryImage",
-          "poll",
-        ],
+        required: ["tempId", "authorHandle", "content", "imagePrompt", "attachGalleryImage", "poll"],
         additionalProperties: false,
       },
     },
@@ -130,9 +123,7 @@ function noodlerPostSchema(allowImagePrompt: boolean, contentMaxLength: number) 
         ? { imagePrompt: { type: "string", minLength: 1, maxLength: NOODLE_REPLY_HARD_MAX_LENGTH } }
         : {}),
     },
-    required: allowImagePrompt
-      ? ["title", "content", "imagePrompt"]
-      : ["title", "content"],
+    required: allowImagePrompt ? ["title", "content", "imagePrompt"] : ["title", "content"],
     additionalProperties: false,
   } as const;
 }
@@ -146,13 +137,7 @@ const noodlerProfileSchema = {
     stagePersonality: { type: "string" },
     disclosureMode: { type: "string", enum: ["open", "hinted", "secret"] },
   },
-  required: [
-    "displayName",
-    "handle",
-    "bio",
-    "stagePersonality",
-    "disclosureMode",
-  ],
+  required: ["displayName", "handle", "bio", "stagePersonality", "disclosureMode"],
   additionalProperties: false,
 } as const;
 
@@ -172,25 +157,13 @@ const noodlerFanActivitySchema = {
     type: { type: "string", enum: ["like", "reply", "repost"] },
     content: nullableString,
   },
-  required: [
-    "actorHandle",
-    "creatorAccountId",
-    "targetPostId",
-    "type",
-    "content",
-  ],
+  required: ["actorHandle", "creatorAccountId", "targetPostId", "type", "content"],
   additionalProperties: false,
 } as const;
 
 export function noodleResponseFormat(
   model: string,
-  kind:
-    | "timeline"
-    | "profiles"
-    | "noodler_post"
-    | "noodler_profile"
-    | "noodler_reply"
-    | "noodler_fan_activity",
+  kind: "timeline" | "profiles" | "noodler_post" | "noodler_profile" | "noodler_reply" | "noodler_fan_activity",
   options: { allowImagePrompt?: boolean; contentMaxLength?: number } = {},
 ): { type: string; [key: string]: unknown } {
   if (!isOpenAIGpt56Model(model)) return { type: "json_object" };

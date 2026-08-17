@@ -14,9 +14,7 @@ let sortableSequence = 0;
 let runtimeHost: CapabilityRuntimeHost | null = null;
 let runtimeRegistration = 0;
 let resolveAgentConfig: ((agentType: string) => Promise<unknown>) | null = null;
-let writeAgentConfig:
-  | ((agentType: string, patch: Record<string, unknown>) => Promise<unknown>)
-  | null = null;
+let writeAgentConfig: ((agentType: string, patch: Record<string, unknown>) => Promise<unknown>) | null = null;
 let agentConfigUpdateQueue = Promise.resolve();
 
 function getRuntimeHost(): CapabilityRuntimeHost {
@@ -46,16 +44,12 @@ export function configurePackageRuntime(
 async function getPackageAgentConfig(agentType: string): Promise<Record<string, unknown>> {
   if (!resolveAgentConfig) throw new Error("World Maps agent configuration is unavailable");
   const value = await resolveAgentConfig(agentType);
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 export async function getPackageAgentConnectionId(agentType: string): Promise<string | null> {
   const config = await getPackageAgentConfig(agentType);
-  return typeof config.connectionId === "string" && config.connectionId.trim()
-    ? config.connectionId.trim()
-    : null;
+  return typeof config.connectionId === "string" && config.connectionId.trim() ? config.connectionId.trim() : null;
 }
 
 export async function updatePackageAgentSettings(
@@ -68,9 +62,7 @@ export async function updatePackageAgentSettings(
     const current = await getPackageAgentSettings(agentType);
     const saved = await writer(agentType, { settings: update(current) });
     const config =
-      saved && typeof saved === "object" && !Array.isArray(saved)
-        ? (saved as Record<string, unknown>)
-        : {};
+      saved && typeof saved === "object" && !Array.isArray(saved) ? (saved as Record<string, unknown>) : {};
     return parseAgentSettings(config.settings);
   });
   agentConfigUpdateQueue = operation.then(
@@ -102,9 +94,7 @@ export async function updatePackageAgentConfiguration(
         ...patch.settings,
       },
     });
-    return saved && typeof saved === "object" && !Array.isArray(saved)
-      ? (saved as Record<string, unknown>)
-      : {};
+    return saved && typeof saved === "object" && !Array.isArray(saved) ? (saved as Record<string, unknown>) : {};
   });
   agentConfigUpdateQueue = operation.then(
     () => undefined,
@@ -120,9 +110,7 @@ function parseAgentSettings(value: unknown): Record<string, unknown> {
   if (typeof value !== "string") return {};
   try {
     const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
   } catch {
     return {};
   }

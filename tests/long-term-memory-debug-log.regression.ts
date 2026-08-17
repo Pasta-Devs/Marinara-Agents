@@ -4,12 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 async function main() {
-  const {
-    LTM_DEBUG_MAX_EVENT_BYTES,
-    LTM_DEBUG_MAX_LOG_BYTES,
-    readLtmDebugLog,
-    recordLtmDebugEvent,
-  } =
+  const { LTM_DEBUG_MAX_EVENT_BYTES, LTM_DEBUG_MAX_LOG_BYTES, readLtmDebugLog, recordLtmDebugEvent } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/debug-log.ts");
   const { getLongTermMemoryDirectories } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/paths.ts");
@@ -21,10 +16,7 @@ async function main() {
       action: "bounded-counts",
       status: "ok",
       counts: Object.fromEntries(
-        Array.from({ length: 200 }, (_, index) => [
-          `${index}-${"count-key-".repeat(40)}`,
-          index,
-        ]),
+        Array.from({ length: 200 }, (_, index) => [`${index}-${"count-key-".repeat(40)}`, index]),
       ),
     });
     assert.ok(boundedCounts?.counts);
@@ -41,22 +33,14 @@ async function main() {
       message: "界".repeat(10_000),
       uiSummary: "界".repeat(10_000),
       error: new Error("e".repeat(10_000)),
-      counts: Object.fromEntries(
-        Array.from({ length: 200 }, (_, index) => [
-          `${index}-${"界".repeat(300)}`,
-          index,
-        ]),
-      ),
+      counts: Object.fromEntries(Array.from({ length: 200 }, (_, index) => [`${index}-${"界".repeat(300)}`, index])),
       diagnostics: Array.from({ length: 200 }, (_, index) => ({
         index,
         text: "d".repeat(10_000),
         nested: { one: { two: { three: { four: { five: "too deep" } } } } },
       })),
       details: Object.fromEntries(
-        Array.from({ length: 200 }, (_, index) => [
-          `key-${index}`,
-          ["v".repeat(10_000), "discarded"],
-        ]),
+        Array.from({ length: 200 }, (_, index) => [`key-${index}`, ["v".repeat(10_000), "discarded"]]),
       ),
     });
     assert.ok(oversized);
@@ -65,13 +49,8 @@ async function main() {
     assert.equal(oversized.counts, undefined);
     assert.equal(oversized.diagnostics, undefined);
     const debugPath = getLongTermMemoryDirectories(root).debugLog;
-    const firstLine = (await readFile(debugPath, "utf8"))
-      .trim()
-      .split("\n")[1]!;
-    assert.equal(
-      Buffer.byteLength(`${firstLine}\n`) <= LTM_DEBUG_MAX_EVENT_BYTES,
-      true,
-    );
+    const firstLine = (await readFile(debugPath, "utf8")).trim().split("\n")[1]!;
+    assert.equal(Buffer.byteLength(`${firstLine}\n`) <= LTM_DEBUG_MAX_EVENT_BYTES, true);
     assert.deepEqual(JSON.parse(firstLine), oversized);
 
     await Promise.all(
@@ -109,9 +88,7 @@ async function main() {
   } finally {
     await rm(root, { recursive: true, force: true });
   }
-  process.stdout.write(
-    "Long-Term Memory debug log regression: bounds, rotation, and filters ok\n",
-  );
+  process.stdout.write("Long-Term Memory debug log regression: bounds, rotation, and filters ok\n");
 }
 
 void main().catch((error) => {

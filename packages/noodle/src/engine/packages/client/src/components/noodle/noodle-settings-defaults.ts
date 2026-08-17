@@ -1,7 +1,4 @@
-import {
-  DEFAULT_NOODLE_SETTINGS,
-  type NoodleSettings,
-} from "@marinara-engine/shared";
+import { DEFAULT_NOODLE_SETTINGS, type NoodleSettings } from "@marinara-engine/shared";
 
 /**
  * Which settings each section owns.
@@ -14,24 +11,11 @@ import {
  * The structure test asserts every key of `NoodleSettings` appears here exactly once, so a new
  * setting cannot silently escape the changed-count and the reset action.
  */
-export type NoodleSettingsSectionId =
-  | "general"
-  | "timeline"
-  | "images"
-  | "participants"
-  | "advanced";
+export type NoodleSettingsSectionId = "general" | "timeline" | "images" | "participants" | "advanced";
 
-export const NOODLE_SETTINGS_SECTION_KEYS: Record<
-  NoodleSettingsSectionId,
-  readonly (keyof NoodleSettings)[]
-> = {
+export const NOODLE_SETTINGS_SECTION_KEYS: Record<NoodleSettingsSectionId, readonly (keyof NoodleSettings)[]> = {
   general: ["generationConnectionId", "refreshesPerDay", "theme"],
-  timeline: [
-    "maxGeneratedPostsPerRefresh",
-    "maxRepliesPerRefresh",
-    "maxRepostsPerRefresh",
-    "maxLikesPerRefresh",
-  ],
+  timeline: ["maxGeneratedPostsPerRefresh", "maxRepliesPerRefresh", "maxRepostsPerRefresh", "maxLikesPerRefresh"],
   images: [
     "enableImagePrompts",
     "imageGenerationConnectionId",
@@ -72,12 +56,11 @@ export const NOODLE_SETTINGS_SECTION_KEYS: Record<
  * tab show a permanent badge for every user, which tells you nothing. A reset of the Images
  * section would also clear the image connections it depends on.
  */
-const NOODLE_SETTINGS_RESET_EXCLUDED: ReadonlySet<keyof NoodleSettings> =
-  new Set([
-    "generationConnectionId",
-    "imageGenerationConnectionId",
-    "imageCaptioningConnectionId",
-  ]);
+const NOODLE_SETTINGS_RESET_EXCLUDED: ReadonlySet<keyof NoodleSettings> = new Set([
+  "generationConnectionId",
+  "imageGenerationConnectionId",
+  "imageCaptioningConnectionId",
+]);
 
 function isDefault(settings: NoodleSettings, key: keyof NoodleSettings): boolean {
   const current = settings[key];

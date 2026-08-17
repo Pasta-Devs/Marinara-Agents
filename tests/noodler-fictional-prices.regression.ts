@@ -26,14 +26,16 @@ assert.equal(noodlerUnlockPriceFromMetadata({}), NOODLER_UNLOCK_COST);
 assert.equal(noodlerUnlockPriceFromMetadata(null), NOODLER_UNLOCK_COST);
 assert.equal(noodlerUnlockPriceFromMetadata(undefined), NOODLER_UNLOCK_COST);
 // Hand-edited or imported junk must not produce NaN prices or negative ones.
-for (const junk of [{ noodlerUnlockPrice: "3" }, { noodlerUnlockPrice: -1 }, { noodlerUnlockPrice: 1.5 }, { noodlerUnlockPrice: null }]) {
+for (const junk of [
+  { noodlerUnlockPrice: "3" },
+  { noodlerUnlockPrice: -1 },
+  { noodlerUnlockPrice: 1.5 },
+  { noodlerUnlockPrice: null },
+]) {
   assert.equal(noodlerUnlockPriceFromMetadata(junk), NOODLER_UNLOCK_COST);
 }
 
-const storage = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts",
-  "utf8",
-);
+const storage = readFileSync("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
 const fanInteraction = storage.slice(
   storage.indexOf("async createNoodlerFanInteraction("),
   storage.indexOf("async deleteNoodlerInteraction("),
@@ -41,21 +43,19 @@ const fanInteraction = storage.slice(
 assert.match(fanInteraction, /postRow\.access !== "public" && postRow\.access !== "locked"/u);
 
 // No affordability gate and no debit on either path.
-assert.doesNotMatch(storage, /wallet\.coins < NOODLER_(UNLOCK|SUBSCRIPTION)_COST/u, "access must never be gated on funds");
+assert.doesNotMatch(
+  storage,
+  /wallet\.coins < NOODLER_(UNLOCK|SUBSCRIPTION)_COST/u,
+  "access must never be gated on funds",
+);
 assert.doesNotMatch(storage, /wallet: \{ coins: viewer\.settings\.wallet\.coins - /u, "nothing may be debited");
 
 // Subscribing still follows the Creator; that is unrelated to price and must survive.
-const subscribe = storage.slice(
-  storage.indexOf("async subscribe("),
-  storage.indexOf("async unsubscribe("),
-);
+const subscribe = storage.slice(storage.indexOf("async subscribe("), storage.indexOf("async unsubscribe("));
 assert.ok(subscribe.length > 0);
 assert.match(subscribe, /followingAccountIds\.includes\(creatorAccountId\)/u);
 
-const routes = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts",
-  "utf8",
-);
+const routes = readFileSync("packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts", "utf8");
 // A locked post withholds its metadata, so the price has to travel as its own field.
 assert.match(routes, /metadata: locked \? null : post\.metadata,/u);
 assert.match(routes, /unlockPrice: locked \? noodlerUnlockPriceFromMetadata\(post\.metadata\) : null,/u);
@@ -69,10 +69,7 @@ const card = readFileSync(
   "utf8",
 );
 const enLocale = JSON.parse(
-  readFileSync(
-    "packages/slurp/src/engine/packages/client/src/localization/locales/en.json",
-    "utf8",
-  ),
+  readFileSync("packages/slurp/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
 ) as Record<string, string>;
 
 // Both actions show a price, and the hint says plainly that it buys nothing.

@@ -1,9 +1,10 @@
-import type { LtmGraphIndex, LtmNote, LtmMemoryChunk } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import type {
+  LtmGraphIndex,
+  LtmNote,
+  LtmMemoryChunk,
+} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 
-export function buildLtmGraphIndex(
-  notes: LtmNote[],
-  chunks: LtmMemoryChunk[],
-): LtmGraphIndex {
+export function buildLtmGraphIndex(notes: LtmNote[], chunks: LtmMemoryChunk[]): LtmGraphIndex {
   const chunkIdsByNote = new Map<string, string[]>();
   for (const chunk of chunks) {
     const ids = chunkIdsByNote.get(chunk.noteId) ?? [];
@@ -15,28 +16,18 @@ export function buildLtmGraphIndex(
   const liveNoteIds = new Set(chunks.map((chunk) => chunk.noteId));
   const liveNotes = notes.filter((note) => liveNoteIds.has(note.id));
 
-  for (const note of liveNotes
-    .slice()
-    .sort((a, b) => a.id.localeCompare(b.id))) {
+  for (const note of liveNotes.slice().sort((a, b) => a.id.localeCompare(b.id))) {
     nodes[note.id] = {
-      chunkIds: (chunkIdsByNote.get(note.id) ?? []).sort((a, b) =>
-        a.localeCompare(b),
-      ),
+      chunkIds: (chunkIdsByNote.get(note.id) ?? []).sort((a, b) => a.localeCompare(b)),
       outgoing: [],
       incoming: [],
     };
   }
 
-  for (const note of liveNotes
-    .slice()
-    .sort((a, b) => a.id.localeCompare(b.id))) {
+  for (const note of liveNotes.slice().sort((a, b) => a.id.localeCompare(b.id))) {
     for (const link of note.links
       .slice()
-      .sort(
-        (a, b) =>
-          a.target.localeCompare(b.target) ||
-          a.relation.localeCompare(b.relation),
-      )) {
+      .sort((a, b) => a.target.localeCompare(b.target) || a.relation.localeCompare(b.relation))) {
       if (!liveNoteIds.has(link.target)) continue;
       const edge = {
         source: note.id,
@@ -50,9 +41,7 @@ export function buildLtmGraphIndex(
 
   return {
     version: 1,
-    nodes: Object.fromEntries(
-      Object.entries(nodes).sort(([a], [b]) => a.localeCompare(b)),
-    ),
+    nodes: Object.fromEntries(Object.entries(nodes).sort(([a], [b]) => a.localeCompare(b))),
   };
 }
 
@@ -69,17 +58,13 @@ export function expandLtmGraph(
 ) {
   const maxHops = options.maxHops ?? 2;
   const maxVisited = Math.max(1, options.maxVisited ?? 256);
-  const maxCandidates = Math.max(
-    1,
-    options.maxCandidates ?? options.topK ?? 50,
-  );
-  const boundedSeeds = seedNoteIds.filter((id) => !options.allowedNoteIds || options.allowedNoteIds.has(id)).slice(0, maxVisited);
+  const maxCandidates = Math.max(1, options.maxCandidates ?? options.topK ?? 50);
+  const boundedSeeds = seedNoteIds
+    .filter((id) => !options.allowedNoteIds || options.allowedNoteIds.has(id))
+    .slice(0, maxVisited);
   const visited = new Set(boundedSeeds);
   const queue = boundedSeeds.map((noteId) => ({ noteId, distance: 0 }));
-  const scores = new Map<
-    string,
-    { score: number; viaNoteId: string; distance: number }
-  >();
+  const scores = new Map<string, { score: number; viaNoteId: string; distance: number }>();
 
   while (queue.length > 0) {
     const current = queue.shift()!;
@@ -88,10 +73,9 @@ export function expandLtmGraph(
     const node = index.nodes[current.noteId];
     if (!node) continue;
 
-    const neighbors = [
-      ...node.outgoing.map((edge) => edge.target),
-      ...node.incoming.map((edge) => edge.source),
-    ].sort((a, b) => a.localeCompare(b));
+    const neighbors = [...node.outgoing.map((edge) => edge.target), ...node.incoming.map((edge) => edge.source)].sort(
+      (a, b) => a.localeCompare(b),
+    );
 
     for (const neighbor of neighbors) {
       if (options.allowedNoteIds && !options.allowedNoteIds.has(neighbor)) continue;

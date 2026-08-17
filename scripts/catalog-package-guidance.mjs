@@ -61,11 +61,13 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
   },
   eightball: {
     modes: ["conversation"],
-    activation: "Install to use /8ball manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
+    activation:
+      "Install to use /8ball manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   },
   chess: {
     modes: ["conversation"],
-    activation: "Install to use /chess manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
+    activation:
+      "Install to use /chess manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   },
   combat: {
     modes: ["roleplay"],
@@ -85,16 +87,17 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
   },
   haptic: {
     modes: ["conversation", "roleplay", "game"],
-    activation: "Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents for Conversation, Roleplay, and Game modes.",
+    activation:
+      "Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents for Conversation, Roleplay, and Game modes.",
   },
   illustrator: {
     modes: ["conversation", "roleplay", "game"],
-    activation: "Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents/Illustrator for Conversation, Roleplay, and Game modes.",
+    activation:
+      "Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents/Illustrator for Conversation, Roleplay, and Game modes.",
   },
   storyboard: {
     modes: ["roleplay", "game"],
-    activation:
-      "Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Roleplay and Game modes.",
+    activation: "Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Roleplay and Game modes.",
   },
   html: {
     modes: ["roleplay"],
@@ -123,23 +126,28 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
   },
   spotify: {
     modes: ["conversation", "roleplay", "game"],
-    activation: "Enable the music player in Settings → General. Add both as a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents/Music DJ for Conversation, Roleplay, and Game modes.",
+    activation:
+      "Enable the music player in Settings → General. Add both as a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents/Music DJ for Conversation, Roleplay, and Game modes.",
   },
   poker: {
     modes: ["conversation"],
-    activation: "Install to use /poker manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
+    activation:
+      "Install to use /poker manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   },
   "rock-paper-scissors": {
     modes: ["conversation"],
-    activation: "Install to use /rps manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
+    activation:
+      "Install to use /rps manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   },
   "tic-tac-toe": {
     modes: ["conversation"],
-    activation: "Install to use /tictactoe manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
+    activation:
+      "Install to use /tictactoe manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   },
   uno: {
     modes: ["conversation"],
-    activation: "Install to use /uno manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
+    activation:
+      "Install to use /uno manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   },
 });
 

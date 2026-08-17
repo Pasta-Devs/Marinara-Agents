@@ -284,8 +284,14 @@ PF.core = {
     if (this._keysBound) return;
     this._keysBound = true;
     const DIRS = {
-      w: "up", arrowup: "up", s: "down", arrowdown: "down",
-      a: "left", arrowleft: "left", d: "right", arrowright: "right",
+      w: "up",
+      arrowup: "up",
+      s: "down",
+      arrowdown: "down",
+      a: "left",
+      arrowleft: "left",
+      d: "right",
+      arrowright: "right",
     };
     this._keyDown = (ev) => {
       if (!this.sim || !this._mainEl) return;
@@ -330,7 +336,8 @@ PF.core = {
         const detail = ev?.detail;
         const core = PF.core;
         if (!detail || !core.chatId) return;
-        if (detail.packageId !== (typeof core.host?.packageId === "string" ? core.host.packageId : "pixelforge")) return;
+        if (detail.packageId !== (typeof core.host?.packageId === "string" ? core.host.packageId : "pixelforge"))
+          return;
         if (detail.chatId !== core.chatId) return;
         PF.spatial.onHostEvent(core, detail);
       });

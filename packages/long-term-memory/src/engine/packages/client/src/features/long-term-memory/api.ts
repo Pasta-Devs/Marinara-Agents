@@ -21,10 +21,8 @@ export const queryKeys = {
   lorebookPreview: ["long-term-memory", "lorebook-import-preview"] as const,
   activity: ["long-term-memory", "activity"] as const,
   scopeTargetsRoot: ["long-term-memory", "scope-targets"] as const,
-  scopeTargets: (chatId: string | null | undefined) =>
-    ["long-term-memory", "scope-targets", chatId] as const,
-  lastInjection: (chatId: string | null | undefined) =>
-    ["long-term-memory", "last-injection", chatId] as const,
+  scopeTargets: (chatId: string | null | undefined) => ["long-term-memory", "scope-targets", chatId] as const,
+  lastInjection: (chatId: string | null | undefined) => ["long-term-memory", "last-injection", chatId] as const,
 } as const;
 
 function getAdminSecretHeader(): Record<string, string> {
@@ -70,12 +68,10 @@ export async function request<TResponse, TBody = unknown>(
       error?: unknown;
       code?: unknown;
     } | null;
-    const message =
-      typeof payload?.error === "string" ? payload.error : response.statusText;
+    const message = typeof payload?.error === "string" ? payload.error : response.statusText;
     const error = new Error(message || "Long-Term Memory request failed");
     Object.assign(error, { status: response.status });
-    if (typeof payload?.code === "string")
-      Object.assign(error, { code: payload.code });
+    if (typeof payload?.code === "string") Object.assign(error, { code: payload.code });
     throw error;
   }
   return response.json() as Promise<TResponse>;
@@ -90,8 +86,7 @@ export async function requestHost<TResponse>(path: string): Promise<TResponse> {
     const payload = (await response.json().catch(() => null)) as {
       error?: unknown;
     } | null;
-    const message =
-      typeof payload?.error === "string" ? payload.error : response.statusText;
+    const message = typeof payload?.error === "string" ? payload.error : response.statusText;
     throw new Error(message || "Marinara request failed");
   }
   return response.json() as Promise<TResponse>;
@@ -100,26 +95,16 @@ export async function requestHost<TResponse>(path: string): Promise<TResponse> {
 export async function requestAllNotes<T>(path: string): Promise<T[]> {
   const notes: T[] = [];
   for (let offset = 0; offset < 100_000; offset += 500) {
-    const page = await request<T[]>(
-      `${path}${path.includes("?") ? "&" : "?"}limit=500&offset=${offset}`,
-    );
+    const page = await request<T[]>(`${path}${path.includes("?") ? "&" : "?"}limit=500&offset=${offset}`);
     notes.push(...page);
     if (page.length < 500) return notes;
   }
-  const overflow = await request<T[]>(
-    `${path}${path.includes("?") ? "&" : "?"}limit=500&offset=100000`,
-  );
-  if (overflow.length)
-    throw new Error("Long-Term Memory note limit exceeded (100,000 notes)");
+  const overflow = await request<T[]>(`${path}${path.includes("?") ? "&" : "?"}limit=500&offset=100000`);
+  if (overflow.length) throw new Error("Long-Term Memory note limit exceeded (100,000 notes)");
   return notes;
 }
 
 /** Invalidations must name each affected resource rather than clearing the package cache. */
-export async function invalidateLtmQueries(
-  client: QueryClient,
-  keys: readonly QueryKey[],
-): Promise<void> {
-  await Promise.all(
-    keys.map((queryKey) => client.invalidateQueries({ queryKey })),
-  );
+export async function invalidateLtmQueries(client: QueryClient, keys: readonly QueryKey[]): Promise<void> {
+  await Promise.all(keys.map((queryKey) => client.invalidateQueries({ queryKey })));
 }

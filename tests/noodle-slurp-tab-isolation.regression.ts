@@ -22,7 +22,11 @@ for (const [surface, source] of [
   ["Noodle", noodleShell],
   ["Slurp", slurpShell],
 ] as const) {
-  assert.doesNotMatch(source, /NoodleModeToggle|BOW_SWAP_KEYFRAMES|data-noodle-bow/u, `${surface} retains mode-switch UI`);
+  assert.doesNotMatch(
+    source,
+    /NoodleModeToggle|BOW_SWAP_KEYFRAMES|data-noodle-bow/u,
+    `${surface} retains mode-switch UI`,
+  );
 }
 
 console.log("Noodle and Slurp tab isolation regressions passed.");

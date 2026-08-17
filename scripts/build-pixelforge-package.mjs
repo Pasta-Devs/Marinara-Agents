@@ -172,5 +172,9 @@ if (!existsSync(join(repoRoot, "artwork/agent-covers/pixelforge.png"))) {
   console.warn("Missing artwork/agent-covers/pixelforge.png — run node packages/pixelforge/build/cover.mjs");
 }
 console.log(`built pixelforge ${VERSION}`);
-console.log(`  client.js ${clientBuffer.byteLength} bytes, ${assetPayloads.length} assets, artifact ${archive.byteLength} bytes`);
-console.log(`  builtAgainst ${boundary.builtAgainst.engineVersion} @ ${boundary.builtAgainst.engineCommit.slice(0, 9)}`);
+console.log(
+  `  client.js ${clientBuffer.byteLength} bytes, ${assetPayloads.length} assets, artifact ${archive.byteLength} bytes`,
+);
+console.log(
+  `  builtAgainst ${boundary.builtAgainst.engineVersion} @ ${boundary.builtAgainst.engineCommit.slice(0, 9)}`,
+);

@@ -15,10 +15,7 @@ export function tokenizeLtmText(text: string) {
 }
 
 export function buildLtmBm25Index(chunks: LtmMemoryChunk[]): LtmBm25Index {
-  const documents = new Map<
-    string,
-    LtmBm25Index["documents"][string]
-  >();
+  const documents = new Map<string, LtmBm25Index["documents"][string]>();
   const termBuckets = new Map<string, LtmBm25Posting[]>();
   let totalLength = 0;
 
@@ -41,9 +38,7 @@ export function buildLtmBm25Index(chunks: LtmMemoryChunk[]): LtmBm25Index {
     Array.from(termBuckets.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([term, postings]) => {
-        const sortedPostings = postings.sort((a, b) =>
-          a.chunkId.localeCompare(b.chunkId),
-        );
+        const sortedPostings = postings.sort((a, b) => a.chunkId.localeCompare(b.chunkId));
         return [
           term,
           {
@@ -58,9 +53,7 @@ export function buildLtmBm25Index(chunks: LtmMemoryChunk[]): LtmBm25Index {
     version: 1,
     chunkCount: chunks.length,
     avgDocLength: chunks.length === 0 ? 0 : totalLength / chunks.length,
-    documents: Object.fromEntries(
-      Array.from(documents.entries()).sort(([a], [b]) => a.localeCompare(b)),
-    ),
+    documents: Object.fromEntries(Array.from(documents.entries()).sort(([a], [b]) => a.localeCompare(b))),
     terms,
   };
 }
@@ -77,17 +70,17 @@ export function searchLtmBm25(
   const maxCandidates = Math.max(1, options.maxCandidates ?? options.topK ?? 50);
 
   for (const term of queryTerms) {
-    const entry = Object.hasOwn(index.terms, term)
-      ? index.terms[term]
-      : undefined;
+    const entry = Object.hasOwn(index.terms, term) ? index.terms[term] : undefined;
     if (!entry) continue;
 
     const idf = Math.log(1 + (index.chunkCount - entry.documentFrequency + 0.5) / (entry.documentFrequency + 0.5));
-    const postings = entry.postings.filter((posting) => !options.allowedChunks || options.allowedChunks.has(posting.chunkId));
-    for (const posting of (options.maxPostingsPerTerm ? postings.slice(0, Math.max(1, options.maxPostingsPerTerm)) : postings)) {
-      const document = Object.hasOwn(index.documents, posting.chunkId)
-        ? index.documents[posting.chunkId]
-        : undefined;
+    const postings = entry.postings.filter(
+      (posting) => !options.allowedChunks || options.allowedChunks.has(posting.chunkId),
+    );
+    for (const posting of options.maxPostingsPerTerm
+      ? postings.slice(0, Math.max(1, options.maxPostingsPerTerm))
+      : postings) {
+      const document = Object.hasOwn(index.documents, posting.chunkId) ? index.documents[posting.chunkId] : undefined;
       if (!document) continue;
       const denominator = posting.count + K1 * (1 - B + B * (document.length / index.avgDocLength));
       const score = idf * ((posting.count * (K1 + 1)) / denominator);

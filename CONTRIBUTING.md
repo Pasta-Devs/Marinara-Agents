@@ -98,11 +98,14 @@ Hierarchical Maps also owns `packages/hierarchical-maps/engine-boundary.json`. I
 Every pull request must run:
 
 ```bash
+npm run check
 node scripts/test-catalog-lanes.mjs
 node scripts/validate-package-locales.mjs
 node scripts/validate-catalog.mjs
 git diff --check
 ```
+
+`npm run check` verifies Prettier formatting and ESLint rules for package-owned source, repository scripts, and tests. Use `npm run format` to apply Prettier. Generated bundles, artifacts, catalogs, and captured Engine snapshots are excluded; rebuild those through their owning scripts instead of formatting them by hand.
 
 Catalog validation verifies every versioned lane and the legacy alias, package count and identity, Engine compatibility, categories, README coverage, package manifests, permissions, entrypoints, declared file hashes and sizes, ZIP checksums and contents, generated JavaScript syntax, runtime registration, and package-specific contracts.
 

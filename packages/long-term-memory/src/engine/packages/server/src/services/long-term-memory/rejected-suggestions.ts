@@ -28,10 +28,14 @@ function normalize(value: unknown): unknown {
 
 function fingerprint(source: LtmExtractionDraft["source"], candidate: LtmExtractionDroppedCandidate) {
   return createHash("sha256")
-    .update(JSON.stringify(normalize({
-      sourceNoteId: source.sourceNoteId,
-      candidate: { ...candidate, index: undefined },
-    })))
+    .update(
+      JSON.stringify(
+        normalize({
+          sourceNoteId: source.sourceNoteId,
+          candidate: { ...candidate, index: undefined },
+        }),
+      ),
+    )
     .digest("hex");
 }
 
@@ -67,8 +71,7 @@ async function readSuggestionsUnlocked(root: string) {
 
 function sortSuggestions(suggestions: LtmRejectedSuggestion[]) {
   return suggestions.sort(
-    (left, right) =>
-      right.lastSeenAt.localeCompare(left.lastSeenAt) || right.id.localeCompare(left.id),
+    (left, right) => right.lastSeenAt.localeCompare(left.lastSeenAt) || right.id.localeCompare(left.id),
   );
 }
 
@@ -90,10 +93,7 @@ export async function readAllRejectedSuggestions(root = getLongTermMemoryRoot())
   return withLtmVaultLock(root, () => readSuggestionsUnlocked(root));
 }
 
-export async function addRejectedSuggestions(
-  draft: LtmExtractionDraft,
-  root = getLongTermMemoryRoot(),
-) {
+export async function addRejectedSuggestions(draft: LtmExtractionDraft, root = getLongTermMemoryRoot()) {
   const candidates = draft.extractionOutcome?.droppedCandidates ?? [];
   if (!candidates.length) return [];
   return withLtmVaultLock(root, async () => {
@@ -105,32 +105,40 @@ export async function addRejectedSuggestions(
       const value = fingerprint(draft.source, candidate);
       const current = byFingerprint.get(value);
       if (current) {
-        byFingerprint.set(value, ltmRejectedSuggestionSchema.parse({
-          ...current,
-          source: draft.source,
-          scope: draft.scope,
-          modes: draft.modes,
-          candidate,
-          lastSeenAt: timestamp,
-        }));
+        byFingerprint.set(
+          value,
+          ltmRejectedSuggestionSchema.parse({
+            ...current,
+            source: draft.source,
+            scope: draft.scope,
+            modes: draft.modes,
+            candidate,
+            lastSeenAt: timestamp,
+          }),
+        );
         continue;
       }
       if (byFingerprint.size >= LTM_REJECTED_SUGGESTIONS_LIMIT)
         throw new Error("Long-term memory rejected-suggestion limit reached.");
-      byFingerprint.set(value, ltmRejectedSuggestionSchema.parse({
-        id: uuidFromFingerprint(value),
-        fingerprint: value,
-        source: draft.source,
-        scope: draft.scope,
-        modes: draft.modes,
-        candidate,
-        createdAt: timestamp,
-        lastSeenAt: timestamp,
-      }));
+      byFingerprint.set(
+        value,
+        ltmRejectedSuggestionSchema.parse({
+          id: uuidFromFingerprint(value),
+          fingerprint: value,
+          source: draft.source,
+          scope: draft.scope,
+          modes: draft.modes,
+          candidate,
+          createdAt: timestamp,
+          lastSeenAt: timestamp,
+        }),
+      );
     }
     const next = sortSuggestions([...byFingerprint.values()]);
     await writeJsonAtomic(path, next);
-    return next.filter((item) => candidates.some((candidate) => fingerprint(draft.source, candidate) === item.fingerprint));
+    return next.filter((item) =>
+      candidates.some((candidate) => fingerprint(draft.source, candidate) === item.fingerprint),
+    );
   });
 }
 
@@ -144,10 +152,7 @@ export async function deleteRejectedSuggestion(id: string, root = getLongTermMem
   });
 }
 
-export async function writeRejectedSuggestions(
-  suggestions: LtmRejectedSuggestion[],
-  root = getLongTermMemoryRoot(),
-) {
+export async function writeRejectedSuggestions(suggestions: LtmRejectedSuggestion[], root = getLongTermMemoryRoot()) {
   return withLtmVaultLock(root, async () => {
     const byId = new Map<string, LtmRejectedSuggestion>();
     const byFingerprint = new Map<string, LtmRejectedSuggestion>();

@@ -9,9 +9,7 @@ function promptRecord(value: unknown): Record<string, unknown> {
       return {};
     }
   }
-  return typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+  return typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 export function escapePromptAttribute(value: string) {
@@ -19,23 +17,13 @@ export function escapePromptAttribute(value: string) {
 }
 
 export function escapePromptText(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export function characterContextFromRow(row: {
-  id: string;
-  data: unknown;
-  avatarPath?: string | null;
-}) {
+export function characterContextFromRow(row: { id: string; data: unknown; avatarPath?: string | null }) {
   const data = promptRecord(row.data);
   const extensions = promptRecord(data.extensions);
-  const name =
-    typeof data.name === "string" && data.name.trim()
-      ? data.name.trim()
-      : "Character";
+  const name = typeof data.name === "string" && data.name.trim() ? data.name.trim() : "Character";
   const lines = [`<character name="${escapePromptAttribute(name)}">`];
   for (const [label, value] of [
     ["Description", data.description],
@@ -100,19 +88,12 @@ const REVIEWED_PHYSICAL_FACT_TOKENS = [
 
 /** A hinted identity receives only reviewed, non-identifying theme tokens. */
 export function reviewedNoodlerTemperamentThemes(value: string) {
-  const personalityWords = new Set(
-    value.toLocaleLowerCase().match(/[a-z]+/gu) ?? [],
-  );
-  return REVIEWED_HINTED_THEME_TOKENS.filter((token) =>
-    personalityWords.has(token),
-  );
+  const personalityWords = new Set(value.toLocaleLowerCase().match(/[a-z]+/gu) ?? []);
+  return REVIEWED_HINTED_THEME_TOKENS.filter((token) => personalityWords.has(token));
 }
 
-export function hintedNoodlerSourceBrief(
-  snapshot: NoodlerSourceSnapshot | null,
-) {
-  if (!snapshot)
-    return "General temperament and creative interests from the source profile.";
+export function hintedNoodlerSourceBrief(snapshot: NoodlerSourceSnapshot | null) {
+  if (!snapshot) return "General temperament and creative interests from the source profile.";
   const themes = reviewedNoodlerTemperamentThemes(snapshot.personality);
   return themes.length > 0
     ? `Approved source themes: ${themes.join(", ")}.`
@@ -122,7 +103,5 @@ export function hintedNoodlerSourceBrief(
 /** Hidden identities receive only reviewed physical tokens, never raw profile prose. */
 export function reviewedNoodlerPhysicalFacts(value: string) {
   const normalized = value.toLocaleLowerCase();
-  return REVIEWED_PHYSICAL_FACT_TOKENS.filter((token) =>
-    normalized.includes(token),
-  );
+  return REVIEWED_PHYSICAL_FACT_TOKENS.filter((token) => normalized.includes(token));
 }

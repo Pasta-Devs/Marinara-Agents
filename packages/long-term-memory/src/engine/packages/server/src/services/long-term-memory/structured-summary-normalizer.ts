@@ -71,7 +71,15 @@ const THREAD_RESOLUTION_PATTERN =
   /\b(?:resolve|resolved|resolver|resolution|would resolve|will resolve|until|when|if|requires|needs|awaits|pending|unresolved|open question|pay off|payoff|future|follow-?up|goal|must|should|confess(?:ion|es|ed|ing)?|confront(?:s|ed|ing)?|explain(?:s|ed|ing|ation)?|updates?)\b/i;
 const CHARACTER_ITEM_PATTERN =
   /\b(?:bracelet|necklace|ring|pendant|keepsake|token|gift|item|weapon|book|letter|photo|photograph|charm|key|tool|artifact)\b/i;
-const CHARACTER_SUBJECT_SECTION_SUFFIXES = new Set(["facts", "core", "profile", "developments", "abilities", "items", "voice"]);
+const CHARACTER_SUBJECT_SECTION_SUFFIXES = new Set([
+  "facts",
+  "core",
+  "profile",
+  "developments",
+  "abilities",
+  "items",
+  "voice",
+]);
 const WORLD_SUBJECT_SECTION_SUFFIXES = new Set(["facts", "lore", "rules", "items", "places", "locations"]);
 const ANCHOR_SUBJECT_SECTION_SUFFIXES = new Set(["motif", "anchor", "callback", "callbacks"]);
 const RELATIONSHIP_DIMENSION_KEYS = new Set<string>(RELATIONSHIP_DIMENSIONS);
@@ -123,12 +131,7 @@ const CHARACTER_STRUCTURED_SECTION_KEYS = new Set([
   "details",
   "state",
 ]);
-const STRUCTURED_IMPORTANCE_VALUES = new Set<LtmEvidenceUnit["importance"]>([
-  "critical",
-  "major",
-  "moderate",
-  "minor",
-]);
+const STRUCTURED_IMPORTANCE_VALUES = new Set<LtmEvidenceUnit["importance"]>(["critical", "major", "moderate", "minor"]);
 const STRUCTURED_CHARACTER_METADATA_KEYS = new Set([
   "id",
   "subject",
@@ -271,10 +274,7 @@ export function normalizeStructuredSummaryEvidenceUnits({
   };
 }
 
-function normalizeSourceEventGraph(
-  units: LtmEvidenceUnit[],
-  sourceNote: LtmNote | undefined,
-) {
+function normalizeSourceEventGraph(units: LtmEvidenceUnit[], sourceNote: LtmNote | undefined) {
   if (!sourceNote?.provenance) return units;
   const sourceLink = { relation: "extracted_from" as const, target: sourceNote.id };
 
@@ -282,10 +282,7 @@ function normalizeSourceEventGraph(
     return units.map((unit) => ({
       ...unit,
       ...(unit.bucket === "timeline_event" ? { claimKind: "change" as const } : {}),
-      links: uniqueLinks([
-        ...unit.links,
-        ...(unit.bucket === "timeline_event" ? [sourceLink] : []),
-      ]),
+      links: uniqueLinks([...unit.links, ...(unit.bucket === "timeline_event" ? [sourceLink] : [])]),
     }));
   }
 
@@ -294,9 +291,7 @@ function normalizeSourceEventGraph(
   const namespaced = units.map((unit) => {
     if (unit.bucket !== "timeline_event") return unit;
     const oldId = noteIdForEvidenceUnit(unit);
-    const next = unit.subjectId.endsWith(`_${suffix}`)
-      ? unit
-      : { ...unit, subjectId: `${unit.subjectId}_${suffix}` };
+    const next = unit.subjectId.endsWith(`_${suffix}`) ? unit : { ...unit, subjectId: `${unit.subjectId}_${suffix}` };
     timelineTargets.set(oldId, noteIdForEvidenceUnit(next));
     return next;
   });
@@ -420,10 +415,7 @@ function parseFieldLine(line: string) {
   const match = cleaned.match(/^([A-Za-z][A-Za-z0-9_ /|-]{0,100}):\s*(.+)$/);
   if (!match?.[1] || !match[2]?.trim()) return null;
   return {
-    keys: match[1]
-      .split("|")
-      .map(normalizeFieldKey)
-      .filter(Boolean),
+    keys: match[1].split("|").map(normalizeFieldKey).filter(Boolean),
     value: match[2].trim(),
   };
 }
@@ -603,7 +595,8 @@ function normalizeSubjectSectionSuffix({
   if (!nextSubject) return { subjectId, sectionKey: currentSection };
   return {
     subjectId: nextSubject,
-    sectionKey: currentSection === suffix || ["facts", "motif", "anchor"].includes(currentSection) ? suffix : currentSection,
+    sectionKey:
+      currentSection === suffix || ["facts", "motif", "anchor"].includes(currentSection) ? suffix : currentSection,
   };
 }
 
@@ -904,7 +897,9 @@ function exactTargetFromCauseValue(value: string, candidates: TimelineTargetCand
   const timelineId = NOTE_ID_PREFIX_PATTERN.test(identifier)
     ? identifier
     : `timeline_${stripUnitSubjectPrefix("timeline_event", identifier)}`;
-  return candidates.find((candidate) => candidate.target === identifier || candidate.target === timelineId)?.target ?? null;
+  return (
+    candidates.find((candidate) => candidate.target === identifier || candidate.target === timelineId)?.target ?? null
+  );
 }
 
 function fuzzyTimelineTargetFromCause(value: string, candidates: TimelineTargetCandidate[]) {
@@ -958,7 +953,9 @@ function structuredCauseTimelineUnit({
   const causeText = cause.trim().replace(/[.?!]\s*$/u, "");
   const text = `${relationshipText} relationship changed after ${causeText}.`;
   return {
-    id: deterministicUuid(`structured-relationship-cause:${sourceNote.id}:${sourceHash}:${relationshipSubjectId}:${causeText}:${sourceLine}`),
+    id: deterministicUuid(
+      `structured-relationship-cause:${sourceNote.id}:${sourceHash}:${relationshipSubjectId}:${causeText}:${sourceLine}`,
+    ),
     bucket: "timeline_event",
     subjectId,
     sectionKey: "event",
@@ -1216,7 +1213,10 @@ function parseStructuredCharacterLine(
   }
 
   const normalizedSubject = stripUnitSubjectPrefix("character_fact", normalizeIdentifier(subjectId, ""));
-  const normalizedSection = structuredCharacterSectionKey(normalizeSectionKey(sectionKey, "facts"), textParts.join(" | "));
+  const normalizedSection = structuredCharacterSectionKey(
+    normalizeSectionKey(sectionKey, "facts"),
+    textParts.join(" | "),
+  );
   const text = textParts.join(" | ").replace(/\s+/g, " ").trim();
   if (!normalizedSubject || !normalizedSection || !text) return null;
   for (const relation of missingTimelineLinkRelations) {
@@ -1235,7 +1235,9 @@ function parseStructuredCharacterLine(
   );
 
   return {
-    id: deterministicUuid(`structured-character:${sourceNote.id}:${sourceHash}:${normalizedSubject}:${normalizedSection}:${text}`),
+    id: deterministicUuid(
+      `structured-character:${sourceNote.id}:${sourceHash}:${normalizedSubject}:${normalizedSection}:${text}`,
+    ),
     bucket: "character_fact",
     subjectId: normalizedSubject,
     sectionKey: normalizedSection,
@@ -1300,7 +1302,10 @@ function parseStructuredScore(value: string, fallback: number) {
 }
 
 function stripInlineMarkup(value: string) {
-  return value.trim().replace(/^`+|`+$/g, "").trim();
+  return value
+    .trim()
+    .replace(/^`+|`+$/g, "")
+    .trim();
 }
 
 function maybeAddToneUnit({
@@ -1344,10 +1349,7 @@ function maybeAddToneUnit({
     links: [],
     sourceHash,
   };
-  return [
-    ...units,
-    toneUnit,
-  ];
+  return [...units, toneUnit];
 }
 
 function eventIdValues(section: StructuredSection) {
@@ -1355,7 +1357,9 @@ function eventIdValues(section: StructuredSection) {
   if (explicit.length > 0) return explicit;
   const ids = fieldValues(section, ["id"]);
   if (ids.length > 0) return ids;
-  const subjectFields = fieldValues(section, ["subject"]).filter((value) => normalizeIdentifier(value, "").includes("_"));
+  const subjectFields = fieldValues(section, ["subject"]).filter((value) =>
+    normalizeIdentifier(value, "").includes("_"),
+  );
   const lineIds = section.lines.flatMap(timelineEventIdsFromLine);
   return uniqueStrings([...subjectFields, ...lineIds]);
 }
@@ -1516,7 +1520,12 @@ function exactTimelineTargetFromLine(line: string, hints: StructuredSummaryHints
   const normalizedLine = normalizeFieldKey(line);
   const matches = hints.eventIds.filter((eventId) => {
     const noteId = `timeline_${eventId}`;
-    return normalizedLine === eventId || normalizedLine === noteId || normalizedLine.includes(eventId) || normalizedLine.includes(noteId);
+    return (
+      normalizedLine === eventId ||
+      normalizedLine === noteId ||
+      normalizedLine.includes(eventId) ||
+      normalizedLine.includes(noteId)
+    );
   });
   return matches.length === 1 ? `timeline_${matches[0]}` : null;
 }
@@ -1595,17 +1604,7 @@ function isMetadataOnlyLine(line: string) {
   const parsed = parseFieldLine(line);
   if (!parsed) return false;
   return parsed.keys.every((key) =>
-    [
-      "id",
-      "subject",
-      "source",
-      "importance",
-      "confidence",
-      "salience",
-      "status",
-      "evidence",
-      "links",
-    ].includes(key),
+    ["id", "subject", "source", "importance", "confidence", "salience", "status", "evidence", "links"].includes(key),
   );
 }
 

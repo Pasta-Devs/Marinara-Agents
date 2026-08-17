@@ -23,10 +23,8 @@ export function NoodleImageComposer({
   urlActionLabel?: string;
 }) {
   const { t: localizeUi } = useUiTranslation();
-  const resolvedFileActionLabel =
-    fileActionLabel ?? localizeUi("ui.noodle.noodlehome.uploadFromDevice");
-  const resolvedUrlActionLabel =
-    urlActionLabel ?? localizeUi("ui.noodle.noodlehome.attachUrl");
+  const resolvedFileActionLabel = fileActionLabel ?? localizeUi("ui.noodle.noodlehome.uploadFromDevice");
+  const resolvedUrlActionLabel = urlActionLabel ?? localizeUi("ui.noodle.noodlehome.attachUrl");
   return (
     <div className="marinara-chat-popover space-y-3 rounded-2xl border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-4 pb-4 pt-2 text-[var(--marinara-chat-chrome-panel-title)] shadow-2xl shadow-black/35">
       <div className="flex items-center justify-between gap-3">
@@ -40,9 +38,7 @@ export function NoodleImageComposer({
           disabled={disabled}
           onClick={onClose}
           className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[var(--marinara-chat-chrome-panel-muted)] transition-colors hover:bg-[var(--marinara-chat-chrome-highlight-bg)] hover:text-[var(--marinara-chat-chrome-panel-title)] disabled:opacity-50"
-          aria-label={localizeUi(
-            "ui.noodle.noodleimagecomposer.closeImagePicker",
-          )}
+          aria-label={localizeUi("ui.noodle.noodleimagecomposer.closeImagePicker")}
           title={localizeUi("ui.noodle.noodleimagecomposer.closeImagePicker")}
         >
           <X size={20} />
@@ -67,9 +63,7 @@ export function NoodleImageComposer({
       </div>
 
       <label className="block space-y-1.5">
-        <span className="text-xs font-bold">
-          {localizeUi("ui.noodle.noodlehome.imageUrl")}
-        </span>
+        <span className="text-xs font-bold">{localizeUi("ui.noodle.noodlehome.imageUrl")}</span>
         <input
           type="url"
           inputMode="url"
@@ -83,9 +77,7 @@ export function NoodleImageComposer({
               onUseImageUrl();
             }
           }}
-          placeholder={localizeUi(
-            "ui.noodle.noodleimagecomposer.httpsExampleComImagePng",
-          )}
+          placeholder={localizeUi("ui.noodle.noodleimagecomposer.httpsExampleComImagePng")}
           className="mari-chrome-field h-10 w-full px-3 text-sm"
         />
       </label>

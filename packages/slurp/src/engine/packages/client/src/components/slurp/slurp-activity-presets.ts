@@ -10,11 +10,7 @@
  * turn auto-posting off instead.
  */
 
-export type SlurpActivityPreset =
-  | "manual"
-  | "occasional"
-  | "lively"
-  | "veryActive";
+export type SlurpActivityPreset = "manual" | "occasional" | "lively" | "veryActive";
 
 /** Ordered quietest-first, which is also the order the onboarding wizard offers them in. */
 export const SLURP_ACTIVITY_PRESETS: readonly SlurpActivityPreset[] = [
@@ -25,10 +21,7 @@ export const SLURP_ACTIVITY_PRESETS: readonly SlurpActivityPreset[] = [
 ] as const;
 
 /** Posts per day for each preset. `manual` has none: it disables automatic posting. */
-export const SLURP_ACTIVITY_PRESET_POSTS_PER_DAY: Record<
-  Exclude<SlurpActivityPreset, "manual">,
-  number
-> = {
+export const SLURP_ACTIVITY_PRESET_POSTS_PER_DAY: Record<Exclude<SlurpActivityPreset, "manual">, number> = {
   occasional: 2,
   lively: 4,
   veryActive: 8,
@@ -38,14 +31,9 @@ export const SLURP_ACTIVITY_PRESET_POSTS_PER_DAY: Record<
 export const SLURP_DEFAULT_ACTIVITY_PRESET: SlurpActivityPreset = "lively";
 
 /** One step quieter than the default, used by the one-click calm-down action. */
-export const SLURP_QUIETER_ACTIVITY_PRESET: Exclude<
-  SlurpActivityPreset,
-  "manual"
-> = "occasional";
+export const SLURP_QUIETER_ACTIVITY_PRESET: Exclude<SlurpActivityPreset, "manual"> = "occasional";
 
-export function slurpPostsPerDayForPreset(
-  preset: Exclude<SlurpActivityPreset, "manual">,
-): number {
+export function slurpPostsPerDayForPreset(preset: Exclude<SlurpActivityPreset, "manual">): number {
   return SLURP_ACTIVITY_PRESET_POSTS_PER_DAY[preset];
 }
 
@@ -60,13 +48,8 @@ export function slurpActivityPresetForSettings(input: {
 }): SlurpActivityPreset | null {
   if (!input.autoPostingScheduleEnabled) return "manual";
   const match = (
-    Object.keys(SLURP_ACTIVITY_PRESET_POSTS_PER_DAY) as Array<
-      Exclude<SlurpActivityPreset, "manual">
-    >
-  ).find(
-    (preset) =>
-      SLURP_ACTIVITY_PRESET_POSTS_PER_DAY[preset] === input.postsPerDay,
-  );
+    Object.keys(SLURP_ACTIVITY_PRESET_POSTS_PER_DAY) as Array<Exclude<SlurpActivityPreset, "manual">>
+  ).find((preset) => SLURP_ACTIVITY_PRESET_POSTS_PER_DAY[preset] === input.postsPerDay);
   return match ?? null;
 }
 

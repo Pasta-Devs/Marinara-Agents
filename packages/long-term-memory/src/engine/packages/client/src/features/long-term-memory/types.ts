@@ -31,9 +31,7 @@ export type CapabilityProps = {
     longTermMemoryMaxChunks?: number;
   };
   onEnabledForChatChange?: (enabled: boolean) => void | Promise<void>;
-  onChatSettingsChange?: (
-    patch: Record<string, unknown>,
-  ) => void | Promise<void>;
+  onChatSettingsChange?: (patch: Record<string, unknown>) => void | Promise<void>;
   onOpenAgentSettings?: () => void;
   onOpenChatSummarySettings?: () => void;
   onOpenActivePromptPresetEditor?: () => void;
@@ -54,8 +52,7 @@ export type CapabilityElement = HTMLElement & {
   __root?: Root | null;
 };
 
-export type LongTermMemoryDestination =
-  "vault" | "review" | "sources" | "settings";
+export type LongTermMemoryDestination = "vault" | "review" | "sources" | "settings";
 
 export type SourceTab = "characters" | "lorebooks" | "chats";
 

@@ -130,7 +130,11 @@ assert.doesNotMatch(
   /\{!pending && enabled && mapAvailable && \(\s*<div data-marinara-maps-runtime-mobile\b[^>]*>/u,
   "A queued move must not suppress the mobile story-map trigger.",
 );
-assert.doesNotMatch(runtimeBarSource, /Set destination/u, "Runtime location controls must replace the legacy destination-only action.");
+assert.doesNotMatch(
+  runtimeBarSource,
+  /Set destination/u,
+  "Runtime location controls must replace the legacy destination-only action.",
+);
 assert.match(builtClient, /Step by step/u, "The built client must include the travel-mode control.");
 assert.match(builtClient, /Travel now/u, "The built client must include the immediate-travel control.");
 assert.match(builtClient, /Next stop/u, "The built client must include the step-by-step next-stop label.");
@@ -144,8 +148,16 @@ assert.match(
   /targetLocationCount,\s*instructions/u,
   "The custom place target must be carried in every AI builder request.",
 );
-assert.match(aiDraftSource, /resolveSpatialDraftSizeSpec/u, "The server must resolve custom targets through the existing size tiers.");
-assert.match(aiDraftSource, /SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT/u, "Custom targets must retain a bounded one-call generation ceiling.");
+assert.match(
+  aiDraftSource,
+  /resolveSpatialDraftSizeSpec/u,
+  "The server must resolve custom targets through the existing size tiers.",
+);
+assert.match(
+  aiDraftSource,
+  /SPATIAL_CUSTOM_TARGET_LOCATION_LIMIT/u,
+  "Custom targets must retain a bounded one-call generation ceiling.",
+);
 assert.match(builtClient, /Custom place target/u, "The built client must include the editable expansion target.");
 assert.match(builtServer, /targetLocationCount/u, "The built server must accept and apply the expansion target.");
 assert.match(
@@ -302,10 +314,7 @@ assert.match(
   "Ambiguous failures must be recoverable by exact transition command ID.",
 );
 assert.doesNotMatch(packageBuilderSource, /spatialTransitionReviewMessages\[data\.code\]/u);
-assert.doesNotMatch(
-  packageBuilderSource,
-  /spatial\.currentLocationId === pending\.transition\.destinationId/u,
-);
+assert.doesNotMatch(packageBuilderSource, /spatial\.currentLocationId === pending\.transition\.destinationId/u);
 assert.doesNotMatch(runtimeBarSource, /data\.currentLocationId === pending\.transition\.destinationId/u);
 assert.match(
   mapJsonSource,
@@ -313,13 +322,12 @@ assert.match(
   "Map truncation detection must only inspect responses that begin with a JSON object.",
 );
 const templateRouteStart = routeSource.indexOf('app.post("/spatial-context/templates/generate"');
-const templateRouteEnd = routeSource.indexOf('app.post<{ Params: ChatSpatialParams }>("/:chatId/spatial-context/generate"');
+const templateRouteEnd = routeSource.indexOf(
+  'app.post<{ Params: ChatSpatialParams }>("/:chatId/spatial-context/generate"',
+);
 assert.ok(templateRouteStart >= 0, "Template route marker is missing.");
 assert.ok(templateRouteEnd > templateRouteStart, "Chat route marker must follow the template route.");
-const templateGenerateSource = routeSource.slice(
-  templateRouteStart,
-  templateRouteEnd,
-);
+const templateGenerateSource = routeSource.slice(templateRouteStart, templateRouteEnd);
 assert.match(
   templateGenerateSource,
   /parseSpatialMapJsonWithRepair\([\s\S]*?repair: spatialMapJsonRepairRequest\([\s\S]*?spatialMapJsonErrorPayload/u,

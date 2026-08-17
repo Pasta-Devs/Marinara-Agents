@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
-const agents = JSON.parse(
-  await readFile(new URL("../packages/storyboard/agents.json", import.meta.url), "utf8"),
-);
+const agents = JSON.parse(await readFile(new URL("../packages/storyboard/agents.json", import.meta.url), "utf8"));
 const storyboard = agents.find((agent) => agent.id === "storyboard");
 assert.ok(storyboard, "Storyboard agent definition must exist");
 
@@ -40,10 +38,7 @@ assert.match(animation.promptTemplate, /Audio:/u);
 assert.match(animation.promptTemplate, /one to four shots/u);
 assert.match(animation.promptTemplate, /\$\{durationSeconds\}/u);
 
-const refinement = findTemplate(
-  "animationRefinementTemplates",
-  "minimax-h3-image-aware-shot-planner",
-);
+const refinement = findTemplate("animationRefinementTemplates", "minimax-h3-image-aware-shot-planner");
 assert.equal(
   sha256(refinement.promptTemplate),
   "31a7fd80fe3c95531371a6a052cdb1c321c0735d5ec76902ab21eb469f3310ee",
