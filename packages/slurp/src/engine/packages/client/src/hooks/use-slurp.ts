@@ -94,6 +94,7 @@ export const noodleKeys = {
 };
 
 export type SlurpSettings = {
+  refreshesPerDay: number;
   generationGuidance: string;
   postsPerDay: number;
   autoPostingScheduleEnabled: boolean;
@@ -149,6 +150,7 @@ export function useUpdateSlurpSettings() {
       api.patch<SlurpSettings>("/slurp/settings", patch),
     onSuccess: (settings) => {
       queryClient.setQueryData(noodleKeys.settings(), settings);
+      return queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerFanStatus() });
     },
   });
 }
@@ -279,10 +281,14 @@ export function useNoodlerEligibleAccounts(
   search: string,
   kind: "all" | "character" | "persona",
   enabled = true,
+  includeAccountId?: string | null,
 ) {
   const normalizedSearch = search.trim();
   return useInfiniteQuery({
-    queryKey: noodleKeys.noodlerEligibleAccounts(normalizedSearch, kind),
+    queryKey: [
+      ...noodleKeys.noodlerEligibleAccounts(normalizedSearch, kind),
+      includeAccountId ?? "none",
+    ],
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
       api.get<{
@@ -291,7 +297,7 @@ export function useNoodlerEligibleAccounts(
         offset: number;
         hasMore: boolean;
       }>(
-        `/slurp/noodler/eligible-accounts?limit=100&offset=${pageParam}&search=${encodeURIComponent(normalizedSearch)}${kind === "all" ? "" : `&kind=${kind}`}`,
+          `/slurp/noodler/eligible-accounts?limit=100&offset=${pageParam}&search=${encodeURIComponent(normalizedSearch)}${kind === "all" ? "" : `&kind=${kind}`}${includeAccountId ? `&includeAccountId=${encodeURIComponent(includeAccountId)}` : ""}`,
       ),
     getNextPageParam: (page) =>
       page.hasMore ? page.offset + page.items.length : undefined,
@@ -370,7 +376,11 @@ export function useBulkCreateNoodlerStageProfiles() {
   const qc = useQueryClient();
   const { t: localizeUi } = useUiTranslation();
   return useMutation({
-    mutationFn: (input: NoodleBulkNoodlerAccountCreateInput) =>
+    mutationFn: (
+      input: NoodleBulkNoodlerAccountCreateInput & {
+        connectionId?: string | null;
+      },
+    ) =>
       api.post<{
         created: NoodlerManagedStageProfile[];
         skipped: string[];
@@ -463,6 +473,28 @@ export function useUploadNoodlerAvatar() {
       form,
     );
   });
+}
+
+export function useUploadNoodlerBanner() {
+  return useNoodlerAvatarMutation(({ accountId, file }: { accountId: string; file: File }) => {
+    const form = new FormData();
+    form.append("payload", "{}");
+    form.append("file", file);
+    return api.upload<NoodlerStageProfile>(
+      `/slurp/noodler/accounts/${encodeURIComponent(accountId)}/banner`,
+      form,
+    );
+  });
+}
+
+export function useGenerateNoodlerArtwork() {
+  return useNoodlerAvatarMutation(
+    ({ accountId, kind, guidance }: { accountId: string; kind: "avatar" | "banner"; guidance?: string }) =>
+      api.post<NoodlerStageProfile>(
+        `/slurp/noodler/accounts/${encodeURIComponent(accountId)}/artwork/generate`,
+        { kind, guidance },
+      ),
+  );
 }
 
 export function useUseNoodlerSourceAvatar() {
@@ -799,6 +831,19 @@ export function useNoodlerUnseenCount(
     refetchIntervalInBackground: false,
   });
   return Math.max(0, Math.floor(data?.count ?? 0));
+}
+
+export function useMarkNoodlerFeedSeen() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (personaId: string) =>
+      api.post<NoodleAccount>("/slurp/noodler/viewer/mark-seen", { personaId }),
+    onSuccess: (_viewer, personaId) =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: noodleKeys.viewer(personaId) }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerUnseenCount(personaId) }),
+      ]),
+  });
 }
 
 export function useToggleNoodlerSubscription() {
@@ -1157,7 +1202,7 @@ export function useRefreshAllNoodlerCreatorsNow() {
 export function useRefreshTargetedNoodlerCreatorsNow() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { accountIds: string[]; executionId?: string }) =>
+    mutationFn: (input: { accountIds: string[]; executionId?: string; access?: "public" | "locked" }) =>
       api.post<{ outcomes: NoodlerRefreshNowOutcome[] }>(
         "/slurp/noodler/auto-post/refresh-targeted",
         {

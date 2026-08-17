@@ -70,6 +70,23 @@ export function stageNoodlerAvatar(accountId: string, upload: NoodlerPostMediaUp
   };
 }
 
+export function stageNoodlerBanner(accountId: string, upload: NoodlerPostMediaUpload) {
+  const staged = stageImageToDisk(
+    `${NOODLER_MEDIA_PREFIX}${accountId}`,
+    upload.buffer.toString("base64"),
+    upload.extension,
+  );
+  return {
+    bannerUrl: noodlerBannerUrl(accountId, staged.filePath),
+    promote: staged.promote,
+    compensate: staged.compensate,
+  };
+}
+
 export function unlinkNoodlerAvatar(accountId: string, avatarUrl: string | null): void {
   unlinkNoodlerMedia(readNoodlerAvatarMediaPath(accountId, avatarUrl));
+}
+
+export function unlinkNoodlerBanner(accountId: string, bannerUrl: string | null): void {
+  unlinkNoodlerMedia(readNoodlerAccountMediaPath(accountId, bannerUrl));
 }

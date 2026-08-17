@@ -104,10 +104,17 @@ import {
 import {
   resolveNoodlerAvatarAbsolutePath,
   stageNoodlerAvatar,
+  stageNoodlerBanner,
   unlinkNoodlerAvatar,
+  unlinkNoodlerBanner,
   resolveNoodlerBannerAbsolutePath,
 } from "../services/slurp/slurp-avatar.js";
 import { getErrorMessage } from "../services/slurp/slurp-public-support.js";
+import { generateNoodlerCreatorArtwork } from "../services/slurp/slurp-artwork.operation.js";
+
+const slurpTargetedRefreshSchema = noodlerTargetedRefreshSchema.extend({
+  access: z.enum(["public", "locked"]).optional(),
+});
 
 function requestRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -127,6 +134,11 @@ const noodleImagePromptConfirmationSchema = z.object({
     .max(20),
   debugMode: z.boolean().optional(),
 });
+
+const slurpBulkNoodlerAccountCreateSchema =
+  noodleBulkNoodlerAccountCreateSchema.extend({
+    connectionId: z.string().min(1).nullable().optional(),
+  });
 
 const noodleStageProfileUpdateRequestSchema = noodleStageProfileUpdateSchema.extend({
   sourceRevisionToken: z.string().regex(/^[A-Za-z0-9_-]{43}$/u).optional(),
@@ -558,6 +570,53 @@ export async function slurpRoutes(app: FastifyInstance) {
     return locked.value;
   });
 
+  app.post("/noodler/accounts/:id/banner", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    try {
+      const { media } = await readNoodlerMultipart(req);
+      const locked = await tryNoodlerAccountOperation(id, async () => {
+        const account = await noodle.getNoodlerAccountById(id);
+        if (!account) return null;
+        const staged = stageNoodlerBanner(id, media);
+        try {
+          staged.promote();
+          const updated = await noodle.updateNoodlerBanner(id, staged.bannerUrl);
+          if (!updated) {
+            staged.compensate();
+            return null;
+          }
+          unlinkNoodlerBanner(id, account.settings.profile.bannerUrl ?? null);
+          return (await noodle.listNoodlerStageProfiles()).find((profile) => profile.id === id) ?? null;
+        } catch (error) {
+          staged.compensate();
+          throw error;
+        }
+      });
+      if (!locked.acquired) return reply.code(409).send({ error: "Another operation for this Creator is already running." });
+      if (!locked.value) return reply.code(404).send({ error: "Creator profile not found" });
+      return locked.value;
+    } catch (error) {
+      return sendNoodlerMediaError(reply, error);
+    }
+  });
+
+  app.post("/noodler/accounts/:id/artwork/generate", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const parsed = z.object({
+      kind: z.enum(["avatar", "banner"]),
+      guidance: z.string().max(2000).optional(),
+    }).safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const result = await generateNoodlerCreatorArtwork(app.db, {
+      accountId: id,
+      ...parsed.data,
+    });
+    if (result === "missing") return reply.code(404).send({ error: "Creator profile not found" });
+    if (result === "busy") return reply.code(409).send({ error: "Another Creator operation is running." });
+    if (result === "unavailable") return reply.code(400).send({ error: "No image generation connection is available." });
+    return (await noodle.listNoodlerStageProfiles()).find((profile) => profile.id === id);
+  });
+
   async function resolveViewerPersona(personaId: string) {
     return noodle.getViewer(personaId);
   }
@@ -776,6 +835,17 @@ export async function slurpRoutes(app: FastifyInstance) {
     }
     noodlerViewerSignalCache.set(viewer.id, { generationKey, value });
     return value;
+  });
+
+  app.post("/noodler/viewer/mark-seen", async (req, reply) => {
+    const parsed = noodlerViewerPersonaSchema.safeParse(req.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const viewer = await noodle.patchViewerSettings(parsed.data.personaId, {
+      subtree: "social",
+      patch: { noodlerFeedSeenAt: new Date().toISOString() },
+    });
+    if (!viewer) return reply.code(404).send({ error: "Slurp viewer persona not found" });
+    return viewer;
   });
 
   app.get("/noodler/viewer", async (req, reply) => {
@@ -1377,6 +1447,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       offset?: string;
       search?: string;
       kind?: string;
+      includeAccountId?: string;
     };
   }>("/noodler/eligible-accounts", async (req, reply) => {
     const [publicAccounts, noodlerAccounts] = await Promise.all([
@@ -1395,7 +1466,8 @@ export async function slurpRoutes(app: FastifyInstance) {
       (account) =>
         (account.kind === "persona" || account.kind === "character") &&
         (!kind || account.kind === kind) &&
-        !linkedIds.has(`${account.kind}:${account.entityId}`),
+        (!linkedIds.has(`${account.kind}:${account.entityId}`) ||
+          account.id === req.query.includeAccountId),
     );
     const filteredAccounts = search
       ? eligibleAccounts.filter((account) =>
@@ -1512,7 +1584,7 @@ export async function slurpRoutes(app: FastifyInstance) {
   });
 
   app.post("/noodler/accounts/bulk", async (req, reply) => {
-    const parsed = noodleBulkNoodlerAccountCreateSchema.safeParse(
+    const parsed = slurpBulkNoodlerAccountCreateSchema.safeParse(
       req.body ?? {},
     );
     if (!parsed.success)
@@ -1522,6 +1594,7 @@ export async function slurpRoutes(app: FastifyInstance) {
       disclosureMode,
       disclosureExceptions,
       autoPosting,
+      connectionId,
       executionId,
     } = parsed.data;
     if (noodleAccountIds.length === 0) {
@@ -1530,11 +1603,13 @@ export async function slurpRoutes(app: FastifyInstance) {
         .send({ created: [], skipped: [], failed: [], reasons: [], executionId });
     }
     const settings = await noodle.getSettings();
-    const connection = settings.generationConnectionId
-      ? await connections.getWithKey(settings.generationConnectionId)
+    const selectedConnectionId =
+      connectionId === undefined ? settings.generationConnectionId : connectionId;
+    const connection = selectedConnectionId
+      ? await connections.getWithKey(selectedConnectionId)
       : await connections.getDefaultForAgents();
     if (!connection)
-      return reply.code(404).send({ error: "Slurp or default agent generation connection not found" });
+      return reply.code(400).send({ error: "The selected writing connection is not available." });
     const created: string[] = [];
     const skipped: string[] = [];
     // Operational failures (provider/storage) are reported apart from expected exclusions
@@ -1758,6 +1833,28 @@ export async function slurpRoutes(app: FastifyInstance) {
       ) {
         return { status: "identity_conflict" } as const;
       }
+      const submittedSnapshotIsCurrent =
+        parsed.data.sourceSnapshot &&
+        currentSourceSnapshot &&
+        compareNoodlerSourceSnapshots(
+          parsed.data.sourceSnapshot,
+          currentSourceSnapshot,
+        ).state === "current";
+      const submittedRevisionIsCurrent =
+        parsed.data.sourceRevisionToken &&
+        currentSourceSnapshot &&
+        verifyNoodlerSourceRevisionToken(
+          parsed.data.sourceRevisionToken,
+          id,
+          currentSourceSnapshot,
+        );
+      const sourceRevisionIsCurrent =
+        parsed.data.disclosureMode === "open"
+          ? submittedSnapshotIsCurrent
+          : submittedRevisionIsCurrent;
+      if (parsed.data.acceptSourceChanges && !sourceRevisionIsCurrent) {
+        return { status: "source_revision_conflict" } as const;
+      }
       if (noodlerAccount) {
         const currentMode =
           noodlerAccount.settings.privacy.identityDisclosure ?? "secret";
@@ -1797,7 +1894,7 @@ export async function slurpRoutes(app: FastifyInstance) {
           // readNoodler*MediaPath would return null and skip the check).
           hasAvatar: Boolean(noodlerAccount.avatarUrl),
           hasBanner: Boolean(noodlerAccount.settings.profile.bannerUrl),
-          preparedPostCount: 0,
+          preparedPostCount: preparedForCreator.length,
         });
         const unresolvedReviewReasons = parsed.data.confirmAvatarReview
           ? reviewReasons.filter((reason) => reason.code !== "creator_avatar")
@@ -1815,28 +1912,6 @@ export async function slurpRoutes(app: FastifyInstance) {
         );
         // The downgrade throws away unreleased reserve posts; say how many.
         discardedPreparedPostCount = preparedForCreator.length;
-      }
-      const submittedSnapshotIsCurrent =
-        parsed.data.sourceSnapshot &&
-        currentSourceSnapshot &&
-        compareNoodlerSourceSnapshots(
-          parsed.data.sourceSnapshot,
-          currentSourceSnapshot,
-        ).state === "current";
-      const submittedRevisionIsCurrent =
-        parsed.data.sourceRevisionToken &&
-        currentSourceSnapshot &&
-        verifyNoodlerSourceRevisionToken(
-          parsed.data.sourceRevisionToken,
-          id,
-          currentSourceSnapshot,
-        );
-      const sourceRevisionIsCurrent =
-        parsed.data.disclosureMode === "open"
-          ? submittedSnapshotIsCurrent
-          : submittedRevisionIsCurrent;
-      if (parsed.data.acceptSourceChanges && !sourceRevisionIsCurrent) {
-        return { status: "source_revision_conflict" } as const;
       }
       const currentMode =
         noodlerAccount?.settings.privacy.identityDisclosure ?? "secret";
@@ -1970,9 +2045,22 @@ export async function slurpRoutes(app: FastifyInstance) {
 
   app.delete("/noodler/accounts/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const locked = await tryNoodlerAccountOperation(id, () =>
-      noodle.deleteNoodlerAccount(id),
-    );
+    const locked = await tryNoodlerAccountOperation(id, async () => {
+      const imageConnections = await getNoodlerImageConnections(app.db);
+      await updateNoodlerImageConnections(app.db, (current) => {
+        const creatorConnectionIds = { ...current.creatorConnectionIds };
+        delete creatorConnectionIds[id];
+        return { ...current, creatorConnectionIds };
+      });
+      try {
+        const deleted = await noodle.deleteNoodlerAccount(id);
+        if (deleted) removeNoodlerAccountMedia(id);
+        return deleted;
+      } catch (error) {
+        await updateNoodlerImageConnections(app.db, () => imageConnections);
+        throw error;
+      }
+    });
     if (!locked.acquired) {
       return reply
         .code(409)
@@ -1984,12 +2072,6 @@ export async function slurpRoutes(app: FastifyInstance) {
     const deleted = locked.value;
     if (!deleted)
       return reply.code(404).send({ error: "NoodleR stage profile not found" });
-    await updateNoodlerImageConnections(app.db, (current) => {
-      const creatorConnectionIds = { ...current.creatorConnectionIds };
-      delete creatorConnectionIds[id];
-      return { ...current, creatorConnectionIds };
-    });
-    removeNoodlerAccountMedia(id);
     return deleted;
   });
 
@@ -2184,13 +2266,14 @@ export async function slurpRoutes(app: FastifyInstance) {
   );
 
   app.post("/noodler/auto-post/refresh-targeted", async (req, reply) => {
-    const parsed = noodlerTargetedRefreshSchema.safeParse(req.body ?? {});
+    const parsed = slurpTargetedRefreshSchema.safeParse(req.body ?? {});
     if (!parsed.success)
       return reply.code(400).send({ error: parsed.error.flatten() });
     const result = await refreshTargetedNoodlerCreatorsNow(
       app.db,
       parsed.data.accountIds,
       parsed.data.executionId,
+      parsed.data.access ?? "locked",
     );
     if (result.status === "disabled")
       return reply.code(404).send({ error: "Not Found" });

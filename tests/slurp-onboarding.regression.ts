@@ -44,9 +44,12 @@ assert.match(
   /\.\.\.\(selectionOnly\s*\? \{\}\s*:\s*\{[\s\S]*?onboarding:/u,
   "Adding creators must not change the completed onboarding state",
 );
+assert.doesNotMatch(panel, /showConfirmDialog/u, "onboarding must not wait on the disconnected host dialog store");
+assert.match(panel, /open=\{providerConfirmationOpen\}[\s\S]*?void performFinish\(\)/u);
+assert.match(panel, /open=\{providerConfirmationOpen\}[\s\S]*?panelStyle=\{getNoodleAccentStyle\(NOODLE_PINK/u);
 assert.match(
   panel,
-  /const finish = async \(\) => \{[\s\S]*?bulkCreate\.mutateAsync\([\s\S]*?\} catch \(error\) \{[\s\S]*?if \(error instanceof Error\) setCreationError\(error\.message\);/u,
+  /const performFinish = async \(\) => \{[\s\S]*?bulkCreate\.mutateAsync\([\s\S]*?\} catch \(error\) \{[\s\S]*?if \(error instanceof Error\) setCreationError\(error\.message\);/u,
   "Bulk-create failures must preserve the caught error",
 );
 assert.doesNotMatch(
@@ -66,12 +69,12 @@ assert.match(
 );
 assert.match(
   home,
-  /selectionOnly=\{onboardingMode === "add-creators"\}[\s\S]*?onComplete=\{\(\) => \{\s*if \(onboardingMode === "first-run"\) \{\s*setOnboardingState\("completed"\);\s*setOnboardingMode\(null\);\s*\}\s*\}\}/u,
-  "The settings callback must close only full onboarding after completion",
+  /selectionOnly=\{onboardingMode === "add-creators"\}[\s\S]*?onComplete=\{\(\) => \{\s*if \(onboardingMode === "first-run"\) \{\s*setOnboardingState\("completed"\);\s*\}\s*\}\}/u,
+  "The settings callback must keep the completion result visible",
 );
 assert.match(
   settings,
-  /section === "creators" && <div className="flex justify-end"><button[^>]+onClick=\{onAddCreators\}/u,
+  /section === "creators"[\s\S]*?onAddCreators/u,
   "Add creators must be shown in the Creators settings section",
 );
 assert.doesNotMatch(
@@ -98,13 +101,34 @@ assert.match(storage, /autoPostingImagesEnabled: z\.boolean\(\)/u);
 assert.match(storage, /autoPostingImagesEnabled: false/u);
 assert.match(
   routes,
-  /settings\.generationConnectionId[\s\S]*?connections\.getWithKey\(settings\.generationConnectionId\)[\s\S]*?: await connections\.getDefaultForAgents\(\)/u,
-  "Creator creation must inherit the Engine agent connection when Slurp has no override",
+  /connectionId[\s\S]*?settings\.generationConnectionId[\s\S]*?connections\.getWithKey\(selectedConnectionId\)[\s\S]*?: await connections\.getDefaultForAgents\(\)/u,
+  "Creator creation must use the selected or Engine default agent connection",
+);
+assert.match(
+  routes,
+  /noodleBulkNoodlerAccountCreateSchema\.extend\(\{[\s\S]*?connectionId: z\.string\(\)\.min\(1\)\.nullable\(\)\.optional\(\)/u,
+  "Creator creation must accept the wizard connection override",
+);
+assert.match(
+  panel,
+  /step === 5 && completion === "creationFailed"[\s\S]*?if \(step === 5\) returnToSetup\(\)/u,
+  "A failed creator setup must allow the user to return to the review step",
 );
 assert.match(
   home,
   /function StageProfileView\(\{[\s\S]*?viewerAccount,\s*slurpSettings,\s*postCardCtx,/u,
   "Creator profile pages must receive their Slurp settings prop",
+);
+assert.match(
+  home,
+  /const closeOnboarding = \(\) => \{[\s\S]*?onboardingMode === "first-run"[\s\S]*?setOnboardingState\("completed"\)[\s\S]*?setOnboardingMode\(null\)/u,
+  "Closing first-run setup must persist completion",
+);
+assert.match(home, /const viewingOwnCreator = profile\.sourceAccountId === viewerAccount\?\.entityId/u, "Profile ownership must follow the active persona");
+assert.match(
+  home,
+  /onRefresh=\{\(\) =>[\s\S]*?viewerQuery\.refetch\(\)[\s\S]*?noodleTimelineRefreshed/u,
+  "The timeline refresh action must refetch and report completion",
 );
 
 console.log("Slurp onboarding regressions passed.");

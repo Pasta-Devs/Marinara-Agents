@@ -30,8 +30,6 @@ import {
   type NoodleDigestEntry,
   type NoodleInteraction,
   type NoodleInteractionType,
-  type NoodleCarryoverMode,
-  type NoodleCarryoverTarget,
   type NoodlePlatform,
   type NoodlePost,
   type NoodlePostAccess,
@@ -115,8 +113,8 @@ const SLURP_SETTINGS_KEY = "slurp.settings";
 const NOODLE_REFRESH_SCHEDULE_KEY = "slurp.refresh-schedule";
 const slurpViewerSettingsKey = (personaId: string) =>
   `slurp.viewer.${personaId}.settings`;
-const NOODLE_CARRYOVER_TARGETS: NoodleCarryoverTarget[] = ["conversation", "roleplay", "game"];
 const NOODLER_RESERVE_STATE_ID = "noodler-reserve";
+let slurpSettingsUpdateQueue: Promise<unknown> = Promise.resolve();
 const ROLLING_DAY_MS = 24 * 60 * 60 * 1000;
 const MANUAL_POST_INVALIDATION_MS = 60 * 60 * 1000;
 /**
@@ -259,7 +257,6 @@ export function noodlerReservePolicyFingerprint(
   account: SlurpAccount,
   settings?: Pick<
     SlurpSettings,
-    | "imageGenerationConnectionId"
     | "imageGenerationPrompt"
     | "imageGenerationUseAvatarReferences"
     | "imageGenerationIncludeDescriptions"
@@ -272,7 +269,6 @@ export function noodlerReservePolicyFingerprint(
   // NoodleR setting change (onboarding state, refresh cadence, …).
   const mediaPolicy = settings
     ? {
-        imageGenerationConnectionId: settings.imageGenerationConnectionId,
         imageGenerationPrompt: settings.imageGenerationPrompt,
         imageGenerationUseAvatarReferences: settings.imageGenerationUseAvatarReferences,
         imageGenerationIncludeDescriptions: settings.imageGenerationIncludeDescriptions,
@@ -386,6 +382,8 @@ function parseRecord(value: unknown): Record<string, unknown> {
   }
   return typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
+
+let viewerSettingsUpdateQueue: Promise<unknown> = Promise.resolve();
 
 function emptyNoodleAccountSettings(): NoodleAccountSettings {
   return {
@@ -621,19 +619,6 @@ function normalizeAccountKind(kind: string): NoodleAccountKind {
   return "persona";
 }
 
-function legacyCarryoverTargets(mode: NoodleCarryoverMode): NoodleCarryoverTarget[] {
-  if (mode === "all") return [...NOODLE_CARRYOVER_TARGETS];
-  if (mode === "conversation" || mode === "roleplay" || mode === "game") return [mode];
-  return [];
-}
-
-function legacyCarryoverMode(targets: NoodleCarryoverTarget[]): NoodleCarryoverMode {
-  const selected = new Set(targets);
-  if (NOODLE_CARRYOVER_TARGETS.every((target) => selected.has(target))) return "all";
-  if (targets.length === 1) return targets[0]!;
-  return "off";
-}
-
 function isToggleInteractionType(type: NoodleInteractionType) {
   return type === "like" || type === "repost";
 }
@@ -653,15 +638,6 @@ export const NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT =
  * being kept as if the user had chosen it. Comparison is exact: an edited string differs by at
  * least one character and is preserved as the user's own.
  */
-const NOODLER_LEGACY_GENERATION_GUIDANCE_DEFAULTS = [
-  // Pre-1.0.1 Slurp wording used the package name in the NoodleR platform prompt.
-  "All Slurp creators and viewers are adults (18+). This is an adult creator page: flirty, suggestive, teasing, and sensual posts are common, and explicit posts appear regularly when they suit the creator — but they are not required and need not be the majority. Tease the locked posts and answer flirty comments in kind. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one bluntly, a funny one filthily. Ordinary posts — updates, humor, behind the scenes, project news — matter just as much and keep both the page and the character human. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.",
-  // Pre-1.0.11. Explicit-dominant: it made lewd posts the norm and ordinary posts the minority,
-  // which overshot the adult-first *variety* the feature is meant to have.
-  "All NoodleR creators and viewers are adults (18+). This is an adult creator page and explicit content is the norm here, not the exception: most posts are lewd — flirty, sexual, suggestive, or openly explicit — and say what the creator is doing, wearing, offering, or thinking about. Tease the locked posts, talk to fans like they are paying for it, and answer horny comments in kind. Keep each creator's personality intact: a shy creator is lewd shyly, a blunt one crudely, a funny one filthily. Ordinary posts (updates, humor, behind the scenes, project news) still appear and keep the page human, but they are the minority. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.",
-  // Pre-1.0.7.
-  "All NoodleR creators and viewers are adults (18+). NSFW and explicit content are allowed when appropriate to the creator's personality and current context, but never forced — stay true to each creator's voice rather than making every post sexual. This is an adult creator page: playful, flirty, suggestive teasing that plays to fans and hints at locked content is a normal, frequent part of the voice when it fits the creator. Vary content across teasers, casual updates, behind-the-scenes moments, fan questions, humor, promotion, flirtation, and project updates. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood — let each creator's own personality set the tone.",
-] as const;
 
 export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   refreshesPerDay: 0,
@@ -712,28 +688,16 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
 
 export function normalizeSlurpSettings(raw: unknown): SlurpSettings {
   const rawRecord = parseRecord(raw);
-  const storedGenerationGuidance =
-    rawRecord.generationGuidance ?? rawRecord.noodlerGenerationGuidance ?? rawRecord.privateGenerationGuidance ??
-    NOODLER_DEFAULT_GENERATION_GUIDANCE;
-  const generationGuidance =
-    NOODLER_LEGACY_GENERATION_GUIDANCE_DEFAULTS.some(
-      (legacy) => legacy === storedGenerationGuidance,
-    )
-      ? NOODLER_DEFAULT_GENERATION_GUIDANCE
-      : storedGenerationGuidance;
   const candidate = Object.fromEntries(
     Object.entries(DEFAULT_SLURP_SETTINGS).map(([key, value]) => [key, rawRecord[key] ?? value]),
   ) as Record<keyof SlurpSettings, unknown>;
-  candidate.generationGuidance = generationGuidance;
+  candidate.generationGuidance = rawRecord.generationGuidance ?? NOODLER_DEFAULT_GENERATION_GUIDANCE;
   candidate.imageGenerationPrompt =
     rawRecord.imageGenerationPrompt === undefined || rawRecord.imageGenerationPrompt === ""
       ? NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT
       : rawRecord.imageGenerationPrompt;
-  candidate.nightQuiet = rawRecord.nightQuiet ?? rawRecord.noodlerNightQuiet ?? DEFAULT_SLURP_SETTINGS.nightQuiet;
-  candidate.onboarding =
-    rawRecord.onboarding ??
-    rawRecord.noodlerOnboardingState ??
-    (rawRecord.noodlerOnboardingComplete === true ? "completed" : DEFAULT_SLURP_SETTINGS.onboarding);
+  candidate.nightQuiet = rawRecord.nightQuiet ?? DEFAULT_SLURP_SETTINGS.nightQuiet;
+  candidate.onboarding = rawRecord.onboarding ?? DEFAULT_SLURP_SETTINGS.onboarding;
   candidate.fanArchetypeWeights = {
     ...DEFAULT_SLURP_SETTINGS.fanArchetypeWeights,
     ...parseRecord(rawRecord.fanArchetypeWeights),
@@ -1371,6 +1335,20 @@ export function createSlurpStorage(db: DB) {
       );
     },
 
+    async cleanupRetiredViewer(personaId: string): Promise<void> {
+      const authored = await db
+        .select()
+        .from(noodleInteractions)
+        .where(eq(noodleInteractions.actorAccountId, personaId));
+      for (const interaction of authored) await this.deleteInteractionById(interaction.id);
+      await db.transaction(async (tx) => {
+        await tx.delete(noodleAccountSubscriptions).where(eq(noodleAccountSubscriptions.viewerAccountId, personaId));
+        await tx.delete(noodlePostUnlocks).where(eq(noodlePostUnlocks.viewerAccountId, personaId));
+        await createAppSettingsStorage(tx).remove(slurpViewerSettingsKey(personaId));
+        await tx._fileStore.flush();
+      });
+    },
+
     async getSettings(): Promise<SlurpSettings> {
       const raw = await settingsStore.get(SLURP_SETTINGS_KEY);
       return normalizeSlurpSettings(raw);
@@ -1385,33 +1363,37 @@ export function createSlurpStorage(db: DB) {
     },
 
     async updateSettings(input: SlurpSettingsUpdateInput): Promise<SlurpSettings> {
-      const current = await this.getSettings();
-      const next = normalizeSlurpSettings({ ...current, ...input });
-      await settingsStore.set(SLURP_SETTINGS_KEY, JSON.stringify(next));
-      if (!current.autoPostingScheduleEnabled && next.autoPostingScheduleEnabled) {
-        const timestamp = now();
-        const rows = await db.select().from(noodlerPreparedPosts);
-        const expired = rows.filter(
-          (row) => row.state === "prepared" && Date.parse(row.publishAt) <= Date.parse(timestamp),
-        );
-        if (expired.length > 0) {
-          await db.transaction(async (tx) =>
-            tx
-              .update(noodlerPreparedPosts)
-              .set({ state: "discarded", updatedAt: timestamp })
-              .where(
-                inArray(
-                  noodlerPreparedPosts.id,
-                  expired.map((row) => row.id),
-                ),
-              ),
+      const run = slurpSettingsUpdateQueue.then(async () => {
+        const current = await this.getSettings();
+        const next = normalizeSlurpSettings({ ...current, ...input });
+        await settingsStore.set(SLURP_SETTINGS_KEY, JSON.stringify(next));
+        if (!current.autoPostingScheduleEnabled && next.autoPostingScheduleEnabled) {
+          const timestamp = now();
+          const rows = await db.select().from(noodlerPreparedPosts);
+          const expired = rows.filter(
+            (row) => row.state === "prepared" && Date.parse(row.publishAt) <= Date.parse(timestamp),
           );
-          for (const row of expired) {
-            unlinkNoodlerMedia(String(parseRecord(parseRecord(row.payload).metadata).noodlerMediaPath ?? "") || null);
+          if (expired.length > 0) {
+            await db.transaction(async (tx) =>
+              tx
+                .update(noodlerPreparedPosts)
+                .set({ state: "discarded", updatedAt: timestamp })
+                .where(
+                  inArray(
+                    noodlerPreparedPosts.id,
+                    expired.map((row) => row.id),
+                  ),
+                ),
+            );
+            for (const row of expired) {
+              unlinkNoodlerMedia(String(parseRecord(parseRecord(row.payload).metadata).noodlerMediaPath ?? "") || null);
+            }
           }
         }
-      }
-      return this.getSettings();
+        return next;
+      });
+      slurpSettingsUpdateQueue = run.catch(() => undefined);
+      return run;
     },
 
     async getRefreshSchedule(): Promise<PersistedNoodleRefreshSchedule | null> {
@@ -1608,21 +1590,20 @@ export function createSlurpStorage(db: DB) {
       personaId: string,
       input: NoodleAccountSettingsPatchInput,
     ): Promise<NoodleAccount | null> {
-      if (input.subtree !== "social") return null;
-      const viewer = await this.getViewer(personaId);
-      if (!viewer) return null;
-      const social = { ...viewer.settings.social, ...input.patch };
-      for (const field of ["noodleFeedSeenAt", "noodlerFeedSeenAt"] as const) {
-        const stored = viewer.settings.social[field];
-        if (stored && social[field] && !(Date.parse(social[field]) > (Date.parse(stored) || 0))) {
-          social[field] = stored;
+      const run = viewerSettingsUpdateQueue.then(async () => {
+        if (input.subtree !== "social") return null;
+        const viewer = await this.getViewer(personaId);
+        if (!viewer) return null;
+        const social = { ...viewer.settings.social, ...input.patch };
+        for (const field of ["noodleFeedSeenAt", "noodlerFeedSeenAt"] as const) {
+          const stored = viewer.settings.social[field];
+          if (stored && social[field] && !(Date.parse(social[field]) > (Date.parse(stored) || 0))) social[field] = stored;
         }
-      }
-      await settingsStore.set(
-        slurpViewerSettingsKey(personaId),
-        JSON.stringify({ ...viewer.settings, social }),
-      );
-      return this.getViewer(personaId);
+        await settingsStore.set(slurpViewerSettingsKey(personaId), JSON.stringify({ ...viewer.settings, social }));
+        return this.getViewer(personaId);
+      });
+      viewerSettingsUpdateQueue = run.catch(() => undefined);
+      return run;
     },
 
     async updateViewerFollow(
@@ -1631,28 +1612,21 @@ export function createSlurpStorage(db: DB) {
       followed: boolean,
       followedAt = now(),
     ): Promise<{ account: NoodleAccount; changed: boolean } | null> {
-      const viewer = await this.getViewer(personaId);
-      if (!viewer) return null;
-      const followingAccountIds = viewer.settings.social.followingAccountIds ?? [];
-      const isFollowing = followingAccountIds.includes(targetAccountId);
-      const followingAccountTimestamps = { ...viewer.settings.social.followingAccountTimestamps };
-      if (isFollowing === followed && (!followed || followingAccountTimestamps[targetAccountId])) {
-        return { account: viewer, changed: false };
-      }
-      if (followed) followingAccountTimestamps[targetAccountId] = followedAt;
-      else delete followingAccountTimestamps[targetAccountId];
-      const next: NoodleAccountSettings = {
-        ...viewer.settings,
-        social: {
-          ...viewer.settings.social,
-          followingAccountIds: followed
-            ? [...followingAccountIds, targetAccountId]
-            : followingAccountIds.filter((accountId) => accountId !== targetAccountId),
-          followingAccountTimestamps,
-        },
-      };
-      await settingsStore.set(slurpViewerSettingsKey(personaId), JSON.stringify(next));
-      return { account: (await this.getViewer(personaId))!, changed: true };
+      const run = viewerSettingsUpdateQueue.then(async () => {
+        const viewer = await this.getViewer(personaId);
+        if (!viewer) return null;
+        const followingAccountIds = viewer.settings.social.followingAccountIds ?? [];
+        const isFollowing = followingAccountIds.includes(targetAccountId);
+        const followingAccountTimestamps = { ...viewer.settings.social.followingAccountTimestamps };
+        if (isFollowing === followed && (!followed || followingAccountTimestamps[targetAccountId])) return { account: viewer, changed: false };
+        if (followed) followingAccountTimestamps[targetAccountId] = followedAt;
+        else delete followingAccountTimestamps[targetAccountId];
+        const next: NoodleAccountSettings = { ...viewer.settings, social: { ...viewer.settings.social, followingAccountIds: followed ? [...followingAccountIds, targetAccountId] : followingAccountIds.filter((accountId) => accountId !== targetAccountId), followingAccountTimestamps } };
+        await settingsStore.set(slurpViewerSettingsKey(personaId), JSON.stringify(next));
+        return { account: (await this.getViewer(personaId))!, changed: true };
+      });
+      viewerSettingsUpdateQueue = run.catch(() => undefined);
+      return run;
     },
 
     async deleteNoodlerAccount(id: string): Promise<NoodleAccount | null> {

@@ -36,6 +36,7 @@ import { createPromptOverridesStorage } from "../storage/prompt-overrides.storag
 import { loadPrompt, NOODLE_IMAGE_POST } from "../prompt-overrides/index.js";
 import { generateNoodleImageWithRetry } from "./slurp-image-retry.js";
 import { rewriteNoodleImagePrompt } from "./slurp-image-prompt-rewrite.js";
+import { resolveNoodlerImageConnectionId } from "./slurp-image-connections.js";
 import type { ConnectionAdmissionMode } from "../generation/connection-admission.js";
 import {
   bootstrapVisibleNoodle,
@@ -414,16 +415,6 @@ export function createPublicNoodleImagesService(db: DB) {
       | { ok: false; error: "missing_connection"; message: string }
     > {
       const settings = await noodle.getSettings();
-      const imageConnection = settings.imageGenerationConnectionId
-        ? await connections.getWithKey(settings.imageGenerationConnectionId)
-        : await connections.getDefaultForImageGeneration();
-      if (!imageConnection) {
-        return {
-          ok: false,
-          error: "missing_connection",
-          message: "Select a Noodle image generation connection first.",
-        };
-      }
 
       for (const promptOverride of input.prompts) {
         const claimToken = newId();
@@ -437,6 +428,18 @@ export function createPublicNoodleImagesService(db: DB) {
         if (!account) {
           await noodle.releasePostImageClaim(post.id, claimToken);
           continue;
+        }
+        const selectedConnectionId = await resolveNoodlerImageConnectionId(db, account.id);
+        const imageConnection = selectedConnectionId
+          ? await connections.getWithKey(selectedConnectionId)
+          : await connections.getDefaultForImageGeneration();
+        if (!imageConnection) {
+          await noodle.releasePostImageClaim(post.id, claimToken);
+          return {
+            ok: false,
+            error: "missing_connection",
+            message: "Select a Slurp image generation connection first.",
+          };
         }
         if (!post.imagePrompt) {
           await noodle.releasePostImageClaim(post.id, claimToken);

@@ -1,8 +1,6 @@
-// NoodleR enable/verification surface: a plain explainer, then the joke "age verification".
+// Slurp opt-in surface: explain the feature, then require an explicit adult confirmation.
 // The explainer runs first because this modal is the opt-in — the user has to be able to learn
 // what NoodleR is, and back out, before Creator setup starts.
-// The card itself is purely presentational: no real input is collected — it fills itself — so
-// there is zero PII and nothing to validate.
 import {
   Check,
   CreditCard,
@@ -17,9 +15,6 @@ import { useTranslation as useUiTranslation } from "react-i18next";
 interface Props {
   personaName: string;
   onComplete: () => void;
-  onSkip: () => void;
-  /** Leaves without opting in. The explainer is the only screen that offers this. */
-  onDismiss: () => void;
   isPending: boolean;
 }
 
@@ -45,8 +40,6 @@ const CARD_NUMBER = "5309 1312 4200 6969";
 export function SlurpAgeGate({
   personaName,
   onComplete,
-  onSkip,
-  onDismiss,
   isPending,
 }: Props) {
   const { t } = useUiTranslation();
@@ -58,6 +51,7 @@ export function SlurpAgeGate({
 
   const [typed, setTyped] = useState(reducedMotion ? CARD_NUMBER.length : 0);
   const [charged, setCharged] = useState(reducedMotion);
+  const [confirmedAdult, setConfirmedAdult] = useState(false);
   const [chargeAmount, setChargeAmount] = useState("9.99");
   const [confetti, setConfetti] = useState(false);
   const chargeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -127,6 +121,7 @@ export function SlurpAgeGate({
     wasPending.current = isPending;
   }, [isPending]);
   const enter = () => {
+    if (!confirmedAdult || !charged) return;
     if (entered.current) return;
     entered.current = true;
     setConfetti(true);
@@ -175,13 +170,6 @@ export function SlurpAgeGate({
           {tt("explainerContinue", "Got it, continue")}
         </button>
 
-        <button
-          type="button"
-          onClick={onDismiss}
-          className="mx-auto text-xs font-semibold text-[var(--muted-foreground)] underline-offset-4 hover:underline"
-        >
-          {tt("notNow", "Not now — take me back")}
-        </button>
       </div>
     );
   }
@@ -191,13 +179,13 @@ export function SlurpAgeGate({
       <GateStyles />
       {confetti && <Confetti />}
       <div className="text-center">
-        <h2 className="text-lg font-black">
-          {tt("cardTitle", "Confirm you're an adult with a credit card")}
+         <h2 className="text-lg font-black">
+           {tt("cardTitle", "Confirm that you are 18 or older")}
         </h2>
         <p className="mt-1 text-xs text-[var(--muted-foreground)]">
           {tt(
             "cardSub",
-            "The card is fake and we fill it in for you. Nothing is charged and nothing leaves your computer.",
+             "This confirmation is required to enter Slurp. No payment information is collected.",
           )}
         </p>
       </div>
@@ -254,10 +242,20 @@ export function SlurpAgeGate({
         )}
       </p>
 
+      <label className="flex items-start gap-3 rounded-md border border-[var(--border)] px-3 py-3 text-sm leading-5">
+        <input
+          type="checkbox"
+          checked={confirmedAdult}
+          onChange={(event) => setConfirmedAdult(event.target.checked)}
+          className="mt-1 h-4 w-4 shrink-0 accent-[var(--noodle-accent)]"
+        />
+        <span>{tt("adultConfirmation", "I confirm that I am 18 years of age or older.")}</span>
+      </label>
+
       <button
         type="button"
         onClick={enter}
-        disabled={!charged || isPending}
+        disabled={!charged || !confirmedAdult || isPending}
         className="h-12 rounded-md bg-[var(--noodle-accent)] text-base font-black uppercase tracking-wide text-zinc-950 [&_svg]:!text-zinc-950 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
       >
         {isPending ? (
@@ -267,14 +265,6 @@ export function SlurpAgeGate({
         )}
       </button>
 
-      <button
-        type="button"
-        onClick={onSkip}
-        disabled={isPending}
-        className="mx-auto text-xs font-semibold text-[var(--muted-foreground)] underline-offset-4 hover:underline disabled:opacity-50"
-      >
-        {tt("skipTheGate", "Skip the joke and enter Slurp")}
-      </button>
     </div>
   );
 }

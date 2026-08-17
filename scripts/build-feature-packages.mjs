@@ -311,7 +311,7 @@ const features = [
   },
   {
     id: "slurp",
-    version: "1.0.5",
+    version: "1.0.8",
     minEngineVersion: "2.4.3",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
@@ -349,7 +349,7 @@ const features = [
     category: "misc",
     kind: ["agent"],
     modes: ["conversation", "roleplay", "game"],
-    permissions: ["chat-read", "chat-write", "network", "routes", "storage", "ui"],
+    permissions: ["chat-read", "network", "routes", "storage", "ui"],
     serverImport: "packages/server/src/services/slurp/server-entry.ts",
     serverEntry: true,
     clientImport: "packages/client/src/slurp-package-entry.tsx",

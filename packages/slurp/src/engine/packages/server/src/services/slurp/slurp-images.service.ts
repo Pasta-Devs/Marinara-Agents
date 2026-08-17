@@ -85,6 +85,10 @@ export async function generateNoodlerPostImage(input: {
   beforeProviderAttempt?: (attempt: number) => Promise<void>;
   onProviderAttemptFailure?: (attempt: number) => Promise<void>;
   admissionMode?: ConnectionAdmissionMode;
+  width?: number;
+  height?: number;
+  compositionGuard?: string;
+  negativePromptAdditions?: string;
 }): Promise<{
   metadata: Record<string, unknown>;
   preview: Omit<NoodleImagePromptReviewItem, "id"> | null;
@@ -118,8 +122,8 @@ export async function generateNoodlerPostImage(input: {
   let characterImageInstructions = "";
   let characterPersonality = "";
   let referenceImages: string[] | undefined;
-  // Identity protection applies to reference selection. A SECRET creator gets no image reference
-  // material, but keeps redacted appearance text so species and stable physical traits survive.
+  // Identity protection applies to reference selection and appearance text. A SECRET creator gets
+  // no source image references or identifying physical description.
   // A HINTED creator also keeps image references: the same body, tattoos, and rooms can show up
   // while the source name and handle stay protected.
   const referenceCharacter =
@@ -141,7 +145,9 @@ export async function generateNoodlerPostImage(input: {
   if (sourceAppearance && input.settings.imageGenerationIncludeDescriptions) {
     characterDescription = input.disclosureMode === "open"
       ? sourceAppearance
-      : reviewedNoodlerPhysicalFacts(sourceAppearance).join(", ");
+      : input.disclosureMode === "hinted"
+        ? reviewedNoodlerPhysicalFacts(sourceAppearance).join(", ")
+        : "";
   }
   if (referenceCharacter) {
     const row = sourceCharacter;
@@ -182,9 +188,9 @@ export async function generateNoodlerPostImage(input: {
         ) {
           characterDescription = input.disclosureMode === "open"
             ? referenceResolution.appearanceBlock
-            : reviewedNoodlerPhysicalFacts(
-                referenceResolution.appearanceBlock,
-              ).join(", ");
+            : input.disclosureMode === "hinted"
+              ? reviewedNoodlerPhysicalFacts(referenceResolution.appearanceBlock).join(", ")
+              : "";
         }
         if (
           input.settings.imageGenerationUseAvatarReferences &&
@@ -242,15 +248,23 @@ export async function generateNoodlerPostImage(input: {
         styleGuidance,
       })
     : null;
-  const finalPrompt = redactIdentity(
+  const finalPromptBase = redactIdentity(
     rewrittenPrompt ??
       (instructionLine && !input.promptOverride && !rawFinalPrompt.includes(instructionLine)
         ? `${rawFinalPrompt}\n${instructionLine}`
         : rawFinalPrompt),
   );
-  const finalNegativePrompt = input.promptOverride
+  const finalPrompt = input.compositionGuard
+    ? `${finalPromptBase}\n\n${input.compositionGuard}`
+    : finalPromptBase;
+  const baseNegativePrompt = input.promptOverride
     ? redactIdentity(input.promptOverride.negativePrompt?.trim() || "") || undefined
     : compiledPrompt.negativePrompt || undefined;
+  const finalNegativePrompt = [baseNegativePrompt, input.negativePromptAdditions]
+    .filter(Boolean)
+    .join(", ") || undefined;
+  const outputWidth = input.width ?? imageSettings.noodle.width;
+  const outputHeight = input.height ?? imageSettings.noodle.height;
   logDebugOverride(
     input.debugMode,
     "[debug/noodler/image] final image prompt for %s:\n%s",
@@ -262,8 +276,8 @@ export async function generateNoodlerPostImage(input: {
     const previewSize = resolveImagePromptReviewSize({
       connection: input.imageConnection,
       prompt: finalPrompt,
-      width: imageSettings.noodle.width,
-      height: imageSettings.noodle.height,
+      width: outputWidth,
+      height: outputHeight,
       imageDefaults,
     });
     return {
@@ -292,8 +306,8 @@ export async function generateNoodlerPostImage(input: {
           prompt: finalPrompt,
           negativePrompt: finalNegativePrompt,
           model: imageModel,
-          width: imageSettings.noodle.width,
-          height: imageSettings.noodle.height,
+           width: outputWidth,
+           height: outputHeight,
           imageEndpointId: input.imageConnection.imageEndpointId || undefined,
           comfyWorkflow: input.imageConnection.comfyuiWorkflow || undefined,
           imageDefaults,

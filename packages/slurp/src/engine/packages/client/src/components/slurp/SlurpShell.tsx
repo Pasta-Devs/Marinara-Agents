@@ -5,7 +5,6 @@
 // ──────────────────────────────────────────────
 import {
   AtSign,
-  Bell,
   Home,
   MoreHorizontal,
   Pencil,
@@ -48,27 +47,6 @@ const BOTTOM_SAFE_INSET =
   CSS.supports?.("-webkit-touch-callout", "none") === true
     ? "env(safe-area-inset-bottom)"
     : "0px";
-
-const MOBILE_NAV_HEIGHT = "56px";
-
-// The bottom nav lives behind an `@container` query, but the shell fills the
-// viewport width on mobile, so a viewport media query tracks the same breakpoint.
-// ponytail: viewport width stands in for the container query.
-function useWideShell() {
-  const [wide, setWide] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      window.matchMedia("(min-width: 1024px)").matches,
-  );
-  useEffect(() => {
-    const query = window.matchMedia("(min-width: 1024px)");
-    const sync = () => setWide(query.matches);
-    sync();
-    query.addEventListener("change", sync);
-    return () => query.removeEventListener("change", sync);
-  }, []);
-  return wide;
-}
 
 // The accent hex that drives `--noodle-accent` for every reused Noodle surface.
 // Provided at the shell root so descendants inherit via CSS var, and read here
@@ -230,11 +208,17 @@ export function Avatar({
   account: Pick<NoodleAccount, "displayName" | "avatarUrl"> & {
     avatarCrop?: AvatarCrop | null;
   };
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
   solid?: boolean;
 }) {
   const dimension =
-    size === "sm" ? "h-8 w-8" : size === "lg" ? "h-24 w-24" : "h-11 w-11";
+    size === "sm"
+      ? "h-8 w-8"
+      : size === "xl"
+        ? "h-32 w-32 sm:h-36 sm:w-36"
+        : size === "lg"
+          ? "h-24 w-24"
+          : "h-11 w-11";
   // NoodleR avatars are served by the package's own route, which a bare <img> cannot
   // authenticate against; the hook swaps those for a fetched object URL and passes the rest through.
   const avatarSrc = useSlurpMediaSrc(account.avatarUrl);
@@ -315,11 +299,10 @@ export type NoodleShellView =
   | "home"
   | "noodler"
   | "search"
-  | "notifications"
   | "profile"
   | "settings"
   | null;
-type NoodleShellMode = "noodle" | "noodler";
+type NoodleShellMode = "noodle" | "noodler" | "slurp";
 
 export interface NoodleShellProps {
   activeView: NoodleShellView;
@@ -346,7 +329,6 @@ export interface NoodleShellProps {
   mobileDrawerTriggerRef?: RefObject<HTMLButtonElement | null>;
   mobileAccountSwitcherOpen: boolean;
   onMobileAccountSwitcherOpenChange: (open: boolean) => void;
-  notificationCount: number;
   onOpenHome: () => void;
   /** Mobile bottom-nav home/hub tap — distinct from onOpenHome because it also clears any active post search. */
   onOpenMobileHome: () => void;
@@ -355,7 +337,6 @@ export interface NoodleShellProps {
   /** Omit on surfaces with no scoped equivalent. */
   onOpenSearch?: () => void;
   /** Omit on surfaces with no scoped equivalent. */
-  onOpenNotifications?: () => void;
   /** Omit on surfaces with no scoped equivalent. */
   onOpenProfile?: () => void;
   onOpenSettings: () => void;
@@ -390,12 +371,10 @@ export function NoodleShell({
   mobileDrawerTriggerRef,
   mobileAccountSwitcherOpen,
   onMobileAccountSwitcherOpenChange,
-  notificationCount,
   onOpenHome,
   onOpenMobileHome,
   onOpenNoodler,
   onOpenSearch,
-  onOpenNotifications,
   onOpenProfile,
   onOpenSettings,
   onCompose,
@@ -408,36 +387,25 @@ export function NoodleShell({
   const mobileDrawerRef = useRef<HTMLElement | null>(null);
   const mobileDrawerCloseRef = useRef<HTMLButtonElement | null>(null);
   const prefersReducedMotion = Boolean(useReducedMotion());
-  const wideShell = useWideShell();
   const hasMorePersonaAccounts =
     visiblePersonaAccounts.length < sortedPersonaAccounts.length;
-  const notificationBadgeLabel =
-    notificationCount > 99 ? "99+" : String(notificationCount);
   const resolvedAppMode =
     appMode ?? (activeView === "noodler" ? "noodler" : "noodle");
   const noodlerActive = resolvedAppMode === "noodler";
+  const slurpActive = resolvedAppMode === "slurp";
   const homeLabel = noodlerActive
     ? localizeUi("ui.noodle.noodleshell.hub")
-    : localizeUi("ui.noodle.noodleshell.home");
+    : slurpActive
+      ? localizeUi("ui.slurp.navigation.home", { defaultValue: "Slurp" })
+      : localizeUi("ui.noodle.noodleshell.home");
   const homeActive =
     homeActiveOverride ?? (activeView === "home" || activeView === "noodler");
   const onOpenHomeDestination = noodlerActive ? onOpenNoodler : onOpenHome;
   const onOpenMobileHomeDestination = noodlerActive
     ? onOpenNoodler
     : onOpenMobileHome;
-  const otherModeLabel = noodlerActive
-    ? localizeUi("navigation.topbar.noodle")
-    : localizeUi("ui.noodle.noodlemodetoggle.noodler");
-  // The bottom-nav wordmark doubles as the mode switch. The first tap navigates at
-  // once — holding it back to watch for a second would make every trip home feel
-  // late — and a second tap inside the window supersedes it with the switch.
-  const lastHomeTapAt = useRef(0);
   const onMobileHomeTap = () => {
-    const now = Date.now();
-    const switching = false;
-    lastHomeTapAt.current = switching ? 0 : now;
-    if (switching) (noodlerActive ? onOpenHome : onOpenNoodler)();
-    else onOpenMobileHomeDestination();
+    onOpenMobileHomeDestination();
   };
   useDialogFocusScope(mobileDrawerOpen, mobileDrawerRef, mobileDrawerCloseRef);
 
@@ -449,7 +417,10 @@ export function NoodleShell({
           NOODLE_ICON_SCOPE_CLASS,
         )}
         data-component="NoodleView"
-        style={getNoodleAccentStyle(accent)}
+        style={getNoodleAccentStyle(
+          accent,
+          { "--slurp-bottom-safe-inset": BOTTOM_SAFE_INSET } as CSSProperties,
+        )}
       >
         {overlays}
         <AnimatePresence>
@@ -516,7 +487,7 @@ export function NoodleShell({
                   </button>
                 </div>
 
-                <nav
+          <nav
                   className="mt-3 space-y-1"
                   aria-label={localizeUi(
                     "ui.noodle.noodleshell.noodleAccountNavigation",
@@ -532,7 +503,8 @@ export function NoodleShell({
                     )}
                   >
                     <Home size={23} />
-                    {homeLabel}
+                    <span className="min-w-0 flex-1">{homeLabel}</span>
+                    {noodlerActive && noodlerUnseenCount > 0 && <span className="min-w-5 rounded-full bg-[var(--noodle-accent)] px-1.5 text-center text-[0.65rem] font-black text-zinc-950">{noodlerUnseenCount > 99 ? "99+" : noodlerUnseenCount}</span>}
                   </button>
                   {onOpenSearch && (
                     <button
@@ -547,31 +519,9 @@ export function NoodleShell({
                       <Search size={23} />
                       {noodlerActive
                         ? localizeUi("ui.noodle.noodleshell.discover")
-                        : localizeUi("ui.noodle.noodlehome.searchNoodle")}
-                    </button>
-                  )}
-                  {onOpenNotifications && (
-                    <button
-                      type="button"
-                      onClick={onOpenNotifications}
-                      aria-current={activeView === "notifications" ? "page" : undefined}
-                      className={cn(
-                        "flex min-h-12 w-full items-center gap-4 rounded-xl px-2 text-left text-base font-bold transition-colors hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
-                        activeView === "notifications" && "bg-[var(--noodle-accent)]/10",
-                      )}
-                    >
-                      <span className="relative flex h-6 w-6 shrink-0 items-center justify-center">
-                        <Bell size={23} />
-                        {notificationCount > 0 && (
-                          <span
-                            data-component="NoodleView.NotificationBadge"
-                            className="absolute -right-2 -top-2 min-w-4 rounded-full bg-[var(--noodle-accent)] px-1 text-center text-[0.58rem] font-black leading-4 text-zinc-950 ring-2 ring-[var(--background)]"
-                          >
-                            {notificationBadgeLabel}
-                          </span>
-                        )}
-                      </span>
-                      {localizeUi("settings.sections.notifications.title")}
+                        : slurpActive
+                          ? localizeUi("ui.slurp.navigation.search", { defaultValue: "Discover" })
+                          : localizeUi("ui.noodle.noodlehome.searchNoodle")}
                     </button>
                   )}
                   {onOpenProfile && (
@@ -585,7 +535,9 @@ export function NoodleShell({
                       )}
                     >
                       <User size={23} />
-                      {localizeUi("ui.noodle.noodlehome.profile")}
+                      {slurpActive
+                        ? localizeUi("ui.slurp.navigation.profile", { defaultValue: "Creator profile" })
+                        : localizeUi("ui.noodle.noodlehome.profile")}
                     </button>
                   )}
                   <button
@@ -730,11 +682,12 @@ export function NoodleShell({
                     <Home size={22} className="!text-[var(--noodle-accent)]" />
                     {homeLabel}
                   </button>
-                  {onOpenSearch && (
-                    <button
-                      type="button"
-                      onClick={onOpenSearch}
-                      className={cn(
+                   {onOpenSearch && (
+                     <button
+                       type="button"
+                       onClick={onOpenSearch}
+                       aria-current={activeView === "search" ? "page" : undefined}
+                       className={cn(
                         "flex min-h-11 w-full items-center gap-4 rounded-full px-3 text-left text-[0.95rem] font-semibold hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
                         activeView === "search" &&
                           "bg-[var(--noodle-accent)]/10",
@@ -744,42 +697,18 @@ export function NoodleShell({
                         size={22}
                         className="!text-[var(--noodle-accent)]"
                       />
-                      {noodlerActive
-                        ? localizeUi("ui.noodle.noodleshell.discover")
-                        : localizeUi("ui.noodle.noodlehome.searchNoodle")}
-                    </button>
-                  )}
-                  {onOpenNotifications && (
-                    <button
-                      type="button"
-                      onClick={onOpenNotifications}
-                      className={cn(
-                        "flex min-h-11 w-full items-center gap-4 rounded-full px-3 text-left text-[0.95rem] font-semibold hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
-                        activeView === "notifications" &&
-                          "bg-[var(--noodle-accent)]/10",
-                      )}
-                    >
-                      <span className="relative flex h-6 w-6 shrink-0 items-center justify-center">
-                        <Bell
-                          size={22}
-                          className="!text-[var(--noodle-accent)]"
-                        />
-                        {notificationCount > 0 && (
-                          <span
-                            data-component="NoodleView.NotificationBadge"
-                            className="absolute -right-2 -top-2 min-w-4 rounded-full bg-[var(--noodle-accent)] px-1 text-center text-[0.58rem] font-black leading-4 text-zinc-950 ring-2 ring-[var(--background)]"
-                          >
-                            {notificationBadgeLabel}
-                          </span>
-                        )}
-                      </span>
-                      {localizeUi("settings.sections.notifications.title")}
+                       {noodlerActive
+                         ? localizeUi("ui.noodle.noodleshell.discover")
+                         : slurpActive
+                           ? localizeUi("ui.slurp.navigation.search", { defaultValue: "Discover" })
+                           : localizeUi("ui.noodle.noodlehome.searchNoodle")}
                     </button>
                   )}
                   {onOpenProfile && (
                     <button
                       type="button"
                       onClick={onOpenProfile}
+                      aria-current={activeView === "profile" ? "page" : undefined}
                       className={cn(
                         "flex min-h-11 w-full items-center gap-4 rounded-full px-3 text-left text-[0.95rem] font-semibold hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]",
                         activeView === "profile" &&
@@ -790,12 +719,15 @@ export function NoodleShell({
                         size={22}
                         className="!text-[var(--noodle-accent)]"
                       />
-                      {localizeUi("ui.noodle.noodlehome.profile")}
+                      {slurpActive
+                        ? localizeUi("ui.slurp.navigation.profile", { defaultValue: "Creator profile" })
+                        : localizeUi("ui.noodle.noodlehome.profile")}
                     </button>
                   )}
                   <button
                     type="button"
                     onClick={onOpenSettings}
+                    aria-current={activeView === "settings" ? "page" : undefined}
                     className={cn(
                       "flex min-h-11 w-full items-center gap-4 rounded-full px-3 text-left text-[0.95rem] font-semibold hover:bg-[var(--accent)]",
                       activeView === "settings" &&
@@ -928,12 +860,7 @@ export function NoodleShell({
             </aside>
 
             <main
-              className="flex min-h-0 w-full flex-1 flex-col @min-[1024px]:max-w-[640px] @min-[1024px]:border-r @min-[1024px]:border-[var(--noodle-divider)]"
-              style={{
-                paddingBottom: wideShell
-                  ? undefined
-                  : `calc(${MOBILE_NAV_HEIGHT} + ${BOTTOM_SAFE_INSET})`,
-              }}
+              className="flex min-h-0 w-full flex-1 flex-col pb-[calc(56px+var(--slurp-bottom-safe-inset))] @min-[1024px]:max-w-[640px] @min-[1024px]:border-r @min-[1024px]:border-[var(--noodle-divider)] @min-[1024px]:pb-0"
             >
               {children}
             </main>
@@ -949,24 +876,32 @@ export function NoodleShell({
           )}
           data-component="NoodleView.MobileBottomNav"
         >
-          <div className="grid h-[56px] grid-flow-col auto-cols-fr">
-            <button
-              ref={mobileDrawerTriggerRef}
-              type="button"
-              onClick={() => onMobileDrawerOpenChange(true)}
-              aria-label={localizeUi(
-                "ui.noodle.noodlehome.openNoodleAccountMenu",
-              )}
-              className="flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
-            >
-              {personaAccount ? (
-                <Avatar account={personaAccount} size="sm" />
-              ) : (
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 ring-1 ring-[var(--noodle-accent)]/25">
-                  <AtSign size={18} />
-                </span>
-              )}
+          <div className="relative grid h-[56px] grid-flow-col auto-cols-fr">
+            <button type="button" ref={mobileDrawerTriggerRef} onClick={() => onMobileDrawerOpenChange(true)} aria-label={localizeUi("ui.slurp.navigation.menu", { defaultValue: "Open Slurp menu" })} className="flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]">
+              {personaAccount ? <Avatar account={personaAccount} size="sm" /> : <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 ring-1 ring-[var(--noodle-accent)]/25"><AtSign size={18} /></span>}
             </button>
+            <button
+              type="button"
+              onClick={onMobileHomeTap}
+              aria-label={localizeUi("ui.noodle.noodleshell.noodleValue1", { value1: homeLabel })}
+              aria-current={homeActive ? "page" : undefined}
+              className="relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+            >
+              <span className="relative flex h-8 w-12 items-center justify-center"><img src={slurpActive ? NOODLER_LOGO_SRC : NOODLE_LOGO_SRC} alt="" className="h-6 w-9 object-contain" /></span>
+              {homeActive && <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-accent)]" />}
+            </button>
+            {onOpenProfile && (
+              <button
+                type="button"
+                onClick={onOpenProfile}
+                aria-label={slurpActive ? localizeUi("ui.slurp.navigation.profile", { defaultValue: "Creator profile" }) : localizeUi("ui.noodle.noodlehome.profile")}
+                aria-current={activeView === "profile" ? "page" : undefined}
+                className="relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
+              >
+                <User size={22} strokeWidth={activeView === "profile" ? 2.8 : 2} />
+                {activeView === "profile" && <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-accent)]" />}
+              </button>
+            )}
             {onOpenSearch && (
               <button
                 type="button"
@@ -974,7 +909,9 @@ export function NoodleShell({
                 aria-label={
                   noodlerActive
                     ? localizeUi("ui.noodle.noodleshell.discoverCreators")
-                    : localizeUi("ui.noodle.noodlehome.searchNoodle")
+                    : slurpActive
+                      ? localizeUi("ui.slurp.navigation.search", { defaultValue: "Discover" })
+                      : localizeUi("ui.noodle.noodlehome.searchNoodle")
                 }
                 aria-current={activeView === "search" ? "page" : undefined}
                 className="relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
@@ -984,74 +921,6 @@ export function NoodleShell({
                   strokeWidth={activeView === "search" ? 2.8 : 2}
                 />
                 {activeView === "search" && (
-                  <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-accent)]" />
-                )}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={onMobileHomeTap}
-              aria-label={localizeUi("ui.noodle.noodleshell.noodleValue1", {
-                value1: homeLabel,
-              })}
-              aria-current={homeActive ? "page" : undefined}
-              className="relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
-            >
-              <span className="relative flex h-8 w-12 items-center justify-center">
-                <img
-                  src={NOODLE_LOGO_SRC}
-                  alt=""
-                  className="h-6 w-9 object-contain"
-                />
-              </span>
-              {homeActive && (
-                <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-accent)]" />
-              )}
-            </button>
-            {onOpenNotifications && (
-              <button
-                type="button"
-                onClick={onOpenNotifications}
-                aria-label={localizeUi(
-                  "ui.noodle.noodleshell.noodleNotifications",
-                )}
-                aria-current={
-                  activeView === "notifications" ? "page" : undefined
-                }
-                className="relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
-              >
-                <span className="relative flex h-6 w-6 items-center justify-center">
-                  <Bell
-                    size={22}
-                    strokeWidth={activeView === "notifications" ? 2.8 : 2}
-                  />
-                  {notificationCount > 0 && (
-                    <span
-                      data-component="NoodleView.NotificationBadge"
-                      className="absolute -right-2 -top-2 min-w-4 rounded-full bg-[var(--noodle-accent)] px-1 text-center text-[0.58rem] font-black leading-4 text-zinc-950 ring-2 ring-[var(--background)]"
-                    >
-                      {notificationBadgeLabel}
-                    </span>
-                  )}
-                </span>
-                {activeView === "notifications" && (
-                  <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-accent)]" />
-                )}
-              </button>
-            )}
-            {onOpenProfile && (
-              <button
-                type="button"
-                onClick={onOpenProfile}
-                aria-label={localizeUi("ui.noodle.noodlehome.profile")}
-                aria-current={activeView === "profile" ? "page" : undefined}
-                className="relative flex items-center justify-center transition-colors hover:bg-[var(--noodle-accent)]/10 active:bg-[var(--noodle-accent)]/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]"
-              >
-                <User
-                  size={22}
-                  strokeWidth={activeView === "profile" ? 2.8 : 2}
-                />
-                {activeView === "profile" && (
                   <span className="absolute top-1 h-1 w-1 rounded-full bg-[var(--noodle-accent)]" />
                 )}
               </button>

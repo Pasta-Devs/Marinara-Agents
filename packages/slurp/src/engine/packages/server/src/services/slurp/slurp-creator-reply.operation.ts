@@ -33,7 +33,11 @@ export async function generateAndApplyNoodlerCreatorReply(
   const locked = await tryNoodlerAccountOperation(
     post.authorAccountId,
     async () => {
-      const connection = await createConnectionsStorage(db).getDefaultForAgents();
+       const settings = await noodle.getSettings();
+       const connections = createConnectionsStorage(db);
+       const connection = settings.generationConnectionId
+         ? await connections.getWithKey(settings.generationConnectionId)
+         : await connections.getDefaultForAgents();
       if (!connection) return { status: "connection_not_found" } as const;
       const claim = await noodle.claimNoodlerCreatorReply(
         post.authorAccountId,

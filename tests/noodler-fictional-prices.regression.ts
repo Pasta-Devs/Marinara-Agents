@@ -80,7 +80,7 @@ assert.match(card, /<NoodlerFictionalPrice amount=\{noodlerUnlockPriceOf\(post\)
 assert.match(card, /<NoodlerFictionalPrice amount=\{noodlerSubscriptionPriceOf\(profile\)\} \/>/u);
 assert.match(card, /title=\{localizeUi\("ui\.noodle\.unlocksheet\.priceHint"\)\}/u);
 assert.match(enLocale["ui.noodle.unlocksheet.price"], /\{\{amount\}\}/u);
-assert.match(enLocale["ui.noodle.unlocksheet.priceHint"], /no money here yet/iu);
+assert.match(enLocale["ui.noodle.unlocksheet.priceHint"], /fictional Slurp roleplay points/iu);
 assert.match(enLocale["ui.noodle.unlocksheet.priceHint"], /never blocked/iu);
 
 // No wallet balance is surfaced anywhere in the viewer UI. Comments may discuss the wallet;

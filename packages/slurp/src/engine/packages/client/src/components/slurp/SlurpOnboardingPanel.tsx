@@ -27,6 +27,7 @@ import {
   resolveNoodlerOnboardingCompletion,
 } from "@marinara-engine/shared";
 import { useTranslation as useUiTranslation } from "react-i18next";
+import { toast } from "sonner";
 import {
   useBulkCreateNoodlerStageProfiles,
   useNoodlerEligibleAccounts,
@@ -170,6 +171,7 @@ export function SlurpOnboardingWizard({
   const [outcomes, setOutcomes] = useState<NoodlerRefreshNowOutcome[]>([]);
   const [completion, setCompletion] = useState<CompletionKind | null>(null);
   const [executionId, setExecutionId] = useState("");
+  const [providerConfirmationOpen, setProviderConfirmationOpen] = useState(false);
   const completionHeadingRef = useRef<HTMLHeadingElement>(null);
   const demoProfile: NoodlerStageProfile = {
     ...DEMO_PROFILE,
@@ -359,14 +361,11 @@ export function SlurpOnboardingWizard({
           : {
               onboarding:
                 state === "completed" ? "completed" : "not_started",
-              generationGuidance:
-                state === "completed"
-                  ? "The Creator should publish in its own voice and balance public updates with locked posts."
-                  : undefined,
             }),
       });
       return true;
     } catch {
+      toast.error("Slurp setup settings could not be saved.");
       return false;
     }
   };
@@ -376,7 +375,16 @@ export function SlurpOnboardingWizard({
       onClose();
     }
   };
-  const finish = async () => {
+  const returnToSetup = () => {
+    setCreationFailed(false);
+    setCreationError(null);
+    setCreationReasons([]);
+    setCompletion(null);
+    setStep(4);
+  };
+  const returnToPreviousStep = () =>
+    setStep(setupLane === "easy" ? 1 : ((step - 1) as Step));
+  const performFinish = async () => {
     let newIds: string[] = [];
     let createFailureCount = 0;
     try {
@@ -387,6 +395,7 @@ export function SlurpOnboardingWizard({
           disclosureMode: disclosure,
           disclosureExceptions: exceptions,
           autoPosting: { enabled: autoPostingEnabled, imagesEnabled },
+          connectionId: generationConnectionId || null,
         });
         newIds = result.created.map((profile) => profile.id);
         setCreatedIds(newIds);
@@ -453,6 +462,13 @@ export function SlurpOnboardingWizard({
       if (settingsSaved) onComplete?.();
     }
   };
+  const finish = () => {
+    if (selected.size > 0) {
+      setProviderConfirmationOpen(true);
+      return;
+    }
+    void performFinish();
+  };
   const pending =
     bulkCreate.isPending ||
     updateSlurpSettings.isPending ||
@@ -505,10 +521,7 @@ export function SlurpOnboardingWizard({
         ];
 
   return (
-    // Dismissing the modal (Escape, the backdrop, the X) only closes it. Recording the skip is
-    // what writes onboardingState "zero", and that is permanent — the wizard never reopens — so
-    // it stays reserved for the explicit Skip Setup button. An accidental Escape on the intro
-    // screen used to end the teaching flow forever with no confirmation.
+    <>
     <Modal
       open={open}
       onClose={onClose}
@@ -1539,12 +1552,16 @@ export function SlurpOnboardingWizard({
                   {t("ui.noodle.noodlerwizard.back")}
                 </button>
               )}
-              {intro === null && setupLane !== null && step > 1 && step < 5 && (
+              {intro === null &&
+                setupLane !== null &&
+                ((step > 1 && step < 5) ||
+                  (step === 5 && completion === "creationFailed")) && (
                 <button
                   type="button"
-                  onClick={() =>
-                    setStep(setupLane === "easy" ? 1 : ((step - 1) as Step))
-                  }
+                  onClick={() => {
+                    if (step === 5) returnToSetup();
+                    else returnToPreviousStep();
+                  }}
                   className="flex min-h-10 items-center gap-1 rounded-md border border-[#5b3a52] px-3 text-sm font-bold max-sm:px-2"
                 >
                   <ChevronLeft size={15} />
@@ -1646,6 +1663,31 @@ export function SlurpOnboardingWizard({
         </div>
       </div>
     </Modal>
+    <Modal
+      open={providerConfirmationOpen}
+      onClose={() => setProviderConfirmationOpen(false)}
+      title="Send context to your provider?"
+      width="max-w-md"
+      panelClassName="noodle-icon-scope"
+      panelStyle={getNoodleAccentStyle(NOODLE_PINK, {
+        "--background": "#17121b",
+        "--foreground": "#fff7fc",
+        "--muted-foreground": "#d8c9d4",
+        "--border": "rgba(255, 126, 193, 0.24)",
+        "--accent": "rgba(255, 126, 193, 0.12)",
+      })}
+    >
+      <div className="space-y-4">
+        <p className="text-sm leading-6 text-[var(--muted-foreground)]">
+          Slurp will send the selected source profiles and generation settings to the selected provider to create Creator drafts.
+        </p>
+        <div className="flex justify-end gap-2 border-t border-[var(--border)] pt-4">
+          <button type="button" onClick={() => setProviderConfirmationOpen(false)} className="min-h-10 rounded-md border border-[var(--border)] px-4 text-xs font-semibold">Cancel</button>
+          <button type="button" onClick={() => { setProviderConfirmationOpen(false); void performFinish(); }} className="min-h-10 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold !text-zinc-950 [&_svg]:!text-zinc-950">Continue</button>
+        </div>
+      </div>
+    </Modal>
+    </>
   );
 }
 

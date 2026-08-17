@@ -49,23 +49,16 @@ assert.match(serverDefault, /^All NoodleR creators and viewers/u);
 assert.match(serverDefault, /not required and need not be the majority/u);
 assert.doesNotMatch(serverDefault, /norm here, not the exception|most posts are lewd|the minority/u);
 
-// Every previously shipped default must stay listed verbatim. Dropping one strands those installs
-// on guidance they never chose; comparison must stay exact so an edited string is preserved.
+// Old Noodler installations are intentionally unsupported. Slurp no longer carries legacy
+// guidance aliases or migration defaults.
 const legacyBlock = storage.slice(
   storage.indexOf("NOODLER_LEGACY_GENERATION_GUIDANCE_DEFAULTS = ["),
   storage.indexOf("export function normalizeSlurpSettings"),
 );
-assert.match(legacyBlock, /norm here, not the exception/u, "pre-1.0.11 default must remain listed");
-assert.match(legacyBlock, /NSFW and explicit content are allowed/u, "pre-1.0.7 default must remain listed");
-assert.equal(legacyBlock.includes(serverDefault), false, "the current default is not a legacy value");
-assert.match(
-  storage,
-  /NOODLER_LEGACY_GENERATION_GUIDANCE_DEFAULTS\.some\(\s*\(legacy\) => legacy === storedGenerationGuidance,?\s*\)/u,
-  "migration must compare stored guidance by exact equality",
-);
+assert.equal(legacyBlock, "", "legacy generation defaults must be removed");
+assert.doesNotMatch(storage, /NOODLER_LEGACY_GENERATION_GUIDANCE_DEFAULTS/u);
 
-// A stored value that matches nothing is the user's own and passes straight through.
-assert.match(storage, /\?\s*NOODLER_DEFAULT_GENERATION_GUIDANCE\s*\n?\s*:\s*storedGenerationGuidance;/u);
+assert.match(storage, /rawRecord\.generationGuidance \?\? NOODLER_DEFAULT_GENERATION_GUIDANCE/u);
 
 // Creator settings must stay package-owned. The migration reads prior Slurp values once, but
 // active normalization and writes must not use the public Noodle schema, defaults, or key.
@@ -82,7 +75,7 @@ assert.match(readme, /shipped default guidance is adult-first/u);
 assert.match(settings, /Restore default/u);
 assert.match(settings, /Edit prompt/u);
 assert.match(settings, /Save prompt/u);
-assert.match(settings, /Image generation prompt/u);
+assert.match(settings, /Image generation instructions/u);
 assert.match(settings, /Edit image generation prompt/u);
 assert.match(settings, /restoreDefaultImagePrompt/u);
 assert.match(settings, /saveImagePrompt/u);

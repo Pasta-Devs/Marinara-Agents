@@ -2,7 +2,6 @@ import { create } from "zustand";
 import type { SlurpNavigationState } from "../components/slurp/slurp-navigation.types";
 
 const PACKAGE_STATE_KEY = "marinara:slurp:package-ui";
-const LEGACY_UI_STATE_KEY = "marinara:ui";
 
 type PersistedSlurpState = {
   navigation?: SlurpNavigationState;
@@ -34,7 +33,7 @@ function isSlurpNavigation(value: unknown): value is SlurpNavigationState {
     return (
       (value.tab === undefined || value.tab === "creator") &&
       (value.section === undefined ||
-        ["general", "creators", "participants", "advanced"].includes(
+        ["general", "creators", "images", "audience", "advanced"].includes(
           value.section as string,
         )) &&
       (value.returnTo === undefined || isSlurpNavigation(value.returnTo))
@@ -45,7 +44,6 @@ function isSlurpNavigation(value: unknown): value is SlurpNavigationState {
     case "hub":
       return value.onboarding === undefined || typeof value.onboarding === "boolean";
     case "search":
-    case "notifications":
       return true;
     case "profile":
       return (
@@ -110,15 +108,7 @@ function validatedPersistedState(
 function readInitialState(): PersistedSlurpState {
   const packageState = readRecord(PACKAGE_STATE_KEY);
   if (packageState) return validatedPersistedState(packageState);
-  const legacyEnvelope = readRecord(LEGACY_UI_STATE_KEY);
-  const legacyState = legacyEnvelope?.state;
-  if (
-    !legacyState ||
-    typeof legacyState !== "object" ||
-    Array.isArray(legacyState)
-  )
-    return {};
-  return validatedPersistedState(legacyState as Record<string, unknown>);
+  return {};
 }
 
 function persistSlurpState(
