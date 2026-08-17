@@ -20,6 +20,34 @@ assert.equal(
   noodleImageExtension(encoded([0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70, 0x61, 0x76, 0x69, 0x66]), "png"),
   "avif",
 );
+assert.equal(
+  noodleImageExtension(
+    encoded([
+      0,
+      0,
+      0,
+      0,
+      0x66,
+      0x74,
+      0x79,
+      0x70,
+      0x6d,
+      0x69,
+      0x66,
+      0x31,
+      0,
+      0,
+      0,
+      0,
+      0x61,
+      0x76,
+      0x69,
+      0x66,
+    ]),
+    "png",
+  ),
+  "avif",
+);
 assert.equal(noodleImageExtension(encoded([0]), ".jpeg"), "jpg");
 assert.equal(noodleImageExtension(encoded([0]), "unknown"), "png");
 

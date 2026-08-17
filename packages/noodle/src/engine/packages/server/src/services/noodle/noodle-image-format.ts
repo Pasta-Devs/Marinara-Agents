@@ -24,8 +24,15 @@ export function noodleImageExtension(base64: string, fallback: string): string {
     bytes[6] === 0x79 &&
     bytes[7] === 0x70
   ) {
-    const brand = bytes.subarray(8, 12).toString("ascii").toLowerCase();
-    if (brand === "avif" || brand === "avis") return "avif";
+    const majorBrand = bytes.subarray(8, 12).toString("ascii").toLowerCase();
+    if (majorBrand === "avif" || majorBrand === "avis") return "avif";
+    for (let offset = 16; offset + 4 <= bytes.length; offset += 4) {
+      const compatibleBrand = bytes
+        .subarray(offset, offset + 4)
+        .toString("ascii")
+        .toLowerCase();
+      if (compatibleBrand === "avif" || compatibleBrand === "avis") return "avif";
+    }
   }
 
   const normalizedFallback = fallback.toLowerCase().replace(/^\./, "").replace("jpeg", "jpg");
