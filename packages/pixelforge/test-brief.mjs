@@ -1946,8 +1946,43 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   for (const seed of [1, 2, 3, 7, 11]) {
     const w = world.build(seed, "cozy-village", sealed);
     const sim = new loadedPF.Sim(w);
+
+    // ASSERT THE TRIGGER, not just the outcome. A tile scan alone would still
+    // pass if schedule compilation stopped putting the household on one
+    // undersized box — the overflow path simply would not run, and the case
+    // would go quietly green while testing nothing.
+    const hearths = [];
+    for (const zoneId in w.zones) for (const npc of w.zones[zoneId].npcs) if (npc.name.startsWith("Hearth")) hearths.push(npc);
+    assert.equal(hearths.length, 6, `seed ${seed}: the whole household compiles`);
+    const homes = new Set(hearths.map((n) => `${n._sched.home.zoneId}:${JSON.stringify(n._sched.home.wander)}`));
+    assert.equal(homes.size, 1, `seed ${seed}: the household shares ONE night home box (${homes.size} distinct)`);
+    const home = hearths[0]._sched.home;
+    const homeZone = w.zones[home.zoneId];
+    let capacity = 0;
+    for (let y = home.wander.y0; y <= home.wander.y1; y++) {
+      for (let x = home.wander.x0; x <= home.wander.x1; x++) {
+        if (loadedPF.schedule.standable(homeZone, x, y)) capacity++;
+      }
+    }
+    assert.ok(capacity < hearths.length, `seed ${seed}: the home box genuinely overflows (${capacity} tiles for 6)`);
+
     sim.clockMin = 23 * 60; // night: the whole household resolves to one door apron
     sim.resolveSchedules();
+
+    // The handle was actually selected, and the overflow path actually ran.
+    let outside = 0;
+    for (const npc of hearths) {
+      const at = Object.keys(w.zones).find((id) => w.zones[id].npcs.includes(npc));
+      assert.equal(at, home.zoneId, `seed ${seed}: ${npc.name} spends the night in its home zone`);
+      const b = home.wander;
+      if (!(npc.x >= b.x0 && npc.x <= b.x1 && npc.y >= b.y0 && npc.y <= b.y1)) outside++;
+    }
+    assert.equal(
+      outside,
+      hearths.length - capacity,
+      `seed ${seed}: exactly the overflow stands outside the box (${outside} out, ${capacity} tiles)`,
+    );
+
     for (const zoneId in w.zones) {
       const z = w.zones[zoneId];
       const seen = new Map();
@@ -1964,6 +1999,36 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
         assert.ok(loadedPF.schedule.standable(z, x, y), `seed ${seed}: ${npc.name} overflows onto a standable tile`);
       }
     }
+  }
+
+  // A SATURATED zone still yields a LEGAL tile. When nothing can satisfy both
+  // predicates the placer drops occupancy, never standability: sharing a tile
+  // looks wrong, but standing in a wall or a doorway is wrong, and a doorway
+  // blocks the way in. The old code returned zone.spawn unchecked.
+  //
+  // This needs a hand-built zone to be worth anything. Every compiled zone's
+  // spawn happens to be standable (480 of 480 tried), so a saturated compiled
+  // zone would land on a legal tile by luck and the case would pass against the
+  // unchecked return it is meant to catch. Putting the spawn ON a door tile is
+  // the one shape that tells the two apart.
+  {
+    const w = 8;
+    const h = 8;
+    const fake = {
+      w,
+      h,
+      solid: new Uint8Array(w * h),
+      object: new Array(w * h).fill(null),
+      portals: [],
+      spawn: { x: 3, y: 3 },
+    };
+    fake.object[3 * w + 3] = "door";
+    assert.ok(!loadedPF.schedule.standable(fake, fake.spawn.x, fake.spawn.y), "the fixture's spawn is a doorway");
+    const at = loadedPF.schedule.walkableIn(fake, { x0: 2, y0: 2, x1: 4, y1: 4 }, "n1", () => true);
+    assert.ok(
+      loadedPF.schedule.standable(fake, at.x, at.y),
+      `a saturated zone never falls back to an unstandable spawn (${at.x},${at.y})`,
+    );
   }
 
   // And a degenerate box never escapes as a NaN placement. `hash % 0` is NaN and

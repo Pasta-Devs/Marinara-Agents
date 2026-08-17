@@ -2578,7 +2578,30 @@ PF.schedule = (() => {
     // (nearest wins on a strict <) and frozen: their wander box is the very box
     // they could not fit in, so every candidate step fails its bounds test.
     // Standing just outside it is the honest outcome — spare, but reachable.
-    return ring(zone.w + zone.h, 0, zone.w - 1, 0, zone.h - 1) ?? { x: zone.spawn.x, y: zone.spawn.y };
+    //
+    // Clamp the scan origin into the zone first, or a box sitting outside the
+    // map would need a radius bigger than w+h just to reach tile 0 and the
+    // "whole zone" pass would quietly cover none of it.
+    cx = PF.clamp(cx, 0, zone.w - 1) | 0;
+    cy = PF.clamp(cy, 0, zone.h - 1) | 0;
+    const inZone = ring(zone.w + zone.h, 0, zone.w - 1, 0, zone.h - 1);
+    if (inZone) return inZone;
+    // Every standable tile in the zone is occupied. Nothing can satisfy both
+    // predicates now, so drop the one that is merely undesirable and keep the
+    // one that is structural: sharing a tile looks wrong, standing inside a wall
+    // or in a doorway IS wrong, and a doorway blocks the way in. Returning the
+    // spawn unchecked (as this did) could do exactly that, so check it — it is
+    // the tile every zone guarantees walkable, and was standable in all 480
+    // compiled zones tried, but the guarantee should live in the code.
+    //
+    // Unreachable in practice, and deliberately not escalated to a null return:
+    // the smallest zone measured holds 119 standable tiles against a cast capped
+    // at 10, so this is a floor under a contract, not a live path.
+    if (standable(zone, zone.spawn.x, zone.spawn.y)) return { x: zone.spawn.x, y: zone.spawn.y };
+    for (let y = 0; y < zone.h; y++) {
+      for (let x = 0; x < zone.w; x++) if (standable(zone, x, y)) return { x, y };
+    }
+    return { x: zone.spawn.x, y: zone.spawn.y };
   }
 
   return { TABLE, resolve, walkableIn, standable };
