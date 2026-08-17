@@ -20,6 +20,7 @@ import {
   useUpdateSlurpSettings,
   type SlurpSettings,
 } from "../../hooks/use-slurp";
+import { showConfirmDialog } from "../../lib/app-dialogs";
 import { Modal } from "../ui/Modal";
 import type { SlurpNavigationState } from "./slurp-navigation.types";
 import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
@@ -542,12 +543,12 @@ export function SlurpSettings({
                             type="button"
                             aria-label={t("ui.slurp.settings.creators.deleteLabel", { name: creator.displayName })}
                             disabled={deleteCreator.isPending}
-                            onClick={async () => {
-                              if (
-                                window.confirm(
-                                  `${t("ui.slurp.settings.creators.deleteTitle")}\n\n${t("ui.slurp.settings.creators.deleteDetail", { name: creator.displayName })}`,
-                                )
-                              )
+                            onClick={() => {
+                              void showConfirmDialog({
+                                title: t("ui.slurp.settings.creators.deleteTitle"),
+                                message: t("ui.slurp.settings.creators.deleteDetail", { name: creator.displayName }),
+                              }).then((confirmed) => {
+                                if (!confirmed) return;
                                 deleteCreator.mutate(creator.id, {
                                   onSuccess: () =>
                                     toast.success(
@@ -555,6 +556,7 @@ export function SlurpSettings({
                                     ),
                                   onError: (error) => toast.error(errorMessage(error)),
                                 });
+                              });
                             }}
                             className="flex h-10 w-10 items-center justify-center rounded-md text-red-400 hover:bg-red-400/10 disabled:opacity-50"
                           >
@@ -620,12 +622,14 @@ export function SlurpSettings({
 
           {section === "advanced" && (
             <div className="space-y-5">
-              <SectionTitle title="Advanced" detail="Maintenance actions and settings for experienced users." />
+              <SectionTitle
+                title={t("ui.slurp.settings.advanced.title")}
+                detail={t("ui.slurp.settings.advanced.detail")}
+              />
               <div className="rounded-md border border-[var(--border)] p-4">
-                <h2 className="text-sm font-semibold">Run setup again</h2>
+                <h2 className="text-sm font-semibold">{t("ui.slurp.settings.advanced.setupAgain")}</h2>
                 <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
-                  Use setup again to review your creators, publishing pace, image defaults, and audience choices.
-                  Existing creator profiles are not deleted.
+                  {t("ui.slurp.settings.advanced.setupAgainDetail")}
                 </p>
                 <button
                   type="button"
@@ -633,7 +637,7 @@ export function SlurpSettings({
                   className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)]"
                 >
                   <RefreshCw size={14} />
-                  Restart setup
+                  {t("ui.slurp.settings.advanced.restartSetup")}
                 </button>
               </div>
             </div>
@@ -643,8 +647,8 @@ export function SlurpSettings({
             <div className="space-y-6">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <SectionTitle
-                  title="Audience activity"
-                  detail="Let Slurp create likes, replies, and reposts from synthetic audience members."
+                  title={t("ui.slurp.settings.audience.title")}
+                  detail={t("ui.slurp.settings.audience.detail")}
                 />
                 <button
                   type="button"
@@ -653,8 +657,8 @@ export function SlurpSettings({
                       onSuccess: (result) =>
                         toast.success(
                           result.created > 0
-                            ? `${result.created} audience actions created.`
-                            : "No audience actions were created.",
+                            ? t("ui.slurp.settings.audience.created", { count: result.created })
+                            : t("ui.slurp.settings.audience.createdNone"),
                         ),
                       onError: (error) => toast.error(errorMessage(error)),
                     })
@@ -663,17 +667,20 @@ export function SlurpSettings({
                   className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
                 >
                   <RefreshCw size={14} className={refreshFans.isPending ? "animate-spin" : ""} />
-                  Refresh now
+                  {t("ui.slurp.settings.audience.refresh")}
                 </button>
               </div>
               <Toggle
-                label="Audience activity"
-                detail="Run scheduled audience interactions for creator posts."
+                label={t("ui.slurp.settings.audience.enabled")}
+                detail={t("ui.slurp.settings.audience.enabledDetail")}
                 value={settings.fanActivityEnabled}
                 onChange={(value) => update("fanActivityEnabled", value)}
               />
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Runs per day" detail="How often Slurp creates audience activity.">
+                <Field
+                  label={t("ui.slurp.settings.audience.runsPerDay")}
+                  detail={t("ui.slurp.settings.audience.runsPerDayDetail")}
+                >
                   <NumberSetting
                     value={settings.fanActivityRunsPerDay}
                     min={1}
@@ -683,19 +690,22 @@ export function SlurpSettings({
                 </Field>
                 <div className="rounded-md border border-[var(--border)] p-3 text-xs text-[var(--muted-foreground)]">
                   {fanStatusQuery.isError
-                    ? "Activity status could not be loaded."
+                    ? t("ui.slurp.settings.audience.statusError")
                     : fanStatusQuery.data
-                      ? `${fanStatusQuery.data.usedRuns} of ${fanStatusQuery.data.runLimit} runs used today.`
-                      : "Activity status is loading."}
+                      ? t("ui.slurp.settings.audience.statusUsed", {
+                          used: fanStatusQuery.data.usedRuns,
+                          limit: fanStatusQuery.data.runLimit,
+                        })
+                      : t("ui.slurp.settings.audience.statusLoading")}
                 </div>
               </div>
               <div>
-                <h2 className="text-sm font-semibold">Activity per run</h2>
+                <h2 className="text-sm font-semibold">{t("ui.slurp.settings.audience.perRun")}</h2>
                 <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                  Set the maximum number of each interaction type.
+                  {t("ui.slurp.settings.audience.perRunDetail")}
                 </p>
                 <div className="mt-3 grid gap-4 sm:grid-cols-3">
-                  <Field label="Likes">
+                  <Field label={t("ui.slurp.settings.audience.likes")}>
                     <NumberSetting
                       value={settings.fanLikesPerRefresh}
                       min={0}
@@ -703,7 +713,7 @@ export function SlurpSettings({
                       onSave={(value) => update("fanLikesPerRefresh", value)}
                     />
                   </Field>
-                  <Field label="Replies">
+                  <Field label={t("ui.slurp.settings.audience.replies")}>
                     <NumberSetting
                       value={settings.fanRepliesPerRefresh}
                       min={0}
@@ -711,7 +721,7 @@ export function SlurpSettings({
                       onSave={(value) => update("fanRepliesPerRefresh", value)}
                     />
                   </Field>
-                  <Field label="Reposts">
+                  <Field label={t("ui.slurp.settings.audience.reposts")}>
                     <NumberSetting
                       value={settings.fanRepostsPerRefresh}
                       min={0}
@@ -722,9 +732,9 @@ export function SlurpSettings({
                 </div>
               </div>
               <div>
-                <h2 className="text-sm font-semibold">Audience mix</h2>
+                <h2 className="text-sm font-semibold">{t("ui.slurp.settings.audience.mix")}</h2>
                 <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                  Higher values make an audience type more likely. Zero disables it.
+                  {t("ui.slurp.settings.audience.mixDetail")}
                 </p>
                 <div className="mt-3 grid gap-4 sm:grid-cols-2">
                   {archetypes.map((key) => (
@@ -860,13 +870,9 @@ export function SlurpSettings({
                       const skipped = outcomes.filter((outcome) => outcome.status === "skipped").length;
                       const failed = outcomes.length - generated - skipped;
                       setRefreshModalOpen(false);
-                      toast.success(
-                        t("ui.slurp.settings.refresh.result", {
-                          generated,
-                          skippedText: skipped ? t("ui.slurp.settings.refresh.skipped", { count: skipped }) : "",
-                          failedText: failed ? t("ui.slurp.settings.refresh.failed", { count: failed }) : "",
-                        }),
-                      );
+                      toast.success(t("ui.slurp.settings.refresh.result", { count: generated }));
+                      if (skipped) toast(t("ui.slurp.settings.refresh.skipped", { count: skipped }));
+                      if (failed) toast.error(t("ui.slurp.settings.refresh.failed", { count: failed }));
                     },
                     onError: (error) => toast.error(errorMessage(error)),
                   },

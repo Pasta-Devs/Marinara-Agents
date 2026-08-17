@@ -391,7 +391,11 @@ export function NoodleShell({
                 ref={mobileDrawerRef}
                 role="dialog"
                 aria-modal="true"
-                aria-label={localizeUi("ui.noodle.noodleshell.noodleAccountMenu")}
+                aria-label={
+                  slurpActive
+                    ? localizeUi("ui.slurp.navigation.menu")
+                    : localizeUi("ui.noodle.noodleshell.noodleAccountMenu")
+                }
                 tabIndex={-1}
                 className="mari-chrome-token-scope flex h-full w-full flex-col overflow-y-auto bg-[var(--background)] px-5 pt-5 text-[var(--foreground)]"
                 style={{ paddingBottom: `max(1rem, ${BOTTOM_SAFE_INSET})` }}
@@ -422,7 +426,11 @@ export function NoodleShell({
                     onClick={() => onMobileDrawerOpenChange(false)}
                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10"
                     title={localizeUi("capabilities.actions.close")}
-                    aria-label={localizeUi("ui.noodle.noodleshell.closeNoodleAccountMenu")}
+                    aria-label={
+                      slurpActive
+                        ? localizeUi("ui.slurp.navigation.closeMenu")
+                        : localizeUi("ui.noodle.noodleshell.closeNoodleAccountMenu")
+                    }
                   >
                     <X size={20} />
                   </button>
@@ -430,7 +438,11 @@ export function NoodleShell({
 
                 <nav
                   className="mt-3 space-y-1"
-                  aria-label={localizeUi("ui.noodle.noodleshell.noodleAccountNavigation")}
+                  aria-label={
+                    slurpActive
+                      ? localizeUi("ui.slurp.navigation.menuNavigation")
+                      : localizeUi("ui.noodle.noodleshell.noodleAccountNavigation")
+                  }
                 >
                   <button
                     type="button"
@@ -591,7 +603,10 @@ export function NoodleShell({
             <aside className="hidden w-[17rem] shrink-0 border-r border-[var(--noodle-divider)] bg-[var(--background)] @min-[1024px]:flex @min-[1024px]:flex-col">
               <div className="flex min-h-0 flex-1 flex-col px-5 py-4">
                 <div className="mb-5 flex h-12 items-center">
-                  <NoodleLogo src={noodlerActive ? NOODLER_LOGO_SRC : NOODLE_LOGO_SRC} className="h-10 w-16" />
+                  <NoodleLogo
+                    src={noodlerActive || slurpActive ? NOODLER_LOGO_SRC : NOODLE_LOGO_SRC}
+                    className="h-10 w-16"
+                  />
                 </div>
                 <nav className="space-y-1">
                   <button
@@ -760,7 +775,11 @@ export function NoodleShell({
         <nav
           className="absolute inset-x-0 bottom-0 z-50 border-t border-[var(--noodle-divider)] bg-[var(--background)]/95 backdrop-blur @min-[1024px]:hidden"
           style={{ paddingBottom: BOTTOM_SAFE_INSET }}
-          aria-label={localizeUi("ui.noodle.noodleshell.noodleMobileNavigation")}
+          aria-label={
+            slurpActive
+              ? localizeUi("ui.slurp.navigation.mobileNav")
+              : localizeUi("ui.noodle.noodleshell.noodleMobileNavigation")
+          }
           data-component="NoodleView.MobileBottomNav"
         >
           <div className="relative grid h-[56px] grid-flow-col auto-cols-fr">

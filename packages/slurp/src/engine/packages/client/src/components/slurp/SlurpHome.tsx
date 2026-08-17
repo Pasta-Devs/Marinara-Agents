@@ -827,7 +827,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     try {
       await updateSlurpSettings.mutateAsync({ onboarding: "completed" });
     } catch (error) {
-      toast.error(errorMessage(error, "Slurp setup state could not be saved."));
+      toast.error(errorMessage(error, localizeUi("ui.slurp.onboarding.saveError")));
     }
     onNavigate({ mode: "creator", view: "hub" });
   };
@@ -2700,7 +2700,7 @@ function SlurpProfileFeaturedImage({
       type="button"
       onClick={() => onOpenImage(source, post.id)}
       className="block w-full overflow-hidden rounded-md text-left ring-1 ring-inset ring-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
-      aria-label={post.title || "Open featured image"}
+      aria-label={post.title || localizeUi("ui.slurp.post.openFeaturedImage")}
     >
       <img src={source} alt={post.title || ""} className="block aspect-[16/8] w-full object-cover" />
     </button>
@@ -2721,7 +2721,7 @@ function SlurpProfileMediaTile({
       onClick={() => source && onOpenImage(source, post.id)}
       disabled={!source}
       className="relative aspect-square overflow-hidden bg-[var(--background)] text-left focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] disabled:cursor-wait"
-      aria-label={post.title || "Open image"}
+      aria-label={post.title || localizeUi("ui.slurp.post.openImage")}
     >
       {source ? (
         <img
@@ -2839,6 +2839,8 @@ function StageProfileView({
   const subscriberTotal = subscribersQuery.data?.pages[0]?.total ?? subscribers.length;
   const accent = profileAccent(profile.id);
   const viewingOwnCreator = profile.sourceAccountId === viewerAccount?.entityId;
+  // Every Slurp Creator profile is operator-managed, so post controls and artwork editing stay
+  // available regardless of which viewer persona is looking at the profile.
   const managedCreator = true;
   const viewerPostById = new Map((viewerCreator?.posts ?? []).map((post) => [post.id, post]));
   const projectedPosts = posts.flatMap((entry) => {
@@ -3278,8 +3280,8 @@ function StageProfileView({
               maxLength={2000}
               placeholder={
                 artworkKind === "banner"
-                  ? "A neon-lit studio, dramatic city skyline, cozy bedroom..."
-                  : "Expression, outfit, lighting, mood..."
+                  ? localizeUi("ui.slurp.artwork.bannerPlaceholder")
+                  : localizeUi("ui.slurp.artwork.avatarPlaceholder")
               }
               className="min-h-32 w-full resize-y rounded-md border border-[var(--border)] bg-[var(--background)] p-3 text-sm font-normal outline-none focus:border-[var(--noodle-accent)]"
             />
@@ -3294,7 +3296,7 @@ function StageProfileView({
               onClick={() => setArtworkKind(null)}
               className="min-h-10 rounded-md border border-[var(--border)] px-4 text-xs font-semibold"
             >
-              Cancel
+              {localizeUi("ui.slurp.artwork.cancel")}
             </button>
             <button
               type="button"
@@ -3325,7 +3327,7 @@ function StageProfileView({
               ) : (
                 <Sparkles size={14} />
               )}
-              Generate
+              {localizeUi("ui.slurp.artwork.generate")}
             </button>
           </div>
         </div>

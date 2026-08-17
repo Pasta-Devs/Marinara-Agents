@@ -153,7 +153,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
               </span>
             )}
           </button>
-          {banner.onGenerate && (
+          {banner.canEdit && banner.onGenerate && (
             <button
               type="button"
               onClick={banner.onGenerate}
@@ -208,7 +208,7 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
                   </span>
                 )}
               </button>
-              {avatarUpload.onGenerate && (
+              {avatarUpload.canEdit && avatarUpload.onGenerate && (
                 <button
                   type="button"
                   onClick={avatarUpload.onGenerate}
