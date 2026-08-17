@@ -819,6 +819,7 @@ export function SlurpCreatorPostCard({
                 >
                   <button
                     type="button"
+                    role="menuitem"
                     onClick={() => startEditingPost(editablePost)}
                     className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]/70"
                   >
@@ -827,6 +828,7 @@ export function SlurpCreatorPostCard({
                   </button>
                   <button
                     type="button"
+                    role="menuitem"
                     onClick={() => deleteNoodlePost(post)}
                     className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]/70"
                   >
@@ -867,7 +869,10 @@ export function SlurpCreatorPostCard({
                 alt={localizeUi("ui.noodle.post.imageBy", {
                   name: author?.displayName ?? localizeUi("ui.noodle.profile.fallbackUser"),
                 })}
-                className="max-h-[26rem] w-full object-contain bg-black/10"
+                className={cn(
+                  "max-h-[26rem] w-full bg-black/10",
+                  ctx.imageFit === "cover" ? "object-cover" : "object-contain",
+                )}
               />
             )}
           </button>

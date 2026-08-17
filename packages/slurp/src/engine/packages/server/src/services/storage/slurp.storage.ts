@@ -4310,77 +4310,22 @@ export function createSlurpStorage(db: DB) {
 
     async subscribe(viewerAccountId: string, creatorAccountId: string): Promise<NoodleAccountSubscription | null> {
       if (viewerAccountId === creatorAccountId) return null;
-      const viewer = await this.getViewer(viewerAccountId);
-      if (!viewer) return null;
-      return db.transaction(async (tx) => {
-        const creatorRows = await tx
-          .select()
-          .from(noodleAccounts)
-          .where(and(eq(noodleAccounts.id, creatorAccountId), eq(noodleAccounts.platform, "slurp")));
-        const creator = creatorRows[0] ? mapAccount(creatorRows[0]) : null;
-        if (
-          !creator ||
-          (creator.sourceKind === "persona" && creator.sourceEntityId === viewerAccountId) ||
-          isNoodlerHiddenFromViewer(creator, viewerAccountId)
-        )
-          return null;
-        const existing = await tx
-          .select()
-          .from(noodleAccountSubscriptions)
-          .where(
-            and(
-              eq(noodleAccountSubscriptions.viewerAccountId, viewerAccountId),
-              eq(noodleAccountSubscriptions.creatorAccountId, creatorAccountId),
-            ),
-          );
-        if (existing[0]) {
-          const followingAccountIds = viewer.settings.social.followingAccountIds ?? [];
-          const followingAccountTimestamps = { ...viewer.settings.social.followingAccountTimestamps };
-          if (!followingAccountIds.includes(creatorAccountId)) {
-            followingAccountTimestamps[creatorAccountId] ??= existing[0].createdAt;
-            await createAppSettingsStorage(tx).set(
-              slurpViewerSettingsKey(viewerAccountId),
-              JSON.stringify({
-                ...viewer.settings,
-                social: {
-                  ...viewer.settings.social,
-                  followingAccountIds: [...followingAccountIds, creatorAccountId],
-                  followingAccountTimestamps,
-                },
-              }),
-            );
-          }
-          return mapSubscription(existing[0]);
-        }
-        const timestamp = now();
-        const followingAccountIds = viewer.settings.social.followingAccountIds ?? [];
-        const followingAccountTimestamps = { ...viewer.settings.social.followingAccountTimestamps };
-        followingAccountTimestamps[creatorAccountId] ??= timestamp;
-        const nextViewerSettings: NoodleAccountSettings = {
-          ...viewer.settings,
-          social: {
-            ...viewer.settings.social,
-            followingAccountIds: followingAccountIds.includes(creatorAccountId)
-              ? followingAccountIds
-              : [...followingAccountIds, creatorAccountId],
-            followingAccountTimestamps,
-          },
-        };
-        // A duplicate row means the subscription already existed, so this path stays idempotent.
-        try {
-          await tx.insert(noodleAccountSubscriptions).values({
-            id: newId(),
-            viewerAccountId,
-            creatorAccountId,
-            createdAt: timestamp,
-          });
-        } catch (error) {
+      const run = viewerSettingsUpdateQueue.then(async () => {
+        const viewer = await this.getViewer(viewerAccountId);
+        if (!viewer) return null;
+        return db.transaction(async (tx) => {
+          const creatorRows = await tx
+            .select()
+            .from(noodleAccounts)
+            .where(and(eq(noodleAccounts.id, creatorAccountId), eq(noodleAccounts.platform, "slurp")));
+          const creator = creatorRows[0] ? mapAccount(creatorRows[0]) : null;
           if (
-            !isFileUniqueConstraintError(error, "slurp_account_subscriptions", ["viewerAccountId", "creatorAccountId"])
-          ) {
-            throw error;
-          }
-          const duplicate = await tx
+            !creator ||
+            (creator.sourceKind === "persona" && creator.sourceEntityId === viewerAccountId) ||
+            isNoodlerHiddenFromViewer(creator, viewerAccountId)
+          )
+            return null;
+          const existing = await tx
             .select()
             .from(noodleAccountSubscriptions)
             .where(
@@ -4389,23 +4334,85 @@ export function createSlurpStorage(db: DB) {
                 eq(noodleAccountSubscriptions.creatorAccountId, creatorAccountId),
               ),
             );
-          return duplicate[0] ? mapSubscription(duplicate[0]) : null;
-        }
-        await createAppSettingsStorage(tx).set(
-          slurpViewerSettingsKey(viewerAccountId),
-          JSON.stringify(nextViewerSettings),
-        );
-        const rows = await tx
-          .select()
-          .from(noodleAccountSubscriptions)
-          .where(
-            and(
-              eq(noodleAccountSubscriptions.viewerAccountId, viewerAccountId),
-              eq(noodleAccountSubscriptions.creatorAccountId, creatorAccountId),
-            ),
+          if (existing[0]) {
+            const followingAccountIds = viewer.settings.social.followingAccountIds ?? [];
+            const followingAccountTimestamps = { ...viewer.settings.social.followingAccountTimestamps };
+            if (!followingAccountIds.includes(creatorAccountId)) {
+              followingAccountTimestamps[creatorAccountId] ??= existing[0].createdAt;
+              await createAppSettingsStorage(tx).set(
+                slurpViewerSettingsKey(viewerAccountId),
+                JSON.stringify({
+                  ...viewer.settings,
+                  social: {
+                    ...viewer.settings.social,
+                    followingAccountIds: [...followingAccountIds, creatorAccountId],
+                    followingAccountTimestamps,
+                  },
+                }),
+              );
+            }
+            return mapSubscription(existing[0]);
+          }
+          const timestamp = now();
+          const followingAccountIds = viewer.settings.social.followingAccountIds ?? [];
+          const followingAccountTimestamps = { ...viewer.settings.social.followingAccountTimestamps };
+          followingAccountTimestamps[creatorAccountId] ??= timestamp;
+          const nextViewerSettings: NoodleAccountSettings = {
+            ...viewer.settings,
+            social: {
+              ...viewer.settings.social,
+              followingAccountIds: followingAccountIds.includes(creatorAccountId)
+                ? followingAccountIds
+                : [...followingAccountIds, creatorAccountId],
+              followingAccountTimestamps,
+            },
+          };
+          // A duplicate row means the subscription already existed, so this path stays idempotent.
+          try {
+            await tx.insert(noodleAccountSubscriptions).values({
+              id: newId(),
+              viewerAccountId,
+              creatorAccountId,
+              createdAt: timestamp,
+            });
+          } catch (error) {
+            if (
+              !isFileUniqueConstraintError(error, "slurp_account_subscriptions", [
+                "viewerAccountId",
+                "creatorAccountId",
+              ])
+            ) {
+              throw error;
+            }
+            const duplicate = await tx
+              .select()
+              .from(noodleAccountSubscriptions)
+              .where(
+                and(
+                  eq(noodleAccountSubscriptions.viewerAccountId, viewerAccountId),
+                  eq(noodleAccountSubscriptions.creatorAccountId, creatorAccountId),
+                ),
+              );
+            return duplicate[0] ? mapSubscription(duplicate[0]) : null;
+          }
+          await createAppSettingsStorage(tx).set(
+            slurpViewerSettingsKey(viewerAccountId),
+            JSON.stringify(nextViewerSettings),
           );
-        return rows[0] ? mapSubscription(rows[0]) : null;
+          const rows = await tx
+            .select()
+            .from(noodleAccountSubscriptions)
+            .where(
+              and(
+                eq(noodleAccountSubscriptions.viewerAccountId, viewerAccountId),
+                eq(noodleAccountSubscriptions.creatorAccountId, creatorAccountId),
+              ),
+            );
+          return rows[0] ? mapSubscription(rows[0]) : null;
+        });
       });
+      viewerSettingsUpdateQueue = run.catch(() => undefined);
+      return run;
     },
 
     async unsubscribe(viewerAccountId: string, creatorAccountId: string): Promise<void> {

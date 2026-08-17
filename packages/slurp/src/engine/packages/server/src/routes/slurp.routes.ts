@@ -1588,6 +1588,7 @@ export async function slurpRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const locked = await tryNoodlerAccountOperation(id, async () => {
       const imageConnections = await getNoodlerImageConnections(app.db);
+      const removedConnectionId = imageConnections.creatorConnectionIds[id];
       await updateNoodlerImageConnections(app.db, (current) => {
         const creatorConnectionIds = { ...current.creatorConnectionIds };
         delete creatorConnectionIds[id];
@@ -1598,7 +1599,15 @@ export async function slurpRoutes(app: FastifyInstance) {
         if (deleted) removeNoodlerAccountMedia(id);
         return deleted;
       } catch (error) {
-        await updateNoodlerImageConnections(app.db, () => imageConnections);
+        if (removedConnectionId) {
+          await updateNoodlerImageConnections(app.db, (current) => ({
+            ...current,
+            creatorConnectionIds: {
+              ...current.creatorConnectionIds,
+              [id]: removedConnectionId,
+            },
+          }));
+        }
         throw error;
       }
     });

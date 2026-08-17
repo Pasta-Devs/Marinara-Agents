@@ -20,7 +20,6 @@ import {
   useUpdateSlurpSettings,
   type SlurpSettings,
 } from "../../hooks/use-slurp";
-import { showConfirmDialog } from "../../lib/app-dialogs";
 import { Modal } from "../ui/Modal";
 import type { SlurpNavigationState } from "./slurp-navigation.types";
 import type { NoodlerManagedStageProfile } from "@marinara-engine/shared";
@@ -29,6 +28,7 @@ import {
   SLURP_ACTIVITY_PRESETS,
   slurpActivityPresetForSettings,
   slurpActivityPresetPatch,
+  slurpPostsPerDayForPreset,
 } from "./slurp-activity-presets";
 
 type SlurpSettingsProps = {
@@ -117,12 +117,7 @@ export function SlurpSettings({
       if (!generationGuidanceEditorOpen) setGenerationGuidanceDraft(settings.generationGuidance);
       if (!imagePromptEditorOpen) setImagePromptDraft(settings.imageGenerationPrompt);
     }
-  }, [
-    generationGuidanceEditorOpen,
-    imagePromptEditorOpen,
-    settings?.generationGuidance,
-    settings?.imageGenerationPrompt,
-  ]);
+  }, [generationGuidanceEditorOpen, imagePromptEditorOpen, settings]);
   const section = navigation.section ?? "general";
   const save = async (patch: Partial<SlurpSettings>) => {
     try {
@@ -198,16 +193,16 @@ export function SlurpSettings({
           <header className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--border)] pb-6">
             <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--noodle-accent)]">Slurp</p>
-              <h1 className="mt-1 text-2xl font-bold">Creator settings</h1>
+              <h1 className="mt-1 text-2xl font-bold">{t("ui.slurp.settings.title")}</h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
-                Control how creators publish, how images are made, and how audience activity appears.
+                {t("ui.slurp.settings.detail")}
               </p>
             </div>
-            <p className="text-xs text-[var(--muted-foreground)]">Changes save automatically.</p>
+            <p className="text-xs text-[var(--muted-foreground)]">{t("ui.slurp.settings.autoSave")}</p>
           </header>
           <nav
             className="flex gap-2 overflow-x-auto border-b border-[var(--border)] pb-4"
-            aria-label="Creator settings sections"
+            aria-label={t("ui.slurp.settings.sectionsLabel")}
           >
             {(["general", "creators", "images", "audience", "advanced"] as const).map((item) => (
               <button
@@ -217,7 +212,7 @@ export function SlurpSettings({
                 onClick={() => onNavigate({ ...navigation, section: item })}
                 className={`min-h-10 shrink-0 rounded-md border px-4 text-sm font-semibold ${section === item ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10 text-[var(--noodle-accent)]" : "border-[var(--border)] hover:bg-[var(--accent)]"}`}
               >
-                {item === "general" ? "Publishing" : item[0].toUpperCase() + item.slice(1)}
+                {t(`ui.slurp.settings.tabs.${item === "general" ? "publishing" : item}`)}
               </button>
             ))}
           </nav>
@@ -225,15 +220,13 @@ export function SlurpSettings({
           {section === "general" && (
             <div className="space-y-6">
               <SectionTitle
-                title="Publishing pace"
-                detail="Set the global pace for all creators. The limit applies across the whole creator cast."
+                title={t("ui.slurp.settings.publishing.title")}
+                detail={t("ui.slurp.settings.publishing.detail")}
               />
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--border)] p-4">
                 <div>
-                  <h2 className="text-sm font-semibold">Refresh Slurp now</h2>
-                  <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                    Run one automatic-style publishing pass for all eligible Creators.
-                  </p>
+                  <h2 className="text-sm font-semibold">{t("ui.slurp.settings.refresh.title")}</h2>
+                  <p className="mt-1 text-xs text-[var(--muted-foreground)]">{t("ui.slurp.settings.refresh.detail")}</p>
                 </div>
                 <button
                   type="button"
@@ -250,12 +243,12 @@ export function SlurpSettings({
                   className="inline-flex min-h-10 items-center gap-2 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-50"
                 >
                   <RefreshCw size={14} />
-                  Refresh Slurp now
+                  {t("ui.slurp.settings.refresh.title")}
                 </button>
               </div>
               <GuidanceBox
-                title="How publishing works"
-                detail="This limit applies to all creators together. For example, 4 posts per day means up to 4 total posts across your creator list. Each creator must also have Auto-post enabled."
+                title={t("ui.slurp.settings.publishing.howTitle")}
+                detail={t("ui.slurp.settings.publishing.howDetail")}
               />
               <div className="grid gap-3 sm:grid-cols-2">
                 {SLURP_ACTIVITY_PRESETS.map((preset) => (
@@ -267,33 +260,27 @@ export function SlurpSettings({
                     onClick={() => void save(slurpActivityPresetPatch(preset))}
                     className={`rounded-md border p-4 text-left disabled:opacity-50 ${activityPreset === preset ? "border-[var(--noodle-accent)] bg-[var(--noodle-accent)]/10" : "border-[var(--border)] hover:bg-[var(--accent)]"}`}
                   >
-                    <span className="block text-sm font-semibold">
-                      {preset === "manual"
-                        ? "Manual"
-                        : preset === "occasional"
-                          ? "Occasional"
-                          : preset === "lively"
-                            ? "Lively"
-                            : "Very active"}
-                    </span>
+                    <span className="block text-sm font-semibold">{t(`ui.slurp.settings.presets.${preset}`)}</span>
                     <span className="mt-1 block text-xs text-[var(--muted-foreground)]">
                       {preset === "manual"
-                        ? "Publish only when you choose."
-                        : `${({ occasional: 2, lively: 4, veryActive: 8 } as const)[preset]} posts per day across creators.`}
+                        ? t("ui.slurp.settings.presets.manualDetail")
+                        : t("ui.slurp.settings.presets.postsDetail", {
+                            count: slurpPostsPerDayForPreset(preset),
+                          })}
                     </span>
                   </button>
                 ))}
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Toggle
-                  label="Automatic creator posting"
-                  detail="Allow enabled creators to publish on schedule."
+                  label={t("ui.slurp.settings.autoPosting")}
+                  detail={t("ui.slurp.settings.autoPostingDetail")}
                   value={settings.autoPostingScheduleEnabled}
                   onChange={(value) => update("autoPostingScheduleEnabled", value)}
                 />
                 <Toggle
-                  label="Quiet hours for character creators"
-                  detail="Do not schedule character posts from 23:00 to 07:00 in the Engine host timezone."
+                  label={t("ui.slurp.settings.quietHours")}
+                  detail={t("ui.slurp.settings.quietHoursDetail")}
                   value={settings.nightQuiet}
                   onChange={(value) => update("nightQuiet", value)}
                 />
@@ -311,14 +298,17 @@ export function SlurpSettings({
                 }
               />
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Creator text connection" detail="Used for creator posts, replies, and audience activity.">
+                <Field
+                  label={t("ui.slurp.settings.connections.creatorText")}
+                  detail={t("ui.slurp.settings.connections.creatorTextDetail")}
+                >
                   <select
                     value={settings.generationConnectionId ?? ""}
                     disabled={connectionsQuery.isLoading || connectionsQuery.isError || updateSettings.isPending}
                     onChange={(event) => void update("generationConnectionId", event.target.value || null)}
                     className="h-10 w-full rounded-md border border-[var(--border)] bg-transparent px-3 text-sm disabled:opacity-50"
                   >
-                    <option value="">Engine default language connection</option>
+                    <option value="">{t("ui.slurp.settings.connections.engineDefault")}</option>
                     {(connectionsQuery.data ?? [])
                       .filter((connection) => connection.provider !== "image_generation")
                       .map((connection) => (
@@ -334,7 +324,7 @@ export function SlurpSettings({
                     <p className="text-xs font-normal text-red-400">Connections could not be loaded.</p>
                   )}
                 </Field>
-                <Field label="Posts per day" detail="Use a custom value only when the presets do not fit.">
+                <Field label={t("ui.slurp.settings.postsPerDay")} detail={t("ui.slurp.settings.postsPerDayDetail")}>
                   <NumberSetting
                     value={settings.postsPerDay}
                     min={1}
@@ -348,17 +338,14 @@ export function SlurpSettings({
 
           {section === "images" && (
             <div className="space-y-6">
-              <SectionTitle
-                title="Creator images"
-                detail="Choose the image connection and the source details used in generated creator images."
-              />
+              <SectionTitle title={t("ui.slurp.settings.images.title")} detail={t("ui.slurp.settings.images.detail")} />
               <GuidanceBox
-                title="When image settings apply"
-                detail="A creator needs Images enabled and Slurp needs a usable image connection. Avatar references can also be limited by the creator's privacy settings."
+                title={t("ui.slurp.settings.images.howTitle")}
+                detail={t("ui.slurp.settings.images.howDetail")}
               />
               <Field
-                label="Global image connection"
-                detail="Creators inherit this connection unless they have an override."
+                label={t("ui.slurp.settings.images.globalConnection")}
+                detail={t("ui.slurp.settings.images.globalConnectionDetail")}
               >
                 <select
                   value={imageSettings?.defaultConnectionId ?? ""}
@@ -377,7 +364,7 @@ export function SlurpSettings({
                   }
                   className="h-10 w-full rounded-md border border-[var(--border)] bg-transparent px-3 text-sm disabled:opacity-50"
                 >
-                  <option value="">Engine default image connection</option>
+                  <option value="">{t("ui.slurp.settings.images.engineDefault")}</option>
                   {imageConnections.map((connection) => (
                     <option key={connection.id} value={connection.id}>
                       {connection.name ?? connection.model ?? connection.id}
@@ -393,26 +380,26 @@ export function SlurpSettings({
               </Field>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Toggle
-                  label="Use avatar references"
-                  detail="Give the image model the creator avatar when policy allows it."
+                  label={t("ui.slurp.settings.images.useAvatarReferences")}
+                  detail={t("ui.slurp.settings.images.useAvatarReferencesDetail")}
                   value={settings.imageGenerationUseAvatarReferences}
                   onChange={(value) => update("imageGenerationUseAvatarReferences", value)}
                 />
                 <Toggle
-                  label="Include creator descriptions"
-                  detail="Add source appearance details to image prompts."
+                  label={t("ui.slurp.settings.images.includeDescriptions")}
+                  detail={t("ui.slurp.settings.images.includeDescriptionsDetail")}
                   value={settings.imageGenerationIncludeDescriptions}
                   onChange={(value) => update("imageGenerationIncludeDescriptions", value)}
                 />
                 <Toggle
-                  label="Enable images for new creators"
-                  detail="This changes creator setup defaults. It does not change existing creators."
+                  label={t("ui.slurp.settings.images.enableForNew")}
+                  detail={t("ui.slurp.settings.images.enableForNewDetail")}
                   value={settings.autoPostingImagesEnabled}
                   onChange={(value) => update("autoPostingImagesEnabled", value)}
                 />
               </div>
               <PromptCard
-                title="Image generation instructions"
+                title={t("ui.slurp.settings.images.instructions")}
                 value={settings.imageGenerationPrompt}
                 isDefault={imagePromptIsDefault}
                 onEdit={() => {
@@ -428,8 +415,8 @@ export function SlurpSettings({
             <div className="space-y-5">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <SectionTitle
-                  title="Creators"
-                  detail="Manage which creator profiles publish automatically and which image connection they use."
+                  title={t("ui.slurp.settings.creators.title")}
+                  detail={t("ui.slurp.settings.creators.detail")}
                 />
                 <button
                   type="button"
@@ -437,7 +424,7 @@ export function SlurpSettings({
                   className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--noodle-accent)]/40 px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10"
                 >
                   <UsersRound size={14} />
-                  Add creators
+                  {t("ui.slurp.settings.creators.add")}
                 </button>
               </div>
               {accountsQuery.isLoading ? (
@@ -446,7 +433,7 @@ export function SlurpSettings({
                 </div>
               ) : accountsQuery.isError ? (
                 <div className="rounded-md border border-red-400/30 p-5 text-sm">
-                  <p>Creator profiles could not be loaded.</p>
+                  <p>{t("ui.slurp.settings.creators.loadError")}</p>
                   <button
                     type="button"
                     onClick={() => void accountsQuery.refetch()}
@@ -486,7 +473,7 @@ export function SlurpSettings({
                             </span>
                           </button>
                           <Toggle
-                            label="Auto-post"
+                            label={t("ui.slurp.settings.creators.autoPost")}
                             value={creator.autoPosting.enabled}
                             compact
                             onChange={(value) =>
@@ -499,7 +486,7 @@ export function SlurpSettings({
                             }
                           />
                           <Toggle
-                            label="Images"
+                            label={t("ui.slurp.settings.creators.images")}
                             value={creator.autoPosting.imagesEnabled}
                             compact
                             onChange={(value) =>
@@ -512,7 +499,9 @@ export function SlurpSettings({
                             }
                           />
                           <select
-                            aria-label={`Image connection for ${creator.displayName}`}
+                            aria-label={t("ui.slurp.settings.creators.imageConnectionLabel", {
+                              name: creator.displayName,
+                            })}
                             disabled={
                               imageSettingsQuery.isLoading ||
                               imageSettingsQuery.isError ||
@@ -534,7 +523,7 @@ export function SlurpSettings({
                             }
                             className="h-10 min-w-40 rounded-md border border-[var(--border)] bg-transparent px-2 text-xs disabled:opacity-50"
                           >
-                            <option value="">Inherit global image connection</option>
+                            <option value="">{t("ui.slurp.settings.creators.inheritImageConnection")}</option>
                             {imageConnections.map((connection) => (
                               <option key={connection.id} value={connection.id}>
                                 {connection.name ?? connection.model ?? connection.id}
@@ -543,7 +532,7 @@ export function SlurpSettings({
                           </select>
                           <button
                             type="button"
-                            aria-label={`Edit ${creator.displayName}`}
+                            aria-label={t("ui.slurp.settings.creators.editLabel", { name: creator.displayName })}
                             onClick={() => onEditCreator(creator)}
                             className="flex h-10 w-10 items-center justify-center rounded-md border border-[var(--border)] hover:bg-[var(--accent)]"
                           >
@@ -551,17 +540,19 @@ export function SlurpSettings({
                           </button>
                           <button
                             type="button"
-                            aria-label={`Delete ${creator.displayName}`}
+                            aria-label={t("ui.slurp.settings.creators.deleteLabel", { name: creator.displayName })}
                             disabled={deleteCreator.isPending}
                             onClick={async () => {
                               if (
-                                await showConfirmDialog({
-                                  title: "Delete creator profile?",
-                                  message: `Delete ${creator.displayName} and its Slurp profile?`,
-                                })
+                                window.confirm(
+                                  `${t("ui.slurp.settings.creators.deleteTitle")}\n\n${t("ui.slurp.settings.creators.deleteDetail", { name: creator.displayName })}`,
+                                )
                               )
                                 deleteCreator.mutate(creator.id, {
-                                  onSuccess: () => toast.success(`${creator.displayName} deleted.`),
+                                  onSuccess: () =>
+                                    toast.success(
+                                      t("ui.slurp.settings.creators.deleted", { name: creator.displayName }),
+                                    ),
                                   onError: (error) => toast.error(errorMessage(error)),
                                 });
                             }}
@@ -572,13 +563,12 @@ export function SlurpSettings({
                         </div>
                         {creator.sourceStatus.state === "missing" && (
                           <p className="mt-3 rounded-md border border-red-400/30 bg-red-400/5 p-3 text-xs text-red-300">
-                            The linked source is missing. This Creator and its posts are retained, but source-based
-                            generation and automatic posting are paused.
+                            {t("ui.slurp.settings.creators.sourceMissing")}
                           </p>
                         )}
                         {creator.sourceStatus.state === "changed" && (
                           <div className="mt-3 rounded-md border border-[var(--border)] bg-[var(--accent)]/30 p-3">
-                            <p className="text-xs font-semibold">Linked source changes need review.</p>
+                            <p className="text-xs font-semibold">{t("ui.slurp.settings.creators.sourceChanged")}</p>
                             <div className="mt-2 flex flex-wrap gap-2">
                               {creator.disclosureMode === "open" && (
                                 <button
@@ -591,7 +581,7 @@ export function SlurpSettings({
                                   }
                                   className="min-h-9 rounded-md bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 disabled:opacity-50"
                                 >
-                                  Accept identity
+                                  {t("ui.slurp.settings.creators.acceptIdentity")}
                                 </button>
                               )}
                               <button
@@ -599,7 +589,7 @@ export function SlurpSettings({
                                 onClick={() => onRedraftCreator(creator)}
                                 className="min-h-9 rounded-md border border-[var(--border)] px-3 text-xs font-semibold"
                               >
-                                Review and redraft
+                                {t("ui.slurp.settings.creators.reviewRedraft")}
                               </button>
                               <button
                                 type="button"
@@ -611,7 +601,7 @@ export function SlurpSettings({
                                 }
                                 className="min-h-9 rounded-md border border-[var(--border)] px-3 text-xs font-semibold disabled:opacity-50"
                               >
-                                Dismiss
+                                {t("ui.slurp.settings.creators.dismiss")}
                               </button>
                             </div>
                           </div>
@@ -622,7 +612,7 @@ export function SlurpSettings({
                 </div>
               ) : (
                 <div className="rounded-md border border-dashed border-[var(--border)] p-8 text-center text-sm text-[var(--muted-foreground)]">
-                  No creator profiles yet.
+                  {t("ui.slurp.settings.creators.none")}
                 </div>
               )}
             </div>
@@ -749,10 +739,10 @@ export function SlurpSettings({
                             [key]: value,
                           };
                           if (!Object.values(next).some((weight) => weight > 0)) {
-                            toast.error("At least one audience type must remain enabled.");
-                            return;
+                            toast.error(t("ui.slurp.settings.audience.keepOne"));
+                            return false;
                           }
-                          update("fanArchetypeWeights", next);
+                          return update("fanArchetypeWeights", next);
                         }}
                       />
                     </Field>
@@ -766,7 +756,7 @@ export function SlurpSettings({
       <Modal
         open={refreshModalOpen}
         onClose={() => setRefreshModalOpen(false)}
-        title="Refresh Slurp now"
+        title={t("ui.slurp.settings.refresh.title")}
         width="max-w-xl"
         closeDisabled={refreshCreators.isPending}
         panelClassName="noodle-icon-scope"
@@ -781,21 +771,21 @@ export function SlurpSettings({
         <div className="space-y-5">
           <div>
             <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold">Creators</h3>
+              <h3 className="text-sm font-semibold">{t("ui.slurp.settings.refresh.creators")}</h3>
               <div className="flex gap-2 text-xs">
                 <button
                   type="button"
                   onClick={() => setRefreshAccountIds(new Set((accountsQuery.data ?? []).map((creator) => creator.id)))}
                   className="text-[var(--noodle-accent)] hover:underline"
                 >
-                  Select all
+                  {t("ui.slurp.settings.refresh.selectAll")}
                 </button>
                 <button
                   type="button"
                   onClick={() => setRefreshAccountIds(new Set())}
                   className="text-[var(--muted-foreground)] hover:underline"
                 >
-                  Clear
+                  {t("ui.slurp.settings.refresh.clear")}
                 </button>
               </div>
             </div>
@@ -831,7 +821,7 @@ export function SlurpSettings({
             </div>
           </div>
           <fieldset>
-            <legend className="text-sm font-semibold">Post access</legend>
+            <legend className="text-sm font-semibold">{t("ui.slurp.settings.refresh.postAccess")}</legend>
             <div className="mt-2 grid grid-cols-2 rounded-md border border-[var(--border)] p-1">
               {(["public", "locked"] as const).map((access) => (
                 <button
@@ -847,8 +837,7 @@ export function SlurpSettings({
             </div>
           </fieldset>
           <p className="text-xs leading-5 text-[var(--muted-foreground)]">
-            Each selected Creator generates one post. This runs immediately and does not wait for the automatic
-            publishing schedule.
+            {t("ui.slurp.settings.refresh.modalDetail")}
           </p>
           <div className="flex justify-end gap-2 border-t border-[var(--border)] pt-4">
             <button
@@ -857,7 +846,7 @@ export function SlurpSettings({
               onClick={() => setRefreshModalOpen(false)}
               className="min-h-10 rounded-md border border-[var(--border)] px-4 text-xs font-semibold"
             >
-              Cancel
+              {t("capabilities.actions.cancel")}
             </button>
             <button
               type="button"
@@ -872,7 +861,11 @@ export function SlurpSettings({
                       const failed = outcomes.length - generated - skipped;
                       setRefreshModalOpen(false);
                       toast.success(
-                        `${generated} published${skipped ? `, ${skipped} skipped` : ""}${failed ? `, ${failed} failed` : ""}.`,
+                        t("ui.slurp.settings.refresh.result", {
+                          generated,
+                          skippedText: skipped ? t("ui.slurp.settings.refresh.skipped", { count: skipped }) : "",
+                          failedText: failed ? t("ui.slurp.settings.refresh.failed", { count: failed }) : "",
+                        }),
                       );
                     },
                     onError: (error) => toast.error(errorMessage(error)),
@@ -882,7 +875,7 @@ export function SlurpSettings({
               className="inline-flex min-h-10 items-center gap-2 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-50"
             >
               {refreshCreators.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-              Generate {refreshAccountIds.size || ""}
+              {t("ui.slurp.settings.refresh.generate", { count: refreshAccountIds.size || "" })}
             </button>
           </div>
         </div>

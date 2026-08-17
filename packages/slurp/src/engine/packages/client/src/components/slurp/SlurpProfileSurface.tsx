@@ -104,6 +104,14 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
       { id: "likes", label: localizeUi("ui.noodle.profile.tabs.likes") },
       { id: "media", label: localizeUi("ui.noodle.profile.tabs.media") },
     ] as Array<{ id: TTab; label: ReactNode; ariaLabel?: string }>);
+  const focusTabAt = (index: number) => {
+    const next = resolvedTabs[(index + resolvedTabs.length) % resolvedTabs.length];
+    if (!next) return;
+    onTabChange(next.id);
+    window.requestAnimationFrame(() => {
+      document.getElementById(`${postPanelId}-tab-${String(next.id)}`)?.focus();
+    });
+  };
   return (
     <div
       className="relative border-b border-[var(--noodle-divider)]"
@@ -150,8 +158,8 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
               type="button"
               onClick={banner.onGenerate}
               className="absolute bottom-2 right-11 flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white opacity-0 shadow-md transition-opacity hover:bg-black/80 group-hover:opacity-100 focus-visible:opacity-100"
-              title="Generate banner with AI"
-              aria-label="Generate banner with AI"
+              title={localizeUi("ui.slurp.artwork.generateBanner")}
+              aria-label={localizeUi("ui.slurp.artwork.generateBanner")}
             >
               <Sparkles size={13} className="!text-white" />
             </button>
@@ -205,8 +213,8 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
                   type="button"
                   onClick={avatarUpload.onGenerate}
                   className="absolute bottom-1 right-8 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white opacity-0 shadow-md transition-opacity hover:bg-black/85 group-hover:opacity-100 focus-visible:opacity-100"
-                  title="Generate avatar with AI"
-                  aria-label="Generate avatar with AI"
+                  title={localizeUi("ui.slurp.artwork.generateAvatar")}
+                  aria-label={localizeUi("ui.slurp.artwork.generateAvatar")}
                 >
                   <Sparkles size={12} className="!text-white" />
                 </button>
@@ -362,6 +370,15 @@ export function SlurpProfileSurface<TTab extends string = SlurpProfileTab>({
               id={`${postPanelId}-tab-${String(tab.id)}`}
               aria-controls={`${postPanelId}-panel`}
               tabIndex={activeTab === tab.id ? 0 : -1}
+              onKeyDown={(event) => {
+                const index = resolvedTabs.findIndex((item) => item.id === tab.id);
+                if (event.key === "ArrowRight") focusTabAt(index + 1);
+                else if (event.key === "ArrowLeft") focusTabAt(index - 1);
+                else if (event.key === "Home") focusTabAt(0);
+                else if (event.key === "End") focusTabAt(resolvedTabs.length - 1);
+                else return;
+                event.preventDefault();
+              }}
               onClick={() => onTabChange(tab.id)}
               aria-label={tab.ariaLabel}
               aria-selected={activeTab === tab.id}

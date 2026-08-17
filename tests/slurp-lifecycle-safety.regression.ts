@@ -63,7 +63,7 @@ assert.match(
   storage,
   /cleanupRetiredViewer[\s\S]*?noodleAccountSubscriptions[\s\S]*?noodlePostUnlocks[\s\S]*?slurpViewerSettingsKey/u,
 );
-assert.match(settings, /Linked source changes need review/u);
+assert.match(settings, /ui\.slurp\.settings\.creators\.sourceChanged/u);
 assert.match(settings, /onRedraftCreator/u);
 assert.match(settings, /import \{ Avatar, getNoodleAccentStyle, NOODLE_PINK \} from "\.\/SlurpShell"/u);
 assert.match(routes, /app\.post\("\/noodler\/accounts\/:id\/banner"/u);
@@ -72,16 +72,16 @@ assert.match(home, /useUploadNoodlerBanner/u);
 assert.match(home, /useGenerateNoodlerArtwork/u);
 assert.match(profileSurface, /<Upload size=\{13\}/u);
 assert.match(profileSurface, /<Upload size=\{12\}/u);
-assert.match(profileSurface, /Generate banner with AI/u);
-assert.match(profileSurface, /Generate avatar with AI/u);
+assert.match(profileSurface, /ui\.slurp\.artwork\.generateBanner/u);
+assert.match(profileSurface, /ui\.slurp\.artwork\.generateAvatar/u);
 assert.match(profileSurface, /group-hover:opacity-100/u);
 assert.match(profileSurface, /<Avatar account=\{account\} size="xl"/u);
 assert.match(artwork, /one continuous ultra-wide background scene only/u);
 assert.match(artwork, /Do not include a profile picture, avatar, headshot/u);
 assert.match(artwork, /width: kind === "banner" \? 1536 : 1024/u);
 assert.match(artwork, /height: kind === "banner" \? 512 : 1024/u);
-assert.match(settings, /Refresh Slurp now/u);
-assert.match(settings, /title="Refresh Slurp now"/u);
+assert.match(settings, /ui\.slurp\.settings\.refresh\.title/u);
+assert.match(settings, /title=\{t\("ui\.slurp\.settings\.refresh\.title"\)\}/u);
 assert.match(settings, /open=\{refreshModalOpen\}[\s\S]*?panelStyle=\{getNoodleAccentStyle\(NOODLE_PINK/u);
 assert.match(
   settings,

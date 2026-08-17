@@ -361,9 +361,9 @@ export function createPublicNoodleImagesService(db: DB) {
           continue;
         }
         const selectedConnectionId = await resolveNoodlerImageConnectionId(db, account.id);
-        const imageConnection = selectedConnectionId
-          ? await connections.getWithKey(selectedConnectionId)
-          : await connections.getDefaultForImageGeneration();
+        const imageConnection =
+          (selectedConnectionId ? await connections.getWithKey(selectedConnectionId) : null) ??
+          (await connections.getDefaultForImageGeneration());
         if (!imageConnection) {
           await noodle.releasePostImageClaim(post.id, claimToken);
           return {

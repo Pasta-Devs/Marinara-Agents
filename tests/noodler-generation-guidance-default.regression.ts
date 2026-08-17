@@ -64,7 +64,7 @@ assert.match(readme, /shipped default guidance is adult-first/u);
 assert.match(settings, /Restore default/u);
 assert.match(settings, /Edit prompt/u);
 assert.match(settings, /Save prompt/u);
-assert.match(settings, /Image generation instructions/u);
+assert.match(settings, /ui\.slurp\.settings\.images\.instructions/u);
 assert.match(settings, /Edit image generation prompt/u);
 assert.match(settings, /restoreDefaultImagePrompt/u);
 assert.match(settings, /saveImagePrompt/u);

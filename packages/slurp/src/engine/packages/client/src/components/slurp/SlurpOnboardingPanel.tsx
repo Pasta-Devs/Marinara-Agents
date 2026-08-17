@@ -1445,7 +1445,7 @@ export function SlurpOnboardingWizard({ open, selectionOnly = false, onClose, on
       <Modal
         open={providerConfirmationOpen}
         onClose={() => setProviderConfirmationOpen(false)}
-        title="Send context to your provider?"
+        title={t("ui.slurp.providerDisclosure.title")}
         width="max-w-md"
         panelClassName="noodle-icon-scope"
         panelStyle={getNoodleAccentStyle(NOODLE_PINK, {
@@ -1458,8 +1458,7 @@ export function SlurpOnboardingWizard({ open, selectionOnly = false, onClose, on
       >
         <div className="space-y-4">
           <p className="text-sm leading-6 text-[var(--muted-foreground)]">
-            Slurp will send the selected source profiles and generation settings to the selected provider to create
-            Creator drafts.
+            {t("ui.slurp.providerDisclosure.onboardingDetail")}
           </p>
           <div className="flex justify-end gap-2 border-t border-[var(--border)] pt-4">
             <button
@@ -1467,7 +1466,7 @@ export function SlurpOnboardingWizard({ open, selectionOnly = false, onClose, on
               onClick={() => setProviderConfirmationOpen(false)}
               className="min-h-10 rounded-md border border-[var(--border)] px-4 text-xs font-semibold"
             >
-              Cancel
+              {t("capabilities.actions.cancel")}
             </button>
             <button
               type="button"
@@ -1477,7 +1476,7 @@ export function SlurpOnboardingWizard({ open, selectionOnly = false, onClose, on
               }}
               className="min-h-10 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold !text-zinc-950 [&_svg]:!text-zinc-950"
             >
-              Continue
+              {t("ui.slurp.actions.continue")}
             </button>
           </div>
         </div>

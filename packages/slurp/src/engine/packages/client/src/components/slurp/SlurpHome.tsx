@@ -313,6 +313,11 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   const activePersonaQuery = useActivePersona();
   const onboardingState = useSlurpUIStore((state) => state.onboardingState);
   const setOnboardingState = useSlurpUIStore((state) => state.setOnboardingState);
+  useEffect(() => {
+    if (slurpSettingsQuery.data?.onboarding === "completed" && onboardingState !== "completed") {
+      setOnboardingState("completed");
+    }
+  }, [onboardingState, setOnboardingState, slurpSettingsQuery.data?.onboarding]);
   const storedPersonaId = useSlurpUIStore((state) => state.viewerPersonaId);
   const setStoredPersonaId = useSlurpUIStore((state) => state.setViewerPersonaId);
   const personas = personasQuery.data ?? [];
@@ -521,10 +526,9 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   const profileDraftGenerationIdRef = useRef(0);
   const confirmProviderDisclosure = async () => {
     return showConfirmDialog({
-      title: "Send context to your provider?",
-      message:
-        "Slurp will send the Creator, source, post, and media context needed for this generation to the selected provider.",
-      confirmLabel: "Continue",
+      title: localizeUi("ui.slurp.providerDisclosure.title"),
+      message: localizeUi("ui.slurp.providerDisclosure.generationDetail"),
+      confirmLabel: localizeUi("ui.slurp.actions.continue"),
     });
   };
   const invalidateProfileDraftGeneration = () => {
@@ -794,6 +798,8 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
 
   useEffect(() => {
     if (
+      slurpSettingsQuery.isSuccess &&
+      slurpSettingsQuery.data.onboarding !== "completed" &&
       onboardingState === "unseen" &&
       navigation.mode === "creator" &&
       navigation.view === "hub" &&
@@ -802,7 +808,13 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
       gatePresentedRef.current = true;
       setGateOpen(true);
     }
-  }, [navigation.mode, navigation.view, onboardingState]);
+  }, [
+    navigation.mode,
+    navigation.view,
+    onboardingState,
+    slurpSettingsQuery.data?.onboarding,
+    slurpSettingsQuery.isSuccess,
+  ]);
 
   useEffect(() => {
     if (navigation.mode !== "creator" || navigation.view !== "hub") return;
@@ -904,13 +916,13 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     guidance?: string;
     currentDraft?: NoodleStageProfileInput;
   }) => {
-    if (!(await confirmProviderDisclosure())) return;
     const noodlerAccountId = options?.noodlerAccountId ?? editingProfileId;
     if (!draftNoodleAccountId && !noodlerAccountId) return;
     if (connections.length === 0) {
       toast.error(localizeUi("ui.noodle.stageprofileform.noConnectionsConfiguredAddOneInSettingsConnections"));
       return;
     }
+    if (!(await confirmProviderDisclosure())) return;
     const generationId = ++profileDraftGenerationIdRef.current;
     const draftForGeneration = options?.currentDraft ?? profileDraft;
     generateProfileDraft.mutate(
@@ -3064,7 +3076,10 @@ function StageProfileView({
                 mode={profile.disclosureMode}
                 detail={
                   profile.disclosureMode === "open" && profile.publicIdentity
-                    ? `Openly linked to ${profile.publicIdentity.displayName} (@${profile.publicIdentity.handle})`
+                    ? localizeUi("ui.slurp.disclosure.openLinkedDetail", {
+                        name: profile.publicIdentity.displayName,
+                        handle: profile.publicIdentity.handle,
+                      })
                     : undefined
                 }
               />
@@ -3084,7 +3099,9 @@ function StageProfileView({
             if (!file) return;
             uploadProfileBanner.mutate(
               { accountId: profile.id, file },
-              { onError: (error) => toast.error(errorMessage(error, "Could not upload the Creator banner.")) },
+              {
+                onError: (error) => toast.error(errorMessage(error, localizeUi("ui.slurp.artwork.bannerUploadError"))),
+              },
             );
           },
           onGenerate: () => {
@@ -3102,7 +3119,9 @@ function StageProfileView({
             if (!file) return;
             uploadProfileAvatar.mutate(
               { accountId: profile.id, file },
-              { onError: (error) => toast.error(errorMessage(error, "Could not upload the Creator avatar.")) },
+              {
+                onError: (error) => toast.error(errorMessage(error, localizeUi("ui.slurp.artwork.avatarUploadError"))),
+              },
             );
           },
           onGenerate: () => {
@@ -3131,7 +3150,7 @@ function StageProfileView({
                 onClick={() => onToggleSubscription(profile.id, viewerCreator.subscribed)}
                 className="mt-4 inline-flex min-h-9 items-center gap-1.5 rounded-md bg-[var(--foreground)] px-4 text-xs font-bold text-[var(--background)] hover:opacity-90 disabled:opacity-50"
               >
-                + Subscribe
+                {localizeUi("ui.slurp.profile.subscribe")}
               </button>
             ) : !viewingOwnCreator && viewerCreator?.subscribed ? (
               <button
@@ -3166,7 +3185,7 @@ function StageProfileView({
             <details className="group border-b border-[var(--noodle-divider)] bg-[var(--accent)]/10">
               <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-4 text-xs font-semibold text-[var(--muted-foreground)] hover:bg-[var(--accent)]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] [&::-webkit-details-marker]:hidden">
                 <ChevronDown size={15} className="transition-transform group-open:rotate-180" />
-                <span>Additional controls</span>
+                <span>{localizeUi("ui.slurp.profile.additionalControls")}</span>
                 {viewingOwnCreator && (
                   <span className="ml-auto text-[0.68rem] text-[var(--noodle-accent)]">
                     {localizeUi("ui.noodle.stageprofileview.yourProfile")}
@@ -3236,7 +3255,9 @@ function StageProfileView({
       <Modal
         open={artworkKind !== null}
         onClose={() => setArtworkKind(null)}
-        title={artworkKind === "banner" ? "Generate banner with AI" : "Generate avatar with AI"}
+        title={localizeUi(
+          artworkKind === "banner" ? "ui.slurp.artwork.generateBanner" : "ui.slurp.artwork.generateAvatar",
+        )}
         width="max-w-lg"
         closeDisabled={generateProfileArtwork.isPending}
         panelClassName="noodle-icon-scope"
@@ -3250,7 +3271,7 @@ function StageProfileView({
       >
         <div className="space-y-4">
           <label className="block space-y-2 text-sm font-semibold">
-            <span>What should the image show?</span>
+            <span>{localizeUi("ui.slurp.artwork.guidanceLabel")}</span>
             <textarea
               value={artworkGuidance}
               onChange={(event) => setArtworkGuidance(event.target.value)}
@@ -3264,7 +3285,7 @@ function StageProfileView({
             />
           </label>
           <p className="text-xs leading-5 text-[var(--muted-foreground)]">
-            Slurp adds the Creator identity, privacy mode, image format, and composition rules automatically.
+            {localizeUi("ui.slurp.artwork.guidanceHelp")}
           </p>
           <div className="flex justify-end gap-2 border-t border-[var(--border)] pt-4">
             <button
@@ -3284,10 +3305,16 @@ function StageProfileView({
                   { accountId: profile.id, kind: artworkKind, guidance: artworkGuidance.trim() || undefined },
                   {
                     onSuccess: () => {
-                      toast.success(`${artworkKind === "banner" ? "Banner" : "Avatar"} generated.`);
+                      toast.success(
+                        localizeUi(
+                          artworkKind === "banner"
+                            ? "ui.slurp.artwork.bannerGenerated"
+                            : "ui.slurp.artwork.avatarGenerated",
+                        ),
+                      );
                       setArtworkKind(null);
                     },
-                    onError: (error) => toast.error(errorMessage(error, "Could not generate Creator artwork.")),
+                    onError: (error) => toast.error(errorMessage(error, localizeUi("ui.slurp.artwork.generateError"))),
                   },
                 );
               }}
@@ -4832,12 +4859,12 @@ function DisclosureBadge({ mode, detail }: { mode: NoodleIdentityDisclosure | nu
     : localizeUi("ui.noodle.disclosure.setupNeeded");
   const defaultDetail =
     mode === "open"
-      ? "The Creator openly uses the linked source identity."
+      ? localizeUi("ui.slurp.disclosure.openDetail")
       : mode === "hinted"
-        ? "The Creator is inspired by the linked source, but uses a different public identity."
+        ? localizeUi("ui.slurp.disclosure.hintedDetail")
         : mode === "secret"
-          ? "The Creator keeps broad inspiration while hiding the linked source identity."
-          : "Choose how this Creator relates to the linked source identity.";
+          ? localizeUi("ui.slurp.disclosure.secretDetail")
+          : localizeUi("ui.slurp.disclosure.setupDetail");
   return (
     <HelpTooltip
       label={label}
