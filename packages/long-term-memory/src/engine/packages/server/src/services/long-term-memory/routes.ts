@@ -422,8 +422,9 @@ export function createLongTermMemoryRoutes(runtime: {
         (info) => ({ logAvailable: true, bytes: info.size }),
         () => ({ logAvailable: false, bytes: 0 }),
       );
-      const [summary, state, indexResult] = await Promise.all([
+      const [summary, pendingDrafts, state, indexResult] = await Promise.all([
         readLtmNoteSummary(root),
+        draftStore.listDrafts({ status: "pending" }),
         readLtmIndexState(root),
         readFile(longTermMemoryRecallIndexPath(root), "utf8")
           .then((value) => ({
@@ -439,6 +440,9 @@ export function createLongTermMemoryRoutes(runtime: {
         directory: LTM_DIR_NAME,
         notes: {
           total: summary.total,
+          sourceNotes: summary.sourceNotes,
+          savedMemories: summary.savedMemories,
+          pendingDrafts: pendingDrafts.length,
           byType: summary.byType,
           byStatus: summary.byStatus,
         },
@@ -465,7 +469,7 @@ export function createLongTermMemoryRoutes(runtime: {
           warnings: state.error ? [state.error] : [],
           generatedAt: index?.generatedAt ?? null,
           sourceHash: index?.sourceHash ?? null,
-          noteCount: index ? summary.total : null,
+          noteCount: index ? summary.savedMemories : null,
           chunkCount: index ? chunks.length : null,
           chunkFormatVersion: index ? CURRENT_LTM_CHUNK_FORMAT_VERSION : null,
           embeddingsAvailable: Boolean(index?.embeddings.embeddedChunkCount),
@@ -788,7 +792,7 @@ export function createLongTermMemoryRoutes(runtime: {
               sourceNote,
               languageModel,
               scope: chat ? resolveChatLtmScope(chat) : sourceNote.scope,
-              modes: chat ? [ltmModeForChatMode(chat.mode)] : sourceNote.modes,
+              modes: chat ? [ltmModeForChatMode(chat.mode)] : body.mode ? [body.mode] : undefined,
               mode: body.mode,
               instruction: body.instruction,
               operationId,

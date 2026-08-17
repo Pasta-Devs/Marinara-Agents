@@ -1611,8 +1611,9 @@ export default function ReviewQueue({
                   const panelId = `ltm-review-source-panel-${id}`;
                   return (
                     <div key={id} className="group">
-                      <button
-                        type="button"
+                      <div
+                        role="button"
+                        tabIndex={0}
                         data-ltm-review-source-select={id}
                         aria-current={active || undefined}
                         aria-expanded={expanded}
@@ -1622,6 +1623,12 @@ export default function ReviewQueue({
                           setSelectedDraftId(null);
                           setSourceCollapsed((current) => (active ? !current : false));
                           setMobilePaneAndFocus("workbench");
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            event.currentTarget.click();
+                          }
                         }}
                         className={`flex min-h-12 cursor-pointer list-none items-center gap-2 border-b border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ring)] ${active ? "bg-[var(--accent)]/55" : ""}`}
                       >
@@ -1636,7 +1643,28 @@ export default function ReviewQueue({
                         <span className="shrink-0 text-xs text-[var(--muted-foreground)]">
                           {(source?.drafts.length ?? 0) + rejectedCount}
                         </span>
-                      </button>
+                        {rejectedCount ? (
+                          <button
+                            type="button"
+                            data-ltm-review-rejected-count={rejectedCount}
+                            className="shrink-0 rounded-full border border-[var(--marinara-editor-warning)]/40 px-2 py-0.5 text-[0.625rem] font-semibold text-[var(--marinara-editor-warning)] underline underline-offset-2"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setSelectedSourceId(id);
+                              setSelectedDraftId(null);
+                              setSourceCollapsed(false);
+                              setMobilePaneAndFocus("workbench");
+                              requestAnimationFrame(() =>
+                                document
+                                  .querySelector<HTMLElement>(`[data-ltm-rejected-source="${CSS.escape(id)}"] summary`)
+                                  ?.click(),
+                              );
+                            }}
+                          >
+                            {localizeUi("ui.longTermMemory.reviewqueue.rejectedCount", { count: rejectedCount })}
+                          </button>
+                        ) : null}
+                      </div>
                       <div id={panelId} hidden={!expanded}>
                         {source?.drafts.map((item, index) => (
                           <button
@@ -1746,6 +1774,7 @@ export default function ReviewQueue({
               {sourceRejectedSuggestions.length ? (
                 <details
                   data-ltm-rejected-suggestions
+                  data-ltm-rejected-source={effectiveSourceId ?? undefined}
                   aria-label={localizeUi("ui.longTermMemory.reviewqueue.suggestionsThatWerentSaved")}
                   className="group rounded-lg border border-[var(--border)] bg-[var(--secondary)]/20"
                 >

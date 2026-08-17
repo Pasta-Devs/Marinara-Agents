@@ -79,6 +79,11 @@ export function LastInjectionSummary({
                 ) : (
                   <span className="min-w-0 truncate">{memory.title}</span>
                 )}
+                {memory.sourceTitle ? (
+                  <span className="min-w-0 truncate text-[0.625rem] text-[var(--muted-foreground)]">
+                    {localizeUi("ui.longTermMemory.lastinjectionsummary.sourceFrom", { source: memory.sourceTitle })}
+                  </span>
+                ) : null}
                 <span className="shrink-0 text-[0.6875rem]">
                   {memory.tokenCount.toLocaleString(locale)} {localizeUi("ui.longTermMemory.activityview.tokens")}
                 </span>
@@ -87,7 +92,10 @@ export function LastInjectionSummary({
           </ul>
         ) : null}
         {!loading && !error && !data?.memories.length ? (
-          <p className={`${compact ? "text-[0.625rem]" : "text-xs"} text-[var(--muted-foreground)]`}>
+          <p
+            className={`${compact ? "text-[0.625rem]" : "text-xs"} text-[var(--muted-foreground)]`}
+            data-ltm-last-injection-state={data?.state ?? "no_matches"}
+          >
             {localizeUi("ui.longTermMemory.lastinjectionsummary.noMemoriesWereInjectedInTheLastRecall")}
           </p>
         ) : null}

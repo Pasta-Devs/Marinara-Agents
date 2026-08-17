@@ -11,6 +11,7 @@ import {
   type LtmNote,
   type LtmScope,
 } from "../../../../shared/src/features/agents/long-term-memory/index.js";
+import { DEFAULT_LTM_IMPORTED_SOURCE_MODE } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
 import { logger, type PackageLanguageModel } from "./package-runtime.js";
 import {
   compileEvidenceUnitExtraction,
@@ -363,7 +364,13 @@ async function extractLongTermMemoryFromSourceNoteInner(
   }
 
   const requestedScope = options.scope ?? sourceNote.scope;
-  const requestedModes = options.modes?.length ? options.modes : sourceNote.modes;
+  const importedWithoutChatContext =
+    !options.chatId && (sourceNote.provenance?.kind === "character" || sourceNote.provenance?.kind === "lorebook");
+  const requestedModes = options.modes?.length
+    ? options.modes
+    : importedWithoutChatContext
+      ? [DEFAULT_LTM_IMPORTED_SOURCE_MODE]
+      : sourceNote.modes;
   const resolvedMode = options.mode ?? requestedModes[0] ?? "roleplay";
   if (!requestedModes.includes(resolvedMode)) {
     throw new LtmServiceError(

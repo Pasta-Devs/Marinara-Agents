@@ -1386,6 +1386,15 @@ export default function SourcesWorkspace({
               <option value="roleplay">{localizeUi("ui.longTermMemory.sourcesworkspace.roleplay")}</option>
             </select>
           </label>
+          {source !== "chats" && modeFilter === "all" ? (
+            <p
+              role="note"
+              data-ltm-import-mode-policy
+              className="max-w-[42rem] text-xs text-[var(--marinara-editor-warning)]"
+            >
+              {localizeUi("ui.longTermMemory.sourcesworkspace.importsDefaultToRoleplay")}
+            </p>
+          ) : null}
           <Button
             disabled={source === "lorebooks" ? lorebookPreview.isFetching : preview.isFetching}
             onClick={() => void (source === "lorebooks" ? lorebookPreview.refetch() : preview.refetch())}
@@ -1960,11 +1969,22 @@ export default function SourcesWorkspace({
                 <StatusSurface tone={resultTone(item.extractionStatus)}>{item.error.message}</StatusSurface>
               ) : null}
               {item.extractionStatus === "succeeded" && item.outcome.droppedUnits > 0 ? (
-                <p className="text-xs text-[var(--muted-foreground)]">
-                  {localizeUi("ui.longTermMemory.sourcesworkspace.rejectedSuggestionCount", {
-                    count: item.outcome.droppedUnits,
-                  })}
-                </p>
+                <div className="space-y-2">
+                  <p
+                    className="text-xs text-[var(--muted-foreground)]"
+                    data-ltm-rejected-count={item.outcome.droppedUnits}
+                  >
+                    {localizeUi("ui.longTermMemory.sourcesworkspace.rejectedSuggestionCount", {
+                      count: item.outcome.droppedUnits,
+                    })}
+                  </p>
+                  <Button
+                    onClick={() => onOpenReview?.(item.note.id)}
+                    data-ltm-source-action="review-rejected-suggestions"
+                  >
+                    {localizeUi("ui.longTermMemory.sourcesworkspace.reviewRejectedSuggestions")}
+                  </Button>
+                </div>
               ) : null}
               {item.diagnostics.length ? (
                 <ul className="space-y-1 text-xs text-[var(--muted-foreground)]" data-ltm-extraction-diagnostics>

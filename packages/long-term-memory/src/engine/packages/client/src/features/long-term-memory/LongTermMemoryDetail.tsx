@@ -1,6 +1,16 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, CircleHelp, Pencil, Plus, Settings2, Sparkles, TriangleAlert, Upload } from "lucide-react";
+import {
+  ArrowLeft,
+  CircleHelp,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Settings2,
+  Sparkles,
+  TriangleAlert,
+  Upload,
+} from "lucide-react";
 import type { LtmStatusResponse } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { queryKeys, request } from "./api";
 import { LongTermMemoryNavigation } from "./LongTermMemoryNavigation";
@@ -109,6 +119,8 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   const [destination, setDestination] = useState<LongTermMemoryDestination>("vault");
   const [activationPending, setActivationPending] = useState(false);
   const [activationError, setActivationError] = useState("");
+  const [repairPending, setRepairPending] = useState(false);
+  const [repairMessage, setRepairMessage] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const addMenuRef = useRef<HTMLDivElement>(null);
   const addTriggerRef = useRef<HTMLButtonElement>(null);
@@ -182,9 +194,9 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       setOnboardingOpen(true);
       return;
     }
-    if (status.data.notes.total !== 0) return;
+    if (status.data.notes.savedMemories !== 0) return;
     setOnboardingOpen(true);
-  }, [status.isSuccess, status.data?.notes.total]);
+  }, [status.isSuccess, status.data?.notes.savedMemories]);
 
   const completeOnboarding = () => {
     setOnboardingOpen(false);
@@ -333,6 +345,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   };
 
   const indexHealth = status.data?.indexes;
+  const savedMemoryCount = status.data?.notes.savedMemories ?? 0;
   const health =
     indexHealth?.rebuildState === "building"
       ? "building"
@@ -350,7 +363,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
       not_built: "ui.longTermMemory.longtermmemorydetail.vaultNotBuilt",
     }[health ?? "not_built"],
   );
-  const emptyUnbuiltVault = health === "not_built" && (status.data?.notes.total ?? 0) === 0;
+  const emptyUnbuiltVault = health === "not_built" && savedMemoryCount === 0;
   const needsHealthAttention = ["building", "degraded", "stale", "corrupt", "failed"].includes(health ?? "");
   const healthTone =
     !status.data || emptyUnbuiltVault
@@ -369,6 +382,40 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
         {indexedChunks} {localizeUi("ui.longTermMemory.longtermmemorydetail.indexedChunks")}
       </p>
       <p>{localizeUi("ui.longTermMemory.longtermmemorydetail.checkSettingsMaintenanceReindexRecallData")}</p>
+      {indexHealth?.embeddingsAvailable === false && savedMemoryCount > 0 ? (
+        <p className="text-[var(--marinara-editor-warning)]">
+          {localizeUi("ui.longTermMemory.longtermmemorydetail.savedButNotSearchable")}
+        </p>
+      ) : null}
+      {indexHealth?.rebuildState === "failed" ? (
+        <p className="text-[var(--destructive)]">
+          {localizeUi("ui.longTermMemory.longtermmemorydetail.semanticRecallUnavailable")}
+        </p>
+      ) : null}
+      <Button
+        disabled={repairPending}
+        onClick={async () => {
+          setRepairPending(true);
+          setRepairMessage("");
+          try {
+            await request("/repair", "POST", { actions: ["rebuild_indexes"] });
+            setRepairMessage(localizeUi("ui.longTermMemory.longtermmemorydetail.reindexComplete"));
+            await status.refetch();
+          } catch (error) {
+            setRepairMessage(
+              error instanceof Error
+                ? error.message
+                : localizeUi("ui.longTermMemory.longtermmemorydetail.reindexFailed"),
+            );
+          } finally {
+            setRepairPending(false);
+          }
+        }}
+      >
+        <RefreshCw aria-hidden="true" size="0.75rem" className={repairPending ? "animate-spin" : ""} />
+        {localizeUi("ui.longTermMemory.longtermmemorydetail.reindexRecall")}
+      </Button>
+      {repairMessage ? <p role="status">{repairMessage}</p> : null}
     </div>
   );
   const chatLabel = props.chatName ?? localizeUi("ui.longTermMemory.longtermmemorydetail.thisChat");
@@ -772,7 +819,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                   destination={destination}
                   onDestinationChange={selectDestination}
                   badges={{
-                    memories: status.data?.notes.total,
+                    memories: savedMemoryCount,
                     review: pendingDrafts.data?.count,
                   }}
                 />
@@ -1426,12 +1473,12 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                               </Button>
                               <Button
                                 onClick={async () => {
-                                  if (status.data?.notes.total) await selectDestination("vault");
+                                  if (savedMemoryCount) await selectDestination("vault");
                                   else await openSources("characters");
                                 }}
                               >
                                 {localizeUi(
-                                  status.data?.notes.total
+                                  savedMemoryCount
                                     ? "ui.longTermMemory.longtermmemorydetail.goToSavedMemories"
                                     : "ui.longTermMemory.longtermmemorydetail.chooseASource",
                                 )}
@@ -1441,12 +1488,12 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                             <Button
                               primary
                               onClick={async () => {
-                                if (status.data?.notes.total) await selectDestination("vault");
+                                if (savedMemoryCount) await selectDestination("vault");
                                 else await openSources("characters");
                               }}
                             >
                               {localizeUi(
-                                status.data?.notes.total
+                                savedMemoryCount
                                   ? "ui.longTermMemory.longtermmemorydetail.goToSavedMemories"
                                   : "ui.longTermMemory.longtermmemorydetail.chooseASource",
                               )}
@@ -1529,7 +1576,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           destination={destination}
           onDestinationChange={selectDestination}
           badges={{
-            memories: status.data?.notes.total,
+            memories: savedMemoryCount,
             review: pendingDrafts.data?.count,
           }}
         />

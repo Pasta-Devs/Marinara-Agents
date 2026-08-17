@@ -74,6 +74,23 @@ async function main() {
             return chats;
           },
         },
+        resources: {
+          async listCharacters() {
+            return [
+              {
+                id: "character-import",
+                data: { name: "Imported Character", description: "A character source for mode policy proof." },
+                comment: "",
+              },
+            ];
+          },
+          async listPersonas() {
+            return [];
+          },
+          async listLorebooks() {
+            return [];
+          },
+        },
       });
       const request = {
         source: "chats" as const,
@@ -109,6 +126,19 @@ async function main() {
         "legacy bare-string day entries must coerce, not vanish",
       );
 
+      const importedCharacter = await importPackageInterop(
+        { source: "characters", sourceIds: ["character-import"], extract: false, limit: 100 },
+        join(dataDir, "long-term-memory"),
+        new AbortController().signal,
+      );
+      assert.equal(importedCharacter.imported[0]?.note.modes[0], "roleplay");
+      const explicitCharacter = await importPackageInterop(
+        { source: "characters", sourceIds: ["character-import"], mode: "game", extract: false, limit: 100 },
+        join(dataDir, "long-term-memory"),
+        new AbortController().signal,
+      );
+      assert.equal(explicitCharacter.imported[0]?.note.modes[0], "game");
+
       const fixtureByMode: Record<string, typeof conversationChat> = {
         roleplay: roleplayChat,
         conversation: conversationChat,
@@ -136,7 +166,7 @@ async function main() {
       assert.ok(imported.imported.every((item) => item.created));
       const storage = new LongTermMemoryStorage(join(dataDir, "long-term-memory"));
       const notes = await storage.listNotes({ type: "source" });
-      assert.equal(notes.length, 3);
+      assert.equal(notes.length, 4);
       const dayNote = notes.find((note) => note.provenance?.entryId === "day:27.07.2026");
       assert.equal(dayNote?.modes[0], "conversation");
       assert.match(dayNote?.sections.source.text ?? "", /Discussed nikujaga\.\n\nmild\n\nno chili/u);
@@ -149,7 +179,7 @@ async function main() {
       assert.equal(importedAgain.imported.length, 3);
       assert.equal(importedAgain.counts.sourceNotesWritten, 3);
       assert.ok(importedAgain.imported.every((item) => !item.created));
-      assert.equal((await storage.listNotes({ type: "source" })).length, 3);
+      assert.equal((await storage.listNotes({ type: "source" })).length, 4);
     },
     [() => releaseRuntime?.(), () => rm(dataDir, { recursive: true, force: true })],
   );

@@ -406,6 +406,23 @@ async function main() {
       headers,
     });
     assert.equal(status.statusCode, 200, status.body);
+    assert.deepEqual(Object.keys(status.json().notes).sort(), [
+      "byStatus",
+      "byType",
+      "pendingDrafts",
+      "savedMemories",
+      "sourceNotes",
+      "total",
+    ]);
+    assert.deepEqual(
+      {
+        total: status.json().notes.total,
+        sourceNotes: status.json().notes.sourceNotes,
+        savedMemories: status.json().notes.savedMemories,
+        pendingDrafts: status.json().notes.pendingDrafts,
+      },
+      { total: 0, sourceNotes: 0, savedMemories: 0, pendingDrafts: 0 },
+    );
     assert.deepEqual(Object.keys(status.json().indexes).sort(), [
       "chunkCount",
       "chunkFormatVersion",
