@@ -83,6 +83,14 @@ Both builders accept package IDs for a focused rebuild. When a build changes an 
 
 The catalog `generatedAt` field is preserved across rebuilds rather than stamped with the current time. This keeps a no-op rebuild byte-identical and stops the timestamp from being a guaranteed merge conflict between concurrent package PRs. A rebuild that touches nothing substantive should leave `catalog/**/catalog.json` unchanged — if `git status` shows only a `generatedAt` diff, discard it. To intentionally refresh the timestamp (for example when promoting a release), run the builder with `MARINARA_CATALOG_STAMP_GENERATED_AT=1`.
 
+### Incomplete packages
+
+A package that is being developed in this repository but is not ready for users is marked **incomplete** by adding its id to `INCOMPLETE_PACKAGE_IDS` in `scripts/catalog-incomplete.mjs`. An incomplete package keeps building normally — its payload, manifest, artifact, and locales stay committed so development and testing continue — but it is excluded from every generated catalog lane, which is the only surface Marinara Engine users browse and install from. Because both the `main` and `staging` catalogs are generated through the same chokepoint (`writeCatalogFamily`), the exclusion applies on every Engine channel, and whichever builder runs next also drops any stale committed entry for a newly-marked id. `validate-catalog.mjs` fails if an incomplete id appears in a committed catalog, and allows its activation guidance to exist ahead of the listing.
+
+When the package is ready to ship: delete its id from the set, rebuild its package (which re-adds the catalog entry), update the package-count assertion in `validate-catalog.mjs` and the README catalog tables, and land all of it in one PR.
+
+For local testing against a development Engine, build with `MARINARA_CATALOG_INCLUDE_INCOMPLETE=1` to produce an unfiltered catalog and point the Engine's `MARINARA_AGENT_CATALOG_URL` override at it. Never commit a catalog generated that way — validation rejects it.
+
 ### Engine compatibility and catalog lanes
 
 Each emitted package manifest is the source of truth for Engine compatibility. For ordinary Agent packages, edit the manifest range; for generated feature packages, edit the feature definition in `scripts/build-feature-packages.mjs`, which emits that range into the manifest. The builders automatically publish an entry into every Engine-major lane intersected by `engine.min` (inclusive) and `engine.maxExclusive` (exclusive). For example, `>=2.3.0 <3.0.0` publishes only to v2, `>=2.3.0 <4.0.0` publishes to v2 and v3, and `>=3.2.0 <3.3.0` publishes only to v3. `catalog/catalog.json` remains an exact v2 alias for Engine releases that predate lane selection.

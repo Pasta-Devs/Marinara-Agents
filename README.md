@@ -4,7 +4,7 @@ Official downloadable agents and capability packages for [Marinara Engine](https
 
 Marinara Engine starts lightweight: a fresh installation contains no optional agents. Open **Agents → Download Agents** on desktop or mobile to browse this catalog, read what each package does, and install only the features you want. Installed packages appear in the normal Agents panel and the chat modes they support. You can update or uninstall them from the same catalog. Restart Marinara Engine when the installer asks you to do so.
 
-Across its Engine compatibility lanes, the catalog currently contains **36 first-party packages**: 6 Writer Agents, 10 Tracker Agents, and 20 Misc Agents. Most packages support **Marinara Engine v2.3.0+**; Long-Term Memory requires **v2.4.1**; World Maps, Storyboard, and Noodle require **v2.4.2**; and Beholder, Inventory Tracker, Haptic Feedback, Slurp, and Pixelforge require **v2.4.3**. Every package accepts compatible Engine v2 and v3 releases below **v4.0.0**. Each Engine release sees only the packages compatible with its major version. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
+Across its Engine compatibility lanes, the catalog currently contains **35 first-party packages**: 6 Writer Agents, 10 Tracker Agents, and 19 Misc Agents. Most packages support **Marinara Engine v2.3.0+**; Long-Term Memory requires **v2.4.1**; World Maps, Storyboard, and Noodle require **v2.4.2**; and Beholder, Inventory Tracker, Haptic Feedback, and Slurp require **v2.4.3**. Every package accepts compatible Engine v2 and v3 releases below **v4.0.0**. Each Engine release sees only the packages compatible with its major version. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
 
 ## Official catalog
 
@@ -51,7 +51,6 @@ Across its Engine compatibility lanes, the catalog currently contains **36 first
 | Long-Term Memory | [`long-term-memory`](packages/long-term-memory/manifest.json) | Extracts durable memories from chat summaries, character records, and lorebooks, with scoped vault browsing, review, source management, recall controls, and preset-marker placement for Roleplay. |
 | Music DJ | [`spotify`](packages/spotify/manifest.json) | Plays scene-matched music through Spotify, YouTube, or local Game Assets. |
 | Noodle | [`noodle`](packages/noodle/manifest.json) | Explore the public Noodle social timeline as an optional local social world, available after installation from **Home → Noodle**. |
-| Pixelforge | [`pixelforge`](packages/pixelforge/manifest.json) | A walkable pixel-art RPG Experience for Game Mode: your setup preferences generate the world — a cozy village or a sci-fi colony — then explore it and talk to NPCs to drive the story. Requires Engine 2.4.3+. |
 | Slurp | [`slurp`](packages/slurp/manifest.json) | The standalone successor to NoodleR: create local Creator profiles, publish public or locked posts, and simulate audience activity from **Home → Slurp**. |
 | Poker | [`poker`](packages/poker/manifest.json) | Adds No-Limit Texas Hold'em for Conversation chats and the `/poker` command. |
 | Rock-Paper-Scissors | [`rock-paper-scissors`](packages/rock-paper-scissors/manifest.json) | Adds best-of-three, five, or seven Conversation matches and the `/rps` command. |
@@ -60,6 +59,14 @@ Across its Engine compatibility lanes, the catalog currently contains **36 first
 | UNO | [`uno`](packages/uno/manifest.json) | Adds a complete Conversation-mode UNO table and `/uno` command. |
 
 For complete mode, lifecycle, and settings documentation for every package, see the Engine's [Downloadable Agents Reference](https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md).
+
+### In development
+
+These packages are being built in this repository but are not finished, so they are excluded from the user-facing catalog on every Engine channel until they are ready (see [Contributing § Incomplete packages](CONTRIBUTING.md#incomplete-packages)):
+
+| Package | ID | Status |
+| --- | --- | --- |
+| Pixelforge | [`pixelforge`](packages/pixelforge/manifest.json) | A walkable pixel-art RPG Experience for Game Mode: generated settlements, NPCs, and story-driven exploration. Under active development; not yet listed for users. |
 
 ### Localization sources
 

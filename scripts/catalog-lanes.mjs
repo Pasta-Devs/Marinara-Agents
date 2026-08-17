@@ -1,5 +1,6 @@
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { INCOMPLETE_PACKAGE_IDS } from "./catalog-incomplete.mjs";
 
 export const LEGACY_CATALOG_MAJOR = 2;
 
@@ -195,7 +196,32 @@ export async function resolveCatalogGeneratedAt(catalogDirectory) {
 export async function writeCatalogFamily(repoRoot, catalog) {
   const catalogDirectory = join(repoRoot, "catalog");
   catalog.generatedAt = await resolveCatalogGeneratedAt(catalogDirectory);
-  const catalogsByMajor = createCatalogLanes(catalog);
+  // Incomplete packages (see catalog-incomplete.mjs) keep their files and
+  // artifacts in the tree but are never listed in the published lanes. This is
+  // the single chokepoint every builder writes through, so a stale committed
+  // entry for a newly-marked id is also dropped on the next rebuild. Never a
+  // silent drop: each exclusion is logged.
+  let published = catalog;
+  if (process.env.MARINARA_CATALOG_INCLUDE_INCOMPLETE === "1") {
+    const included = catalog.packages.filter((entry) => INCOMPLETE_PACKAGE_IDS.has(entry.manifest.id));
+    for (const entry of included) {
+      console.log(`catalog: INCLUDING incomplete package ${entry.manifest.id} (dev build — do not commit)`);
+    }
+  } else {
+    const excluded = catalog.packages.filter((entry) => INCOMPLETE_PACKAGE_IDS.has(entry.manifest.id));
+    for (const entry of excluded) {
+      console.log(
+        `catalog: excluding incomplete package ${entry.manifest.id} ${entry.manifest.version} from the published lanes`,
+      );
+    }
+    if (excluded.length > 0) {
+      published = {
+        ...catalog,
+        packages: catalog.packages.filter((entry) => !INCOMPLETE_PACKAGE_IDS.has(entry.manifest.id)),
+      };
+    }
+  }
+  const catalogsByMajor = createCatalogLanes(published);
   await mkdir(catalogDirectory, { recursive: true });
 
   const entries = await readdir(catalogDirectory, { withFileTypes: true });

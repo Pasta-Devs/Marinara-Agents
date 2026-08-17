@@ -13,6 +13,7 @@ import {
   readCatalogFamily,
 } from "./catalog-lanes.mjs";
 import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
+import { INCOMPLETE_PACKAGE_IDS } from "./catalog-incomplete.mjs";
 import { assertPackagePrivateImportBoundary } from "./package-engine-boundary.mjs";
 import { OFFICIAL_PACKAGE_GUIDANCE, withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
 import {
@@ -28,6 +29,16 @@ const MIN_ENGINE_VERSION = "2.3.0";
 const REQUIRED_MAX_ENGINE_EXCLUSIVE = "4.0.0";
 const ENGINE_CAPABILITY_API = Object.freeze({ major: 1, minor: 9 });
 if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.packages)) throw new Error("Invalid catalog envelope");
+// Incomplete packages (catalog-incomplete.mjs) keep their source, payload, and
+// artifact in the tree but must never be listed in a published catalog lane —
+// this also catches a stale committed entry that predates marking the id.
+for (const entry of catalog.packages) {
+  if (INCOMPLETE_PACKAGE_IDS.has(entry.manifest.id)) {
+    throw new Error(
+      `${entry.manifest.id} is marked incomplete (scripts/catalog-incomplete.mjs) and must not appear in the published catalog — rebuild the catalog to drop it`,
+    );
+  }
+}
 const expectedCatalogsByMajor = createCatalogLanes(catalog);
 if (JSON.stringify([...catalogsByMajor.keys()].sort()) !== JSON.stringify([...expectedCatalogsByMajor.keys()].sort())) {
   throw new Error("Versioned catalog lane set does not match package Engine compatibility ranges");
@@ -718,15 +729,19 @@ for (const entry of catalog.packages) {
   }
 }
 
-const guidanceIds = Object.keys(OFFICIAL_PACKAGE_GUIDANCE).sort();
+// Guidance may be authored ahead of listing for an incomplete package (its id
+// is absent from the catalog by design), so exempt those ids from exactness.
+const guidanceIds = Object.keys(OFFICIAL_PACKAGE_GUIDANCE)
+  .filter((id) => !INCOMPLETE_PACKAGE_IDS.has(id))
+  .sort();
 if (JSON.stringify(guidanceIds) !== JSON.stringify([...ids].sort())) {
   throw new Error("Official package activation guidance must cover exactly the downloadable catalog");
 }
 
 const agentOnly = catalog.packages.filter((entry) => !entry.manifest.entrypoints.server).length;
 const features = catalog.packages.length - agentOnly;
-if (catalog.packages.length !== 36 || agentOnly !== 25 || features !== 11) {
-  throw new Error(`Expected 25 agents and 11 features, found ${agentOnly} and ${features}`);
+if (catalog.packages.length !== 35 || agentOnly !== 24 || features !== 11) {
+  throw new Error(`Expected 24 agents and 11 features, found ${agentOnly} and ${features}`);
 }
 console.log(`Catalog valid: ${catalog.packages.length} packages (${agentOnly} agents, ${features} features).`);
 console.log(
