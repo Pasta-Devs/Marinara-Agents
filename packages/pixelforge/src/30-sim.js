@@ -22,6 +22,10 @@ PF.Sim = class {
     this._npcTimers = new Map();
     this._rnd = PF.rng((world.seed ^ 0x9e3779b9) >>> 0);
     this.dirty = false; // save-worthy change happened
+    this._daypart = null;
+    // Place everyone for the starting clock. A restore overwrites clockMin
+    // AFTER construction and calls this again (see 60-save simFromSaved).
+    this.resolveSchedules();
   }
 
   zone() {
@@ -99,26 +103,136 @@ PF.Sim = class {
         }
       }
     }
-    // Clock + NPC wander run in walk AND dialogue (life goes on, time passes
-    // during conversations), never in combat/replay. Package-local clock only —
+    // NPCs keep wandering in walk AND dialogue (the world stays alive while you
+    // read), but the CLOCK only advances while walking: a conversation should
+    // never burn the afternoon, and a daypart boundary crossing mid-dialogue
+    // would relocate the very NPC you are talking to. Package-local clock only —
     // never the host time endpoints (issue #5076).
     if (this.mode === "walk" || this.mode === "dialogue") {
-      this._clockAcc += dt;
-      while (this._clockAcc >= PF.CLOCK_SECONDS_PER_GAME_MINUTE) {
-        this._clockAcc -= PF.CLOCK_SECONDS_PER_GAME_MINUTE;
-        this.clockMin++;
-        if (this.clockMin >= 24 * 60) {
-          this.clockMin = 0;
-          this.day++;
+      if (this.mode === "walk") {
+        let advanced = false;
+        this._clockAcc += dt;
+        while (this._clockAcc >= PF.CLOCK_SECONDS_PER_GAME_MINUTE) {
+          this._clockAcc -= PF.CLOCK_SECONDS_PER_GAME_MINUTE;
+          this.clockMin++;
+          advanced = true;
+          if (this.clockMin >= 24 * 60) {
+            this.clockMin = 0;
+            this.day++;
+          }
         }
+        // A fixed 1/60s step advances at most one game minute per ~300 frames,
+        // so a boundary can never be skipped between checks.
+        if (advanced && this.daypart() !== this._daypart) this.resolveSchedules();
       }
       this.stepNpcs(dt, z);
     }
     return { zoneChanged: false };
   }
 
+  /** The four dayparts, aligned to the same thresholds darkness() tints by, so
+   *  NPCs move exactly as the light changes. */
+  daypart(min = this.clockMin) {
+    const h = min / 60;
+    if (h >= 7 && h < 18) return "day";
+    if (h >= 18 && h < 21) return "dusk";
+    if (h >= 5 && h < 7) return "dawn";
+    return "night";
+  }
+
+  /** Jump the clock to the next occurrence of a daypart's start (the "wait
+   *  until dusk" rest action). A JUMP, not an advance: NPCs re-place in one
+   *  shot. Walk mode only, so it can never collide with the dialogue freeze. */
+  waitUntil(target) {
+    const starts = { dawn: 5 * 60, day: 7 * 60, dusk: 18 * 60, night: 21 * 60 };
+    const at = starts[target];
+    if (at === undefined || this.mode !== "walk") return false;
+    if (at <= this.clockMin) this.day++;
+    this.clockMin = at;
+    this._clockAcc = 0;
+    this.resolveSchedules();
+    return true;
+  }
+
+  /** Re-place every scheduled NPC for the current daypart. Idempotent, O(cast),
+   *  and fires only on a boundary crossing (~4x/day) plus once per rebuild. */
+  resolveSchedules() {
+    this._daypart = this.daypart();
+    // Flatten first: splicing between zone arrays while iterating them would
+    // skip or double-process an NPC.
+    const all = [];
+    for (const zoneId in this.world.zones) {
+      for (const npc of this.world.zones[zoneId].npcs) all.push([zoneId, npc]);
+    }
+    for (const [fromId, npc] of all) {
+      if (!npc._sched || npc._hold) continue; // _hold reserves a GM override seam
+      const handle = PF.schedule.resolve(npc._sched, this._daypart);
+      if (!handle) continue;
+      const target = this.world.zones[handle.zoneId];
+      if (!target) continue;
+      const box = handle.wander;
+      // spread:false keeps a private, meaningful placement (a merchant's own
+      // stall counter); every other handle is SHARED geometry, so disperse by
+      // id. `taken` then closes the gap the hash cannot: colliding ids, and the
+      // NPCs already standing in the destination, would otherwise stack — and a
+      // sprite underneath another one can never be selected by talk-targeting.
+      const spreadKey = handle.spread === false ? null : npc.id;
+      const taken = (x, y) => this.npcOccupies(target, x, y, npc);
+      if (handle.zoneId === fromId) {
+        // In-zone: swap the box, and only snap when the NPC is outside it —
+        // overlapping day/night boxes should not pop.
+        const inside = npc.x >= box.x0 && npc.x <= box.x1 && npc.y >= box.y0 && npc.y <= box.y1;
+        npc.wander = box;
+        if (!inside) {
+          const at = PF.schedule.walkableIn(target, box, spreadKey, taken);
+          npc.x = at.x;
+          npc.y = at.y;
+        }
+      } else {
+        // Cross-zone: the renderer and talk-detection only walk the CURRENT
+        // zone's array, so a spliced NPC simply leaves one zone and appears in
+        // the other — no visibility flag needed.
+        const from = this.world.zones[fromId];
+        const index = from.npcs.indexOf(npc);
+        if (index >= 0) from.npcs.splice(index, 1);
+        target.npcs.push(npc);
+        npc.wander = box;
+        // Push FIRST so `taken` sees the destination's real occupants and skips
+        // only this NPC. Without the spread key every transient bedding down at
+        // the same inn box landed on its center tile.
+        const at = PF.schedule.walkableIn(target, box, spreadKey, taken);
+        npc.x = at.x;
+        npc.y = at.y;
+      }
+      // stepNpcs caches float fx/fy per id; a stale timer would drag the token
+      // back toward the old box. Dropping it re-seeds at the new position.
+      this._npcTimers.delete(npc.id);
+    }
+  }
+
+  /** Is another NPC standing on — or already walking onto — this tile? Terrain
+   *  alone is not enough: two NPCs would pick the same free tile and slide
+   *  through each other. Casts are capped at ~10, so a scan is cheaper than
+   *  maintaining an occupancy index. */
+  npcOccupies(z, x, y, exclude) {
+    for (const other of z.npcs) {
+      if (other === exclude) continue;
+      if (Math.round(other.x) === x && Math.round(other.y) === y) return true;
+      const timer = this._npcTimers.get(other.id);
+      if (timer && (timer.dx || timer.dy) && timer.tx === x && timer.ty === y) return true;
+    }
+    return false;
+  }
+
   stepNpcs(dt, z) {
     for (const npc of z.npcs) {
+      // The person you are talking TO stands still. nearNpc stops updating the
+      // moment dialogue starts, so it still points at whoever was greeted —
+      // drifting away mid-sentence read as if they had stopped listening.
+      if (this.mode === "dialogue" && this.nearNpc && npc.id === this.nearNpc.id) {
+        npc.stepPhase = 0;
+        continue;
+      }
       let t = this._npcTimers.get(npc.id);
       if (!t) {
         t = { wait: 1 + this._rnd() * 3, dx: 0, dy: 0, fx: npc.x, fy: npc.y };
@@ -138,9 +252,18 @@ PF.Sim = class {
         const nx = Math.round(t.fx) + dx;
         const ny = Math.round(t.fy) + dy;
         const w = npc.wander;
-        if (nx >= w.x0 && nx <= w.x1 && ny >= w.y0 && ny <= w.y1 && !z.solid[ny * z.w + nx]) {
+        if (
+          nx >= w.x0 &&
+          nx <= w.x1 &&
+          ny >= w.y0 &&
+          ny <= w.y1 &&
+          PF.schedule.standable(z, nx, ny) &&
+          !this.npcOccupies(z, nx, ny, npc)
+        ) {
           t.dx = dx;
           t.dy = dy;
+          t.tx = nx; // remember the DESTINATION — see the arrival test below
+          t.ty = ny;
         } else {
           t.dx = 0;
           t.dy = 0;
@@ -153,9 +276,17 @@ PF.Sim = class {
         t.fy += t.dy * speed;
         npc.facing = t.dx < 0 ? 2 : t.dx > 0 ? 3 : t.dy < 0 ? 1 : 0;
         npc.stepPhase = (npc.stepPhase || 0) + dt * 6;
-        if (Math.abs(t.fx - Math.round(t.fx)) < 0.05 && Math.abs(t.fy - Math.round(t.fy)) < 0.05) {
-          t.fx = Math.round(t.fx);
-          t.fy = Math.round(t.fy);
+        // Arrival is reaching the DESTINATION tile, not merely being near an
+        // integer: NPCs always start on an exact tile, and at the fixed 1/60s
+        // step one move covers 1.6/60 = 0.027 tiles, so a "near any integer"
+        // test matched the tile they were still standing on and cancelled every
+        // move on its first frame — the wander has never actually moved anyone.
+        if ((t.dx > 0 && t.fx >= t.tx) || (t.dx < 0 && t.fx <= t.tx)) {
+          t.fx = t.tx;
+          t.dx = 0;
+          t.dy = 0;
+        } else if ((t.dy > 0 && t.fy >= t.ty) || (t.dy < 0 && t.fy <= t.ty)) {
+          t.fy = t.ty;
           t.dx = 0;
           t.dy = 0;
         }
@@ -186,7 +317,9 @@ PF.Sim = class {
   header() {
     const z = this.zone();
     const near = this.nearNpc ? `; near: ${this.nearNpc.name} (${this.nearNpc.role})` : "";
-    return `[World: ${z.name}; ${this.clockLabel()}${near}]`;
+    // The daypart word is one token and keeps the GM's light and "who is about"
+    // narration consistent with what we render and where NPCs actually are.
+    return `[World: ${z.name}; ${this.clockLabel()} (${this.daypart()})${near}]`;
   }
 
   /** The metered turn prefix (docs/brief-schema.md §7): name+role ride the

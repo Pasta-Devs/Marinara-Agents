@@ -1,5 +1,5 @@
-// Pixelforge 0.6.3 — Marinara Engine game-surface Experience (single-file client bundle)
-// Built from packages/pixelforge/src (13 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
+// Pixelforge 0.7.0 — Marinara Engine game-surface Experience (single-file client bundle)
+// Built from packages/pixelforge/src (14 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
 // ===== 00-prelude.js =====
@@ -11,7 +11,10 @@ const PF = {
   VW: 480, // internal viewport width  (integer-scaled up to the container)
   VH: 270, // internal viewport height
   WALK_SPEED: 70, // px/s
-  CLOCK_SECONDS_PER_GAME_MINUTE: 1.2, // package-local clock (never /game/time/advance — issue #5076)
+  // Package-local clock (never /game/time/advance — issue #5076). 5s per game
+  // minute = 2 real hours of WALKING per in-game day; the clock also freezes
+  // during dialogue, so a played day stretches well past that. Tune here.
+  CLOCK_SECONDS_PER_GAME_MINUTE: 5,
 };
 
 /** Deterministic 32-bit string hash (FNV-1a). */
@@ -2120,6 +2123,13 @@ PF.world = (() => {
     for (const place of interiorPlaces) {
       const id = zoneIdForPlace(place);
       if (!id) continue;
+      // An interior only exists if it claimed a facade: its door IS the portal.
+      // The facade loop above stops when the building lots run dry (a small
+      // outpost has fewer lots than CAPS.places allows), and compiling the zone
+      // anyway produced a named, NPC-populated room with no door in either
+      // direction — anyone homed there was stranded and un-talkable forever.
+      // Same policy as an unanchorable feature: dropped, never sealed.
+      if (!buildings.some((b) => b.boundPlace === place)) continue;
       const [w, h] = INTERIOR_DIMS[place.kind] || INTERIOR_DIMS.dwelling;
       const zone = makeZone(id, place.name, w, h, "floor");
       for (let x = 0; x < w; x++) {
@@ -2303,33 +2313,44 @@ PF.world = (() => {
     // spawn renders the NPC inside the trunk until it happens to step off
     // (review finding — seed 6 pins it). Deterministic outward ring scan over
     // the wander box; the zone's own spawn tile is the last resort.
-    const walkableSpawn = (zone, wander) => {
-      const cx = ((wander.x0 + wander.x1) / 2) | 0;
-      const cy = ((wander.y0 + wander.y1) / 2) | 0;
-      const open = (x, y) => x >= 0 && x < zone.w && y >= 0 && y < zone.h && !zone.solid[idx(zone, x, y)];
-      if (open(cx, cy)) return { x: cx, y: cy };
-      const maxR = Math.max(wander.x1 - wander.x0, wander.y1 - wander.y0);
-      for (let r = 1; r <= maxR; r++) {
-        for (let dy = -r; dy <= r; dy++) {
-          for (let dx = -r; dx <= r; dx++) {
-            if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-            const x = cx + dx;
-            const y = cy + dy;
-            if (x >= wander.x0 && x <= wander.x1 && y >= wander.y0 && y <= wander.y1 && open(x, y)) return { x, y };
-          }
-        }
-      }
-      return { x: zone.spawn.x, y: zone.spawn.y };
-    };
+    // `key` spreads NPCs that share a box (a household, the plaza) instead of
+    // stacking them all on its center where only the top sprite is talkable.
+    // This IS the runtime placer (25-schedule): a compiled spawn and a schedule
+    // relocation have to obey exactly the same rules — never a door or portal
+    // tile, which are walkable by design but look wrong (and block the way in)
+    // when occupied — so share the one implementation instead of keeping a twin
+    // that can drift. The occupancy test rules out a tile another cast member
+    // already holds: the hash only spreads, and two ids colliding in a small
+    // box (a door apron is six tiles) is exactly the un-talkable stack the key
+    // was added to prevent. `npcs` only holds members placed BEFORE this one,
+    // so the pass stays deterministic.
+    const walkableSpawn = (zone, wander, key) =>
+      PF.schedule.walkableIn(zone, wander, key, (x, y) => zone.npcs.some((n) => n.x === x && n.y === y));
+    // A door apron box: the strip an NPC mills around in front of its building.
+    const doorBox = (door, reach, depth) => ({
+      x0: Math.max(2, door.doorX - reach),
+      y0: Math.max(2, door.doorY),
+      x1: Math.min(v.w - 3, door.doorX + reach),
+      y1: Math.min(v.h - 3, door.doorY + depth),
+    });
     brief.cast.forEach((member, index) => {
       const npcId = `n${index + 1}`;
       const standing = member.standing ?? "resident";
       let zone = zones[zoneIdByName.get(member.home) ?? "z1"] ?? v;
       let wander;
+      // The sleep/off-duty node, when it differs from the working one (a shop
+      // owner's dwelling, a transient's inn bed). Left null when an NPC simply
+      // stays put — 30-sim's schedule resolver falls back to `post`.
+      let home = null;
+      // Households, the plaza and the inn are SHARED boxes, so spawn each NPC
+      // at its own hashed tile inside the box; anyone stacked under another
+      // sprite can never be selected by talk-targeting (review finding).
+      let spread = true;
       if (standing === "resident") {
         // Wander near the owner's building when they have one, else around the
         // zone's spawn; interiors wander their walkable middle.
         const owned = buildings.find((b) => b.owner === member || (b.households ?? []).includes(member.household));
+        const dwelling = buildings.find((b) => (b.households ?? []).includes(member.household));
         if (zone === v && owned) {
           wander = {
             x0: Math.max(2, owned.door.doorX - 4),
@@ -2337,6 +2358,12 @@ PF.world = (() => {
             x1: Math.min(v.w - 3, owned.door.doorX + 4),
             y1: Math.min(v.h - 3, owned.door.doorY + 5),
           };
+          // A special-building owner sleeps at their dwelling, not the workshop.
+          // Dwellings have no interiors, so "turned in for the night" reads as
+          // hugging their own door rather than roaming the apron — but keep it
+          // wide enough for a whole household to stand at it without stacking.
+          const bed = dwelling && dwelling !== owned ? dwelling : owned;
+          home = { zoneId: v.id, wander: doorBox(bed.door, 1, 1) };
         } else if (zone === v) {
           wander = plazaBox();
         } else {
@@ -2345,11 +2372,17 @@ PF.world = (() => {
       } else if (standing === "transient" && stalls.some((s) => s.owner === member)) {
         const stall = stalls.find((s) => s.owner === member);
         zone = v; // tend the stall in the settlement
+        // A stall is one merchant's own pitch, not shared geometry, and the
+        // center of the box IS the counter — so keep the exact placement.
+        spread = false;
+        // Behind the counter only — the single row south of the three tables.
+        // A deeper box let them drift into the street, which read as abandoning
+        // the stall rather than manning it.
         wander = {
           x0: Math.max(2, stall.x),
           y0: Math.min(v.h - 3, stall.y + 1),
           x1: Math.min(v.w - 3, stall.x + 4),
-          y1: Math.min(v.h - 3, stall.y + 2),
+          y1: Math.min(v.h - 3, stall.y + 1),
         };
       } else if (standing === "transient") {
         const spot = loiterAnchor();
@@ -2365,7 +2398,11 @@ PF.world = (() => {
         zone = v; // destitute: the town's public center
         wander = plazaBox();
       }
-      const spawnAt = walkableSpawn(zone, wander);
+      // Transients bed down at the inn when the settlement has one.
+      if (standing === "transient" && gatheringZoneId && zones[gatheringZoneId]) {
+        home = { zoneId: gatheringZoneId, wander: fullZoneBox(zones[gatheringZoneId]) };
+      }
+      const spawnAt = walkableSpawn(zone, wander, spread ? npcId : null);
       zone.npcs.push({
         id: npcId,
         name: member.name,
@@ -2375,6 +2412,19 @@ PF.world = (() => {
         x: spawnAt.x,
         y: spawnAt.y,
         wander,
+        // Daypart schedule handles, resolved at runtime by 30-sim. Runtime-only
+        // (like facing/stepPhase): never serialized, re-baked on every compile,
+        // so schedules add ZERO save fields. `post` is the working/day anchor
+        // computed above; `home` is the sleep node when it differs.
+        _sched: {
+          kind: member.kind,
+          standing,
+          // spread:false keeps a private, meaningful placement (a merchant's own
+          // stall counter); shared boxes disperse by NPC id.
+          post: { zoneId: zone.id, wander, spread },
+          home,
+          public: { zoneId: v.id, wander: plazaBox() },
+        },
       });
     });
 
@@ -2394,6 +2444,167 @@ PF.world = (() => {
   }
 
   return { build, idx };
+})();
+
+// ===== 25-schedule.js =====
+// ── NPC daypart schedules ────────────────────────────────────────────────────
+// Who is where, when. The compiler (20-world) bakes a `_sched` onto every NPC
+// holding pre-computed location HANDLES — geometry can only be built while the
+// buildings/stalls/zones are still in scope. This module owns the POLICY: a
+// small table of kind×standing -> daypart -> handle name, resolved at runtime
+// by the Sim as the clock crosses a daypart boundary.
+//
+// Deliberately sparse. A combo with nothing interesting to do names only
+// "post", so it behaves exactly as it did before schedules existed — standing
+// at its anchor around the clock. Any handle a template names that an NPC does
+// not have (no dwelling, no inn) falls back to `post`, so a template can never
+// strand an NPC nowhere.
+//
+// Schedules add ZERO save fields: they are a pure function of the clock, which
+// is already saved, so a restored chat re-resolves to the right daypart and a
+// timeline rewind rewinds the town with it.
+PF.schedule = (() => {
+  // Handle names: post = the working/day anchor, home = the sleep node,
+  // public = the settlement's plaza. See 20-world's cast loop for the geometry.
+  const TABLE = {
+    // The innkeeper never leaves the inn — it is the fixed point the evening
+    // crowd converges on, and it means the lit building is never empty.
+    "host:resident": { dawn: "post", day: "post", dusk: "post", night: "post" },
+    // The watch keeps the night, so the settlement never looks abandoned.
+    "guard:resident": { dawn: "home", day: "post", dusk: "post", night: "post" },
+    // Trades work their building through the day and sleep at their dwelling.
+    "leader:resident": { dawn: "home", day: "post", dusk: "post", night: "home" },
+    "grower:resident": { dawn: "home", day: "post", dusk: "post", night: "home" },
+    "maker:resident": { dawn: "home", day: "post", dusk: "post", night: "home" },
+    "merchant:resident": { dawn: "home", day: "post", dusk: "post", night: "home" },
+    // A travelling trader sleeps at the inn and tends the stall by day.
+    "merchant:transient": { dawn: "home", day: "post", dusk: "post", night: "home" },
+    // Everyone else with a roof: at the door at dawn, the square by day (the
+    // plaza should feel busiest in daylight and empty after dark), home at night.
+    "*:resident": { dawn: "home", day: "public", dusk: "home", night: "home" },
+    // Loiterers hold their public spot all day and take a bed at night.
+    "*:transient": { dawn: "post", day: "post", dusk: "post", night: "home" },
+    // Fringe NPCs stay out at the margins — meeting one means going to them.
+    "*:fringe": { dawn: "post", day: "post", dusk: "post", night: "post" },
+    // No bed to go to: the square, day and night.
+    "*:destitute": { dawn: "post", day: "post", dusk: "post", night: "post" },
+  };
+  const DEFAULT = { dawn: "post", day: "post", dusk: "post", night: "post" };
+
+  /** The handle an NPC should occupy at this daypart, or null when unscheduled. */
+  function resolve(sched, daypart) {
+    if (!sched) return null;
+    const template = TABLE[`${sched.kind}:${sched.standing}`] ?? TABLE[`*:${sched.standing}`] ?? DEFAULT;
+    return sched[template[daypart] ?? "post"] ?? sched.post ?? null;
+  }
+
+  /** Can an NPC STAND here? Open ground is not enough: a door tile is
+   *  deliberately non-solid (the player walks through it) and a portal tile is
+   *  the zone's exit, so an NPC parked on either looks wrong and blocks the way
+   *  in. Player movement is unaffected — this gates NPCs only. */
+  function standable(zone, x, y) {
+    if (x < 0 || x >= zone.w || y < 0 || y >= zone.h) return false;
+    const index = y * zone.w + x;
+    if (zone.solid[index]) return false;
+    if (zone.object[index] === "door") return false;
+    for (const portal of zone.portals) if (portal.x === x && portal.y === y) return false;
+    return true;
+  }
+
+  /** An open tile inside the box, nudged off anything solid — the runtime twin
+   *  of the compiler's walkableSpawn, so a relocation can never drop an NPC
+   *  inside a wall or a tree. Deterministic: consumes no randomness.
+   *
+   *  `key` spreads a SHARED box. Most residents resolve to the same `public`
+   *  handle by day and a household shares one `home`, so a plain box-center
+   *  placement stacked the cast onto a single tile — and because talk-targeting
+   *  picks the nearest with a strict <, everyone under the top sprite became
+   *  unreachable. A stable per-NPC hash picks each one its own starting tile.
+   *
+   *  `taken` is the caller's occupancy test. The hash alone only SPREADS: two
+   *  ids can still land on the same tile in a small box (a household door
+   *  apron is six tiles), which puts us right back on the unreachable sprite.
+   *  Treating an occupied tile as closed makes the ring scan walk to the next
+   *  free one, so "no two NPCs on a tile" is an invariant rather than a
+   *  probability. Still deterministic: occupancy is a function of the order
+   *  the caller places its NPCs in, which is itself fixed. */
+  function walkableIn(zone, box, key, taken) {
+    // Normalize the corners rather than trusting them. An inverted box makes a
+    // span of zero, `hash % 0` is NaN, and standable()'s bounds test is false
+    // for every NaN comparison — so a NaN tile would sail out as a valid
+    // placement instead of throwing anywhere near the mistake. Nothing produces
+    // one today; this is input validation, not a live bug.
+    const x0 = Math.min(box.x0, box.x1);
+    const x1 = Math.max(box.x0, box.x1);
+    const y0 = Math.min(box.y0, box.y1);
+    const y1 = Math.max(box.y0, box.y1);
+    let cx = ((x0 + x1) / 2) | 0;
+    let cy = ((y0 + y1) / 2) | 0;
+    const spanX = x1 - x0 + 1;
+    const spanY = y1 - y0 + 1;
+    // `> 0` is also the non-finite guard: it is false for NaN, which leaves the
+    // `| 0`-ed center in place, so no NaN ever reaches standable().
+    if (key && spanX > 0 && spanY > 0) {
+      const hash = PF.hashStr(String(key));
+      cx = x0 + (hash % spanX);
+      cy = y0 + (((hash / 7) | 0) % spanY);
+    }
+    const open = (x, y) => standable(zone, x, y) && !(taken && taken(x, y));
+    if (open(cx, cy)) return { x: cx, y: cy };
+    /** Deterministic outward ring scan from the start tile, clipped to a rect. */
+    const ring = (maxR, lox, hix, loy, hiy) => {
+      for (let r = 1; r <= maxR; r++) {
+        for (let dy = -r; dy <= r; dy++) {
+          for (let dx = -r; dx <= r; dx++) {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+            const x = cx + dx;
+            const y = cy + dy;
+            if (x >= lox && x <= hix && y >= loy && y <= hiy && open(x, y)) return { x, y };
+          }
+        }
+      }
+      return null;
+    };
+    // Sum, not max: an off-center hashed start still has to be able to reach
+    // the far corner of the box.
+    const inBox = ring(x1 - x0 + (y1 - y0), x0, x1, y0, y1);
+    if (inBox) return inBox;
+    // The box is FULL. Widen to the zone before giving up. The old fallback
+    // dropped straight onto zone.spawn — ONE fixed tile that honours neither
+    // `taken` nor standable() — so every NPC overflowing the same box in a
+    // single pass landed on top of the last. A household at the CAPS.household
+    // cap of 6 shares a 3x2 door apron whose door tile standable() excludes, so
+    // it overflowed on every seed tried, and the losers were both un-talkable
+    // (nearest wins on a strict <) and frozen: their wander box is the very box
+    // they could not fit in, so every candidate step fails its bounds test.
+    // Standing just outside it is the honest outcome — spare, but reachable.
+    //
+    // Clamp the scan origin into the zone first, or a box sitting outside the
+    // map would need a radius bigger than w+h just to reach tile 0 and the
+    // "whole zone" pass would quietly cover none of it.
+    cx = PF.clamp(cx, 0, zone.w - 1) | 0;
+    cy = PF.clamp(cy, 0, zone.h - 1) | 0;
+    const inZone = ring(zone.w + zone.h, 0, zone.w - 1, 0, zone.h - 1);
+    if (inZone) return inZone;
+    // Every standable tile in the zone is occupied. Nothing can satisfy both
+    // predicates now, so drop the one that is merely undesirable and keep the
+    // one that is structural: sharing a tile looks wrong, standing inside a wall
+    // or in a doorway IS wrong, and a doorway blocks the way in. Returning the
+    // spawn unchecked (as this did) could do exactly that, so check it — it is
+    // the tile every zone guarantees walkable, and was standable in all 480
+    // compiled zones tried, but the guarantee should live in the code.
+    //
+    // Unreachable in practice, and deliberately not escalated to a null return:
+    // the smallest zone measured holds 119 standable tiles against a cast capped
+    // at 10, so this is a floor under a contract, not a live path.
+    if (standable(zone, zone.spawn.x, zone.spawn.y)) return { x: zone.spawn.x, y: zone.spawn.y };
+    for (let y = 0; y < zone.h; y++) {
+      for (let x = 0; x < zone.w; x++) if (standable(zone, x, y)) return { x, y };
+    }
+    return { x: zone.spawn.x, y: zone.spawn.y };
+  }
+
+  return { TABLE, resolve, walkableIn, standable };
 })();
 
 // ===== 30-sim.js =====
@@ -2421,6 +2632,10 @@ PF.Sim = class {
     this._npcTimers = new Map();
     this._rnd = PF.rng((world.seed ^ 0x9e3779b9) >>> 0);
     this.dirty = false; // save-worthy change happened
+    this._daypart = null;
+    // Place everyone for the starting clock. A restore overwrites clockMin
+    // AFTER construction and calls this again (see 60-save simFromSaved).
+    this.resolveSchedules();
   }
 
   zone() {
@@ -2498,26 +2713,136 @@ PF.Sim = class {
         }
       }
     }
-    // Clock + NPC wander run in walk AND dialogue (life goes on, time passes
-    // during conversations), never in combat/replay. Package-local clock only —
+    // NPCs keep wandering in walk AND dialogue (the world stays alive while you
+    // read), but the CLOCK only advances while walking: a conversation should
+    // never burn the afternoon, and a daypart boundary crossing mid-dialogue
+    // would relocate the very NPC you are talking to. Package-local clock only —
     // never the host time endpoints (issue #5076).
     if (this.mode === "walk" || this.mode === "dialogue") {
-      this._clockAcc += dt;
-      while (this._clockAcc >= PF.CLOCK_SECONDS_PER_GAME_MINUTE) {
-        this._clockAcc -= PF.CLOCK_SECONDS_PER_GAME_MINUTE;
-        this.clockMin++;
-        if (this.clockMin >= 24 * 60) {
-          this.clockMin = 0;
-          this.day++;
+      if (this.mode === "walk") {
+        let advanced = false;
+        this._clockAcc += dt;
+        while (this._clockAcc >= PF.CLOCK_SECONDS_PER_GAME_MINUTE) {
+          this._clockAcc -= PF.CLOCK_SECONDS_PER_GAME_MINUTE;
+          this.clockMin++;
+          advanced = true;
+          if (this.clockMin >= 24 * 60) {
+            this.clockMin = 0;
+            this.day++;
+          }
         }
+        // A fixed 1/60s step advances at most one game minute per ~300 frames,
+        // so a boundary can never be skipped between checks.
+        if (advanced && this.daypart() !== this._daypart) this.resolveSchedules();
       }
       this.stepNpcs(dt, z);
     }
     return { zoneChanged: false };
   }
 
+  /** The four dayparts, aligned to the same thresholds darkness() tints by, so
+   *  NPCs move exactly as the light changes. */
+  daypart(min = this.clockMin) {
+    const h = min / 60;
+    if (h >= 7 && h < 18) return "day";
+    if (h >= 18 && h < 21) return "dusk";
+    if (h >= 5 && h < 7) return "dawn";
+    return "night";
+  }
+
+  /** Jump the clock to the next occurrence of a daypart's start (the "wait
+   *  until dusk" rest action). A JUMP, not an advance: NPCs re-place in one
+   *  shot. Walk mode only, so it can never collide with the dialogue freeze. */
+  waitUntil(target) {
+    const starts = { dawn: 5 * 60, day: 7 * 60, dusk: 18 * 60, night: 21 * 60 };
+    const at = starts[target];
+    if (at === undefined || this.mode !== "walk") return false;
+    if (at <= this.clockMin) this.day++;
+    this.clockMin = at;
+    this._clockAcc = 0;
+    this.resolveSchedules();
+    return true;
+  }
+
+  /** Re-place every scheduled NPC for the current daypart. Idempotent, O(cast),
+   *  and fires only on a boundary crossing (~4x/day) plus once per rebuild. */
+  resolveSchedules() {
+    this._daypart = this.daypart();
+    // Flatten first: splicing between zone arrays while iterating them would
+    // skip or double-process an NPC.
+    const all = [];
+    for (const zoneId in this.world.zones) {
+      for (const npc of this.world.zones[zoneId].npcs) all.push([zoneId, npc]);
+    }
+    for (const [fromId, npc] of all) {
+      if (!npc._sched || npc._hold) continue; // _hold reserves a GM override seam
+      const handle = PF.schedule.resolve(npc._sched, this._daypart);
+      if (!handle) continue;
+      const target = this.world.zones[handle.zoneId];
+      if (!target) continue;
+      const box = handle.wander;
+      // spread:false keeps a private, meaningful placement (a merchant's own
+      // stall counter); every other handle is SHARED geometry, so disperse by
+      // id. `taken` then closes the gap the hash cannot: colliding ids, and the
+      // NPCs already standing in the destination, would otherwise stack — and a
+      // sprite underneath another one can never be selected by talk-targeting.
+      const spreadKey = handle.spread === false ? null : npc.id;
+      const taken = (x, y) => this.npcOccupies(target, x, y, npc);
+      if (handle.zoneId === fromId) {
+        // In-zone: swap the box, and only snap when the NPC is outside it —
+        // overlapping day/night boxes should not pop.
+        const inside = npc.x >= box.x0 && npc.x <= box.x1 && npc.y >= box.y0 && npc.y <= box.y1;
+        npc.wander = box;
+        if (!inside) {
+          const at = PF.schedule.walkableIn(target, box, spreadKey, taken);
+          npc.x = at.x;
+          npc.y = at.y;
+        }
+      } else {
+        // Cross-zone: the renderer and talk-detection only walk the CURRENT
+        // zone's array, so a spliced NPC simply leaves one zone and appears in
+        // the other — no visibility flag needed.
+        const from = this.world.zones[fromId];
+        const index = from.npcs.indexOf(npc);
+        if (index >= 0) from.npcs.splice(index, 1);
+        target.npcs.push(npc);
+        npc.wander = box;
+        // Push FIRST so `taken` sees the destination's real occupants and skips
+        // only this NPC. Without the spread key every transient bedding down at
+        // the same inn box landed on its center tile.
+        const at = PF.schedule.walkableIn(target, box, spreadKey, taken);
+        npc.x = at.x;
+        npc.y = at.y;
+      }
+      // stepNpcs caches float fx/fy per id; a stale timer would drag the token
+      // back toward the old box. Dropping it re-seeds at the new position.
+      this._npcTimers.delete(npc.id);
+    }
+  }
+
+  /** Is another NPC standing on — or already walking onto — this tile? Terrain
+   *  alone is not enough: two NPCs would pick the same free tile and slide
+   *  through each other. Casts are capped at ~10, so a scan is cheaper than
+   *  maintaining an occupancy index. */
+  npcOccupies(z, x, y, exclude) {
+    for (const other of z.npcs) {
+      if (other === exclude) continue;
+      if (Math.round(other.x) === x && Math.round(other.y) === y) return true;
+      const timer = this._npcTimers.get(other.id);
+      if (timer && (timer.dx || timer.dy) && timer.tx === x && timer.ty === y) return true;
+    }
+    return false;
+  }
+
   stepNpcs(dt, z) {
     for (const npc of z.npcs) {
+      // The person you are talking TO stands still. nearNpc stops updating the
+      // moment dialogue starts, so it still points at whoever was greeted —
+      // drifting away mid-sentence read as if they had stopped listening.
+      if (this.mode === "dialogue" && this.nearNpc && npc.id === this.nearNpc.id) {
+        npc.stepPhase = 0;
+        continue;
+      }
       let t = this._npcTimers.get(npc.id);
       if (!t) {
         t = { wait: 1 + this._rnd() * 3, dx: 0, dy: 0, fx: npc.x, fy: npc.y };
@@ -2537,9 +2862,18 @@ PF.Sim = class {
         const nx = Math.round(t.fx) + dx;
         const ny = Math.round(t.fy) + dy;
         const w = npc.wander;
-        if (nx >= w.x0 && nx <= w.x1 && ny >= w.y0 && ny <= w.y1 && !z.solid[ny * z.w + nx]) {
+        if (
+          nx >= w.x0 &&
+          nx <= w.x1 &&
+          ny >= w.y0 &&
+          ny <= w.y1 &&
+          PF.schedule.standable(z, nx, ny) &&
+          !this.npcOccupies(z, nx, ny, npc)
+        ) {
           t.dx = dx;
           t.dy = dy;
+          t.tx = nx; // remember the DESTINATION — see the arrival test below
+          t.ty = ny;
         } else {
           t.dx = 0;
           t.dy = 0;
@@ -2552,9 +2886,17 @@ PF.Sim = class {
         t.fy += t.dy * speed;
         npc.facing = t.dx < 0 ? 2 : t.dx > 0 ? 3 : t.dy < 0 ? 1 : 0;
         npc.stepPhase = (npc.stepPhase || 0) + dt * 6;
-        if (Math.abs(t.fx - Math.round(t.fx)) < 0.05 && Math.abs(t.fy - Math.round(t.fy)) < 0.05) {
-          t.fx = Math.round(t.fx);
-          t.fy = Math.round(t.fy);
+        // Arrival is reaching the DESTINATION tile, not merely being near an
+        // integer: NPCs always start on an exact tile, and at the fixed 1/60s
+        // step one move covers 1.6/60 = 0.027 tiles, so a "near any integer"
+        // test matched the tile they were still standing on and cancelled every
+        // move on its first frame — the wander has never actually moved anyone.
+        if ((t.dx > 0 && t.fx >= t.tx) || (t.dx < 0 && t.fx <= t.tx)) {
+          t.fx = t.tx;
+          t.dx = 0;
+          t.dy = 0;
+        } else if ((t.dy > 0 && t.fy >= t.ty) || (t.dy < 0 && t.fy <= t.ty)) {
+          t.fy = t.ty;
           t.dx = 0;
           t.dy = 0;
         }
@@ -2585,7 +2927,9 @@ PF.Sim = class {
   header() {
     const z = this.zone();
     const near = this.nearNpc ? `; near: ${this.nearNpc.name} (${this.nearNpc.role})` : "";
-    return `[World: ${z.name}; ${this.clockLabel()}${near}]`;
+    // The daypart word is one token and keeps the GM's light and "who is about"
+    // narration consistent with what we render and where NPCs actually are.
+    return `[World: ${z.name}; ${this.clockLabel()} (${this.daypart()})${near}]`;
   }
 
   /** The metered turn prefix (docs/brief-schema.md §7): name+role ride the
@@ -3446,13 +3790,31 @@ PF.save = {
     if (!brief && meta?.pixelforgeBrief === undefined && this._configGenerate(meta)) world.interim = true;
     const sim = new PF.Sim(world);
     if (saved && saved.v === 1) {
-      if (typeof saved.zone === "string" && world.zones[saved.zone]) sim.zoneId = saved.zone;
+      // A saved zone that no longer exists (world gen changed between versions,
+      // or an interior that this build no longer compiles) falls back to the
+      // start zone — but the saved x/y belonged to the OLD zone, and carrying
+      // them over just clamps interior coordinates into a much larger map. The
+      // solid-tile rescue below only fires if that lands in a wall, so the
+      // player would silently reappear in a random corner. Land them at the
+      // spawn instead, which is the one tile every zone guarantees is walkable.
+      const zoneResolved = typeof saved.zone === "string" && !!world.zones[saved.zone];
+      if (zoneResolved) sim.zoneId = saved.zone;
       const z = sim.zone();
-      if (typeof saved.x === "number") sim.x = PF.clamp(saved.x, PF.TILE, (z.w - 1) * PF.TILE);
-      if (typeof saved.y === "number") sim.y = PF.clamp(saved.y, PF.TILE, (z.h - 1) * PF.TILE);
+      if (zoneResolved) {
+        if (typeof saved.x === "number") sim.x = PF.clamp(saved.x, PF.TILE, (z.w - 1) * PF.TILE);
+        if (typeof saved.y === "number") sim.y = PF.clamp(saved.y, PF.TILE, (z.h - 1) * PF.TILE);
+      } else {
+        sim.x = (z.spawn.x + 0.5) * PF.TILE;
+        sim.y = (z.spawn.y + 0.5) * PF.TILE;
+      }
       if (typeof saved.facing === "number") sim.facing = saved.facing & 3;
       if (typeof saved.clockMin === "number") sim.clockMin = PF.clamp(saved.clockMin | 0, 0, 24 * 60 - 1);
       if (typeof saved.day === "number") sim.day = Math.max(1, saved.day | 0);
+      // The world was built (and everyone placed at their compiled anchor) by
+      // the constructor above, which ran against the DEFAULT 08:00 clock. Now
+      // that the saved time is restored, re-place for the real daypart — else a
+      // chat reopened at midnight would show a town going about its morning.
+      sim.resolveSchedules();
       if (saved.intro && typeof saved.intro === "object") {
         sim.intro = {
           world: saved.intro.world === true,
@@ -3669,6 +4031,48 @@ PF.save = {
 // chips, touch D-pad, Talk / Travel / Keyboard controls, toasts. The root is
 // pointer-events:none; each control opts back in — clicks in empty space fall
 // through to the narration below (host contract).
+// Collapsing the host's narration box is a CSS-only reach OUTSIDE our element,
+// which the host sanctions through the manifest's contributions.gameSurface
+// .surfaceClass ("pixelforge-surface") stamped on the shared game container,
+// plus its inert `experience-dialogue-*` theming hooks. Scope every rule under
+// that class so nothing leaks into the rest of the app. The collapse takes the
+// WHOLE panel, controls included; see the trade-off note on the rule itself.
+const PF_NARRATION_STYLE_ID = "pixelforge-narration-collapse";
+function installPixelforgeNarrationStyle(doc) {
+  if (!doc || doc.getElementById(PF_NARRATION_STYLE_ID)) return;
+  const style = doc.createElement("style");
+  style.id = PF_NARRATION_STYLE_ID;
+  // Collapse the WHOLE panel, not just the prose. Hiding the prose alone left
+  // the speaker label, the failure banner and the button row floating in an
+  // empty box, which is most of the height back. The label and banner carry no
+  // hook of their own — only utility classes — so picking them off individually
+  // would mean matching styling soup that breaks on any host restyle.
+  //
+  // Trade-off, deliberate: while collapsed the Retry/Next controls go with it,
+  // so a failed generation is invisible until the player expands again. The
+  // toggle sits right beside the panel and dialogue force-expands, so nothing
+  // is ever unreachable — but this is exactly why the host should own a real
+  // collapse control (Marinara-Engine#5209) instead of a package doing CSS.
+  //
+  // `data-tour` is a product-tour hook rather than a declared contract; it is
+  // still far steadier than utility classes, and the theming hooks below are
+  // contract, so keep both.
+  //
+  // visibility:hidden is load-bearing, not belt-and-braces (review finding).
+  // max-height/opacity/overflow only hide PAINT, and pointer-events only stops
+  // the mouse — none of them leave the tab order, so a keyboard player tabbing
+  // past a collapsed panel would land on the invisible turn input and type into
+  // nothing. visibility:hidden takes the whole subtree out of sequential
+  // navigation, which is the behaviour the collapse is claiming to have.
+  style.textContent =
+    '.pf-narration-collapsed .pixelforge-surface [data-tour="game-dialogue"],' +
+    ".pf-narration-collapsed .pixelforge-surface .experience-dialogue-wrap," +
+    ".pf-narration-collapsed .pixelforge-surface .game-narration-prose{" +
+    "max-height:0;min-height:0;padding-top:0;padding-bottom:0;margin-top:0;margin-bottom:0;" +
+    "border-width:0;overflow:hidden;opacity:0;visibility:hidden;pointer-events:none;}";
+  doc.head.appendChild(style);
+}
+
 PF.Hud = class {
   constructor(rootEl, core) {
     this.core = core;
@@ -3692,16 +4096,24 @@ PF.Hud = class {
 
     this.talkBtn = this._btn("Talk (E)", () => core.interact());
     this.travelBtn = this._btn("Travel", () => this.toggleTravel());
+    this.waitBtn = this._btn("⏩ Wait…", () => this.toggleWait());
+    this.narrationBtn = this._btn("▤ Hide narration", () => this.toggleNarration());
     this.keyboardBtn = this._btn("Keyboard", () => core.setMode("dialogue"));
     this.resumeBtn = this._btn("▶ Resume walking", () => core.resume());
+    this.waitMenu = PF.el("div", {
+      style:
+        "display:none;flex-direction:column;gap:6px;align-items:flex-end;max-height:40vh;overflow:auto;pointer-events:auto;",
+    });
     this.actions = PF.el(
       "div",
       {
         style:
           "position:absolute;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px;align-items:flex-end;z-index:2;",
       },
-      [this.talkBtn, this.travelBtn, this.keyboardBtn, this.resumeBtn],
+      [this.talkBtn, this.travelBtn, this.waitMenu, this.waitBtn, this.narrationBtn, this.keyboardBtn, this.resumeBtn],
     );
+    this._narrationCollapsed = false;
+    installPixelforgeNarrationStyle(rootEl && rootEl.ownerDocument);
 
     // Touch D-pad. touch-action:none so the browser doesn't claim the gesture
     // (same requirement the host documents on its own drag surfaces).
@@ -3768,6 +4180,14 @@ PF.Hud = class {
 
   destroy() {
     clearTimeout(this._toastTimer);
+    // The collapse class lives on <html>, OUTSIDE our element, so removing the
+    // HUD does not take it with us. Left behind it outlives the thing that can
+    // undo it: a remount (chat switch, error unmount, version bump) builds a
+    // fresh Hud whose _narrationCollapsed starts false, so the button offers to
+    // "Hide narration" while the panel is already hidden — and the Retry/Next
+    // controls and turn input stay collapsed with nothing left to expand them.
+    // Fail open: hand the narration back and let the player re-collapse it.
+    this.toggleNarration(false);
     this.root.remove();
   }
 
@@ -3778,6 +4198,55 @@ PF.Hud = class {
     this._toastTimer = setTimeout(() => {
       this.toastEl.style.opacity = "0";
     }, 2600);
+  }
+
+  /** Skip ahead to the next dawn / midday / dusk / night. The clock is
+   *  otherwise only moved by walking, so without this a player who wants to see
+   *  the town after dark has to walk in circles for an hour. */
+  toggleWait() {
+    const open = this.waitMenu.style.display !== "flex";
+    if (!open) {
+      this.waitMenu.style.display = "none";
+      return;
+    }
+    this.waitMenu.replaceChildren();
+    for (const [part, label] of [
+      ["dawn", "Wait for dawn"],
+      ["day", "Wait for morning"],
+      ["dusk", "Wait for dusk"],
+      ["night", "Wait for night"],
+    ]) {
+      this.waitMenu.appendChild(
+        this._btn(label, () => {
+          this.waitMenu.style.display = "none";
+          if (!this.core.sim.waitUntil(part)) {
+            this.toast("Not while you're talking — resume walking first");
+            return;
+          }
+          // waitUntil moves clockMin/day but does not flag the save itself, and
+          // the autosave only fires on a dirty sim — without this the skipped
+          // hours are lost on reload.
+          this.core.markDirty();
+          this.refreshChips();
+          this.toast(`Time passes — ${this.core.sim.clockLabel()}`);
+        }),
+      );
+    }
+    this.waitMenu.style.display = "flex";
+  }
+
+  /** Collapse the host's narration box so more of the world is visible. The
+   *  whole panel goes, Retry/Next included — the toggle sits right beside it and
+   *  dialogue force-expands, because the turn input lives in there. */
+  toggleNarration(force) {
+    const collapsed = typeof force === "boolean" ? force : !this._narrationCollapsed;
+    // Only a real click changes what the player WANTS; the dialogue-mode
+    // force-open is temporary and must not overwrite that preference.
+    if (typeof force !== "boolean") this._narrationPreference = collapsed;
+    this._narrationCollapsed = collapsed;
+    const root = this.root.ownerDocument.documentElement;
+    root.classList.toggle("pf-narration-collapsed", collapsed);
+    if (this.narrationBtn) this.narrationBtn.textContent = collapsed ? "▣ Show narration" : "▤ Hide narration";
   }
 
   toggleTravel() {
@@ -3805,8 +4274,21 @@ PF.Hud = class {
   refreshChips() {
     const sim = this.core.sim;
     if (!sim) return;
-    const spatialName = PF.spatial.locationName();
-    this.locChip.textContent = spatialName ? `${sim.zone().name} — ${spatialName}` : sim.zone().name;
+    // The spatial name is the ENGINE's committed party location, which only
+    // moves on a narrated transition or a Travel — walking is package-local, so
+    // it does not follow the player between zones. Showing it unconditionally
+    // pinned a stale name to every zone ("The Tailings — The Slag Bar"), and on
+    // the start zone it could even show a leftover location from a DIFFERENT
+    // world in the same chat. Annotate only when it really is this zone's
+    // binding, and never annotate the exterior, whose binding is seeded from
+    // whatever the map already said.
+    const zoneName = sim.zone().name;
+    const locationId = PF.spatial.data && PF.spatial.data.currentLocationId;
+    const bound =
+      locationId && sim.zoneId !== sim.world.startZone && sim.world.bindings[locationId] === sim.zoneId
+        ? PF.spatial.locationName()
+        : null;
+    this.locChip.textContent = bound && bound !== zoneName ? `${zoneName} — ${bound}` : zoneName;
     this.clockChip.textContent = sim.clockLabel();
   }
 
@@ -3828,6 +4310,8 @@ PF.Hud = class {
       this.dpad.style.display = inWorld ? "" : "none";
       this.talkBtn.style.display = inWorld ? "" : "none";
       this.travelBtn.style.display = inWorld && spatialAvail ? "" : "none";
+      this.waitBtn.style.display = inWorld ? "" : "none";
+      this.narrationBtn.style.display = inWorld ? "" : "none";
       this.keyboardBtn.style.display = inWorld ? "" : "none";
       // In combat, Resume exists only for the NARRATIVE fallback signal (which
       // can flip without any combat UI). With the real Capability API 1.11
@@ -3836,6 +4320,12 @@ PF.Hud = class {
       this.resumeBtn.style.display = mode === "dialogue" || combatResumeApplies ? "" : "none";
       this.resumeBtn.textContent = combatResumeApplies ? "▶ Resume exploring" : "▶ Resume walking";
       this.travelMenu.style.display = "none";
+      this.waitMenu.style.display = "none";
+      // The turn input lives INSIDE the host's narration box, so a collapsed
+      // box would leave a talking player with nowhere to type. Force it open
+      // for the conversation and restore the player's choice afterwards.
+      if (!inWorld) this.toggleNarration(false);
+      else if (this._narrationPreference) this.toggleNarration(true);
       if (mode === "dialogue") this.toast("Type in the message box below — Resume to keep walking");
     }
     if (this._mode === "walk") {
