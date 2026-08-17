@@ -110,6 +110,7 @@ const noodleOwnedSourcePaths = [
   "packages/server/src/services/noodle/noodle-generation-log.ts",
   "packages/server/src/services/noodle/noodle-handle.ts",
   "packages/server/src/services/noodle/noodle-image-prompt-rewrite.ts",
+  "packages/server/src/services/noodle/noodle-image-format.ts",
   "packages/server/src/services/noodle/noodle-image-prompt.ts",
   "packages/server/src/services/noodle/noodle-image-retry.ts",
   "packages/server/src/services/noodle/noodle-interaction-policy.ts",
