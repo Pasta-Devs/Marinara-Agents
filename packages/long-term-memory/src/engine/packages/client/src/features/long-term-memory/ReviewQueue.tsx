@@ -1650,11 +1650,12 @@ export default function ReviewQueue({
                               setSelectedDraftId(null);
                               setSourceCollapsed(false);
                               setMobilePaneAndFocus("workbench");
-                              requestAnimationFrame(() =>
-                                document
-                                  .querySelector<HTMLElement>(`[data-ltm-rejected-source="${CSS.escape(id)}"] summary`)
-                                  ?.click(),
-                              );
+                              requestAnimationFrame(() => {
+                                const details = document.querySelector<HTMLDetailsElement>(
+                                  `details[data-ltm-rejected-source="${CSS.escape(id)}"]`,
+                                );
+                                if (details) details.open = true;
+                              });
                             }}
                           >
                             {localizeUi("ui.longTermMemory.reviewqueue.rejectedCount", { count: rejectedCount })}

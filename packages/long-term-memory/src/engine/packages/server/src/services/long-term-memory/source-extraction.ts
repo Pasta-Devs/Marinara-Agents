@@ -368,7 +368,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
     !options.chatId && (sourceNote.provenance?.kind === "character" || sourceNote.provenance?.kind === "lorebook");
   const requestedModes = options.modes?.length
     ? options.modes
-    : importedWithoutChatContext
+    : importedWithoutChatContext && !options.mode
       ? [DEFAULT_LTM_IMPORTED_SOURCE_MODE]
       : sourceNote.modes;
   const resolvedMode = options.mode ?? requestedModes[0] ?? "roleplay";
