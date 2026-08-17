@@ -19,10 +19,19 @@ type LtmNoteSummary = {
   version: 1;
   lastMutationId?: string;
   total: number;
+  sourceNotes: number;
+  savedMemories: number;
   byType: Record<string, number>;
   byStatus: Record<string, number>;
 };
-const emptySummary = (): LtmNoteSummary => ({ version: 1, total: 0, byType: {}, byStatus: {} });
+const emptySummary = (): LtmNoteSummary => ({
+  version: 1,
+  total: 0,
+  sourceNotes: 0,
+  savedMemories: 0,
+  byType: {},
+  byStatus: {},
+});
 function isCountBucket(value: unknown): value is Record<string, number> {
   return Boolean(
     value &&
@@ -38,12 +47,18 @@ function isNoteSummary(value: unknown): value is LtmNoteSummary {
     summary.version === 1 &&
     Number.isInteger(summary.total) &&
     summary.total >= 0 &&
+    Number.isInteger(summary.sourceNotes) &&
+    summary.sourceNotes >= 0 &&
+    Number.isInteger(summary.savedMemories) &&
+    summary.savedMemories >= 0 &&
     isCountBucket(summary.byType) &&
     isCountBucket(summary.byStatus)
   );
 }
 function addNote(summary: LtmNoteSummary, note: LtmNote, delta: 1 | -1) {
   summary.total += delta;
+  if (note.type === "source") summary.sourceNotes += delta;
+  else summary.savedMemories += delta;
   for (const [key, value] of [
     [note.type, summary.byType],
     [note.status, summary.byStatus],

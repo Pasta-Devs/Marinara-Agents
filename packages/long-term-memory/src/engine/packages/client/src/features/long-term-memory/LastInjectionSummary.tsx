@@ -28,16 +28,18 @@ export function LastInjectionSummary({
             ? localizeUi("ui.longTermMemory.lastinjectionsummary.lastInjectionUnavailable")
             : loading
               ? localizeUi("ui.longTermMemory.lastinjectionsummary.loadingLastInjection")
-              : data?.memoryCount
-                ? localizeUi(
-                    selectLtmPluralForm(locale, data.memoryCount) === "one"
-                      ? "ui.longTermMemory.lastinjectionsummary.injectedOne"
-                      : "ui.longTermMemory.lastinjectionsummary.injectedOther",
-                    {
-                      count: data.memoryCount,
-                    },
-                  )
-                : localizeUi("ui.longTermMemory.lastinjectionsummary.noMemoriesInjectedYet")}
+              : data?.state === "not_recorded"
+                ? localizeUi("ui.longTermMemory.lastinjectionsummary.noRecallRecorded")
+                : data?.memoryCount
+                  ? localizeUi(
+                      selectLtmPluralForm(locale, data.memoryCount) === "one"
+                        ? "ui.longTermMemory.lastinjectionsummary.injectedOne"
+                        : "ui.longTermMemory.lastinjectionsummary.injectedOther",
+                      {
+                        count: data.memoryCount,
+                      },
+                    )
+                  : localizeUi("ui.longTermMemory.lastinjectionsummary.noMemoriesInjectedYet")}
         </span>
         {data && !error ? (
           <span className="shrink-0 text-[0.6875rem] font-normal text-[var(--muted-foreground)]">
@@ -79,6 +81,11 @@ export function LastInjectionSummary({
                 ) : (
                   <span className="min-w-0 truncate">{memory.title}</span>
                 )}
+                {memory.sourceTitle ? (
+                  <span className="min-w-0 truncate text-[0.625rem] text-[var(--muted-foreground)]">
+                    {localizeUi("ui.longTermMemory.lastinjectionsummary.sourceFrom", { source: memory.sourceTitle })}
+                  </span>
+                ) : null}
                 <span className="shrink-0 text-[0.6875rem]">
                   {memory.tokenCount.toLocaleString(locale)} {localizeUi("ui.longTermMemory.activityview.tokens")}
                 </span>
@@ -87,8 +94,15 @@ export function LastInjectionSummary({
           </ul>
         ) : null}
         {!loading && !error && !data?.memories.length ? (
-          <p className={`${compact ? "text-[0.625rem]" : "text-xs"} text-[var(--muted-foreground)]`}>
-            {localizeUi("ui.longTermMemory.lastinjectionsummary.noMemoriesWereInjectedInTheLastRecall")}
+          <p
+            className={`${compact ? "text-[0.625rem]" : "text-xs"} text-[var(--muted-foreground)]`}
+            data-ltm-last-injection-state={data?.state ?? "not_recorded"}
+          >
+            {localizeUi(
+              data?.state === "not_recorded"
+                ? "ui.longTermMemory.lastinjectionsummary.noRecallRecorded"
+                : "ui.longTermMemory.lastinjectionsummary.noMemoriesWereInjectedInTheLastRecall",
+            )}
           </p>
         ) : null}
       </div>

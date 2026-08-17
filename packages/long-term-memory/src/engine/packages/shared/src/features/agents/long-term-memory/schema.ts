@@ -1569,6 +1569,9 @@ export const ltmStatusResponseSchema = z
     notes: z
       .object({
         total: z.number().int().min(0),
+        sourceNotes: z.number().int().min(0).default(0),
+        savedMemories: z.number().int().min(0).default(0),
+        pendingDrafts: z.number().int().min(0).default(0),
         byType: z.record(z.string().min(1), z.number().int().min(0)),
         byStatus: z.record(z.string().min(1), z.number().int().min(0)),
       })
@@ -2654,6 +2657,9 @@ export const ltmLastInjectionMemorySchema = z.object({
   noteId: z.string(),
   title: z.string(),
   tokenCount: z.number(),
+  sectionKey: ltmSectionKeySchema.optional(),
+  sourceNoteId: ltmNoteIdSchema.optional(),
+  sourceTitle: z.string().optional(),
 });
 
 export const ltmInjectionUiSummarySchema = z.object({
@@ -2666,6 +2672,8 @@ export const ltmLastInjectionResponseSchema = z.object({
   memoryCount: z.number(),
   tokenCount: z.number(),
   memories: z.array(ltmLastInjectionMemorySchema),
+  state: z.enum(["injected", "no_matches", "not_recorded"]).default("not_recorded"),
+  dispatchedAt: ltmIsoTimestampSchema.nullable().default(null),
 });
 
 export const ltmPendingDraftsCountResponseSchema = z.object({

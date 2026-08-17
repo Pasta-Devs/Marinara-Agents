@@ -48,12 +48,15 @@ const gameChat = {
 };
 
 async function main() {
-  const [{ configurePackageRuntime }, { previewPackageInterop, importPackageInterop }, { LongTermMemoryStorage }] =
-    await Promise.all([
-      import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts"),
-      import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/interop.ts"),
-      import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/storage.ts"),
-    ]);
+  const [
+    { configurePackageRuntime },
+    { previewPackageInterop, previewPackageLorebooks, importPackageInterop },
+    { LongTermMemoryStorage },
+  ] = await Promise.all([
+    import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts"),
+    import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/interop.ts"),
+    import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/storage.ts"),
+  ]);
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-conversation-summary-"));
   const agents = JSON.parse(
     await readFile(new URL("../packages/long-term-memory/agents.json", import.meta.url), "utf8"),
@@ -66,12 +69,58 @@ async function main() {
       releaseRuntime = configurePackageRuntime({
         dataDir,
         logger: { debug() {}, info() {}, warn() {}, error() {} },
+        languageModels: {
+          async resolveForRequest() {
+            return {
+              name: "FixtureModel",
+              connectionId: "fixture-connection",
+              model: "fixture-model",
+              maxContext: 32_000,
+              maxOutputTokens: 4_000,
+              fitContext(messages: any[], options: { maxTokens?: number }) {
+                return {
+                  messages,
+                  maxTokens: options.maxTokens,
+                  estimatedTokensBefore: 20,
+                  estimatedTokensAfter: 20,
+                  trimmed: false,
+                };
+              },
+              async chatComplete() {
+                return { content: JSON.stringify({ summary: "", units: [] }), finishReason: "stop" };
+              },
+            };
+          },
+        },
         persistence: {
           async getChat(chatId: string) {
             return chats.find((chat) => chat.id === chatId) ?? null;
           },
           async listChats() {
             return chats;
+          },
+        },
+        resources: {
+          async listCharacters() {
+            return [
+              {
+                id: "character-import",
+                data: { name: "Imported Character", description: "A character source for mode policy proof." },
+                comment: "",
+              },
+            ];
+          },
+          async listPersonas() {
+            return [];
+          },
+          async listLorebooks() {
+            return [
+              {
+                id: "lorebook-import",
+                data: { name: "Imported Lorebook", category: "World" },
+                entries: [{ id: "lore-entry", name: "Moon Vault", content: "The Moon Vault is sealed." }],
+              },
+            ];
           },
         },
       });
@@ -109,6 +158,43 @@ async function main() {
         "legacy bare-string day entries must coerce, not vanish",
       );
 
+      const importedCharacter = await importPackageInterop(
+        { source: "characters", sourceIds: ["character-import"], extract: false, limit: 100 },
+        join(dataDir, "long-term-memory"),
+        new AbortController().signal,
+      );
+      assert.equal(importedCharacter.imported[0]?.note.modes[0], "roleplay");
+      const explicitCharacter = await importPackageInterop(
+        { source: "characters", sourceIds: ["character-import"], mode: "game", extract: false, limit: 100 },
+        join(dataDir, "long-term-memory"),
+        new AbortController().signal,
+      );
+      assert.equal(explicitCharacter.imported[0]?.note.modes[0], "game");
+
+      const lorebookPreview = await previewPackageLorebooks({ limit: 100 }, join(dataDir, "long-term-memory"));
+      const lorebookGamePreview = await previewPackageLorebooks(
+        { limit: 100, mode: "game" },
+        join(dataDir, "long-term-memory"),
+      );
+      const lorebookSourceId = lorebookPreview.books[0]?.entries[0]?.candidates[0]?.sourceId;
+      assert.ok(lorebookSourceId, "lorebook preview must expose an importable candidate");
+      assert.equal(lorebookPreview.books[0]?.counts.candidates, 1);
+      assert.equal(lorebookGamePreview.books[0]?.counts.candidates, 1);
+      const importedLorebook = await importPackageInterop(
+        { source: "lorebooks", sourceIds: [lorebookSourceId], extract: true, limit: 100 },
+        join(dataDir, "long-term-memory"),
+        new AbortController().signal,
+      );
+      assert.equal(importedLorebook.imported[0]?.note.modes[0], "roleplay");
+      assert.equal(importedLorebook.imported[0]?.extractionStatus, "succeeded");
+      const explicitLorebook = await importPackageInterop(
+        { source: "lorebooks", sourceIds: [lorebookSourceId], mode: "game", extract: true, limit: 100 },
+        join(dataDir, "long-term-memory"),
+        new AbortController().signal,
+      );
+      assert.equal(explicitLorebook.imported[0]?.note.modes[0], "game");
+      assert.equal(explicitLorebook.imported[0]?.extractionStatus, "succeeded");
+
       const fixtureByMode: Record<string, typeof conversationChat> = {
         roleplay: roleplayChat,
         conversation: conversationChat,
@@ -136,7 +222,7 @@ async function main() {
       assert.ok(imported.imported.every((item) => item.created));
       const storage = new LongTermMemoryStorage(join(dataDir, "long-term-memory"));
       const notes = await storage.listNotes({ type: "source" });
-      assert.equal(notes.length, 3);
+      assert.equal(notes.length, 5);
       const dayNote = notes.find((note) => note.provenance?.entryId === "day:27.07.2026");
       assert.equal(dayNote?.modes[0], "conversation");
       assert.match(dayNote?.sections.source.text ?? "", /Discussed nikujaga\.\n\nmild\n\nno chili/u);
@@ -149,7 +235,7 @@ async function main() {
       assert.equal(importedAgain.imported.length, 3);
       assert.equal(importedAgain.counts.sourceNotesWritten, 3);
       assert.ok(importedAgain.imported.every((item) => !item.created));
-      assert.equal((await storage.listNotes({ type: "source" })).length, 3);
+      assert.equal((await storage.listNotes({ type: "source" })).length, 5);
     },
     [() => releaseRuntime?.(), () => rm(dataDir, { recursive: true, force: true })],
   );
