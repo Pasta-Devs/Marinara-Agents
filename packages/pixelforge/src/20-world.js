@@ -58,6 +58,13 @@ PF.world = (() => {
       const x = 1 + ((rnd() * (z.w - 2)) | 0);
       const y = 2 + ((rnd() * (z.h - 3)) | 0);
       if (z.solid[idx(z, x, y)] || z.object[idx(z, x, y)] || z.ground[idx(z, x, y)] !== "grass") continue;
+      // never UNDER a building's roof overhang: the overhang rows are grass and
+      // non-solid, so the checks above miss them, but the overhead roof composites
+      // over the trunk (a tree that looks eaten by the wall) and the canopy at y-1
+      // would punch through the roofline. Guard the overhead layer explicitly.
+      const roofHere = z.overhead[idx(z, x, y)];
+      const roofAbove = z.overhead[idx(z, x, y - 1)];
+      if (roofHere === "roof" || roofHere === "roofEdge" || roofAbove === "roof" || roofAbove === "roofEdge") continue;
       // never near a door or portal exit — a tree there traps the player (review finding)
       if (reserved && reserved.some((r) => Math.abs(r.x - x) <= 1 && Math.abs(r.y - y) <= 2)) continue;
       put(z, x, y, "object", "trunk", true);
@@ -386,10 +393,19 @@ PF.world = (() => {
     v.flavor = brief.flavor;
 
     // ── Building arithmetic (§4.5) ──
-    // Only residents establish a dwelling; transient/fringe/destitute NPCs get
-    // no house (they anchor to a standing-specific rest spot in the cast loop).
+    // A settlement dwelling is minted only for a resident who actually lives at
+    // the root (home === the settlement). A resident whose home is a place or the
+    // wilds — a forager who lives in the woods, a smith who sleeps at the forge —
+    // lives THERE and anchors to that zone in the cast loop, so a town house would
+    // sit permanently empty. Transient/fringe/destitute NPCs get no house at all
+    // (they anchor to a standing-specific rest spot). This mirrors the harness's
+    // rootHouseholds, so compiler and invariant agree by construction.
     const households = [
-      ...new Set(brief.cast.filter((m) => (m.standing ?? "resident") === "resident").map((m) => m.household)),
+      ...new Set(
+        brief.cast
+          .filter((m) => (m.standing ?? "resident") === "resident" && m.home === brief.name)
+          .map((m) => m.household),
+      ),
     ].sort((a, b) => a - b);
     const specials = [];
     const seenSpecial = new Set();

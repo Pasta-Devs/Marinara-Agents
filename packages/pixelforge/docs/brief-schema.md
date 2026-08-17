@@ -130,9 +130,11 @@ response is **never stored** (checkpoints capture by value — see #5110).
    (wraparound) to the first household with room — deterministic, no clustering on one target.
 5. **Derivation & caps** (buildings — the "30 people" rule; **only `resident`-standing cast
    members generate buildings** — see the §1 `standing` note):
-   - dwellings = distinct **resident** households; shared household = shared roof; a non-resident
-     never gets a dwelling — it anchors to its standing rest spot (transient → the inn, fringe →
-     the wilds/margin, destitute → the public center);
+   - dwellings = distinct **resident** households **homed at the settlement root** (a resident
+     whose `home` is a place or the wilds — a forager in the woods, a smith who sleeps at the forge
+     — lives THERE, so no empty town house is minted); shared household = shared roof; a
+     non-resident never gets a dwelling — it anchors to its standing rest spot (transient → the inn,
+     fringe → the wilds/margin, destitute → the public center);
    - special buildings from a **resident**'s `kind` (never a duplicate hall; extra specials demote
      to workyard markers); a non-resident with a special kind builds nothing — except a
      **transient `merchant`**, who sets up a light market stall (3 tables, no walls) when a lot is

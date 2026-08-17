@@ -477,6 +477,105 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   assert.equal(inForge.length, 1, "one transient browses inside the workshop shop; the other loiters elsewhere");
 }
 
+// 11h. The dwelling gate is home-aware: a resident who lives at the root gets a town
+// house, but a resident whose home is the wilds (a forager who lives in the woods)
+// sleeps THERE and mints NO phantom settlement dwelling. With an all-folk cast (no
+// special buildings) at/above castMin (no stock top-up) and only a wilds place (no
+// interior facades), every z1 door is a dwelling — so the door count equals the
+// DISTINCT ROOT-resident households exactly; the wilds resident adds none. (checkWorld
+// only asserts >=; this pins the equality that a gate regression would break.)
+{
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Wold",
+      places: [{ kind: "wilds", name: "The Fen" }],
+      cast: [
+        { name: "Ana", role: "reeve", kind: "folk", tint: "blue", home: "Wold", household: 1 },
+        { name: "Bo", role: "cooper", kind: "folk", tint: "green", home: "Wold", household: 2 },
+        { name: "Cy", role: "weaver", kind: "folk", tint: "amber", home: "Wold", household: 3 },
+        { name: "Del", role: "carter", kind: "folk", tint: "rose", home: "Wold", household: 4 },
+        { name: "Fenn", role: "forager", kind: "folk", tint: "teal", home: "The Fen", household: 5 },
+      ],
+    },
+    ctx,
+  );
+  const w = world.build(7, "cozy-village", sealed);
+  checkWorld(w, sealed, "dwelling-gate");
+  const v = w.zones.z1;
+  const rootName = sealed._ids.zones.z1;
+  const rootHouseholds = new Set(
+    sealed.cast.filter((c) => c.home === rootName && (c.standing ?? "resident") === "resident").map((c) => c.household),
+  );
+  const doorCount = v.object.filter((t) => t === "door").length;
+  assert.equal(
+    doorCount,
+    rootHouseholds.size,
+    `a door per root household, none for the wilds resident (${doorCount} doors vs ${rootHouseholds.size} root households)`,
+  );
+  const fenId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Fen")[0];
+  assert.ok(
+    w.zones[fenId].npcs.some((n) => n.name === "Fenn"),
+    "the wilds resident lives (and sleeps) out in the wilds zone, not in an empty town house",
+  );
+}
+
+// 11i. Scattered trees never land under a building's roof overhang — the overhang
+// rows are grass and non-solid, so only an explicit overhead-layer guard keeps a
+// trunk from being drawn under (and visually eaten by) a roof. Swept across seeds.
+{
+  for (let seed = 1; seed <= 60; seed++) {
+    const sealed = brief.validate(
+      {
+        scale: "village",
+        name: "Timbrel",
+        surround: "woods",
+        cast: [
+          { name: "Ada", role: "reeve", kind: "leader", tint: "blue", home: "Timbrel", household: 1 },
+          { name: "Ben", role: "smith", kind: "maker", tint: "green", home: "Timbrel", household: 2 },
+          { name: "Ces", role: "farmer", kind: "grower", tint: "amber", home: "Timbrel", household: 3 },
+          { name: "Dan", role: "carter", kind: "folk", tint: "rose", home: "Timbrel", household: 4 },
+        ],
+      },
+      ctx,
+    );
+    const v = world.build(seed, "cozy-village", sealed).zones.z1;
+    // Guard against a trivially-passing check: the world must actually have roofs.
+    assert.ok(v.overhead.some((t) => t === "roof" || t === "roofEdge"), `seed ${seed}: has roofs to test against`);
+    for (let i = 0; i < v.object.length; i++) {
+      if (v.object[i] !== "trunk") continue;
+      const oh = v.overhead[i];
+      assert.ok(oh !== "roof" && oh !== "roofEdge", `seed ${seed}: no trunk under a roof (tile ${i} overhead ${oh})`);
+    }
+  }
+}
+
+// 11j. The stall pass handles MORE than one transient merchant: given free lots for
+// both, each lays its own 3-table stall and tends it — the loop does not stop at one.
+{
+  const sealed = brief.validate(
+    {
+      scale: "town",
+      name: "Twomarket",
+      cast: [
+        { name: "Ona", role: "elder", kind: "folk", tint: "blue", home: "Twomarket", household: 1 },
+        { name: "Sol", role: "spice trader", kind: "merchant", tint: "rose", home: "Twomarket", household: 2, standing: "transient" },
+        { name: "Tam", role: "silk trader", kind: "merchant", tint: "teal", home: "Twomarket", household: 3, standing: "transient" },
+      ],
+    },
+    ctx,
+  );
+  const w = world.build(4242, "cozy-village", sealed);
+  checkWorld(w, sealed, "two-merchants");
+  const v = w.zones.z1;
+  assert.equal(v.object.filter((t) => t === "table").length, 6, "two transient merchants -> two 3-table stalls");
+  for (const name of ["Sol", "Tam"]) {
+    const m = v.npcs.find((n) => n.name === name);
+    assert.ok(m, `${name} is placed`);
+    assert.equal(v.object[v.w * (m.y - 1) + m.x], "table", `${name} stands at their own stall counter`);
+  }
+}
+
 // 12. Determinism: same brief + seed → structurally identical world.
 {
   const sealed = brief.defaults("cozy-village", 7);
