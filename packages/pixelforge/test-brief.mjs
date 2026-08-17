@@ -194,6 +194,10 @@ function checkWorld(w, sealed, label) {
     for (const npc of zone.npcs) {
       assert.ok(npc.wander.x0 >= 0 && npc.wander.x1 < zone.w && npc.wander.y0 >= 0 && npc.wander.y1 < zone.h,
         `${label}: ${npc.name} wander inside ${zone.id}`);
+      // Never spawned ON a solid tile — a scattered wilds trunk on the zone
+      // center used to swallow the NPC anchored there (stepNpcs vets only the
+      // tiles it moves TO, so the overlap persists until a lucky step).
+      assert.ok(!zone.solid[zone.w * npc.y + npc.x], `${label}: ${npc.name} spawns walkable in ${zone.id}`);
     }
     // Portals land on walkable tiles in their destination — and the portal's
     // OWN tile must be walkable too, or the player can never step onto it.
@@ -304,6 +308,12 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     "destitute anchors to the public center, never a house",
   );
   assert.ok(!v.npcs.some((n) => n.name === "Wyn"), "the fringe NPC leaves the settlement for the wilds");
+
+  // Walkable-spawn regression: seed 6 scatters a trunk exactly on the wilds
+  // center tile (17,11), where the fringe hermit anchors — before the spawn
+  // nudge Wyn spawned INSIDE it (checkWorld's walkable-spawn assert catches
+  // the overlap; ~7% of seeds reproduced it on this fixture).
+  checkWorld(world.build(6, "cozy-village", sealed), sealed, "standing-solid-center");
 }
 
 // 11c. Standing SUPPRESSION + the no-inn / no-wilds fallbacks. A non-resident

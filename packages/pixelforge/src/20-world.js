@@ -712,6 +712,30 @@ PF.world = (() => {
       }
       return { zone: v, wander: plazaBox() };
     };
+    // Spawn at the wander box's center — but never ON a solid tile. A wilds
+    // trunk can land exactly at the zone center (scatterTrees reserves only the
+    // arrival tiles), and stepNpcs vets only the tile it moves TO, so a solid
+    // spawn renders the NPC inside the trunk until it happens to step off
+    // (review finding — seed 6 pins it). Deterministic outward ring scan over
+    // the wander box; the zone's own spawn tile is the last resort.
+    const walkableSpawn = (zone, wander) => {
+      const cx = ((wander.x0 + wander.x1) / 2) | 0;
+      const cy = ((wander.y0 + wander.y1) / 2) | 0;
+      const open = (x, y) => x >= 0 && x < zone.w && y >= 0 && y < zone.h && !zone.solid[idx(zone, x, y)];
+      if (open(cx, cy)) return { x: cx, y: cy };
+      const maxR = Math.max(wander.x1 - wander.x0, wander.y1 - wander.y0);
+      for (let r = 1; r <= maxR; r++) {
+        for (let dy = -r; dy <= r; dy++) {
+          for (let dx = -r; dx <= r; dx++) {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+            const x = cx + dx;
+            const y = cy + dy;
+            if (x >= wander.x0 && x <= wander.x1 && y >= wander.y0 && y <= wander.y1 && open(x, y)) return { x, y };
+          }
+        }
+      }
+      return { x: zone.spawn.x, y: zone.spawn.y };
+    };
     brief.cast.forEach((member, index) => {
       const npcId = `n${index + 1}`;
       const standing = member.standing ?? "resident";
@@ -756,14 +780,15 @@ PF.world = (() => {
         zone = v; // destitute: the town's public center
         wander = plazaBox();
       }
+      const spawnAt = walkableSpawn(zone, wander);
       zone.npcs.push({
         id: npcId,
         name: member.name,
         role: member.role,
         hue: PF.brief.TINTS[member.tint] ?? 210,
         persona: member.persona,
-        x: ((wander.x0 + wander.x1) / 2) | 0,
-        y: ((wander.y0 + wander.y1) / 2) | 0,
+        x: spawnAt.x,
+        y: spawnAt.y,
         wander,
       });
     });
