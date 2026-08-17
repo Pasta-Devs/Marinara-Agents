@@ -70,8 +70,16 @@ PF.schedule = (() => {
    *  handle by day and a household shares one `home`, so a plain box-center
    *  placement stacked the cast onto a single tile — and because talk-targeting
    *  picks the nearest with a strict <, everyone under the top sprite became
-   *  unreachable. A stable per-NPC hash picks each one its own starting tile. */
-  function walkableIn(zone, box, key) {
+   *  unreachable. A stable per-NPC hash picks each one its own starting tile.
+   *
+   *  `taken` is the caller's occupancy test. The hash alone only SPREADS: two
+   *  ids can still land on the same tile in a small box (a household door
+   *  apron is six tiles), which puts us right back on the unreachable sprite.
+   *  Treating an occupied tile as closed makes the ring scan walk to the next
+   *  free one, so "no two NPCs on a tile" is an invariant rather than a
+   *  probability. Still deterministic: occupancy is a function of the order
+   *  the caller places its NPCs in, which is itself fixed. */
+  function walkableIn(zone, box, key, taken) {
     let cx = ((box.x0 + box.x1) / 2) | 0;
     let cy = ((box.y0 + box.y1) / 2) | 0;
     if (key) {
@@ -81,7 +89,7 @@ PF.schedule = (() => {
       cx = box.x0 + (hash % spanX);
       cy = box.y0 + (((hash / 7) | 0) % spanY);
     }
-    const open = (x, y) => standable(zone, x, y);
+    const open = (x, y) => standable(zone, x, y) && !(taken && taken(x, y));
     if (open(cx, cy)) return { x: cx, y: cy };
     // Sum, not max: an off-center hashed start still has to be able to reach
     // the far corner of the box.

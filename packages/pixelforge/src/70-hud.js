@@ -145,6 +145,14 @@ PF.Hud = class {
 
   destroy() {
     clearTimeout(this._toastTimer);
+    // The collapse class lives on <html>, OUTSIDE our element, so removing the
+    // HUD does not take it with us. Left behind it outlives the thing that can
+    // undo it: a remount (chat switch, error unmount, version bump) builds a
+    // fresh Hud whose _narrationCollapsed starts false, so the button offers to
+    // "Hide narration" while the panel is already hidden — and the Retry/Next
+    // controls and turn input stay collapsed with nothing left to expand them.
+    // Fail open: hand the narration back and let the player re-collapse it.
+    this.toggleNarration(false);
     this.root.remove();
   }
 

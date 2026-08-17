@@ -171,13 +171,20 @@ PF.Sim = class {
       const target = this.world.zones[handle.zoneId];
       if (!target) continue;
       const box = handle.wander;
+      // spread:false keeps a private, meaningful placement (a merchant's own
+      // stall counter); every other handle is SHARED geometry, so disperse by
+      // id. `taken` then closes the gap the hash cannot: colliding ids, and the
+      // NPCs already standing in the destination, would otherwise stack — and a
+      // sprite underneath another one can never be selected by talk-targeting.
+      const spreadKey = handle.spread === false ? null : npc.id;
+      const taken = (x, y) => this.npcOccupies(target, x, y, npc);
       if (handle.zoneId === fromId) {
         // In-zone: swap the box, and only snap when the NPC is outside it —
         // overlapping day/night boxes should not pop.
         const inside = npc.x >= box.x0 && npc.x <= box.x1 && npc.y >= box.y0 && npc.y <= box.y1;
         npc.wander = box;
         if (!inside) {
-          const at = PF.schedule.walkableIn(target, box, handle.spread === false ? null : npc.id);
+          const at = PF.schedule.walkableIn(target, box, spreadKey, taken);
           npc.x = at.x;
           npc.y = at.y;
         }
@@ -190,7 +197,10 @@ PF.Sim = class {
         if (index >= 0) from.npcs.splice(index, 1);
         target.npcs.push(npc);
         npc.wander = box;
-        const at = PF.schedule.walkableIn(target, box);
+        // Push FIRST so `taken` sees the destination's real occupants and skips
+        // only this NPC. Without the spread key every transient bedding down at
+        // the same inn box landed on its center tile.
+        const at = PF.schedule.walkableIn(target, box, spreadKey, taken);
         npc.x = at.x;
         npc.y = at.y;
       }

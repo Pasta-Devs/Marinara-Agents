@@ -2315,31 +2315,17 @@ PF.world = (() => {
     // the wander box; the zone's own spawn tile is the last resort.
     // `key` spreads NPCs that share a box (a household, the plaza) instead of
     // stacking them all on its center where only the top sprite is talkable.
-    const walkableSpawn = (zone, wander, key) => {
-      let cx = ((wander.x0 + wander.x1) / 2) | 0;
-      let cy = ((wander.y0 + wander.y1) / 2) | 0;
-      if (key) {
-        const hash = PF.hashStr(String(key));
-        cx = wander.x0 + (hash % (wander.x1 - wander.x0 + 1));
-        cy = wander.y0 + (((hash / 7) | 0) % (wander.y1 - wander.y0 + 1));
-      }
-      // Same rule as the runtime placer: never a door or portal tile, which are
-      // walkable by design and look wrong (and block the way in) when occupied.
-      const open = (x, y) => PF.schedule.standable(zone, x, y);
-      if (open(cx, cy)) return { x: cx, y: cy };
-      const maxR = wander.x1 - wander.x0 + (wander.y1 - wander.y0);
-      for (let r = 1; r <= maxR; r++) {
-        for (let dy = -r; dy <= r; dy++) {
-          for (let dx = -r; dx <= r; dx++) {
-            if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-            const x = cx + dx;
-            const y = cy + dy;
-            if (x >= wander.x0 && x <= wander.x1 && y >= wander.y0 && y <= wander.y1 && open(x, y)) return { x, y };
-          }
-        }
-      }
-      return { x: zone.spawn.x, y: zone.spawn.y };
-    };
+    // This IS the runtime placer (25-schedule): a compiled spawn and a schedule
+    // relocation have to obey exactly the same rules — never a door or portal
+    // tile, which are walkable by design but look wrong (and block the way in)
+    // when occupied — so share the one implementation instead of keeping a twin
+    // that can drift. The occupancy test rules out a tile another cast member
+    // already holds: the hash only spreads, and two ids colliding in a small
+    // box (a door apron is six tiles) is exactly the un-talkable stack the key
+    // was added to prevent. `npcs` only holds members placed BEFORE this one,
+    // so the pass stays deterministic.
+    const walkableSpawn = (zone, wander, key) =>
+      PF.schedule.walkableIn(zone, wander, key, (x, y) => zone.npcs.some((n) => n.x === x && n.y === y));
     // A door apron box: the strip an NPC mills around in front of its building.
     const doorBox = (door, reach, depth) => ({
       x0: Math.max(2, door.doorX - reach),
@@ -2533,8 +2519,16 @@ PF.schedule = (() => {
    *  handle by day and a household shares one `home`, so a plain box-center
    *  placement stacked the cast onto a single tile — and because talk-targeting
    *  picks the nearest with a strict <, everyone under the top sprite became
-   *  unreachable. A stable per-NPC hash picks each one its own starting tile. */
-  function walkableIn(zone, box, key) {
+   *  unreachable. A stable per-NPC hash picks each one its own starting tile.
+   *
+   *  `taken` is the caller's occupancy test. The hash alone only SPREADS: two
+   *  ids can still land on the same tile in a small box (a household door
+   *  apron is six tiles), which puts us right back on the unreachable sprite.
+   *  Treating an occupied tile as closed makes the ring scan walk to the next
+   *  free one, so "no two NPCs on a tile" is an invariant rather than a
+   *  probability. Still deterministic: occupancy is a function of the order
+   *  the caller places its NPCs in, which is itself fixed. */
+  function walkableIn(zone, box, key, taken) {
     let cx = ((box.x0 + box.x1) / 2) | 0;
     let cy = ((box.y0 + box.y1) / 2) | 0;
     if (key) {
@@ -2544,7 +2538,7 @@ PF.schedule = (() => {
       cx = box.x0 + (hash % spanX);
       cy = box.y0 + (((hash / 7) | 0) % spanY);
     }
-    const open = (x, y) => standable(zone, x, y);
+    const open = (x, y) => standable(zone, x, y) && !(taken && taken(x, y));
     if (open(cx, cy)) return { x: cx, y: cy };
     // Sum, not max: an off-center hashed start still has to be able to reach
     // the far corner of the box.
@@ -2739,13 +2733,20 @@ PF.Sim = class {
       const target = this.world.zones[handle.zoneId];
       if (!target) continue;
       const box = handle.wander;
+      // spread:false keeps a private, meaningful placement (a merchant's own
+      // stall counter); every other handle is SHARED geometry, so disperse by
+      // id. `taken` then closes the gap the hash cannot: colliding ids, and the
+      // NPCs already standing in the destination, would otherwise stack — and a
+      // sprite underneath another one can never be selected by talk-targeting.
+      const spreadKey = handle.spread === false ? null : npc.id;
+      const taken = (x, y) => this.npcOccupies(target, x, y, npc);
       if (handle.zoneId === fromId) {
         // In-zone: swap the box, and only snap when the NPC is outside it —
         // overlapping day/night boxes should not pop.
         const inside = npc.x >= box.x0 && npc.x <= box.x1 && npc.y >= box.y0 && npc.y <= box.y1;
         npc.wander = box;
         if (!inside) {
-          const at = PF.schedule.walkableIn(target, box, handle.spread === false ? null : npc.id);
+          const at = PF.schedule.walkableIn(target, box, spreadKey, taken);
           npc.x = at.x;
           npc.y = at.y;
         }
@@ -2758,7 +2759,10 @@ PF.Sim = class {
         if (index >= 0) from.npcs.splice(index, 1);
         target.npcs.push(npc);
         npc.wander = box;
-        const at = PF.schedule.walkableIn(target, box);
+        // Push FIRST so `taken` sees the destination's real occupants and skips
+        // only this NPC. Without the spread key every transient bedding down at
+        // the same inn box landed on its center tile.
+        const at = PF.schedule.walkableIn(target, box, spreadKey, taken);
         npc.x = at.x;
         npc.y = at.y;
       }
@@ -4121,6 +4125,14 @@ PF.Hud = class {
 
   destroy() {
     clearTimeout(this._toastTimer);
+    // The collapse class lives on <html>, OUTSIDE our element, so removing the
+    // HUD does not take it with us. Left behind it outlives the thing that can
+    // undo it: a remount (chat switch, error unmount, version bump) builds a
+    // fresh Hud whose _narrationCollapsed starts false, so the button offers to
+    // "Hide narration" while the panel is already hidden — and the Retry/Next
+    // controls and turn input stay collapsed with nothing left to expand them.
+    // Fail open: hand the narration back and let the player re-collapse it.
+    this.toggleNarration(false);
     this.root.remove();
   }
 

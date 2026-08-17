@@ -1689,14 +1689,18 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   sim.mode = "walk";
   const z = sim.zone();
   assert.ok(z.npcs.length > 0, "the settlement has NPCs to move");
-  const start = z.npcs.map((n) => `${n.name}@${Math.round(n.x)},${Math.round(n.y)}`).join("|");
+  // Key the start tiles BY NAME. A substring test over one joined string lets a
+  // name that is a suffix of another ("Ada" inside "Wanda") match the wrong
+  // entry when both stand on the same tile, so a genuinely frozen NPC would
+  // read as unmoved-but-accounted-for and a movement regression could pass.
+  const start = new Map(z.npcs.map((n) => [n.name, `${Math.round(n.x)},${Math.round(n.y)}`]));
   // Two in-game hours at the shipped 1/60s timestep.
   for (let i = 0; i < 60 * 60 * 2; i++) sim.step(1 / 60, {});
-  const moved = z.npcs.filter((n) => {
-    const at = `${n.name}@${Math.round(n.x)},${Math.round(n.y)}`;
-    return !start.includes(at);
-  });
-  assert.ok(moved.length > 0, `at least one NPC wandered to a new tile (start ${start})`);
+  const moved = z.npcs.filter((n) => start.get(n.name) !== `${Math.round(n.x)},${Math.round(n.y)}`);
+  assert.ok(
+    moved.length > 0,
+    `at least one NPC wandered to a new tile (start ${[...start].map(([n, at]) => `${n}@${at}`).join("|")})`,
+  );
   // And wandering never walks anyone through a wall or out of their box.
   for (const npc of z.npcs) {
     const x = Math.round(npc.x);
@@ -1732,10 +1736,13 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   const v = w.zones.z1;
 
   // A stall merchant tends the counter: a single row, never the open street.
+  // ASSERT the preconditions rather than guarding on them — skipping when the
+  // merchant stops getting a stall (or stops being spread:false) would make the
+  // case pass while checking nothing at all.
   const sol = v.npcs.find((n) => n.name === "Sol");
-  if (sol && sol._sched.post.spread === false) {
-    assert.equal(sol.wander.y0, sol.wander.y1, "the stall merchant's box is the counter row only");
-  }
+  assert.ok(sol, "the transient merchant tends their stall in the settlement");
+  assert.equal(sol._sched.post.spread, false, "a stall is private geometry, so its placement is not hashed");
+  assert.equal(sol.wander.y0, sol.wander.y1, "the stall merchant's box is the counter row only");
 
   // Nobody is placed in a doorway or on a portal, at any daypart.
   for (const min of [6 * 60, 12 * 60, 19 * 60, 23 * 60]) {
@@ -1814,6 +1821,97 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     }
   }
   assert.equal(collisions, 0, `no two NPCs share a tile while wandering (${collisions} colliding samples)`);
+}
+
+// 14i. Relocation must spread too. 14g pins the WANDER step; this pins the
+// PLACEMENT. The cross-zone branch resolved its tile without the spread key, so
+// every transient bedding down at the same inn arrived on the box's center —
+// and a sprite under another sprite can never be selected by talk-targeting,
+// which picks the nearest with a strict <. Needs several NPCs converging on ONE
+// box from ANOTHER zone, which the default briefs never produce: the loiter
+// rotation posts some transients at the inn already, and those take the in-zone
+// path. Six of them guarantees at least two arrive from outside.
+{
+  const cast = [{ name: "Mira", role: "innkeep", kind: "host", tint: "amber", home: "The Lantern", household: 1 }];
+  for (let i = 0; i < 6; i++) {
+    cast.push({
+      name: `Drifter${i}`,
+      role: "drifter",
+      kind: "wanderer",
+      tint: ["blue", "green", "rose", "teal", "violet", "orange"][i],
+      home: "Bedhold",
+      household: 10 + i,
+      standing: "transient",
+    });
+  }
+  const sealed = brief.validate(
+    { scale: "village", name: "Bedhold", places: [{ kind: "gathering", name: "The Lantern" }], cast },
+    ctx,
+  );
+  const w = world.build(31, "cozy-village", sealed);
+  const sim = new loadedPF.Sim(w);
+  const innId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Lantern")[0];
+  sim.clockMin = 23 * 60;
+  sim.resolveSchedules();
+  // Guard against a vacuous pass: the bug needs arrivals from another zone.
+  const arrived = w.zones[innId].npcs.length;
+  assert.ok(arrived >= 4, `the inn genuinely fills up at night (${arrived} NPCs)`);
+  const seen = new Map();
+  for (const npc of w.zones[innId].npcs) {
+    const tile = `${Math.round(npc.x)},${Math.round(npc.y)}`;
+    assert.ok(!seen.has(tile), `${npc.name} and ${seen.get(tile)} both bedded down on tile ${tile}`);
+    seen.set(tile, npc.name);
+  }
+
+  // And the invariant holds for a mixed cast across every daypart — a hash can
+  // collide inside a box as small as a household's door apron, so the placer
+  // has to treat an occupied tile as closed rather than merely spread by id.
+  const kinds = ["host", "guard", "leader", "grower", "maker", "merchant", "folk", "wanderer"];
+  const standings = ["resident", "resident", "transient", "transient", "fringe", "destitute"];
+  for (let seed = 1; seed <= 12; seed++) {
+    const rnd = loadedPF.rng(seed >>> 0);
+    const mixed = [];
+    for (let i = 0; i < 5 + ((seed * 7) % 6); i++) {
+      mixed.push({
+        name: `M${i}`,
+        role: "villager",
+        kind: kinds[(rnd() * kinds.length) | 0],
+        tint: "amber",
+        home: i % 3 === 0 ? "The Lantern" : "Mixford",
+        household: 1 + ((i / 2) | 0),
+        standing: standings[(rnd() * standings.length) | 0],
+      });
+    }
+    const mixedSealed = brief.validate(
+      {
+        scale: "village",
+        name: "Mixford",
+        places: [
+          { kind: "gathering", name: "The Lantern" },
+          { kind: "workshop", name: "The Forge" },
+        ],
+        cast: mixed,
+      },
+      ctx,
+    );
+    const mw = world.build(seed, "cozy-village", mixedSealed);
+    const msim = new loadedPF.Sim(mw);
+    for (const min of [6 * 60, 12 * 60, 19 * 60, 23 * 60]) {
+      msim.clockMin = min;
+      msim.resolveSchedules();
+      for (const zoneId in mw.zones) {
+        const tiles = new Map();
+        for (const npc of mw.zones[zoneId].npcs) {
+          const tile = `${Math.round(npc.x)},${Math.round(npc.y)}`;
+          assert.ok(
+            !tiles.has(tile),
+            `seed ${seed} at ${min / 60}h: ${npc.name} stacked on ${tiles.get(tile)} at ${tile} in ${zoneId}`,
+          );
+          tiles.set(tile, npc.name);
+        }
+      }
+    }
+  }
 }
 
 // 14h. A save whose zone no longer exists lands the player at the start zone's
@@ -1899,10 +1997,19 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     for (const zoneId in w.zones) {
       assert.ok(reached.has(zoneId), `seed ${seed}: zone ${zoneId} (${w.zones[zoneId].name}) is reachable`);
     }
-    // And nobody is left in a zone that no longer exists.
+    // And nobody can be SENT somewhere stranded either. Re-asserting
+    // reached.has(zoneId) per NPC only repeats the sweep above; what the zone
+    // sweep cannot see is a baked schedule handle pointing at an interior this
+    // build no longer compiles (the drop guard in 20-world), which would move
+    // an NPC out of the world on the next daypart — or into a room with no door.
     for (const zoneId in w.zones) {
       for (const npc of w.zones[zoneId].npcs) {
-        assert.ok(reached.has(zoneId), `seed ${seed}: ${npc.name} is not stranded in ${zoneId}`);
+        for (const name of ["post", "home", "public"]) {
+          const handle = npc._sched[name];
+          if (!handle) continue;
+          assert.ok(w.zones[handle.zoneId], `seed ${seed}: ${npc.name}'s ${name} handle names a live zone`);
+          assert.ok(reached.has(handle.zoneId), `seed ${seed}: ${npc.name}'s ${name} handle is reachable`);
+        }
       }
     }
   }
