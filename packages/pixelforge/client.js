@@ -1,4 +1,4 @@
-// Pixelforge 0.5.1 — Marinara Engine game-surface Experience (single-file client bundle)
+// Pixelforge 0.6.3 — Marinara Engine game-surface Experience (single-file client bundle)
 // Built from packages/pixelforge/src (13 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -798,6 +798,10 @@ PF.brief = (() => {
     "wanderer",
     "folk",
   ];
+  // Rootedness/integration — orthogonal to kind. resident is the strong default;
+  // non-residents get NO dwelling and a standing-specific rest anchor (the inn,
+  // the wilds/edge, or the town's public center). See docs/brief-schema.md.
+  const STANDING = ["resident", "transient", "fringe", "destitute"];
   // Nine buckets cannot cluster; sprite legibility is an invariant, not a repair.
   const TINTS = {
     red: 4,
@@ -1068,6 +1072,7 @@ PF.brief = (() => {
           ? Math.max(1, Math.min(CAPS.household, Math.round(householdNumber)))
           : 1,
         persona: capText(item?.persona ?? item?.flavor, 100),
+        standing: foldEnum(item?.standing, STANDING, "resident"),
       });
     }
 
@@ -1084,6 +1089,7 @@ PF.brief = (() => {
           name: dedupeName(stock.name, `cast-topup[${brief.cast.length}]`),
           home: brief.name,
           household: brief.cast.length + 1,
+          standing: stock.standing ?? "resident",
         });
         repairs.push(`cast: floor top-up ${stock.name}`);
       }
@@ -1331,12 +1337,15 @@ PF.brief = (() => {
       `- places: 0-4 additional zones of {kind, name, flavor}. kind from: ${PLACE_KINDS.join(" | ")}.`,
       "  At most 2 wilds, 1 hall, 1 gathering. wilds may carry 0-3 features (water-crossing and",
       "  dense-growth are wilds-only). flavor: ONE sentence <=120 chars.",
-      "- cast: 4-10 story-relevant people of {name, role, kind, tint, home, household, persona}.",
+      "- cast: 4-10 story-relevant people of {name, role, kind, tint, home, household, persona, standing}.",
       `  kind (machine field) from: ${CAST_KINDS.join(" | ")}. role: <=24 chars free text (their title).`,
       `  tint from: ${Object.keys(TINTS).join(" | ")}. home: the NAME of the zone they live in.`,
       "  household: 1-6 — people sharing a number share a roof; buildings are derived from",
       "  households, so do NOT list one household per person unless they truly live alone.",
       "  persona: <=100 chars — what they want, and what they are hiding.",
+      `  standing (optional, default resident): one of ${STANDING.join(" | ")}. transient = passing`,
+      "  through; fringe = lives apart at the edges (hermit, outcast, refugee); destitute = no home.",
+      "  Keep most people resident; a crossroads or waystation may have many transients.",
       "- backgroundPopulation: total inhabitants including the cast (0-500). This is narrative",
       "  texture for the map description — it never creates buildings.",
       "",
@@ -1389,6 +1398,7 @@ PF.brief = (() => {
               home: text(24),
               household: { type: "integer", minimum: 1, maximum: 6 },
               persona: text(100),
+              standing: { type: "string", enum: STANDING },
             },
             required: ["name", "kind", "tint", "home", "household"],
           },
@@ -1633,6 +1643,13 @@ PF.world = (() => {
       const x = 1 + ((rnd() * (z.w - 2)) | 0);
       const y = 2 + ((rnd() * (z.h - 3)) | 0);
       if (z.solid[idx(z, x, y)] || z.object[idx(z, x, y)] || z.ground[idx(z, x, y)] !== "grass") continue;
+      // never UNDER a building's roof overhang: the overhang rows are grass and
+      // non-solid, so the checks above miss them, but the overhead roof composites
+      // over the trunk (a tree that looks eaten by the wall) and the canopy at y-1
+      // would punch through the roofline. Guard the overhead layer explicitly.
+      const roofHere = z.overhead[idx(z, x, y)];
+      const roofAbove = z.overhead[idx(z, x, y - 1)];
+      if (roofHere === "roof" || roofHere === "roofEdge" || roofAbove === "roof" || roofAbove === "roofEdge") continue;
       // never near a door or portal exit — a tree there traps the player (review finding)
       if (reserved && reserved.some((r) => Math.abs(r.x - x) <= 1 && Math.abs(r.y - y) <= 2)) continue;
       put(z, x, y, "object", "trunk", true);
@@ -1961,10 +1978,26 @@ PF.world = (() => {
     v.flavor = brief.flavor;
 
     // ── Building arithmetic (§4.5) ──
-    const households = [...new Set(brief.cast.map((m) => m.household))].sort((a, b) => a - b);
+    // A settlement dwelling is minted only for a resident who actually lives at
+    // the root (home === the settlement). A resident whose home is a place or the
+    // wilds — a forager who lives in the woods, a smith who sleeps at the forge —
+    // lives THERE and anchors to that zone in the cast loop, so a town house would
+    // sit permanently empty. Transient/fringe/destitute NPCs get no house at all
+    // (they anchor to a standing-specific rest spot). This mirrors the harness's
+    // rootHouseholds, so compiler and invariant agree by construction.
+    const households = [
+      ...new Set(
+        brief.cast
+          .filter((m) => (m.standing ?? "resident") === "resident" && m.home === brief.name)
+          .map((m) => m.household),
+      ),
+    ].sort((a, b) => a - b);
     const specials = [];
     const seenSpecial = new Set();
     for (const member of brief.cast) {
+      // Only residents run a permanent special building (the hall, the shop, the
+      // post…); a transient/fringe/destitute NPC never anchors one.
+      if ((member.standing ?? "resident") !== "resident") continue;
       const special = SPECIAL_BUILDING_KINDS[member.kind];
       if (special && !seenSpecial.has(special)) {
         seenSpecial.add(special);
@@ -2024,17 +2057,26 @@ PF.world = (() => {
       buildings.push({ door: b, rect: { x: slot.x, y: slot.y, w: width, h: 4 }, households: group });
     }
 
+    // ── Transient merchants set up a light market stall in a free lot (never a
+    // permanent shop). They tend it; with no free lot they fall back to the
+    // public rest spot in the cast loop. Other non-resident kinds build nothing.
+    const stalls = [];
+    for (const member of brief.cast) {
+      if ((member.standing ?? "resident") !== "transient" || member.kind !== "merchant") continue;
+      const slot = takeSlot();
+      if (!slot) break;
+      PLACERS["market-stalls"](v, slot.x, slot.y);
+      stalls.push({ owner: member, x: slot.x, y: slot.y });
+    }
+
     // ── Features: corner anchors, but NEVER over a building or another
     // feature. Buildings claim their footprint plus the roof overhang above and
     // a door apron below — a placer that fenced over a hall's only door
     // orphaned the zone and the NPC inside it (review blocker). A feature with
     // no clear anchor is dropped: a plainer settlement, never a sealed one.
-    const claimed = buildings.map((b) => ({
-      x: b.rect.x - 1,
-      y: b.rect.y - 3,
-      w: b.rect.w + 2,
-      h: b.rect.h + 5,
-    }));
+    const claimed = buildings
+      .map((b) => ({ x: b.rect.x - 1, y: b.rect.y - 3, w: b.rect.w + 2, h: b.rect.h + 5 }))
+      .concat(stalls.map((s) => ({ x: s.x - 1, y: s.y - 1, w: 7, h: 5 })));
     const intersects = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
     const featureAnchors = [
       { x: 4, y: 3 },
@@ -2053,11 +2095,24 @@ PF.world = (() => {
       claimed.push({ x: anchor.x, y: anchor.y, ...FEATURE_RECT });
     }
     const doorRects = buildings.map((b) => ({ x: b.door.doorX, y: b.door.doorY }));
+    const stallReserved = stalls.flatMap((s) => [
+      { x: s.x, y: s.y + 1 },
+      { x: s.x + 2, y: s.y + 1 },
+      { x: s.x + 4, y: s.y + 1 },
+    ]);
+    // Keep the strip beside each shop door clear so an outside loiterer has ground.
+    const shopFrontReserved = buildings
+      .filter((b) => b.special === "shop" || b.boundPlace?.kind === "workshop")
+      .map((b) => ({ x: b.door.doorX + 2, y: b.door.doorY + 1 }));
     scatterTrees(
       v,
       rnd,
       { woods: 26, fields: 8, rocky: 10, water: 12, barren: 5 }[brief.surround] ?? 12,
-      doorRects.concat(doorRects.map((d) => ({ x: d.x, y: d.y + 1 }))),
+      doorRects.concat(
+        doorRects.map((d) => ({ x: d.x, y: d.y + 1 })),
+        stallReserved,
+        shopFrontReserved,
+      ),
     );
     zones.z1 = v;
 
@@ -2198,34 +2253,127 @@ PF.world = (() => {
     });
 
     // ── The cast ──
+    // Residents wander near their building (or the plaza if house-less).
+    // Non-residents never bind to a dwelling; they anchor by standing to a
+    // predictable rest spot: transient -> the inn (gathering interior), fringe ->
+    // the wilds (else the settlement's outer margin), destitute -> the town's
+    // public center. See docs/brief-schema.md § Standing.
+    const gatheringPlace = interiorPlaces.find((p) => p.kind === "gathering");
+    const gatheringZoneId = gatheringPlace ? zoneIdForPlace(gatheringPlace) : null;
+    const wildsZoneId = wildsPlaces.length ? zoneIdForPlace(wildsPlaces[0]) : null;
+    const plazaBox = () => ({ x0: midX - 6, y0: midY - 5, x1: midX + 6, y1: midY + 5 });
+    const fullZoneBox = (z) => ({ x0: 2, y0: 2, x1: z.w - 3, y1: z.h - 3 });
+    // Transients loiter at a public spot — the inn, an existing resident shop's
+    // front, or the plaza — spread across whatever the settlement has (seeded).
+    const shopSpots = buildings
+      .filter((b) => b.special === "shop" || b.boundPlace?.kind === "workshop")
+      .map((b) => ({ door: b.door, interiorZoneId: b.boundPlace ? zoneIdForPlace(b.boundPlace) : null }));
+    const loiterSpots = [];
+    if (gatheringZoneId && zones[gatheringZoneId]) loiterSpots.push({ kind: "inn" });
+    for (const shop of shopSpots)
+      loiterSpots.push({ kind: "shop", door: shop.door, interiorZoneId: shop.interiorZoneId });
+    loiterSpots.push({ kind: "plaza" });
+    const loiterStart = PF.hashStr(`${seed >>> 0}|loiter`) % loiterSpots.length;
+    let loiterN = 0;
+    const loiterAnchor = () => {
+      const spot = loiterSpots[(loiterStart + loiterN++) % loiterSpots.length];
+      if (spot.kind === "inn") return { zone: zones[gatheringZoneId], wander: fullZoneBox(zones[gatheringZoneId]) };
+      if (spot.kind === "shop") {
+        // A shop with an interior (a workshop) — browse inside, like the inn.
+        if (spot.interiorZoneId && zones[spot.interiorZoneId]) {
+          const z = zones[spot.interiorZoneId];
+          return { zone: z, wander: fullZoneBox(z) };
+        }
+        // A facade shop — loiter just BESIDE the door, never in the doorway.
+        return {
+          zone: v,
+          wander: {
+            x0: Math.min(v.w - 3, spot.door.doorX + 1),
+            y0: Math.min(v.h - 3, spot.door.doorY + 1),
+            x1: Math.min(v.w - 3, spot.door.doorX + 3),
+            y1: Math.min(v.h - 3, spot.door.doorY + 1),
+          },
+        };
+      }
+      return { zone: v, wander: plazaBox() };
+    };
+    // Spawn at the wander box's center — but never ON a solid tile. A wilds
+    // trunk can land exactly at the zone center (scatterTrees reserves only the
+    // arrival tiles), and stepNpcs vets only the tile it moves TO, so a solid
+    // spawn renders the NPC inside the trunk until it happens to step off
+    // (review finding — seed 6 pins it). Deterministic outward ring scan over
+    // the wander box; the zone's own spawn tile is the last resort.
+    const walkableSpawn = (zone, wander) => {
+      const cx = ((wander.x0 + wander.x1) / 2) | 0;
+      const cy = ((wander.y0 + wander.y1) / 2) | 0;
+      const open = (x, y) => x >= 0 && x < zone.w && y >= 0 && y < zone.h && !zone.solid[idx(zone, x, y)];
+      if (open(cx, cy)) return { x: cx, y: cy };
+      const maxR = Math.max(wander.x1 - wander.x0, wander.y1 - wander.y0);
+      for (let r = 1; r <= maxR; r++) {
+        for (let dy = -r; dy <= r; dy++) {
+          for (let dx = -r; dx <= r; dx++) {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+            const x = cx + dx;
+            const y = cy + dy;
+            if (x >= wander.x0 && x <= wander.x1 && y >= wander.y0 && y <= wander.y1 && open(x, y)) return { x, y };
+          }
+        }
+      }
+      return { x: zone.spawn.x, y: zone.spawn.y };
+    };
     brief.cast.forEach((member, index) => {
       const npcId = `n${index + 1}`;
-      const homeZoneId = zoneIdByName.get(member.home) ?? "z1";
-      const zone = zones[homeZoneId] ?? v;
-      // Wander near the owner's building when they have one, else around the
-      // zone's spawn; interiors wander their walkable middle.
-      const owned = buildings.find((b) => b.owner === member || (b.households ?? []).includes(member.household));
+      const standing = member.standing ?? "resident";
+      let zone = zones[zoneIdByName.get(member.home) ?? "z1"] ?? v;
       let wander;
-      if (zone === v && owned) {
+      if (standing === "resident") {
+        // Wander near the owner's building when they have one, else around the
+        // zone's spawn; interiors wander their walkable middle.
+        const owned = buildings.find((b) => b.owner === member || (b.households ?? []).includes(member.household));
+        if (zone === v && owned) {
+          wander = {
+            x0: Math.max(2, owned.door.doorX - 4),
+            y0: Math.max(2, owned.door.doorY),
+            x1: Math.min(v.w - 3, owned.door.doorX + 4),
+            y1: Math.min(v.h - 3, owned.door.doorY + 5),
+          };
+        } else if (zone === v) {
+          wander = plazaBox();
+        } else {
+          wander = fullZoneBox(zone);
+        }
+      } else if (standing === "transient" && stalls.some((s) => s.owner === member)) {
+        const stall = stalls.find((s) => s.owner === member);
+        zone = v; // tend the stall in the settlement
         wander = {
-          x0: Math.max(2, owned.door.doorX - 4),
-          y0: Math.max(2, owned.door.doorY),
-          x1: Math.min(v.w - 3, owned.door.doorX + 4),
-          y1: Math.min(v.h - 3, owned.door.doorY + 5),
+          x0: Math.max(2, stall.x),
+          y0: Math.min(v.h - 3, stall.y + 1),
+          x1: Math.min(v.w - 3, stall.x + 4),
+          y1: Math.min(v.h - 3, stall.y + 2),
         };
-      } else if (zone === v) {
-        wander = { x0: midX - 6, y0: midY - 5, x1: midX + 6, y1: midY + 5 };
+      } else if (standing === "transient") {
+        const spot = loiterAnchor();
+        zone = spot.zone;
+        wander = spot.wander;
+      } else if (standing === "fringe" && wildsZoneId && zones[wildsZoneId]) {
+        zone = zones[wildsZoneId];
+        wander = fullZoneBox(zone);
+      } else if (standing === "fringe") {
+        zone = v; // no wilds to retreat to — the settlement's outer margin
+        wander = { x0: 3, y0: v.h - 6, x1: v.w - 4, y1: v.h - 3 };
       } else {
-        wander = { x0: 2, y0: 2, x1: zone.w - 3, y1: zone.h - 3 };
+        zone = v; // destitute: the town's public center
+        wander = plazaBox();
       }
+      const spawnAt = walkableSpawn(zone, wander);
       zone.npcs.push({
         id: npcId,
         name: member.name,
         role: member.role,
         hue: PF.brief.TINTS[member.tint] ?? 210,
         persona: member.persona,
-        x: ((wander.x0 + wander.x1) / 2) | 0,
-        y: ((wander.y0 + wander.y1) / 2) | 0,
+        x: spawnAt.x,
+        y: spawnAt.y,
         wander,
       });
     });

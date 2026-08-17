@@ -32,6 +32,10 @@ PF.brief = (() => {
     "wanderer",
     "folk",
   ];
+  // Rootedness/integration — orthogonal to kind. resident is the strong default;
+  // non-residents get NO dwelling and a standing-specific rest anchor (the inn,
+  // the wilds/edge, or the town's public center). See docs/brief-schema.md.
+  const STANDING = ["resident", "transient", "fringe", "destitute"];
   // Nine buckets cannot cluster; sprite legibility is an invariant, not a repair.
   const TINTS = {
     red: 4,
@@ -302,6 +306,7 @@ PF.brief = (() => {
           ? Math.max(1, Math.min(CAPS.household, Math.round(householdNumber)))
           : 1,
         persona: capText(item?.persona ?? item?.flavor, 100),
+        standing: foldEnum(item?.standing, STANDING, "resident"),
       });
     }
 
@@ -318,6 +323,7 @@ PF.brief = (() => {
           name: dedupeName(stock.name, `cast-topup[${brief.cast.length}]`),
           home: brief.name,
           household: brief.cast.length + 1,
+          standing: stock.standing ?? "resident",
         });
         repairs.push(`cast: floor top-up ${stock.name}`);
       }
@@ -565,12 +571,15 @@ PF.brief = (() => {
       `- places: 0-4 additional zones of {kind, name, flavor}. kind from: ${PLACE_KINDS.join(" | ")}.`,
       "  At most 2 wilds, 1 hall, 1 gathering. wilds may carry 0-3 features (water-crossing and",
       "  dense-growth are wilds-only). flavor: ONE sentence <=120 chars.",
-      "- cast: 4-10 story-relevant people of {name, role, kind, tint, home, household, persona}.",
+      "- cast: 4-10 story-relevant people of {name, role, kind, tint, home, household, persona, standing}.",
       `  kind (machine field) from: ${CAST_KINDS.join(" | ")}. role: <=24 chars free text (their title).`,
       `  tint from: ${Object.keys(TINTS).join(" | ")}. home: the NAME of the zone they live in.`,
       "  household: 1-6 — people sharing a number share a roof; buildings are derived from",
       "  households, so do NOT list one household per person unless they truly live alone.",
       "  persona: <=100 chars — what they want, and what they are hiding.",
+      `  standing (optional, default resident): one of ${STANDING.join(" | ")}. transient = passing`,
+      "  through; fringe = lives apart at the edges (hermit, outcast, refugee); destitute = no home.",
+      "  Keep most people resident; a crossroads or waystation may have many transients.",
       "- backgroundPopulation: total inhabitants including the cast (0-500). This is narrative",
       "  texture for the map description — it never creates buildings.",
       "",
@@ -623,6 +632,7 @@ PF.brief = (() => {
               home: text(24),
               household: { type: "integer", minimum: 1, maximum: 6 },
               persona: text(100),
+              standing: { type: "string", enum: STANDING },
             },
             required: ["name", "kind", "tint", "home", "household"],
           },

@@ -172,7 +172,10 @@ const ctx = { theme: "cozy-village", seed: 424242 };
   assert.ok(text.length < 4_000, `guidance stays compact (${text.length} chars)`);
   assert.ok(text.includes("AUTHORITATIVE"), "theme-authority line present");
   assert.ok(text.includes("do NOT list one household per person"), "household teaching line present");
-  assert.ok(JSON.stringify(brief.schema()).length <= 8_000, "schema fits the route's cap");
+  assert.ok(text.includes("standing"), "standing teaching line present");
+  const schemaStr = JSON.stringify(brief.schema());
+  assert.ok(schemaStr.length <= 8_000, "schema fits the route's cap");
+  assert.ok(schemaStr.includes("destitute"), "schema exposes the standing enum");
 }
 
 // ── Compiler invariants (compile(sealedBrief, seed)) ─────────────────────────
@@ -191,6 +194,17 @@ function checkWorld(w, sealed, label) {
     for (const npc of zone.npcs) {
       assert.ok(npc.wander.x0 >= 0 && npc.wander.x1 < zone.w && npc.wander.y0 >= 0 && npc.wander.y1 < zone.h,
         `${label}: ${npc.name} wander inside ${zone.id}`);
+      // Never spawned ON a solid tile — a scattered wilds trunk on the zone
+      // center used to swallow the NPC anchored there (stepNpcs vets only the
+      // tiles it moves TO, so the overlap persists until a lucky step). Bounds
+      // first: an out-of-zone index reads undefined from the Uint8Array, and
+      // a negated undefined would wave the invalid spawn through (review
+      // finding); walkable is exactly 0 — put() only ever writes 0 or 1.
+      assert.ok(
+        Number.isInteger(npc.x) && npc.x >= 0 && npc.x < zone.w && Number.isInteger(npc.y) && npc.y >= 0 && npc.y < zone.h,
+        `${label}: ${npc.name} spawn inside ${zone.id}`,
+      );
+      assert.equal(zone.solid[zone.w * npc.y + npc.x], 0, `${label}: ${npc.name} spawns walkable in ${zone.id}`);
     }
     // Portals land on walkable tiles in their destination — and the portal's
     // OWN tile must be walkable too, or the player can never step onto it.
@@ -207,7 +221,12 @@ function checkWorld(w, sealed, label) {
   // fixture that trips this assert should relax it to the merged-block count.)
   const v = w.zones.z1;
   const rootName = sealed._ids.zones.z1;
-  const rootHouseholds = new Set(sealed.cast.filter((c) => c.home === rootName).map((c) => c.household));
+  // Non-residents get no dwelling, so they do not demand a root door.
+  const rootHouseholds = new Set(
+    sealed.cast
+      .filter((c) => c.home === rootName && (c.standing ?? "resident") === "resident")
+      .map((c) => c.household),
+  );
   const doorCount = v.object.filter((t) => t === "door").length;
   assert.ok(
     doorCount >= rootHouseholds.size,
@@ -251,6 +270,327 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   assert.ok(gatheringId, "the gathering has an ordinal id");
   const innkeeper = w.zones[gatheringId].npcs.find((n) => n.name === "Perrin");
   assert.ok(innkeeper, "the innkeeper lives in the gathering interior");
+}
+
+// 11b. Standing: non-residents get no dwelling and anchor to a rest spot —
+// transient → a public loiter spot, fringe → the wilds, destitute → the plaza.
+{
+  const sealed = brief.validate(
+    {
+      scale: "village", name: "Crossford",
+      places: [{ kind: "gathering", name: "The Ford Inn" }, { kind: "wilds", name: "The Reach" }],
+      cast: [
+        { name: "Alder", role: "reeve", kind: "leader", tint: "blue", home: "Crossford", household: 1 },
+        { name: "Bram", role: "smith", kind: "maker", tint: "amber", home: "Crossford", household: 2 },
+        { name: "Sil", role: "wayfarer", kind: "wanderer", tint: "green", home: "Crossford", household: 3, standing: "transient" },
+        { name: "Wyn", role: "hermit", kind: "wanderer", tint: "teal", home: "Crossford", household: 4, standing: "fringe" },
+        { name: "Gad", role: "beggar", kind: "folk", tint: "rose", home: "Crossford", household: 5, standing: "destitute" },
+        { name: "Rue", role: "weaver", kind: "elder", tint: "violet", home: "Crossford", household: 2, standing: "nonsense" },
+      ],
+    },
+    ctx,
+  );
+  // Fold: omitted → resident, unknown → resident, valid values preserved.
+  const by = (name) => sealed.cast.find((c) => c.name === name);
+  assert.equal(by("Alder").standing, "resident", "omitted standing defaults to resident");
+  assert.equal(by("Rue").standing, "resident", "unknown standing folds to resident");
+  assert.equal(by("Sil").standing, "transient", "valid standing preserved");
+  assert.equal(by("Wyn").standing, "fringe", "valid standing preserved");
+  assert.equal(by("Gad").standing, "destitute", "valid standing preserved");
+
+  const w = world.build(424242, "cozy-village", sealed);
+  checkWorld(w, sealed, "standing");
+  const v = w.zones.z1;
+  const innId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Ford Inn")?.[0];
+  const woodsId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Reach")?.[0];
+  assert.ok(innId && woodsId, "the inn and the wilds have ordinal ids");
+  assert.ok(w.zones[woodsId].npcs.some((n) => n.name === "Wyn"), "fringe retreats to the wilds");
+  const gad = v.npcs.find((n) => n.name === "Gad");
+  assert.ok(gad, "destitute stays in the settlement");
+  const mX = (v.w / 2) | 0;
+  const mY = (v.h / 2) | 0;
+  assert.deepEqual(
+    gad.wander,
+    { x0: mX - 6, y0: mY - 5, x1: mX + 6, y1: mY + 5 },
+    "destitute anchors to the public center, never a house",
+  );
+  assert.ok(!v.npcs.some((n) => n.name === "Wyn"), "the fringe NPC leaves the settlement for the wilds");
+
+  // Walkable-spawn regression: seed 6 scatters a trunk exactly on the wilds
+  // center tile (17,11), where the fringe hermit anchors — before the spawn
+  // nudge Wyn spawned INSIDE it (checkWorld's walkable-spawn assert catches
+  // the overlap; ~7% of seeds reproduced it on this fixture).
+  checkWorld(world.build(6, "cozy-village", sealed), sealed, "standing-solid-center");
+}
+
+// 11c. Standing SUPPRESSION + the no-inn / no-wilds fallbacks. A non-resident
+// holding a special-kind that no resident claims builds nothing; non-resident
+// households add no roof (exact door count catches a deleted gate); and with no
+// gathering/wilds present, transient falls back to the plaza and fringe to the
+// settlement's outer margin.
+{
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Wayrest",
+      places: [{ kind: "hall", name: "The Moot Hall" }],
+      cast: [
+        { name: "Ada", role: "elder", kind: "folk", tint: "blue", home: "Wayrest", household: 1 },
+        { name: "Ben", role: "cooper", kind: "folk", tint: "amber", home: "Wayrest", household: 2 },
+        { name: "Cal", role: "digger", kind: "folk", tint: "green", home: "Wayrest", household: 3 },
+        { name: "Dov", role: "sellsword", kind: "guard", tint: "red", home: "Wayrest", household: 4, standing: "transient" },
+        { name: "Esk", role: "hermit", kind: "wanderer", tint: "teal", home: "Wayrest", household: 5, standing: "fringe" },
+        { name: "Fyn", role: "beggar", kind: "folk", tint: "rose", home: "Wayrest", household: 6, standing: "destitute" },
+      ],
+    },
+    ctx,
+  );
+  const w = world.build(4242, "cozy-village", sealed);
+  checkWorld(w, sealed, "standing-suppression");
+  const v = w.zones.z1;
+  // 3 resident dwellings + 1 hall facade = 4 doors. The transient guard's
+  // "post" is suppressed and no non-resident household adds a dwelling; deleting
+  // either the specials gate or the households filter would raise this count.
+  const doorCount = v.object.filter((t) => t === "door").length;
+  assert.equal(doorCount, 4, `only residents build (got ${doorCount} doors, expected 4)`);
+  assert.equal(v.object.filter((t) => t === "table").length, 0, "a transient non-merchant lays no stall");
+  assert.ok(!Object.values(w.zones).some((z) => z.mapKind === "place"), "no wilds synthesized (places is non-empty)");
+  const mX = (v.w / 2) | 0;
+  const mY = (v.h / 2) | 0;
+  const plaza = { x0: mX - 6, y0: mY - 5, x1: mX + 6, y1: mY + 5 };
+  const wander = (name) => v.npcs.find((n) => n.name === name).wander;
+  assert.deepEqual(wander("Dov"), plaza, "transient with no inn falls back to the plaza");
+  assert.deepEqual(
+    wander("Esk"),
+    { x0: 3, y0: v.h - 6, x1: v.w - 4, y1: v.h - 3 },
+    "fringe with no wilds falls back to the outer margin",
+  );
+  assert.deepEqual(wander("Fyn"), plaza, "destitute anchors to the public center");
+}
+
+// 11d. Transient merchants set up a light market stall (a 3-table structure,
+// never a permanent shop) and tend it. A transient non-merchant, or a merchant
+// with no free lot, does not.
+{
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Fairmarket",
+      cast: [
+        { name: "Ona", role: "elder", kind: "folk", tint: "blue", home: "Fairmarket", household: 1 },
+        { name: "Pel", role: "cooper", kind: "folk", tint: "green", home: "Fairmarket", household: 2 },
+        { name: "Rin", role: "weaver", kind: "folk", tint: "amber", home: "Fairmarket", household: 3 },
+        { name: "Sol", role: "spice trader", kind: "merchant", tint: "rose", home: "Fairmarket", household: 4, standing: "transient" },
+      ],
+    },
+    ctx,
+  );
+  const w = world.build(4242, "cozy-village", sealed);
+  checkWorld(w, sealed, "merchant-stall");
+  const v = w.zones.z1;
+  // One transient merchant -> exactly one 3-table stall in the settlement.
+  const tables = v.object.filter((t) => t === "table").length;
+  assert.equal(tables, 3, `the transient merchant set up a 3-table stall (got ${tables})`);
+  const sol = v.npcs.find((n) => n.name === "Sol");
+  assert.ok(sol, "the transient merchant tends the stall in the settlement");
+  // Tending it: the tile directly above the merchant's counter is a stall table.
+  assert.equal(v.object[v.w * (sol.y - 1) + sol.x], "table", "the merchant stands at their stall counter");
+}
+
+// 11e. Transients loiter at PUBLIC spots and spread across them. With an inn, a
+// resident shop, and three transients (three spots), the seeded round-robin puts
+// one inside the inn, one at the shop front, and one in the plaza.
+{
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Tradeholm",
+      places: [{ kind: "gathering", name: "The Rest" }],
+      cast: [
+        { name: "Ada", role: "elder", kind: "folk", tint: "blue", home: "Tradeholm", household: 1 },
+        { name: "Ben", role: "farmer", kind: "folk", tint: "green", home: "Tradeholm", household: 2 },
+        { name: "Cor", role: "shopkeep", kind: "merchant", tint: "amber", home: "Tradeholm", household: 3 },
+        { name: "Vye", role: "pilgrim", kind: "scholar", tint: "teal", home: "Tradeholm", household: 4, standing: "transient" },
+        { name: "Wil", role: "drifter", kind: "wanderer", tint: "rose", home: "Tradeholm", household: 5, standing: "transient" },
+        { name: "Xio", role: "envoy", kind: "elder", tint: "violet", home: "Tradeholm", household: 6, standing: "transient" },
+      ],
+    },
+    ctx,
+  );
+  const w = world.build(99, "cozy-village", sealed);
+  checkWorld(w, sealed, "loiter-spread");
+  const v = w.zones.z1;
+  const innId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Rest")?.[0];
+  const mX = (v.w / 2) | 0;
+  const mY = (v.h / 2) | 0;
+  const plaza = JSON.stringify({ x0: mX - 6, y0: mY - 5, x1: mX + 6, y1: mY + 5 });
+  const names = ["Vye", "Wil", "Xio"];
+  const inInn = names.filter((n) => w.zones[innId].npcs.some((x) => x.name === n));
+  assert.equal(inInn.length, 1, "one transient loiters inside the inn");
+  const inV = names.filter((n) => v.npcs.some((x) => x.name === n)).map((n) => v.npcs.find((x) => x.name === n));
+  assert.equal(inV.length, 2, "the other two loiter out in the settlement");
+  assert.equal(inV.filter((t) => JSON.stringify(t.wander) === plaza).length, 1, "one loiters in the plaza");
+  const atShop = inV.filter((t) => JSON.stringify(t.wander) !== plaza);
+  assert.equal(atShop.length, 1, "one loiters at the shop front");
+  const s = atShop[0];
+  // Beside the door, not in it: the shop door sits up-and-left of the loiter box.
+  assert.equal(
+    v.object[v.w * (s.wander.y0 - 1) + (s.wander.x0 - 1)],
+    "door",
+    "the shop-loiterer stands beside a shop door, not in the doorway",
+  );
+}
+
+// 11f. A transient merchant with NO free lot lays no stall and still loiters at
+// a public spot (here the residents' buildings consume every lot).
+{
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Fullford",
+      cast: [
+        { name: "Ona", role: "reeve", kind: "leader", tint: "blue", home: "Fullford", household: 1 },
+        { name: "Pel", role: "farmer", kind: "grower", tint: "green", home: "Fullford", household: 2 },
+        { name: "Gar", role: "watch", kind: "guard", tint: "red", home: "Fullford", household: 3 },
+        { name: "Sol", role: "peddler", kind: "merchant", tint: "rose", home: "Fullford", household: 4, standing: "transient" },
+      ],
+    },
+    ctx,
+  );
+  const w = world.build(4242, "cozy-village", sealed);
+  checkWorld(w, sealed, "stall-no-lot");
+  const v = w.zones.z1;
+  assert.equal(v.object.filter((t) => t === "table").length, 0, "no free lot -> the transient merchant lays no stall");
+  const sol = v.npcs.find((n) => n.name === "Sol");
+  assert.ok(sol, "the merchant still loiters at a public spot");
+  const mX = (v.w / 2) | 0;
+  const mY = (v.h / 2) | 0;
+  assert.deepEqual(sol.wander, { x0: mX - 6, y0: mY - 5, x1: mX + 6, y1: mY + 5 }, "falls back to the plaza");
+}
+
+// 11g. A shop with an interior (a workshop) — a loitering transient browses
+// INSIDE it (the mechanism the inn already uses); facade shops keep them outside.
+{
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Forgeton",
+      places: [{ kind: "workshop", name: "The Forge" }],
+      cast: [
+        { name: "Ada", role: "elder", kind: "folk", tint: "blue", home: "Forgeton", household: 1 },
+        { name: "Ben", role: "cooper", kind: "folk", tint: "green", home: "Forgeton", household: 2 },
+        { name: "Cor", role: "smith", kind: "maker", tint: "amber", home: "The Forge", household: 3 },
+        { name: "Vye", role: "pilgrim", kind: "scholar", tint: "teal", home: "Forgeton", household: 4, standing: "transient" },
+        { name: "Wil", role: "drifter", kind: "wanderer", tint: "rose", home: "Forgeton", household: 5, standing: "transient" },
+      ],
+    },
+    ctx,
+  );
+  const w = world.build(99, "cozy-village", sealed);
+  checkWorld(w, sealed, "shop-interior");
+  const forgeId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Forge")?.[0];
+  assert.ok(forgeId, "the workshop shop has an ordinal id");
+  const inForge = ["Vye", "Wil"].filter((n) => w.zones[forgeId].npcs.some((x) => x.name === n));
+  assert.equal(inForge.length, 1, "one transient browses inside the workshop shop; the other loiters elsewhere");
+}
+
+// 11h. The dwelling gate is home-aware: a resident who lives at the root gets a town
+// house, but a resident whose home is the wilds (a forager who lives in the woods)
+// sleeps THERE and mints NO phantom settlement dwelling. With an all-folk cast (no
+// special buildings) at/above castMin (no stock top-up) and only a wilds place (no
+// interior facades), every z1 door is a dwelling — so the door count equals the
+// DISTINCT ROOT-resident households exactly; the wilds resident adds none. (checkWorld
+// only asserts >=; this pins the equality that a gate regression would break.)
+{
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Wold",
+      places: [{ kind: "wilds", name: "The Fen" }],
+      cast: [
+        { name: "Ana", role: "reeve", kind: "folk", tint: "blue", home: "Wold", household: 1 },
+        { name: "Bo", role: "cooper", kind: "folk", tint: "green", home: "Wold", household: 2 },
+        { name: "Cy", role: "weaver", kind: "folk", tint: "amber", home: "Wold", household: 3 },
+        { name: "Del", role: "carter", kind: "folk", tint: "rose", home: "Wold", household: 4 },
+        { name: "Fenn", role: "forager", kind: "folk", tint: "teal", home: "The Fen", household: 5 },
+      ],
+    },
+    ctx,
+  );
+  const w = world.build(7, "cozy-village", sealed);
+  checkWorld(w, sealed, "dwelling-gate");
+  const v = w.zones.z1;
+  const rootName = sealed._ids.zones.z1;
+  const rootHouseholds = new Set(
+    sealed.cast.filter((c) => c.home === rootName && (c.standing ?? "resident") === "resident").map((c) => c.household),
+  );
+  const doorCount = v.object.filter((t) => t === "door").length;
+  assert.equal(
+    doorCount,
+    rootHouseholds.size,
+    `a door per root household, none for the wilds resident (${doorCount} doors vs ${rootHouseholds.size} root households)`,
+  );
+  const fenId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Fen")[0];
+  assert.ok(
+    w.zones[fenId].npcs.some((n) => n.name === "Fenn"),
+    "the wilds resident lives (and sleeps) out in the wilds zone, not in an empty town house",
+  );
+}
+
+// 11i. Scattered trees never land under a building's roof overhang — the overhang
+// rows are grass and non-solid, so only an explicit overhead-layer guard keeps a
+// trunk from being drawn under (and visually eaten by) a roof. Swept across seeds.
+{
+  for (let seed = 1; seed <= 60; seed++) {
+    const sealed = brief.validate(
+      {
+        scale: "village",
+        name: "Timbrel",
+        surround: "woods",
+        cast: [
+          { name: "Ada", role: "reeve", kind: "leader", tint: "blue", home: "Timbrel", household: 1 },
+          { name: "Ben", role: "smith", kind: "maker", tint: "green", home: "Timbrel", household: 2 },
+          { name: "Ces", role: "farmer", kind: "grower", tint: "amber", home: "Timbrel", household: 3 },
+          { name: "Dan", role: "carter", kind: "folk", tint: "rose", home: "Timbrel", household: 4 },
+        ],
+      },
+      ctx,
+    );
+    const v = world.build(seed, "cozy-village", sealed).zones.z1;
+    // Guard against a trivially-passing check: the world must actually have roofs.
+    assert.ok(v.overhead.some((t) => t === "roof" || t === "roofEdge"), `seed ${seed}: has roofs to test against`);
+    for (let i = 0; i < v.object.length; i++) {
+      if (v.object[i] !== "trunk") continue;
+      const oh = v.overhead[i];
+      assert.ok(oh !== "roof" && oh !== "roofEdge", `seed ${seed}: no trunk under a roof (tile ${i} overhead ${oh})`);
+    }
+  }
+}
+
+// 11j. The stall pass handles MORE than one transient merchant: given free lots for
+// both, each lays its own 3-table stall and tends it — the loop does not stop at one.
+{
+  const sealed = brief.validate(
+    {
+      scale: "town",
+      name: "Twomarket",
+      cast: [
+        { name: "Ona", role: "elder", kind: "folk", tint: "blue", home: "Twomarket", household: 1 },
+        { name: "Sol", role: "spice trader", kind: "merchant", tint: "rose", home: "Twomarket", household: 2, standing: "transient" },
+        { name: "Tam", role: "silk trader", kind: "merchant", tint: "teal", home: "Twomarket", household: 3, standing: "transient" },
+      ],
+    },
+    ctx,
+  );
+  const w = world.build(4242, "cozy-village", sealed);
+  checkWorld(w, sealed, "two-merchants");
+  const v = w.zones.z1;
+  assert.equal(v.object.filter((t) => t === "table").length, 6, "two transient merchants -> two 3-table stalls");
+  for (const name of ["Sol", "Tam"]) {
+    const m = v.npcs.find((n) => n.name === name);
+    assert.ok(m, `${name} is placed`);
+    assert.equal(v.object[v.w * (m.y - 1) + m.x], "table", `${name} stands at their own stall counter`);
+  }
 }
 
 // 12. Determinism: same brief + seed → structurally identical world.
