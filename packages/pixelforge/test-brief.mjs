@@ -196,8 +196,15 @@ function checkWorld(w, sealed, label) {
         `${label}: ${npc.name} wander inside ${zone.id}`);
       // Never spawned ON a solid tile — a scattered wilds trunk on the zone
       // center used to swallow the NPC anchored there (stepNpcs vets only the
-      // tiles it moves TO, so the overlap persists until a lucky step).
-      assert.ok(!zone.solid[zone.w * npc.y + npc.x], `${label}: ${npc.name} spawns walkable in ${zone.id}`);
+      // tiles it moves TO, so the overlap persists until a lucky step). Bounds
+      // first: an out-of-zone index reads undefined from the Uint8Array, and
+      // a negated undefined would wave the invalid spawn through (review
+      // finding); walkable is exactly 0 — put() only ever writes 0 or 1.
+      assert.ok(
+        Number.isInteger(npc.x) && npc.x >= 0 && npc.x < zone.w && Number.isInteger(npc.y) && npc.y >= 0 && npc.y < zone.h,
+        `${label}: ${npc.name} spawn inside ${zone.id}`,
+      );
+      assert.equal(zone.solid[zone.w * npc.y + npc.x], 0, `${label}: ${npc.name} spawns walkable in ${zone.id}`);
     }
     // Portals land on walkable tiles in their destination — and the portal's
     // OWN tile must be walkable too, or the player can never step onto it.
