@@ -2046,6 +2046,44 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   }
 }
 
+// 14k. The floor invariant that lets walkableIn stay TOTAL, enforced instead of
+// assumed (review finding). The placer always returns a tile because none of its
+// callers has a better answer: a compile-time spawn has to put the cast member
+// somewhere, and by the time a cross-zone move needs a tile the NPC has already
+// left its old zone. Its last resort is zone.spawn, which is only a legal answer
+// while every compiled zone has somewhere legal to stand — so pin that here
+// rather than trusting the generator to keep it true. If a future generator can
+// emit a zone with no standable tile, this fails first and loudly, and the
+// fallback needs a real policy instead of a tile.
+{
+  let minFree = Infinity;
+  let zones = 0;
+  for (const theme of ["cozy-village", "sci-fi-colony"]) {
+    for (let seed = 1; seed <= 30; seed++) {
+      const w = world.build(seed, theme, brief.defaults(theme, seed));
+      for (const zoneId in w.zones) {
+        const z = w.zones[zoneId];
+        zones++;
+        assert.ok(
+          loadedPF.schedule.standable(z, z.spawn.x, z.spawn.y),
+          `${theme} seed ${seed}: ${zoneId} (${z.name}) spawn ${z.spawn.x},${z.spawn.y} is itself standable`,
+        );
+        let free = 0;
+        for (let y = 0; y < z.h; y++) {
+          for (let x = 0; x < z.w; x++) if (loadedPF.schedule.standable(z, x, y)) free++;
+        }
+        assert.ok(free > 0, `${theme} seed ${seed}: ${zoneId} (${z.name}) has somewhere to stand`);
+        minFree = Math.min(minFree, free);
+      }
+    }
+  }
+  // Guard against a vacuous pass, and pin the headroom the rest of the argument
+  // rests on: the cast is capped at 10, so saturating a zone is out of reach too
+  // — which is why the branch below the saturation fallback cannot be hit.
+  assert.ok(zones > 100, `the sweep actually compiled zones (${zones})`);
+  assert.ok(minFree > 10, `every zone has room for a whole cast (smallest ${minFree})`);
+}
+
 // 14h. A save whose zone no longer exists lands the player at the start zone's
 // SPAWN, not at the old interior coordinates clamped into a much bigger map.
 // The solid-tile rescue only fires if those coordinates hit a wall, so without
