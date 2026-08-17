@@ -35,6 +35,7 @@ import { createNoodleStorage } from "../storage/noodle.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
 import { loadPrompt, NOODLE_IMAGE_POST } from "../prompt-overrides/index.js";
 import { generateNoodleImageWithRetry } from "./noodle-image-retry.js";
+import { noodleImageExtension } from "./noodle-image-format.js";
 import { rewriteNoodleImagePrompt } from "./noodle-image-prompt-rewrite.js";
 import type { ConnectionAdmissionMode } from "../generation/connection-admission.js";
 import {
@@ -359,7 +360,7 @@ export async function generateNoodlePostImage(input: {
       ? `characters/${input.account.entityId}`
       : "noodle",
     image.base64,
-    image.ext,
+    noodleImageExtension(image.base64, image.ext),
   );
   if (input.account.kind === "character") {
     return {
