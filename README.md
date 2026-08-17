@@ -62,11 +62,11 @@ For complete mode, lifecycle, and settings documentation for every package, see 
 
 ### In development
 
-These packages are being built in this repository but are not finished, so they are excluded from the user-facing catalog on every Engine channel until they are ready (see [Contributing § Incomplete packages](CONTRIBUTING.md#incomplete-packages)):
+These packages are being built in this repository but are not ready for the stable catalog yet. A package is either **in development** (hidden from every Engine channel) or **staging only** (offered to Engine `staging` testers, hidden from stable `main` users). See [Contributing § Packages that are not ready for everyone](CONTRIBUTING.md#packages-that-are-not-ready-for-everyone).
 
-| Package | ID | Status |
-| --- | --- | --- |
-| Pixelforge | [`pixelforge`](packages/pixelforge/manifest.json) | A walkable pixel-art RPG Experience for Game Mode: generated settlements, NPCs, and story-driven exploration. Under active development; not yet listed for users. |
+| Package | ID | Availability | Status |
+| --- | --- | --- | --- |
+| Pixelforge | [`pixelforge`](packages/pixelforge/manifest.json) | In development | A walkable pixel-art RPG Experience for Game Mode: generated settlements, NPCs, and story-driven exploration. Under active development; not yet listed for users. |
 
 ### Localization sources
 

@@ -83,13 +83,26 @@ Both builders accept package IDs for a focused rebuild. When a build changes an 
 
 The catalog `generatedAt` field is preserved across rebuilds rather than stamped with the current time. This keeps a no-op rebuild byte-identical and stops the timestamp from being a guaranteed merge conflict between concurrent package PRs. A rebuild that touches nothing substantive should leave `catalog/**/catalog.json` unchanged — if `git status` shows only a `generatedAt` diff, discard it. To intentionally refresh the timestamp (for example when promoting a release), run the builder with `MARINARA_CATALOG_STAMP_GENERATED_AT=1`.
 
-### Incomplete packages
+### Packages that are not ready for everyone
 
-A package that is being developed in this repository but is not ready for users is marked **incomplete** by adding its id to `INCOMPLETE_PACKAGE_IDS` in `scripts/catalog-incomplete.mjs`. An incomplete package keeps building normally — its payload, manifest, artifact, and locales stay committed so development and testing continue — but it is excluded from every generated catalog lane, which is the only surface Marinara Engine users browse and install from. Because both the `main` and `staging` catalogs are generated through the same chokepoint (`writeCatalogFamily`), the exclusion applies on every Engine channel, and whichever builder runs next also drops any stale committed entry for a newly-marked id. `validate-catalog.mjs` fails if an incomplete id appears in a committed catalog, and allows its activation guidance to exist ahead of the listing.
+`scripts/catalog-incomplete.mjs` holds two sets, because "not finished" and "not promoted" are different states. Both keep the package building normally — payload, manifest, artifact, and locales stay committed so development and testing continue — and both are enforced at the single catalog chokepoint (`writeCatalogFamily`), so every builder inherits them and whichever builder runs next relocates or drops a stale committed entry for a newly-marked id.
 
-When the package is ready to ship: delete its id from the set, rebuild its package (which re-adds the catalog entry), update the package-count assertion in `validate-catalog.mjs` and the README catalog tables, and land all of it in one PR.
+| Set | Stable (`main`) users | Staging users |
+| --- | --- | --- |
+| `INCOMPLETE_PACKAGE_IDS` | hidden | hidden |
+| `STAGING_ONLY_PACKAGE_IDS` | hidden | visible and installable |
 
-For local testing against a development Engine, build with `MARINARA_CATALOG_INCLUDE_INCOMPLETE=1` to produce an unfiltered catalog and point the Engine's `MARINARA_AGENT_CATALOG_URL` override at it. Never commit a catalog generated that way — validation rejects it.
+Use `INCOMPLETE_PACKAGE_IDS` while a package is still being built and is not ready for anyone. Use `STAGING_ONLY_PACKAGE_IDS` once it is ready for testers but not for the stable channel. A package graduates `INCOMPLETE_PACKAGE_IDS` → `STAGING_ONLY_PACKAGE_IDS` → neither; an id may not sit in both.
+
+**Why the staging tier needs an overlay.** Promotion is a wholesale `staging` → `main` merge, so both branches end up with byte-identical catalogs. A package therefore cannot be shown on one branch and hidden on the other by catalog *content* — only the Engine knows which channel it is on. So a staging-only package is cut from the published lanes (which stable users read, and which promotion copies verbatim) and written to a **preview overlay** under `catalog/preview/`, mirroring the normal lane layout. The overlay rides along on `main` inertly: a stable Engine never requests it. A staging Engine fetches it and merges it over the published lanes.
+
+This is fail-hidden, never fail-leak: an Engine that predates preview-overlay support simply never sees a staging-only package, and no Engine can reveal one to stable users by being out of date.
+
+When a package is ready to ship to everyone: delete its id from both sets, rebuild its package (which re-adds the catalog entry to the published lanes and removes the overlay), update the package-count assertion in `validate-catalog.mjs` and the README catalog tables, and land all of it in one PR.
+
+`validate-catalog.mjs` enforces that each tier lands in exactly one place: an incomplete id in no catalog at all, a staging-only id in the overlay and never in the published lanes, no orphaned overlay entry or empty overlay directory. Activation guidance and README coverage may exist ahead of a listing.
+
+For local testing against a development Engine, build with `MARINARA_CATALOG_INCLUDE_INCOMPLETE=1` to publish every held-back package into the normal lanes, and point the Engine's `MARINARA_AGENT_CATALOG_URL` override at it. Never commit a catalog generated that way — validation rejects it.
 
 ### Engine compatibility and catalog lanes
 

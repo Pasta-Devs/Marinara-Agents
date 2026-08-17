@@ -13,7 +13,7 @@ import {
   readCatalogFamily,
 } from "./catalog-lanes.mjs";
 import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
-import { INCOMPLETE_PACKAGE_IDS } from "./catalog-incomplete.mjs";
+import { INCOMPLETE_PACKAGE_IDS, STAGING_ONLY_PACKAGE_IDS } from "./catalog-incomplete.mjs";
 import { assertPackagePrivateImportBoundary } from "./package-engine-boundary.mjs";
 import { OFFICIAL_PACKAGE_GUIDANCE, withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
 import {
@@ -24,22 +24,79 @@ import {
 } from "./catalog-path-safety.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const { catalog, catalogsByMajor, legacyCatalog } = await readCatalogFamily(repoRoot);
+const { catalog, catalogsByMajor, legacyCatalog, previewCatalogsByMajor, previewLegacyCatalog } =
+  await readCatalogFamily(repoRoot);
 const MIN_ENGINE_VERSION = "2.3.0";
 const REQUIRED_MAX_ENGINE_EXCLUSIVE = "4.0.0";
 const ENGINE_CAPABILITY_API = Object.freeze({ major: 1, minor: 9 });
 if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.packages)) throw new Error("Invalid catalog envelope");
-// Incomplete packages (catalog-incomplete.mjs) keep their source, payload, and
-// artifact in the tree but must never be listed in a published catalog lane —
-// this also catches a stale committed entry that predates marking the id.
-for (const entry of catalog.packages) {
-  if (INCOMPLETE_PACKAGE_IDS.has(entry.manifest.id)) {
+// Held-back packages (catalog-incomplete.mjs) keep their source, payload, and
+// artifact in the tree, but each tier must land in exactly one place: an
+// incomplete package in no catalog at all, a staging-only package in the
+// preview overlay and never in the published lanes that stable users read and
+// promotion copies verbatim. These also catch a stale committed entry that
+// predates marking the id.
+const publishedIds = new Set();
+for (const lane of [legacyCatalog, ...catalogsByMajor.values()]) {
+  for (const entry of lane?.packages ?? []) publishedIds.add(entry.manifest.id);
+}
+const previewIds = new Set();
+for (const lane of [previewLegacyCatalog, ...previewCatalogsByMajor.values()]) {
+  for (const entry of lane?.packages ?? []) previewIds.add(entry.manifest.id);
+}
+for (const id of publishedIds) {
+  if (INCOMPLETE_PACKAGE_IDS.has(id)) {
     throw new Error(
-      `${entry.manifest.id} is marked incomplete (scripts/catalog-incomplete.mjs) and must not appear in the published catalog — rebuild the catalog to drop it`,
+      `${id} is marked incomplete (scripts/catalog-incomplete.mjs) and must not appear in any catalog — rebuild the catalog to drop it`,
+    );
+  }
+  if (STAGING_ONLY_PACKAGE_IDS.has(id)) {
+    throw new Error(
+      `${id} is marked staging-only (scripts/catalog-incomplete.mjs) and must not appear in the published lanes — rebuild the catalog to move it to the preview overlay`,
     );
   }
 }
-const expectedCatalogsByMajor = createCatalogLanes(catalog);
+for (const id of previewIds) {
+  if (INCOMPLETE_PACKAGE_IDS.has(id)) {
+    throw new Error(`${id} is marked incomplete and must not appear in the preview overlay either`);
+  }
+  if (!STAGING_ONLY_PACKAGE_IDS.has(id)) {
+    throw new Error(`${id} is in the preview overlay but is not marked staging-only — rebuild the catalog`);
+  }
+}
+for (const id of STAGING_ONLY_PACKAGE_IDS) {
+  if (!previewIds.has(id)) {
+    throw new Error(`${id} is marked staging-only but is missing from the preview overlay — rebuild its package`);
+  }
+}
+// Lane derivation is checked per family: published lanes against the packages
+// stable users receive, preview lanes against the staging-only overlay.
+const publishedCatalog = {
+  ...catalog,
+  packages: catalog.packages.filter((entry) => !STAGING_ONLY_PACKAGE_IDS.has(entry.manifest.id)),
+};
+const previewCatalog = {
+  ...catalog,
+  packages: catalog.packages.filter((entry) => STAGING_ONLY_PACKAGE_IDS.has(entry.manifest.id)),
+};
+if (previewCatalog.packages.length > 0) {
+  const expectedPreviewLanes = createCatalogLanes(previewCatalog);
+  for (const [major, expectedLane] of expectedPreviewLanes) {
+    if (JSON.stringify(previewCatalogsByMajor.get(major)) !== JSON.stringify(expectedLane)) {
+      throw new Error(
+        `catalog/preview/v${major}/catalog.json does not match its packages' Engine compatibility ranges`,
+      );
+    }
+  }
+  if (JSON.stringify(previewLegacyCatalog) !== JSON.stringify(expectedPreviewLanes.get(LEGACY_CATALOG_MAJOR))) {
+    throw new Error(
+      `catalog/preview/catalog.json must remain an exact alias of catalog/preview/v${LEGACY_CATALOG_MAJOR}/catalog.json`,
+    );
+  }
+} else if (previewCatalogsByMajor.size > 0 || previewLegacyCatalog) {
+  throw new Error("catalog/preview exists with no staging-only packages — rebuild the catalog to remove it");
+}
+const expectedCatalogsByMajor = createCatalogLanes(publishedCatalog);
 if (JSON.stringify([...catalogsByMajor.keys()].sort()) !== JSON.stringify([...expectedCatalogsByMajor.keys()].sort())) {
   throw new Error("Versioned catalog lane set does not match package Engine compatibility ranges");
 }
@@ -738,12 +795,22 @@ if (JSON.stringify(guidanceIds) !== JSON.stringify([...ids].sort())) {
   throw new Error("Official package activation guidance must cover exactly the downloadable catalog");
 }
 
-const agentOnly = catalog.packages.filter((entry) => !entry.manifest.entrypoints.server).length;
-const features = catalog.packages.length - agentOnly;
-if (catalog.packages.length !== 35 || agentOnly !== 24 || features !== 11) {
+// Counted over the PUBLISHED lanes — what a stable user actually receives.
+// Staging-only packages live in the preview overlay and are counted separately.
+const agentOnly = publishedCatalog.packages.filter((entry) => !entry.manifest.entrypoints.server).length;
+const features = publishedCatalog.packages.length - agentOnly;
+if (publishedCatalog.packages.length !== 35 || agentOnly !== 24 || features !== 11) {
   throw new Error(`Expected 24 agents and 11 features, found ${agentOnly} and ${features}`);
 }
-console.log(`Catalog valid: ${catalog.packages.length} packages (${agentOnly} agents, ${features} features).`);
+console.log(`Catalog valid: ${publishedCatalog.packages.length} packages (${agentOnly} agents, ${features} features).`);
+if (previewCatalog.packages.length > 0) {
+  console.log(
+    `Preview overlay valid: ${previewCatalog.packages.length} staging-only package(s) (${previewCatalog.packages
+      .map((entry) => entry.manifest.id)
+      .sort()
+      .join(", ")}) — hidden from stable users.`,
+  );
+}
 console.log(
   `Catalog lanes valid: ${[...catalogsByMajor.entries()]
     .map(([major, lane]) => `v${major}=${lane.packages.length}`)
