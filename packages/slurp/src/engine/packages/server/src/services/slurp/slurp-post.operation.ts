@@ -4,6 +4,7 @@ import {
   type NoodlerPostCreateInput,
   type NoodlerPostUpdateInput,
   type NoodlerManagedPost,
+  type NoodlePostAccess,
   type NoodlerRefreshNowOutcome,
 } from "@marinara-engine/shared";
 import type { NoodleImagePromptReviewItem } from "./slurp-public-images.service.js";
@@ -178,6 +179,7 @@ export async function refreshTargetedNoodlerCreatorsNow(
   db: DB,
   accountIds: string[],
   executionId?: string,
+  access: NoodlePostAccess = "locked",
 ): Promise<NoodlerRefreshNowResult> {
   const noodle = createSlurpStorage(db);
 
@@ -192,7 +194,7 @@ export async function refreshTargetedNoodlerCreatorsNow(
         mode: "noodler",
         targetAccountId: accountId,
         format: "caption",
-        access: "locked",
+        access,
         executionId,
       });
       const status = result.status === "disabled" || result.status === "busy" ? "skipped" : result.status;

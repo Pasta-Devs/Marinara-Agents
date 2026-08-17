@@ -30,7 +30,7 @@ assert.match(
 );
 assert.match(
   panel,
-  /await saveSettings\(\s*selected\.size === 0 \|\| newIds\.length === 0 \? "zero" : "completed",\s*\);/u,
+  /await saveSettings\(\s*selected\.size === 0 \|\| newIds\.length === 0 \? "zero" : "completed",?\s*\);/u,
 );
 
 // Adding creators later reuses this wizard; its settings write remains Slurp-owned.

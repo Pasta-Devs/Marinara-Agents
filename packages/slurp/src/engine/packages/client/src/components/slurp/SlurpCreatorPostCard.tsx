@@ -358,7 +358,15 @@ function NoodlerFictionalPrice({ amount }: { amount: number }) {
   );
 }
 
-export function SlurpCreatorPostCard({ post, ctx }: { post: NoodlePostCardModel; ctx: NoodlePostCardCtx }) {
+export function SlurpCreatorPostCard({
+  post,
+  ctx,
+  surface = "feed",
+}: {
+  post: NoodlePostCardModel;
+  ctx: NoodlePostCardCtx;
+  surface?: "feed" | "profile";
+}) {
   const { t: localizeUi, i18n } = useUiTranslation();
   const {
     personaAccount,
@@ -739,7 +747,11 @@ export function SlurpCreatorPostCard({ post, ctx }: { post: NoodlePostCardModel;
       key={post.id}
       data-noodle-post-id={post.id}
       tabIndex={-1}
-      className="border-b border-[var(--noodle-divider)] px-4 py-5 transition-colors hover:bg-[var(--accent)]/25"
+      className={
+        surface === "profile"
+          ? "border-b border-[var(--noodle-divider)] px-4 py-3 transition-colors hover:bg-[var(--accent)]/25"
+          : "border-b border-[var(--noodle-divider)] px-4 py-5 transition-colors hover:bg-[var(--accent)]/25"
+      }
     >
       <div className="flex gap-3">
         {author ? (
@@ -792,16 +804,22 @@ export function SlurpCreatorPostCard({ post, ctx }: { post: NoodlePostCardModel;
               <button
                 type="button"
                 onClick={() => setPostMenuId((current) => (current === post.id ? null : post.id))}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10"
+                className="flex h-11 w-11 items-center justify-center rounded-full text-[var(--noodle-accent)] transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
                 title={localizeUi("ui.noodle.noodlepostcard.postActions")}
                 aria-label={localizeUi("ui.noodle.noodlepostcard.postActions")}
+                aria-haspopup="menu"
+                aria-expanded={postMenuId === post.id}
               >
                 <MoreHorizontal size={18} />
               </button>
               {postMenuId === post.id && (
-                <div className="absolute right-0 top-[calc(100%+0.25rem)] z-30 min-w-32 overflow-hidden rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)] py-1 text-xs shadow-2xl shadow-black/30">
+                <div
+                  role="menu"
+                  className="absolute right-0 top-[calc(100%+0.25rem)] z-30 min-w-32 overflow-hidden rounded-lg border border-[var(--noodle-divider)] bg-[var(--background)] py-1 text-xs shadow-2xl shadow-black/30"
+                >
                   <button
                     type="button"
+                    role="menuitem"
                     onClick={() => startEditingPost(editablePost)}
                     className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]/70"
                   >
@@ -810,6 +828,7 @@ export function SlurpCreatorPostCard({ post, ctx }: { post: NoodlePostCardModel;
                   </button>
                   <button
                     type="button"
+                    role="menuitem"
                     onClick={() => deleteNoodlePost(post)}
                     className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--noodle-accent)]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)]/70"
                   >
@@ -850,7 +869,10 @@ export function SlurpCreatorPostCard({ post, ctx }: { post: NoodlePostCardModel;
                 alt={localizeUi("ui.noodle.post.imageBy", {
                   name: author?.displayName ?? localizeUi("ui.noodle.profile.fallbackUser"),
                 })}
-                className="aspect-[4/3] max-h-[32rem] w-full object-cover"
+                className={cn(
+                  "max-h-[26rem] w-full bg-black/10",
+                  ctx.imageFit === "cover" ? "object-cover" : "object-contain",
+                )}
               />
             )}
           </button>

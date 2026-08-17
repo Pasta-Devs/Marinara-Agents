@@ -1,7 +1,8 @@
 import type { DB } from "../../db/connection.js";
 import { createAppSettingsStorage } from "../storage/app-settings.storage.js";
 
-const KEY = "noodle.noodler-image-connections";
+const KEY = "slurp.image-connections";
+const LEGACY_KEY = "noodle.noodler-image-connections";
 
 export type NoodlerImageConnections = {
   defaultConnectionId: string | null;
@@ -11,11 +12,12 @@ export type NoodlerImageConnections = {
 const defaults = (): NoodlerImageConnections => ({ defaultConnectionId: null, creatorConnectionIds: {} });
 
 export async function getNoodlerImageConnections(db: DB): Promise<NoodlerImageConnections> {
-  const raw = await createAppSettingsStorage(db).get(KEY);
+  const storage = createAppSettingsStorage(db);
+  const raw = (await storage.get(KEY)) ?? (await storage.get(LEGACY_KEY));
   if (!raw) return defaults();
   try {
     const value = JSON.parse(raw) as Partial<NoodlerImageConnections>;
-    return {
+    const result = {
       defaultConnectionId: typeof value.defaultConnectionId === "string" ? value.defaultConnectionId : null,
       creatorConnectionIds:
         value.creatorConnectionIds && typeof value.creatorConnectionIds === "object"
@@ -26,6 +28,8 @@ export async function getNoodlerImageConnections(db: DB): Promise<NoodlerImageCo
             )
           : {},
     };
+    if (!(await storage.get(KEY))) await storage.set(KEY, JSON.stringify(result));
+    return result;
   } catch {
     return defaults();
   }

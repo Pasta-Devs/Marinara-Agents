@@ -61,8 +61,13 @@ assert.match(
 );
 assert.match(
   stageProfileDraft,
+  /bio: input\.request\.currentDraft\?\.bio \?\? parsedDraft\.bio/u,
+  "open Slurp profile creation must use the generated summary unless the user edited the bio",
+);
+assert.doesNotMatch(
+  stageProfileDraft,
   /bio: input\.request\.currentDraft\?\.bio \?\? publicAccount\.bio/u,
-  "open Slurp profile creation must preserve an explicit draft bio",
+  "open Slurp profile creation must not copy the complete source description into the profile bio",
 );
 assert.match(
   stageProfileDraft,
@@ -71,13 +76,21 @@ assert.match(
 );
 assert.match(
   stageProfileDraft,
-  /Create a separate creator identity with a different display name and handle[\s\S]*fixed physical facts[\s\S]*Do not use or imply/u,
-  "secret Slurp profile creation must preserve physical traits and reject public identity clues",
+  /Create a careful hidden identity[\s\S]*Preserve only broad temperament[\s\S]*Do not reveal or preserve the face/u,
+  "secret Slurp profile creation must preserve broad traits without identifying appearance",
 );
 assert.match(
   stageProfileDraft,
-  /function noodlerSecretSourceText[\s\S]*reviewedNoodlerTemperamentThemes[\s\S]*reviewedNoodlerPhysicalFacts/u,
-  "secret Slurp profile prompts must use reviewed temperament and physical tokens",
+  /function noodlerSecretSourceText[\s\S]*reviewedNoodlerTemperamentThemes/u,
+  "secret Slurp profile prompts must use reviewed temperament themes",
+);
+assert.doesNotMatch(
+  stageProfileDraft.slice(
+    stageProfileDraft.indexOf("function noodlerSecretSourceText"),
+    stageProfileDraft.indexOf("export function noodlerSourceText"),
+  ),
+  /reviewedNoodlerPhysicalFacts/u,
+  "secret Slurp profile prompts must not include identifying physical facts",
 );
 assert.match(
   slurpImages,
@@ -86,7 +99,7 @@ assert.match(
 );
 assert.match(
   slurpImages,
-  /const finalPrompt = redactIdentity\([\s\S]*rewrittenPrompt/u,
+  /const finalPromptBase = redactIdentity\([\s\S]*rewrittenPrompt/u,
   "rewritten Slurp image prompts must receive final identity redaction",
 );
 assert.match(
