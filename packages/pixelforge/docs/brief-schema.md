@@ -65,11 +65,20 @@ through the derivations below.
                             // (case/whitespace/diacritics) → the settlement root. NO substring
                             // matching — a deterministic guess can bind an NPC to the wrong zone
                             // forever. Reads only the already-finalized zone list.
-      household: 1,         // int 1-6. SAME NUMBER = SAME ROOF. This is the ONLY way the model
-                            // can cause a dwelling to exist, and it is bounded by construction:
+      household: 1,         // int 1-6. SAME NUMBER = SAME ROOF. The way a RESIDENT (see standing)
+                            // causes a dwelling to exist, bounded by construction:
                             // "30 people → 30 houses" is inexpressible in this schema.
-      persona: "…" },       // TEXT ≤100 — "what they want, and what they are hiding."
+      persona: "…",         // TEXT ≤100 — "what they want, and what they are hiding."
                             // Injected once per NPC per session, on first interaction.
+      standing: "resident" }, // OPTIONAL ENUM resident (default) | transient | fringe | destitute.
+                            // How rooted they are — orthogonal to kind. Only a RESIDENT gets a
+                            // dwelling; a non-resident anchors to a predictable rest spot instead:
+                            // transient → a public spot (inn, a resident shop's front, or plaza;
+                            // a `merchant` sets up a market stall when a lot is free), fringe →
+                            // the wilds (else the settlement's outer margin), destitute → the
+                            // town's public center.
+                            // Does NOT affect the sprite. Settled-outsiders (a resident turned
+                            // pariah) stay a GM-runtime matter; wealth/class is a separate layer.
   ],
 
   backgroundPopulation: 30, // int 0-500, cast included. NARRATIVE TEXTURE, never geometry:
@@ -119,10 +128,17 @@ response is **never stored** (checkpoints capture by value — see #5110).
    found past the cap into the kept set); `home` resolution per §1; a household >6 members
    splits **per member** by `hash(seed, "household-split-<memberId>")`, scanning forward
    (wraparound) to the first household with room — deterministic, no clustering on one target.
-5. **Derivation & caps** (buildings — the "30 people" rule):
-   - dwellings = distinct households; shared household = shared roof;
-   - special buildings from `kind` (never a duplicate hall; extra specials demote to workyard
-     markers);
+5. **Derivation & caps** (buildings — the "30 people" rule; **only `resident`-standing cast
+   members generate buildings** — see the §1 `standing` note):
+   - dwellings = distinct **resident** households **homed at the settlement root** (a resident
+     whose `home` is a place or the wilds — a forager in the woods, a smith who sleeps at the forge
+     — lives THERE, so no empty town house is minted); shared household = shared roof; a
+     non-resident never gets a dwelling — it anchors to its standing rest spot (transient → the inn,
+     fringe → the wilds/margin, destitute → the public center);
+   - special buildings from a **resident**'s `kind` (never a duplicate hall; extra specials demote
+     to workyard markers); a non-resident with a special kind builds nothing — except a
+     **transient `merchant`**, who sets up a light market stall (3 tables, no walls) when a lot is
+     free (else it loiters at a public spot like any transient);
    - residential filler = `clamp(BASE[scale] − dwellings − specials, 0, ∞)`,
      area cap `floor(buildableArea / 56)`;
    - **over-subscription MERGES households into multi-family blocks — a named NPC's home is
