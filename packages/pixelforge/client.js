@@ -2591,6 +2591,10 @@ PF.Sim = class {
     this._rnd = PF.rng((world.seed ^ 0x9e3779b9) >>> 0);
     this.dirty = false; // save-worthy change happened
     this._daypart = null;
+    // Cutscene beat (see stepCutscene): while set, the package asks the host to
+    // fold its narration box away so the world has the screen to itself.
+    this.cutscene = null;
+    this._vistaArmed = true;
     // Place everyone for the starting clock. A restore overwrites clockMin
     // AFTER construction and calls this again (see 60-save simFromSaved).
     this.resolveSchedules();
@@ -2693,9 +2697,36 @@ PF.Sim = class {
         // so a boundary can never be skipped between checks.
         if (advanced && this.daypart() !== this._daypart) this.resolveSchedules();
       }
+      if (this.mode === "walk") this.stepCutscene(dt, z);
       this.stepNpcs(dt, z);
     }
     return { zoneChanged: false };
+  }
+
+  /** A scripted beat that hands the screen to the world for a few seconds.
+   *  Demonstrates the host's transient narration-collapse request (capability
+   *  API 1.13): the package asks while the beat runs and simply stops asking
+   *  when it ends, and the host restores the player's own preference.
+   *
+   *  The trigger is the settlement's far corner — a quiet spot to look out
+   *  from, easy to find deliberately and hard to blunder into mid-errand.
+   *  Walking away ends it early, so a beat can never hold the box hostage,
+   *  and it re-arms only once the player has left, so loitering cannot loop it. */
+  stepCutscene(dt, z) {
+    const inVista = z.id === this.world.startZone && this.x < 6 * PF.TILE && this.y < 6 * PF.TILE;
+    if (!inVista) {
+      this.cutscene = null;
+      this._vistaArmed = true;
+      return;
+    }
+    if (this.cutscene) {
+      this.cutscene.t += dt;
+      if (this.cutscene.t >= this.cutscene.hold) this.cutscene = null;
+      return;
+    }
+    if (!this._vistaArmed) return;
+    this._vistaArmed = false;
+    this.cutscene = { t: 0, hold: 7, text: "You stop at the edge of " + z.name + " and look out over it." };
   }
 
   /** The four dayparts, aligned to the same thresholds darkness() tints by, so
@@ -4027,6 +4058,13 @@ PF.Hud = class {
     };
     this.S = S;
 
+    // Cutscene caption: centred, non-interactive, only while a beat runs.
+    this.captionEl = PF.el("div", {
+      style:
+        "position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);max-width:70%;text-align:center;" +
+        "pointer-events:none;opacity:0;transition:opacity .5s;background:rgba(12,14,12,0.72);color:#f3efe2;" +
+        "border-radius:10px;padding:10px 16px;font:600 13px/1.55 ui-monospace,Consolas,monospace;z-index:3;",
+    });
     this.locChip = PF.el("span", { style: S.chip, text: "…" });
     this.clockChip = PF.el("span", { style: S.chip, text: "" });
     this.topbar = PF.el(
@@ -4107,7 +4145,7 @@ PF.Hud = class {
     this.root = PF.el(
       "div",
       { style: "position:absolute;inset:0;pointer-events:none;font-family:ui-monospace,Consolas,monospace;" },
-      [this.topbar, this.actions, this.dpad, this.travelMenu, this.toastEl],
+      [this.topbar, this.actions, this.dpad, this.travelMenu, this.captionEl, this.toastEl],
     );
     rootEl.appendChild(this.root);
     this._toastTimer = 0;
@@ -4260,6 +4298,13 @@ PF.Hud = class {
       if (!inWorld) this.toggleNarration(false);
       else if (this._narrationPreference) this.toggleNarration(true);
       if (mode === "dialogue") this.toast("Type in the message box below — Resume to keep walking");
+    }
+    // Cutscene caption — writes DOM only when the beat starts or ends.
+    const caption = sim.cutscene ? sim.cutscene.text : "";
+    if (caption !== this._caption) {
+      this._caption = caption;
+      if (caption) this.captionEl.textContent = caption;
+      this.captionEl.style.opacity = caption ? "1" : "0";
     }
     if (this._mode === "walk") {
       const canTalk = !!sim.nearNpc;
@@ -4748,6 +4793,10 @@ PF.core = {
     try {
       fn({
         providesPlayerInput: this.sim.mode === "walk",
+        // Transient: asked only while a cutscene beat runs. The host restores
+        // the player's own setting the moment we stop asking, and its own
+        // safety rules still outrank us, so this can never trap a player.
+        requestsCollapsedNarration: !!this.sim.cutscene,
         providesChoices: false,
         providesInventory: false,
         providesCombat: false,
@@ -4916,6 +4965,11 @@ PF.core = {
       while (this._acc >= STEP) {
         this._acc -= STEP;
         const res = sim.step(STEP, this.input);
+        // A beat starting or ending changes what chrome we are asking for.
+        if (!!sim.cutscene !== this._cutsceneDeclared) {
+          this._cutsceneDeclared = !!sim.cutscene;
+          this._declareChrome();
+        }
         if (res.zoneChanged) {
           this.hud?.refreshChips();
           this.hud?.toast(sim.zone().name);

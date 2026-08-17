@@ -23,6 +23,10 @@ PF.Sim = class {
     this._rnd = PF.rng((world.seed ^ 0x9e3779b9) >>> 0);
     this.dirty = false; // save-worthy change happened
     this._daypart = null;
+    // Cutscene beat (see stepCutscene): while set, the package asks the host to
+    // fold its narration box away so the world has the screen to itself.
+    this.cutscene = null;
+    this._vistaArmed = true;
     // Place everyone for the starting clock. A restore overwrites clockMin
     // AFTER construction and calls this again (see 60-save simFromSaved).
     this.resolveSchedules();
@@ -125,9 +129,36 @@ PF.Sim = class {
         // so a boundary can never be skipped between checks.
         if (advanced && this.daypart() !== this._daypart) this.resolveSchedules();
       }
+      if (this.mode === "walk") this.stepCutscene(dt, z);
       this.stepNpcs(dt, z);
     }
     return { zoneChanged: false };
+  }
+
+  /** A scripted beat that hands the screen to the world for a few seconds.
+   *  Demonstrates the host's transient narration-collapse request (capability
+   *  API 1.13): the package asks while the beat runs and simply stops asking
+   *  when it ends, and the host restores the player's own preference.
+   *
+   *  The trigger is the settlement's far corner — a quiet spot to look out
+   *  from, easy to find deliberately and hard to blunder into mid-errand.
+   *  Walking away ends it early, so a beat can never hold the box hostage,
+   *  and it re-arms only once the player has left, so loitering cannot loop it. */
+  stepCutscene(dt, z) {
+    const inVista = z.id === this.world.startZone && this.x < 6 * PF.TILE && this.y < 6 * PF.TILE;
+    if (!inVista) {
+      this.cutscene = null;
+      this._vistaArmed = true;
+      return;
+    }
+    if (this.cutscene) {
+      this.cutscene.t += dt;
+      if (this.cutscene.t >= this.cutscene.hold) this.cutscene = null;
+      return;
+    }
+    if (!this._vistaArmed) return;
+    this._vistaArmed = false;
+    this.cutscene = { t: 0, hold: 7, text: "You stop at the edge of " + z.name + " and look out over it." };
   }
 
   /** The four dayparts, aligned to the same thresholds darkness() tints by, so

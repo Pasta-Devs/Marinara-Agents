@@ -1908,4 +1908,50 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   }
 }
 
+// 14l. The vista cutscene beat. It exists to exercise the host's transient
+// narration-collapse request (capability API 1.13): the package asks only while
+// the beat runs. The contract that matters is that it always STOPS asking —
+// on its own timer, and immediately if the player walks away.
+{
+  const sealed = brief.defaults("cozy-village", 4242);
+  const w = world.build(4242, "cozy-village", sealed);
+  const sim = new loadedPF.Sim(w);
+  sim.mode = "walk";
+  const z = sim.zone();
+
+  // Standing anywhere else, nothing is ever requested.
+  sim.x = 20 * loadedPF.TILE;
+  sim.y = 20 * loadedPF.TILE;
+  sim.step(1 / 60, {});
+  assert.equal(sim.cutscene, null, "no beat away from the corner");
+
+  // Stepping into the corner starts it.
+  sim.x = 2 * loadedPF.TILE;
+  sim.y = 2 * loadedPF.TILE;
+  sim.step(1 / 60, {});
+  assert.ok(sim.cutscene, "the corner starts a beat");
+  assert.ok(sim.cutscene.text.includes(z.name), "the caption names the settlement");
+
+  // It ends on its own, without the player doing anything.
+  for (let i = 0; i < 60 * 10; i++) sim.step(1 / 60, {});
+  assert.equal(sim.cutscene, null, "the beat releases itself on its timer");
+
+  // Loitering does not loop it — it re-arms only after leaving.
+  for (let i = 0; i < 60 * 10; i++) sim.step(1 / 60, {});
+  assert.equal(sim.cutscene, null, "loitering in the corner does not retrigger");
+  sim.x = 20 * loadedPF.TILE;
+  sim.y = 20 * loadedPF.TILE;
+  sim.step(1 / 60, {});
+  sim.x = 2 * loadedPF.TILE;
+  sim.y = 2 * loadedPF.TILE;
+  sim.step(1 / 60, {});
+  assert.ok(sim.cutscene, "leaving and returning arms it again");
+
+  // Walking away releases it immediately — a beat can never hold the box hostage.
+  sim.x = 20 * loadedPF.TILE;
+  sim.y = 20 * loadedPF.TILE;
+  sim.step(1 / 60, {});
+  assert.equal(sim.cutscene, null, "walking away releases the beat at once");
+}
+
 console.log("brief validator + compiler: all cases passed");

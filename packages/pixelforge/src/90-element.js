@@ -205,6 +205,10 @@ PF.core = {
     try {
       fn({
         providesPlayerInput: this.sim.mode === "walk",
+        // Transient: asked only while a cutscene beat runs. The host restores
+        // the player's own setting the moment we stop asking, and its own
+        // safety rules still outrank us, so this can never trap a player.
+        requestsCollapsedNarration: !!this.sim.cutscene,
         providesChoices: false,
         providesInventory: false,
         providesCombat: false,
@@ -373,6 +377,11 @@ PF.core = {
       while (this._acc >= STEP) {
         this._acc -= STEP;
         const res = sim.step(STEP, this.input);
+        // A beat starting or ending changes what chrome we are asking for.
+        if (!!sim.cutscene !== this._cutsceneDeclared) {
+          this._cutsceneDeclared = !!sim.cutscene;
+          this._declareChrome();
+        }
         if (res.zoneChanged) {
           this.hud?.refreshChips();
           this.hud?.toast(sim.zone().name);
