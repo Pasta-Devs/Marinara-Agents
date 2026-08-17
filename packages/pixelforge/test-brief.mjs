@@ -172,7 +172,10 @@ const ctx = { theme: "cozy-village", seed: 424242 };
   assert.ok(text.length < 4_000, `guidance stays compact (${text.length} chars)`);
   assert.ok(text.includes("AUTHORITATIVE"), "theme-authority line present");
   assert.ok(text.includes("do NOT list one household per person"), "household teaching line present");
-  assert.ok(JSON.stringify(brief.schema()).length <= 8_000, "schema fits the route's cap");
+  assert.ok(text.includes("standing"), "standing teaching line present");
+  const schemaStr = JSON.stringify(brief.schema());
+  assert.ok(schemaStr.length <= 8_000, "schema fits the route's cap");
+  assert.ok(schemaStr.includes("destitute"), "schema exposes the standing enum");
 }
 
 // ── Compiler invariants (compile(sealedBrief, seed)) ─────────────────────────
@@ -207,7 +210,12 @@ function checkWorld(w, sealed, label) {
   // fixture that trips this assert should relax it to the merged-block count.)
   const v = w.zones.z1;
   const rootName = sealed._ids.zones.z1;
-  const rootHouseholds = new Set(sealed.cast.filter((c) => c.home === rootName).map((c) => c.household));
+  // Non-residents get no dwelling, so they do not demand a root door.
+  const rootHouseholds = new Set(
+    sealed.cast
+      .filter((c) => c.home === rootName && (c.standing ?? "resident") === "resident")
+      .map((c) => c.household),
+  );
   const doorCount = v.object.filter((t) => t === "door").length;
   assert.ok(
     doorCount >= rootHouseholds.size,
@@ -251,6 +259,99 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   assert.ok(gatheringId, "the gathering has an ordinal id");
   const innkeeper = w.zones[gatheringId].npcs.find((n) => n.name === "Perrin");
   assert.ok(innkeeper, "the innkeeper lives in the gathering interior");
+}
+
+// 11b. Standing: non-residents get no dwelling and anchor to a rest spot —
+// transient → the inn interior, fringe → the wilds, destitute → the plaza.
+{
+  const sealed = brief.validate(
+    {
+      scale: "village", name: "Crossford",
+      places: [{ kind: "gathering", name: "The Ford Inn" }, { kind: "wilds", name: "The Reach" }],
+      cast: [
+        { name: "Alder", role: "reeve", kind: "leader", tint: "blue", home: "Crossford", household: 1 },
+        { name: "Bram", role: "smith", kind: "maker", tint: "amber", home: "Crossford", household: 2 },
+        { name: "Sil", role: "trader", kind: "merchant", tint: "green", home: "Crossford", household: 3, standing: "transient" },
+        { name: "Wyn", role: "hermit", kind: "wanderer", tint: "teal", home: "Crossford", household: 4, standing: "fringe" },
+        { name: "Gad", role: "beggar", kind: "folk", tint: "rose", home: "Crossford", household: 5, standing: "destitute" },
+        { name: "Rue", role: "weaver", kind: "elder", tint: "violet", home: "Crossford", household: 2, standing: "nonsense" },
+      ],
+    },
+    ctx,
+  );
+  // Fold: omitted → resident, unknown → resident, valid values preserved.
+  const by = (name) => sealed.cast.find((c) => c.name === name);
+  assert.equal(by("Alder").standing, "resident", "omitted standing defaults to resident");
+  assert.equal(by("Rue").standing, "resident", "unknown standing folds to resident");
+  assert.equal(by("Sil").standing, "transient", "valid standing preserved");
+  assert.equal(by("Wyn").standing, "fringe", "valid standing preserved");
+  assert.equal(by("Gad").standing, "destitute", "valid standing preserved");
+
+  const w = world.build(424242, "cozy-village", sealed);
+  checkWorld(w, sealed, "standing");
+  const v = w.zones.z1;
+  const innId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Ford Inn")?.[0];
+  const woodsId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Reach")?.[0];
+  assert.ok(innId && woodsId, "the inn and the wilds have ordinal ids");
+  assert.ok(w.zones[innId].npcs.some((n) => n.name === "Sil"), "transient rests in the inn interior");
+  assert.ok(w.zones[woodsId].npcs.some((n) => n.name === "Wyn"), "fringe retreats to the wilds");
+  const gad = v.npcs.find((n) => n.name === "Gad");
+  assert.ok(gad, "destitute stays in the settlement");
+  const mX = (v.w / 2) | 0;
+  const mY = (v.h / 2) | 0;
+  assert.deepEqual(
+    gad.wander,
+    { x0: mX - 6, y0: mY - 5, x1: mX + 6, y1: mY + 5 },
+    "destitute anchors to the public center, never a house",
+  );
+  assert.ok(
+    !v.npcs.some((n) => n.name === "Sil" || n.name === "Wyn"),
+    "non-residents are not housed among the settlement rows",
+  );
+}
+
+// 11c. Standing SUPPRESSION + the no-inn / no-wilds fallbacks. A non-resident
+// holding a special-kind that no resident claims builds nothing; non-resident
+// households add no roof (exact door count catches a deleted gate); and with no
+// gathering/wilds present, transient falls back to the plaza and fringe to the
+// settlement's outer margin.
+{
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Wayrest",
+      places: [{ kind: "workshop", name: "The Works" }],
+      cast: [
+        { name: "Ada", role: "elder", kind: "folk", tint: "blue", home: "Wayrest", household: 1 },
+        { name: "Ben", role: "cooper", kind: "folk", tint: "amber", home: "Wayrest", household: 2 },
+        { name: "Cal", role: "digger", kind: "folk", tint: "green", home: "Wayrest", household: 3 },
+        { name: "Dov", role: "sellsword", kind: "guard", tint: "red", home: "Wayrest", household: 4, standing: "transient" },
+        { name: "Esk", role: "hermit", kind: "wanderer", tint: "teal", home: "Wayrest", household: 5, standing: "fringe" },
+        { name: "Fyn", role: "beggar", kind: "folk", tint: "rose", home: "Wayrest", household: 6, standing: "destitute" },
+      ],
+    },
+    ctx,
+  );
+  const w = world.build(4242, "cozy-village", sealed);
+  checkWorld(w, sealed, "standing-suppression");
+  const v = w.zones.z1;
+  // 3 resident dwellings + 1 workshop facade = 4 doors. The transient guard's
+  // "post" is suppressed and no non-resident household adds a dwelling; deleting
+  // either the specials gate or the households filter would raise this count.
+  const doorCount = v.object.filter((t) => t === "door").length;
+  assert.equal(doorCount, 4, `only residents build (got ${doorCount} doors, expected 4)`);
+  assert.ok(!Object.values(w.zones).some((z) => z.mapKind === "place"), "no wilds synthesized (places is non-empty)");
+  const mX = (v.w / 2) | 0;
+  const mY = (v.h / 2) | 0;
+  const plaza = { x0: mX - 6, y0: mY - 5, x1: mX + 6, y1: mY + 5 };
+  const wander = (name) => v.npcs.find((n) => n.name === name).wander;
+  assert.deepEqual(wander("Dov"), plaza, "transient with no inn falls back to the plaza");
+  assert.deepEqual(
+    wander("Esk"),
+    { x0: 3, y0: v.h - 6, x1: v.w - 4, y1: v.h - 3 },
+    "fringe with no wilds falls back to the outer margin",
+  );
+  assert.deepEqual(wander("Fyn"), plaza, "destitute anchors to the public center");
 }
 
 // 12. Determinism: same brief + seed → structurally identical world.

@@ -386,10 +386,17 @@ PF.world = (() => {
     v.flavor = brief.flavor;
 
     // ── Building arithmetic (§4.5) ──
-    const households = [...new Set(brief.cast.map((m) => m.household))].sort((a, b) => a - b);
+    // Only residents establish a dwelling; transient/fringe/destitute NPCs get
+    // no house (they anchor to a standing-specific rest spot in the cast loop).
+    const households = [
+      ...new Set(brief.cast.filter((m) => (m.standing ?? "resident") === "resident").map((m) => m.household)),
+    ].sort((a, b) => a - b);
     const specials = [];
     const seenSpecial = new Set();
     for (const member of brief.cast) {
+      // Only residents run a permanent special building (the hall, the shop, the
+      // post…); a transient/fringe/destitute NPC never anchors one.
+      if ((member.standing ?? "resident") !== "resident") continue;
       const special = SPECIAL_BUILDING_KINDS[member.kind];
       if (special && !seenSpecial.has(special)) {
         seenSpecial.add(special);
@@ -623,25 +630,49 @@ PF.world = (() => {
     });
 
     // ── The cast ──
+    // Residents wander near their building (or the plaza if house-less).
+    // Non-residents never bind to a dwelling; they anchor by standing to a
+    // predictable rest spot: transient -> the inn (gathering interior), fringe ->
+    // the wilds (else the settlement's outer margin), destitute -> the town's
+    // public center. See docs/brief-schema.md § Standing.
+    const gatheringPlace = interiorPlaces.find((p) => p.kind === "gathering");
+    const gatheringZoneId = gatheringPlace ? zoneIdForPlace(gatheringPlace) : null;
+    const wildsZoneId = wildsPlaces.length ? zoneIdForPlace(wildsPlaces[0]) : null;
+    const plazaBox = () => ({ x0: midX - 6, y0: midY - 5, x1: midX + 6, y1: midY + 5 });
+    const fullZoneBox = (z) => ({ x0: 2, y0: 2, x1: z.w - 3, y1: z.h - 3 });
     brief.cast.forEach((member, index) => {
       const npcId = `n${index + 1}`;
-      const homeZoneId = zoneIdByName.get(member.home) ?? "z1";
-      const zone = zones[homeZoneId] ?? v;
-      // Wander near the owner's building when they have one, else around the
-      // zone's spawn; interiors wander their walkable middle.
-      const owned = buildings.find((b) => b.owner === member || (b.households ?? []).includes(member.household));
+      const standing = member.standing ?? "resident";
+      let zone = zones[zoneIdByName.get(member.home) ?? "z1"] ?? v;
       let wander;
-      if (zone === v && owned) {
-        wander = {
-          x0: Math.max(2, owned.door.doorX - 4),
-          y0: Math.max(2, owned.door.doorY),
-          x1: Math.min(v.w - 3, owned.door.doorX + 4),
-          y1: Math.min(v.h - 3, owned.door.doorY + 5),
-        };
-      } else if (zone === v) {
-        wander = { x0: midX - 6, y0: midY - 5, x1: midX + 6, y1: midY + 5 };
+      if (standing === "resident") {
+        // Wander near the owner's building when they have one, else around the
+        // zone's spawn; interiors wander their walkable middle.
+        const owned = buildings.find((b) => b.owner === member || (b.households ?? []).includes(member.household));
+        if (zone === v && owned) {
+          wander = {
+            x0: Math.max(2, owned.door.doorX - 4),
+            y0: Math.max(2, owned.door.doorY),
+            x1: Math.min(v.w - 3, owned.door.doorX + 4),
+            y1: Math.min(v.h - 3, owned.door.doorY + 5),
+          };
+        } else if (zone === v) {
+          wander = plazaBox();
+        } else {
+          wander = fullZoneBox(zone);
+        }
+      } else if (standing === "transient" && gatheringZoneId && zones[gatheringZoneId]) {
+        zone = zones[gatheringZoneId];
+        wander = fullZoneBox(zone);
+      } else if (standing === "fringe" && wildsZoneId && zones[wildsZoneId]) {
+        zone = zones[wildsZoneId];
+        wander = fullZoneBox(zone);
+      } else if (standing === "fringe") {
+        zone = v; // no wilds to retreat to — the settlement's outer margin
+        wander = { x0: 3, y0: v.h - 6, x1: v.w - 4, y1: v.h - 3 };
       } else {
-        wander = { x0: 2, y0: 2, x1: zone.w - 3, y1: zone.h - 3 };
+        zone = v; // destitute (or a transient with no inn): the public center
+        wander = plazaBox();
       }
       zone.npcs.push({
         id: npcId,
