@@ -4012,8 +4012,8 @@ PF.save = {
 // which the host sanctions through the manifest's contributions.gameSurface
 // .surfaceClass ("pixelforge-surface") stamped on the shared game container,
 // plus its inert `experience-dialogue-*` theming hooks. Scope every rule under
-// that class so nothing leaks into the rest of the app, and collapse only the
-// PROSE — the meta row (Retry, Next, Logs) and the turn input must stay usable.
+// that class so nothing leaks into the rest of the app. The collapse takes the
+// WHOLE panel, controls included; see the trade-off note on the rule itself.
 const PF_NARRATION_STYLE_ID = "pixelforge-narration-collapse";
 function installPixelforgeNarrationStyle(doc) {
   if (!doc || doc.getElementById(PF_NARRATION_STYLE_ID)) return;
@@ -4034,12 +4034,19 @@ function installPixelforgeNarrationStyle(doc) {
   // `data-tour` is a product-tour hook rather than a declared contract; it is
   // still far steadier than utility classes, and the theming hooks below are
   // contract, so keep both.
+  //
+  // visibility:hidden is load-bearing, not belt-and-braces (review finding).
+  // max-height/opacity/overflow only hide PAINT, and pointer-events only stops
+  // the mouse — none of them leave the tab order, so a keyboard player tabbing
+  // past a collapsed panel would land on the invisible turn input and type into
+  // nothing. visibility:hidden takes the whole subtree out of sequential
+  // navigation, which is the behaviour the collapse is claiming to have.
   style.textContent =
     '.pf-narration-collapsed .pixelforge-surface [data-tour="game-dialogue"],' +
     ".pf-narration-collapsed .pixelforge-surface .experience-dialogue-wrap," +
     ".pf-narration-collapsed .pixelforge-surface .game-narration-prose{" +
     "max-height:0;min-height:0;padding-top:0;padding-bottom:0;margin-top:0;margin-bottom:0;" +
-    "border-width:0;overflow:hidden;opacity:0;pointer-events:none;}";
+    "border-width:0;overflow:hidden;opacity:0;visibility:hidden;pointer-events:none;}";
   doc.head.appendChild(style);
 }
 
@@ -4205,9 +4212,9 @@ PF.Hud = class {
     this.waitMenu.style.display = "flex";
   }
 
-  /** Collapse the host's narration box so more of the world is visible. Only
-   *  the prose collapses — the button row (Retry, Next, Logs) stays reachable,
-   *  and it force-expands in dialogue because the turn input lives in there. */
+  /** Collapse the host's narration box so more of the world is visible. The
+   *  whole panel goes, Retry/Next included — the toggle sits right beside it and
+   *  dialogue force-expands, because the turn input lives in there. */
   toggleNarration(force) {
     const collapsed = typeof force === "boolean" ? force : !this._narrationCollapsed;
     // Only a real click changes what the player WANTS; the dialogue-mode
