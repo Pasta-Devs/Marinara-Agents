@@ -147,6 +147,12 @@ export async function ensurePersonaAccounts(
       invited: true,
     });
   }
+  const retiredPersonaIds = new Set(
+    (await noodle.listAccounts())
+      .filter((account) => account.kind === "persona" && !livePersonaIds.has(account.entityId))
+      .map((account) => account.entityId),
+  );
+  for (const personaId of retiredPersonaIds) await noodle.cleanupRetiredViewer(personaId);
   return livePersonaIds;
 }
 
@@ -184,13 +190,8 @@ export async function bootstrapVisibleNoodle(
   for (const account of existingCharacterAccounts) {
     const row = characterRowsById.get(account.entityId);
     if (!row) {
-      // Character was deleted but the account cleanup failed or predates it existing (see
-      // characters.routes.ts delete handler) — reconcile the ghost here on every open.
-      try {
-        await noodle.deleteAccountByEntity("character", account.entityId);
-      } catch (err) {
-        logger.error(err, "Failed to reconcile ghost Noodle account for character %s", account.entityId);
-      }
+      // Keep the Slurp Creator and its published state. Storage marks the source as missing,
+      // which pauses source-dependent generation and automatic posting.
       continue;
     }
     await noodle.upsertAccountFromProfile({

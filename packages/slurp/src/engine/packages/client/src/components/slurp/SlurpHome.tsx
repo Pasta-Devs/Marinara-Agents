@@ -17,7 +17,6 @@ import {
   Sparkles,
   Trash2,
   Upload,
-  VolumeX,
   UserRound,
   X,
 } from "lucide-react";
@@ -46,17 +45,14 @@ import type {
   Persona,
 } from "@marinara-engine/shared";
 import {
-  useAdoptNoodlerSourceIdentity,
   useCreateNoodlerPost,
   useCreateNoodlerInteraction,
   useTriggerNoodlerCreatorReply,
   useCreateNoodlerStageProfile,
   useDeleteNoodlerPost,
-  useDismissNoodlerSourceChanges,
   useGenerateNoodlerNoodlePost,
   useConfirmNoodlerImagePrompts,
   useRunNoodlerAutoPostNow,
-  useRefreshAllNoodlerCreatorsNow,
   useGenerateNoodlerStageProfileDraft,
   useLoadNoodlerPostImage,
   useNoodlerAccounts,
@@ -64,6 +60,7 @@ import {
   useNoodlerPosts,
   useNoodlerSubscribers,
   useNoodlerUnseenCount,
+  useMarkNoodlerFeedSeen,
   useNoodlerViewer,
   useRemoveNoodlerInteraction,
   useToggleNoodlerFollow,
@@ -76,17 +73,20 @@ import {
   useUpdateNoodlerFanActivity,
   useUpdateNoodlerStageProfile,
   useSlurpSettings,
+  useUpdateSlurpSettings,
   useUploadNoodlerAvatar,
+  useUploadNoodlerBanner,
+  useGenerateNoodlerArtwork,
   useUseNoodlerSourceAvatar,
   useRemoveNoodlerAvatar,
   type NoodlerContentFormat,
   type SlurpProfilePost,
   type NoodlerPostDraftImage,
 } from "../../hooks/use-slurp";
-import { useActivePersona, useCharacterGroups, usePersonas } from "../../hooks/use-creator-personas";
+import { useActivePersona, usePersonas } from "../../hooks/use-creator-personas";
 import { useConnections } from "../../hooks/use-connections";
 import { ApiError } from "../../lib/api-client";
-import { showAlertDialog, showConfirmDialog } from "../../lib/app-dialogs";
+import { showConfirmDialog } from "../../lib/app-dialogs";
 import { cn } from "../../lib/utils";
 import { useSlurpUIStore } from "../../stores/slurp-package.store";
 import {
@@ -98,6 +98,7 @@ import {
   NoodleAnchoredPopover,
   NoodleComposerShell,
   NoodleComposerToolRow,
+  createNoodleLightboxImage,
   type NoodlePostCardModel,
   type NoodlePostImageUpdate,
   useNoodlePostCardController,
@@ -105,13 +106,8 @@ import {
 import { LockedSlurpPostCard, SlurpCreatorPostCard } from "./SlurpCreatorPostCard";
 import { ChatImageLightbox } from "../chat/ChatImageLightbox";
 import { useSlurpMediaSrc } from "../../hooks/use-slurp-media-src";
-import { summarizeRefreshOutcomes } from "./slurp-auto-post";
 import { SlurpOnboardingWizard } from "./SlurpOnboardingPanel";
 import { SlurpAgeGate } from "./SlurpAgeGate";
-import { SLURP_QUIETER_ACTIVITY_PRESET, slurpPostsPerDayForPreset } from "./slurp-activity-presets";
-
-/** Resolved once from the shared preset table so "quieter" means the same thing everywhere. */
-const SLURP_QUIETER_POSTS_PER_DAY = slurpPostsPerDayForPreset(SLURP_QUIETER_ACTIVITY_PRESET);
 import {
   Avatar,
   getNoodleAccentStyle,
@@ -124,7 +120,7 @@ import {
   NOODLE_PINK,
   useNoodleAccent,
 } from "./SlurpShell";
-import { NoodleProfileSurface } from "./SlurpProfileSurface";
+import { SlurpProfileSurface } from "./SlurpProfileSurface";
 import { SlurpSettings } from "./SlurpSettings";
 import { NoodleImageComposer } from "./SlurpImageComposer";
 import { NoodlePollComposer } from "./SlurpPollComposer";
@@ -312,11 +308,16 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   const { t: localizeUi } = useUiTranslation();
   const accountsQuery = useNoodlerAccounts();
   const slurpSettingsQuery = useSlurpSettings();
-  const characterGroupsQuery = useCharacterGroups();
+  const updateSlurpSettings = useUpdateSlurpSettings();
   const personasQuery = usePersonas();
   const activePersonaQuery = useActivePersona();
   const onboardingState = useSlurpUIStore((state) => state.onboardingState);
   const setOnboardingState = useSlurpUIStore((state) => state.setOnboardingState);
+  useEffect(() => {
+    if (slurpSettingsQuery.data?.onboarding === "completed" && onboardingState !== "completed") {
+      setOnboardingState("completed");
+    }
+  }, [onboardingState, setOnboardingState, slurpSettingsQuery.data?.onboarding]);
   const storedPersonaId = useSlurpUIStore((state) => state.viewerPersonaId);
   const setStoredPersonaId = useSlurpUIStore((state) => state.setViewerPersonaId);
   const personas = personasQuery.data ?? [];
@@ -427,11 +428,13 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
       tone: "destructive",
     });
   const exitToCreatorHub = async () => {
+    if (!(await confirmDiscardProfileDraft())) return;
     if (!(await confirmDiscardNoodlerPostDrafts())) return;
     setNoodlerPostDrafts({});
     onNavigate({ mode: "creator", view: "hub" });
   };
   const openSettings = async () => {
+    if (!(await confirmDiscardProfileDraft())) return;
     if (!(await confirmDiscardNoodlerPostDrafts())) return;
     setNoodlerPostDrafts({});
     // Open the shared two-pane settings on the NoodleR tab instead of a separate
@@ -453,6 +456,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   const onboardingPresentedRef = useRef(false);
   const viewerQuery = useNoodlerViewer(viewerPersonaId);
   const noodlerUnseenCount = useNoodlerUnseenCount(viewerPersonaId);
+  const markFeedSeenMutation = useMarkNoodlerFeedSeen();
   // The stored timestamp advances as soon as the feed is shown, which would erase the divider
   // out from under the reader. Freeze the value the divider uses per persona at that moment,
   // and keep advancing the stored one so the next visit measures from here.
@@ -466,7 +470,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
       ...current,
       [scope.viewer.id]: scope.viewer.settings.social.noodlerFeedSeenAt ?? null,
     }));
-    // Creator feed visit timestamps require a Creator account-settings route.
+    markFeedSeenMutation.mutate(scope.viewer.id);
   };
   const toggleFollow = useToggleNoodlerFollow();
   const toggleSubscription = useToggleNoodlerSubscription();
@@ -481,9 +485,15 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   const updatePost = useUpdateNoodlerPost();
   const deletePost = useDeleteNoodlerPost();
   const updateAccess = useUpdateNoodlerAccess();
+  const [draftNoodleAccountId, setDraftNoodleAccountId] = useState<string | null>(null);
   const [sourceSearch, setSourceSearch] = useState("");
   const [sourceKind, setSourceKind] = useState<"all" | "character" | "persona">("all");
-  const eligibleAccountsQuery = useNoodlerEligibleAccounts(sourceSearch, sourceKind, navigation.mode === "creator");
+  const eligibleAccountsQuery = useNoodlerEligibleAccounts(
+    sourceSearch,
+    sourceKind,
+    navigation.mode === "creator",
+    draftNoodleAccountId,
+  );
   const createProfile = useCreateNoodlerStageProfile();
   const updateProfile = useUpdateNoodlerStageProfile();
   const uploadAvatar = useUploadNoodlerAvatar();
@@ -493,13 +503,11 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   const confirmImagePrompts = useConfirmNoodlerImagePrompts();
   const runAutoPostNow = useRunNoodlerAutoPostNow();
   const setupAutoPosting = useUpdateNoodlerAutoPosting();
-  const refreshAllNow = useRefreshAllNoodlerCreatorsNow();
   const createPost = useCreateNoodlerPost();
   const generateProfileDraft = useGenerateNoodlerStageProfileDraft();
   const connectionsQuery = useConnections();
   const connections = (connectionsQuery.data ?? []) as Array<{ id: string; name: string; model?: string }>;
   const [profileDraft, setProfileDraft] = useState<NoodleStageProfileInput | null>(null);
-  const [draftNoodleAccountId, setDraftNoodleAccountId] = useState<string | null>(null);
   const [imagePromptReview, setImagePromptReview] = useState<{
     accountId: string;
     items: ImagePromptReviewItem[];
@@ -511,10 +519,18 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   const [draftConnectionId, setDraftConnectionId] = useState("");
   const [previousDraft, setPreviousDraft] = useState<NoodleStageProfileInput | null>(null);
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
+  const profileReturnToSettingsRef = useRef<SlurpNavigationState | null>(null);
   const [acceptSourceChangesForProfileId, setAcceptSourceChangesForProfileId] = useState<string | null>(null);
   const [draftSourceSnapshot, setDraftSourceSnapshot] = useState<NoodlerSourceSnapshot | null>(null);
   const [draftSourceRevisionToken, setDraftSourceRevisionToken] = useState<string | null>(null);
   const profileDraftGenerationIdRef = useRef(0);
+  const confirmProviderDisclosure = async () => {
+    return showConfirmDialog({
+      title: localizeUi("ui.slurp.providerDisclosure.title"),
+      message: localizeUi("ui.slurp.providerDisclosure.generationDetail"),
+      confirmLabel: localizeUi("ui.slurp.actions.continue"),
+    });
+  };
   const invalidateProfileDraftGeneration = () => {
     profileDraftGenerationIdRef.current += 1;
   };
@@ -596,7 +612,8 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     onNavigate({ mode: "creator", view: "hub" });
     setMobileDrawerOpen(false);
   };
-  const goToNoodlerSearch = () => {
+  const goToNoodlerSearch = async () => {
+    if (!(await confirmDiscardProfileDraft())) return;
     onNavigate({ mode: "creator", view: "search" });
     setMobileDrawerOpen(false);
     window.requestAnimationFrame(() => discoveryInputRef.current?.focus());
@@ -666,6 +683,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     // The comment is already posted at this point. Opting out simply stops here, so no provider
     // request is made and the failure toast below can only ever mean a reply was actually asked for.
     if (!input.askForReply) return;
+    if (!(await confirmProviderDisclosure())) return;
     try {
       await triggerCreatorReply.mutateAsync({
         postId: post.id,
@@ -729,7 +747,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     );
   };
   const postCardController = useNoodlePostCardController({
-    postManagement: true,
+    postManagement: false,
     personaAccount: shellPersonaAccount,
     savePost,
     deletePost: deleteNoodlePost,
@@ -760,25 +778,6 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     navigation.mode === "creator" && navigation.view === "profile"
       ? (accountsQuery.data?.find((profile) => profile.id === navigation.accountId) ?? null)
       : null;
-  const selectedPublicSource = selectedProfile
-    ? (eligibleAccountsQuery.data?.pages
-        .flatMap((page) => page.items)
-        .find((account) => account.id === selectedProfile.sourceAccountId) ?? null)
-    : null;
-  const selectedSourceFolderInvited = useMemo(() => {
-    if (selectedPublicSource?.kind !== "character" || !Array.isArray(characterGroupsQuery.data)) return false;
-    const invitedGroupIds = new Set<string>();
-    return characterGroupsQuery.data.some((value: unknown) => {
-      if (!value || typeof value !== "object") return false;
-      const group = value as { id?: unknown; characterIds?: unknown };
-      return (
-        typeof group.id === "string" &&
-        invitedGroupIds.has(group.id) &&
-        Array.isArray(group.characterIds) &&
-        group.characterIds.includes(selectedPublicSource.entityId)
-      );
-    });
-  }, [characterGroupsQuery.data, selectedPublicSource]);
   const postsQuery = useNoodlerPosts(selectedProfile?.id ?? null, viewerPersonaId);
   const selectedViewerCreator =
     viewerQuery.data?.creators.find((creator) => creator.profile.id === selectedProfile?.id) ?? null;
@@ -799,6 +798,8 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
 
   useEffect(() => {
     if (
+      slurpSettingsQuery.isSuccess &&
+      slurpSettingsQuery.data.onboarding !== "completed" &&
       onboardingState === "unseen" &&
       navigation.mode === "creator" &&
       navigation.view === "hub" &&
@@ -807,25 +808,32 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
       gatePresentedRef.current = true;
       setGateOpen(true);
     }
-  }, [navigation.mode, navigation.view, onboardingState]);
+  }, [
+    navigation.mode,
+    navigation.view,
+    onboardingState,
+    slurpSettingsQuery.data?.onboarding,
+    slurpSettingsQuery.isSuccess,
+  ]);
 
   useEffect(() => {
-    if (
-      onboardingState === "entered" &&
-      navigation.mode === "creator" &&
-      navigation.view === "hub" &&
-      !onboardingPresentedRef.current
-    ) {
-      onboardingPresentedRef.current = true;
-      setOnboardingMode("first-run");
-    }
+    if (navigation.mode !== "creator" || navigation.view !== "hub") return;
+    onboardingPresentedRef.current = false;
   }, [navigation.mode, navigation.view, onboardingState]);
 
-  const enterFromGate = () => {
+  const enterFromGate = async () => {
     setGateOpen(false);
-    setOnboardingState("entered");
-    setOnboardingMode("first-run");
+    setOnboardingState("completed");
+    try {
+      await updateSlurpSettings.mutateAsync({ onboarding: "completed" });
+    } catch (error) {
+      toast.error(errorMessage(error, localizeUi("ui.slurp.onboarding.saveError")));
+    }
     onNavigate({ mode: "creator", view: "hub" });
+  };
+
+  const closeOnboarding = () => {
+    setOnboardingMode(null);
   };
 
   // NoodleR can only be entered through the opt-in gate in NoodleHome, so a persisted
@@ -868,6 +876,8 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     setDraftSourceSnapshot(null);
     setDraftSourceRevisionToken(null);
     setEditingProfileId(profile.id);
+    profileReturnToSettingsRef.current =
+      navigation.mode === "creator" && navigation.view === "profile" ? (navigation.returnToSettings ?? null) : null;
     setDraftNoodleAccountId(profile.sourceAccountId);
     setCreationDisclosure(profile.disclosureMode ?? "hinted");
     setCreationStep("draft");
@@ -900,7 +910,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     setProfileDraft((current) => (current ? { ...current, disclosureMode: value } : current));
   };
 
-  const generateDraft = (options?: {
+  const generateDraft = async (options?: {
     noodlerAccountId?: string;
     disclosureMode?: NoodleIdentityDisclosure;
     guidance?: string;
@@ -912,6 +922,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
       toast.error(localizeUi("ui.noodle.stageprofileform.noConnectionsConfiguredAddOneInSettingsConnections"));
       return;
     }
+    if (!(await confirmProviderDisclosure())) return;
     const generationId = ++profileDraftGenerationIdRef.current;
     const draftForGeneration = options?.currentDraft ?? profileDraft;
     generateProfileDraft.mutate(
@@ -943,7 +954,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
 
   const redraftFromSource = (profile: NoodlerStageProfile) => {
     beginEdit(profile);
-    generateDraft({
+    void generateDraft({
       noodlerAccountId: profile.id,
       disclosureMode: profile.disclosureMode ?? "hinted",
       guidance: localizeUi("ui.noodle.noodlerhome.redraftGuidance"),
@@ -976,10 +987,16 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
         mode: "creator",
         view: "profile",
         accountId: profile.id,
-        ...(navigation.mode === "creator" &&
-          (navigation.view === "profiles" || navigation.view === "profile") &&
-          navigation.returnToSettings && { returnToSettings: navigation.returnToSettings }),
+        ...((profileReturnToSettingsRef.current ??
+        (navigation.mode === "creator" && (navigation.view === "profiles" || navigation.view === "profile")
+          ? navigation.returnToSettings
+          : null))
+          ? {
+              returnToSettings: profileReturnToSettingsRef.current ?? navigation.returnToSettings,
+            }
+          : {}),
       });
+      profileReturnToSettingsRef.current = null;
       toast.success(
         editingProfileId
           ? localizeUi("ui.noodle.noodlerhome.stageProfileUpdated")
@@ -1065,6 +1082,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   };
 
   const submitGuidedPost = async ({ profileId, title, body, access, image, poll, format }: NoodlerPostSubmission) => {
+    if (!(await confirmProviderDisclosure())) return;
     const guide = serializeNoodlerPostGuide(title, body);
     const result = await generatePost.mutateAsync({
       mode: "creator",
@@ -1083,7 +1101,8 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     toast.success(localizeUi("ui.noodle.noodlerhome.noodlerPostGenerated"));
   };
 
-  const submitRunNow = (accountId: string) => {
+  const submitRunNow = async (accountId: string) => {
+    if (!(await confirmProviderDisclosure())) return;
     runAutoPostNow.mutate(accountId, {
       // Run-now never requests prompt review, so it only ever yields a plain generated post.
       onSuccess: () => toast.success(localizeUi("ui.noodle.noodlerhome.automaticPostGenerated")),
@@ -1138,12 +1157,12 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     : null;
 
   const shellProps = {
-    appMode: "noodler" as const,
+    appMode: "slurp" as const,
     activeView:
-      navigation.mode === "creator" && navigation.view === "profile"
-        ? ("profile" as const)
-        : navigation.mode === "creator" && navigation.view === "notifications"
-          ? ("notifications" as const)
+      navigation.mode === "creator-settings"
+        ? ("settings" as const)
+        : navigation.mode === "creator" && navigation.view === "profile"
+          ? ("profile" as const)
           : navigation.mode === "creator" && navigation.view === "search"
             ? ("search" as const)
             : ("noodler" as const),
@@ -1165,18 +1184,19 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     onMobileDrawerOpenChange: setMobileDrawerOpen,
     mobileAccountSwitcherOpen,
     onMobileAccountSwitcherOpenChange: setMobileAccountSwitcherOpen,
-    notificationCount: 0,
     onOpenHome: exitToCreatorHub,
     onOpenMobileHome: exitToCreatorHub,
     onOpenNoodler: goToHub,
     onOpenSearch: goToNoodlerSearch,
-    onOpenNotifications: () => {
-      setMobileDrawerOpen(false);
-      onNavigate({ mode: "creator", view: "notifications" });
-    },
     onOpenProfile: () => {
       setMobileDrawerOpen(false);
-      onNavigate({ mode: "creator", view: "profile", accountId: mainAuthorProfile?.id ?? null });
+      onNavigate(
+        mainAuthorProfile
+          ? { mode: "creator", view: "profile", accountId: mainAuthorProfile.id }
+          : shellPersonaAccount
+            ? { mode: "creator", view: "create-profile", sourceAccountId: shellPersonaAccount.id }
+            : { mode: "creator", view: "profiles" },
+      );
     },
     onOpenSettings: openSettings,
     // Every NoodleR branch spreads shellProps, so the lightbox mounts once wherever the user is.
@@ -1203,6 +1223,14 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
           navigation={navigation}
           onNavigate={onNavigate}
           onAddCreators={() => setOnboardingMode("add-creators")}
+          onEditCreator={(creator) => {
+            beginEdit(creator);
+            onNavigate({ mode: "creator", view: "profile", accountId: creator.id, returnToSettings: navigation });
+          }}
+          onRedraftCreator={(creator) => {
+            redraftFromSource(creator);
+            onNavigate({ mode: "creator", view: "profile", accountId: creator.id, returnToSettings: navigation });
+          }}
           onRestartOnboarding={() => {
             onboardingPresentedRef.current = true;
             setOnboardingState("entered");
@@ -1212,11 +1240,10 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
         <SlurpOnboardingWizard
           open={onboardingMode !== null}
           selectionOnly={onboardingMode === "add-creators"}
-          onClose={() => setOnboardingMode(null)}
+          onClose={closeOnboarding}
           onComplete={() => {
             if (onboardingMode === "first-run") {
               setOnboardingState("completed");
-              setOnboardingMode(null);
             }
           }}
           onSkipped={() => setOnboardingMode(null)}
@@ -1414,6 +1441,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
               }))
             }
             sourceAccountId={draftNoodleAccountId}
+            accentId={editingProfileId ?? draftNoodleAccountId ?? "new-profile"}
             isEditing={Boolean(editingProfileId)}
             isPending={createProfile.isPending || updateProfile.isPending}
             avatar={
@@ -1462,7 +1490,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   if (selectedProfile) {
     return (
       <NoodleShell {...shellProps} rightRail={emptyRightRail}>
-        <main className="h-full min-h-0 overflow-y-auto">
+        <div className="h-full min-h-0 overflow-y-auto">
           <StageProfileView
             key={`${selectedProfile.id}:${shellPersonaAccount?.id ?? "no-viewer"}`}
             profile={selectedProfile}
@@ -1472,8 +1500,6 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
             slurpSettings={slurpSettingsQuery.data ?? null}
             postCardCtx={postCardCtx}
             viewerAccounts={viewerAccounts}
-            publicSource={selectedPublicSource}
-            sourceFolderInvited={selectedSourceFolderInvited}
             viewerIsLoading={Boolean(viewerPersonaId) && !viewerQuery.data && viewerQuery.isLoading}
             viewerIsError={Boolean(viewerPersonaId) && !viewerQuery.data && viewerQuery.isError}
             onRetryViewer={() => void viewerQuery.refetch()}
@@ -1484,6 +1510,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
             isLoading={postsQuery.isLoading}
             isError={postsQuery.isError}
             onRetry={() => void postsQuery.refetch()}
+            onOpenImage={(url, id) => postCardController.setImageLightbox(createNoodleLightboxImage(id, url))}
             onEdit={() => beginEdit(selectedProfile)}
             onRedraft={() => redraftFromSource(selectedProfile)}
             redraftPending={generateProfileDraft.isPending}
@@ -1525,7 +1552,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
               )
             }
           />
-        </main>
+        </div>
         {reviewModal}
       </NoodleShell>
     );
@@ -1536,19 +1563,6 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
       <NoodleShell {...shellProps} rightRail={emptyRightRail}>
         <NoodlerFrame onBack={goToHub} title={localizeUi("ui.noodle.noodlehome.profile")}>
           <EmptyState title={localizeUi("ui.noodle.viewerhub.thisPersonaHasNoLinkedNoodlerProfile")} />
-        </NoodlerFrame>
-      </NoodleShell>
-    );
-  }
-
-  if (navigation.mode === "creator" && navigation.view === "notifications") {
-    return (
-      <NoodleShell {...shellProps} rightRail={emptyRightRail}>
-        <NoodlerFrame onBack={goToHub} title={localizeUi("settings.sections.notifications.title")}>
-          <EmptyState
-            title={localizeUi("settings.sections.notifications.title")}
-            detail={localizeUi("ui.noodle.noodlerhome.notificationsComingSoon")}
-          />
         </NoodlerFrame>
       </NoodleShell>
     );
@@ -1579,14 +1593,16 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
           )}
         </label>
 
-        <SubscriptionSections
-          creators={(viewerQuery.data?.creators ?? []).filter(
-            (creator) => creator.profile.id !== mainAuthorProfile?.id,
-          )}
-          onToggleSubscription={toggleCreatorSubscription}
-          togglePending={toggleSubscription.isPending}
-          onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
-        />
+        <div className="hidden @min-[1024px]:block">
+          <SubscriptionSections
+            creators={(viewerQuery.data?.creators ?? []).filter(
+              (creator) => creator.profile.id !== mainAuthorProfile?.id,
+            )}
+            onToggleSubscription={toggleCreatorSubscription}
+            togglePending={toggleSubscription.isPending}
+            onOpenProfile={(accountId) => onNavigate({ mode: "creator", view: "profile", accountId })}
+          />
+        </div>
       </div>
     </aside>
   );
@@ -1596,7 +1612,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
       <NoodleShell {...shellProps} rightRail={emptyRightRail}>
         <div className="flex h-full min-h-0 flex-col">
           <main className="min-h-0 flex-1 overflow-y-auto">
-            <div className="flex min-h-14 items-center gap-3 border-b border-[var(--noodle-divider)] px-4 py-3">
+            <div className="flex min-h-14 flex-wrap items-center gap-3 border-b border-[var(--noodle-divider)] px-4 py-3">
               {navigation.returnToSettings && (
                 <button
                   type="button"
@@ -1614,61 +1630,6 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
                   {localizeUi("ui.noodle.noodlerhome.noodlerIdentitiesAndGuidedPosts")}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() =>
-                  refreshAllNow.mutate(undefined, {
-                    onSuccess: ({ outcomes }) => {
-                      const summary = summarizeRefreshOutcomes(outcomes);
-                      const message = localizeUi(summary.key, summary.params);
-                      if (!summary.ok) {
-                        toast.error(message);
-                        return;
-                      }
-                      const publishedNames = outcomes
-                        .filter((outcome) => outcome.status === "generated")
-                        .map(
-                          (outcome) =>
-                            accountsQuery.data?.find((profile) => profile.id === outcome.accountId)?.displayName ??
-                            outcome.accountId,
-                        );
-                      toast.success(message);
-                      void showAlertDialog({
-                        title: localizeUi("ui.noodle.noodlerhome.refreshComplete"),
-                        message: publishedNames.length
-                          ? localizeUi("ui.noodle.noodlerhome.refreshPublishedFor", {
-                              names: publishedNames.join(", "),
-                            })
-                          : message,
-                      });
-                    },
-                    onError: (error) =>
-                      toast.error(
-                        errorMessage(error, localizeUi("ui.noodle.noodlerhome.couldNotRefreshNoodlerCreators")),
-                      ),
-                  })
-                }
-                disabled={refreshAllNow.isPending}
-                title={localizeUi("ui.noodle.noodlerhome.runsAnAutomaticStylePostNowForEveryCreator")}
-                className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {refreshAllNow.isPending ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
-                {localizeUi("ui.noodle.noodlerhome.refreshNoodlerNow")}
-              </button>
-              {canQuieten && (
-                <button
-                  type="button"
-                  onClick={makeQuieter}
-                  disabled={quieterPending}
-                  title={localizeUi("ui.noodle.noodlerhome.makeNoodlerQuieterDetail", {
-                    count: SLURP_QUIETER_POSTS_PER_DAY,
-                  })}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {quieterPending ? <Loader2 size={15} className="animate-spin" /> : <VolumeX size={15} />}
-                  {localizeUi("ui.noodle.noodlerhome.makeNoodlerQuieter")}
-                </button>
-              )}
               {shellPersonaAccount && (
                 <button
                   type="button"
@@ -1803,8 +1764,16 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
         isLoading={viewerQuery.isLoading}
         isError={viewerQuery.isError}
         onRetry={() => void viewerQuery.refetch()}
-        onRefresh={() => void viewerQuery.refetch()}
-        isRefreshing={viewerQuery.isFetching}
+        onRefresh={() =>
+          void viewerQuery.refetch().then(({ error }) => {
+            if (error) {
+              toast.error(errorMessage(error, localizeUi("ui.noodle.noodlerhome.couldNotRefreshNoodlerCreators")));
+              return;
+            }
+            toast.success(localizeUi("ui.noodle.noodlehome.noodleTimelineRefreshed"));
+          })
+        }
+        isRefreshing={viewerQuery.isRefetching}
         unlockPending={unlockPost.isPending}
         postCardCtx={postCardCtx}
         onUnlock={(postId) => {
@@ -1867,7 +1836,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
       />
       <SlurpOnboardingWizard
         open={onboardingMode !== null}
-        onClose={() => setOnboardingMode(null)}
+        onClose={closeOnboarding}
         onComplete={() => {
           setOnboardingState("completed");
           setFeedTab("all");
@@ -1876,17 +1845,16 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
       />
       <Modal
         open={gateOpen}
-        onClose={() => setGateOpen(false)}
+        onClose={() => undefined}
         title={localizeUi("ui.noodle.noodlemodetoggle.noodler")}
         width="max-w-md"
         panelClassName="noodle-icon-scope"
         panelStyle={getNoodleAccentStyle(NOODLE_PINK)}
+        closeDisabled
       >
         <SlurpAgeGate
           personaName={shellPersonaAccount?.displayName ?? ""}
           onComplete={enterFromGate}
-          onSkip={enterFromGate}
-          onDismiss={() => setGateOpen(false)}
           isPending={false}
         />
       </Modal>
@@ -1911,6 +1879,7 @@ function StageProfileForm({
   onUndoDraft,
   onChange,
   sourceAccountId,
+  accentId,
   isEditing,
   isPending,
   avatar,
@@ -1937,6 +1906,7 @@ function StageProfileForm({
   onUndoDraft: () => void;
   onChange: (patch: Partial<NoodleStageProfileInput>) => void;
   sourceAccountId: string | null;
+  accentId: string;
   isEditing: boolean;
   isPending: boolean;
   avatar: NoodlerStageProfile | null;
@@ -1950,7 +1920,7 @@ function StageProfileForm({
 }) {
   const { t: localizeUi } = useUiTranslation();
   const disclosureChoices = disclosureOptions(localizeUi);
-  const accent = useNoodleAccent();
+  const accent = profileAccent(accentId);
   const [connectionPickerOpen, setConnectionPickerOpen] = useState(false);
   const [relationshipPickerOpen, setRelationshipPickerOpen] = useState(false);
   const [relationshipPickerPosition, setRelationshipPickerPosition] = useState<{
@@ -2711,6 +2681,63 @@ function WizardFooter({
   );
 }
 
+type SlurpProfileImagePost = NoodlePostCardModel & { imageUrl: string };
+
+function profileAccent(_profileId: string): string {
+  return NOODLE_PINK;
+}
+
+function SlurpProfileFeaturedImage({
+  post,
+  onOpenImage,
+}: {
+  post: SlurpProfileImagePost;
+  onOpenImage: (url: string, id: string) => void;
+}) {
+  const { t: localizeUi } = useUiTranslation();
+  const source = useSlurpMediaSrc(post.imageUrl);
+  return source ? (
+    <button
+      type="button"
+      onClick={() => onOpenImage(source, post.id)}
+      className="block w-full overflow-hidden rounded-md text-left ring-1 ring-inset ring-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--noodle-accent)]"
+      aria-label={post.title || localizeUi("ui.slurp.post.openFeaturedImage")}
+    >
+      <img src={source} alt={post.title || ""} className="block aspect-[16/8] w-full object-cover" />
+    </button>
+  ) : null;
+}
+
+function SlurpProfileMediaTile({
+  post,
+  onOpenImage,
+}: {
+  post: SlurpProfileImagePost;
+  onOpenImage: (url: string, id: string) => void;
+}) {
+  const { t: localizeUi } = useUiTranslation();
+  const source = useSlurpMediaSrc(post.imageUrl);
+  return (
+    <button
+      type="button"
+      onClick={() => source && onOpenImage(source, post.id)}
+      disabled={!source}
+      className="relative aspect-square overflow-hidden bg-[var(--background)] text-left focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] disabled:cursor-wait"
+      aria-label={post.title || localizeUi("ui.slurp.post.openImage")}
+    >
+      {source ? (
+        <img
+          src={source}
+          alt={post.title || ""}
+          className="h-full w-full object-cover transition-transform duration-300 hover:scale-[1.03]"
+        />
+      ) : (
+        <div className="h-full w-full bg-[var(--muted)]" />
+      )}
+    </button>
+  );
+}
+
 function StageProfileView({
   profile,
   posts,
@@ -2719,8 +2746,6 @@ function StageProfileView({
   slurpSettings,
   postCardCtx,
   viewerAccounts,
-  publicSource,
-  sourceFolderInvited,
   viewerIsLoading,
   viewerIsError,
   onRetryViewer,
@@ -2735,8 +2760,6 @@ function StageProfileView({
   onRedraft,
   redraftPending,
   onBack,
-  onInviteCharacter,
-  invitePending,
   onManualPost,
   onGuidedPost,
   manualPending,
@@ -2751,6 +2774,7 @@ function StageProfileView({
   subscriptionPending,
   accessPending,
   onAccessChange,
+  onOpenImage,
 }: {
   profile: NoodlerManagedStageProfile;
   posts: SlurpProfilePost[];
@@ -2759,8 +2783,6 @@ function StageProfileView({
   slurpSettings: ReturnType<typeof useSlurpSettings>["data"] | null;
   postCardCtx: ReturnType<typeof useNoodlePostCardController>["ctx"];
   viewerAccounts: NoodleAccount[];
-  publicSource: NoodleAccount | null;
-  sourceFolderInvited: boolean;
   viewerIsLoading: boolean;
   viewerIsError: boolean;
   onRetryViewer: () => void;
@@ -2775,8 +2797,6 @@ function StageProfileView({
   onRedraft: () => void;
   redraftPending: boolean;
   onBack: () => void;
-  onInviteCharacter: () => void;
-  invitePending: boolean;
   onManualPost: (input: NoodlerPostSubmission) => Promise<void>;
   onGuidedPost: (input: NoodlerPostSubmission) => Promise<void>;
   manualPending: boolean;
@@ -2791,6 +2811,7 @@ function StageProfileView({
   subscriptionPending: boolean;
   accessPending: boolean;
   onAccessChange: (access: NoodlerManagedStageProfile["access"]) => void;
+  onOpenImage: (url: string, id: string) => void;
 }) {
   const { t: localizeUi } = useUiTranslation();
   const bannerSrc = useSlurpMediaSrc(profile.bannerUrl);
@@ -2798,8 +2819,13 @@ function StageProfileView({
   const [automationOpen, setAutomationOpen] = useState(false);
   const updateAutoPosting = useUpdateNoodlerAutoPosting();
   const updateFanActivity = useUpdateNoodlerFanActivity();
-  const dismissSourceChanges = useDismissNoodlerSourceChanges();
-  const adoptSourceIdentity = useAdoptNoodlerSourceIdentity();
+  const uploadProfileAvatar = useUploadNoodlerAvatar();
+  const uploadProfileBanner = useUploadNoodlerBanner();
+  const generateProfileArtwork = useGenerateNoodlerArtwork();
+  const profileAvatarFileRef = useRef<HTMLInputElement | null>(null);
+  const profileBannerFileRef = useRef<HTMLInputElement | null>(null);
+  const [artworkKind, setArtworkKind] = useState<"avatar" | "banner" | null>(null);
+  const [artworkGuidance, setArtworkGuidance] = useState("");
   // Global fan controls require a Creator settings route. Keep per-Creator controls available.
   const globalSettings = slurpSettings
     ? {
@@ -2813,10 +2839,11 @@ function StageProfileView({
   const subscribersQuery = useNoodlerSubscribers(profile.id);
   const subscribers = subscribersQuery.data?.pages.flatMap((page) => page.items) ?? [];
   const subscriberTotal = subscribersQuery.data?.pages[0]?.total ?? subscribers.length;
-  const accent = useNoodleAccent();
-  const viewingOwnCreator = Boolean(viewerAccount && profile.sourceAccountId === viewerAccount.id);
-  const characterSource = publicSource?.kind === "character" ? publicSource : null;
-  const directInvite = characterSource?.invited === true;
+  const accent = profileAccent(profile.id);
+  const viewingOwnCreator = profile.sourceAccountId === viewerAccount?.entityId;
+  // Every Slurp Creator profile is operator-managed, so post controls and artwork editing stay
+  // available regardless of which viewer persona is looking at the profile.
+  const managedCreator = true;
   const viewerPostById = new Map((viewerCreator?.posts ?? []).map((post) => [post.id, post]));
   const projectedPosts = posts.flatMap((entry) => {
     const managedPost = "managed" in entry ? entry.managed : null;
@@ -2854,6 +2881,11 @@ function StageProfileView({
     if (activeTab === "media") return Boolean(item.model.imageUrl);
     return false;
   });
+  const imagePosts = projectedPosts.flatMap<SlurpProfileImagePost>((item) => {
+    if (item.kind !== "card" && item.kind !== "managed-reveal") return [];
+    return typeof item.model.imageUrl === "string" ? [{ ...item.model, imageUrl: item.model.imageUrl }] : [];
+  });
+  const featuredPost = imagePosts[0] ?? null;
   const cards = (
     <>
       {activeTab === "subscribers" ? (
@@ -2927,6 +2959,16 @@ function StageProfileView({
           action={localizeUi("capabilities.actions.tryAgain")}
           onAction={onRetry}
         />
+      ) : activeTab === "media" ? (
+        imagePosts.length > 0 ? (
+          <div className="grid grid-cols-2 gap-px bg-[var(--noodle-divider)] sm:grid-cols-3">
+            {imagePosts.map((post) => (
+              <SlurpProfileMediaTile key={post.id} post={post} onOpenImage={onOpenImage} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState title={localizeUi("ui.noodle.stageprofileview.noValue1PostsYet", { value1: activeTab })} />
+        )
       ) : visiblePosts.length > 0 ? (
         visiblePosts.map((item) =>
           item.kind === "locked" || item.kind === "controller-locked" ? (
@@ -2970,18 +3012,20 @@ function StageProfileView({
                 </button>
               </div>
               <SlurpCreatorPostCard
+                surface="profile"
                 post={item.model}
-                ctx={{ ...postCardCtx, personaAccount: null, postManagement: true }}
+                ctx={{ ...postCardCtx, personaAccount: null, postManagement: managedCreator }}
               />
             </div>
           ) : (
             <SlurpCreatorPostCard
+              surface="profile"
               key={item.model.id}
               post={item.model}
               ctx={{
                 ...postCardCtx,
                 personaAccount: viewingOwnCreator ? null : viewerAccount,
-                postManagement: true,
+                postManagement: managedCreator,
               }}
             />
           ),
@@ -2999,7 +3043,7 @@ function StageProfileView({
   );
   return (
     <>
-      <NoodleProfileSurface
+      <SlurpProfileSurface
         mobileHeader={
           <button
             type="button"
@@ -3032,178 +3076,99 @@ function StageProfileView({
                 }
               />
             ) : (
-              <DisclosureBadge mode={profile.disclosureMode} />
-            )}
-            {profile.disclosureMode === "open" && profile.publicIdentity && (
-              <span className="text-xs text-[var(--muted-foreground)]">
-                {localizeUi("ui.noodle.stageprofileview.openlyLinkedTo")} {profile.publicIdentity.displayName} (@
-                {profile.publicIdentity.handle})
-              </span>
+              <DisclosureBadge
+                mode={profile.disclosureMode}
+                detail={
+                  profile.disclosureMode === "open" && profile.publicIdentity
+                    ? localizeUi("ui.slurp.disclosure.openLinkedDetail", {
+                        name: profile.publicIdentity.displayName,
+                        handle: profile.publicIdentity.handle,
+                      })
+                    : undefined
+                }
+              />
             )}
           </>
         }
         // A creator inherits a banner from its source at creation (open/hinted only); without
         // one the shell keeps its plain accent band.
-        banner={bannerSrc ? { url: bannerSrc, canEdit: false, uploadTarget: null } : undefined}
-        decorativeBanner={!bannerSrc}
-        leadingActions={
-          viewingOwnCreator ? (
-            <span className="inline-flex h-9 items-center rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-bold text-[var(--muted-foreground)]">
-              {localizeUi("ui.noodle.stageprofileview.yourProfile")}
-            </span>
-          ) : viewerCreator ? (
-            <span className="flex gap-2">
+        banner={{
+          url: bannerSrc,
+          canEdit: true,
+          uploadTarget: uploadProfileBanner.isPending ? "banner" : null,
+          fileRef: profileBannerFileRef,
+          onFileChange: (event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (!file) return;
+            uploadProfileBanner.mutate(
+              { accountId: profile.id, file },
+              {
+                onError: (error) => toast.error(errorMessage(error, localizeUi("ui.slurp.artwork.bannerUploadError"))),
+              },
+            );
+          },
+          onGenerate: () => {
+            setArtworkGuidance("");
+            setArtworkKind("banner");
+          },
+        }}
+        avatarUpload={{
+          canEdit: true,
+          uploadTarget: uploadProfileAvatar.isPending ? "avatar" : null,
+          fileRef: profileAvatarFileRef,
+          onFileChange: (event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (!file) return;
+            uploadProfileAvatar.mutate(
+              { accountId: profile.id, file },
+              {
+                onError: (error) => toast.error(errorMessage(error, localizeUi("ui.slurp.artwork.avatarUploadError"))),
+              },
+            );
+          },
+          onGenerate: () => {
+            setArtworkGuidance("");
+            setArtworkKind("avatar");
+          },
+        }}
+        decorativeBanner={false}
+        leadingActions={null}
+        bioContent={
+          <>
+            {profile.bio && <p className="mt-3 whitespace-pre-wrap text-sm leading-6">{profile.bio}</p>}
+            {!viewingOwnCreator && viewerCreator && !viewerCreator.followed ? (
               <button
                 type="button"
                 disabled={followPending}
-                onClick={() => onToggleFollow(profile.id, viewerCreator.followed)}
-                className="h-9 rounded-full border border-[var(--noodle-divider)] px-4 text-xs font-bold hover:bg-[var(--accent)] disabled:opacity-50"
+                onClick={() => onToggleFollow(profile.id, false)}
+                className="mt-4 inline-flex min-h-9 items-center rounded-md border border-[var(--noodle-divider)] px-4 text-xs font-bold hover:bg-[var(--accent)] disabled:opacity-50"
               >
-                {viewerCreator.followed
-                  ? localizeUi("ui.noodle.subscriptionsections.unfollow")
-                  : localizeUi("ui.noodle.noodlehome.follow")}
+                {localizeUi("ui.noodle.noodlehome.follow")}
               </button>
+            ) : !viewingOwnCreator && viewerCreator?.followed && !viewerCreator.subscribed ? (
               <button
                 type="button"
                 disabled={subscriptionPending}
                 onClick={() => onToggleSubscription(profile.id, viewerCreator.subscribed)}
-                className={cn(
-                  "h-9 rounded-full px-4 text-xs font-bold hover:bg-[var(--accent)] disabled:opacity-50",
-                  viewerCreator.subscribed
-                    ? "border border-[var(--noodle-divider)] text-[var(--foreground)]"
-                    : "bg-[var(--foreground)] text-[var(--background)]",
-                )}
+                className="mt-4 inline-flex min-h-9 items-center gap-1.5 rounded-md bg-[var(--foreground)] px-4 text-xs font-bold text-[var(--background)] hover:opacity-90 disabled:opacity-50"
               >
-                {viewerCreator.subscribed
-                  ? localizeUi("ui.noodle.stageprofileview.subscribed")
-                  : localizeUi("ui.noodle.lockednoodlerpostcard.subscribe")}
+                {localizeUi("ui.slurp.profile.subscribe")}
               </button>
-            </span>
-          ) : undefined
-        }
-        bioContent={
-          <>
-            {viewingOwnCreator && profile.sourceStatus.state === "missing" && (
-              <div className="mt-3 rounded-md border border-[var(--destructive)]/40 bg-[var(--destructive)]/5 p-3 text-sm">
-                <p className="font-bold text-[var(--destructive)]">
-                  {localizeUi("ui.noodle.stageprofileview.sourceMissingTitle")}
-                </p>
-                <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                  {localizeUi("ui.noodle.stageprofileview.sourceMissingDetail")}
-                </p>
-              </div>
-            )}
-            {viewingOwnCreator && profile.sourceStatus.state === "changed" && (
-              <div className="mt-3 rounded-md border border-[var(--noodle-divider)] bg-[var(--accent)]/40 p-3 text-sm">
-                <p className="font-bold">{localizeUi("ui.noodle.stageprofileview.sourceChangedTitle")}</p>
-                <ul className="mt-1 space-y-0.5 text-xs text-[var(--muted-foreground)]">
-                  {profile.sourceStatus.changes.map((change) => (
-                    <li key={change.field}>
-                      <span className="font-semibold">{change.field}</span>: {change.previous || "—"} →{" "}
-                      {change.current || "—"}
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {profile.disclosureMode === "open" && (
-                    <button
-                      type="button"
-                      disabled={adoptSourceIdentity.isPending}
-                      onClick={() =>
-                        adoptSourceIdentity.mutate(profile.id, {
-                          onError: (error) =>
-                            toast.error(
-                              errorMessage(
-                                error,
-                                localizeUi("ui.noodle.stageprofileview.couldNotUpdateSourceIdentity"),
-                              ),
-                            ),
-                        })
-                      }
-                      className="h-8 rounded-md bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 hover:opacity-90 disabled:opacity-50"
-                    >
-                      {localizeUi("ui.noodle.stageprofileview.sourceAdoptIdentity")}
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    disabled={redraftPending}
-                    onClick={onRedraft}
-                    className="h-8 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:opacity-50"
-                  >
-                    {redraftPending
-                      ? localizeUi("ui.noodle.stageprofileview.sourceRedrafting")
-                      : localizeUi("ui.noodle.stageprofileview.sourceRedraft")}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={dismissSourceChanges.isPending}
-                    onClick={() =>
-                      dismissSourceChanges.mutate(profile.id, {
-                        onError: (error) =>
-                          toast.error(
-                            errorMessage(error, localizeUi("ui.noodle.stageprofileview.couldNotDismissSourceChanges")),
-                          ),
-                      })
-                    }
-                    className="h-8 rounded-md border border-[var(--noodle-divider)] px-3 text-xs font-bold hover:bg-[var(--accent)] disabled:opacity-50"
-                  >
-                    {localizeUi("ui.noodle.stageprofileview.sourceDismiss")}
-                  </button>
-                </div>
-              </div>
-            )}
-            {profile.bio && <p className="mt-3 whitespace-pre-wrap text-sm leading-6">{profile.bio}</p>}
+            ) : !viewingOwnCreator && viewerCreator?.subscribed ? (
+              <button
+                type="button"
+                disabled={subscriptionPending}
+                onClick={() => onToggleSubscription(profile.id, true)}
+                className="mt-4 inline-flex min-h-9 items-center rounded-md border border-[var(--noodle-divider)] px-4 text-xs font-bold text-[var(--muted-foreground)] hover:bg-[var(--accent)] disabled:opacity-50"
+              >
+                {localizeUi("ui.noodle.stageprofileview.subscribed")}
+              </button>
+            ) : null}
           </>
         }
-        contentActions={
-          <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
-            {characterSource && profile.sourceStatus.state !== "missing" && (
-              <div className="mr-auto flex min-h-9 items-center gap-2 text-xs text-[var(--muted-foreground)]">
-                <span>
-                  {directInvite
-                    ? localizeUi("ui.noodle.noodlerhome.directlyInvited")
-                    : sourceFolderInvited
-                      ? localizeUi("ui.noodle.noodlerhome.folderOnlyParticipation")
-                      : localizeUi("ui.noodle.noodlerhome.notInvited")}
-                </span>
-                {!directInvite && (
-                  <button
-                    type="button"
-                    onClick={onInviteCharacter}
-                    disabled={invitePending}
-                    className="h-9 rounded-md bg-[var(--noodle-accent)] px-3 text-xs font-bold text-zinc-950 hover:opacity-90 disabled:opacity-50"
-                  >
-                    {localizeUi("ui.noodle.noodlerhome.inviteCharacter")}
-                  </button>
-                )}
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={onEdit}
-              className="h-9 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 transition-[opacity,scale] hover:opacity-90 active:scale-[0.96]"
-            >
-              {localizeUi("ui.noodle.stageprofileview.editProfile")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setAccessSettingsOpen(true)}
-              className="h-9 rounded-md border border-[var(--noodle-divider)] px-4 text-xs font-bold hover:bg-[var(--accent)]"
-            >
-              {localizeUi("ui.noodle.stageprofileview.access")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setAutomationOpen(true)}
-              className="h-9 rounded-md border border-[var(--noodle-divider)] px-4 text-xs font-bold hover:bg-[var(--accent)]"
-            >
-              {autoPosting.enabled
-                ? localizeUi("ui.noodle.stageprofileview.automationOn")
-                : localizeUi("ui.noodle.stageprofileview.automation")}
-            </button>
-          </div>
-        }
+        contentActions={null}
         tabs={[
           { id: "posts", label: localizeUi("ui.noodle.profile.tabs.posts") },
           { id: "media", label: localizeUi("ui.noodle.profile.tabs.media") },
@@ -3220,21 +3185,155 @@ function StageProfileView({
         activeTab={activeTab}
         onTabChange={setActiveTab}
         preTabsContent={
-          <NoodlerPostComposer
-            key={profile.id}
-            profile={profile}
-            draft={draft}
-            onDraftChange={onDraftChange}
-            onClearDraft={onClearDraft}
-            onDiscardDraft={onDiscardDraft}
-            onManualPost={onManualPost}
-            onGuidedPost={onGuidedPost}
-            manualPending={manualPending}
-            guidePending={guidePending}
-          />
+          managedCreator ? (
+            <details className="group border-b border-[var(--noodle-divider)] bg-[var(--accent)]/10">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-4 text-xs font-semibold text-[var(--muted-foreground)] hover:bg-[var(--accent)]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] [&::-webkit-details-marker]:hidden">
+                <ChevronDown size={15} className="transition-transform group-open:rotate-180" />
+                <span>{localizeUi("ui.slurp.profile.additionalControls")}</span>
+                {viewingOwnCreator && (
+                  <span className="ml-auto text-[0.68rem] text-[var(--noodle-accent)]">
+                    {localizeUi("ui.noodle.stageprofileview.yourProfile")}
+                  </span>
+                )}
+              </summary>
+              <div className="border-t border-[var(--noodle-divider)]">
+                <div className="flex flex-wrap items-center justify-end gap-2 p-3">
+                  <button
+                    type="button"
+                    onClick={onEdit}
+                    className="h-9 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950"
+                  >
+                    {localizeUi("ui.noodle.stageprofileview.editProfile")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAccessSettingsOpen(true)}
+                    className="h-9 rounded-md border border-[var(--noodle-divider)] px-4 text-xs font-bold hover:bg-[var(--accent)]"
+                  >
+                    {localizeUi("ui.noodle.stageprofileview.access")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAutomationOpen(true)}
+                    className="h-9 rounded-md border border-[var(--noodle-divider)] px-4 text-xs font-bold hover:bg-[var(--accent)]"
+                  >
+                    {autoPosting.enabled
+                      ? localizeUi("ui.noodle.stageprofileview.automationOn")
+                      : localizeUi("ui.noodle.stageprofileview.automation")}
+                  </button>
+                </div>
+                <div className="border-t border-[var(--noodle-divider)] bg-[var(--background)]">
+                  <NoodlerPostComposer
+                    key={profile.id}
+                    profile={profile}
+                    draft={draft}
+                    onDraftChange={onDraftChange}
+                    onClearDraft={onClearDraft}
+                    onDiscardDraft={onDiscardDraft}
+                    onManualPost={onManualPost}
+                    onGuidedPost={onGuidedPost}
+                    manualPending={manualPending}
+                    guidePending={guidePending}
+                  />
+                </div>
+              </div>
+            </details>
+          ) : null
+        }
+        featuredContent={
+          featuredPost && !bannerSrc && activeTab === "posts" ? (
+            <div className="border-b border-[var(--noodle-divider)] bg-[var(--noodle-accent)]/[0.04] px-4 py-4 sm:px-6">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <span className="text-[0.68rem] font-bold uppercase tracking-[0.14em] text-[var(--noodle-accent)]">
+                  {localizeUi("ui.noodle.profile.tabs.media")}
+                </span>
+                <span className="text-xs text-[var(--muted-foreground)]">{profile.displayName}</span>
+              </div>
+              <SlurpProfileFeaturedImage post={featuredPost} onOpenImage={onOpenImage} />
+            </div>
+          ) : null
         }
         postList={cards}
+        accent={profileAccent(profile.id)}
       />
+      <Modal
+        open={artworkKind !== null}
+        onClose={() => setArtworkKind(null)}
+        title={localizeUi(
+          artworkKind === "banner" ? "ui.slurp.artwork.generateBanner" : "ui.slurp.artwork.generateAvatar",
+        )}
+        width="max-w-lg"
+        closeDisabled={generateProfileArtwork.isPending}
+        panelClassName="noodle-icon-scope"
+        panelStyle={getNoodleAccentStyle(accent, {
+          "--background": "#17121b",
+          "--foreground": "#fff7fc",
+          "--muted-foreground": "#d8c9d4",
+          "--border": "rgba(255, 126, 193, 0.24)",
+          "--accent": "rgba(255, 126, 193, 0.12)",
+        })}
+      >
+        <div className="space-y-4">
+          <label className="block space-y-2 text-sm font-semibold">
+            <span>{localizeUi("ui.slurp.artwork.guidanceLabel")}</span>
+            <textarea
+              value={artworkGuidance}
+              onChange={(event) => setArtworkGuidance(event.target.value)}
+              maxLength={2000}
+              placeholder={
+                artworkKind === "banner"
+                  ? localizeUi("ui.slurp.artwork.bannerPlaceholder")
+                  : localizeUi("ui.slurp.artwork.avatarPlaceholder")
+              }
+              className="min-h-32 w-full resize-y rounded-md border border-[var(--border)] bg-[var(--background)] p-3 text-sm font-normal outline-none focus:border-[var(--noodle-accent)]"
+            />
+          </label>
+          <p className="text-xs leading-5 text-[var(--muted-foreground)]">
+            {localizeUi("ui.slurp.artwork.guidanceHelp")}
+          </p>
+          <div className="flex justify-end gap-2 border-t border-[var(--border)] pt-4">
+            <button
+              type="button"
+              disabled={generateProfileArtwork.isPending}
+              onClick={() => setArtworkKind(null)}
+              className="min-h-10 rounded-md border border-[var(--border)] px-4 text-xs font-semibold"
+            >
+              {localizeUi("ui.slurp.artwork.cancel")}
+            </button>
+            <button
+              type="button"
+              disabled={generateProfileArtwork.isPending || !artworkKind}
+              onClick={() => {
+                if (!artworkKind) return;
+                generateProfileArtwork.mutate(
+                  { accountId: profile.id, kind: artworkKind, guidance: artworkGuidance.trim() || undefined },
+                  {
+                    onSuccess: () => {
+                      toast.success(
+                        localizeUi(
+                          artworkKind === "banner"
+                            ? "ui.slurp.artwork.bannerGenerated"
+                            : "ui.slurp.artwork.avatarGenerated",
+                        ),
+                      );
+                      setArtworkKind(null);
+                    },
+                    onError: (error) => toast.error(errorMessage(error, localizeUi("ui.slurp.artwork.generateError"))),
+                  },
+                );
+              }}
+              className="inline-flex min-h-10 items-center gap-2 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:opacity-50"
+            >
+              {generateProfileArtwork.isPending ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Sparkles size={14} />
+              )}
+              {localizeUi("ui.slurp.artwork.generate")}
+            </button>
+          </div>
+        </div>
+      </Modal>
       <Modal
         open={accessSettingsOpen}
         onClose={() => setAccessSettingsOpen(false)}
@@ -3614,6 +3713,7 @@ function ViewerHub({
     );
   }
   const searchTerm = search.trim().toLowerCase();
+  const searchable = (value: unknown) => (typeof value === "string" ? value.toLowerCase() : "");
   const followedCreatorIds = new Set(scope?.viewer.settings.social.followingAccountIds ?? []);
   const creators = scope?.creators ?? [];
   const feed = creators
@@ -3624,8 +3724,8 @@ function ViewerHub({
         !searchTerm ||
         (post.title ?? "").toLowerCase().includes(searchTerm) ||
         (post.content ?? "").toLowerCase().includes(searchTerm) ||
-        creator.profile.handle.toLowerCase().includes(searchTerm) ||
-        creator.profile.displayName.toLowerCase().includes(searchTerm),
+        searchable(creator.profile.handle).includes(searchTerm) ||
+        searchable(creator.profile.displayName).includes(searchTerm),
     )
     .sort((a, b) => new Date(b.post.createdAt).getTime() - new Date(a.post.createdAt).getTime());
   const searchResults = creators
@@ -3635,8 +3735,8 @@ function ViewerHub({
         searchTerm &&
         ((post.title ?? "").toLowerCase().includes(searchTerm) ||
           (post.content ?? "").toLowerCase().includes(searchTerm) ||
-          creator.profile.handle.toLowerCase().includes(searchTerm) ||
-          creator.profile.displayName.toLowerCase().includes(searchTerm)),
+          searchable(creator.profile.handle).includes(searchTerm) ||
+          searchable(creator.profile.displayName).includes(searchTerm)),
     )
     .sort((a, b) => new Date(b.post.createdAt).getTime() - new Date(a.post.createdAt).getTime());
   const visibleFeed = feed.slice(0, visibleFeedCount);
@@ -3645,8 +3745,8 @@ function ViewerHub({
     (creator) =>
       creator.profile.id !== authorProfile?.id &&
       (!searchTerm ||
-        creator.profile.handle.toLowerCase().includes(searchTerm) ||
-        creator.profile.displayName.toLowerCase().includes(searchTerm)),
+        searchable(creator.profile.handle).includes(searchTerm) ||
+        searchable(creator.profile.displayName).includes(searchTerm)),
   );
   // The feed is newest-first, so the divider goes after the *last* new post — the viewer's own
   // posts sitting in that run are not news themselves but must not cut it short. Shown only
@@ -3658,7 +3758,15 @@ function ViewerHub({
     !Number.isNaN(newSince) &&
     creator.profile.sourceAccountId !== scope?.viewer.id &&
     new Date(post.createdAt).getTime() > newSince;
-  const lastNewIndex = searchTerm ? -1 : feed.findLastIndex(isNewToViewer);
+  let lastNewIndex = -1;
+  if (!searchTerm) {
+    for (let index = feed.length - 1; index >= 0; index -= 1) {
+      if (isNewToViewer(feed[index]!)) {
+        lastNewIndex = index;
+        break;
+      }
+    }
+  }
   const dividerIndex = lastNewIndex >= 0 && lastNewIndex < feed.length - 1 ? lastNewIndex + 1 : -1;
   const renderFeedPost = ({ post, creator }: (typeof searchResults)[number]) =>
     post.locked ? (
@@ -3860,7 +3968,7 @@ function ViewerHub({
           </div>
         </div>
       </div>
-      <div className="border-b border-[var(--noodle-divider)] py-3 @min-[1024px]:px-4 @min-[1280px]:hidden">
+      <div className="hidden border-b border-[var(--noodle-divider)] py-3 @min-[1024px]:block @min-[1024px]:px-4 @min-[1280px]:hidden">
         <SubscriptionSections
           creators={(scope?.creators ?? []).filter((creator) => creator.profile.id !== authorProfile?.id)}
           onToggleSubscription={onToggleSubscription}
@@ -4542,7 +4650,7 @@ function NoodlerPostComposer({
                 disabled={composerBusy}
                 className="min-h-8 px-2 font-bold disabled:opacity-50"
               >
-                {localizeUi("settings.notifications.customSound.actions.remove")}
+                {localizeUi("ui.noodle.noodlehome.removeAttachedImage")}
               </button>
             </div>
           </div>
@@ -4748,15 +4856,26 @@ function SubscriptionSections({
   );
 }
 
-function DisclosureBadge({ mode }: { mode: NoodleIdentityDisclosure | null }) {
+function DisclosureBadge({ mode, detail }: { mode: NoodleIdentityDisclosure | null; detail?: ReactNode }) {
   const { t: localizeUi } = useUiTranslation();
   const label = mode
     ? localizeUi(`ui.noodle.disclosure.${mode}.shortLabel`)
     : localizeUi("ui.noodle.disclosure.setupNeeded");
+  const defaultDetail =
+    mode === "open"
+      ? localizeUi("ui.slurp.disclosure.openDetail")
+      : mode === "hinted"
+        ? localizeUi("ui.slurp.disclosure.hintedDetail")
+        : mode === "secret"
+          ? localizeUi("ui.slurp.disclosure.secretDetail")
+          : localizeUi("ui.slurp.disclosure.setupDetail");
   return (
-    <span className="rounded-full border border-[var(--noodle-divider)] px-2 py-0.5 text-[0.68rem] font-bold capitalize text-[var(--muted-foreground)]">
-      {label}
-    </span>
+    <HelpTooltip
+      label={label}
+      side="bottom"
+      buttonClassName="rounded-full border border-[var(--noodle-divider)] px-2 py-0.5 text-[0.68rem] font-bold capitalize text-[var(--muted-foreground)] opacity-100 [&_svg]:hidden"
+      text={<span>{detail ?? defaultDetail}</span>}
+    />
   );
 }
 
