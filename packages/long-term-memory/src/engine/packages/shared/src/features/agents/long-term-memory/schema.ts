@@ -2672,7 +2672,7 @@ export const ltmLastInjectionResponseSchema = z.object({
   memoryCount: z.number(),
   tokenCount: z.number(),
   memories: z.array(ltmLastInjectionMemorySchema),
-  state: z.enum(["injected", "no_matches"]).default("injected"),
+  state: z.enum(["injected", "no_matches", "not_recorded"]).default("not_recorded"),
   dispatchedAt: ltmIsoTimestampSchema.nullable().default(null),
 });
 

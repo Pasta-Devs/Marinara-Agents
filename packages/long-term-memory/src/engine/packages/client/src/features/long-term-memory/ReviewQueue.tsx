@@ -1612,44 +1612,40 @@ export default function ReviewQueue({
                   return (
                     <div key={id} className="group">
                       <div
-                        role="button"
-                        tabIndex={0}
-                        data-ltm-review-source-select={id}
-                        aria-current={active || undefined}
-                        aria-expanded={expanded}
-                        aria-controls={panelId}
-                        onClick={() => {
-                          setSelectedSourceId(id);
-                          setSelectedDraftId(null);
-                          setSourceCollapsed((current) => (active ? !current : false));
-                          setMobilePaneAndFocus("workbench");
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            event.currentTarget.click();
-                          }
-                        }}
-                        className={`flex min-h-12 cursor-pointer list-none items-center gap-2 border-b border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ring)] ${active ? "bg-[var(--accent)]/55" : ""}`}
+                        className={`flex min-h-12 items-stretch border-b border-[var(--border)] text-sm ${active ? "bg-[var(--accent)]/55" : ""}`}
                       >
-                        <ChevronRight
-                          aria-hidden="true"
-                          size="0.875rem"
-                          className={`shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`}
-                        />
-                        <span className="min-w-0 flex-1 truncate font-semibold">
-                          {noteById.get(id)?.title || localizeUi("ui.longTermMemory.reviewqueue.untitledMemory")}
-                        </span>
-                        <span className="shrink-0 text-xs text-[var(--muted-foreground)]">
-                          {(source?.drafts.length ?? 0) + rejectedCount}
-                        </span>
+                        <button
+                          type="button"
+                          data-ltm-review-source-select={id}
+                          aria-current={active || undefined}
+                          aria-expanded={expanded}
+                          aria-controls={panelId}
+                          onClick={() => {
+                            setSelectedSourceId(id);
+                            setSelectedDraftId(null);
+                            setSourceCollapsed((current) => (active ? !current : false));
+                            setMobilePaneAndFocus("workbench");
+                          }}
+                          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 px-3 py-2 text-left hover:bg-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--ring)]"
+                        >
+                          <ChevronRight
+                            aria-hidden="true"
+                            size="0.875rem"
+                            className={`shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`}
+                          />
+                          <span className="min-w-0 flex-1 truncate font-semibold">
+                            {noteById.get(id)?.title || localizeUi("ui.longTermMemory.reviewqueue.untitledMemory")}
+                          </span>
+                          <span className="shrink-0 text-xs text-[var(--muted-foreground)]">
+                            {(source?.drafts.length ?? 0) + rejectedCount}
+                          </span>
+                        </button>
                         {rejectedCount ? (
                           <button
                             type="button"
                             data-ltm-review-rejected-count={rejectedCount}
                             className="shrink-0 rounded-full border border-[var(--marinara-editor-warning)]/40 px-2 py-0.5 text-[0.625rem] font-semibold text-[var(--marinara-editor-warning)] underline underline-offset-2"
-                            onClick={(event) => {
-                              event.stopPropagation();
+                            onClick={() => {
                               setSelectedSourceId(id);
                               setSelectedDraftId(null);
                               setSourceCollapsed(false);

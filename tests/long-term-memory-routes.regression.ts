@@ -23,6 +23,8 @@ async function main() {
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
   const { addRejectedSuggestions } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/rejected-suggestions.ts");
+  const { longTermMemoryInjectionReceiptPath } =
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/usage.ts");
   const app = Fastify();
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-routes-"));
   const packageManifest = JSON.parse(
@@ -423,6 +425,18 @@ async function main() {
       },
       { total: 0, sourceNotes: 0, savedMemories: 0, pendingDrafts: 0 },
     );
+    const missingInjection = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/last-injection/no-recorded-recall",
+      headers,
+    });
+    assert.deepEqual(missingInjection.json(), {
+      memoryCount: 0,
+      tokenCount: 0,
+      memories: [],
+      state: "not_recorded",
+      dispatchedAt: null,
+    });
     assert.deepEqual(Object.keys(status.json().indexes).sort(), [
       "chunkCount",
       "chunkFormatVersion",
@@ -3339,6 +3353,66 @@ async function main() {
       ).json().total,
       0,
     );
+    await storageService.storage.createNote({
+      id: "source_route_attribution",
+      title: "Imported observatory source",
+      type: "source",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: [],
+      keywords: [],
+      links: [],
+      sections: { source: { text: "Imported source material.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+      provenance: { kind: "character", sourceId: "character-mara" },
+    });
+    await storageService.storage.createNote({
+      id: "world_route_attribution",
+      title: "Gate memory",
+      type: "world",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: [],
+      keywords: [],
+      links: [{ relation: "extracted_from", target: "source_route_attribution" }],
+      sections: { facts: { text: "The gate is sealed.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+    });
+    await writeFile(
+      longTermMemoryInjectionReceiptPath("chat-attribution", join(dataDir, "long-term-memory")),
+      JSON.stringify({
+        version: 1,
+        chatId: "chat-attribution",
+        dispatchedAt: "2026-07-17T00:00:00.000Z",
+        serializedTokenCount: 12,
+        chunks: [
+          {
+            chunkId: "world_route_attribution::facts",
+            noteId: "world_route_attribution",
+            sectionKey: "facts",
+            tokenCount: 12,
+          },
+        ],
+      }),
+    );
+    const attributedInjection = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/last-injection/chat-attribution",
+      headers,
+    });
+    assert.equal(attributedInjection.statusCode, 200, attributedInjection.body);
+    assert.deepEqual(attributedInjection.json().memories, [
+      {
+        noteId: "world_route_attribution",
+        title: "Gate memory",
+        tokenCount: 12,
+        sectionKey: "facts",
+        sourceNoteId: "source_route_attribution",
+        sourceTitle: "Imported observatory source",
+      },
+    ]);
+    assert.equal(attributedInjection.json().state, "injected");
+    assert.equal(attributedInjection.json().dispatchedAt, "2026-07-17T00:00:00.000Z");
     await cleanup();
     cleanup = undefined;
     assert.equal(

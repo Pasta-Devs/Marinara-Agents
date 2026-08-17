@@ -498,23 +498,44 @@ export function createLongTermMemoryRoutes(runtime: {
     app.delete("/debug-log", async () => clearLtmDebugLog(root));
     app.get<{ Params: { chatId: string } }>("/last-injection/:chatId", async (request) => {
       const receipt = await readLongTermMemoryInjectionReceipt(request.params.chatId, root);
-      if (!receipt) return { memoryCount: 0, tokenCount: 0, memories: [] };
-      const titles = new Map((await storage.listNotes()).map((note) => [note.id, note.title?.trim() || note.id]));
-      const memories = new Map<string, { noteId: string; title: string; tokenCount: number }>();
+      if (!receipt)
+        return { memoryCount: 0, tokenCount: 0, memories: [], state: "not_recorded" as const, dispatchedAt: null };
+      const notesById = new Map((await storage.listNotes()).map((note) => [note.id, note]));
+      const memories = new Map<
+        string,
+        {
+          noteId: string;
+          title: string;
+          tokenCount: number;
+          sectionKey?: string;
+          sourceNoteId?: string;
+          sourceTitle?: string;
+        }
+      >();
       for (const chunk of receipt.chunks) {
         const current = memories.get(chunk.noteId);
         if (current) current.tokenCount += chunk.tokenCount;
-        else
+        else {
+          const note = notesById.get(chunk.noteId);
+          const linkedSourceId = note?.links.find((link) => link.relation === "extracted_from")?.target;
+          const sourceNote = linkedSourceId ? notesById.get(linkedSourceId) : undefined;
+          const sourceNoteId = sourceNote?.id;
           memories.set(chunk.noteId, {
             noteId: chunk.noteId,
-            title: titles.get(chunk.noteId) ?? chunk.noteId,
+            title: note?.title?.trim() || chunk.noteId,
             tokenCount: chunk.tokenCount,
+            sectionKey: chunk.sectionKey,
+            ...(sourceNoteId ? { sourceNoteId } : {}),
+            ...(sourceNote?.title?.trim() ? { sourceTitle: sourceNote.title.trim() } : {}),
           });
+        }
       }
       return {
         memoryCount: memories.size,
         tokenCount: receipt.serializedTokenCount,
         memories: [...memories.values()],
+        state: memories.size ? ("injected" as const) : ("no_matches" as const),
+        dispatchedAt: receipt.dispatchedAt,
       };
     });
     app.get("/settings", async () => getLtmGlobalSettings(root));

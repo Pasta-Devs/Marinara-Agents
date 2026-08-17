@@ -365,6 +365,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
   );
   const emptyUnbuiltVault = health === "not_built" && savedMemoryCount === 0;
   const needsHealthAttention = ["building", "degraded", "stale", "corrupt", "failed"].includes(health ?? "");
+  const embeddingsNeedAttention = indexHealth?.embeddingsAvailable === false && savedMemoryCount > 0;
   const healthTone =
     !status.data || emptyUnbuiltVault
       ? "bg-[var(--muted-foreground)]"
@@ -375,6 +376,27 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           : "bg-[var(--marinara-editor-accent)] opacity-50";
   const healthNeedsDangerTone = health === "corrupt" || health === "failed";
   const indexedChunks = status.data?.indexes.chunkCount ?? "--";
+  const repairRecall = async () => {
+    setRepairPending(true);
+    setRepairMessage("");
+    try {
+      await request("/repair", "POST", { actions: ["rebuild_indexes"] });
+      setRepairMessage(localizeUi("ui.longTermMemory.longtermmemorydetail.reindexComplete"));
+      await status.refetch();
+    } catch (error) {
+      setRepairMessage(
+        error instanceof Error ? error.message : localizeUi("ui.longTermMemory.longtermmemorydetail.reindexFailed"),
+      );
+    } finally {
+      setRepairPending(false);
+    }
+  };
+  const repairButton = () => (
+    <Button disabled={repairPending} onClick={() => void repairRecall()}>
+      <RefreshCw aria-hidden="true" size="0.75rem" className={repairPending ? "animate-spin" : ""} />
+      {localizeUi("ui.longTermMemory.longtermmemorydetail.reindexRecall")}
+    </Button>
+  );
   const healthInfo = (
     <div className="space-y-2">
       <strong className="block text-[var(--marinara-editor-text)]">{healthLabel}</strong>
@@ -392,29 +414,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
           {localizeUi("ui.longTermMemory.longtermmemorydetail.semanticRecallUnavailable")}
         </p>
       ) : null}
-      <Button
-        disabled={repairPending}
-        onClick={async () => {
-          setRepairPending(true);
-          setRepairMessage("");
-          try {
-            await request("/repair", "POST", { actions: ["rebuild_indexes"] });
-            setRepairMessage(localizeUi("ui.longTermMemory.longtermmemorydetail.reindexComplete"));
-            await status.refetch();
-          } catch (error) {
-            setRepairMessage(
-              error instanceof Error
-                ? error.message
-                : localizeUi("ui.longTermMemory.longtermmemorydetail.reindexFailed"),
-            );
-          } finally {
-            setRepairPending(false);
-          }
-        }}
-      >
-        <RefreshCw aria-hidden="true" size="0.75rem" className={repairPending ? "animate-spin" : ""} />
-        {localizeUi("ui.longTermMemory.longtermmemorydetail.reindexRecall")}
-      </Button>
+      {repairButton()}
       {repairMessage ? <p role="status">{repairMessage}</p> : null}
     </div>
   );
@@ -823,7 +823,7 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                     review: pendingDrafts.data?.count,
                   }}
                 />
-                {health !== "healthy" && !needsHealthAttention ? (
+                {(health !== "healthy" || embeddingsNeedAttention) && !needsHealthAttention ? (
                   <div
                     aria-busy={status.isFetching}
                     data-ltm-surface="vault-health-pill"
@@ -862,6 +862,29 @@ export function LongTermMemoryDetail({ props }: { props: CapabilityProps }) {
                     <span className="font-semibold">{healthLabel}</span>
                     <span className="hidden truncate sm:inline">
                       {localizeUi("ui.longTermMemory.longtermmemorydetail.checkSettingsMaintenanceReindexRecallData")}
+                    </span>
+                  </span>
+                  <InfoPopover
+                    label={localizeUi("ui.longTermMemory.longtermmemorydetail.howToRepairVaultHealth")}
+                    content={healthInfo}
+                  />
+                  {repairButton()}
+                </StatusSurface>
+              ) : null}
+              {embeddingsNeedAttention && !needsHealthAttention ? (
+                <StatusSurface
+                  tone="warning"
+                  data-ltm-surface="semantic-recall-warning"
+                  className="min-h-12 justify-between px-3 py-2 text-sm font-medium"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <TriangleAlert
+                      aria-hidden="true"
+                      size="1rem"
+                      className="shrink-0 !text-[var(--marinara-editor-warning)]"
+                    />
+                    <span className="font-semibold">
+                      {localizeUi("ui.longTermMemory.longtermmemorydetail.savedButNotSearchable")}
                     </span>
                   </span>
                   <InfoPopover
