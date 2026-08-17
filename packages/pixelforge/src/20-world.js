@@ -735,7 +735,9 @@ PF.world = (() => {
         cx = wander.x0 + (hash % (wander.x1 - wander.x0 + 1));
         cy = wander.y0 + (((hash / 7) | 0) % (wander.y1 - wander.y0 + 1));
       }
-      const open = (x, y) => x >= 0 && x < zone.w && y >= 0 && y < zone.h && !zone.solid[idx(zone, x, y)];
+      // Same rule as the runtime placer: never a door or portal tile, which are
+      // walkable by design and look wrong (and block the way in) when occupied.
+      const open = (x, y) => PF.schedule.standable(zone, x, y);
       if (open(cx, cy)) return { x: cx, y: cy };
       const maxR = wander.x1 - wander.x0 + (wander.y1 - wander.y0);
       for (let r = 1; r <= maxR; r++) {
@@ -799,11 +801,14 @@ PF.world = (() => {
         // A stall is one merchant's own pitch, not shared geometry, and the
         // center of the box IS the counter — so keep the exact placement.
         spread = false;
+        // Behind the counter only — the single row south of the three tables.
+        // A deeper box let them drift into the street, which read as abandoning
+        // the stall rather than manning it.
         wander = {
           x0: Math.max(2, stall.x),
           y0: Math.min(v.h - 3, stall.y + 1),
           x1: Math.min(v.w - 3, stall.x + 4),
-          y1: Math.min(v.h - 3, stall.y + 2),
+          y1: Math.min(v.h - 3, stall.y + 1),
         };
       } else if (standing === "transient") {
         const spot = loiterAnchor();

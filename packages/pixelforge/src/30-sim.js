@@ -200,8 +200,29 @@ PF.Sim = class {
     }
   }
 
+  /** Is another NPC standing on — or already walking onto — this tile? Terrain
+   *  alone is not enough: two NPCs would pick the same free tile and slide
+   *  through each other. Casts are capped at ~10, so a scan is cheaper than
+   *  maintaining an occupancy index. */
+  npcOccupies(z, x, y, exclude) {
+    for (const other of z.npcs) {
+      if (other === exclude) continue;
+      if (Math.round(other.x) === x && Math.round(other.y) === y) return true;
+      const timer = this._npcTimers.get(other.id);
+      if (timer && (timer.dx || timer.dy) && timer.tx === x && timer.ty === y) return true;
+    }
+    return false;
+  }
+
   stepNpcs(dt, z) {
     for (const npc of z.npcs) {
+      // The person you are talking TO stands still. nearNpc stops updating the
+      // moment dialogue starts, so it still points at whoever was greeted —
+      // drifting away mid-sentence read as if they had stopped listening.
+      if (this.mode === "dialogue" && this.nearNpc && npc.id === this.nearNpc.id) {
+        npc.stepPhase = 0;
+        continue;
+      }
       let t = this._npcTimers.get(npc.id);
       if (!t) {
         t = { wait: 1 + this._rnd() * 3, dx: 0, dy: 0, fx: npc.x, fy: npc.y };
@@ -221,7 +242,14 @@ PF.Sim = class {
         const nx = Math.round(t.fx) + dx;
         const ny = Math.round(t.fy) + dy;
         const w = npc.wander;
-        if (nx >= w.x0 && nx <= w.x1 && ny >= w.y0 && ny <= w.y1 && !z.solid[ny * z.w + nx]) {
+        if (
+          nx >= w.x0 &&
+          nx <= w.x1 &&
+          ny >= w.y0 &&
+          ny <= w.y1 &&
+          PF.schedule.standable(z, nx, ny) &&
+          !this.npcOccupies(z, nx, ny, npc)
+        ) {
           t.dx = dx;
           t.dy = dy;
           t.tx = nx; // remember the DESTINATION — see the arrival test below

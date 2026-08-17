@@ -3,6 +3,41 @@
 // chips, touch D-pad, Talk / Travel / Keyboard controls, toasts. The root is
 // pointer-events:none; each control opts back in — clicks in empty space fall
 // through to the narration below (host contract).
+// Collapsing the host's narration box is a CSS-only reach OUTSIDE our element,
+// which the host sanctions through the manifest's contributions.gameSurface
+// .surfaceClass ("pixelforge-surface") stamped on the shared game container,
+// plus its inert `experience-dialogue-*` theming hooks. Scope every rule under
+// that class so nothing leaks into the rest of the app, and collapse only the
+// PROSE — the meta row (Retry, Next, Logs) and the turn input must stay usable.
+const PF_NARRATION_STYLE_ID = "pixelforge-narration-collapse";
+function installPixelforgeNarrationStyle(doc) {
+  if (!doc || doc.getElementById(PF_NARRATION_STYLE_ID)) return;
+  const style = doc.createElement("style");
+  style.id = PF_NARRATION_STYLE_ID;
+  // Collapse the WHOLE panel, not just the prose. Hiding the prose alone left
+  // the speaker label, the failure banner and the button row floating in an
+  // empty box, which is most of the height back. The label and banner carry no
+  // hook of their own — only utility classes — so picking them off individually
+  // would mean matching styling soup that breaks on any host restyle.
+  //
+  // Trade-off, deliberate: while collapsed the Retry/Next controls go with it,
+  // so a failed generation is invisible until the player expands again. The
+  // toggle sits right beside the panel and dialogue force-expands, so nothing
+  // is ever unreachable — but this is exactly why the host should own a real
+  // collapse control (Marinara-Engine#5209) instead of a package doing CSS.
+  //
+  // `data-tour` is a product-tour hook rather than a declared contract; it is
+  // still far steadier than utility classes, and the theming hooks below are
+  // contract, so keep both.
+  style.textContent =
+    '.pf-narration-collapsed .pixelforge-surface [data-tour="game-dialogue"],' +
+    ".pf-narration-collapsed .pixelforge-surface .experience-dialogue-wrap," +
+    ".pf-narration-collapsed .pixelforge-surface .game-narration-prose{" +
+    "max-height:0;min-height:0;padding-top:0;padding-bottom:0;margin-top:0;margin-bottom:0;" +
+    "border-width:0;overflow:hidden;opacity:0;pointer-events:none;}";
+  doc.head.appendChild(style);
+}
+
 PF.Hud = class {
   constructor(rootEl, core) {
     this.core = core;
@@ -26,16 +61,24 @@ PF.Hud = class {
 
     this.talkBtn = this._btn("Talk (E)", () => core.interact());
     this.travelBtn = this._btn("Travel", () => this.toggleTravel());
+    this.waitBtn = this._btn("⏩ Wait…", () => this.toggleWait());
+    this.narrationBtn = this._btn("▤ Hide narration", () => this.toggleNarration());
     this.keyboardBtn = this._btn("Keyboard", () => core.setMode("dialogue"));
     this.resumeBtn = this._btn("▶ Resume walking", () => core.resume());
+    this.waitMenu = PF.el("div", {
+      style:
+        "display:none;flex-direction:column;gap:6px;align-items:flex-end;max-height:40vh;overflow:auto;pointer-events:auto;",
+    });
     this.actions = PF.el(
       "div",
       {
         style:
           "position:absolute;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px;align-items:flex-end;z-index:2;",
       },
-      [this.talkBtn, this.travelBtn, this.keyboardBtn, this.resumeBtn],
+      [this.talkBtn, this.travelBtn, this.waitMenu, this.waitBtn, this.narrationBtn, this.keyboardBtn, this.resumeBtn],
     );
+    this._narrationCollapsed = false;
+    installPixelforgeNarrationStyle(rootEl && rootEl.ownerDocument);
 
     // Touch D-pad. touch-action:none so the browser doesn't claim the gesture
     // (same requirement the host documents on its own drag surfaces).
@@ -114,6 +157,55 @@ PF.Hud = class {
     }, 2600);
   }
 
+  /** Skip ahead to the next dawn / midday / dusk / night. The clock is
+   *  otherwise only moved by walking, so without this a player who wants to see
+   *  the town after dark has to walk in circles for an hour. */
+  toggleWait() {
+    const open = this.waitMenu.style.display !== "flex";
+    if (!open) {
+      this.waitMenu.style.display = "none";
+      return;
+    }
+    this.waitMenu.replaceChildren();
+    for (const [part, label] of [
+      ["dawn", "Wait for dawn"],
+      ["day", "Wait for morning"],
+      ["dusk", "Wait for dusk"],
+      ["night", "Wait for night"],
+    ]) {
+      this.waitMenu.appendChild(
+        this._btn(label, () => {
+          this.waitMenu.style.display = "none";
+          if (!this.core.sim.waitUntil(part)) {
+            this.toast("Not while you're talking — resume walking first");
+            return;
+          }
+          // waitUntil moves clockMin/day but does not flag the save itself, and
+          // the autosave only fires on a dirty sim — without this the skipped
+          // hours are lost on reload.
+          this.core.markDirty();
+          this.refreshChips();
+          this.toast(`Time passes — ${this.core.sim.clockLabel()}`);
+        }),
+      );
+    }
+    this.waitMenu.style.display = "flex";
+  }
+
+  /** Collapse the host's narration box so more of the world is visible. Only
+   *  the prose collapses — the button row (Retry, Next, Logs) stays reachable,
+   *  and it force-expands in dialogue because the turn input lives in there. */
+  toggleNarration(force) {
+    const collapsed = typeof force === "boolean" ? force : !this._narrationCollapsed;
+    // Only a real click changes what the player WANTS; the dialogue-mode
+    // force-open is temporary and must not overwrite that preference.
+    if (typeof force !== "boolean") this._narrationPreference = collapsed;
+    this._narrationCollapsed = collapsed;
+    const root = this.root.ownerDocument.documentElement;
+    root.classList.toggle("pf-narration-collapsed", collapsed);
+    if (this.narrationBtn) this.narrationBtn.textContent = collapsed ? "▣ Show narration" : "▤ Hide narration";
+  }
+
   toggleTravel() {
     const open = this.travelMenu.style.display !== "flex";
     if (!open) {
@@ -139,8 +231,21 @@ PF.Hud = class {
   refreshChips() {
     const sim = this.core.sim;
     if (!sim) return;
-    const spatialName = PF.spatial.locationName();
-    this.locChip.textContent = spatialName ? `${sim.zone().name} — ${spatialName}` : sim.zone().name;
+    // The spatial name is the ENGINE's committed party location, which only
+    // moves on a narrated transition or a Travel — walking is package-local, so
+    // it does not follow the player between zones. Showing it unconditionally
+    // pinned a stale name to every zone ("The Tailings — The Slag Bar"), and on
+    // the start zone it could even show a leftover location from a DIFFERENT
+    // world in the same chat. Annotate only when it really is this zone's
+    // binding, and never annotate the exterior, whose binding is seeded from
+    // whatever the map already said.
+    const zoneName = sim.zone().name;
+    const locationId = PF.spatial.data && PF.spatial.data.currentLocationId;
+    const bound =
+      locationId && sim.zoneId !== sim.world.startZone && sim.world.bindings[locationId] === sim.zoneId
+        ? PF.spatial.locationName()
+        : null;
+    this.locChip.textContent = bound && bound !== zoneName ? `${zoneName} — ${bound}` : zoneName;
     this.clockChip.textContent = sim.clockLabel();
   }
 
@@ -162,6 +267,8 @@ PF.Hud = class {
       this.dpad.style.display = inWorld ? "" : "none";
       this.talkBtn.style.display = inWorld ? "" : "none";
       this.travelBtn.style.display = inWorld && spatialAvail ? "" : "none";
+      this.waitBtn.style.display = inWorld ? "" : "none";
+      this.narrationBtn.style.display = inWorld ? "" : "none";
       this.keyboardBtn.style.display = inWorld ? "" : "none";
       // In combat, Resume exists only for the NARRATIVE fallback signal (which
       // can flip without any combat UI). With the real Capability API 1.11
@@ -170,6 +277,12 @@ PF.Hud = class {
       this.resumeBtn.style.display = mode === "dialogue" || combatResumeApplies ? "" : "none";
       this.resumeBtn.textContent = combatResumeApplies ? "▶ Resume exploring" : "▶ Resume walking";
       this.travelMenu.style.display = "none";
+      this.waitMenu.style.display = "none";
+      // The turn input lives INSIDE the host's narration box, so a collapsed
+      // box would leave a talking player with nowhere to type. Force it open
+      // for the conversation and restore the player's choice afterwards.
+      if (!inWorld) this.toggleNarration(false);
+      else if (this._narrationPreference) this.toggleNarration(true);
       if (mode === "dialogue") this.toast("Type in the message box below — Resume to keep walking");
     }
     if (this._mode === "walk") {

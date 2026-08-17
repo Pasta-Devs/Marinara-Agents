@@ -49,6 +49,19 @@ PF.schedule = (() => {
     return sched[template[daypart] ?? "post"] ?? sched.post ?? null;
   }
 
+  /** Can an NPC STAND here? Open ground is not enough: a door tile is
+   *  deliberately non-solid (the player walks through it) and a portal tile is
+   *  the zone's exit, so an NPC parked on either looks wrong and blocks the way
+   *  in. Player movement is unaffected — this gates NPCs only. */
+  function standable(zone, x, y) {
+    if (x < 0 || x >= zone.w || y < 0 || y >= zone.h) return false;
+    const index = y * zone.w + x;
+    if (zone.solid[index]) return false;
+    if (zone.object[index] === "door") return false;
+    for (const portal of zone.portals) if (portal.x === x && portal.y === y) return false;
+    return true;
+  }
+
   /** An open tile inside the box, nudged off anything solid — the runtime twin
    *  of the compiler's walkableSpawn, so a relocation can never drop an NPC
    *  inside a wall or a tree. Deterministic: consumes no randomness.
@@ -68,7 +81,7 @@ PF.schedule = (() => {
       cx = box.x0 + (hash % spanX);
       cy = box.y0 + (((hash / 7) | 0) % spanY);
     }
-    const open = (x, y) => x >= 0 && x < zone.w && y >= 0 && y < zone.h && !zone.solid[y * zone.w + x];
+    const open = (x, y) => standable(zone, x, y);
     if (open(cx, cy)) return { x: cx, y: cy };
     // Sum, not max: an off-center hashed start still has to be able to reach
     // the far corner of the box.
@@ -86,5 +99,5 @@ PF.schedule = (() => {
     return { x: zone.spawn.x, y: zone.spawn.y };
   }
 
-  return { TABLE, resolve, walkableIn };
+  return { TABLE, resolve, walkableIn, standable };
 })();

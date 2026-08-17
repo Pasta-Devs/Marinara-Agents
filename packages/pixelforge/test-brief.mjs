@@ -20,6 +20,7 @@ const source = [
   "30-sim.js",
   "50-spatial.js",
   "55-maps-export.js",
+  "60-save.js",
 ]
   .map((file) => readFileSync(join(here, "src", file), "utf8"))
   .join("\n");
@@ -1706,6 +1707,157 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
       `${npc.name} stays in its wander box`,
     );
   }
+}
+
+// 14e. Playtest findings: the NPC you are talking to holds still, nobody stands
+// in a doorway or on a portal, and a stall merchant stays behind their counter.
+{
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Standfast",
+      places: [{ kind: "gathering", name: "The Lamp" }],
+      cast: [
+        { name: "Ada", role: "reeve", kind: "leader", tint: "blue", home: "Standfast", household: 1 },
+        { name: "Ben", role: "cooper", kind: "folk", tint: "green", home: "Standfast", household: 2 },
+        { name: "Cyd", role: "innkeep", kind: "host", tint: "amber", home: "The Lamp", household: 3 },
+        { name: "Sol", role: "trader", kind: "merchant", tint: "rose", home: "Standfast", household: 4, standing: "transient" },
+      ],
+    },
+    ctx,
+  );
+  const w = world.build(11, "cozy-village", sealed);
+  checkWorld(w, sealed, "playtest-fixes");
+  const sim = new loadedPF.Sim(w);
+  const v = w.zones.z1;
+
+  // A stall merchant tends the counter: a single row, never the open street.
+  const sol = v.npcs.find((n) => n.name === "Sol");
+  if (sol && sol._sched.post.spread === false) {
+    assert.equal(sol.wander.y0, sol.wander.y1, "the stall merchant's box is the counter row only");
+  }
+
+  // Nobody is placed in a doorway or on a portal, at any daypart.
+  for (const min of [6 * 60, 12 * 60, 19 * 60, 23 * 60]) {
+    sim.clockMin = min;
+    sim.resolveSchedules();
+    for (const zoneId in w.zones) {
+      const z = w.zones[zoneId];
+      for (const npc of z.npcs) {
+        const x = Math.round(npc.x);
+        const y = Math.round(npc.y);
+        assert.notEqual(z.object[z.w * y + x], "door", `${npc.name} does not stand in a doorway at ${min}`);
+        assert.ok(
+          !z.portals.some((p) => p.x === x && p.y === y),
+          `${npc.name} does not stand on a portal at ${min}`,
+        );
+      }
+    }
+  }
+
+  // Wandering never walks anyone into a doorway either.
+  sim.mode = "walk";
+  sim.clockMin = 12 * 60;
+  sim.resolveSchedules();
+  for (let i = 0; i < 60 * 60 * 2; i++) sim.step(1 / 60, {});
+  for (const zoneId in w.zones) {
+    const z = w.zones[zoneId];
+    for (const npc of z.npcs) {
+      const x = Math.round(npc.x);
+      const y = Math.round(npc.y);
+      assert.notEqual(z.object[z.w * y + x], "door", `${npc.name} never wanders into a doorway`);
+    }
+  }
+
+  // The NPC being talked to stands still while the player is in dialogue.
+  const partner = v.npcs[0];
+  sim.mode = "dialogue";
+  sim.nearNpc = partner;
+  const held = `${partner.x},${partner.y}`;
+  for (let i = 0; i < 60 * 60; i++) sim.step(1 / 60, {});
+  assert.equal(`${partner.x},${partner.y}`, held, "the conversation partner holds still during dialogue");
+}
+
+// 14g. NPCs never share a tile WHILE WANDERING. Placement alone was not enough:
+// the wander step only checked terrain, so two NPCs could pick the same free
+// tile and slide through each other (playtest finding). Needs a CROWDED zone to
+// reproduce — a full cast of folk all converge on the plaza at midday.
+{
+  const cast = [];
+  for (let i = 0; i < 8; i++) {
+    cast.push({
+      name: `Folk${i}`,
+      role: "villager",
+      kind: "folk",
+      tint: ["blue", "green", "amber", "rose", "teal", "violet", "orange", "grey"][i],
+      home: "Crowdham",
+      household: i + 1,
+    });
+  }
+  const sealed = brief.validate({ scale: "village", name: "Crowdham", cast }, ctx);
+  const w = world.build(21, "cozy-village", sealed);
+  const sim = new loadedPF.Sim(w);
+  sim.mode = "walk";
+  sim.clockMin = 12 * 60; // folk -> the plaza, all sharing one box
+  sim.resolveSchedules();
+  const v = w.zones.z1;
+  // Guard against a vacuous pass: one NPC can never collide with itself.
+  assert.ok(v.npcs.length >= 5, `the plaza is genuinely crowded (${v.npcs.length} NPCs)`);
+  let collisions = 0;
+  for (let i = 0; i < 60 * 60 * 3; i++) {
+    sim.step(1 / 60, {});
+    const seen = new Set();
+    for (const npc of v.npcs) {
+      const tile = `${Math.round(npc.x)},${Math.round(npc.y)}`;
+      if (seen.has(tile)) collisions++;
+      seen.add(tile);
+    }
+  }
+  assert.equal(collisions, 0, `no two NPCs share a tile while wandering (${collisions} colliding samples)`);
+}
+
+// 14h. A save whose zone no longer exists lands the player at the start zone's
+// SPAWN, not at the old interior coordinates clamped into a much bigger map.
+// The solid-tile rescue only fires if those coordinates hit a wall, so without
+// this the player silently reappeared in a random corner (design-review find,
+// and a guaranteed failure once interiors come and go between versions).
+{
+  const sealed = brief.defaults("cozy-village", 808);
+  const w = world.build(808, "cozy-village", sealed);
+  const meta = { pixelforgeBrief: sealed };
+  const restore = (savedZone) =>
+    loadedPF.save.simFromSaved(
+      { v: 1, seed: 808, theme: "cozy-village", zone: savedZone, x: 5 * loadedPF.TILE, y: 4 * loadedPF.TILE, facing: 0 },
+      meta,
+      "chat-test",
+    );
+
+  const gone = restore("zDoesNotExist");
+  const spawn = w.zones[w.startZone].spawn;
+  assert.equal(gone.zoneId, w.startZone, "an unresolvable zone falls back to the start zone");
+  assert.equal(gone.x, (spawn.x + 0.5) * loadedPF.TILE, "and the player lands on the spawn tile, not stale coordinates");
+  assert.equal(gone.y, (spawn.y + 0.5) * loadedPF.TILE, "on both axes");
+
+  // A zone that DOES resolve still restores its exact saved position.
+  const kept = restore(w.startZone);
+  assert.equal(kept.zoneId, w.startZone, "a resolvable zone is honored");
+  assert.equal(kept.x, 5 * loadedPF.TILE, "and its saved coordinates survive");
+  assert.equal(kept.y, 4 * loadedPF.TILE, "on both axes");
+}
+
+// 14f. wait-until is reachable as a player action and lands on the boundary.
+{
+  const sealed = brief.defaults("cozy-village", 5150);
+  const sim = new loadedPF.Sim(world.build(5150, "cozy-village", sealed));
+  sim.mode = "walk";
+  sim.clockMin = 10 * 60;
+  assert.equal(sim.waitUntil("dusk"), true, "waiting for dusk succeeds while walking");
+  assert.equal(sim.clockMin, 18 * 60, "the clock lands exactly on the dusk boundary");
+  // Waiting for a daypart already past rolls into the next day.
+  const dayBefore = sim.day;
+  assert.equal(sim.waitUntil("dawn"), true, "waiting for a passed daypart still succeeds");
+  assert.equal(sim.day, dayBefore + 1, "and rolls over to the next day");
+  assert.equal(sim.clockMin, 5 * 60, "landing on dawn");
 }
 
 // 14d. Every compiled zone is reachable from the start zone. An interior place

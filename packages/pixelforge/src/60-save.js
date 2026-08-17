@@ -213,10 +213,23 @@ PF.save = {
     if (!brief && meta?.pixelforgeBrief === undefined && this._configGenerate(meta)) world.interim = true;
     const sim = new PF.Sim(world);
     if (saved && saved.v === 1) {
-      if (typeof saved.zone === "string" && world.zones[saved.zone]) sim.zoneId = saved.zone;
+      // A saved zone that no longer exists (world gen changed between versions,
+      // or an interior that this build no longer compiles) falls back to the
+      // start zone — but the saved x/y belonged to the OLD zone, and carrying
+      // them over just clamps interior coordinates into a much larger map. The
+      // solid-tile rescue below only fires if that lands in a wall, so the
+      // player would silently reappear in a random corner. Land them at the
+      // spawn instead, which is the one tile every zone guarantees is walkable.
+      const zoneResolved = typeof saved.zone === "string" && !!world.zones[saved.zone];
+      if (zoneResolved) sim.zoneId = saved.zone;
       const z = sim.zone();
-      if (typeof saved.x === "number") sim.x = PF.clamp(saved.x, PF.TILE, (z.w - 1) * PF.TILE);
-      if (typeof saved.y === "number") sim.y = PF.clamp(saved.y, PF.TILE, (z.h - 1) * PF.TILE);
+      if (zoneResolved) {
+        if (typeof saved.x === "number") sim.x = PF.clamp(saved.x, PF.TILE, (z.w - 1) * PF.TILE);
+        if (typeof saved.y === "number") sim.y = PF.clamp(saved.y, PF.TILE, (z.h - 1) * PF.TILE);
+      } else {
+        sim.x = (z.spawn.x + 0.5) * PF.TILE;
+        sim.y = (z.spawn.y + 0.5) * PF.TILE;
+      }
       if (typeof saved.facing === "number") sim.facing = saved.facing & 3;
       if (typeof saved.clockMin === "number") sim.clockMin = PF.clamp(saved.clockMin | 0, 0, 24 * 60 - 1);
       if (typeof saved.day === "number") sim.day = Math.max(1, saved.day | 0);
