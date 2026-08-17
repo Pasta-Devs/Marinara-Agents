@@ -547,16 +547,18 @@ export function SlurpSettings({
                               void showConfirmDialog({
                                 title: t("ui.slurp.settings.creators.deleteTitle"),
                                 message: t("ui.slurp.settings.creators.deleteDetail", { name: creator.displayName }),
-                              }).then((confirmed) => {
-                                if (!confirmed) return;
-                                deleteCreator.mutate(creator.id, {
-                                  onSuccess: () =>
-                                    toast.success(
-                                      t("ui.slurp.settings.creators.deleted", { name: creator.displayName }),
-                                    ),
-                                  onError: (error) => toast.error(errorMessage(error)),
-                                });
-                              });
+                              })
+                                .then((confirmed) => {
+                                  if (!confirmed) return;
+                                  deleteCreator.mutate(creator.id, {
+                                    onSuccess: () =>
+                                      toast.success(
+                                        t("ui.slurp.settings.creators.deleted", { name: creator.displayName }),
+                                      ),
+                                    onError: (error) => toast.error(errorMessage(error)),
+                                  });
+                                })
+                                .catch((error) => toast.error(errorMessage(error)));
                             }}
                             className="flex h-10 w-10 items-center justify-center rounded-md text-red-400 hover:bg-red-400/10 disabled:opacity-50"
                           >

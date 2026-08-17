@@ -2694,6 +2694,7 @@ function SlurpProfileFeaturedImage({
   post: SlurpProfileImagePost;
   onOpenImage: (url: string, id: string) => void;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   const source = useSlurpMediaSrc(post.imageUrl);
   return source ? (
     <button
@@ -2714,6 +2715,7 @@ function SlurpProfileMediaTile({
   post: SlurpProfileImagePost;
   onOpenImage: (url: string, id: string) => void;
 }) {
+  const { t: localizeUi } = useUiTranslation();
   const source = useSlurpMediaSrc(post.imageUrl);
   return (
     <button
