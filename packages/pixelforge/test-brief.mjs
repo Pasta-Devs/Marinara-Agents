@@ -5240,4 +5240,74 @@ const cellarBrief = (prosperity) => ({
   assert.ok(bel && bel._sched.post, "and they still compile with an ordinary derived post");
 }
 
+// ── A NAMED WORKER HOLDS THEIR POST THROUGH THE DAY (0.9.0) ────────────────
+// The binding is only worth having if it survives the hours anybody is looking.
+// Six of the twelve cast kinds — healer, scholar, elder, child, wanderer, folk —
+// have no row in the schedule table at all and fall to "*:resident", whose DAY
+// entry is `public`: the plaza. So a named acolyte would hold the sanctuary at
+// dawn and at dusk and then walk out of it for 07:00-18:00, which is both the
+// longest daypart and the one a player is most likely to open a door in. The
+// `worker` tier exists to close exactly that, and it is keyed on having been
+// PLACED BY NAME rather than on a kind, the same way the keeper tier is keyed on
+// holding a building.
+{
+  const sealed = brief.validate(
+    {
+      name: "Cadenhall",
+      scale: "village",
+      prosperity: "modest",
+      places: [{ kind: "sanctuary", name: "St Aldwin's", flavor: "A cold stone nave." }],
+      cast: [
+        { name: "Prior Wen", role: "prior", kind: "elder", tint: "violet", home: "St Aldwin's", household: 1 },
+        { name: "Bel", role: "acolyte", kind: "folk", tint: "rose", home: "Cadenhall", workplace: "St Aldwin's", household: 2 },
+        { name: "Corin", role: "acolyte", kind: "folk", tint: "teal", home: "Cadenhall", workplace: "St Aldwin's", household: 2 },
+        { name: "Halla", role: "farmhand", kind: "folk", tint: "green", home: "Cadenhall", household: 3 },
+      ],
+    },
+    ctx,
+  );
+  const w = world.build(31337, "cozy-village", sealed);
+  const sim = new loadedPF.Sim(w);
+  const sanctuaryId = Object.entries(sealed._ids.zones).find(([, n]) => n === "St Aldwin's")[0];
+  const whereIs = (name) => {
+    for (const zoneId in w.zones) if (w.zones[zoneId].npcs.some((n) => n.name === name)) return zoneId;
+    return null;
+  };
+  const at = (min) => {
+    sim.clockMin = min;
+    sim.resolveSchedules();
+  };
+
+  // The `worker` flag is baked, and ONLY for the people the brief named.
+  const flagOf = (name) => {
+    for (const zoneId in w.zones) {
+      const npc = w.zones[zoneId].npcs.find((n) => n.name === name);
+      if (npc) return npc._sched.worker;
+    }
+    return null;
+  };
+  assert.equal(flagOf("Bel"), true, "a named worker is flagged as one");
+  assert.equal(flagOf("Halla"), false, "and nobody else is");
+
+  // MIDDAY IS THE POINT. Both acolytes are inside the sanctuary at noon; Halla,
+  // who was never assigned anywhere, keeps the plaza the generic row sends her to.
+  at(12 * 60);
+  assert.equal(whereIs("Bel"), sanctuaryId, "a named worker is at work at midday, not in the square");
+  assert.equal(whereIs("Corin"), sanctuaryId, "and so is the second one — the cap ownership imposed is gone");
+  assert.equal(whereIs("Halla"), "z1", "someone with no named workplace still spends the day in the settlement");
+
+  // And they are STILL two people, not one sprite on top of another.
+  const inNave = w.zones[sanctuaryId].npcs.filter((n) => n.name === "Bel" || n.name === "Corin");
+  assert.equal(inNave.length, 2, "both acolytes are in the nave at once");
+  assert.notEqual(
+    `${inNave[0].x},${inNave[0].y}`,
+    `${inNave[1].x},${inNave[1].y}`,
+    "on their own tiles, so both can be talked to",
+  );
+
+  // Night still belongs to the bed: a day job has no opinion about where you sleep.
+  at(23 * 60);
+  assert.notEqual(whereIs("Bel"), sanctuaryId, "a named worker goes home to sleep like anybody else");
+}
+
 console.log("brief validator + compiler: all cases passed");

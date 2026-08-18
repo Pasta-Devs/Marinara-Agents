@@ -3687,6 +3687,7 @@ PF.world = (() => {
         // on one tile makes the lower one impossible to talk to.
         spread = true;
       }
+      const worker = !!workZone;
       const spawnAt = walkableSpawn(zone, wander, spread ? npcId : null);
       zone.npcs.push({
         id: npcId,
@@ -3708,6 +3709,7 @@ PF.world = (() => {
           // stall counter); shared boxes disperse by NPC id.
           post: { zoneId: zone.id, wander, spread },
           keeper,
+          worker,
           home,
           public: { zoneId: v.id, wander: plazaBox() },
         },
@@ -3784,6 +3786,19 @@ PF.schedule = (() => {
     // the building rather than on being an elder: which KIND ends up keeping a
     // sanctuary is a question about the kind vocabulary, not about schedules.
     "*:resident:keeper": { dawn: "post", day: "post", dusk: "post", night: "home" },
+    // SOMEBODY THE BRIEF PLACED BY NAME (see the `worker` flag — a resolved
+    // `workplace`). Without a row like this the binding inverts itself exactly
+    // where it was supposed to help: half the cast kinds have no row of their own,
+    // so an acolyte or a shop assistant falls to "*:resident", whose DAY entry is
+    // the plaza — they would hold the building they were assigned to at dawn and
+    // dusk and then leave it for the eleven hours of daylight a player is most
+    // likely to open the door.
+    //
+    // Keyed on being named rather than on a kind, for the same reason the keeper
+    // tier is keyed on holding a building: it says nothing about WHO someone is,
+    // only that the brief already answered where they are. Night is still `home`,
+    // because a day job has no opinion about a bed.
+    "*:resident:worker": { dawn: "post", day: "post", dusk: "post", night: "home" },
     // Everyone else with a roof: on their own doorstep at dawn and again at dusk,
     // the square by day, and in bed at night.
     //
@@ -3811,6 +3826,8 @@ PF.schedule = (() => {
     const template =
       (sched.keeper ? TABLE[`${sched.kind}:${sched.standing}:keeper`] : null) ??
       (sched.keeper ? TABLE[`*:${sched.standing}:keeper`] : null) ??
+      (sched.worker ? TABLE[`${sched.kind}:${sched.standing}:worker`] : null) ??
+      (sched.worker ? TABLE[`*:${sched.standing}:worker`] : null) ??
       TABLE[`${sched.kind}:${sched.standing}`] ??
       TABLE[`*:${sched.standing}`] ??
       DEFAULT;

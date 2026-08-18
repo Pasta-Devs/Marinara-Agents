@@ -1965,6 +1965,7 @@ PF.world = (() => {
         // on one tile makes the lower one impossible to talk to.
         spread = true;
       }
+      const worker = !!workZone;
       const spawnAt = walkableSpawn(zone, wander, spread ? npcId : null);
       zone.npcs.push({
         id: npcId,
@@ -1986,6 +1987,7 @@ PF.world = (() => {
           // stall counter); shared boxes disperse by NPC id.
           post: { zoneId: zone.id, wander, spread },
           keeper,
+          worker,
           home,
           public: { zoneId: v.id, wander: plazaBox() },
         },
