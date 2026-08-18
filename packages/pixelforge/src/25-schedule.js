@@ -18,9 +18,15 @@ PF.schedule = (() => {
   // Handle names: post = the working/day anchor, home = the sleep node,
   // public = the settlement's plaza. See 20-world's cast loop for the geometry.
   const TABLE = {
-    // The innkeeper never leaves the inn — it is the fixed point the evening
-    // crowd converges on, and it means the lit building is never empty.
-    "host:resident": { dawn: "post", day: "post", dusk: "post", night: "post" },
+    // The innkeeper holds the inn all day — it is the fixed point the evening
+    // crowd converges on, and it means the lit building is never empty. At night
+    // they turn in like anybody else: a brief that homes them AT the inn (the
+    // usual shape) puts their bed in the inn's own living quarters, so the
+    // building is still occupied and they are simply in it asleep rather than
+    // standing among the tables at 3am. One homed at a house down the road walks
+    // to it — their guests are still upstairs. With no bed anywhere the handle
+    // falls back to `post` and this row behaves exactly as it always did.
+    "host:resident": { dawn: "post", day: "post", dusk: "post", night: "home" },
     // The watch keeps the night, so the settlement never looks abandoned.
     "guard:resident": { dawn: "home", day: "post", dusk: "post", night: "post" },
     // Trades work their building through the day and sleep at their dwelling.

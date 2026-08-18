@@ -2055,13 +2055,72 @@ PF.world = (() => {
   // church-less settlement claims no lot and no dwelling slot, which is also what
   // keeps every brief sealed before 0.8.0 compiling to the same tiles.
   const PLACE_BOUND_SPECIALS = new Set(["sanctuary"]);
+  // ── Live-work premises vs duty stations ─────────────────────────────────────
+  // A workplace is a HOME only when the trade is carried on where the family
+  // lives. The smith's household sleeps over the forge, a farming family lives on
+  // the farm, an innkeeper lives at the inn and a sanctuary's keeper lives in it —
+  // one household, one roof, one lot. Counting a tradesman's shop AND a separate
+  // house for the same family spent two of a settlement's handful of lots on one
+  // household, and at the small end the specials then ate every lot and nobody got
+  // a dwelling at all.
+  //
+  // A DUTY STATION is somewhere people GO and come back from. Nobody lives in the
+  // guard post; a reeve works at the hall and goes home to a house like anyone
+  // else. Its owner is an ordinary household the housing arithmetic still owes a
+  // roof. A future post-like workplace joins that side by staying OUT of this set
+  // — no logic moves. And a brief that wants someone to live in a grand hall
+  // already has the escape hatch: home that cast member at the place, which the
+  // compiler honours without any of this.
+  const LIVE_WORK_SPECIALS = new Set(["shop", "farm", "gathering", "sanctuary"]);
+  // The interior a special opens into when the compiler mints it on its OWN lot,
+  // and the word its zone is named for. A special with no entry here is a facade,
+  // and the two tables are read TOGETHER: a live-work special only houses its
+  // household when there is a room with beds behind the door. gathering and
+  // sanctuary are live-work but never self-lot — they bind to the place the brief
+  // named, where that brief's own `home` field says who lives there.
+  const SELF_LOT_INTERIORS = {
+    shop: { kind: "shop", label: "shop" },
+    farm: { kind: "farm", label: "farm" },
+  };
   const INTERIOR_DIMS = {
     gathering: [16, 12],
     workshop: [16, 12],
     hall: [18, 12],
     sanctuary: [16, 14], // the nave needs length: the aisle is the walk to the altar
-    shop: [14, 10],
+    // A live-work shop carries a household's bedrooms in the same shell as the
+    // shop floor, so it is two rows deeper than a plain dwelling: the sleeping
+    // band, the corridor its bedroom doors open onto, and the counter run below.
+    shop: [14, 12],
+    farm: [14, 10],
     dwelling: [14, 10],
+  };
+  // ── Living quarters in a building the brief NAMED ───────────────────────────
+  // `home` naming a place is the sanctioned way for a brief to say "this person
+  // lives HERE" — it is how a sanctuary's keeper has always worked and it is the
+  // escape hatch for a lord who lives in the keep. So a named place has to sleep
+  // whoever is homed in it, by the same machinery as anywhere else.
+  //
+  // This is NOT the same question as LIVE_WORK_SPECIALS, and the two must not be
+  // folded together: that table decides who the compiler houses ON ITS OWN
+  // INITIATIVE (a smith gets a home over the forge without being asked; nobody is
+  // given a bed in the guard post). An explicit `home` is the BRIEF OVERRIDING
+  // that default, and a default that says "by convention nobody lives here" has
+  // no business refusing it — a hall is a duty station until a brief homes the
+  // lord in it, and then it is his house.
+  //
+  // `top` is the row the quarters band starts on and `floor0` is where the
+  // building's own floor starts WITHOUT quarters; the difference is how many rows
+  // the building grows. Everything but the gathering hangs its quarters under the
+  // shell's own wall row. The gathering cannot: the guest wing is already there
+  // and the berths a settlement was BUILT to offer must not move because somebody
+  // lives in, so its quarters sit below the guest corridor — which is exactly why
+  // the quarters plan holds a room's width open (see SLEEP_PLANS.quarters).
+  const PLACE_QUARTERS = {
+    gathering: { top: 8, floor0: 6 },
+    hall: { top: 2, floor0: 2 },
+    sanctuary: { top: 2, floor0: 2 },
+    workshop: { top: 2, floor0: 2 },
+    dwelling: { top: 2, floor0: 2 },
   };
   // ── Sleeping arrangements ───────────────────────────────────────────────────
   // A sleeping place is ONE TILE an NPC stands on — the bed is the placement, not
@@ -2142,9 +2201,16 @@ PF.world = (() => {
    *  floor: a walled-off pocket nobody can walk into is the one shape the
    *  reachability invariant forbids.
    *
+   *  `capNorth` paints the matching wall run along the row ABOVE the band, for a
+   *  band that does NOT sit against the shell's own wall row — living quarters
+   *  slotted into the middle of a building. Every other caller's band is flush
+   *  under the shell wall and needs nothing. The two runs are painted here rather
+   *  than by the caller so they can never drift apart and leave a room open at
+   *  the top.
+   *
    *  Returns one record per room placed — {purpose, x0, y0, x1, y1, doorX}
    *  merged with whatever its furnisher returned. */
-  function partitionRooms(zone, area, rooms) {
+  function partitionRooms(zone, area, rooms, capNorth) {
     const placed = [];
     let x = area.x0;
     for (const room of rooms) {
@@ -2152,7 +2218,10 @@ PF.world = (() => {
       if (x1 > area.x1) break; // the caller sized the list; this is the floor under it
       // South wall first, then the door back out of it. The run covers the
       // divider column too, so the wall reads as one run rather than a comb.
-      for (let wx = x; wx <= Math.min(x1 + 1, area.x1); wx++) put(zone, wx, area.y1 + 1, "object", "wall", true);
+      for (let wx = x; wx <= Math.min(x1 + 1, area.x1); wx++) {
+        put(zone, wx, area.y1 + 1, "object", "wall", true);
+        if (capNorth) put(zone, wx, area.y0 - 1, "object", "wall", true);
+      }
       const doorX = x + ((room.span - 1) >> 1);
       put(zone, doorX, area.y1 + 1, "object", "door", false);
       if (x1 < area.x1) for (let wy = area.y0; wy <= area.y1; wy++) put(zone, x1 + 1, wy, "object", "wall", true);
@@ -2181,6 +2250,16 @@ PF.world = (() => {
   const SLEEP_PLANS = {
     dwelling: { band: 3, span: 4, soft: 2, max: 4 },
     gathering: { band: 3, span: 4, soft: 1, max: 4, spare: true },
+    // LIVING QUARTERS — the rooms a building the brief NAMED grows when the brief
+    // homes somebody in it (the keeper's rooms behind the church, the alewife's
+    // over the tap). Three to a room rather than the dwelling's two, and
+    // `keepOpen` holds a room's width of the band in reserve, because a quarters
+    // band is the only one that can land in the MIDDLE of a building: the columns
+    // it leaves free are how the rest of the building is reached past it, and a
+    // wing that took the whole width would seal off everything above it. The
+    // reserve caps the wing at two rooms — eight bunked, above CAPS.household —
+    // and anything past that falls to the open plan, which walls nothing.
+    quarters: { band: 3, span: 4, soft: 3, max: 4, keepOpen: true },
   };
 
   // ── What a communal building was BUILT for ──────────────────────────────────
@@ -2233,17 +2312,17 @@ PF.world = (() => {
    *  the compiler's own over-subscription merge does, and a roof carrying two or
    *  three whole households IS a bunkhouse. Which is the point: the open plan has
    *  to mean an orphanage, a barracks or a doss-house, never a big family. */
-  function layoutSleeping(zone, w, h, kind, sleepers) {
+  function layoutSleeping(zone, w, h, kind, sleepers, top = 2) {
     const plan = SLEEP_PLANS[kind];
-    const area = { x0: 1, y0: 2, x1: w - 2, y1: 1 + plan.band };
+    const area = { x0: 1, y0: top, x1: w - 2, y1: top - 1 + plan.band };
     // n rooms of `span` need n-1 dividers between them: n*(span+1) - 1 tiles.
-    const fits = Math.floor((area.x1 - area.x0 + 2) / (plan.span + 1));
+    const fits = Math.floor((area.x1 - area.x0 + 2) / (plan.span + 1)) - (plan.keepOpen ? 1 : 0);
     const count = plan.spare ? fits : Math.min(fits, Math.ceil(sleepers / plan.soft));
     // `max` is policy; the wall run is physics. Take the lower, or a plan that
     // over-promised would hand a room more sleepers than it has tiles for and
     // the surplus would quietly fall back to the door apron with no bed at all.
     const holds = Math.min(plan.max, 2 * bedsAlong(plan.span));
-    if (count < 1 || sleepers > count * holds) return dormitory(zone, w, h, sleepers);
+    if (count < 1 || sleepers > count * holds) return dormitory(zone, w, h, sleepers, top);
     const rooms = partitionRooms(
       zone,
       area,
@@ -2256,6 +2335,7 @@ PF.world = (() => {
         // widened past its budget from carving furniture-less rooms.
         sleepers: plan.spare ? Math.max(1, taken) : taken,
       })),
+      plan.keepOpen,
     );
     return { rooms, beds: rooms.flatMap((room) => room.beds ?? []) };
   }
@@ -2269,9 +2349,9 @@ PF.world = (() => {
    *  here means the bodies already outran the rooms. Nothing on this path asks
    *  who they are — a barracks of adults and a house full of children compile to
    *  the same tiles, because the only input is how many have to fit. */
-  function dormitory(zone, w, h, sleepers) {
+  function dormitory(zone, w, h, sleepers, top = 2) {
     const beds = [];
-    for (const y of BED_ROWS) {
+    for (const y of BED_ROWS.map((row) => row - BED_ROWS[0] + top)) {
       if (y > h - 3 || beds.length >= sleepers) break;
       beds.push(...paintRun(zone, sleepRun(2, w - 2, y, sleepers - beds.length, true)));
     }
@@ -2291,36 +2371,49 @@ PF.world = (() => {
       // and the common room keeps everything south of them — which is also the
       // shape a travelling group or a player party needs, several beds behind
       // one door, long before there is anything but a lone drifter to put in it.
+      //
+      // The guest wing keeps the band under the shell wall whether or not the
+      // building also has living quarters — the berths a settlement was BUILT to
+      // offer do not move because somebody lives here. Quarters land below it
+      // (see PLACE_QUARTERS), and the common room starts at `floor0` either way.
       const sleeping = layoutSleeping(z, w, h, "gathering", options.sleepers ?? 0);
+      const floor = options.floor0;
       // Rug first: a ground fill clears solidity, so painting it after the
       // tables would silently make one of them walk-through (the hall's lesson).
-      fillRect(z, 5, h - 4, 4, 3, "ground", "rug", false);
-      fillRect(z, 3, h - 5, 5, 1, "object", "counter", true);
-      put(z, w - 6, h - 4, "object", "table", true);
-      put(z, w - 4, h - 2, "object", "table", true);
-      z.lights.push({ x: 4, y: h - 5 }, { x: w - 6, y: h - 4 });
+      // Nothing solid on `floor` itself: it is the row the rooms above open onto.
+      fillRect(z, 5, floor + 2, 4, 3, "ground", "rug", false);
+      fillRect(z, 3, floor + 1, 5, 1, "object", "counter", true);
+      put(z, w - 6, floor + 2, "object", "table", true);
+      put(z, w - 4, floor + 4, "object", "table", true);
+      z.lights.push({ x: 4, y: floor + 1 }, { x: w - 6, y: floor + 2 });
       return sleeping;
     },
-    hall(z, w, h) {
+    hall(z, w, h, options) {
       // Rug first: its ground fill clears solidity, so painting it after the
-      // table silently made the table walk-through (review finding).
-      fillRect(z, 3, 3, w - 6, h - 6, "ground", "rug", false);
-      fillRect(z, 4, 5, w - 8, 1, "object", "table", true);
-      z.lights.push({ x: 3, y: 2 }, { x: w - 4, y: 2 });
+      // table silently made the table walk-through (review finding). Everything
+      // is measured from `floor0` — the first row of the hall's own floor, which
+      // moves down when the brief homes somebody in living quarters above it.
+      const floor = options.floor0;
+      fillRect(z, 3, floor + 1, w - 6, h - floor - 4, "ground", "rug", false);
+      fillRect(z, 4, floor + 3, w - 8, 1, "object", "table", true);
+      z.lights.push({ x: 3, y: floor }, { x: w - 4, y: floor });
     },
-    sanctuary(z, w, h) {
+    sanctuary(z, w, h, options) {
       // A nave the player walks the length of: a carpet aisle from the door to
       // the altar, benches in rows either side, candle plinths flanking the
       // altar. Aisle first — the hall's lesson: a ground fill clears solidity,
       // so painting it after the altar would make the altar walk-through.
+      // Measured from `floor0`: a church whose keeper LIVES in it grows the
+      // quarters above the nave, and the nave keeps its full length below them.
+      const floor = options.floor0;
       const aisleX = (w / 2) | 0;
-      fillRect(z, aisleX, 3, 1, h - 4, "ground", "rug", false);
-      fillRect(z, aisleX - 2, 3, 5, 1, "object", "altar", true);
+      fillRect(z, aisleX, floor + 1, 1, h - floor - 2, "ground", "rug", false);
+      fillRect(z, aisleX - 2, floor + 1, 5, 1, "object", "altar", true);
       for (const candleX of [aisleX - 3, aisleX + 3]) {
-        put(z, candleX, 3, "object", "wallStone", true);
-        z.lights.push({ x: candleX, y: 3 });
+        put(z, candleX, floor + 1, "object", "wallStone", true);
+        z.lights.push({ x: candleX, y: floor + 1 });
       }
-      for (let row = 6; row < h - 2; row += 2) {
+      for (let row = floor + 4; row < h - 2; row += 2) {
         fillRect(z, 3, row, aisleX - 3, 1, "object", "counter", true);
         fillRect(z, aisleX + 1, row, aisleX - 3, 1, "object", "counter", true);
       }
@@ -2328,22 +2421,48 @@ PF.world = (() => {
       put(z, w - 3, 1, "object", "window", true);
       z.lights.push({ x: 2, y: 1 }, { x: w - 3, y: 1 });
     },
-    workshop(z, w) {
-      fillRect(z, 3, 3, 4, 1, "object", "counter", true);
-      put(z, w - 4, 5, "object", "table", true);
-      z.lights.push({ x: 3, y: 3 });
+    workshop(z, w, h, options) {
+      const floor = options.floor0;
+      fillRect(z, 3, floor + 1, 4, 1, "object", "counter", true);
+      put(z, w - 4, floor + 3, "object", "table", true);
+      z.lights.push({ x: 3, y: floor + 1 });
     },
-    shop(z, w, h) {
+    shop(z, w, h, options) {
+      // A LIVE-WORK premises: the trade is carried on where the family lives, so
+      // the household's bedrooms take the north band exactly as a dwelling's do
+      // and the shop floor is what is left south of them. Sleeping FIRST —
+      // partitionRooms owns those rows, and a fitting painted into them would be
+      // walled inside somebody's bedroom.
+      const sleeping = layoutSleeping(z, w, h, "dwelling", options.sleepers ?? 0);
       // Never a bare room with a door on it: a counter to be served over and a
       // wall of stock behind it. An empty shop reads worse than a locked one
       // (maintainer call), and the owner's `post` handle moves in here, so it is
       // staffed as well as stocked. The counter run stops short of the east wall
       // so the player can walk around its end — an unreachable pocket behind the
       // counter would strand the shopkeeper the room exists to show.
-      for (let x = 2; x <= w - 3; x += 2) put(z, x, 2, "object", "shelf", true);
-      fillRect(z, 3, 4, w - 7, 1, "object", "counter", true);
-      fillRect(z, 3, h - 3, 3, 2, "ground", "rug", false);
-      z.lights.push({ x: 3, y: 4 }, { x: w - 3, y: 2 });
+      //
+      // Everything sits at least two rows off the sleeping band: the row directly
+      // under the bedroom wall is the corridor every bedroom door opens onto, and
+      // stock across it would seal the household into their own rooms.
+      for (let x = 2; x <= w - 3; x += 2) put(z, x, h - 5, "object", "shelf", true);
+      fillRect(z, 3, h - 3, w - 7, 1, "object", "counter", true);
+      fillRect(z, 3, h - 2, 3, 1, "ground", "rug", false);
+      z.lights.push({ x: 3, y: h - 3 }, { x: w - 3, y: h - 5 });
+      return sleeping;
+    },
+    farm(z, w, h, options) {
+      // The farmhouse half of a farm: the land is outside, what is in here is the
+      // house a farming family sleeps in. Bedrooms along the north band like any
+      // other household, and the working half under them — the long bench a day's
+      // crop is sorted on and the table that day ends at.
+      const sleeping = layoutSleeping(z, w, h, "dwelling", options.sleepers ?? 0);
+      // Rug first: a ground fill clears solidity, so painting it after the bench
+      // would silently make the bench walk-through (the hall's lesson).
+      fillRect(z, w - 6, h - 3, 3, 2, "ground", "rug", false);
+      fillRect(z, 2, h - 3, 4, 1, "object", "counter", true);
+      put(z, 2, h - 2, "object", "table", true);
+      z.lights.push({ x: 2, y: h - 3 }, { x: w - 4, y: h - 3 });
+      return sleeping;
     },
     dwelling(z, w, h, options) {
       // The beds ARE the feature: one per resident, 1x1 and non-solid, so a night
@@ -2364,7 +2483,17 @@ PF.world = (() => {
   };
 
   function interiorRoom(id, name, kind, options) {
-    const [w, h] = INTERIOR_DIMS[kind] || INTERIOR_DIMS.dwelling;
+    const [w, baseH] = INTERIOR_DIMS[kind] || INTERIOR_DIMS.dwelling;
+    const opts = options || {};
+    // LIVING QUARTERS. `residents` is the household the brief HOMED in this
+    // building; when there is one, the building grows the rows to sleep them and
+    // its own floor starts below the quarters. Nobody homed here => not one tile
+    // moves, so every brief that names a place and houses nobody in it compiles
+    // exactly what it always did.
+    const quarters = PLACE_QUARTERS[kind];
+    const sleepingIn = quarters && (opts.residents ?? 0) > 0 ? quarters : null;
+    const floor0 = sleepingIn ? sleepingIn.top + SLEEP_PLANS.quarters.band + 1 : (quarters?.floor0 ?? 2);
+    const h = baseH + (sleepingIn ? floor0 - quarters.floor0 : 0);
     const zone = makeZone(id, name, w, h, "floor");
     for (let x = 0; x < w; x++) {
       put(zone, x, 0, "object", "wallStone", true);
@@ -2375,12 +2504,29 @@ PF.world = (() => {
       put(zone, 0, y, "object", "wallStone", true);
       put(zone, w - 1, y, "object", "wallStone", true);
     }
-    const furnished = (FURNISH[kind] || FURNISH.dwelling)(zone, w, h, options || {}) ?? {};
+    // Quarters BEFORE the furnisher: partitionRooms owns those rows, and a
+    // fitting painted into them would end up walled inside somebody's bedroom.
+    // Same call, same plan machinery and the same ROOM_FURNISH.bedroom as a
+    // household anywhere else gets — so a keeper's family gets bedrooms and bunks
+    // by the density rule, not a bed each regardless of size.
+    const living = sleepingIn ? layoutSleeping(zone, w, h, "quarters", opts.residents, sleepingIn.top) : null;
+    const furnished = (FURNISH[kind] || FURNISH.dwelling)(zone, w, h, { ...opts, floor0 }) ?? {};
     // What the furnisher carved and where it put the sleepers. Compiler output,
     // not save data: a zone is rebuilt from the seed on every load, so rooms and
     // beds cost ZERO save fields — the same deal schedules took.
-    zone.rooms = furnished.rooms ?? [];
+    //
+    // `beds` and `homeBeds` are kept APART on purpose. `beds` is what the building
+    // OFFERS, in claim order — an inn's guest berths — and `homeBeds` belongs to
+    // the people who live here. A keeper bedded down in a rented room is wrong and
+    // a traveller handed the keeper's bed is worse, so the two lists never
+    // intersect: they are carved from different bands of the building.
+    // Quarters rooms are marked so anything counting what the building OFFERS can
+    // tell them from what it keeps for itself; they are in `rooms` all the same,
+    // because `rooms` is what the wander boxes avoid and what the reachability
+    // sweep walks, and a private room is both whoever it belongs to.
+    zone.rooms = (furnished.rooms ?? []).concat((living?.rooms ?? []).map((room) => ({ ...room, quarters: true })));
     zone.beds = furnished.beds ?? [];
+    zone.homeBeds = living?.beds ?? [];
     const doorX = (w / 2) | 0;
     put(zone, doorX, h - 1, "object", "door", false);
     zone.spawn = { x: doorX, y: h - 2 };
@@ -2403,6 +2549,14 @@ PF.world = (() => {
       label: "Step outside",
     });
   }
+
+  /** Where a live-work owner WORKS inside their own building, keyed by special.
+   *  Only a shop has a station to be manned — the row between the stock and the
+   *  counter — so it is the only entry: a farmer works the land and comes back
+   *  in, and everyone else keeps the door apron they have always used. */
+  const WORK_POSTS = {
+    shop: (w, h) => ({ x0: 3, y0: h - 4, x1: w - 5, y1: h - 4 }),
+  };
 
   function compile(brief, seed) {
     const activeTheme = PF.art.setTheme ? PF.art.setTheme(brief.theme) : brief.theme;
@@ -2440,18 +2594,27 @@ PF.world = (() => {
     // ── Building arithmetic (§4.5) ──
     // A settlement dwelling is minted only for a resident who actually lives at
     // the root (home === the settlement). A resident whose home is a place or the
-    // wilds — a forager who lives in the woods, a smith who sleeps at the forge —
-    // lives THERE and anchors to that zone in the cast loop, so a town house would
-    // sit permanently empty. Transient/fringe/destitute NPCs get no house at all
-    // (they anchor to a standing-specific rest spot). This mirrors the harness's
-    // rootHouseholds, so compiler and invariant agree by construction.
-    const households = [
-      ...new Set(
-        brief.cast
-          .filter((m) => (m.standing ?? "resident") === "resident" && m.home === brief.name)
-          .map((m) => m.household),
-      ),
-    ].sort((a, b) => a - b);
+    // wilds — a forager who lives in the woods, a chaplain who lives in her own
+    // church — lives THERE and anchors to that zone in the cast loop, so a town
+    // house would sit permanently empty. Transient/fringe/destitute NPCs get no
+    // house at all (they anchor to a standing-specific rest spot).
+    //
+    // …with ONE exception, and it is the drop guard's other half: a named place
+    // that never claimed a lot compiles no zone, so the building that resident
+    // "lives in" does not exist. They live in the settlement like anybody else
+    // and the town owes them a roof. `built` is the list of places that got one.
+    const strandedFrom = (member, built) =>
+      interiorPlaces.some((place) => place.name === member.home) && !built.some((place) => place.name === member.home);
+    const townHouseholds = (built) =>
+      [
+        ...new Set(
+          brief.cast
+            .filter(
+              (m) => (m.standing ?? "resident") === "resident" && (m.home === brief.name || strandedFrom(m, built)),
+            )
+            .map((m) => m.household),
+        ),
+      ].sort((a, b) => a - b);
     const specials = [];
     const seenSpecial = new Set();
     for (const member of brief.cast) {
@@ -2468,17 +2631,19 @@ PF.world = (() => {
     // hall to the leader's — their doors become the interior portals.
     const interiorPlaces = brief.places.filter((p) => p.kind !== "wilds");
     const wildsPlaces = brief.places.filter((p) => p.kind === "wilds");
-    const budget = Math.max(scale.buildings, households.length ? 1 : 0);
-    // Merge over-subscribed households into shared blocks: a merged household
-    // keeps every member housed (never dropped), just under a shared roof.
-    const dwellingSlots = Math.max(1, budget - specials.length - interiorPlaces.length);
-    const householdGroups = [];
-    for (const [index, household] of households.entries()) {
-      const slot = index < dwellingSlots ? index : dwellingSlots - 1;
-      (householdGroups[slot] ??= []).push(household);
-    }
+    // How many lots the row placer bothers to lay out. It is a ceiling and never
+    // the binding one — the map's own width runs out first at every scale — so
+    // the arithmetic below counts the lots that actually exist, not this.
+    const budget = scale.buildings;
 
     // Row-placed buildings in the upper and lower thirds, straddling the plaza.
+    // Laid BEFORE the arithmetic below, because the lots are the arithmetic's
+    // input: `scale.buildings` only caps how many the placer bothers to lay, and
+    // the map's own width is what actually decides (two on an outpost or a
+    // hamlet, six in a village, eight in a town — all well under the budget).
+    // Sizing the dwellings off the budget instead was half of the housing bug:
+    // the sum promised slots the ground did not have, so `Math.max(1, …)` handed
+    // out a dwelling slot that no lot ever backed.
     const buildings = [];
     const slots = [];
     const rowYs = [Math.max(4, midY - 9), Math.min(v.h - 8, midY + 4)];
@@ -2490,6 +2655,77 @@ PF.world = (() => {
     }
     let slotIndex = 0;
     const takeSlot = () => slots[slotIndex++] ?? null;
+
+    // ── Who still owes a roof ───────────────────────────────────────────────────
+    // Every household needs somewhere to sleep, and a LIVE-WORK special IS that
+    // somewhere for the family that runs it — so the lots are handed out against
+    // one demand ("how many households still need a house"), never against a
+    // house-per-household PLUS a workshop-per-trade that counted the same family
+    // twice. `owed` is who has nowhere yet; it shrinks as the lots are claimed.
+    //
+    // The LAST free lot belongs to whoever is still in it. A workshop or a named
+    // place that would leave a family with no bed does not take the final lot;
+    // the house does, and the merge below puts every remaining household under
+    // that one roof rather than dropping any of them. That is a floor, not a
+    // priority: while there is more than one lot left, places and specials claim
+    // theirs in the order they always have.
+    /** Lots to hold back: one, whenever `stillOwed` people would otherwise be
+     *  left with nowhere to sleep. ONE rule, read by both claimants below. */
+    const reserve = (stillOwed) => (stillOwed > 0 ? 1 : 0);
+    let free = slots.length;
+    // Which places get lots, and only THEN who is left needing a house — the two
+    // define each other, and this is the order that unties them. Holding a lot
+    // back can only ever strand MORE people (one fewer place is built), so a
+    // reservation judged against the most generous split is still right after it
+    // is applied: no fixed point to iterate.
+    const generous = interiorPlaces.slice(0, Math.min(interiorPlaces.length, free));
+    const placeLots = Math.max(0, free - reserve(townHouseholds(generous).length));
+    const placesBuilt = interiorPlaces.slice(0, Math.min(interiorPlaces.length, placeLots));
+    free -= placesBuilt.length;
+    const households = townHouseholds(placesBuilt);
+    const owed = new Set(households);
+    /** The household a special HOUSES: only a live-work premises the compiler
+     *  mints itself, and only when its owner actually lives at the settlement
+     *  root. An owner homed at a named place lives there already, so their
+     *  building is a pure workplace and houses nobody. */
+    const liveWorkHousehold = (entry) =>
+      LIVE_WORK_SPECIALS.has(entry.special) && SELF_LOT_INTERIORS[entry.special] && entry.owner.home === brief.name
+        ? entry.owner.household
+        : null;
+
+    // {special, owner, boundPlace} — boundPlace set when it shares a named
+    // place's facade (and so claims no lot of its own).
+    const specialsBuilt = [];
+    for (const entry of specials) {
+      const boundPlace = placesBuilt.find((place) => interiorKindForSpecial(entry.special) === place.kind) ?? null;
+      if (boundPlace) {
+        specialsBuilt.push({ ...entry, boundPlace, household: null });
+        continue;
+      }
+      // The place exists but never claimed a lot, so there is nothing to keep:
+      // a place-bound special has no facade of its own to fall back on.
+      if (PLACE_BOUND_SPECIALS.has(entry.special)) continue;
+      const household = liveWorkHousehold(entry);
+      const houses = household !== null && owed.has(household);
+      // Skipped rather than broken out of: a later special that houses the last
+      // owed household needs no reservation and can still take the lot.
+      if (free < 1 + reserve(owed.size - (houses ? 1 : 0))) continue;
+      free--;
+      if (houses) owed.delete(household);
+      specialsBuilt.push({ ...entry, boundPlace: null, household: houses ? household : null });
+    }
+    // Merge over-subscribed households into shared blocks: a merged household
+    // keeps every member housed (never dropped), just under a shared roof. The
+    // reservation above guarantees at least one lot here whenever anyone is owed
+    // one, so the merge always has somewhere to merge INTO.
+    const dwellingHouseholds = households.filter((household) => owed.has(household));
+
+    const dwellingSlots = Math.min(free, dwellingHouseholds.length);
+    const householdGroups = [];
+    for (const [index, household] of dwellingHouseholds.entries()) {
+      const slot = index < dwellingSlots ? index : dwellingSlots - 1;
+      (householdGroups[slot] ??= []).push(household);
+    }
     // Head-room over a lot. A tall building grows UPWARD so its door stays on the
     // row the rest of the lot geometry expects — the apron, the portal's outside
     // tile and the owner's wander box are all measured from the door. Upward it
@@ -2498,7 +2734,7 @@ PF.world = (() => {
     // bottom one: a roofed road reads as a tunnel. An outpost's rows sit tight
     // against both, so there the clamp is simply zero and the facade carries it.
     const headroom = (slotY) => Math.max(0, slotY - (slotY > midY ? midY + 3 : 4));
-    for (const place of interiorPlaces) {
+    for (const place of placesBuilt) {
       const slot = takeSlot();
       if (!slot) break;
       const tall = place.kind === "sanctuary";
@@ -2520,20 +2756,26 @@ PF.world = (() => {
       );
       buildings.push({ door: b, rect: { x: slot.x, y: top, w: width, h: height }, boundPlace: place });
     }
-    for (const { special, owner } of specials) {
+    for (const { special, owner, boundPlace, household } of specialsBuilt) {
       // A special whose interior already exists as a place shares that facade.
-      const bound = buildings.find((b) => b.boundPlace && interiorKindForSpecial(special) === b.boundPlace.kind);
-      if (bound) {
-        bound.owner = owner;
+      if (boundPlace) {
+        const bound = buildings.find((b) => b.boundPlace === boundPlace);
+        if (bound) bound.owner = owner;
         continue;
       }
-      // The place exists but never claimed a lot, so there is nothing to keep:
-      // a place-bound special has no facade of its own to fall back on.
-      if (PLACE_BOUND_SPECIALS.has(special)) continue;
       const slot = takeSlot();
       if (!slot) break;
       const b = building(v, slot.x, slot.y, 6, 4, 2, [4]);
-      buildings.push({ door: b, rect: { x: slot.x, y: slot.y, w: 6, h: 4 }, special, owner });
+      buildings.push({
+        door: b,
+        rect: { x: slot.x, y: slot.y, w: 6, h: 4 },
+        special,
+        owner,
+        // A live-work premises carries its owner's household: the same field a
+        // dwelling uses, so one interior pass sleeps both and the "who lives
+        // here" lookups in the cast loop need to know nothing about specials.
+        ...(household === null ? {} : { households: [household] }),
+      });
     }
     for (const group of householdGroups) {
       const slot = takeSlot();
@@ -2590,6 +2832,15 @@ PF.world = (() => {
     const shopFrontReserved = buildings
       .filter((b) => b.special === "shop" || b.boundPlace?.kind === "workshop")
       .map((b) => ({ x: b.door.doorX + 2, y: b.door.doorY + 1 }));
+    // The approach road each wilds comes back onto. The wilds pass runs AFTER
+    // this scatter and opens the border ring at the map edge, but the tile the
+    // portal actually delivers the player to is the ROAD tile one column inside
+    // it — which nothing reserved, so a scattered trunk could land exactly there
+    // and the walk home arrived inside a tree. East for the first wilds, west for
+    // the second, mirroring the portal wiring below.
+    const wildsArrivals = wildsPlaces.flatMap((_, index) =>
+      [midY - 1, midY].map((y) => ({ x: index === 0 ? v.w - 2 : 1, y })),
+    );
     scatterTrees(
       v,
       rnd,
@@ -2598,11 +2849,13 @@ PF.world = (() => {
         doorRects.map((d) => ({ x: d.x, y: d.y + 1 })),
         stallReserved,
         shopFrontReserved,
+        wildsArrivals,
       ),
     );
     zones.z1 = v;
 
     // ── Interior zones ──
+    const bedFor = new Map(); // cast member -> {zoneId, x, y}, their own bed tile
     for (const place of interiorPlaces) {
       const id = zoneIdForPlace(place);
       if (!id) continue;
@@ -2618,10 +2871,31 @@ PF.world = (() => {
       // tonight's guest list (see GUEST_BERTHS), so the wing is the same wing on
       // a quiet night as on a full one and the transients the brief did bring
       // compete for berths that were already there.
-      const zone = interiorRoom(id, place.name, place.kind, { sleepers: guestBerths(brief) });
+      //
+      // Who the BRIEF homed in this building. `home` naming a place is the
+      // sanctioned way to say "this person lives here" — the chaplain in her own
+      // church, the alewife over her own tap room — so the building has to sleep
+      // them. Without this they stood on the bare floor of the building they live
+      // in at midnight, which is the exact opposite of what the rooms were for.
+      const residents = brief.cast.filter(
+        (member) => (member.standing ?? "resident") === "resident" && zoneIdByName.get(member.home) === id,
+      );
+      const zone = interiorRoom(id, place.name, place.kind, {
+        // Guest berths are the GATHERING's alone — what a settlement of this size
+        // and means was built to offer travellers. Nothing else rents rooms, so
+        // nothing else lays them; a house or a church sleeps only its own people.
+        sleepers: place.kind === "gathering" ? guestBerths(brief) : 0,
+        residents: residents.length,
+      });
       zone.flavor = place.flavor;
       zones[id] = zone;
       linkInterior(v, zone, facade.door, `Enter ${place.name}`);
+      // Their own bed each, out of the quarters and never out of the guest
+      // berths — the two lists are carved from different bands (interiorRoom).
+      residents.forEach((member, index) => {
+        const bed = zone.homeBeds[index];
+        if (bed) bedFor.set(member, { zoneId: id, x: bed.x, y: bed.y });
+      });
     }
 
     // ── Wilds zones, hung off alternating map edges ──
@@ -2697,57 +2971,55 @@ PF.world = (() => {
       zones[id] = zone;
     });
 
-    // ── Dwelling and shop interiors ──
+    // ── Dwelling and workplace interiors ──
     // Until now a dwelling was a facade with nothing behind it, so a resident the
     // schedule sent home at night had nowhere to BE and "turned in" rendered as
-    // hugging their own doorstep. Every dwelling and every shop now opens, on the
-    // building's existing door, and each resident gets a bed of their own inside.
+    // hugging their own doorstep. Every dwelling and every live-work premises now
+    // opens, on the building's existing door, and each resident gets a bed of
+    // their own inside — the smith's child sleeps in the smithy by exactly the
+    // same rules as any other family, because it is the same call.
     //
-    // Neither claims a World Maps row (spec §8): a building is ONE location and
+    // None claims a World Maps row (spec §8): a building is ONE location and
     // these are rooms inside one, not destinations. Only a NAMED brief place is a
     // destination — and the locations route is additive with NO delete, so a row
     // written to a player's real map is permanent and the gate has to be right
     // the first time.
-    const bedFor = new Map(); // cast member -> {zoneId, x, y}, their own bed tile
     for (const b of buildings) {
-      if (b.households) {
-        // Everyone sleeping under this roof, in cast order — the same predicate
-        // `households` was derived from, so the room's beds and the dwelling
-        // arithmetic can never disagree about who lives here.
-        const residents = brief.cast.filter(
-          (m) =>
-            (m.standing ?? "resident") === "resident" && m.home === brief.name && b.households.includes(m.household),
-        );
-        // Keyed on the LOWEST household number under this roof: sealed brief data,
-        // so the id is stable across rebuilds and additive against saved zone ids
-        // (60-save restores a zone by id). A loop counter would move the moment a
-        // household merged differently.
-        const id = `h${Math.min(...b.households)}`;
-        const zone = interiorRoom(id, `${residents[0]?.name ?? brief.name}'s home`, "dwelling", {
-          sleepers: residents.length,
-        });
-        zone.mapExport = false;
-        zones[id] = zone;
-        linkInterior(v, zone, b.door, "Go inside");
-        b.interior = { zoneId: id };
-        // One bed each — never a shared tile: two sprites on one tile makes the
-        // lower one un-talkable, which is precisely what a bedroom would cause.
-        residents.forEach((member, index) => {
-          const bed = zone.beds[index];
-          if (bed) bedFor.set(member, { zoneId: id, x: bed.x, y: bed.y });
-        });
-      } else if (b.special === "shop" && b.owner) {
-        // Keyed on the owner's cast ordinal — the same number their NPC id carries.
-        const id = `s${brief.cast.indexOf(b.owner) + 1}`;
-        const [sw] = INTERIOR_DIMS.shop;
-        const zone = interiorRoom(id, `${b.owner.name}'s shop`, "shop");
-        zone.mapExport = false;
-        zones[id] = zone;
-        linkInterior(v, zone, b.door, "Go inside");
-        // Behind the counter, between it and the stock: the one row that reads as
-        // manning a shop rather than browsing it.
-        b.interior = { zoneId: id, post: { x0: 3, y0: 3, x1: sw - 5, y1: 3 } };
-      }
+      // A special is its own lot (a bound one hangs off the place's facade and is
+      // built by the places pass), so its interior is whatever SELF_LOT_INTERIORS
+      // gives it; everything else with people under it is a dwelling.
+      const interior = b.special ? SELF_LOT_INTERIORS[b.special] : b.households ? { kind: "dwelling" } : null;
+      if (!interior) continue;
+      // Everyone sleeping under this roof, in cast order — the same predicate
+      // `households` was derived from, so the room's beds and the lot arithmetic
+      // can never disagree about who lives here.
+      const residents = brief.cast.filter(
+        (m) =>
+          (m.standing ?? "resident") === "resident" &&
+          (m.home === brief.name || strandedFrom(m, placesBuilt)) &&
+          (b.households ?? []).includes(m.household),
+      );
+      // A dwelling keys on the LOWEST household number under its roof and a
+      // workplace on its owner's cast ordinal (the number their NPC id carries):
+      // sealed brief data either way, so the id is stable across rebuilds and
+      // additive against saved zone ids (60-save restores a zone by id). A loop
+      // counter would move the moment a household merged differently.
+      const id = b.special ? `s${brief.cast.indexOf(b.owner) + 1}` : `h${Math.min(...b.households)}`;
+      const name = b.special ? `${b.owner.name}'s ${interior.label}` : `${residents[0]?.name ?? brief.name}'s home`;
+      const zone = interiorRoom(id, name, interior.kind, { sleepers: residents.length });
+      zone.mapExport = false;
+      zones[id] = zone;
+      linkInterior(v, zone, b.door, "Go inside");
+      // Behind the counter, between it and the stock: the one row that reads as
+      // manning a shop rather than browsing it. Only the kinds with a station to
+      // man have one (WORK_POSTS).
+      b.interior = { zoneId: id, post: WORK_POSTS[b.special]?.(zone.w, zone.h) };
+      // One bed each — never a shared tile: two sprites on one tile makes the
+      // lower one un-talkable, which is precisely what a bedroom would cause.
+      residents.forEach((member, index) => {
+        const bed = zone.beds[index];
+        if (bed) bedFor.set(member, { zoneId: id, x: bed.x, y: bed.y });
+      });
     }
 
     // ── The cast ──
@@ -2857,16 +3129,23 @@ PF.world = (() => {
       if (standing === "resident") {
         // Wander near the owner's building when they have one, else around the
         // zone's spawn; interiors wander their walkable middle.
-        const owned = buildings.find((b) => b.owner === member || (b.households ?? []).includes(member.household));
+        // The building they RUN first, and only then the roof they live under —
+        // a live-work premises now carries its owner's household, so a plain
+        // membership test would hand a second trade in the same family the first
+        // one's building to work in.
+        const owned =
+          buildings.find((b) => b.owner === member) ??
+          buildings.find((b) => (b.households ?? []).includes(member.household));
         keeper = !!(owned && owned.boundPlace && PLACE_BOUND_SPECIALS.has(owned.boundPlace.kind));
         const dwelling = buildings.find((b) => (b.households ?? []).includes(member.household));
         const ownBed = bedFor.get(member);
         if (zone === v && owned) {
-          if (owned.interior?.post && zones[owned.interior.zoneId]) {
+          if (owned.owner === member && owned.interior?.post && zones[owned.interior.zoneId]) {
             // A shopkeeper works INSIDE the shop now that there is a shop to be
             // inside. An owner loitering on the apron with a stocked room behind
             // them is the same "nobody is where they are scheduled to be" gap the
-            // dwellings had, and it is the room's only occupant.
+            // dwellings had. Scoped to the OWNER: the shop is their household's
+            // home too now, and a smith's child does not man the counter.
             zone = zones[owned.interior.zoneId];
             wander = owned.interior.post;
           } else {
@@ -2877,11 +3156,13 @@ PF.world = (() => {
               y1: Math.min(v.h - 3, owned.door.doorY + 5),
             };
           }
-          // A special-building owner sleeps at their dwelling, not the workshop.
-          // Their own bed when the household has a room with one in it; the old
-          // door-apron box only where there is no bed to point at (a special
-          // owner whose household never claimed a dwelling slot) — kept wide
-          // enough for a whole household to stand at it without stacking.
+          // A DUTY-STATION owner sleeps at their dwelling, not at the post they
+          // stand; a LIVE-WORK owner's dwelling IS the building they run, and the
+          // same expression covers both — whichever roof carries their household.
+          // Their own bed when that roof has a room with one in it; the old
+          // door-apron box only where there is no bed to point at (an owner whose
+          // household never claimed a lot at all) — kept wide enough for a whole
+          // household to stand at it without stacking.
           const roof = dwelling && dwelling !== owned ? dwelling : owned;
           home = ownBed
             ? { zoneId: ownBed.zoneId, wander: bedBox(ownBed), spread: false }
@@ -2890,6 +3171,11 @@ PF.world = (() => {
           wander = plazaBox();
         } else {
           wander = fullZoneBox(zone);
+          // Homed at a building the brief NAMED: their bed is in that building's
+          // living quarters, so their night handle is that one tile exactly like
+          // a householder's. Left null when the place laid them none — a resident
+          // homed at a WILDS sleeps rough, which is what living in the woods is.
+          if (ownBed) home = { zoneId: ownBed.zoneId, wander: bedBox(ownBed), spread: false };
         }
       } else if (standing === "transient" && stalls.some((s) => s.owner === member)) {
         const stall = stalls.find((s) => s.owner === member);
@@ -3003,9 +3289,15 @@ PF.schedule = (() => {
   // Handle names: post = the working/day anchor, home = the sleep node,
   // public = the settlement's plaza. See 20-world's cast loop for the geometry.
   const TABLE = {
-    // The innkeeper never leaves the inn — it is the fixed point the evening
-    // crowd converges on, and it means the lit building is never empty.
-    "host:resident": { dawn: "post", day: "post", dusk: "post", night: "post" },
+    // The innkeeper holds the inn all day — it is the fixed point the evening
+    // crowd converges on, and it means the lit building is never empty. At night
+    // they turn in like anybody else: a brief that homes them AT the inn (the
+    // usual shape) puts their bed in the inn's own living quarters, so the
+    // building is still occupied and they are simply in it asleep rather than
+    // standing among the tables at 3am. One homed at a house down the road walks
+    // to it — their guests are still upstairs. With no bed anywhere the handle
+    // falls back to `post` and this row behaves exactly as it always did.
+    "host:resident": { dawn: "post", day: "post", dusk: "post", night: "home" },
     // The watch keeps the night, so the settlement never looks abandoned.
     "guard:resident": { dawn: "home", day: "post", dusk: "post", night: "post" },
     // Trades work their building through the day and sleep at their dwelling.

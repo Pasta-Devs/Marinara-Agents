@@ -60,7 +60,9 @@ through the derivations below.
                             // elder|child|wanderer|folk — the MACHINE field. Derives the sprite
                             // archetype AND the special building (leader→hall, host→gathering,
                             // grower→farmhouse/hydro, guard→post, merchant/maker→workshop,
-                            // elder→sanctuary when the brief names one — §4.5).
+                            // elder→sanctuary when the brief names one — §4.5). A live-work
+                            // premises (shop, farm, inn, sanctuary) is also its owner's HOME;
+                            // a duty station (post, hall) is not.
                             // The model never picks a sprite or a building directly.
       tint: "blue",         // ENUM 9: red|orange|amber|green|teal|blue|violet|rose|grey → fixed
                             // hue table. Nine buckets cannot cluster; no raw hues, no repair loop.
@@ -134,8 +136,11 @@ response is **never stored** (checkpoints capture by value — see #5110).
 5. **Derivation & caps** (buildings — the "30 people" rule; **only `resident`-standing cast
    members generate buildings** — see the §1 `standing` note):
    - dwellings = distinct **resident** households **homed at the settlement root** (a resident
-     whose `home` is a place or the wilds — a forager in the woods, a smith who sleeps at the forge
-     — lives THERE, so no empty town house is minted); shared household = shared roof; a
+     whose `home` is a place or the wilds — a forager in the woods, a chaplain who lives in her own
+     church — lives THERE, so no empty town house is minted), **minus the households already housed
+     at a LIVE-WORK premises** (below), **plus** anyone whose named home never claimed a lot: a
+     dropped place compiles no zone, so the building they "live in" does not exist and the town owes
+     them a roof like anyone else. Shared household = shared roof; a
      non-resident never gets a dwelling — it anchors to its standing rest spot (transient → the inn,
      fringe → the wilds/margin, destitute → the public center);
    - special buildings from a **resident**'s `kind` (never a duplicate hall; extra specials demote
@@ -146,19 +151,50 @@ response is **never stored** (checkpoints capture by value — see #5110).
      nothing — except a
      **transient `merchant`**, who sets up a light market stall (3 tables, no walls) when a lot is
      free (else it loiters at a public spot like any transient);
-   - residential filler = `clamp(BASE[scale] − dwellings − specials, 0, ∞)`,
-     area cap `floor(buildableArea / 56)`;
+   - **live-work vs duty station.** A workplace is a HOME only when the trade is carried on where
+     the family lives: `maker`/`merchant`→shop, `grower`→farm, `host`→gathering and
+     `elder`→sanctuary are **live-work** — the owner AND their household sleep there and mint no
+     dwelling of their own, one household to one roof on one lot. `guard`→post and `leader`→hall
+     are **duty stations**: nobody lives in a guard post, a reeve works at the hall and goes home
+     to a house, so their households still need a dwelling. A brief that wants someone to live in
+     a grand hall homes that cast member AT the place — the existing `home` mechanism, no new
+     field. The compiler houses a household only in a live-work building it mints ITSELF; a
+     special bound to a named place is that place, and the brief's own `home` says who lives in it;
+   - **living quarters.** `home` naming a place is the sanctioned way to say "this person lives
+     here", so a NAMED place sleeps whoever is homed in it: the building grows a quarters band and
+     lays it with the same `layoutSleeping`/`partitionRooms`/`bedroom` machinery a household gets
+     anywhere else, bedrooms and bunks by the same density rule. This is NOT the live-work table
+     and must not be folded into it — that table decides who the compiler houses on its OWN
+     initiative (nobody is given a bed in the guard post), while an explicit `home` is the brief
+     OVERRIDING that default: a hall is a duty station until a brief homes the lord in it. Quarters
+     are opt-in, so a place the brief houses nobody in compiles exactly the tiles it always did.
+     A gathering's quarters are **distinct from its guest berths** — different bands of the
+     building, lists that never intersect: a keeper is not a lodger and a traveller is never dealt
+     the keeper's bed. Only a gathering lays berths at all; a named house or church sleeps its own
+     people and lets nothing;
+   - **lots are physical**, not budgeted: the row placer lays what the map is wide enough for
+     (two on an outpost or a hamlet, six in a village, eight in a town), which is under
+     `BASE[scale]` at every size. They are claimed in order — named places, then specials, then
+     dwellings, then market stalls — with ONE floor: while any household is still unhoused, the
+     **last free lot goes to housing**. A workshop or a named place that would leave a family with
+     nowhere to sleep is not built; the house is, and the merge below puts every remaining
+     household under it. `dwelling lots = min(lots left, households still owed a roof)`;
    - **over-subscription MERGES households into multi-family blocks — a named NPC's home is
      never dropped**; only filler is dropped, then the lowest-priority specials
      (leader > host > grower > maker > merchant > guard > healer > scholar > folk);
-   - **interiors**: a dwelling and a shop each compile a room behind the door the building already
-     has, two-way portal on that door, `mapExport = false` (§8). A dwelling's zone id is
-     `h<lowest household number under that roof>` and a shop's is `s<owner's cast ordinal>` — keyed
+   - **interiors**: a dwelling, a shop and a farm each compile a room behind the door the building
+     already has, two-way portal on that door, `mapExport = false` (§8). A duty station (post,
+     hall) stays a facade — no zone is minted just to put a bed in it. A dwelling's zone id is
+     `h<lowest household number under that roof>` and a workplace's is `s<owner's cast ordinal>` — keyed
      on sealed brief data, never a loop counter, so a rebuild resolves a saved zone id to the same
      room. Every resident of a dwelling gets their **own bed tile** (non-solid: the sleeper stands
      on it) and their night handle is that one tile, so "went home to rest" is something the player
-     can walk in and see rather than a box on the doorstep. A shop is stocked and staffed — counter,
-     shelves, and the owner's working anchor moved inside, because an empty shop reads worse than a
+     can walk in and see rather than a box on the doorstep. A live-work interior sleeps its
+     household through the same `layoutSleeping` call a dwelling uses, so a trade family gets
+     bedrooms and bunks by exactly the same density rules as any other family — a smith's child
+     sleeps in the smithy. A shop is stocked and staffed — counter,
+     shelves, and the OWNER's working anchor moved inside (only the owner's: the rest of the
+     household are residents there, not staff), because an empty shop reads worse than a
      locked door. The inn keeps four guest beds for the transients who already bedded down there;
      past the fourth they share the common room as before. None of this adds a save field: the
      handles are re-baked on every compile and placement is a pure function of the saved clock;
@@ -264,7 +300,7 @@ absent) end the attempt for the session with no retry drumbeat. Exported ids lan
 **One building, one location.** A zone that is a ROOM inside another zone's building — a floor,
 a back room — stamps `mapExport = false` and is skipped: no row, no binding, reached only through
 the building it sits in. Named brief places (the sanctuary included) export their single row;
-generated dwellings and shops — which since 0.8.0 do compile interior zones (§4.5) — never do:
+generated dwellings, shops and farms — which since 0.8.0 do compile interior zones (§4.5) — never do:
 they are rooms inside a building the settlement already contains, not destinations of their own.
 The gate exists because this route is additive with **no delete**: a row written to a player's real
 map is permanent, so it ships with the zone type that needs it rather than a release later.
