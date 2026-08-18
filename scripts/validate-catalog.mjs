@@ -665,8 +665,8 @@ for (const entry of catalog.packages) {
     ) {
       throw new Error("Beholder must ship the canonical benchmarked 3,709-character delta prompt");
     }
-    if (compareEngineVersions(manifest.engine.min, "2.4.4") < 0) {
-      throw new Error("Beholder's delta prompt requires Engine 2.4.4 or newer");
+    if (compareEngineVersions(manifest.engine.min, "2.4.3") < 0) {
+      throw new Error("Beholder's delta prompt requires Engine 2.4.3 or newer");
     }
   }
 
