@@ -5310,4 +5310,80 @@ const cellarBrief = (prosperity) => ({
   assert.notEqual(whereIs("Bel"), sanctuaryId, "a named worker goes home to sleep like anybody else");
 }
 
+// ── NOBODY LOSES THEIR BED TO SOMEBODY WHO IS ALSO LEAVING (0.9.0) ─────────
+// Placement consults `taken` so no sprite is stacked under another — a buried
+// one can never be talk-targeted. But "taken" used to be read against wherever
+// people were standing from the LAST daypart, in a single pass, while half of
+// them were on their way out. So an NPC whose own bed was still warm under a
+// housemate not yet processed got shunted to the nearest free tile; the
+// housemate then walked off; and the sleeper spent the night on the
+// floorboards beside an empty bed.
+//
+// A pure ORDERING accident, which is why it hid: the same world resolved in a
+// different NPC order strands a different person, and going straight to a
+// daypart instead of arriving from one never triggers it at all.
+//
+// So this case manufactures the worst legal instance rather than waiting for a
+// seed to produce one — everybody stood on the NEXT sleeper's bed, every single
+// destination occupied by somebody who is themselves about to move.
+{
+  const sealed = brief.validate(
+    {
+      scale: "hamlet",
+      prosperity: "thriving",
+      name: "Harbour",
+      places: [{ kind: "gathering", name: "The Anchor" }],
+      cast: [
+        { name: "Keep", role: "innkeep", kind: "host", tint: "amber", home: "The Anchor", household: 1 },
+        ...Array.from({ length: 9 }, (_, i) => ({
+          name: `K${i}`,
+          role: "hand",
+          kind: "folk",
+          tint: ["green", "blue", "rose", "teal", "violet", "grey"][i % 6],
+          home: "The Anchor",
+          household: i < 5 ? 1 : 2,
+        })),
+      ],
+    },
+    ctx,
+  );
+  for (const seed of [1, 11, 424242]) {
+    const w = world.build(seed, "cozy-village", sealed);
+    const inn = findZone(w, "The Anchor");
+    const sim = new loadedPF.Sim(w);
+
+    // Night once, the ordinary way: everybody arrives and takes their own bed.
+    sim.clockMin = 23 * 60;
+    sim.resolveSchedules();
+    const sleepers = inn.npcs.filter((npc) => npc._sched?.home?.zoneId === inn.id);
+    assert.ok(sleepers.length >= 8, `seed ${seed}: the crowd sleeps at the inn (${sleepers.length})`);
+    const beds = sleepers.map((npc) => ({ x: npc._sched.home.wander.x0, y: npc._sched.home.wander.y0 }));
+
+    // ROTATE: stand each of them on the NEXT one's bed. Every position is legal
+    // and every destination is now held by another mover.
+    sleepers.forEach((npc, i) => {
+      const squat = beds[(i + 1) % beds.length];
+      npc.x = squat.x;
+      npc.y = squat.y;
+    });
+    sim.resolveSchedules();
+
+    for (let i = 0; i < sleepers.length; i++) {
+      const npc = sleepers[i];
+      assert.equal(
+        `${Math.round(npc.x)},${Math.round(npc.y)}`,
+        `${beds[i].x},${beds[i].y}`,
+        `seed ${seed}: ${npc.name} reached their own bed rather than yielding it to a housemate who was leaving anyway`,
+      );
+      assert.ok(
+        SLEEPS_ON.has(inn.object[inn.w * Math.round(npc.y) + Math.round(npc.x)]),
+        `seed ${seed}: ${npc.name} is on a sleeping tile`,
+      );
+    }
+    // And still one each — the fix must not trade displacement for stacking.
+    const tiles = new Set(sleepers.map((npc) => `${Math.round(npc.x)},${Math.round(npc.y)}`));
+    assert.equal(tiles.size, sleepers.length, `seed ${seed}: one sleeper per tile`);
+  }
+}
+
 console.log("brief validator + compiler: all cases passed");
