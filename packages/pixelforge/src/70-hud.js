@@ -3,48 +3,6 @@
 // chips, touch D-pad, Talk / Travel / Keyboard controls, toasts. The root is
 // pointer-events:none; each control opts back in — clicks in empty space fall
 // through to the narration below (host contract).
-// Collapsing the host's narration box is a CSS-only reach OUTSIDE our element,
-// which the host sanctions through the manifest's contributions.gameSurface
-// .surfaceClass ("pixelforge-surface") stamped on the shared game container,
-// plus its inert `experience-dialogue-*` theming hooks. Scope every rule under
-// that class so nothing leaks into the rest of the app. The collapse takes the
-// WHOLE panel, controls included; see the trade-off note on the rule itself.
-const PF_NARRATION_STYLE_ID = "pixelforge-narration-collapse";
-function installPixelforgeNarrationStyle(doc) {
-  if (!doc || doc.getElementById(PF_NARRATION_STYLE_ID)) return;
-  const style = doc.createElement("style");
-  style.id = PF_NARRATION_STYLE_ID;
-  // Collapse the WHOLE panel, not just the prose. Hiding the prose alone left
-  // the speaker label, the failure banner and the button row floating in an
-  // empty box, which is most of the height back. The label and banner carry no
-  // hook of their own — only utility classes — so picking them off individually
-  // would mean matching styling soup that breaks on any host restyle.
-  //
-  // Trade-off, deliberate: while collapsed the Retry/Next controls go with it,
-  // so a failed generation is invisible until the player expands again. The
-  // toggle sits right beside the panel and dialogue force-expands, so nothing
-  // is ever unreachable — but this is exactly why the host should own a real
-  // collapse control (Marinara-Engine#5209) instead of a package doing CSS.
-  //
-  // `data-tour` is a product-tour hook rather than a declared contract; it is
-  // still far steadier than utility classes, and the theming hooks below are
-  // contract, so keep both.
-  //
-  // visibility:hidden is load-bearing, not belt-and-braces (review finding).
-  // max-height/opacity/overflow only hide PAINT, and pointer-events only stops
-  // the mouse — none of them leave the tab order, so a keyboard player tabbing
-  // past a collapsed panel would land on the invisible turn input and type into
-  // nothing. visibility:hidden takes the whole subtree out of sequential
-  // navigation, which is the behaviour the collapse is claiming to have.
-  style.textContent =
-    '.pf-narration-collapsed .pixelforge-surface [data-tour="game-dialogue"],' +
-    ".pf-narration-collapsed .pixelforge-surface .experience-dialogue-wrap," +
-    ".pf-narration-collapsed .pixelforge-surface .game-narration-prose{" +
-    "max-height:0;min-height:0;padding-top:0;padding-bottom:0;margin-top:0;margin-bottom:0;" +
-    "border-width:0;overflow:hidden;opacity:0;visibility:hidden;pointer-events:none;}";
-  doc.head.appendChild(style);
-}
-
 PF.Hud = class {
   constructor(rootEl, core) {
     this.core = core;
@@ -76,7 +34,6 @@ PF.Hud = class {
     this.talkBtn = this._btn("Talk (E)", () => core.interact());
     this.travelBtn = this._btn("Travel", () => this.toggleTravel());
     this.waitBtn = this._btn("⏩ Wait…", () => this.toggleWait());
-    this.narrationBtn = this._btn("▤ Hide narration", () => this.toggleNarration());
     this.keyboardBtn = this._btn("Keyboard", () => core.setMode("dialogue"));
     this.resumeBtn = this._btn("▶ Resume walking", () => core.resume());
     this.waitMenu = PF.el("div", {
@@ -89,10 +46,8 @@ PF.Hud = class {
         style:
           "position:absolute;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px;align-items:flex-end;z-index:2;",
       },
-      [this.talkBtn, this.travelBtn, this.waitMenu, this.waitBtn, this.narrationBtn, this.keyboardBtn, this.resumeBtn],
+      [this.talkBtn, this.travelBtn, this.waitMenu, this.waitBtn, this.keyboardBtn, this.resumeBtn],
     );
-    this._narrationCollapsed = false;
-    installPixelforgeNarrationStyle(rootEl && rootEl.ownerDocument);
 
     // Touch D-pad. touch-action:none so the browser doesn't claim the gesture
     // (same requirement the host documents on its own drag surfaces).
@@ -159,14 +114,6 @@ PF.Hud = class {
 
   destroy() {
     clearTimeout(this._toastTimer);
-    // The collapse class lives on <html>, OUTSIDE our element, so removing the
-    // HUD does not take it with us. Left behind it outlives the thing that can
-    // undo it: a remount (chat switch, error unmount, version bump) builds a
-    // fresh Hud whose _narrationCollapsed starts false, so the button offers to
-    // "Hide narration" while the panel is already hidden — and the Retry/Next
-    // controls and turn input stay collapsed with nothing left to expand them.
-    // Fail open: hand the narration back and let the player re-collapse it.
-    this.toggleNarration(false);
     this.root.remove();
   }
 
@@ -212,20 +159,6 @@ PF.Hud = class {
       );
     }
     this.waitMenu.style.display = "flex";
-  }
-
-  /** Collapse the host's narration box so more of the world is visible. The
-   *  whole panel goes, Retry/Next included — the toggle sits right beside it and
-   *  dialogue force-expands, because the turn input lives in there. */
-  toggleNarration(force) {
-    const collapsed = typeof force === "boolean" ? force : !this._narrationCollapsed;
-    // Only a real click changes what the player WANTS; the dialogue-mode
-    // force-open is temporary and must not overwrite that preference.
-    if (typeof force !== "boolean") this._narrationPreference = collapsed;
-    this._narrationCollapsed = collapsed;
-    const root = this.root.ownerDocument.documentElement;
-    root.classList.toggle("pf-narration-collapsed", collapsed);
-    if (this.narrationBtn) this.narrationBtn.textContent = collapsed ? "▣ Show narration" : "▤ Hide narration";
   }
 
   toggleTravel() {
@@ -290,7 +223,6 @@ PF.Hud = class {
       this.talkBtn.style.display = inWorld ? "" : "none";
       this.travelBtn.style.display = inWorld && spatialAvail ? "" : "none";
       this.waitBtn.style.display = inWorld ? "" : "none";
-      this.narrationBtn.style.display = inWorld ? "" : "none";
       this.keyboardBtn.style.display = inWorld ? "" : "none";
       // In combat, Resume exists only for the NARRATIVE fallback signal (which
       // can flip without any combat UI). With the real Capability API 1.11
@@ -300,11 +232,6 @@ PF.Hud = class {
       this.resumeBtn.textContent = combatResumeApplies ? "▶ Resume exploring" : "▶ Resume walking";
       this.travelMenu.style.display = "none";
       this.waitMenu.style.display = "none";
-      // The turn input lives INSIDE the host's narration box, so a collapsed
-      // box would leave a talking player with nowhere to type. Force it open
-      // for the conversation and restore the player's choice afterwards.
-      if (!inWorld) this.toggleNarration(false);
-      else if (this._narrationPreference) this.toggleNarration(true);
       if (mode === "dialogue") this.toast("Type in the message box below — Resume to keep walking");
     }
     // Cutscene caption — writes DOM only when the beat starts or ends.
