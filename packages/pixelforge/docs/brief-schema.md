@@ -151,6 +151,17 @@ response is **never stored** (checkpoints capture by value — see #5110).
    - **over-subscription MERGES households into multi-family blocks — a named NPC's home is
      never dropped**; only filler is dropped, then the lowest-priority specials
      (leader > host > grower > maker > merchant > guard > healer > scholar > folk);
+   - **interiors**: a dwelling and a shop each compile a room behind the door the building already
+     has, two-way portal on that door, `mapExport = false` (§8). A dwelling's zone id is
+     `h<lowest household number under that roof>` and a shop's is `s<owner's cast ordinal>` — keyed
+     on sealed brief data, never a loop counter, so a rebuild resolves a saved zone id to the same
+     room. Every resident of a dwelling gets their **own bed tile** (non-solid: the sleeper stands
+     on it) and their night handle is that one tile, so "went home to rest" is something the player
+     can walk in and see rather than a box on the doorstep. A shop is stocked and staffed — counter,
+     shelves, and the owner's working anchor moved inside, because an empty shop reads worse than a
+     locked door. The inn keeps four guest beds for the transients who already bedded down there;
+     past the fourth they share the common room as before. None of this adds a save field: the
+     handles are re-baked on every compile and placement is a pure function of the saved clock;
    - **height** is a facade, not a footprint: every body row of a building is already solid wall,
      hidden under roof overhead, so a tall building simply leaves its top rows UNROOFED and the
      stonework shows. A `sanctuary` takes two such rows always, plus whatever head-room its lot
@@ -253,9 +264,10 @@ absent) end the attempt for the session with no retry drumbeat. Exported ids lan
 **One building, one location.** A zone that is a ROOM inside another zone's building — a floor,
 a back room — stamps `mapExport = false` and is skipped: no row, no binding, reached only through
 the building it sits in. Named brief places (the sanctuary included) export their single row;
-generated dwellings, which have no interior zone at all, never did. The gate exists because this
-route is additive with **no delete**: a row written to a player's real map is permanent, so it
-ships with the zone type that needs it rather than a release later.
+generated dwellings and shops — which since 0.8.0 do compile interior zones (§4.5) — never do:
+they are rooms inside a building the settlement already contains, not destinations of their own.
+The gate exists because this route is additive with **no delete**: a row written to a player's real
+map is permanent, so it ships with the zone type that needs it rather than a release later.
 
 Not yet exported (still §9 territory): the root's population phrase and per-feature locations —
 features have no zones of their own, and decorating the root would edit a location the user may

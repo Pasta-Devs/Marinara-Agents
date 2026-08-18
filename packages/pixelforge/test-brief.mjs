@@ -1044,6 +1044,12 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     core.markDirty = () => { core.dirty++; };
     return { w, core };
   };
+  // The zones the export is allowed to touch. The exterior IS the root, and a
+  // room inside a building (a dwelling, a shop) stamps mapExport = false, so a
+  // case that diffs "every zone" against what was posted has to ask the same
+  // question 55-maps-export asks. Case 45 is where the gate itself is pinned.
+  const exportableZones = (w) =>
+    Object.keys(w.zones).filter((id) => id !== w.startZone && w.zones[id].mapExport !== false);
   const mapsExport = loadedPF.mapsExport;
   const prevGetSpatial = loadedPF.api.getSpatial;
   const prevPostLocations = loadedPF.api.postSpatialLocations;
@@ -1066,7 +1072,7 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   // (self-heal) without re-posting. A second run is a no-op.
   {
     const { w, core } = exportScaffold(4242, "chat-export-31");
-    const zoneIds = Object.keys(w.zones).filter((id) => id !== w.startZone);
+    const zoneIds = exportableZones(w);
     assert.ok(zoneIds.length >= 2, "the default brief compiles interior and wilds zones");
     const preSeeded = mapsExport.idFor(w, zoneIds[0]);
     let revision = 5;
@@ -1135,7 +1141,7 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   // re-read diff empties the batch and bindings still land.
   {
     const { w, core } = exportScaffold(777, "chat-export-33");
-    const zoneIds = Object.keys(w.zones).filter((id) => id !== w.startZone);
+    const zoneIds = exportableZones(w);
     let raced = false;
     const posts = [];
     loadedPF.api.getSpatial = async () => ({
@@ -1228,7 +1234,7 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   // new zones post. A location already bound to another zone never adopts.
   {
     const { w, core } = exportScaffold(2468, "chat-export-37");
-    const zoneIds = Object.keys(w.zones).filter((id) => id !== w.startZone);
+    const zoneIds = exportableZones(w);
     const adoptedZone = zoneIds[0];
     const adoptedName = w.zones[adoptedZone].name;
     const posts = [];
@@ -1264,7 +1270,7 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   // creating a twin (live-found regression on the Kepler playtest).
   {
     const { w, core } = exportScaffold(2468, "chat-export-37b");
-    const zoneIds = Object.keys(w.zones).filter((id) => id !== w.startZone);
+    const zoneIds = exportableZones(w);
     const adoptedZone = zoneIds[0];
     const adoptedName = w.zones[adoptedZone].name;
     const posts = [];
@@ -1329,7 +1335,7 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   // done-key suppressed all of this: review finding).
   {
     const { w, core } = exportScaffold(1357, "chat-export-39");
-    const zoneIds = Object.keys(w.zones).filter((id) => id !== w.startZone);
+    const zoneIds = exportableZones(w);
     let serverLocs = [{ id: "loc-root" }];
     const posts = [];
     loadedPF.api.getSpatial = async () => ({
@@ -1465,7 +1471,7 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   // absolute attempt budget — CodeRabbit finding on #389.
   {
     const { w, core } = exportScaffold(5566, "chat-export-44");
-    const zoneIds = Object.keys(w.zones).filter((id) => id !== w.startZone);
+    const zoneIds = exportableZones(w);
     const flipName = w.zones[zoneIds[0]].name;
     let reads = 0;
     const posts = [];
@@ -1513,6 +1519,7 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
           { name: "Perrin", role: "innkeep", kind: "host", tint: "amber", home: "The Bell", household: 2 },
           { name: "Alder", role: "reeve", kind: "leader", tint: "blue", home: "Bellford", household: 3 },
           { name: "Tam", role: "farmer", kind: "grower", tint: "green", home: "Bellford", household: 4 },
+          { name: "Cor", role: "shopkeep", kind: "merchant", tint: "teal", home: "Bellford", household: 5 },
         ],
       },
       { theme: "cozy-village", seed: 3131 },
@@ -1522,8 +1529,19 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     const innId = Object.keys(built.zones).find((id) => built.zones[id].name === "The Bell");
     assert.ok(churchId && innId, "the sanctuary and the gathering both compiled");
     assert.equal(built.zones[churchId].mapExport, true, "a named place exports by default");
-    // No compiled zone opts out yet — floors-as-rooms is what the gate is FOR,
-    // so stamp one by hand rather than wait for the zone type that needs it.
+    // The compiled rooms — the dwelling and the shop — stamp the gate themselves.
+    // (Five specials against a village's eight lots leave one dwelling slot, so
+    // the four root households share a roof; one dwelling is what this fixture
+    // is expected to build.)
+    const roomIds = Object.keys(built.zones).filter((id) => built.zones[id].mapExport === false);
+    assert.ok(
+      roomIds.some((id) => built.zones[id].name.endsWith("'s home")) &&
+        roomIds.some((id) => built.zones[id].name.endsWith("'s shop")),
+      `the fixture compiled a dwelling and a shop (${roomIds.map((id) => built.zones[id].name).join(", ")})`,
+    );
+    // The gathering is stamped by HAND as well, so the gate is proven for a zone
+    // type that does not set it itself: it is a property of the flag, not of
+    // which zone kinds happen to carry it today.
     built.zones[innId].mapExport = false;
     const { w, core } = exportScaffold(3131, "chat-export-45", built);
     let serverLocs = [{ id: "loc-root" }];
@@ -1552,6 +1570,15 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     assert.ok(!posted.some((row) => row.name === "The Bell"), "a zone stamped mapExport = false never posts");
     assert.equal(w.bindings[mapsExport.idFor(w, innId)], undefined, "and never binds a location it did not create");
     assert.equal(w.zones[innId].spatialLocationId, null, "the excluded zone records no location");
+    // The compiled rooms take the same path: a dwelling and a shop are a floor
+    // inside a building the settlement already contains, never a destination of
+    // their own — and this route can never take a wrong row back.
+    for (const roomId of roomIds) {
+      const room = w.zones[roomId];
+      assert.ok(!posted.some((row) => row.name === room.name), `${room.name} is a room, so it never posts`);
+      assert.equal(w.bindings[mapsExport.idFor(w, roomId)], undefined, `${room.name} binds no location`);
+      assert.equal(room.spatialLocationId, null, `${room.name} records no location`);
+    }
     assert.equal(w.bindings[mapsExport.idFor(w, churchId)], churchId, "the church binds");
     // Non-vacuous: the wilds zone proves the run really did export its peers.
     const wildsId = Object.keys(w.zones).find((id) => w.zones[id].name === "The Reach");
@@ -1983,11 +2010,16 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
 // scan honoured occupancy, but when it exhausted the box the fallback returned
 // zone.spawn — a single fixed tile that checks neither occupancy nor standable.
 // The suite had no household-at-the-cap fixture, which is exactly where this
-// lives: CAPS.household is 6, and a resident's night `home` handle is a 3x2 door
+// lives: CAPS.household is 6, and a resident's night `home` handle was a 3x2 door
 // apron whose door tile standable() excludes, leaving ~3 usable tiles. Three
 // members overflowed onto the spawn on EVERY seed tried, and stacked NPCs are
 // both un-talkable and frozen — their wander box is the one they failed to fit
 // in, so every candidate step fails its bounds test.
+//
+// 0.8.0: the compiler no longer BUILDS that shape — a household sleeps in a
+// dwelling interior, one bed each (case 52). The placer's guarantee outlives the
+// fixture that found it, so the pre-0.8.0 handle is forced by hand below rather
+// than the case being deleted along with the bug that motivated it.
 {
   const cast = [];
   for (let i = 0; i < 6; i++) {
@@ -2019,6 +2051,20 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     const hearths = [];
     for (const zoneId in w.zones) for (const npc of w.zones[zoneId].npcs) if (npc.name.startsWith("Hearth")) hearths.push(npc);
     assert.equal(hearths.length, 6, `seed ${seed}: the whole household compiles`);
+    // Force the pre-0.8.0 shape: the whole household onto the ONE door apron in
+    // front of their dwelling. The apron is still real geometry — it is the tile
+    // strip the portal into the house sits on — so this is the shipped placer
+    // being handed a genuinely undersized shared box, not a synthetic one.
+    const dwellingId = hearths[0]._sched.home.zoneId;
+    const doorPortal = w.zones.z1.portals.find((p) => p.toZone === dwellingId);
+    assert.ok(doorPortal, `seed ${seed}: the household's dwelling opens off the settlement`);
+    const apron = {
+      x0: Math.max(2, doorPortal.x - 1),
+      y0: Math.max(2, doorPortal.y),
+      x1: Math.min(w.zones.z1.w - 3, doorPortal.x + 1),
+      y1: Math.min(w.zones.z1.h - 3, doorPortal.y + 1),
+    };
+    for (const npc of hearths) npc._sched.home = { zoneId: "z1", wander: apron };
     const homes = new Set(hearths.map((n) => `${n._sched.home.zoneId}:${JSON.stringify(n._sched.home.wander)}`));
     assert.equal(homes.size, 1, `seed ${seed}: the household shares ONE night home box (${homes.size} distinct)`);
     const home = hearths[0]._sched.home;
@@ -2193,6 +2239,24 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   assert.equal(sim.clockMin, 5 * 60, "landing on dawn");
 }
 
+// The 0.8.0 rooms fixture, shared by 14d and cases 51-53: a settlement with a
+// leader's hall, a smith (a shop), a two-person household (two beds under one
+// roof), an inn, and a transient who takes a bed in it.
+const bedsBrief = (overrides = {}) => ({
+  scale: "village",
+  name: "Hearthwick",
+  places: [{ kind: "gathering", name: "The Kettle" }],
+  cast: [
+    { name: "Ada", role: "reeve", kind: "leader", tint: "blue", home: "Hearthwick", household: 1 },
+    { name: "Ben", role: "smith", kind: "maker", tint: "green", home: "Hearthwick", household: 2 },
+    { name: "Cass", role: "cooper", kind: "folk", tint: "amber", home: "Hearthwick", household: 3 },
+    { name: "Dell", role: "carter", kind: "folk", tint: "rose", home: "Hearthwick", household: 3 },
+    { name: "Perrin", role: "innkeep", kind: "host", tint: "orange", home: "The Kettle", household: 4 },
+    { name: "Wisp", kind: "wanderer", tint: "teal", home: "Hearthwick", household: 5, standing: "transient" },
+  ],
+  ...overrides,
+});
+
 // 14d. Every compiled zone is reachable from the start zone. An interior place
 // that never claimed a building lot used to compile a named, NPC-populated room
 // with no portal in either direction — whoever was homed there was stranded and
@@ -2236,15 +2300,25 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     },
     ctx,
   );
+  // 0.8.0 fixture: dwellings and shops compile rooms of their own, so the graph
+  // this floods is several times the size it used to be — and a dwelling whose
+  // portal pair was forgotten is exactly the "room with no door" this case
+  // exists to refuse.
+  const sealedRooms = brief.validate(bedsBrief(), ctx);
   // The outpost fixture exists to prove the DROP guard, so it demands no zone by
   // name; the sanctuary fixture would pass trivially if its church were one of
   // the dropped ones, so that one names what has to be there.
-  for (const [sealed, required] of [
-    [sealedOutpost, []],
-    [sealedSanctuary, ["St. Ilde's", "The Bell"]],
+  for (const [sealed, required, minRooms] of [
+    [sealedOutpost, [], 0],
+    [sealedSanctuary, ["St. Ilde's", "The Bell"], 2],
+    [sealedRooms, ["The Kettle", "Ben's shop", "Cass's home"], 4],
   ]) {
     for (const seed of [1, 2, 3, 4, 5]) {
       const w = world.build(seed, "cozy-village", sealed);
+      // Non-vacuous: the sweep below is only interesting if the build actually
+      // produced the interior rooms whose doors it is checking.
+      const rooms = Object.values(w.zones).filter((zone) => zone.mapExport === false);
+      assert.ok(rooms.length >= minRooms, `seed ${seed}: ${rooms.length} interior rooms compiled (want ${minRooms})`);
       // Flood the portal graph from the start zone.
       const reached = new Set([w.startZone]);
       const queue = [w.startZone];
@@ -2650,6 +2724,194 @@ const zoneNamed = (w, name) => Object.values(w.zones).find((zone) => zone.name =
   const keeping = midday(withChurch);
   assert.equal(keeping.npc._sched.keeper, true, "an elder homed at a sanctuary keeps it");
   assert.equal(keeping.world.zones[keeping.zoneId].name, "St Ives", "and is inside it at midday");
+}
+
+// ── Dwellings, shops and beds (0.8.0): the rooms behind the doors ────────────
+// The complaint this answers: NPCs were scheduled somewhere to rest and the
+// player never saw it, because a dwelling was a facade with no room behind it —
+// "turned in for the night" resolved to a box on the door apron OUTSIDE.
+
+// 51. A resident spends the night in their dwelling, ON their own bed, and is
+// back out in the settlement by day. The transient's inn bed is the same
+// promise for someone with no roof of their own.
+{
+  const sealed = brief.validate(bedsBrief(), ctx);
+  const findNpc = (w, name) => {
+    for (const id in w.zones) {
+      const npc = w.zones[id].npcs.find((n) => n.name === name);
+      if (npc) return { id, npc, zone: w.zones[id] };
+    }
+    return null;
+  };
+  for (const seed of [1, 7, 31, 424242]) {
+    const w = world.build(seed, "cozy-village", sealed);
+    checkWorld(w, sealed, `beds seed ${seed}`);
+    const sim = new loadedPF.Sim(w);
+
+    sim.clockMin = 23 * 60;
+    sim.resolveSchedules();
+    const night = findNpc(w, "Cass");
+    assert.notEqual(night.id, "z1", `seed ${seed}: Cass is indoors at night, not on the street`);
+    assert.equal(night.zone.mapKind, "building", `seed ${seed}: and the room is a building interior`);
+    assert.equal(
+      night.zone.object[night.zone.w * night.npc.y + night.npc.x],
+      "bed",
+      `seed ${seed}: Cass stands on a bed at 23:00 (${night.npc.x},${night.npc.y} in ${night.id})`,
+    );
+    // The handle really is a bed, not a box that happens to overlap one.
+    const handle = night.npc._sched.home;
+    assert.equal(handle.zoneId, night.id, `seed ${seed}: the night handle names the dwelling`);
+    assert.equal(handle.spread, false, `seed ${seed}: a bed is a placement, never a box to disperse in`);
+    assert.ok(
+      handle.wander.x0 === handle.wander.x1 && handle.wander.y0 === handle.wander.y1,
+      `seed ${seed}: the night handle is one tile wide`,
+    );
+
+    // The transient takes a real bed at the inn rather than standing among the tables.
+    const guest = findNpc(w, "Wisp");
+    assert.equal(guest.zone.name, "The Kettle", `seed ${seed}: the drifter beds down at the inn`);
+    assert.equal(
+      guest.zone.object[guest.zone.w * guest.npc.y + guest.npc.x],
+      "bed",
+      `seed ${seed}: and in one of its guest beds`,
+    );
+
+    sim.clockMin = 12 * 60;
+    sim.resolveSchedules();
+    const day = findNpc(w, "Cass");
+    assert.equal(day.id, "z1", `seed ${seed}: Cass is back out in the settlement by day`);
+    assert.equal(
+      w.zones.z1.object[w.zones.z1.w * day.npc.y + day.npc.x],
+      null,
+      `seed ${seed}: and standing on open ground, not furniture`,
+    );
+  }
+}
+
+// 52. Every resident under one roof gets their OWN bed. Six is CAPS.household,
+// the largest a single dwelling ever has to sleep — and two sprites on one tile
+// makes the lower one un-talkable, so "a bed each" is an invariant rather than a
+// nicety. (The pre-0.8.0 shape put the whole household on one door apron; case
+// 14j keeps that overflow path under test by forcing the old handle by hand.)
+{
+  const cast = [];
+  for (let i = 0; i < 6; i++) {
+    cast.push({
+      name: `Kin${i}`,
+      role: "weaver",
+      kind: "folk",
+      tint: ["blue", "green", "amber", "rose", "teal", "violet"][i],
+      home: "Sixfold",
+      household: 1,
+    });
+  }
+  cast.push({ name: "Lamp", role: "innkeep", kind: "host", tint: "orange", home: "The Lamp", household: 2 });
+  const sealed = brief.validate(
+    { scale: "village", name: "Sixfold", places: [{ kind: "gathering", name: "The Lamp" }], cast },
+    ctx,
+  );
+  assert.equal(
+    sealed.cast.filter((c) => c.household === sealed.cast[0].household).length,
+    6,
+    "the household survives validation at the cap — a split would make this vacuous",
+  );
+  for (const seed of [1, 3, 11]) {
+    const w = world.build(seed, "cozy-village", sealed);
+    const kin = [];
+    for (const id in w.zones) for (const npc of w.zones[id].npcs) if (npc.name.startsWith("Kin")) kin.push(npc);
+    assert.equal(kin.length, 6, `seed ${seed}: the whole household compiles`);
+    const zoneIds = new Set(kin.map((n) => n._sched.home.zoneId));
+    assert.equal(zoneIds.size, 1, `seed ${seed}: one household, one roof (${[...zoneIds].join(",")})`);
+    const homeZone = w.zones[[...zoneIds][0]];
+    const tiles = new Set(kin.map((n) => `${n._sched.home.wander.x0},${n._sched.home.wander.y0}`));
+    assert.equal(tiles.size, 6, `seed ${seed}: six sleepers, six beds (${tiles.size} distinct)`);
+    for (const tile of tiles) {
+      const [x, y] = tile.split(",").map(Number);
+      assert.equal(homeZone.object[homeZone.w * y + x], "bed", `seed ${seed}: ${tile} is an actual bed tile`);
+    }
+
+    // And it holds once the Sim has placed them: same room, one tile each.
+    const sim = new loadedPF.Sim(w);
+    sim.clockMin = 23 * 60;
+    sim.resolveSchedules();
+    const taken = new Set();
+    for (const npc of kin) {
+      assert.ok(homeZone.npcs.includes(npc), `seed ${seed}: ${npc.name} sleeps at home`);
+      const tile = `${npc.x},${npc.y}`;
+      assert.ok(!taken.has(tile), `seed ${seed}: ${npc.name} shares tile ${tile} with a housemate`);
+      taken.add(tile);
+      assert.equal(homeZone.object[homeZone.w * npc.y + npc.x], "bed", `seed ${seed}: ${npc.name} is in a bed`);
+    }
+  }
+}
+
+// 53. A shop opens, and it is not an empty room: a counter to be served over,
+// stock behind it, and the owner working there through the day. The maintainer
+// call was that an empty shop reads worse than a locked door, so the room ships
+// furnished and staffed in the same change.
+{
+  const sealed = brief.validate(bedsBrief(), ctx);
+  for (const seed of [1, 31, 424242]) {
+    const w = world.build(seed, "cozy-village", sealed);
+    const shop = Object.values(w.zones).find((zone) => zone.name === "Ben's shop");
+    assert.ok(shop, `seed ${seed}: the smith's shop compiled a room`);
+    assert.equal(shop.mapExport, false, `seed ${seed}: a shop is a room inside a building, not a destination`);
+    assert.ok(shop.object.includes("counter"), `seed ${seed}: there is a counter`);
+    const stock = shop.object.filter((tile) => tile === "shelf").length;
+    assert.ok(stock >= 3, `seed ${seed}: and stock behind it (${stock} tiles)`);
+    // Non-vacuous the other way: stock is the shop's own furniture, not something
+    // every interior grew.
+    assert.ok(
+      !Object.values(w.zones).some((zone) => zone !== shop && zone.object.includes("shelf")),
+      `seed ${seed}: nothing else in the world sprouted shelving`,
+    );
+
+    const sim = new loadedPF.Sim(w);
+    sim.clockMin = 12 * 60;
+    sim.resolveSchedules();
+    const ben = shop.npcs.find((npc) => npc.name === "Ben");
+    assert.ok(ben, `seed ${seed}: the owner is inside their own shop at midday`);
+    assert.equal(
+      shop.object[shop.w * (ben.y + 1) + ben.x],
+      "counter",
+      `seed ${seed}: standing behind the counter, not out in front of it`,
+    );
+
+    // The counter must not wall the shopkeeper off: a pocket the player cannot
+    // walk into would strand the very person the room exists to show. Flood the
+    // room from the tile inside its door.
+    const seen = new Set([`${shop.spawn.x},${shop.spawn.y}`]);
+    const queue = [shop.spawn];
+    while (queue.length) {
+      const { x, y } = queue.pop();
+      for (const [dx, dy] of [
+        [0, -1],
+        [0, 1],
+        [-1, 0],
+        [1, 0],
+      ]) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= shop.w || ny >= shop.h) continue;
+        if (shop.solid[shop.w * ny + nx] || seen.has(`${nx},${ny}`)) continue;
+        seen.add(`${nx},${ny}`);
+        queue.push({ x: nx, y: ny });
+      }
+    }
+    assert.ok(seen.has(`${ben.x},${ben.y}`), `seed ${seed}: the player can reach the shopkeeper from the door`);
+
+    // Off duty he goes home to his own bed, not back onto the apron.
+    sim.clockMin = 23 * 60;
+    sim.resolveSchedules();
+    const home = Object.values(w.zones).find((zone) => zone.npcs.some((npc) => npc.name === "Ben"));
+    assert.notEqual(home, shop, `seed ${seed}: the smith does not sleep in the shop`);
+    const asleep = home.npcs.find((npc) => npc.name === "Ben");
+    assert.equal(
+      home.object[home.w * asleep.y + asleep.x],
+      "bed",
+      `seed ${seed}: a shop owner sleeps in their dwelling's bed`,
+    );
+  }
 }
 
 console.log("brief validator + compiler: all cases passed");

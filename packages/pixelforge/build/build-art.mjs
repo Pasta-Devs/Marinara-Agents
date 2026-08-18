@@ -272,6 +272,26 @@ const PAINTERS = {
     g.rect(0, 7, T, 1, PAL.doorKnob);
     g.rect(0, 13, T, 1, PAL.stoneDark);
   },
+  bed(g, rnd) {
+    PAINTERS.floor(g, rnd);
+    g.rect(2, 1, 12, 14, PAL.beam);
+    g.rect(3, 2, 10, 12, PAL.wall);
+    g.rect(3, 2, 10, 4, PAL.white); g.rect(3, 5, 10, 1, PAL.plasterShadow);
+    g.rect(3, 8, 10, 6, PAL.rug); g.rect(3, 8, 10, 1, PAL.rugHi);
+    g.px(2, 1, PAL.trunkHi); g.px(13, 1, PAL.trunkHi);
+  },
+  shelf(g) {
+    g.rect(0, 0, T, T, PAL.counter);
+    g.rect(0, 0, T, 1, PAL.beam); g.rect(0, T - 1, T, 1, PAL.beam);
+    for (const shelfY of [1, 9]) {
+      for (let c = 2; c < 14; c += 4) {
+        g.rect(c, shelfY + 1, 3, 4, PAL.path1);
+        g.rect(c, shelfY + 1, 3, 1, PAL.doorKnob);
+        g.px(c, shelfY + 4, PAL.pathEdge);
+      }
+      g.rect(1, shelfY + 5, 14, 1, PAL.beam);
+    }
+  },
 };
 
 // ── Actors: 4 rows (down, up, left, right) × 4 walk frames, 12×16 ────────────

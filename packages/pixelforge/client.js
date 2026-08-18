@@ -383,6 +383,32 @@ PF.art = (() => {
       px(g, 0, 6, T, 1, PAL.doorKnob);
       px(g, 0, 12, T, 1, PAL.stoneDark);
     },
+    // A bed is laid NON-solid wherever the compiler puts one: the sleeper stands
+    // ON the tile, which is what makes walking in at night read as finding
+    // someone in bed rather than standing politely beside the furniture. So it is
+    // painted floor-first and kept low-contrast — a sprite composites over it.
+    bed(g, rnd) {
+      PAINTERS.floor(g, rnd);
+      px(g, 2, 1, 12, 14, PAL.beam);
+      px(g, 3, 2, 10, 12, PAL.wall);
+      px(g, 3, 2, 10, 4, PAL.white);
+      px(g, 3, 8, 10, 6, PAL.rug);
+      px(g, 3, 8, 10, 1, PAL.roofHi);
+    },
+    // The shop's stock: the tile that says there is something here to buy. Solid,
+    // so it reads as furniture the shopkeeper stands in front of.
+    shelf(g) {
+      px(g, 0, 0, T, T, PAL.counter);
+      px(g, 0, 0, T, 1, PAL.beam);
+      px(g, 0, T - 1, T, 1, PAL.beam);
+      for (const shelfY of [1, 9]) {
+        for (let cx = 2; cx < 14; cx += 4) {
+          px(g, cx, shelfY + 1, 3, 4, PAL.path1);
+          px(g, cx, shelfY + 1, 3, 1, PAL.doorKnob);
+        }
+        px(g, 1, shelfY + 5, 14, 1, PAL.beam);
+      }
+    },
   };
 
   // ── Themes ──────────────────────────────────────────────────────────────────
@@ -2010,8 +2036,139 @@ PF.world = (() => {
     workshop: [16, 12],
     hall: [18, 12],
     sanctuary: [16, 14], // the nave needs length: the aisle is the walk to the altar
+    shop: [14, 10],
     dwelling: [14, 10],
   };
+  // The sleeping wall: bed tiles run along the rows FARTHEST from the door, two
+  // apart so a household reads as a bedroom rather than a barracks, and they fill
+  // one row before starting the next. A room is only asked for as many beds as it
+  // has sleepers, so the second row exists only for a merged household.
+  const BED_ROWS = [2, 4];
+  function bedSlots(w, h, count) {
+    const slots = [];
+    for (const y of BED_ROWS) {
+      if (y > h - 3 || slots.length >= count) break;
+      for (let x = 2; x <= w - 2 && slots.length < count; x += 2) slots.push({ x, y });
+    }
+    return slots;
+  }
+  // The inn's guest corner. Transients already bedded down at the inn, but at a
+  // shared box covering the whole common room, so "took a bed" rendered as
+  // standing among the tables. Four is the corner the 16x12 gathering has room
+  // for; a fifth transient keeps the old shared box (see the cast loop).
+  const innBeds = (w) => [
+    { x: w - 5, y: 2 },
+    { x: w - 3, y: 2 },
+    { x: w - 5, y: 4 },
+    { x: w - 3, y: 4 },
+  ];
+
+  // ── Interior rooms ──────────────────────────────────────────────────────────
+  // Every interior is the same shell — four walls, one door centered on the south
+  // wall, the spawn on the tile inside it — so the portal wiring, the spawn and
+  // the map gate are written once and a new kind only says what furniture goes
+  // in. FURNISH is keyed by the brief's own place-kind vocabulary plus the kinds
+  // the compiler mints itself (shop); an unknown kind furnishes as a plain room.
+  const FURNISH = {
+    gathering(z, w, h) {
+      fillRect(z, 3, 3, 5, 1, "object", "counter", true);
+      put(z, w - 6, 5, "object", "table", true);
+      put(z, w - 4, h - 4, "object", "table", true);
+      fillRect(z, 5, 6, 4, 3, "ground", "rug", false);
+      for (const bed of innBeds(w)) put(z, bed.x, bed.y, "object", "bed", false);
+      z.lights.push({ x: 4, y: 3 }, { x: w - 5, y: 5 });
+    },
+    hall(z, w, h) {
+      // Rug first: its ground fill clears solidity, so painting it after the
+      // table silently made the table walk-through (review finding).
+      fillRect(z, 3, 3, w - 6, h - 6, "ground", "rug", false);
+      fillRect(z, 4, 5, w - 8, 1, "object", "table", true);
+      z.lights.push({ x: 3, y: 2 }, { x: w - 4, y: 2 });
+    },
+    sanctuary(z, w, h) {
+      // A nave the player walks the length of: a carpet aisle from the door to
+      // the altar, benches in rows either side, candle plinths flanking the
+      // altar. Aisle first — the hall's lesson: a ground fill clears solidity,
+      // so painting it after the altar would make the altar walk-through.
+      const aisleX = (w / 2) | 0;
+      fillRect(z, aisleX, 3, 1, h - 4, "ground", "rug", false);
+      fillRect(z, aisleX - 2, 3, 5, 1, "object", "altar", true);
+      for (const candleX of [aisleX - 3, aisleX + 3]) {
+        put(z, candleX, 3, "object", "wallStone", true);
+        z.lights.push({ x: candleX, y: 3 });
+      }
+      for (let row = 6; row < h - 2; row += 2) {
+        fillRect(z, 3, row, aisleX - 3, 1, "object", "counter", true);
+        fillRect(z, aisleX + 1, row, aisleX - 3, 1, "object", "counter", true);
+      }
+      put(z, 2, 1, "object", "window", true);
+      put(z, w - 3, 1, "object", "window", true);
+      z.lights.push({ x: 2, y: 1 }, { x: w - 3, y: 1 });
+    },
+    workshop(z, w) {
+      fillRect(z, 3, 3, 4, 1, "object", "counter", true);
+      put(z, w - 4, 5, "object", "table", true);
+      z.lights.push({ x: 3, y: 3 });
+    },
+    shop(z, w, h) {
+      // Never a bare room with a door on it: a counter to be served over and a
+      // wall of stock behind it. An empty shop reads worse than a locked one
+      // (maintainer call), and the owner's `post` handle moves in here, so it is
+      // staffed as well as stocked. The counter run stops short of the east wall
+      // so the player can walk around its end — an unreachable pocket behind the
+      // counter would strand the shopkeeper the room exists to show.
+      for (let x = 2; x <= w - 3; x += 2) put(z, x, 2, "object", "shelf", true);
+      fillRect(z, 3, 4, w - 7, 1, "object", "counter", true);
+      fillRect(z, 3, h - 3, 3, 2, "ground", "rug", false);
+      z.lights.push({ x: 3, y: 4 }, { x: w - 3, y: 2 });
+    },
+    dwelling(z, w, h, options) {
+      // The beds ARE the feature: one per resident, 1x1 and non-solid, so a night
+      // visit finds the household asleep in them instead of milling on a doorstep.
+      for (const bed of options.beds ?? []) put(z, bed.x, bed.y, "object", "bed", false);
+      // A living half under the sleeping wall, so the room is not only a dormitory
+      // — and so a dwelling with no sleepers of its own is still a furnished room.
+      put(z, 2, h - 3, "object", "table", true);
+      fillRect(z, w - 6, h - 4, 3, 2, "ground", "rug", false);
+      z.lights.push({ x: 2, y: h - 3 });
+    },
+  };
+
+  function interiorRoom(id, name, kind, options) {
+    const [w, h] = INTERIOR_DIMS[kind] || INTERIOR_DIMS.dwelling;
+    const zone = makeZone(id, name, w, h, "floor");
+    for (let x = 0; x < w; x++) {
+      put(zone, x, 0, "object", "wallStone", true);
+      put(zone, x, 1, "object", "wall", true);
+      put(zone, x, h - 1, "object", "wallStone", true);
+    }
+    for (let y = 0; y < h; y++) {
+      put(zone, 0, y, "object", "wallStone", true);
+      put(zone, w - 1, y, "object", "wallStone", true);
+    }
+    (FURNISH[kind] || FURNISH.dwelling)(zone, w, h, options || {});
+    const doorX = (w / 2) | 0;
+    put(zone, doorX, h - 1, "object", "door", false);
+    zone.spawn = { x: doorX, y: h - 2 };
+    zone.mapKind = "building"; // World Maps export kind (spec §8)
+    return zone;
+  }
+
+  /** Wire a building's door to its interior, both ways. A room with no door is
+   *  the one shape the reachability invariant forbids — whoever is homed there is
+   *  stranded and un-talkable forever — so the portal pair ships with the room
+   *  rather than at whichever call site remembers to add it. */
+  function linkInterior(v, zone, door, label) {
+    v.portals.push({ x: door.doorX, y: door.doorY, toZone: zone.id, toX: zone.spawn.x, toY: zone.spawn.y, label });
+    zone.portals.push({
+      x: zone.spawn.x,
+      y: zone.h - 1,
+      toZone: v.id,
+      toX: door.doorX,
+      toY: door.doorY + 1,
+      label: "Step outside",
+    });
+  }
 
   function compile(brief, seed) {
     const activeTheme = PF.art.setTheme ? PF.art.setTheme(brief.theme) : brief.theme;
@@ -2221,83 +2378,12 @@ PF.world = (() => {
       // anyway produced a named, NPC-populated room with no door in either
       // direction — anyone homed there was stranded and un-talkable forever.
       // Same policy as an unanchorable feature: dropped, never sealed.
-      if (!buildings.some((b) => b.boundPlace === place)) continue;
-      const [w, h] = INTERIOR_DIMS[place.kind] || INTERIOR_DIMS.dwelling;
-      const zone = makeZone(id, place.name, w, h, "floor");
-      for (let x = 0; x < w; x++) {
-        put(zone, x, 0, "object", "wallStone", true);
-        put(zone, x, 1, "object", "wall", true);
-        put(zone, x, h - 1, "object", "wallStone", true);
-      }
-      for (let y = 0; y < h; y++) {
-        put(zone, 0, y, "object", "wallStone", true);
-        put(zone, w - 1, y, "object", "wallStone", true);
-      }
-      if (place.kind === "gathering") {
-        fillRect(zone, 3, 3, 5, 1, "object", "counter", true);
-        put(zone, w - 6, 5, "object", "table", true);
-        put(zone, w - 4, h - 4, "object", "table", true);
-        fillRect(zone, 5, 6, 4, 3, "ground", "rug", false);
-        zone.lights.push({ x: 4, y: 3 }, { x: w - 5, y: 5 });
-      } else if (place.kind === "hall") {
-        // Rug first: its ground fill clears solidity, so painting it after the
-        // table silently made the table walk-through (review finding).
-        fillRect(zone, 3, 3, w - 6, h - 6, "ground", "rug", false);
-        fillRect(zone, 4, 5, w - 8, 1, "object", "table", true);
-        zone.lights.push({ x: 3, y: 2 }, { x: w - 4, y: 2 });
-      } else if (place.kind === "sanctuary") {
-        // A nave the player walks the length of: a carpet aisle from the door to
-        // the altar, benches in rows either side, candle plinths flanking the
-        // altar. Aisle first — the hall's lesson: a ground fill clears solidity,
-        // so painting it after the altar would make the altar walk-through.
-        const aisleX = (w / 2) | 0;
-        fillRect(zone, aisleX, 3, 1, h - 4, "ground", "rug", false);
-        fillRect(zone, aisleX - 2, 3, 5, 1, "object", "altar", true);
-        for (const candleX of [aisleX - 3, aisleX + 3]) {
-          put(zone, candleX, 3, "object", "wallStone", true);
-          zone.lights.push({ x: candleX, y: 3 });
-        }
-        for (let row = 6; row < h - 2; row += 2) {
-          fillRect(zone, 3, row, aisleX - 3, 1, "object", "counter", true);
-          fillRect(zone, aisleX + 1, row, aisleX - 3, 1, "object", "counter", true);
-        }
-        put(zone, 2, 1, "object", "window", true);
-        put(zone, w - 3, 1, "object", "window", true);
-        zone.lights.push({ x: 2, y: 1 }, { x: w - 3, y: 1 });
-      } else if (place.kind === "workshop") {
-        fillRect(zone, 3, 3, 4, 1, "object", "counter", true);
-        put(zone, w - 4, 5, "object", "table", true);
-        zone.lights.push({ x: 3, y: 3 });
-      } else {
-        put(zone, 3, 4, "object", "table", true);
-        fillRect(zone, 5, 5, 3, 2, "ground", "rug", false);
-        zone.lights.push({ x: 3, y: 3 });
-      }
-      const doorX = (w / 2) | 0;
-      put(zone, doorX, h - 1, "object", "door", false);
-      zone.spawn = { x: doorX, y: h - 2 };
-      zone.flavor = place.flavor;
-      zone.mapKind = "building"; // World Maps export kind (spec §8)
-      zones[id] = zone;
       const facade = buildings.find((b) => b.boundPlace === place);
-      if (facade) {
-        v.portals.push({
-          x: facade.door.doorX,
-          y: facade.door.doorY,
-          toZone: id,
-          toX: zone.spawn.x,
-          toY: zone.spawn.y,
-          label: `Enter ${place.name}`,
-        });
-        zone.portals.push({
-          x: doorX,
-          y: h - 1,
-          toZone: "z1",
-          toX: facade.door.doorX,
-          toY: facade.door.doorY + 1,
-          label: "Step outside",
-        });
-      }
+      if (!facade) continue;
+      const zone = interiorRoom(id, place.name, place.kind);
+      zone.flavor = place.flavor;
+      zones[id] = zone;
+      linkInterior(v, zone, facade.door, `Enter ${place.name}`);
     }
 
     // ── Wilds zones, hung off alternating map edges ──
@@ -2373,6 +2459,58 @@ PF.world = (() => {
       zones[id] = zone;
     });
 
+    // ── Dwelling and shop interiors ──
+    // Until now a dwelling was a facade with nothing behind it, so a resident the
+    // schedule sent home at night had nowhere to BE and "turned in" rendered as
+    // hugging their own doorstep. Every dwelling and every shop now opens, on the
+    // building's existing door, and each resident gets a bed of their own inside.
+    //
+    // Neither claims a World Maps row (spec §8): a building is ONE location and
+    // these are rooms inside one, not destinations. Only a NAMED brief place is a
+    // destination — and the locations route is additive with NO delete, so a row
+    // written to a player's real map is permanent and the gate has to be right
+    // the first time.
+    const bedFor = new Map(); // cast member -> {zoneId, x, y}, their own bed tile
+    for (const b of buildings) {
+      if (b.households) {
+        // Everyone sleeping under this roof, in cast order — the same predicate
+        // `households` was derived from, so the room's beds and the dwelling
+        // arithmetic can never disagree about who lives here.
+        const residents = brief.cast.filter(
+          (m) =>
+            (m.standing ?? "resident") === "resident" && m.home === brief.name && b.households.includes(m.household),
+        );
+        // Keyed on the LOWEST household number under this roof: sealed brief data,
+        // so the id is stable across rebuilds and additive against saved zone ids
+        // (60-save restores a zone by id). A loop counter would move the moment a
+        // household merged differently.
+        const id = `h${Math.min(...b.households)}`;
+        const beds = bedSlots(INTERIOR_DIMS.dwelling[0], INTERIOR_DIMS.dwelling[1], residents.length);
+        const zone = interiorRoom(id, `${residents[0]?.name ?? brief.name}'s home`, "dwelling", { beds });
+        zone.mapExport = false;
+        zones[id] = zone;
+        linkInterior(v, zone, b.door, "Go inside");
+        b.interior = { zoneId: id };
+        // One bed each — never a shared tile: two sprites on one tile makes the
+        // lower one un-talkable, which is precisely what a bedroom would cause.
+        residents.forEach((member, index) => {
+          const bed = beds[index];
+          if (bed) bedFor.set(member, { zoneId: id, x: bed.x, y: bed.y });
+        });
+      } else if (b.special === "shop" && b.owner) {
+        // Keyed on the owner's cast ordinal — the same number their NPC id carries.
+        const id = `s${brief.cast.indexOf(b.owner) + 1}`;
+        const [sw] = INTERIOR_DIMS.shop;
+        const zone = interiorRoom(id, `${b.owner.name}'s shop`, "shop");
+        zone.mapExport = false;
+        zones[id] = zone;
+        linkInterior(v, zone, b.door, "Go inside");
+        // Behind the counter, between it and the stock: the one row that reads as
+        // manning a shop rather than browsing it.
+        b.interior = { zoneId: id, post: { x0: 3, y0: 3, x1: sw - 5, y1: 3 } };
+      }
+    }
+
     // ── The cast ──
     // Residents wander near their building (or the plaza if house-less).
     // Non-residents never bind to a dwelling; they anchor by standing to a
@@ -2394,6 +2532,8 @@ PF.world = (() => {
     for (const shop of shopSpots)
       loiterSpots.push({ kind: "shop", door: shop.door, interiorZoneId: shop.interiorZoneId });
     loiterSpots.push({ kind: "plaza" });
+    // The inn's guest beds, claimed in cast order as transients are placed.
+    const guestBeds = gatheringZoneId && zones[gatheringZoneId] ? innBeds(zones[gatheringZoneId].w) : [];
     const loiterStart = PF.hashStr(`${seed >>> 0}|loiter`) % loiterSpots.length;
     let loiterN = 0;
     const loiterAnchor = () => {
@@ -2437,6 +2577,10 @@ PF.world = (() => {
     // so the pass stays deterministic.
     const walkableSpawn = (zone, wander, key) =>
       PF.schedule.walkableIn(zone, wander, key, (x, y) => zone.npcs.some((n) => n.x === x && n.y === y));
+    // A bed box is one tile wide: the sleeper does not mill, they lie down. It
+    // rides `spread: false` for the same reason the stall counter does — the tile
+    // IS the placement, and a hash nudge would put them beside their own bed.
+    const bedBox = (bed) => ({ x0: bed.x, y0: bed.y, x1: bed.x, y1: bed.y });
     // A door apron box: the strip an NPC mills around in front of its building.
     const doorBox = (door, reach, depth) => ({
       x0: Math.max(2, door.doorX - reach),
@@ -2466,19 +2610,32 @@ PF.world = (() => {
         const owned = buildings.find((b) => b.owner === member || (b.households ?? []).includes(member.household));
         keeper = !!(owned && owned.boundPlace && PLACE_BOUND_SPECIALS.has(owned.boundPlace.kind));
         const dwelling = buildings.find((b) => (b.households ?? []).includes(member.household));
+        const ownBed = bedFor.get(member);
         if (zone === v && owned) {
-          wander = {
-            x0: Math.max(2, owned.door.doorX - 4),
-            y0: Math.max(2, owned.door.doorY),
-            x1: Math.min(v.w - 3, owned.door.doorX + 4),
-            y1: Math.min(v.h - 3, owned.door.doorY + 5),
-          };
+          if (owned.interior?.post && zones[owned.interior.zoneId]) {
+            // A shopkeeper works INSIDE the shop now that there is a shop to be
+            // inside. An owner loitering on the apron with a stocked room behind
+            // them is the same "nobody is where they are scheduled to be" gap the
+            // dwellings had, and it is the room's only occupant.
+            zone = zones[owned.interior.zoneId];
+            wander = owned.interior.post;
+          } else {
+            wander = {
+              x0: Math.max(2, owned.door.doorX - 4),
+              y0: Math.max(2, owned.door.doorY),
+              x1: Math.min(v.w - 3, owned.door.doorX + 4),
+              y1: Math.min(v.h - 3, owned.door.doorY + 5),
+            };
+          }
           // A special-building owner sleeps at their dwelling, not the workshop.
-          // Dwellings have no interiors, so "turned in for the night" reads as
-          // hugging their own door rather than roaming the apron — but keep it
-          // wide enough for a whole household to stand at it without stacking.
-          const bed = dwelling && dwelling !== owned ? dwelling : owned;
-          home = { zoneId: v.id, wander: doorBox(bed.door, 1, 1) };
+          // Their own bed when the household has a room with one in it; the old
+          // door-apron box only where there is no bed to point at (a special
+          // owner whose household never claimed a dwelling slot) — kept wide
+          // enough for a whole household to stand at it without stacking.
+          const roof = dwelling && dwelling !== owned ? dwelling : owned;
+          home = ownBed
+            ? { zoneId: ownBed.zoneId, wander: bedBox(ownBed), spread: false }
+            : { zoneId: v.id, wander: doorBox(roof.door, 1, 1) };
         } else if (zone === v) {
           wander = plazaBox();
         } else {
@@ -2513,9 +2670,18 @@ PF.world = (() => {
         zone = v; // destitute: the town's public center
         wander = plazaBox();
       }
-      // Transients bed down at the inn when the settlement has one.
+      // Transients bed down at the inn when the settlement has one — in one of
+      // its guest beds, handed out in cast order. Past the fourth they share the
+      // common-room box as they always did: a fifth bed would have to go
+      // somewhere the 16x12 gathering does not have, and standing in a busy inn
+      // is a fair reading of "no room left".
       if (standing === "transient" && gatheringZoneId && zones[gatheringZoneId]) {
-        home = { zoneId: gatheringZoneId, wander: fullZoneBox(zones[gatheringZoneId]) };
+        const guest = guestBeds.shift();
+        home = {
+          zoneId: gatheringZoneId,
+          wander: guest ? bedBox(guest) : fullZoneBox(zones[gatheringZoneId]),
+          spread: !guest,
+        };
       }
       const spawnAt = walkableSpawn(zone, wander, spread ? npcId : null);
       zone.npcs.push({
@@ -2608,9 +2774,15 @@ PF.schedule = (() => {
     // the building rather than on being an elder: which KIND ends up keeping a
     // sanctuary is a question about the kind vocabulary, not about schedules.
     "*:resident:keeper": { dawn: "post", day: "post", dusk: "post", night: "home" },
-    // Everyone else with a roof: at the door at dawn, the square by day (the
-    // plaza should feel busiest in daylight and empty after dark), home at night.
-    "*:resident": { dawn: "home", day: "public", dusk: "home", night: "home" },
+    // Everyone else with a roof: on their own doorstep at dawn and again at dusk,
+    // the square by day, and in bed at night.
+    //
+    // dawn/dusk are `post` — the apron OUTSIDE their door — not `home`. They used to
+    // be `home` and that read correctly while `home` was a one-tile spot at the door.
+    // It stopped being true the moment dwellings gained interiors and `home` became a
+    // bed inside: residents then vanished indoors from 18:00 to 07:00, which is over
+    // half the clock and most of the hours with interesting light. Bed is for night.
+    "*:resident": { dawn: "post", day: "public", dusk: "post", night: "home" },
     // Loiterers hold their public spot all day and take a bed at night.
     "*:transient": { dawn: "post", day: "post", dusk: "post", night: "home" },
     // Fringe NPCs stay out at the margins — meeting one means going to them.

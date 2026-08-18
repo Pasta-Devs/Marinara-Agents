@@ -23,6 +23,8 @@
     "trunk": 18,
     "canopy": 19,
     "table": 20,
-    "altar": 21
+    "altar": 21,
+    "bed": 22,
+    "shelf": 23
   }
 }

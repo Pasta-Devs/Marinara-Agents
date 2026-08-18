@@ -210,6 +210,32 @@ PF.art = (() => {
       px(g, 0, 6, T, 1, PAL.doorKnob);
       px(g, 0, 12, T, 1, PAL.stoneDark);
     },
+    // A bed is laid NON-solid wherever the compiler puts one: the sleeper stands
+    // ON the tile, which is what makes walking in at night read as finding
+    // someone in bed rather than standing politely beside the furniture. So it is
+    // painted floor-first and kept low-contrast — a sprite composites over it.
+    bed(g, rnd) {
+      PAINTERS.floor(g, rnd);
+      px(g, 2, 1, 12, 14, PAL.beam);
+      px(g, 3, 2, 10, 12, PAL.wall);
+      px(g, 3, 2, 10, 4, PAL.white);
+      px(g, 3, 8, 10, 6, PAL.rug);
+      px(g, 3, 8, 10, 1, PAL.roofHi);
+    },
+    // The shop's stock: the tile that says there is something here to buy. Solid,
+    // so it reads as furniture the shopkeeper stands in front of.
+    shelf(g) {
+      px(g, 0, 0, T, T, PAL.counter);
+      px(g, 0, 0, T, 1, PAL.beam);
+      px(g, 0, T - 1, T, 1, PAL.beam);
+      for (const shelfY of [1, 9]) {
+        for (let cx = 2; cx < 14; cx += 4) {
+          px(g, cx, shelfY + 1, 3, 4, PAL.path1);
+          px(g, cx, shelfY + 1, 3, 1, PAL.doorKnob);
+        }
+        px(g, 1, shelfY + 5, 14, 1, PAL.beam);
+      }
+    },
   };
 
   // ── Themes ──────────────────────────────────────────────────────────────────

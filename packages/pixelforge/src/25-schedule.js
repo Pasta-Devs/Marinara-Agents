@@ -39,9 +39,15 @@ PF.schedule = (() => {
     // the building rather than on being an elder: which KIND ends up keeping a
     // sanctuary is a question about the kind vocabulary, not about schedules.
     "*:resident:keeper": { dawn: "post", day: "post", dusk: "post", night: "home" },
-    // Everyone else with a roof: at the door at dawn, the square by day (the
-    // plaza should feel busiest in daylight and empty after dark), home at night.
-    "*:resident": { dawn: "home", day: "public", dusk: "home", night: "home" },
+    // Everyone else with a roof: on their own doorstep at dawn and again at dusk,
+    // the square by day, and in bed at night.
+    //
+    // dawn/dusk are `post` — the apron OUTSIDE their door — not `home`. They used to
+    // be `home` and that read correctly while `home` was a one-tile spot at the door.
+    // It stopped being true the moment dwellings gained interiors and `home` became a
+    // bed inside: residents then vanished indoors from 18:00 to 07:00, which is over
+    // half the clock and most of the hours with interesting light. Bed is for night.
+    "*:resident": { dawn: "post", day: "public", dusk: "post", night: "home" },
     // Loiterers hold their public spot all day and take a bed at night.
     "*:transient": { dawn: "post", day: "post", dusk: "post", night: "home" },
     // Fringe NPCs stay out at the margins — meeting one means going to them.
