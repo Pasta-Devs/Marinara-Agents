@@ -881,6 +881,13 @@ PF.brief = (() => {
     hamlet: { w: 34, h: 24, buildings: 6 },
     village: { w: 44, h: 30, buildings: 8 },
     town: { w: 56, h: 38, buildings: 12 },
+    // A CITY, and the first scale where the map has more ground than the brief
+    // has claimants: 96x72 lays 18 lots against a cast capped at 10, so
+    // `buildings` finally stops being decoration and the constraint moves from
+    // the ground to the people standing on it. Deliberately roomy — most of it
+    // is open at first, and that is the point: it shows in thirty seconds which
+    // of the layout constants are absolute and which actually scale.
+    city: { w: 96, h: 72, buildings: 40 },
   };
   const SURROUNDS = ["woods", "fields", "rocky", "water", "barren"];
   const PROSPERITY = ["struggling", "modest", "thriving"];
@@ -1001,7 +1008,8 @@ PF.brief = (() => {
   /** scale may arrive as a POPULATION NUMBER (the most-observed weak-model slip). */
   function foldScale(value, repairs) {
     if (typeof value === "number" && Number.isFinite(value)) {
-      const bucket = value < 8 ? "outpost" : value < 20 ? "hamlet" : value < 60 ? "village" : "town";
+      const bucket =
+        value < 8 ? "outpost" : value < 20 ? "hamlet" : value < 60 ? "village" : value < 200 ? "town" : "city";
       repairs.push(`scale: bucketed number ${value} -> ${bucket}`);
       return bucket;
     }
@@ -2346,7 +2354,7 @@ PF.world = (() => {
   // guidance tells the model is narrative texture for the map description, and
   // letting it size real geometry would hang the building's shape on the least
   // constrained number in the brief.
-  const GUEST_BERTHS = { outpost: 4, hamlet: 5, village: 6, town: 9 };
+  const GUEST_BERTHS = { outpost: 4, hamlet: 5, village: 6, town: 9, city: 12 };
   const BERTH_PROSPERITY = { struggling: -1, modest: 0, thriving: 1 };
   /** How many guests the settlement's gathering was built to sleep.
    *
@@ -3226,15 +3234,82 @@ PF.world = (() => {
       { x: v.w - 12, y: v.h - 8 },
       { x: 4, y: v.h - 8 },
     ];
+    // WHAT EACH FEATURE ACTUALLY PAINTS. One 9x6 rect used to stand for all of
+    // them, and it was a fiction: `market-stalls` paints three tables on a
+    // single row and `landmark-stone` paints ONE tile. Both were being refused
+    // for want of fifty times the ground they use, which is most of why a
+    // village placed nothing — its lot claims leave gaps, just not 9x6 ones.
+    //
+    // Each rect is the placer's true extent plus a one-tile margin, so a feature
+    // still never abuts a wall. Keyed by tag with a conservative default, so a
+    // new tag is safe before anyone measures it.
+    const FEATURE_RECTS = {
+      "water-feature": { w: 8, h: 5 }, // 6x4 pool + the well at x+6
+      "crop-plots": { w: 9, h: 6 }, // the fenced plot is the big one: 8x5
+      "market-stalls": { w: 6, h: 2 }, // three tables on one row
+      workyard: { w: 6, h: 5 },
+      "landmark-stone": { w: 3, h: 3 }, // a single stone
+      shrine: { w: 4, h: 4 },
+      ruin: { w: 6, h: 5 },
+      lookout: { w: 4, h: 4 },
+    };
     const FEATURE_RECT = { w: 9, h: 6 };
+    // The four corners are the PREFERRED anchors — they are what gives a
+    // settlement its recognisable shape — but there are only four of them and a
+    // row of lots sits directly under two. Once the buildings claim their
+    // footprints the corners go with them, and every named feature the model
+    // authored vanished with no error and no trace. Measured, with all four
+    // declared together: 0 of 4 placed at a village, 2 of 4 at an outpost, a
+    // hamlet and a town. Only a city had room, which is exactly the wrong way
+    // round — and the brief tells the model its features WILL exist.
+    //
+    // So a SCAN is the floor under the corners: the first free 9x6 anywhere on
+    // the map. Rows are walked from the outside in — top edge, bottom edge, then
+    // inward — so a displaced feature still rings the settlement the way a
+    // corner one does instead of clumping in the middle of the green.
+    //
+    // A small settlement still places fewer than a large one, because there is
+    // genuinely less ground; what it no longer does is place none.
+    // The two ARTERIES only. The plaza is deliberately NOT excluded: a market or
+    // a well standing in the square is right rather than wrong, and on a small
+    // map an 8x8 plaza reaches every corner rect, so excluding it took an
+    // outpost from two features to none.
+    const roads = [
+      { x: 2, y: midY - 1, w: v.w - 4, h: 2 },
+      { x: midX - 1, y: 2, w: 2, h: v.h - 4 },
+    ];
+    const anchorFree = (x, y, size) => {
+      const rect = { x, y, ...size };
+      return !claimed.some((busy) => intersects(rect, busy)) && !roads.some((busy) => intersects(rect, busy));
+    };
+    // Outside-in row order, computed once. The corners already avoid the roads
+    // at every scale the tables offer, so adding that test to them changes no
+    // placement that works today — it only stops the scan paving the crossroad.
+    // Outside-in row order: top edge, bottom edge, then inward, so a displaced
+    // feature still rings the settlement the way a corner one does rather than
+    // landing in the middle of the green. Bounded by the tallest footprint, and
+    // the per-feature test below is what actually decides a fit.
+    const scanRows = [];
+    for (let top = 3, bottom = v.h - 9; top <= bottom; top++, bottom--) {
+      scanRows.push(top);
+      if (bottom !== top) scanRows.push(bottom);
+    }
     for (const feature of brief.features) {
-      const anchor = featureAnchors.find((candidate) => {
-        const rect = { x: candidate.x, y: candidate.y, ...FEATURE_RECT };
-        return !claimed.some((busy) => intersects(rect, busy));
-      });
-      if (!anchor) continue; // dropped, not misplaced
+      const size = FEATURE_RECTS[feature.tag] ?? FEATURE_RECT;
+      let anchor = featureAnchors.find((candidate) => anchorFree(candidate.x, candidate.y, size));
+      if (!anchor) {
+        for (const y of scanRows) {
+          for (let x = 4; x + size.w <= v.w - 3; x++) {
+            if (!anchorFree(x, y, size)) continue;
+            anchor = { x, y };
+            break;
+          }
+          if (anchor) break;
+        }
+      }
+      if (!anchor) continue; // genuinely nowhere left: a plainer settlement, never a sealed one
       PLACERS[feature.tag]?.(v, anchor.x, anchor.y);
-      claimed.push({ x: anchor.x, y: anchor.y, ...FEATURE_RECT });
+      claimed.push({ x: anchor.x, y: anchor.y, ...size });
     }
     const doorRects = buildings.map((b) => ({ x: b.door.doorX, y: b.door.doorY }));
     const stallReserved = stalls.flatMap((s) => [

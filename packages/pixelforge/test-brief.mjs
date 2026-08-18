@@ -5613,4 +5613,107 @@ const cellarBrief = (prosperity) => ({
   assert.ok(beds.length >= 9, `nine under one roof still get nine sleeping places (${beds.length})`);
 }
 
+// ── A SETTLEMENT PLACES THE FEATURES IT WAS GIVEN (0.9.0) ──────────────────
+// Features anchor at four fixed corners and are dropped when every corner is
+// claimed — "a plainer settlement, never a sealed one". The trouble was that a
+// row of lots sits directly under two corners, so the drop was not the rare
+// fallback the comment describes: with four features declared together, a
+// VILLAGE placed NONE of them, and an outpost, a hamlet and a town placed two.
+// Silently, while the brief goes on telling the model its features will exist.
+//
+// Two things were wrong. The corners were the only candidates, and the 9x6
+// footprint they were tested against was a fiction — `market-stalls` paints
+// three tables on ONE ROW and `landmark-stone` paints a single tile, and both
+// were refused for want of fifty times the ground they use.
+//
+// Measured before: outpost 2, hamlet 2, village 0, town 2, city 4 (of 4).
+// Measured after:  outpost 3, hamlet 4, village 3, town 4, city 4.
+{
+  const FEATURES = [
+    { tag: "market-stalls", name: "The Shambles" },
+    { tag: "water-feature", name: "The Millpond" },
+    { tag: "ruin", name: "The Old Gate" },
+    { tag: "landmark-stone", name: "The Reckoning Stone" },
+  ];
+  const PLACES = [
+    { kind: "gathering", name: "The Kettle" },
+    { kind: "hall", name: "The Guildhall" },
+    { kind: "sanctuary", name: "St Ivel's" },
+    { kind: "workshop", name: "The Yards" },
+  ];
+  const CAST = [
+    { name: "A", role: "provost", kind: "leader", tint: "blue", home: "Probe", household: 1 },
+    { name: "B", role: "innkeep", kind: "host", tint: "amber", home: "Probe", household: 2 },
+    { name: "C", role: "smith", kind: "maker", tint: "red", home: "Probe", household: 3 },
+    { name: "D", role: "hand", kind: "folk", tint: "green", home: "Probe", household: 4 },
+  ];
+  const build = (scale, featureCount, placeCount, seed) =>
+    world.build(
+      seed,
+      "cozy-village",
+      brief.validate(
+        {
+          scale,
+          prosperity: "thriving",
+          name: "Probe",
+          features: FEATURES.slice(0, featureCount),
+          places: PLACES.slice(0, placeCount),
+          cast: CAST,
+        },
+        { theme: "cozy-village", seed },
+      ),
+    );
+  // A feature PLACED is one that paints tiles: adding it to the brief changes
+  // z1. Counted cumulatively, because four features compete for the same
+  // ground — asking whether each can place ALONE is a different, easier
+  // question, and it is the one that hid this bug.
+  const placedCount = (scale, placeCount, seed) => {
+    let placed = 0;
+    for (let k = 1; k <= FEATURES.length; k++) {
+      const withIt = build(scale, k, placeCount, seed).zones.z1;
+      const without = build(scale, k - 1, placeCount, seed).zones.z1;
+      for (let i = 0; i < withIt.object.length; i++) {
+        if (withIt.object[i] !== without.object[i] || withIt.ground[i] !== without.ground[i]) {
+          placed++;
+          break;
+        }
+      }
+    }
+    return placed;
+  };
+
+  for (const scale of ["outpost", "hamlet", "village", "town", "city"]) {
+    for (const placeCount of [0, 4]) {
+      for (const seed of [1, 8080]) {
+        const placed = placedCount(scale, placeCount, seed);
+        // At most ONE of four may be refused. A settlement genuinely runs out
+        // of ground — that is honest — but it does not lose the lot.
+        assert.ok(
+          placed >= FEATURES.length - 1,
+          `${scale} seed ${seed} (${placeCount} places): placed ${placed} of ${FEATURES.length} features`,
+        );
+      }
+    }
+  }
+
+  // And the ground features take is not taken from the people: the sleeping
+  // places are the same with four features as with none.
+  for (const scale of ["outpost", "hamlet", "village", "town", "city"]) {
+    const bedsWith = new Set();
+    const bedsWithout = new Set();
+    for (const [count, into] of [
+      [4, bedsWith],
+      [0, bedsWithout],
+    ]) {
+      const w = build(scale, count, 4, 8080);
+      for (const zone of Object.values(w.zones)) for (const bed of zone.beds ?? []) into.add(`${bed.zoneId ?? zone.id}:${bed.x},${bed.y}`);
+    }
+    assert.equal(
+      bedsWith.size,
+      bedsWithout.size,
+      `${scale}: features cost somebody a bed (${bedsWithout.size} without, ${bedsWith.size} with)`,
+    );
+  }
+}
+
 console.log("brief validator + compiler: all cases passed");

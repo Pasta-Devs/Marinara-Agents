@@ -14,6 +14,13 @@ PF.brief = (() => {
     hamlet: { w: 34, h: 24, buildings: 6 },
     village: { w: 44, h: 30, buildings: 8 },
     town: { w: 56, h: 38, buildings: 12 },
+    // A CITY, and the first scale where the map has more ground than the brief
+    // has claimants: 96x72 lays 18 lots against a cast capped at 10, so
+    // `buildings` finally stops being decoration and the constraint moves from
+    // the ground to the people standing on it. Deliberately roomy — most of it
+    // is open at first, and that is the point: it shows in thirty seconds which
+    // of the layout constants are absolute and which actually scale.
+    city: { w: 96, h: 72, buildings: 40 },
   };
   const SURROUNDS = ["woods", "fields", "rocky", "water", "barren"];
   const PROSPERITY = ["struggling", "modest", "thriving"];
@@ -134,7 +141,8 @@ PF.brief = (() => {
   /** scale may arrive as a POPULATION NUMBER (the most-observed weak-model slip). */
   function foldScale(value, repairs) {
     if (typeof value === "number" && Number.isFinite(value)) {
-      const bucket = value < 8 ? "outpost" : value < 20 ? "hamlet" : value < 60 ? "village" : "town";
+      const bucket =
+        value < 8 ? "outpost" : value < 20 ? "hamlet" : value < 60 ? "village" : value < 200 ? "town" : "city";
       repairs.push(`scale: bucketed number ${value} -> ${bucket}`);
       return bucket;
     }
