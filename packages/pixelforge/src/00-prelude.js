@@ -5,6 +5,10 @@ const PF = {
   TILE: 16, // world tile size in world pixels
   VW: 480, // internal viewport width  (integer-scaled up to the container)
   VH: 270, // internal viewport height
+  // Roof cutout: how far the see-through bubble reaches around the player when
+  // they walk under an eave, and how much of the roof it removes at the centre.
+  // Deliberately short of 1 so the building still reads as solid overhead.
+  ROOF_PEEK: { inner: 12, outer: 40, max: 0.85 },
   WALK_SPEED: 70, // px/s
   // Package-local clock (never /game/time/advance — issue #5076). 5s per game
   // minute = 2 real hours of WALKING per in-game day; the clock also freezes

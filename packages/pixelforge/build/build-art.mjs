@@ -263,6 +263,84 @@ const PAINTERS = {
     g.rect(3, 4, 10, 7, PAL.path1);
     g.rect(3, 12, 2, 3, PAL.beam); g.rect(11, 12, 2, 3, PAL.beam);
   },
+  // Appended, never inserted: the id order IS the atlas index map, so a new tile
+  // goes on the end or every shipped index shifts under it.
+  altar(g) {
+    g.rect(0, 0, T, T, PAL.floor1);
+    g.rect(0, 2, T, 11, PAL.stone); g.rect(0, 2, T, 1, PAL.stoneHi);
+    g.rect(0, 3, T, 2, PAL.white); g.rect(0, 5, T, 1, PAL.plasterShadow);
+    g.rect(0, 7, T, 1, PAL.doorKnob);
+    g.rect(0, 13, T, 1, PAL.stoneDark);
+  },
+  bed(g, rnd) {
+    PAINTERS.floor(g, rnd);
+    g.rect(2, 1, 12, 14, PAL.beam);
+    g.rect(3, 2, 10, 12, PAL.wall);
+    g.rect(3, 2, 10, 4, PAL.white); g.rect(3, 5, 10, 1, PAL.plasterShadow);
+    g.rect(3, 8, 10, 6, PAL.rug); g.rect(3, 8, 10, 1, PAL.rugHi);
+    g.px(2, 1, PAL.trunkHi); g.px(13, 1, PAL.trunkHi);
+  },
+  shelf(g) {
+    g.rect(0, 0, T, T, PAL.counter);
+    g.rect(0, 0, T, 1, PAL.beam); g.rect(0, T - 1, T, 1, PAL.beam);
+    for (const shelfY of [1, 9]) {
+      for (let c = 2; c < 14; c += 4) {
+        g.rect(c, shelfY + 1, 3, 4, PAL.path1);
+        g.rect(c, shelfY + 1, 3, 1, PAL.doorKnob);
+        g.px(c, shelfY + 4, PAL.pathEdge);
+      }
+      g.rect(1, shelfY + 5, 14, 1, PAL.beam);
+    }
+  },
+  // One berth of a bunk: the compiler lays TWO of these one above the other and
+  // stands a sleeper on each, so the frame runs edge to edge top and bottom and
+  // a stacked pair reads as one two-berth unit. Ladder up the west rail.
+  bunk(g, rnd) {
+    PAINTERS.floor(g, rnd);
+    g.rect(2, 0, 12, T, PAL.beam);
+    g.rect(3, 0, 10, T, PAL.wall);
+    g.rect(3, 1, 10, 4, PAL.white); g.rect(3, 4, 10, 1, PAL.plasterShadow);
+    g.rect(3, 7, 10, 8, PAL.rug); g.rect(3, 7, 10, 1, PAL.rugHi);
+    g.rect(2, 0, 1, T, PAL.trunk); g.rect(13, 0, 1, T, PAL.trunk);
+    for (let rung = 1; rung < T; rung += 4) { g.rect(1, rung, 3, 1, PAL.trunkHi); g.px(3, rung, PAL.doorKnob); }
+  },
+  // A flight going UP, receding north so the tile says which way it goes without
+  // an arrow. Non-solid where the compiler lays it: a stair is a portal.
+  stairsUp(g, rnd) {
+    PAINTERS.floor(g, rnd);
+    for (let step = 0; step < 4; step++) {
+      const inset = step;
+      g.rect(1 + inset, T - 4 - step * 4, T - 2 - inset * 2, 4, PAL.beam);
+      g.rect(1 + inset, T - 4 - step * 4, T - 2 - inset * 2, 1, PAL.plaster);
+      g.rect(1 + inset, T - 3 - step * 4, T - 2 - inset * 2, 1, PAL.plasterShadow);
+    }
+  },
+  // The way DOWN is a hole in the floor rather than the same steps mirrored: the
+  // dark mouth is what tells the two apart standing over them.
+  stairsDown(g, rnd) {
+    PAINTERS.floor(g, rnd);
+    g.rect(1, 2, T - 2, T - 3, PAL.ink);
+    for (let step = 0; step < 3; step++) {
+      const inset = step + 1;
+      g.rect(1 + inset, 3 + step * 4, T - 2 - inset * 2, 3, PAL.beam);
+      g.rect(1 + inset, 3 + step * 4, T - 2 - inset * 2, 1, PAL.wallDark);
+    }
+  },
+  // The one thing in a belfry, with floor all the way round it. Solid — the bell
+  // is what the climb is for. No themed override, for the altar's reason: the
+  // colony palette makes the same silhouette a struck alarm plate.
+  bell(g) {
+    g.rect(0, 0, T, T, PAL.floor1);
+    g.rect(2, 1, 12, 2, PAL.beam);
+    g.rect(2, 1, 12, 1, PAL.trunkHi);
+    g.rect(5, 3, 6, 2, PAL.stoneDark);
+    g.rect(4, 5, 8, 6, PAL.doorKnob);
+    g.rect(5, 6, 2, 4, PAL.white);
+    g.rect(3, 11, 10, 2, PAL.doorKnob);
+    g.rect(3, 11, 10, 1, PAL.white);
+    g.rect(3, 12, 10, 1, PAL.pathEdge);
+    g.rect(7, 13, 2, 2, PAL.stoneDark);
+  },
 };
 
 // ── Actors: 4 rows (down, up, left, right) × 4 walk frames, 12×16 ────────────

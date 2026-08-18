@@ -180,6 +180,17 @@ PF.core = {
       this._resumeMode = prev; // don't collapse dialogue into walk on exit (review finding)
     }
     this.sim.mode = mode;
+    // Replay returns out of the frame loop before sim.step(), so the sim's own
+    // walk-only guard can never fire for it — the one function that changes mode
+    // drops the beat instead, and the declaration below is honest immediately.
+    if (mode !== "walk") {
+      this.sim.cutscene = null;
+      // The frame loop re-declares only when the beat state DIFFERS from the
+      // memo of what we last asked for, so dropping the beat has to move the
+      // memo too. Left stale at true, the next beat matches it and is never
+      // declared — the host is never asked to collapse that one (review finding).
+      this._cutsceneDeclared = false;
+    }
     this.input.up = this.input.down = this.input.left = this.input.right = false;
     this._declareChrome();
     this.hud?.update();
@@ -205,6 +216,10 @@ PF.core = {
     try {
       fn({
         providesPlayerInput: this.sim.mode === "walk",
+        // Transient: asked only while a cutscene beat runs. The host restores
+        // the player's own setting the moment we stop asking, and its own
+        // safety rules still outrank us, so this can never trap a player.
+        requestsCollapsedNarration: !!this.sim.cutscene,
         providesChoices: false,
         providesInventory: false,
         providesCombat: false,
@@ -373,6 +388,11 @@ PF.core = {
       while (this._acc >= STEP) {
         this._acc -= STEP;
         const res = sim.step(STEP, this.input);
+        // A beat starting or ending changes what chrome we are asking for.
+        if (!!sim.cutscene !== this._cutsceneDeclared) {
+          this._cutsceneDeclared = !!sim.cutscene;
+          this._declareChrome();
+        }
         if (res.zoneChanged) {
           this.hud?.refreshChips();
           this.hud?.toast(sim.zone().name);

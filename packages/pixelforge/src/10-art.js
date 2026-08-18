@@ -199,6 +199,100 @@ PF.art = (() => {
       px(g, 2, 3, 12, 9, PAL.counter);
       px(g, 3, 4, 10, 7, PAL.path1);
     },
+    // The sanctuary's focal block. Edge-to-edge on purpose: a run of them reads as
+    // ONE long altar rather than a row of furniture, which is the whole point of a
+    // focal object. The colony's palette turns the same silhouette into a lit
+    // memorial slab, so no painter override is needed to make it coherent there.
+    altar(g) {
+      px(g, 0, 0, T, T, PAL.floor1);
+      px(g, 0, 3, T, 10, PAL.stone);
+      px(g, 0, 3, T, 2, PAL.white);
+      px(g, 0, 6, T, 1, PAL.doorKnob);
+      px(g, 0, 12, T, 1, PAL.stoneDark);
+    },
+    // A bed is laid NON-solid wherever the compiler puts one: the sleeper stands
+    // ON the tile, which is what makes walking in at night read as finding
+    // someone in bed rather than standing politely beside the furniture. So it is
+    // painted floor-first and kept low-contrast — a sprite composites over it.
+    bed(g, rnd) {
+      PAINTERS.floor(g, rnd);
+      px(g, 2, 1, 12, 14, PAL.beam);
+      px(g, 3, 2, 10, 12, PAL.wall);
+      px(g, 3, 2, 10, 4, PAL.white);
+      px(g, 3, 8, 10, 6, PAL.rug);
+      px(g, 3, 8, 10, 1, PAL.roofHi);
+    },
+    // The shop's stock: the tile that says there is something here to buy. Solid,
+    // so it reads as furniture the shopkeeper stands in front of.
+    shelf(g) {
+      px(g, 0, 0, T, T, PAL.counter);
+      px(g, 0, 0, T, 1, PAL.beam);
+      px(g, 0, T - 1, T, 1, PAL.beam);
+      for (const shelfY of [1, 9]) {
+        for (let cx = 2; cx < 14; cx += 4) {
+          px(g, cx, shelfY + 1, 3, 4, PAL.path1);
+          px(g, cx, shelfY + 1, 3, 1, PAL.doorKnob);
+        }
+        px(g, 1, shelfY + 5, 14, 1, PAL.beam);
+      }
+    },
+    // One berth of a bunk — and the reason a bunk sleeps two without ever
+    // putting two sprites on one tile: the compiler lays TWO of these one above
+    // the other and stands a sleeper on each. So the frame runs edge to edge top
+    // and bottom (the altar's trick), and a stacked pair reads as one two-berth
+    // frame rather than two beds nose to tail. The ladder up the west rail is
+    // what tells it apart from a bed at a glance. Non-solid like the bed: the
+    // sleeper stands ON it.
+    bunk(g, rnd) {
+      PAINTERS.floor(g, rnd);
+      px(g, 2, 0, 12, T, PAL.beam);
+      px(g, 3, 0, 10, T, PAL.wall);
+      px(g, 3, 1, 10, 4, PAL.white);
+      px(g, 3, 7, 10, 8, PAL.rug);
+      px(g, 3, 7, 10, 1, PAL.roofHi);
+      px(g, 2, 0, 1, T, PAL.trunk);
+      px(g, 13, 0, 1, T, PAL.trunk);
+      for (let rung = 1; rung < T; rung += 4) px(g, 1, rung, 3, 1, PAL.doorKnob);
+    },
+    // A flight going UP, drawn receding north — up the screen is up the stairs,
+    // so the tile needs no arrow to say which way it goes. Non-solid wherever the
+    // compiler lays one: a stair is a PORTAL and the player has to be able to step
+    // onto it, which is also why an NPC is never found standing here (standable()
+    // refuses portal tiles).
+    stairsUp(g, rnd) {
+      PAINTERS.floor(g, rnd);
+      for (let step = 0; step < 4; step++) {
+        const inset = step;
+        px(g, 1 + inset, T - 4 - step * 4, T - 2 - inset * 2, 4, PAL.beam);
+        px(g, 1 + inset, T - 4 - step * 4, T - 2 - inset * 2, 1, PAL.plaster);
+      }
+    },
+    // The way DOWN is a hole in the floor, not the same steps mirrored: the dark
+    // mouth is what tells the two apart at a glance, standing over them.
+    stairsDown(g, rnd) {
+      PAINTERS.floor(g, rnd);
+      px(g, 1, 2, T - 2, T - 3, PAL.ink);
+      for (let step = 0; step < 3; step++) {
+        const inset = step + 1;
+        px(g, 1 + inset, 3 + step * 4, T - 2 - inset * 2, 3, PAL.beam);
+        px(g, 1 + inset, 3 + step * 4, T - 2 - inset * 2, 1, PAL.wallDark);
+      }
+    },
+    // The one thing in a belfry, hung on its headstock with floor all the way
+    // round it. Solid: the bell is what the climb is FOR, so it reads as an
+    // object the player walks up to rather than through. Like the altar it needs
+    // no themed override — the colony palette turns the same silhouette into a
+    // struck alarm plate, which is the same thing a bell is.
+    bell(g) {
+      px(g, 0, 0, T, T, PAL.floor1);
+      px(g, 2, 1, 12, 2, PAL.beam);
+      px(g, 5, 3, 6, 2, PAL.stoneDark);
+      px(g, 4, 5, 8, 6, PAL.doorKnob);
+      px(g, 5, 6, 2, 4, PAL.white);
+      px(g, 3, 11, 10, 2, PAL.doorKnob);
+      px(g, 3, 11, 10, 1, PAL.white);
+      px(g, 7, 13, 2, 2, PAL.stoneDark);
+    },
   };
 
   // ── Themes ──────────────────────────────────────────────────────────────────
