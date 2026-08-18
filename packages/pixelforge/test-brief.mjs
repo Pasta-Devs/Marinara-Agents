@@ -3694,10 +3694,13 @@ const liveWorkBrief = (overrides = {}) => ({
       !Object.values(w.zones).some((zone) => zone.name === "Sten's home"),
       `seed ${seed}: and no separate house is minted for the same household`,
     );
-    // The same rooms-and-beds machinery, not a special case: two sleepers want
-    // one bedroom, with a door on it.
-    assert.equal(forge.rooms.length, 1, `seed ${seed}: two sleepers want one bedroom (${forge.rooms.length})`);
-    assert.equal(partitionTiles(forge).doors.length, 1, `seed ${seed}: and the bedroom has a door`);
+    // The same rooms-and-beds machinery, not a special case — and the smith who
+    // RUNS the forge gets a room of his own, so the child gets the other.
+    assert.equal(forge.rooms.length, 2, `seed ${seed}: the smith's room and the child's (${forge.rooms.length})`);
+    assert.equal(partitionTiles(forge).doors.length, 2, `seed ${seed}: a door on each`);
+    const own = forge.rooms.find((room) => room.private);
+    assert.ok(own, `seed ${seed}: one of them is the owner's own`);
+    assert.equal(own.beds.length, 1, `seed ${seed}: single occupancy (${own.beds.length} beds)`);
     assert.ok(forge.object.includes("counter"), `seed ${seed}: it is still a shop — a counter to be served over`);
 
     const sim = new loadedPF.Sim(w);
@@ -4241,10 +4244,12 @@ const bellwetherBrief = (overrides = {}) => ({
 
 // 67. A HOUSEHOLD HOMED AT A PLACE GETS THE USUAL ROOMS. Not one bed each in a
 // row: bedrooms, and bunks once a room has to take more than two — the same
-// density rule a family in a house gets, because it is the same call. Six and
-// four are the two sides of that line, so neither half can go vacuous.
+// density rule a family in a house gets, because it is the same call — except
+// for the LORD, who gets a room of his own first (case 68). Six and three are the
+// two sides of the density line for the rooms after his, so neither half can go
+// vacuous.
 {
-  const keepBrief = (size) => ({
+  const keepBrief = (size, kind = "leader") => ({
     scale: "village",
     name: "Marchward",
     places: [{ kind: "hall", name: "The Keep" }],
@@ -4252,7 +4257,7 @@ const bellwetherBrief = (overrides = {}) => ({
       ...Array.from({ length: size }, (_, i) => ({
         name: `Kin${i}`,
         role: i ? "ward" : "lord",
-        kind: i ? "child" : "leader",
+        kind: i ? "child" : kind,
         tint: ["blue", "green", "amber", "rose", "teal", "violet"][i % 6],
         home: "The Keep",
         household: 1,
@@ -4262,8 +4267,8 @@ const bellwetherBrief = (overrides = {}) => ({
     ],
   });
   for (const seed of [1, 3, 11]) {
-    const built = (size) => {
-      const sealed = brief.validate(keepBrief(size), ctx);
+    const built = (size, kind) => {
+      const sealed = brief.validate(keepBrief(size, kind), ctx);
       assert.equal(
         sealed.cast.filter((c) => c.home === "The Keep").length,
         size,
@@ -4278,11 +4283,14 @@ const bellwetherBrief = (overrides = {}) => ({
 
     const big = built(6);
     const quarters = big.keep.rooms.filter((room) => room.quarters);
-    assert.equal(quarters.length, 2, `seed ${seed}: six under the roof want two rooms (${quarters.length})`);
+    const shared = quarters.filter((room) => !room.private);
+    assert.equal(quarters.length, 3, `seed ${seed}: the lord's room and two more (${quarters.length})`);
+    assert.equal(shared.length, 2, `seed ${seed}: five wards want two rooms between them (${shared.length})`);
     assert.equal(big.keep.homeBeds.length, 6, `seed ${seed}: six sleepers, six places`);
+    const tileAt = (zone, bed) => zone.object[zone.w * bed.y + bed.x];
     assert.ok(
-      big.keep.homeBeds.every((bed) => big.keep.object[big.keep.w * bed.y + bed.x] === "bunk"),
-      `seed ${seed}: three to a room is dense, so the rooms bunk`,
+      shared.some((room) => room.beds.every((bed) => tileAt(big.keep, bed) === "bunk")),
+      `seed ${seed}: three to a room is dense, so that room bunks`,
     );
     // Real rooms, in the tiles: shut a quarters door and its beds leave the map.
     for (const room of quarters) {
@@ -4297,12 +4305,34 @@ const bellwetherBrief = (overrides = {}) => ({
     // And the hall is still a hall underneath them.
     assert.ok(big.keep.object.includes("table"), `seed ${seed}: the great table survives the quarters above it`);
 
-    // Four is the other side of the density line: same two rooms, no bunk.
-    const small = built(4);
-    assert.equal(small.keep.homeBeds.length, 4, `seed ${seed}: four sleepers, four places`);
+    // Three is the other side of the density line: the lord's room plus one that
+    // sleeps two, and nothing in the building bunks.
+    const small = built(3);
+    assert.equal(small.keep.homeBeds.length, 3, `seed ${seed}: three sleepers, three places`);
+    assert.equal(
+      small.keep.rooms.filter((room) => room.quarters).length,
+      2,
+      `seed ${seed}: the lord's room and one for the pair`,
+    );
     assert.ok(
       small.keep.homeBeds.every((bed) => small.keep.object[small.keep.w * bed.y + bed.x] === "bed"),
       `seed ${seed}: two to a room is not dense, so no bunk appears`,
+    );
+
+    // NO OWNER, no private room: six folk homed at a hall nobody runs sleep by the
+    // ordinary rules, exactly as they did before. The counterpart that keeps the
+    // private room from being "whoever is listed first".
+    const unowned = built(6, "folk");
+    const unownedQuarters = unowned.keep.rooms.filter((room) => room.quarters);
+    assert.ok(
+      unownedQuarters.every((room) => !room.private),
+      `seed ${seed}: a building nobody runs reserves nothing`,
+    );
+    assert.equal(unownedQuarters.length, 2, `seed ${seed}: six share two rooms (${unownedQuarters.length})`);
+    assert.equal(unowned.keep.homeBeds.length, 6, `seed ${seed}: and everyone still has a place`);
+    assert.ok(
+      unowned.keep.homeBeds.every((bed) => unowned.keep.object[unowned.keep.w * bed.y + bed.x] === "bunk"),
+      `seed ${seed}: three to a room, both rooms bunked, as before`,
     );
 
     // Everybody is actually in them at 23:00, one tile each.
@@ -4316,6 +4346,210 @@ const bellwetherBrief = (overrides = {}) => ({
       assert.ok(SLEEPS_ON.has(big.keep.object[big.keep.w * npc.y + npc.x]), `seed ${seed}: Kin${i} is in a bed`);
       assert.ok(!taken.has(`${npc.x},${npc.y}`), `seed ${seed}: Kin${i} shares a tile with a housemate`);
       taken.add(`${npc.x},${npc.y}`);
+    }
+  }
+}
+
+// 68. THE OWNER GETS A ROOM OF THEIR OWN. A building that houses the person who
+// runs it owes them a door of their own: an innkeeper asleep in a room she rents
+// out reads as a lodger in her own inn, and an innkeeper bunked in with her staff
+// reads as a dormitory. Six was the shape that failed — the keeper was simply the
+// first bed in a shared bunked room — and two only ever looked right by luck.
+//
+// Single occupancy is asserted at EVERY daypart, not just at 23:00: a room that
+// is private at midnight and shared at noon is not private.
+{
+  const anchorBrief = (size, guests) => ({
+    scale: "town",
+    prosperity: "thriving",
+    name: "Harbour",
+    places: [{ kind: "gathering", name: "The Anchor" }],
+    cast: [
+      { name: "Keep", role: "innkeep", kind: "host", tint: "amber", home: "The Anchor", household: 1 },
+      ...Array.from({ length: size - 1 }, (_, i) => ({
+        name: `K${i}`,
+        role: "hand",
+        kind: "folk",
+        tint: ["green", "blue", "rose", "teal", "violet"][i % 5],
+        home: "The Anchor",
+        household: 1,
+      })),
+      ...Array.from({ length: guests }, (_, i) => ({
+        name: `T${i}`,
+        role: "drover",
+        kind: "folk",
+        tint: ["grey", "red"][i % 2],
+        home: "Harbour",
+        household: 2,
+        standing: "transient",
+      })),
+      { name: "Nan", role: "weaver", kind: "folk", tint: "grey", home: "Harbour", household: 3 },
+      { name: "Tam", role: "carter", kind: "folk", tint: "red", home: "Harbour", household: 4 },
+    ],
+  });
+  for (const size of [1, 2, 3, 4, 5, 6]) {
+    const guests = size <= 4 ? 2 : 0; // castMax is 10; keep the fixture sealed untouched
+    const sealed = brief.validate(anchorBrief(size, guests), ctx);
+    // Non-vacuous: the household really is `size` people under one roof, and the
+    // owner really is the one who runs the building rather than a lodger.
+    assert.equal(
+      sealed.cast.filter((c) => c.home === "The Anchor").length,
+      size,
+      `${size}: the whole household stays homed at the inn`,
+    );
+    assert.equal(sealed.cast.find((c) => c.name === "Keep").kind, "host", `${size}: the keeper keeps the inn`);
+    for (const seed of [1, 11, 424242]) {
+      const w = world.build(seed, "cozy-village", sealed);
+      checkWorld(w, sealed, `anchor(${size}) seed ${seed}`);
+      const inn = findZone(w, "The Anchor");
+      assert.ok(inn, `${size} seed ${seed}: the inn compiled`);
+      const own = inn.rooms.find((room) => room.private);
+      assert.ok(own, `${size} seed ${seed}: the keeper has a room of her own`);
+      assert.equal(own.beds.length, 1, `${size} seed ${seed}: single occupancy (${own.beds.length} beds in it)`);
+      assert.equal(
+        inn.object[inn.w * own.beds[0].y + own.beds[0].x],
+        "bed",
+        `${size} seed ${seed}: a bed, never a bunk — a private room is not a berth in a stack`,
+      );
+      // Everyone still has a sleeping place, private room and all.
+      assert.equal(inn.homeBeds.length, size, `${size} seed ${seed}: ${size} sleepers, ${inn.homeBeds.length} places`);
+      assert.equal(
+        new Set(inn.homeBeds.map((bed) => `${bed.x},${bed.y}`)).size,
+        size,
+        `${size} seed ${seed}: no place is dealt twice`,
+      );
+      // It is HERS: the owner's night handle is that bed, and it is not a berth.
+      const berth = new Set(inn.beds.map((bed) => `${bed.x},${bed.y}`));
+      const ownTile = `${own.beds[0].x},${own.beds[0].y}`;
+      assert.ok(!berth.has(ownTile), `${size} seed ${seed}: the keeper's own bed is also being let out`);
+      const keeper = Object.values(w.zones)
+        .flatMap((zone) => zone.npcs)
+        .find((npc) => npc.name === "Keep");
+      assert.equal(
+        `${keeper._sched.home.wander.x0},${keeper._sched.home.wander.y0}`,
+        ownTile,
+        `${size} seed ${seed}: the keeper is sent to her own room, not to a let one`,
+      );
+
+      // Single occupancy, all day: nobody else is ever inside that room.
+      const sim = new loadedPF.Sim(w);
+      const inside = (npc) => npc.x >= own.x0 && npc.x <= own.x1 && npc.y >= own.y0 && npc.y <= own.y1;
+      let sleptThere = 0;
+      for (const clock of [6 * 60, 12 * 60, 19 * 60, 23 * 60]) {
+        sim.clockMin = clock;
+        sim.resolveSchedules();
+        const occupants = Object.values(w.zones)
+          .flatMap((zone) => (zone === inn ? zone.npcs : []))
+          .filter(inside);
+        assert.ok(
+          occupants.length <= 1,
+          `${size} seed ${seed} @${clock / 60}: ${occupants.length} people in the keeper's room (${occupants.map((n) => n.name).join()})`,
+        );
+        for (const npc of occupants) {
+          assert.equal(npc.name, "Keep", `${size} seed ${seed} @${clock / 60}: ${npc.name} is in the keeper's room`);
+        }
+        if (occupants.length === 1) sleptThere++;
+      }
+      // Non-vacuous: "nobody else is ever in there" would pass on a room the
+      // keeper never enters either.
+      assert.ok(sleptThere > 0, `${size} seed ${seed}: the keeper actually uses the room she was given`);
+
+      // The rest of the household sleep in the rooms after hers, one tile each.
+      sim.clockMin = 23 * 60;
+      sim.resolveSchedules();
+      const taken = new Set();
+      for (let i = 0; i < size - 1; i++) {
+        const npc = inn.npcs.find((n) => n.name === `K${i}`);
+        assert.ok(npc, `${size} seed ${seed}: K${i} sleeps at the inn they live in`);
+        assert.ok(SLEEPS_ON.has(inn.object[inn.w * npc.y + npc.x]), `${size} seed ${seed}: K${i} is in a bed`);
+        assert.ok(!inside(npc), `${size} seed ${seed}: K${i} is bunked in the keeper's own room`);
+        assert.ok(!taken.has(`${npc.x},${npc.y}`), `${size} seed ${seed}: K${i} shares a tile`);
+        taken.add(`${npc.x},${npc.y}`);
+      }
+      // And no traveller is ever put in it.
+      for (const npc of inn.npcs.filter((n) => n.name.startsWith("T"))) {
+        assert.ok(!inside(npc), `${size} seed ${seed}: guest ${npc.name} was put in the keeper's own room`);
+      }
+    }
+  }
+
+  // The room is the OWNER'S, not the first-listed resident's. Same household,
+  // same size, the keeper written LAST in the cast — without this the rule could
+  // be "whoever comes first in the array" and nothing here would notice.
+  {
+    const late = anchorBrief(4, 0);
+    const keeper = late.cast.find((member) => member.name === "Keep");
+    late.cast = [...late.cast.filter((member) => member !== keeper), keeper];
+    const sealed = brief.validate(late, ctx);
+    assert.notEqual(
+      sealed.cast.filter((c) => c.home === "The Anchor")[0].name,
+      "Keep",
+      "the keeper really is not the first of her household in the cast",
+    );
+    for (const seed of [1, 11, 424242]) {
+      const w = world.build(seed, "cozy-village", sealed);
+      checkWorld(w, sealed, `anchor-late seed ${seed}`);
+      const inn = findZone(w, "The Anchor");
+      const own = inn.rooms.find((room) => room.private);
+      assert.ok(own, `seed ${seed}: the keeper still gets a room of her own`);
+      const sim = new loadedPF.Sim(w);
+      sim.clockMin = 23 * 60;
+      sim.resolveSchedules();
+      const inRoom = inn.npcs.filter((n) => n.x >= own.x0 && n.x <= own.x1 && n.y >= own.y0 && n.y <= own.y1);
+      assert.deepEqual(
+        inRoom.map((n) => n.name),
+        ["Keep"],
+        `seed ${seed}: the private room belongs to whoever RUNS the inn (${inRoom.map((n) => n.name).join()})`,
+      );
+    }
+  }
+
+  // The documented fallback, exercised rather than asserted from the comment:
+  // ten people homed at one inn cannot have both a private room and a bed each,
+  // so the private room is the thing that gives way — never a sleeper.
+  {
+    const crowd = {
+      scale: "town",
+      prosperity: "thriving",
+      name: "Harbour",
+      places: [{ kind: "gathering", name: "The Anchor" }],
+      cast: [
+        { name: "Keep", role: "innkeep", kind: "host", tint: "amber", home: "The Anchor", household: 1 },
+        ...Array.from({ length: 9 }, (_, i) => ({
+          name: `K${i}`,
+          role: "hand",
+          kind: "folk",
+          tint: ["green", "blue", "rose", "teal", "violet", "grey"][i % 6],
+          home: "The Anchor",
+          household: i < 5 ? 1 : 2,
+        })),
+      ],
+    };
+    const sealed = brief.validate(crowd, ctx);
+    const living = sealed.cast.filter((c) => c.home === "The Anchor");
+    assert.equal(living.length, 10, `all ten are homed at the inn (${living.length})`);
+    for (const seed of [1, 11, 424242]) {
+      const w = world.build(seed, "cozy-village", sealed);
+      checkWorld(w, sealed, `anchor-crowd seed ${seed}`);
+      const inn = findZone(w, "The Anchor");
+      assert.equal(inn.homeBeds.length, 10, `seed ${seed}: ten sleepers, ten places (${inn.homeBeds.length})`);
+      assert.equal(
+        new Set(inn.homeBeds.map((bed) => `${bed.x},${bed.y}`)).size,
+        10,
+        `seed ${seed}: and no place dealt twice`,
+      );
+      assert.ok(
+        !inn.rooms.some((room) => room.private),
+        `seed ${seed}: the private room gives way rather than a sleeper going without`,
+      );
+      const sim = new loadedPF.Sim(w);
+      sim.clockMin = 23 * 60;
+      sim.resolveSchedules();
+      for (const member of living) {
+        const npc = inn.npcs.find((n) => n.name === member.name);
+        assert.ok(npc, `seed ${seed}: ${member.name} sleeps at the inn`);
+        assert.ok(SLEEPS_ON.has(inn.object[inn.w * npc.y + npc.x]), `seed ${seed}: ${member.name} is in a bed`);
+      }
     }
   }
 }

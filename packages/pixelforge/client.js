@@ -2227,7 +2227,7 @@ PF.world = (() => {
       if (x1 < area.x1) for (let wy = area.y0; wy <= area.y1; wy++) put(zone, x1 + 1, wy, "object", "wall", true);
       const rect = { x0: x, y0: area.y0, x1, y1: area.y1 };
       const furnished = ROOM_FURNISH[room.purpose]?.(zone, rect, room) ?? {};
-      placed.push({ purpose: room.purpose, ...rect, doorX, ...furnished });
+      placed.push({ purpose: room.purpose, ...(room.private ? { private: true } : {}), ...rect, doorX, ...furnished });
       x = x1 + 2;
     }
     return placed;
@@ -2247,8 +2247,12 @@ PF.world = (() => {
   // bedroom could not hold a fifth body, so a household of five fell out of its
   // own walls into an open dormitory — a family of five compiled to a barracks,
   // which is the exact reading rooms were added to prevent.
+  // `privateSpan` is the OWNER'S OWN ROOM — see layoutSleeping. Two columns wide,
+  // which is one bed and no more: an innkeeper should not be lying in a room they
+  // rent out, nor bunked in with their own staff. Small on purpose; a private room
+  // is what a keeper has, and floor space is what the building needs for the rest.
   const SLEEP_PLANS = {
-    dwelling: { band: 3, span: 4, soft: 2, max: 4 },
+    dwelling: { band: 3, span: 4, soft: 2, max: 4, privateSpan: 2 },
     gathering: { band: 3, span: 4, soft: 1, max: 4, spare: true },
     // LIVING QUARTERS — the rooms a building the brief NAMED grows when the brief
     // homes somebody in it (the keeper's rooms behind the church, the alewife's
@@ -2259,7 +2263,7 @@ PF.world = (() => {
     // wing that took the whole width would seal off everything above it. The
     // reserve caps the wing at two rooms — eight bunked, above CAPS.household —
     // and anything past that falls to the open plan, which walls nothing.
-    quarters: { band: 3, span: 4, soft: 3, max: 4, keepOpen: true },
+    quarters: { band: 3, span: 4, soft: 3, max: 4, keepOpen: true, privateSpan: 2 },
   };
 
   // ── What a communal building was BUILT for ──────────────────────────────────
@@ -2312,29 +2316,59 @@ PF.world = (() => {
    *  the compiler's own over-subscription merge does, and a roof carrying two or
    *  three whole households IS a bunkhouse. Which is the point: the open plan has
    *  to mean an orphanage, a barracks or a doss-house, never a big family. */
-  function layoutSleeping(zone, w, h, kind, sleepers, top = 2) {
+  function layoutSleeping(zone, w, h, kind, sleepers, top = 2, owned = false) {
     const plan = SLEEP_PLANS[kind];
     const area = { x0: 1, y0: top, x1: w - 2, y1: top - 1 + plan.band };
-    // n rooms of `span` need n-1 dividers between them: n*(span+1) - 1 tiles.
-    const fits = Math.floor((area.x1 - area.x0 + 2) / (plan.span + 1)) - (plan.keepOpen ? 1 : 0);
-    const count = plan.spare ? fits : Math.min(fits, Math.ceil(sleepers / plan.soft));
+    // THE OWNER'S OWN ROOM, first in the run and one sleeper wide. A building that
+    // houses the person who runs it owes them a door of their own: an innkeeper
+    // in a let room reads as a lodger in their own inn, and an innkeeper bunked
+    // in with the staff reads as a dormitory. The rest of the household fills the
+    // rooms after it under the ordinary rules — bunks when dense, and so on —
+    // because they are an ordinary household.
+    //
+    // NOT a double bed: the maintainer wants the owner's bed to become one when
+    // they have a partner, and that waits on the relationship layer double beds
+    // are already deferred behind (roadmap 14). The ROOM is the part that lands
+    // today.
+    const priv = owned && plan.privateSpan > 0 && sleepers > 0;
+    const shareFrom = area.x0 + (priv ? plan.privateSpan + 1 : 0);
+    // How many `span` rooms fit east of it. `keepOpen` stops the run two columns
+    // short of the band's edge — one for the last divider and one walkable — which
+    // is how the rows above and below a mid-band wing reach each other past it.
+    const lastEnd = (n) => shareFrom + (n - 1) * (plan.span + 1) + plan.span - 1;
+    const limit = area.x1 - (plan.keepOpen ? 2 : 0);
+    let fits = 0;
+    while (lastEnd(fits + 1) <= limit) fits++;
+    const rest = sleepers - (priv ? 1 : 0);
+    const count = plan.spare ? fits : Math.min(fits, Math.ceil(rest / plan.soft));
     // `max` is policy; the wall run is physics. Take the lower, or a plan that
     // over-promised would hand a room more sleepers than it has tiles for and
     // the surplus would quietly fall back to the door apron with no bed at all.
     const holds = Math.min(plan.max, 2 * bedsAlong(plan.span));
-    if (count < 1 || sleepers > count * holds) return dormitory(zone, w, h, sleepers, top);
+    // EVERYONE SLEEPS SOMEWHERE outranks the private room. If reserving it would
+    // leave the rest of the household without a bed, give the room up and lay the
+    // wing the ordinary way; the open plan below is the floor under that in turn.
+    // (No band is wide enough to grow into here: a household is capped at six, and
+    // six — the owner plus five — fits every wing the compiler builds. This is the
+    // path for a place several households are homed at, where it is a fallback and
+    // not a silent drop.)
+    if (priv && (rest > count * holds || (rest > 0 && count < 1)))
+      return layoutSleeping(zone, w, h, kind, sleepers, top, false);
+    if (!priv && (count < 1 || sleepers > count * holds)) return dormitory(zone, w, h, sleepers, top);
     const rooms = partitionRooms(
       zone,
       area,
-      share(sleepers, count).map((taken) => ({
-        purpose: "bedroom",
-        span: plan.span,
-        // A spare room still gets its bed — a guest room with no bed in it is a
-        // cupboard. The berth table sits at or above the room count, so this no
-        // longer fires on any settlement; it is the floor that stops a wing
-        // widened past its budget from carving furniture-less rooms.
-        sleepers: plan.spare ? Math.max(1, taken) : taken,
-      })),
+      (priv ? [{ purpose: "bedroom", span: plan.privateSpan, sleepers: 1, private: true }] : []).concat(
+        share(rest, count).map((taken) => ({
+          purpose: "bedroom",
+          span: plan.span,
+          // A spare room still gets its bed — a guest room with no bed in it is a
+          // cupboard. The berth table sits at or above the room count, so this no
+          // longer fires on any settlement; it is the floor that stops a wing
+          // widened past its budget from carving furniture-less rooms.
+          sleepers: plan.spare ? Math.max(1, taken) : taken,
+        })),
+      ),
       plan.keepOpen,
     );
     return { rooms, beds: rooms.flatMap((room) => room.beds ?? []) };
@@ -2433,7 +2467,7 @@ PF.world = (() => {
       // and the shop floor is what is left south of them. Sleeping FIRST —
       // partitionRooms owns those rows, and a fitting painted into them would be
       // walled inside somebody's bedroom.
-      const sleeping = layoutSleeping(z, w, h, "dwelling", options.sleepers ?? 0);
+      const sleeping = layoutSleeping(z, w, h, "dwelling", options.sleepers ?? 0, 2, options.owned);
       // Never a bare room with a door on it: a counter to be served over and a
       // wall of stock behind it. An empty shop reads worse than a locked one
       // (maintainer call), and the owner's `post` handle moves in here, so it is
@@ -2455,7 +2489,7 @@ PF.world = (() => {
       // house a farming family sleeps in. Bedrooms along the north band like any
       // other household, and the working half under them — the long bench a day's
       // crop is sorted on and the table that day ends at.
-      const sleeping = layoutSleeping(z, w, h, "dwelling", options.sleepers ?? 0);
+      const sleeping = layoutSleeping(z, w, h, "dwelling", options.sleepers ?? 0, 2, options.owned);
       // Rug first: a ground fill clears solidity, so painting it after the bench
       // would silently make the bench walk-through (the hall's lesson).
       fillRect(z, w - 6, h - 3, 3, 2, "ground", "rug", false);
@@ -2470,7 +2504,7 @@ PF.world = (() => {
       // Behind BEDROOM DOORS, bunked once a room has to take more than two — a
       // household at CAPS.household is a big family and keeps its walls, and the
       // open plan is reserved for the roofs that are genuinely institutional.
-      const sleeping = layoutSleeping(z, w, h, "dwelling", options.sleepers ?? 0);
+      const sleeping = layoutSleeping(z, w, h, "dwelling", options.sleepers ?? 0, 2, options.owned);
       // A living half under the sleeping wall, so the room is not only a dormitory
       // — and so a dwelling with no sleepers of its own is still a furnished room.
       // Nothing solid on the row under the bedroom wall: that row is the corridor
@@ -2509,7 +2543,9 @@ PF.world = (() => {
     // Same call, same plan machinery and the same ROOM_FURNISH.bedroom as a
     // household anywhere else gets — so a keeper's family gets bedrooms and bunks
     // by the density rule, not a bed each regardless of size.
-    const living = sleepingIn ? layoutSleeping(zone, w, h, "quarters", opts.residents, sleepingIn.top) : null;
+    const living = sleepingIn
+      ? layoutSleeping(zone, w, h, "quarters", opts.residents, sleepingIn.top, opts.owned)
+      : null;
     const furnished = (FURNISH[kind] || FURNISH.dwelling)(zone, w, h, { ...opts, floor0 }) ?? {};
     // What the furnisher carved and where it put the sleepers. Compiler output,
     // not save data: a zone is rebuilt from the seed on every load, so rooms and
@@ -2856,6 +2892,14 @@ PF.world = (() => {
 
     // ── Interior zones ──
     const bedFor = new Map(); // cast member -> {zoneId, x, y}, their own bed tile
+    /** Everyone sleeping under one roof, THE OWNER FIRST. The owner is the cast
+     *  member who runs the building — the one the specials pass bound to it — and
+     *  never merely whoever happens to come first in the cast, so a building that
+     *  houses a household with no owner among them lays no private room and the
+     *  ordinary rules apply. Order matters twice over: the private room is first
+     *  in the run, and beds are dealt to this list in order. */
+    const ownerFirst = (residents, owner) =>
+      owner && residents.includes(owner) ? [owner, ...residents.filter((m) => m !== owner)] : residents;
     for (const place of interiorPlaces) {
       const id = zoneIdForPlace(place);
       if (!id) continue;
@@ -2880,19 +2924,21 @@ PF.world = (() => {
       const residents = brief.cast.filter(
         (member) => (member.standing ?? "resident") === "resident" && zoneIdByName.get(member.home) === id,
       );
+      const living = ownerFirst(residents, facade.owner);
       const zone = interiorRoom(id, place.name, place.kind, {
         // Guest berths are the GATHERING's alone — what a settlement of this size
         // and means was built to offer travellers. Nothing else rents rooms, so
         // nothing else lays them; a house or a church sleeps only its own people.
         sleepers: place.kind === "gathering" ? guestBerths(brief) : 0,
-        residents: residents.length,
+        residents: living.length,
+        owned: living[0] === facade.owner && !!facade.owner,
       });
       zone.flavor = place.flavor;
       zones[id] = zone;
       linkInterior(v, zone, facade.door, `Enter ${place.name}`);
       // Their own bed each, out of the quarters and never out of the guest
       // berths — the two lists are carved from different bands (interiorRoom).
-      residents.forEach((member, index) => {
+      living.forEach((member, index) => {
         const bed = zone.homeBeds[index];
         if (bed) bedFor.set(member, { zoneId: id, x: bed.x, y: bed.y });
       });
@@ -3006,7 +3052,13 @@ PF.world = (() => {
       // counter would move the moment a household merged differently.
       const id = b.special ? `s${brief.cast.indexOf(b.owner) + 1}` : `h${Math.min(...b.households)}`;
       const name = b.special ? `${b.owner.name}'s ${interior.label}` : `${residents[0]?.name ?? brief.name}'s home`;
-      const zone = interiorRoom(id, name, interior.kind, { sleepers: residents.length });
+      // A live-work premises houses the tradesman who runs it, so they get the
+      // private room too — the same rule as a keeper's, for the same reason.
+      const sleepers = ownerFirst(residents, b.owner);
+      const zone = interiorRoom(id, name, interior.kind, {
+        sleepers: sleepers.length,
+        owned: sleepers[0] === b.owner && !!b.owner,
+      });
       zone.mapExport = false;
       zones[id] = zone;
       linkInterior(v, zone, b.door, "Go inside");
@@ -3016,7 +3068,7 @@ PF.world = (() => {
       b.interior = { zoneId: id, post: WORK_POSTS[b.special]?.(zone.w, zone.h) };
       // One bed each — never a shared tile: two sprites on one tile makes the
       // lower one un-talkable, which is precisely what a bedroom would cause.
-      residents.forEach((member, index) => {
+      sleepers.forEach((member, index) => {
         const bed = zone.beds[index];
         if (bed) bedFor.set(member, { zoneId: id, x: bed.x, y: bed.y });
       });
