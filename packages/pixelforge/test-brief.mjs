@@ -2257,6 +2257,54 @@ const bedsBrief = (overrides = {}) => ({
   ...overrides,
 });
 
+// The tiles an NPC can be asleep on. A bunk is a bed TYPE, not a second kind of
+// furniture with its own rules, so anything asserting "in bed" names both.
+const SLEEPS_ON = new Set(["bed", "bunk"]);
+
+// A partition has to show in the TILES, not just in the compiler's bookkeeping.
+// An interior shell is wallStone around the edge with one `wall` row at y=1 and
+// one door in the south wall — so any `wall` below that row, or any door that is
+// not the front door, is a room divider and nothing else can be.
+function partitionTiles(z) {
+  const walls = [];
+  const doors = [];
+  for (let y = 2; y < z.h - 1; y++) {
+    for (let x = 1; x < z.w - 1; x++) {
+      const tile = z.object[z.w * y + x];
+      if (tile === "wall") walls.push(`${x},${y}`);
+      if (tile === "door") doors.push(`${x},${y}`);
+    }
+  }
+  return { walls, doors };
+}
+
+/** Every tile a player can walk to from `start`, four-way, blocked by solids —
+ *  and by `closed`, a set of "x,y" the caller wants treated as wall. Closing a
+ *  room's door and re-flooding is how a case proves the room really is a ROOM:
+ *  enclosed, with that door as its only way in. Loose wall stubs pass every
+ *  other check here and fail this one. */
+function floodFill(z, start, closed) {
+  const seen = new Set([`${start.x},${start.y}`]);
+  const queue = [start];
+  while (queue.length) {
+    const { x, y } = queue.pop();
+    for (const [dx, dy] of [
+      [0, -1],
+      [0, 1],
+      [-1, 0],
+      [1, 0],
+    ]) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= z.w || ny >= z.h) continue;
+      if (z.solid[z.w * ny + nx] || seen.has(`${nx},${ny}`) || closed?.has(`${nx},${ny}`)) continue;
+      seen.add(`${nx},${ny}`);
+      queue.push({ x: nx, y: ny });
+    }
+  }
+  return seen;
+}
+
 // 14d. Every compiled zone is reachable from the start zone. An interior place
 // that never claimed a building lot used to compile a named, NPC-populated room
 // with no portal in either direction — whoever was homed there was stranded and
@@ -2788,11 +2836,15 @@ const zoneNamed = (w, name) => Object.values(w.zones).find((zone) => zone.name =
   }
 }
 
-// 52. Every resident under one roof gets their OWN bed. Six is CAPS.household,
-// the largest a single dwelling ever has to sleep — and two sprites on one tile
-// makes the lower one un-talkable, so "a bed each" is an invariant rather than a
-// nicety. (The pre-0.8.0 shape put the whole household on one door apron; case
-// 14j keeps that overflow path under test by forcing the old handle by hand.)
+// 52. Every resident under one roof gets their OWN SLEEPING TILE. Six is
+// CAPS.household, the largest a single dwelling ever has to sleep — and two
+// sprites on one tile makes the lower one un-talkable, so "a place each" is an
+// invariant rather than a nicety. Six outruns the bedrooms the band holds, so
+// this household sleeps communally and its places are BUNKS — which is exactly
+// why the tile assertion names both: a bunk is a sleeping place, and the
+// invariant under test is one tile per sleeper, not which furniture it is.
+// (The pre-0.8.0 shape put the whole household on one door apron; case 14j
+// keeps that overflow path under test by forcing the old handle by hand.)
 {
   const cast = [];
   for (let i = 0; i < 6; i++) {
@@ -2824,10 +2876,13 @@ const zoneNamed = (w, name) => Object.values(w.zones).find((zone) => zone.name =
     assert.equal(zoneIds.size, 1, `seed ${seed}: one household, one roof (${[...zoneIds].join(",")})`);
     const homeZone = w.zones[[...zoneIds][0]];
     const tiles = new Set(kin.map((n) => `${n._sched.home.wander.x0},${n._sched.home.wander.y0}`));
-    assert.equal(tiles.size, 6, `seed ${seed}: six sleepers, six beds (${tiles.size} distinct)`);
+    assert.equal(tiles.size, 6, `seed ${seed}: six sleepers, six places (${tiles.size} distinct)`);
     for (const tile of tiles) {
       const [x, y] = tile.split(",").map(Number);
-      assert.equal(homeZone.object[homeZone.w * y + x], "bed", `seed ${seed}: ${tile} is an actual bed tile`);
+      assert.ok(
+        SLEEPS_ON.has(homeZone.object[homeZone.w * y + x]),
+        `seed ${seed}: ${tile} is an actual sleeping tile (${homeZone.object[homeZone.w * y + x]})`,
+      );
     }
 
     // And it holds once the Sim has placed them: same room, one tile each.
@@ -2840,7 +2895,7 @@ const zoneNamed = (w, name) => Object.values(w.zones).find((zone) => zone.name =
       const tile = `${npc.x},${npc.y}`;
       assert.ok(!taken.has(tile), `seed ${seed}: ${npc.name} shares tile ${tile} with a housemate`);
       taken.add(tile);
-      assert.equal(homeZone.object[homeZone.w * npc.y + npc.x], "bed", `seed ${seed}: ${npc.name} is in a bed`);
+      assert.ok(SLEEPS_ON.has(homeZone.object[homeZone.w * npc.y + npc.x]), `seed ${seed}: ${npc.name} is in a bed`);
     }
   }
 }
@@ -2912,6 +2967,306 @@ const zoneNamed = (w, name) => Object.values(w.zones).find((zone) => zone.name =
       `seed ${seed}: a shop owner sleeps in their dwelling's bed`,
     );
   }
+}
+
+// ── Rooms, bedrooms and bunks (0.8.0) ────────────────────────────────────────
+// The complaint this answers: every bed in a dwelling sat in ONE open room, laid
+// along two rows in the same 14x10 space as the table, so a six-person household
+// read as a dormitory whether or not it was one — and the inn's guest beds were
+// four tiles in the corner of the common room rather than rooms with doors.
+
+/** A settlement whose only household is `size` people of one cast kind, plus the
+ *  fixed pair (a reeve and an innkeep) that keeps the lot arithmetic identical
+ *  between two calls that differ ONLY in `kind`. */
+const houseBrief = (name, size, kind) => ({
+  scale: "village",
+  name,
+  places: [{ kind: "gathering", name: `The ${name} Lamp` }],
+  cast: [
+    ...Array.from({ length: size }, (_, i) => ({
+      name: `Kin${i}`,
+      role: "ward",
+      kind,
+      tint: ["blue", "green", "amber", "rose", "teal", "violet"][i % 6],
+      home: name,
+      household: 1,
+    })),
+    { name: "Ada", role: "reeve", kind: "leader", tint: "grey", home: name, household: 2 },
+    { name: "Perrin", role: "innkeep", kind: "host", tint: "orange", home: `The ${name} Lamp`, household: 3 },
+  ],
+});
+const findZone = (w, name) => Object.values(w.zones).find((zone) => zone.name === name);
+
+// 54. A small household sleeps behind a bedroom DOOR, and both sleepers are
+// inside that room at night on tiles of their own. The partition is asserted in
+// the TILES — a wall run below the shell's own wall row with a door in it —
+// because a room that exists only in the compiler's bookkeeping is not a room.
+{
+  const sealed = brief.validate(bedsBrief(), ctx);
+  for (const seed of [1, 3, 11, 424242]) {
+    const w = world.build(seed, "cozy-village", sealed);
+    checkWorld(w, sealed, `bedrooms seed ${seed}`);
+    const home = findZone(w, "Cass's home");
+    assert.ok(home, `seed ${seed}: the two-person household compiled a dwelling`);
+    const { walls, doors } = partitionTiles(home);
+    assert.ok(walls.length > 0, `seed ${seed}: the dwelling has an interior wall run`);
+    assert.equal(home.rooms.length, 1, `seed ${seed}: two sleepers want one bedroom (${home.rooms.length})`);
+    assert.equal(doors.length, home.rooms.length, `seed ${seed}: one door per room, so none is sealed in`);
+    // Zone count is the point of doing this with walls: a bedroom must NOT mint
+    // a zone (each one costs two full-size canvases in the render cache).
+    assert.ok(
+      !Object.values(w.zones).some((zone) => zone !== home && zone.name === home.name),
+      `seed ${seed}: the bedroom is a partition, never a zone of its own`,
+    );
+
+    const sim = new loadedPF.Sim(w);
+    sim.clockMin = 23 * 60;
+    sim.resolveSchedules();
+    const room = home.rooms[0];
+    const taken = new Set();
+    for (const name of ["Cass", "Dell"]) {
+      const npc = home.npcs.find((n) => n.name === name);
+      assert.ok(npc, `seed ${seed}: ${name} is home at 23:00`);
+      assert.ok(
+        npc.x >= room.x0 && npc.x <= room.x1 && npc.y >= room.y0 && npc.y <= room.y1,
+        `seed ${seed}: ${name} sleeps INSIDE the bedroom (${npc.x},${npc.y} vs ${room.x0}..${room.x1})`,
+      );
+      const tile = `${npc.x},${npc.y}`;
+      assert.ok(!taken.has(tile), `seed ${seed}: ${name} shares tile ${tile} with the other sleeper`);
+      taken.add(tile);
+      assert.equal(
+        home.object[home.w * npc.y + npc.x],
+        "bed",
+        `seed ${seed}: two in a room this size is not dense, so a single bed each`,
+      );
+    }
+    assert.equal(taken.size, 2, `seed ${seed}: two sleepers, two tiles`);
+
+    // And it is ENCLOSED: shut the bedroom door and the beds fall off the map.
+    // Every other assertion above passes on a partition of loose wall stubs;
+    // this is the one that says the walls actually join up.
+    const shut = floodFill(home, home.spawn, new Set([`${room.doorX},${room.y1 + 1}`]));
+    for (const bed of home.beds) {
+      assert.ok(
+        !shut.has(`${bed.x},${bed.y}`),
+        `seed ${seed}: closing the bedroom door leaves ${bed.x},${bed.y} open — the room has no walls`,
+      );
+    }
+    assert.ok(shut.has(`${home.spawn.x},${home.spawn.y}`), `seed ${seed}: the flood ran at all`);
+  }
+}
+
+// 55. A household too big for its bedrooms becomes an OPEN DORMITORY. Asserted
+// as the ABSENCE of the partition — no interior wall run, no interior door — not
+// merely as "there are beds", which was true before rooms existed. The same
+// fixture one person smaller is partitioned, so neither half can go vacuous.
+{
+  for (const seed of [1, 3, 11]) {
+    const crowded = brief.validate(houseBrief("Sixfold", 6, "folk"), ctx);
+    assert.equal(
+      crowded.cast.filter((c) => c.household === crowded.cast[0].household).length,
+      6,
+      "the household survives validation at the cap — a split would make this vacuous",
+    );
+    const dorm = findZone(world.build(seed, "cozy-village", crowded), "Kin0's home");
+    assert.ok(dorm, `seed ${seed}: the crowded household compiled a dwelling`);
+    const open = partitionTiles(dorm);
+    assert.equal(open.walls.length, 0, `seed ${seed}: a dormitory has no interior wall run (${open.walls.join(" ")})`);
+    assert.equal(open.doors.length, 0, `seed ${seed}: and no interior doors (${open.doors.join(" ")})`);
+    assert.equal(dorm.rooms.length, 0, `seed ${seed}: and the compiler agrees it partitioned nothing`);
+    assert.equal(dorm.beds.length, 6, `seed ${seed}: six sleepers still get six places`);
+    for (const bed of dorm.beds) {
+      assert.equal(
+        dorm.object[dorm.w * bed.y + bed.x],
+        "bunk",
+        `seed ${seed}: a dormitory sleeps its people in bunks (${bed.x},${bed.y})`,
+      );
+    }
+
+    // One person fewer fits the bedrooms, so it IS partitioned — the boundary is
+    // real and case 55 is not just asserting "dwellings have no walls".
+    const roomy = brief.validate(houseBrief("Fourfold", 4, "folk"), ctx);
+    const rooms = findZone(world.build(seed, "cozy-village", roomy), "Kin0's home");
+    assert.ok(rooms, `seed ${seed}: the smaller household compiled a dwelling`);
+    assert.ok(partitionTiles(rooms).walls.length > 0, `seed ${seed}: four sleepers still get bedrooms`);
+    assert.equal(rooms.rooms.length, 2, `seed ${seed}: four sleepers, two bedrooms of two`);
+  }
+}
+
+// 56. The inn's guests get ROOMS. One drifter sleeps behind a door of their own;
+// a crowded inn packs the rooms that need it with bunks and leaves the room that
+// does not with single beds — same building, same seed, only the density differs.
+{
+  const sealed = brief.validate(bedsBrief(), ctx);
+  for (const seed of [1, 31, 424242]) {
+    const w = world.build(seed, "cozy-village", sealed);
+    const inn = findZone(w, "The Kettle");
+    assert.ok(inn, `seed ${seed}: the gathering compiled`);
+    assert.ok(inn.rooms.length >= 1, `seed ${seed}: the inn has guest rooms (${inn.rooms.length})`);
+    assert.equal(
+      partitionTiles(inn).doors.length,
+      inn.rooms.length,
+      `seed ${seed}: every guest room has a door — a guest walled in is un-talkable forever`,
+    );
+    for (const room of inn.rooms) {
+      assert.ok(room.beds.length >= 1, `seed ${seed}: a guest room with no bed in it is a cupboard`);
+      // A guest room is a room: its door is the only way in. Otherwise "guest
+      // room" is a label on a corner of the common floor, which is what 0.7.x
+      // already had.
+      const shut = floodFill(inn, inn.spawn, new Set([`${room.doorX},${room.y1 + 1}`]));
+      for (const bed of room.beds) {
+        assert.ok(
+          !shut.has(`${bed.x},${bed.y}`),
+          `seed ${seed}: closing the guest room door leaves ${bed.x},${bed.y} open to the common room`,
+        );
+      }
+    }
+    const sim = new loadedPF.Sim(w);
+    sim.clockMin = 23 * 60;
+    sim.resolveSchedules();
+    const wisp = inn.npcs.find((npc) => npc.name === "Wisp");
+    assert.ok(wisp, `seed ${seed}: the drifter beds down at the inn`);
+    const host = inn.rooms.find(
+      (room) => wisp.x >= room.x0 && wisp.x <= room.x1 && wisp.y >= room.y0 && wisp.y <= room.y1,
+    );
+    assert.ok(host, `seed ${seed}: and inside one of its guest rooms (${wisp.x},${wisp.y})`);
+    assert.equal(inn.object[inn.w * wisp.y + wisp.x], "bed", `seed ${seed}: a solo guest gets a bed, not a bunk`);
+  }
+
+  // Eight guests over three rooms → 3, 3, 2. The threes outrun what single beds
+  // fit along the room's wall and bunk; the two does not and does not.
+  const cast = [{ name: "Host", role: "innkeep", kind: "host", tint: "orange", home: "The Long Rest", household: 1 }];
+  for (let i = 0; i < 8; i++) {
+    cast.push({
+      name: `T${i}`,
+      role: "drover",
+      kind: "folk",
+      tint: ["blue", "green", "amber", "rose", "teal", "violet", "grey", "red"][i],
+      home: "Waystop",
+      household: 2 + ((i / 3) | 0),
+      standing: "transient",
+    });
+  }
+  const busy = brief.validate(
+    { scale: "town", name: "Waystop", places: [{ kind: "gathering", name: "The Long Rest" }], cast },
+    ctx,
+  );
+  assert.equal(busy.cast.filter((c) => c.standing === "transient").length, 8, "eight guests survive validation");
+  for (const seed of [1, 5, 31]) {
+    const w = world.build(seed, "cozy-village", busy);
+    const inn = findZone(w, "The Long Rest");
+    assert.ok(inn, `seed ${seed}: the busy inn compiled`);
+    const types = inn.rooms.map((room) => new Set(room.beds.map((bed) => inn.object[inn.w * bed.y + bed.x])));
+    assert.ok(
+      types.some((set) => set.has("bunk")),
+      `seed ${seed}: the crowded guest rooms are bunked`,
+    );
+    assert.ok(
+      types.some((set) => set.size === 1 && set.has("bed")),
+      `seed ${seed}: and the room that is NOT crowded keeps single beds — density decides, not the building`,
+    );
+    // Everyone still lands on a tile of their own.
+    const sim = new loadedPF.Sim(w);
+    sim.clockMin = 23 * 60;
+    sim.resolveSchedules();
+    const taken = new Set();
+    for (const npc of inn.npcs) {
+      const tile = `${Math.round(npc.x)},${Math.round(npc.y)}`;
+      assert.ok(!taken.has(tile), `seed ${seed}: ${npc.name} stacked on tile ${tile} in the inn`);
+      taken.add(tile);
+    }
+    const guests = inn.npcs.filter((npc) => npc.name.startsWith("T"));
+    assert.ok(guests.length >= 6, `seed ${seed}: the inn genuinely fills up (${guests.length} guests)`);
+  }
+}
+
+// 57. Bunks come from the ROOM, never from who is sleeping in it. Two fixtures
+// identical but for the cast kind — six children, six adults — must compile to
+// the same sleeping tiles, so no rule of the form `kind === "child"` (or its
+// mirror, "adults only") can survive here. And a lone child gets a plain single
+// bed: one sleeper is not dense, whatever their age.
+{
+  for (const seed of [1, 3, 11]) {
+    const built = (kind) => {
+      const w = world.build(seed, "cozy-village", brief.validate(houseBrief("Wardhome", 6, kind), ctx));
+      const home = findZone(w, "Kin0's home");
+      assert.ok(home, `seed ${seed}: the ${kind} household compiled a dwelling`);
+      return home;
+    };
+    const wards = built("child");
+    const adults = built("folk");
+    // Non-vacuous: both really are dense, and dense really does mean bunks.
+    assert.equal(wards.beds.length, 6, `seed ${seed}: six wards, six places`);
+    assert.ok(
+      wards.beds.every((bed) => wards.object[wards.w * bed.y + bed.x] === "bunk"),
+      `seed ${seed}: a house full of children at that density gets bunks`,
+    );
+    assert.ok(
+      adults.beds.every((bed) => adults.object[adults.w * bed.y + bed.x] === "bunk"),
+      `seed ${seed}: and so does a barracks of adults at the same density`,
+    );
+    assert.deepEqual(
+      adults.object,
+      wards.object,
+      `seed ${seed}: the two interiors are tile-for-tile identical — the rule never read the cast`,
+    );
+
+    // The other direction: one child, alone in a bedroom, sleeps in a bed.
+    const lone = findZone(
+      world.build(seed, "cozy-village", brief.validate(houseBrief("Onefold", 1, "child"), ctx)),
+      "Kin0's home",
+    );
+    assert.ok(lone, `seed ${seed}: the one-child household compiled a dwelling`);
+    assert.equal(lone.beds.length, 1, `seed ${seed}: one sleeper, one place`);
+    assert.equal(
+      lone.object[lone.w * lone.beds[0].y + lone.beds[0].x],
+      "bed",
+      `seed ${seed}: a lone child does not force a bunk — density does, and there is none`,
+    );
+    assert.ok(partitionTiles(lone).walls.length > 0, `seed ${seed}: and they still get a bedroom of their own`);
+  }
+}
+
+// 58. Every sleeping tile is reachable on foot from the interior's entrance. A
+// bedroom whose door gap was forgotten walls its sleeper off: the player can
+// never reach them, and 25-schedule's placer would ring-scan them out of the
+// room the compiler put them in. Flooded from the tile inside the front door,
+// across every fixture in this file that sleeps anyone.
+{
+  const fixtures = [
+    ["hearthwick", brief.validate(bedsBrief(), ctx)],
+    ["dormitory", brief.validate(houseBrief("Sixfold", 6, "folk"), ctx)],
+    ["four", brief.validate(houseBrief("Fourfold", 4, "child"), ctx)],
+    ["lone", brief.validate(houseBrief("Onefold", 1, "folk"), ctx)],
+    ["defaults", brief.defaults("cozy-village", 424242)],
+    ["colony", brief.defaults("sci-fi-colony", 424242)],
+  ];
+  let checked = 0;
+  for (const [label, sealed] of fixtures) {
+    for (const seed of [1, 3, 11, 424242]) {
+      const w = world.build(seed, "cozy-village", sealed);
+      for (const zone of Object.values(w.zones)) {
+        if (!zone.beds?.length) continue;
+        const reached = floodFill(zone, zone.spawn);
+        for (const bed of zone.beds) {
+          assert.ok(
+            reached.has(`${bed.x},${bed.y}`),
+            `${label} seed ${seed}: ${zone.name} walls off the sleeping tile ${bed.x},${bed.y}`,
+          );
+          checked++;
+        }
+        // And the room's own door is reachable, so the sleeper can be talked to
+        // rather than merely stood next to through a wall.
+        for (const room of zone.rooms) {
+          assert.ok(
+            reached.has(`${room.doorX},${room.y1 + 1}`),
+            `${label} seed ${seed}: ${zone.name} has an unreachable room door at ${room.doorX},${room.y1 + 1}`,
+          );
+        }
+      }
+    }
+  }
+  assert.ok(checked > 100, `the sweep actually visited sleeping tiles (${checked})`);
 }
 
 console.log("brief validator + compiler: all cases passed");

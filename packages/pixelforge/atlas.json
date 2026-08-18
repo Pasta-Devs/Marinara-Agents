@@ -25,6 +25,7 @@
     "table": 20,
     "altar": 21,
     "bed": 22,
-    "shelf": 23
+    "shelf": 23,
+    "bunk": 24
   }
 }

@@ -19,6 +19,12 @@ PF.world = (() => {
       npcs: [],
       spawn: { x: 2, y: 2 },
       spatialLocationId: null, // bound World Maps location, when known
+      // Rooms PARTITIONED inside this zone — wall runs with a door, never zones
+      // of their own. Zone count is the flagged cost of the release and every
+      // zone holds two full-size canvases in the render cache, so a bedroom is
+      // walls; floors will be zones. {purpose, x0, y0, x1, y1, doorX, ...}
+      rooms: [],
+      beds: [], // sleeping tiles this zone offers, in claim order
       // World Maps export gate (spec §8). A building is ONE location and its
       // floors are rooms inside it, so a zone that is a room stamps this false
       // and never claims a map row. The locations route is additive with no
@@ -395,29 +401,163 @@ PF.world = (() => {
     shop: [14, 10],
     dwelling: [14, 10],
   };
-  // The sleeping wall: bed tiles run along the rows FARTHEST from the door, two
-  // apart so a household reads as a bedroom rather than a barracks, and they fill
-  // one row before starting the next. A room is only asked for as many beds as it
-  // has sleepers, so the second row exists only for a merged household.
+  // ── Sleeping arrangements ───────────────────────────────────────────────────
+  // A sleeping place is ONE TILE an NPC stands on — the bed is the placement, not
+  // furniture beside it — so "a bunk sleeps two" cannot mean two sprites on one
+  // tile: the lower one would be un-talkable (talk-targeting picks the nearest on
+  // a strict <) and it would break the invariant that no two NPCs share a tile.
+  //
+  // A BUNK is therefore one frame across TWO tiles stacked NORTH-SOUTH — the
+  // upper berth and the lower berth — with a sleeper standing on each. The `bunk`
+  // tile is painted edge to edge vertically (the altar's trick), so a pair reads
+  // as one two-berth frame rather than two beds end to end. The COLUMN pitch is
+  // two either way, so a run still reads as separate pieces of furniture; bunking
+  // doubles what a wall run holds without widening it, which is exactly the
+  // density argument for putting them in.
   const BED_ROWS = [2, 4];
-  function bedSlots(w, h, count) {
+  /** Sleeping places along one wall run, plus the furniture that paints them.
+   *  `paint` is every tile of every PIECE — a bunk with one berth spare is still
+   *  a whole bunk — while `slots` is one tile per sleeper, in claim order. */
+  function sleepRun(x0, x1, y, count, bunked) {
+    const paint = [];
     const slots = [];
-    for (const y of BED_ROWS) {
-      if (y > h - 3 || slots.length >= count) break;
-      for (let x = 2; x <= w - 2 && slots.length < count; x += 2) slots.push({ x, y });
+    for (let x = x0; x <= x1 && slots.length < count; x += 2) {
+      paint.push({ x, y });
+      slots.push({ x, y });
+      if (bunked) {
+        paint.push({ x, y: y + 1 });
+        if (slots.length < count) slots.push({ x, y: y + 1 });
+      }
     }
-    return slots;
+    return { tile: bunked ? "bunk" : "bed", paint, slots };
   }
-  // The inn's guest corner. Transients already bedded down at the inn, but at a
-  // shared box covering the whole common room, so "took a bed" rendered as
-  // standing among the tables. Four is the corner the 16x12 gathering has room
-  // for; a fifth transient keeps the old shared box (see the cast loop).
-  const innBeds = (w) => [
-    { x: w - 5, y: 2 },
-    { x: w - 3, y: 2 },
-    { x: w - 5, y: 4 },
-    { x: w - 3, y: 4 },
-  ];
+  /** How many SINGLE beds fit along a run of `span` tiles, one apart. Bunking the
+   *  same run doubles it — that is the whole of the density argument. */
+  const bedsAlong = (span) => Math.max(0, Math.ceil(span / 2));
+  const paintRun = (zone, run) => {
+    for (const tile of run.paint) put(zone, tile.x, tile.y, "object", run.tile, false);
+    return run.slots;
+  };
+
+  // ── Interior partitioning ───────────────────────────────────────────────────
+  // One furnisher per room PURPOSE — the same table shape as FURNISH one level
+  // up, and for the same reason: a new purpose is an entry, never a branch.
+  const ROOM_FURNISH = {
+    /** A bedroom is its sleeping wall: places along the row farthest from the
+     *  door and nothing else, because a room this size has nothing else to say.
+     *
+     *  Bunks are decided HERE, from `room.sleepers` against what the wall run
+     *  holds — how many bodies must fit this space, and nothing about whose they
+     *  are. A guard barracks, an inn's crowded guest room and a house full of
+     *  orphans all get the same answer, because they are the same question. */
+    bedroom(zone, rect, room) {
+      const span = rect.x1 - rect.x0 + 1;
+      const bunked = room.sleepers > bedsAlong(span);
+      return { beds: paintRun(zone, sleepRun(rect.x0, rect.x1, rect.y0, room.sleepers, bunked)) };
+    },
+  };
+
+  /** Subdivide an interior's floor into walled rooms, each with its own door.
+   *
+   *  Shaped as (zone, area, rooms) — a rect to carve up plus a LIST OF ROOM
+   *  DESCRIPTORS — rather than as a "lay out the bedrooms" call, because
+   *  bedrooms are only the first purpose to want it. Kitchens, dining, storage
+   *  and crafting rooms are the obvious next ones, and they have to arrive as
+   *  another descriptor plus another ROOM_FURNISH entry — DATA, never a second
+   *  partitioner. So this function knows nothing but geometry: where each room
+   *  lands, which walls it needs and where its door goes. What a room is FOR
+   *  lives entirely in the descriptor and its furnisher.
+   *
+   *  Rooms pack west to east along `area`, divided by one-tile wall runs, each
+   *  with a door in its south wall opening onto the floor the caller kept. Any
+   *  of `area` left over east of the last room stays OPEN and joined to that
+   *  floor: a walled-off pocket nobody can walk into is the one shape the
+   *  reachability invariant forbids.
+   *
+   *  Returns one record per room placed — {purpose, x0, y0, x1, y1, doorX}
+   *  merged with whatever its furnisher returned. */
+  function partitionRooms(zone, area, rooms) {
+    const placed = [];
+    let x = area.x0;
+    for (const room of rooms) {
+      const x1 = x + room.span - 1;
+      if (x1 > area.x1) break; // the caller sized the list; this is the floor under it
+      // South wall first, then the door back out of it. The run covers the
+      // divider column too, so the wall reads as one run rather than a comb.
+      for (let wx = x; wx <= Math.min(x1 + 1, area.x1); wx++) put(zone, wx, area.y1 + 1, "object", "wall", true);
+      const doorX = x + ((room.span - 1) >> 1);
+      put(zone, doorX, area.y1 + 1, "object", "door", false);
+      if (x1 < area.x1) for (let wy = area.y0; wy <= area.y1; wy++) put(zone, x1 + 1, wy, "object", "wall", true);
+      const rect = { x0: x, y0: area.y0, x1, y1: area.y1 };
+      const furnished = ROOM_FURNISH[room.purpose]?.(zone, rect, room) ?? {};
+      placed.push({ purpose: room.purpose, ...rect, doorX, ...furnished });
+      x = x1 + 2;
+    }
+    return placed;
+  }
+
+  // How an interior that has to sleep people is arranged. `soft` is the
+  // occupancy a room of this purpose is comfortable with (a household bedroom
+  // sleeps a couple; an inn gives a guest a door of their own), `max` is what one
+  // will take at a push — a house's 1-2 beds per bedroom, an inn's 1-4. `spare`
+  // says the wing exists whether or not tonight's guests fill it: an inn with no
+  // guest room is not an inn, while a house builds only the bedrooms it needs.
+  const SLEEP_PLANS = {
+    dwelling: { band: 3, span: 4, soft: 2, max: 2 },
+    gathering: { band: 3, span: 4, soft: 1, max: 4, spare: true },
+  };
+  /** Split `sleepers` across `count` rooms as evenly as the room order allows. */
+  const share = (sleepers, count) =>
+    Array.from({ length: count }, (_, i) => Math.floor(sleepers / count) + (i < sleepers % count ? 1 : 0));
+
+  /** Where an interior's sleepers sleep: private rooms carved out of the band
+   *  along the north wall while they fit, an open dormitory when they do not.
+   *
+   *  COMMUNAL IS INFERRED, never declared. A brief says who lives somewhere, not
+   *  that a house is a dormitory, so the arithmetic answers it: once the sleepers
+   *  outrun what the band's rooms can hold at their `max`, partitioning them is a
+   *  lie about the building and the whole interior becomes the sleeping room. */
+  function layoutSleeping(zone, w, h, kind, sleepers) {
+    const plan = SLEEP_PLANS[kind];
+    const area = { x0: 1, y0: 2, x1: w - 2, y1: 1 + plan.band };
+    // n rooms of `span` need n-1 dividers between them: n*(span+1) - 1 tiles.
+    const fits = Math.floor((area.x1 - area.x0 + 2) / (plan.span + 1));
+    const count = plan.spare ? fits : Math.min(fits, Math.ceil(sleepers / plan.soft));
+    // `max` is policy; the wall run is physics. Take the lower, or a plan that
+    // over-promised would hand a room more sleepers than it has tiles for and
+    // the surplus would quietly fall back to the door apron with no bed at all.
+    const holds = Math.min(plan.max, 2 * bedsAlong(plan.span));
+    if (count < 1 || sleepers > count * holds) return dormitory(zone, w, h, sleepers);
+    const rooms = partitionRooms(
+      zone,
+      area,
+      share(sleepers, count).map((taken) => ({
+        purpose: "bedroom",
+        span: plan.span,
+        // A spare room still gets its bed — an empty guest room with no bed in
+        // it is a cupboard, and the next guest has to have somewhere to go.
+        sleepers: plan.spare ? Math.max(1, taken) : taken,
+      })),
+    );
+    return { rooms, beds: rooms.flatMap((room) => room.beds ?? []) };
+  }
+
+  /** No partitions: the sleepers outnumber what private rooms hold, so the
+   *  interior IS the sleeping room — places along the rows farthest from the
+   *  door, out in the open, as they were before rooms existed.
+   *
+   *  BUNKED, and for the same spatial reason the partition was refused: getting
+   *  here means the bodies already outran the rooms. Nothing on this path asks
+   *  who they are — a barracks of adults and a house full of children compile to
+   *  the same tiles, because the only input is how many have to fit. */
+  function dormitory(zone, w, h, sleepers) {
+    const beds = [];
+    for (const y of BED_ROWS) {
+      if (y > h - 3 || beds.length >= sleepers) break;
+      beds.push(...paintRun(zone, sleepRun(2, w - 2, y, sleepers - beds.length, true)));
+    }
+    return { rooms: [], beds };
+  }
 
   // ── Interior rooms ──────────────────────────────────────────────────────────
   // Every interior is the same shell — four walls, one door centered on the south
@@ -426,13 +566,21 @@ PF.world = (() => {
   // in. FURNISH is keyed by the brief's own place-kind vocabulary plus the kinds
   // the compiler mints itself (shop); an unknown kind furnishes as a plain room.
   const FURNISH = {
-    gathering(z, w, h) {
-      fillRect(z, 3, 3, 5, 1, "object", "counter", true);
-      put(z, w - 6, 5, "object", "table", true);
-      put(z, w - 4, h - 4, "object", "table", true);
-      fillRect(z, 5, 6, 4, 3, "ground", "rug", false);
-      for (const bed of innBeds(w)) put(z, bed.x, bed.y, "object", "bed", false);
-      z.lights.push({ x: 4, y: 3 }, { x: w - 5, y: 5 });
+    gathering(z, w, h, options) {
+      // Guest ROOMS, not four beds in the corner of the common room. The band
+      // along the north wall is partitioned into rooms with doors of their own
+      // and the common room keeps everything south of them — which is also the
+      // shape a travelling group or a player party needs, several beds behind
+      // one door, long before there is anything but a lone drifter to put in it.
+      const sleeping = layoutSleeping(z, w, h, "gathering", options.sleepers ?? 0);
+      // Rug first: a ground fill clears solidity, so painting it after the
+      // tables would silently make one of them walk-through (the hall's lesson).
+      fillRect(z, 5, h - 4, 4, 3, "ground", "rug", false);
+      fillRect(z, 3, h - 5, 5, 1, "object", "counter", true);
+      put(z, w - 6, h - 4, "object", "table", true);
+      put(z, w - 4, h - 2, "object", "table", true);
+      z.lights.push({ x: 4, y: h - 5 }, { x: w - 6, y: h - 4 });
+      return sleeping;
     },
     hall(z, w, h) {
       // Rug first: its ground fill clears solidity, so painting it after the
@@ -481,12 +629,18 @@ PF.world = (() => {
     dwelling(z, w, h, options) {
       // The beds ARE the feature: one per resident, 1x1 and non-solid, so a night
       // visit finds the household asleep in them instead of milling on a doorstep.
-      for (const bed of options.beds ?? []) put(z, bed.x, bed.y, "object", "bed", false);
+      // Behind BEDROOM DOORS once the household is small enough to have them —
+      // six people in one open room read as a barracks, which is what a household
+      // becomes only when it genuinely outgrows its bedrooms.
+      const sleeping = layoutSleeping(z, w, h, "dwelling", options.sleepers ?? 0);
       // A living half under the sleeping wall, so the room is not only a dormitory
       // — and so a dwelling with no sleepers of its own is still a furnished room.
+      // Nothing solid on the row under the bedroom wall: that row is the corridor
+      // every bedroom door opens onto.
       put(z, 2, h - 3, "object", "table", true);
       fillRect(z, w - 6, h - 4, 3, 2, "ground", "rug", false);
       z.lights.push({ x: 2, y: h - 3 });
+      return sleeping;
     },
   };
 
@@ -502,7 +656,12 @@ PF.world = (() => {
       put(zone, 0, y, "object", "wallStone", true);
       put(zone, w - 1, y, "object", "wallStone", true);
     }
-    (FURNISH[kind] || FURNISH.dwelling)(zone, w, h, options || {});
+    const furnished = (FURNISH[kind] || FURNISH.dwelling)(zone, w, h, options || {}) ?? {};
+    // What the furnisher carved and where it put the sleepers. Compiler output,
+    // not save data: a zone is rebuilt from the seed on every load, so rooms and
+    // beds cost ZERO save fields — the same deal schedules took.
+    zone.rooms = furnished.rooms ?? [];
+    zone.beds = furnished.beds ?? [];
     const doorX = (w / 2) | 0;
     put(zone, doorX, h - 1, "object", "door", false);
     zone.spawn = { x: doorX, y: h - 2 };
@@ -574,6 +733,10 @@ PF.world = (() => {
           .map((m) => m.household),
       ),
     ].sort((a, b) => a - b);
+    // Everyone who beds down at the settlement's gathering — the same predicate
+    // the cast loop hands guest beds out under, so the inn's guest wing and the
+    // guests it is built for can never disagree about how many there are.
+    const transients = brief.cast.filter((member) => (member.standing ?? "resident") === "transient");
     const specials = [];
     const seenSpecial = new Set();
     for (const member of brief.cast) {
@@ -736,7 +899,11 @@ PF.world = (() => {
       // Same policy as an unanchorable feature: dropped, never sealed.
       const facade = buildings.find((b) => b.boundPlace === place);
       if (!facade) continue;
-      const zone = interiorRoom(id, place.name, place.kind);
+      // Guest rooms are sized to the guests the brief actually brought: every
+      // transient tries for a bed here (see the cast loop). Counted before the
+      // room is built because the interiors compile ahead of the cast — the
+      // brief is the one thing available to both.
+      const zone = interiorRoom(id, place.name, place.kind, { sleepers: transients.length });
       zone.flavor = place.flavor;
       zones[id] = zone;
       linkInterior(v, zone, facade.door, `Enter ${place.name}`);
@@ -841,8 +1008,9 @@ PF.world = (() => {
         // (60-save restores a zone by id). A loop counter would move the moment a
         // household merged differently.
         const id = `h${Math.min(...b.households)}`;
-        const beds = bedSlots(INTERIOR_DIMS.dwelling[0], INTERIOR_DIMS.dwelling[1], residents.length);
-        const zone = interiorRoom(id, `${residents[0]?.name ?? brief.name}'s home`, "dwelling", { beds });
+        const zone = interiorRoom(id, `${residents[0]?.name ?? brief.name}'s home`, "dwelling", {
+          sleepers: residents.length,
+        });
         zone.mapExport = false;
         zones[id] = zone;
         linkInterior(v, zone, b.door, "Go inside");
@@ -850,7 +1018,7 @@ PF.world = (() => {
         // One bed each — never a shared tile: two sprites on one tile makes the
         // lower one un-talkable, which is precisely what a bedroom would cause.
         residents.forEach((member, index) => {
-          const bed = beds[index];
+          const bed = zone.beds[index];
           if (bed) bedFor.set(member, { zoneId: id, x: bed.x, y: bed.y });
         });
       } else if (b.special === "shop" && b.owner) {
@@ -877,7 +1045,17 @@ PF.world = (() => {
     const gatheringZoneId = gatheringPlace ? zoneIdForPlace(gatheringPlace) : null;
     const wildsZoneId = wildsPlaces.length ? zoneIdForPlace(wildsPlaces[0]) : null;
     const plazaBox = () => ({ x0: midX - 6, y0: midY - 5, x1: midX + 6, y1: midY + 5 });
-    const fullZoneBox = (z) => ({ x0: 2, y0: 2, x1: z.w - 3, y1: z.h - 3 });
+    // The walkable middle of a zone — but only the COMMON half of one that has
+    // rooms partitioned into it. A private room is somewhere an NPC is SENT (a
+    // bed, at night), never somewhere they drift: standable() rules out door
+    // tiles, so anyone who wandered into a bedroom could not walk back out of it
+    // and would hold the room until the next daypart moved them.
+    const fullZoneBox = (z) => ({
+      x0: 2,
+      y0: z.rooms.reduce((floor, room) => Math.max(floor, room.y1 + 2), 2),
+      x1: z.w - 3,
+      y1: z.h - 3,
+    });
     // Transients loiter at a public spot — the inn, an existing resident shop's
     // front, or the plaza — spread across whatever the settlement has (seeded).
     const shopSpots = buildings
@@ -888,8 +1066,9 @@ PF.world = (() => {
     for (const shop of shopSpots)
       loiterSpots.push({ kind: "shop", door: shop.door, interiorZoneId: shop.interiorZoneId });
     loiterSpots.push({ kind: "plaza" });
-    // The inn's guest beds, claimed in cast order as transients are placed.
-    const guestBeds = gatheringZoneId && zones[gatheringZoneId] ? innBeds(zones[gatheringZoneId].w) : [];
+    // The inn's guest beds, claimed in cast order as transients are placed —
+    // a copy, because claiming shifts the list and the zone keeps its own.
+    const guestBeds = gatheringZoneId && zones[gatheringZoneId] ? [...zones[gatheringZoneId].beds] : [];
     const loiterStart = PF.hashStr(`${seed >>> 0}|loiter`) % loiterSpots.length;
     let loiterN = 0;
     const loiterAnchor = () => {
@@ -1027,10 +1206,9 @@ PF.world = (() => {
         wander = plazaBox();
       }
       // Transients bed down at the inn when the settlement has one — in one of
-      // its guest beds, handed out in cast order. Past the fourth they share the
-      // common-room box as they always did: a fifth bed would have to go
-      // somewhere the 16x12 gathering does not have, and standing in a busy inn
-      // is a fair reading of "no room left".
+      // its guest beds, handed out in cast order. The wing is sized to them, so
+      // running out means the guest rooms are full to their bunks; sharing the
+      // common-room box then is a fair reading of "no room left".
       if (standing === "transient" && gatheringZoneId && zones[gatheringZoneId]) {
         const guest = guestBeds.shift();
         home = {

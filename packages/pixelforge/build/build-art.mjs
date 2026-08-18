@@ -292,6 +292,18 @@ const PAINTERS = {
       g.rect(1, shelfY + 5, 14, 1, PAL.beam);
     }
   },
+  // One berth of a bunk: the compiler lays TWO of these one above the other and
+  // stands a sleeper on each, so the frame runs edge to edge top and bottom and
+  // a stacked pair reads as one two-berth unit. Ladder up the west rail.
+  bunk(g, rnd) {
+    PAINTERS.floor(g, rnd);
+    g.rect(2, 0, 12, T, PAL.beam);
+    g.rect(3, 0, 10, T, PAL.wall);
+    g.rect(3, 1, 10, 4, PAL.white); g.rect(3, 4, 10, 1, PAL.plasterShadow);
+    g.rect(3, 7, 10, 8, PAL.rug); g.rect(3, 7, 10, 1, PAL.rugHi);
+    g.rect(2, 0, 1, T, PAL.trunk); g.rect(13, 0, 1, T, PAL.trunk);
+    for (let rung = 1; rung < T; rung += 4) { g.rect(1, rung, 3, 1, PAL.trunkHi); g.px(3, rung, PAL.doorKnob); }
+  },
 };
 
 // ── Actors: 4 rows (down, up, left, right) × 4 walk frames, 12×16 ────────────

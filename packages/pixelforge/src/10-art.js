@@ -236,6 +236,24 @@ PF.art = (() => {
         px(g, 1, shelfY + 5, 14, 1, PAL.beam);
       }
     },
+    // One berth of a bunk — and the reason a bunk sleeps two without ever
+    // putting two sprites on one tile: the compiler lays TWO of these one above
+    // the other and stands a sleeper on each. So the frame runs edge to edge top
+    // and bottom (the altar's trick), and a stacked pair reads as one two-berth
+    // frame rather than two beds nose to tail. The ladder up the west rail is
+    // what tells it apart from a bed at a glance. Non-solid like the bed: the
+    // sleeper stands ON it.
+    bunk(g, rnd) {
+      PAINTERS.floor(g, rnd);
+      px(g, 2, 0, 12, T, PAL.beam);
+      px(g, 3, 0, 10, T, PAL.wall);
+      px(g, 3, 1, 10, 4, PAL.white);
+      px(g, 3, 7, 10, 8, PAL.rug);
+      px(g, 3, 7, 10, 1, PAL.roofHi);
+      px(g, 2, 0, 1, T, PAL.trunk);
+      px(g, 13, 0, 1, T, PAL.trunk);
+      for (let rung = 1; rung < T; rung += 4) px(g, 1, rung, 3, 1, PAL.doorKnob);
+    },
   };
 
   // ── Themes ──────────────────────────────────────────────────────────────────
