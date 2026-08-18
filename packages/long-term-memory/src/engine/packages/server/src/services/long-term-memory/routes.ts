@@ -422,8 +422,9 @@ export function createLongTermMemoryRoutes(runtime: {
         (info) => ({ logAvailable: true, bytes: info.size }),
         () => ({ logAvailable: false, bytes: 0 }),
       );
-      const [summary, state, indexResult] = await Promise.all([
+      const [summary, pendingDrafts, state, indexResult] = await Promise.all([
         readLtmNoteSummary(root),
+        draftStore.listDrafts({ status: "pending" }),
         readLtmIndexState(root),
         readFile(longTermMemoryRecallIndexPath(root), "utf8")
           .then((value) => ({
@@ -439,6 +440,9 @@ export function createLongTermMemoryRoutes(runtime: {
         directory: LTM_DIR_NAME,
         notes: {
           total: summary.total,
+          sourceNotes: summary.sourceNotes,
+          savedMemories: summary.savedMemories,
+          pendingDrafts: pendingDrafts.length,
           byType: summary.byType,
           byStatus: summary.byStatus,
         },
@@ -465,7 +469,7 @@ export function createLongTermMemoryRoutes(runtime: {
           warnings: state.error ? [state.error] : [],
           generatedAt: index?.generatedAt ?? null,
           sourceHash: index?.sourceHash ?? null,
-          noteCount: index ? summary.total : null,
+          noteCount: index ? summary.savedMemories : null,
           chunkCount: index ? chunks.length : null,
           chunkFormatVersion: index ? CURRENT_LTM_CHUNK_FORMAT_VERSION : null,
           embeddingsAvailable: Boolean(index?.embeddings.embeddedChunkCount),
@@ -494,23 +498,44 @@ export function createLongTermMemoryRoutes(runtime: {
     app.delete("/debug-log", async () => clearLtmDebugLog(root));
     app.get<{ Params: { chatId: string } }>("/last-injection/:chatId", async (request) => {
       const receipt = await readLongTermMemoryInjectionReceipt(request.params.chatId, root);
-      if (!receipt) return { memoryCount: 0, tokenCount: 0, memories: [] };
-      const titles = new Map((await storage.listNotes()).map((note) => [note.id, note.title?.trim() || note.id]));
-      const memories = new Map<string, { noteId: string; title: string; tokenCount: number }>();
+      if (!receipt)
+        return { memoryCount: 0, tokenCount: 0, memories: [], state: "not_recorded" as const, dispatchedAt: null };
+      const notesById = new Map((await storage.listNotes()).map((note) => [note.id, note]));
+      const memories = new Map<
+        string,
+        {
+          noteId: string;
+          title: string;
+          tokenCount: number;
+          sectionKey?: string;
+          sourceNoteId?: string;
+          sourceTitle?: string;
+        }
+      >();
       for (const chunk of receipt.chunks) {
         const current = memories.get(chunk.noteId);
         if (current) current.tokenCount += chunk.tokenCount;
-        else
+        else {
+          const note = notesById.get(chunk.noteId);
+          const linkedSourceId = note?.links.find((link) => link.relation === "extracted_from")?.target;
+          const sourceNote = linkedSourceId ? notesById.get(linkedSourceId) : undefined;
+          const sourceNoteId = sourceNote?.id;
           memories.set(chunk.noteId, {
             noteId: chunk.noteId,
-            title: titles.get(chunk.noteId) ?? chunk.noteId,
+            title: note?.title?.trim() || chunk.noteId,
             tokenCount: chunk.tokenCount,
+            sectionKey: chunk.sectionKey,
+            ...(sourceNoteId ? { sourceNoteId } : {}),
+            ...(sourceNote?.title?.trim() ? { sourceTitle: sourceNote.title.trim() } : {}),
           });
+        }
       }
       return {
         memoryCount: memories.size,
         tokenCount: receipt.serializedTokenCount,
         memories: [...memories.values()],
+        state: memories.size ? ("injected" as const) : ("no_matches" as const),
+        dispatchedAt: receipt.dispatchedAt,
       };
     });
     app.get("/settings", async () => getLtmGlobalSettings(root));
@@ -788,7 +813,7 @@ export function createLongTermMemoryRoutes(runtime: {
               sourceNote,
               languageModel,
               scope: chat ? resolveChatLtmScope(chat) : sourceNote.scope,
-              modes: chat ? [ltmModeForChatMode(chat.mode)] : sourceNote.modes,
+              modes: chat ? [ltmModeForChatMode(chat.mode)] : body.mode ? [body.mode] : undefined,
               mode: body.mode,
               instruction: body.instruction,
               operationId,

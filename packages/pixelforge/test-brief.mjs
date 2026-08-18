@@ -1689,14 +1689,18 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   sim.mode = "walk";
   const z = sim.zone();
   assert.ok(z.npcs.length > 0, "the settlement has NPCs to move");
-  const start = z.npcs.map((n) => `${n.name}@${Math.round(n.x)},${Math.round(n.y)}`).join("|");
+  // Key the start tiles BY NAME. A substring test over one joined string lets a
+  // name that is a suffix of another ("Ada" inside "Wanda") match the wrong
+  // entry when both stand on the same tile, so a genuinely frozen NPC would
+  // read as unmoved-but-accounted-for and a movement regression could pass.
+  const start = new Map(z.npcs.map((n) => [n.name, `${Math.round(n.x)},${Math.round(n.y)}`]));
   // Two in-game hours at the shipped 1/60s timestep.
   for (let i = 0; i < 60 * 60 * 2; i++) sim.step(1 / 60, {});
-  const moved = z.npcs.filter((n) => {
-    const at = `${n.name}@${Math.round(n.x)},${Math.round(n.y)}`;
-    return !start.includes(at);
-  });
-  assert.ok(moved.length > 0, `at least one NPC wandered to a new tile (start ${start})`);
+  const moved = z.npcs.filter((n) => start.get(n.name) !== `${Math.round(n.x)},${Math.round(n.y)}`);
+  assert.ok(
+    moved.length > 0,
+    `at least one NPC wandered to a new tile (start ${[...start].map(([n, at]) => `${n}@${at}`).join("|")})`,
+  );
   // And wandering never walks anyone through a wall or out of their box.
   for (const npc of z.npcs) {
     const x = Math.round(npc.x);
@@ -1732,10 +1736,13 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   const v = w.zones.z1;
 
   // A stall merchant tends the counter: a single row, never the open street.
+  // ASSERT the preconditions rather than guarding on them — skipping when the
+  // merchant stops getting a stall (or stops being spread:false) would make the
+  // case pass while checking nothing at all.
   const sol = v.npcs.find((n) => n.name === "Sol");
-  if (sol && sol._sched.post.spread === false) {
-    assert.equal(sol.wander.y0, sol.wander.y1, "the stall merchant's box is the counter row only");
-  }
+  assert.ok(sol, "the transient merchant tends their stall in the settlement");
+  assert.equal(sol._sched.post.spread, false, "a stall is private geometry, so its placement is not hashed");
+  assert.equal(sol.wander.y0, sol.wander.y1, "the stall merchant's box is the counter row only");
 
   // Nobody is placed in a doorway or on a portal, at any daypart.
   for (const min of [6 * 60, 12 * 60, 19 * 60, 23 * 60]) {
@@ -1814,6 +1821,267 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     }
   }
   assert.equal(collisions, 0, `no two NPCs share a tile while wandering (${collisions} colliding samples)`);
+}
+
+// 14i. Relocation must spread too. 14g pins the WANDER step; this pins the
+// PLACEMENT. The cross-zone branch resolved its tile without the spread key, so
+// every transient bedding down at the same inn arrived on the box's center —
+// and a sprite under another sprite can never be selected by talk-targeting,
+// which picks the nearest with a strict <. Needs several NPCs converging on ONE
+// box from ANOTHER zone, which the default briefs never produce: the loiter
+// rotation posts some transients at the inn already, and those take the in-zone
+// path. Six of them guarantees at least two arrive from outside.
+{
+  const cast = [{ name: "Mira", role: "innkeep", kind: "host", tint: "amber", home: "The Lantern", household: 1 }];
+  for (let i = 0; i < 6; i++) {
+    cast.push({
+      name: `Drifter${i}`,
+      role: "drifter",
+      kind: "wanderer",
+      tint: ["blue", "green", "rose", "teal", "violet", "orange"][i],
+      home: "Bedhold",
+      household: 10 + i,
+      standing: "transient",
+    });
+  }
+  const sealed = brief.validate(
+    { scale: "village", name: "Bedhold", places: [{ kind: "gathering", name: "The Lantern" }], cast },
+    ctx,
+  );
+  const w = world.build(31, "cozy-village", sealed);
+  const sim = new loadedPF.Sim(w);
+  const innId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Lantern")[0];
+  sim.clockMin = 23 * 60;
+  sim.resolveSchedules();
+  // Guard against a vacuous pass: the bug needs arrivals from another zone.
+  const arrived = w.zones[innId].npcs.length;
+  assert.ok(arrived >= 4, `the inn genuinely fills up at night (${arrived} NPCs)`);
+  const seen = new Map();
+  for (const npc of w.zones[innId].npcs) {
+    const tile = `${Math.round(npc.x)},${Math.round(npc.y)}`;
+    assert.ok(!seen.has(tile), `${npc.name} and ${seen.get(tile)} both bedded down on tile ${tile}`);
+    seen.set(tile, npc.name);
+  }
+
+  // And the invariant holds for a mixed cast across every daypart — a hash can
+  // collide inside a box as small as a household's door apron, so the placer
+  // has to treat an occupied tile as closed rather than merely spread by id.
+  const kinds = ["host", "guard", "leader", "grower", "maker", "merchant", "folk", "wanderer"];
+  const standings = ["resident", "resident", "transient", "transient", "fringe", "destitute"];
+  for (let seed = 1; seed <= 12; seed++) {
+    const rnd = loadedPF.rng(seed >>> 0);
+    const mixed = [];
+    for (let i = 0; i < 5 + ((seed * 7) % 6); i++) {
+      mixed.push({
+        name: `M${i}`,
+        role: "villager",
+        kind: kinds[(rnd() * kinds.length) | 0],
+        tint: "amber",
+        home: i % 3 === 0 ? "The Lantern" : "Mixford",
+        household: 1 + ((i / 2) | 0),
+        standing: standings[(rnd() * standings.length) | 0],
+      });
+    }
+    const mixedSealed = brief.validate(
+      {
+        scale: "village",
+        name: "Mixford",
+        places: [
+          { kind: "gathering", name: "The Lantern" },
+          { kind: "workshop", name: "The Forge" },
+        ],
+        cast: mixed,
+      },
+      ctx,
+    );
+    const mw = world.build(seed, "cozy-village", mixedSealed);
+    const msim = new loadedPF.Sim(mw);
+    for (const min of [6 * 60, 12 * 60, 19 * 60, 23 * 60]) {
+      msim.clockMin = min;
+      msim.resolveSchedules();
+      for (const zoneId in mw.zones) {
+        const tiles = new Map();
+        for (const npc of mw.zones[zoneId].npcs) {
+          const tile = `${Math.round(npc.x)},${Math.round(npc.y)}`;
+          assert.ok(
+            !tiles.has(tile),
+            `seed ${seed} at ${min / 60}h: ${npc.name} stacked on ${tiles.get(tile)} at ${tile} in ${zoneId}`,
+          );
+          tiles.set(tile, npc.name);
+        }
+      }
+    }
+  }
+}
+
+// 14j. A box that OVERFLOWS must not dump the remainder on one tile. The ring
+// scan honoured occupancy, but when it exhausted the box the fallback returned
+// zone.spawn — a single fixed tile that checks neither occupancy nor standable.
+// The suite had no household-at-the-cap fixture, which is exactly where this
+// lives: CAPS.household is 6, and a resident's night `home` handle is a 3x2 door
+// apron whose door tile standable() excludes, leaving ~3 usable tiles. Three
+// members overflowed onto the spawn on EVERY seed tried, and stacked NPCs are
+// both un-talkable and frozen — their wander box is the one they failed to fit
+// in, so every candidate step fails its bounds test.
+{
+  const cast = [];
+  for (let i = 0; i < 6; i++) {
+    cast.push({
+      name: `Hearth${i}`,
+      role: "weaver",
+      kind: "maker",
+      tint: ["blue", "green", "amber", "rose", "teal", "violet"][i],
+      home: "Fullhouse",
+      household: 1, // one roof, at the CAPS.household cap
+    });
+  }
+  cast.push({ name: "Lamplight", role: "innkeep", kind: "host", tint: "orange", home: "The Lamp", household: 2 });
+  const sealed = brief.validate(
+    { scale: "village", name: "Fullhouse", places: [{ kind: "gathering", name: "The Lamp" }], cast },
+    ctx,
+  );
+  // Guard against a vacuous pass: the repair passes must have KEPT one roof.
+  const roof = sealed.cast.filter((c) => c.household === sealed.cast[0].household);
+  assert.equal(roof.length, 6, `the household survives validation at the cap (${roof.length})`);
+  for (const seed of [1, 2, 3, 7, 11]) {
+    const w = world.build(seed, "cozy-village", sealed);
+    const sim = new loadedPF.Sim(w);
+
+    // ASSERT THE TRIGGER, not just the outcome. A tile scan alone would still
+    // pass if schedule compilation stopped putting the household on one
+    // undersized box — the overflow path simply would not run, and the case
+    // would go quietly green while testing nothing.
+    const hearths = [];
+    for (const zoneId in w.zones) for (const npc of w.zones[zoneId].npcs) if (npc.name.startsWith("Hearth")) hearths.push(npc);
+    assert.equal(hearths.length, 6, `seed ${seed}: the whole household compiles`);
+    const homes = new Set(hearths.map((n) => `${n._sched.home.zoneId}:${JSON.stringify(n._sched.home.wander)}`));
+    assert.equal(homes.size, 1, `seed ${seed}: the household shares ONE night home box (${homes.size} distinct)`);
+    const home = hearths[0]._sched.home;
+    const homeZone = w.zones[home.zoneId];
+    let capacity = 0;
+    for (let y = home.wander.y0; y <= home.wander.y1; y++) {
+      for (let x = home.wander.x0; x <= home.wander.x1; x++) {
+        if (loadedPF.schedule.standable(homeZone, x, y)) capacity++;
+      }
+    }
+    assert.ok(capacity < hearths.length, `seed ${seed}: the home box genuinely overflows (${capacity} tiles for 6)`);
+
+    sim.clockMin = 23 * 60; // night: the whole household resolves to one door apron
+    sim.resolveSchedules();
+
+    // The handle was actually selected, and the overflow path actually ran.
+    let outside = 0;
+    for (const npc of hearths) {
+      const at = Object.keys(w.zones).find((id) => w.zones[id].npcs.includes(npc));
+      assert.equal(at, home.zoneId, `seed ${seed}: ${npc.name} spends the night in its home zone`);
+      const b = home.wander;
+      if (!(npc.x >= b.x0 && npc.x <= b.x1 && npc.y >= b.y0 && npc.y <= b.y1)) outside++;
+    }
+    assert.equal(
+      outside,
+      hearths.length - capacity,
+      `seed ${seed}: exactly the overflow stands outside the box (${outside} out, ${capacity} tiles)`,
+    );
+
+    for (const zoneId in w.zones) {
+      const z = w.zones[zoneId];
+      const seen = new Map();
+      for (const npc of z.npcs) {
+        const x = Math.round(npc.x);
+        const y = Math.round(npc.y);
+        const tile = `${x},${y}`;
+        assert.ok(
+          !seen.has(tile),
+          `seed ${seed}: ${npc.name} overflowed onto ${seen.get(tile)} at ${tile} in ${zoneId}`,
+        );
+        seen.set(tile, npc.name);
+        // The overflow tile still has to be somewhere an NPC may legally stand.
+        assert.ok(loadedPF.schedule.standable(z, x, y), `seed ${seed}: ${npc.name} overflows onto a standable tile`);
+      }
+    }
+  }
+
+  // A SATURATED zone still yields a LEGAL tile. When nothing can satisfy both
+  // predicates the placer drops occupancy, never standability: sharing a tile
+  // looks wrong, but standing in a wall or a doorway is wrong, and a doorway
+  // blocks the way in. The old code returned zone.spawn unchecked.
+  //
+  // This needs a hand-built zone to be worth anything. Every compiled zone's
+  // spawn happens to be standable (480 of 480 tried), so a saturated compiled
+  // zone would land on a legal tile by luck and the case would pass against the
+  // unchecked return it is meant to catch. Putting the spawn ON a door tile is
+  // the one shape that tells the two apart.
+  {
+    const w = 8;
+    const h = 8;
+    const fake = {
+      w,
+      h,
+      solid: new Uint8Array(w * h),
+      object: new Array(w * h).fill(null),
+      portals: [],
+      spawn: { x: 3, y: 3 },
+    };
+    fake.object[3 * w + 3] = "door";
+    assert.ok(!loadedPF.schedule.standable(fake, fake.spawn.x, fake.spawn.y), "the fixture's spawn is a doorway");
+    const at = loadedPF.schedule.walkableIn(fake, { x0: 2, y0: 2, x1: 4, y1: 4 }, "n1", () => true);
+    assert.ok(
+      loadedPF.schedule.standable(fake, at.x, at.y),
+      `a saturated zone never falls back to an unstandable spawn (${at.x},${at.y})`,
+    );
+  }
+
+  // And a degenerate box never escapes as a NaN placement. `hash % 0` is NaN and
+  // standable()'s bounds test is false for every NaN comparison, so an inverted
+  // box would return {x: NaN} as if it were a real tile. Nothing builds one
+  // today — this pins the guard, not a live path.
+  const z = world.build(5, "cozy-village", sealed).zones.z1;
+  for (const box of [
+    { x0: 9, y0: 9, x1: 4, y1: 4 }, // inverted on both axes
+    { x0: 9, y0: 4, x1: 4, y1: 9 }, // inverted on one
+  ]) {
+    const at = loadedPF.schedule.walkableIn(z, box, "n1");
+    assert.ok(Number.isInteger(at.x) && Number.isInteger(at.y), `an inverted box yields real tiles (${at.x},${at.y})`);
+    assert.ok(loadedPF.schedule.standable(z, at.x, at.y), "an inverted box yields a standable tile");
+  }
+}
+
+// 14k. The floor invariant that lets walkableIn stay TOTAL, enforced instead of
+// assumed (review finding). The placer always returns a tile because none of its
+// callers has a better answer: a compile-time spawn has to put the cast member
+// somewhere, and by the time a cross-zone move needs a tile the NPC has already
+// left its old zone. Its last resort is zone.spawn, which is only a legal answer
+// while every compiled zone has somewhere legal to stand — so pin that here
+// rather than trusting the generator to keep it true. If a future generator can
+// emit a zone with no standable tile, this fails first and loudly, and the
+// fallback needs a real policy instead of a tile.
+{
+  let minFree = Infinity;
+  let zones = 0;
+  for (const theme of ["cozy-village", "sci-fi-colony"]) {
+    for (let seed = 1; seed <= 30; seed++) {
+      const w = world.build(seed, theme, brief.defaults(theme, seed));
+      for (const zoneId in w.zones) {
+        const z = w.zones[zoneId];
+        zones++;
+        assert.ok(
+          loadedPF.schedule.standable(z, z.spawn.x, z.spawn.y),
+          `${theme} seed ${seed}: ${zoneId} (${z.name}) spawn ${z.spawn.x},${z.spawn.y} is itself standable`,
+        );
+        let free = 0;
+        for (let y = 0; y < z.h; y++) {
+          for (let x = 0; x < z.w; x++) if (loadedPF.schedule.standable(z, x, y)) free++;
+        }
+        assert.ok(free > 0, `${theme} seed ${seed}: ${zoneId} (${z.name}) has somewhere to stand`);
+        minFree = Math.min(minFree, free);
+      }
+    }
+  }
+  // Guard against a vacuous pass, and pin the headroom the rest of the argument
+  // rests on: the cast is capped at 10, so saturating a zone is out of reach too
+  // — which is why the branch below the saturation fallback cannot be hit.
+  assert.ok(zones > 100, `the sweep actually compiled zones (${zones})`);
+  assert.ok(minFree > 10, `every zone has room for a whole cast (smallest ${minFree})`);
 }
 
 // 14h. A save whose zone no longer exists lands the player at the start zone's
@@ -1899,10 +2167,19 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     for (const zoneId in w.zones) {
       assert.ok(reached.has(zoneId), `seed ${seed}: zone ${zoneId} (${w.zones[zoneId].name}) is reachable`);
     }
-    // And nobody is left in a zone that no longer exists.
+    // And nobody can be SENT somewhere stranded either. Re-asserting
+    // reached.has(zoneId) per NPC only repeats the sweep above; what the zone
+    // sweep cannot see is a baked schedule handle pointing at an interior this
+    // build no longer compiles (the drop guard in 20-world), which would move
+    // an NPC out of the world on the next daypart — or into a room with no door.
     for (const zoneId in w.zones) {
       for (const npc of w.zones[zoneId].npcs) {
-        assert.ok(reached.has(zoneId), `seed ${seed}: ${npc.name} is not stranded in ${zoneId}`);
+        for (const name of ["post", "home", "public"]) {
+          const handle = npc._sched[name];
+          if (!handle) continue;
+          assert.ok(w.zones[handle.zoneId], `seed ${seed}: ${npc.name}'s ${name} handle names a live zone`);
+          assert.ok(reached.has(handle.zoneId), `seed ${seed}: ${npc.name}'s ${name} handle is reachable`);
+        }
       }
     }
   }

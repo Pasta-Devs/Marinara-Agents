@@ -655,6 +655,20 @@ for (const entry of catalog.packages) {
     }
     agentDefinitionIds.add(definition.id);
   }
+  if (manifest.id === "beholder") {
+    // Canonical GENERAL_PROMPT from GetBeholder/Beholder-ME at ecee80e57cb84ad54c02c9c1b3d081e8cbd2799b.
+    const prompt = matchingDefinitions[0]?.defaultPromptTemplate ?? "";
+    const promptSha256 = createHash("sha256").update(prompt).digest("hex");
+    if (
+      prompt.length !== 3_709 ||
+      promptSha256 !== "03fd72e0569a389c9cf6241fb61ee6fd8e9ed9f26a9b1cc7ed5ef61f073c5002"
+    ) {
+      throw new Error("Beholder must ship the canonical benchmarked 3,709-character delta prompt");
+    }
+    if (compareEngineVersions(manifest.engine.min, "2.4.4") < 0) {
+      throw new Error("Beholder's delta prompt requires Engine 2.4.4 or newer");
+    }
+  }
 
   const hasServer = Boolean(manifest.entrypoints.server);
   const hasClient = Boolean(manifest.entrypoints.client);

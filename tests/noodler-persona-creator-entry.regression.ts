@@ -28,6 +28,11 @@ assert.doesNotMatch(storage, /slurpSourceAccountId: account\.sourceEntityId,/u);
 assert.match(home, /view: "create-profile",\s*sourceAccountId: shellPersonaAccount\.id,/u);
 assert.match(
   home,
+  /onOpenProfile:[\s\S]*?mainAuthorProfile[\s\S]*?view: "profile"[\s\S]*?shellPersonaAccount[\s\S]*?view: "create-profile"[\s\S]*?sourceAccountId: shellPersonaAccount\.id/u,
+  "The shell profile action must open or create the active persona's Creator profile",
+);
+assert.match(
+  home,
   /myCreatorProfile\s*\?\s*\{\s*mode: "creator",\s*view: "profile",\s*accountId: myCreatorProfile\.id,?\s*\}/u,
 );
 assert.match(

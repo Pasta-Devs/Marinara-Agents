@@ -198,10 +198,8 @@ export async function runNoodlerFanActivity(input: {
     if (!settings.fanActivityEnabled) return { status: "disabled", created: 0 };
     let plan = await reconcilePlan(input.db, settings, at);
 
-    const connectionId = settings.generationConnectionId;
-    if (!connectionId) return { status: "connection_required", created: 0 };
     const connection = await resolveNoodlerFanConnection(input.db, settings);
-    if (!connection) return { status: "connection_not_found", created: 0 };
+    if (!connection) return { status: "connection_required", created: 0 };
     const admission = tryBackgroundConnection(connection.id, at);
     if (!admission.acquired) return { status: "busy", created: 0 };
 

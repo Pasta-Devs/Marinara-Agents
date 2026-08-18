@@ -1,4 +1,4 @@
-// Pixelforge 0.7.0 — Marinara Engine game-surface Experience (single-file client bundle)
+// Pixelforge 0.8.0 — Marinara Engine game-surface Experience (single-file client bundle)
 // Built from packages/pixelforge/src (14 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -2315,31 +2315,17 @@ PF.world = (() => {
     // the wander box; the zone's own spawn tile is the last resort.
     // `key` spreads NPCs that share a box (a household, the plaza) instead of
     // stacking them all on its center where only the top sprite is talkable.
-    const walkableSpawn = (zone, wander, key) => {
-      let cx = ((wander.x0 + wander.x1) / 2) | 0;
-      let cy = ((wander.y0 + wander.y1) / 2) | 0;
-      if (key) {
-        const hash = PF.hashStr(String(key));
-        cx = wander.x0 + (hash % (wander.x1 - wander.x0 + 1));
-        cy = wander.y0 + (((hash / 7) | 0) % (wander.y1 - wander.y0 + 1));
-      }
-      // Same rule as the runtime placer: never a door or portal tile, which are
-      // walkable by design and look wrong (and block the way in) when occupied.
-      const open = (x, y) => PF.schedule.standable(zone, x, y);
-      if (open(cx, cy)) return { x: cx, y: cy };
-      const maxR = wander.x1 - wander.x0 + (wander.y1 - wander.y0);
-      for (let r = 1; r <= maxR; r++) {
-        for (let dy = -r; dy <= r; dy++) {
-          for (let dx = -r; dx <= r; dx++) {
-            if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-            const x = cx + dx;
-            const y = cy + dy;
-            if (x >= wander.x0 && x <= wander.x1 && y >= wander.y0 && y <= wander.y1 && open(x, y)) return { x, y };
-          }
-        }
-      }
-      return { x: zone.spawn.x, y: zone.spawn.y };
-    };
+    // This IS the runtime placer (25-schedule): a compiled spawn and a schedule
+    // relocation have to obey exactly the same rules — never a door or portal
+    // tile, which are walkable by design but look wrong (and block the way in)
+    // when occupied — so share the one implementation instead of keeping a twin
+    // that can drift. The occupancy test rules out a tile another cast member
+    // already holds: the hash only spreads, and two ids colliding in a small
+    // box (a door apron is six tiles) is exactly the un-talkable stack the key
+    // was added to prevent. `npcs` only holds members placed BEFORE this one,
+    // so the pass stays deterministic.
+    const walkableSpawn = (zone, wander, key) =>
+      PF.schedule.walkableIn(zone, wander, key, (x, y) => zone.npcs.some((n) => n.x === x && n.y === y));
     // A door apron box: the strip an NPC mills around in front of its building.
     const doorBox = (door, reach, depth) => ({
       x0: Math.max(2, door.doorX - reach),
@@ -2533,31 +2519,87 @@ PF.schedule = (() => {
    *  handle by day and a household shares one `home`, so a plain box-center
    *  placement stacked the cast onto a single tile — and because talk-targeting
    *  picks the nearest with a strict <, everyone under the top sprite became
-   *  unreachable. A stable per-NPC hash picks each one its own starting tile. */
-  function walkableIn(zone, box, key) {
-    let cx = ((box.x0 + box.x1) / 2) | 0;
-    let cy = ((box.y0 + box.y1) / 2) | 0;
-    if (key) {
-      const spanX = box.x1 - box.x0 + 1;
-      const spanY = box.y1 - box.y0 + 1;
+   *  unreachable. A stable per-NPC hash picks each one its own starting tile.
+   *
+   *  `taken` is the caller's occupancy test. The hash alone only SPREADS: two
+   *  ids can still land on the same tile in a small box (a household door
+   *  apron is six tiles), which puts us right back on the unreachable sprite.
+   *  Treating an occupied tile as closed makes the ring scan walk to the next
+   *  free one, so "no two NPCs on a tile" is an invariant rather than a
+   *  probability. Still deterministic: occupancy is a function of the order
+   *  the caller places its NPCs in, which is itself fixed. */
+  function walkableIn(zone, box, key, taken) {
+    // Normalize the corners rather than trusting them. An inverted box makes a
+    // span of zero, `hash % 0` is NaN, and standable()'s bounds test is false
+    // for every NaN comparison — so a NaN tile would sail out as a valid
+    // placement instead of throwing anywhere near the mistake. Nothing produces
+    // one today; this is input validation, not a live bug.
+    const x0 = Math.min(box.x0, box.x1);
+    const x1 = Math.max(box.x0, box.x1);
+    const y0 = Math.min(box.y0, box.y1);
+    const y1 = Math.max(box.y0, box.y1);
+    let cx = ((x0 + x1) / 2) | 0;
+    let cy = ((y0 + y1) / 2) | 0;
+    const spanX = x1 - x0 + 1;
+    const spanY = y1 - y0 + 1;
+    // `> 0` is also the non-finite guard: it is false for NaN, which leaves the
+    // `| 0`-ed center in place, so no NaN ever reaches standable().
+    if (key && spanX > 0 && spanY > 0) {
       const hash = PF.hashStr(String(key));
-      cx = box.x0 + (hash % spanX);
-      cy = box.y0 + (((hash / 7) | 0) % spanY);
+      cx = x0 + (hash % spanX);
+      cy = y0 + (((hash / 7) | 0) % spanY);
     }
-    const open = (x, y) => standable(zone, x, y);
+    const open = (x, y) => standable(zone, x, y) && !(taken && taken(x, y));
     if (open(cx, cy)) return { x: cx, y: cy };
-    // Sum, not max: an off-center hashed start still has to be able to reach
-    // the far corner of the box.
-    const maxR = box.x1 - box.x0 + (box.y1 - box.y0);
-    for (let r = 1; r <= maxR; r++) {
-      for (let dy = -r; dy <= r; dy++) {
-        for (let dx = -r; dx <= r; dx++) {
-          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-          const x = cx + dx;
-          const y = cy + dy;
-          if (x >= box.x0 && x <= box.x1 && y >= box.y0 && y <= box.y1 && open(x, y)) return { x, y };
+    /** Deterministic outward ring scan from the start tile, clipped to a rect. */
+    const ring = (maxR, lox, hix, loy, hiy) => {
+      for (let r = 1; r <= maxR; r++) {
+        for (let dy = -r; dy <= r; dy++) {
+          for (let dx = -r; dx <= r; dx++) {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+            const x = cx + dx;
+            const y = cy + dy;
+            if (x >= lox && x <= hix && y >= loy && y <= hiy && open(x, y)) return { x, y };
+          }
         }
       }
+      return null;
+    };
+    // Sum, not max: an off-center hashed start still has to be able to reach
+    // the far corner of the box.
+    const inBox = ring(x1 - x0 + (y1 - y0), x0, x1, y0, y1);
+    if (inBox) return inBox;
+    // The box is FULL. Widen to the zone before giving up. The old fallback
+    // dropped straight onto zone.spawn — ONE fixed tile that honours neither
+    // `taken` nor standable() — so every NPC overflowing the same box in a
+    // single pass landed on top of the last. A household at the CAPS.household
+    // cap of 6 shares a 3x2 door apron whose door tile standable() excludes, so
+    // it overflowed on every seed tried, and the losers were both un-talkable
+    // (nearest wins on a strict <) and frozen: their wander box is the very box
+    // they could not fit in, so every candidate step fails its bounds test.
+    // Standing just outside it is the honest outcome — spare, but reachable.
+    //
+    // Clamp the scan origin into the zone first, or a box sitting outside the
+    // map would need a radius bigger than w+h just to reach tile 0 and the
+    // "whole zone" pass would quietly cover none of it.
+    cx = PF.clamp(cx, 0, zone.w - 1) | 0;
+    cy = PF.clamp(cy, 0, zone.h - 1) | 0;
+    const inZone = ring(zone.w + zone.h, 0, zone.w - 1, 0, zone.h - 1);
+    if (inZone) return inZone;
+    // Every standable tile in the zone is occupied. Nothing can satisfy both
+    // predicates now, so drop the one that is merely undesirable and keep the
+    // one that is structural: sharing a tile looks wrong, standing inside a wall
+    // or in a doorway IS wrong, and a doorway blocks the way in. Returning the
+    // spawn unchecked (as this did) could do exactly that, so check it — it is
+    // the tile every zone guarantees walkable, and was standable in all 480
+    // compiled zones tried, but the guarantee should live in the code.
+    //
+    // Unreachable in practice, and deliberately not escalated to a null return:
+    // the smallest zone measured holds 119 standable tiles against a cast capped
+    // at 10, so this is a floor under a contract, not a live path.
+    if (standable(zone, zone.spawn.x, zone.spawn.y)) return { x: zone.spawn.x, y: zone.spawn.y };
+    for (let y = 0; y < zone.h; y++) {
+      for (let x = 0; x < zone.w; x++) if (standable(zone, x, y)) return { x, y };
     }
     return { x: zone.spawn.x, y: zone.spawn.y };
   }
@@ -2770,13 +2812,20 @@ PF.Sim = class {
       const target = this.world.zones[handle.zoneId];
       if (!target) continue;
       const box = handle.wander;
+      // spread:false keeps a private, meaningful placement (a merchant's own
+      // stall counter); every other handle is SHARED geometry, so disperse by
+      // id. `taken` then closes the gap the hash cannot: colliding ids, and the
+      // NPCs already standing in the destination, would otherwise stack — and a
+      // sprite underneath another one can never be selected by talk-targeting.
+      const spreadKey = handle.spread === false ? null : npc.id;
+      const taken = (x, y) => this.npcOccupies(target, x, y, npc);
       if (handle.zoneId === fromId) {
         // In-zone: swap the box, and only snap when the NPC is outside it —
         // overlapping day/night boxes should not pop.
         const inside = npc.x >= box.x0 && npc.x <= box.x1 && npc.y >= box.y0 && npc.y <= box.y1;
         npc.wander = box;
         if (!inside) {
-          const at = PF.schedule.walkableIn(target, box, handle.spread === false ? null : npc.id);
+          const at = PF.schedule.walkableIn(target, box, spreadKey, taken);
           npc.x = at.x;
           npc.y = at.y;
         }
@@ -2789,7 +2838,10 @@ PF.Sim = class {
         if (index >= 0) from.npcs.splice(index, 1);
         target.npcs.push(npc);
         npc.wander = box;
-        const at = PF.schedule.walkableIn(target, box);
+        // Push FIRST so `taken` sees the destination's real occupants and skips
+        // only this NPC. Without the spread key every transient bedding down at
+        // the same inn box landed on its center tile.
+        const at = PF.schedule.walkableIn(target, box, spreadKey, taken);
         npc.x = at.x;
         npc.y = at.y;
       }
@@ -4014,8 +4066,8 @@ PF.save = {
 // which the host sanctions through the manifest's contributions.gameSurface
 // .surfaceClass ("pixelforge-surface") stamped on the shared game container,
 // plus its inert `experience-dialogue-*` theming hooks. Scope every rule under
-// that class so nothing leaks into the rest of the app, and collapse only the
-// PROSE — the meta row (Retry, Next, Logs) and the turn input must stay usable.
+// that class so nothing leaks into the rest of the app. The collapse takes the
+// WHOLE panel, controls included; see the trade-off note on the rule itself.
 const PF_NARRATION_STYLE_ID = "pixelforge-narration-collapse";
 function installPixelforgeNarrationStyle(doc) {
   if (!doc || doc.getElementById(PF_NARRATION_STYLE_ID)) return;
@@ -4036,12 +4088,19 @@ function installPixelforgeNarrationStyle(doc) {
   // `data-tour` is a product-tour hook rather than a declared contract; it is
   // still far steadier than utility classes, and the theming hooks below are
   // contract, so keep both.
+  //
+  // visibility:hidden is load-bearing, not belt-and-braces (review finding).
+  // max-height/opacity/overflow only hide PAINT, and pointer-events only stops
+  // the mouse — none of them leave the tab order, so a keyboard player tabbing
+  // past a collapsed panel would land on the invisible turn input and type into
+  // nothing. visibility:hidden takes the whole subtree out of sequential
+  // navigation, which is the behaviour the collapse is claiming to have.
   style.textContent =
     '.pf-narration-collapsed .pixelforge-surface [data-tour="game-dialogue"],' +
     ".pf-narration-collapsed .pixelforge-surface .experience-dialogue-wrap," +
     ".pf-narration-collapsed .pixelforge-surface .game-narration-prose{" +
     "max-height:0;min-height:0;padding-top:0;padding-bottom:0;margin-top:0;margin-bottom:0;" +
-    "border-width:0;overflow:hidden;opacity:0;pointer-events:none;}";
+    "border-width:0;overflow:hidden;opacity:0;visibility:hidden;pointer-events:none;}";
   doc.head.appendChild(style);
 }
 
@@ -4159,6 +4218,14 @@ PF.Hud = class {
 
   destroy() {
     clearTimeout(this._toastTimer);
+    // The collapse class lives on <html>, OUTSIDE our element, so removing the
+    // HUD does not take it with us. Left behind it outlives the thing that can
+    // undo it: a remount (chat switch, error unmount, version bump) builds a
+    // fresh Hud whose _narrationCollapsed starts false, so the button offers to
+    // "Hide narration" while the panel is already hidden — and the Retry/Next
+    // controls and turn input stay collapsed with nothing left to expand them.
+    // Fail open: hand the narration back and let the player re-collapse it.
+    this.toggleNarration(false);
     this.root.remove();
   }
 
@@ -4206,9 +4273,9 @@ PF.Hud = class {
     this.waitMenu.style.display = "flex";
   }
 
-  /** Collapse the host's narration box so more of the world is visible. Only
-   *  the prose collapses — the button row (Retry, Next, Logs) stays reachable,
-   *  and it force-expands in dialogue because the turn input lives in there. */
+  /** Collapse the host's narration box so more of the world is visible. The
+   *  whole panel goes, Retry/Next included — the toggle sits right beside it and
+   *  dialogue force-expands, because the turn input lives in there. */
   toggleNarration(force) {
     const collapsed = typeof force === "boolean" ? force : !this._narrationCollapsed;
     // Only a real click changes what the player WANTS; the dialogue-mode

@@ -20,6 +20,7 @@ import {
   withMergedLtmScopeLinks,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
 import { ltmModeForChatMode, normalizeLtmChatCharacterIds, resolveChatLtmScope } from "./chat-scope.js";
+import { DEFAULT_LTM_IMPORTED_SOURCE_MODE } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
 import { nowIso } from "./ltm-utils.js";
 import { getPackageLanguageModels, getPackagePersistence, getPackageResources } from "./package-runtime.js";
 import { processLongTermMemorySourceBatch } from "./source-processing.js";
@@ -269,7 +270,7 @@ function scoped(candidate: Candidate, override?: LtmScope) {
   return withMergedLtmScopeLinks({ ...candidate.scope, ...override }, {});
 }
 function mode(candidate: Candidate, value?: LtmMode) {
-  return !value ? candidate : { ...candidate, modes: [value], extractionMode: value };
+  return value ? { ...candidate, modes: [value], extractionMode: value } : candidate;
 }
 function fingerprint(candidate: Candidate, scope: LtmScope) {
   return extractionFingerprintForLtmSourceMaterial({
@@ -356,7 +357,7 @@ function normalizeLorebooks(books: Array<{ id: string; data: unknown; entries: u
           provenance,
           scope,
           modes: ["roleplay", "conversation", "game"],
-          extractionMode: "roleplay",
+          extractionMode: DEFAULT_LTM_IMPORTED_SOURCE_MODE,
           mutationCount: 1,
           summary: `Import ${title}`,
           lorebookEntryId: base,
@@ -408,7 +409,7 @@ async function candidates(
         provenance,
         scope: { characterIds: [row.id] },
         modes: ["roleplay", "conversation", "game"],
-        extractionMode: "roleplay",
+        extractionMode: DEFAULT_LTM_IMPORTED_SOURCE_MODE,
         mutationCount: 1,
         summary: `Import ${name}`,
       });
@@ -486,7 +487,11 @@ async function candidates(
         (!selected || selected.has(item.sourceId)),
     ),
     ordered = selected ? [...selected].flatMap((id) => filtered.filter((item) => item.sourceId === id)) : filtered;
-  return ordered.slice(0, Math.max(request.limit, selected?.size ?? 0)).map((item) => mode(item, request.mode));
+  return ordered
+    .slice(0, Math.max(request.limit, selected?.size ?? 0))
+    .map((item) =>
+      mode(item, request.mode ?? (request.source === "chats" ? undefined : DEFAULT_LTM_IMPORTED_SOURCE_MODE)),
+    );
 }
 
 function provenanceKey(provenance: LtmSourceProvenance) {
@@ -567,7 +572,7 @@ export async function previewPackageLorebooks(
     books = normalizeLorebooks(resources).map((book) => {
       const rows = book.candidates
           .filter((row) => (!request.mode || row.modes.includes(request.mode)) && matchesScope(row, request.scope))
-          .map((row) => mode(row, request.mode)),
+          .map((row) => mode(row, request.mode ?? DEFAULT_LTM_IMPORTED_SOURCE_MODE)),
         grouped = new Map<
           string,
           {

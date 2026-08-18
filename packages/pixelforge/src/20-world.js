@@ -727,31 +727,17 @@ PF.world = (() => {
     // the wander box; the zone's own spawn tile is the last resort.
     // `key` spreads NPCs that share a box (a household, the plaza) instead of
     // stacking them all on its center where only the top sprite is talkable.
-    const walkableSpawn = (zone, wander, key) => {
-      let cx = ((wander.x0 + wander.x1) / 2) | 0;
-      let cy = ((wander.y0 + wander.y1) / 2) | 0;
-      if (key) {
-        const hash = PF.hashStr(String(key));
-        cx = wander.x0 + (hash % (wander.x1 - wander.x0 + 1));
-        cy = wander.y0 + (((hash / 7) | 0) % (wander.y1 - wander.y0 + 1));
-      }
-      // Same rule as the runtime placer: never a door or portal tile, which are
-      // walkable by design and look wrong (and block the way in) when occupied.
-      const open = (x, y) => PF.schedule.standable(zone, x, y);
-      if (open(cx, cy)) return { x: cx, y: cy };
-      const maxR = wander.x1 - wander.x0 + (wander.y1 - wander.y0);
-      for (let r = 1; r <= maxR; r++) {
-        for (let dy = -r; dy <= r; dy++) {
-          for (let dx = -r; dx <= r; dx++) {
-            if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-            const x = cx + dx;
-            const y = cy + dy;
-            if (x >= wander.x0 && x <= wander.x1 && y >= wander.y0 && y <= wander.y1 && open(x, y)) return { x, y };
-          }
-        }
-      }
-      return { x: zone.spawn.x, y: zone.spawn.y };
-    };
+    // This IS the runtime placer (25-schedule): a compiled spawn and a schedule
+    // relocation have to obey exactly the same rules — never a door or portal
+    // tile, which are walkable by design but look wrong (and block the way in)
+    // when occupied — so share the one implementation instead of keeping a twin
+    // that can drift. The occupancy test rules out a tile another cast member
+    // already holds: the hash only spreads, and two ids colliding in a small
+    // box (a door apron is six tiles) is exactly the un-talkable stack the key
+    // was added to prevent. `npcs` only holds members placed BEFORE this one,
+    // so the pass stays deterministic.
+    const walkableSpawn = (zone, wander, key) =>
+      PF.schedule.walkableIn(zone, wander, key, (x, y) => zone.npcs.some((n) => n.x === x && n.y === y));
     // A door apron box: the strip an NPC mills around in front of its building.
     const doorBox = (door, reach, depth) => ({
       x0: Math.max(2, door.doorX - reach),
