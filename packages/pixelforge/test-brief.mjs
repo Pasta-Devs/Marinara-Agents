@@ -2542,6 +2542,49 @@ function floodFill(z, start, closed) {
   }
 }
 
+// 14m. The chrome memo across a change of hands. setMode drops the beat when the
+// screen changes owner (14l), but the frame loop asks for chrome again only when
+// the beat state DIFFERS from the memo of what was last asked for. So dropping a
+// beat has to move that memo too: left saying "cutscene" while that same setMode
+// declared otherwise, the NEXT beat matches the stale memo, the diff never fires,
+// and the host is never asked to collapse narration for it. 90-element is a DOM
+// module the bundle above leaves out, so it is evaluated here on its own against
+// the two globals it touches at load time.
+{
+  globalThis.HTMLElement ??= class {};
+  globalThis.customElements ??= { get: () => undefined, define: () => {} };
+  new Function("PF", `"use strict";\n${readFileSync(join(here, "src", "90-element.js"), "utf8")}`)(loadedPF);
+
+  const core = loadedPF.core;
+  const asked = [];
+  core.host = { setExperienceChrome: (c) => asked.push(!!c?.requestsCollapsedNarration) };
+  core.sim = { mode: "walk", cutscene: null };
+  core.input = {};
+  core.hud = null;
+  core._cutsceneDeclared = false;
+  // The frame loop's own diff, which is the thing the memo exists to serve.
+  const frame = () => {
+    if (!!core.sim.cutscene !== core._cutsceneDeclared) {
+      core._cutsceneDeclared = !!core.sim.cutscene;
+      core._declareChrome();
+    }
+  };
+
+  core.sim.cutscene = { text: "the valley opens up" };
+  frame();
+  assert.equal(asked.at(-1), true, "the first beat asks the host to collapse narration");
+
+  core.setMode("replay");
+  assert.equal(core.sim.cutscene, null, "the beat does not survive replay");
+  assert.equal(asked.at(-1), false, "and the ask is withdrawn with it");
+  assert.equal(core._cutsceneDeclared, false, "the memo tracks the withdrawal, not the dropped beat");
+
+  core.setMode("walk");
+  core.sim.cutscene = { text: "the valley again, later" };
+  frame();
+  assert.equal(asked.at(-1), true, "a later beat is declared once the screen comes back");
+}
+
 // ── The sanctuary (0.8.0): a tall facade outside, a room worth entering inside ──
 // A church is the first place kind whose exterior is not a house wearing a
 // different roof: building()'s facade option turns its already-solid body rows
