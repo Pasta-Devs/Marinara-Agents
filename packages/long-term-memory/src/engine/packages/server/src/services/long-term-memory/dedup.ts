@@ -10,8 +10,11 @@ type ExistingSectionCandidate = {
   noteId: string;
   sectionKey: string;
   text: string;
-  tokens: Set<string>;
+  tokens: string[];
 };
+
+const MAX_COMPARISON_TOKENS = 500;
+const MAX_COMPARISON_WINDOWS = 64;
 
 export function deduplicateUnits(units: LtmEvidenceUnit[], existingNotes: LtmNote[]) {
   const lexicalThreshold = 0.85;
@@ -28,9 +31,11 @@ export function deduplicateUnits(units: LtmEvidenceUnit[], existingNotes: LtmNot
     const candidates = [...(seenInBatch.get(key) ?? []), ...(existingCandidates.get(key) ?? [])];
     const duplicate = candidates.find((candidate) => {
       if (normalizeText(candidate.text) === unitText) return true;
-      if (candidate.tokens.size === 0 || unitTokens.size === 0) return false;
-      if (!hasTokenIntersection(unitTokens, candidate.tokens)) return false;
-      return jaccardSimilarity(unitTokens, candidate.tokens) >= lexicalThreshold;
+      if (!candidate.tokens.length || !unitTokens.size) return false;
+      return comparisonTokenWindows(candidate.tokens, unitTokens.size).some((window) => {
+        if (!hasTokenIntersection(unitTokens, window)) return false;
+        return jaccardSimilarity(unitTokens, window) >= lexicalThreshold;
+      });
     });
 
     if (duplicate) {
@@ -51,7 +56,7 @@ export function deduplicateUnits(units: LtmEvidenceUnit[], existingNotes: LtmNot
       noteId,
       sectionKey: unit.sectionKey,
       text: unit.text,
-      tokens: unitTokens,
+      tokens: allTokens(unit.text),
     });
     seenInBatch.set(key, bucket);
   }
@@ -67,7 +72,7 @@ function existingSectionCandidates(notes: LtmNote[]): Map<string, ExistingSectio
       if (!text) continue;
       const key = `${note.id}\u0000${sectionKey}`;
       const bucket = candidates.get(key) ?? [];
-      bucket.push({ noteId: note.id, sectionKey, text, tokens: tokenize(text) });
+      bucket.push({ noteId: note.id, sectionKey, text, tokens: allTokens(text) });
       candidates.set(key, bucket);
     }
   }
@@ -83,4 +88,26 @@ function hasTokenIntersection(left: Set<string>, right: Set<string>) {
     if (right.has(token)) return true;
   }
   return false;
+}
+
+function allTokens(text: string) {
+  return (
+    text
+      .toLowerCase()
+      .match(/[a-z0-9]+/g)
+      ?.filter((token) => token.length >= 4) ?? []
+  );
+}
+
+function comparisonTokenWindows(tokens: string[], requestedSize: number) {
+  const size = Math.min(Math.max(requestedSize, 1), MAX_COMPARISON_TOKENS);
+  if (tokens.length <= size) return [new Set(tokens)];
+
+  // ponytail: sample 64 distributed windows; raise the ceiling only if long sections still miss duplicates.
+  const maxStart = tokens.length - size;
+  const windowCount = Math.min(MAX_COMPARISON_WINDOWS, maxStart + 1);
+  const starts = Array.from({ length: windowCount }, (_, index) =>
+    Math.round((index * maxStart) / Math.max(windowCount - 1, 1)),
+  );
+  return [...new Set(starts)].map((start) => new Set(tokens.slice(start, start + size)));
 }
