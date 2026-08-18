@@ -32,6 +32,7 @@ import {
   getLtmKeywordIntent,
   ltmKeywordKey,
   removeLtmKeyword,
+  setLtmManualKeywords,
 } from "../../../../shared/src/features/agents/long-term-memory/keywords.js";
 import {
   getLtmScopeChatIds,
@@ -1232,6 +1233,7 @@ export default function MemoryVault({
   const [openActionNoteId, setOpenActionNoteId] = useState<string | null>(null);
   const [linkTarget, setLinkTarget] = useState("");
   const [linkRelation, setLinkRelation] = useState<LtmLink["relation"]>("involves");
+  const [keywordInput, setKeywordInput] = useState("");
   const [sectionKey, setSectionKey] = useState("");
   const [addingSection, setAddingSection] = useState(false);
   const [renamingSectionKey, setRenamingSectionKey] = useState<string | null>(null);
@@ -1720,6 +1722,7 @@ export default function MemoryVault({
     setSaved("");
     setIsNew(true);
     setRecoverySuggestionId(recoveryHandoff.rejectedSuggestionId ?? null);
+    setKeywordInput("");
     setError("");
     setNotice(localizeUi("ui.longTermMemory.memoryvault.reviewRecoveredSuggestion"));
     setDetailsOpen(false);
@@ -1787,6 +1790,7 @@ export default function MemoryVault({
     setRecoverySuggestionId(null);
     setLinkTarget("");
     setLinkRelation("involves");
+    setKeywordInput("");
     setSectionKey("");
     setAddingSection(false);
     setMobilePane("navigator");
@@ -1829,6 +1833,7 @@ export default function MemoryVault({
     setRecoverySuggestionId(null);
     setLinkTarget("");
     setLinkRelation("involves");
+    setKeywordInput("");
     setSectionKey("");
     setAddingSection(false);
     setError("");
@@ -1854,6 +1859,7 @@ export default function MemoryVault({
     setRecoverySuggestionId(null);
     setLinkTarget("");
     setLinkRelation("involves");
+    setKeywordInput("");
     setSectionKey("");
     setAddingSection(false);
     setDetailsOpen(false);
@@ -2326,6 +2332,20 @@ export default function MemoryVault({
   const update = <K extends keyof LtmNote>(key: K, value: LtmNote[K]) => {
     setSaveState("idle");
     setDraft((current) => (current ? { ...current, [key]: value } : current));
+  };
+  const addKeywords = () => {
+    if (!draft) return;
+    const values = keywordInput
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (!values.length) return;
+    setSaveState("idle");
+    setDraft((current) => {
+      if (!current) return current;
+      return { ...current, ...setLtmManualKeywords(current, [...getLtmKeywordIntent(current).manual, ...values]) };
+    });
+    setKeywordInput("");
   };
   const updateConflict = (index: number, text: string) => {
     if (!draft?.conflicts) return;
@@ -3531,6 +3551,25 @@ export default function MemoryVault({
                                         </Pill>
                                       );
                                     })}
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    <input
+                                      className={`${inputClass} min-w-0 flex-1 basis-40`}
+                                      value={keywordInput}
+                                      onChange={(event) => setKeywordInput(event.target.value)}
+                                      onKeyDown={(event) => {
+                                        if (event.key !== "Enter") return;
+                                        event.preventDefault();
+                                        addKeywords();
+                                      }}
+                                      placeholder={localizeUi("ui.longTermMemory.memoryvault.addKeyword")}
+                                      aria-label={localizeUi("ui.longTermMemory.memoryvault.addKeyword")}
+                                      data-ltm-keyword-input
+                                    />
+                                    <Button disabled={!keywordInput.trim()} onClick={addKeywords} data-ltm-keyword-add>
+                                      <Plus aria-hidden="true" size="0.75rem" />
+                                      {localizeUi("ui.longTermMemory.tokeneditor.add")}
+                                    </Button>
                                   </div>
                                 </section>
                                 {draft.type === "thread" || draft.type === "world" || draft.type === "tone" ? (
