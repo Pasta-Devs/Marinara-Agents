@@ -106,7 +106,7 @@ PF.Render = class {
       .sort((a, b) => a.y - b.y);
     for (const a of actors) a.draw();
 
-    ctx.drawImage(comp.overhead, camX, camY, viewW, viewH, offX, offY, viewW, viewH);
+    this._blitOverhead(ctx, comp.overhead, z, sim, camX, camY, viewW, viewH, offX, offY);
 
     // day/night multiply tint + warm window glow
     const dark = sim.darkness();
@@ -135,5 +135,55 @@ PF.Render = class {
       ctx.lineWidth = 2;
       ctx.strokeRect(offX + 1, offY + 1, viewW - 2, viewH - 2);
     }
+  }
+
+  /** Overhead blit with a soft cutout around the player.
+   *
+   *  A building's eave is painted two rows ABOVE its footprint, and those rows are
+   *  ordinary walkable grass — so the player can stand there, and since the overhead
+   *  layer composites after the actors, the roof simply swallows them. Roughly 62
+   *  tiles per settlement are walkable-but-roofed, and tall buildings make it worse.
+   *
+   *  The zone composites are cached and player-independent, so the hole cannot live
+   *  in them: it is punched into a view-sized scratch each frame instead. Only while
+   *  the player is actually covered — indoors and in the open this costs nothing and
+   *  takes the original single-blit path. */
+  _blitOverhead(ctx, overhead, z, sim, camX, camY, viewW, viewH, offX, offY) {
+    const T = PF.TILE;
+    const tx = Math.floor(sim.x / T);
+    const ty = Math.floor(sim.y / T);
+    // The sprite stands taller than its tile, so test the feet tile and the one
+    // above it — checking only the feet leaves the head swallowed.
+    const roofed = (x, y) => x >= 0 && x < z.w && y >= 0 && y < z.h && !!z.overhead[y * z.w + x];
+    if (!roofed(tx, ty) && !roofed(tx, ty - 1)) {
+      ctx.drawImage(overhead, camX, camY, viewW, viewH, offX, offY, viewW, viewH);
+      return;
+    }
+    if (!this._peek) {
+      this._peek = PF.offscreen(PF.VW, PF.VH);
+      this._peek.getContext("2d").imageSmoothingEnabled = false;
+    }
+    const g = this._peek.getContext("2d");
+    g.globalCompositeOperation = "source-over";
+    g.clearRect(0, 0, PF.VW, PF.VH);
+    g.drawImage(overhead, camX, camY, viewW, viewH, 0, 0, viewW, viewH);
+    const px = Math.round(sim.x - camX);
+    const py = Math.round(sim.y - camY - 8);
+    const { inner, outer, max } = PF.ROOF_PEEK;
+    // destination-out subtracts alpha, so the gradient's alpha IS the transparency.
+    // Banded stops rather than a smooth ramp: three flat steps read as deliberate
+    // pixel-art shading instead of a photographic vignette.
+    const grad = g.createRadialGradient(px, py, inner, px, py, outer);
+    grad.addColorStop(0, `rgba(0,0,0,${max})`);
+    grad.addColorStop(0.55, `rgba(0,0,0,${max})`);
+    grad.addColorStop(0.56, `rgba(0,0,0,${max * 0.6})`);
+    grad.addColorStop(0.8, `rgba(0,0,0,${max * 0.6})`);
+    grad.addColorStop(0.81, `rgba(0,0,0,${max * 0.25})`);
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    g.globalCompositeOperation = "destination-out";
+    g.fillStyle = grad;
+    g.fillRect(px - outer, py - outer, outer * 2, outer * 2);
+    g.globalCompositeOperation = "source-over"; // never leave the op set on the scratch
+    ctx.drawImage(this._peek, 0, 0, viewW, viewH, offX, offY, viewW, viewH);
   }
 };
