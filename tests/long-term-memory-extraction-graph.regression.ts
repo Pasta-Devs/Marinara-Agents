@@ -768,6 +768,45 @@ async function main() {
     "same-section duplicates must still match at a long-section tail",
   );
 
+  const interiorUnitText = [
+    "observatory",
+    "gate",
+    "remains",
+    "sealed",
+    "during",
+    "nightly",
+    "watch",
+    "despite",
+    "storm",
+    "damage",
+    "around",
+    "hinges",
+    "after",
+    "winter",
+    "repairs",
+  ].join(" ");
+  const interiorCandidateText = interiorUnitText.replace("nightly", "nighttime");
+  const interiorResult = deduplicateUnits(
+    [dedupUnit(interiorUnitText, "interior_subject")],
+    [
+      {
+        ...chat,
+        id: "world_interior_subject",
+        type: "world" as const,
+        sections: {
+          facts: {
+            text: [
+              ...Array.from({ length: 731 }, (_, index) => `interiorfiller${index}`),
+              interiorCandidateText,
+              ...Array.from({ length: 258 }, (_, index) => `interiortail${index}`),
+            ].join(" "),
+          },
+        },
+      } as any,
+    ],
+  );
+  assert.equal(interiorResult.deduplicated.length, 0, "same-section near-duplicates must match at interior offsets");
+
   const crossSectionResult = deduplicateUnits(
     [dedupUnit("The observatory gate remains sealed.", "cross_scope_subject", "history")],
     [

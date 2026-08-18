@@ -14,7 +14,6 @@ type ExistingSectionCandidate = {
 };
 
 const MAX_COMPARISON_TOKENS = 500;
-const MAX_COMPARISON_WINDOWS = 64;
 
 export function deduplicateUnits(units: LtmEvidenceUnit[], existingNotes: LtmNote[]) {
   const lexicalThreshold = 0.85;
@@ -32,10 +31,7 @@ export function deduplicateUnits(units: LtmEvidenceUnit[], existingNotes: LtmNot
     const duplicate = candidates.find((candidate) => {
       if (normalizeText(candidate.text) === unitText) return true;
       if (!candidate.tokens.length || !unitTokens.size) return false;
-      return comparisonTokenWindows(candidate.tokens, unitTokens.size).some((window) => {
-        if (!hasTokenIntersection(unitTokens, window)) return false;
-        return jaccardSimilarity(unitTokens, window) >= lexicalThreshold;
-      });
+      return hasLexicalDuplicate(candidate.tokens, unitTokens, lexicalThreshold);
     });
 
     if (duplicate) {
@@ -83,13 +79,6 @@ function normalizeText(text: string) {
   return text.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-function hasTokenIntersection(left: Set<string>, right: Set<string>) {
-  for (const token of left) {
-    if (right.has(token)) return true;
-  }
-  return false;
-}
-
 function allTokens(text: string) {
   return (
     text
@@ -99,15 +88,36 @@ function allTokens(text: string) {
   );
 }
 
-function comparisonTokenWindows(tokens: string[], requestedSize: number) {
-  const size = Math.min(Math.max(requestedSize, 1), MAX_COMPARISON_TOKENS);
-  if (tokens.length <= size) return [new Set(tokens)];
+function hasLexicalDuplicate(tokens: string[], unitTokens: Set<string>, threshold: number) {
+  if (tokens.length <= MAX_COMPARISON_TOKENS) {
+    return jaccardSimilarity(unitTokens, new Set(tokens)) >= threshold;
+  }
 
-  // ponytail: sample 64 distributed windows; raise the ceiling only if long sections still miss duplicates.
-  const maxStart = tokens.length - size;
-  const windowCount = Math.min(MAX_COMPARISON_WINDOWS, maxStart + 1);
-  const starts = Array.from({ length: windowCount }, (_, index) =>
-    Math.round((index * maxStart) / Math.max(windowCount - 1, 1)),
-  );
-  return [...new Set(starts)].map((start) => new Set(tokens.slice(start, start + size)));
+  const size = Math.min(Math.max(unitTokens.size, 1), MAX_COMPARISON_TOKENS);
+  const counts = new Map<string, number>();
+  let shared = 0;
+
+  const add = (token: string) => {
+    const count = counts.get(token) ?? 0;
+    counts.set(token, count + 1);
+    if (count === 0 && unitTokens.has(token)) shared++;
+  };
+  const remove = (token: string) => {
+    const count = counts.get(token)!;
+    if (count === 1) {
+      counts.delete(token);
+      if (unitTokens.has(token)) shared--;
+    } else counts.set(token, count - 1);
+  };
+
+  tokens.slice(0, size).forEach(add);
+  for (let start = 0; start <= tokens.length - size; start++) {
+    const similarity = shared / (unitTokens.size + counts.size - shared);
+    if (shared > 0 && similarity >= threshold) return true;
+    if (start < tokens.length - size) {
+      remove(tokens[start]!);
+      add(tokens[start + size]!);
+    }
+  }
+  return false;
 }
