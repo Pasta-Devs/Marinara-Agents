@@ -346,6 +346,19 @@ assert.equal(
 assert.match(types, /onOpenSources\?: \(source\?: SourceTab\) => boolean \| Promise<boolean>/u);
 assert.match(reviewQueue, /item\.draft\.status === "pending"/u);
 assert.match(reviewQueue, /skippableSelectedRows/u);
+assert.match(reviewQueue, /REVIEW_STATE_STORAGE_KEY/u);
+assert.match(reviewQueue, /draftReviewFingerprint/u);
+assert.match(reviewQueue, /savedReviewStateDiscarded/u);
+assert.match(reviewQueue, /failedMutationIds/u);
+assert.match(reviewQueue, /retryFailed/u);
+assert.match(reviewQueue, /reviewFailed/u);
+assert.match(reviewQueue, /reviewProgress/u);
+assert.match(reviewQueue, /MAX_EDITABLE_TEXT_LENGTH = 20_000/u);
+assert.match(reviewQueue, /charactersRemaining/u);
+assert.match(reviewQueue, /textExceedsLimit/u);
+assert.equal(locale["ui.longTermMemory.reviewqueue.retryFailed"], "Retry failed");
+assert.equal(locale["ui.longTermMemory.reviewqueue.reviewFailed"], "Review failed");
+assert.equal(locale["ui.longTermMemory.reviewqueue.charactersRemaining"], "{{count}} characters remaining");
 assert.match(locale["ui.longTermMemory.sourceoperation.deleteDetachment"], /detached/u);
 
 process.stdout.write(

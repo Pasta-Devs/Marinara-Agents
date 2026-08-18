@@ -484,6 +484,7 @@ async function main() {
       let healthState: "healthy" | "degraded" = "healthy";
       let noteTotal = 5;
       let pendingDraftCount = 2;
+      let failSecondReviewAccept = false;
       let lastInjectionRequests = 0;
       browserServer = createServer(async (request, response) => {
         const url = new URL(request.url ?? "/", "http://127.0.0.1");
@@ -507,7 +508,14 @@ async function main() {
           return send(200, {
             initialized: true,
             directory: "long-term-memory",
-            notes: { total: noteTotal, byType: {}, byStatus: {} },
+            notes: {
+              total: noteTotal,
+              sourceNotes: 1,
+              savedMemories: Math.max(0, noteTotal - 1),
+              pendingDrafts: pendingDraftCount,
+              byType: {},
+              byStatus: {},
+            },
             events: { logAvailable: false, bytes: null },
             indexes: {
               health: healthState,
@@ -859,6 +867,8 @@ async function main() {
           const draftId = decodeURIComponent(url.pathname.split("/").at(-2)!);
           const mutationIds = body.mutationIds ?? [];
           reviewActionCalls.push({ action, draftId, mutationIds });
+          if (action === "accept" && draftId === reviewDraftIds.second && failSecondReviewAccept)
+            return send(503, { error: "temporary review failure" });
           reviewSources = reviewSources
             .map((source) => ({
               ...source,
@@ -1170,6 +1180,14 @@ async function main() {
         localStorage.removeItem("marinara-long-term-memory-onboarding-v1");
       });
       await page.locator("[data-ltm-review-mutation] textarea").first().fill("Dirty memory");
+      await page.locator('[data-ltm-review-source-select="source_mobile_recovery"]').click();
+      await page.locator('[data-ltm-review-source-select="source_mobile_review"]').click();
+      await page.locator("[data-ltm-review-mutation-toggle]").click();
+      assert.equal(await page.locator("[data-ltm-review-mutation] textarea").first().inputValue(), "Dirty memory");
+      assert.deepEqual(
+        await page.evaluate(() => Object.keys(localStorage).filter((key) => key.includes("review_state"))),
+        ["marinara_ltm_review_state:desktop-chat"],
+      );
       await setupGuide.click();
       await page.getByRole("button", { name: "Next: How recall works" }).click();
       await page.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
@@ -1211,6 +1229,7 @@ async function main() {
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
       await page.locator('[data-ltm-review-source-select="source_mobile_review"]').click();
       await page.locator("[data-ltm-review-mutation-toggle]").click();
+      assert.equal(await page.locator("[data-ltm-review-mutation] textarea").first().inputValue(), "Dirty memory");
       await page.locator("[data-ltm-review-mutation] textarea").first().fill("Dirty memory");
       await setupGuide.click();
       await page.getByRole("button", { name: "Next: How recall works" }).click();
@@ -1620,7 +1639,15 @@ async function main() {
       await page
         .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-control="review-select"]`)
         .check();
-      await page.getByRole("button", { name: "Skip selected (1)" }).click();
+      failSecondReviewAccept = true;
+      await page.getByRole("button", { name: "Accept eligible (1)" }).click();
+      await page.getByRole("button", { name: "Retry failed" }).waitFor();
+      failSecondReviewAccept = false;
+      await page.getByRole("button", { name: "Retry failed" }).click();
+      await page.waitForFunction(
+        (mutationId) => !document.querySelector(`[data-ltm-review-mutation="${mutationId}"]`),
+        reviewMutationIds.second,
+      );
       const firstMutation = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"]`);
       await firstMutation.waitFor({ state: "visible" });
       await page.waitForFunction(
@@ -1639,7 +1666,12 @@ async function main() {
       );
       assert.deepEqual(reviewActionCalls, [
         {
-          action: "skip",
+          action: "accept",
+          draftId: reviewDraftIds.second,
+          mutationIds: [reviewMutationIds.second],
+        },
+        {
+          action: "accept",
           draftId: reviewDraftIds.second,
           mutationIds: [reviewMutationIds.second],
         },
