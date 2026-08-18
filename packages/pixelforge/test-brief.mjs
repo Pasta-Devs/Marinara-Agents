@@ -97,7 +97,7 @@ const ctx = { theme: "cozy-village", seed: 424242 };
   );
   assert.equal(sealed.name, "Objton", "markdown stripped from names");
   assert.equal(sealed.cast[0].name, "One", "backticks stripped");
-  assert.equal(sealed.cast[0].household, 6, "household clamped to cap");
+  assert.equal(sealed.cast[0].household, 10, "household clamped to cap");
   assert.equal(sealed.cast[1].home, "Objton", "unresolved home falls to root");
   assert.equal(sealed.cast[2].kind, "folk", "unknown kind folds to folk");
   assert.ok(Object.keys(brief.TINTS).includes(sealed.cast[2].tint), "unknown tint replaced from the enum");
@@ -182,7 +182,11 @@ const ctx = { theme: "cozy-village", seed: 424242 };
   const text = brief.guidance("sci-fi-colony");
   assert.ok(text.length < 4_000, `guidance stays compact (${text.length} chars)`);
   assert.ok(text.includes("AUTHORITATIVE"), "theme-authority line present");
-  assert.ok(text.includes("do NOT list one household per person"), "household teaching line present");
+  assert.ok(text.includes("do NOT give everyone their own number"), "household teaching line present");
+  assert.ok(
+    text.includes("lodgers") && text.includes("no limit on how many"),
+    "and the guidance says unrelated people may share one, without a cap",
+  );
   assert.ok(text.includes("standing"), "standing teaching line present");
   const schemaStr = JSON.stringify(brief.schema());
   assert.ok(schemaStr.length <= 8_000, "schema fits the route's cap");
@@ -5500,6 +5504,113 @@ const cellarBrief = (prosperity) => ({
       `${npc.name} is standing on a bed in the middle of the day`,
     );
   }
+}
+
+// ── A HOUSEHOLD NUMBER IS AN ID SPACE, NOT AN OCCUPANCY BOUND (0.9.0) ──────
+// One constant used to answer two unrelated questions: WHICH group you are in,
+// and HOW MANY may share it. That is the same conflation as `household` itself
+// carrying both kinship and address, one level down, and it made a convent, a
+// barracks and a boarding house inexpressible — ten unrelated lodgers under one
+// roof is ten people sharing a number, and the split pass tore them apart.
+//
+// The pass also shipped a live contract violation: its replacement number
+// escaped its own cap by `(next % (CAPS.household * 2)) + 1`, so the SEALED
+// brief carried household numbers above the schema's own maximum.
+{
+  // 1. Ten unrelated people, ten households. Nothing is merged.
+  const solo = brief.validate(
+    {
+      scale: "village",
+      name: "Solitude",
+      cast: Array.from({ length: 10 }, (_, i) => ({
+        name: `S${i}`,
+        role: "lodger",
+        kind: "folk",
+        tint: ["green", "blue", "rose", "teal", "violet", "grey"][i % 6],
+        home: "Solitude",
+        household: i + 1,
+      })),
+    },
+    ctx,
+  );
+  assert.equal(
+    new Set(solo.cast.map((c) => c.household)).size,
+    10,
+    "ten unrelated people can be ten households",
+  );
+
+  // 2. A big family STAYS a big family. Seven under one number used to be torn
+  //    into two by a repair pass; a brief that says seven kin means seven kin.
+  const clan = brief.validate(
+    {
+      scale: "village",
+      name: "Clanhome",
+      cast: [
+        ...Array.from({ length: 7 }, (_, i) => ({
+          name: `C${i}`, role: "kin", kind: "folk", tint: "green", home: "Clanhome", household: 3,
+        })),
+        { name: "D0", role: "kin", kind: "folk", tint: "blue", home: "Clanhome", household: 4 },
+        { name: "D1", role: "kin", kind: "folk", tint: "rose", home: "Clanhome", household: 5 },
+        { name: "D2", role: "kin", kind: "folk", tint: "teal", home: "Clanhome", household: 6 },
+      ],
+    },
+    ctx,
+  );
+  assert.equal(
+    clan.cast.filter((c) => c.household === 3).length,
+    7,
+    "a household of seven is not torn in half by a repair pass",
+  );
+  assert.ok(
+    !clan._repairs.some((line) => line.includes("split")),
+    `and no split is recorded (${clan._repairs.filter((l) => l.includes("split")).join()})`,
+  );
+
+  // 3. THE CONTRACT VIOLATION. Nothing the validator seals may exceed the bound
+  //    the validator itself publishes — the old pass minted numbers above it on
+  //    most seeds, which no schema check downstream would have caught.
+  const bound = brief.schema().properties.cast.items.properties.household.maximum;
+  for (const seed of [1, 2, 3, 7, 11, 23, 424242]) {
+    const sealed = brief.validate(
+      {
+        scale: "village",
+        name: "Clanhome",
+        cast: [
+          ...Array.from({ length: 7 }, (_, i) => ({
+            name: `C${i}`, role: "kin", kind: "folk", tint: "green", home: "Clanhome", household: 3,
+          })),
+          { name: "D0", role: "kin", kind: "folk", tint: "blue", home: "Clanhome", household: 4 },
+          { name: "D1", role: "kin", kind: "folk", tint: "rose", home: "Clanhome", household: 5 },
+          { name: "D2", role: "kin", kind: "folk", tint: "teal", home: "Clanhome", household: 6 },
+        ],
+      },
+      { theme: "cozy-village", seed },
+    );
+    for (const member of sealed.cast) {
+      assert.ok(
+        member.household >= 1 && member.household <= bound,
+        `seed ${seed}: ${member.name} sealed household ${member.household}, outside the published bound 1..${bound}`,
+      );
+    }
+  }
+
+  // 4. And it still COMPILES: ten under one roof is a communal arrangement, not
+  //    a crash. Everyone gets a sleeping place, which is the 0.8 invariant.
+  const commune = brief.validate(
+    {
+      scale: "village",
+      prosperity: "modest",
+      name: "Commonhold",
+      cast: Array.from({ length: 9 }, (_, i) => ({
+        name: `M${i}`, role: "member", kind: "folk", tint: "green", home: "Commonhold", household: 1,
+      })),
+    },
+    ctx,
+  );
+  const w = world.build(77, "cozy-village", commune);
+  checkWorld(w, commune, "commune");
+  const beds = Object.values(w.zones).flatMap((z) => z.beds ?? []);
+  assert.ok(beds.length >= 9, `nine under one roof still get nine sleeping places (${beds.length})`);
 }
 
 console.log("brief validator + compiler: all cases passed");

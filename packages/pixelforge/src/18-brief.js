@@ -72,7 +72,14 @@ PF.brief = (() => {
     sanctuary: 1,
     castMin: 4,
     castMax: 10,
-    household: 6,
+    // AN ID SPACE, not an occupancy bound. The two were the same constant, and
+    // that conflation is the same bug as `household` carrying both kinship and
+    // address: `Math.min(CAPS.household, n)` clamps WHICH group you are in, while
+    // the oversize-split pass used the identical number to bound HOW MANY share
+    // one. Ten people must be able to be ten unrelated households — a convent, a
+    // barracks, a boarding house — so the id space is the cast size, and nothing
+    // caps the members of a group any more.
+    household: 10,
   };
   const BRIEF_BYTE_BUDGET = 8_192;
 
@@ -365,23 +372,16 @@ PF.brief = (() => {
       for (let i = splitAt; i < brief.cast.length; i++) brief.cast[i].household = 2;
       repairs.push("cast: single household split into two");
     }
-    // Oversized households split (>6 members share a number).
-    const byHousehold = new Map();
-    for (const member of brief.cast) {
-      const list = byHousehold.get(member.household) ?? [];
-      list.push(member);
-      byHousehold.set(member.household, list);
-    }
-    for (const [id, members] of byHousehold) {
-      if (members.length <= CAPS.household) continue;
-      // Seed-derived target (§3's single-entropy rule): scan from a seeded
-      // offset for the first free household number.
-      let next = 1 + ((det(seed, `household-split-${id}`)() * CAPS.household) | 0);
-      while (byHousehold.has(next)) next = (next % (CAPS.household * 2)) + 1;
-      for (const member of members.slice(CAPS.household)) member.household = next;
-      byHousehold.set(next, members.slice(CAPS.household));
-      repairs.push(`cast: household ${id} split (over ${CAPS.household} members)`);
-    }
+    // The oversized-household split is GONE. It bounded how many people could
+    // share one number, using the same constant that bounds which numbers exist —
+    // and a group is no longer bounded at all, because ten unrelated lodgers under
+    // one roof is a thing a brief has to be able to say.
+    //
+    // It also shipped a live contract violation. `next` escaped its own cap by
+    // `(next % (CAPS.household * 2)) + 1`, so the pass sealed household numbers
+    // ABOVE the schema's own maximum: measured at 263 members over 400 seeds with
+    // seven kin and three singletons. And it wrote into `byHousehold` while
+    // iterating that same Map. Deleting the pass retires both.
     const tints = new Set(brief.cast.map((c) => c.tint));
     if (tints.size < Math.min(3, brief.cast.length)) {
       const keys = Object.keys(TINTS);
@@ -608,8 +608,10 @@ PF.brief = (() => {
       "  workplace (optional): the NAME of the zone they work in, when it is not the one they",
       "  live in and they do not run it themselves — a second teacher at the school, a shop",
       "  assistant, one of several sellers at a market. Omit it for anyone who works at home.",
-      "  household: 1-6 — people sharing a number share a roof; buildings are derived from",
-      "  households, so do NOT list one household per person unless they truly live alone.",
+      "  household: 1-10 — people sharing a number share a roof. Buildings are derived from",
+      "  households, so do NOT give everyone their own number unless they truly live apart.",
+      "  Unrelated people CAN share one: lodgers at a boarding house, sisters at a convent,",
+      "  recruits in a barracks are all one number, and there is no limit on how many.",
       "  persona: <=100 chars — what they want, and what they are hiding.",
       `  standing (optional, default resident): one of ${STANDING.join(" | ")}. transient = passing`,
       "  through; fringe = lives apart at the edges (hermit, outcast, refugee); destitute = no home.",
@@ -665,7 +667,7 @@ PF.brief = (() => {
               tint: { type: "string", enum: Object.keys(TINTS) },
               home: text(24),
               workplace: text(24),
-              household: { type: "integer", minimum: 1, maximum: 6 },
+              household: { type: "integer", minimum: 1, maximum: 10 },
               persona: text(100),
               standing: { type: "string", enum: STANDING },
             },

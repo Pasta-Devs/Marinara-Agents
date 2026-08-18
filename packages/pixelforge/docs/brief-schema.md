@@ -143,9 +143,10 @@ response is **never stored** (checkpoints capture by value — see #5110).
    drop feature items with unknown tags whole; a `host` in the cast with no gathering place
    synthesizes AT MOST ONE interior named from the host (the player can walk into the inn).
 4. **Cast.** Bounds 4-10 (over → keep `leader` + first-N by array order, hoisting a `leader`
-   found past the cap into the kept set); `home` resolution per §1; a household >6 members
-   splits **per member** by `hash(seed, "household-split-<memberId>")`, scanning forward
-   (wraparound) to the first household with room — deterministic, no clustering on one target.
+   found past the cap into the kept set); `home` resolution per §1. There is NO cap on how many
+   people share a household number — unrelated lodgers, sisters at a convent and recruits in a
+   barracks are all one number, and `CAPS.household` bounds only WHICH numbers exist (an id
+   space the size of the cast), never how many share one.
 5. **Derivation & caps** (buildings — the "30 people" rule; **only `resident`-standing cast
    members generate buildings** — see the §1 `standing` note):
    - dwellings = distinct **resident** households **homed at the settlement root** (a resident

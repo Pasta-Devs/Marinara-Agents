@@ -650,10 +650,17 @@ PF.world = (() => {
    *  lie about the building and the whole interior becomes the sleeping room.
    *
    *  Bunked bedrooms put that line at NINE in a dwelling — two rooms of four —
-   *  and nine is past CAPS.household, so no single household can reach it. Only
-   *  the compiler's own over-subscription merge does, and a roof carrying two or
-   *  three whole households IS a bunkhouse. Which is the point: the open plan has
-   *  to mean an orphanage, a barracks or a doss-house, never a big family. */
+   *  Bunked bedrooms put that line at NINE in a dwelling — two rooms of four.
+   *  That used to be past CAPS.household, so only the compiler's own
+   *  over-subscription merge could reach it and the open plan always meant an
+   *  orphanage, a barracks or a doss-house. It no longer does: the household
+   *  number is an ID SPACE the size of the cast, so a brief can put nine or ten
+   *  people under one roof deliberately, and the open plan is what they get.
+   *
+   *  Which is right rather than a regression — nine people sharing a roof ARE a
+   *  communal arrangement however they are related, and the brief said so. What
+   *  it costs is the old inference "open plan implies no kinship", which was only
+   *  ever true because the cap made a big family inexpressible. */
   function layoutSleeping(zone, w, h, kind, sleepers, top = 2, owned = false) {
     const plan = SLEEP_PLANS[kind];
     const area = { x0: 1, y0: top, x1: w - 2, y1: top - 1 + plan.band };
