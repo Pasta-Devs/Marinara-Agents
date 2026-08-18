@@ -2340,10 +2340,21 @@ export default function MemoryVault({
       .map((value) => value.trim())
       .filter(Boolean);
     if (!values.length) return;
+    if (values.some((value) => value.length > 80)) {
+      setError(localizeUi("ui.longTermMemory.memoryvault.manualKeywordTooLong"));
+      return;
+    }
+    const manualKeywords = [...getLtmKeywordIntent(draft).manual, ...values];
+    const next = setLtmManualKeywords(draft, manualKeywords);
+    if (next.manualKeywords.length > 30) {
+      setError(localizeUi("ui.longTermMemory.memoryvault.manualKeywordLimit"));
+      return;
+    }
+    setError("");
     setSaveState("idle");
     setDraft((current) => {
       if (!current) return current;
-      return { ...current, ...setLtmManualKeywords(current, [...getLtmKeywordIntent(current).manual, ...values]) };
+      return { ...current, ...setLtmManualKeywords(current, manualKeywords) };
     });
     setKeywordInput("");
   };
@@ -3558,7 +3569,7 @@ export default function MemoryVault({
                                       value={keywordInput}
                                       onChange={(event) => setKeywordInput(event.target.value)}
                                       onKeyDown={(event) => {
-                                        if (event.key !== "Enter") return;
+                                        if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
                                         event.preventDefault();
                                         addKeywords();
                                       }}

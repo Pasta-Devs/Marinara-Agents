@@ -844,6 +844,8 @@
   "ui.longTermMemory.memoryvault.memorySaved": "Memory saved.",
   "ui.longTermMemory.memoryvault.memorySavedNewerEditsUnsaved": "Memory saved. Your newer edits remain unsaved.",
   "ui.longTermMemory.memoryvault.memoryTitleRequired": "A memory title is required.",
+  "ui.longTermMemory.memoryvault.manualKeywordLimit": "A memory can have at most 30 manually added keywords.",
+  "ui.longTermMemory.memoryvault.manualKeywordTooLong": "Each keyword must be 80 characters or fewer.",
   "ui.longTermMemory.memoryvault.manageSourceDeletionInSources": "Manage imported source deletion from Sources so you can review linked memories.",
   "ui.longTermMemory.memoryvault.newMemorySection": "New memory detail.",
   "ui.longTermMemory.memoryvault.openingTarget": "opening {{target}}",
