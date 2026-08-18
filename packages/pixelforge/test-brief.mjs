@@ -5386,4 +5386,67 @@ const cellarBrief = (prosperity) => ({
   }
 }
 
+// ── LIVING IN A NAMED BUILDING IS KEEPING IT (0.9.0) ───────────────────────
+// The keeper tier — the row that holds somebody in their building through the
+// DAY instead of sending them to the plaza — used to be reachable only by
+// OWNING a sanctuary, and ownership is one building per person. So exactly one
+// keeper was possible in an entire world. Everyone else the brief deliberately
+// housed in a named building fell to "*:resident", whose day entry is `public`:
+// they lived in the moot house and walked out of it for the whole of daylight,
+// which is precisely when a player opens the door.
+//
+// `mapKind` is the gate because it is the compiler's own word for "this place
+// has a room you can stand in". A wilds is stamped "place", so a forager homed
+// in the woods keeps their old habits — they have no building to keep, which is
+// rather the point of living out there.
+{
+  const sealed = brief.validate(
+    {
+      name: "Cadenhall",
+      scale: "village",
+      prosperity: "modest",
+      places: [
+        { kind: "hall", name: "The Moot House", flavor: "Where the parish argues." },
+        { kind: "wilds", name: "The Long Coppice", flavor: "Hazel and quiet." },
+      ],
+      cast: [
+        // An ELDER has no row of its own in the schedule table, so without the
+        // keeper tier this is the exact case that leaks to the square.
+        { name: "Reeve Ott", role: "reeve", kind: "elder", tint: "grey", home: "The Moot House", household: 1 },
+        { name: "Wick", role: "forager", kind: "folk", tint: "green", home: "The Long Coppice", household: 2, standing: "fringe" },
+        { name: "Halla", role: "farmer", kind: "grower", tint: "green", home: "Cadenhall", household: 3 },
+      ],
+    },
+    ctx,
+  );
+  const w = world.build(9090, "cozy-village", sealed);
+  checkWorld(w, sealed, "keeper-widening");
+  const hallId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Moot House")[0];
+  const coppiceId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Long Coppice")[0];
+  assert.equal(w.zones[hallId].mapKind, "building", "a named hall is a building you can stand in");
+  assert.equal(w.zones[coppiceId].mapKind, "place", "a wilds is not");
+
+  const find = (name) => {
+    for (const id in w.zones) {
+      const npc = w.zones[id].npcs.find((n) => n.name === name);
+      if (npc) return { id, npc };
+    }
+    return null;
+  };
+  assert.equal(find("Reeve Ott").npc._sched.keeper, true, "living in the moot house makes you its keeper");
+  assert.equal(find("Wick").npc._sched.keeper, false, "living in the woods does not make you a keeper of anything");
+
+  // MIDDAY IS THE POINT: the reeve is in the hall, not in the square.
+  const sim = new loadedPF.Sim(w);
+  sim.clockMin = 12 * 60;
+  sim.resolveSchedules();
+  assert.equal(find("Reeve Ott").id, hallId, "the reeve keeps the moot house through the day");
+  assert.equal(find("Halla").id, "z1", "somebody with no named building still has the settlement to be in");
+
+  // And the night handle is untouched — keeping a building is not sleeping rough.
+  sim.clockMin = 23 * 60;
+  sim.resolveSchedules();
+  assert.equal(find("Reeve Ott").id, hallId, "and sleeps in the quarters the hall grew for her");
+}
+
 console.log("brief validator + compiler: all cases passed");

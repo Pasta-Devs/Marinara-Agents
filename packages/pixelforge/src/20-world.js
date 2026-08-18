@@ -1888,6 +1888,20 @@ PF.world = (() => {
           // a householder's. Left null when the place laid them none — a resident
           // homed at a WILDS sleeps rough, which is what living in the woods is.
           if (ownBed) home = { zoneId: ownBed.zoneId, wander: bedBox(ownBed), spread: false };
+          // LIVING IN A BUILDING THE BRIEF NAMED IS KEEPING IT. The keeper tier
+          // used to be reachable only by OWNING a sanctuary, and ownership is one
+          // building per person, so exactly one keeper was possible in a whole
+          // world. Everyone else the brief housed in a named building — a healer
+          // at an infirmary, a scholar at a school, an elder at the moot house —
+          // fell to "*:resident", whose DAY entry is the plaza. They lived in the
+          // building and then walked out of it for the whole of daylight.
+          //
+          // `mapKind` is the right question because it is the compiler's own word
+          // for "this place has a room you can stand in": every named place that
+          // grows an interior is stamped "building", and a WILDS is stamped
+          // "place". So a forager homed in the woods is untouched — they have no
+          // building to keep, which is the point of living out there.
+          if (zone.mapKind === "building") keeper = true;
         }
       } else if (standing === "transient" && stalls.some((s) => s.owner === member)) {
         const stall = stalls.find((s) => s.owner === member);
