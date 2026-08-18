@@ -263,6 +263,15 @@ const PAINTERS = {
     g.rect(3, 4, 10, 7, PAL.path1);
     g.rect(3, 12, 2, 3, PAL.beam); g.rect(11, 12, 2, 3, PAL.beam);
   },
+  // Appended, never inserted: the id order IS the atlas index map, so a new tile
+  // goes on the end or every shipped index shifts under it.
+  altar(g) {
+    g.rect(0, 0, T, T, PAL.floor1);
+    g.rect(0, 2, T, 11, PAL.stone); g.rect(0, 2, T, 1, PAL.stoneHi);
+    g.rect(0, 3, T, 2, PAL.white); g.rect(0, 5, T, 1, PAL.plasterShadow);
+    g.rect(0, 7, T, 1, PAL.doorKnob);
+    g.rect(0, 13, T, 1, PAL.stoneDark);
+  },
 };
 
 // ── Actors: 4 rows (down, up, left, right) × 4 walk frames, 12×16 ────────────

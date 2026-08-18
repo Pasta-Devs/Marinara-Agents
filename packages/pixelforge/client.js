@@ -372,6 +372,17 @@ PF.art = (() => {
       px(g, 2, 3, 12, 9, PAL.counter);
       px(g, 3, 4, 10, 7, PAL.path1);
     },
+    // The sanctuary's focal block. Edge-to-edge on purpose: a run of them reads as
+    // ONE long altar rather than a row of furniture, which is the whole point of a
+    // focal object. The colony's palette turns the same silhouette into a lit
+    // memorial slab, so no painter override is needed to make it coherent there.
+    altar(g) {
+      px(g, 0, 0, T, T, PAL.floor1);
+      px(g, 0, 3, T, 10, PAL.stone);
+      px(g, 0, 3, T, 2, PAL.white);
+      px(g, 0, 6, T, 1, PAL.doorKnob);
+      px(g, 0, 12, T, 1, PAL.stoneDark);
+    },
   };
 
   // ── Themes ──────────────────────────────────────────────────────────────────
@@ -790,7 +801,7 @@ PF.brief = (() => {
   };
   const SURROUNDS = ["woods", "fields", "rocky", "water", "barren"];
   const PROSPERITY = ["struggling", "modest", "thriving"];
-  const PLACE_KINDS = ["gathering", "workshop", "hall", "dwelling", "wilds"];
+  const PLACE_KINDS = ["gathering", "workshop", "hall", "sanctuary", "dwelling", "wilds"];
   const CAST_KINDS = [
     "leader",
     "host",
@@ -836,7 +847,17 @@ PF.brief = (() => {
   // Which tags make sense per zone kind (invalid-for-zone drops at compile, not parse).
   const SETTLEMENT_TAGS = new Set(FEATURE_TAGS.filter((t) => t !== "water-crossing" && t !== "dense-growth"));
 
-  const CAPS = { features: 4, places: 4, wilds: 2, hall: 1, gathering: 1, castMin: 4, castMax: 10, household: 6 };
+  const CAPS = {
+    features: 4,
+    places: 4,
+    wilds: 2,
+    hall: 1,
+    gathering: 1,
+    sanctuary: 1,
+    castMin: 4,
+    castMax: 10,
+    household: 6,
+  };
   const BRIEF_BYTE_BUDGET = 8_192;
 
   // ── Deterministic entropy: ONE source ───────────────────────────────────────
@@ -993,6 +1014,7 @@ PF.brief = (() => {
     let wildsCount = 0;
     let hallCount = 0;
     let gatheringCount = 0;
+    let sanctuaryCount = 0;
     for (const item of asArray(src.places)) {
       if (brief.places.length >= CAPS.places) break;
       const kind = foldEnum(item?.kind, PLACE_KINDS, null);
@@ -1003,9 +1025,11 @@ PF.brief = (() => {
       if (kind === "wilds" && wildsCount >= CAPS.wilds) continue;
       if (kind === "hall" && hallCount >= CAPS.hall) continue;
       if (kind === "gathering" && gatheringCount >= CAPS.gathering) continue;
+      if (kind === "sanctuary" && sanctuaryCount >= CAPS.sanctuary) continue;
       if (kind === "wilds") wildsCount++;
       if (kind === "hall") hallCount++;
       if (kind === "gathering") gatheringCount++;
+      if (kind === "sanctuary") sanctuaryCount++;
       const name = dedupeName(capText(item?.name, 24) || PLACE_LABELS[kind], `places[${brief.places.length}]`);
       const place = { kind, name, flavor: capText(item?.flavor, 120) };
       if (kind === "wilds") {
@@ -1342,8 +1366,9 @@ PF.brief = (() => {
       `- features: 0-4 of {tag, name} placed in the settlement. tag from: ${[...SETTLEMENT_TAGS].join(", ")}.`,
       "  name <=24 chars — becomes a map location.",
       `- places: 0-4 additional zones of {kind, name, flavor}. kind from: ${PLACE_KINDS.join(" | ")}.`,
-      "  At most 2 wilds, 1 hall, 1 gathering. wilds may carry 0-3 features (water-crossing and",
-      "  dense-growth are wilds-only). flavor: ONE sentence <=120 chars.",
+      "  At most 2 wilds, 1 hall, 1 gathering, 1 sanctuary. Home an elder at a sanctuary to keep it. A sanctuary is the settlement's",
+      "  church, temple or memorial hall — it is built taller than the houses. wilds may carry",
+      "  0-3 features (water-crossing and dense-growth are wilds-only). flavor: ONE sentence <=120 chars.",
       "- cast: 4-10 story-relevant people of {name, role, kind, tint, home, household, persona, standing}.",
       `  kind (machine field) from: ${CAST_KINDS.join(" | ")}. role: <=24 chars free text (their title).`,
       `  tint from: ${Object.keys(TINTS).join(" | ")}. home: the NAME of the zone they live in.`,
@@ -1433,6 +1458,7 @@ PF.brief = (() => {
     gathering: "The Hearth",
     workshop: "The Works",
     hall: "The Hall",
+    sanctuary: "The Sanctuary",
     dwelling: "The House",
     wilds: "The Wilds",
   };
@@ -1611,6 +1637,12 @@ PF.world = (() => {
       npcs: [],
       spawn: { x: 2, y: 2 },
       spatialLocationId: null, // bound World Maps location, when known
+      // World Maps export gate (spec §8). A building is ONE location and its
+      // floors are rooms inside it, so a zone that is a room stamps this false
+      // and never claims a map row. The locations route is additive with no
+      // delete — a row written to a player's real map is permanent — so the
+      // gate has to ship with the zone type, never a release later.
+      mapExport: true,
       lights: [], // {x, y} warm glow points at night
     };
   }
@@ -1624,20 +1656,38 @@ PF.world = (() => {
     for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) put(z, x, y, layer, tileId, solid);
   };
 
-  /** A simple gabled building: stone footprint, plaster walls, roof overhead, one door. */
-  function building(z, x0, y0, w, h, doorOffset, windows) {
+  /** A simple gabled building: stone footprint, plaster walls, roof overhead, one door.
+   *
+   *  `options.facade` (0 = every existing call site) leaves the top N body rows
+   *  UNROOFED. Every body row is already solid wall — it was just permanently hidden
+   *  under roof overhead, so a building's height read as roofline and nothing else.
+   *  Exposing rows turns that height into visible stonework, which is what makes a
+   *  church or a keep stand over the houses beside it, and it costs no extra footprint.
+   *  `options.facadeWindows` lights the topmost exposed row, so the storey reads as a
+   *  storey rather than a blank slab. */
+  function building(z, x0, y0, w, h, doorOffset, windows, options) {
     // walls occupy the bottom wall row; roof covers the rest as overhead
     const wallY = y0 + h - 1;
+    // One roofed body row always survives: the eave is painted relative to the
+    // footprint's top, and a facade that ate every row would hang it off nothing.
+    const facade = PF.clamp((options?.facade ?? 0) | 0, 0, Math.max(0, h - 2));
+    const facadeY = wallY - facade;
     fillRect(z, x0, y0, w, h, "ground", "stone", false);
     for (let x = x0; x < x0 + w; x++) {
       put(z, x, wallY, "object", "wall", true);
       for (let y = y0; y < wallY; y++) put(z, x, y, "object", "wallStone", true);
       for (let y = y0 - 2; y < y0; y++) put(z, x, y, "overhead", y === y0 - 2 ? "roof" : "roofEdge");
-      for (let y = y0; y < wallY; y++) put(z, x, y, "overhead", "roof");
+      for (let y = y0; y < facadeY; y++) put(z, x, y, "overhead", "roof");
     }
     for (const wx of windows || []) {
       put(z, x0 + wx, wallY, "object", "window", true);
       z.lights.push({ x: x0 + wx, y: wallY });
+    }
+    if (facade) {
+      for (const wx of options.facadeWindows || []) {
+        put(z, x0 + wx, facadeY, "object", "window", true);
+        z.lights.push({ x: x0 + wx, y: facadeY });
+      }
     }
     const dx = x0 + doorOffset;
     put(z, dx, wallY, "object", "door", false);
@@ -1948,8 +1998,20 @@ PF.world = (() => {
     guard: "post",
     merchant: "shop",
     maker: "shop",
+    elder: "sanctuary",
   };
-  const INTERIOR_DIMS = { gathering: [16, 12], workshop: [16, 12], hall: [18, 12], dwelling: [14, 10] };
+  // A sanctuary is never minted on demand — it is the church the brief NAMED, and
+  // a nameless one would be an extra house with a spire. So an elder in a
+  // church-less settlement claims no lot and no dwelling slot, which is also what
+  // keeps every brief sealed before 0.8.0 compiling to the same tiles.
+  const PLACE_BOUND_SPECIALS = new Set(["sanctuary"]);
+  const INTERIOR_DIMS = {
+    gathering: [16, 12],
+    workshop: [16, 12],
+    hall: [18, 12],
+    sanctuary: [16, 14], // the nave needs length: the aisle is the walk to the altar
+    dwelling: [14, 10],
+  };
 
   function compile(brief, seed) {
     const activeTheme = PF.art.setTheme ? PF.art.setTheme(brief.theme) : brief.theme;
@@ -2006,10 +2068,10 @@ PF.world = (() => {
       // post…); a transient/fringe/destitute NPC never anchors one.
       if ((member.standing ?? "resident") !== "resident") continue;
       const special = SPECIAL_BUILDING_KINDS[member.kind];
-      if (special && !seenSpecial.has(special)) {
-        seenSpecial.add(special);
-        specials.push({ special, owner: member });
-      }
+      if (!special || seenSpecial.has(special)) continue;
+      if (PLACE_BOUND_SPECIALS.has(special) && !brief.places.some((place) => place.kind === special)) continue;
+      seenSpecial.add(special);
+      specials.push({ special, owner: member });
     }
     // Interior places claim a facade: gathering binds to the host's building,
     // hall to the leader's — their doors become the interior portals.
@@ -2037,12 +2099,35 @@ PF.world = (() => {
     }
     let slotIndex = 0;
     const takeSlot = () => slots[slotIndex++] ?? null;
+    // Head-room over a lot. A tall building grows UPWARD so its door stays on the
+    // row the rest of the lot geometry expects — the apron, the portal's outside
+    // tile and the owner's wander box are all measured from the door. Upward it
+    // stops two rows short of the border ring (whose canopies are overhead too, and
+    // a roof would erase them) in the top row, and clear of the crossroad in the
+    // bottom one: a roofed road reads as a tunnel. An outpost's rows sit tight
+    // against both, so there the clamp is simply zero and the facade carries it.
+    const headroom = (slotY) => Math.max(0, slotY - (slotY > midY ? midY + 3 : 4));
     for (const place of interiorPlaces) {
       const slot = takeSlot();
       if (!slot) break;
-      const width = place.kind === "hall" ? 8 : 7;
-      const b = building(v, slot.x, slot.y, width, 5, 3, [1, 5]);
-      buildings.push({ door: b, rect: { x: slot.x, y: slot.y, w: width, h: 5 }, boundPlace: place });
+      const tall = place.kind === "sanctuary";
+      const width = place.kind === "hall" || tall ? 8 : 7;
+      // Every row a sanctuary wins goes to the facade, never the roof: the
+      // roofline stays two rows deep and the extra height is all stonework.
+      const rise = tall ? Math.min(2, headroom(slot.y)) : 0;
+      const height = 5 + rise;
+      const top = slot.y - rise;
+      const b = building(
+        v,
+        slot.x,
+        top,
+        width,
+        height,
+        3,
+        [1, 5],
+        tall ? { facade: 2 + rise, facadeWindows: [3, 4] } : undefined,
+      );
+      buildings.push({ door: b, rect: { x: slot.x, y: top, w: width, h: height }, boundPlace: place });
     }
     for (const { special, owner } of specials) {
       // A special whose interior already exists as a place shares that facade.
@@ -2051,6 +2136,9 @@ PF.world = (() => {
         bound.owner = owner;
         continue;
       }
+      // The place exists but never claimed a lot, so there is nothing to keep:
+      // a place-bound special has no facade of its own to fall back on.
+      if (PLACE_BOUND_SPECIALS.has(special)) continue;
       const slot = takeSlot();
       if (!slot) break;
       const b = building(v, slot.x, slot.y, 6, 4, 2, [4]);
@@ -2157,6 +2245,25 @@ PF.world = (() => {
         fillRect(zone, 3, 3, w - 6, h - 6, "ground", "rug", false);
         fillRect(zone, 4, 5, w - 8, 1, "object", "table", true);
         zone.lights.push({ x: 3, y: 2 }, { x: w - 4, y: 2 });
+      } else if (place.kind === "sanctuary") {
+        // A nave the player walks the length of: a carpet aisle from the door to
+        // the altar, benches in rows either side, candle plinths flanking the
+        // altar. Aisle first — the hall's lesson: a ground fill clears solidity,
+        // so painting it after the altar would make the altar walk-through.
+        const aisleX = (w / 2) | 0;
+        fillRect(zone, aisleX, 3, 1, h - 4, "ground", "rug", false);
+        fillRect(zone, aisleX - 2, 3, 5, 1, "object", "altar", true);
+        for (const candleX of [aisleX - 3, aisleX + 3]) {
+          put(zone, candleX, 3, "object", "wallStone", true);
+          zone.lights.push({ x: candleX, y: 3 });
+        }
+        for (let row = 6; row < h - 2; row += 2) {
+          fillRect(zone, 3, row, aisleX - 3, 1, "object", "counter", true);
+          fillRect(zone, aisleX + 1, row, aisleX - 3, 1, "object", "counter", true);
+        }
+        put(zone, 2, 1, "object", "window", true);
+        put(zone, w - 3, 1, "object", "window", true);
+        zone.lights.push({ x: 2, y: 1 }, { x: w - 3, y: 1 });
       } else if (place.kind === "workshop") {
         fillRect(zone, 3, 3, 4, 1, "object", "counter", true);
         put(zone, w - 4, 5, "object", "table", true);
@@ -2350,10 +2457,14 @@ PF.world = (() => {
       // at its own hashed tile inside the box; anyone stacked under another
       // sprite can never be selected by talk-targeting (review finding).
       let spread = true;
+      // Holds a building the brief NAMED (a sanctuary today). It unlocks the keeper
+      // schedule tier, so the same cast kind keeps its ordinary habits without one.
+      let keeper = false;
       if (standing === "resident") {
         // Wander near the owner's building when they have one, else around the
         // zone's spawn; interiors wander their walkable middle.
         const owned = buildings.find((b) => b.owner === member || (b.households ?? []).includes(member.household));
+        keeper = !!(owned && owned.boundPlace && PLACE_BOUND_SPECIALS.has(owned.boundPlace.kind));
         const dwelling = buildings.find((b) => (b.households ?? []).includes(member.household));
         if (zone === v && owned) {
           wander = {
@@ -2426,6 +2537,7 @@ PF.world = (() => {
           // spread:false keeps a private, meaningful placement (a merchant's own
           // stall counter); shared boxes disperse by NPC id.
           post: { zoneId: zone.id, wander, spread },
+          keeper,
           home,
           public: { zoneId: v.id, wander: plazaBox() },
         },
@@ -2444,7 +2556,11 @@ PF.world = (() => {
   }
 
   function interiorKindForSpecial(special) {
-    return special === "gathering" ? "gathering" : special === "hall" ? "hall" : special === "shop" ? "workshop" : null;
+    if (special === "gathering") return "gathering";
+    if (special === "hall") return "hall";
+    if (special === "sanctuary") return "sanctuary";
+    if (special === "shop") return "workshop";
+    return null;
   }
 
   return { build, idx };
@@ -2483,6 +2599,13 @@ PF.schedule = (() => {
     "merchant:resident": { dawn: "home", day: "post", dusk: "post", night: "home" },
     // A travelling trader sleeps at the inn and tends the stall by day.
     "merchant:transient": { dawn: "home", day: "post", dusk: "post", night: "home" },
+    // The sanctuary's KEEPER — only reachable when the elder actually holds one
+    // (see the `keeper` flag). Without a row like this the keeper falls to
+    // "*:resident" and spends the daylight hours in the plaza, which is exactly
+    // when a player opens the church door, so the room built around them would
+    // always be empty. Scoped to keepers on purpose: an elder in a settlement with
+    // no sanctuary keeps the plaza habits they have always had.
+    "elder:resident:keeper": { dawn: "post", day: "post", dusk: "post", night: "home" },
     // Everyone else with a roof: at the door at dawn, the square by day (the
     // plaza should feel busiest in daylight and empty after dark), home at night.
     "*:resident": { dawn: "home", day: "public", dusk: "home", night: "home" },
@@ -2498,7 +2621,14 @@ PF.schedule = (() => {
   /** The handle an NPC should occupy at this daypart, or null when unscheduled. */
   function resolve(sched, daypart) {
     if (!sched) return null;
-    const template = TABLE[`${sched.kind}:${sched.standing}`] ?? TABLE[`*:${sched.standing}`] ?? DEFAULT;
+    // Most specific first. The `:keeper` tier exists so a template can describe
+    // someone who actually holds a building without changing how that same cast
+    // kind behaves when they do not.
+    const template =
+      (sched.keeper ? TABLE[`${sched.kind}:${sched.standing}:keeper`] : null) ??
+      TABLE[`${sched.kind}:${sched.standing}`] ??
+      TABLE[`*:${sched.standing}`] ??
+      DEFAULT;
     return sched[template[daypart] ?? "post"] ?? sched.post ?? null;
   }
 
@@ -3569,7 +3699,14 @@ PF.mapsExport = {
   async _sync(core, world, rootLoc) {
     const gen = PF.spatial._gen;
     const chatId = core.chatId;
-    const zoneIds = Object.keys(world.zones).filter((zoneId) => zoneId !== world.startZone);
+    // A building is ONE location; its floors are rooms inside it. A zone that is
+    // a room stamps mapExport = false (20-world) and is skipped here — it gets no
+    // row and no binding. This route is additive with NO delete, so a row posted
+    // to a player's real map can never be taken back: the gate belongs on the
+    // same side of the release as the zone type that needs it.
+    const zoneIds = Object.keys(world.zones).filter(
+      (zoneId) => zoneId !== world.startZone && world.zones[zoneId].mapExport !== false,
+    );
     let plan = this._plan(world, zoneIds, rootLoc);
     let missing = plan.filter((entry) => entry.create).map((entry) => entry.zoneId);
     let retriesWithoutProgress = 0;

@@ -22,6 +22,7 @@
     "well": 17,
     "trunk": 18,
     "canopy": 19,
-    "table": 20
+    "table": 20,
+    "altar": 21
   }
 }

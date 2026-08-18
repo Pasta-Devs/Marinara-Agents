@@ -52,23 +52,23 @@
     },
     {
       "path": "client.js",
-      "sha256": "04a02c0c04f38867d2b8599c7837387a59722cd58c25b92db49fa056a9b63f25",
-      "bytes": 226640
+      "sha256": "c4fe5126f0ebcca6dbd0d58142326ba266e4d837c63cde88c18bd284e8f14f6d",
+      "bytes": 233832
     },
     {
       "path": "tiles.png",
-      "sha256": "11a6078061eea4e4055b8f4aa81afd3d4212a64fb7f8f15108772f3fdd78c540",
-      "bytes": 1244
+      "sha256": "651c3544f02daac292dca4e36808ca1b933394bd248d5bd9e6a2af09250c866a",
+      "bytes": 1282
     },
     {
       "path": "tiles-sci-fi-colony.png",
-      "sha256": "9fa853c1002950b7bc2269d79e65395ab877d01a40e4084d7518969b5cd5e5e5",
-      "bytes": 1242
+      "sha256": "a83ff26017e34b386546b09fa6e63f1db3089854e5c66b330b0f7855718c7c33",
+      "bytes": 1280
     },
     {
       "path": "atlas.json",
-      "sha256": "15f630fa24084ee5cabcb7657e7cd7f077ee87a374bc5cf44c1d6c4568ecd68d",
-      "bytes": 403
+      "sha256": "952a979ea6b6aa36b08286fc3aa3ab5e7466df2ee3322cbcec9c08ffbb13a4ee",
+      "bytes": 420
     },
     {
       "path": "sprites.json",

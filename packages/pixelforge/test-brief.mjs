@@ -1033,9 +1033,8 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
 // 31-36. World Maps export (spec §8): seed-stable ids, the definition as the
 // idempotency ledger, additive-route retry discipline, and quiet degradation.
 {
-  const exportScaffold = (seed, chatId) => {
-    const sealed = brief.defaults("cozy-village", seed);
-    const w = world.build(seed, "cozy-village", sealed);
+  const exportScaffold = (seed, chatId, prebuilt) => {
+    const w = prebuilt ?? world.build(seed, "cozy-village", brief.defaults("cozy-village", seed));
     const sim = {
       world: w, zoneId: w.startZone, mode: "walk",
       zone() { return this.world.zones[this.zoneId]; },
@@ -1491,6 +1490,72 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     await mapsExport.maybeSync(core);
     assert.ok(posts.length <= 8, `the absolute budget bounds the loop (posted ${posts.length} times)`);
     assert.ok(mapsExport._failed, "the surrender is recorded for backoff");
+  }
+
+  // 45. The export gate: a building is ONE location and its floors are rooms
+  // inside it, so a zone stamped mapExport = false gets no row and no binding,
+  // while a NAMED brief place — the sanctuary here — still exports its single
+  // row. This route is additive with NO delete: a row posted to a player's real
+  // map is permanent, which is why the gate ships with the zone type and not a
+  // release later.
+  {
+    const sealed = brief.validate(
+      {
+        scale: "village",
+        name: "Bellford",
+        places: [
+          { kind: "sanctuary", name: "St. Ilde's", flavor: "Cold stone, warm candles." },
+          { kind: "gathering", name: "The Bell" },
+          { kind: "wilds", name: "The Reach" },
+        ],
+        cast: [
+          { name: "Sera", role: "chaplain", kind: "elder", tint: "rose", home: "Bellford", household: 1 },
+          { name: "Perrin", role: "innkeep", kind: "host", tint: "amber", home: "The Bell", household: 2 },
+          { name: "Alder", role: "reeve", kind: "leader", tint: "blue", home: "Bellford", household: 3 },
+          { name: "Tam", role: "farmer", kind: "grower", tint: "green", home: "Bellford", household: 4 },
+        ],
+      },
+      { theme: "cozy-village", seed: 3131 },
+    );
+    const built = world.build(3131, "cozy-village", sealed);
+    const churchId = Object.keys(built.zones).find((id) => built.zones[id].name === "St. Ilde's");
+    const innId = Object.keys(built.zones).find((id) => built.zones[id].name === "The Bell");
+    assert.ok(churchId && innId, "the sanctuary and the gathering both compiled");
+    assert.equal(built.zones[churchId].mapExport, true, "a named place exports by default");
+    // No compiled zone opts out yet — floors-as-rooms is what the gate is FOR,
+    // so stamp one by hand rather than wait for the zone type that needs it.
+    built.zones[innId].mapExport = false;
+    const { w, core } = exportScaffold(3131, "chat-export-45", built);
+    let serverLocs = [{ id: "loc-root" }];
+    const posted = [];
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision: 2, locations: serverLocs.slice() },
+      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async (chatId, body) => {
+      posted.push(...body.locations);
+      serverLocs = serverLocs.concat(body.locations.map((row) => ({ id: row.id })));
+      return { ok: true, status: 200, body: {} };
+    };
+    resetExportState();
+    await bindRoot(core);
+    await mapsExport.maybeSync(core);
+    assert.ok(
+      posted.some((row) => row.name === "St. Ilde's" && row.kind === "building"),
+      "the church exports its single row",
+    );
+    assert.equal(
+      posted.filter((row) => row.name === "St. Ilde's").length,
+      1,
+      "one building, one location — never a row per floor",
+    );
+    assert.ok(!posted.some((row) => row.name === "The Bell"), "a zone stamped mapExport = false never posts");
+    assert.equal(w.bindings[mapsExport.idFor(w, innId)], undefined, "and never binds a location it did not create");
+    assert.equal(w.zones[innId].spatialLocationId, null, "the excluded zone records no location");
+    assert.equal(w.bindings[mapsExport.idFor(w, churchId)], churchId, "the church binds");
+    // Non-vacuous: the wilds zone proves the run really did export its peers.
+    const wildsId = Object.keys(w.zones).find((id) => w.zones[id].name === "The Reach");
+    assert.equal(w.bindings[mapsExport.idFor(w, wildsId)], wildsId, "the other named places still export");
   }
 
   loadedPF.api.getSpatial = prevGetSpatial;
@@ -2133,7 +2198,7 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
 // with no portal in either direction — whoever was homed there was stranded and
 // un-talkable forever (review finding: 200/200 outposts on the pinned brief).
 {
-  const sealed = brief.validate(
+  const sealedOutpost = brief.validate(
     {
       scale: "outpost",
       name: "Stonewatch",
@@ -2151,35 +2216,69 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     },
     ctx,
   );
-  for (const seed of [1, 2, 3, 4, 5]) {
-    const w = world.build(seed, "cozy-village", sealed);
-    // Flood the portal graph from the start zone.
-    const reached = new Set([w.startZone]);
-    const queue = [w.startZone];
-    while (queue.length) {
-      for (const portal of w.zones[queue.pop()].portals) {
-        if (!reached.has(portal.toZone)) {
-          reached.add(portal.toZone);
-          queue.push(portal.toZone);
+  // A sanctuary is a named place like any other: the tallest building in the
+  // settlement is scenery if the player cannot walk into it, and its keeper is
+  // un-talkable if the door never opens.
+  const sealedSanctuary = brief.validate(
+    {
+      scale: "village",
+      name: "Bellford",
+      places: [
+        { kind: "sanctuary", name: "St. Ilde's" },
+        { kind: "gathering", name: "The Bell" },
+      ],
+      cast: [
+        { name: "Sera", role: "chaplain", kind: "elder", tint: "rose", home: "St. Ilde's", household: 1 },
+        { name: "Perrin", role: "innkeep", kind: "host", tint: "amber", home: "The Bell", household: 2 },
+        { name: "Alder", role: "reeve", kind: "leader", tint: "blue", home: "Bellford", household: 3 },
+        { name: "Tam", role: "farmer", kind: "grower", tint: "green", home: "Bellford", household: 4 },
+      ],
+    },
+    ctx,
+  );
+  // The outpost fixture exists to prove the DROP guard, so it demands no zone by
+  // name; the sanctuary fixture would pass trivially if its church were one of
+  // the dropped ones, so that one names what has to be there.
+  for (const [sealed, required] of [
+    [sealedOutpost, []],
+    [sealedSanctuary, ["St. Ilde's", "The Bell"]],
+  ]) {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const w = world.build(seed, "cozy-village", sealed);
+      // Flood the portal graph from the start zone.
+      const reached = new Set([w.startZone]);
+      const queue = [w.startZone];
+      while (queue.length) {
+        for (const portal of w.zones[queue.pop()].portals) {
+          if (!reached.has(portal.toZone)) {
+            reached.add(portal.toZone);
+            queue.push(portal.toZone);
+          }
         }
       }
-    }
-    for (const zoneId in w.zones) {
-      assert.ok(reached.has(zoneId), `seed ${seed}: zone ${zoneId} (${w.zones[zoneId].name}) is reachable`);
-    }
-    // And nobody can be SENT somewhere stranded either. Re-asserting
-    // reached.has(zoneId) per NPC only repeats the sweep above; what the zone
-    // sweep cannot see is a baked schedule handle pointing at an interior this
-    // build no longer compiles (the drop guard in 20-world), which would move
-    // an NPC out of the world on the next daypart — or into a room with no door.
-    for (const zoneId in w.zones) {
-      for (const npc of w.zones[zoneId].npcs) {
-        for (const name of ["post", "home", "public"]) {
-          const handle = npc._sched[name];
-          if (!handle) continue;
-          assert.ok(w.zones[handle.zoneId], `seed ${seed}: ${npc.name}'s ${name} handle names a live zone`);
-          assert.ok(reached.has(handle.zoneId), `seed ${seed}: ${npc.name}'s ${name} handle is reachable`);
+      for (const zoneId in w.zones) {
+        assert.ok(reached.has(zoneId), `seed ${seed}: zone ${zoneId} (${w.zones[zoneId].name}) is reachable`);
+      }
+      // And nobody can be SENT somewhere stranded either. Re-asserting
+      // reached.has(zoneId) per NPC only repeats the sweep above; what the zone
+      // sweep cannot see is a baked schedule handle pointing at an interior this
+      // build no longer compiles (the drop guard in 20-world), which would move
+      // an NPC out of the world on the next daypart — or into a room with no door.
+      for (const zoneId in w.zones) {
+        for (const npc of w.zones[zoneId].npcs) {
+          for (const name of ["post", "home", "public"]) {
+            const handle = npc._sched[name];
+            if (!handle) continue;
+            assert.ok(w.zones[handle.zoneId], `seed ${seed}: ${npc.name}'s ${name} handle names a live zone`);
+            assert.ok(reached.has(handle.zoneId), `seed ${seed}: ${npc.name}'s ${name} handle is reachable`);
+          }
         }
+      }
+      for (const name of required) {
+        assert.ok(
+          Object.values(w.zones).some((zone) => zone.name === name),
+          `seed ${seed}: ${name} compiled`,
+        );
       }
     }
   }
@@ -2229,6 +2328,328 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   sim.y = 20 * loadedPF.TILE;
   sim.step(1 / 60, {});
   assert.equal(sim.cutscene, null, "walking away releases the beat at once");
+}
+
+// ── The sanctuary (0.8.0): a tall facade outside, a room worth entering inside ──
+// A church is the first place kind whose exterior is not a house wearing a
+// different roof: building()'s facade option turns its already-solid body rows
+// into visible stonework, and the compiler spends whatever head-room the lot has
+// on more of the same.
+const sanctuaryBrief = (overrides = {}) => ({
+  scale: "village",
+  name: "Bellford",
+  places: [
+    { kind: "sanctuary", name: "St. Ilde's", flavor: "Cold stone, warm candles." },
+    { kind: "gathering", name: "The Bell" },
+  ],
+  cast: [
+    { name: "Sera", role: "chaplain", kind: "elder", tint: "rose", home: "St. Ilde's", household: 1 },
+    { name: "Perrin", role: "innkeep", kind: "host", tint: "amber", home: "The Bell", household: 2 },
+    { name: "Alder", role: "reeve", kind: "leader", tint: "blue", home: "Bellford", household: 3 },
+    { name: "Tam", role: "farmer", kind: "grower", tint: "green", home: "Bellford", household: 4 },
+  ],
+  ...overrides,
+});
+const zoneNamed = (w, name) => Object.values(w.zones).find((zone) => zone.name === name);
+
+// 46. The interior is a nave, not a room with a label: an altar the aisle walks
+// up to, benches in rows either side, candles at the altar, and a carpet the
+// player can follow from the door without squeezing past the furniture.
+{
+  const sealed = brief.validate(sanctuaryBrief(), ctx);
+  const w = world.build(424242, "cozy-village", sealed);
+  checkWorld(w, sealed, "sanctuary");
+  const z = zoneNamed(w, "St. Ilde's");
+  assert.ok(z, "the sanctuary compiled");
+  assert.equal(z.mapKind, "building", "a church is a building on the map");
+  const at = (x, y) => z.object[z.w * y + x];
+  const solidAt = (x, y) => z.solid[z.w * y + x];
+
+  // The altar: a run of at least three tiles, every one of them solid. The rug
+  // aisle is painted FIRST for exactly this reason — a ground fill clears
+  // solidity, so reversing the order would leave a walk-through altar (the
+  // hall's shipped bug, and the reason its comment exists).
+  const altars = [];
+  for (let y = 0; y < z.h; y++) for (let x = 0; x < z.w; x++) if (at(x, y) === "altar") altars.push({ x, y });
+  assert.ok(altars.length >= 3, `the altar is a real focal block (${altars.length} tiles)`);
+  assert.equal(new Set(altars.map((tile) => tile.y)).size, 1, "the altar is one run, not scattered furniture");
+  for (const tile of altars) assert.equal(solidAt(tile.x, tile.y), 1, "the altar blocks — the aisle stops at it");
+
+  // Pews: at least three rows, on BOTH sides of the aisle.
+  const benchRows = [];
+  for (let y = 0; y < z.h; y++) {
+    const row = [];
+    for (let x = 0; x < z.w; x++) if (at(x, y) === "counter") row.push(x);
+    if (row.length) benchRows.push({ y, xs: row });
+  }
+  assert.ok(benchRows.length >= 3, `pews in rows (${benchRows.length} rows)`);
+  const aisleX = (z.w / 2) | 0;
+  for (const row of benchRows) {
+    assert.ok(
+      row.xs.some((x) => x < aisleX),
+      `row ${row.y} seats the left of the aisle`,
+    );
+    assert.ok(
+      row.xs.some((x) => x > aisleX),
+      `row ${row.y} seats the right of the aisle`,
+    );
+    assert.ok(!row.xs.includes(aisleX), `row ${row.y} leaves the aisle open`);
+  }
+
+  // Candles: the altar row is lit from both sides, so the room reads at night.
+  const altarY = altars[0].y;
+  const altarLights = z.lights.filter((light) => light.y === altarY);
+  assert.ok(altarLights.length >= 2, "the altar is lit from both sides");
+  assert.ok(
+    altarLights.some((light) => light.x < aisleX) && altarLights.some((light) => light.x > aisleX),
+    "a candle each side, not two on one",
+  );
+
+  // And the walk itself: from the spawn inside the door, up the carpet, to the
+  // tile below the altar. A pew row closing over the aisle would pass every
+  // assertion above and still make the room pointless.
+  const seen = new Set([`${z.spawn.x},${z.spawn.y}`]);
+  const queue = [z.spawn];
+  while (queue.length) {
+    const { x, y } = queue.pop();
+    for (const [dx, dy] of [
+      [0, -1],
+      [0, 1],
+      [-1, 0],
+      [1, 0],
+    ]) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= z.w || ny >= z.h || solidAt(nx, ny) || seen.has(`${nx},${ny}`)) continue;
+      seen.add(`${nx},${ny}`);
+      queue.push({ x: nx, y: ny });
+    }
+  }
+  assert.ok(seen.has(`${aisleX},${altarY + 1}`), "the aisle reaches the altar rail from the door");
+  assert.equal(z.ground[z.w * (altarY + 1) + aisleX], "rug", "and the walk up is carpeted");
+  // Non-vacuous: the altar is the sanctuary's own furniture, not something every
+  // interior gained.
+  assert.ok(!zoneNamed(w, "The Bell").object.includes("altar"), "the gathering interior grew no altar");
+}
+
+// 47. The exterior is TALLER, on tiles rather than on vibes: a sanctuary shows
+// rows of bare wall where an ordinary building shows only roof, and it spends
+// the lot's head-room going UP — clamped so it never reaches the border ring
+// above the top row of lots, and never roofs the crossroad below the bottom one.
+{
+  // Facade tiles: solid wall standing in the open, with no roof over it. Roofed
+  // body rows and the eave both carry overhead, so this counts exactly the rows
+  // the facade option exposes.
+  const facadeTiles = (v, x0, x1) => {
+    let count = 0;
+    for (let y = 0; y < v.h; y++) {
+      for (let x = Math.max(0, x0); x <= Math.min(v.w - 1, x1); x++) {
+        const i = v.w * y + x;
+        if (v.object[i] === "wallStone" && !v.overhead[i] && v.ground[i] === "stone") count++;
+      }
+    }
+    return count;
+  };
+  // The topmost row this lot paints anything on — the eave, two rows above the
+  // footprint's top.
+  const topRow = (v, doorX, doorY) => {
+    let top = doorY;
+    while (top > 0 && (v.object[v.w * (top - 1) + doorX] || v.overhead[v.w * (top - 1) + doorX])) top--;
+    return top;
+  };
+  // The same lot, built as a church and as an ordinary interior facade: same
+  // brief, same slot, so every difference measured below is the facade option's.
+  const lotOf = (sealed, seed, kind) => {
+    const swapped = {
+      ...sealed,
+      places: sealed.places.map((place) => (place.kind === "sanctuary" ? { ...place, kind } : place)),
+    };
+    const w = world.build(seed, "cozy-village", swapped);
+    const v = w.zones.z1;
+    const z = zoneNamed(w, "St. Ilde's");
+    const portal = z ? v.portals.find((p) => p.toZone === z.id) : null;
+    if (!portal) return null;
+    return {
+      doorY: portal.y,
+      top: topRow(v, portal.x, portal.y),
+      facade: facadeTiles(v, portal.x - 3, portal.x + 4),
+      midY: (v.h / 2) | 0,
+    };
+  };
+
+  let sawRise = false;
+  for (const scale of ["outpost", "hamlet", "village", "town"]) {
+    // Padding pushes the church down the lot list, so both rows of lots — the one
+    // under the border ring and the one under the crossroad — get exercised.
+    for (const pad of [0, 1, 2, 3]) {
+      const places = ["gathering", "workshop", "hall"]
+        .slice(0, pad)
+        .map((kind, index) => ({ kind, name: `Pad ${index}` }));
+      places.push({ kind: "sanctuary", name: "St. Ilde's" });
+      const sealed = brief.validate(sanctuaryBrief({ scale, places }), ctx);
+      const church = lotOf(sealed, 7, "sanctuary");
+      const plain = lotOf(sealed, 7, "workshop");
+      if (!church || !plain) continue; // the lots ran dry — the drop guard's case
+      const label = `${scale}/pad${pad}`;
+
+      assert.ok(church.facade >= 2, `${label}: the church shows bare wall (${church.facade} tiles)`);
+      assert.equal(plain.facade, 0, `${label}: an ordinary building shows none — it is all roof`);
+      assert.equal(church.doorY, plain.doorY, `${label}: the door stays on the row the lot puts it on`);
+      assert.ok(church.top <= plain.top, `${label}: the church never sits lower than an ordinary building`);
+      assert.ok(church.top >= 2, `${label}: the eave stays clear of the border ring (top row ${church.top})`);
+      // The clamp only has to protect a lot that was clear to begin with: an
+      // outpost's lower row already eaves over its crossroad with any building.
+      if (plain.doorY > church.midY && plain.top > church.midY) {
+        assert.ok(church.top > church.midY, `${label}: the extra height never roofs the crossroad`);
+      }
+      if (church.top < plain.top) {
+        sawRise = true;
+        // The height went into the facade, not the roof: every row won is a row
+        // of visible wall, so the roofline stays as deep as anyone else's.
+        assert.ok(church.facade >= plain.facade + 2, `${label}: every row it wins is a row of wall`);
+      }
+    }
+  }
+  assert.ok(sawRise, "at least one lot had the head-room to build up — the clamp is not simply always zero");
+}
+
+// 48. A brief sealed before 0.8.0 compiles to exactly the tiles it always did.
+// The elder → sanctuary wiring is the risk: it has to stay dormant when the
+// brief names no church, or every existing world would quietly rearrange itself
+// on the next load (worlds are rebuilt from seed + brief, never from tiles).
+{
+  const older = {
+    scale: "village",
+    name: "Mossbrook",
+    places: [
+      { kind: "gathering", name: "The Wet Boot" },
+      { kind: "wilds", name: "The Fallow" },
+    ],
+    features: [{ tag: "crop-plots", name: "The Rows" }],
+    cast: [
+      { name: "Sera", role: "weaver", kind: "elder", tint: "rose", home: "Mossbrook", household: 1 },
+      { name: "Perrin", role: "innkeep", kind: "host", tint: "amber", home: "The Wet Boot", household: 2 },
+      { name: "Alder", role: "mayor", kind: "leader", tint: "blue", home: "Mossbrook", household: 3 },
+      { name: "Tam", role: "farmer", kind: "grower", tint: "green", home: "Mossbrook", household: 4 },
+      { name: "Brin", role: "carter", kind: "folk", tint: "teal", home: "Mossbrook", household: 5 },
+    ],
+  };
+  const sealed = brief.validate(older, ctx);
+  assert.ok(
+    sealed.cast.some((member) => member.kind === "elder"),
+    "the fixture really does carry an elder — the dormancy claim needs one",
+  );
+  const tiles = (w) =>
+    JSON.stringify(
+      Object.keys(w.zones).map((id) => {
+        const z = w.zones[id];
+        return [id, z.w, z.h, z.ground, z.object, z.overhead, [...z.solid], z.portals, z.lights, z.spawn];
+      }),
+    );
+  // The same brief with the elder demoted to plain folk: identical tiles is what
+  // "dormant" MEANS. A lot it claimed, or a dwelling slot it displaced, shows up
+  // here as a diff.
+  const demoted = brief.validate(
+    { ...older, cast: older.cast.map((member) => (member.kind === "elder" ? { ...member, kind: "folk" } : member)) },
+    ctx,
+  );
+  for (const seed of [1, 7, 424242]) {
+    const w = world.build(seed, "cozy-village", sealed);
+    checkWorld(w, sealed, `older-brief seed ${seed}`);
+    assert.equal(tiles(w), tiles(world.build(seed, "cozy-village", demoted)), `seed ${seed}: an elder mints nothing`);
+    for (const id in w.zones) {
+      const z = w.zones[id];
+      assert.ok(!z.object.includes("altar"), `seed ${seed}: no altar anywhere in ${id}`);
+      // Facade rows are the other half of the new machinery, and equally opt-in.
+      for (let i = 0; i < z.object.length; i++) {
+        if (z.object[i] !== "wallStone" || z.overhead[i] || z.ground[i] !== "stone") continue;
+        assert.fail(`seed ${seed}: ${id} grew a facade row at ${i % z.w},${(i / z.w) | 0}`);
+      }
+    }
+  }
+}
+
+// 49. The church world holds every NPC invariant the settlement does, around the
+// clock: nobody stands in a wall, a doorway or a portal tile, and nobody shares
+// a tile — including inside the sanctuary, whose keeper is the one cast member
+// the schedule table now posts there all day.
+{
+  const sealed = brief.validate(sanctuaryBrief(), ctx);
+  for (const seed of [1, 7, 424242]) {
+    const w = world.build(seed, "cozy-village", sealed);
+    const sim = new loadedPF.Sim(w);
+    for (const min of [6 * 60, 12 * 60, 19 * 60, 23 * 60]) {
+      sim.clockMin = min;
+      sim.resolveSchedules();
+      for (const zoneId in w.zones) {
+        const z = w.zones[zoneId];
+        const taken = new Set();
+        for (const npc of z.npcs) {
+          const x = Math.round(npc.x);
+          const y = Math.round(npc.y);
+          assert.ok(
+            loadedPF.schedule.standable(z, x, y),
+            `seed ${seed} @${min}: ${npc.name} stands somewhere legal in ${zoneId}`,
+          );
+          assert.ok(!taken.has(`${x},${y}`), `seed ${seed} @${min}: ${npc.name} shares nobody's tile`);
+          taken.add(`${x},${y}`);
+        }
+      }
+    }
+    // Non-vacuous: the keeper really is in the church at the hour a player is
+    // most likely to open its door.
+    sim.clockMin = 12 * 60;
+    sim.resolveSchedules();
+    assert.ok(
+      zoneNamed(w, "St. Ilde's").npcs.some((npc) => npc.name === "Sera"),
+      `seed ${seed}: the chaplain keeps the sanctuary through the day`,
+    );
+  }
+}
+
+// 50. The keeper schedule tier is scoped to elders who actually hold a sanctuary.
+// Adding a church must not change how elders behave in the settlements that have
+// none — those still keep the plaza habits they have always had.
+{
+  const cast = (elderHome) => [
+    { name: "Ana", role: "reeve", kind: "leader", tint: "blue", home: "Oldtown", household: 1 },
+    { name: "Gran", role: "chaplain", kind: "elder", tint: "rose", home: elderHome, household: 2 },
+    { name: "Bo", role: "farmer", kind: "folk", tint: "green", home: "Oldtown", household: 3 },
+    { name: "Cy", role: "cooper", kind: "folk", tint: "amber", home: "Oldtown", household: 4 },
+  ];
+  const noChurch = brief.validate({ scale: "village", name: "Oldtown", cast: cast("Oldtown") }, ctx);
+  const withChurch = brief.validate(
+    { scale: "village", name: "Oldtown", places: [{ kind: "sanctuary", name: "St Ives" }], cast: cast("St Ives") },
+    ctx,
+  );
+  const midday = (sealed) => {
+    const w = world.build(5, "cozy-village", sealed);
+    const sim = new loadedPF.Sim(w);
+    sim.clockMin = 12 * 60;
+    sim.resolveSchedules();
+    for (const id in w.zones) {
+      const npc = w.zones[id].npcs.find((n) => n.name === "Gran");
+      if (npc) return { world: w, zoneId: id, npc };
+    }
+    throw new Error("the elder vanished");
+  };
+
+  // Without a sanctuary: no keeper flag, and the plaza by day exactly as before.
+  const plain = midday(noChurch);
+  assert.equal(plain.npc._sched.keeper, false, "an elder with no sanctuary is not a keeper");
+  assert.equal(plain.zoneId, "z1", "and stays in the settlement");
+  const v = plain.world.zones.z1;
+  const mx = (v.w / 2) | 0;
+  const my = (v.h / 2) | 0;
+  assert.ok(
+    Math.abs(Math.round(plain.npc.x) - mx) <= 6 && Math.abs(Math.round(plain.npc.y) - my) <= 5,
+    "an elder with no sanctuary still spends midday in the plaza",
+  );
+
+  // Holding one: keeper, and inside it rather than out in the square.
+  const keeping = midday(withChurch);
+  assert.equal(keeping.npc._sched.keeper, true, "an elder homed at a sanctuary keeps it");
+  assert.equal(keeping.world.zones[keeping.zoneId].name, "St Ives", "and is inside it at midday");
 }
 
 console.log("brief validator + compiler: all cases passed");

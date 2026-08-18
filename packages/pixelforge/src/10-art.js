@@ -199,6 +199,17 @@ PF.art = (() => {
       px(g, 2, 3, 12, 9, PAL.counter);
       px(g, 3, 4, 10, 7, PAL.path1);
     },
+    // The sanctuary's focal block. Edge-to-edge on purpose: a run of them reads as
+    // ONE long altar rather than a row of furniture, which is the whole point of a
+    // focal object. The colony's palette turns the same silhouette into a lit
+    // memorial slab, so no painter override is needed to make it coherent there.
+    altar(g) {
+      px(g, 0, 0, T, T, PAL.floor1);
+      px(g, 0, 3, T, 10, PAL.stone);
+      px(g, 0, 3, T, 2, PAL.white);
+      px(g, 0, 6, T, 1, PAL.doorKnob);
+      px(g, 0, 12, T, 1, PAL.stoneDark);
+    },
   };
 
   // ── Themes ──────────────────────────────────────────────────────────────────

@@ -42,10 +42,12 @@ through the derivations below.
                             // an unknown tag drops the WHOLE item (a name can never orphan a tag).
                             // name: TEXT ≤24 graphemes → a World Maps CHILD location.
 
-  places: [                 // 0-4 additional zones; ≤2 wilds, ≤1 hall, ≤1 gathering.
-    { kind: "gathering",    // ENUM gathering|workshop|hall|dwelling|wilds → zone builder + dims
-                            // (interiors 14x10–18x12 by kind, wilds 36x24). No size field: dims
-                            // derive from kind + feature count, never from the model.
+  places: [                 // 0-4 additional zones; ≤2 wilds, ≤1 hall, ≤1 gathering, ≤1 sanctuary.
+    { kind: "gathering",    // ENUM gathering|workshop|hall|sanctuary|dwelling|wilds → zone builder
+                            // + dims (interiors 14x10–18x14 by kind, wilds 36x24). No size field:
+                            // dims derive from kind + feature count, never from the model.
+                            // sanctuary = the settlement's church, temple or memorial hall (16x14):
+                            // the one kind built TALL — see §4.5.
       name: "The Wet Boot", // TEXT ≤24 graphemes → zone name, World Maps location.
       flavor: "…",          // TEXT ≤120, one sentence. Injected ONCE on first zone entry.
       features: [] },       // wilds only, 0-3, same item shape/rules.
@@ -57,7 +59,8 @@ through the derivations below.
       kind: "leader",       // ENUM (12): leader|host|grower|maker|merchant|guard|healer|scholar|
                             // elder|child|wanderer|folk — the MACHINE field. Derives the sprite
                             // archetype AND the special building (leader→hall, host→gathering,
-                            // grower→farmhouse/hydro, guard→post, merchant/maker→workshop…).
+                            // grower→farmhouse/hydro, guard→post, merchant/maker→workshop,
+                            // elder→sanctuary when the brief names one — §4.5).
                             // The model never picks a sprite or a building directly.
       tint: "blue",         // ENUM 9: red|orange|amber|green|teal|blue|violet|rose|grey → fixed
                             // hue table. Nine buckets cannot cluster; no raw hues, no repair loop.
@@ -136,14 +139,24 @@ response is **never stored** (checkpoints capture by value — see #5110).
      non-resident never gets a dwelling — it anchors to its standing rest spot (transient → the inn,
      fringe → the wilds/margin, destitute → the public center);
    - special buildings from a **resident**'s `kind` (never a duplicate hall; extra specials demote
-     to workyard markers); a non-resident with a special kind builds nothing — except a
+     to workyard markers); a **place-bound** special is the exception — `elder`→`sanctuary` binds
+     the church the brief NAMED and mints nothing on its own, so an elder in a church-less
+     settlement claims neither a lot nor a dwelling slot (which is also what keeps every brief
+     sealed before 0.8.0 compiling to the same tiles); a non-resident with a special kind builds
+     nothing — except a
      **transient `merchant`**, who sets up a light market stall (3 tables, no walls) when a lot is
      free (else it loiters at a public spot like any transient);
    - residential filler = `clamp(BASE[scale] − dwellings − specials, 0, ∞)`,
      area cap `floor(buildableArea / 56)`;
    - **over-subscription MERGES households into multi-family blocks — a named NPC's home is
      never dropped**; only filler is dropped, then the lowest-priority specials
-     (leader > host > grower > maker > merchant > guard > healer > scholar > folk).
+     (leader > host > grower > maker > merchant > guard > healer > scholar > folk);
+   - **height** is a facade, not a footprint: every body row of a building is already solid wall,
+     hidden under roof overhead, so a tall building simply leaves its top rows UNROOFED and the
+     stonework shows. A `sanctuary` takes two such rows always, plus whatever head-room its lot
+     has (clamped: clear of the border ring above the upper row of lots, clear of the crossroad
+     above the lower one — an outpost's rows sit tight against both and get zero), and it grows
+     UPWARD so its door stays on the row the lot's apron, portal and wander boxes expect.
 6. **Quality floors** (valid-but-degenerate briefs — the weak-local-model shape): after repair,
    enforce ≥2 distinct households (split by seed), ≥2 zones (synthesize one wilds), ≥3 distinct
    tints (rotate by seed), and no feature tag on more than TWO kept slots (the surplus re-rolls
@@ -236,6 +249,13 @@ binding (map replaced/started over) prunes the dead bindings so the exterior re-
 export re-runs under the new root; deliberate refusals (archived parent, the location cap, route
 absent) end the attempt for the session with no retry drumbeat. Exported ids land in
 `world.bindings`, which is what lets travel and narrated drift teleport into generated zones.
+
+**One building, one location.** A zone that is a ROOM inside another zone's building — a floor,
+a back room — stamps `mapExport = false` and is skipped: no row, no binding, reached only through
+the building it sits in. Named brief places (the sanctuary included) export their single row;
+generated dwellings, which have no interior zone at all, never did. The gate exists because this
+route is additive with **no delete**: a row written to a player's real map is permanent, so it
+ships with the zone type that needs it rather than a release later.
 
 Not yet exported (still §9 territory): the root's population phrase and per-feature locations —
 features have no zones of their own, and decorating the root would edit a location the user may
