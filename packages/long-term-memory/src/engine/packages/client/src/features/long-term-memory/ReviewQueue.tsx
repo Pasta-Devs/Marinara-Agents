@@ -1038,7 +1038,6 @@ export default function ReviewQueue({
     );
     for (const [draftId, saved] of Object.entries(persisted?.drafts ?? {})) {
       const current = currentDrafts.get(draftId);
-      const currentMutationIds = new Set(current?.draft.mutations.map((mutation) => mutation.id) ?? []);
       if (
         !current ||
         current.draft.status !== "pending" ||
@@ -1047,7 +1046,10 @@ export default function ReviewQueue({
         discardedState = true;
         continue;
       }
-      const currentMutations = new Map(current.draft.mutations.map((mutation) => [mutation.id, mutation] as const));
+      const appliedMutationIds = new Set(current.draft.appliedMutationIds ?? []);
+      const pendingMutations = current.draft.mutations.filter((mutation) => !appliedMutationIds.has(mutation.id));
+      const currentMutationIds = new Set(pendingMutations.map((mutation) => mutation.id));
+      const currentMutations = new Map(pendingMutations.map((mutation) => [mutation.id, mutation] as const));
       const savedMutationFingerprints = new Map(saved.mutationFingerprints);
       saved.selectedIds.forEach((id) => {
         if (!currentMutationIds.has(id)) return;
@@ -1088,13 +1090,15 @@ export default function ReviewQueue({
     );
     for (const [draftId, item] of currentDrafts) {
       if (item.draft.status !== "pending") continue;
-      const mutationIds = new Set(item.draft.mutations.map((mutation) => mutation.id));
+      const appliedMutationIds = new Set(item.draft.appliedMutationIds ?? []);
+      const pendingMutations = item.draft.mutations.filter((mutation) => !appliedMutationIds.has(mutation.id));
+      const mutationIds = new Set(pendingMutations.map((mutation) => mutation.id));
       const selected = [...selectedIds].filter((id) => mutationIds.has(id));
       const editedMutations = [...editedById].filter(([id]) => mutationIds.has(id));
       if (selected.length || editedMutations.length)
         drafts[draftId] = {
           contextFingerprint: draftReviewContextFingerprint(item),
-          mutationFingerprints: item.draft.mutations.map((mutation) => [mutation.id, mutationFingerprint(mutation)]),
+          mutationFingerprints: pendingMutations.map((mutation) => [mutation.id, mutationFingerprint(mutation)]),
           selectedIds: selected,
           editedMutations,
         };
@@ -1459,7 +1463,7 @@ export default function ReviewQueue({
         .map((id) => refreshedRows.rowByMutationId.get(id))
         .filter((row): row is ReviewRow => Boolean(row));
       if (!failedRows.length) {
-        setResult((current) => (current ? { ...current, failedMutationIds: [], failedDraftIds: [] } : current));
+        setResult(null);
         return;
       }
       setSelectedIds((current) => new Set([...current, ...failedRows.map((row) => row.mutation.id)]));

@@ -355,6 +355,8 @@ assert.match(reviewQueue, /review\.refetch\(\)/u);
 assert.match(reviewQueue, /pendingMutationIds/u);
 assert.match(reviewQueue, /mutationFingerprints/u);
 assert.match(reviewQueue, /contextFingerprint/u);
+assert.match(reviewQueue, /appliedMutationIds/u);
+assert.match(reviewQueue, /setResult\(null\)/u);
 assert.match(reviewQueue, /reviewFailed/u);
 assert.match(reviewQueue, /reviewProgress/u);
 assert.match(reviewQueue, /MAX_EDITABLE_TEXT_LENGTH = 20_000/u);
