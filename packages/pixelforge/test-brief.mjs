@@ -5449,4 +5449,57 @@ const cellarBrief = (prosperity) => ({
   assert.equal(find("Reeve Ott").id, hallId, "and sleeps in the quarters the hall grew for her");
 }
 
+// ONE HEAD PER BUILDING, not everyone under its roof. Keeping a building and
+// sleeping in it are different facts, and conflating them breaks the moment a
+// brief homes a CROWD somewhere: ten residents at one address are a dormitory, a
+// barracks or a boarding house, and the defining thing about all three is that
+// the people in them LEAVE during the day. Marking the whole roll as keepers
+// held them indoors around the clock — and on the open plan, which walls
+// nothing, the wander box covers the bed rows and beds are non-solid, so they
+// spent the afternoon standing on their own bunks.
+{
+  const sealed = brief.validate(
+    {
+      scale: "hamlet",
+      prosperity: "thriving",
+      name: "Harbour",
+      places: [{ kind: "gathering", name: "The Anchor" }],
+      cast: [
+        { name: "Keep", role: "innkeep", kind: "host", tint: "amber", home: "The Anchor", household: 1 },
+        ...Array.from({ length: 9 }, (_, i) => ({
+          name: `K${i}`,
+          role: "lodger",
+          kind: "folk",
+          tint: ["green", "blue", "rose", "teal", "violet", "grey"][i % 6],
+          home: "The Anchor",
+          household: i < 5 ? 1 : 2,
+        })),
+      ],
+    },
+    ctx,
+  );
+  const w = world.build(1, "cozy-village", sealed);
+  const inn = findZone(w, "The Anchor");
+  const everyone = Object.values(w.zones).flatMap((zone) => zone.npcs);
+  const keepers = everyone.filter((npc) => npc._sched.keeper);
+  assert.equal(keepers.length, 1, `one head, not a roll call (${keepers.map((n) => n.name).join()})`);
+  assert.equal(keepers[0].name, "Keep", "and it is the first resident in cast order");
+
+  // Midday: the head holds the building, the lodgers are out of it.
+  const sim = new loadedPF.Sim(w);
+  sim.clockMin = 12 * 60;
+  sim.resolveSchedules();
+  assert.equal(inn.npcs.length, 1, `at midday only the head is inside (${inn.npcs.map((n) => n.name).join()})`);
+  // Non-vacuous: they went somewhere real rather than being dropped.
+  assert.equal(everyone.length, 10, "and nobody was lost doing it");
+  // Nobody loiters on a bed by day — the open plan walls nothing, so this is
+  // the assertion that catches a resident being held indoors by mistake.
+  for (const npc of inn.npcs) {
+    assert.ok(
+      !SLEEPS_ON.has(inn.object[inn.w * Math.round(npc.y) + Math.round(npc.x)]),
+      `${npc.name} is standing on a bed in the middle of the day`,
+    );
+  }
+}
+
 console.log("brief validator + compiler: all cases passed");

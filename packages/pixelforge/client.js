@@ -3544,6 +3544,29 @@ PF.world = (() => {
       x1: Math.min(v.w - 3, door.doorX + reach),
       y1: Math.min(v.h - 3, door.doorY + depth),
     });
+    // THE HEAD OF A NAMED BUILDING: the first resident homed there in cast
+    // order. Cast order is already a statement of importance — pass 4 of the
+    // validator hoists a leader ahead of the cap — and a cast list is written
+    // head-first by every model that has ever written one.
+    //
+    // This exists because KEEPING a building and SLEEPING in it are different
+    // facts, and conflating them breaks the moment a brief homes a crowd
+    // somewhere. Ten residents at one address are a dormitory, a barracks or a
+    // boarding house, and the defining thing about all three is that the people
+    // in them LEAVE during the day. Marking every one of them a keeper held the
+    // whole roll indoors around the clock — and on the open plan, which walls
+    // nothing, the wander box covers the bed rows and beds are non-solid, so
+    // they spent the afternoon standing on their own bunks.
+    //
+    // One head each. Everyone else falls to the ordinary resident row, or to the
+    // worker tier when the brief said where they work — which is the right
+    // answer for the eight sisters who live at the convent and work at the church.
+    const headOfBuilding = new Map();
+    brief.cast.forEach((member) => {
+      if ((member.standing ?? "resident") !== "resident") return;
+      const id = zoneIdByName.get(member.home);
+      if (id && !headOfBuilding.has(id)) headOfBuilding.set(id, member);
+    });
     brief.cast.forEach((member, index) => {
       const npcId = `n${index + 1}`;
       const standing = member.standing ?? "resident";
@@ -3610,20 +3633,23 @@ PF.world = (() => {
           // a householder's. Left null when the place laid them none — a resident
           // homed at a WILDS sleeps rough, which is what living in the woods is.
           if (ownBed) home = { zoneId: ownBed.zoneId, wander: bedBox(ownBed), spread: false };
-          // LIVING IN A BUILDING THE BRIEF NAMED IS KEEPING IT. The keeper tier
-          // used to be reachable only by OWNING a sanctuary, and ownership is one
-          // building per person, so exactly one keeper was possible in a whole
-          // world. Everyone else the brief housed in a named building — a healer
-          // at an infirmary, a scholar at a school, an elder at the moot house —
-          // fell to "*:resident", whose DAY entry is the plaza. They lived in the
-          // building and then walked out of it for the whole of daylight.
+          // KEEPING A NAMED BUILDING. The tier used to be reachable only by OWNING
+          // a sanctuary, and ownership is one building per person, so exactly one
+          // keeper was possible in a whole world. Everyone else the brief housed in
+          // a named building — a healer at an infirmary, a scholar at a school, an
+          // elder at the moot house — fell to "*:resident", whose DAY entry is the
+          // plaza. They lived in the building and then walked out of it for the
+          // whole of daylight.
+          //
+          // The HEAD of the building, not everyone under its roof: see
+          // headOfBuilding above for why sleeping somewhere is not keeping it.
           //
           // `mapKind` is the right question because it is the compiler's own word
           // for "this place has a room you can stand in": every named place that
           // grows an interior is stamped "building", and a WILDS is stamped
           // "place". So a forager homed in the woods is untouched — they have no
           // building to keep, which is the point of living out there.
-          if (zone.mapKind === "building") keeper = true;
+          if (zone.mapKind === "building" && headOfBuilding.get(zone.id) === member) keeper = true;
         }
       } else if (standing === "transient" && stalls.some((s) => s.owner === member)) {
         const stall = stalls.find((s) => s.owner === member);
