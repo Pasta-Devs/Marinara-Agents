@@ -1211,9 +1211,9 @@ export function createLongTermMemoryRoutes(runtime: {
       "/drafts/:id/preflight",
       { bodyLimit: DRAFT_BODY_LIMIT_BYTES },
       async (request, reply) => {
-        const id = z.string().uuid().parse(request.params.id);
-        const body = ltmDraftPreflightRequestSchema.parse(request.body ?? {});
         try {
+          const id = z.string().uuid().parse(request.params.id);
+          const body = ltmDraftPreflightRequestSchema.parse(request.body ?? {});
           return ltmDraftPreflightResponseSchema.parse(
             await preflightLongTermMemoryDraft(id, {
               root,

@@ -3222,8 +3222,25 @@ async function main() {
     assert.equal(invalidPreflight.statusCode, 409, invalidPreflight.body);
     assert.equal(invalidPreflight.json().code, "ltm_draft_mutation_missing");
     const blockedMutationId = "10000000-0000-4000-8000-000000000003";
+    await storageService.storage.createNote({
+      id: "source_route_blocked",
+      title: "Blocked preflight source",
+      type: "source",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: ["source_summary"],
+      keywords: [],
+      links: [],
+      sections: {
+        source: {
+          text: "A separate source for blocked preflight.",
+          updatedAt: "2026-07-17T00:00:00.000Z",
+        },
+      },
+    });
     const blockedDraft = await storageService.drafts.createDraft({
-      source: { sourceNoteId: "source_route_review", chatId: "chat-a" },
+      source: { sourceNoteId: "source_route_blocked", chatId: "chat-a" },
       scope: { chatId: "chat-a", chatIds: ["chat-a"] },
       modes: ["roleplay"],
       response: {
@@ -3236,7 +3253,7 @@ async function main() {
             risk: "medium",
             confidence: 0.8,
             summary: "Link to missing memory",
-            evidence: ["source_note:source_route_review"],
+            evidence: ["source_note:source_route_blocked"],
             noteId: "world_eastern_gate",
             link: { target: "world_missing_target", relation: "related_to" },
           },
@@ -3253,6 +3270,193 @@ async function main() {
     assert.deepEqual(blockedPreflight.json().blockedMutationIds, [blockedMutationId]);
     assert.equal(blockedPreflight.json().rows[0].status, "blocked");
     assert.equal(blockedPreflight.json().rows[0].blockers[0].code, "preflight_blocked");
+    const conflictMutationId = "10000000-0000-4000-8000-000000000004";
+    await storageService.storage.createNote({
+      id: "world_existing_conflict",
+      title: "Existing conflicted memory",
+      type: "world",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: [],
+      keywords: ["gate"],
+      links: [],
+      conflicts: [
+        {
+          field: "facts",
+          existing: "The gate is open.",
+          proposed: "The gate is sealed.",
+          resolution: "pending",
+          policy: "manual_review",
+        },
+      ],
+      sections: { facts: { text: "The gate is open.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+    });
+    const conflictDraft = await storageService.drafts.createDraft({
+      source: { sourceNoteId: "source_route_blocked", chatId: "chat-a" },
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      modes: ["roleplay"],
+      response: {
+        summary: "Pending conflict preflight",
+        mutations: [
+          {
+            id: conflictMutationId,
+            claimKind: "change",
+            kind: "create_note",
+            risk: "medium",
+            confidence: 0.8,
+            summary: "Create conflicted memory",
+            evidence: ["source_note:source_route_blocked"],
+            note: {
+              id: "world_existing_conflict",
+              title: "Eastern gate update",
+              type: "world",
+              status: "active",
+              modes: ["roleplay"],
+              scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+              tags: [],
+              keywords: ["gate"],
+              links: [],
+              conflicts: [
+                {
+                  field: "facts",
+                  existing: "The gate is open.",
+                  proposed: "The gate is sealed.",
+                  resolution: "pending",
+                  policy: "manual_review",
+                },
+              ],
+              sections: {
+                facts: {
+                  text: "The eastern gate is sealed.",
+                  updatedAt: "2026-07-17T00:00:00.000Z",
+                },
+              },
+            },
+          },
+        ],
+      },
+    });
+    const conflictPreflight = await app.inject({
+      method: "POST",
+      url: `/api/long-term-memory/drafts/${conflictDraft.id}/preflight`,
+      headers,
+      payload: { mutationIds: [conflictMutationId] },
+    });
+    assert.equal(conflictPreflight.statusCode, 200, conflictPreflight.body);
+    assert.equal(conflictPreflight.json().rows[0].status, "blocked");
+    assert.equal(conflictPreflight.json().rows[0].blockers[0].code, "unresolved_conflict");
+    const capSourceId = "source_route_cap";
+    await storageService.storage.createNote({
+      id: capSourceId,
+      title: "Section cap source",
+      type: "source",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: ["source_summary"],
+      keywords: [],
+      links: [],
+      sections: { source: { text: "Section cap evidence.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+    });
+    await storageService.storage.createNote({
+      id: "world_section_cap",
+      title: "Section cap target",
+      type: "world",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: [],
+      keywords: ["cap"],
+      links: [],
+      sections: { facts: { text: "x".repeat(20_000), updatedAt: "2026-07-17T00:00:00.000Z" } },
+    });
+    const capMutationId = "10000000-0000-4000-8000-000000000005";
+    const capDraft = await storageService.drafts.createDraft({
+      source: { sourceNoteId: capSourceId, chatId: "chat-a" },
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      modes: ["roleplay"],
+      response: {
+        summary: "Section cap preflight",
+        mutations: [
+          {
+            id: capMutationId,
+            claimKind: "static",
+            kind: "append_section",
+            risk: "low",
+            confidence: 0.8,
+            summary: "Append beyond section cap",
+            evidence: [`source_note:${capSourceId}`],
+            noteId: "world_section_cap",
+            sectionKey: "facts",
+            text: "This addition exceeds the section limit.",
+          },
+        ],
+      },
+    });
+    const capPreflight = await app.inject({
+      method: "POST",
+      url: `/api/long-term-memory/drafts/${capDraft.id}/preflight`,
+      headers,
+      payload: { mutationIds: [capMutationId] },
+    });
+    assert.equal(capPreflight.statusCode, 200, capPreflight.body);
+    assert.equal(capPreflight.json().rows[0].status, "blocked");
+    assert.equal(capPreflight.json().rows[0].blockers[0].code, "projection_limit_exceeded");
+    const groundingSourceId = "source_route_grounding";
+    await storageService.storage.createNote({
+      id: groundingSourceId,
+      title: "Grounding source",
+      type: "source",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: ["source_summary"],
+      keywords: [],
+      links: [],
+      sections: { source: { text: "Grounding evidence.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+    });
+    const groundingMutationId = "10000000-0000-4000-8000-000000000006";
+    const groundingDraft = await storageService.drafts.createDraft({
+      source: { sourceNoteId: groundingSourceId, chatId: "chat-a" },
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      modes: ["roleplay"],
+      response: {
+        summary: "Timeline grounding preflight",
+        mutations: [
+          {
+            id: groundingMutationId,
+            claimKind: "change",
+            kind: "create_note",
+            risk: "medium",
+            confidence: 0.8,
+            summary: "Create an ungrounded world change",
+            evidence: [`source_note:${groundingSourceId}`],
+            note: {
+              id: "world_ungrounded_change",
+              title: "Ungrounded change",
+              type: "world",
+              status: "active",
+              modes: ["roleplay"],
+              scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+              tags: [],
+              keywords: ["grounding"],
+              links: [],
+              sections: { facts: { text: "A changed fact without an event.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+            },
+          },
+        ],
+      },
+    });
+    const groundingPreflight = await app.inject({
+      method: "POST",
+      url: `/api/long-term-memory/drafts/${groundingDraft.id}/preflight`,
+      headers,
+      payload: { mutationIds: [groundingMutationId] },
+    });
+    assert.equal(groundingPreflight.statusCode, 200, groundingPreflight.body);
+    assert.equal(groundingPreflight.json().rows[0].status, "blocked");
+    assert.match(groundingPreflight.json().rows[0].blockers[0].message, /timeline event grounded/u);
     assert.equal(
       (
         await app.inject({

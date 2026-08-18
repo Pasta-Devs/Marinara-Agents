@@ -40,6 +40,11 @@ type ApplyDraftResponse = {
 };
 
 type PreflightRow = LtmDraftPreflightResponse["rows"][number];
+type AcceptRequest = {
+  draftId: string;
+  mutationIds: string[];
+  editedMutations: LtmDraftMutation[];
+};
 
 type SkipDraftResponse = {
   mutationIds: string[];
@@ -47,6 +52,8 @@ type SkipDraftResponse = {
 
 type BatchResult = {
   action: "accepted" | "skipped";
+  phase: "preflight" | "complete";
+  ready: number;
   completed: number;
   failed: number;
   remaining: number;
@@ -991,6 +998,8 @@ export default function ReviewQueue({
   const [dismissingId, setDismissingId] = useState<string | null>(null);
   const [result, setResult] = useState<BatchResult | null>(null);
   const [preflightRows, setPreflightRows] = useState<Map<string, PreflightRow>>(new Map());
+  const [preflightByDraftId, setPreflightByDraftId] = useState<Map<string, LtmDraftPreflightResponse>>(new Map());
+  const [preflightKey, setPreflightKey] = useState<string | null>(null);
   const [deleteSuggestionError, setDeleteSuggestionError] = useState("");
   const [extractingSourceId, setExtractingSourceId] = useState<string | null>(null);
   const [extractionMessage, setExtractionMessage] = useState<{
@@ -1015,6 +1024,8 @@ export default function ReviewQueue({
     setReviewStateHydrated(null);
     setReviewStateMessage(null);
     setPreflightRows(new Map());
+    setPreflightByDraftId(new Map());
+    setPreflightKey(null);
     setDetailsOpen(false);
     setExpandedMutationIds(new Set());
   }, [props.chatId]);
@@ -1026,10 +1037,15 @@ export default function ReviewQueue({
     setDetailsOpen(false);
     setExpandedMutationIds(new Set());
     setPreflightRows(new Map());
+    setPreflightByDraftId(new Map());
+    setPreflightKey(null);
   }, [effectiveSourceId, selectedReviewSource]);
   useEffect(() => {
     setDetailsOpen(false);
     setExpandedMutationIds(new Set());
+    setPreflightRows(new Map());
+    setPreflightByDraftId(new Map());
+    setPreflightKey(null);
   }, [selectedDraft?.draft.id]);
 
   useEffect(() => {
@@ -1254,7 +1270,15 @@ export default function ReviewQueue({
   const allSelected = activeDraftRows.length > 0 && selectedRows.length === activeDraftRows.length;
   const someSelected = selectedRows.length > 0 && !allSelected;
 
+  const clearPreflight = () => {
+    setPreflightRows(new Map());
+    setPreflightByDraftId(new Map());
+    setPreflightKey(null);
+    setResult(null);
+  };
+
   const toggleSelection = (id: string) => {
+    clearPreflight();
     setSelectedIds((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
@@ -1270,12 +1294,7 @@ export default function ReviewQueue({
       else updated.set(original.id, next);
       return updated;
     });
-    setPreflightRows((current) => {
-      if (!current.has(original.id)) return current;
-      const nextRows = new Map(current);
-      nextRows.delete(original.id);
-      return nextRows;
-    });
+    clearPreflight();
   };
 
   const invalidClosureEditIds = (applicableRows: readonly ReviewRow[], allRows: readonly ReviewRow[] = rows) => {
@@ -1299,6 +1318,33 @@ export default function ReviewQueue({
     return invalidIds;
   };
 
+  const buildAcceptRequests = (applicableRows: readonly ReviewRow[], allRows: readonly ReviewRow[]): AcceptRequest[] =>
+    [...groupByDraft(applicableRows)].map(([draftId, selectedDraftRows]) => {
+      const draftRows = allRows
+        .filter((row) => row.draftId === draftId)
+        .map((row) => ({ ...row, mutation: editedById.get(row.mutation.id) ?? row.mutation }));
+      const mutationIds = [
+        ...acceptedMutationIds(
+          draftRows,
+          selectedDraftRows.map((row) => row.mutation.id),
+        ),
+      ].sort();
+      return {
+        draftId,
+        mutationIds,
+        editedMutations: [...editedById].filter(([id]) => mutationIds.includes(id)).map(([, edited]) => edited),
+      };
+    });
+
+  const acceptRequestKey = (requests: AcceptRequest[]) =>
+    JSON.stringify(
+      requests.map((request) => ({
+        draftId: request.draftId,
+        mutationIds: request.mutationIds,
+        editedMutations: request.editedMutations,
+      })),
+    );
+
   const runBatch = async (
     action: "accept" | "skip",
     explicitRows?: ReviewRow[],
@@ -1311,6 +1357,8 @@ export default function ReviewQueue({
     if (invalidEditIds.length) {
       setResult({
         action: "accepted",
+        phase: "preflight",
+        ready: 0,
         completed: 0,
         failed: invalidEditIds.length,
         remaining: applicableRows.length,
@@ -1338,6 +1386,73 @@ export default function ReviewQueue({
       });
       return;
     }
+    const acceptRequests = action === "accept" ? buildAcceptRequests(applicableRows, allRows) : [];
+    const requestKey = action === "accept" ? acceptRequestKey(acceptRequests) : null;
+    if (action === "accept" && preflightKey !== requestKey) {
+      setRunning("accept");
+      setResult(null);
+      const preflights = new Map<string, LtmDraftPreflightResponse>();
+      const nextRows = new Map<string, PreflightRow>();
+      const blockedMutationIds = new Set<string>();
+      const messages: string[] = [];
+      const failedMutationIds = new Set<string>();
+      try {
+        for (const requestBody of acceptRequests) {
+          try {
+            const response = await request<LtmDraftPreflightResponse>(
+              `/drafts/${requestBody.draftId}/preflight`,
+              "POST",
+              {
+                mutationIds: requestBody.mutationIds,
+                ...(requestBody.editedMutations.length ? { editedMutations: requestBody.editedMutations } : {}),
+                bulk: requestBody.mutationIds.length > 1,
+              },
+            );
+            preflights.set(requestBody.draftId, response);
+            response.rows.forEach((row) => nextRows.set(row.mutationId, row));
+            response.blockedMutationIds.forEach((id) => blockedMutationIds.add(id));
+          } catch (error) {
+            requestBody.mutationIds.forEach((id) => failedMutationIds.add(id));
+            messages.push(
+              localizeUi("ui.longTermMemory.reviewqueue.draftActionFailed", {
+                message:
+                  error instanceof Error ? error.message : localizeUi("ui.longTermMemory.reviewqueue.requestFailed"),
+              }),
+            );
+          }
+        }
+        setPreflightByDraftId(preflights);
+        setPreflightRows(nextRows);
+        setPreflightKey(messages.length ? null : requestKey);
+        setExpandedMutationIds(
+          new Set(
+            [...nextRows.values()]
+              .filter((row) => row.status === "blocked" || row.conflicts.length)
+              .map((row) => row.mutationId),
+          ),
+        );
+        setResult({
+          action: "accepted",
+          phase: "preflight",
+          ready: [...preflights.values()].reduce((sum, response) => sum + response.readyMutationIds.length, 0),
+          completed: 0,
+          failed: failedMutationIds.size,
+          remaining: applicableRows.length,
+          autoIncluded: [...preflights.values()].reduce(
+            (sum, response) => sum + response.autoIncludedMutationIds.length,
+            0,
+          ),
+          indexRebuildFailures: [],
+          messages,
+          cascadeMutationLabels: [],
+          savedMemoryIds: [],
+          blockedMutationIds: [...blockedMutationIds],
+        });
+      } finally {
+        setRunning(null);
+      }
+      return;
+    }
     setRunning(action);
     setResult(null);
     const completedIds = new Set<string>();
@@ -1349,33 +1464,21 @@ export default function ReviewQueue({
     const messages: string[] = [];
     const cascadeMutationLabels = new Set<string>();
     const blockedMutationIds = new Set<string>();
-    const nextPreflightRows = new Map<string, PreflightRow>();
     try {
       for (const [draftId, draftRows] of groupByDraft(applicableRows)) {
         const mutationIds = draftRows.map((row) => row.mutation.id);
         try {
           if (action === "accept") {
-            const draftRows = allRows
-              .filter((row) => row.draftId === draftId)
-              .map((row) => ({
-                ...row,
-                mutation: editedById.get(row.mutation.id) ?? row.mutation,
-              }));
-            const acceptedIds = acceptedMutationIds(draftRows, mutationIds);
-            const editedMutations = [...editedById].filter(([id]) => acceptedIds.has(id)).map(([, edited]) => edited);
-            const preflight = await request<LtmDraftPreflightResponse>(`/drafts/${draftId}/preflight`, "POST", {
-              mutationIds: [...acceptedIds],
-              ...(editedMutations.length ? { editedMutations } : {}),
-              bulk: acceptedIds.size > 1,
-            });
-            preflight.rows.forEach((row) => nextPreflightRows.set(row.mutationId, row));
+            const preflight = preflightByDraftId.get(draftId);
+            if (!preflight) throw new Error("Review preflight is missing. Run preflight again before applying.");
             preflight.blockedMutationIds.forEach((id) => blockedMutationIds.add(id));
             const readyIds = new Set(preflight.readyMutationIds);
             if (!readyIds.size) continue;
+            const requestBody = acceptRequests.find((request) => request.draftId === draftId)!;
             const response = await request<ApplyDraftResponse>(`/drafts/${draftId}/accept`, "POST", {
               mutationIds: [...readyIds],
-              ...(editedMutations.length
-                ? { editedMutations: editedMutations.filter((mutation) => readyIds.has(mutation.id)) }
+              ...(requestBody.editedMutations.length
+                ? { editedMutations: requestBody.editedMutations.filter((mutation) => readyIds.has(mutation.id)) }
                 : {}),
             });
             const applied = new Set(response.appliedMutationIds);
@@ -1429,9 +1532,11 @@ export default function ReviewQueue({
         return next;
       });
       setReviewedIds((current) => new Set([...current, ...completedIds]));
-      setPreflightRows(nextPreflightRows);
+      setPreflightKey(null);
       setResult({
         action: action === "accept" ? "accepted" : "skipped",
+        phase: "complete",
+        ready: 0,
         completed: completedIds.size,
         failed: failedIds.size,
         remaining: remainingIds.size + failedIds.size,
@@ -1537,6 +1642,8 @@ export default function ReviewQueue({
     } catch (error) {
       setResult({
         action: "skipped",
+        phase: "complete",
+        ready: 0,
         completed: 0,
         failed: 1,
         remaining: 0,
@@ -2001,18 +2108,23 @@ export default function ReviewQueue({
               : "success"
           }
         >
-          {localizeUi("ui.longTermMemory.reviewqueue.batchResultSummary", {
-            action:
-              result.action === "accepted"
-                ? localizeUi("ui.longTermMemory.reviewqueue.applied")
-                : localizeUi("ui.longTermMemory.reviewqueue.skipped"),
-            completed: result.completed,
-            mutation:
-              result.completed === 1
-                ? localizeUi("ui.longTermMemory.reviewqueue.mutation")
-                : localizeUi("ui.longTermMemory.reviewqueue.mutations"),
-            failed: result.failed,
-          })}
+          {result.phase === "preflight"
+            ? localizeUi("ui.longTermMemory.reviewqueue.preflightSummary", {
+                ready: result.ready,
+                blocked: result.blockedMutationIds.length,
+              })
+            : localizeUi("ui.longTermMemory.reviewqueue.batchResultSummary", {
+                action:
+                  result.action === "accepted"
+                    ? localizeUi("ui.longTermMemory.reviewqueue.applied")
+                    : localizeUi("ui.longTermMemory.reviewqueue.skipped"),
+                completed: result.completed,
+                mutation:
+                  result.completed === 1
+                    ? localizeUi("ui.longTermMemory.reviewqueue.mutation")
+                    : localizeUi("ui.longTermMemory.reviewqueue.mutations"),
+                failed: result.failed,
+              })}
           {result.blockedMutationIds.length
             ? localizeUi("ui.longTermMemory.reviewqueue.blockedMutations", {
                 count: result.blockedMutationIds.length,
@@ -2408,8 +2520,9 @@ export default function ReviewQueue({
                   checked={allSelected}
                   indeterminate={someSelected}
                   label={localizeUi("ui.longTermMemory.reviewqueue.selectAll")}
-                  onChange={() =>
-                    allSelected
+                  onChange={() => {
+                    clearPreflight();
+                    return allSelected
                       ? setSelectedIds((current) => {
                           const next = new Set(current);
                           activeDraftRows.forEach((row) => next.delete(row.mutation.id));
@@ -2417,8 +2530,8 @@ export default function ReviewQueue({
                         })
                       : setSelectedIds(
                           (current) => new Set([...current, ...activeDraftRows.map((row) => row.mutation.id)]),
-                        )
-                  }
+                        );
+                  }}
                 />
                 <span data-ltm-review-progress className="text-xs text-[var(--muted-foreground)]">
                   {localizeUi("ui.longTermMemory.reviewqueue.reviewSummary", {
@@ -2451,9 +2564,13 @@ export default function ReviewQueue({
                   >
                     {running === "accept"
                       ? localizeUi("ui.longTermMemory.reviewqueue.accepting")
-                      : localizeUi("ui.longTermMemory.reviewqueue.acceptEligibleValue1", {
-                          value1: eligibleSelectedRows.length,
-                        })}
+                      : result?.phase === "preflight"
+                        ? localizeUi("ui.longTermMemory.reviewqueue.applyPreflighted", {
+                            count: result.ready,
+                          })
+                        : localizeUi("ui.longTermMemory.reviewqueue.acceptEligibleValue1", {
+                            value1: eligibleSelectedRows.length,
+                          })}
                   </Button>
                   <Button
                     destructive
@@ -2466,7 +2583,13 @@ export default function ReviewQueue({
                           value1: skippableSelectedRows.length,
                         })}
                   </Button>
-                  <Button disabled={running !== null} onClick={() => setSelectedIds(new Set())}>
+                  <Button
+                    disabled={running !== null}
+                    onClick={() => {
+                      clearPreflight();
+                      setSelectedIds(new Set());
+                    }}
+                  >
                     {localizeUi("ui.longTermMemory.activityview.clear")}
                   </Button>
                 </div>

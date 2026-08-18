@@ -369,6 +369,8 @@ assert.match(reviewQueue, /preflight/u);
 assert.match(reviewQueue, /data-ltm-review-preflight/u);
 assert.match(reviewQueue, /data-ltm-review-conflicts/u);
 assert.match(reviewQueue, /preflightBlocked/u);
+assert.match(reviewQueue, /preflightSummary/u);
+assert.match(reviewQueue, /applyPreflighted/u);
 assert.match(locale["ui.longTermMemory.sourceoperation.deleteDetachment"], /detached/u);
 
 process.stdout.write(
