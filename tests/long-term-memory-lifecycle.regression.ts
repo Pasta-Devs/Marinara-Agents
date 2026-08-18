@@ -296,6 +296,7 @@ async function main() {
         draftId: string;
         mutationIds: string[];
       }> = [];
+      const reviewEditedMutationIds: string[][] = [];
       const reviewDraftIds = {
         first: "10000000-0000-4000-8000-000000000011",
         second: "10000000-0000-4000-8000-000000000012",
@@ -304,12 +305,13 @@ async function main() {
       const reviewMutationIds = {
         first: "10000000-0000-4000-8000-000000000021",
         second: "10000000-0000-4000-8000-000000000022",
+        partial: "10000000-0000-4000-8000-000000000023",
       };
       const makeReviewDraft = (
         draftId: string,
         mutationId?: string,
         title = "Review fixture memory",
-        mutation?: Record<string, unknown>,
+        mutation?: Record<string, unknown> | Record<string, unknown>[],
       ) => ({
         id: draftId,
         status: "pending",
@@ -323,35 +325,37 @@ async function main() {
         modes: ["roleplay"],
         summary: `${title} summary`,
         mutations: mutationId
-          ? [
-              mutation ?? {
-                id: mutationId,
-                kind: "create_note",
-                claimKind: "addition",
-                risk: "low",
-                confidence: 0.9,
-                summary: title,
-                evidence: ["source_note:source_mobile_review"],
-                note: {
-                  id: `world_${mutationId.slice(-3)}`,
-                  title,
-                  type: "world",
-                  status: "active",
-                  modes: ["roleplay"],
-                  scope: {},
-                  tags: [],
-                  keywords: [],
-                  links: [],
-                  sections: {
-                    facts: {
-                      text: `${title} content.`,
-                      importance: "major",
-                      updatedAt: "2026-07-30T00:00:00.000Z",
+          ? Array.isArray(mutation)
+            ? mutation
+            : [
+                mutation ?? {
+                  id: mutationId,
+                  kind: "create_note",
+                  claimKind: "addition",
+                  risk: "low",
+                  confidence: 0.9,
+                  summary: title,
+                  evidence: ["source_note:source_mobile_review"],
+                  note: {
+                    id: `world_${mutationId.slice(-3)}`,
+                    title,
+                    type: "world",
+                    status: "active",
+                    modes: ["roleplay"],
+                    scope: {},
+                    tags: [],
+                    keywords: [],
+                    links: [],
+                    sections: {
+                      facts: {
+                        text: `${title} content.`,
+                        importance: "major",
+                        updatedAt: "2026-07-30T00:00:00.000Z",
+                      },
                     },
                   },
                 },
-              },
-            ]
+              ]
           : [],
       });
       const makeExistingReviewMutation = () => ({
@@ -368,6 +372,33 @@ async function main() {
           text: "Updated second mobile review memory text.",
           importance: "major",
           updatedAt: "2026-07-30T00:00:00.000Z",
+        },
+      });
+      const makePartialReviewMutation = () => ({
+        id: reviewMutationIds.partial,
+        kind: "create_note",
+        claimKind: "addition",
+        risk: "low",
+        confidence: 0.9,
+        summary: "Pending partial review memory",
+        evidence: ["source_note:source_mobile_review"],
+        note: {
+          id: "world_partial_mobile",
+          title: "Pending partial review memory",
+          type: "world",
+          status: "active",
+          modes: ["roleplay"],
+          scope: {},
+          tags: [],
+          keywords: [],
+          links: [],
+          sections: {
+            facts: {
+              text: "Pending partial review memory content.",
+              importance: "major",
+              updatedAt: "2026-07-30T00:00:00.000Z",
+            },
+          },
         },
       });
       let reviewSources: any[] = [
@@ -410,12 +441,10 @@ async function main() {
               deduplications: [],
             },
             {
-              draft: makeReviewDraft(
-                reviewDraftIds.second,
-                reviewMutationIds.second,
-                "Second mobile review memory",
+              draft: makeReviewDraft(reviewDraftIds.second, reviewMutationIds.second, "Second mobile review memory", [
                 makeExistingReviewMutation(),
-              ),
+                makePartialReviewMutation(),
+              ]),
               freshness: "fresh",
               blockReasons: [],
               diagnostics: [],
@@ -473,6 +502,20 @@ async function main() {
                   draftId: reviewDraftIds.second,
                   mutation: makeExistingReviewMutation(),
                   disposition: "merge",
+                  diagnostics: [],
+                  changes: [],
+                },
+              ],
+            },
+            {
+              noteId: "world_partial_mobile",
+              title: "Pending partial review memory",
+              noteType: "world",
+              rows: [
+                {
+                  draftId: reviewDraftIds.second,
+                  mutation: makePartialReviewMutation(),
+                  disposition: "new",
                   diagnostics: [],
                   changes: [],
                 },
@@ -862,19 +905,51 @@ async function main() {
           for await (const chunk of request) chunks.push(Buffer.from(chunk));
           const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
             mutationIds?: string[];
+            editedMutations?: Array<{ id: string }>;
           };
           const action = url.pathname.endsWith("/accept") ? "accept" : "skip";
           const draftId = decodeURIComponent(url.pathname.split("/").at(-2)!);
           const mutationIds = body.mutationIds ?? [];
+          reviewEditedMutationIds.push((body.editedMutations ?? []).map((mutation) => mutation.id));
           reviewActionCalls.push({ action, draftId, mutationIds });
-          if (action === "accept" && draftId === reviewDraftIds.second && failSecondReviewAccept)
-            return send(503, { error: "temporary review failure" });
-          reviewSources = reviewSources
-            .map((source) => ({
+          if (
+            action === "accept" &&
+            draftId === reviewDraftIds.second &&
+            mutationIds.includes(reviewMutationIds.second)
+          ) {
+            reviewSources = reviewSources.map((source) => ({
               ...source,
-              drafts: source.drafts.filter((item: any) => item.draft.id !== draftId),
-            }))
-            .filter((source) => source.drafts.length > 0);
+              drafts: source.drafts.map((item: any) =>
+                item.draft.id === draftId
+                  ? {
+                      ...item,
+                      draft: {
+                        ...item.draft,
+                        updatedAt: "2026-07-30T00:00:01.000Z",
+                        appliedMutationIds: [reviewMutationIds.second],
+                        mutations: item.draft.mutations.filter(
+                          (mutation: any) => mutation.id === reviewMutationIds.partial,
+                        ),
+                      },
+                    }
+                  : item,
+              ),
+              targets: source.targets.map((target: any) => ({
+                ...target,
+                rows: target.rows.filter(
+                  (row: any) => row.draftId !== draftId || row.mutation.id === reviewMutationIds.partial,
+                ),
+              })),
+            }));
+            if (failSecondReviewAccept) return send(503, { error: "temporary review failure" });
+          } else {
+            reviewSources = reviewSources
+              .map((source) => ({
+                ...source,
+                drafts: source.drafts.filter((item: any) => item.draft.id !== draftId),
+              }))
+              .filter((source) => source.drafts.length > 0);
+          }
           return action === "accept"
             ? send(200, {
                 appliedMutationIds: mutationIds,
@@ -1163,7 +1238,9 @@ async function main() {
       await page.getByRole("button", { name: "Cancel" }).click();
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
       await page.locator('[data-ltm-review-source-select="source_mobile_review"]').click();
-      await page.locator("[data-ltm-review-mutation-toggle]").click();
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-review-mutation-toggle]`)
+        .click();
       await page.evaluate(() => {
         const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
           capabilityProps?: Record<string, unknown>;
@@ -1587,7 +1664,9 @@ async function main() {
       assert.match(reviewText, /Update section/u);
       assert.match(reviewText, /Major/u);
       assert.equal(await page.locator("[data-ltm-review-operation]").count(), 1);
-      await page.locator("[data-ltm-review-mutation-toggle]").click();
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-review-mutation-toggle]`)
+        .click();
       await page.getByRole("button", { name: "Open memory" }).click();
       await page.locator('[data-ltm-surface="vault"]').waitFor();
       await page.locator("[data-ltm-note-editor]").waitFor();
@@ -1639,8 +1718,17 @@ async function main() {
       await page
         .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-control="review-select"]`)
         .check();
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-review-mutation-toggle]`)
+        .click();
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] textarea`)
+        .fill("Edited pending partial memory");
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-control="review-select"]`)
+        .check();
       failSecondReviewAccept = true;
-      await page.getByRole("button", { name: "Accept eligible (1)" }).click();
+      await page.getByRole("button", { name: "Accept eligible (2)" }).click();
       await page.getByRole("button", { name: "Retry failed" }).waitFor();
       failSecondReviewAccept = false;
       await page.getByRole("button", { name: "Retry failed" }).click();
@@ -1648,6 +1736,10 @@ async function main() {
         (mutationId) => !document.querySelector(`[data-ltm-review-mutation="${mutationId}"]`),
         reviewMutationIds.second,
       );
+      assert.deepEqual(reviewEditedMutationIds.at(-1), [reviewMutationIds.partial]);
+      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      await page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.first}"]`).click();
+      await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
       const firstMutation = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"]`);
       await firstMutation.waitFor({ state: "visible" });
       await page.waitForFunction(
@@ -1662,18 +1754,19 @@ async function main() {
         .check();
       await page.getByRole("button", { name: "Accept eligible (1)" }).click();
       await page.waitForFunction(
-        () => !document.querySelector('[data-ltm-review-source-select="source_mobile_review"]'),
+        (mutationId) => !document.querySelector(`[data-ltm-review-mutation="${mutationId}"]`),
+        reviewMutationIds.first,
       );
       assert.deepEqual(reviewActionCalls, [
         {
           action: "accept",
           draftId: reviewDraftIds.second,
-          mutationIds: [reviewMutationIds.second],
+          mutationIds: [reviewMutationIds.second, reviewMutationIds.partial],
         },
         {
           action: "accept",
           draftId: reviewDraftIds.second,
-          mutationIds: [reviewMutationIds.second],
+          mutationIds: [reviewMutationIds.partial],
         },
         {
           action: "accept",

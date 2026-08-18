@@ -58,12 +58,13 @@ type BatchResult = {
 };
 
 type PersistedReviewState = {
-  version: 1;
+  version: 2;
   chatId: string | null;
   drafts: Record<
     string,
     {
-      fingerprint: string;
+      contextFingerprint: string;
+      mutationFingerprints: Array<[string, string]>;
       selectedIds: string[];
       editedMutations: Array<[string, LtmDraftMutation]>;
     }
@@ -185,6 +186,41 @@ function groupByDraft(rows: readonly ReviewRow[]) {
     grouped.set(row.draftId, [...(grouped.get(row.draftId) ?? []), row]);
   }
   return grouped;
+}
+
+function buildReviewRows(reviewData: LtmDraftReviewResponse | undefined) {
+  const rowByMutationId = new Map<string, ReviewRow>();
+  for (const source of reviewData?.sources ?? []) {
+    for (const target of source.targets) {
+      for (const row of target.rows) {
+        rowByMutationId.set(row.mutation.id, {
+          sourceNoteId: source.sourceNoteId,
+          ...row,
+          targetId: target.noteId,
+          targetTitle: target.title,
+          targetType: target.noteType,
+        });
+      }
+    }
+    for (const item of source.drafts) {
+      for (const mutation of item.draft.mutations) {
+        if (!rowByMutationId.has(mutation.id)) {
+          rowByMutationId.set(mutation.id, {
+            sourceNoteId: source.sourceNoteId,
+            draftId: item.draft.id,
+            mutation,
+            disposition: "unavailable",
+            diagnostics: [],
+            changes: [],
+            targetId: mutationTarget(mutation),
+            targetTitle: mutation.kind === "create_note" ? mutation.note.title : undefined,
+            targetType: mutation.kind === "create_note" ? mutation.note.type : undefined,
+          });
+        }
+      }
+    }
+  }
+  return { rowByMutationId, rows: [...rowByMutationId.values()] };
 }
 
 function acceptedMutationIds(draftRows: readonly ReviewRow[], selectedIds: readonly string[]) {
@@ -340,7 +376,7 @@ function readPersistedReviewState(key: string, chatId: string | null): Persisted
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<PersistedReviewState>;
     if (
-      parsed.version !== 1 ||
+      parsed.version !== 2 ||
       parsed.chatId !== chatId ||
       !parsed.drafts ||
       typeof parsed.drafts !== "object" ||
@@ -352,7 +388,15 @@ function readPersistedReviewState(key: string, chatId: string | null): Persisted
         if (!value || typeof value !== "object" || Array.isArray(value)) return false;
         const draft = value as Partial<PersistedDraftState>;
         return (
-          typeof draft.fingerprint === "string" &&
+          typeof draft.contextFingerprint === "string" &&
+          Array.isArray(draft.mutationFingerprints) &&
+          draft.mutationFingerprints.every(
+            (entry) =>
+              Array.isArray(entry) &&
+              entry.length === 2 &&
+              typeof entry[0] === "string" &&
+              typeof entry[1] === "string",
+          ) &&
           Array.isArray(draft.selectedIds) &&
           draft.selectedIds.every((id) => typeof id === "string") &&
           Array.isArray(draft.editedMutations) &&
@@ -392,6 +436,19 @@ function draftReviewFingerprint(item: LtmDraftReviewDraft) {
     updatedAt: item.draft.updatedAt,
     mutations: item.draft.mutations,
   });
+}
+
+function draftReviewContextFingerprint(item: LtmDraftReviewDraft) {
+  return JSON.stringify({
+    freshness: item.freshness,
+    source: item.draft.source,
+    scope: item.draft.scope,
+    modes: item.draft.modes,
+  });
+}
+
+function mutationFingerprint(mutation: LtmDraftMutation) {
+  return JSON.stringify(mutation);
 }
 
 function remainingCharacters(value: string) {
@@ -982,16 +1039,28 @@ export default function ReviewQueue({
     for (const [draftId, saved] of Object.entries(persisted?.drafts ?? {})) {
       const current = currentDrafts.get(draftId);
       const currentMutationIds = new Set(current?.draft.mutations.map((mutation) => mutation.id) ?? []);
-      if (!current || current.draft.status !== "pending" || saved.fingerprint !== draftReviewFingerprint(current)) {
+      if (
+        !current ||
+        current.draft.status !== "pending" ||
+        saved.contextFingerprint !== draftReviewContextFingerprint(current)
+      ) {
         discardedState = true;
         continue;
       }
+      const currentMutations = new Map(current.draft.mutations.map((mutation) => [mutation.id, mutation] as const));
+      const savedMutationFingerprints = new Map(saved.mutationFingerprints);
       saved.selectedIds.forEach((id) => {
-        if (currentMutationIds.has(id)) restoredSelectedIds.add(id);
+        if (!currentMutationIds.has(id)) return;
+        if (savedMutationFingerprints.get(id) !== mutationFingerprint(currentMutations.get(id)!)) discardedState = true;
+        else restoredSelectedIds.add(id);
       });
       for (const [id, mutation] of saved.editedMutations) {
-        if (currentMutationIds.has(id) && isPersistedMutation(mutation) && mutation.id === id)
-          restoredEdits.set(id, mutation);
+        if (!currentMutationIds.has(id)) continue;
+        if (savedMutationFingerprints.get(id) !== mutationFingerprint(currentMutations.get(id)!)) {
+          discardedState = true;
+          continue;
+        }
+        if (isPersistedMutation(mutation) && mutation.id === id) restoredEdits.set(id, mutation);
       }
     }
     setSelectedIds(restoredSelectedIds);
@@ -1024,13 +1093,14 @@ export default function ReviewQueue({
       const editedMutations = [...editedById].filter(([id]) => mutationIds.has(id));
       if (selected.length || editedMutations.length)
         drafts[draftId] = {
-          fingerprint: draftReviewFingerprint(item),
+          contextFingerprint: draftReviewContextFingerprint(item),
+          mutationFingerprints: item.draft.mutations.map((mutation) => [mutation.id, mutationFingerprint(mutation)]),
           selectedIds: selected,
           editedMutations,
         };
     }
     writePersistedReviewState(reviewStateKey, {
-      version: 1,
+      version: 2,
       chatId: props.chatId ?? null,
       drafts,
     });
@@ -1191,10 +1261,10 @@ export default function ReviewQueue({
     });
   };
 
-  const invalidClosureEditIds = (applicableRows: readonly ReviewRow[]) => {
+  const invalidClosureEditIds = (applicableRows: readonly ReviewRow[], allRows: readonly ReviewRow[] = rows) => {
     const invalidIds: string[] = [];
     for (const [draftId, selectedDraftRows] of groupByDraft(applicableRows)) {
-      const draftRows = rows
+      const draftRows = allRows
         .filter((row) => row.draftId === draftId)
         .map((row) => ({
           ...row,
@@ -1215,11 +1285,12 @@ export default function ReviewQueue({
   const runBatch = async (
     action: "accept" | "skip",
     explicitRows?: ReviewRow[],
-    excludedMutationIds: ReadonlySet<string> = new Set(),
+    allRows: readonly ReviewRow[] = rows,
+    allRowByMutationId: ReadonlyMap<string, ReviewRow> = rowByMutationId,
   ) => {
     const applicableRows = explicitRows ?? (action === "accept" ? eligibleSelectedRows : skippableSelectedRows);
     if (!applicableRows.length) return;
-    const invalidEditIds = action === "accept" ? invalidClosureEditIds(applicableRows) : [];
+    const invalidEditIds = action === "accept" ? invalidClosureEditIds(applicableRows, allRows) : [];
     if (invalidEditIds.length) {
       setResult({
         action: "accepted",
@@ -1264,15 +1335,13 @@ export default function ReviewQueue({
         const mutationIds = draftRows.map((row) => row.mutation.id);
         try {
           if (action === "accept") {
-            const draftRows = rows
+            const draftRows = allRows
               .filter((row) => row.draftId === draftId)
               .map((row) => ({
                 ...row,
                 mutation: editedById.get(row.mutation.id) ?? row.mutation,
               }));
-            const acceptedIds = new Set(
-              [...acceptedMutationIds(draftRows, mutationIds)].filter((id) => !excludedMutationIds.has(id)),
-            );
+            const acceptedIds = acceptedMutationIds(draftRows, mutationIds);
             const editedMutations = [...editedById].filter(([id]) => acceptedIds.has(id)).map(([, edited]) => edited);
             const response = await request<ApplyDraftResponse>(`/drafts/${draftId}/accept`, "POST", {
               mutationIds: [...acceptedIds],
@@ -1346,8 +1415,8 @@ export default function ReviewQueue({
             ? [
                 ...new Set(
                   [...completedIds].flatMap((id) => {
-                    const row = rowByMutationId.get(id);
-                    return row ? [row.targetId] : [];
+                    const currentRow = allRowByMutationId.get(id);
+                    return currentRow ? [currentRow.targetId] : [];
                   }),
                 ),
               ]
@@ -1366,14 +1435,54 @@ export default function ReviewQueue({
     }
   };
 
-  const retryFailed = () => {
+  const retryFailed = async () => {
     if (!result?.failedMutationIds.length || running !== null) return;
-    const failedRows = result.failedMutationIds
-      .map((id) => rowByMutationId.get(id))
-      .filter((row): row is ReviewRow => Boolean(row));
-    if (!failedRows.length) return;
-    setSelectedIds((current) => new Set([...current, ...failedRows.map((row) => row.mutation.id)]));
-    void runBatch(result.action === "accepted" ? "accept" : "skip", failedRows, new Set(result.completedMutationIds));
+    const action = result.action === "accepted" ? "accept" : "skip";
+    setRunning(action);
+    try {
+      const refreshed = await review.refetch();
+      if (refreshed.error) throw refreshed.error;
+      const refreshedRows = buildReviewRows(refreshed.data);
+      const pendingMutationIds = new Set(
+        refreshed.data?.sources.flatMap((source) =>
+          source.drafts
+            .filter((item) => item.draft.status === "pending")
+            .flatMap((item) =>
+              item.draft.mutations
+                .filter((mutation) => !item.draft.appliedMutationIds?.includes(mutation.id))
+                .map((mutation) => mutation.id),
+            ),
+        ) ?? [],
+      );
+      const failedRows = result.failedMutationIds
+        .filter((id) => pendingMutationIds.has(id))
+        .map((id) => refreshedRows.rowByMutationId.get(id))
+        .filter((row): row is ReviewRow => Boolean(row));
+      if (!failedRows.length) {
+        setResult((current) => (current ? { ...current, failedMutationIds: [], failedDraftIds: [] } : current));
+        return;
+      }
+      setSelectedIds((current) => new Set([...current, ...failedRows.map((row) => row.mutation.id)]));
+      const pendingRows = refreshedRows.rows.filter((row) => pendingMutationIds.has(row.mutation.id));
+      await runBatch(action, failedRows, pendingRows, refreshedRows.rowByMutationId);
+    } catch (error) {
+      setResult((current) =>
+        current
+          ? {
+              ...current,
+              messages: [
+                ...current.messages,
+                localizeUi("ui.longTermMemory.reviewqueue.draftActionFailed", {
+                  message:
+                    error instanceof Error ? error.message : localizeUi("ui.longTermMemory.reviewqueue.requestFailed"),
+                }),
+              ],
+            }
+          : current,
+      );
+    } finally {
+      setRunning(null);
+    }
   };
 
   const reviewFailed = () => {
