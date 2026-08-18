@@ -26,6 +26,9 @@
     "altar": 21,
     "bed": 22,
     "shelf": 23,
-    "bunk": 24
+    "bunk": 24,
+    "stairsUp": 25,
+    "stairsDown": 26,
+    "bell": 27
   }
 }

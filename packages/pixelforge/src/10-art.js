@@ -254,6 +254,45 @@ PF.art = (() => {
       px(g, 13, 0, 1, T, PAL.trunk);
       for (let rung = 1; rung < T; rung += 4) px(g, 1, rung, 3, 1, PAL.doorKnob);
     },
+    // A flight going UP, drawn receding north — up the screen is up the stairs,
+    // so the tile needs no arrow to say which way it goes. Non-solid wherever the
+    // compiler lays one: a stair is a PORTAL and the player has to be able to step
+    // onto it, which is also why an NPC is never found standing here (standable()
+    // refuses portal tiles).
+    stairsUp(g, rnd) {
+      PAINTERS.floor(g, rnd);
+      for (let step = 0; step < 4; step++) {
+        const inset = step;
+        px(g, 1 + inset, T - 4 - step * 4, T - 2 - inset * 2, 4, PAL.beam);
+        px(g, 1 + inset, T - 4 - step * 4, T - 2 - inset * 2, 1, PAL.plaster);
+      }
+    },
+    // The way DOWN is a hole in the floor, not the same steps mirrored: the dark
+    // mouth is what tells the two apart at a glance, standing over them.
+    stairsDown(g, rnd) {
+      PAINTERS.floor(g, rnd);
+      px(g, 1, 2, T - 2, T - 3, PAL.ink);
+      for (let step = 0; step < 3; step++) {
+        const inset = step + 1;
+        px(g, 1 + inset, 3 + step * 4, T - 2 - inset * 2, 3, PAL.beam);
+        px(g, 1 + inset, 3 + step * 4, T - 2 - inset * 2, 1, PAL.wallDark);
+      }
+    },
+    // The one thing in a belfry, hung on its headstock with floor all the way
+    // round it. Solid: the bell is what the climb is FOR, so it reads as an
+    // object the player walks up to rather than through. Like the altar it needs
+    // no themed override — the colony palette turns the same silhouette into a
+    // struck alarm plate, which is the same thing a bell is.
+    bell(g) {
+      px(g, 0, 0, T, T, PAL.floor1);
+      px(g, 2, 1, 12, 2, PAL.beam);
+      px(g, 5, 3, 6, 2, PAL.stoneDark);
+      px(g, 4, 5, 8, 6, PAL.doorKnob);
+      px(g, 5, 6, 2, 4, PAL.white);
+      px(g, 3, 11, 10, 2, PAL.doorKnob);
+      px(g, 3, 11, 10, 1, PAL.white);
+      px(g, 7, 13, 2, 2, PAL.stoneDark);
+    },
   };
 
   // ── Themes ──────────────────────────────────────────────────────────────────

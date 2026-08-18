@@ -427,6 +427,45 @@ PF.art = (() => {
       px(g, 13, 0, 1, T, PAL.trunk);
       for (let rung = 1; rung < T; rung += 4) px(g, 1, rung, 3, 1, PAL.doorKnob);
     },
+    // A flight going UP, drawn receding north — up the screen is up the stairs,
+    // so the tile needs no arrow to say which way it goes. Non-solid wherever the
+    // compiler lays one: a stair is a PORTAL and the player has to be able to step
+    // onto it, which is also why an NPC is never found standing here (standable()
+    // refuses portal tiles).
+    stairsUp(g, rnd) {
+      PAINTERS.floor(g, rnd);
+      for (let step = 0; step < 4; step++) {
+        const inset = step;
+        px(g, 1 + inset, T - 4 - step * 4, T - 2 - inset * 2, 4, PAL.beam);
+        px(g, 1 + inset, T - 4 - step * 4, T - 2 - inset * 2, 1, PAL.plaster);
+      }
+    },
+    // The way DOWN is a hole in the floor, not the same steps mirrored: the dark
+    // mouth is what tells the two apart at a glance, standing over them.
+    stairsDown(g, rnd) {
+      PAINTERS.floor(g, rnd);
+      px(g, 1, 2, T - 2, T - 3, PAL.ink);
+      for (let step = 0; step < 3; step++) {
+        const inset = step + 1;
+        px(g, 1 + inset, 3 + step * 4, T - 2 - inset * 2, 3, PAL.beam);
+        px(g, 1 + inset, 3 + step * 4, T - 2 - inset * 2, 1, PAL.wallDark);
+      }
+    },
+    // The one thing in a belfry, hung on its headstock with floor all the way
+    // round it. Solid: the bell is what the climb is FOR, so it reads as an
+    // object the player walks up to rather than through. Like the altar it needs
+    // no themed override — the colony palette turns the same silhouette into a
+    // struck alarm plate, which is the same thing a bell is.
+    bell(g) {
+      px(g, 0, 0, T, T, PAL.floor1);
+      px(g, 2, 1, 12, 2, PAL.beam);
+      px(g, 5, 3, 6, 2, PAL.stoneDark);
+      px(g, 4, 5, 8, 6, PAL.doorKnob);
+      px(g, 5, 6, 2, 4, PAL.white);
+      px(g, 3, 11, 10, 2, PAL.doorKnob);
+      px(g, 3, 11, 10, 1, PAL.white);
+      px(g, 7, 13, 2, 2, PAL.stoneDark);
+    },
   };
 
   // ── Themes ──────────────────────────────────────────────────────────────────
@@ -1684,7 +1723,7 @@ PF.world = (() => {
       // Rooms PARTITIONED inside this zone — wall runs with a door, never zones
       // of their own. Zone count is the flagged cost of the release and every
       // zone holds two full-size canvases in the render cache, so a bedroom is
-      // walls; floors will be zones. {purpose, x0, y0, x1, y1, doorX, ...}
+      // walls and a FLOOR is a zone. {purpose, x0, y0, x1, y1, doorX, ...}
       rooms: [],
       beds: [], // sleeping tiles this zone offers, in claim order
       // World Maps export gate (spec §8). A building is ONE location and its
@@ -2398,6 +2437,19 @@ PF.world = (() => {
   // the map gate are written once and a new kind only says what furniture goes
   // in. FURNISH is keyed by the brief's own place-kind vocabulary plus the kinds
   // the compiler mints itself (shop); an unknown kind furnishes as a plain room.
+  /** The band a sleeping wing vacated when it went upstairs is the room's own
+   *  space now, not a hole in it. A long table down the middle of it is what a
+   *  house big enough for a staircase does with the ground floor it just freed —
+   *  and it keeps the north end of a big room from reading as unfinished.
+   *
+   *  Rows 2-4 exactly: the rows layoutSleeping would have partitioned. Nothing
+   *  else in any furnisher reaches up there, which is why it can be one call
+   *  shared by all of them rather than three near-copies. */
+  function vacatedBand(zone, w) {
+    fillRect(zone, 3, 3, w - 6, 1, "object", "table", true);
+    zone.lights.push({ x: 3, y: 3 }, { x: w - 4, y: 3 });
+  }
+
   const FURNISH = {
     gathering(z, w, h, options) {
       // Guest ROOMS, not four beds in the corner of the common room. The band
@@ -2410,7 +2462,12 @@ PF.world = (() => {
       // building also has living quarters — the berths a settlement was BUILT to
       // offer do not move because somebody lives here. Quarters land below it
       // (see PLACE_QUARTERS), and the common room starts at `floor0` either way.
-      const sleeping = layoutSleeping(z, w, h, "gathering", options.sleepers ?? 0);
+      // SKIPPED, not called with a count of zero, when the wing is upstairs: a
+      // guest wing is sized to the BUILDING and carves its spare rooms whatever
+      // the headcount (SLEEP_PLANS.gathering `spare`), so a zero would have laid
+      // the whole wing again — over the keeper's quarters, which come up to these
+      // very rows once the wing leaves them.
+      const sleeping = options.upstairs ? null : layoutSleeping(z, w, h, "gathering", options.sleepers ?? 0);
       const floor = options.floor0;
       // Rug first: a ground fill clears solidity, so painting it after the
       // tables would silently make one of them walk-through (the hall's lesson).
@@ -2467,7 +2524,12 @@ PF.world = (() => {
       // and the shop floor is what is left south of them. Sleeping FIRST —
       // partitionRooms owns those rows, and a fitting painted into them would be
       // walled inside somebody's bedroom.
-      const sleeping = layoutSleeping(z, w, h, "dwelling", options.sleepers ?? 0, 2, options.owned);
+      // SKIPPED, not called with a count of zero, when the band is upstairs — and
+      // the rows it would have taken become part of the room (vacatedBand).
+      const sleeping = options.upstairs
+        ? null
+        : layoutSleeping(z, w, h, "dwelling", options.sleepers ?? 0, 2, options.owned);
+      if (options.upstairs) vacatedBand(z, w);
       // Never a bare room with a door on it: a counter to be served over and a
       // wall of stock behind it. An empty shop reads worse than a locked one
       // (maintainer call), and the owner's `post` handle moves in here, so it is
@@ -2489,7 +2551,12 @@ PF.world = (() => {
       // house a farming family sleeps in. Bedrooms along the north band like any
       // other household, and the working half under them — the long bench a day's
       // crop is sorted on and the table that day ends at.
-      const sleeping = layoutSleeping(z, w, h, "dwelling", options.sleepers ?? 0, 2, options.owned);
+      // SKIPPED, not called with a count of zero, when the band is upstairs — and
+      // the rows it would have taken become part of the room (vacatedBand).
+      const sleeping = options.upstairs
+        ? null
+        : layoutSleeping(z, w, h, "dwelling", options.sleepers ?? 0, 2, options.owned);
+      if (options.upstairs) vacatedBand(z, w);
       // Rug first: a ground fill clears solidity, so painting it after the bench
       // would silently make the bench walk-through (the hall's lesson).
       fillRect(z, w - 6, h - 3, 3, 2, "ground", "rug", false);
@@ -2504,7 +2571,12 @@ PF.world = (() => {
       // Behind BEDROOM DOORS, bunked once a room has to take more than two — a
       // household at CAPS.household is a big family and keeps its walls, and the
       // open plan is reserved for the roofs that are genuinely institutional.
-      const sleeping = layoutSleeping(z, w, h, "dwelling", options.sleepers ?? 0, 2, options.owned);
+      // SKIPPED, not called with a count of zero, when the band is upstairs — and
+      // the rows it would have taken become part of the room (vacatedBand).
+      const sleeping = options.upstairs
+        ? null
+        : layoutSleeping(z, w, h, "dwelling", options.sleepers ?? 0, 2, options.owned);
+      if (options.upstairs) vacatedBand(z, w);
       // A living half under the sleeping wall, so the room is not only a dormitory
       // — and so a dwelling with no sleepers of its own is still a furnished room.
       // Nothing solid on the row under the bedroom wall: that row is the corridor
@@ -2516,15 +2588,263 @@ PF.world = (() => {
     },
   };
 
+  // ── Floors: the storey above and the cellar below ───────────────────────────
+  // A ROOM is a partition inside a zone. A FLOOR **is** a zone, joined to the one
+  // under it by a stair portal pair. That split is the design and not an accident
+  // of it: a bedroom must never cost a zone — every zone holds two full-size
+  // canvases in the render cache, and the count is the flagged cost of this
+  // release — while a floor gets one and in exchange reuses machinery the world
+  // already has. Portals, the reachability sweep, save-restore, the schedule
+  // resolver's cross-zone splice and the World Maps gate all work on a floor the
+  // day it compiles, because not one of them can tell it from any other zone. A
+  // LEVEL system would have had to re-teach every one of them.
+  //
+  // Ids derive from the parent's: `{parent}u` above, `{parent}b` below. A parent
+  // id is already sealed-brief data (`z{ordinal}`, `h{household}`, `s{ordinal}`),
+  // so a floor id is stable across rebuilds and purely ADDITIVE against saved zone
+  // ids — an old save naming `h1` still resolves, and 60-save already lands the
+  // player at spawn for an id that does not. ZERO new save fields: a floor is
+  // compiled from the seed like every other zone.
+  //
+  // Exactly one flight each way. `h1uu` is not turned away by a depth guard: it
+  // cannot be spelled, because interiorRoom() is the only caller and the floors
+  // it builds never call back into it.
+  const BELFRY_DIMS = [9, 9];
+
+  /** The column each flight takes: up to the WEST of the door, down to the EAST.
+   *
+   *  Fixed rather than searched, and claimed against the EMPTY shell before a
+   *  stick of furniture is down. That ordering is load-bearing. A storey is
+   *  decided before the ground floor is laid, because the sleeping band that
+   *  moves up must not also be laid down here — so a flight that could fail to
+   *  find a column AFTERWARDS would leave a household with beds nowhere at all.
+   *  Beside the door there is nothing to fail against: the row inside the south
+   *  wall is bare when the shell goes up, and the startup check below pins both
+   *  neighbours inside every width the tables offer.
+   *
+   *  A flight also needs a LANDING — the tile the other end delivers the player
+   *  onto, which must never be the step itself or the portal would fire again and
+   *  bounce them straight back (linkInterior puts a player one tile inside a door
+   *  for exactly this reason). The two ends pick theirs differently and subFloor
+   *  says why. */
+  const stairX = (w, dir) => ((w / 2) | 0) + (dir === "up" ? -1 : 1);
+  // Both flights inside the shell at every width the tables offer, plus the
+  // landing of the smallest floor there is. Same discipline as the PLACERS
+  // registry check: a building that grew a storey with no way up to it would be
+  // an unreachable zone, which the reachability invariant forbids outright.
+  for (const [kind, [w]] of Object.entries({ ...INTERIOR_DIMS, belfry: BELFRY_DIMS })) {
+    for (const x of [stairX(w, "up"), stairX(w, "down"), (w / 2) | 0]) {
+      if (x < 1 || x > w - 2) throw new Error(`pixelforge: ${kind} interior is too narrow for stairs`);
+    }
+  }
+
+  // One furnisher per floor PURPOSE — the same table shape as FURNISH and
+  // ROOM_FURNISH below it, and for the same reason: another kind of floor is an
+  // entry plus a furnisher, never a branch inside the builder.
+  const FLOOR_FURNISH = {
+    /** An upper storey IS its sleeping band. The band moves up here whole, laid
+     *  by the same layoutSleeping call the ground floor would have made with the
+     *  same plan — so a guest room upstairs and a guest room downstairs are the
+     *  same room, down to the bunking rule and the owner's private door. The only
+     *  thing that changed is which zone it is in. */
+    storey(zone, w, h, plan) {
+      return layoutSleeping(zone, w, h, plan.sleepPlan, plan.sleepers, 2, plan.owned);
+    },
+    /** A cellar: stock down the walls, a bench when the trade over it needs one.
+     *  Largely scenery today and deliberately so — this is the room building and
+     *  resource management will want a floor for, and an empty cellar now is
+     *  cheaper than a wrong one later. The middle is left clear for whatever
+     *  lands there. */
+    cellar(zone, w, h, plan) {
+      for (let x = 2; x <= w - 3; x += 2) put(zone, x, 2, "object", "shelf", true);
+      for (const y of [4, h - 5]) {
+        put(zone, 1, y, "object", "shelf", true);
+        put(zone, w - 2, y, "object", "shelf", true);
+      }
+      if (plan.work) {
+        fillRect(zone, 3, h - 4, 4, 1, "object", "counter", true);
+        put(zone, w - 4, h - 4, "object", "table", true);
+      }
+      zone.lights.push({ x: 2, y: 2 }, { x: w - 3, y: 2 });
+      return {};
+    },
+    /** The bell tower, and a deliberate REUSE rather than a special case. A
+     *  belfry is a small room with one thing in it at the top of a flight of
+     *  stairs, and every part of that except the furniture is what subFloor
+     *  already does — id derivation, the stair pair, the map gate, reachability.
+     *  Giving it its own path would have duplicated all four to change the
+     *  contents of one room. `dims` is the single concession the mechanism
+     *  needed, and it earns itself: a tower is narrower than the nave it stands
+     *  over, and the two flights are placed independently at each end so the
+     *  footprints never had to match. */
+    belfry(zone, w) {
+      const cx = (w / 2) | 0;
+      // Hung in the middle with floor all the way round it: being up here WITH
+      // the bell is the whole reward for the climb.
+      put(zone, cx, 3, "object", "bell", true);
+      zone.lights.push({ x: cx, y: 3 });
+      // Louvres either side, on the shell's own wall row — the same trick the
+      // nave downstairs uses for its clerestory. They are what makes the room
+      // read as open air rather than an attic.
+      for (const wx of [2, w - 3]) {
+        put(zone, wx, 1, "object", "window", true);
+        zone.lights.push({ x: wx, y: 1 });
+      }
+      return {};
+    },
+  };
+
+  // ── Which buildings earn which floors ───────────────────────────────────────
+  // GATED, never universal, and the gate is the whole reason zone count does not
+  // double: a floor is a zone, and a zone is two full-size canvases. A building
+  // earns a storey when its sleeping band is big enough that the ground floor is
+  // mostly corridor past it.
+  //
+  //   - The GATHERING always. Guest rooms upstairs is the shape an inn has had
+  //     for as long as there have been inns, its berth budget is the largest band
+  //     the compiler lays (four to ten), and it is where a travelling group or a
+  //     player party goes.
+  //   - The SANCTUARY always, but a BELL TOWER rather than a storey.
+  //   - A HOUSE only when it is LARGE OR MERGED: four or more sleeping under one
+  //     roof, or a block the over-subscription merge put more than one household
+  //     into. A cottage of one to three keeps its bedrooms on the ground floor,
+  //     where they cost nothing and read perfectly well.
+  //
+  // Read off `sleepers` — the band the compiler lays ITSELF. A brief that homes
+  // somebody at a named place gets `residents` and living QUARTERS instead, and
+  // those stay downstairs: quarters are the room a keeper has behind their own
+  // building, and putting a chaplain up a staircase to reach her own bed is not
+  // what the escape hatch was for.
+  const UPPER_STOREY_SLEEPERS = 4;
+  // The kinds whose FURNISH lays a household band of its own — the compiler's
+  // word for "a house", whether or not a trade is carried on in it.
+  const HOUSEHOLD_KINDS = new Set(["dwelling", "shop", "farm"]);
+  const upstairsName = (below) => `${below}, upstairs`;
+  function upperPlan(kind, opts) {
+    if (kind === "sanctuary") return { purpose: "belfry", dims: BELFRY_DIMS, name: (below) => `${below} bell tower` };
+    const sleepers = opts.sleepers ?? 0;
+    if (kind === "gathering") return { purpose: "storey", sleepPlan: "gathering", sleepers, name: upstairsName };
+    if (!HOUSEHOLD_KINDS.has(kind)) return null;
+    if (sleepers < UPPER_STOREY_SLEEPERS && !opts.merged) return null;
+    return { purpose: "storey", sleepPlan: "dwelling", sleepers, owned: !!opts.owned, name: upstairsName };
+  }
+
+  // Cellars.
+  //   - The WORKSHOP and the GATHERING always: the stock and the barrels have to
+  //     go somewhere, and both are buildings the whole settlement uses.
+  //   - A HOUSE on a draw seeded by PROSPERITY. A cellar is stored surplus, so a
+  //     struggling settlement digs none and a thriving one digs most.
+  //
+  // The draw runs off its OWN hashed stream, keyed on the seed and the building's
+  // id — both sealed-brief data, so a town has the same cellars every time it is
+  // rebuilt. Not off the compile's shared `rnd`: the wilds are scattered from that
+  // stream AFTER the interiors, and drawing from it here would move trees in a
+  // zone this feature has no business touching.
+  const CELLAR_ALWAYS = new Set(["workshop", "gathering"]);
+  const CELLAR_ODDS = { struggling: 0, modest: 0.35, thriving: 0.7 };
+  function cellarPlan(id, kind, opts) {
+    const odds = HOUSEHOLD_KINDS.has(kind) ? (CELLAR_ODDS[opts.prosperity] ?? 0) : 0;
+    const dug = CELLAR_ALWAYS.has(kind) || PF.rng(PF.hashStr(`${(opts.seed ?? 0) >>> 0}|cellar|${id}`))() < odds;
+    if (!dug) return null;
+    // Sometimes work rather than only storage: an undercroft under a building
+    // whose trade wants the room, which is the one the brief actually named.
+    return { purpose: "cellar", work: kind === "workshop", name: (below) => `${below} cellar` };
+  }
+
+  /** Beds carry the zone they are IN. A sleeping band can now sit on a different
+   *  floor from the building's front door, so "the fourth bed in this building"
+   *  is no longer enough to send anybody to — the schedule handle needs a zone id,
+   *  and the only thing that knows it is the zone that painted the bed. */
+  const bedsIn = (zone, beds) => (beds ?? []).map((bed) => ({ zoneId: zone.id, x: bed.x, y: bed.y }));
+
+  /** Build one floor over or under `parent` and wire the stairs both ways.
+   *
+   *  Shaped like every other builder here: handed WHAT the floor is and owning
+   *  WHERE everything in it goes. The parent's step is already painted (see
+   *  stairX) — this raises the shell the other end of it opens into. */
+  function subFloor(parent, dir, plan) {
+    const up = dir === "up";
+    const [w, h] = plan.dims ?? [parent.w, parent.h];
+    const zone = makeZone(`${parent.id}${up ? "u" : "b"}`, plan.name(parent.name), w, h, "floor");
+    for (let x = 0; x < w; x++) {
+      put(zone, x, 0, "object", "wallStone", true);
+      put(zone, x, 1, "object", "wall", true);
+      put(zone, x, h - 1, "object", "wallStone", true);
+    }
+    for (let y = 0; y < h; y++) {
+      put(zone, 0, y, "object", "wallStone", true);
+      put(zone, w - 1, y, "object", "wallStone", true);
+    }
+    // The floor's own end of the staircase, where the ground floor's door would
+    // be: the middle of the south wall row. Claimed before the furniture for the
+    // same reason the parent's is, and independently of it — which is what lets
+    // the bell tower be narrower than the church under it.
+    const landingX = (w / 2) | 0;
+    const stepX = stairX(parent.w, dir);
+    put(zone, landingX, h - 2, "object", up ? "stairsDown" : "stairsUp", false);
+    zone.spawn = { x: landingX, y: h - 3 };
+    // A stair is a PORTAL, and that is what makes it nearly free: the player's
+    // portal handling walks it with no new code, the reachability sweep counts
+    // the floor as reached, and standable() already refuses to park an NPC on a
+    // portal tile — so nobody is ever found standing in the stairwell.
+    parent.portals.push({
+      x: stepX,
+      y: parent.h - 2,
+      toZone: zone.id,
+      toX: landingX,
+      toY: h - 3,
+      label: `${up ? "Up" : "Down"} to ${zone.name}`,
+    });
+    zone.portals.push({
+      x: landingX,
+      y: h - 2,
+      toZone: parent.id,
+      // Back onto the tile just inside the front door — the room's own spawn,
+      // which is the one tile every interior guarantees is walkable. The step's
+      // north neighbour would have been the natural landing and is not safe: it
+      // is ordinary floor the furnisher owns, and a shop's counter run is laid
+      // straight across it. Coming down beside the door also reads right, and it
+      // is the same bargain the door itself takes — step back onto the stair and
+      // you go up again, exactly as stepping back onto the door puts you out.
+      toX: parent.spawn.x,
+      toY: parent.spawn.y,
+      label: `${up ? "Down" : "Up"} to ${parent.name}`,
+    });
+    // A building is ONE World Maps location and its floors are rooms inside it
+    // (spec §8). The locations route is additive with NO delete, so a row written
+    // to a player's real map can never be taken back — the gate is stamped HERE,
+    // on the one function that can mint a floor, and not left to call sites where
+    // the next one to be added would forget it.
+    zone.mapExport = false;
+    zone.mapKind = "building";
+    const furnished = FLOOR_FURNISH[plan.purpose](zone, w, h, plan) ?? {};
+    zone.rooms = furnished.rooms ?? [];
+    zone.beds = bedsIn(zone, furnished.beds);
+    return zone;
+  }
+
   function interiorRoom(id, name, kind, options) {
     const [w, baseH] = INTERIOR_DIMS[kind] || INTERIOR_DIMS.dwelling;
     const opts = options || {};
+    // The floor ABOVE, decided before a single tile is laid. A sleeping band that
+    // is going upstairs must not also be laid down here — the household would get
+    // two beds each and the ground floor would carve rooms nobody sleeps in — so
+    // the decision has to come before the furnisher, not after it.
+    const upper = upperPlan(kind, opts);
+    const upstairs = upper?.purpose === "storey";
     // LIVING QUARTERS. `residents` is the household the brief HOMED in this
     // building; when there is one, the building grows the rows to sleep them and
     // its own floor starts below the quarters. Nobody homed here => not one tile
     // moves, so every brief that names a place and houses nobody in it compiles
     // exactly what it always did.
-    const quarters = PLACE_QUARTERS[kind];
+    //
+    // The gathering is the one building whose quarters do NOT sit flush under the
+    // shell's wall row: its guest wing is already there, and the berths a
+    // settlement was BUILT to offer must not move because somebody lives in. With
+    // that wing upstairs there is nothing left on this floor to make room for, so
+    // the quarters come back up to the ordinary rows and the building stops
+    // carrying four rows of nothing where the wing used to be.
+    const quarters = upstairs && PLACE_QUARTERS[kind] ? { top: 2, floor0: 2 } : PLACE_QUARTERS[kind];
     const sleepingIn = quarters && (opts.residents ?? 0) > 0 ? quarters : null;
     const floor0 = sleepingIn ? sleepingIn.top + SLEEP_PLANS.quarters.band + 1 : (quarters?.floor0 ?? 2);
     const h = baseH + (sleepingIn ? floor0 - quarters.floor0 : 0);
@@ -2546,7 +2866,28 @@ PF.world = (() => {
     const living = sleepingIn
       ? layoutSleeping(zone, w, h, "quarters", opts.residents, sleepingIn.top, opts.owned)
       : null;
-    const furnished = (FURNISH[kind] || FURNISH.dwelling)(zone, w, h, { ...opts, floor0 }) ?? {};
+    const doorX = (w / 2) | 0;
+    put(zone, doorX, h - 1, "object", "door", false);
+    zone.spawn = { x: doorX, y: h - 2 };
+    // THE FLIGHTS, claimed against the bare shell (see stairX) and before the
+    // furnisher runs, so a step can never fail to be placed and never be laid
+    // over. What they open onto is raised further down, once the room they leave
+    // is finished.
+    const flights = [];
+    for (const [dir, plan] of [
+      ["up", upper],
+      ["down", cellarPlan(id, kind, opts)],
+    ]) {
+      if (!plan) continue;
+      put(zone, stairX(w, dir), h - 2, "object", dir === "up" ? "stairsUp" : "stairsDown", false);
+      flights.push([dir, plan]);
+    }
+    const furnished =
+      (FURNISH[kind] || FURNISH.dwelling)(zone, w, h, {
+        ...opts,
+        floor0,
+        upstairs,
+      }) ?? {};
     // What the furnisher carved and where it put the sleepers. Compiler output,
     // not save data: a zone is rebuilt from the seed on every load, so rooms and
     // beds cost ZERO save fields — the same deal schedules took.
@@ -2561,12 +2902,19 @@ PF.world = (() => {
     // because `rooms` is what the wander boxes avoid and what the reachability
     // sweep walks, and a private room is both whoever it belongs to.
     zone.rooms = (furnished.rooms ?? []).concat((living?.rooms ?? []).map((room) => ({ ...room, quarters: true })));
-    zone.beds = furnished.beds ?? [];
-    zone.homeBeds = living?.beds ?? [];
-    const doorX = (w / 2) | 0;
-    put(zone, doorX, h - 1, "object", "door", false);
-    zone.spawn = { x: doorX, y: h - 2 };
+    zone.homeBeds = bedsIn(zone, living?.beds);
     zone.mapKind = "building"; // World Maps export kind (spec §8)
+    // The floors, LAST: their stairs land against furniture that is already down,
+    // and a storey's own rooms are carved into a shell of its own.
+    zone.floors = flights.map(([dir, plan]) => subFloor(zone, dir, plan));
+    // A building's bed list SPANS its floors. Whoever deals beds out asks the
+    // building, not the storey — "the fourth berth at the inn" has to mean the
+    // same thing whether the guest wing is up the stairs or along the back wall —
+    // so every record carries the zone it is really in and the ground floor
+    // publishes the concatenation. `rooms` deliberately does NOT do this: it is
+    // what wander boxes avoid and what the room sweeps walk, and both of those are
+    // questions about ONE zone's tiles.
+    zone.beds = bedsIn(zone, furnished.beds).concat(...zone.floors.map((floor) => floor.beds));
     return zone;
   }
 
@@ -2932,15 +3280,21 @@ PF.world = (() => {
         sleepers: place.kind === "gathering" ? guestBerths(brief) : 0,
         residents: living.length,
         owned: living[0] === facade.owner && !!facade.owner,
+        seed,
+        prosperity: brief.prosperity,
       });
       zone.flavor = place.flavor;
       zones[id] = zone;
+      // A floor is a zone like any other from here on — it is only ever reached
+      // through its stairs, and it carries its own mapExport = false.
+      for (const floor of zone.floors) zones[floor.id] = floor;
       linkInterior(v, zone, facade.door, `Enter ${place.name}`);
       // Their own bed each, out of the quarters and never out of the guest
       // berths — the two lists are carved from different bands (interiorRoom).
+      // The record names its own zone, because a band can be a floor away.
       living.forEach((member, index) => {
         const bed = zone.homeBeds[index];
-        if (bed) bedFor.set(member, { zoneId: id, x: bed.x, y: bed.y });
+        if (bed) bedFor.set(member, bed);
       });
     }
 
@@ -3058,9 +3412,16 @@ PF.world = (() => {
       const zone = interiorRoom(id, name, interior.kind, {
         sleepers: sleepers.length,
         owned: sleepers[0] === b.owner && !!b.owner,
+        // A block the over-subscription merge put more than one household under
+        // is a big house whatever tonight's headcount is, so it earns its stairs
+        // on the same footing as a large one (see upperPlan).
+        merged: (b.households ?? []).length > 1,
+        seed,
+        prosperity: brief.prosperity,
       });
       zone.mapExport = false;
       zones[id] = zone;
+      for (const floor of zone.floors) zones[floor.id] = floor;
       linkInterior(v, zone, b.door, "Go inside");
       // Behind the counter, between it and the stock: the one row that reads as
       // manning a shop rather than browsing it. Only the kinds with a station to
@@ -3070,7 +3431,7 @@ PF.world = (() => {
       // lower one un-talkable, which is precisely what a bedroom would cause.
       sleepers.forEach((member, index) => {
         const bed = zone.beds[index];
-        if (bed) bedFor.set(member, { zoneId: id, x: bed.x, y: bed.y });
+        if (bed) bedFor.set(member, bed);
       });
     }
 
@@ -3266,7 +3627,11 @@ PF.world = (() => {
       if (standing === "transient" && gatheringZoneId && zones[gatheringZoneId]) {
         const guest = guestBeds.shift();
         home = {
-          zoneId: gatheringZoneId,
+          // The berth's OWN zone: an inn keeps its guest rooms upstairs, so the
+          // handle that sends a guest to bed sends them up the stairs. Whoever
+          // arrives after the last berth still shares the common room, which is
+          // on the ground floor where the rest of the evening is.
+          zoneId: guest ? guest.zoneId : gatheringZoneId,
           wander: guest ? bedBox(guest) : fullZoneBox(zones[gatheringZoneId]),
           spread: !guest,
         };

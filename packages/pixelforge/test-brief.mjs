@@ -193,6 +193,26 @@ const ctx = { theme: "cozy-village", seed: 424242 };
 // The tiles an NPC can be asleep on. A bunk is a bed TYPE, not a second kind of
 // furniture with its own rules, so anything asserting "in bed" names both.
 const SLEEPS_ON = new Set(["bed", "bunk"]);
+// A BUILDING is its ground floor plus whatever floors it grew (0.8.0). Floor ids
+// derive from the parent's — `{id}u` above, `{id}b` below — so "everywhere under
+// this roof" is a question about ids and needs no bookkeeping to answer.
+const floorIds = (w, zoneId) => [zoneId, `${zoneId}u`, `${zoneId}b`].filter((id) => w.zones[id]);
+const floorsOf = (w, zoneId) => floorIds(w, zoneId).map((id) => w.zones[id]);
+/** Everyone anywhere in a building, tagged with the floor they are standing on. */
+const underRoof = (w, zoneId) => floorsOf(w, zoneId).flatMap((zone) => zone.npcs.map((npc) => ({ zone, npc })));
+/** The floor a building's sleeping rooms are on: the storey when it grew one,
+ *  the ground floor when it did not (0.8.0 floors). Cases about BEDROOMS ask
+ *  this rather than naming a floor, so one assertion covers both sides of the
+ *  upper-storey gate. */
+const bedFloor = (w, zone) => {
+  const up = w.zones[`${zone.id}u`];
+  return up && up.beds.length ? up : zone;
+};
+/** The ground floor of whatever floor an id names. Every ground zone id ends in a
+ *  digit (`z2`, `h1`, `s4`), so a trailing `u`/`b` can only be a floor suffix. */
+const groundFloorId = (zoneId) => (/[ub]$/.test(zoneId) ? zoneId.slice(0, -1) : zoneId);
+/** The tile an NPC is standing on, wherever in the building they are. */
+const standingOn = (zone, npc) => zone.object[zone.w * Math.round(npc.y) + Math.round(npc.x)];
 
 function checkWorld(w, sealed, label) {
   assert.equal(w.startZone, "z1", `${label}: settlement is z1`);
@@ -1581,6 +1601,13 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
         roomIds.some((id) => built.zones[id].name.endsWith("'s shop")),
       `the fixture compiled a dwelling and a shop (${roomIds.map((id) => built.zones[id].name).join(", ")})`,
     );
+    // …and FLOORS (0.8.0). "One building, one location — never a row per floor"
+    // below is a claim about zones that have to exist for it to mean anything:
+    // the church carries a bell tower and the inn a cellar in this fixture.
+    assert.ok(
+      roomIds.includes(`${churchId}u`) && roomIds.includes(`${innId}b`),
+      `the fixture compiled sub-floors (${roomIds.join(", ")})`,
+    );
     // The gathering is stamped by HAND as well, so the gate is proven for a zone
     // type that does not set it itself: it is a property of the flag, not of
     // which zone kinds happen to carry it today.
@@ -1704,11 +1731,13 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
 
   // Cross-zone relocation: the drifter loiters in the settlement by day and
   // takes a bed at the inn at night — spliced between zone arrays, exactly once.
+  // The berth is UP THE STAIRS (0.8.0 floors), which is the same splice: a floor
+  // is a zone, so a guest going to bed crosses one exactly as they always did.
   dayOf(12 * 60);
   const drifterDay = findNpc("Wisp");
   dayOf(23 * 60);
   const drifterNight = findNpc("Wisp");
-  assert.equal(drifterNight.zoneId, innId, "the drifter sleeps at the inn");
+  assert.equal(drifterNight.zoneId, `${innId}u`, "the drifter sleeps in the inn's guest rooms");
   assert.notEqual(drifterDay.zoneId, drifterNight.zoneId, "the drifter actually changed zone");
   let copies = 0;
   for (const zoneId in w.zones) copies += w.zones[zoneId].npcs.filter((n) => n.name === "Wisp").length;
@@ -1987,12 +2016,14 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   const innId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Lantern")[0];
   sim.clockMin = 23 * 60;
   sim.resolveSchedules();
-  // Guard against a vacuous pass: the bug needs arrivals from another zone.
-  const arrived = w.zones[innId].npcs.length;
-  assert.ok(arrived >= 4, `the inn genuinely fills up at night (${arrived} NPCs)`);
+  // Guard against a vacuous pass: the bug needs arrivals from another zone. The
+  // inn is the whole building — its guest rooms are up the stairs (0.8.0 floors)
+  // and a tile clash between two guests is the same clash on either floor.
+  const beds = underRoof(w, innId);
+  assert.ok(beds.length >= 4, `the inn genuinely fills up at night (${beds.length} NPCs)`);
   const seen = new Map();
-  for (const npc of w.zones[innId].npcs) {
-    const tile = `${Math.round(npc.x)},${Math.round(npc.y)}`;
+  for (const { zone, npc } of beds) {
+    const tile = `${zone.id}:${Math.round(npc.x)},${Math.round(npc.y)}`;
     assert.ok(!seen.has(tile), `${npc.name} and ${seen.get(tile)} both bedded down on tile ${tile}`);
     seen.set(tile, npc.name);
   }
@@ -2097,7 +2128,10 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     // front of their dwelling. The apron is still real geometry — it is the tile
     // strip the portal into the house sits on — so this is the shipped placer
     // being handed a genuinely undersized shared box, not a synthetic one.
-    const dwellingId = hearths[0]._sched.home.zoneId;
+    // A household this size sleeps UPSTAIRS (0.8.0 floors), and the front door
+    // opens onto the ground floor — so the apron this case needs is the building's,
+    // not the storey's.
+    const dwellingId = groundFloorId(hearths[0]._sched.home.zoneId);
     const doorPortal = w.zones.z1.portals.find((p) => p.toZone === dwellingId);
     assert.ok(doorPortal, `seed ${seed}: the household's dwelling opens off the settlement`);
     const apron = {
@@ -2855,9 +2889,16 @@ const zoneNamed = (w, name) => Object.values(w.zones).find((zone) => zone.name =
       `seed ${seed}: the night handle is one tile wide`,
     );
 
-    // The transient takes a real bed at the inn rather than standing among the tables.
+    // The transient takes a real bed at the inn rather than standing among the
+    // tables — and the inn keeps its guest rooms UPSTAIRS (0.8.0 floors), so the
+    // bed is a floor above the tap room and the walk there is a stair portal.
     const guest = findNpc(w, "Wisp");
-    assert.equal(guest.zone.name, "The Kettle", `seed ${seed}: the drifter beds down at the inn`);
+    assert.equal(
+      guest.zone.name,
+      "The Kettle, upstairs",
+      `seed ${seed}: the drifter beds down in the inn's guest rooms`,
+    );
+    assert.equal(guest.zone.mapExport, false, `seed ${seed}: and a guest storey is never a map destination`);
     assert.equal(
       guest.zone.object[guest.zone.w * guest.npc.y + guest.npc.x],
       "bed",
@@ -2955,11 +2996,12 @@ const zoneNamed = (w, name) => Object.values(w.zones).find((zone) => zone.name =
     const stock = shop.object.filter((tile) => tile === "shelf").length;
     assert.ok(stock >= 3, `seed ${seed}: and stock behind it (${stock} tiles)`);
     // Non-vacuous the other way: stock is the shop's own furniture, not something
-    // every interior grew.
-    assert.ok(
-      !Object.values(w.zones).some((zone) => zone !== shop && zone.object.includes("shelf")),
-      `seed ${seed}: nothing else in the world sprouted shelving`,
-    );
+    // every interior grew. A CELLAR is the one other room shelving belongs in —
+    // stores are what a cellar IS — so it is named here rather than waved through.
+    for (const zone of Object.values(w.zones)) {
+      if (zone === shop || !zone.object.includes("shelf")) continue;
+      assert.ok(zone.id.endsWith("b"), `seed ${seed}: ${zone.name} sprouted shelving and is not a cellar`);
+    }
 
     const sim = new loadedPF.Sim(w);
     sim.clockMin = 12 * 60;
@@ -3154,21 +3196,27 @@ const bunkhouseBrief = (hands) => ({
         size,
         `the ${size}-person household survives validation — a split would make this vacuous`,
       );
-      const home = findZone(world.build(seed, "cozy-village", sealed), "Kin0's home");
+      const w = world.build(seed, "cozy-village", sealed);
+      const home = findZone(w, "Kin0's home");
       assert.ok(home, `seed ${seed}: the ${size}-person household compiled a dwelling`);
-      const { walls, doors } = partitionTiles(home);
+      // A household this size is LARGE, so its bedrooms are up the stairs (0.8.0
+      // floors). Which floor they are on is not what this case is about — that a
+      // big family keeps WALLS instead of falling into a dormitory is — so it
+      // asks where the bedrooms are rather than assuming.
+      const sleeping = bedFloor(w, home);
+      const { walls, doors } = partitionTiles(sleeping);
       assert.ok(walls.length > 0, `seed ${seed}: ${size} sleepers keep an interior wall run`);
-      assert.equal(home.rooms.length, 2, `seed ${seed}: ${size} sleepers, two bedrooms (${home.rooms.length})`);
-      assert.equal(doors.length, home.rooms.length, `seed ${seed}: one door per bedroom, so nobody is sealed in`);
+      assert.equal(sleeping.rooms.length, 2, `seed ${seed}: ${size} sleepers, two bedrooms (${sleeping.rooms.length})`);
+      assert.equal(doors.length, sleeping.rooms.length, `seed ${seed}: one door per bedroom, so nobody is sealed in`);
       assert.ok(home.beds.length >= size, `seed ${seed}: ${size} sleepers, ${home.beds.length} places`);
       assert.ok(
-        home.rooms.some((room) => room.beds.every((bed) => home.object[home.w * bed.y + bed.x] === "bunk")),
+        sleeping.rooms.some((room) => room.beds.every((bed) => sleeping.object[sleeping.w * bed.y + bed.x] === "bunk")),
         `seed ${seed}: the crowded bedroom bunks rather than the house losing its walls`,
       );
       // And every bedroom is a ROOM: shut its door and its beds leave the map.
       // Without this the case passes on a partition of loose wall stubs.
-      for (const room of home.rooms) {
-        const shut = floodFill(home, home.spawn, new Set([`${room.doorX},${room.y1 + 1}`]));
+      for (const room of sleeping.rooms) {
+        const shut = floodFill(sleeping, sleeping.spawn, new Set([`${room.doorX},${room.y1 + 1}`]));
         for (const bed of room.beds) {
           assert.ok(
             !shut.has(`${bed.x},${bed.y}`),
@@ -3176,21 +3224,27 @@ const bunkhouseBrief = (hands) => ({
           );
         }
       }
-      // A partition is not a zone: the whole point of doing this in walls.
-      assert.ok(
-        Object.values(world.build(seed, "cozy-village", sealed).zones).filter((z) => z.name === home.name).length === 1,
+      // A partition is still not a zone. Two bedrooms cost ONE storey between
+      // them, not one zone each — which is the whole reason a bedroom is walls
+      // and a floor is a zone.
+      assert.equal(
+        Object.values(w.zones).filter((z) => z.id === home.id || z.id.startsWith(`${home.id}`)).length,
+        floorIds(w, home.id).length,
         `seed ${seed}: the bedrooms mint no zones of their own`,
       );
+      assert.ok(floorIds(w, home.id).length <= 3, `seed ${seed}: a building is a ground floor and at most two floors`);
     }
 
     // Four fits the two rooms on singles: density decides, and there is none.
     const roomy = brief.validate(houseBrief("Fourfold", 4, "folk"), ctx);
-    const rooms = findZone(world.build(seed, "cozy-village", roomy), "Kin0's home");
-    assert.ok(rooms, `seed ${seed}: the smaller household compiled a dwelling`);
-    assert.ok(partitionTiles(rooms).walls.length > 0, `seed ${seed}: four sleepers still get bedrooms`);
-    assert.equal(rooms.rooms.length, 2, `seed ${seed}: four sleepers, two bedrooms of two`);
+    const fourW = world.build(seed, "cozy-village", roomy);
+    const four = findZone(fourW, "Kin0's home");
+    assert.ok(four, `seed ${seed}: the smaller household compiled a dwelling`);
+    const fourBeds = bedFloor(fourW, four);
+    assert.ok(partitionTiles(fourBeds).walls.length > 0, `seed ${seed}: four sleepers still get bedrooms`);
+    assert.equal(fourBeds.rooms.length, 2, `seed ${seed}: four sleepers, two bedrooms of two`);
     assert.ok(
-      rooms.beds.every((bed) => rooms.object[rooms.w * bed.y + bed.x] === "bed"),
+      fourBeds.beds.every((bed) => fourBeds.object[fourBeds.w * bed.y + bed.x] === "bed"),
       `seed ${seed}: two to a room is not dense, so no bunk appears`,
     );
   }
@@ -3225,13 +3279,17 @@ const bunkhouseBrief = (hands) => ({
     checkWorld(w, sealed, `family seed ${seed}`);
     const home = findZone(w, "Mera's home");
     assert.ok(home, `seed ${seed}: the family compiled a dwelling`);
-    assert.ok(home.rooms.length >= 2, `seed ${seed}: it is a home with bedrooms (${home.rooms.length})`);
-    assert.ok(partitionTiles(home).walls.length > 0, `seed ${seed}: and the walls are in the tiles`);
+    // Four under one roof is a LARGE household, so the bedrooms are up the
+    // stairs. That they are BEDROOMS rather than four beds in a row is what this
+    // case is about, and it reads the same on either floor.
+    const sleeping = bedFloor(w, home);
+    assert.ok(sleeping.rooms.length >= 2, `seed ${seed}: it is a home with bedrooms (${sleeping.rooms.length})`);
+    assert.ok(partitionTiles(sleeping).walls.length > 0, `seed ${seed}: and the walls are in the tiles`);
     assert.ok(home.beds.length >= 4, `seed ${seed}: a sleeping place each (${home.beds.length})`);
     // Nobody is left in the open: every sleeping place is inside a bedroom.
     for (const bed of home.beds) {
       assert.ok(
-        home.rooms.some((room) => bed.x >= room.x0 && bed.x <= room.x1 && bed.y >= room.y0 && bed.y <= room.y1),
+        sleeping.rooms.some((room) => bed.x >= room.x0 && bed.x <= room.x1 && bed.y >= room.y0 && bed.y <= room.y1),
         `seed ${seed}: ${bed.x},${bed.y} is a bed in a room, not four in a row across the floor`,
       );
     }
@@ -3240,11 +3298,11 @@ const bunkhouseBrief = (hands) => ({
     sim.resolveSchedules();
     const taken = new Set();
     for (const name of ["Mera", "Pip", "Nel", "Rill"]) {
-      const npc = home.npcs.find((n) => n.name === name);
+      const npc = sleeping.npcs.find((n) => n.name === name);
       assert.ok(npc, `seed ${seed}: ${name} is home at 23:00`);
-      assert.ok(SLEEPS_ON.has(home.object[home.w * npc.y + npc.x]), `seed ${seed}: ${name} is in a bed`);
+      assert.ok(SLEEPS_ON.has(standingOn(sleeping, npc)), `seed ${seed}: ${name} is in a bed`);
       assert.ok(
-        home.rooms.some((room) => npc.x >= room.x0 && npc.x <= room.x1 && npc.y >= room.y0 && npc.y <= room.y1),
+        sleeping.rooms.some((room) => npc.x >= room.x0 && npc.x <= room.x1 && npc.y >= room.y0 && npc.y <= room.y1),
         `seed ${seed}: ${name} sleeps inside a bedroom (${npc.x},${npc.y})`,
       );
       assert.ok(!taken.has(`${npc.x},${npc.y}`), `seed ${seed}: ${name} shares a tile with a housemate`);
@@ -3262,35 +3320,40 @@ const bunkhouseBrief = (hands) => ({
     const w = world.build(seed, "cozy-village", sealed);
     const inn = findZone(w, "The Kettle");
     assert.ok(inn, `seed ${seed}: the gathering compiled`);
-    assert.ok(inn.rooms.length >= 1, `seed ${seed}: the inn has guest rooms (${inn.rooms.length})`);
+    // GUEST ROOMS UPSTAIRS (0.8.0 floors) — the classic inn. The wing is the same
+    // wing it always was, laid by the same plan; only the zone it sits in moved,
+    // so every assertion below reads the storey instead of the tap room.
+    const wing = w.zones[`${inn.id}u`];
+    assert.ok(wing, `seed ${seed}: the inn grew a guest storey`);
+    assert.ok(wing.rooms.length >= 1, `seed ${seed}: the inn has guest rooms (${wing.rooms.length})`);
     assert.equal(
-      partitionTiles(inn).doors.length,
-      inn.rooms.length,
+      partitionTiles(wing).doors.length,
+      wing.rooms.length,
       `seed ${seed}: every guest room has a door — a guest walled in is un-talkable forever`,
     );
-    for (const room of inn.rooms) {
+    for (const room of wing.rooms) {
       assert.ok(room.beds.length >= 1, `seed ${seed}: a guest room with no bed in it is a cupboard`);
       // A guest room is a room: its door is the only way in. Otherwise "guest
       // room" is a label on a corner of the common floor, which is what 0.7.x
       // already had.
-      const shut = floodFill(inn, inn.spawn, new Set([`${room.doorX},${room.y1 + 1}`]));
+      const shut = floodFill(wing, wing.spawn, new Set([`${room.doorX},${room.y1 + 1}`]));
       for (const bed of room.beds) {
         assert.ok(
           !shut.has(`${bed.x},${bed.y}`),
-          `seed ${seed}: closing the guest room door leaves ${bed.x},${bed.y} open to the common room`,
+          `seed ${seed}: closing the guest room door leaves ${bed.x},${bed.y} open to the landing`,
         );
       }
     }
     const sim = new loadedPF.Sim(w);
     sim.clockMin = 23 * 60;
     sim.resolveSchedules();
-    const wisp = inn.npcs.find((npc) => npc.name === "Wisp");
-    assert.ok(wisp, `seed ${seed}: the drifter beds down at the inn`);
-    const host = inn.rooms.find(
+    const wisp = wing.npcs.find((npc) => npc.name === "Wisp");
+    assert.ok(wisp, `seed ${seed}: the drifter beds down in the inn's guest rooms`);
+    const host = wing.rooms.find(
       (room) => wisp.x >= room.x0 && wisp.x <= room.x1 && wisp.y >= room.y0 && wisp.y <= room.y1,
     );
-    assert.ok(host, `seed ${seed}: and inside one of its guest rooms (${wisp.x},${wisp.y})`);
-    assert.equal(inn.object[inn.w * wisp.y + wisp.x], "bed", `seed ${seed}: a solo guest gets a bed, not a bunk`);
+    assert.ok(host, `seed ${seed}: and inside one of them (${wisp.x},${wisp.y})`);
+    assert.equal(standingOn(wing, wisp), "bed", `seed ${seed}: a solo guest gets a bed, not a bunk`);
   }
 
   // A thriving village builds seven berths over its three rooms → 3, 2, 2. The
@@ -3323,7 +3386,9 @@ const bunkhouseBrief = (hands) => ({
     const w = world.build(seed, "cozy-village", busy);
     const inn = findZone(w, "The Long Rest");
     assert.ok(inn, `seed ${seed}: the busy inn compiled`);
-    const types = inn.rooms.map((room) => new Set(room.beds.map((bed) => inn.object[inn.w * bed.y + bed.x])));
+    const wing = w.zones[`${inn.id}u`];
+    assert.ok(wing, `seed ${seed}: with its guest storey over it`);
+    const types = wing.rooms.map((room) => new Set(room.beds.map((bed) => wing.object[wing.w * bed.y + bed.x])));
     assert.ok(
       types.some((set) => set.has("bunk")),
       `seed ${seed}: the crowded guest rooms are bunked`,
@@ -3332,17 +3397,18 @@ const bunkhouseBrief = (hands) => ({
       types.some((set) => set.size === 1 && set.has("bed")),
       `seed ${seed}: and the room that is NOT crowded keeps single beds — density decides, not the building`,
     );
-    // Everyone still lands on a tile of their own.
+    // Everyone still lands on a tile of their own, wherever in the building they
+    // ended up — the overflow stays in the tap room while the berths fill upstairs.
     const sim = new loadedPF.Sim(w);
     sim.clockMin = 23 * 60;
     sim.resolveSchedules();
     const taken = new Set();
-    for (const npc of inn.npcs) {
-      const tile = `${Math.round(npc.x)},${Math.round(npc.y)}`;
+    for (const { zone, npc } of underRoof(w, inn.id)) {
+      const tile = `${zone.id}:${Math.round(npc.x)},${Math.round(npc.y)}`;
       assert.ok(!taken.has(tile), `seed ${seed}: ${npc.name} stacked on tile ${tile} in the inn`);
       taken.add(tile);
     }
-    const guests = inn.npcs.filter((npc) => npc.name.startsWith("T"));
+    const guests = underRoof(w, inn.id).filter(({ npc }) => npc.name.startsWith("T"));
     assert.ok(guests.length >= 6, `seed ${seed}: the inn genuinely fills up (${guests.length} guests)`);
   }
 }
@@ -3354,11 +3420,14 @@ const bunkhouseBrief = (hands) => ({
 // bed: one sleeper is not dense, whatever their age.
 {
   for (const seed of [1, 3, 11]) {
+    // Six is a LARGE household, so the sleeping rooms are up the stairs (0.8.0
+    // floors). The question here is whose beds they are, which the floor does not
+    // change — so both fixtures are compared on the floor their bedrooms are on.
     const built = (kind) => {
       const w = world.build(seed, "cozy-village", brief.validate(houseBrief("Wardhome", 6, kind), ctx));
       const home = findZone(w, "Kin0's home");
       assert.ok(home, `seed ${seed}: the ${kind} household compiled a dwelling`);
-      return home;
+      return bedFloor(w, home);
     };
     const wards = built("child");
     const adults = built("folk");
@@ -3378,12 +3447,13 @@ const bunkhouseBrief = (hands) => ({
       `seed ${seed}: the two interiors are tile-for-tile identical — the rule never read the cast`,
     );
 
-    // The other direction: one child, alone in a bedroom, sleeps in a bed.
-    const lone = findZone(
-      world.build(seed, "cozy-village", brief.validate(houseBrief("Onefold", 1, "child"), ctx)),
-      "Kin0's home",
-    );
+    // The other direction: one child, alone in a bedroom, sleeps in a bed — and
+    // on the GROUND floor, because one sleeper is a cottage and a cottage earns
+    // no staircase (the upper-storey gate).
+    const loneW = world.build(seed, "cozy-village", brief.validate(houseBrief("Onefold", 1, "child"), ctx));
+    const lone = findZone(loneW, "Kin0's home");
     assert.ok(lone, `seed ${seed}: the one-child household compiled a dwelling`);
+    assert.equal(loneW.zones[`${lone.id}u`], undefined, `seed ${seed}: and no storey over it`);
     assert.equal(lone.beds.length, 1, `seed ${seed}: one sleeper, one place`);
     assert.equal(
       lone.object[lone.w * lone.beds[0].y + lone.beds[0].x],
@@ -3415,9 +3485,14 @@ const bunkhouseBrief = (hands) => ({
     for (const seed of [1, 3, 11, 424242]) {
       const w = world.build(seed, "cozy-village", sealed);
       for (const zone of Object.values(w.zones)) {
-        if (!zone.beds?.length) continue;
+        // A building's `beds` list SPANS its floors (0.8.0), so ask each zone
+        // about the sleeping tiles that are actually in it: flooding a ground
+        // floor for a tile up the stairs would prove nothing either way. Quarters
+        // ride along, which is free and strictly more coverage than before.
+        const sleeping = [...(zone.beds ?? []), ...(zone.homeBeds ?? [])].filter((bed) => bed.zoneId === zone.id);
+        if (!sleeping.length) continue;
         const reached = floodFill(zone, zone.spawn);
-        for (const bed of zone.beds) {
+        for (const bed of sleeping) {
           assert.ok(
             reached.has(`${bed.x},${bed.y}`),
             `${label} seed ${seed}: ${zone.name} walls off the sleeping tile ${bed.x},${bed.y}`,
@@ -3462,11 +3537,15 @@ const bunkhouseBrief = (hands) => ({
       // the validator would have split before the compiler ever saw it.
       const households = new Set(sealed.cast.map((member) => member.household));
       assert.ok(households.size > 1, `seed ${seed}: ${households.size} households share the roof, so the merge fired`);
+      // A MERGED block sleeps upstairs (0.8.0 floors), so the handle that sends
+      // somebody to bed names the storey. Whether it is one floor or two, the
+      // question is the same one: everybody who lives here sleeps here.
+      const under = new Set(floorIds(w, roof.id));
       const sleepers = Object.values(w.zones)
         .flatMap((zone) => zone.npcs)
-        .filter((npc) => npc._sched.home?.zoneId === roof.id);
+        .filter((npc) => under.has(npc._sched.home?.zoneId));
       assert.equal(sleepers.length, 4 + hands, `seed ${seed}: everyone in the ${label} fixture sleeps under it`);
-      roofs[label] = roof;
+      roofs[label] = bedFloor(w, roof);
     }
     // Eight is a crowded house and keeps its walls; nine is an institution.
     assert.ok(partitionTiles(roofs.eight).walls.length > 0, `seed ${seed}: eight under one roof still get bedrooms`);
@@ -3546,18 +3625,30 @@ const innBrief = (overrides, guests) => ({
 });
 {
   const innOf = (w) => findZone(w, "The Long Rest");
+  // The wing is UPSTAIRS (0.8.0 floors): the inn is one building with a tap room
+  // and a landing of let rooms over it. `beds` is still asked of the building,
+  // because "the fourth berth at the inn" cannot depend on which floor it is on.
+  const wingOf = (w) => w.zones[`${innOf(w).id}u`];
   // The headline: an empty road and a crowded one build the SAME wing, tile for
   // tile. Anything that read the cast to size the guest rooms shows up here.
   for (const seed of [1, 5, 31, 424242]) {
-    const quiet = innOf(world.build(seed, "cozy-village", brief.validate(innBrief({}, 0), ctx)));
-    const crowded = innOf(world.build(seed, "cozy-village", brief.validate(innBrief({}, 6), ctx)));
+    const quietW = world.build(seed, "cozy-village", brief.validate(innBrief({}, 0), ctx));
+    const crowdedW = world.build(seed, "cozy-village", brief.validate(innBrief({}, 6), ctx));
+    const quiet = innOf(quietW);
+    const crowded = innOf(crowdedW);
     assert.ok(quiet && crowded, `seed ${seed}: both inns compiled`);
-    // GUEST rooms: the inn also has the keeper's own quarters now (Perrin is
-    // homed at The Long Rest), and those are hers, not the wing's.
-    const guestRooms = (inn) => inn.rooms.filter((room) => !room.quarters);
-    assert.ok(guestRooms(quiet).length >= 3, `seed ${seed}: a village inn with no guests still has its wing`);
-    assert.ok(quiet.beds.length >= guestRooms(quiet).length, `seed ${seed}: and a berth in every room of it`);
-    assert.deepEqual(crowded.object, quiet.object, `seed ${seed}: the guest wing is the same wing either way`);
+    // GUEST rooms are the storey's; the keeper's own quarters (Perrin is homed at
+    // The Long Rest) stay downstairs behind the tap room, which is where a keeper
+    // lives — the two lists were always carved from different bands.
+    const guestRooms = (w) => wingOf(w).rooms.filter((room) => !room.quarters);
+    assert.ok(guestRooms(quietW).length >= 3, `seed ${seed}: a village inn with no guests still has its wing`);
+    assert.ok(quiet.beds.length >= guestRooms(quietW).length, `seed ${seed}: and a berth in every room of it`);
+    assert.deepEqual(
+      wingOf(crowdedW).object,
+      wingOf(quietW).object,
+      `seed ${seed}: the guest wing is the same wing either way`,
+    );
+    assert.deepEqual(crowded.object, quiet.object, `seed ${seed}: and the tap room under it is the same room`);
     assert.equal(
       JSON.stringify(crowded.beds),
       JSON.stringify(quiet.beds),
@@ -3584,19 +3675,23 @@ const innBrief = (overrides, guests) => ({
   const built = {};
   for (const scale of ["outpost", "hamlet", "village", "town"]) {
     for (const prosperity of ["struggling", "modest", "thriving"]) {
-      const inn = innOf(world.build(424242, "cozy-village", brief.validate(innBrief({ scale, prosperity }, 0), ctx)));
+      const w = world.build(424242, "cozy-village", brief.validate(innBrief({ scale, prosperity }, 0), ctx));
+      const inn = innOf(w);
       const label = `${scale}/${prosperity}`;
       built[label] = inn.beds.length;
       // Over the top of the range the wing stops being a wing: it falls through
       // to the open plan and the inn is a bunkhouse with a bar.
-      const guests = inn.rooms.filter((room) => !room.quarters);
+      const wing = w.zones[`${inn.id}u`];
+      const guests = wing.rooms.filter((room) => !room.quarters);
       assert.ok(guests.length > 0, `${label}: the inn keeps guest ROOMS`);
-      assert.equal(partitionTiles(inn).doors.length, inn.rooms.length, `${label}: a door on every room`);
+      for (const floor of [inn, wing]) {
+        assert.equal(partitionTiles(floor).doors.length, floor.rooms.length, `${label}: a door on every room`);
+      }
       // Under the bottom of it, rooms outnumber berths and one is a cupboard.
       assert.ok(inn.beds.length >= guests.length, `${label}: ${guests.length} guest rooms, ${inn.beds.length} berths`);
       assert.equal(
         inn.beds.length,
-        new Set(inn.beds.map((bed) => `${bed.x},${bed.y}`)).size,
+        new Set(inn.beds.map((bed) => `${bed.zoneId}:${bed.x},${bed.y}`)).size,
         `${label}: no berth is dealt twice`,
       );
     }
@@ -3632,16 +3727,19 @@ const innBrief = (overrides, guests) => ({
     const sim = new loadedPF.Sim(w);
     sim.clockMin = 23 * 60;
     sim.resolveSchedules();
-    const guests = inn.npcs.filter((npc) => npc.name.startsWith("T"));
+    // The building, both floors: the berths fill upstairs and whoever arrives
+    // after the last one is still down in the common room, which is what "no room
+    // left" has always meant.
+    const guests = underRoof(w, inn.id).filter(({ npc }) => npc.name.startsWith("T"));
     assert.equal(guests.length, 6, `seed ${seed}: every guest beds down at the inn (${guests.length})`);
     const taken = new Set();
     let inBed = 0;
-    for (const npc of guests) {
-      const tile = `${npc.x},${npc.y}`;
+    for (const { zone, npc } of guests) {
+      const tile = `${zone.id}:${npc.x},${npc.y}`;
       assert.ok(!taken.has(tile), `seed ${seed}: ${npc.name} stacked on tile ${tile}`);
       taken.add(tile);
-      assert.ok(loadedPF.schedule.standable(inn, npc.x, npc.y), `seed ${seed}: ${npc.name} stands somewhere legal`);
-      if (SLEEPS_ON.has(inn.object[inn.w * npc.y + npc.x])) inBed++;
+      assert.ok(loadedPF.schedule.standable(zone, npc.x, npc.y), `seed ${seed}: ${npc.name} stands somewhere legal`);
+      if (SLEEPS_ON.has(standingOn(zone, npc))) inBed++;
     }
     assert.equal(inBed, inn.beds.length, `seed ${seed}: every berth is claimed (${inBed} of ${inn.beds.length})`);
     assert.ok(inBed < guests.length, `seed ${seed}: and the overflow is genuinely bedless, in the common room`);
@@ -4155,36 +4253,39 @@ const bellwetherBrief = (overrides = {}) => ({
       checkWorld(w, sealed, `innkeep(${guests}) seed ${seed}`);
       const inn = findZone(w, "The Ploughshare");
       assert.ok(inn, `seed ${seed}: the inn compiled`);
-      // Non-vacuous both ways: there are berths AND there are quarters.
+      // Non-vacuous both ways: there are berths AND there are quarters. The two
+      // lists were always carved from different bands; with the wing upstairs
+      // (0.8.0 floors) they are on different FLOORS, so every key here carries
+      // the zone — a tile number alone would now match across a staircase.
       assert.ok(inn.beds.length >= 3, `seed ${seed}: the guest wing has berths (${inn.beds.length})`);
       assert.equal(inn.homeBeds.length, 2, `seed ${seed}: and the keeper's household has beds of its own`);
-      const berth = new Set(inn.beds.map((bed) => `${bed.x},${bed.y}`));
+      const key = (bed) => `${bed.zoneId}:${bed.x},${bed.y}`;
+      const berth = new Set(inn.beds.map(key));
       for (const bed of inn.homeBeds) {
-        assert.ok(
-          !berth.has(`${bed.x},${bed.y}`),
-          `seed ${seed}: the keeper's bed at ${bed.x},${bed.y} is also being rented out`,
-        );
+        assert.ok(!berth.has(key(bed)), `seed ${seed}: the keeper's bed at ${key(bed)} is also being rented out`);
       }
       // And in the handles: the keeper sleeps in the quarters, every guest in the
       // wing, nobody in anybody else's.
       const sim = new loadedPF.Sim(w);
       sim.clockMin = 23 * 60;
       sim.resolveSchedules();
-      const home = new Set(inn.homeBeds.map((bed) => `${bed.x},${bed.y}`));
+      const home = new Set(inn.homeBeds.map(key));
       for (const name of ["Bett", "Pip"]) {
         const npc = inn.npcs.find((n) => n.name === name);
-        assert.ok(npc, `seed ${seed}: ${name} sleeps at the inn they live in`);
-        assert.ok(home.has(`${npc.x},${npc.y}`), `seed ${seed}: ${name} is in their OWN bed, not a let room`);
+        assert.ok(npc, `seed ${seed}: ${name} sleeps at the inn they live in — downstairs, behind the tap room`);
+        assert.ok(home.has(`${inn.id}:${npc.x},${npc.y}`), `seed ${seed}: ${name} is in their OWN bed, not a let room`);
       }
-      for (const npc of inn.npcs.filter((n) => n.name.startsWith("T"))) {
+      const lodgers = underRoof(w, inn.id).filter(({ npc }) => npc.name.startsWith("T"));
+      assert.equal(lodgers.length, guests, `seed ${seed}: all ${guests} guests are somewhere in the inn`);
+      for (const { zone, npc } of lodgers) {
         assert.ok(
-          !home.has(`${npc.x},${npc.y}`),
+          !home.has(`${zone.id}:${npc.x},${npc.y}`),
           `seed ${seed}: guest ${npc.name} was put in the keeper's bed (${npc.x},${npc.y})`,
         );
         const handle = npc._sched.home;
         if (handle && handle.wander.x0 === handle.wander.x1 && handle.wander.y0 === handle.wander.y1) {
           assert.ok(
-            berth.has(`${handle.wander.x0},${handle.wander.y0}`),
+            berth.has(`${handle.zoneId}:${handle.wander.x0},${handle.wander.y0}`),
             `seed ${seed}: guest ${npc.name} was dealt a bed that is not a guest berth`,
           );
         }
@@ -4419,15 +4520,18 @@ const bellwetherBrief = (overrides = {}) => ({
         `${size} seed ${seed}: no place is dealt twice`,
       );
       // It is HERS: the owner's night handle is that bed, and it is not a berth.
-      const berth = new Set(inn.beds.map((bed) => `${bed.x},${bed.y}`));
+      // The quarters are downstairs and the let rooms are up (0.8.0 floors), so
+      // the keys carry a zone — bare tile numbers would now collide across the
+      // staircase and this case would read as a clash that is not one.
+      const berth = new Set(inn.beds.map((bed) => `${bed.zoneId}:${bed.x},${bed.y}`));
       const ownTile = `${own.beds[0].x},${own.beds[0].y}`;
-      assert.ok(!berth.has(ownTile), `${size} seed ${seed}: the keeper's own bed is also being let out`);
+      assert.ok(!berth.has(`${inn.id}:${ownTile}`), `${size} seed ${seed}: the keeper's own bed is also being let out`);
       const keeper = Object.values(w.zones)
         .flatMap((zone) => zone.npcs)
         .find((npc) => npc.name === "Keep");
       assert.equal(
-        `${keeper._sched.home.wander.x0},${keeper._sched.home.wander.y0}`,
-        ownTile,
+        `${keeper._sched.home.zoneId}:${keeper._sched.home.wander.x0},${keeper._sched.home.wander.y0}`,
+        `${inn.id}:${ownTile}`,
         `${size} seed ${seed}: the keeper is sent to her own room, not to a let one`,
       );
 
@@ -4552,6 +4656,433 @@ const bellwetherBrief = (overrides = {}) => ({
       }
     }
   }
+}
+
+// ── Floors: storeys, cellars and the bell tower (0.8.0) ──────────────────────
+// A ROOM is a partition inside a zone; a FLOOR is a zone of its own, joined by a
+// stair portal pair. The split is the whole design — a bedroom must never cost a
+// zone, and a floor buys one in exchange for reusing the portal, reachability,
+// save-restore and schedule machinery unchanged — so these cases test the two
+// halves separately: that a floor really is geometry the player can walk into and
+// out of, and that the GATE keeps the number of them down.
+
+const STAIR_TILES = new Set(["stairsUp", "stairsDown"]);
+/** Every stair tile in a zone, with the portal it fires. */
+const stairsIn = (zone) => {
+  const out = [];
+  for (let y = 0; y < zone.h; y++) {
+    for (let x = 0; x < zone.w; x++) {
+      if (!STAIR_TILES.has(zone.object[zone.w * y + x])) continue;
+      out.push({ x, y, tile: zone.object[zone.w * y + x], portal: zone.portals.find((p) => p.x === x && p.y === y) });
+    }
+  }
+  return out;
+};
+/** Walk the player until a portal fires, or give up. Driven through the real Sim
+ *  on purpose: a portal pair that never fires is exactly the bug a table read
+ *  cannot see. */
+const walkUntilCross = (sim, input) => {
+  for (let tick = 0; tick < 200; tick++) {
+    if (sim.step(1 / 60, input)?.zoneChanged) return sim.zoneId;
+  }
+  return null;
+};
+const playerTile = (sim) => `${Math.floor(sim.x / loadedPF.TILE)},${Math.floor(sim.y / loadedPF.TILE)}`;
+
+// 69. A BUILDING WITH AN UPPER FLOOR. The floor exists, it is a zone, it is
+// stamped out of the World Maps export, and the player can walk up the stairs and
+// back down them.
+{
+  const sealed = brief.validate(bedsBrief(), ctx);
+  for (const seed of [1, 3, 11, 424242]) {
+    const w = world.build(seed, "cozy-village", sealed);
+    checkWorld(w, sealed, `upper-floor seed ${seed}`);
+    const inn = findZone(w, "The Kettle");
+    assert.ok(inn, `seed ${seed}: the inn compiled`);
+    const up = w.zones[`${inn.id}u`];
+    assert.ok(up, `seed ${seed}: and grew a storey (${inn.id}u)`);
+    assert.equal(up.name, "The Kettle, upstairs", `seed ${seed}: named for the building under it`);
+    assert.equal(up.mapExport, false, `seed ${seed}: a floor is a room inside one location, never a row of its own`);
+    // Non-vacuous: the storey is where the guest rooms actually went.
+    assert.ok(up.beds.length >= 3, `seed ${seed}: the guest wing is up here (${up.beds.length} berths)`);
+    assert.ok(
+      inn.beds.length > 0 && inn.beds.every((bed) => bed.zoneId === up.id),
+      `seed ${seed}: and every berth the building offers names that floor`,
+    );
+
+    // The stairs are a MATCHED PAIR, in the tiles as well as in the portal table.
+    // A portal with no tile under it is an invisible trapdoor; a tile with no
+    // portal is a painted step that goes nowhere.
+    const below = stairsIn(inn).filter((step) => step.tile === "stairsUp");
+    assert.equal(below.length, 1, `seed ${seed}: one flight up out of the tap room (${below.length})`);
+    assert.equal(below[0].portal?.toZone, up.id, `seed ${seed}: and it is a portal to the storey`);
+    const above = stairsIn(up).filter((step) => step.tile === "stairsDown");
+    assert.equal(above.length, 1, `seed ${seed}: one flight back down (${above.length})`);
+    assert.equal(above[0].portal?.toZone, inn.id, `seed ${seed}: which lands in the building it came from`);
+    for (const zone of [inn, up]) {
+      for (const step of stairsIn(zone)) {
+        assert.ok(step.portal, `seed ${seed}: the step at ${zone.id} ${step.x},${step.y} fires nothing`);
+        assert.equal(zone.solid[zone.w * step.y + step.x], 0, `seed ${seed}: a step the player cannot stand on`);
+      }
+    }
+
+    // CLIMB IT. Stand on the tile inside the front door, walk west onto the step,
+    // and the Sim's own portal handling does the rest.
+    const sim = new loadedPF.Sim(w);
+    sim.teleport(inn.id, inn.spawn.x, inn.spawn.y);
+    assert.equal(walkUntilCross(sim, { left: true }), up.id, `seed ${seed}: walking west of the door goes upstairs`);
+    // The landing is not the stairhead: arriving on it would fire the portal
+    // again and bounce the player straight back down.
+    assert.notEqual(playerTile(sim), `${above[0].x},${above[0].y}`, `seed ${seed}: the player lands beside the step`);
+    assert.equal(playerTile(sim), `${up.spawn.x},${up.spawn.y}`, `seed ${seed}: on the storey's own landing`);
+    // Back down: the storey's step is directly south of the landing.
+    assert.equal(walkUntilCross(sim, { down: true }), inn.id, `seed ${seed}: and walking south comes back down`);
+    assert.equal(playerTile(sim), `${inn.spawn.x},${inn.spawn.y}`, `seed ${seed}: landing back beside the front door`);
+  }
+}
+
+// 70. A SLEEPER WHOSE BED IS UPSTAIRS IS UPSTAIRS AT NIGHT. Five under one roof
+// is a large household, so the bedrooms are a flight up — and the schedule
+// resolver needed no new code for it, because a floor is a zone and going to bed
+// is the cross-zone splice it always was. (NPCs TELEPORT across a daypart
+// boundary; pathing is deferred to roadmap 12, so a sleeper simply appears in
+// their room rather than climbing the stairs.)
+{
+  const sealed = brief.validate(houseBrief("Upfold", 5, "folk"), ctx);
+  for (const seed of [1, 3, 11, 424242]) {
+    const w = world.build(seed, "cozy-village", sealed);
+    checkWorld(w, sealed, `upstairs-sleeper seed ${seed}`);
+    const home = findZone(w, "Kin0's home");
+    const up = w.zones[`${home.id}u`];
+    assert.ok(up, `seed ${seed}: a five-person household sleeps upstairs`);
+    // Non-vacuous both ways: nothing to sleep on downstairs, everything up.
+    assert.equal(
+      home.object.filter((tile) => SLEEPS_ON.has(tile)).length,
+      0,
+      `seed ${seed}: there is nothing to sleep on downstairs`,
+    );
+    assert.ok(up.object.filter((tile) => SLEEPS_ON.has(tile)).length >= 5, `seed ${seed}: the beds are up here`);
+    // And the rows the bedrooms left behind are part of the room now rather than
+    // a hole in it: a house with a staircase has a bigger ground floor, not a
+    // blank slab where the wing used to be. Rows 2-4 are exactly the band
+    // layoutSleeping would have partitioned.
+    const bandFittings = [];
+    for (let y = 2; y <= 4; y++) {
+      // The shell's own side columns live in `object` too, so the scan stops
+      // inside them — a slice of whole rows would find the walls and pass on an
+      // empty room.
+      for (let x = 1; x <= home.w - 2; x++) if (home.object[home.w * y + x]) bandFittings.push(`${x},${y}`);
+    }
+    assert.ok(
+      bandFittings.length >= 4,
+      `seed ${seed}: the band the bedrooms vacated is furnished, not left empty (${bandFittings.length} tiles)`,
+    );
+
+    const sim = new loadedPF.Sim(w);
+    const names = ["Kin0", "Kin1", "Kin2", "Kin3", "Kin4"];
+    sim.clockMin = 23 * 60;
+    sim.resolveSchedules();
+    const taken = new Set();
+    for (const name of names) {
+      const npc = up.npcs.find((n) => n.name === name);
+      assert.ok(npc, `seed ${seed}: ${name} is upstairs at 23:00`);
+      assert.ok(SLEEPS_ON.has(standingOn(up, npc)), `seed ${seed}: ${name} is in a bed up there (${npc.x},${npc.y})`);
+      assert.ok(!taken.has(`${npc.x},${npc.y}`), `seed ${seed}: ${name} shares a berth`);
+      taken.add(`${npc.x},${npc.y}`);
+    }
+    // …and out of the bedrooms by day. Not merely "not upstairs": they are out in
+    // the settlement, which is where a resident's day handle has always sent them.
+    sim.clockMin = 12 * 60;
+    sim.resolveSchedules();
+    assert.equal(up.npcs.length, 0, `seed ${seed}: the bedrooms are empty by day (${up.npcs.length} still up)`);
+    for (const name of names) {
+      const found = Object.values(w.zones).find((zone) => zone.npcs.some((n) => n.name === name));
+      assert.ok(found, `seed ${seed}: ${name} is somewhere in the world by day`);
+      assert.notEqual(found.id, up.id, `seed ${seed}: ${name} is not still in bed at noon`);
+    }
+    // The round trip is repeatable: nobody is lost or duplicated by the splice.
+    sim.clockMin = 23 * 60;
+    sim.resolveSchedules();
+    for (const name of names) {
+      const copies = Object.values(w.zones).reduce((n, zone) => n + zone.npcs.filter((x) => x.name === name).length, 0);
+      assert.equal(copies, 1, `seed ${seed}: ${name} exists in exactly one zone after two crossings`);
+    }
+  }
+}
+
+// 70b. THE OTHER SIDE OF THE GATE. A cottage keeps its bedrooms on the ground
+// floor — which is the whole reason zone count does not run away, so it is
+// asserted rather than assumed.
+{
+  for (const size of [1, 2, 3]) {
+    const sealed = brief.validate(houseBrief(`Small${size}`, size, "folk"), ctx);
+    for (const seed of [1, 11, 424242]) {
+      const w = world.build(seed, "cozy-village", sealed);
+      const home = findZone(w, "Kin0's home");
+      assert.ok(home, `${size} seed ${seed}: the cottage compiled`);
+      assert.equal(w.zones[`${home.id}u`], undefined, `${size} seed ${seed}: a cottage of ${size} grows no storey`);
+      assert.equal(home.beds.length, size, `${size} seed ${seed}: and sleeps its people downstairs`);
+      assert.ok(
+        home.beds.every((bed) => bed.zoneId === home.id),
+        `${size} seed ${seed}: on this floor, in this zone`,
+      );
+    }
+  }
+  // FOUR is the line: two full bedrooms is where the band takes the whole north
+  // wall and the ground floor is corridor past it.
+  for (const seed of [1, 11, 424242]) {
+    const under = world.build(seed, "cozy-village", brief.validate(houseBrief("Threefold", 3, "folk"), ctx));
+    const over = world.build(seed, "cozy-village", brief.validate(houseBrief("Fourfold", 4, "folk"), ctx));
+    assert.equal(
+      under.zones[`${findZone(under, "Kin0's home").id}u`],
+      undefined,
+      `seed ${seed}: three keeps the ground floor`,
+    );
+    assert.ok(over.zones[`${findZone(over, "Kin0's home").id}u`], `seed ${seed}: four takes the stairs`);
+  }
+}
+
+// 71. CELLARS, where the rule says and nowhere else. The workshop and the
+// gathering always — both are buildings the whole settlement uses and the stock
+// has to go somewhere. A house on a draw seeded by PROSPERITY: a cellar is stored
+// surplus, so a struggling settlement digs none.
+const cellarBrief = (prosperity) => ({
+  scale: "town",
+  prosperity,
+  name: "Delve",
+  places: [
+    { kind: "workshop", name: "The Forge" },
+    { kind: "gathering", name: "The Kettle" },
+    { kind: "hall", name: "The Moot" },
+  ],
+  cast: [
+    { name: "Ada", role: "reeve", kind: "leader", tint: "blue", home: "Delve", household: 1 },
+    { name: "Perrin", role: "innkeep", kind: "host", tint: "orange", home: "The Kettle", household: 2 },
+    { name: "Bram", role: "smith", kind: "maker", tint: "green", home: "The Forge", household: 3 },
+    { name: "Cass", role: "cooper", kind: "folk", tint: "amber", home: "Delve", household: 4 },
+    { name: "Dell", role: "carter", kind: "folk", tint: "rose", home: "Delve", household: 5 },
+    { name: "Enna", role: "wright", kind: "folk", tint: "teal", home: "Delve", household: 6 },
+  ],
+});
+{
+  let thrivingHouseCellars = 0;
+  for (const prosperity of ["struggling", "modest", "thriving"]) {
+    const sealed = brief.validate(cellarBrief(prosperity), ctx);
+    for (const seed of [1, 3, 11, 424242]) {
+      const w = world.build(seed, "cozy-village", sealed);
+      checkWorld(w, sealed, `cellars(${prosperity}) seed ${seed}`);
+      const label = `${prosperity} seed ${seed}`;
+      const dug = (name) => {
+        const zone = findZone(w, name);
+        return zone ? !!w.zones[`${zone.id}b`] : null;
+      };
+      // ALWAYS, at every prosperity — including struggling, where no house has one.
+      assert.equal(dug("The Forge"), true, `${label}: the workshop always has an undercroft`);
+      assert.equal(dug("The Kettle"), true, `${label}: and the gathering always has a cellar`);
+      // NEVER: a hall is a duty station and nobody asked for a cellar under it.
+      assert.equal(dug("The Moot"), false, `${label}: the hall digs nothing`);
+      // Houses, by prosperity. Counted over the whole world so the case does not
+      // depend on which household won which lot.
+      const houses = Object.values(w.zones).filter((zone) => /^[hs]\d+$/.test(zone.id));
+      assert.ok(houses.length >= 2, `${label}: the fixture built houses to ask about (${houses.length})`);
+      const cellars = houses.filter((house) => w.zones[`${house.id}b`]).length;
+      if (prosperity === "struggling") {
+        assert.equal(cellars, 0, `${label}: a struggling settlement has no surplus to keep (${cellars} cellars)`);
+      }
+      if (prosperity === "thriving") thrivingHouseCellars += cellars;
+      // Whatever was dug came from the SEED and not from the clock: a rebuild of
+      // the same brief digs exactly the same cellars.
+      const again = world.build(seed, "cozy-village", sealed);
+      assert.deepEqual(
+        Object.keys(again.zones)
+          .filter((id) => id.endsWith("b"))
+          .sort(),
+        Object.keys(w.zones)
+          .filter((id) => id.endsWith("b"))
+          .sort(),
+        `${label}: the same cellars every rebuild`,
+      );
+    }
+  }
+  // Non-vacuous the other way: the prosperity draw really does fire somewhere, or
+  // "struggling digs none" would pass on a rule that never digs at all.
+  assert.ok(thrivingHouseCellars > 0, `a thriving town digs house cellars too (${thrivingHouseCellars})`);
+
+  // A cellar is STORES, and a room the player can walk about in rather than a
+  // named void: the floor exists today mostly for what building and resource
+  // management will put in it, but it has to be somewhere to put anything.
+  const w = world.build(424242, "cozy-village", brief.validate(cellarBrief("thriving"), ctx));
+  const forge = findZone(w, "The Forge");
+  const under = w.zones[`${forge.id}b`];
+  assert.equal(under.name, "The Forge cellar", "a cellar is named for the building over it");
+  assert.equal(under.mapExport, false, "and is never a map destination");
+  assert.ok(under.object.filter((tile) => tile === "shelf").length >= 4, "with stock down its walls");
+  assert.ok(under.object.includes("counter"), "and a bench, because a forge's undercroft is worked in");
+  const reached = floodFill(under, under.spawn);
+  assert.ok(reached.size > 20, `the cellar is a room, not a corridor (${reached.size} tiles from the stairhead)`);
+}
+
+// 72. THE BELL TOWER. The showcase: the player climbs the church. It is built by
+// the SAME sub-floor mechanism as a guest storey — same id derivation, same stair
+// pair, same export gate — and differs only in its footprint and what is in it,
+// which is exactly what the floor-furnisher table is for.
+{
+  const sealed = brief.validate(sanctuaryBrief(), ctx);
+  for (const seed of [1, 3, 424242]) {
+    const w = world.build(seed, "cozy-village", sealed);
+    checkWorld(w, sealed, `belfry seed ${seed}`);
+    const church = zoneNamed(w, "St. Ilde's");
+    assert.ok(church, `seed ${seed}: the church compiled`);
+    const tower = w.zones[`${church.id}u`];
+    assert.ok(tower, `seed ${seed}: with a bell tower over it`);
+    assert.equal(tower.name, "St. Ilde's bell tower", `seed ${seed}: named for the church`);
+    assert.equal(tower.mapExport, false, `seed ${seed}: a tower is part of the church, not a second destination`);
+    // Smaller than the nave — the one concession the mechanism made for it, and
+    // the reason the two flights are placed independently at either end.
+    assert.ok(tower.w < church.w && tower.h < church.h, `seed ${seed}: a tower is narrower than the church under it`);
+    // THE BELL, and it is solid: the climb is to stand with it, not walk through it.
+    const bells = [];
+    for (let y = 0; y < tower.h; y++) {
+      for (let x = 0; x < tower.w; x++) if (tower.object[tower.w * y + x] === "bell") bells.push({ x, y });
+    }
+    assert.equal(bells.length, 1, `seed ${seed}: one bell in the belfry (${bells.length})`);
+    assert.equal(tower.solid[tower.w * bells[0].y + bells[0].x], 1, `seed ${seed}: and it blocks`);
+    // CLIMBABLE, through the Sim: from the tile inside the church door, west onto
+    // the step, up the tower.
+    const sim = new loadedPF.Sim(w);
+    sim.teleport(church.id, church.spawn.x, church.spawn.y);
+    assert.equal(walkUntilCross(sim, { left: true }), tower.id, `seed ${seed}: the player can climb the tower`);
+    // And walk right round the bell once up there: it is a room, not a niche.
+    const round = floodFill(tower, tower.spawn);
+    for (const [dx, dy] of [
+      [0, -1],
+      [0, 1],
+      [-1, 0],
+      [1, 0],
+    ]) {
+      assert.ok(
+        round.has(`${bells[0].x + dx},${bells[0].y + dy}`),
+        `seed ${seed}: the bell is walled in on the ${dx},${dy} side`,
+      );
+    }
+    assert.equal(walkUntilCross(sim, { down: true }), church.id, `seed ${seed}: and climb back down into the nave`);
+    // The church keeps its nave: the tower took nothing from the floor below it.
+    assert.ok(church.object.includes("altar"), `seed ${seed}: the altar is still there`);
+    assert.equal(w.zones[`${church.id}b`], undefined, `seed ${seed}: and no crypt was dug — that is not the rule`);
+  }
+}
+
+// 73. DEPTH IS CAPPED AT ONE EACH WAY, and not by a guard that could be forgotten
+// — `h1uu` cannot be spelled, because only interiorRoom() mints floors and the
+// floors it mints never mint their own. Swept across the file's fixtures.
+{
+  const fixtures = [
+    ["hearthwick", brief.validate(bedsBrief(), ctx)],
+    ["inn", brief.validate(innBrief({ scale: "town", prosperity: "thriving" }, 6), ctx)],
+    ["sanctuary", brief.validate(sanctuaryBrief(), ctx)],
+    ["cellars", brief.validate(cellarBrief("thriving"), ctx)],
+    ["bunkhouse", brief.validate(bunkhouseBrief(5), ctx)],
+    ["six", brief.validate(houseBrief("Sixfold", 6, "folk"), ctx)],
+    ["bellwether", brief.validate(bellwetherBrief(), ctx)],
+    ["defaults", brief.defaults("cozy-village", 424242)],
+    ["colony", brief.defaults("sci-fi-colony", 424242)],
+  ];
+  let floorsSeen = 0;
+  let stairsSeen = 0;
+  for (const [label, sealed] of fixtures) {
+    for (const seed of [1, 3, 11, 424242]) {
+      const w = world.build(seed, "cozy-village", sealed);
+      for (const id of Object.keys(w.zones)) {
+        assert.ok(/^(z|h|s)\d+[ub]?$/.test(id), `${label} seed ${seed}: zone id "${id}" is more than one flight off`);
+        if (!/[ub]$/.test(id)) continue;
+        floorsSeen++;
+        assert.ok(w.zones[groundFloorId(id)], `${label} seed ${seed}: floor ${id} has no building under it`);
+        assert.equal(w.zones[id].mapExport, false, `${label} seed ${seed}: floor ${id} would claim a map row`);
+      }
+      // Every stair tile is a portal and every stair portal has a stair tile under
+      // it. This is the guard against a furnisher one day being laid over a step
+      // the shell claimed before it ran: the step would still teleport, invisibly,
+      // from under a table.
+      for (const zone of Object.values(w.zones)) {
+        for (const step of stairsIn(zone)) {
+          assert.ok(step.portal, `${label} seed ${seed}: ${zone.id} has a step at ${step.x},${step.y} firing nothing`);
+          stairsSeen++;
+        }
+        for (const portal of zone.portals) {
+          // The portals BETWEEN floors of one building — the stairs, and nothing
+          // else: a front door leads to another building's id entirely.
+          if (portal.toZone === zone.id || groundFloorId(portal.toZone) !== groundFloorId(zone.id)) continue;
+          assert.ok(
+            STAIR_TILES.has(zone.object[zone.w * portal.y + portal.x]),
+            `${label} seed ${seed}: ${zone.id} → ${portal.toZone} is a portal with no step painted on it`,
+          );
+        }
+      }
+    }
+  }
+  assert.ok(floorsSeen > 40, `the sweep actually visited floors (${floorsSeen})`);
+  assert.ok(stairsSeen > 80, `and steps (${stairsSeen})`);
+}
+
+// 74. NOBODY STANDS IN THE STAIRWELL. A stair is a portal, and standable()
+// already refuses portal tiles — the claim this release leans on rather than a
+// rule of its own, so it is checked against real casts at every daypart instead
+// of taken on trust.
+{
+  const fixtures = [
+    ["hearthwick", brief.validate(bedsBrief(), ctx)],
+    ["packed-inn", brief.validate(innBrief({ prosperity: "struggling" }, 6), ctx)],
+    ["cellars", brief.validate(cellarBrief("thriving"), ctx)],
+    ["bunkhouse", brief.validate(bunkhouseBrief(5), ctx)],
+    ["six", brief.validate(houseBrief("Sixfold", 6, "folk"), ctx)],
+  ];
+  let stood = 0;
+  let steppedOn = 0;
+  for (const [label, sealed] of fixtures) {
+    for (const seed of [1, 3, 11]) {
+      const w = world.build(seed, "cozy-village", sealed);
+      const sim = new loadedPF.Sim(w);
+      // Non-vacuous: the world being swept really does have stairs in it.
+      assert.ok(
+        Object.values(w.zones).some((zone) => stairsIn(zone).length),
+        `${label} seed ${seed}: the world has stairs to stand on`,
+      );
+      // THE MECHANISM, asked directly. A sweep of where the cast ended up passes
+      // whether the rule holds or the dice were merely kind — a stair is one tile
+      // in a room of a hundred and forty. So put the question to standable()
+      // itself, on every step in the world: it must refuse, because a step is a
+      // portal and that is the only thing keeping anybody off it.
+      for (const zone of Object.values(w.zones)) {
+        for (const step of stairsIn(zone)) {
+          assert.equal(
+            loadedPF.schedule.standable(zone, step.x, step.y),
+            false,
+            `${label} seed ${seed}: standable() would park an NPC on the step at ${zone.id} ${step.x},${step.y}`,
+          );
+          steppedOn++;
+        }
+      }
+      for (const min of [6 * 60, 12 * 60, 19 * 60, 23 * 60]) {
+        sim.clockMin = min;
+        sim.resolveSchedules();
+        for (const zone of Object.values(w.zones)) {
+          const steps = new Set(stairsIn(zone).map((step) => `${step.x},${step.y}`));
+          for (const npc of zone.npcs) {
+            const x = Math.round(npc.x);
+            const y = Math.round(npc.y);
+            assert.ok(!steps.has(`${x},${y}`), `${label} seed ${seed} @${min}: ${npc.name} stands on the stairs`);
+            assert.ok(
+              loadedPF.schedule.standable(zone, x, y),
+              `${label} seed ${seed} @${min}: ${npc.name} stands somewhere illegal in ${zone.id}`,
+            );
+            stood++;
+          }
+        }
+      }
+    }
+  }
+  assert.ok(stood > 400, `the sweep actually placed NPCs (${stood})`);
+  assert.ok(steppedOn > 60, `and actually asked about steps (${steppedOn})`);
 }
 
 console.log("brief validator + compiler: all cases passed");
