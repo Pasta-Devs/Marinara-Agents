@@ -902,6 +902,30 @@ async function main() {
               resolve();
             };
           });
+        if (request.method === "POST" && url.pathname.endsWith("/preflight")) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+            mutationIds?: string[];
+          };
+          const mutationIds = body.mutationIds ?? [];
+          return send(200, {
+            draftId: decodeURIComponent(url.pathname.split("/").at(-2)!),
+            selectedMutationIds: mutationIds,
+            readyMutationIds: mutationIds,
+            blockedMutationIds: [],
+            autoIncludedMutationIds: [],
+            rows: mutationIds.map((mutationId) => ({
+              mutationId,
+              targetId: "world_new_mobile",
+              disposition: "new",
+              status: "ready",
+              autoIncluded: false,
+              blockers: [],
+              conflicts: [],
+            })),
+          });
+        }
         if (request.method === "POST" && (url.pathname.endsWith("/accept") || url.pathname.endsWith("/skip"))) {
           const chunks: Buffer[] = [];
           for await (const chunk of request) chunks.push(Buffer.from(chunk));
@@ -1731,9 +1755,11 @@ async function main() {
         .check();
       failSecondReviewAccept = true;
       await page.getByRole("button", { name: "Accept eligible (2)" }).click();
+      await page.getByRole("button", { name: /^Apply preflighted \(/ }).click();
       await page.getByRole("button", { name: "Retry failed" }).waitFor();
       failSecondReviewAccept = false;
       await page.getByRole("button", { name: "Retry failed" }).click();
+      await page.getByRole("button", { name: /^Apply preflighted \(/ }).click();
       await page.waitForFunction(
         (mutationId) => !document.querySelector(`[data-ltm-review-mutation="${mutationId}"]`),
         reviewMutationIds.second,
@@ -1755,6 +1781,7 @@ async function main() {
         .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-control="review-select"]`)
         .check();
       await page.getByRole("button", { name: "Accept eligible (1)" }).click();
+      await page.getByRole("button", { name: /^Apply preflighted \(/ }).click();
       await page.waitForFunction(
         (mutationId) => !document.querySelector(`[data-ltm-review-mutation="${mutationId}"]`),
         reviewMutationIds.first,

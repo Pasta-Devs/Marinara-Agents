@@ -1446,6 +1446,9 @@ export default function ReviewQueue({
           messages,
           cascadeMutationLabels: [],
           savedMemoryIds: [],
+          failedMutationIds: [...failedMutationIds],
+          failedDraftIds: [],
+          completedMutationIds: [],
           blockedMutationIds: [...blockedMutationIds],
         });
       } finally {
