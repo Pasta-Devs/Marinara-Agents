@@ -123,7 +123,7 @@
         "version": "1.1.0",
         "description": "Tracks each roleplay character's clothing by body slot, held items, wounds, missing parts, bare slots, and species, then keeps that physical state available to the next response. Recommended for SOTA models: OpenAI GPT-5.5+, Claude Opus 4.8+, or Kimi K3+. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
-          "min": "2.4.4",
+          "min": "2.4.3",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -152,7 +152,7 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/beholder.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/beholder-1.1.0.zip",
-        "sha256": "d4ddabccece147ead0bebceb394df7073b322fe42aa6ae41e81f01b743e4f2ac",
+        "sha256": "e5d02999eda3ae3a98a685d24d981dbf5f6823e117baa93967958bc3e273bb9c",
         "bytes": 3061
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#beholder"
