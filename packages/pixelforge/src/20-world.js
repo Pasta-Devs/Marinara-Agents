@@ -449,7 +449,13 @@ PF.world = (() => {
      *  Bunks are decided HERE, from `room.sleepers` against what the wall run
      *  holds — how many bodies must fit this space, and nothing about whose they
      *  are. A guard barracks, an inn's crowded guest room and a house full of
-     *  orphans all get the same answer, because they are the same question. */
+     *  orphans all get the same answer, because they are the same question.
+     *
+     *  A room is therefore all singles or all bunks: the run rounds UP to whole
+     *  furniture, so a third sleeper buys a second bunk and leaves a berth spare
+     *  rather than wedging one single in beside one bunk. A spare berth reads as
+     *  ordinary life; furniture picked to hit an exact headcount reads as a
+     *  census. */
     bedroom(zone, rect, room) {
       const span = rect.x1 - rect.x0 + 1;
       const bunked = room.sleepers > bedsAlong(span);
@@ -499,13 +505,55 @@ PF.world = (() => {
   // How an interior that has to sleep people is arranged. `soft` is the
   // occupancy a room of this purpose is comfortable with (a household bedroom
   // sleeps a couple; an inn gives a guest a door of their own), `max` is what one
-  // will take at a push — a house's 1-2 beds per bedroom, an inn's 1-4. `spare`
-  // says the wing exists whether or not tonight's guests fill it: an inn with no
-  // guest room is not an inn, while a house builds only the bedrooms it needs.
+  // will take at a push — the wall run bunked, four either way. `spare` carves
+  // the whole wing whatever count it is handed, because an inn with no guest room
+  // is not an inn, while a house builds only the bedrooms it needs. That count is
+  // now a CAPACITY and never zero, so `spare` sits dormant with the per-room floor
+  // below it: both are what a wing widened past its berth budget would need.
+  //
+  // A BEDROOM TAKES A BUNK, for the same reason the dormitory always did: the
+  // wall run is the constraint and bunking doubles it. Capped at two singles, a
+  // bedroom could not hold a fifth body, so a household of five fell out of its
+  // own walls into an open dormitory — a family of five compiled to a barracks,
+  // which is the exact reading rooms were added to prevent.
   const SLEEP_PLANS = {
-    dwelling: { band: 3, span: 4, soft: 2, max: 2 },
+    dwelling: { band: 3, span: 4, soft: 2, max: 4 },
     gathering: { band: 3, span: 4, soft: 1, max: 4, spare: true },
   };
+
+  // ── What a communal building was BUILT for ──────────────────────────────────
+  // A FORMAL HOUSEHOLD adapts its bedding to its inhabitants; a COMMUNAL or
+  // INSTITUTIONAL building reflects what it was built FOR. Two different rules,
+  // and the asymmetry is the whole of it: a household's bedding follows its
+  // people, an institution's people follow its bedding.
+  //
+  // So the guest wing is not sized from however many drifters the brief happened
+  // to name. Sized that way the inn was never quiet and never full — a berth per
+  // guest and not one spare, every night, which is the one thing an inn is not
+  // for. It is sized from the two sealed axes that already say how much road
+  // passes the door and how much house was built to take it: `scale`, and
+  // `prosperity` a step either side of it. Both are folded enums, so the table is
+  // total by construction and every settlement of a size reads as that size.
+  //
+  // backgroundPopulation stays out of it deliberately. It is a free 0-500 the
+  // guidance tells the model is narrative texture for the map description, and
+  // letting it size real geometry would hang the building's shape on the least
+  // constrained number in the brief.
+  const GUEST_BERTHS = { outpost: 4, hamlet: 5, village: 6, town: 9 };
+  const BERTH_PROSPERITY = { struggling: -1, modest: 0, thriving: 1 };
+  /** How many guests the settlement's gathering was built to sleep.
+   *
+   *  The table is written to stay inside what the wing can physically be: never
+   *  under the rooms the band carves (three today — a guest room with no bed in
+   *  it is a cupboard), never over what those rooms hold bunked (twelve), which
+   *  is where the wing would fall through to `dormitory()` and the inn would
+   *  become a bunkhouse with a bar. Both bounds are properties of THIS table,
+   *  asserted in the harness rather than clamped here, so widening the gathering
+   *  has to come back and re-read the numbers instead of quietly re-shaping
+   *  them. */
+  const guestBerths = (brief) =>
+    (GUEST_BERTHS[brief.scale] ?? GUEST_BERTHS.village) + (BERTH_PROSPERITY[brief.prosperity] ?? 0);
+
   /** Split `sleepers` across `count` rooms as evenly as the room order allows. */
   const share = (sleepers, count) =>
     Array.from({ length: count }, (_, i) => Math.floor(sleepers / count) + (i < sleepers % count ? 1 : 0));
@@ -516,7 +564,13 @@ PF.world = (() => {
    *  COMMUNAL IS INFERRED, never declared. A brief says who lives somewhere, not
    *  that a house is a dormitory, so the arithmetic answers it: once the sleepers
    *  outrun what the band's rooms can hold at their `max`, partitioning them is a
-   *  lie about the building and the whole interior becomes the sleeping room. */
+   *  lie about the building and the whole interior becomes the sleeping room.
+   *
+   *  Bunked bedrooms put that line at NINE in a dwelling — two rooms of four —
+   *  and nine is past CAPS.household, so no single household can reach it. Only
+   *  the compiler's own over-subscription merge does, and a roof carrying two or
+   *  three whole households IS a bunkhouse. Which is the point: the open plan has
+   *  to mean an orphanage, a barracks or a doss-house, never a big family. */
   function layoutSleeping(zone, w, h, kind, sleepers) {
     const plan = SLEEP_PLANS[kind];
     const area = { x0: 1, y0: 2, x1: w - 2, y1: 1 + plan.band };
@@ -534,8 +588,10 @@ PF.world = (() => {
       share(sleepers, count).map((taken) => ({
         purpose: "bedroom",
         span: plan.span,
-        // A spare room still gets its bed — an empty guest room with no bed in
-        // it is a cupboard, and the next guest has to have somewhere to go.
+        // A spare room still gets its bed — a guest room with no bed in it is a
+        // cupboard. The berth table sits at or above the room count, so this no
+        // longer fires on any settlement; it is the floor that stops a wing
+        // widened past its budget from carving furniture-less rooms.
         sleepers: plan.spare ? Math.max(1, taken) : taken,
       })),
     );
@@ -544,7 +600,8 @@ PF.world = (() => {
 
   /** No partitions: the sleepers outnumber what private rooms hold, so the
    *  interior IS the sleeping room — places along the rows farthest from the
-   *  door, out in the open, as they were before rooms existed.
+   *  door, out in the open, as they were before rooms existed. Getting here takes
+   *  nine under one roof, which is an institution and not a household.
    *
    *  BUNKED, and for the same spatial reason the partition was refused: getting
    *  here means the bodies already outran the rooms. Nothing on this path asks
@@ -629,9 +686,9 @@ PF.world = (() => {
     dwelling(z, w, h, options) {
       // The beds ARE the feature: one per resident, 1x1 and non-solid, so a night
       // visit finds the household asleep in them instead of milling on a doorstep.
-      // Behind BEDROOM DOORS once the household is small enough to have them —
-      // six people in one open room read as a barracks, which is what a household
-      // becomes only when it genuinely outgrows its bedrooms.
+      // Behind BEDROOM DOORS, bunked once a room has to take more than two — a
+      // household at CAPS.household is a big family and keeps its walls, and the
+      // open plan is reserved for the roofs that are genuinely institutional.
       const sleeping = layoutSleeping(z, w, h, "dwelling", options.sleepers ?? 0);
       // A living half under the sleeping wall, so the room is not only a dormitory
       // — and so a dwelling with no sleepers of its own is still a furnished room.
@@ -733,10 +790,6 @@ PF.world = (() => {
           .map((m) => m.household),
       ),
     ].sort((a, b) => a - b);
-    // Everyone who beds down at the settlement's gathering — the same predicate
-    // the cast loop hands guest beds out under, so the inn's guest wing and the
-    // guests it is built for can never disagree about how many there are.
-    const transients = brief.cast.filter((member) => (member.standing ?? "resident") === "transient");
     const specials = [];
     const seenSpecial = new Set();
     for (const member of brief.cast) {
@@ -899,11 +952,11 @@ PF.world = (() => {
       // Same policy as an unanchorable feature: dropped, never sealed.
       const facade = buildings.find((b) => b.boundPlace === place);
       if (!facade) continue;
-      // Guest rooms are sized to the guests the brief actually brought: every
-      // transient tries for a bed here (see the cast loop). Counted before the
-      // room is built because the interiors compile ahead of the cast — the
-      // brief is the one thing available to both.
-      const zone = interiorRoom(id, place.name, place.kind, { sleepers: transients.length });
+      // Guest rooms are sized to what the house was BUILT for and not to
+      // tonight's guest list (see GUEST_BERTHS), so the wing is the same wing on
+      // a quiet night as on a full one and the transients the brief did bring
+      // compete for berths that were already there.
+      const zone = interiorRoom(id, place.name, place.kind, { sleepers: guestBerths(brief) });
       zone.flavor = place.flavor;
       zones[id] = zone;
       linkInterior(v, zone, facade.door, `Enter ${place.name}`);
@@ -1206,9 +1259,10 @@ PF.world = (() => {
         wander = plazaBox();
       }
       // Transients bed down at the inn when the settlement has one — in one of
-      // its guest beds, handed out in cast order. The wing is sized to them, so
-      // running out means the guest rooms are full to their bunks; sharing the
-      // common-room box then is a fair reading of "no room left".
+      // its guest beds, handed out in cast order. The wing is sized to the
+      // settlement, not to them, so a quiet night leaves berths standing empty
+      // and a busy one runs the inn out: whoever arrives after the last berth
+      // shares the common-room box, which is what "no room left" has always meant.
       if (standing === "transient" && gatheringZoneId && zones[gatheringZoneId]) {
         const guest = guestBeds.shift();
         home = {
