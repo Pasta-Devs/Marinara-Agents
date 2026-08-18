@@ -365,6 +365,10 @@ assert.match(reviewQueue, /textExceedsLimit/u);
 assert.equal(locale["ui.longTermMemory.reviewqueue.retryFailed"], "Retry failed");
 assert.equal(locale["ui.longTermMemory.reviewqueue.reviewFailed"], "Review failed");
 assert.equal(locale["ui.longTermMemory.reviewqueue.charactersRemaining"], "{{count}} characters remaining");
+assert.match(reviewQueue, /preflight/u);
+assert.match(reviewQueue, /data-ltm-review-preflight/u);
+assert.match(reviewQueue, /data-ltm-review-conflicts/u);
+assert.match(reviewQueue, /preflightBlocked/u);
 assert.match(locale["ui.longTermMemory.sourceoperation.deleteDetachment"], /detached/u);
 
 process.stdout.write(

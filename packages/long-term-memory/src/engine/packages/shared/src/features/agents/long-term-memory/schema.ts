@@ -2257,6 +2257,48 @@ export const ltmDraftReviewResponseSchema = z
   })
   .strict();
 
+export const ltmDraftPreflightRequestSchema = z
+  .object({
+    mutationIds: z
+      .array(z.string().uuid())
+      .min(1)
+      .max(1_000)
+      .refine((ids) => new Set(ids).size === ids.length, "Mutation IDs must be unique."),
+    editedMutations: z.array(ltmDraftMutationSchema).max(1_000).optional(),
+    bulk: z.boolean().default(false),
+  })
+  .strict();
+
+export const ltmDraftPreflightBlockerSchema = z
+  .object({
+    code: z.string().min(1).max(120),
+    message: z.string().min(1).max(2_000),
+  })
+  .strict();
+
+export const ltmDraftPreflightRowSchema = z
+  .object({
+    mutationId: z.string().uuid(),
+    targetId: ltmNoteIdSchema,
+    disposition: ltmMutationDispositionSchema,
+    status: z.enum(["ready", "blocked"]),
+    autoIncluded: z.boolean(),
+    blockers: z.array(ltmDraftPreflightBlockerSchema).max(20),
+    conflicts: z.array(ltmConflictSchema).max(250),
+  })
+  .strict();
+
+export const ltmDraftPreflightResponseSchema = z
+  .object({
+    draftId: z.string().uuid(),
+    selectedMutationIds: z.array(z.string().uuid()).max(1_000),
+    readyMutationIds: z.array(z.string().uuid()).max(1_000),
+    blockedMutationIds: z.array(z.string().uuid()).max(1_000),
+    autoIncludedMutationIds: z.array(z.string().uuid()).max(1_000),
+    rows: z.array(ltmDraftPreflightRowSchema).max(1_000),
+  })
+  .strict();
+
 export const ltmRejectedSuggestionsResponseSchema = z
   .object({
     suggestions: z.array(ltmRejectedSuggestionSchema).max(10_000),
@@ -2788,6 +2830,10 @@ export type LtmDraftReviewTarget = z.infer<typeof ltmDraftReviewTargetSchema>;
 export type LtmDraftReviewDraft = z.infer<typeof ltmDraftReviewDraftSchema>;
 export type LtmDraftReviewSource = z.infer<typeof ltmDraftReviewSourceSchema>;
 export type LtmDraftReviewResponse = z.infer<typeof ltmDraftReviewResponseSchema>;
+export type LtmDraftPreflightRequest = z.infer<typeof ltmDraftPreflightRequestSchema>;
+export type LtmDraftPreflightBlocker = z.infer<typeof ltmDraftPreflightBlockerSchema>;
+export type LtmDraftPreflightRow = z.infer<typeof ltmDraftPreflightRowSchema>;
+export type LtmDraftPreflightResponse = z.infer<typeof ltmDraftPreflightResponseSchema>;
 export type LtmRejectedSuggestionsResponse = z.infer<typeof ltmRejectedSuggestionsResponseSchema>;
 export type LtmExtractSourceNoteRequest = z.infer<typeof ltmExtractSourceNoteRequestSchema>;
 export type LtmExtractSourceNoteResponse = z.infer<typeof ltmExtractSourceNoteResponseSchema>;

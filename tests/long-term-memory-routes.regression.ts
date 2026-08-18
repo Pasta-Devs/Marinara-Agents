@@ -3203,6 +3203,56 @@ async function main() {
       review.json().sources[0]?.targets.some((target: any) => target.noteId === "world_eastern_gate"),
       true,
     );
+    const preflight = await app.inject({
+      method: "POST",
+      url: `/api/long-term-memory/drafts/${draft.id}/preflight`,
+      headers,
+      payload: { mutationIds: [mutationId], bulk: false },
+    });
+    assert.equal(preflight.statusCode, 200, preflight.body);
+    assert.deepEqual(preflight.json().blockedMutationIds, []);
+    assert.deepEqual(preflight.json().readyMutationIds, [eventMutationId, mutationId]);
+    assert.equal(preflight.json().rows.find((row: any) => row.mutationId === mutationId).status, "ready");
+    const invalidPreflight = await app.inject({
+      method: "POST",
+      url: `/api/long-term-memory/drafts/${draft.id}/preflight`,
+      headers,
+      payload: { mutationIds: ["10000000-0000-4000-8000-000000000099"] },
+    });
+    assert.equal(invalidPreflight.statusCode, 409, invalidPreflight.body);
+    assert.equal(invalidPreflight.json().code, "ltm_draft_mutation_missing");
+    const blockedMutationId = "10000000-0000-4000-8000-000000000003";
+    const blockedDraft = await storageService.drafts.createDraft({
+      source: { sourceNoteId: "source_route_review", chatId: "chat-a" },
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      modes: ["roleplay"],
+      response: {
+        summary: "Missing target preflight",
+        mutations: [
+          {
+            id: blockedMutationId,
+            claimKind: "change",
+            kind: "add_link",
+            risk: "medium",
+            confidence: 0.8,
+            summary: "Link to missing memory",
+            evidence: ["source_note:source_route_review"],
+            noteId: "world_eastern_gate",
+            link: { target: "world_missing_target", relation: "related_to" },
+          },
+        ],
+      },
+    });
+    const blockedPreflight = await app.inject({
+      method: "POST",
+      url: `/api/long-term-memory/drafts/${blockedDraft.id}/preflight`,
+      headers,
+      payload: { mutationIds: [blockedMutationId] },
+    });
+    assert.equal(blockedPreflight.statusCode, 200, blockedPreflight.body);
+    assert.deepEqual(blockedPreflight.json().blockedMutationIds, [blockedMutationId]);
+    assert.equal(blockedPreflight.json().rows[0].status, "blocked");
+    assert.equal(blockedPreflight.json().rows[0].blockers[0].code, "preflight_blocked");
     assert.equal(
       (
         await app.inject({

@@ -3,14 +3,15 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronRight, Loader2, X } from "lucide-react";
 import type {
   LtmDraftMutation,
-  type LtmDraftReviewDraft,
-  type LtmDraftReviewMutation,
-  type LtmDraftReviewResponse,
-  type LtmExtractionDropReason,
-  type LtmImportance,
-  type LtmNote,
-  type LtmRejectedSuggestion,
-  type LtmRejectedSuggestionsResponse,
+  LtmDraftPreflightResponse,
+  LtmDraftReviewDraft,
+  LtmDraftReviewMutation,
+  LtmDraftReviewResponse,
+  LtmExtractionDropReason,
+  LtmImportance,
+  LtmNote,
+  LtmRejectedSuggestion,
+  LtmRejectedSuggestionsResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { invalidateLtmQueries, queryKeys, request, requestAllNotes } from "./api";
 import { humanizeLabel, labelKeys, localizedLabel } from "./display-labels";
@@ -38,6 +39,8 @@ type ApplyDraftResponse = {
   indexRebuild: { status: "not_requested" | "succeeded" } | { status: "failed"; error: string };
 };
 
+type PreflightRow = LtmDraftPreflightResponse["rows"][number];
+
 type SkipDraftResponse = {
   mutationIds: string[];
 };
@@ -55,6 +58,7 @@ type BatchResult = {
   failedMutationIds: string[];
   failedDraftIds: string[];
   completedMutationIds: string[];
+  blockedMutationIds: string[];
 };
 
 type PersistedReviewState = {
@@ -986,6 +990,7 @@ export default function ReviewQueue({
   const [running, setRunning] = useState<"accept" | "skip" | null>(null);
   const [dismissingId, setDismissingId] = useState<string | null>(null);
   const [result, setResult] = useState<BatchResult | null>(null);
+  const [preflightRows, setPreflightRows] = useState<Map<string, PreflightRow>>(new Map());
   const [deleteSuggestionError, setDeleteSuggestionError] = useState("");
   const [extractingSourceId, setExtractingSourceId] = useState<string | null>(null);
   const [extractionMessage, setExtractionMessage] = useState<{
@@ -1009,6 +1014,7 @@ export default function ReviewQueue({
     setResult(null);
     setReviewStateHydrated(null);
     setReviewStateMessage(null);
+    setPreflightRows(new Map());
     setDetailsOpen(false);
     setExpandedMutationIds(new Set());
   }, [props.chatId]);
@@ -1019,6 +1025,7 @@ export default function ReviewQueue({
     );
     setDetailsOpen(false);
     setExpandedMutationIds(new Set());
+    setPreflightRows(new Map());
   }, [effectiveSourceId, selectedReviewSource]);
   useEffect(() => {
     setDetailsOpen(false);
@@ -1263,6 +1270,12 @@ export default function ReviewQueue({
       else updated.set(original.id, next);
       return updated;
     });
+    setPreflightRows((current) => {
+      if (!current.has(original.id)) return current;
+      const nextRows = new Map(current);
+      nextRows.delete(original.id);
+      return nextRows;
+    });
   };
 
   const invalidClosureEditIds = (applicableRows: readonly ReviewRow[], allRows: readonly ReviewRow[] = rows) => {
@@ -1321,6 +1334,7 @@ export default function ReviewQueue({
         failedMutationIds: invalidEditIds,
         failedDraftIds: [...new Set(applicableRows.map((row) => row.draftId))],
         completedMutationIds: [],
+        blockedMutationIds: [],
       });
       return;
     }
@@ -1334,6 +1348,8 @@ export default function ReviewQueue({
     const indexRebuildFailures: string[] = [];
     const messages: string[] = [];
     const cascadeMutationLabels = new Set<string>();
+    const blockedMutationIds = new Set<string>();
+    const nextPreflightRows = new Map<string, PreflightRow>();
     try {
       for (const [draftId, draftRows] of groupByDraft(applicableRows)) {
         const mutationIds = draftRows.map((row) => row.mutation.id);
@@ -1347,9 +1363,20 @@ export default function ReviewQueue({
               }));
             const acceptedIds = acceptedMutationIds(draftRows, mutationIds);
             const editedMutations = [...editedById].filter(([id]) => acceptedIds.has(id)).map(([, edited]) => edited);
-            const response = await request<ApplyDraftResponse>(`/drafts/${draftId}/accept`, "POST", {
+            const preflight = await request<LtmDraftPreflightResponse>(`/drafts/${draftId}/preflight`, "POST", {
               mutationIds: [...acceptedIds],
               ...(editedMutations.length ? { editedMutations } : {}),
+              bulk: acceptedIds.size > 1,
+            });
+            preflight.rows.forEach((row) => nextPreflightRows.set(row.mutationId, row));
+            preflight.blockedMutationIds.forEach((id) => blockedMutationIds.add(id));
+            const readyIds = new Set(preflight.readyMutationIds);
+            if (!readyIds.size) continue;
+            const response = await request<ApplyDraftResponse>(`/drafts/${draftId}/accept`, "POST", {
+              mutationIds: [...readyIds],
+              ...(editedMutations.length
+                ? { editedMutations: editedMutations.filter((mutation) => readyIds.has(mutation.id)) }
+                : {}),
             });
             const applied = new Set(response.appliedMutationIds);
             const skipped = new Set(response.skippedMutationIds);
@@ -1402,6 +1429,7 @@ export default function ReviewQueue({
         return next;
       });
       setReviewedIds((current) => new Set([...current, ...completedIds]));
+      setPreflightRows(nextPreflightRows);
       setResult({
         action: action === "accept" ? "accepted" : "skipped",
         completed: completedIds.size,
@@ -1425,6 +1453,7 @@ export default function ReviewQueue({
                 ),
               ]
             : [],
+        blockedMutationIds: [...blockedMutationIds],
       });
       if (completedIds.size) {
         await invalidateLtmQueries(queryClient, [
@@ -1523,6 +1552,7 @@ export default function ReviewQueue({
         failedMutationIds: [],
         failedDraftIds: [],
         completedMutationIds: [],
+        blockedMutationIds: [],
       });
     } finally {
       setDismissingId(null);
@@ -1629,6 +1659,8 @@ export default function ReviewQueue({
     const valid = selectedEditIsValid(mutation);
     const previewChanges = hideProjection ? [] : row.changes;
     const expanded = expandedMutationIds.has(row.mutation.id);
+    const preflight = preflightRows.get(row.mutation.id);
+    const preflightBlocked = preflight?.status === "blocked";
     const dependencyCount = dependencyCounts.get(row.mutation.id) ?? 0;
     const mutationLabel = localizeUi(mutationLabels[mutation.kind]);
     const dispositionLabel = localizeUi(dispositionLabels[row.disposition]);
@@ -1761,7 +1793,7 @@ export default function ReviewQueue({
               iconSize="1rem"
               className="mari-editor-action--primary !h-11 !min-h-11 !w-11 !min-w-11"
               style={{ height: 44, minHeight: 44, width: 44, minWidth: 44 }}
-              disabled={!eligibleIds.has(row.mutation.id) || !valid || running !== null}
+              disabled={!eligibleIds.has(row.mutation.id) || !valid || preflightBlocked || running !== null}
               onClick={() => void runBatch("accept", [row])}
             />
             <IconButton
@@ -1842,6 +1874,51 @@ export default function ReviewQueue({
                 ))}
               </div>
             ) : null}
+            {preflight ? (
+              <div
+                data-ltm-review-preflight
+                role={preflightBlocked ? "alert" : "status"}
+                className={`mari-editor-panel mari-editor-panel--soft space-y-2 p-3 text-xs ${
+                  preflightBlocked ? "border-[var(--destructive)]/35 text-[var(--destructive)]" : ""
+                }`}
+              >
+                <p className="font-semibold">
+                  {preflightBlocked
+                    ? localizeUi("ui.longTermMemory.reviewqueue.preflightBlocked")
+                    : localizeUi("ui.longTermMemory.reviewqueue.preflightReady")}
+                </p>
+                {preflight.blockers.map((blocker) => (
+                  <p key={`${blocker.code}-${blocker.message}`}>
+                    {humanizeLabel(blocker.code)}: {humanizeText(blocker.message)}
+                  </p>
+                ))}
+                {preflight.conflicts.length ? (
+                  <details data-ltm-review-conflicts>
+                    <summary className="cursor-pointer font-medium">
+                      {localizeUi("ui.longTermMemory.reviewqueue.conflictsFound", {
+                        count: preflight.conflicts.length,
+                      })}
+                    </summary>
+                    <div className="mt-2 space-y-2">
+                      {preflight.conflicts.map((conflict, index) => (
+                        <div key={`${conflict.field}-${index}`} className="space-y-1">
+                          <p className="font-medium">{humanizeLabel(conflict.field)}</p>
+                          <p>
+                            {localizeUi("ui.longTermMemory.reviewqueue.existingValue", { value: conflict.existing })}
+                          </p>
+                          <p>
+                            {localizeUi("ui.longTermMemory.reviewqueue.proposedValue", { value: conflict.proposed })}
+                          </p>
+                          <p>
+                            {localizeUi("ui.longTermMemory.reviewqueue.conflictPolicy", { value: conflict.policy })}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                ) : null}
+              </div>
+            ) : null}
             {hideProjection ? (
               <p data-ltm-review-preview-stale role="status" className="text-xs text-[var(--muted-foreground)]">
                 {localizeUi("ui.longTermMemory.reviewqueue.projectionPreviewIsStaleBecauseThisTargetHasEdited")}
@@ -1917,7 +1994,13 @@ export default function ReviewQueue({
         </StatusSurface>
       ) : null}
       {result ? (
-        <StatusSurface tone={result.failed || result.indexRebuildFailures.length ? "danger" : "success"}>
+        <StatusSurface
+          tone={
+            result.failed || result.blockedMutationIds.length || result.indexRebuildFailures.length
+              ? "danger"
+              : "success"
+          }
+        >
           {localizeUi("ui.longTermMemory.reviewqueue.batchResultSummary", {
             action:
               result.action === "accepted"
@@ -1930,6 +2013,11 @@ export default function ReviewQueue({
                 : localizeUi("ui.longTermMemory.reviewqueue.mutations"),
             failed: result.failed,
           })}
+          {result.blockedMutationIds.length
+            ? localizeUi("ui.longTermMemory.reviewqueue.blockedMutations", {
+                count: result.blockedMutationIds.length,
+              })
+            : ""}
           {result.remaining
             ? localizeUi("ui.longTermMemory.reviewqueue.otherMutationsPending", {
                 count: result.remaining,

@@ -3,8 +3,8 @@ import {
   isLtmSourceLikeNote,
   ltmDraftMutationSchema,
   type LtmDraftMutation,
+  type LtmDraftPreflightResponse,
   type LtmExtractionDraft,
-  type LtmNote,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { recordLtmDebugEvent, withLtmDebugOperation } from "./debug-log.js";
 import {
@@ -75,6 +75,10 @@ function applyEdits(mutations: LtmDraftMutation[], edits: NonNullable<ApplyLtmDr
     edited.set(edit.id, parsed.data);
   }
   return mutations.map((mutation) => edited.get(mutation.id) ?? mutation);
+}
+
+function mutationTargetId(mutation: LtmDraftMutation) {
+  return mutation.kind === "create_note" ? mutation.note.id : mutation.noteId;
 }
 
 async function assertFresh(storage: LongTermMemoryStorage, draft: LtmExtractionDraft) {
@@ -158,6 +162,15 @@ async function preflight(storage: LongTermMemoryStorage, draft: LtmExtractionDra
           `Long-term memory draft cannot merge scoped create ${mutation.note.id} into an existing note from another scope.`,
         );
     }
+  const pendingConflicts = mutations.flatMap((mutation) => {
+    const note = mutation.kind === "create_note" ? mutation.note : existing.get(mutation.noteId);
+    return (note?.conflicts ?? []).filter((conflict) => conflict.resolution === "pending");
+  });
+  if (pendingConflicts.length)
+    throw new LtmDraftProjectionError(
+      "This change has unresolved conflicts. Choose a resolution before applying it.",
+      "unresolved_conflict",
+    );
   const baseNotes = new Map(existing);
   const projected = projectLtmDraftOntoNotes({
     notes: baseNotes,
@@ -191,6 +204,151 @@ async function preflight(storage: LongTermMemoryStorage, draft: LtmExtractionDra
       throw new Error(`Long-term memory ${note.id} must link to a timeline event grounded in the same source.`);
     }
   }
+  return projected;
+}
+
+export async function preflightLongTermMemoryDraft(
+  id: string,
+  options: {
+    root?: string;
+    mutationIds: string[];
+    editedMutations?: Array<{ id: string } & Record<string, unknown>>;
+    bulk?: boolean;
+  },
+): Promise<LtmDraftPreflightResponse> {
+  const store = new LongTermMemoryDraftStore(options.root);
+  const draft = await store.getDraft(id);
+  if (!draft) throw new Error(`Long-term memory draft not found: ${id}`);
+  if (draft.status !== "pending")
+    throw new LtmDraftApplyError(`Long-term memory draft is not pending: ${id}`, 409, "ltm_draft_not_pending");
+  const storage = new LongTermMemoryStorage(options.root);
+  await assertFresh(storage, draft);
+  const selectedIds = new Set(options.mutationIds);
+  const unknown = options.mutationIds.filter(
+    (mutationId) => !draft.mutations.some((mutation) => mutation.id === mutationId),
+  );
+  if (unknown.length)
+    throw new LtmDraftApplyError(
+      `Long-term memory draft mutation not found: ${unknown.join(", ")}`,
+      409,
+      "ltm_draft_mutation_missing",
+    );
+  const previouslyApplied = new Set(draft.appliedMutationIds ?? []);
+  const edited = applyEdits(draft.mutations, options.editedMutations ?? []);
+  const mutations = edited.filter((mutation) => selectedIds.has(mutation.id) && !previouslyApplied.has(mutation.id));
+  if (!mutations.length) throw new Error("Long-term memory draft has no pending mutations selected for preflight.");
+
+  const blockers = new Map<string, { code: string; message: string }[]>();
+  const addBlocker = (mutationIds: string[], error: unknown) => {
+    const message = error instanceof Error ? error.message : "Long-term memory preflight failed.";
+    const code = error instanceof LtmDraftProjectionError ? error.code : "preflight_blocked";
+    for (const mutationId of mutationIds)
+      blockers.set(mutationId, [...(blockers.get(mutationId) ?? []), { code, message }]);
+  };
+
+  const selected = [...mutations];
+  const targetIds = new Set(
+    selected.flatMap((mutation) => (mutation.kind === "create_note" ? [mutation.note.id] : [mutation.noteId])),
+  );
+  const eventCreateByNoteId = new Map(
+    edited.flatMap((mutation) =>
+      mutation.kind === "create_note" && mutation.note.type === "timeline_event"
+        ? [[mutation.note.id, mutation] as const]
+        : [],
+    ),
+  );
+  let preflightMutations = [...selected];
+  let expanded = true;
+  while (expanded) {
+    expanded = false;
+    const selectedNoteIds = new Set(preflightMutations.map((mutation) => mutationTargetId(mutation)));
+    const changedNoteIds = new Set(
+      preflightMutations
+        .filter((mutation) => mutation.claimKind === "change")
+        .map((mutation) => mutationTargetId(mutation)),
+    );
+    const dependencies = edited.filter((mutation) => {
+      if (preflightMutations.some((item) => item.id === mutation.id)) return false;
+      if (mutation.kind === "create_note" && selectedNoteIds.has(mutation.note.id)) return true;
+      if (
+        mutation.kind === "add_link" &&
+        changedNoteIds.has(mutation.noteId) &&
+        eventCreateByNoteId.has(mutation.link.target)
+      )
+        return true;
+      return preflightMutations.some((item) => {
+        const links = item.kind === "create_note" ? item.note.links : item.kind === "add_link" ? [item.link] : [];
+        return links.some((link) => eventCreateByNoteId.has(link.target) && mutationTargetId(mutation) === link.target);
+      });
+    });
+    if (dependencies.length) {
+      preflightMutations = [...dependencies, ...preflightMutations];
+      expanded = true;
+    }
+  }
+  const autoIncludedIds = preflightMutations
+    .filter((mutation) => !selectedIds.has(mutation.id))
+    .map((mutation) => mutation.id);
+  const bulkApply = options.bulk || preflightMutations.length > 1;
+  const projectionRows = new Map<string, { disposition: "new" | "merge" | "rewrite" }>();
+  try {
+    const projection = await preflight(storage, draft, preflightMutations);
+    for (const item of projection.projections)
+      for (const row of item.mutations) projectionRows.set(row.mutationId, row);
+  } catch (error) {
+    for (const mutation of preflightMutations) {
+      try {
+        const projection = await preflight(storage, draft, [mutation]);
+        for (const item of projection.projections)
+          for (const row of item.mutations) projectionRows.set(row.mutationId, row);
+      } catch (singleError) {
+        addBlocker([mutation.id], singleError);
+      }
+    }
+    if (!blockers.size)
+      addBlocker(
+        preflightMutations.map((mutation) => mutation.id),
+        error,
+      );
+  }
+
+  const existing = await storage.getNotesByIds([...targetIds]);
+  const rows = preflightMutations.map((mutation) => {
+    const projectedRow = projectionRows.get(mutation.id);
+    const disposition = projectedRow?.disposition ?? "rewrite";
+    const mutationBlockers = [...(blockers.get(mutation.id) ?? [])];
+    if (bulkApply && disposition === "rewrite")
+      mutationBlockers.push({
+        code: "destructive_disposition_requires_explicit_review",
+        message: "Rewrite and other destructive changes must be reviewed and applied one at a time.",
+      });
+    const noteConflicts = mutation.kind === "create_note" ? (mutation.note.conflicts ?? []) : [];
+    const storedConflicts =
+      existing.get(mutation.kind === "create_note" ? mutation.note.id : mutation.noteId)?.conflicts ?? [];
+    const conflicts = [
+      ...new Map(
+        [...storedConflicts, ...noteConflicts].map((conflict) => [JSON.stringify(conflict), conflict]),
+      ).values(),
+    ];
+    return {
+      mutationId: mutation.id,
+      targetId: mutation.kind === "create_note" ? mutation.note.id : mutation.noteId,
+      disposition,
+      status: mutationBlockers.length ? "blocked" : "ready",
+      autoIncluded: autoIncludedIds.includes(mutation.id),
+      blockers: mutationBlockers,
+      conflicts,
+    };
+  });
+  const blockedMutationIds = rows.filter((row) => row.status === "blocked").map((row) => row.mutationId);
+  return {
+    draftId: id,
+    selectedMutationIds: [...selectedIds],
+    readyMutationIds: rows.filter((row) => row.status === "ready").map((row) => row.mutationId),
+    blockedMutationIds,
+    autoIncludedMutationIds: autoIncludedIds,
+    rows,
+  };
 }
 
 function lowRisk(mutation: LtmDraftMutation) {
@@ -444,7 +602,16 @@ async function applyInner(
         };
       throw new Error(`Long-term memory draft has no mutations selected for apply: ${id}`);
     }
-    await preflight(storage, draft, selected);
+    const projection = await preflight(storage, draft, selected);
+    if (
+      selected.length > 1 &&
+      projection.projections.some((group) => group.mutations.some((mutation) => mutation.disposition === "rewrite"))
+    )
+      throw new LtmDraftApplyError(
+        "Rewrite and other destructive changes must be reviewed and applied one at a time.",
+        409,
+        "destructive_disposition_requires_explicit_review",
+      );
     let progress = await store.updateDraftUnlocked(id, {
       applyState: "applying",
       mutations: draft.mutations,
