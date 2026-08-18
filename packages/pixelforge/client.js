@@ -2599,13 +2599,15 @@ PF.schedule = (() => {
     "merchant:resident": { dawn: "home", day: "post", dusk: "post", night: "home" },
     // A travelling trader sleeps at the inn and tends the stall by day.
     "merchant:transient": { dawn: "home", day: "post", dusk: "post", night: "home" },
-    // The sanctuary's KEEPER — only reachable when the elder actually holds one
+    // A KEEPER — anyone who holds a building the brief NAMED, whatever their kind.
     // (see the `keeper` flag). Without a row like this the keeper falls to
     // "*:resident" and spends the daylight hours in the plaza, which is exactly
     // when a player opens the church door, so the room built around them would
     // always be empty. Scoped to keepers on purpose: an elder in a settlement with
-    // no sanctuary keeps the plaza habits they have always had.
-    "elder:resident:keeper": { dawn: "post", day: "post", dusk: "post", night: "home" },
+    // no sanctuary keeps the plaza habits they have always had. Keyed on holding
+    // the building rather than on being an elder: which KIND ends up keeping a
+    // sanctuary is a question about the kind vocabulary, not about schedules.
+    "*:resident:keeper": { dawn: "post", day: "post", dusk: "post", night: "home" },
     // Everyone else with a roof: at the door at dawn, the square by day (the
     // plaza should feel busiest in daylight and empty after dark), home at night.
     "*:resident": { dawn: "home", day: "public", dusk: "home", night: "home" },
@@ -2626,6 +2628,7 @@ PF.schedule = (() => {
     // kind behaves when they do not.
     const template =
       (sched.keeper ? TABLE[`${sched.kind}:${sched.standing}:keeper`] : null) ??
+      (sched.keeper ? TABLE[`*:${sched.standing}:keeper`] : null) ??
       TABLE[`${sched.kind}:${sched.standing}`] ??
       TABLE[`*:${sched.standing}`] ??
       DEFAULT;
