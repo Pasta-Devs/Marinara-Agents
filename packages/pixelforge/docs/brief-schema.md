@@ -70,6 +70,19 @@ through the derivations below.
                             // (case/whitespace/diacritics) → the settlement root. NO substring
                             // matching — a deterministic guess can bind an NPC to the wrong zone
                             // forever. Reads only the already-finalized zone list.
+      workplace: "St Aldwin's",
+                            // OPTIONAL zone NAME reference, same exact → folded resolution as
+                            // `home` and the same refusal to substring-match. Where the working
+                            // day is spent when OWNERSHIP cannot say: the compiler infers a work
+                            // anchor from what somebody owns, but ownership is one building per
+                            // person and one person per building, so a school's second teacher, a
+                            // market's fourth seller and a shop assistant have no way to be placed
+                            // without this. Unresolved falls to NONE, never to the root the way
+                            // `home` does — "works at the settlement" is not a box anyone can stand
+                            // in — and the drop is recorded in `_repairs`. Omitted for anyone who
+                            // works where they live or runs the place themselves, and a brief that
+                            // never sets it compiles exactly as it did before the field existed.
+                            // Moves the WORKING anchor only: it never rehouses anybody.
       household: 1,         // int 1-6. SAME NUMBER = SAME ROOF. The way a RESIDENT (see standing)
                             // causes a dwelling to exist, bounded by construction:
                             // "30 people → 30 houses" is inexpressible in this schema.

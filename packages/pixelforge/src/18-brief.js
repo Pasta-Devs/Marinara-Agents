@@ -304,6 +304,22 @@ PF.brief = (() => {
         if (homeRaw) repairs.push(`cast[${brief.cast.length}].home: unresolved ${JSON.stringify(homeRaw)} -> root`);
         home = brief.name;
       }
+      // WORKPLACE — where the working day is spent, when OWNERSHIP cannot say.
+      // Ownership answers it for a smith with a forge, but it is one building per
+      // person and one person per building, so it can never place a school's second
+      // teacher, a market's fourth seller, or a shop assistant.
+      //
+      // Same exact -> folded resolution as `home`, and no substring matching for the
+      // same reason: a guessed binding is forever.
+      //
+      // Unresolved falls to NULL, not to the root the way `home` does. "Works at the
+      // settlement" says nothing a wander box could be built from, and a null
+      // workplace IS every brief that has ever compiled — so the derivation in
+      // 20-world runs exactly as before for anyone who does not name one.
+      const workplaceRaw = capText(item?.workplace, 24);
+      const workplace = zoneNames.includes(workplaceRaw) ? workplaceRaw : (zoneFolds.get(fold(workplaceRaw)) ?? null);
+      if (workplaceRaw && !workplace)
+        repairs.push(`cast[${brief.cast.length}].workplace: unresolved ${JSON.stringify(workplaceRaw)} -> none`);
       const householdNumber = Number(item?.household);
       brief.cast.push({
         name: dedupeName(name, `cast[${brief.cast.length}]`),
@@ -315,6 +331,7 @@ PF.brief = (() => {
           pick(seed, `cast-tint-${brief.cast.length}`, Object.keys(TINTS)),
         ),
         home,
+        ...(workplace ? { workplace } : {}),
         household: Number.isFinite(householdNumber)
           ? Math.max(1, Math.min(CAPS.household, Math.round(householdNumber)))
           : 1,
@@ -588,6 +605,9 @@ PF.brief = (() => {
       "- cast: 4-10 story-relevant people of {name, role, kind, tint, home, household, persona, standing}.",
       `  kind (machine field) from: ${CAST_KINDS.join(" | ")}. role: <=24 chars free text (their title).`,
       `  tint from: ${Object.keys(TINTS).join(" | ")}. home: the NAME of the zone they live in.`,
+      "  workplace (optional): the NAME of the zone they work in, when it is not the one they",
+      "  live in and they do not run it themselves — a second teacher at the school, a shop",
+      "  assistant, one of several sellers at a market. Omit it for anyone who works at home.",
       "  household: 1-6 — people sharing a number share a roof; buildings are derived from",
       "  households, so do NOT list one household per person unless they truly live alone.",
       "  persona: <=100 chars — what they want, and what they are hiding.",
@@ -644,6 +664,7 @@ PF.brief = (() => {
               kind: { type: "string", enum: CAST_KINDS },
               tint: { type: "string", enum: Object.keys(TINTS) },
               home: text(24),
+              workplace: text(24),
               household: { type: "integer", minimum: 1, maximum: 6 },
               persona: text(100),
               standing: { type: "string", enum: STANDING },

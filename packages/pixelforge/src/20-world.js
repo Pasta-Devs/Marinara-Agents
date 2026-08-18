@@ -1935,6 +1935,36 @@ PF.world = (() => {
           spread: !guest,
         };
       }
+      // A NAMED WORKPLACE OUTRANKS THE DERIVED ONE. Ownership is the only guess
+      // the compiler can make about where somebody spends the day, and it is a
+      // good one — but it is strictly one building per person and one person per
+      // building, so it can never place a school's second teacher, a market's
+      // fourth seller or a shop assistant. The moment a brief says outright where
+      // someone works, that statement beats the inference.
+      //
+      // Only the WORKING anchor moves. `home` was resolved above and is left
+      // exactly as it was: naming a workplace must never take anybody out of
+      // their own bed, and the night handle is the one thing a day job cannot
+      // have an opinion about.
+      //
+      // Unset for everyone the brief does not speak for (18-brief only emits the
+      // field when it RESOLVES), so this whole block is inert for every brief that
+      // compiled before it existed.
+      const workZone = member.workplace ? zones[zoneIdByName.get(member.workplace) ?? ""] : null;
+      if (workZone) {
+        zone = workZone;
+        // Behind the counter when the building keeps one, the room's walkable
+        // middle otherwise — the two boxes an OWNER already gets. A named worker
+        // stands where the owner would stand rather than in some third place
+        // invented for them, so a shop with an assistant reads as one room with
+        // two people working in it.
+        const workBuilding = buildings.find((b) => b.interior?.zoneId === workZone.id);
+        wander = workBuilding?.interior?.post ?? (workZone === v ? plazaBox() : fullZoneBox(workZone));
+        // Always dispersed: a workplace is a SHARED box by definition — it exists
+        // precisely for the cases with more than one person in it — and two sprites
+        // on one tile makes the lower one impossible to talk to.
+        spread = true;
+      }
       const spawnAt = walkableSpawn(zone, wander, spread ? npcId : null);
       zone.npcs.push({
         id: npcId,

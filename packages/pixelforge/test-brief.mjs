@@ -5144,4 +5144,100 @@ const cellarBrief = (prosperity) => ({
   assert.ok(steppedOn > 60, `and actually asked about steps (${steppedOn})`);
 }
 
+// ── A NAMED WORKPLACE (0.9.0) ───────────────────────────────────────────────
+// Ownership is the compiler's only guess at where somebody spends the day, and
+// it is structurally one building per person and one person per building
+// (`seenSpecial` dedupes the special, and `b.owner` is a single reference). So
+// every building the brief names has room for exactly ONE working adult and no
+// staff: a sanctuary with two acolytes, a market with four sellers, a shop with
+// an assistant are all inexpressible at any price.
+//
+// `workplace` is the brief saying it outright. This case pins the three things
+// that make it worth a sealed field: the named zone WINS over the derived post,
+// it moves ONLY the working anchor and never the bed, and — the whole point —
+// SEVERAL people can name the SAME building and each get their own tile in it.
+{
+  const sealed = brief.validate(
+    {
+      name: "Cadenhall",
+      scale: "village",
+      prosperity: "modest",
+      places: [{ kind: "sanctuary", name: "St Aldwin's", flavor: "A cold stone nave." }],
+      cast: [
+        { name: "Prior Wen", role: "prior", kind: "elder", tint: "violet", home: "St Aldwin's", household: 1 },
+        // Two acolytes who LIVE in the village and WORK at the sanctuary. Neither
+        // owns it — the prior does — so without the field both would spend the
+        // day in the plaza and the church would be a room with one person in it.
+        { name: "Bel", role: "acolyte", kind: "folk", tint: "rose", home: "Cadenhall", workplace: "St Aldwin's", household: 2 },
+        { name: "Corin", role: "acolyte", kind: "folk", tint: "teal", home: "Cadenhall", workplace: "St Aldwin's", household: 2 },
+        { name: "Halla", role: "farmer", kind: "grower", tint: "green", home: "Cadenhall", household: 3 },
+      ],
+    },
+    ctx,
+  );
+  const w = world.build(31337, "cozy-village", sealed);
+  checkWorld(w, sealed, "workplace");
+
+  const sanctuaryId = Object.entries(sealed._ids.zones).find(([, name]) => name === "St Aldwin's")?.[0];
+  assert.ok(sanctuaryId, "the sanctuary has an ordinal id");
+  const everyNpc = Object.values(w.zones).flatMap((zone) => zone.npcs.map((npc) => ({ zone, npc })));
+  const at = (name) => everyNpc.find((entry) => entry.npc.name === name);
+
+  // 1. The field survived validate() and resolved to the zone NAME.
+  assert.equal(sealed.cast[1].workplace, "St Aldwin's", "a resolved workplace is sealed onto the cast member");
+  assert.equal(sealed.cast[3].workplace, undefined, "and is absent for anyone who did not name one");
+
+  // 2. The named zone wins: both acolytes work in the sanctuary, not the plaza.
+  for (const name of ["Bel", "Corin"]) {
+    const entry = at(name);
+    assert.ok(entry, `${name} was placed`);
+    assert.equal(entry.npc._sched.post.zoneId, sanctuaryId, `${name} works in the sanctuary they were assigned to`);
+  }
+
+  // 3. THE REASON THE FIELD EXISTS. Ownership cannot express two workers in one
+  //    building; this must. Distinct tiles, because two sprites on one tile make
+  //    the lower one impossible to talk to.
+  const bel = at("Bel").npc;
+  const corin = at("Corin").npc;
+  assert.notEqual(`${bel.x},${bel.y}`, `${corin.x},${corin.y}`, "two people working in one building do not stack");
+  assert.equal(at("Bel").zone.id, sanctuaryId, "and they are compiled INTO that zone, not merely pointed at it");
+
+  // 4. A day job has no opinion about a bed. Their home handle still points at
+  //    the village they live in — naming a workplace must never rehouse anybody.
+  for (const name of ["Bel", "Corin"]) {
+    const home = at(name).npc._sched.home;
+    if (home) assert.notEqual(home.zoneId, sanctuaryId, `${name} does not sleep at work`);
+  }
+
+  // 5. Nobody who did not name one is moved: the farmer keeps the derived post.
+  assert.equal(at("Halla").npc._sched.post.zoneId, "z1", "an unnamed workplace leaves the derivation alone");
+}
+
+// An unresolvable workplace is RECORDED and dropped, never guessed at and never
+// promoted to the root the way `home` is — "works at the settlement" is not a
+// box anything can stand in, and a wrong binding is forever.
+{
+  const sealed = brief.validate(
+    {
+      name: "Cadenhall",
+      scale: "hamlet",
+      cast: [
+        { name: "Bel", role: "acolyte", kind: "folk", tint: "rose", home: "Cadenhall", workplace: "A Church That Is Not There", household: 1 },
+        { name: "Halla", role: "farmer", kind: "grower", tint: "green", home: "Cadenhall", household: 2 },
+      ],
+    },
+    ctx,
+  );
+  assert.equal(sealed.cast[0].workplace, undefined, "an unresolved workplace is dropped, not guessed");
+  assert.ok(
+    sealed._repairs.some((line) => line.includes("workplace") && line.includes("unresolved")),
+    "and the drop is recorded in _repairs rather than being silent",
+  );
+  const w = world.build(31337, "cozy-village", sealed);
+  const bel = Object.values(w.zones)
+    .flatMap((zone) => zone.npcs)
+    .find((npc) => npc.name === "Bel");
+  assert.ok(bel && bel._sched.post, "and they still compile with an ordinary derived post");
+}
+
 console.log("brief validator + compiler: all cases passed");
