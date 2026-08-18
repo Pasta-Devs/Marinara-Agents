@@ -11,7 +11,7 @@ import {
 import { getLongTermMemoryDirectories, safeJoin } from "./paths.js";
 import { retrieveLongTermMemory } from "./retrieval.js";
 import { getLtmGlobalSettings } from "./settings.js";
-import { recordLongTermMemoryInjection } from "./usage.js";
+import { recordLongTermMemoryInjection, recordLongTermMemoryZeroMatch } from "./usage.js";
 import { recordLtmDebugEvent } from "./debug-log.js";
 import { getPackagePersistence, withKeyedLock } from "./package-runtime.js";
 
@@ -88,6 +88,10 @@ export async function prepareGenerationLongTermMemory(input: {
     rejectedLimit: 20,
     signal: input.signal,
   });
+  if (retrieval.chunks.length === 0) {
+    await recordLongTermMemoryZeroMatch(input.chatId, input.root);
+    return null;
+  }
   const artifact = serializeLongTermMemoryPrompt(retrieval.chunks, {
     preamble: recall.recallPreamble,
     maxTokens: retrieval.maxTokens,

@@ -23,8 +23,10 @@ async function main() {
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
   const { addRejectedSuggestions } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/rejected-suggestions.ts");
-  const { longTermMemoryInjectionReceiptPath } =
+  const { longTermMemoryInjectionReceiptPath, recordLongTermMemoryZeroMatch } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/usage.ts");
+  const { prepareGenerationLongTermMemory } =
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/generation-injection.ts");
   const app = Fastify();
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-routes-"));
   const packageManifest = JSON.parse(
@@ -437,6 +439,45 @@ async function main() {
       state: "not_recorded",
       dispatchedAt: null,
     });
+    const zeroMatchReceipt = await recordLongTermMemoryZeroMatch("zero-match-chat", storageService.root);
+    assert.ok(zeroMatchReceipt);
+    assert.equal(Array.isArray(zeroMatchReceipt.chunks), true);
+    assert.equal(zeroMatchReceipt.chunks.length, 0);
+    const zeroMatchInjection = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/last-injection/zero-match-chat",
+      headers,
+    });
+    assert.equal(zeroMatchInjection.statusCode, 200, zeroMatchInjection.body);
+    assert.deepEqual(
+      {
+        memoryCount: zeroMatchInjection.json().memoryCount,
+        tokenCount: zeroMatchInjection.json().tokenCount,
+        memories: zeroMatchInjection.json().memories,
+        state: zeroMatchInjection.json().state,
+      },
+      { memoryCount: 0, tokenCount: 0, memories: [], state: "no_matches" },
+    );
+    assert.ok(
+      typeof zeroMatchInjection.json().dispatchedAt === "string" &&
+        Number.isFinite(Date.parse(zeroMatchInjection.json().dispatchedAt)),
+      "a zero-match recall must carry a parseable dispatchedAt timestamp",
+    );
+    const recallZeroMatch = await prepareGenerationLongTermMemory({
+      root: storageService.root,
+      chatId: "game-empty",
+      chatMode: "game",
+      characterIds: [],
+      messages: [{ role: "user", content: "A query that matches no saved memory." }],
+    });
+    assert.equal(recallZeroMatch, null, "a zero-match recall injects nothing");
+    const recalledZeroMatch = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/last-injection/game-empty",
+      headers,
+    });
+    assert.equal(recalledZeroMatch.json().state, "no_matches");
+    assert.equal(recalledZeroMatch.json().memoryCount, 0);
     assert.deepEqual(Object.keys(status.json().indexes).sort(), [
       "chunkCount",
       "chunkFormatVersion",
