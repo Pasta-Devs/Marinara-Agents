@@ -138,6 +138,7 @@ async function main() {
         ["chat-conversation:day:27.07.2026", "chat-conversation:week:27.07.2026", "chat-conversation:day:02.08.2026"],
         "day and week DD.MM.YYYY keys must share one chronological order",
       );
+      assert.ok(candidates.samples.every((candidate) => candidate.importMode === "conversation"));
       const limitedCandidates = await previewPackageInterop(
         { ...request, limit: 2 },
         join(dataDir, "long-term-memory"),
@@ -164,6 +165,11 @@ async function main() {
         new AbortController().signal,
       );
       assert.equal(importedCharacter.imported[0]?.note.modes[0], "roleplay");
+      const characterPreview = await previewPackageInterop(
+        { source: "characters", limit: 100 },
+        join(dataDir, "long-term-memory"),
+      );
+      assert.equal(characterPreview.samples[0]?.importMode, "roleplay");
       const explicitCharacter = await importPackageInterop(
         { source: "characters", sourceIds: ["character-import"], mode: "game", extract: false, limit: 100 },
         join(dataDir, "long-term-memory"),
@@ -172,10 +178,12 @@ async function main() {
       assert.equal(explicitCharacter.imported[0]?.note.modes[0], "game");
 
       const lorebookPreview = await previewPackageLorebooks({ limit: 100 }, join(dataDir, "long-term-memory"));
+      assert.equal(lorebookPreview.books[0]?.entries[0]?.candidates[0]?.importMode, "roleplay");
       const lorebookGamePreview = await previewPackageLorebooks(
         { limit: 100, mode: "game" },
         join(dataDir, "long-term-memory"),
       );
+      assert.equal(lorebookGamePreview.books[0]?.entries[0]?.candidates[0]?.importMode, "game");
       const lorebookSourceId = lorebookPreview.books[0]?.entries[0]?.candidates[0]?.sourceId;
       assert.ok(lorebookSourceId, "lorebook preview must expose an importable candidate");
       assert.equal(lorebookPreview.books[0]?.counts.candidates, 1);

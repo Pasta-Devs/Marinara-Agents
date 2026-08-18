@@ -590,6 +590,7 @@
   "ui.longTermMemory.sourcesworkspace.game": "Game",
   "ui.longTermMemory.sourcesworkspace.imported": "imported",
   "ui.longTermMemory.sourcesworkspace.importScope": "Import scope",
+  "ui.longTermMemory.sourcesworkspace.importsAsMode": "Imports as {{mode}}",
   "ui.longTermMemory.sourcesworkspace.importSelected_7fb57e8": "Import and extract selected",
   "ui.longTermMemory.sourcesworkspace.limitImportsToThisChatAndItsRelatedScope": "Limit imports to this chat and its related scope.",
   "ui.longTermMemory.sourcesworkspace.loadingLorebooks": "Loading lorebooks...",

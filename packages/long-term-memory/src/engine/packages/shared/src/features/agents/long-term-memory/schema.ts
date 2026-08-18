@@ -2352,6 +2352,7 @@ export const ltmInteropPreviewRequestSchema = z
 const ltmInteropPreviewSampleBaseSchema = z.object({
   sourceId: z.string().min(1).max(120),
   title: z.string().min(1).max(240),
+  importMode: ltmModeSchema,
   mutationCount: z.number().int().min(0).max(10_000),
   summary: z.string().max(2_000),
   snippet: z.string().max(280),

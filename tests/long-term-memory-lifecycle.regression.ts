@@ -801,6 +801,7 @@ async function main() {
               {
                 sourceId: "chat-a:summary-desktop-reextract",
                 title: "Desktop re-extract source",
+                importMode: "conversation",
                 mutationCount: 0,
                 summary: "An imported source held open for re-extraction.",
                 snippet: "The re-extract action should show progress.",
@@ -838,6 +839,7 @@ async function main() {
                       {
                         sourceId: "lorebook_mobile_fixture:entry_mobile_harbor:0",
                         title: "Mobile Field Guide: Harbor Signals",
+                        importMode: "roleplay",
                         mutationCount: 1,
                         summary: "Harbor signal colors and their meanings.",
                         snippet: "A blue lantern marks the safe channel after dusk.",

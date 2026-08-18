@@ -334,6 +334,9 @@ assert.match(workspace, /excludedNoteIds: excludedMemories/u);
 assert.match(workspace, /data-ltm-source-operation-preview/u);
 assert.match(workspace, /data-ltm-source-operation-excluded/u);
 assert.match(workspace, /data-ltm-source-operation-result/u);
+assert.match(workspace, /data-ltm-source-import-mode/u);
+assert.match(workspace, /importsAsMode/u);
+assert.equal(locale["ui.longTermMemory.sourcesworkspace.importsAsMode"], "Imports as {{mode}}");
 assert.equal(locale["ui.longTermMemory.sourceoperation.clearAll"], "Clear all");
 assert.equal(
   locale["ui.longTermMemory.sourceoperation.confirmArchive"],
