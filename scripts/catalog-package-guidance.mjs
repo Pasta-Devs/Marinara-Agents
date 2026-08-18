@@ -27,6 +27,10 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     modes: ["roleplay"],
     activation: "Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
   },
+  beholder: {
+    modes: ["roleplay"],
+    activation: "Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+  },
   "character-tracker": {
     modes: ["roleplay"],
     activation: "Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
@@ -43,6 +47,10 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     modes: ["roleplay", "game"],
     activation: "Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
   },
+  "inventory-tracker": {
+    modes: ["roleplay"],
+    activation: "Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+  },
   "persona-stats": {
     modes: ["roleplay"],
     activation: "Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
@@ -57,11 +65,13 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
   },
   eightball: {
     modes: ["conversation"],
-    activation: "Install to use /8ball manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
+    activation:
+      "Install to use /8ball manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   },
   chess: {
     modes: ["conversation"],
-    activation: "Install to use /chess manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
+    activation:
+      "Install to use /chess manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   },
   combat: {
     modes: ["roleplay"],
@@ -80,17 +90,18 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     activation: "Add the Agent in Chat Settings → Agents → Misc Agents for Roleplay mode.",
   },
   haptic: {
-    modes: ["conversation", "roleplay"],
-    activation: "Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents for Conversation and Roleplay modes.",
+    modes: ["conversation", "roleplay", "game"],
+    activation:
+      "Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents for Conversation, Roleplay, and Game modes.",
   },
   illustrator: {
     modes: ["conversation", "roleplay", "game"],
-    activation: "Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents/Illustrator for Conversation, Roleplay, and Game modes.",
+    activation:
+      "Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents/Illustrator for Conversation, Roleplay, and Game modes.",
   },
   storyboard: {
     modes: ["roleplay", "game"],
-    activation:
-      "Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Roleplay and Game modes.",
+    activation: "Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Roleplay and Game modes.",
   },
   html: {
     modes: ["roleplay"],
@@ -109,25 +120,38 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     modes: ["conversation", "roleplay", "game"],
     activation: "Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
   },
+  slurp: {
+    modes: ["conversation", "roleplay", "game"],
+    activation: "Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
+  },
+  pixelforge: {
+    modes: ["game"],
+    activation: "Install it, then choose Pixelforge as the Experience when creating a Game Mode chat.",
+  },
   spotify: {
     modes: ["conversation", "roleplay", "game"],
-    activation: "Enable the music player in Settings → General. Add both as a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents/Music DJ for Conversation, Roleplay, and Game modes.",
+    activation:
+      "Enable the music player in Settings → General. Add both as a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents/Music DJ for Conversation, Roleplay, and Game modes.",
   },
   poker: {
     modes: ["conversation"],
-    activation: "Install to use /poker manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
+    activation:
+      "Install to use /poker manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   },
   "rock-paper-scissors": {
     modes: ["conversation"],
-    activation: "Install to use /rps manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
+    activation:
+      "Install to use /rps manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   },
   "tic-tac-toe": {
     modes: ["conversation"],
-    activation: "Install to use /tictactoe manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
+    activation:
+      "Install to use /tictactoe manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   },
   uno: {
     modes: ["conversation"],
-    activation: "Install to use /uno manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
+    activation:
+      "Install to use /uno manually in any Conversation chat. Add under Chat Settings → Agents → Commands only to let characters initiate it.",
   },
 });
 

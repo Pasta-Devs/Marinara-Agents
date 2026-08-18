@@ -19,35 +19,28 @@ type NoodlePackageState = {
   setNoodleSelectedPersonaId: (id: string | null) => void;
 };
 
+function isPublicNoodleNavigation(navigation: NoodleNavigationState | undefined): navigation is NoodleNavigationState {
+  return navigation?.mode === "public" || navigation?.mode === "settings";
+}
+
 function readRecord(key: string): Record<string, unknown> | null {
   try {
-    const parsed = JSON.parse(
-      window.localStorage.getItem(key) ?? "null",
-    ) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null;
+    const parsed = JSON.parse(window.localStorage.getItem(key) ?? "null") as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
   } catch {
     return null;
   }
 }
 
-function validatedPersistedState(
-  state: Record<string, unknown>,
-): PersistedNoodleState {
+function validatedPersistedState(state: Record<string, unknown>): PersistedNoodleState {
   const validated: PersistedNoodleState = {};
-  if (
-    state.noodleNavigation &&
-    typeof state.noodleNavigation === "object" &&
-    !Array.isArray(state.noodleNavigation)
-  ) {
-    validated.noodleNavigation =
-      state.noodleNavigation as NoodleNavigationState;
+  if (state.noodleNavigation && typeof state.noodleNavigation === "object" && !Array.isArray(state.noodleNavigation)) {
+    const navigation = state.noodleNavigation as NoodleNavigationState;
+    if (isPublicNoodleNavigation(navigation)) {
+      validated.noodleNavigation = navigation;
+    }
   }
-  if (
-    typeof state.noodleSelectedPersonaId === "string" ||
-    state.noodleSelectedPersonaId === null
-  ) {
+  if (typeof state.noodleSelectedPersonaId === "string" || state.noodleSelectedPersonaId === null) {
     validated.noodleSelectedPersonaId = state.noodleSelectedPersonaId;
   }
   return validated;
@@ -58,21 +51,11 @@ function readInitialState(): PersistedNoodleState {
   if (packageState) return validatedPersistedState(packageState);
   const legacyEnvelope = readRecord(LEGACY_UI_STATE_KEY);
   const legacyState = legacyEnvelope?.state;
-  if (
-    !legacyState ||
-    typeof legacyState !== "object" ||
-    Array.isArray(legacyState)
-  )
-    return {};
+  if (!legacyState || typeof legacyState !== "object" || Array.isArray(legacyState)) return {};
   return validatedPersistedState(legacyState as Record<string, unknown>);
 }
 
-function persistNoodleState(
-  state: Pick<
-    NoodlePackageState,
-    "noodleNavigation" | "noodleSelectedPersonaId"
-  >,
-) {
+function persistNoodleState(state: Pick<NoodlePackageState, "noodleNavigation" | "noodleSelectedPersonaId">) {
   try {
     window.localStorage.setItem(PACKAGE_STATE_KEY, JSON.stringify(state));
   } catch {
@@ -109,10 +92,7 @@ export const useUIStore = create<NoodlePackageState>((set, get) => ({
 
 export function configureNoodlePackageState(props: Record<string, unknown>) {
   useUIStore.setState({
-    conversationTimeZone:
-      typeof props.conversationTimeZone === "string"
-        ? props.conversationTimeZone
-        : "",
+    conversationTimeZone: typeof props.conversationTimeZone === "string" ? props.conversationTimeZone : "",
     debugMode: props.debugMode === true,
     reviewImagePromptsBeforeSend: props.reviewImagePromptsBeforeSend === true,
   });

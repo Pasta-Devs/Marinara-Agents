@@ -74,12 +74,19 @@ export function SpatialContextSettingsSection({
           </span>
         </button>
         {activationPending && (
-          <p role="status" aria-live="polite" className="px-1 text-[0.625rem] text-[var(--marinara-chat-chrome-accent)]">
+          <p
+            role="status"
+            aria-live="polite"
+            className="px-1 text-[0.625rem] text-[var(--marinara-chat-chrome-accent)]"
+          >
             Updating World Maps…
           </p>
         )}
         {activationError && (
-          <p role="alert" className="rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]">
+          <p
+            role="alert"
+            className="rounded-lg bg-[var(--destructive)]/10 px-3 py-2 text-[0.6875rem] text-[var(--destructive)]"
+          >
             {activationError}
           </p>
         )}

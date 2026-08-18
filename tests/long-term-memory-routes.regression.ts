@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dirname } from "node:path";
@@ -8,40 +8,27 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 async function main() {
   const engineRoot =
-    process.env.MARINARA_ENGINE_ROOT ??
-    join(dirname(fileURLToPath(import.meta.url)), "../../Marinara-Engine");
+    process.env.MARINARA_ENGINE_ROOT ?? join(dirname(fileURLToPath(import.meta.url)), "../../Marinara-Engine");
   const Fastify = (
-    await import(
-      pathToFileURL(
-        join(engineRoot, "packages/server/node_modules/fastify/fastify.js"),
-      ).href
-    )
+    await import(pathToFileURL(join(engineRoot, "packages/server/node_modules/fastify/fastify.js")).href)
   ).default;
   const { registerCapabilityPrivilegedRoutes } = await import(
     pathToFileURL(
-      join(
-        engineRoot,
-        "packages/server/src/services/capability-packages/capability-route-registration.service.ts",
-      ),
+      join(engineRoot, "packages/server/src/services/capability-packages/capability-route-registration.service.ts"),
     ).href
   );
   const { activate } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/server-entry.ts");
-    const { ltmExtractionSettingsPatchSchema, ltmExtractionSettingsSchema } =
-      await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
-  const { addRejectedSuggestions } = await import(
-    "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/rejected-suggestions.ts"
-  );
+  const { ltmExtractionSettingsPatchSchema, ltmExtractionSettingsSchema } =
+    await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
+  const { addRejectedSuggestions } =
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/rejected-suggestions.ts");
+  const { longTermMemoryInjectionReceiptPath } =
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/usage.ts");
   const app = Fastify();
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-routes-"));
   const packageManifest = JSON.parse(
-    await readFile(
-      join(
-        dirname(fileURLToPath(import.meta.url)),
-        "../packages/long-term-memory/manifest.json",
-      ),
-      "utf8",
-    ),
+    await readFile(join(dirname(fileURLToPath(import.meta.url)), "../packages/long-term-memory/manifest.json"), "utf8"),
   );
   const installed = {
     id: "long-term-memory",
@@ -55,8 +42,7 @@ async function main() {
     manifest: packageManifest,
   };
   const previousSecret = process.env.ADMIN_SECRET;
-  const previousRequireSecret =
-    process.env.MARINARA_REQUIRE_ADMIN_SECRET_ON_LOOPBACK;
+  const previousRequireSecret = process.env.MARINARA_REQUIRE_ADMIN_SECRET_ON_LOOPBACK;
   process.env.ADMIN_SECRET = "ltm-route-secret";
   process.env.MARINARA_REQUIRE_ADMIN_SECRET_ON_LOOPBACK = "true";
   let cleanup: (() => void | Promise<void>) | undefined;
@@ -94,9 +80,7 @@ async function main() {
           ...installed,
           manifest: {
             ...installed.manifest,
-            permissions: installed.manifest.permissions.filter(
-              (permission) => permission !== "routes",
-            ),
+            permissions: installed.manifest.permissions.filter((permission) => permission !== "routes"),
           },
         } as any,
         async () => {},
@@ -238,9 +222,7 @@ async function main() {
             async resolveForRequest(request: any) {
               modelRequests.push(request);
               if (request.model === "missing-model")
-                throw new Error(
-                  "Language model connection not found: connection-a",
-                );
+                throw new Error("Language model connection not found: connection-a");
               return {
                 name: "FixtureModel",
                 connectionId: request.connectionId ?? "connection-a",
@@ -277,58 +259,58 @@ async function main() {
                       ? ""
                       : JSON.stringify({
                           summary: "Extracted observatory facts.",
-                      units: [
-                        {
-                          bucket: "timeline_event",
-                          subjectId: "observatory_gate_sealed",
-                          sectionKey: "event",
-                          text: "Mara sealed the observatory gate at dusk.",
-                          importance: "major",
-                          evidence: ["source_note:source_route_extract"],
-                          confidence: 0.95,
-                          salience: 0.9,
-                          status: "active",
-                          links: [],
-                          sourceHash: "replaced-by-package",
-                        },
-                        {
-                          bucket: "world_fact",
-                          subjectId: "observatory_gate",
-                          sectionKey: "facts",
-                          text: "The observatory gate is sealed at dusk.",
-                          importance: "major",
-                          evidence: ["source_note:source_route_extract"],
-                          confidence: 0.95,
-                          salience: 0.9,
-                          status: "active",
-                          links: [
+                          units: [
                             {
-                              relation: "evidenced_by",
-                              target: "timeline_observatory_gate_sealed",
+                              bucket: "timeline_event",
+                              subjectId: "observatory_gate_sealed",
+                              sectionKey: "event",
+                              text: "Mara sealed the observatory gate at dusk.",
+                              importance: "major",
+                              evidence: ["source_note:source_route_extract"],
+                              confidence: 0.95,
+                              salience: 0.9,
+                              status: "active",
+                              links: [],
+                              sourceHash: "replaced-by-package",
+                            },
+                            {
+                              bucket: "world_fact",
+                              subjectId: "observatory_gate",
+                              sectionKey: "facts",
+                              text: "The observatory gate is sealed at dusk.",
+                              importance: "major",
+                              evidence: ["source_note:source_route_extract"],
+                              confidence: 0.95,
+                              salience: 0.9,
+                              status: "active",
+                              links: [
+                                {
+                                  relation: "evidenced_by",
+                                  target: "timeline_observatory_gate_sealed",
+                                },
+                              ],
+                              sourceHash: "replaced-by-package",
+                            },
+                            {
+                              bucket: "character_fact",
+                              subjectId: "mara",
+                              subjectNames: ["Mara"],
+                              sectionKey: "role",
+                              text: "Mara seals the observatory gate at dusk.",
+                              importance: "major",
+                              evidence: ["source_note:source_route_extract"],
+                              confidence: 0.95,
+                              salience: 0.9,
+                              status: "active",
+                              links: [
+                                {
+                                  relation: "evidenced_by",
+                                  target: "timeline_observatory_gate_sealed",
+                                },
+                              ],
+                              sourceHash: "replaced-by-package",
                             },
                           ],
-                          sourceHash: "replaced-by-package",
-                        },
-                        {
-                          bucket: "character_fact",
-                          subjectId: "mara",
-                          subjectNames: ["Mara"],
-                          sectionKey: "role",
-                          text: "Mara seals the observatory gate at dusk.",
-                          importance: "major",
-                          evidence: ["source_note:source_route_extract"],
-                          confidence: 0.95,
-                          salience: 0.9,
-                          status: "active",
-                          links: [
-                            {
-                              relation: "evidenced_by",
-                              target: "timeline_observatory_gate_sealed",
-                            },
-                          ],
-                          sourceHash: "replaced-by-package",
-                        },
-                      ],
                         }),
                     finishReason: "stop",
                     usage: {
@@ -341,8 +323,7 @@ async function main() {
                 fitContext(messages: any[], options: any) {
                   return {
                     messages,
-                    maxTokens:
-                      fitContextMode === "reduced" ? 123 : options.maxTokens,
+                    maxTokens: fitContextMode === "reduced" ? 123 : options.maxTokens,
                     estimatedTokensBefore: 100,
                     estimatedTokensAfter: 100,
                     trimmed: fitContextMode === "trimmed",
@@ -397,12 +378,7 @@ async function main() {
           return () => void service || void name;
         },
         registerPrivilegedRoutes: (routes: any, options: { prefix: string }) =>
-          registerCapabilityPrivilegedRoutes(
-            app,
-            installed as any,
-            routes,
-            options,
-          ),
+          registerCapabilityPrivilegedRoutes(app, installed as any, routes, options),
       },
     });
     await app.ready();
@@ -432,6 +408,35 @@ async function main() {
       headers,
     });
     assert.equal(status.statusCode, 200, status.body);
+    assert.deepEqual(Object.keys(status.json().notes).sort(), [
+      "byStatus",
+      "byType",
+      "pendingDrafts",
+      "savedMemories",
+      "sourceNotes",
+      "total",
+    ]);
+    assert.deepEqual(
+      {
+        total: status.json().notes.total,
+        sourceNotes: status.json().notes.sourceNotes,
+        savedMemories: status.json().notes.savedMemories,
+        pendingDrafts: status.json().notes.pendingDrafts,
+      },
+      { total: 0, sourceNotes: 0, savedMemories: 0, pendingDrafts: 0 },
+    );
+    const missingInjection = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/last-injection/no-recorded-recall",
+      headers,
+    });
+    assert.deepEqual(missingInjection.json(), {
+      memoryCount: 0,
+      tokenCount: 0,
+      memories: [],
+      state: "not_recorded",
+      dispatchedAt: null,
+    });
     assert.deepEqual(Object.keys(status.json().indexes).sort(), [
       "chunkCount",
       "chunkFormatVersion",
@@ -467,10 +472,155 @@ async function main() {
             text: "The cobalt key is beneath the observatory.",
             updatedAt: "2026-07-17T00:00:00.000Z",
           },
+          history: {
+            text: "The observatory was sealed after the eclipse.",
+            updatedAt: "2026-07-17T00:00:00.000Z",
+          },
         },
       },
     });
     assert.equal(created.statusCode, 201, created.body);
+    const conflictingScope = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes",
+      headers,
+      payload: {
+        ...created.json().note,
+        id: "world_route_scope_conflict",
+        scope: { chatId: "chat-a", chatIds: ["chat-b"] },
+      },
+    });
+    assert.equal(conflictingScope.statusCode, 400, conflictingScope.body);
+    const recentEvents = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/events?noteId=world_route_fixture&limit=5",
+      headers,
+    });
+    assert.equal(recentEvents.statusCode, 200, recentEvents.body);
+    assert.equal(recentEvents.json().events[0]?.target, "world_route_fixture");
+    const globalScopeRejected = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes",
+      headers,
+      payload: { ...created.json().note, id: "world_route_global_rejected", title: "Global rejected", scope: {} },
+    });
+    assert.equal(globalScopeRejected.statusCode, 400, globalScopeRejected.body);
+    assert.match(globalScopeRejected.json().error, /place where this memory is available/u);
+    const missingTitle = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes",
+      headers,
+      payload: { ...created.json().note, id: "world_missing_route_title", title: undefined },
+    });
+    assert.equal(missingTitle.statusCode, 400, missingTitle.body);
+    const missingCharacterSubject = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes",
+      headers,
+      payload: { ...created.json().note, id: "char_missing_route_subject", type: "character" },
+    });
+    assert.equal(missingCharacterSubject.statusCode, 400, missingCharacterSubject.body);
+    const validCharacter = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes",
+      headers,
+      payload: {
+        ...created.json().note,
+        id: "char_route_subject",
+        type: "character",
+        scope: { chatId: "chat-validation", chatIds: ["chat-validation"] },
+        subjects: [{ key: "character:character-mara", ref: { kind: "character", id: "character-mara" } }],
+      },
+    });
+    assert.equal(validCharacter.statusCode, 201, validCharacter.body);
+    const invalidCharacterPatch = await app.inject({
+      method: "PATCH",
+      url: "/api/long-term-memory/notes/char_route_subject",
+      headers,
+      payload: { subjects: [] },
+    });
+    assert.equal(invalidCharacterPatch.statusCode, 400, invalidCharacterPatch.body);
+    await storageService.storage.createNote({
+      ...created.json().note,
+      id: "char_legacy_route_correction",
+      title: "Legacy character",
+      type: "character",
+      scope: { chatId: "chat-validation", chatIds: ["chat-validation"] },
+    });
+    const legacySubjectCorrection = await app.inject({
+      method: "PATCH",
+      url: "/api/long-term-memory/notes/char_legacy_route_correction",
+      headers,
+      payload: { subjects: [{ key: "character:character-mara", ref: { kind: "character", id: "character-mara" } }] },
+    });
+    assert.equal(legacySubjectCorrection.statusCode, 200, legacySubjectCorrection.body);
+    await storageService.storage.createNote({
+      ...created.json().note,
+      id: "world_legacy_route_correction",
+      title: undefined,
+      scope: { chatId: "chat-validation", chatIds: ["chat-validation"] },
+    });
+    const legacyCorrection = await app.inject({
+      method: "PATCH",
+      url: "/api/long-term-memory/notes/world_legacy_route_correction",
+      headers,
+      payload: { title: "Corrected legacy title" },
+    });
+    assert.equal(legacyCorrection.statusCode, 200, legacyCorrection.body);
+    const renamePreview = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/world_route_fixture/sections/rename-preview",
+      headers,
+      payload: { fromSectionKey: "facts", toSectionKey: "details" },
+    });
+    assert.equal(renamePreview.statusCode, 200, renamePreview.body);
+    assert.deepEqual(renamePreview.json(), {
+      fromSectionKey: "facts",
+      toSectionKey: "details",
+      rewrittenDraftCount: 0,
+      rewrittenDraftIds: [],
+    });
+    const renamed = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/world_route_fixture/sections/rename",
+      headers,
+      payload: { fromSectionKey: "facts", toSectionKey: "details" },
+    });
+    assert.equal(renamed.statusCode, 200, renamed.body);
+    assert.deepEqual(Object.keys(renamed.json().note.sections), ["details", "history"]);
+    assert.equal(renamed.json().note.sections.details.text, "The cobalt key is beneath the observatory.");
+    assert.equal(renamed.json().rebuild.status, "complete");
+    const rebuildPath = join(dataDir, "long-term-memory", "indexes", "recall.json");
+    await rm(rebuildPath, { force: true });
+    await mkdir(rebuildPath);
+    const savedWithStaleRecall = await app.inject({
+      method: "PATCH",
+      url: "/api/long-term-memory/notes/world_route_fixture",
+      headers,
+      payload: { title: "Route fixture saved while recall is stale" },
+    });
+    assert.equal(savedWithStaleRecall.statusCode, 200, savedWithStaleRecall.body);
+    assert.equal(savedWithStaleRecall.json().rebuild.status, "deferred");
+    assert.equal(
+      (await storageService.storage.getNote("world_route_fixture"))?.title,
+      "Route fixture saved while recall is stale",
+      "ordinary edits persist even when their required recall rebuild fails",
+    );
+    await rm(rebuildPath, { recursive: true, force: true });
+    const rebuiltAfterFailure = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/rebuild",
+      headers,
+    });
+    assert.equal(rebuiltAfterFailure.statusCode, 200, rebuiltAfterFailure.body);
+    const renameSectionCollision = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/world_route_fixture/sections/rename",
+      headers,
+      payload: { fromSectionKey: "details", toSectionKey: "history" },
+    });
+    assert.equal(renameSectionCollision.statusCode, 409, renameSectionCollision.body);
+    assert.equal(renameSectionCollision.json().code, "ltm_section_already_exists");
     const rebuiltStatus = await app.inject({
       method: "GET",
       url: "/api/long-term-memory/status",
@@ -491,20 +641,9 @@ async function main() {
     assert.equal(batch.json().status, "partial");
     assert.deepEqual(batch.json().updatedNoteIds, ["world_route_fixture"]);
     assert.deepEqual(batch.json().failedNoteIds, ["world_route_missing"]);
-    assert.deepEqual(
-      (await storageService.storage.getNote("world_route_fixture")).modes,
-      ["roleplay", "game"],
-    );
-    assert.equal(
-      (
-        await storageService.storage.getNote("world_route_fixture")
-      ).tags.includes("batch_fixture"),
-      true,
-    );
-    const tooManyBatchIds = Array.from(
-      { length: 101 },
-      (_, index) => `world_batch_${index}`,
-    );
+    assert.deepEqual((await storageService.storage.getNote("world_route_fixture")).modes, ["roleplay", "game"]);
+    assert.equal((await storageService.storage.getNote("world_route_fixture")).tags.includes("batch_fixture"), true);
+    const tooManyBatchIds = Array.from({ length: 101 }, (_, index) => `world_batch_${index}`);
     const invalidBatch = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes/batch",
@@ -527,10 +666,11 @@ async function main() {
           headers,
           payload: {
             id: "world_concurrent_fixture",
+            title: "Concurrent fixture",
             type: "world",
             status: "active",
             modes: ["roleplay"],
-            scope: {},
+            scope: { chatId: "chat-concurrent", chatIds: ["chat-concurrent"] },
             tags: [],
             keywords: [],
             links: [],
@@ -544,18 +684,37 @@ async function main() {
         }),
       ),
     );
-    assert.deepEqual(
-      concurrent.map((response) => response.statusCode).sort(),
-      [201, 409],
-    );
+    assert.deepEqual(concurrent.map((response) => response.statusCode).sort(), [201, 409]);
+    const globalCreate = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes",
+      headers,
+      payload: {
+        id: "world_global_create_fixture",
+        type: "world",
+        status: "active",
+        modes: ["roleplay"],
+        scope: {},
+        tags: [],
+        keywords: [],
+        links: [],
+        sections: {
+          facts: {
+            text: "New memories require an explicit place.",
+            updatedAt: "2026-07-17T00:00:00.000Z",
+          },
+        },
+      },
+    });
+    assert.equal(globalCreate.statusCode, 400, globalCreate.body);
     const listed = await app.inject({
       method: "GET",
       url: "/api/long-term-memory/notes?scopeChatIds=chat-a&includeGlobal=false",
       headers,
     });
-    assert.deepEqual(
-      listed.json().map((note: any) => note.id),
-      ["world_route_fixture"],
+    assert.equal(
+      listed.json().some((note: any) => note.id === "world_route_fixture"),
+      true,
     );
     const personaScoped = await app.inject({
       method: "POST",
@@ -571,6 +730,7 @@ async function main() {
           chatId: "chat-a",
           chatIds: ["chat-a"],
           personaId: "persona-fixture",
+          personaIds: ["persona-fixture"],
         },
         tags: ["route_fixture"],
         keywords: [],
@@ -590,30 +750,22 @@ async function main() {
       headers,
       payload: { scope: {} },
     });
-    assert.equal(
-      globalizePersonaScoped.statusCode,
-      400,
-      globalizePersonaScoped.body,
-    );
+    assert.equal(globalizePersonaScoped.statusCode, 400, globalizePersonaScoped.body);
     assert.match(globalizePersonaScoped.json().error, /scope-removal action/);
-    assert.deepEqual(
-      (await storageService.storage.getNote("world_persona_scoped"))?.scope,
-      {
-        chatId: "chat-a",
-        chatIds: ["chat-a"],
-        personaId: "persona-fixture",
-      },
-    );
+    assert.deepEqual((await storageService.storage.getNote("world_persona_scoped"))?.scope, {
+      chatId: "chat-a",
+      chatIds: ["chat-a"],
+      personaId: "persona-fixture",
+      personaIds: ["persona-fixture"],
+    });
     const missingPersonaScope = await app.inject({
       method: "GET",
       url: "/api/long-term-memory/notes?scopeChatIds=chat-a&includeGlobal=false",
       headers,
     });
     assert.equal(
-      missingPersonaScope
-        .json()
-        .some((note: any) => note.id === "world_persona_scoped"),
-      false,
+      missingPersonaScope.json().some((note: any) => note.id === "world_persona_scoped"),
+      true,
     );
     const matchingPersonaScope = await app.inject({
       method: "GET",
@@ -621,9 +773,7 @@ async function main() {
       headers,
     });
     assert.equal(
-      matchingPersonaScope
-        .json()
-        .some((note: any) => note.id === "world_persona_scoped"),
+      matchingPersonaScope.json().some((note: any) => note.id === "world_persona_scoped"),
       true,
     );
     const removePersonaChatScope = await app.inject({
@@ -632,16 +782,12 @@ async function main() {
       headers,
       payload: { chatId: "chat-a" },
     });
-    assert.equal(
-      removePersonaChatScope.statusCode,
-      200,
-      removePersonaChatScope.body,
-    );
+    assert.equal(removePersonaChatScope.statusCode, 200, removePersonaChatScope.body);
     assert.equal(removePersonaChatScope.json().deleted, false);
-    assert.deepEqual(
-      (await storageService.storage.getNote("world_persona_scoped"))?.scope,
-      { personaId: "persona-fixture" },
-    );
+    assert.deepEqual((await storageService.storage.getNote("world_persona_scoped"))?.scope, {
+      personaId: "persona-fixture",
+      personaIds: ["persona-fixture"],
+    });
     const chatOnly = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes",
@@ -671,16 +817,9 @@ async function main() {
       headers,
       payload: { chatId: "chat-a" },
     });
-    assert.equal(
-      removeFinalChatScope.statusCode,
-      200,
-      removeFinalChatScope.body,
-    );
+    assert.equal(removeFinalChatScope.statusCode, 200, removeFinalChatScope.body);
     assert.equal(removeFinalChatScope.json().deleted, true);
-    assert.equal(
-      await storageService.storage.getNote("world_chat_only_scope"),
-      null,
-    );
+    assert.equal(await storageService.storage.getNote("world_chat_only_scope"), null);
     await storageService.storage.createNote({
       id: "world_concurrent_scope_removal",
       title: "Concurrent scope removal fixture",
@@ -703,20 +842,13 @@ async function main() {
       },
     });
     await Promise.all([
-      storageService.storage.removeNoteFromScope(
-        "world_concurrent_scope_removal",
-        { chatIds: ["chat-a"] },
-      ),
-      storageService.storage.removeNoteFromScope(
-        "world_concurrent_scope_removal",
-        { chatIds: ["chat-b"] },
-      ),
+      storageService.storage.removeNoteFromScope("world_concurrent_scope_removal", { chatIds: ["chat-a"] }),
+      storageService.storage.removeNoteFromScope("world_concurrent_scope_removal", { chatIds: ["chat-b"] }),
     ]);
-    assert.deepEqual(
-      (await storageService.storage.getNote("world_concurrent_scope_removal"))
-        ?.scope,
-      { personaId: "persona-fixture" },
-    );
+    assert.deepEqual((await storageService.storage.getNote("world_concurrent_scope_removal"))?.scope, {
+      personaId: "persona-fixture",
+      personaIds: ["persona-fixture"],
+    });
     await storageService.storage.createNote({
       id: "world_professor_mari_group",
       type: "world",
@@ -752,9 +884,7 @@ async function main() {
       ["chat-a"],
     );
     assert.equal(
-      scopeTargets
-        .json()
-        .groups.some((group: any) => group.id === "professor-mari-only"),
+      scopeTargets.json().groups.some((group: any) => group.id === "professor-mari-only"),
       false,
     );
     assert.equal(
@@ -764,17 +894,12 @@ async function main() {
     assert.equal(
       scopeTargets
         .json()
-        .characters.some(
-          (character: any) =>
-            character.id === "character-mara" && character.label === "Mara",
-        ),
+        .characters.some((character: any) => character.id === "character-mara" && character.label === "Mara"),
       true,
       JSON.stringify(scopeTargets.json().characters),
     );
     assert.equal(
-      scopeTargets
-        .json()
-        .characters.some((character: any) => character.id === "character-nyra"),
+      scopeTargets.json().characters.some((character: any) => character.id === "character-nyra"),
       false,
     );
     const allScopeTargets = await app.inject({
@@ -784,9 +909,7 @@ async function main() {
     });
     assert.equal(allScopeTargets.statusCode, 200, allScopeTargets.body);
     assert.equal(
-      allScopeTargets
-        .json()
-        .chats.some((chat: any) => chat.id === "game-empty"),
+      allScopeTargets.json().chats.some((chat: any) => chat.id === "game-empty"),
       true,
     );
     assert.deepEqual(allScopeTargets.json().personas, [
@@ -794,32 +917,21 @@ async function main() {
       { id: "persona-b", label: "Kira Luna", comment: "Private detective" },
     ]);
     assert.equal(
-      allScopeTargets
-        .json()
-        .chats.some((chat: any) => chat.id === "chat-professor-mari"),
+      allScopeTargets.json().chats.some((chat: any) => chat.id === "chat-professor-mari"),
+      false,
+    );
+    assert.equal(
+      allScopeTargets.json().characters.some((character: any) => character.id === "__professor_mari__"),
       false,
     );
     assert.equal(
       allScopeTargets
         .json()
-        .characters.some(
-          (character: any) => character.id === "__professor_mari__",
-        ),
-      false,
-    );
-    assert.equal(
-      allScopeTargets
-        .json()
-        .characters.some(
-          (character: any) =>
-            character.id === "character-nyra" && character.label === "Nyra",
-        ),
+        .characters.some((character: any) => character.id === "character-nyra" && character.label === "Nyra"),
       true,
     );
     assert.deepEqual(
-      allScopeTargets
-        .json()
-        .groups.find((group: any) => group.id === "observatory-branches"),
+      allScopeTargets.json().groups.find((group: any) => group.id === "observatory-branches"),
       {
         id: "observatory-branches",
         label: "Observatory",
@@ -827,9 +939,7 @@ async function main() {
       },
     );
     assert.equal(
-      allScopeTargets
-        .json()
-        .groups.some((group: any) => group.id === "professor-mari-only"),
+      allScopeTargets.json().groups.some((group: any) => group.id === "professor-mari-only"),
       false,
     );
     const professorMariCharacterPreview = await app.inject({
@@ -840,15 +950,11 @@ async function main() {
     });
     assert.equal(professorMariCharacterPreview.statusCode, 200);
     assert.equal(
-      professorMariCharacterPreview
-        .json()
-        .samples.some((sample: any) => sample.sourceId === "__professor_mari__"),
+      professorMariCharacterPreview.json().samples.some((sample: any) => sample.sourceId === "__professor_mari__"),
       false,
     );
     assert.equal(
-      professorMariCharacterPreview
-        .json()
-        .samples.some((sample: any) => sample.sourceId === "character-mara"),
+      professorMariCharacterPreview.json().samples.some((sample: any) => sample.sourceId === "character-mara"),
       true,
     );
     const professorMariCharacterImport = await app.inject({
@@ -862,9 +968,7 @@ async function main() {
       },
     });
     assert.equal(professorMariCharacterImport.statusCode, 200);
-    assert.deepEqual(professorMariCharacterImport.json().missingSourceIds, [
-      "__professor_mari__",
-    ]);
+    assert.deepEqual(professorMariCharacterImport.json().missingSourceIds, ["__professor_mari__"]);
     assert.equal(professorMariCharacterImport.json().imported.length, 0);
     assert.equal(
       (await storageService.storage.listNotes({ type: "source" })).some(
@@ -882,16 +986,11 @@ async function main() {
     assert.equal(
       professorMariChatPreview
         .json()
-        .samples.some(
-          (sample: any) =>
-            sample.sourceId === "chat-professor-mari:summary-mari",
-        ),
+        .samples.some((sample: any) => sample.sourceId === "chat-professor-mari:summary-mari"),
       false,
     );
     assert.equal(
-      professorMariChatPreview
-        .json()
-        .samples.some((sample: any) => sample.sourceId === "chat-a:summary-a"),
+      professorMariChatPreview.json().samples.some((sample: any) => sample.sourceId === "chat-a:summary-a"),
       true,
     );
     const professorMariChatImport = await app.inject({
@@ -905,9 +1004,7 @@ async function main() {
       },
     });
     assert.equal(professorMariChatImport.statusCode, 200);
-    assert.deepEqual(professorMariChatImport.json().missingSourceIds, [
-      "chat-professor-mari:summary-mari",
-    ]);
+    assert.deepEqual(professorMariChatImport.json().missingSourceIds, ["chat-professor-mari:summary-mari"]);
     assert.equal(professorMariChatImport.json().imported.length, 0);
     for (const note of [
       {
@@ -964,13 +1061,17 @@ async function main() {
       headers,
     });
     assert.deepEqual(
-      characterAllChats.json().map((note: any) => note.id).sort(),
+      characterAllChats
+        .json()
+        .map((note: any) => note.id)
+        .sort(),
       [
         "world_route_fixture",
         "world_scope_branch",
         "world_scope_character",
         "world_scope_chat",
         "world_scope_group",
+        "world_scope_other_character",
       ].sort(),
     );
     await storageService.storage.createNote({
@@ -1000,15 +1101,10 @@ async function main() {
       headers,
     });
     assert.equal(
-      characterWithoutPersona
-        .json()
-        .some((note: any) => note.id === "world_character_persona_scoped"),
+      characterWithoutPersona.json().some((note: any) => note.id === "world_character_persona_scoped"),
       true,
     );
-    assert.equal(
-      new Set(characterAllChats.json().map((note: any) => note.id)).size,
-      characterAllChats.json().length,
-    );
+    assert.equal(new Set(characterAllChats.json().map((note: any) => note.id)).size, characterAllChats.json().length);
     await storageService.storage.createNote({
       id: "char_mara",
       type: "character",
@@ -1040,7 +1136,10 @@ async function main() {
       headers,
     });
     assert.deepEqual(
-      characterAllBranches.json().map((note: any) => note.id).sort(),
+      characterAllBranches
+        .json()
+        .map((note: any) => note.id)
+        .sort(),
       [
         "char_mara",
         "world_character_persona_scoped",
@@ -1048,6 +1147,7 @@ async function main() {
         "world_scope_branch",
         "world_scope_character",
         "world_scope_group",
+        "world_scope_other_character",
       ].sort(),
     );
     const selectedBranch = await app.inject({
@@ -1056,9 +1156,13 @@ async function main() {
       headers,
     });
     assert.deepEqual(
-      selectedBranch.json().map((note: any) => note.id).sort(),
+      selectedBranch
+        .json()
+        .map((note: any) => note.id)
+        .sort(),
       [
         "char_mara",
+        "world_character_persona_scoped",
         "world_scope_branch",
         "world_scope_character",
         "world_scope_group",
@@ -1075,10 +1179,7 @@ async function main() {
       },
     });
     assert.equal(searched.statusCode, 200, searched.body);
-    assert.equal(
-      searched.json().chunks[0]?.chunk.noteId,
-      "world_route_fixture",
-    );
+    assert.equal(searched.json().chunks[0]?.chunk.noteId, "world_route_fixture");
     const transferPreview = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes/transfer-preview",
@@ -1090,9 +1191,7 @@ async function main() {
       },
     });
     assert.equal(transferPreview.statusCode, 200, transferPreview.body);
-    assert.deepEqual(transferPreview.json().buckets.ready, [
-      "world_route_fixture",
-    ]);
+    assert.deepEqual(transferPreview.json().buckets.ready, ["world_route_fixture"]);
     await storageService.storage.createNote({
       id: "world_transfer_destination_conflict",
       title: "Destination conflict",
@@ -1124,13 +1223,11 @@ async function main() {
     });
     assert.equal(staleTransfer.statusCode, 409, staleTransfer.body);
     assert.match(staleTransfer.json().error, /Refresh the preview/);
-    assert.deepEqual(
-      (await storageService.storage.getNote("world_route_fixture")).scope,
-      { chatId: "chat-a", chatIds: ["chat-a"] },
-    );
-    await storageService.storage.deleteNotesPermanently([
-      "world_transfer_destination_conflict",
-    ]);
+    assert.deepEqual((await storageService.storage.getNote("world_route_fixture")).scope, {
+      chatId: "chat-a",
+      chatIds: ["chat-a"],
+    });
+    await storageService.storage.deleteNotesPermanently(["world_transfer_destination_conflict"]);
     const transfer = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes/transfer",
@@ -1187,15 +1284,14 @@ async function main() {
         destinationChatId: "chat-persona-b",
       },
     });
-    assert.equal(personaTransfer.statusCode, 409, personaTransfer.body);
-    assert.deepEqual(
-      (await storageService.storage.getNote("world_persona_transfer")).scope,
-      {
-        chatId: "chat-persona-a",
-        chatIds: ["chat-persona-a"],
-        personaId: "persona-a",
-      },
-    );
+    assert.equal(personaTransfer.statusCode, 200, personaTransfer.body);
+    assert.deepEqual((await storageService.storage.getNote("world_persona_transfer")).scope, {
+      chatId: "chat-persona-a",
+      chatIds: ["chat-persona-a", "chat-persona-b"],
+      characterIds: ["character-mara"],
+      personaId: "persona-a",
+      personaIds: ["persona-a", "persona-b"],
+    });
     const extractSource = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes",
@@ -1247,15 +1343,8 @@ async function main() {
       headers,
       payload: { title: "Updated observatory report" },
     });
-    assert.equal(
-      sourceMetadataUpdate.statusCode,
-      200,
-      sourceMetadataUpdate.body,
-    );
-    assert.equal(
-      sourceMetadataUpdate.json().note.title,
-      "Updated observatory report",
-    );
+    assert.equal(sourceMetadataUpdate.statusCode, 200, sourceMetadataUpdate.body);
+    assert.equal(sourceMetadataUpdate.json().note.title, "Updated observatory report");
     const sourceContentUpdate = await app.inject({
       method: "PATCH",
       url: "/api/long-term-memory/notes/source_route_extract",
@@ -1271,8 +1360,7 @@ async function main() {
     });
     assert.equal(sourceContentUpdate.statusCode, 400, sourceContentUpdate.body);
     assert.equal(
-      (await storageService.storage.getNote("source_route_extract")).sections
-        .source.text,
+      (await storageService.storage.getNote("source_route_extract")).sections.source.text,
       "Mara seals the observatory gate at dusk.",
     );
     const inferredChatExtraction = await app.inject({
@@ -1281,11 +1369,7 @@ async function main() {
       headers,
       payload: {},
     });
-    assert.equal(
-      inferredChatExtraction.statusCode,
-      200,
-      inferredChatExtraction.body,
-    );
+    assert.equal(inferredChatExtraction.statusCode, 200, inferredChatExtraction.body);
     assert.equal(modelRequests.at(-1)?.chatConnectionId, "connection-a");
     await storageService.storage.createNote({
       id: "source_route_extract_unknown_chat",
@@ -1315,11 +1399,7 @@ async function main() {
       headers,
       payload: {},
     });
-    assert.equal(
-      unknownInferredChatExtraction.statusCode,
-      200,
-      unknownInferredChatExtraction.body,
-    );
+    assert.equal(unknownInferredChatExtraction.statusCode, 200, unknownInferredChatExtraction.body);
     assert.equal(modelRequests.at(-1)?.chatConnectionId, null);
     await storageService.storage.createNote({
       id: "source_delete_keep",
@@ -1366,12 +1446,47 @@ async function main() {
       headers,
       payload: { ids: ["source_delete_keep"], retractExtracted: false },
     });
-    assert.equal(keepSource.statusCode, 200, keepSource.body);
-    assert.equal(
-      await storageService.storage.getNote("source_delete_keep"),
-      null,
-    );
+    assert.equal(keepSource.statusCode, 400, keepSource.body);
+    assert.equal(keepSource.json().code, "ltm_source_lineage_preview_required");
+    assert.ok(await storageService.storage.getNote("source_delete_keep"));
     assert.ok(await storageService.storage.getNote("world_delete_keep"));
+    await storageService.storage.createNote({
+      id: "source_delete_stale",
+      title: "Stale source fixture",
+      type: "source",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: ["source_summary"],
+      keywords: [],
+      links: [],
+      provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "stale" },
+      sections: { source: { text: "Stale source.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+    });
+    await storageService.storage.createNote({
+      ...created.json().note,
+      id: "world_delete_stale_a",
+      links: [{ relation: "extracted_from", target: "source_delete_stale" }],
+    });
+    await storageService.storage.createNote({
+      ...created.json().note,
+      id: "world_delete_stale_b",
+      links: [{ relation: "extracted_from", target: "source_delete_stale" }],
+    });
+    const staleDelete = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/permanent-delete",
+      headers,
+      payload: {
+        ids: ["source_delete_stale", "world_delete_stale_a"],
+        retractExtracted: true,
+        excludedNoteIds: [],
+        lineageSourceNoteId: "source_delete_stale",
+        expectedLineageNoteIds: ["source_delete_stale", "world_delete_stale_a"],
+      },
+    });
+    assert.equal(staleDelete.statusCode, 409, staleDelete.body);
+    assert.ok(await storageService.storage.getNote("world_delete_stale_b"));
     await storageService.storage.createNote({
       id: "source_delete_retract",
       title: "Retract source fixture",
@@ -1412,8 +1527,7 @@ async function main() {
             {
               owner: "source",
               sourceNoteId: "source_delete_retract",
-              sourceHash:
-                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              sourceHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
               text: "This memory is retracted.",
               updatedAt: "2026-07-17T00:00:00.000Z",
               evidence: ["source_note:source_delete_retract"],
@@ -1422,28 +1536,73 @@ async function main() {
         },
       },
     });
+    await storageService.storage.projectNote("world_delete_retract", "world", (current: any) => ({
+      ...current,
+      sections: {
+        facts: {
+          ...current.sections.facts,
+          contributions: [
+            {
+              owner: "source",
+              sourceNoteId: "source_delete_retract",
+              sourceHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              text: "This memory is retracted.",
+              updatedAt: "2026-07-17T00:00:00.000Z",
+              evidence: ["source_note:source_delete_retract"],
+            },
+          ],
+        },
+      },
+    }));
+    const oversizedLineage = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/permanent-delete",
+      headers,
+      payload: {
+        ids: ["source_delete_retract"],
+        retractExtracted: true,
+        excludedNoteIds: ["world_delete_retract"],
+        lineageSourceNoteId: "source_delete_retract",
+        expectedLineageNoteIds: [
+          "source_delete_retract",
+          "world_delete_retract",
+          ...Array.from({ length: 998 }, (_, index) => `world_lineage_${index}`),
+        ],
+      },
+    });
+    assert.equal(
+      oversizedLineage.statusCode,
+      409,
+      "a 1,000-ID lineage must pass request validation before stale-lineage detection",
+    );
     const retractSource = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes/permanent-delete",
       headers,
-      payload: { ids: ["source_delete_retract"], retractExtracted: true },
+      payload: {
+        ids: ["source_delete_retract"],
+        retractExtracted: true,
+        excludedNoteIds: ["world_delete_retract"],
+        lineageSourceNoteId: "source_delete_retract",
+        expectedLineageNoteIds: ["source_delete_retract", "world_delete_retract"],
+      },
     });
     assert.equal(retractSource.statusCode, 200, retractSource.body);
-    assert.equal(
-      await storageService.storage.getNote("source_delete_retract"),
-      null,
-    );
-    assert.deepEqual(
-      (await storageService.storage.getNote("world_delete_retract"))?.sections
-        .facts.contributions,
-      [
-        {
-          owner: "manual",
-          text: "This memory is retracted.",
-          updatedAt: "2026-07-17T00:00:00.000Z",
-        },
-      ],
-    );
+    assert.deepEqual(retractSource.json().detachedNoteIds, ["world_delete_retract"]);
+    assert.equal(await storageService.storage.getNote("source_delete_retract"), null);
+    assert.deepEqual((await storageService.storage.getNote("world_delete_retract"))?.sections.facts.contributions, [
+      {
+        owner: "manual",
+        text: "This memory is retracted.",
+        updatedAt: "2026-07-17T00:00:00.000Z",
+      },
+    ]);
+    const derivedResponse = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/notes/source_delete_retract/derived",
+      headers,
+    });
+    assert.equal(derivedResponse.statusCode, 404);
     const invalidMode = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes/source_route_extract/extract",
@@ -1476,18 +1635,10 @@ async function main() {
         .json()
         .draft?.mutations.map((mutation: any) => mutation.note?.id)
         .sort(),
-      [
-        "char_mara",
-        "timeline_observatory_gate_sealed_1bbd9d3c48",
-        "world_observatory_gate",
-      ],
+      ["char_mara", "timeline_observatory_gate_sealed_1bbd9d3c48", "world_observatory_gate"],
     );
     assert.deepEqual(
-      extracted
-        .json()
-        .draft?.mutations.find(
-          (mutation: any) => mutation.note?.id === "char_mara",
-        )?.note.subjects,
+      extracted.json().draft?.mutations.find((mutation: any) => mutation.note?.id === "char_mara")?.note.subjects,
       [
         {
           key: "character:character-mara",
@@ -1511,22 +1662,18 @@ async function main() {
     assert.equal(
       completionMessages
         .at(-1)
-        .some((message: any) =>
-          message.content.includes("Mara seals the observatory gate at dusk."),
-        ),
+        .some((message: any) => message.content.includes("Mara seals the observatory gate at dusk.")),
       true,
     );
     assert.deepEqual(
-      completionOptions.at(-1)?.responseFormat?.json_schema?.schema?.properties
-        ?.units?.items?.properties?.claimKind?.enum,
+      completionOptions.at(-1)?.responseFormat?.json_schema?.schema?.properties?.units?.items?.properties?.claimKind
+        ?.enum,
       ["static", "change"],
     );
     assert.equal(
       completionOptions
         .at(-1)
-        ?.responseFormat?.json_schema?.schema?.properties?.units?.items?.required?.includes(
-          "claimKind",
-        ),
+        ?.responseFormat?.json_schema?.schema?.properties?.units?.items?.required?.includes("claimKind"),
       true,
     );
     const grammarErrors = [
@@ -1549,11 +1696,7 @@ async function main() {
           .json()
           .draft?.mutations.map((mutation: any) => mutation.note?.id)
           .sort(),
-        [
-          "char_mara",
-          "timeline_observatory_gate_sealed_1bbd9d3c48",
-          "world_observatory_gate",
-        ],
+        ["char_mara", "timeline_observatory_gate_sealed_1bbd9d3c48", "world_observatory_gate"],
       );
       assert.equal(completionOptions.at(-2)?.responseFormat?.type, "json_schema");
       assert.equal("responseFormat" in completionOptions.at(-1), false);
@@ -1579,9 +1722,7 @@ async function main() {
     assert.match(trimmedContext.json().error, /source is too large/);
     fitContextMode = "normal";
     assert.equal(
-      debugOverrides.some(
-        (entry) => entry.enabled && entry.message.includes("extraction prompt"),
-      ),
+      debugOverrides.some((entry) => entry.enabled && entry.message.includes("extraction prompt")),
       true,
     );
     await storageService.storage.createNote({
@@ -1614,10 +1755,40 @@ async function main() {
           (note: any) =>
             note.id === "world_cross_scope_derived" &&
             note.scope.chatId === "chat-b" &&
-            note.sections === undefined,
+            note.sections === undefined &&
+            note.previewText === "A memory derived in another chat." &&
+            typeof note.incomingLinkCount === "number" &&
+            typeof note.outgoingLinkCount === "number",
         ),
       true,
     );
+    assert.equal(typeof crossScopeDerived.json().sourceIncomingLinkCount, "number");
+    await storageService.storage.createNote({
+      id: "source_transfer_second_parent",
+      title: "Second transfer parent",
+      type: "source",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: ["source_summary"],
+      keywords: [],
+      links: [],
+      provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "second-parent" },
+      sections: { source: { text: "Second parent.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+    });
+    await storageService.storage.createNote({
+      ...created.json().note,
+      id: "world_transfer_multi_source",
+      links: [
+        { target: "source_route_extract", relation: "extracted_from" },
+        { target: "source_transfer_second_parent", relation: "extracted_from" },
+      ],
+    });
+    await storageService.storage.createNote({
+      ...created.json().note,
+      id: "world_transfer_multi_descendant",
+      links: [{ target: "world_transfer_multi_source", relation: "extracted_from" }],
+    });
     const transferWithDerived = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes/transfer-preview",
@@ -1630,11 +1801,16 @@ async function main() {
       },
     });
     assert.equal(transferWithDerived.statusCode, 200, transferWithDerived.body);
+    assert.equal(transferWithDerived.json().selection.derivedNoteIds.includes("world_cross_scope_derived"), true);
     assert.equal(
-      transferWithDerived
-        .json()
-        .selection.derivedNoteIds.includes("world_cross_scope_derived"),
+      transferWithDerived.json().selection.derivedNoteIds.includes("world_transfer_multi_descendant"),
       true,
+      "transfer must retain descendants through every extracted_from parent",
+    );
+    assert.deepEqual(
+      transferWithDerived.json().items.find((item: any) => item.noteId === "world_transfer_multi_source")
+        ?.sourceNoteIds,
+      ["source_route_extract", "source_transfer_second_parent"],
     );
     const transferWithoutDerived = await app.inject({
       method: "POST",
@@ -1647,15 +1823,21 @@ async function main() {
         includeDerived: false,
       },
     });
-    assert.equal(
-      transferWithoutDerived.statusCode,
-      200,
-      transferWithoutDerived.body,
-    );
-    assert.equal(
-      transferWithoutDerived.json().selection.includedDerivedCount,
-      0,
-    );
+    assert.equal(transferWithoutDerived.statusCode, 200, transferWithoutDerived.body);
+    assert.equal(transferWithoutDerived.json().selection.includedDerivedCount, 0);
+    const transferWithSelectedDerived = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes/transfer-preview",
+      headers,
+      payload: {
+        noteIds: ["source_route_extract"],
+        derivedNoteIds: ["world_cross_scope_derived"],
+        mode: "copy",
+        destinationChatId: "chat-b",
+      },
+    });
+    assert.equal(transferWithSelectedDerived.statusCode, 200, transferWithSelectedDerived.body);
+    assert.deepEqual(transferWithSelectedDerived.json().selection.derivedNoteIds, ["world_cross_scope_derived"]);
     await storageService.storage.createNote({
       id: "source_transfer_noop_root",
       title: "No-op transfer root",
@@ -1687,9 +1869,7 @@ async function main() {
       scope: { chatId: "chat-a", chatIds: ["chat-a"] },
       tags: [],
       keywords: [],
-      links: [
-        { target: "source_transfer_noop_root", relation: "extracted_from" },
-      ],
+      links: [{ target: "source_transfer_noop_root", relation: "extracted_from" }],
       sections: {
         facts: {
           text: "Ready derived transfer",
@@ -1709,12 +1889,8 @@ async function main() {
       },
     });
     assert.equal(derivedOnlyPreview.statusCode, 200, derivedOnlyPreview.body);
-    assert.deepEqual(derivedOnlyPreview.json().buckets.noOp, [
-      "source_transfer_noop_root",
-    ]);
-    assert.deepEqual(derivedOnlyPreview.json().buckets.ready, [
-      "world_transfer_ready_derived",
-    ]);
+    assert.deepEqual(derivedOnlyPreview.json().buckets.noOp, ["source_transfer_noop_root"]);
+    assert.deepEqual(derivedOnlyPreview.json().buckets.ready, ["world_transfer_ready_derived"]);
     const derivedOnlyApply = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes/transfer",
@@ -1728,9 +1904,7 @@ async function main() {
       },
     });
     assert.equal(derivedOnlyApply.statusCode, 200, derivedOnlyApply.body);
-    assert.deepEqual(derivedOnlyApply.json().updatedNoteIds, [
-      "world_transfer_ready_derived",
-    ]);
+    assert.deepEqual(derivedOnlyApply.json().updatedNoteIds, ["world_transfer_ready_derived"]);
     const extractionActivity = (
       await app.inject({
         method: "GET",
@@ -1762,16 +1936,10 @@ async function main() {
       url: "/api/long-term-memory/debug-log?phase=extraction",
       headers,
     });
-    assert.equal(
-      extractionPhaseActivity.statusCode,
-      200,
-      extractionPhaseActivity.body,
-    );
+    assert.equal(extractionPhaseActivity.statusCode, 200, extractionPhaseActivity.body);
     assert.equal(
       extractionPhaseActivity.json().events.length > 0 &&
-        extractionPhaseActivity
-          .json()
-          .events.every((event: any) => event.phase === "extraction"),
+        extractionPhaseActivity.json().events.every((event: any) => event.phase === "extraction"),
       true,
     );
     const errorActivity = await app.inject({
@@ -1782,9 +1950,7 @@ async function main() {
     assert.equal(errorActivity.statusCode, 200, errorActivity.body);
     assert.equal(errorActivity.json().events.length > 0, true);
     assert.equal(
-      errorActivity
-        .json()
-        .events.every((event: any) => event.status === "error"),
+      errorActivity.json().events.every((event: any) => event.status === "error"),
       true,
     );
     for (const query of ["phase=invalid", "status=invalid"]) {
@@ -1802,9 +1968,7 @@ async function main() {
     });
     assert.equal(chatDrafts.statusCode, 200, chatDrafts.body);
     assert.equal(
-      chatDrafts
-        .json()
-        .some((draft: any) => draft.id === extracted.json().draft.id),
+      chatDrafts.json().some((draft: any) => draft.id === extracted.json().draft.id),
       true,
     );
     assert.equal(
@@ -1829,37 +1993,23 @@ async function main() {
     assert.equal(autoApplied.json().draft.indexRebuildStatus, "not_requested");
     assert.equal(modelCalls > 2, true);
     for (const [id, createdAt, text] of [
-      [
-        "char_mara_legacy_a",
-        "2026-07-15T00:00:00.000Z",
-        "Mara guards the eastern gate.",
-      ],
-      [
-        "char_mara_legacy_b",
-        "2026-07-16T00:00:00.000Z",
-        "Mara seals the western gate.",
-      ],
+      ["char_mara_legacy_a", "2026-07-15T00:00:00.000Z", "Mara guards the eastern gate."],
+      ["char_mara_legacy_b", "2026-07-16T00:00:00.000Z", "Mara seals the western gate."],
     ] as const) {
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/long-term-memory/notes",
-        headers,
-        payload: {
-          id,
-          title: "Mara",
-          type: "character",
-          status: "active",
-          modes: ["roleplay"],
-          scope: { chatId: "chat-a", chatIds: ["chat-a"] },
-          tags: [],
-          keywords: [],
-          createdAt,
-          updatedAt: createdAt,
-          links: [],
-          sections: { facts: { text, updatedAt: createdAt } },
-        },
+      await storageService.storage.createNote({
+        id,
+        title: "Mara",
+        type: "character",
+        status: "active",
+        modes: ["roleplay"],
+        scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+        tags: [],
+        keywords: [],
+        createdAt,
+        updatedAt: createdAt,
+        links: [],
+        sections: { facts: { text, updatedAt: createdAt } },
       });
-      assert.equal(response.statusCode, 201, response.body);
     }
     await storageService.storage.updateNote("world_route_fixture", {
       links: [{ target: "char_mara_legacy_b", relation: "affects_character" }],
@@ -1873,9 +2023,7 @@ async function main() {
     assert.equal(identityPreview.statusCode, 200, identityPreview.body);
     const identityCandidate = identityPreview
       .json()
-      .candidates.find((candidate: any) =>
-        candidate.duplicateNoteIds.includes("char_mara_legacy_b"),
-      );
+      .candidates.find((candidate: any) => candidate.duplicateNoteIds.includes("char_mara_legacy_b"));
     assert.equal(identityCandidate.canonicalNoteId, "char_mara_legacy_a");
     const noOpIdentityApply = await app.inject({
       method: "POST",
@@ -1906,25 +2054,14 @@ async function main() {
         },
       },
     });
-    assert.equal(
-      swappedIdentityPreview.statusCode,
-      200,
-      swappedIdentityPreview.body,
-    );
+    assert.equal(swappedIdentityPreview.statusCode, 200, swappedIdentityPreview.body);
     const swappedIdentityCandidate = swappedIdentityPreview
       .json()
-      .candidates.find(
-        (candidate: any) => candidate.id === identityCandidate.id,
-      );
-    assert.equal(
-      swappedIdentityCandidate.canonicalNoteId,
-      "char_mara_legacy_b",
-    );
+      .candidates.find((candidate: any) => candidate.id === identityCandidate.id);
+    assert.equal(swappedIdentityCandidate.canonicalNoteId, "char_mara_legacy_b");
     assert.equal(
       swappedIdentityCandidate.additiveContent.some((content: any) =>
-        content.addedLines.some((line: string) =>
-          line.includes("eastern gate"),
-        ),
+        content.addedLines.some((line: string) => line.includes("eastern gate")),
       ),
       true,
     );
@@ -1939,11 +2076,7 @@ async function main() {
         },
       },
     });
-    assert.equal(
-      staleCanonicalPreview.statusCode,
-      409,
-      staleCanonicalPreview.body,
-    );
+    assert.equal(staleCanonicalPreview.statusCode, 409, staleCanonicalPreview.body);
     assert.equal(staleCanonicalPreview.json().code, "identity_repair_stale");
     const identityApply = await app.inject({
       method: "POST",
@@ -1971,65 +2104,35 @@ async function main() {
     ]);
     assert.equal("manifest" in identityApply.json().rebuild, false);
     assert.equal("sourceChunkCount" in identityApply.json().rebuild, false);
-    assert.deepEqual(identityApply.json().repairs[0].archivedNoteIds, [
-      "char_mara_legacy_a",
+    assert.deepEqual(identityApply.json().repairs[0].archivedNoteIds, ["char_mara_legacy_a"]);
+    assert.deepEqual((await storageService.storage.getNote("char_mara_legacy_b")).subjects, [
+      {
+        key: "character:character-mara",
+        ref: { kind: "character", id: "character-mara" },
+      },
     ]);
-    assert.deepEqual(
-      (await storageService.storage.getNote("char_mara_legacy_b")).subjects,
-      [
-        {
-          key: "character:character-mara",
-          ref: { kind: "character", id: "character-mara" },
-        },
-      ],
-    );
-    assert.match(
-      (await storageService.storage.getNote("char_mara_legacy_b")).sections
-        .facts.text,
-      /eastern gate/,
-    );
-    assert.equal(
-      (await storageService.storage.getNote("char_mara_legacy_a")).status,
-      "archived",
-    );
-    assert.equal(
-      (await storageService.storage.getNote("world_route_fixture")).links[0]
-        .target,
-      "char_mara_legacy_b",
-    );
+    assert.match((await storageService.storage.getNote("char_mara_legacy_b")).sections.facts.text, /eastern gate/);
+    assert.equal((await storageService.storage.getNote("char_mara_legacy_a")).status, "archived");
+    assert.equal((await storageService.storage.getNote("world_route_fixture")).links[0].target, "char_mara_legacy_b");
     assert.equal(identityApply.json().integrity.ok, true);
     for (const [id, createdAt, text] of [
-      [
-        "char_nyra_persona_a",
-        "2026-07-17T00:00:00.000Z",
-        "Nyra charts the northern passage.",
-      ],
-      [
-        "char_nyra_persona_b",
-        "2026-07-18T00:00:00.000Z",
-        "Nyra marks the southern passage.",
-      ],
+      ["char_nyra_persona_a", "2026-07-17T00:00:00.000Z", "Nyra charts the northern passage."],
+      ["char_nyra_persona_b", "2026-07-18T00:00:00.000Z", "Nyra marks the southern passage."],
     ] as const) {
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/long-term-memory/notes",
-        headers,
-        payload: {
-          id,
-          title: "Nyra",
-          type: "character",
-          status: "active",
-          modes: ["roleplay"],
-          scope: { personaId: "persona-fixture" },
-          tags: [],
-          keywords: [],
-          createdAt,
-          updatedAt: createdAt,
-          links: [],
-          sections: { facts: { text, updatedAt: createdAt } },
-        },
+      await storageService.storage.createNote({
+        id,
+        title: "Nyra",
+        type: "character",
+        status: "active",
+        modes: ["roleplay"],
+        scope: { personaId: "persona-fixture" },
+        tags: [],
+        keywords: [],
+        createdAt,
+        updatedAt: createdAt,
+        links: [],
+        sections: { facts: { text, updatedAt: createdAt } },
       });
-      assert.equal(response.statusCode, 201, response.body);
     }
     const personaIdentityPreview = await app.inject({
       method: "POST",
@@ -2037,16 +2140,10 @@ async function main() {
       headers,
       payload: { scope: { personaId: "persona-fixture" } },
     });
-    assert.equal(
-      personaIdentityPreview.statusCode,
-      200,
-      personaIdentityPreview.body,
-    );
+    assert.equal(personaIdentityPreview.statusCode, 200, personaIdentityPreview.body);
     const personaIdentityCandidate = personaIdentityPreview
       .json()
-      .candidates.find((candidate: any) =>
-        candidate.duplicateNoteIds.includes("char_nyra_persona_b"),
-      );
+      .candidates.find((candidate: any) => candidate.duplicateNoteIds.includes("char_nyra_persona_b"));
     assert.ok(personaIdentityCandidate);
     const personaIdentityApply = await app.inject({
       method: "POST",
@@ -2064,19 +2161,11 @@ async function main() {
         ],
       },
     });
-    assert.equal(
-      personaIdentityApply.statusCode,
-      200,
-      personaIdentityApply.body,
-    );
-    assert.deepEqual(
-      (
-        await storageService.storage.getNote(
-          personaIdentityCandidate.canonicalNoteId,
-        )
-      ).scope,
-      { personaId: "persona-fixture" },
-    );
+    assert.equal(personaIdentityApply.statusCode, 200, personaIdentityApply.body);
+    assert.deepEqual((await storageService.storage.getNote(personaIdentityCandidate.canonicalNoteId)).scope, {
+      personaId: "persona-fixture",
+      personaIds: ["persona-fixture"],
+    });
     const preview = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/preview",
@@ -2087,19 +2176,11 @@ async function main() {
     assert.equal(
       preview
         .json()
-        .samples.some(
-          (sample: any) =>
-            sample.sourceId === "chat-a:summary-a" &&
-            sample.freshness === "new",
-        ),
+        .samples.some((sample: any) => sample.sourceId === "chat-a:summary-a" && sample.freshness === "new"),
       true,
     );
     assert.equal(
-      preview
-        .json()
-        .samples.some(
-          (sample: any) => sample.sourceId === "game-a:game-session-1",
-        ),
+      preview.json().samples.some((sample: any) => sample.sourceId === "game-a:game-session-1"),
       true,
     );
     const excludedByChatIds = await app.inject({
@@ -2111,11 +2192,7 @@ async function main() {
     assert.equal(
       excludedByChatIds
         .json()
-        .samples.some(
-          (sample: any) =>
-            sample.sourceId.startsWith("chat-a:") ||
-            sample.sourceId.startsWith("game-a:"),
-        ),
+        .samples.some((sample: any) => sample.sourceId.startsWith("chat-a:") || sample.sourceId.startsWith("game-a:")),
       false,
     );
     const excludedByGroup = await app.inject({
@@ -2140,23 +2217,16 @@ async function main() {
       },
     });
     assert.equal(
-      branchPreview
-        .json()
-        .samples.some((sample: any) => sample.sourceId === "chat-a:summary-a"),
+      branchPreview.json().samples.some((sample: any) => sample.sourceId === "chat-a:summary-a"),
       true,
     );
     assert.equal(
-      branchPreview
-        .json()
-        .samples.some(
-          (sample: any) => sample.sourceId === "game-a:game-session-1",
-        ),
+      branchPreview.json().samples.some((sample: any) => sample.sourceId === "game-a:game-session-1"),
       true,
     );
     const branchSourceId = branchPreview
       .json()
-      .samples.find((sample: any) => sample.sourceId === "game-a:game-session-1")
-      .sourceId;
+      .samples.find((sample: any) => sample.sourceId === "game-a:game-session-1").sourceId;
     const currentChatOnlyImport = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/source-notes",
@@ -2169,9 +2239,7 @@ async function main() {
       },
     });
     assert.equal(currentChatOnlyImport.statusCode, 200, currentChatOnlyImport.body);
-    assert.deepEqual(currentChatOnlyImport.json().missingSourceIds, [
-      branchSourceId,
-    ]);
+    assert.deepEqual(currentChatOnlyImport.json().missingSourceIds, [branchSourceId]);
     const scopedBranchImport = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/source-notes",
@@ -2196,11 +2264,7 @@ async function main() {
       payload: { source: "chats", limit: 10, mode: "game" },
     });
     assert.equal(
-      gamePreview
-        .json()
-        .samples.every(
-          (sample: any) => sample.sourceId === "game-a:game-session-1",
-        ),
+      gamePreview.json().samples.every((sample: any) => sample.sourceId === "game-a:game-session-1"),
       true,
     );
     chats[0].metadata.summaryEntries.push({
@@ -2252,9 +2316,7 @@ async function main() {
     assert.equal(
       completionMessages
         .at(-1)
-        .some((message: any) =>
-          message.content.includes("Mara seals the observatory gate at dusk."),
-        ),
+        .some((message: any) => message.content.includes("Mara seals the observatory gate at dusk.")),
       true,
     );
     const importedChatNote = importedChat.json().imported[0].note;
@@ -2294,10 +2356,7 @@ async function main() {
         source: {
           text: "Previously imported fallback text.",
           updatedAt: "2026-07-17T00:00:00.000Z",
-          evidence: [
-            "chat:chat-a",
-            "summary_entry:summary-provenance-fallback",
-          ],
+          evidence: ["chat:chat-a", "summary_entry:summary-provenance-fallback"],
         },
       },
     });
@@ -2331,18 +2390,12 @@ async function main() {
     });
     const fallbackSample = provenancePreview
       .json()
-      .samples.find(
-        (sample: any) =>
-          sample.sourceId === "chat-a:summary-provenance-fallback",
-      );
+      .samples.find((sample: any) => sample.sourceId === "chat-a:summary-provenance-fallback");
     assert.equal(fallbackSample.status, "imported");
     assert.equal(fallbackSample.freshness, "extraction_incomplete");
     assert.equal(fallbackSample.existingNoteId, "source_provenance_fallback");
     assert.equal(
-      provenancePreview
-        .json()
-        .samples.find((sample: any) => sample.sourceId === "chat-a:summary-a")
-        .existingNoteId,
+      provenancePreview.json().samples.find((sample: any) => sample.sourceId === "chat-a:summary-a").existingNoteId,
       importedChatNote.id,
     );
     await storageService.storage.updateNote(importedChatNote.id, {
@@ -2368,19 +2421,14 @@ async function main() {
       },
     });
     assert.equal(refreshedChat.statusCode, 200, refreshedChat.body);
-    assert.equal(
-      refreshedChat.json().imported[0].extractionStatus,
-      "not_started",
-    );
+    assert.equal(refreshedChat.json().imported[0].extractionStatus, "not_started");
     assert.equal(refreshedChat.json().imported[0].outcome.state, "no_suggestions_created");
     assert.equal(refreshedChat.json().imported[0].draft, null);
     assert.equal(modelCalls, importCalls + 1);
     const refreshedNote = refreshedChat.json().imported[0].note;
     assert.equal(refreshedNote.tags.includes("user_tag"), true);
     assert.deepEqual(refreshedNote.keywords, ["preserve-me"]);
-    assert.deepEqual(refreshedNote.links, [
-      { target: "world_route_fixture", relation: "evidenced_by" },
-    ]);
+    assert.deepEqual(refreshedNote.links, [{ target: "world_route_fixture", relation: "evidenced_by" }]);
     assert.equal(refreshedNote.sections.notes.text, "User-owned section.");
     chats[0].metadata.summaryEntries.push({
       id: "summary-empty-response",
@@ -2446,10 +2494,7 @@ async function main() {
     assert.equal(migrated.statusCode, 200, migrated.body);
     assert.notEqual(migrated.json().imported[0].note.id, legacyId);
     assert.equal(await storageService.storage.getNote(legacyId), null);
-    assert.equal(
-      migrated.json().imported[0].note.tags.includes("legacy_tag"),
-      true,
-    );
+    assert.equal(migrated.json().imported[0].note.tags.includes("legacy_tag"), true);
     const gameCalls = modelCalls;
     const gameResolutions = modelRequests.length;
     const importedGame = await app.inject({
@@ -2463,14 +2508,8 @@ async function main() {
       },
     });
     assert.equal(importedGame.statusCode, 200, importedGame.body);
-    assert.equal(
-      importedGame.json().imported[0]?.extractionMethod,
-      "deterministic",
-    );
-    assert.equal(
-      importedGame.json().imported[0]?.extractionStatus,
-      "succeeded",
-    );
+    assert.equal(importedGame.json().imported[0]?.extractionMethod, "deterministic");
+    assert.equal(importedGame.json().imported[0]?.extractionStatus, "succeeded");
     assert.equal(modelCalls, gameCalls);
     assert.equal(modelRequests.length, gameResolutions);
     assert.match(
@@ -2481,10 +2520,7 @@ async function main() {
       importedGame.json().imported[0].note.sections.source.text,
       /Party state:\nThe party holds the cobalt key\./,
     );
-    assert.equal(
-      importedGame.json().imported[0].draft.mutations.length > 0,
-      true,
-    );
+    assert.equal(importedGame.json().imported[0].draft.mutations.length > 0, true);
     const { configurePackageRuntime } =
       await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts");
     releaseRuntimeOverride = configurePackageRuntime({
@@ -2493,11 +2529,7 @@ async function main() {
         debug() {},
         info() {},
         warn(...args: any[]) {
-          refineWarnings.push(
-            args.map((value) =>
-              value instanceof Error ? value.message : value,
-            ),
-          );
+          refineWarnings.push(args.map((value) => (value instanceof Error ? value.message : value)));
         },
         error() {},
         debugOverride() {},
@@ -2510,10 +2542,7 @@ async function main() {
           modelRequests.push(request);
           return {
             name: "RefineFixture",
-            connectionId:
-              request.connectionId ??
-              request.chatConnectionId ??
-              "connection-a",
+            connectionId: request.connectionId ?? request.chatConnectionId ?? "connection-a",
             model: request.model ?? "refine-model",
             maxContext: 32_000,
             maxOutputTokens: 4_000,
@@ -2548,9 +2577,7 @@ async function main() {
               id: "character-mara",
               data: {
                 name: "Mara",
-                alternate_greetings: JSON.stringify([
-                  "Welcome to the observatory.",
-                ]),
+                alternate_greetings: JSON.stringify(["Welcome to the observatory."]),
               },
               comment: "",
             },
@@ -2627,12 +2654,8 @@ async function main() {
     assert.equal(groupedLorePreview.json().counts.books, 2);
     assert.equal(groupedLorePreview.json().counts.entries, 4);
     assert.equal(groupedLorePreview.json().counts.candidates, 5);
-    const groupedScopedLore = groupedLorePreview
-      .json()
-      .books.find((book: any) => book.id === "lorebook-a");
-    const groupedEmptyLore = groupedLorePreview
-      .json()
-      .books.find((book: any) => book.id === "lorebook-empty");
+    const groupedScopedLore = groupedLorePreview.json().books.find((book: any) => book.id === "lorebook-a");
+    const groupedEmptyLore = groupedLorePreview.json().books.find((book: any) => book.id === "lorebook-empty");
     assert.equal(groupedScopedLore.name, groupedEmptyLore.name);
     assert.notEqual(groupedScopedLore.id, groupedEmptyLore.id);
     assert.equal(groupedScopedLore.tags[1].length, 120);
@@ -2647,20 +2670,15 @@ async function main() {
       pending: 0,
       imported: 0,
     });
-    const groupedLargeEntry = groupedScopedLore.entries.find(
-      (entry: any) => entry.id === "entry-large",
-    );
+    const groupedLargeEntry = groupedScopedLore.entries.find((entry: any) => entry.id === "entry-large");
     assert.equal(groupedLargeEntry.name, "Gate");
     assert.equal(groupedLargeEntry.candidateCount, 2);
     assert.equal(
-      groupedLargeEntry.candidates.every(
-        (candidate: any) => candidate.snippet.length <= 203,
-      ),
+      groupedLargeEntry.candidates.every((candidate: any) => candidate.snippet.length <= 203),
       true,
     );
-    const groupedImportSourceId = groupedScopedLore.entries.find(
-      (entry: any) => entry.id === "entry-a",
-    ).candidates[0].sourceId;
+    const groupedImportSourceId = groupedScopedLore.entries.find((entry: any) => entry.id === "entry-a").candidates[0]
+      .sourceId;
     const loreImport = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/source-notes",
@@ -2676,10 +2694,7 @@ async function main() {
       chatIds: ["chat-a"],
       characterIds: ["character-mara"],
     });
-    assert.equal(
-      loreImport.json().imported[0].note.tags.includes("cobalt_lore"),
-      true,
-    );
+    assert.equal(loreImport.json().imported[0].note.tags.includes("cobalt_lore"), true);
     const groupedAfterImport = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/lorebooks/preview",
@@ -2698,10 +2713,7 @@ async function main() {
       headers,
       payload: { source: "characters", limit: 10 },
     });
-    assert.match(
-      characterPreview.json().samples[0].snippet,
-      /Welcome to the observatory/,
-    );
+    assert.match(characterPreview.json().samples[0].snippet, /Welcome to the observatory/);
     const firstGameNote = importedGame.json().imported[0].note;
     const firstGameFingerprint = firstGameNote.extractionFingerprint;
     const currentGamePreview = await app.inject({
@@ -2712,9 +2724,7 @@ async function main() {
     });
     const currentGameSample = currentGamePreview
       .json()
-      .samples.find(
-        (sample: any) => sample.sourceId === "game-a:game-session-1",
-      );
+      .samples.find((sample: any) => sample.sourceId === "game-a:game-session-1");
     assert.equal(currentGameSample.status, "imported");
     assert.equal(currentGameSample.freshness, "current");
     const contextGamePreview = await app.inject({
@@ -2732,15 +2742,11 @@ async function main() {
     });
     const contextGameSample = contextGamePreview
       .json()
-      .samples.find(
-        (sample: any) => sample.sourceId === "game-a:game-session-1",
-      );
+      .samples.find((sample: any) => sample.sourceId === "game-a:game-session-1");
     assert.equal(contextGameSample.status, "imported");
     assert.equal(contextGameSample.freshness, "context_updated");
     const changedGameCalls = modelCalls;
-    chats.find(
-      (chat) => chat.id === "game-a",
-    ).metadata.gamePreviousSessionSummaries[0].summary =
+    chats.find((chat) => chat.id === "game-a").metadata.gamePreviousSessionSummaries[0].summary =
       "The party discovered the changed Moon Vault beneath the observatory.";
     const changedGamePreview = await app.inject({
       method: "POST",
@@ -2750,9 +2756,7 @@ async function main() {
     });
     const changedGameSample = changedGamePreview
       .json()
-      .samples.find(
-        (sample: any) => sample.sourceId === "game-a:game-session-1",
-      );
+      .samples.find((sample: any) => sample.sourceId === "game-a:game-session-1");
     assert.equal(changedGameSample.status, "imported");
     assert.equal(changedGameSample.freshness, "source_updated");
     const changedGame = await app.inject({
@@ -2762,14 +2766,8 @@ async function main() {
       payload: { source: "chats", sourceIds: ["game-a:game-session-1"] },
     });
     assert.equal(changedGame.statusCode, 200, changedGame.body);
-    assert.match(
-      changedGame.json().imported[0].note.sections.source.text,
-      /changed Moon Vault/,
-    );
-    assert.notDeepEqual(
-      changedGame.json().imported[0].note.extractionFingerprint,
-      firstGameFingerprint,
-    );
+    assert.match(changedGame.json().imported[0].note.sections.source.text, /changed Moon Vault/);
+    assert.notDeepEqual(changedGame.json().imported[0].note.extractionFingerprint, firstGameFingerprint);
     assert.equal(modelCalls, changedGameCalls);
     const enabledRefine = await app.inject({
       method: "PUT",
@@ -2809,15 +2807,9 @@ async function main() {
       payload: { connectionId: "saved-extraction-connection" },
     });
     assert.equal(savedConnection.statusCode, 200, savedConnection.body);
-    assert.equal(
-      savedConnection.json().connectionId,
-      "saved-extraction-connection",
-    );
+    assert.equal(savedConnection.json().connectionId, "saved-extraction-connection");
     assert.equal(extractionPatch.json().useExtractionAgentOnGameMode, true);
-    assert.deepEqual(
-      extractionPatch.json().promptTemplates,
-      extractionTemplates.json().promptTemplates,
-    );
+    assert.deepEqual(extractionPatch.json().promptTemplates, extractionTemplates.json().promptTemplates);
     const savedConnectionRun = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes/source_route_extract/extract",
@@ -2825,21 +2817,14 @@ async function main() {
       payload: { chatId: "chat-a" },
     });
     assert.equal(savedConnectionRun.statusCode, 200, savedConnectionRun.body);
-    assert.equal(
-      modelRequests.at(-1)?.connectionId,
-      "saved-extraction-connection",
-    );
+    assert.equal(modelRequests.at(-1)?.connectionId, "saved-extraction-connection");
     const resetSavedConnection = await app.inject({
       method: "PUT",
       url: "/api/long-term-memory/extraction-settings",
       headers,
       payload: { connectionId: null },
     });
-    assert.equal(
-      resetSavedConnection.statusCode,
-      200,
-      resetSavedConnection.body,
-    );
+    assert.equal(resetSavedConnection.statusCode, 200, resetSavedConnection.body);
     assert.equal(resetSavedConnection.json().connectionId, null);
     assert.equal(
       ltmExtractionSettingsSchema.parse(extractionPatch.json()).temperature,
@@ -2866,11 +2851,7 @@ async function main() {
       headers,
       payload: { chatId: "chat-a" },
     });
-    assert.equal(
-      disabledExtractionRun.statusCode,
-      200,
-      disabledExtractionRun.body,
-    );
+    assert.equal(disabledExtractionRun.statusCode, 200, disabledExtractionRun.body);
     assert.equal("reasoningEffort" in completionOptions.at(-1), false);
     assert.equal("verbosity" in completionOptions.at(-1), false);
     const restoredExtraction = await app.inject({
@@ -2880,10 +2861,7 @@ async function main() {
       payload: { reasoningEffort: "low", verbosity: "low" },
     });
     assert.equal(restoredExtraction.statusCode, 200, restoredExtraction.body);
-    for (const schema of [
-      ltmExtractionSettingsSchema,
-      ltmExtractionSettingsPatchSchema,
-    ]) {
+    for (const schema of [ltmExtractionSettingsSchema, ltmExtractionSettingsPatchSchema]) {
       assert.throws(() => schema.parse({ unknownExtractionField: true }));
       assert.throws(() => schema.parse({ maxOutputTokens: 511 }));
     }
@@ -2893,19 +2871,10 @@ async function main() {
       headers,
       payload: { activePromptTemplateIdsByMode: { game: "missing_template" } },
     });
-    assert.equal(
-      invalidExtractionTemplate.statusCode,
-      400,
-      invalidExtractionTemplate.body,
-    );
-    chats.find(
-      (chat) => chat.id === "game-a",
-    ).metadata.gameJournal.quests[0].description =
+    assert.equal(invalidExtractionTemplate.statusCode, 400, invalidExtractionTemplate.body);
+    chats.find((chat) => chat.id === "game-a").metadata.gameJournal.quests[0].description =
       "Break the Seal remains open until the party finds the cobalt key and opens the observatory seal.";
-    await storageService.storage.deleteNotesPermanently([
-      "world_location_moon_vault",
-      "thread_quest_seal",
-    ]);
+    await storageService.storage.deleteNotesPermanently(["world_location_moon_vault", "thread_quest_seal"]);
     const refineCalls = modelCalls;
     const refineResolutions = modelRequests.length;
     const refinedGame = await app.inject({
@@ -2915,18 +2884,10 @@ async function main() {
       payload: { source: "chats", sourceIds: ["game-a:game-session-1"] },
     });
     assert.equal(refinedGame.statusCode, 200, refinedGame.body);
-    assert.equal(
-      refinedGame.json().imported[0]?.extractionStatus,
-      "succeeded",
-      refinedGame.body,
-    );
+    assert.equal(refinedGame.json().imported[0]?.extractionStatus, "succeeded", refinedGame.body);
     assert.equal(modelRequests.length, refineResolutions + 1);
     assert.equal(modelCalls, refineCalls + 1, JSON.stringify(refineWarnings));
-    assert.equal(
-      refinedGame.json().imported[0].draft.summary,
-      "Extracted Moon Vault discovery.",
-      refinedGame.body,
-    );
+    assert.equal(refinedGame.json().imported[0].draft.summary, "Extracted Moon Vault discovery.", refinedGame.body);
     failGameRefine = true;
     const fallbackGame = await app.inject({
       method: "POST",
@@ -3035,11 +2996,7 @@ async function main() {
     assert.equal(
       currentPreview
         .json()
-        .samples.some(
-          (sample: any) =>
-            sample.sourceId === "game-a:game-session-1" &&
-            sample.freshness === "current",
-        ),
+        .samples.some((sample: any) => sample.sourceId === "game-a:game-session-1" && sample.freshness === "current"),
       true,
     );
     const source = await app.inject({
@@ -3087,11 +3044,7 @@ async function main() {
         },
       },
     });
-    await writeFile(
-      join(storageService.root, "drafts", "malformed.json"),
-      "{not-json",
-      "utf8",
-    );
+    await writeFile(join(storageService.root, "drafts", "malformed.json"), "{not-json", "utf8");
     const mutationId = "10000000-0000-4000-8000-000000000001";
     const eventMutationId = "10000000-0000-4000-8000-000000000002";
     const eventMutation = {
@@ -3137,9 +3090,7 @@ async function main() {
         scope: { chatId: "chat-a", chatIds: ["chat-a"] },
         tags: [],
         keywords: ["gate", "dusk"],
-        links: [
-          { target: "timeline_eastern_gate_sealed", relation: "evidenced_by" },
-        ],
+        links: [{ target: "timeline_eastern_gate_sealed", relation: "evidenced_by" }],
         sections: {
           facts: {
             text: "The eastern gate is sealed at dusk.",
@@ -3249,11 +3200,7 @@ async function main() {
     assert.equal(review.json().counts.drafts, 1);
     assert.equal(review.json().sources[0]?.drafts[0]?.freshness, "fresh");
     assert.equal(
-      review
-        .json()
-        .sources[0]?.targets.some(
-          (target: any) => target.noteId === "world_eastern_gate",
-        ),
+      review.json().sources[0]?.targets.some((target: any) => target.noteId === "world_eastern_gate"),
       true,
     );
     assert.equal(
@@ -3273,14 +3220,10 @@ async function main() {
       payload: { mutationIds: [mutationId] },
     });
     assert.equal(accepted.statusCode, 200, accepted.body);
-    assert.deepEqual(
-      new Set(accepted.json().appliedMutationIds),
-      new Set([eventMutationId, mutationId]),
-    );
+    assert.deepEqual(new Set(accepted.json().appliedMutationIds), new Set([eventMutationId, mutationId]));
     assert.equal(accepted.json().draft.status, "accepted");
     assert.equal(
-      (await storageService.storage.getNote("world_eastern_gate"))?.sections
-        .facts.text,
+      (await storageService.storage.getNote("world_eastern_gate"))?.sections.facts.text,
       "The eastern gate is sealed at dusk.",
     );
     const integrity = await app.inject({
@@ -3309,9 +3252,7 @@ async function main() {
     assert.equal(backupPreview.json().incoming.rejectedSuggestions, 1);
     assert.equal(backupPreview.json().current.rejectedSuggestions, 1);
     const replacement = backup.json();
-    replacement.notes = replacement.notes.filter(
-      (note: any) => note.id === "world_route_fixture",
-    );
+    replacement.notes = replacement.notes.filter((note: any) => note.id === "world_route_fixture");
     const imported = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/backup/import",
@@ -3320,17 +3261,17 @@ async function main() {
     });
     assert.equal(imported.statusCode, 200, imported.body);
     assert.equal(
-      (await storageService.storage.listNotes()).some(
-        (note: any) => note.id === "world_route_fixture",
-      ),
+      (await storageService.storage.listNotes()).some((note: any) => note.id === "world_route_fixture"),
       true,
     );
     assert.equal(
-      (await app.inject({
-        method: "GET",
-        url: "/api/long-term-memory/rejected-suggestions",
-        headers,
-      })).json().total,
+      (
+        await app.inject({
+          method: "GET",
+          url: "/api/long-term-memory/rejected-suggestions",
+          headers,
+        })
+      ).json().total,
       1,
     );
     const resetSettings = await app.inject({
@@ -3340,17 +3281,61 @@ async function main() {
     });
     assert.equal(resetSettings.statusCode, 200, resetSettings.body);
     assert.equal(
-      (await app.inject({
-        method: "GET",
-        url: "/api/long-term-memory/rejected-suggestions",
-        headers,
-      })).json().total,
+      (
+        await app.inject({
+          method: "GET",
+          url: "/api/long-term-memory/rejected-suggestions",
+          headers,
+        })
+      ).json().total,
       1,
     );
-    assert.equal(
-      (await storageService.storage.getNote("world_route_fixture"))?.id,
-      "world_route_fixture",
-    );
+    assert.equal((await storageService.storage.getNote("world_route_fixture"))?.id, "world_route_fixture");
+    const deletionFixture = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes",
+      headers,
+      payload: {
+        id: "world_detail_route_fixture",
+        title: "Detail route fixture",
+        type: "world",
+        status: "active",
+        modes: ["roleplay"],
+        scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+        tags: [],
+        keywords: [],
+        links: [],
+        sections: {
+          facts: { text: "A removable fact.", updatedAt: "2026-07-17T00:00:00.000Z" },
+          history: { text: "A retained history.", updatedAt: "2026-07-17T00:00:00.000Z" },
+        },
+      },
+    });
+    assert.equal(deletionFixture.statusCode, 201, deletionFixture.body);
+    const deletedDetail = await app.inject({
+      method: "PATCH",
+      url: "/api/long-term-memory/notes/world_detail_route_fixture",
+      headers,
+      payload: {
+        sections: { history: deletionFixture.json().note.sections.history },
+        removedSectionKeys: ["facts"],
+      },
+    });
+    assert.equal(deletedDetail.statusCode, 200, deletedDetail.body);
+    assert.deepEqual(Object.keys(deletedDetail.json().note.sections), ["history"]);
+    const lastDetail = await app.inject({
+      method: "PATCH",
+      url: "/api/long-term-memory/notes/world_detail_route_fixture",
+      headers,
+      payload: { removedSectionKeys: ["history"] },
+    });
+    assert.equal(lastDetail.statusCode, 400, lastDetail.body);
+    const unregisteredSectionRoute = await app.inject({
+      method: "DELETE",
+      url: "/api/long-term-memory/notes/world_detail_route_fixture/sections/history",
+      headers,
+    });
+    assert.equal(unregisteredSectionRoute.statusCode, 404, unregisteredSectionRoute.body);
     const deletedAll = await app.inject({
       method: "DELETE",
       url: "/api/long-term-memory/data",
@@ -3359,13 +3344,75 @@ async function main() {
     assert.equal(deletedAll.statusCode, 200, deletedAll.body);
     assert.equal((await storageService.storage.listNotes()).length, 0);
     assert.equal(
-      (await app.inject({
-        method: "GET",
-        url: "/api/long-term-memory/rejected-suggestions",
-        headers,
-      })).json().total,
+      (
+        await app.inject({
+          method: "GET",
+          url: "/api/long-term-memory/rejected-suggestions",
+          headers,
+        })
+      ).json().total,
       0,
     );
+    await storageService.storage.createNote({
+      id: "source_route_attribution",
+      title: "Imported observatory source",
+      type: "source",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: [],
+      keywords: [],
+      links: [],
+      sections: { source: { text: "Imported source material.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+      provenance: { kind: "character", sourceId: "character-mara" },
+    });
+    await storageService.storage.createNote({
+      id: "world_route_attribution",
+      title: "Gate memory",
+      type: "world",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: [],
+      keywords: [],
+      links: [{ relation: "extracted_from", target: "source_route_attribution" }],
+      sections: { facts: { text: "The gate is sealed.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+    });
+    await writeFile(
+      longTermMemoryInjectionReceiptPath("chat-attribution", join(dataDir, "long-term-memory")),
+      JSON.stringify({
+        version: 1,
+        chatId: "chat-attribution",
+        dispatchedAt: "2026-07-17T00:00:00.000Z",
+        serializedTokenCount: 12,
+        chunks: [
+          {
+            chunkId: "world_route_attribution::facts",
+            noteId: "world_route_attribution",
+            sectionKey: "facts",
+            tokenCount: 12,
+          },
+        ],
+      }),
+    );
+    const attributedInjection = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/last-injection/chat-attribution",
+      headers,
+    });
+    assert.equal(attributedInjection.statusCode, 200, attributedInjection.body);
+    assert.deepEqual(attributedInjection.json().memories, [
+      {
+        noteId: "world_route_attribution",
+        title: "Gate memory",
+        tokenCount: 12,
+        sectionKey: "facts",
+        sourceNoteId: "source_route_attribution",
+        sourceTitle: "Imported observatory source",
+      },
+    ]);
+    assert.equal(attributedInjection.json().state, "injected");
+    assert.equal(attributedInjection.json().dispatchedAt, "2026-07-17T00:00:00.000Z");
     await cleanup();
     cleanup = undefined;
     assert.equal(
@@ -3385,11 +3432,8 @@ async function main() {
     await rm(dataDir, { recursive: true, force: true });
     if (previousSecret === undefined) delete process.env.ADMIN_SECRET;
     else process.env.ADMIN_SECRET = previousSecret;
-    if (previousRequireSecret === undefined)
-      delete process.env.MARINARA_REQUIRE_ADMIN_SECRET_ON_LOOPBACK;
-    else
-      process.env.MARINARA_REQUIRE_ADMIN_SECRET_ON_LOOPBACK =
-        previousRequireSecret;
+    if (previousRequireSecret === undefined) delete process.env.MARINARA_REQUIRE_ADMIN_SECRET_ON_LOOPBACK;
+    else process.env.MARINARA_REQUIRE_ADMIN_SECRET_ON_LOOPBACK = previousRequireSecret;
   }
   process.stdout.write(
     "Long-Term Memory routes regression: permissions, malformed drafts, model/debug forwarding, chat draft visibility, client errors, extraction, cleanup ok\n",

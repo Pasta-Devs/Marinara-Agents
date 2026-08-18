@@ -10,10 +10,7 @@ import {
 import { basename } from "path";
 import { logger } from "../../lib/logger.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
-import {
-  createNoodleStorage,
-  parseNoodleAvatarCrop,
-} from "../storage/noodle.storage.js";
+import { createNoodleStorage, parseNoodleAvatarCrop } from "../storage/noodle.storage.js";
 import { isNoodleProfileGenerated } from "./noodle-profile-selection.js";
 import { ensureAmbientNoodleAccounts } from "./noodle-ambient-profiles.js";
 import { normalizeNoodleHandle } from "./noodle-handle.js";
@@ -30,85 +27,56 @@ export function parseRecord(value: unknown): Record<string, unknown> {
       return {};
     }
   }
-  return typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+  return typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 export function parseStringArray(value: unknown): string[] {
-  if (Array.isArray(value))
-    return value.filter(
-      (item): item is string => typeof item === "string" && item.length > 0,
-    );
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string" && item.length > 0);
   if (typeof value !== "string") return [];
   try {
     const parsed = JSON.parse(value);
     return Array.isArray(parsed)
-      ? parsed.filter(
-          (item): item is string => typeof item === "string" && item.length > 0,
-        )
+      ? parsed.filter((item): item is string => typeof item === "string" && item.length > 0)
       : [];
   } catch {
     return [];
   }
 }
 
-export {
-  characterContextFromRow,
-  escapePromptAttribute,
-  escapePromptText,
-} from "./noodle-prompt-safety.js";
+export { characterContextFromRow, escapePromptAttribute, escapePromptText } from "./noodle-prompt-safety.js";
 
 export function galleryImageUrl(filePath: string, fallbackChatId: string) {
   const filename = basename(filePath.replace(/\\/g, "/"));
   return `/api/gallery/file/${encodeURIComponent(fallbackChatId)}/${encodeURIComponent(filename)}`;
 }
 
-export function characterGalleryImageUrl(
-  characterId: string,
-  filePath: string,
-) {
+export function characterGalleryImageUrl(characterId: string, filePath: string) {
   const filename = basename(filePath.replace(/\\/g, "/"));
   return `/api/characters/${encodeURIComponent(characterId)}/gallery/file/${encodeURIComponent(filename)}`;
 }
 
 export function sinceHoursIso(hours: number) {
-  return new Date(
-    Date.now() - Math.max(1, hours) * 60 * 60 * 1000,
-  ).toISOString();
+  return new Date(Date.now() - Math.max(1, hours) * 60 * 60 * 1000).toISOString();
 }
 
 export function characterAvatarCrop(row: { data: unknown }) {
-  return parseNoodleAvatarCrop(
-    parseRecord(parseRecord(row.data).extensions).avatarCrop,
-  );
+  return parseNoodleAvatarCrop(parseRecord(parseRecord(row.data).extensions).avatarCrop);
 }
 
-export function characterNameFromRow(
-  row: { data: unknown } | null | undefined,
-) {
+export function characterNameFromRow(row: { data: unknown } | null | undefined) {
   const data = parseRecord(row?.data);
-  return typeof data.name === "string" && data.name.trim()
-    ? data.name.trim()
-    : "Character";
+  return typeof data.name === "string" && data.name.trim() ? data.name.trim() : "Character";
 }
 
 export function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export function mentionedCharacterAccounts(
-  accounts: NoodleAccount[],
-  content: string,
-): NoodleAccount[] {
-  const mentionedHandles = new Set(
-    extractNoodleMentionHandles(content).map(normalizeNoodleHandle),
-  );
+export function mentionedCharacterAccounts(accounts: NoodleAccount[], content: string): NoodleAccount[] {
+  const mentionedHandles = new Set(extractNoodleMentionHandles(content).map(normalizeNoodleHandle));
   if (mentionedHandles.size === 0) return [];
   return accounts.filter(
-    (account) =>
-      account.kind === "character" &&
-      mentionedHandles.has(normalizeNoodleHandle(account.handle)),
+    (account) => account.kind === "character" && mentionedHandles.has(normalizeNoodleHandle(account.handle)),
   );
 }
 
@@ -119,10 +87,7 @@ export function mentionedAccountMetadata(accounts: NoodleAccount[]) {
   };
 }
 
-export function generatedProfileSettings(
-  location: string,
-  bannerUrl: string | null,
-): NoodleAccountProfileSettings {
+export function generatedProfileSettings(location: string, bannerUrl: string | null): NoodleAccountProfileSettings {
   return {
     profileGenerated: true,
     location,
@@ -155,10 +120,7 @@ export async function ensureProfessorMariAccount(
       handle: account.handle || "professor_mari",
       displayName: account.displayName || "Professor Mari",
       bio: PROFESSOR_MARI_NOODLE_BIO,
-      avatarUrl:
-        account.avatarUrl ||
-        row?.avatarPath ||
-        "/sprites/mari/Mari_profile.png",
+      avatarUrl: account.avatarUrl || row?.avatarPath || "/sprites/mari/Mari_profile.png",
       profile: generatedProfileSettings("Marinara Engine", null),
     });
   }
@@ -185,29 +147,21 @@ export async function ensurePersonaAccounts(
   return livePersonaIds;
 }
 
-function filterStalePersonaAccounts(
-  bootstrap: NoodleBootstrap,
-  livePersonaIds: Set<string>,
-): NoodleBootstrap {
+function filterStalePersonaAccounts(bootstrap: NoodleBootstrap, livePersonaIds: Set<string>): NoodleBootstrap {
   return {
     ...bootstrap,
     accounts: bootstrap.accounts.filter(
-      (account) =>
-        account.kind !== "persona" || livePersonaIds.has(account.entityId),
+      (account) => account.kind !== "persona" || livePersonaIds.has(account.entityId),
     ),
   };
 }
 
-function filterExcludedNoodleAccounts(
-  bootstrap: NoodleBootstrap,
-  settings: NoodleSettings,
-): NoodleBootstrap {
+function filterExcludedNoodleAccounts(bootstrap: NoodleBootstrap, settings: NoodleSettings): NoodleBootstrap {
   if (settings.allowProfessorMari) return bootstrap;
   return {
     ...bootstrap,
     accounts: bootstrap.accounts.filter(
-      (account) =>
-        account.kind !== "character" || account.entityId !== PROFESSOR_MARI_ID,
+      (account) => account.kind !== "character" || account.entityId !== PROFESSOR_MARI_ID,
     ),
   };
 }
@@ -219,15 +173,11 @@ export async function bootstrapVisibleNoodle(
   const settings = await noodle.getSettings();
   const livePersonaIds = await ensurePersonaAccounts(noodle, characters);
   await ensureAmbientNoodleAccounts(noodle, settings.allowRandomUsers);
-  if (settings.allowProfessorMari)
-    await ensureProfessorMariAccount(noodle, characters);
+  if (settings.allowProfessorMari) await ensureProfessorMariAccount(noodle, characters);
   const existingCharacterAccounts = (await noodle.listAccounts()).filter(
-    (account) =>
-      account.kind === "character" && account.entityId !== PROFESSOR_MARI_ID,
+    (account) => account.kind === "character" && account.entityId !== PROFESSOR_MARI_ID,
   );
-  const characterRowsById = new Map(
-    (await characters.list()).map((row) => [row.id, row]),
-  );
+  const characterRowsById = new Map((await characters.list()).map((row) => [row.id, row]));
   for (const account of existingCharacterAccounts) {
     const row = characterRowsById.get(account.entityId);
     if (!row) {
@@ -236,11 +186,7 @@ export async function bootstrapVisibleNoodle(
       try {
         await noodle.deleteAccountByEntity("character", account.entityId);
       } catch (err) {
-        logger.error(
-          err,
-          "Failed to reconcile ghost Noodle account for character %s",
-          account.entityId,
-        );
+        logger.error(err, "Failed to reconcile ghost Noodle account for character %s", account.entityId);
       }
       continue;
     }
@@ -253,10 +199,7 @@ export async function bootstrapVisibleNoodle(
       syncIdentity: true,
     });
   }
-  return filterExcludedNoodleAccounts(
-    filterStalePersonaAccounts(await noodle.bootstrap(), livePersonaIds),
-    settings,
-  );
+  return filterExcludedNoodleAccounts(filterStalePersonaAccounts(await noodle.bootstrap(), livePersonaIds), settings);
 }
 
 export async function resolvePersonaAccount(
@@ -266,9 +209,7 @@ export async function resolvePersonaAccount(
 ) {
   const personas = await characters.listPersonas();
   const persona =
-    personas.find((p) => p.id === personaId) ??
-    personas.find((p) => p.isActive === "true") ??
-    personas[0];
+    personas.find((p) => p.id === personaId) ?? personas.find((p) => p.isActive === "true") ?? personas[0];
   if (!persona) return null;
   return noodle.upsertAccountFromProfile({
     kind: "persona",
@@ -288,9 +229,7 @@ export function interactionDigestVerb(type: NoodleInteractionType) {
   return "liked";
 }
 
-export function noodleDigestAccountLabel(
-  account: Pick<NoodleAccount, "kind" | "displayName" | "handle">,
-) {
+export function noodleDigestAccountLabel(account: Pick<NoodleAccount, "kind" | "displayName" | "handle">) {
   const identity = `${account.displayName} (@${account.handle})`;
   return account.kind === "persona" ? `Persona ${identity}` : identity;
 }
@@ -315,9 +254,7 @@ export async function filterResolvableNoodleParticipants(
 ): Promise<{ resolvable: NoodleAccount[]; staleAccounts: NoodleAccount[] }> {
   const resolvable: NoodleAccount[] = [];
   const staleAccounts: NoodleAccount[] = [];
-  const hasCharacterAccount = accounts.some(
-    (account) => account.kind === "character",
-  );
+  const hasCharacterAccount = accounts.some((account) => account.kind === "character");
   const liveCharacterIds = hasCharacterAccount
     ? new Set((await characters.list()).map((row) => row.id))
     : new Set<string>();

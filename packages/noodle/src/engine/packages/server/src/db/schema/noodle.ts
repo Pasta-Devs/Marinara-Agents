@@ -16,22 +16,11 @@ export const noodleAccounts = fileTable(
     invited: text("invited").notNull().default("false"),
     settings: text("settings").notNull().default("{}"),
     platform: text("platform").notNull().default("noodle"),
-    noodleAccountId: text("noodle_account_id"),
-    // Rollback-only mirrors of platform/noodleAccountId. Nothing reads these; they exist so a
-    // build from before the rename can still tell a NoodleR profile from a Noodle account. Without
-    // them an older build falls back to the column default and puts NoodleR content on the public
-    // timeline. Safe to drop once no supported version reads `visibility`.
-    visibility: text("visibility").notNull().default("public"),
-    publicAccountId: text("public_account_id"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
   {
-    uniqueBy: [
-      { keys: ["noodleAccountId"], when: (row) => row.noodleAccountId != null },
-      // Handles only need to be unique within Noodle; NoodleR profiles may reuse them.
-      { keys: ["handle"], when: (row) => row.platform !== "noodler" },
-    ],
+    uniqueBy: [{ keys: ["handle"] }],
   },
 );
 
@@ -98,59 +87,6 @@ export const noodleInteractions = fileTable(
     ],
   },
 );
-
-export const noodlerCreatorReplyClaims = fileTable(
-  "noodler_creator_reply_claims",
-  {
-    id: text("id").primaryKey(),
-    postId: text("post_id").notNull(),
-    parentInteractionId: text("parent_interaction_id").notNull(),
-    creatorAccountId: text("creator_account_id").notNull(),
-    replyInteractionId: text("reply_interaction_id"),
-    claimedAt: text("claimed_at").notNull(),
-  },
-  { uniqueBy: [{ keys: ["parentInteractionId", "creatorAccountId"] }] },
-);
-
-export const noodlerPreparedPosts = fileTable(
-  "noodler_prepared_posts",
-  {
-    id: text("id").primaryKey(),
-    creatorAccountId: text("creator_account_id").notNull(),
-    generatedAt: text("generated_at").notNull(),
-    publishAt: text("publish_at").notNull(),
-    payload: text("payload").notNull(),
-    policyFingerprint: text("policy_fingerprint").notNull(),
-    state: text("state").notNull().default("prepared"),
-    publishedPostId: text("published_post_id"),
-    imageState: text("image_state").notNull().default("none"),
-    imageClaimToken: text("image_claim_token"),
-    imageClaimLeaseUntil: text("image_claim_lease_until"),
-    updatedAt: text("updated_at").notNull(),
-  },
-  { uniqueBy: [{ keys: ["publishedPostId"], when: (row) => row.publishedPostId != null }] },
-);
-
-export const noodlerAutomaticAttempts = fileTable("noodler_automatic_attempts", {
-  id: text("id").primaryKey(),
-  kind: text("kind").notNull(),
-  claimedAt: text("claimed_at").notNull(),
-  outcome: text("outcome").notNull().default("claimed"),
-});
-
-export const noodlerReserveState = fileTable("noodler_reserve_state", {
-  id: text("id").primaryKey(),
-  lastObservedBudgetTime: text("last_observed_budget_time").notNull(),
-  preparationNotBefore: text("preparation_not_before").notNull(),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
-});
-
-export const noodlerFanActivityState = fileTable("noodler_fan_activity_state", {
-  id: text("id").primaryKey(),
-  plan: text("plan").notNull(),
-  updatedAt: text("updated_at").notNull(),
-});
 
 export const noodleActivityDigests = fileTable("noodle_activity_digests", {
   id: text("id").primaryKey(),

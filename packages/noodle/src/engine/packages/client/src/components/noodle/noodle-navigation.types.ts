@@ -13,30 +13,13 @@ export type NoodlePublicNavigationState =
       returnToSettings?: NoodleSettingsNavigationState;
     };
 
-export type NoodleSettingsReturnState =
-  | NoodlePublicNavigationState
-  | { mode: "noodler"; view: "hub" }
-  | { mode: "noodler"; view: "profiles" }
-  | { mode: "noodler"; view: "profile"; accountId: string }
-  | { mode: "noodler"; view: "create-profile"; noodleAccountId: string };
+export type NoodleSettingsReturnState = NoodlePublicNavigationState;
 
 export type NoodleSettingsNavigationState = {
   mode: "settings";
-  tab?: "noodle" | "noodler";
-  section?: "general" | "timeline" | "participants" | "creators" | "advanced";
+  tab?: "noodle";
+  section?: "general" | "timeline" | "images" | "participants" | "advanced";
   returnTo?: NoodleSettingsReturnState;
 };
 
-export type NoodlerNavigationState =
-  /** `onboarding` is set by the opt-in gate so the hub opens the first-run wizard on arrival. */
-  | { mode: "noodler"; view: "hub"; onboarding?: boolean }
-  | { mode: "noodler"; view: "search" }
-  | { mode: "noodler"; view: "notifications" }
-  | { mode: "noodler"; view: "profiles"; returnToSettings?: NoodleSettingsNavigationState }
-  | { mode: "noodler"; view: "profile"; accountId: string | null; returnToSettings?: NoodleSettingsNavigationState }
-  | { mode: "noodler"; view: "create-profile"; noodleAccountId: string };
-
-export type NoodleNavigationState =
-  | NoodlePublicNavigationState
-  | NoodlerNavigationState
-  | NoodleSettingsNavigationState;
+export type NoodleNavigationState = NoodlePublicNavigationState | NoodleSettingsNavigationState;

@@ -1,16 +1,9 @@
 import { basename } from "path";
-import {
-  type APIProvider,
-  type NoodleAccount,
-  type NoodleIdentityDisclosure,
-} from "@marinara-engine/shared";
+import { type APIProvider, type NoodleAccount } from "@marinara-engine/shared";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
 import { noodleSamplingOptions } from "./noodle-sampling-options.js";
-import {
-  resolveStoredChatOptions,
-  resolveStoredMaxTokens,
-} from "../generation/generation-parameters.js";
+import { resolveStoredChatOptions, resolveStoredMaxTokens } from "../generation/generation-parameters.js";
 import { parseGameJsonish } from "../game/jsonish.js";
 import type { BaseLLMProvider, ChatMessage } from "../llm/base-provider.js";
 import { createCharacterGalleryStorage } from "../storage/character-gallery.storage.js";
@@ -21,10 +14,7 @@ import { allocateAmbientProfileHandles } from "./noodle-ambient-profile-generati
 import { noodleAccountsNeedingProfiles } from "./noodle-profile-selection.js";
 import { normalizeNoodleHandle } from "./noodle-handle.js";
 import { NOODLE_ADULT_PLATFORM_POLICY } from "./noodle-prompt.js";
-import {
-  NOODLE_JSON_OUTPUT_HEADING,
-  noodleResponseFormat,
-} from "./noodle-response-format.js";
+import { NOODLE_JSON_OUTPUT_HEADING, noodleResponseFormat } from "./noodle-response-format.js";
 import {
   characterContextFromRow,
   escapePromptAttribute,
@@ -50,34 +40,6 @@ export async function pickRandomCharacterBannerUrl(
   if (!image) return null;
   const filename = basename(image.filePath.replace(/\\/g, "/"));
   return `/api/characters/${encodeURIComponent(characterId)}/gallery/file/${encodeURIComponent(filename)}`;
-}
-
-/**
- * Only OPEN inherits the literal source photo — the same picture would out a hinted creator on
- * sight, which is exactly what hinted promises never to do. Hinted and secret both get null here
- * and pick up freshly generated artwork instead (see backfillNextNoodlerCreatorArtwork): hinted
- * generates through the appearance-referenced pipeline so it still looks like the same person
- * without being the same photo, secret gets no reference material at all.
- */
-export async function resolveNoodlerCreatorArtwork(input: {
-  characters: ReturnType<typeof createCharactersStorage>;
-  characterGallery: ReturnType<typeof createCharacterGalleryStorage>;
-  publicAccount: Pick<NoodleAccount, "kind" | "entityId" | "avatarUrl">;
-  disclosureMode: NoodleIdentityDisclosure;
-}): Promise<{ avatarUrl: string | null; bannerUrl: string | null }> {
-  if (input.disclosureMode !== "open") return { avatarUrl: null, bannerUrl: null };
-  if (input.publicAccount.kind !== "character") {
-    return { avatarUrl: input.publicAccount.avatarUrl ?? null, bannerUrl: null };
-  }
-  const row = await input.characters.getById(input.publicAccount.entityId);
-  return {
-    // The Noodle account rarely carries its own avatar, so the character row is the real source.
-    avatarUrl: input.publicAccount.avatarUrl ?? row?.avatarPath ?? null,
-    bannerUrl: await pickRandomCharacterBannerUrl(
-      input.characterGallery,
-      input.publicAccount.entityId,
-    ),
-  };
 }
 
 function profileSetupMaxTokens(characterCount: number) {
@@ -119,17 +81,12 @@ export async function generateMissingNoodleProfiles(input: {
   for (const account of noodleAccountsNeedingProfiles(input.accounts)) {
     const row = await input.characters.getById(account.entityId);
     if (!row) continue;
-    const bannerUrl = await pickRandomCharacterBannerUrl(
-      input.characterGallery,
-      account.entityId,
-    );
+    const bannerUrl = await pickRandomCharacterBannerUrl(input.characterGallery, account.entityId);
     targets.push({ account, row, bannerUrl });
   }
   if (targets.length === 0) return;
 
-  const characterBlocks = targets
-    .map(({ account, row }) => buildNoodleProfileTargetBlock(account, row))
-    .join("\n\n");
+  const characterBlocks = targets.map(({ account, row }) => buildNoodleProfileTargetBlock(account, row)).join("\n\n");
   const outputFormat = [
     NOODLE_JSON_OUTPUT_HEADING,
     JSON.stringify(
@@ -138,8 +95,7 @@ export async function generateMissingNoodleProfiles(input: {
           {
             entityId: "exact entityId from profile_target",
             name: "display name for the social profile",
-            handle:
-              "short @nickname without @, lowercase letters/numbers/underscores preferred",
+            handle: "short @nickname without @, lowercase letters/numbers/underscores preferred",
             bio: "short in-character social media bio",
             location: "short profile location, fictional or canonical if known",
           },
@@ -162,58 +118,36 @@ export async function generateMissingNoodleProfiles(input: {
     },
     {
       role: "user",
-      content: [
-        "# Characters Needing Noodle Profiles",
-        characterBlocks,
-        "",
-        outputFormat,
-      ].join("\n"),
+      content: ["# Characters Needing Noodle Profiles", characterBlocks, "", outputFormat].join("\n"),
     },
   ];
-  const promptForLog = messages
-    .map((m) => `${m.role.toUpperCase()}:\n${m.content}`)
-    .join("\n\n");
-  logDebugOverride(
-    input.debugMode,
-    "[debug/noodle] Profile prompt sent to model:\n%s",
-    promptForLog,
-  );
+  const promptForLog = messages.map((m) => `${m.role.toUpperCase()}:\n${m.content}`).join("\n\n");
+  logDebugOverride(input.debugMode, "[debug/noodle] Profile prompt sent to model:\n%s", promptForLog);
   const maxTokens = clampGenerationMaxOutputTokens({
     provider: input.connection.provider as APIProvider,
     model: input.connection.model,
-    maxTokens: resolveStoredMaxTokens(
-      input.connection.defaultParameters,
-      profileSetupMaxTokens(targets.length),
-    ),
+    maxTokens: resolveStoredMaxTokens(input.connection.defaultParameters, profileSetupMaxTokens(targets.length)),
     maxTokensOverride: input.connection.maxTokensOverride,
   });
   const result = await input.provider.chatComplete(messages, {
     model: input.connection.model,
     maxTokens,
     ...noodleSamplingOptions(
-      resolveStoredChatOptions(
-        input.connection.defaultParameters,
-        input.connection.provider,
-        input.connection.model,
-      ),
+      resolveStoredChatOptions(input.connection.defaultParameters, input.connection.provider, input.connection.model),
       { temperature: 0.55, topP: 0.9 },
     ),
     stream: false,
     debugMode: input.debugMode,
     responseFormat: noodleResponseFormat(input.connection.model, "profiles"),
   });
-  const generated = parseNoodleGeneratedProfiles(
-    parseGameJsonish(result.content ?? ""),
-  );
+  const generated = parseNoodleGeneratedProfiles(parseGameJsonish(result.content ?? ""));
   if (generated.rejected.length > 0) {
     logger.warn(
       "[noodle] Skipped %d invalid generated profile row(s); valid profiles will still be applied",
       generated.rejected.length,
     );
   }
-  const profileByEntityId = new Map(
-    generated.profiles.map((profile) => [profile.entityId, profile]),
-  );
+  const profileByEntityId = new Map(generated.profiles.map((profile) => [profile.entityId, profile]));
   const allocatedHandles = allocateAmbientProfileHandles(
     targets.map(({ account }) => account),
     profileByEntityId,
@@ -223,9 +157,7 @@ export async function generateMissingNoodleProfiles(input: {
     const profile = profileByEntityId.get(target.account.entityId);
     if (!profile) continue;
     await input.noodle.updateAccountProfile(target.account.id, {
-      handle:
-        allocatedHandles.get(target.account.id) ??
-        normalizeNoodleHandle(target.account.handle),
+      handle: allocatedHandles.get(target.account.id) ?? normalizeNoodleHandle(target.account.handle),
       displayName: profile.name,
       bio: profile.bio,
       avatarUrl: target.row.avatarPath ?? target.account.avatarUrl,

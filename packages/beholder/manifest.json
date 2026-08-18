@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "beholder",
+  "name": "Beholder",
+  "version": "1.1.0",
+  "description": "Tracks each roleplay character's clothing by body slot, held items, wounds, missing parts, bare slots, and species, then keeps that physical state available to the next response. Recommended for SOTA models: OpenAI GPT-5.5+, Claude Opus 4.8+, or Kimi K3+. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+  "engine": {
+    "min": "2.4.3",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json"
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "0da9fcd2758269b2360a6dc33258638656f96f13ce334ec335c0ab971c09999e",
+      "bytes": 4618
+    }
+  ],
+  "permissions": [
+    "agent-runtime",
+    "chat-read",
+    "prompt-context",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": false
+}

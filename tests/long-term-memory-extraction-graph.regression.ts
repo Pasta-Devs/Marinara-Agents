@@ -1,19 +1,11 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 async function main() {
-  const source =
-    "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
-  const {
-    compileEvidenceUnitExtraction,
-    evidenceUnitMessages,
-    evidenceUnitResponseFormat,
-    parseEvidenceUnitPayload,
-  } =
+  const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
+  const { compileEvidenceUnitExtraction, evidenceUnitMessages, evidenceUnitResponseFormat, parseEvidenceUnitPayload } =
     await import(`${source}/evidence-unit-extraction.ts`);
-  const { compileLtmEvidenceUnits } = await import(
-    `${source}/evidence-unit-compiler.ts`
-  );
+  const { compileLtmEvidenceUnits } = await import(`${source}/evidence-unit-compiler.ts`);
   const { deduplicateUnits } = await import(`${source}/dedup.ts`);
   const {
     analyzeTrustedLtmNoteSubjects,
@@ -21,21 +13,12 @@ async function main() {
     subjectsEqual,
     trustedLtmIdentityNotesForSource,
   } = await import(`${source}/subject-identity.ts`);
-  const { projectLtmDraftMutationGroup } = await import(
-    `${source}/draft-projector.ts`
-  );
-  const { sourceHashForLtmSourceNote } = await import(
-    `${source}/source-hash.ts`
-  );
-  const { normalizeStructuredSummaryEvidenceUnits } = await import(
-    `${source}/structured-summary-normalizer.ts`
-  );
-  const { resolveScopedEvidenceUnitTargets } = await import(
-    `${source}/scoped-targets.ts`
-  );
-  const { ltmNoteIdSchema } = await import(
-    "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts"
-  );
+  const { projectLtmDraftMutationGroup } = await import(`${source}/draft-projector.ts`);
+  const { sourceHashForLtmSourceNote } = await import(`${source}/source-hash.ts`);
+  const { normalizeStructuredSummaryEvidenceUnits } = await import(`${source}/structured-summary-normalizer.ts`);
+  const { resolveScopedEvidenceUnitTargets, scopedVariantNoteId } = await import(`${source}/scoped-targets.ts`);
+  const { ltmNoteIdSchema } =
+    await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
 
   const timestamp = "2026-07-21T00:00:00.000Z";
   const sourceNote = (
@@ -65,13 +48,7 @@ async function main() {
   const unit = (
     note: ReturnType<typeof sourceNote>,
     input: {
-      bucket:
-        | "timeline_event"
-        | "character_fact"
-        | "relationship_state"
-        | "world_fact"
-        | "thread"
-        | "tone";
+      bucket: "timeline_event" | "character_fact" | "relationship_state" | "world_fact" | "thread" | "tone";
       subjectId: string;
       sectionKey: string;
       title?: string;
@@ -133,10 +110,7 @@ async function main() {
   ]);
   assert.equal(linklessCharacter.accounting.keptUnits, 1);
   assert.equal(linklessCharacter.compiledResponse.mutations.length, 1);
-  assert.equal(
-    linklessCharacter.compiledResponse.mutations[0]?.claimKind,
-    "static",
-  );
+  assert.equal(linklessCharacter.compiledResponse.mutations[0]?.claimKind, "static");
 
   const relationshipWithoutCause = compile(chat, [
     unit(chat, {
@@ -193,9 +167,7 @@ async function main() {
       claimKind: "change",
       subjectNames: ["Alice", "Rowan"],
       dimensionChanges: { trust: -12 },
-      links: [
-        { target: "timeline_argument_strained_trust", relation: "caused_by" },
-      ],
+      links: [{ target: "timeline_argument_strained_trust", relation: "caused_by" }],
     }),
   ]);
   assert.equal(relationshipWithEvent.accounting.keptUnits, 2);
@@ -234,9 +206,7 @@ async function main() {
     modes: ["roleplay"],
   });
   assert.equal(currentEvidence.mutations[0]?.kind, "append_section");
-  assert.deepEqual(currentEvidence.mutations[0]?.evidence, [
-    `source_note:${chat.id}`,
-  ]);
+  assert.deepEqual(currentEvidence.mutations[0]?.evidence, [`source_note:${chat.id}`]);
 
   const structuredCharacterSource = sourceNote(
     "source_structured_character_text",
@@ -265,13 +235,10 @@ async function main() {
     false,
   );
   assert.equal(
-    structuredCharacterUnits[0]?.text.includes("distinguishes his case as an \"exoneree\" rather than parolee"),
+    structuredCharacterUnits[0]?.text.includes('distinguishes his case as an "exoneree" rather than parolee'),
     true,
   );
-  assert.equal(
-    structuredCharacterUnits[1]?.text.startsWith("Began processing Damo's state compensation claim"),
-    true,
-  );
+  assert.equal(structuredCharacterUnits[1]?.text.startsWith("Began processing Damo's state compensation claim"), true);
 
   const invalidEventWithDependent = compile(chat, [
     unit(chat, {
@@ -286,9 +253,7 @@ async function main() {
       sectionKey: "facts",
       text: "The argument remained consequential.",
       claimKind: "change",
-      links: [
-        { target: "timeline_invalid_argument", relation: "evidenced_by" },
-      ],
+      links: [{ target: "timeline_invalid_argument", relation: "evidenced_by" }],
     }),
   ]);
   assert.equal(invalidEventWithDependent.accounting.keptUnits, 0);
@@ -314,10 +279,7 @@ async function main() {
     }),
   ]);
   assert.equal(invalidEventWithStaticFact.accounting.keptUnits, 1);
-  assert.equal(
-    invalidEventWithStaticFact.compiledResponse.mutations[0]?.claimKind,
-    "static",
-  );
+  assert.equal(invalidEventWithStaticFact.compiledResponse.mutations[0]?.claimKind, "static");
   assert.equal(
     invalidEventWithDependent.diagnostics.some(
       (diagnostic) =>
@@ -349,17 +311,14 @@ async function main() {
   assert.equal(repairedLoreCharacter.accounting.keptUnits, 1);
   assert.equal(
     repairedLoreCharacter.compiledResponse.mutations.some(
-      (mutation) =>
-        mutation.kind === "create_note" &&
-        mutation.note.type === "timeline_event",
+      (mutation) => mutation.kind === "create_note" && mutation.note.type === "timeline_event",
     ),
     false,
     "static lore must not synthesize a timeline event",
   );
   assert.equal(
     repairedLoreCharacter.compiledResponse.mutations.some(
-      (mutation) =>
-        mutation.kind === "create_note" && mutation.note.type === "character",
+      (mutation) => mutation.kind === "create_note" && mutation.note.type === "character",
     ),
     true,
     "direct source evidence must keep the linkless static character fact",
@@ -394,9 +353,7 @@ async function main() {
           subjectId: "source_prefixed_event",
           sectionKey: "event",
           text: "Mara learned the observatory script.",
-          links: [
-            { target: `source_note:${chat.id}`, relation: "extracted_from" },
-          ],
+          links: [{ target: `source_note:${chat.id}`, relation: "extracted_from" }],
         }),
       ],
     },
@@ -444,24 +401,65 @@ async function main() {
   );
   assert.equal(
     oversizedDerivedNoteId.diagnostics.some(
-      (diagnostic) =>
-        diagnostic.details?.validatorCode === "overlong_target_note_id",
+      (diagnostic) => diagnostic.details?.validatorCode === "overlong_target_note_id",
     ),
     true,
   );
   assert.equal(
     oversizedDerivedNoteId.diagnostics.find(
-      (diagnostic) =>
-        diagnostic.details?.validatorCode === "overlong_target_note_id",
+      (diagnostic) => diagnostic.details?.validatorCode === "overlong_target_note_id",
     )?.noteId,
     undefined,
   );
-  assert.equal(
-    oversizedDerivedNoteId.outcome.droppedCandidates[0]?.recovery?.noteId,
-    undefined,
-  );
+  assert.equal(oversizedDerivedNoteId.outcome.droppedCandidates[0]?.recovery?.noteId, undefined);
 
   const strictStorageIds: string[][] = [];
+  const legacyScope = { chatId: "chat-a", chatIds: ["chat-a"] };
+  const legacyHash = createHash("sha256").update("ltm_scope_v1:chat:chat-a").digest("hex").slice(0, 10);
+  const legacyNoteId = `world_legacy_scope_fact_${legacyHash}`;
+  const conflictingNote = {
+    ...chat,
+    id: "world_legacy_scope_fact",
+    type: "world" as const,
+    scope: { groupId: "group-b" },
+    tags: [],
+    sections: { facts: { text: "Other scoped memory.", updatedAt: timestamp } },
+  };
+  const legacyNote = {
+    ...chat,
+    id: legacyNoteId,
+    type: "world" as const,
+    scope: legacyScope,
+    tags: [],
+    sections: { facts: { text: "Legacy scoped memory.", updatedAt: timestamp } },
+  };
+  const legacyResolution = await resolveScopedEvidenceUnitTargets({
+    units: [
+      unit(chat, {
+        bucket: "world_fact",
+        subjectId: `legacy_scope_fact_${legacyHash}`,
+        sectionKey: "facts",
+        text: "Legacy scoped memory.",
+        links: [{ target: chat.id, relation: "extracted_from" }],
+      }),
+    ],
+    existingNotes: [legacyNote, conflictingNote],
+    storage: {
+      getNotesByIds: async () =>
+        new Map([
+          [conflictingNote.id, conflictingNote],
+          [legacyNote.id, legacyNote],
+        ]),
+    },
+    scope: legacyScope,
+  });
+  assert.equal(legacyResolution.remaps.size, 0);
+  assert.equal(
+    legacyResolution.existingNotes.some((note) => note.id === legacyNote.id),
+    true,
+  );
+  assert.notEqual(scopedVariantNoteId("world_legacy_scope", legacyScope), legacyNoteId);
+
   const targetResolution = await resolveScopedEvidenceUnitTargets({
     units: [
       unit(chat, {
@@ -493,10 +491,7 @@ async function main() {
     true,
   );
 
-  const malformedPayload = parseEvidenceUnitPayload(
-    { units: Array.from({ length: 100 }, () => null) },
-    sourceHash,
-  );
+  const malformedPayload = parseEvidenceUnitPayload({ units: Array.from({ length: 100 }, () => null) }, sourceHash);
   assert.equal(malformedPayload.parserRejections, 100);
   assert.equal(malformedPayload.droppedCandidates.length, 80);
   const countedMalformedCompilation = compileEvidenceUnitExtraction({
@@ -547,8 +542,7 @@ async function main() {
     createdAt: timestamp,
   });
   const profileMutation = toneCompilation.mutations.find(
-    (mutation) =>
-      mutation.kind === "update_section" && mutation.sectionKey === "profile",
+    (mutation) => mutation.kind === "update_section" && mutation.sectionKey === "profile",
   );
   assert.ok(profileMutation, "tone extraction must update the derived profile");
   assert.deepEqual(profileMutation?.evidence, [`source_note:${chat.id}`]);
@@ -616,7 +610,10 @@ async function main() {
   const titledCreateCompilation = compileTitleCases(titleCases);
   const createdTitles = new Map(
     titledCreateCompilation.mutations
-      .filter((mutation): mutation is Extract<(typeof titledCreateCompilation.mutations)[number], { kind: "create_note" }> => mutation.kind === "create_note")
+      .filter(
+        (mutation): mutation is Extract<(typeof titledCreateCompilation.mutations)[number], { kind: "create_note" }> =>
+          mutation.kind === "create_note",
+      )
       .map((mutation) => [mutation.note.type, mutation.note.title]),
   );
   assert.equal(createdTitles.get("timeline_event"), "Trust-Straining Argument");
@@ -626,12 +623,15 @@ async function main() {
   assert.equal(createdTitles.get("character"), "Mara");
   assert.equal(createdTitles.get("relationship"), "Alice and Rowan");
 
-  const untitledCreateCompilation = compileTitleCases(
-    titleCases.map(({ title: _title, ...input }) => input),
-  );
+  const untitledCreateCompilation = compileTitleCases(titleCases.map(({ title: _title, ...input }) => input));
   const fallbackTitles = new Map(
     untitledCreateCompilation.mutations
-      .filter((mutation): mutation is Extract<(typeof untitledCreateCompilation.mutations)[number], { kind: "create_note" }> => mutation.kind === "create_note")
+      .filter(
+        (
+          mutation,
+        ): mutation is Extract<(typeof untitledCreateCompilation.mutations)[number], { kind: "create_note" }> =>
+          mutation.kind === "create_note",
+      )
       .map((mutation) => [mutation.note.type, mutation.note.title]),
   );
   assert.equal(fallbackTitles.get("timeline_event"), "Argument Strained Trust");
@@ -704,28 +704,19 @@ async function main() {
   assert.equal(staticRelationshipDelta.accounting.keptUnits, 0);
   assert.equal(
     staticRelationshipDelta.diagnostics.some(
-      (diagnostic) =>
-        diagnostic.details?.validatorCode ===
-        "static_relationship_dimension_change",
+      (diagnostic) => diagnostic.details?.validatorCode === "static_relationship_dimension_change",
     ),
     true,
   );
 
-  const dedupUnit = (
-    text: string,
-    subjectId = "dedup_subject",
-    sectionKey = "facts",
-  ) =>
+  const dedupUnit = (text: string, subjectId = "dedup_subject", sectionKey = "facts") =>
     unit(chat, {
       bucket: "world_fact",
       subjectId,
       sectionKey,
       text,
     });
-  const shared = Array.from(
-    { length: 17 },
-    (_, index) => `shared${index}`,
-  ).join(" ");
+  const shared = Array.from({ length: 17 }, (_, index) => `shared${index}`).join(" ");
   const exactlyThreshold = dedupUnit(shared);
   const thresholdMatch = dedupUnit(`${shared} extraA extraB extraC`);
   const belowThreshold = dedupUnit(`${shared} belowA belowB belowC belowD`);
@@ -753,9 +744,7 @@ async function main() {
   );
   assert.equal(dedupResult.deduplicated.length, 6);
   assert.equal(
-    dedupResult.diagnostics.filter(
-      (diagnostic) => diagnostic.code === "deduplicated_evidence_unit",
-    ).length,
+    dedupResult.diagnostics.filter((diagnostic) => diagnostic.code === "deduplicated_evidence_unit").length,
     4,
     "dedup must characterize same-batch, existing-note, threshold, and exact matches",
   );
@@ -807,11 +796,9 @@ async function main() {
     ],
     notes: [],
   });
-  const canonicalIdentityNote = identityNote(
-    "char_seraphina",
-    "Seraphina Duvall",
-    [identityCatalog.entries.find((entry: any) => entry.name === "Seraphina Duvall")!.subject],
-  );
+  const canonicalIdentityNote = identityNote("char_seraphina", "Seraphina Duvall", [
+    identityCatalog.entries.find((entry: any) => entry.name === "Seraphina Duvall")!.subject,
+  ]);
   identityCatalog.notes.push(canonicalIdentityNote);
   assert.deepEqual(
     trustedLtmIdentityNotesForSource({
@@ -829,15 +816,11 @@ async function main() {
     [],
     "a surname-only mention must not select a trusted identity",
   );
-  const legacySpellingNote = identityNote(
-    "char_serafina_legacy",
-    "Serafina Duvall",
-  );
+  const legacySpellingNote = identityNote("char_serafina_legacy", "Serafina Duvall");
   identityCatalog.notes.push(legacySpellingNote);
   assert.equal(
-    analyzeTrustedLtmNoteSubjects(identityCatalog).matches.find(
-      (match: any) => match.note.id === legacySpellingNote.id,
-    )?.basis,
+    analyzeTrustedLtmNoteSubjects(identityCatalog).matches.find((match: any) => match.note.id === legacySpellingNote.id)
+      ?.basis,
     "spelling_variation",
     "identity repair should expose the conservative fuzzy match basis",
   );
@@ -848,9 +831,7 @@ async function main() {
     ],
     notes: [],
   });
-  ambiguousCatalog.notes.push(
-    identityNote("char_one", "Seraphina Duvall", [ambiguousCatalog.entries[0]!.subject]),
-  );
+  ambiguousCatalog.notes.push(identityNote("char_one", "Seraphina Duvall", [ambiguousCatalog.entries[0]!.subject]));
   assert.deepEqual(
     trustedLtmIdentityNotesForSource({
       sourceText: "Serafina Duvall entered the observatory.",

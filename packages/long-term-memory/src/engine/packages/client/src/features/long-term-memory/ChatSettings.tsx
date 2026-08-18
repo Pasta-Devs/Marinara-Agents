@@ -6,12 +6,7 @@ import type {
   LtmLastInjectionResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { queryKeys, request } from "./api";
-import {
-  InfoPopover,
-  NumberField,
-  StatusSurface,
-  compactInputClass,
-} from "./shared-controls";
+import { InfoPopover, NumberField, StatusSurface, compactInputClass } from "./shared-controls";
 import type { CapabilityProps } from "./types";
 import { LastInjectionSummary } from "./LastInjectionSummary";
 import { useLtmTranslation } from "./localization";
@@ -29,10 +24,7 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
   const lastInjection = useQuery({
     enabled: Boolean(props.chatId),
     queryKey: queryKeys.lastInjection(props.chatId),
-    queryFn: () =>
-      request<LtmLastInjectionResponse>(
-        `/last-injection/${encodeURIComponent(props.chatId!)}`,
-      ),
+    queryFn: () => request<LtmLastInjectionResponse>(`/last-injection/${encodeURIComponent(props.chatId!)}`),
   });
   const runUpdate = async (operation: () => void | Promise<void>) => {
     setPending(true);
@@ -43,64 +35,42 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
       setMessage(
         error instanceof Error
           ? error.message
-          : localizeUi(
-              "ui.longTermMemory.longtermmemorydetail.couldNotUpdateThisChat",
-            ),
+          : localizeUi("ui.longTermMemory.longtermmemorydetail.couldNotUpdateThisChat"),
       );
     } finally {
       setPending(false);
     }
   };
-  const update = (patch: Record<string, unknown>) =>
-    void runUpdate(() => props.onChatSettingsChange?.(patch));
+  const update = (patch: Record<string, unknown>) => void runUpdate(() => props.onChatSettingsChange?.(patch));
   const settings = props.chatSettings ?? {};
   const readOnly = typeof props.onChatSettingsChange !== "function";
   const effectiveStyle =
-    settings.longTermMemoryRecallStyle ??
-    globalSettings.data?.longTermMemoryRecallStyle ??
-    "balanced";
+    settings.longTermMemoryRecallStyle ?? globalSettings.data?.longTermMemoryRecallStyle ?? "balanced";
   const effectiveBudget =
-    settings.longTermMemoryBudgetTokens ??
-    globalSettings.data?.longTermMemoryBudgetTokens ??
-    4096;
-  const effectiveMaxChunks =
-    settings.longTermMemoryMaxChunks ??
-    globalSettings.data?.longTermMemoryMaxChunks ??
-    20;
+    settings.longTermMemoryBudgetTokens ?? globalSettings.data?.longTermMemoryBudgetTokens ?? 4096;
+  const effectiveMaxChunks = settings.longTermMemoryMaxChunks ?? globalSettings.data?.longTermMemoryMaxChunks ?? 20;
   const styleInherited = settings.longTermMemoryRecallStyle == null;
   const budgetInherited = settings.longTermMemoryBudgetTokens == null;
   const maxChunksInherited = settings.longTermMemoryMaxChunks == null;
 
   return (
-    <section
-      data-ltm-surface="chat-settings"
-      data-ltm-density="compact"
-      className="space-y-1.5"
-    >
+    <section data-ltm-surface="chat-settings" data-ltm-density="compact" className="space-y-1.5">
       {readOnly ? (
         <StatusSurface compact>
-          {localizeUi(
-            "ui.longTermMemory.chatsettings.chatSettingsAreManagedByTheHostAndCannot",
-          )}
+          {localizeUi("ui.longTermMemory.chatsettings.chatSettingsAreManagedByTheHostAndCannot")}
         </StatusSurface>
       ) : null}
       <div className="grid gap-1.5">
         <div className="space-y-0.5 px-0.5 text-[0.59375rem] leading-snug text-[var(--muted-foreground)]">
           <p>{localizeUi("ui.longTermMemory.chatsettings.recallExplanation")}</p>
-          <p>
-            {localizeUi(
-              "ui.longTermMemory.chatsettings.lastInjectionSummaryGuidance",
-            )}
-          </p>
+          <p>{localizeUi("ui.longTermMemory.chatsettings.lastInjectionSummaryGuidance")}</p>
         </div>
         <div className="space-y-1 text-[0.625rem] font-medium text-[var(--muted-foreground)]">
           <span id={recallStyleLabelId} className="flex items-center gap-1">
             {localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
             <InfoPopover
               label={localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
-              content={localizeUi(
-                recallStyleDescriptionKey(effectiveStyle),
-              )}
+              content={localizeUi(recallStyleDescriptionKey(effectiveStyle))}
               compact
             />
           </span>
@@ -110,29 +80,17 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
             className={compactInputClass}
             disabled={pending || readOnly}
             value={effectiveStyle}
-            onChange={(event) =>
-              update({ longTermMemoryRecallStyle: event.target.value })
-            }
+            onChange={(event) => update({ longTermMemoryRecallStyle: event.target.value })}
           >
-            <option value="balanced">
-              {localizeUi("ui.longTermMemory.chatsettings.balanced")}
-            </option>
-            <option value="exact">
-              {localizeUi("ui.longTermMemory.chatsettings.exact")}
-            </option>
-            <option value="broad">
-              {localizeUi("ui.longTermMemory.chatsettings.broad")}
-            </option>
-            <option value="story">
-              {localizeUi("ui.longTermMemory.chatsettings.story")}
-            </option>
-            <option value="custom">
-              {localizeUi("ui.longTermMemory.chatsettings.custom")}
-            </option>
+            <option value="balanced">{localizeUi("ui.longTermMemory.chatsettings.balanced")}</option>
+            <option value="exact">{localizeUi("ui.longTermMemory.chatsettings.exact")}</option>
+            <option value="broad">{localizeUi("ui.longTermMemory.chatsettings.broad")}</option>
+            <option value="story">{localizeUi("ui.longTermMemory.chatsettings.story")}</option>
+            <option value="custom">{localizeUi("ui.longTermMemory.chatsettings.custom")}</option>
           </select>
           {styleInherited && globalSettings.data ? (
             <span className="text-[0.5625rem] text-[var(--muted-foreground)]">
-              <span className="inline-flex rounded bg-[var(--secondary)] px-1.5 py-0.5">
+              <span className="inline-flex rounded border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">
                 {localizeUi("ui.longTermMemory.chatsettings.globalDefault")}
               </span>
             </span>
@@ -140,12 +98,8 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
         </div>
         <div className="space-y-1">
           <NumberField
-            label={localizeUi(
-              "ui.longTermMemory.chatsettings.recallContextBudget",
-            )}
-            help={localizeUi(
-              "ui.longTermMemory.chatsettings.maximumNumberOfTokensThatRecalledMemoriesMayAdd",
-            )}
+            label={localizeUi("ui.longTermMemory.chatsettings.recallContextBudget")}
+            help={localizeUi("ui.longTermMemory.chatsettings.maximumNumberOfTokensThatRecalledMemoriesMayAdd")}
             value={effectiveBudget}
             min={128}
             max={16384}
@@ -156,7 +110,7 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
           />
           {budgetInherited && globalSettings.data ? (
             <span className="text-[0.5625rem] text-[var(--muted-foreground)]">
-              <span className="inline-flex rounded bg-[var(--secondary)] px-1.5 py-0.5">
+              <span className="inline-flex rounded border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">
                 {localizeUi("ui.longTermMemory.chatsettings.globalDefault")}
               </span>
             </span>
@@ -165,9 +119,7 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
         <div className="space-y-1">
           <NumberField
             label={localizeUi("ui.longTermMemory.chatsettings.maximumMemories")}
-            help={localizeUi(
-              "ui.longTermMemory.chatsettings.maximumNumberOfSavedMemoriesThatOneRecallMay",
-            )}
+            help={localizeUi("ui.longTermMemory.chatsettings.maximumNumberOfSavedMemoriesThatOneRecallMay")}
             value={effectiveMaxChunks}
             min={1}
             max={100}
@@ -177,7 +129,7 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
           />
           {maxChunksInherited && globalSettings.data ? (
             <span className="text-[0.5625rem] text-[var(--muted-foreground)]">
-              <span className="inline-flex rounded bg-[var(--secondary)] px-1.5 py-0.5">
+              <span className="inline-flex rounded border border-[var(--border)] bg-[var(--secondary)] px-1.5 py-0.5">
                 {localizeUi("ui.longTermMemory.chatsettings.globalDefault")}
               </span>
             </span>
@@ -198,9 +150,7 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
           className="inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] px-2.5 text-[0.625rem] font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]"
         >
           <Settings2 aria-hidden="true" size="0.75rem" />
-          {localizeUi(
-            "ui.longTermMemory.chatsettings.openLongTermMemorySettings",
-          )}
+          {localizeUi("ui.longTermMemory.chatsettings.openLongTermMemorySettings")}
         </button>
       ) : null}
       {message ? (

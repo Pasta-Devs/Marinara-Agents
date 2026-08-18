@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import {
   getLtmScopeChatIds,
+  getLtmScopeGroupIds,
+  getLtmScopePersonaIds,
   isGlobalLtmScope,
   type LtmEvidenceUnit,
   type LtmExtractionDroppedCandidate,
@@ -297,25 +299,29 @@ type PreparedLtmSubjectIdentityContext = {
   sourceBackedNpcSourceTitle?: string;
 };
 
-export async function loadTrustedLtmSubjectCatalog(
-  scope: LtmScope,
-  root?: string,
-): Promise<TrustedLtmSubjectCatalog> {
+export async function loadTrustedLtmSubjectCatalog(scope: LtmScope, root?: string): Promise<TrustedLtmSubjectCatalog> {
   const persistence = getPackagePersistence();
   const resources = getPackageResources();
   const chatIds = getLtmScopeChatIds(scope);
-  const allChats = chatIds.length === 0 && scope.groupId ? await persistence.listChats() : [];
-  const chats = chatIds.length
-    ? (await Promise.all(chatIds.map((id) => persistence.getChat(id)))).filter(
-        (chat): chat is NonNullable<typeof chat> => Boolean(chat),
-      )
-    : allChats.filter((chat) => chat.groupId === scope.groupId);
+  const groupIds = getLtmScopeGroupIds(scope);
+  const [explicitChats, allChats] = await Promise.all([
+    Promise.all(chatIds.map((id) => persistence.getChat(id))),
+    groupIds.length ? persistence.listChats() : Promise.resolve([]),
+  ]);
+  const chats = [
+    ...new Map(
+      [
+        ...explicitChats.filter((chat): chat is NonNullable<typeof chat> => Boolean(chat)),
+        ...allChats.filter((chat) => chat.groupId && groupIds.includes(chat.groupId)),
+      ].map((chat) => [chat.id, chat]),
+    ).values(),
+  ];
   const characterIds = uniqueStrings([
     ...(scope.characterIds ?? []),
     ...chats.flatMap((chat) => normalizeLtmChatCharacterIds(chat.characterIds)),
   ]);
   const personaIds = uniqueStrings([
-    scope.personaId,
+    ...getLtmScopePersonaIds(scope),
     ...chats.map((chat) => chat.personaId ?? undefined),
   ]);
   const [characterRows, personaRows, notes] = await Promise.all([
@@ -392,8 +398,7 @@ export function buildTrustedLtmSubjectCatalog({
         mutable.get(subject.key) ??
         (subject.ref
           ? [...mutable.values()].find(
-              (entry) =>
-                entry.subject.ref && subjectRefKey(entry.subject.ref) === subjectRefKey(subject.ref!),
+              (entry) => entry.subject.ref && subjectRefKey(entry.subject.ref) === subjectRefKey(subject.ref!),
             )
           : undefined);
       const noteName = note.type === "character" && subjects.length === 1 ? subjectNameFromNote(note) : "";
@@ -469,8 +474,7 @@ export function analyzeTrustedLtmNoteSubjects(catalog: TrustedLtmSubjectCatalog)
     if (note.subjects) {
       const entries = note.subjects.map(
         (subject) =>
-          index.byKey.get(subject.key) ??
-          (subject.ref ? index.byRef.get(subjectRefKey(subject.ref)) : undefined),
+          index.byKey.get(subject.key) ?? (subject.ref ? index.byRef.get(subjectRefKey(subject.ref)) : undefined),
       );
       if (
         note.subjects.length !== expectedSubjects ||

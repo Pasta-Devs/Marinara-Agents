@@ -1,13 +1,11 @@
-import type {
-  LtmMode,
-  LtmScope,
-} from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import type { LtmMode, LtmScope } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 
 export type ScopeTargetChat = {
   id: string;
   label: string;
   mode: LtmMode;
   groupId: string | null;
+  personaId: string | null;
   characterIds: string[];
 };
 export type ScopeTargetGroup = { id: string; label: string; chatIds: string[] };
@@ -36,9 +34,7 @@ export type ScopeIndexes = {
 
 export function buildScopeIndexes(chats: ScopeTargetChat[]): ScopeIndexes {
   const chatsById = new Map(chats.map((chat) => [chat.id, chat]));
-  const characterIdsByChatId = new Map(
-    chats.map((chat) => [chat.id, new Set(chat.characterIds)]),
-  );
+  const characterIdsByChatId = new Map(chats.map((chat) => [chat.id, new Set(chat.characterIds)]));
   const chatsByCharacterId = new Map<string, ScopeTargetChat[]>();
   for (const chat of chats) {
     for (const characterId of chat.characterIds) {
@@ -73,16 +69,11 @@ export function deriveScopeConversations(
   ].filter(
     (conversation) =>
       !selectedCharacterId ||
-      conversation.chatIds.some((id) =>
-        indexes.characterIdsByChatId.get(id)?.has(selectedCharacterId),
-      ),
+      conversation.chatIds.some((id) => indexes.characterIdsByChatId.get(id)?.has(selectedCharacterId)),
   );
 }
 
-export function deriveScopeBranches(
-  conversation: { chatIds: string[] } | undefined,
-  indexes: ScopeIndexes,
-) {
+export function deriveScopeBranches(conversation: { chatIds: string[] } | undefined, indexes: ScopeIndexes) {
   return (conversation?.chatIds ?? [])
     .map((id) => indexes.chatsById.get(id))
     .filter((chat): chat is ScopeTargetChat => Boolean(chat));

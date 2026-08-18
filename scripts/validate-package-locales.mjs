@@ -104,9 +104,7 @@ for (const entry of (await readdir(packagesRoot, { withFileTypes: true })).sort(
   const expectedEnglish = serializePackageLocale(buildEnglishPackageLocale(manifest, agentDefinitions));
   const actualEnglish = await readFile(join(localesRoot, "en.json"), "utf8");
   if (actualEnglish !== expectedEnglish) {
-    throw new Error(
-      `English localization for ${manifest.id} is stale. Run node scripts/sync-package-locales.mjs.`,
-    );
+    throw new Error(`English localization for ${manifest.id} is stale. Run node scripts/sync-package-locales.mjs.`);
   }
 
   for (const localeFile of localeFiles) {
@@ -198,11 +196,7 @@ for (const file of await collectSourceFiles(noodleClientRoot)) {
   }
 }
 const missingNoodleKeys = [...referencedNoodleKeys]
-  .filter(
-    (key) =>
-      !(key in noodleEnglish) &&
-      !(`${key}_one` in noodleEnglish && `${key}_other` in noodleEnglish),
-  )
+  .filter((key) => !(key in noodleEnglish) && !(`${key}_one` in noodleEnglish && `${key}_other` in noodleEnglish))
   .sort();
 if (missingNoodleKeys.length > 0) {
   throw new Error(`Noodle English localization is missing: ${missingNoodleKeys.join(", ")}`);

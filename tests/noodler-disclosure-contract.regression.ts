@@ -4,16 +4,16 @@ import {
   isNoodlerDisclosureDowngrade,
   noodlerDisclosureReviewReasons,
   projectNoodlerAudienceProfile,
-} from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodler-disclosure";
+} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-disclosure";
 import {
   compareMinimizedNoodlerSourceSnapshot,
   isMinimizedNoodlerSourceSnapshot,
   minimizeNoodlerSourceSnapshot,
-} from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-noodler-source";
+} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-source";
 
 const managedProfile = {
   id: "creator",
-  noodleAccountId: "source-account",
+  slurpSourceAccountId: "source-account",
   handle: "stage",
   displayName: "Stage Name",
   bio: "Stage bio",
@@ -31,7 +31,7 @@ const managedProfile = {
 };
 
 const hintedAudience = projectNoodlerAudienceProfile(managedProfile);
-assert.equal(hintedAudience.noodleAccountId, null);
+assert.equal(hintedAudience.slurpSourceAccountId, null);
 assert.equal(hintedAudience.publicIdentity, null);
 assert.equal("access" in hintedAudience, false);
 assert.equal("sourceStatus" in hintedAudience, false);
@@ -40,7 +40,7 @@ const openAudience = projectNoodlerAudienceProfile({
   ...managedProfile,
   disclosureMode: "open",
 });
-assert.equal(openAudience.noodleAccountId, "source-account");
+assert.equal(openAudience.slurpSourceAccountId, "source-account");
 assert.deepEqual(openAudience.publicIdentity, managedProfile.publicIdentity);
 
 assert.equal(isNoodlerDisclosureDowngrade("open", "hinted"), true);
@@ -103,28 +103,15 @@ assert.equal(isMinimizedNoodlerSourceSnapshot(hinted), true);
 // The themes prefix pushes the token off the start of the string, so the salt has to be
 // read through the leading-space branch of the pattern. Without it a hinted personality
 // would draw a fresh salt on every comparison and report as changed forever.
-assert.deepEqual(
-  compareMinimizedNoodlerSourceSnapshot(hinted, snapshot, "hinted"),
-  { state: "current" },
-);
-assert.equal(
-  minimizeNoodlerSourceSnapshot(snapshot, "hinted", hinted).personality,
-  hinted.personality,
-);
+assert.deepEqual(compareMinimizedNoodlerSourceSnapshot(hinted, snapshot, "hinted"), { state: "current" });
+assert.equal(minimizeNoodlerSourceSnapshot(snapshot, "hinted", hinted).personality, hinted.personality);
 
 // Each minimization salts independently, so two stores of the same source do not
 // produce the same token — but a comparison against a baseline reuses its salt.
 assert.notEqual(minimizeNoodlerSourceSnapshot(snapshot, "secret").name, secret.name);
+assert.deepEqual(compareMinimizedNoodlerSourceSnapshot(secret, snapshot, "secret"), { state: "current" });
 assert.deepEqual(
-  compareMinimizedNoodlerSourceSnapshot(secret, snapshot, "secret"),
-  { state: "current" },
-);
-assert.deepEqual(
-  compareMinimizedNoodlerSourceSnapshot(
-    secret,
-    { ...snapshot, backstory: "Came back last spring" },
-    "secret",
-  ),
+  compareMinimizedNoodlerSourceSnapshot(secret, { ...snapshot, backstory: "Came back last spring" }, "secret"),
   {
     state: "changed",
     changes: [
@@ -138,7 +125,7 @@ assert.deepEqual(
 );
 
 const generationPrivacy = readFileSync(
-  "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-noodler-generation.service.ts",
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
   "utf8",
 );
 assert.match(generationPrivacy, /stageProfileContainsSourceDetails/u);
@@ -153,25 +140,31 @@ assert.match(generationPrivacy, /Never confirm a guess/u);
 assert.match(generationPrivacy, /mode === "hinted" \? "you-know-who" : "someone"/u);
 
 const imagesPrivacy = readFileSync(
-  "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-noodler-images.service.ts",
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-images.service.ts",
   "utf8",
 );
-assert.match(imagesPrivacy, /input\.disclosureMode !== "secret" &&\s+input\.linkedPublicAccount\?\.kind === "character"/u);
+assert.match(
+  imagesPrivacy,
+  /input\.disclosureMode !== "secret" &&\s+input\.linkedPublicAccount\?\.kind === "character"/u,
+);
 
 const draftPrivacy = readFileSync(
-  "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-stage-profile-draft.service.ts",
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-stage-profile-draft.service.ts",
   "utf8",
 );
 assert.match(draftPrivacy, /# Open-secret inspiration brief/u);
 assert.match(draftPrivacy, /noodlerHintedSourceText\(input\.source\?\.data\)/u);
 // The hinted brief still withholds the canonical story beats.
 assert.doesNotMatch(
-  draftPrivacy.slice(draftPrivacy.indexOf("export function noodlerHintedSourceText"), draftPrivacy.indexOf("export function noodlerSourceText")),
+  draftPrivacy.slice(
+    draftPrivacy.indexOf("export function noodlerHintedSourceText"),
+    draftPrivacy.indexOf("export function noodlerSourceText"),
+  ),
   /scenario|backstory|source\.name/u,
 );
 
 const artworkPrivacy = readFileSync(
-  "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-public-profiles.service.ts",
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-public-profiles.service.ts",
   "utf8",
 );
 // Only an OPEN creator may inherit the literal source photo as its avatar/banner. Hinted must
@@ -181,7 +174,7 @@ const artworkPrivacy = readFileSync(
 assert.match(artworkPrivacy, /if \(input\.disclosureMode !== "open"\) return \{ avatarUrl: null, bannerUrl: null \};/u);
 
 const fanActivityPrivacy = readFileSync(
-  "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-noodler-fan-activity.service.ts",
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-fan-activity.service.ts",
   "utf8",
 );
 // Locked posts are eligible fan-activity targets, but only their title reaches the prompt — a

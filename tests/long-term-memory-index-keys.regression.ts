@@ -5,8 +5,7 @@ import { join } from "node:path";
 import type { LtmBudgetedChunk } from "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/budget.ts";
 import type { LtmMemoryChunk } from "../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts";
 
-const source =
-  "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
+const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
 const reservedKeys = ["constructor", "__proto__", "prototype"] as const;
 
 function chunk(id: string, noteId: string): LtmMemoryChunk {
@@ -45,18 +44,11 @@ function assertOwnKeys(record: object, message: string) {
 }
 
 async function main() {
-  const { buildLtmBm25Index, searchLtmBm25 } = await import(
-    `${source}/bm25.ts`
-  );
-  const { buildLtmKeywordIndex, searchLtmKeywordIndex } = await import(
-    `${source}/keyword-index.ts`
-  );
-  const { buildLtmMetadataIndex, getLtmMetadataMatches } = await import(
-    `${source}/metadata-index.ts`
-  );
+  const { buildLtmBm25Index, searchLtmBm25 } = await import(`${source}/bm25.ts`);
+  const { buildLtmKeywordIndex, searchLtmKeywordIndex } = await import(`${source}/keyword-index.ts`);
+  const { buildLtmMetadataIndex, getLtmMetadataMatches } = await import(`${source}/metadata-index.ts`);
   const { parseLtmRecallIndex } = await import(`${source}/rebuild.ts`);
-  const { readLongTermMemoryUsage, recordLongTermMemoryInjection } =
-    await import(`${source}/usage.ts`);
+  const { readLongTermMemoryUsage, recordLongTermMemoryInjection } = await import(`${source}/usage.ts`);
 
   const chunks = [
     chunk("constructor", "constructor"),
@@ -66,15 +58,9 @@ async function main() {
 
   const bm25 = buildLtmBm25Index(chunks);
   const keyword = buildLtmKeywordIndex(chunks);
-  keyword.byKeyword = Object.fromEntries([
-    ...Object.entries(keyword.byKeyword),
-    ["__proto__", ["__proto__"]],
-  ]);
+  keyword.byKeyword = Object.fromEntries([...Object.entries(keyword.byKeyword), ["__proto__", ["__proto__"]]]);
   const metadata = buildLtmMetadataIndex(chunks);
-  metadata.byTag = Object.fromEntries([
-    ...Object.entries(metadata.byTag),
-    ["__proto__", ["__proto__"]],
-  ]);
+  metadata.byTag = Object.fromEntries([...Object.entries(metadata.byTag), ["__proto__", ["__proto__"]]]);
   const parsedRecall = parseLtmRecallIndex(
     JSON.parse(
       JSON.stringify({
@@ -96,14 +82,8 @@ async function main() {
     ),
   );
 
-  assertOwnKeys(
-    parsedRecall.bm25.documents,
-    "BM25 documents must retain reserved chunk IDs",
-  );
-  assertOwnKeys(
-    parsedRecall.bm25.terms,
-    "BM25 terms must retain reserved tokens",
-  );
+  assertOwnKeys(parsedRecall.bm25.documents, "BM25 documents must retain reserved chunk IDs");
+  assertOwnKeys(parsedRecall.bm25.terms, "BM25 terms must retain reserved tokens");
   assert.deepEqual(
     searchLtmBm25(parsedRecall.bm25, reservedKeys.join(" "), { topK: 10 }).map(
       ({ chunkId }: { chunkId: string }) => chunkId,
@@ -112,11 +92,7 @@ async function main() {
   );
   const bm25WithoutConstructor = {
     ...parsedRecall.bm25,
-    terms: Object.fromEntries(
-      Object.entries(parsedRecall.bm25.terms).filter(
-        ([key]) => key !== "constructor",
-      ),
-    ),
+    terms: Object.fromEntries(Object.entries(parsedRecall.bm25.terms).filter(([key]) => key !== "constructor")),
   };
   assert.deepEqual(
     searchLtmBm25(bm25WithoutConstructor, "constructor", { topK: 10 }),
@@ -124,14 +100,8 @@ async function main() {
     "BM25 must not read inherited constructor entries",
   );
 
-  assertOwnKeys(
-    parsedRecall.keywords.byChunkId,
-    "keyword index must retain reserved chunk IDs",
-  );
-  assertOwnKeys(
-    parsedRecall.keywords.byKeyword,
-    "keyword index must retain reserved keyword keys",
-  );
+  assertOwnKeys(parsedRecall.keywords.byChunkId, "keyword index must retain reserved chunk IDs");
+  assertOwnKeys(parsedRecall.keywords.byKeyword, "keyword index must retain reserved keyword keys");
   assert.deepEqual(
     searchLtmKeywordIndex(parsedRecall.keywords, "constructor", {
       topK: 10,
@@ -141,9 +111,7 @@ async function main() {
   const keywordsWithoutConstructor = {
     ...parsedRecall.keywords,
     byKeyword: Object.fromEntries(
-      Object.entries(parsedRecall.keywords.byKeyword).filter(
-        ([key]) => key !== "constructor",
-      ),
+      Object.entries(parsedRecall.keywords.byKeyword).filter(([key]) => key !== "constructor"),
     ),
   };
   assert.deepEqual(
@@ -154,36 +122,20 @@ async function main() {
     "keyword search must not read inherited constructor entries",
   );
 
-  assertOwnKeys(
-    parsedRecall.metadata.chunks,
-    "metadata index must retain reserved chunk IDs",
-  );
-  assertOwnKeys(
-    parsedRecall.metadata.byTag,
-    "metadata index must retain reserved tags",
-  );
+  assertOwnKeys(parsedRecall.metadata.chunks, "metadata index must retain reserved chunk IDs");
+  assertOwnKeys(parsedRecall.metadata.byTag, "metadata index must retain reserved tags");
   assert.deepEqual(
-    getLtmMetadataMatches(
-      parsedRecall.metadata,
-      { tags: [...reservedKeys] },
-      { topK: 10 },
-    ).map(({ chunkId }: { chunkId: string }) => chunkId),
+    getLtmMetadataMatches(parsedRecall.metadata, { tags: [...reservedKeys] }, { topK: 10 }).map(
+      ({ chunkId }: { chunkId: string }) => chunkId,
+    ),
     ["__proto__", "constructor", "prototype"],
   );
   const metadataWithoutConstructor = {
     ...parsedRecall.metadata,
-    byTag: Object.fromEntries(
-      Object.entries(parsedRecall.metadata.byTag).filter(
-        ([key]) => key !== "constructor",
-      ),
-    ),
+    byTag: Object.fromEntries(Object.entries(parsedRecall.metadata.byTag).filter(([key]) => key !== "constructor")),
   };
   assert.deepEqual(
-    getLtmMetadataMatches(
-      metadataWithoutConstructor,
-      { tags: ["constructor"] },
-      { topK: 10 },
-    ),
+    getLtmMetadataMatches(metadataWithoutConstructor, { tags: ["constructor"] }, { topK: 10 }),
     [],
     "metadata search must not read inherited constructor entries",
   );
@@ -207,10 +159,7 @@ async function main() {
 
     const usage = await readLongTermMemoryUsage(root);
     assertOwnKeys(usage.chats, "usage must retain reserved chat IDs");
-    assertOwnKeys(
-      usage.acceptedReceipts ?? {},
-      "usage must retain reserved accounting IDs",
-    );
+    assertOwnKeys(usage.acceptedReceipts ?? {}, "usage must retain reserved accounting IDs");
     for (const key of reservedKeys) {
       assert.equal(Object.hasOwn(usage.chats[key]!.chunks, key), true);
     }

@@ -1,10 +1,4 @@
-import {
-  Database,
-  FileInput,
-  ListChecks,
-  Settings2,
-  type LucideIcon,
-} from "lucide-react";
+import { Database, FileInput, ListChecks, Settings2, type LucideIcon } from "lucide-react";
 import type { LongTermMemoryDestination } from "./types";
 import { useLtmTranslation } from "./localization";
 
@@ -98,9 +92,7 @@ export function LongTermMemoryNavigation({
       style={{ containerName: "ltm-navigation", containerType: "inline-size" }}
     >
       <nav
-        aria-label={localizeUi(
-          "ui.longTermMemory.longtermmemorynavigation.longTermMemorySections",
-        )}
+        aria-label={localizeUi("ui.longTermMemory.longtermmemorynavigation.longTermMemorySections")}
         data-ltm-navigation={mobile ? "mobile" : "desktop"}
         className={
           mobile

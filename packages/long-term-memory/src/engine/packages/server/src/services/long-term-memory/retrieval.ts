@@ -45,11 +45,7 @@ function hasUsableVectorIndex(
   embeddings: Awaited<ReturnType<typeof loadOrRebuildLongTermMemoryIndexes>>["embeddings"],
   spaceId: string,
 ) {
-  return Boolean(
-    embeddings.spaceId === spaceId &&
-      embeddings.dimension &&
-      embeddings.embeddedChunkCount > 0,
-  );
+  return Boolean(embeddings.spaceId === spaceId && embeddings.dimension && embeddings.embeddedChunkCount > 0);
 }
 
 function pickGraphSeedNotes(
@@ -77,7 +73,6 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
       .filter((chunk) => input.includeResolved || chunk.status !== "resolved" || chunk.noteType !== "thread")
       .filter((chunk) => !input.mode || chunk.modes?.includes(input.mode))
       .filter((chunk) => {
-        if (chunk.scope.groupId && chunk.scope.groupId !== input.scope?.groupId) return false;
         const hasScope = !isGlobalLtmScope(input.scope) || characterIds.length > 0;
         return matchesLtmScope(
           { id: chunk.noteId, type: chunk.noteType, scope: chunk.scope },
@@ -88,31 +83,57 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
   );
   const lanes: LtmRankLane[] = [];
   const metadata = getLtmMetadataMatches(index.metadata, {
-    noteIds: Array.from(query.matchAll(/\b(?:source|char|rel|scene|thread|world|faction|location|rule|tone)_[a-z0-9_]+\b/g), (match) => match[0]),
+    noteIds: Array.from(
+      query.matchAll(/\b(?:source|char|rel|scene|thread|world|faction|location|rule|tone)_[a-z0-9_]+\b/g),
+      (match) => match[0],
+    ),
     tags: Array.from(query.matchAll(/#([a-z][a-z0-9_]+)/g), (match) => match[1]!),
   }).filter((hit) => allowed.has(hit.chunkId));
   if (metadata.length) {
-    lanes.push({ name: "direct", weight: 1, items: metadata.map((hit) => ({ chunkId: hit.chunkId, rawScore: Math.min(1, hit.score), reason: hit.reasons.join(",") })) });
+    lanes.push({
+      name: "direct",
+      weight: 1,
+      items: metadata.map((hit) => ({
+        chunkId: hit.chunkId,
+        rawScore: Math.min(1, hit.score),
+        reason: hit.reasons.join(","),
+      })),
+    });
   }
   const lexical = searchLtmBm25(index.bm25, query, { allowedChunks: allowed });
   if ((input.lexicalWeight ?? 1) > 0 && lexical.length) {
-    lanes.push({ name: "bm25", weight: input.lexicalWeight ?? 1, items: lexical.map((hit) => ({ chunkId: hit.chunkId, rawScore: hit.score, reason: "bm25" })) });
+    lanes.push({
+      name: "bm25",
+      weight: input.lexicalWeight ?? 1,
+      items: lexical.map((hit) => ({ chunkId: hit.chunkId, rawScore: hit.score, reason: "bm25" })),
+    });
   }
   const keywords = searchLtmKeywordIndex(index.keywords, query, { allowedChunks: allowed });
   if ((input.keywordWeight ?? 1) > 0 && keywords.length) {
     const max = keywords[0]?.score ?? 1;
-    lanes.push({ name: "keyword", weight: input.keywordWeight ?? 1, items: keywords.map((hit) => ({ chunkId: hit.chunkId, rawScore: hit.score / max, reason: hit.reasons.join(",") })) });
+    lanes.push({
+      name: "keyword",
+      weight: input.keywordWeight ?? 1,
+      items: keywords.map((hit) => ({
+        chunkId: hit.chunkId,
+        rawScore: hit.score / max,
+        reason: hit.reasons.join(","),
+      })),
+    });
   }
   const seedNotes = Array.from(
-    new Set([
-      ...pickGraphSeedNotes(index, lexical, 5),
-      ...pickGraphSeedNotes(index, keywords, 5),
-    ]),
+    new Set([...pickGraphSeedNotes(index, lexical, 5), ...pickGraphSeedNotes(index, keywords, 5)]),
   );
-  const allowedNoteIds = new Set(Array.from(allowed, (chunkId) => index.metadata.chunks[chunkId]?.noteId).filter((id): id is string => Boolean(id)));
+  const allowedNoteIds = new Set(
+    Array.from(allowed, (chunkId) => index.metadata.chunks[chunkId]?.noteId).filter((id): id is string => Boolean(id)),
+  );
   const graph = expandLtmGraph(index.graph, seedNotes, { allowedNoteIds }).filter((hit) => allowed.has(hit.chunkId));
   if ((input.graphWeight ?? 1) > 0 && graph.length) {
-    lanes.push({ name: "graph", weight: input.graphWeight ?? 1, items: graph.map((hit) => ({ chunkId: hit.chunkId, rawScore: hit.score, reason: `graph:${hit.viaNoteId}` })) });
+    lanes.push({
+      name: "graph",
+      weight: input.graphWeight ?? 1,
+      items: graph.map((hit) => ({ chunkId: hit.chunkId, rawScore: hit.score, reason: `graph:${hit.viaNoteId}` })),
+    });
   }
   let embeddingsAvailable = false;
   const embeddingAdapter = input.embeddingAdapter ?? getPackageEmbeddingAdapter();
@@ -124,11 +145,14 @@ export async function retrieveLongTermMemory(input: RetrieveLongTermMemoryInput)
   ) {
     const queryVector = (await embedLongTermMemoryTexts([query], { ...input, embeddingAdapter }))?.[0];
     if (queryVector?.length === index.embeddings.dimension) {
-      const vectors = index.embeddings.chunks.flatMap((entry) => {
-        if (!entry.vector || entry.vector.length !== index.embeddings.dimension || !allowed.has(entry.chunkId)) return [];
-        const score = cosine(queryVector, entry.vector);
-        return score > 0 ? [{ chunkId: entry.chunkId, rawScore: score, reason: "vector" }] : [];
-      }).sort((left, right) => right.rawScore - left.rawScore);
+      const vectors = index.embeddings.chunks
+        .flatMap((entry) => {
+          if (!entry.vector || entry.vector.length !== index.embeddings.dimension || !allowed.has(entry.chunkId))
+            return [];
+          const score = cosine(queryVector, entry.vector);
+          return score > 0 ? [{ chunkId: entry.chunkId, rawScore: score, reason: "vector" }] : [];
+        })
+        .sort((left, right) => right.rawScore - left.rawScore);
       embeddingsAvailable = vectors.length > 0;
       if (vectors.length) lanes.push({ name: "vector", weight: input.semanticWeight ?? 0, items: vectors });
     }

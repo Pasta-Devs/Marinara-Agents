@@ -46,27 +46,22 @@ export const labelKeys = {
   },
   maintenanceAction: {
     rebuild_indexes: "ui.longTermMemory.memorysettings.reindexRecallData",
-    quarantine_malformed_notes:
-      "ui.longTermMemory.memorysettings.quarantineMalformedNotes",
-    backfill_imported_source_titles:
-      "ui.longTermMemory.memorysettings.backfillSourceTitles",
+    quarantine_malformed_notes: "ui.longTermMemory.memorysettings.quarantineMalformedNotes",
+    backfill_imported_source_titles: "ui.longTermMemory.memorysettings.backfillSourceTitles",
   },
   maintenanceResult: {
     rebuilt: "ui.longTermMemory.memorysettings.resultRebuilt",
     backfilled: "ui.longTermMemory.memorysettings.resultBackfilled",
-    no_titles_to_backfill:
-      "ui.longTermMemory.memorysettings.resultNoTitlesToBackfill",
+    no_titles_to_backfill: "ui.longTermMemory.memorysettings.resultNoTitlesToBackfill",
     quarantined: "ui.longTermMemory.memorysettings.resultQuarantined",
-    no_malformed_notes:
-      "ui.longTermMemory.memorysettings.resultNoMalformedNotes",
+    no_malformed_notes: "ui.longTermMemory.memorysettings.resultNoMalformedNotes",
   },
   relation: {
     occurred_in: "ui.longTermMemory.memoryvault.relationOccurredIn",
     triggered_by: "ui.longTermMemory.memoryvault.relationTriggeredBy",
     resolved_in: "ui.longTermMemory.memoryvault.relationResolvedIn",
     evidenced_by: "ui.longTermMemory.memoryvault.relationEvidencedBy",
-    affects_relationship:
-      "ui.longTermMemory.memoryvault.relationAffectsRelationship",
+    affects_relationship: "ui.longTermMemory.memoryvault.relationAffectsRelationship",
     affects_character: "ui.longTermMemory.memoryvault.relationAffectsCharacter",
     caused_by: "ui.longTermMemory.memoryvault.relationCausedBy",
     involves: "ui.longTermMemory.memoryvault.relationInvolves",
@@ -113,26 +108,17 @@ export const labelKeys = {
   },
 } as const;
 
-export function localizedLabel(
-  value: string,
-  localizeUi: LabelLocalizer,
-  keys: Readonly<Record<string, string>>,
-) {
+export function localizedLabel(value: string, localizeUi: LabelLocalizer, keys: Readonly<Record<string, string>>) {
   const key = keys[value];
   return key ? localizeUi(key) : humanizeLabel(value);
 }
 
-export function memoryLabel(
-  note: Pick<LtmNote, "title"> | null | undefined,
-  untitledMemory: string,
-) {
+export function memoryLabel(note: Pick<LtmNote, "title"> | null | undefined, untitledMemory: string) {
   return note?.title?.trim() || untitledMemory;
 }
 
 export function noteTypeLabel(type: string, localizeUi?: LabelLocalizer) {
-  return localizeUi
-    ? localizedLabel(type, localizeUi, labelKeys.noteType)
-    : humanizeLabel(type);
+  return localizeUi ? localizedLabel(type, localizeUi, labelKeys.noteType) : humanizeLabel(type);
 }
 
 export function humanizeLabel(value: string) {
@@ -144,13 +130,9 @@ export function scopeTargetLabel(
   kind: "chat" | "character" | "group" | "persona",
   id: string,
   targets: ReadonlyArray<{ id: string; label: string }>,
-  fallbackLabels: Partial<
-    Record<"chat" | "character" | "group" | "persona", string>
-  > = {},
+  fallbackLabels: Partial<Record<"chat" | "character" | "group" | "persona", string>> = {},
 ) {
-  const target = targets.find(
-    (item) => item.id === id || item.id === `${kind}:${id}`,
-  );
+  const target = targets.find((item) => item.id === id || item.id === `${kind}:${id}`);
   if (target?.label && target.label !== id) return target.label;
   return fallbackLabels[kind] ?? humanizeLabel(kind);
 }

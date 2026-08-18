@@ -3,7 +3,11 @@ import type { LtmMode } from "../../../../shared/src/features/agents/long-term-m
 import { resolveLongTermMemoryRecallSettings } from "../../../../shared/src/features/agents/long-term-memory/runtime-settings.js";
 import { resolveChatLtmScope, ltmModeForChatMode } from "./chat-scope.js";
 import { readJsonFile, writeJsonAtomic } from "./atomic-json.js";
-import { serializeLongTermMemoryPrompt, isLongTermMemoryPromptPresent, type LtmSerializedPromptArtifact } from "./prompt.js";
+import {
+  serializeLongTermMemoryPrompt,
+  isLongTermMemoryPromptPresent,
+  type LtmSerializedPromptArtifact,
+} from "./prompt.js";
 import { getLongTermMemoryDirectories, safeJoin } from "./paths.js";
 import { retrieveLongTermMemory } from "./retrieval.js";
 import { getLtmGlobalSettings } from "./settings.js";
@@ -19,22 +23,26 @@ export type LongTermMemoryRecallReceipt = {
 };
 
 function pendingPath(root: string, chatId: string) {
-  return safeJoin(getLongTermMemoryDirectories(root).events, `runtime-receipts/pending-${createHash("sha256").update(chatId).digest("hex")}.json`);
+  return safeJoin(
+    getLongTermMemoryDirectories(root).events,
+    `runtime-receipts/pending-${createHash("sha256").update(chatId).digest("hex")}.json`,
+  );
 }
 
 const accountingLocks = new Map<string, Promise<void>>();
 
 function parseReceipt(value: unknown): LongTermMemoryRecallReceipt | null {
   const receipt = value as LongTermMemoryRecallReceipt;
-  return receipt?.version === 1 && typeof receipt.id === "string" && typeof receipt.chatId === "string" && typeof receipt.artifact?.content === "string"
+  return receipt?.version === 1 &&
+    typeof receipt.id === "string" &&
+    typeof receipt.chatId === "string" &&
+    typeof receipt.artifact?.content === "string"
     ? receipt
     : null;
 }
 
 function metadataRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 export async function prepareGenerationLongTermMemory(input: {
@@ -56,7 +64,10 @@ export async function prepareGenerationLongTermMemory(input: {
     requestDebug: input.debugMode,
   });
   const recent = input.messages.slice(-recall.contextMessages);
-  const queryText = recent.map((message) => message.content).filter(Boolean).join("\n");
+  const queryText = recent
+    .map((message) => message.content)
+    .filter(Boolean)
+    .join("\n");
   if (!queryText.trim()) return null;
   const scope = resolveChatLtmScope(chat);
   const retrieval = await retrieveLongTermMemory({
@@ -133,14 +144,22 @@ export async function recordGenerationLongTermMemoryDispatch(input: {
 }) {
   let receipt = parseReceipt(input.receipt);
   if (!receipt) receipt = parseReceipt(await readJsonFile(pendingPath(input.root, input.chatId), null));
-  if (!receipt || receipt.chatId !== input.chatId || !isLongTermMemoryPromptPresent(input.messages, receipt.artifact.content)) return false;
+  if (
+    !receipt ||
+    receipt.chatId !== input.chatId ||
+    !isLongTermMemoryPromptPresent(input.messages, receipt.artifact.content)
+  )
+    return false;
   return withKeyedLock(accountingLocks, receipt.id, async () => {
-    const recorded = await recordLongTermMemoryInjection({
-      chatId: input.chatId,
-      chunks: receipt!.artifact.chunks,
-      serializedTokenCount: receipt!.artifact.estimatedTokens,
-      accountingId: receipt!.id,
-    }, input.root);
+    const recorded = await recordLongTermMemoryInjection(
+      {
+        chatId: input.chatId,
+        chunks: receipt!.artifact.chunks,
+        serializedTokenCount: receipt!.artifact.estimatedTokens,
+        accountingId: receipt!.id,
+      },
+      input.root,
+    );
     return recorded !== null;
   });
 }

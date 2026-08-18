@@ -46,9 +46,8 @@ const sourcePackageIds = new Set(packageDirectories);
 const requestedPackageIds = new Set(
   process.argv.slice(2).map((id) => assertPortableFilenameComponent(id, "Requested package id")),
 );
-const selectedPackageDirectories = requestedPackageIds.size > 0
-  ? packageDirectories.filter((id) => requestedPackageIds.has(id))
-  : packageDirectories;
+const selectedPackageDirectories =
+  requestedPackageIds.size > 0 ? packageDirectories.filter((id) => requestedPackageIds.has(id)) : packageDirectories;
 if (selectedPackageDirectories.length !== requestedPackageIds.size && requestedPackageIds.size > 0) {
   const unknownIds = [...requestedPackageIds].filter((id) => !sourcePackageIds.has(id));
   throw new Error(`Unknown agent package${unknownIds.length === 1 ? "" : "s"}: ${unknownIds.join(", ")}`);
@@ -72,26 +71,22 @@ for (const id of selectedPackageDirectories) {
     if (error instanceof SyntaxError) continue;
     throw error;
   }
-  // Feature packages own their build in build-feature-packages.mjs.
-  if (!manifest.kind?.includes("agent") || manifest.entrypoints?.server) continue;
+  // Server-bearing feature packages own their build in build-feature-packages.mjs;
+  // client-bearing ones (Pixelforge) own theirs in build-<id>-package.mjs. Rebuilding
+  // either here would strip client.js and assets from files[] and the artifact.
+  if (!manifest.kind?.includes("agent") || manifest.entrypoints?.server || manifest.entrypoints?.client) continue;
   const manifestId = assertPortableFilenameComponent(manifest.id, `Package id in ${id}/manifest.json`);
   if (manifestId !== id) throw new Error(`Package directory ${id} contains manifest id ${manifestId}`);
   const artifactName = packageArtifactName(manifestId, manifest.version);
-  const agentsPath = assertPortableRelativePath(
-    manifest.entrypoints?.agents,
-    `Agent entrypoint for ${manifestId}`,
-  );
+  const agentsPath = assertPortableRelativePath(manifest.entrypoints?.agents, `Agent entrypoint for ${manifestId}`);
   const agentsSourcePath = await resolveContainedPortablePath(
     sourceDir,
     agentsPath,
     `Agent entrypoint for ${manifestId}`,
   );
-  await resolveContainedPortablePath(
-    sourceDir,
-    "locales/en.json",
-    `English locale output for ${manifestId}`,
-    { allowMissing: true },
-  );
+  await resolveContainedPortablePath(sourceDir, "locales/en.json", `English locale output for ${manifestId}`, {
+    allowMissing: true,
+  });
   const agentDefinitions = JSON.parse(await readFile(agentsSourcePath, "utf8"));
   for (const definition of agentDefinitions) {
     if (definition.id === id) {
@@ -132,12 +127,9 @@ for (const id of selectedPackageDirectories) {
       await chmod(artifactSource, 0o644);
       await utimes(artifactSource, ARTIFACT_MTIME, ARTIFACT_MTIME);
     }
-    const artifactPath = await resolveContainedPortablePath(
-      artifactsDir,
-      artifactName,
-      `Artifact for ${manifestId}`,
-      { allowMissing: true },
-    );
+    const artifactPath = await resolveContainedPortablePath(artifactsDir, artifactName, `Artifact for ${manifestId}`, {
+      allowMissing: true,
+    });
     await rm(artifactPath, { force: true });
     const zipped = spawnSync("zip", ["-X", "-q", artifactPath, "manifest.json", agentsPath], {
       cwd: temporary,
@@ -163,10 +155,9 @@ for (const id of selectedPackageDirectories) {
 }
 
 catalog.packages = [
-  ...catalog.packages.filter(
-    (entry) => sourcePackageIds.has(entry.manifest.id) && !rebuiltIds.has(entry.manifest.id),
-  ),
+  ...catalog.packages.filter((entry) => sourcePackageIds.has(entry.manifest.id) && !rebuiltIds.has(entry.manifest.id)),
   ...rebuiltPackages,
 ].sort((left, right) => left.manifest.name.localeCompare(right.manifest.name));
-catalog.generatedAt = new Date().toISOString();
+// generatedAt is resolved centrally in writeCatalogFamily (preserved by
+// default; refreshed only when MARINARA_CATALOG_STAMP_GENERATED_AT=1).
 await writeCatalogFamily(repoRoot, catalog);

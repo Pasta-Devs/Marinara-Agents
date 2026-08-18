@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {
   canViewNoodlerPost,
   isNoodlerHiddenFromViewer,
-} from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodler-access";
+} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-access";
 
 const publicPost = { id: "public", access: "public" as const };
 const lockedPost = { id: "locked", access: "locked" as const };

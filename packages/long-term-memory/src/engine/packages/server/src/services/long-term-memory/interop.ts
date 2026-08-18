@@ -14,26 +14,19 @@ import {
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import {
   getLtmScopeChatIds,
+  getLtmScopeGroupIds,
+  getLtmScopePersonaIds,
+  ltmScopesOverlap,
   withMergedLtmScopeLinks,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
-import {
-  ltmModeForChatMode,
-  normalizeLtmChatCharacterIds,
-  resolveChatLtmScope,
-} from "./chat-scope.js";
+import { ltmModeForChatMode, normalizeLtmChatCharacterIds, resolveChatLtmScope } from "./chat-scope.js";
+import { DEFAULT_LTM_IMPORTED_SOURCE_MODE } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
 import { nowIso } from "./ltm-utils.js";
-import {
-  getPackageLanguageModels,
-  getPackagePersistence,
-  getPackageResources,
-} from "./package-runtime.js";
+import { getPackageLanguageModels, getPackagePersistence, getPackageResources } from "./package-runtime.js";
 import { processLongTermMemorySourceBatch } from "./source-processing.js";
 import { getLtmExtractionConfig } from "./extraction-config.js";
 import { extractionFingerprintForLtmSourceMaterial } from "./source-hash.js";
-import {
-  inferSourceProvenance,
-  sourceNoteIdForProvenance,
-} from "./source-identity.js";
+import { inferSourceProvenance, sourceNoteIdForProvenance } from "./source-identity.js";
 import { LongTermMemoryStorage } from "./storage.js";
 import { LtmServiceError } from "./service-error.js";
 
@@ -68,8 +61,7 @@ type Lorebook = {
 
 export const PROFESSOR_MARI_CHARACTER_ID = "__professor_mari__";
 function object(value: unknown): Record<string, unknown> {
-  if (value && typeof value === "object" && !Array.isArray(value))
-    return value as Record<string, unknown>;
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
   if (typeof value === "string")
     try {
       return object(JSON.parse(value));
@@ -100,10 +92,7 @@ function identifier(value: string, fallback: string) {
 }
 function stringArray(value: unknown) {
   if (Array.isArray(value))
-    return value.filter(
-      (item): item is string =>
-        typeof item === "string" && Boolean(item.trim()),
-    );
+    return value.filter((item): item is string => typeof item === "string" && Boolean(item.trim()));
   if (typeof value === "string")
     try {
       return stringArray(JSON.parse(value));
@@ -129,9 +118,7 @@ function compact(data: Record<string, unknown>, comment = "") {
     ["Appearance", extensions.appearance ?? data.appearance],
     ["Library note", comment],
   ]
-    .flatMap(([label, value]) =>
-      text(value) ? [`${label}:\n${text(value)}`] : [],
-    )
+    .flatMap(([label, value]) => (text(value) ? [`${label}:\n${text(value)}`] : []))
     .join("\n\n");
 }
 function chunks(value: string) {
@@ -157,25 +144,17 @@ function conversationDate(value: string) {
   if (!match) return null;
   const [, day, month, year] = match,
     date = new Date(Number(year), Number(month) - 1, Number(day));
-  return date.getFullYear() === Number(year) &&
-      date.getMonth() === Number(month) - 1 &&
-      date.getDate() === Number(day)
+  return date.getFullYear() === Number(year) && date.getMonth() === Number(month) - 1 && date.getDate() === Number(day)
     ? date
     : null;
 }
-function conversationSummaryEntries(
-  raw: unknown,
-  kind: "day" | "week",
-) {
+function conversationSummaryEntries(raw: unknown, kind: "day" | "week") {
   return Object.entries(object(raw))
     .flatMap(([key, value]) => {
       const entry = object(value),
         summary = typeof value === "string" ? text(value) : text(entry.summary),
         keyDetails = Array.isArray(entry.keyDetails)
-          ? entry.keyDetails.filter(
-              (detail): detail is string =>
-                typeof detail === "string" && Boolean(detail.trim()),
-            )
+          ? entry.keyDetails.filter((detail): detail is string => typeof detail === "string" && Boolean(detail.trim()))
           : [],
         date = conversationDate(key),
         content = [summary, ...keyDetails].filter(Boolean).join("\n\n");
@@ -198,26 +177,16 @@ function conversationSummaries(metadata: Record<string, unknown>) {
   return [
     ...conversationSummaryEntries(metadata.daySummaries, "day"),
     ...conversationSummaryEntries(metadata.weekSummaries, "week"),
-  ].sort(
-    (left, right) =>
-      conversationDate(left.range)!.getTime() -
-      conversationDate(right.range)!.getTime(),
-  );
+  ].sort((left, right) => conversationDate(left.range)!.getTime() - conversationDate(right.range)!.getTime());
 }
 function summaries(metadata: Record<string, unknown>, chatMode: LtmMode) {
   if (chatMode === "conversation") return conversationSummaries(metadata);
-  const raw = Array.isArray(metadata.summaryEntries)
-      ? metadata.summaryEntries.map(object)
-      : [],
+  const raw = Array.isArray(metadata.summaryEntries) ? metadata.summaryEntries.map(object) : [],
     entries = raw.flatMap((entry, index) => {
       const content = text(entry.content);
       if (!content || entry.enabled === false) return [];
-      const start =
-          typeof entry.rangeStartIndex === "number"
-            ? entry.rangeStartIndex
-            : null,
-        end =
-          typeof entry.rangeEndIndex === "number" ? entry.rangeEndIndex : null;
+      const start = typeof entry.rangeStartIndex === "number" ? entry.rangeStartIndex : null,
+        end = typeof entry.rangeEndIndex === "number" ? entry.rangeEndIndex : null;
       return [
         {
           id: text(entry.id) || `summary-${hash(`${index}:${content}`)}`,
@@ -248,81 +217,52 @@ function summaries(metadata: Record<string, unknown>, chatMode: LtmMode) {
           ]
         : [],
     sessions = Array.isArray(metadata.gamePreviousSessionSummaries)
-      ? metadata.gamePreviousSessionSummaries
-          .map(object)
-          .flatMap((session, index) => {
-            const sessionNumber = Number(session.sessionNumber),
-              id = Number.isFinite(sessionNumber)
-                ? `game-session-${sessionNumber}`
-                : `game-session-${hash(JSON.stringify(session))}`,
-              fields: Array<[string, unknown]> = [
-                ["Summary", session.summary],
-                ["Resume point", session.resumePoint],
-                ["Party dynamics", session.partyDynamics],
-                ["Party state", session.partyState],
-                [
-                  "Key discoveries",
-                  stringArray(session.keyDiscoveries).join("\n"),
-                ],
-                [
-                  "Character moments",
-                  stringArray(session.characterMoments).join("\n"),
-                ],
-                [
-                  "Little details",
-                  stringArray(session.littleDetails).join("\n"),
-                ],
-                ["NPC updates", stringArray(session.npcUpdates).join("\n")],
-                ["Next session request", session.nextSessionRequest],
-              ],
-              content = fields
-                .flatMap(([label, value]) =>
-                  text(value) ? [`${label}:\n${text(value)}`] : [],
-                )
-                .join("\n\n"),
-              deterministicSourceText = [
-                text(session.summary)
-                  ? `## timeline_event\nSummary: ${text(session.summary)}`
-                  : "",
-                text(session.resumePoint)
-                  ? `## world_fact\nResume point: ${text(session.resumePoint)}`
-                  : "",
-                text(session.nextSessionRequest)
-                  ? `## thread\nNext session request: ${text(session.nextSessionRequest)}`
-                  : "",
-                text(session.partyDynamics)
-                  ? `## world_fact\nParty dynamics: ${text(session.partyDynamics)}`
-                  : "",
-                text(session.partyState)
-                  ? `## world_fact\nParty state: ${text(session.partyState)}`
-                  : "",
-                ...stringArray(session.keyDiscoveries).map(
-                  (value) => `## world_fact\nKey discovery: ${value}`,
-                ),
-                ...stringArray(session.characterMoments).map(
-                  (value) => `## timeline_event\nCharacter moment: ${value}`,
-                ),
-                ...stringArray(session.littleDetails).map(
-                  (value) => `## world_fact\nLittle detail: ${value}`,
-                ),
-                ...stringArray(session.npcUpdates).map(
-                  (value) => `## world_fact\nNPC update: ${value}`,
-                ),
+      ? metadata.gamePreviousSessionSummaries.map(object).flatMap((session, index) => {
+          const sessionNumber = Number(session.sessionNumber),
+            id = Number.isFinite(sessionNumber)
+              ? `game-session-${sessionNumber}`
+              : `game-session-${hash(JSON.stringify(session))}`,
+            fields: Array<[string, unknown]> = [
+              ["Summary", session.summary],
+              ["Resume point", session.resumePoint],
+              ["Party dynamics", session.partyDynamics],
+              ["Party state", session.partyState],
+              ["Key discoveries", stringArray(session.keyDiscoveries).join("\n")],
+              ["Character moments", stringArray(session.characterMoments).join("\n")],
+              ["Little details", stringArray(session.littleDetails).join("\n")],
+              ["NPC updates", stringArray(session.npcUpdates).join("\n")],
+              ["Next session request", session.nextSessionRequest],
+            ],
+            content = fields
+              .flatMap(([label, value]) => (text(value) ? [`${label}:\n${text(value)}`] : []))
+              .join("\n\n"),
+            deterministicSourceText = [
+              text(session.summary) ? `## timeline_event\nSummary: ${text(session.summary)}` : "",
+              text(session.resumePoint) ? `## world_fact\nResume point: ${text(session.resumePoint)}` : "",
+              text(session.nextSessionRequest)
+                ? `## thread\nNext session request: ${text(session.nextSessionRequest)}`
+                : "",
+              text(session.partyDynamics) ? `## world_fact\nParty dynamics: ${text(session.partyDynamics)}` : "",
+              text(session.partyState) ? `## world_fact\nParty state: ${text(session.partyState)}` : "",
+              ...stringArray(session.keyDiscoveries).map((value) => `## world_fact\nKey discovery: ${value}`),
+              ...stringArray(session.characterMoments).map((value) => `## timeline_event\nCharacter moment: ${value}`),
+              ...stringArray(session.littleDetails).map((value) => `## world_fact\nLittle detail: ${value}`),
+              ...stringArray(session.npcUpdates).map((value) => `## world_fact\nNPC update: ${value}`),
+            ]
+              .filter(Boolean)
+              .join("\n\n");
+          return content
+            ? [
+                {
+                  id,
+                  content,
+                  deterministicSourceText,
+                  range: `game session ${Number.isFinite(sessionNumber) ? sessionNumber : index + 1}`,
+                  origin: "game_session",
+                },
               ]
-                .filter(Boolean)
-                .join("\n\n");
-            return content
-              ? [
-                  {
-                    id,
-                    content,
-                    deterministicSourceText,
-                    range: `game session ${Number.isFinite(sessionNumber) ? sessionNumber : index + 1}`,
-                    origin: "game_session",
-                  },
-                ]
-              : [];
-          })
+            : [];
+        })
       : [];
   return [...ordinary, ...sessions];
 }
@@ -330,9 +270,7 @@ function scoped(candidate: Candidate, override?: LtmScope) {
   return withMergedLtmScopeLinks({ ...candidate.scope, ...override }, {});
 }
 function mode(candidate: Candidate, value?: LtmMode) {
-  return !value
-    ? candidate
-    : { ...candidate, modes: [value], extractionMode: value };
+  return value ? { ...candidate, modes: [value], extractionMode: value } : candidate;
 }
 function fingerprint(candidate: Candidate, scope: LtmScope) {
   return extractionFingerprintForLtmSourceMaterial({
@@ -350,47 +288,27 @@ function fingerprint(candidate: Candidate, scope: LtmScope) {
 function matchesScope(candidate: Candidate, scope?: LtmScope) {
   if (!scope) return true;
   if (candidate.provenance.kind === "character") {
-    return Boolean(
-      candidate.scope.characterIds?.some((id) =>
-        scope.characterIds?.includes(id),
-      ),
-    );
+    return Boolean(candidate.scope.characterIds?.some((id) => scope.characterIds?.includes(id)));
   }
   return matchesImportScope(candidate.scope, scope);
 }
 
 function matchesImportScope(candidateScope: LtmScope, scope?: LtmScope) {
   if (!scope) return true;
-  const scopeIds = new Set(getLtmScopeChatIds(scope));
-  if (scope.groupId) {
-    if (candidateScope.groupId !== scope.groupId) return false;
-  } else if (scopeIds.size) {
-    const candidateIds = new Set(getLtmScopeChatIds(candidateScope));
-    if (![...candidateIds].some((id) => scopeIds.has(id))) return false;
-  }
-  if (scope.characterIds?.length) {
-    const candidateIds = new Set(candidateScope.characterIds ?? []);
-    if (![...candidateIds].some((id) => scope.characterIds?.includes(id)))
-      return false;
-  }
-  return true;
+  return ltmScopesOverlap(candidateScope, scope, { includeGlobal: false });
 }
 
 function lorebookScope(data: Record<string, unknown>) {
   return withMergedLtmScopeLinks(
     {
       ...(text(data.chatId) ? { chatId: text(data.chatId) } : {}),
-      ...(stringArray(data.characterIds).length
-        ? { characterIds: stringArray(data.characterIds) }
-        : {}),
+      ...(stringArray(data.characterIds).length ? { characterIds: stringArray(data.characterIds) } : {}),
     },
     { chatIds: text(data.chatId) ? [text(data.chatId)] : [] },
   );
 }
 
-function normalizeLorebooks(
-  books: Array<{ id: string; data: unknown; entries: unknown[] }>,
-) {
+function normalizeLorebooks(books: Array<{ id: string; data: unknown; entries: unknown[] }>) {
   return books.map((book): Lorebook => {
     const data = object(book.data),
       name = text(data.name) || "Lorebook",
@@ -404,9 +322,7 @@ function normalizeLorebooks(
       importTags = tags.map((tag) => identifier(tag, "tag")).slice(0, 12),
       scope = lorebookScope(data),
       entries = [
-        ...(description
-          ? [{ id: "description", name: "Description", content: description }]
-          : []),
+        ...(description ? [{ id: "description", name: "Description", content: description }] : []),
         ...book.entries.map(object),
       ],
       normalized: Candidate[] = [],
@@ -414,26 +330,14 @@ function normalizeLorebooks(
     for (const [index, entry] of entries.entries()) {
       const content = text(entry.content);
       if (!content) continue;
-      const rawBase =
-          text(entry.id) ||
-          text(entry.uid) ||
-          text(entry.key) ||
-          `position_${index + 1}`,
-        initialBase =
-          rawBase.length <= 120
-            ? rawBase
-            : `entry_${hash(`${rawBase}\0${index}`, 16)}`,
-        base = usedEntryIds.has(initialBase)
-          ? `entry_${hash(`${rawBase}\0${index}`, 16)}`
-          : initialBase,
+      const rawBase = text(entry.id) || text(entry.uid) || text(entry.key) || `position_${index + 1}`,
+        initialBase = rawBase.length <= 120 ? rawBase : `entry_${hash(`${rawBase}\0${index}`, 16)}`,
+        base = usedEntryIds.has(initialBase) ? `entry_${hash(`${rawBase}\0${index}`, 16)}` : initialBase,
         entryName = text(entry.name) || "Entry";
       usedEntryIds.add(base);
       for (const [part, sourceText] of chunks(content).entries()) {
         const rawEntryId = part ? `${base}:part:${part + 1}` : base,
-          entryId =
-            rawEntryId.length <= 120
-              ? rawEntryId
-              : `entry_${hash(`${base}\0${part}`, 16)}`,
+          entryId = rawEntryId.length <= 120 ? rawEntryId : `entry_${hash(`${base}\0${part}`, 16)}`,
           sourceId = `lorebook_entry_${hash(`${book.id}\0${entryId}`)}`,
           title = `Lorebook - ${name}: ${entryName}${part ? ` (${part + 1})` : ""}`,
           provenance = {
@@ -453,7 +357,7 @@ function normalizeLorebooks(
           provenance,
           scope,
           modes: ["roleplay", "conversation", "game"],
-          extractionMode: "roleplay",
+          extractionMode: DEFAULT_LTM_IMPORTED_SOURCE_MODE,
           mutationCount: 1,
           summary: `Import ${title}`,
           lorebookEntryId: base,
@@ -498,42 +402,39 @@ async function candidates(
         title: name,
         sourceText,
         sourceNoteId: sourceNoteIdForProvenance(provenance),
-        legacySourceNoteIds: [
-          `source_import_character_${suffix}`,
-          `scene_import_character_${suffix}`,
-        ],
+        legacySourceNoteIds: [`source_import_character_${suffix}`, `scene_import_character_${suffix}`],
         sourceTag: "imported_character",
         importTags: [],
         evidence: [`character:${row.id}`],
         provenance,
         scope: { characterIds: [row.id] },
         modes: ["roleplay", "conversation", "game"],
-        extractionMode: "roleplay",
+        extractionMode: DEFAULT_LTM_IMPORTED_SOURCE_MODE,
         mutationCount: 1,
         summary: `Import ${name}`,
       });
     }
   if (request.source === "lorebooks")
-    for (const book of normalizeLorebooks(
-      await getPackageResources().listLorebooks(),
-    ))
-      result.push(...book.candidates);
+    for (const book of normalizeLorebooks(await getPackageResources().listLorebooks())) result.push(...book.candidates);
   if (request.source === "chats") {
     const scopeIds = new Set(getLtmScopeChatIds(request.scope));
-    const broaderScope = Boolean(request.scope?.groupId) || scopeIds.size > 1;
+    const scopeGroupIds = new Set(getLtmScopeGroupIds(request.scope));
+    const scopeCharacterIds = new Set(request.scope?.characterIds ?? []);
+    const scopePersonaIds = new Set(getLtmScopePersonaIds(request.scope));
+    const hasScopeFilter =
+      scopeIds.size > 0 || scopeGroupIds.size > 0 || scopeCharacterIds.size > 0 || scopePersonaIds.size > 0;
+    const broaderScope =
+      hasScopeFilter &&
+      (scopeGroupIds.size > 0 || scopeIds.size > 1 || scopeCharacterIds.size > 0 || scopePersonaIds.size > 0);
     for (const chat of await getPackagePersistence().listChats()) {
+      if (normalizeLtmChatCharacterIds(chat.characterIds).includes(PROFESSOR_MARI_CHARACTER_ID)) continue;
+      if (request.chatId && !broaderScope && chat.id !== request.chatId) continue;
       if (
-        normalizeLtmChatCharacterIds(chat.characterIds).includes(
-          PROFESSOR_MARI_CHARACTER_ID,
-        )
-      )
-        continue;
-      if (request.chatId && !broaderScope && chat.id !== request.chatId)
-        continue;
-      if (
-        request.scope?.groupId
-          ? chat.groupId !== request.scope.groupId
-          : scopeIds.size && !scopeIds.has(chat.id)
+        hasScopeFilter &&
+        !scopeIds.has(chat.id) &&
+        !(chat.groupId && scopeGroupIds.has(chat.groupId)) &&
+        !normalizeLtmChatCharacterIds(chat.characterIds).some((id) => scopeCharacterIds.has(id)) &&
+        !(chat.personaId && scopePersonaIds.has(chat.personaId))
       )
         continue;
       const metadata = object(chat.metadata),
@@ -553,9 +454,7 @@ async function candidates(
                   `source_import_chat_${identifier(chat.name, "chat")}_${hash(seed)}`,
                   `scene_import_chat_${identifier(chat.name, "chat")}_${hash(chat.id)}`,
                 ]
-              : [
-                  `source_import_chat_${identifier(chat.name, "chat")}_${hash(seed)}`,
-                ];
+              : [`source_import_chat_${identifier(chat.name, "chat")}_${hash(seed)}`];
         result.push({
           sourceId,
           title,
@@ -576,9 +475,7 @@ async function candidates(
           extractionMode: chatMode,
           mutationCount: 1,
           summary: `Import ${title}`,
-          ...(entry.deterministicSourceText
-            ? { deterministicSourceText: entry.deterministicSourceText }
-            : {}),
+          ...(entry.deterministicSourceText ? { deterministicSourceText: entry.deterministicSourceText } : {}),
         });
       }
     }
@@ -589,14 +486,12 @@ async function candidates(
         (!request.mode || item.modes.includes(request.mode)) &&
         (!selected || selected.has(item.sourceId)),
     ),
-    ordered = selected
-      ? [...selected].flatMap((id) =>
-          filtered.filter((item) => item.sourceId === id),
-        )
-      : filtered;
+    ordered = selected ? [...selected].flatMap((id) => filtered.filter((item) => item.sourceId === id)) : filtered;
   return ordered
     .slice(0, Math.max(request.limit, selected?.size ?? 0))
-    .map((item) => mode(item, request.mode));
+    .map((item) =>
+      mode(item, request.mode ?? (request.source === "chats" ? undefined : DEFAULT_LTM_IMPORTED_SOURCE_MODE)),
+    );
 }
 
 function provenanceKey(provenance: LtmSourceProvenance) {
@@ -610,14 +505,12 @@ async function existingMatcher(storage: LongTermMemoryStorage) {
   for (const note of notes) {
     if (note.type !== "source") continue;
     const provenance = inferSourceProvenance(note);
-    if (provenance && !byProvenance.has(provenanceKey(provenance)))
-      byProvenance.set(provenanceKey(provenance), note);
+    if (provenance && !byProvenance.has(provenanceKey(provenance))) byProvenance.set(provenanceKey(provenance), note);
   }
   return (row: Candidate) =>
     [row.sourceNoteId, ...row.legacySourceNoteIds]
       .map((id) => byId.get(id))
-      .find((note): note is LtmNote => Boolean(note)) ??
-    byProvenance.get(provenanceKey(row.provenance));
+      .find((note): note is LtmNote => Boolean(note)) ?? byProvenance.get(provenanceKey(row.provenance));
 }
 
 function previewFreshness(
@@ -626,31 +519,19 @@ function previewFreshness(
 ): LtmInteropPreviewFreshness {
   const existingFingerprint = note.extractionFingerprint;
   if (!existingFingerprint) return "extraction_incomplete";
-  if (existingFingerprint.sourceHash !== candidateFingerprint.sourceHash)
-    return "source_updated";
-  const { sourceHash: _existingSourceHash, ...existingContext } =
-      existingFingerprint,
-    { sourceHash: _candidateSourceHash, ...candidateContext } =
-      candidateFingerprint;
-  return JSON.stringify(existingContext) === JSON.stringify(candidateContext)
-    ? "current"
-    : "context_updated";
+  if (existingFingerprint.sourceHash !== candidateFingerprint.sourceHash) return "source_updated";
+  const { sourceHash: _existingSourceHash, ...existingContext } = existingFingerprint,
+    { sourceHash: _candidateSourceHash, ...candidateContext } = candidateFingerprint;
+  return JSON.stringify(existingContext) === JSON.stringify(candidateContext) ? "current" : "context_updated";
 }
 
-function previewSample(
-  row: Candidate,
-  note: LtmNote | undefined,
-  scope?: LtmScope,
-) {
+function previewSample(row: Candidate, note: LtmNote | undefined, scope?: LtmScope) {
   const base = {
     sourceId: row.sourceId,
     title: row.title,
     mutationCount: row.mutationCount,
     summary: row.summary,
-    snippet:
-      row.sourceText.length > 200
-        ? `${row.sourceText.slice(0, 200)}...`
-        : row.sourceText,
+    snippet: row.sourceText.length > 200 ? `${row.sourceText.slice(0, 200)}...` : row.sourceText,
   };
   return note
     ? {
@@ -669,9 +550,7 @@ export async function previewPackageInterop(
   const rows = await candidates(request),
     storage = new LongTermMemoryStorage(root),
     matchExisting = await existingMatcher(storage),
-    samples = rows.map((row) =>
-      previewSample(row, matchExisting(row), request.scope),
-    );
+    samples = rows.map((row) => previewSample(row, matchExisting(row), request.scope));
   return {
     source: request.source,
     scanned: samples.length,
@@ -688,18 +567,12 @@ export async function previewPackageLorebooks(
   const storage = new LongTermMemoryStorage(root),
     matchExisting = await existingMatcher(storage),
     resources = (await getPackageResources().listLorebooks())
-      .filter((book) =>
-        matchesImportScope(lorebookScope(object(book.data)), request.scope),
-      )
+      .filter((book) => matchesImportScope(lorebookScope(object(book.data)), request.scope))
       .slice(0, request.limit),
     books = normalizeLorebooks(resources).map((book) => {
       const rows = book.candidates
-          .filter(
-            (row) =>
-              (!request.mode || row.modes.includes(request.mode)) &&
-              matchesScope(row, request.scope),
-          )
-          .map((row) => mode(row, request.mode)),
+          .filter((row) => (!request.mode || row.modes.includes(request.mode)) && matchesScope(row, request.scope))
+          .map((row) => mode(row, request.mode ?? DEFAULT_LTM_IMPORTED_SOURCE_MODE)),
         grouped = new Map<
           string,
           {
@@ -715,9 +588,7 @@ export async function previewPackageLorebooks(
             name: row.lorebookEntryName!,
             candidates: [],
           };
-        entry.candidates.push(
-          previewSample(row, matchExisting(row), request.scope),
-        );
+        entry.candidates.push(previewSample(row, matchExisting(row), request.scope));
         grouped.set(id, entry);
       }
       const entries = [...grouped.values()].map((entry) => ({
@@ -725,16 +596,11 @@ export async function previewPackageLorebooks(
           candidateCount: entry.candidates.length,
         })),
         samples = entries.flatMap((entry) => entry.candidates),
-        imported = samples.filter(
-          (sample) => sample.status === "imported",
-        ).length;
+        imported = samples.filter((sample) => sample.status === "imported").length;
       return {
         id: book.id,
         name: book.name,
-        description:
-          book.description.length > 600
-            ? `${book.description.slice(0, 597)}...`
-            : book.description,
+        description: book.description.length > 600 ? `${book.description.slice(0, 597)}...` : book.description,
         category: book.category,
         tags: book.tags,
         scope: book.scope,
@@ -748,10 +614,7 @@ export async function previewPackageLorebooks(
       };
     }),
     entries = books.reduce((count, book) => count + book.counts.entries, 0),
-    candidatesCount = books.reduce(
-      (count, book) => count + book.counts.candidates,
-      0,
-    ),
+    candidatesCount = books.reduce((count, book) => count + book.counts.candidates, 0),
     imported = books.reduce((count, book) => count + book.counts.imported, 0);
   return {
     counts: {
@@ -769,11 +632,8 @@ export async function importPackageInterop(
   root: string,
   signal: AbortSignal,
 ): Promise<LtmImportSourceNotesResponse> {
-  const chat = request.chatId
-    ? await getPackagePersistence().getChat(request.chatId)
-    : null;
-  if (request.chatId && !chat)
-    throw new LtmServiceError("Chat not found", 404, "ltm_chat_not_found");
+  const chat = request.chatId ? await getPackagePersistence().getChat(request.chatId) : null;
+  if (request.chatId && !chat) throw new LtmServiceError("Chat not found", 404, "ltm_chat_not_found");
   const operationId = randomUUID(),
     selected = new Set(request.sourceIds),
     rows = await candidates(request, selected),
@@ -797,9 +657,7 @@ export async function importPackageInterop(
       });
     } catch (error) {
       throw new LtmServiceError(
-        error instanceof Error
-          ? error.message
-          : "Language model configuration is invalid",
+        error instanceof Error ? error.message : "Language model configuration is invalid",
         400,
         "ltm_model_configuration",
       );
@@ -841,9 +699,7 @@ export async function importPackageInterop(
         },
         found = matchExisting(row),
         existing =
-          found && found.id !== row.sourceNoteId
-            ? await storage.renameNoteId(found.id, row.sourceNoteId)
-            : found,
+          found && found.id !== row.sourceNoteId ? await storage.renameNoteId(found.id, row.sourceNoteId) : found,
         note = existing
           ? await storage.updateNote(existing.id, {
               title: row.title,
@@ -860,9 +716,7 @@ export async function importPackageInterop(
         title: row.title,
         note,
         created: !existing,
-        ...(row.deterministicSourceText
-          ? { deterministicSourceText: row.deterministicSourceText }
-          : {}),
+        ...(row.deterministicSourceText ? { deterministicSourceText: row.deterministicSourceText } : {}),
       });
     } catch (error) {
       writeFailures.push({
@@ -873,10 +727,7 @@ export async function importPackageInterop(
         retryable: true,
         error: {
           code: "source_write_failed",
-          message:
-            error instanceof Error
-              ? error.message
-              : "Failed to write imported source note",
+          message: error instanceof Error ? error.message : "Failed to write imported source note",
         },
       });
     }
@@ -900,9 +751,7 @@ export async function importPackageInterop(
           title: item.title,
           note: item.note,
           created: item.created,
-          sourceWriteStatus: item.created
-            ? ("created" as const)
-            : ("refreshed" as const),
+          sourceWriteStatus: item.created ? ("created" as const) : ("refreshed" as const),
           extractionStatus: "not_started" as const,
           extractionMethod: "none" as const,
           retryable: false as const,
@@ -927,15 +776,9 @@ export async function importPackageInterop(
           appliedMutationIds: [],
           skippedMutationIds: [],
         })),
-    cancelled = results.filter(
-      (item) => item.extractionStatus === "cancelled",
-    ).length,
-    failed = results.filter(
-      (item) => item.extractionStatus === "failed",
-    ).length,
-    succeeded = results.filter(
-      (item) => item.extractionStatus === "succeeded",
-    ).length;
+    cancelled = results.filter((item) => item.extractionStatus === "cancelled").length,
+    failed = results.filter((item) => item.extractionStatus === "failed").length,
+    succeeded = results.filter((item) => item.extractionStatus === "succeeded").length;
   const counts = {
       requested: request.sourceIds.length,
       sourceNotesWritten: written.length,
@@ -945,20 +788,13 @@ export async function importPackageInterop(
       missing: missingSourceIds.length,
       sourceWriteFailed: writeFailures.length,
     },
-    incomplete =
-      counts.failed +
-      counts.cancelled +
-      counts.missing +
-      counts.sourceWriteFailed,
+    incomplete = counts.failed + counts.cancelled + counts.missing + counts.sourceWriteFailed,
     batchStatus =
       incomplete === 0
         ? ("success" as const)
         : counts.succeeded
           ? ("partial_success" as const)
-          : counts.cancelled &&
-              !counts.failed &&
-              !counts.missing &&
-              !counts.sourceWriteFailed
+          : counts.cancelled && !counts.failed && !counts.missing && !counts.sourceWriteFailed
             ? ("cancelled" as const)
             : ("failed" as const);
   return {

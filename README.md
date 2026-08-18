@@ -4,7 +4,7 @@ Official downloadable agents and capability packages for [Marinara Engine](https
 
 Marinara Engine starts lightweight: a fresh installation contains no optional agents. Open **Agents → Download Agents** on desktop or mobile to browse this catalog, read what each package does, and install only the features you want. Installed packages appear in the normal Agents panel and the chat modes they support. You can update or uninstall them from the same catalog. Restart Marinara Engine when the installer asks you to do so.
 
-Across its Engine compatibility lanes, the catalog currently contains **32 first-party packages**: 6 Writer Agents, 8 Tracker Agents, and 18 Misc Agents. Most packages support **Marinara Engine v2.3.0+**; Long-Term Memory requires **v2.4.1**, while World Maps, Storyboard, and Noodle require **v2.4.2**. Every package accepts compatible Engine v2 and v3 releases below **v4.0.0**. Each Engine release sees only the packages compatible with its major version. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
+Across its Engine compatibility lanes, the catalog currently contains **35 first-party packages**: 6 Writer Agents, 10 Tracker Agents, and 19 Misc Agents. Most packages support **Marinara Engine v2.3.0+**; Long-Term Memory requires **v2.4.1**; World Maps, Storyboard, and Noodle require **v2.4.2**; and Beholder, Inventory Tracker, Haptic Feedback, and Slurp require **v2.4.3**. Every package accepts compatible Engine v2 and v3 releases below **v4.0.0**. Each Engine release sees only the packages compatible with its major version. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
 
 ## Official catalog
 
@@ -24,9 +24,11 @@ Across its Engine compatibility lanes, the catalog currently contains **32 first
 | Agent | Package | What it does |
 | --- | --- | --- |
 | Background | [`background`](packages/background/manifest.json) | Selects the best existing scene background from your library. |
+| Beholder | [`beholder`](packages/beholder/manifest.json) | Tracks clothing by body slot, held items, wounds, missing parts, bare slots, and species. Recommended for OpenAI GPT-5.5+, Claude Opus 4.8+, or Kimi K3+. |
 | Character Tracker | [`character-tracker`](packages/character-tracker/manifest.json) | Tracks present characters, moods, actions, appearance, thoughts, and character stats. |
 | Custom Tracker | [`custom-tracker`](packages/custom-tracker/manifest.json) | Tracks user-defined currencies, counters, flags, and other custom fields. |
 | Expression Engine | [`expression`](packages/expression/manifest.json) | Detects character emotions and selects matching Visual Novel sprites or expressions. |
+| Inventory Tracker | [`inventory-tracker`](packages/inventory-tracker/manifest.json) | Tracks currencies, equipped gear, and carried items as separate structured lists. |
 | World Maps | [`hierarchical-maps`](packages/hierarchical-maps/manifest.json) | Adds persistent nested locations, durable shared worlds, reusable artwork, customizable Direct Link lines, map authoring, and movement. |
 | Persona Stats | [`persona-stats`](packages/persona-stats/manifest.json) | Tracks the player persona's status bars and custom stats from narrative events. |
 | Quest Tracker | [`quest`](packages/quest/manifest.json) | Manages quest objectives, completion states, and rewards. |
@@ -42,13 +44,14 @@ Across its Engine compatibility lanes, the catalog currently contains **32 first
 | Calls | [`conversation-calls`](packages/conversation-calls/manifest.json) | Adds live audio/video calls, microphone transcription, and character video presence. |
 | CYOA Choices | [`cyoa`](packages/cyoa/manifest.json) | Generates clickable Choose Your Own Adventure choices after Roleplay responses. |
 | Echo Chamber | [`echo-chamber`](packages/echo-chamber/manifest.json) | Simulates a streaming-style audience chat reacting to Roleplay in real time. |
-| Haptic Feedback | [`haptic`](packages/haptic/manifest.json) | Controls connected Intiface devices from analyzed narrative content. |
+| Haptic Feedback | [`haptic`](packages/haptic/manifest.json) | Controls every supported action and pattern on connected Intiface devices. |
 | Illustrator | [`illustrator`](packages/illustrator/manifest.json) | Creates images and videos, with optional automatic Roleplay backgrounds for new scene locations. |
 | Immersive HTML | [`html`](packages/html/manifest.json) | Adds diegetic HTML/CSS/JS visual artifacts without changing story meaning. |
 | Lorebook Keeper | [`lorebook-keeper`](packages/lorebook-keeper/manifest.json) | Creates and updates durable lorebook entries from important story facts. |
 | Long-Term Memory | [`long-term-memory`](packages/long-term-memory/manifest.json) | Extracts durable memories from chat summaries, character records, and lorebooks, with scoped vault browsing, review, source management, recall controls, and preset-marker placement for Roleplay. |
 | Music DJ | [`spotify`](packages/spotify/manifest.json) | Plays scene-matched music through Spotify, YouTube, or local Game Assets. |
-| Noodle | [`noodle`](packages/noodle/manifest.json) | Explore the familiar Noodle and NoodleR social timelines as an optional social world, available after installation from **Home → Noodle**. |
+| Noodle | [`noodle`](packages/noodle/manifest.json) | Explore the public Noodle social timeline as an optional local social world, available after installation from **Home → Noodle**. |
+| Slurp | [`slurp`](packages/slurp/manifest.json) | The standalone successor to NoodleR: create local Creator profiles, publish public or locked posts, and simulate audience activity from **Home → Slurp**. |
 | Poker | [`poker`](packages/poker/manifest.json) | Adds No-Limit Texas Hold'em for Conversation chats and the `/poker` command. |
 | Rock-Paper-Scissors | [`rock-paper-scissors`](packages/rock-paper-scissors/manifest.json) | Adds best-of-three, five, or seven Conversation matches and the `/rps` command. |
 | Storyboard | [`storyboard`](packages/storyboard/manifest.json) | Plans and generates still or animated Game and Roleplay storyboards with provider-tuned prompt chains. |
@@ -56,6 +59,14 @@ Across its Engine compatibility lanes, the catalog currently contains **32 first
 | UNO | [`uno`](packages/uno/manifest.json) | Adds a complete Conversation-mode UNO table and `/uno` command. |
 
 For complete mode, lifecycle, and settings documentation for every package, see the Engine's [Downloadable Agents Reference](https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md).
+
+### In development
+
+These packages are being built in this repository but are not ready for the stable catalog yet. A package is either **in development** (hidden from every Engine channel) or **staging only** (offered to Engine `staging` testers, hidden from stable `main` users). See [Contributing § Packages that are not ready for everyone](CONTRIBUTING.md#packages-that-are-not-ready-for-everyone).
+
+| Package | ID | Availability | Status |
+| --- | --- | --- | --- |
+| Pixelforge | [`pixelforge`](packages/pixelforge/manifest.json) | In development | A walkable pixel-art RPG Experience for Game Mode: generated settlements, NPCs, and story-driven exploration. Under active development; not yet listed for users. |
 
 ### Localization sources
 
@@ -85,6 +96,7 @@ Build the shared package snapshot and all feature bundles from a neighboring Mar
 node scripts/build-agent-catalog.mjs
 node scripts/build-feature-packages.mjs
 node scripts/test-catalog-lanes.mjs
+node scripts/validate-package-locales.mjs
 node scripts/validate-catalog.mjs
 ```
 

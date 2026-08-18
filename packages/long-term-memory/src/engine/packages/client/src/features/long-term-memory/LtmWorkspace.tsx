@@ -1,12 +1,4 @@
-import {
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type ReactNode,
-} from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 export type LtmWorkspacePane = "navigator" | "workbench" | "inspector";
 
@@ -28,10 +20,7 @@ type LtmWorkspaceBaseProps = {
 };
 
 type LtmWorkspaceProps = LtmWorkspaceBaseProps &
-  (
-    | { navigator?: WorkspaceSlot; inspector?: never }
-    | { navigator: WorkspaceSlot; inspector?: WorkspaceSlot }
-  );
+  ({ navigator?: WorkspaceSlot; inspector?: never } | { navigator: WorkspaceSlot; inspector?: WorkspaceSlot });
 
 export function LtmWorkspace({
   activeMobilePane,
@@ -46,8 +35,8 @@ export function LtmWorkspace({
   const containerRef = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
-  const [rootFontSize, setRootFontSize] = useState(() =>
-    Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16,
+  const [rootFontSize, setRootFontSize] = useState(
+    () => Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16,
   );
   const widthRem = width / rootFontSize;
   const panes = [
@@ -56,29 +45,24 @@ export function LtmWorkspace({
     ...(inspector ? (["inspector"] as const) : []),
   ];
   const slots = { navigator, workbench, inspector };
-  const tabPanes = widthRem < compactBreakpointRem
-    ? panes
-    : inspector && widthRem < wideBreakpointRem
-      ? panes.filter((pane) => pane !== "navigator")
-      : [];
+  const tabPanes =
+    widthRem < compactBreakpointRem
+      ? panes
+      : inspector && widthRem < wideBreakpointRem
+        ? panes.filter((pane) => pane !== "navigator")
+        : [];
   const availablePanes = tabPanes.filter((pane) => !slots[pane]?.disabled);
-  const nextAvailablePane = availablePanes.includes(activeMobilePane)
-    ? undefined
-    : availablePanes[0];
+  const nextAvailablePane = availablePanes.includes(activeMobilePane) ? undefined : availablePanes[0];
   const effectiveActivePane = nextAvailablePane ?? activeMobilePane;
 
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     setWidth(container.getBoundingClientRect().width);
-    const observer = new ResizeObserver(([entry]) =>
-      setWidth(entry.contentRect.width),
-    );
+    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
     observer.observe(container);
     const rootObserver = new MutationObserver(() =>
-      setRootFontSize(
-        Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16,
-      ),
+      setRootFontSize(Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16),
     );
     rootObserver.observe(document.documentElement, {
       attributes: true,
@@ -91,16 +75,11 @@ export function LtmWorkspace({
   }, []);
 
   useEffect(() => {
-    if (tabPanes.length && nextAvailablePane)
-      onMobilePaneChange(nextAvailablePane);
+    if (tabPanes.length && nextAvailablePane) onMobilePaneChange(nextAvailablePane);
   }, [nextAvailablePane, onMobilePaneChange, tabPanes.length]);
 
-  const handleTabKey = (
-    event: KeyboardEvent<HTMLButtonElement>,
-    pane: LtmWorkspacePane,
-  ) => {
-    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key))
-      return;
+  const handleTabKey = (event: KeyboardEvent<HTMLButtonElement>, pane: LtmWorkspacePane) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
     const index = availablePanes.indexOf(pane);
     const nextIndex =
@@ -108,10 +87,7 @@ export function LtmWorkspace({
         ? 0
         : event.key === "End"
           ? availablePanes.length - 1
-          : (index +
-              (event.key === "ArrowRight" ? 1 : -1) +
-              availablePanes.length) %
-            availablePanes.length;
+          : (index + (event.key === "ArrowRight" ? 1 : -1) + availablePanes.length) % availablePanes.length;
     const next = availablePanes[nextIndex];
     if (!next) return;
     onMobilePaneChange(next);
@@ -147,6 +123,13 @@ export function LtmWorkspace({
           min-height: 2.75rem;
           width: 2.75rem;
           min-width: 2.75rem;
+        }
+        [data-ltm-workspace] [data-ltm-workspace-switcher] {
+          background: var(--marinara-editor-control-bg);
+        }
+        [data-ltm-workspace] [data-ltm-workspace-pane-tab][data-active="true"] {
+          background: var(--background);
+          color: var(--foreground);
         }
         @container ltm-workspace (min-width: ${compactBreakpointRem}rem) {
           [data-ltm-workspace] [data-ltm-workspace-pane] {

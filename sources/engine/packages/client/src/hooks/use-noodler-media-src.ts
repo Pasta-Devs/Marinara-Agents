@@ -12,7 +12,7 @@ export function useNoodlerMediaSrc(
   imageUrl: string | null | undefined,
 ): string | null {
   const [resolved, setResolved] = useState<string | null>(null);
-  const managed = imageUrl?.startsWith("/api/noodle/") === true;
+  const managed = imageUrl?.startsWith("/api/slurp/") === true;
 
   useEffect(() => {
     if (!imageUrl || !managed) {

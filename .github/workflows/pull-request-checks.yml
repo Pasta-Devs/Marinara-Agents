@@ -31,6 +31,9 @@ jobs:
       - name: Install locked test dependencies
         run: npm ci
 
+      - name: Check formatting and lint
+        run: npm run check
+
       - name: Test package security invariants
         run: npm run test:security
 
@@ -42,6 +45,9 @@ jobs:
 
       - name: Validate catalogs, packages, artifacts, and README coverage
         run: node scripts/validate-catalog.mjs
+
+      - name: Test catalog generatedAt determinism
+        run: node scripts/tests/catalog-generatedat-determinism.regression.mjs
 
       - name: Test World Maps UI contracts
         run: node tests/world-maps-ui-contract.regression.mjs

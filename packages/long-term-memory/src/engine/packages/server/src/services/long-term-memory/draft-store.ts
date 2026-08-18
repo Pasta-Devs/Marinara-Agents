@@ -166,13 +166,9 @@ export class LongTermMemoryDraftStore {
           const superseded = error instanceof LtmSupersessionError ? error.superseded : [];
           const rollback = await Promise.allSettled([
             unlink(draftPathForId(draft.id, this.root)),
-            ...superseded.map((previous) =>
-              writeJsonAtomic(draftPathForId(previous.id, this.root), previous),
-            ),
+            ...superseded.map((previous) => writeJsonAtomic(draftPathForId(previous.id, this.root), previous)),
           ]);
-          const failures = rollback.flatMap((result) =>
-            result.status === "rejected" ? [result.reason] : [],
-          );
+          const failures = rollback.flatMap((result) => (result.status === "rejected" ? [result.reason] : []));
           if (failures.length)
             throw new AggregateError([error, ...failures], "Long-Term Memory draft creation and rollback both failed.");
           throw error;
@@ -247,7 +243,11 @@ export class LongTermMemoryDraftStore {
     return withLtmVaultLock(this.root, () => this.updateDraftStatusUnlocked(id, parsedStatus, patch));
   }
 
-  async updateDraftStatusUnlocked(id: string, status: LtmExtractionDraft["status"], patch: Partial<LtmExtractionDraft> = {}) {
+  async updateDraftStatusUnlocked(
+    id: string,
+    status: LtmExtractionDraft["status"],
+    patch: Partial<LtmExtractionDraft> = {},
+  ) {
     return this.updateDraftUnlocked(id, { ...patch, status: ltmDraftStatusSchema.parse(status) });
   }
 
@@ -306,9 +306,7 @@ export class LongTermMemoryDraftStore {
       const mutationIdSet = new Set(uniqueMutationIds);
       const eventNoteIds = new Set(
         draft.mutations.flatMap((mutation) =>
-          mutation.kind === "create_note" && mutation.note.type === "timeline_event"
-            ? [mutation.note.id]
-            : [],
+          mutation.kind === "create_note" && mutation.note.type === "timeline_event" ? [mutation.note.id] : [],
         ),
       );
       let expanded = true;
@@ -316,16 +314,12 @@ export class LongTermMemoryDraftStore {
         expanded = false;
         const removedNoteIds = new Set(
           draft.mutations.flatMap((mutation) =>
-            mutationIdSet.has(mutation.id) && mutation.kind === "create_note"
-              ? [mutation.note.id]
-              : [],
+            mutationIdSet.has(mutation.id) && mutation.kind === "create_note" ? [mutation.note.id] : [],
           ),
         );
         const invalidatedNoteIds = new Set(
           draft.mutations.flatMap((mutation) =>
-            mutationIdSet.has(mutation.id) &&
-            mutation.kind === "add_link" &&
-            eventNoteIds.has(mutation.link.target)
+            mutationIdSet.has(mutation.id) && mutation.kind === "add_link" && eventNoteIds.has(mutation.link.target)
               ? [mutation.noteId]
               : [],
           ),
@@ -336,7 +330,9 @@ export class LongTermMemoryDraftStore {
             mutation.kind === "create_note"
               ? mutation.note.links.some((link) => removedNoteIds.has(link.target))
               : mutation.kind === "add_link"
-                ? invalidatedNoteIds.has(mutation.noteId) || removedNoteIds.has(mutation.noteId) || removedNoteIds.has(mutation.link.target)
+                ? invalidatedNoteIds.has(mutation.noteId) ||
+                  removedNoteIds.has(mutation.noteId) ||
+                  removedNoteIds.has(mutation.link.target)
                 : removedNoteIds.has(mutation.noteId) ||
                   (mutation.claimKind === "change" && invalidatedNoteIds.has(mutation.noteId));
           if (dependsOnRemoved) {

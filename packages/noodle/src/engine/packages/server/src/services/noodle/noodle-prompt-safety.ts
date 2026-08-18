@@ -1,5 +1,3 @@
-import type { NoodlerSourceSnapshot } from "@marinara-engine/shared";
-
 function promptRecord(value: unknown): Record<string, unknown> {
   if (!value) return {};
   if (typeof value === "string") {
@@ -9,9 +7,7 @@ function promptRecord(value: unknown): Record<string, unknown> {
       return {};
     }
   }
-  return typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+  return typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 export function escapePromptAttribute(value: string) {
@@ -19,23 +15,13 @@ export function escapePromptAttribute(value: string) {
 }
 
 export function escapePromptText(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export function characterContextFromRow(row: {
-  id: string;
-  data: unknown;
-  avatarPath?: string | null;
-}) {
+export function characterContextFromRow(row: { id: string; data: unknown; avatarPath?: string | null }) {
   const data = promptRecord(row.data);
   const extensions = promptRecord(data.extensions);
-  const name =
-    typeof data.name === "string" && data.name.trim()
-      ? data.name.trim()
-      : "Character";
+  const name = typeof data.name === "string" && data.name.trim() ? data.name.trim() : "Character";
   const lines = [`<character name="${escapePromptAttribute(name)}">`];
   for (const [label, value] of [
     ["Description", data.description],
@@ -51,44 +37,4 @@ export function characterContextFromRow(row: {
   }
   lines.push(`</character>`);
   return lines.join("\n");
-}
-
-const REVIEWED_HINTED_THEME_TOKENS = [
-  "adventurous",
-  "artistic",
-  "bookish",
-  "calm",
-  "cheerful",
-  "creative",
-  "curious",
-  "friendly",
-  "gentle",
-  "inventive",
-  "kind",
-  "musical",
-  "outgoing",
-  "playful",
-  "reserved",
-  "scientific",
-  "sporty",
-  "technical",
-  "thoughtful",
-  "witty",
-] as const;
-
-/** A hinted identity receives only reviewed, non-identifying theme tokens. */
-export function hintedNoodlerSourceBrief(
-  snapshot: NoodlerSourceSnapshot | null,
-) {
-  if (!snapshot)
-    return "General temperament and creative interests from the source profile.";
-  const personalityWords = new Set(
-    snapshot.personality.toLocaleLowerCase().match(/[a-z]+/gu) ?? [],
-  );
-  const themes = REVIEWED_HINTED_THEME_TOKENS.filter((token) =>
-    personalityWords.has(token),
-  );
-  return themes.length > 0
-    ? `Approved source themes: ${themes.join(", ")}.`
-    : "General temperament and creative interests from the source profile.";
 }

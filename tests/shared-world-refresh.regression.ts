@@ -18,11 +18,7 @@ const common = {
   serverHierarchyProfile: baseHierarchyProfile,
 };
 
-assert.equal(
-  shouldRefreshSpatialWorkspace(common),
-  false,
-  "An unchanged clean workspace must not be rehydrated",
-);
+assert.equal(shouldRefreshSpatialWorkspace(common), false, "An unchanged clean workspace must not be rehydrated");
 assert.equal(
   shouldRefreshSpatialWorkspace({
     ...common,
@@ -61,10 +57,7 @@ assert.equal(
   "A clean workspace must also accept canonical hierarchy-profile changes",
 );
 const hookSource = readFileSync(
-  resolve(
-    repoRoot,
-    "packages/hierarchical-maps/src/engine/packages/client/src/hooks/use-spatial-context.ts",
-  ),
+  resolve(repoRoot, "packages/hierarchical-maps/src/engine/packages/client/src/hooks/use-spatial-context.ts"),
   "utf8",
 );
 assert.match(

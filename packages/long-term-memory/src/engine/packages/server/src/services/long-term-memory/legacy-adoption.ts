@@ -11,9 +11,7 @@ function metadataRecord(value: unknown): Record<string, unknown> {
   if (typeof value !== "string") return {};
   try {
     const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? parsed as Record<string, unknown>
-      : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
   } catch {
     return {};
   }
@@ -40,9 +38,7 @@ export async function adoptLegacyLongTermMemoryChats() {
         chatId: chat.id,
         metadata: {
           ...metadata,
-          activeAgentIds: activeAgentIds.includes(LTM_AGENT_ID)
-            ? activeAgentIds
-            : [...activeAgentIds, LTM_AGENT_ID],
+          activeAgentIds: activeAgentIds.includes(LTM_AGENT_ID) ? activeAgentIds : [...activeAgentIds, LTM_AGENT_ID],
           enableAgents: true,
           [LTM_ADOPTION_MARKER]: true,
         },
@@ -56,7 +52,7 @@ export async function adoptLegacyLongTermMemoryChats() {
 
 export async function adoptLegacyLongTermMemoryAgentConfig(root: string) {
   const path = safeJoin(getLongTermMemoryDirectories(root).config, "agent-settings.json");
-  if (await readJsonFile<unknown>(path, null) !== null) return;
+  if ((await readJsonFile<unknown>(path, null)) !== null) return;
   const getAgentConfig = getPackageRuntime().getAgentConfig;
   if (!getAgentConfig) return;
   try {

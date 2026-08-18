@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
 import { existsSync, realpathSync } from "node:fs";
-import { chmod, copyFile, cp, mkdir, mkdtemp, readFile, readdir, rm, utimes, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { createRequire } from "node:module";
 import { catalogArtworkUrl } from "./catalog-artwork.mjs";
+import { createDeterministicZip } from "./deterministic-zip.mjs";
 import { readCatalogFamily, writeCatalogFamily } from "./catalog-lanes.mjs";
 import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
 import { assertPackagePrivateImportBoundary } from "./package-engine-boundary.mjs";
@@ -14,6 +16,40 @@ import { writeEnglishPackageLocale } from "./package-locales.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const engineRoot = resolve(process.env.MARINARA_ENGINE_ROOT || join(repoRoot, "../Marinara-Engine"));
+
+// Tool binaries run as JS entrypoints under the current Node instead of via
+// `pnpm exec`: pnpm is a .cmd on Windows that bare spawnSync cannot start, and
+// shell-mode spawning would mangle arguments that contain spaces (the esbuild
+// banner). Resolution goes through the engine workspace that declares each
+// tool, so the pnpm strict layout still applies.
+const engineRequire = createRequire(pathToFileURL(join(engineRoot, "package.json")));
+const engineClientRequire = createRequire(pathToFileURL(join(engineRoot, "packages/client/package.json")));
+// esbuild honors NODE_PATH; `pnpm exec` used to provide the module paths, so
+// list every workspace node_modules a vendored source can import from (pnpm's
+// strict layout keeps each package's deps in its own node_modules symlinks).
+// This repo's own node_modules comes FIRST so a package pinned in BOTH repos
+// (zod) resolves to a single copy everywhere — the vendored shared dist
+// already reaches it by directory walk-up, and two distinct realpaths would
+// bundle twice (review finding: doubled zod bloated every bundle ~6-20%).
+const engineNodePathDirs = [
+  join(repoRoot, "node_modules"),
+  join(engineRoot, "node_modules"),
+  join(engineRoot, "packages/server/node_modules"),
+  join(engineRoot, "packages/shared/node_modules"),
+  join(engineRoot, "packages/client/node_modules"),
+];
+let engineNodePath = engineNodePathDirs.join(process.platform === "win32" ? ";" : ":");
+
+// esbuild's bin is a JS shim on Windows but is optimized into the NATIVE
+// executable by its postinstall on POSIX — running that under node would try
+// to parse machine code as JavaScript. Spawn it directly where it is
+// executable; only Windows needs the node indirection (review finding).
+function spawnEsbuild(args, options) {
+  const bin = engineRequire.resolve("esbuild/bin/esbuild");
+  return process.platform === "win32"
+    ? spawnSync(process.execPath, [bin, ...args], options)
+    : spawnSync(bin, args, options);
+}
 const artifactsDir = join(repoRoot, "artifacts");
 const packagesDir = join(repoRoot, "packages");
 const sourcesRoot = join(repoRoot, "sources/engine");
@@ -23,10 +59,22 @@ const sourceRoot = process.env.MARINARA_ENGINE_SOURCE_ROOT
   : existsSync(sourcesRoot)
     ? sourcesRoot
     : engineRoot;
+// An external MARINARA_ENGINE_SOURCE_ROOT tree carries its own dependency
+// installs; without these entries its bare imports (e.g. chess.js) cannot
+// resolve (review finding).
+if (process.env.MARINARA_ENGINE_SOURCE_ROOT && sourceRoot !== engineRoot && sourceRoot !== sourcesRoot) {
+  engineNodePath = [
+    ...engineNodePathDirs.slice(0, 1),
+    join(sourceRoot, "node_modules"),
+    join(sourceRoot, "packages/server/node_modules"),
+    join(sourceRoot, "packages/shared/node_modules"),
+    join(sourceRoot, "packages/client/node_modules"),
+    ...engineNodePathDirs.slice(1),
+  ].join(process.platform === "win32" ? ";" : ":");
+}
 const packageSharedEntry = join(repoRoot, "sources/package-shared.ts");
 const MIN_ENGINE_VERSION = "2.3.0";
 const MAX_ENGINE_EXCLUSIVE = "4.0.0";
-const ARTIFACT_MTIME = new Date("2000-01-01T00:00:00.000Z");
 const hierarchicalMapsOwnedSourcePaths = [
   "packages/server/src/routes/spatial-context.routes.ts",
   "packages/server/src/services/spatial-context",
@@ -53,10 +101,51 @@ const noodleOwnedSourcePaths = [
   "packages/client/src/stores/noodle-package.store.ts",
   "packages/server/src/db/schema/noodle.ts",
   "packages/server/src/routes/noodle.routes.ts",
-  "packages/server/src/services/noodle",
+  "packages/server/src/services/noodle/noodle-ambient-profile-generation.service.ts",
+  "packages/server/src/services/noodle/noodle-ambient-profiles.ts",
+  "packages/server/src/services/noodle/noodle-context.ts",
+  "packages/server/src/services/noodle/noodle-generated-activity.service.ts",
+  "packages/server/src/services/noodle/noodle-generated-profiles.ts",
+  "packages/server/src/services/noodle/noodle-generated-refresh.ts",
+  "packages/server/src/services/noodle/noodle-generation-log.ts",
+  "packages/server/src/services/noodle/noodle-handle.ts",
+  "packages/server/src/services/noodle/noodle-image-prompt-rewrite.ts",
+  "packages/server/src/services/noodle/noodle-image-format.ts",
+  "packages/server/src/services/noodle/noodle-image-prompt.ts",
+  "packages/server/src/services/noodle/noodle-image-retry.ts",
+  "packages/server/src/services/noodle/noodle-interaction-policy.ts",
+  "packages/server/src/services/noodle/noodle-participant-selection.ts",
+  "packages/server/src/services/noodle/noodle-post-target.ts",
+  "packages/server/src/services/noodle/noodle-profile-avatar.ts",
+  "packages/server/src/services/noodle/noodle-profile-selection.ts",
+  "packages/server/src/services/noodle/noodle-prompt.ts",
+  "packages/server/src/services/noodle/noodle-public-generation.service.ts",
+  "packages/server/src/services/noodle/noodle-public-images.service.ts",
+  "packages/server/src/services/noodle/noodle-public-profiles.service.ts",
+  "packages/server/src/services/noodle/noodle-public-prompt.service.ts",
+  "packages/server/src/services/noodle/noodle-public-support.ts",
+  "packages/server/src/services/noodle/noodle-prompt-safety.ts",
+  "packages/server/src/services/noodle/noodle-refresh-schedule.ts",
+  "packages/server/src/services/noodle/noodle-refresh-scheduler.service.ts",
+  "packages/server/src/services/noodle/noodle-response-format.ts",
+  "packages/server/src/services/noodle/noodle-sampling-options.ts",
+  "packages/server/src/services/noodle/noodle-vision.ts",
+  "packages/server/src/services/noodle/server-entry.ts",
   "packages/server/src/services/prompt-overrides/registry/noodle.ts",
   "packages/server/src/services/storage/noodle-refresh-run-retention.ts",
   "packages/server/src/services/storage/noodle.storage.ts",
+];
+const slurpSourceRoot = join(packagesDir, "slurp/src/engine");
+const slurpOwnedSourcePaths = [
+  "packages/client/src/components/slurp",
+  "packages/client/src/hooks/use-slurp.ts",
+  "packages/client/src/localization/locales",
+  "packages/client/src/slurp-package-entry.tsx",
+  "packages/client/src/stores/slurp-package.store.ts",
+  "packages/server/src/db/schema/slurp.ts",
+  "packages/server/src/routes/slurp.routes.ts",
+  "packages/server/src/services/slurp",
+  "packages/server/src/services/storage/slurp.storage.ts",
 ];
 const reuseExistingRuntime = process.env.MARINARA_REUSE_FEATURE_RUNTIME === "1";
 const rebuiltFeatureClients = new Set(
@@ -67,7 +156,7 @@ const rebuiltFeatureClients = new Set(
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
 async function prepareFeatureBuildRoot(feature) {
-  if (feature.id === "noodle") {
+  if (feature.id === "noodle" || feature.id === "slurp") {
     if (!existsSync(feature.packageSourceRoot)) {
       throw new Error(`Missing package-owned ${feature.name} source`);
     }
@@ -115,10 +204,16 @@ async function captureEngineSources(metafilePath, buildRoot = sourceRoot, exclud
   const normalizedBuildRoot = resolve(buildRoot);
   for (const input of Object.keys(metafile.inputs || {})) {
     const absolute = resolve(engineRoot, input);
-    if (!absolute.startsWith(`${normalizedBuildRoot}/`) || absolute.includes("/node_modules/")) continue;
-    const relative = absolute.slice(normalizedBuildRoot.length + 1);
-    if (excludedPaths.some((path) => relative === path || relative.startsWith(`${path}/`))) continue;
-    const destination = join(sourcesRoot, relative);
+    // Separator-aware like capturePackageSources: resolve() yields \-delimited
+    // paths on Windows, and the old /-based prefix check silently captured
+    // nothing there (review finding).
+    if (!absolute.startsWith(`${normalizedBuildRoot}${sep}`) || absolute.includes(`${sep}node_modules${sep}`)) continue;
+    const relativePath = relative(normalizedBuildRoot, absolute);
+    if (!relativePath || relativePath.startsWith(`..${sep}`) || relativePath === "..") continue;
+    const normalizedRelativePath = relativePath.split(sep).join("/");
+    if (excludedPaths.some((path) => normalizedRelativePath === path || normalizedRelativePath.startsWith(`${path}/`)))
+      continue;
+    const destination = join(sourcesRoot, normalizedRelativePath);
     if (absolute === destination) continue;
     await mkdir(dirname(destination), { recursive: true });
     await copyFile(absolute, destination);
@@ -150,41 +245,46 @@ async function capturePackageSources(metafilePath, buildRoot, excludedPaths) {
   }
 }
 
+async function removeOwnedSourceSnapshots(excludedPaths) {
+  for (const path of excludedPaths) {
+    await rm(join(sourcesRoot, path), { recursive: true, force: true });
+  }
+}
+
 const features = [
   {
     id: "noodle",
-    version: "1.0.10",
+    version: "1.2.4",
     minEngineVersion: "2.4.2",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
-    description:
-      "Explore the Noodle public timeline and the NoodleR creator-and-fan roleplay feed as an optional local social world.",
+    description: "Explore the Noodle public timeline as an optional local social world.",
     localizations: {
       de: {
         name: "Noodle",
         description:
-          "Entdecke die öffentliche Noodle-Timeline und den lokalen NoodleR-Rollenspiel-Feed für Kreative und Fans als optionale soziale Welt. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Noodle.",
+          "Entdecke die öffentliche Noodle-Timeline als optionale lokale soziale Welt. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Noodle.",
         homeBrowserTab: {
           label: "Noodle",
-          ariaLabel: "Noodle und NoodleR öffnen",
+          ariaLabel: "Noodle öffnen",
         },
       },
       ko: {
         name: "Noodle",
         description:
-          "Noodle 공개 타임라인과 로컬 NoodleR 크리에이터 및 팬 역할극 피드를 선택형 소셜 세계로 만나 보세요. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Noodle을 여세요.",
+          "Noodle 공개 타임라인을 선택형 로컬 소셜 세계로 만나 보세요. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Noodle을 여세요.",
         homeBrowserTab: {
           label: "Noodle",
-          ariaLabel: "Noodle 및 NoodleR 열기",
+          ariaLabel: "Noodle 열기",
         },
       },
       pl: {
         name: "Noodle",
         description:
-          "Poznaj publiczną oś czasu Noodle oraz lokalny kanał fabularny NoodleR dla twórców i fanów jako opcjonalny świat społecznościowy. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Noodle na stronie głównej.",
+          "Poznaj publiczną oś czasu Noodle jako opcjonalny lokalny świat społecznościowy. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Noodle na stronie głównej.",
         homeBrowserTab: {
           label: "Noodle",
-          ariaLabel: "Otwórz Noodle i NoodleR",
+          ariaLabel: "Otwórz Noodle",
         },
       },
     },
@@ -198,19 +298,76 @@ const features = [
     packageSourceRoot: noodleSourceRoot,
     ownedSourcePaths: noodleOwnedSourcePaths,
     libraryHidden: true,
-    assetPaths: ["noodle-klusek.png", "noodler-klusek.png"],
+    assetPaths: ["noodle-klusek.png"],
     contributions: {
       slots: ["home-browser-tab"],
       homeBrowserTab: {
         label: "Noodle",
-        ariaLabel: "Open Noodle and NoodleR",
-        iconPaths: ["noodle-klusek.png", "noodler-klusek.png"],
+        ariaLabel: "Open Noodle",
+        iconPaths: ["noodle-klusek.png"],
+      },
+    },
+  },
+  {
+    id: "slurp",
+    version: "1.0.8",
+    minEngineVersion: "2.4.3",
+    maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
+    name: "Slurp",
+    description:
+      "The standalone successor to NoodleR: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity.",
+    localizations: {
+      de: {
+        name: "Slurp",
+        description:
+          "Erstelle ein lokales Creator-Profil aus einem Engine-Charakter oder einer Engine-Persona, veröffentliche öffentliche oder gesperrte Beiträge und simuliere Abonnements und Publikumsaktivität. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Slurp.",
+        homeBrowserTab: {
+          label: "Slurp",
+          ariaLabel: "Slurp öffnen",
+        },
+      },
+      ko: {
+        name: "Slurp",
+        description:
+          "Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 NoodleR 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Slurp를 여세요.",
+        homeBrowserTab: {
+          label: "Slurp",
+          ariaLabel: "Slurp 열기",
+        },
+      },
+      pl: {
+        name: "Slurp",
+        description:
+          "Utwórz lokalne profile twórców z postaci silnika lub person silnika, publikuj publiczne lub zablokowane posty NoodleR i symuluj subskrypcje oraz aktywność publiczności. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Slurp na stronie głównej.",
+        homeBrowserTab: {
+          label: "Slurp",
+          ariaLabel: "Otwórz Slurp",
+        },
+      },
+    },
+    category: "misc",
+    kind: ["agent"],
+    modes: ["conversation", "roleplay", "game"],
+    permissions: ["chat-read", "network", "routes", "storage", "ui"],
+    serverImport: "packages/server/src/services/slurp/server-entry.ts",
+    serverEntry: true,
+    clientImport: "packages/client/src/slurp-package-entry.tsx",
+    packageSourceRoot: slurpSourceRoot,
+    ownedSourcePaths: slurpOwnedSourcePaths,
+    libraryHidden: true,
+    assetPaths: ["slurp-logo.png", "slurpagent.png"],
+    contributions: {
+      slots: ["home-browser-tab"],
+      homeBrowserTab: {
+        label: "Slurp",
+        ariaLabel: "Open Slurp",
+        iconPaths: ["slurp-logo.png"],
       },
     },
   },
   {
     id: "long-term-memory",
-    version: "1.2.6",
+    version: "1.2.7",
     minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
@@ -235,7 +392,7 @@ const features = [
   },
   {
     id: "hierarchical-maps",
-    version: "1.3.6",
+    version: "1.4.0",
     minEngineVersion: "2.4.2",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "World Maps",
@@ -445,11 +602,8 @@ export async function selfCheck() {
     const entry = join(temporary, "entry.mjs");
     const metafile = join(temporary, "meta.json");
     await writeFile(entry, source);
-    const result = spawnSync(
-      "pnpm",
+    const result = spawnEsbuild(
       [
-        "exec",
-        "esbuild",
         entry,
         "--bundle",
         "--platform=node",
@@ -472,7 +626,7 @@ export async function selfCheck() {
       {
         cwd: engineRoot,
         encoding: "utf8",
-        env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") },
+        env: { ...process.env, NODE_PATH: engineNodePath },
       },
     );
     if (result.status !== 0) {
@@ -480,6 +634,9 @@ export async function selfCheck() {
     }
     if (feature.ownedSourcePaths?.length) {
       await capturePackageSources(metafile, prepared.buildRoot, feature.ownedSourcePaths);
+      if (feature.id === "slurp") {
+        await removeOwnedSourceSnapshots(["packages/client/src/localization/locales"]);
+      }
     } else {
       await captureEngineSources(
         metafile,
@@ -541,11 +698,8 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
     const entry = join(temporary, "entry.tsx");
     const metafile = join(temporary, "meta.json");
     await writeFile(entry, source);
-    const result = spawnSync(
-      "pnpm",
+    const result = spawnEsbuild(
       [
-        "exec",
-        "esbuild",
         entry,
         "--bundle",
         "--platform=browser",
@@ -565,7 +719,7 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
       {
         cwd: engineRoot,
         encoding: "utf8",
-        env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") },
+        env: { ...process.env, NODE_PATH: engineNodePath },
       },
     );
     if (result.status !== 0)
@@ -576,10 +730,10 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
   }
 }
 
-async function buildNoodleStyles(buildRoot, temporary) {
-  const input = join(temporary, "noodle.css");
-  const outputDir = join(temporary, "noodle-css");
-  const config = join(temporary, "vite.noodle.config.mjs");
+async function buildPackageStyles(buildRoot, temporary, capabilityId) {
+  const input = join(temporary, `${capabilityId}.css`);
+  const outputDir = join(temporary, `${capabilityId}-css`);
+  const config = join(temporary, `vite.${capabilityId}.config.mjs`);
   const globals = join(engineRoot, "packages/client/src/styles/globals.css");
   const packageClientSources = join(buildRoot, "packages/client/src").split(sep).join("/");
   await writeFile(
@@ -608,15 +762,15 @@ export default defineConfig({
 `,
   );
   const result = spawnSync(
-    "pnpm",
-    ["--filter", "@marinara-engine/client", "exec", "vite", "build", "--config", config],
-    { cwd: engineRoot, encoding: "utf8", env: { ...process.env, SKIP_PWA: "1" } },
+    process.execPath,
+    [join(dirname(engineClientRequire.resolve("vite/package.json")), "bin/vite.js"), "build", "--config", config],
+    { cwd: join(engineRoot, "packages/client"), encoding: "utf8", env: { ...process.env, SKIP_PWA: "1" } },
   );
-  if (result.status !== 0) throw new Error(result.stderr || result.stdout || "Noodle stylesheet build failed");
+  if (result.status !== 0) throw new Error(result.stderr || result.stdout || `${capabilityId} stylesheet build failed`);
   const assets = join(outputDir, "assets");
   const cssFiles = (await readdir(assets)).filter((filename) => filename.endsWith(".css")).sort();
   if (cssFiles.length !== 1) {
-    throw new Error(`Noodle stylesheet build produced ${cssFiles.length} CSS assets; expected exactly one`);
+    throw new Error(`${capabilityId} stylesheet build produced ${cssFiles.length} CSS assets; expected exactly one`);
   }
   const [cssFile] = cssFiles;
   const styles = await readFile(join(assets, cssFile), "utf8");
@@ -624,7 +778,7 @@ export default defineConfig({
     .replaceAll(":root", ":scope")
     .replaceAll("[data-theme=dark]", ":scope:where([data-theme=dark] *)")
     .replaceAll("[data-theme=light]", ":scope:where([data-theme=light] *)");
-  return `@scope (marinara-capability-noodle){${scopedStyles}}`;
+  return `@scope (marinara-capability-${capabilityId}, [data-marinara-capability-scope=${JSON.stringify(capabilityId)}]){${scopedStyles}}`;
 }
 
 async function bundleSpecialClient(feature, output) {
@@ -651,10 +805,7 @@ async function bundleSpecialClient(feature, output) {
       const worldMap = resolve(prepared.buildRoot, "packages/client/src/components/game/GameWorldMap.tsx");
       const spatialHooks = resolve(prepared.buildRoot, "packages/client/src/hooks/use-spatial-context.ts");
       const packageApi = resolve(prepared.buildRoot, "packages/client/src/features/spatial-context/package-api.ts");
-      const localization = resolve(
-        prepared.buildRoot,
-        "packages/client/src/features/spatial-context/localization.tsx",
-      );
+      const localization = resolve(prepared.buildRoot, "packages/client/src/features/spatial-context/localization.tsx");
       const pendingTransitions = resolve(
         prepared.buildRoot,
         "packages/client/src/features/spatial-context/pending-spatial-transitions.ts",
@@ -1298,20 +1449,18 @@ function Root({ element }) {
 class Element extends HTMLElement { connectedCallback() { if (!this.__root) this.__root = createRoot(this); this.__root.render(<QueryClientProvider client={client}><Root element={this} /></QueryClientProvider>); } disconnectedCallback() { queueMicrotask(() => { if (!this.isConnected && this.__root) { this.__root.unmount(); this.__root = null; } }); } }
 if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.stringify(tag)}, Element);`;
     } else if (feature.clientImport) {
-      if (feature.id === "noodle") {
-        source = `import { setNoodlePackageStyles } from ${JSON.stringify(resolve(prepared.buildRoot, feature.clientImport))};`;
-        const styles = await buildNoodleStyles(prepared.buildRoot, temporary);
-        source += `\nsetNoodlePackageStyles(${JSON.stringify(styles)});\n`;
+      if (feature.id === "noodle" || feature.id === "slurp") {
+        const setterName = feature.id === "noodle" ? "setNoodlePackageStyles" : "setSlurpPackageStyles";
+        source = `import { ${setterName} } from ${JSON.stringify(resolve(prepared.buildRoot, feature.clientImport))};`;
+        const styles = await buildPackageStyles(prepared.buildRoot, temporary, feature.id);
+        source += `\n${setterName}(${JSON.stringify(styles)});\n`;
       } else source = `import ${JSON.stringify(resolve(prepared.buildRoot, feature.clientImport))};`;
     } else return;
     const entry = join(temporary, "entry.tsx");
     const metafile = join(temporary, "meta.json");
     await writeFile(entry, source);
-    const result = spawnSync(
-      "pnpm",
+    const result = spawnEsbuild(
       [
-        "exec",
-        "esbuild",
         entry,
         "--bundle",
         "--platform=browser",
@@ -1331,7 +1480,7 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
       {
         cwd: engineRoot,
         encoding: "utf8",
-        env: { ...process.env, NODE_PATH: join(engineRoot, "node_modules") },
+        env: { ...process.env, NODE_PATH: engineNodePath },
       },
     );
     if (result.status !== 0)
@@ -1525,20 +1674,21 @@ for (const feature of selectedFeatures) {
       ...(clientBuffer ? ["client.js"] : []),
       ...assetPayloads.map((asset) => asset.path),
     ];
-    for (const artifactFile of artifactFiles) {
-      const artifactSource = join(temporary, artifactFile);
-      await chmod(artifactSource, 0o644);
-      await utimes(artifactSource, ARTIFACT_MTIME, ARTIFACT_MTIME);
-    }
     const artifactName = `${feature.id}-${version}.zip`;
     const artifactPath = join(artifactsDir, artifactName);
     await rm(artifactPath, { force: true });
-    const zipped = spawnSync("zip", ["-X", "-q", artifactPath, ...artifactFiles], {
-      cwd: temporary,
-      env: { ...process.env, TZ: "UTC" },
-    });
-    if (zipped.status !== 0) throw new Error(`zip failed for ${feature.id}`);
-    const artifact = await readFile(artifactPath);
+    // Deterministic store-only zip (same module the Pixelforge build uses):
+    // byte-stable across machines and requires no system `zip` binary, so the
+    // feature build runs on Windows dev machines too.
+    const artifact = createDeterministicZip(
+      await Promise.all(
+        artifactFiles.map(async (artifactFile) => ({
+          name: artifactFile,
+          data: await readFile(join(temporary, artifactFile)),
+        })),
+      ),
+    );
+    await writeFile(artifactPath, artifact);
     catalog.packages.push({
       manifest,
       category: feature.category ?? "misc",
@@ -1553,13 +1703,16 @@ for (const feature of selectedFeatures) {
           ? "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md"
           : feature.id === "noodle"
             ? "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
-          : `https://github.com/Pasta-Devs/Marinara-Agents#${feature.id}`,
+            : feature.id === "slurp"
+              ? "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp/README.md"
+              : `https://github.com/Pasta-Devs/Marinara-Agents#${feature.id}`,
     });
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
 }
 
-catalog.generatedAt = new Date().toISOString();
 catalog.packages.sort((left, right) => left.manifest.name.localeCompare(right.manifest.name));
+// generatedAt is resolved centrally in writeCatalogFamily (preserved by
+// default; refreshed only when MARINARA_CATALOG_STAMP_GENERATED_AT=1).
 await writeCatalogFamily(repoRoot, catalog);

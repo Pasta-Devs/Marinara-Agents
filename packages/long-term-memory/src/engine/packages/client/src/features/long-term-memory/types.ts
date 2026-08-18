@@ -31,9 +31,7 @@ export type CapabilityProps = {
     longTermMemoryMaxChunks?: number;
   };
   onEnabledForChatChange?: (enabled: boolean) => void | Promise<void>;
-  onChatSettingsChange?: (
-    patch: Record<string, unknown>,
-  ) => void | Promise<void>;
+  onChatSettingsChange?: (patch: Record<string, unknown>) => void | Promise<void>;
   onOpenAgentSettings?: () => void;
   onOpenChatSummarySettings?: () => void;
   onOpenActivePromptPresetEditor?: () => void;
@@ -54,8 +52,7 @@ export type CapabilityElement = HTMLElement & {
   __root?: Root | null;
 };
 
-export type LongTermMemoryDestination =
-  "vault" | "review" | "sources" | "settings";
+export type LongTermMemoryDestination = "vault" | "review" | "sources" | "settings";
 
 export type SourceTab = "characters" | "lorebooks" | "chats";
 
@@ -74,9 +71,14 @@ export type LongTermMemoryDestinationProps = {
   selectedSource?: SourceTab;
   onSourceChange?: (source: SourceTab) => void;
   onDirtyChange?: (dirty: boolean) => void;
+  onSaveRequest?: (save: (() => Promise<boolean>) | null) => void;
   onOpenMemory?: (noteId: string) => void;
   onOpenVault?: () => void;
+  onOpenSources?: (source?: SourceTab) => boolean | Promise<boolean>;
   onOpenReview?: (sourceNoteId?: string) => void;
+  onOpenActivity?: () => void;
+  openActivityRequest?: number;
+  onOpenActivityHandled?: () => void;
   onRecoverCandidate?: (
     candidate: LtmExtractionDroppedCandidate,
     scope: LtmScope,

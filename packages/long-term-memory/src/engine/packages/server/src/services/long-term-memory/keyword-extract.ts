@@ -1,4 +1,9 @@
 import type { LtmNote } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
+import {
+  getLtmActiveKeywords,
+  getLtmKeywordIntent,
+  ltmKeywordKey,
+} from "../../../../shared/src/features/agents/long-term-memory/keywords.js";
 
 const TOKEN_PATTERN = /[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*/gu;
 const SENTENCE_SPLIT_PATTERN = /[.!?\n\r]+/;
@@ -128,7 +133,7 @@ const STOP_WORDS = new Set([
 
 const MAX_NOTE_KEYWORDS = 30;
 
-function normalizeKeywordToken(token: string) {
+export function normalizeKeywordToken(token: string) {
   const normalized = token
     .toLocaleLowerCase()
     .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")
@@ -142,9 +147,9 @@ function normalizeKeywordToken(token: string) {
 }
 
 function tokenizeKeywordText(text: string) {
-  return Array.from(text.matchAll(TOKEN_PATTERN), (match) =>
-    normalizeKeywordToken(match[0]!),
-  ).filter((token): token is string => Boolean(token));
+  return Array.from(text.matchAll(TOKEN_PATTERN), (match) => normalizeKeywordToken(match[0]!)).filter(
+    (token): token is string => Boolean(token),
+  );
 }
 
 function normalizePhrase(value: string) {
@@ -161,8 +166,7 @@ function collectPhrases(tokens: string[]) {
       if (slice.length !== size) continue;
       if (slice.every((token) => STOP_WORDS.has(token))) continue;
       const phrase = slice.join(" ");
-      if (phrase.length < 3 || /^\d+$/.test(phrase.replace(/\s+/g, "")))
-        continue;
+      if (phrase.length < 3 || /^\d+$/.test(phrase.replace(/\s+/g, ""))) continue;
       phrases.push(phrase);
     }
   }
@@ -175,11 +179,7 @@ export function normalizeKeywordTerms(text: string) {
   return [...normalized];
 }
 
-export function mergeKeywords(
-  primary: string[],
-  secondary: string[],
-  maxTotal: number,
-) {
+export function mergeKeywords(primary: string[], secondary: string[], maxTotal: number) {
   const merged: string[] = [];
   const seen = new Set<string>();
 
@@ -187,7 +187,7 @@ export function mergeKeywords(
     const normalized = normalizePhrase(keyword);
     if (!normalized || seen.has(normalized)) continue;
     seen.add(normalized);
-    merged.push(keyword.trim());
+    merged.push(normalized);
     if (merged.length >= maxTotal) break;
   }
 
@@ -209,8 +209,7 @@ export function extractKeywordsTfIdf(text: string, maxKeywords: number) {
     const seenInSentence = new Set<string>();
     for (const phrase of collectPhrases(tokens)) {
       termFrequency.set(phrase, (termFrequency.get(phrase) ?? 0) + 1);
-      if (!firstSeenOrder.has(phrase))
-        firstSeenOrder.set(phrase, sentenceIndex);
+      if (!firstSeenOrder.has(phrase)) firstSeenOrder.set(phrase, sentenceIndex);
       if (seenInSentence.has(phrase)) continue;
       seenInSentence.add(phrase);
       documentFrequency.set(phrase, (documentFrequency.get(phrase) ?? 0) + 1);
@@ -230,16 +229,10 @@ export function extractKeywordsTfIdf(text: string, maxKeywords: number) {
       };
     })
     .sort(
-      (left, right) =>
-        right.score - left.score ||
-        left.order - right.order ||
-        left.phrase.localeCompare(right.phrase),
+      (left, right) => right.score - left.score || left.order - right.order || left.phrase.localeCompare(right.phrase),
     )
     .map((entry) => entry.phrase)
-    .filter(
-      (phrase, index, list) =>
-        list.findIndex((candidate) => candidate === phrase) === index,
-    )
+    .filter((phrase, index, list) => list.findIndex((candidate) => candidate === phrase) === index)
     .slice(0, maxKeywords);
 }
 
@@ -252,8 +245,15 @@ function noteTextForKeywordExtraction(note: LtmNote) {
 
 export function extractNoteKeywords(note: LtmNote) {
   const noteText = noteTextForKeywordExtraction(note);
-  const tfIdfKeywords = noteText
-    ? extractKeywordsTfIdf(noteText, MAX_NOTE_KEYWORDS)
-    : [];
-  return mergeKeywords(note.keywords, tfIdfKeywords, MAX_NOTE_KEYWORDS);
+  const tfIdfKeywords = noteText ? extractKeywordsTfIdf(noteText, MAX_NOTE_KEYWORDS) : [];
+  const suppressed = new Set(
+    getLtmKeywordIntent(note)
+      .suppressed.map(normalizePhrase)
+      .filter((keyword): keyword is string => Boolean(keyword)),
+  );
+  return mergeKeywords(
+    getLtmActiveKeywords(note),
+    tfIdfKeywords.filter((keyword) => !suppressed.has(normalizePhrase(keyword))),
+    MAX_NOTE_KEYWORDS,
+  );
 }

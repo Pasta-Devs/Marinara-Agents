@@ -63,10 +63,7 @@ function tierFor(chunk: LtmMemoryChunk): 1 | 2 | 3 {
 }
 
 function normalizedComparableText(chunk: LtmMemoryChunk) {
-  return formatLtmChunkPromptText(chunk)
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLocaleLowerCase();
+  return formatLtmChunkPromptText(chunk).replace(/\s+/g, " ").trim().toLocaleLowerCase();
 }
 
 function pushRejected(

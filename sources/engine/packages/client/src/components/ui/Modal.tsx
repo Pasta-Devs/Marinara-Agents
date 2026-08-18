@@ -3,7 +3,7 @@
 // Uses CSS animations instead of framer-motion to
 // avoid double-animation under React.StrictMode.
 // ──────────────────────────────────────────────
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type Ref } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode, type Ref } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import {
@@ -28,7 +28,13 @@ interface ModalProps {
   panelClassName?: string;
   /** Optional feature-local style variables applied to the full panel. */
   panelStyle?: CSSProperties;
+  /** Prevent every dismissal path while an action is in progress. */
+  closeDisabled?: boolean;
+  /** Optional classes for the scroll area. */
+  contentClassName?: string;
 }
+
+export const ModalPortalContext = createContext<Element | null>(null);
 
 export function Modal({
   open,
@@ -41,13 +47,58 @@ export function Modal({
   mobileFullscreen = false,
   panelClassName,
   panelStyle,
+  closeDisabled = false,
+  contentClassName,
 }: ModalProps) {
+  const portalContainer = useContext(ModalPortalContext);
   const overlayRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
   // Track mounted state separately so we can play the exit animation
   // before actually removing the DOM nodes.
   const [mounted, setMounted] = useState(false);
   const [animating, setAnimating] = useState<"enter" | "exit" | null>(null);
   const enterRafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusTimer = window.setTimeout(() => {
+      const first = panelRef.current?.querySelector<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      (first ?? panelRef.current)?.focus();
+    }, 0);
+    return () => window.clearTimeout(focusTimer);
+  }, [open]);
+
+  useEffect(() => {
+    if (open) return;
+    openerRef.current?.focus();
+    openerRef.current = null;
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (event: KeyboardEvent) => {
+      if (event.key !== "Tab" || !panelRef.current) return;
+      const focusable = Array.from(panelRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ));
+      if (focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [open]);
 
   useEffect(() => {
     if (enterRafRef.current !== null) {
@@ -75,13 +126,13 @@ export function Modal({
 
   // Close on Escape
   useEffect(() => {
-    if (!open) return;
+    if (!open || closeDisabled) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [open, onClose]);
+  }, [closeDisabled, open, onClose]);
 
   // Remove from DOM after exit animation completes
   const handleAnimationEnd = () => {
@@ -110,13 +161,13 @@ export function Modal({
 
   return createPortal(
     <div
-      ref={overlayRef}
+        ref={overlayRef}
       role="dialog"
       aria-modal="true"
       aria-label={title}
       data-chat-floating-panel={chatFloatingPanel ? "true" : undefined}
       data-component="Modal"
-      className={`mari-modal fixed inset-0 z-[10000] flex items-center justify-center ${
+      className={`mari-modal pointer-events-auto fixed inset-0 z-[10000] flex items-center justify-center ${
         mobileFullscreen
           ? "p-0 sm:p-4"
           : "p-3 max-md:pt-[max(0.75rem,env(safe-area-inset-top))] max-md:pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4"
@@ -127,7 +178,7 @@ export function Modal({
       }}
       onTransitionEnd={handleAnimationEnd}
       onClick={(e) => {
-        if (e.target === overlayRef.current) onClose();
+        if (!closeDisabled && (e.target === overlayRef.current || e.target === e.currentTarget.querySelector(".mari-modal-backdrop"))) onClose();
       }}
     >
       {/* Backdrop */}
@@ -141,6 +192,8 @@ export function Modal({
 
       {/* Panel */}
       <div
+        ref={panelRef}
+        tabIndex={-1}
         className={`mari-modal-panel ${NEUTRAL_PANEL_SHELL} relative flex w-full flex-col ${width} max-h-[calc(100dvh-1.5rem)] sm:max-h-[min(90dvh,52rem)]${
           mobileFullscreen
             ? " max-sm:h-full max-sm:max-h-none max-sm:max-w-none max-sm:rounded-none max-sm:border-0 max-sm:pt-[env(safe-area-inset-top)] max-sm:pb-[env(safe-area-inset-bottom)]"
@@ -158,7 +211,11 @@ export function Modal({
           <h2 className={NEUTRAL_PANEL_TITLE}>{title}</h2>
           <button
             type="button"
-            onClick={onClose}
+            aria-label="Close dialog"
+            onClick={() => {
+              if (!closeDisabled) onClose();
+            }}
+            disabled={closeDisabled}
             className="rounded-lg p-1.5 text-[var(--marinara-chat-chrome-panel-muted)] transition-colors hover:bg-[var(--marinara-chat-chrome-highlight-bg-hover)] hover:text-[var(--marinara-chat-chrome-highlight-text)]"
           >
             <X size="1rem" />
@@ -168,12 +225,12 @@ export function Modal({
         {/* Content */}
         <div
           ref={contentRef}
-          className={`min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 ${NEUTRAL_PANEL_SCROLL_AREA}`}
+          className={`min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 ${NEUTRAL_PANEL_SCROLL_AREA} ${contentClassName ?? ""}`}
         >
           {children}
         </div>
       </div>
     </div>,
-    document.body,
+    portalContainer ?? document.body,
   );
 }

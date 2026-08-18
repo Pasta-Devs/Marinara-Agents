@@ -10,27 +10,55 @@ import { getPackageDataDir } from "./package-runtime.js";
 
 export const LTM_DIR_NAME = "long-term-memory";
 export const LTM_VAULT_DIR = "vault";
-export const LTM_VAULT_FOLDERS = ["sources", "timeline", "characters", "relationships", "scenes", "world", "threads", "tone"] as const;
+export const LTM_VAULT_FOLDERS = [
+  "sources",
+  "timeline",
+  "characters",
+  "relationships",
+  "scenes",
+  "world",
+  "threads",
+  "tone",
+] as const;
 
-export function getLongTermMemoryRoot(dataDir = getPackageDataDir()) { return join(dataDir, LTM_DIR_NAME); }
+export function getLongTermMemoryRoot(dataDir = getPackageDataDir()) {
+  return join(dataDir, LTM_DIR_NAME);
+}
 export function getLongTermMemoryDirectories(root = getLongTermMemoryRoot()) {
   return {
-    root, vault: join(root, LTM_VAULT_DIR), events: join(root, "events"), debug: join(root, "debug"),
-    indexes: join(root, "indexes"), config: join(root, "config"), drafts: join(root, "drafts"),
-    transactions: join(root, "transactions"), receipts: join(root, "events", "receipts"),
-    eventLog: join(root, "events", "log.jsonl"), debugLog: join(root, "debug", "log.jsonl"),
+    root,
+    vault: join(root, LTM_VAULT_DIR),
+    events: join(root, "events"),
+    debug: join(root, "debug"),
+    indexes: join(root, "indexes"),
+    activityIndex: join(root, "indexes", "activity"),
+    config: join(root, "config"),
+    drafts: join(root, "drafts"),
+    transactions: join(root, "transactions"),
+    receipts: join(root, "events", "receipts"),
+    eventLog: join(root, "events", "log.jsonl"),
+    debugLog: join(root, "debug", "log.jsonl"),
   };
 }
 export function ltmRejectedSuggestionsPath(root = getLongTermMemoryRoot()) {
   return safeJoin(getLongTermMemoryDirectories(root).config, "rejected-suggestions.json");
 }
-export function vaultFolderForNoteType(type: LtmNoteType) { return LTM_NOTE_TYPE_TO_VAULT_FOLDER[type]; }
+export function vaultFolderForNoteType(type: LtmNoteType) {
+  return LTM_NOTE_TYPE_TO_VAULT_FOLDER[type];
+}
 export function notePathForId(id: string, type: LtmNoteType, root = getLongTermMemoryRoot()) {
-  return join(root, LTM_VAULT_DIR, vaultFolderForNoteType(ltmNoteTypeSchema.parse(type)), `${ltmNoteIdSchema.parse(id)}.json`);
+  return join(
+    root,
+    LTM_VAULT_DIR,
+    vaultFolderForNoteType(ltmNoteTypeSchema.parse(type)),
+    `${ltmNoteIdSchema.parse(id)}.json`,
+  );
 }
 export function assertInsideDirectory(root: string, candidate: string) {
-  const base = resolve(root); const path = resolve(candidate);
-  if (path !== base && !path.startsWith(`${base}${sep}`)) throw new Error(`Path escapes long-term memory root: ${candidate}`);
+  const base = resolve(root);
+  const path = resolve(candidate);
+  if (path !== base && !path.startsWith(`${base}${sep}`))
+    throw new Error(`Path escapes long-term memory root: ${candidate}`);
   return path;
 }
 export function safeJoin(root: string, relativePath: string) {

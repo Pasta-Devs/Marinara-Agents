@@ -11,6 +11,7 @@ import {
   type LtmNote,
   type LtmScope,
 } from "../../../../shared/src/features/agents/long-term-memory/index.js";
+import { DEFAULT_LTM_IMPORTED_SOURCE_MODE } from "../../../../shared/src/features/agents/long-term-memory/constants.js";
 import { logger, type PackageLanguageModel } from "./package-runtime.js";
 import {
   compileEvidenceUnitExtraction,
@@ -204,10 +205,18 @@ export async function finalizeLongTermMemoryExtractionDraft(
   const storage = new LongTermMemoryStorage(options.root);
   const currentSource = await storage.getNote(input.sourceNote.id);
   if (!currentSource || !isLtmSourceNote(currentSource)) {
-    throw new LtmServiceError(`Long-term memory source note disappeared before draft finalization: ${input.sourceNote.id}`, 404, "ltm_note_not_found");
+    throw new LtmServiceError(
+      `Long-term memory source note disappeared before draft finalization: ${input.sourceNote.id}`,
+      404,
+      "ltm_note_not_found",
+    );
   }
   if (sourceHashForEvidenceUnitExtraction(currentSource) !== sourceHashForEvidenceUnitExtraction(input.sourceNote)) {
-    throw new LtmServiceError(`Long-term memory source note changed before draft finalization: ${input.sourceNote.id}`, 409, "ltm_source_changed");
+    throw new LtmServiceError(
+      `Long-term memory source note changed before draft finalization: ${input.sourceNote.id}`,
+      409,
+      "ltm_source_changed",
+    );
   }
   const expectedFingerprint = extractionFingerprintForLtmSourceNote(input.sourceNote, {
     scope: input.scope,
@@ -230,10 +239,10 @@ export async function finalizeLongTermMemoryExtractionDraft(
       })
     : input.response;
   const sourceMetadata = sourceMetadataForEvidenceUnitDraft(currentSource, {
-      scope: input.scope,
-      modes: input.modes,
-      extractionMode: input.extractionMode,
-    });
+    scope: input.scope,
+    modes: input.modes,
+    extractionMode: input.extractionMode,
+  });
   const source = {
     ...sourceMetadata,
     ...(!sourceMetadata.chatId && input.chatId ? { chatId: input.chatId } : {}),
@@ -300,10 +309,9 @@ async function getExistingTypedNotes(options: {
         catalog: options.trustedSubjectCatalog,
       })
     : [];
-  const noteIds = Array.from(new Set([
-    ...identityNotes.map((note) => note.id),
-    ...retrieval.chunks.map((chunk) => chunk.chunk.noteId),
-  ]));
+  const noteIds = Array.from(
+    new Set([...identityNotes.map((note) => note.id), ...retrieval.chunks.map((chunk) => chunk.chunk.noteId)]),
+  );
   const notesById = await options.storage.getNotesByIds(noteIds);
   const notes = noteIds
     .map((noteId) => notesById.get(noteId))
@@ -315,7 +323,8 @@ async function getExistingTypedNotes(options: {
     });
   const identityIds = new Set(identityNotes.map((note) => note.id));
   return notes.sort(
-    (left, right) => Number(identityIds.has(right.id)) - Number(identityIds.has(left.id)) || left.id.localeCompare(right.id),
+    (left, right) =>
+      Number(identityIds.has(right.id)) - Number(identityIds.has(left.id)) || left.id.localeCompare(right.id),
   );
 }
 
@@ -347,14 +356,28 @@ async function extractLongTermMemoryFromSourceNoteInner(
   }
   if (!isLtmSourceNote(sourceNote)) {
     logger.warn("[ltm] Note %s is not a source note", options.noteId);
-    throw new LtmServiceError(`Long-term memory note is not a source note: ${options.noteId}`, 400, "ltm_source_invalid");
+    throw new LtmServiceError(
+      `Long-term memory note is not a source note: ${options.noteId}`,
+      400,
+      "ltm_source_invalid",
+    );
   }
 
   const requestedScope = options.scope ?? sourceNote.scope;
-  const requestedModes = options.modes?.length ? options.modes : sourceNote.modes;
+  const importedWithoutChatContext =
+    !options.chatId && (sourceNote.provenance?.kind === "character" || sourceNote.provenance?.kind === "lorebook");
+  const requestedModes = options.modes?.length
+    ? options.modes
+    : importedWithoutChatContext && !options.mode
+      ? [DEFAULT_LTM_IMPORTED_SOURCE_MODE]
+      : sourceNote.modes;
   const resolvedMode = options.mode ?? requestedModes[0] ?? "roleplay";
   if (!requestedModes.includes(resolvedMode)) {
-    throw new LtmServiceError(`Long-term memory extraction mode is not enabled for source note: ${resolvedMode}`, 400, "ltm_mode_not_enabled");
+    throw new LtmServiceError(
+      `Long-term memory extraction mode is not enabled for source note: ${resolvedMode}`,
+      400,
+      "ltm_mode_not_enabled",
+    );
   }
   sourceNote = await bindSourceNoteToExtractionContext({
     storage,
@@ -365,7 +388,11 @@ async function extractLongTermMemoryFromSourceNoteInner(
   const sourceText = getLtmSourceNoteText(sourceNote);
   if (!sourceText) {
     logger.warn("[ltm] Source note %s has no source text", options.noteId);
-    throw new LtmServiceError(`Long-term memory source note has no source text: ${options.noteId}`, 400, "ltm_source_empty");
+    throw new LtmServiceError(
+      `Long-term memory source note has no source text: ${options.noteId}`,
+      400,
+      "ltm_source_empty",
+    );
   }
 
   const scope = sourceNote.scope;
@@ -375,7 +402,11 @@ async function extractLongTermMemoryFromSourceNoteInner(
   const estimatedSourceTokens = Math.max(1, Math.ceil(sourceText.length / 4));
   const sourceExceedsTokenLimit = estimatedSourceTokens > extractionConfig.maxSourceTokens;
   if (sourceExceedsTokenLimit) {
-    throw new LtmServiceError(`source_too_large: source requires about ${estimatedSourceTokens} tokens; maximum is ${extractionConfig.maxSourceTokens}`, 400, "ltm_source_too_large");
+    throw new LtmServiceError(
+      `source_too_large: source requires about ${estimatedSourceTokens} tokens; maximum is ${extractionConfig.maxSourceTokens}`,
+      400,
+      "ltm_source_too_large",
+    );
   }
   const extractionText = sourceText;
   await recordLtmDebugEvent({

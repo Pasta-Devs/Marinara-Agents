@@ -11,17 +11,10 @@ import type { DB } from "../../db/connection.js";
 import { logger, logDebugOverride } from "../../lib/logger.js";
 import { newId } from "../../utils/id-generator.js";
 import { resolveImageConnectionFallback } from "../generation/media-connection-fallback.js";
-import {
-  generateImage,
-  stageImageToDisk,
-  type StagedGalleryImage,
-} from "../image/image-generation.js";
+import { generateImage, stageImageToDisk, type StagedGalleryImage } from "../image/image-generation.js";
 import { resolveConnectionImageDefaults } from "../image/image-generation-defaults.js";
 import { loadImageGenerationUserSettings } from "../image/image-generation-settings.js";
-import {
-  compileImagePrompt,
-  resolveImageStyleGuidanceText,
-} from "../image/image-prompt-compiler.js";
+import { compileImagePrompt, resolveImageStyleGuidanceText } from "../image/image-prompt-compiler.js";
 import { resolveImagePromptReviewSize } from "../image/image-prompt-review.js";
 import {
   normalizeIllustratorAppearance,
@@ -35,6 +28,7 @@ import { createNoodleStorage } from "../storage/noodle.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
 import { loadPrompt, NOODLE_IMAGE_POST } from "../prompt-overrides/index.js";
 import { generateNoodleImageWithRetry } from "./noodle-image-retry.js";
+import { noodleImageExtension } from "./noodle-image-format.js";
 import { rewriteNoodleImagePrompt } from "./noodle-image-prompt-rewrite.js";
 import type { ConnectionAdmissionMode } from "../generation/connection-admission.js";
 import {
@@ -46,9 +40,7 @@ import {
   parseRecord,
 } from "./noodle-public-support.js";
 
-type ImageConnection = NonNullable<
-  Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>
->;
+type ImageConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
 export type NoodleImagePromptReviewItem = {
   id: string;
@@ -60,10 +52,7 @@ export type NoodleImagePromptReviewItem = {
   height: number;
 };
 
-export type ReviewedNoodleImagePrompt = Pick<
-  NoodleImagePromptReviewItem,
-  "id" | "prompt" | "negativePrompt"
->;
+export type ReviewedNoodleImagePrompt = Pick<NoodleImagePromptReviewItem, "id" | "prompt" | "negativePrompt">;
 
 export type StagedNoodlePostMedia = {
   file: StagedGalleryImage;
@@ -79,10 +68,7 @@ export type StagedNoodlePostMedia = {
 };
 
 const NOODLE_SERVICE_DIR = dirname(fileURLToPath(import.meta.url));
-const CLIENT_PUBLIC_DIR = resolve(
-  NOODLE_SERVICE_DIR,
-  "../../../../client/public",
-);
+const CLIENT_PUBLIC_DIR = resolve(NOODLE_SERVICE_DIR, "../../../../client/public");
 const PROFESSOR_MARI_REFERENCE_ASSETS = [
   "sprites/mari/Mari_profile.png",
   "sprites/mari/chibi-professor-mari.png",
@@ -108,19 +94,14 @@ function readProfessorMariReferenceImages(): string[] {
 
 export function characterAppearanceFromRow(row: { data: unknown }) {
   const data = parseRecord(row.data);
-  return (
-    readIllustratorAppearance(data) ??
-    normalizeIllustratorAppearance(data.description) ??
-    ""
-  );
+  return readIllustratorAppearance(data) ?? normalizeIllustratorAppearance(data.description) ?? "";
 }
 
 export function characterNoodleImageContextFromRow(row: { data: unknown }) {
   const data = parseRecord(row.data);
   const extensions = parseRecord(data.extensions);
   return {
-    personality:
-      typeof data.personality === "string" ? data.personality.trim() : "",
+    personality: typeof data.personality === "string" ? data.personality.trim() : "",
     imageInstructions:
       extensions.applyConversationImageInstructionsToNoodle === true &&
       typeof extensions.conversationImageInstructions === "string"
@@ -148,8 +129,7 @@ export async function generateNoodlePostImage(input: {
   const imageSettings = await loadImageGenerationUserSettings(input.db);
   const imageDefaults = resolveConnectionImageDefaults(input.imageConnection);
   const imageModel = input.imageConnection.model || "";
-  const imageBaseUrl =
-    input.imageConnection.baseUrl || "https://image.pollinations.ai";
+  const imageBaseUrl = input.imageConnection.baseUrl || "https://image.pollinations.ai";
   const imageSource = input.imageConnection.imageGenerationSource || imageModel;
   const imageServiceHint = input.imageConnection.imageService || imageSource;
   const imageFallback = await resolveImageConnectionFallback(
@@ -168,10 +148,7 @@ export async function generateNoodlePostImage(input: {
       characterPersonality = imageContext.personality;
       characterImageInstructions = imageContext.imageInstructions;
 
-      if (
-        input.settings.imageGenerationIncludeDescriptions ||
-        input.settings.imageGenerationUseAvatarReferences
-      ) {
+      if (input.settings.imageGenerationIncludeDescriptions || input.settings.imageGenerationUseAvatarReferences) {
         const referenceAccountByEntityId = new Map(
           [input.account, ...input.referenceAccounts]
             .filter((account) => account.kind === "character")
@@ -179,9 +156,7 @@ export async function generateNoodlePostImage(input: {
         );
         const referenceRows = await Promise.all(
           Array.from(referenceAccountByEntityId.keys()).map((characterId) =>
-            characterId === character.id
-              ? Promise.resolve(character)
-              : input.characters.getById(characterId),
+            characterId === character.id ? Promise.resolve(character) : input.characters.getById(characterId),
           ),
         );
         const chatCharacters = referenceRows
@@ -195,70 +170,44 @@ export async function generateNoodlePostImage(input: {
               appearance: characterAppearanceFromRow(row),
             };
           });
-        const referenceResolution = await resolveIllustratorCharacterReferences(
-          {
-            charactersStore: input.characters,
-            chatCharacters,
-            persona: null,
-            requestedNames: [input.account.displayName],
-            promptText: [
-              input.account.displayName,
-              input.postContent,
-              input.draftPrompt,
-            ].join("\n"),
-            maxReferences: 6,
-          },
-        );
-        if (
-          input.settings.imageGenerationIncludeDescriptions &&
-          referenceResolution.appearanceBlock
-        ) {
+        const referenceResolution = await resolveIllustratorCharacterReferences({
+          charactersStore: input.characters,
+          chatCharacters,
+          persona: null,
+          requestedNames: [input.account.displayName],
+          promptText: [input.account.displayName, input.postContent, input.draftPrompt].join("\n"),
+          maxReferences: 6,
+        });
+        if (input.settings.imageGenerationIncludeDescriptions && referenceResolution.appearanceBlock) {
           characterDescription = referenceResolution.appearanceBlock;
         }
         if (input.settings.imageGenerationUseAvatarReferences) {
           const builtInMariReferences =
-            input.account.entityId === PROFESSOR_MARI_ID
-              ? readProfessorMariReferenceImages()
-              : [];
-          const combinedReferences = [
-            ...builtInMariReferences,
-            ...referenceResolution.referenceImages,
-          ];
-          if (combinedReferences.length > 0)
-            referenceImages = Array.from(new Set(combinedReferences)).slice(
-              0,
-              6,
-            );
+            input.account.entityId === PROFESSOR_MARI_ID ? readProfessorMariReferenceImages() : [];
+          const combinedReferences = [...builtInMariReferences, ...referenceResolution.referenceImages];
+          if (combinedReferences.length > 0) referenceImages = Array.from(new Set(combinedReferences)).slice(0, 6);
         }
       }
     }
   }
 
-  const postPrompt = await loadPrompt(
-    input.promptOverrides,
-    NOODLE_IMAGE_POST,
-    {
-      authorName: input.account.displayName,
-      postContent: input.postContent,
-      draftPrompt: input.draftPrompt,
-      userInstructions: input.settings.imageGenerationPrompt,
-      characterDescription,
-      characterImageInstructions,
-      characterPersonality,
-    },
-  );
+  const postPrompt = await loadPrompt(input.promptOverrides, NOODLE_IMAGE_POST, {
+    authorName: input.account.displayName,
+    postContent: input.postContent,
+    draftPrompt: input.draftPrompt,
+    userInstructions: input.settings.imageGenerationPrompt,
+    characterDescription,
+    characterImageInstructions,
+    characterPersonality,
+  });
   const compiledPrompt = compileImagePrompt({
     kind: "illustration",
     prompt: postPrompt,
     styleProfiles: imageSettings.styleProfiles,
     imageDefaults,
   });
-  const styleGuidance = resolveImageStyleGuidanceText(
-    imageSettings.styleProfiles,
-    compiledPrompt.profile.id,
-  );
-  const rawFinalPrompt =
-    input.promptOverride?.prompt.trim() || compiledPrompt.prompt;
+  const styleGuidance = resolveImageStyleGuidanceText(imageSettings.styleProfiles, compiledPrompt.profile.id);
+  const rawFinalPrompt = input.promptOverride?.prompt.trim() || compiledPrompt.prompt;
   const imagePromptInstructions = input.imageConnection.imagePromptInstructions?.trim();
   const instructionLine = imagePromptInstructions
     ? `User image instructions: ${imagePromptInstructions.replace(/\s+/g, " ").slice(0, 5000)}`
@@ -267,17 +216,21 @@ export async function generateNoodlePostImage(input: {
     characterDescription ? `Appearance:\n${characterDescription}` : "",
     characterPersonality ? `Personality:\n${characterPersonality}` : "",
     characterImageInstructions ? `Character image preferences:\n${characterImageInstructions}` : "",
-  ].filter(Boolean).join("\n\n");
-  const rewrittenPrompt = (imagePromptInstructions || styleGuidance) && !input.promptOverride
-    ? await rewriteNoodleImagePrompt({
-        db: input.db,
-        prompt: rawFinalPrompt,
-        instructions: imagePromptInstructions,
-        characterContext,
-        styleGuidance,
-      })
-    : null;
-  const finalPrompt = rewrittenPrompt ??
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+  const rewrittenPrompt =
+    (imagePromptInstructions || styleGuidance) && !input.promptOverride
+      ? await rewriteNoodleImagePrompt({
+          db: input.db,
+          prompt: rawFinalPrompt,
+          instructions: imagePromptInstructions,
+          characterContext,
+          styleGuidance,
+        })
+      : null;
+  const finalPrompt =
+    rewrittenPrompt ??
     (instructionLine && !input.promptOverride && !rawFinalPrompt.includes(instructionLine)
       ? `${rawFinalPrompt}\n${instructionLine}`
       : rawFinalPrompt);
@@ -291,11 +244,7 @@ export async function generateNoodlePostImage(input: {
     finalPrompt,
   );
   if (finalNegativePrompt) {
-    logDebugOverride(
-      input.debugMode,
-      "[debug/noodle/image] negative prompt:\n%s",
-      finalNegativePrompt,
-    );
+    logDebugOverride(input.debugMode, "[debug/noodle/image] negative prompt:\n%s", finalNegativePrompt);
   }
 
   if (input.previewOnly) {
@@ -323,26 +272,20 @@ export async function generateNoodlePostImage(input: {
 
   const image = await generateNoodleImageWithRetry(
     () =>
-      generateImage(
-        imageSource,
-        imageBaseUrl,
-        input.imageConnection.apiKey || "",
-        imageServiceHint,
-        {
-          prompt: finalPrompt,
-          negativePrompt: finalNegativePrompt,
-          model: imageModel,
-          width: imageSettings.noodle.width,
-          height: imageSettings.noodle.height,
-          imageEndpointId: input.imageConnection.imageEndpointId || undefined,
-          comfyWorkflow: input.imageConnection.comfyuiWorkflow || undefined,
-          imageDefaults,
-          referenceImages,
-          debugMode: input.debugMode,
-          fallback: imageFallback,
-          admissionMode: input.admissionMode,
-        },
-      ),
+      generateImage(imageSource, imageBaseUrl, input.imageConnection.apiKey || "", imageServiceHint, {
+        prompt: finalPrompt,
+        negativePrompt: finalNegativePrompt,
+        model: imageModel,
+        width: imageSettings.noodle.width,
+        height: imageSettings.noodle.height,
+        imageEndpointId: input.imageConnection.imageEndpointId || undefined,
+        comfyWorkflow: input.imageConnection.comfyuiWorkflow || undefined,
+        imageDefaults,
+        referenceImages,
+        debugMode: input.debugMode,
+        fallback: imageFallback,
+        admissionMode: input.admissionMode,
+      }),
     (error, attempt, maxAttempts) => {
       logger.warn(
         error,
@@ -355,11 +298,9 @@ export async function generateNoodlePostImage(input: {
   );
   const provider = input.imageConnection.provider ?? "image_generation";
   const file = stageImageToDisk(
-    input.account.kind === "character"
-      ? `characters/${input.account.entityId}`
-      : "noodle",
+    input.account.kind === "character" ? `characters/${input.account.entityId}` : "noodle",
     image.base64,
-    image.ext,
+    noodleImageExtension(image.base64, image.ext),
   );
   if (input.account.kind === "character") {
     return {
@@ -410,8 +351,7 @@ export function createPublicNoodleImagesService(db: DB) {
       prompts: ReviewedNoodleImagePrompt[];
       debugMode: boolean;
     }): Promise<
-      | { ok: true; bootstrap: NoodleBootstrap }
-      | { ok: false; error: "missing_connection"; message: string }
+      { ok: true; bootstrap: NoodleBootstrap } | { ok: false; error: "missing_connection"; message: string }
     > {
       const settings = await noodle.getSettings();
       const imageConnection = settings.imageGenerationConnectionId
@@ -427,11 +367,7 @@ export function createPublicNoodleImagesService(db: DB) {
 
       for (const promptOverride of input.prompts) {
         const claimToken = newId();
-        const post = await noodle.claimPostImage(
-          promptOverride.id,
-          claimToken,
-          imageClaimLeaseUntil(),
-        );
+        const post = await noodle.claimPostImage(promptOverride.id, claimToken, imageClaimLeaseUntil());
         if (!post) continue;
         const account = await noodle.getAccountById(post.authorAccountId);
         if (!account) {
@@ -446,24 +382,13 @@ export function createPublicNoodleImagesService(db: DB) {
         const renewClaim = async () => {
           if (!claimOwned) return;
           try {
-            claimOwned = await noodle.renewPostImageClaim(
-              post.id,
-              claimToken,
-              imageClaimLeaseUntil(),
-            );
+            claimOwned = await noodle.renewPostImageClaim(post.id, claimToken, imageClaimLeaseUntil());
           } catch (error) {
             claimOwned = false;
-            logger.warn(
-              error,
-              "[noodle] Failed to renew reviewed image claim for post %s",
-              post.id,
-            );
+            logger.warn(error, "[noodle] Failed to renew reviewed image claim for post %s", post.id);
           }
         };
-        const renewalTimer = setInterval(
-          () => void renewClaim(),
-          REVIEWED_IMAGE_CLAIM_RENEW_MS,
-        );
+        const renewalTimer = setInterval(() => void renewClaim(), REVIEWED_IMAGE_CLAIM_RENEW_MS);
         renewalTimer.unref?.();
         let generatedImage: Awaited<ReturnType<typeof generateNoodlePostImage>>;
         try {
@@ -482,11 +407,7 @@ export function createPublicNoodleImagesService(db: DB) {
             promptOverride,
           });
         } catch (error) {
-          logger.warn(
-            error,
-            "[noodle] Failed to generate reviewed image for %s",
-            account.displayName,
-          );
+          logger.warn(error, "[noodle] Failed to generate reviewed image for %s", account.displayName);
           clearInterval(renewalTimer);
           await renewClaim();
           if (claimOwned) {
@@ -513,40 +434,24 @@ export function createPublicNoodleImagesService(db: DB) {
           await db.transaction(async (tx) => {
             const txNoodle = createNoodleStorage(tx);
             const txCharacterGallery = createCharacterGalleryStorage(tx);
-            const galleryImage = generatedImage.stagedMedia
-              ?.characterGalleryInput
-              ? await txCharacterGallery.create(
-                  generatedImage.stagedMedia.characterGalleryInput,
-                )
+            const galleryImage = generatedImage.stagedMedia?.characterGalleryInput
+              ? await txCharacterGallery.create(generatedImage.stagedMedia.characterGalleryInput)
               : null;
-            const finalized = await txNoodle.finalizePostImageClaim(
-              post.id,
-              claimToken,
-              {
-                imageUrl: generatedImage.imageUrl,
-                metadata: {
-                  ...generatedImage.metadata,
-                  ...(galleryImage
-                    ? { characterGalleryImageId: galleryImage.id }
-                    : {}),
-                },
+            const finalized = await txNoodle.finalizePostImageClaim(post.id, claimToken, {
+              imageUrl: generatedImage.imageUrl,
+              metadata: {
+                ...generatedImage.metadata,
+                ...(galleryImage ? { characterGalleryImageId: galleryImage.id } : {}),
               },
-            );
-            if (!finalized)
-              throw new Error(
-                "Reviewed Noodle image claim was lost during finalization.",
-              );
+            });
+            if (!finalized) throw new Error("Reviewed Noodle image claim was lost during finalization.");
           });
         } catch (error) {
           generatedImage.stagedMedia?.file.compensate();
           try {
             await noodle.releasePostImageClaim(post.id, claimToken);
           } catch (releaseError) {
-            logger.warn(
-              releaseError,
-              "[noodle] Failed to release reviewed image claim for post %s",
-              post.id,
-            );
+            logger.warn(releaseError, "[noodle] Failed to release reviewed image claim for post %s", post.id);
           }
           throw error;
         } finally {

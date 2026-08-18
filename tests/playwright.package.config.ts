@@ -7,11 +7,8 @@ function parsePort(name: string, fallback: number) {
 
 const clientPort = parsePort("PLAYWRIGHT_CLIENT_PORT", 5188);
 const mobileClientPort = parsePort("PLAYWRIGHT_MOBILE_CLIENT_PORT", 5189);
-const baseURL =
-  process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${clientPort}`;
-const mobileBaseURL =
-  process.env.PLAYWRIGHT_MOBILE_BASE_URL ??
-  `http://127.0.0.1:${mobileClientPort}`;
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${clientPort}`;
+const mobileBaseURL = process.env.PLAYWRIGHT_MOBILE_BASE_URL ?? `http://127.0.0.1:${mobileClientPort}`;
 const packageId = process.env.MARINARA_PACKAGE_ID ?? "noodle";
 
 export default defineConfig({

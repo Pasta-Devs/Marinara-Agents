@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 2,
+  "capabilityApi": {
+    "major": 1,
+    "minor": 10
+  },
+  "builtAgainst": {
+    "engineVersion": "2.4.3",
+    "engineCommit": "bb551bf921c006922edac7be06dbea8fe4c999b9"
+  },
+  "id": "pixelforge",
+  "name": "Pixelforge",
+  "version": "0.8.0",
+  "description": "A walkable pixel-art RPG Experience for Game Mode: your setup preferences generate the world — a cozy village or a sci-fi colony — then explore it, talk to NPCs to drive the story, and let the GM narrate, with World Maps integration and the engine's own combat. Install it, then choose Pixelforge as the Experience when creating a Game Mode chat.",
+  "engine": {
+    "min": "2.4.3",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "client": "client.js"
+  },
+  "contributions": {
+    "slots": [
+      "game-surface"
+    ],
+    "gameSurface": {
+      "surfaceClass": "pixelforge-surface"
+    },
+    "assets": {
+      "paths": [
+        "tiles.png",
+        "tiles-sci-fi-colony.png",
+        "atlas.json",
+        "sprites.json",
+        "sprites/player.png",
+        "sprites/mira.png",
+        "sprites/tam.png",
+        "sprites/rook.png",
+        "sprites/fen.png"
+      ]
+    }
+  },
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "779bf47b19cd641d043487d216cdc72293e41eed6a325ea967e49f67b2b3bc4a",
+      "bytes": 759
+    },
+    {
+      "path": "client.js",
+      "sha256": "4cdd73c714b93937e310a76ca6ddddfe9a293fc77a6ca249a3a369b0a1d785dc",
+      "bytes": 299286
+    },
+    {
+      "path": "tiles.png",
+      "sha256": "d91906477bfec66d37f6c4e61799ff9d093c2420fd87356a76d3021fe44094d9",
+      "bytes": 1700
+    },
+    {
+      "path": "tiles-sci-fi-colony.png",
+      "sha256": "2a01c426cd12dcd83859712431eb5827a30ecbda78286b2f72d5bccb92469e5a",
+      "bytes": 1663
+    },
+    {
+      "path": "atlas.json",
+      "sha256": "32111258ad0ba50ec674b6f8ea4e7a9c0a5602b148e61f3e4d0a97833cdb84c4",
+      "bytes": 526
+    },
+    {
+      "path": "sprites.json",
+      "sha256": "6355b5d35a1350f9ed1c1ffea44871a04464190d27b1f9f43bcd712bd892a3c5",
+      "bytes": 299
+    },
+    {
+      "path": "sprites/player.png",
+      "sha256": "dcc25ead27f081dd18824ba7951b5498476bd0537535c5d62d5a27ae07b1cdd7",
+      "bytes": 423
+    },
+    {
+      "path": "sprites/mira.png",
+      "sha256": "1c062d538fbfdea82c1360a9f1af894f8137c9195d09ab982a51471532182496",
+      "bytes": 422
+    },
+    {
+      "path": "sprites/tam.png",
+      "sha256": "2b64f03908d1a2be31fc17c15119cc83dce941a3b4eb4c083d13eed19bf0b536",
+      "bytes": 422
+    },
+    {
+      "path": "sprites/rook.png",
+      "sha256": "1ca8a2b6069b5972adea2bcd115cf0efe1f284ac5f77a6febd1289d349a06a1f",
+      "bytes": 423
+    },
+    {
+      "path": "sprites/fen.png",
+      "sha256": "5c27a49f7942c46a55e0c162112fdf9d6563a513e3c125df5c1fddf637676bf4",
+      "bytes": 423
+    }
+  ],
+  "permissions": [
+    "chat-read",
+    "chat-write",
+    "ui"
+  ],
+  "restartRequired": false
+}

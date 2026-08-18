@@ -2,31 +2,31 @@
   "schemaVersion": 1,
   "id": "noodle",
   "name": "Noodle",
-  "version": "1.0.10",
-  "description": "Explore the Noodle public timeline and the NoodleR creator-and-fan roleplay feed as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
+  "version": "1.2.4",
+  "description": "Explore the Noodle public timeline as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
   "localizations": {
     "de": {
       "name": "Noodle",
-      "description": "Entdecke die öffentliche Noodle-Timeline und den lokalen NoodleR-Rollenspiel-Feed für Kreative und Fans als optionale soziale Welt. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Noodle.",
+      "description": "Entdecke die öffentliche Noodle-Timeline als optionale lokale soziale Welt. Installiere das Paket, starte Marinara Engine nach Aufforderung neu und öffne dann unter Home den Tab Noodle.",
       "homeBrowserTab": {
         "label": "Noodle",
-        "ariaLabel": "Noodle und NoodleR öffnen"
+        "ariaLabel": "Noodle öffnen"
       }
     },
     "ko": {
       "name": "Noodle",
-      "description": "Noodle 공개 타임라인과 로컬 NoodleR 크리에이터 및 팬 역할극 피드를 선택형 소셜 세계로 만나 보세요. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Noodle을 여세요.",
+      "description": "Noodle 공개 타임라인을 선택형 로컬 소셜 세계로 만나 보세요. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Noodle을 여세요.",
       "homeBrowserTab": {
         "label": "Noodle",
-        "ariaLabel": "Noodle 및 NoodleR 열기"
+        "ariaLabel": "Noodle 열기"
       }
     },
     "pl": {
       "name": "Noodle",
-      "description": "Poznaj publiczną oś czasu Noodle oraz lokalny kanał fabularny NoodleR dla twórców i fanów jako opcjonalny świat społecznościowy. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Noodle na stronie głównej.",
+      "description": "Poznaj publiczną oś czasu Noodle jako opcjonalny lokalny świat społecznościowy. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Noodle na stronie głównej.",
       "homeBrowserTab": {
         "label": "Noodle",
-        "ariaLabel": "Otwórz Noodle i NoodleR"
+        "ariaLabel": "Otwórz Noodle"
       }
     }
   },
@@ -48,38 +48,32 @@
     ],
     "homeBrowserTab": {
       "label": "Noodle",
-      "ariaLabel": "Open Noodle and NoodleR",
+      "ariaLabel": "Open Noodle",
       "iconPaths": [
-        "noodle-klusek.png",
-        "noodler-klusek.png"
+        "noodle-klusek.png"
       ]
     }
   },
   "files": [
     {
       "path": "agents.json",
-      "sha256": "650529c8995d40249a1870ffcc5f422c3f39cb4d3ec8601c5606c62a86882dfe",
-      "bytes": 634
+      "sha256": "905d74012562eb8531a26cb9b3e3e01ac7485900c282c6021f000d2bd4b8cfac",
+      "bytes": 588
     },
     {
       "path": "server.mjs",
-      "sha256": "33436549df031c3d73a5c40e4d22a456068e1ec05a65e970511358b82dab1727",
-      "bytes": 2481456
+      "sha256": "9c63468c9f0b9d566d88076234f02d979f4928e37b803b2e7918bc2e7181d51f",
+      "bytes": 2283661
     },
     {
       "path": "client.js",
-      "sha256": "732dabbd4ffa79eed6b222f511ac81aac4bac0675422354b8af71af83bebf11d",
-      "bytes": 2544223
+      "sha256": "b7a431c7f00aff3e67ab6eab6b413053c859866f2875d647f4b5f112976c6f3a",
+      "bytes": 2304139
     },
     {
       "path": "noodle-klusek.png",
       "sha256": "003236ad2b83c5eb44731a48048c86b07aa8c1f9c411f881c15f7d4af3c68212",
       "bytes": 28325
-    },
-    {
-      "path": "noodler-klusek.png",
-      "sha256": "f3f0eb142c6ff572dea636aa7ab7d046922aedde2f5425890327e79834bd923e",
-      "bytes": 27664
     }
   ],
   "permissions": [

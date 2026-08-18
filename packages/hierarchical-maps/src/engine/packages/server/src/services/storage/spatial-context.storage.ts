@@ -34,9 +34,7 @@ function snapshotWrite(input: CreateSpatialSnapshotInput): CapabilitySpatialSnap
   };
 }
 
-export function createSpatialContextStorage(
-  persistence: SpatialSnapshotPersistence = getPackagePersistence(),
-) {
+export function createSpatialContextStorage(persistence: SpatialSnapshotPersistence = getPackagePersistence()) {
   const snapshots = persistence.spatialSnapshots;
   return {
     getById(id: string): Promise<SpatialContextSnapshot | null> {

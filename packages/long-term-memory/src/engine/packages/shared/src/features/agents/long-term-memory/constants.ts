@@ -1,21 +1,12 @@
-import type {
-  LtmExtractionReasoningEffort,
-  LtmExtractionVerbosity,
-} from "./schema.js";
+import type { LtmExtractionReasoningEffort, LtmExtractionVerbosity } from "./schema.js";
 import type { LtmEvidenceUnitBucket, LtmMode } from "./schema.js";
-export type LongTermMemoryRecallStyle =
-  | "balanced"
-  | "exact"
-  | "broad"
-  | "custom"
-  | "story";
+export type LongTermMemoryRecallStyle = "balanced" | "exact" | "broad" | "custom" | "story";
 
-export const DEFAULT_LTM_EXTRACTION_REASONING_EFFORT =
-  "low" satisfies LtmExtractionReasoningEffort;
-export const DEFAULT_LTM_EXTRACTION_VERBOSITY =
-  "low" satisfies LtmExtractionVerbosity;
+export const DEFAULT_LTM_EXTRACTION_REASONING_EFFORT = "low" satisfies LtmExtractionReasoningEffort;
+export const DEFAULT_LTM_EXTRACTION_VERBOSITY = "low" satisfies LtmExtractionVerbosity;
 export const DEFAULT_LTM_EXTRACTION_MAX_TOKENS = 8192;
 export const DEFAULT_LTM_EXTRACTION_TEMPERATURE = 0;
+export const DEFAULT_LTM_IMPORTED_SOURCE_MODE = "roleplay" satisfies LtmMode;
 export const DEFAULT_LTM_EXTRACTION_MAX_SOURCE_TOKENS = 8_192;
 export const DEFAULT_LTM_EXTRACTION_MAX_EXISTING_NOTE_TOKENS = 4_096;
 export const DEFAULT_LTM_EXTRACTION_EXISTING_NOTE_MAX_CHUNKS = 12;
@@ -46,11 +37,7 @@ export const RELATIONSHIP_DIMENSIONS = [
   "protectiveness",
 ] as const;
 
-export const QUEST_THREAD_SECTION_KEYS = [
-  "objective",
-  "stage",
-  "resolution",
-] as const;
+export const QUEST_THREAD_SECTION_KEYS = ["objective", "stage", "resolution"] as const;
 
 export const CORE_LTM_EXTRACTION_RULES = [
   "Use exactly one extraction pass for all durable memory streams.",
@@ -217,7 +204,7 @@ export const DEFAULT_LTM_EXTRACTION_PROMPT_GAME = [
   "- relationship_state: state. Include dimensions/dimensionChanges when the source supports them; relationship changes need a caused_by link.",
   "- world_fact: facts or items.",
   "- timeline_event: event.",
-   "- thread: objective, stage, or resolution. The text must describe an unresolved situation and what would resolve it. When the thread is marked resolved, also emit a timeline_event capturing what changed.",
+  "- thread: objective, stage, or resolution. The text must describe an unresolved situation and what would resolve it. When the thread is marked resolved, also emit a timeline_event capturing what changed.",
   "- tone: observations. World/session-level atmospheric register only, not one-scene mood.",
   "- anchor: the source section key. Recurring motif or planted callback only.",
   "",
@@ -240,10 +227,7 @@ export const DEFAULT_LTM_EXTRACTION_PROMPTS_BY_MODE = {
   game: DEFAULT_LTM_EXTRACTION_PROMPT_GAME,
 } as const satisfies Record<LtmMode, string>;
 
-export const DEFAULT_LTM_ALLOWED_STREAMS_BY_MODE: Record<
-  LtmMode,
-  typeof DEFAULT_LTM_ALLOWED_STREAMS
-> = {
+export const DEFAULT_LTM_ALLOWED_STREAMS_BY_MODE: Record<LtmMode, typeof DEFAULT_LTM_ALLOWED_STREAMS> = {
   roleplay: DEFAULT_LTM_ALLOWED_STREAMS,
   conversation: DEFAULT_LTM_ALLOWED_STREAMS,
   game: DEFAULT_LTM_ALLOWED_STREAMS,
@@ -261,8 +245,7 @@ export const DEFAULT_LTM_STREAM_DESCRIPTIONS_BY_MODE: Record<
     relationship_state:
       "relationship state or dimension change backed by a caused_by event link or existing relationship note",
     world_fact: "stable world/lore fact",
-    thread:
-      "unresolved situation, question, tension, or goal with a clear future resolver",
+    thread: "unresolved situation, question, tension, or goal with a clear future resolver",
     tone: "durable world/session atmospheric register or recurring style only",
     anchor: "recurring motif, planted callback, or continuity anchor",
   },
@@ -284,26 +267,20 @@ export const DEFAULT_LTM_STREAM_DESCRIPTIONS_BY_MODE: Record<
     relationship_state:
       "relationship state or dimension change backed by a caused_by event link or existing relationship note",
     world_fact: "stable world/lore fact",
-    thread:
-      "quest objective, stage, or summary of an unresolved situation with a clear future resolver",
+    thread: "quest objective, stage, or summary of an unresolved situation with a clear future resolver",
     tone: "durable world/session atmospheric register or recurring style only",
     anchor: "recurring motif, planted callback, or continuity anchor",
   },
 };
 
-export const DEFAULT_LTM_RECALL_STYLE_BY_MODE: Record<
-  LtmMode,
-  LongTermMemoryRecallStyle
-> = {
+export const DEFAULT_LTM_RECALL_STYLE_BY_MODE: Record<LtmMode, LongTermMemoryRecallStyle> = {
   roleplay: "story",
   conversation: "balanced",
   game: "exact",
 };
 
-export const DEFAULT_LTM_RECALL_STYLE =
-  "balanced" satisfies LongTermMemoryRecallStyle;
-export const DEFAULT_LTM_RECALL_PREAMBLE =
-  "Relevant long-term memories for this reply:";
+export const DEFAULT_LTM_RECALL_STYLE = "balanced" satisfies LongTermMemoryRecallStyle;
+export const DEFAULT_LTM_RECALL_PREAMBLE = "Relevant long-term memories for this reply:";
 
 export const LTM_RECALL_STYLE_WEIGHTS = {
   balanced: {
@@ -346,8 +323,7 @@ export const LTM_RECALL_STYLE_WEIGHTS = {
   }
 >;
 
-export const DEFAULT_LTM_RECALL_STYLE_WEIGHTS =
-  LTM_RECALL_STYLE_WEIGHTS[DEFAULT_LTM_RECALL_STYLE];
+export const DEFAULT_LTM_RECALL_STYLE_WEIGHTS = LTM_RECALL_STYLE_WEIGHTS[DEFAULT_LTM_RECALL_STYLE];
 
 export type LtmRecallWeights = {
   semanticWeight: number;
@@ -356,13 +332,8 @@ export type LtmRecallWeights = {
   keywordWeight: number;
 };
 
-export function parseLongTermMemoryRecallStyle(
-  value: unknown,
-): LongTermMemoryRecallStyle {
-  return value === "exact" ||
-    value === "broad" ||
-    value === "story" ||
-    value === "custom"
+export function parseLongTermMemoryRecallStyle(value: unknown): LongTermMemoryRecallStyle {
+  return value === "exact" || value === "broad" || value === "story" || value === "custom"
     ? value
     : DEFAULT_LTM_RECALL_STYLE;
 }

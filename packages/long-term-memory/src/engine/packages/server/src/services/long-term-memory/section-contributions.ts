@@ -14,10 +14,7 @@ export function manualContribution(section: LtmSection): LtmSectionContribution 
   return { owner: "manual", ...contributionFields(section) };
 }
 
-export function sourceContribution(
-  section: LtmSection,
-  source: LtmDraftSource,
-): LtmSectionContribution {
+export function sourceContribution(section: LtmSection, source: LtmDraftSource): LtmSectionContribution {
   if (!source.sourceNoteId || !source.sourceHash)
     throw new Error("Source-backed sections require source identity and hash.");
   return {
@@ -29,9 +26,7 @@ export function sourceContribution(
 }
 
 export function sectionContributions(section: LtmSection) {
-  return section.contributions?.length
-    ? section.contributions
-    : [manualContribution(section)];
+  return section.contributions?.length ? section.contributions : [manualContribution(section)];
 }
 
 export function renderSectionContributions(
@@ -39,8 +34,16 @@ export function renderSectionContributions(
   additive: boolean,
 ): LtmSection | null {
   if (!contributions.length) return null;
-  const rendered = additive ? contributions : [contributions.at(-1)!];
-  const latest = rendered.at(-1)!;
+  const manual = contributions.filter((contribution) => contribution.owner === "manual");
+  const rendered = additive
+    ? [
+        ...contributions.filter((contribution) => contribution.owner === "source"),
+        ...(manual.length ? [manual.at(-1)!] : []),
+      ]
+    : manual.length
+      ? [manual.at(-1)!]
+      : [contributions.at(-1)!];
+  const latest = [...rendered].sort((left, right) => left.updatedAt.localeCompare(right.updatedAt)).at(-1)!;
   let text = "";
   if (additive) {
     const seen = new Set<string>();
@@ -57,10 +60,10 @@ export function renderSectionContributions(
   } else text = latest.text.trim();
   const salience = rendered.flatMap((item) => item.salience ?? []).sort((a, b) => b - a)[0];
   const confidence = rendered.flatMap((item) => item.confidence ?? []).sort((a, b) => b - a)[0];
-  const importance = (["critical", "major", "moderate", "minor"] as const).find(
-    (value) => rendered.some((item) => item.importance === value),
+  const importance = (["critical", "major", "moderate", "minor"] as const).find((value) =>
+    rendered.some((item) => item.importance === value),
   );
-  const evidence = uniqueStrings(rendered.flatMap((item) => item.evidence ?? [])).slice(0, 100);
+  const evidence = uniqueStrings(contributions.flatMap((item) => item.evidence ?? [])).slice(0, 100);
   return {
     text,
     updatedAt: latest.updatedAt,

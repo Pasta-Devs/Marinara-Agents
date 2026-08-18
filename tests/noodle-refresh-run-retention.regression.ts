@@ -6,7 +6,7 @@ import {
   NOODLE_FINISHED_REFRESH_RUN_RETENTION_LIMIT,
   pruneNoodleRefreshRuns,
   selectNoodleRefreshRunIdsToPrune,
-} from "../packages/noodle/src/engine/packages/server/src/services/storage/noodle-refresh-run-retention";
+} from "../packages/slurp/src/engine/packages/server/src/services/storage/slurp-refresh-run-retention";
 
 type RefreshRun = {
   id: string;
@@ -36,7 +36,10 @@ const retainedFinished = retained
 assert.equal(retainedFinished.length, NOODLE_FINISHED_REFRESH_RUN_RETENTION_LIMIT);
 assert.deepEqual(
   retainedFinished.map((row) => row.id),
-  finished.slice(-NOODLE_FINISHED_REFRESH_RUN_RETENTION_LIMIT).reverse().map((row) => row.id),
+  finished
+    .slice(-NOODLE_FINISHED_REFRESH_RUN_RETENTION_LIMIT)
+    .reverse()
+    .map((row) => row.id),
   "retention must keep the newest finished runs first",
 );
 assert.deepEqual(

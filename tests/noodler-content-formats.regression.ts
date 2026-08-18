@@ -10,10 +10,7 @@ import { readFileSync } from "node:fs";
 
 const schemaPath = "sources/engine/packages/shared/dist/schemas/noodle.schema.js";
 const schema = readFileSync(schemaPath, "utf8");
-assert.match(
-  schema,
-  /noodlerContentFormatSchema = z\.enum\(\["caption", "teaser", "announcement", "long_form"\]\)/u,
-);
+assert.match(schema, /noodlerContentFormatSchema = z\.enum\(\["caption", "teaser", "announcement", "long_form"\]\)/u);
 assert.match(schema, /DEFAULT_NOODLER_CONTENT_FORMAT = "caption"/u);
 assert.match(schema, /caption: \{ title: "optional", targetMin: 40, targetMax: 500 \}/u);
 assert.match(schema, /teaser: \{ title: "optional", targetMin: 40, targetMax: 280 \}/u);
@@ -25,25 +22,22 @@ assert.match(schema, /Teaser posts require a locked follow-up/u);
 assert.match(schema, /Only teaser posts can link a locked follow-up/u);
 
 const generation = readFileSync(
-  "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-noodler-generation.service.ts",
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
   "utf8",
 );
 const operations = readFileSync(
-  "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-noodler-post.operation.ts",
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-post.operation.ts",
   "utf8",
 );
 const reserve = readFileSync(
-  "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-noodler-reserve.operation.ts",
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-reserve.operation.ts",
   "utf8",
 );
 const responseFormat = readFileSync(
-  "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-response-format.ts",
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-response-format.ts",
   "utf8",
 );
-const composer = readFileSync(
-  "packages/noodle/src/engine/packages/client/src/components/noodle/NoodlerHome.tsx",
-  "utf8",
-);
+const composer = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
 
 assert.match(generation, /NOODLER_FORMAT_PROMPTS\[format\]/u);
 // Every generated NoodleR post carries a title, whatever the format.
@@ -53,7 +47,8 @@ assert.match(generation, /Every post needs a title/u);
 assert.match(generation, /imagePrompt is required/u);
 assert.match(responseFormat, /minLength: 1, maxLength: NOODLER_TITLE_HARD_MAX_LENGTH/u);
 assert.match(responseFormat, /Math\.min\(contentMaxLength, NOODLE_POST_HARD_MAX_LENGTH\)/u);
-assert.match(generation, /caption: 320,/u);
+assert.match(generation, /Hard limit 300 characters/u);
+assert.match(generation, /caption: 300,/u);
 assert.match(generation, /NOODLER_FORMAT_MAX_LENGTH\[format\]/u);
 assert.match(generation, /noodlerContentFormat: input\.request\.format \?\? "caption"/u);
 assert.match(generation, /noodlerLockedFollowUpPostId/u);

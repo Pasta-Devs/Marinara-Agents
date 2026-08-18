@@ -10,6 +10,7 @@ import { isEnoent } from "./ltm-utils.js";
 import { getLongTermMemoryDirectories, getLongTermMemoryRoot, safeJoin } from "./paths.js";
 import { readLongTermMemoryUsage, longTermMemoryUsagePath } from "./usage.js";
 import { withLtmVaultLock } from "./vault-lock.js";
+import { pruneLtmActivityIndex } from "./activity-index.js";
 
 const lastRetentionRun = new Map<string, number>();
 const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -152,10 +153,7 @@ async function runLongTermMemoryRetentionUnsafe({
       // skip malformed receipt files
       continue;
     }
-    if (
-      receipt.dispatchedAt &&
-      new Date(receipt.dispatchedAt).getTime() < receiptCutoff
-    ) {
+    if (receipt.dispatchedAt && new Date(receipt.dispatchedAt).getTime() < receiptCutoff) {
       await rm(path, { force: true });
       receiptsRemoved++;
     }
@@ -164,6 +162,11 @@ async function runLongTermMemoryRetentionUnsafe({
   // 4. Event log cleanup
   for (const eventLogPath of [dirs.eventLog, dirs.debugLog]) {
     eventsRemoved += await pruneEventLog(eventLogPath, eventCutoff);
+  }
+  try {
+    await pruneLtmActivityIndex(root, eventCutoff);
+  } catch (error) {
+    logger.warn(error, "[ltm] Deferred activity index pruning during retention");
   }
 
   // 5. Incomplete generation receipt cleanup
@@ -193,7 +196,5 @@ async function runLongTermMemoryRetentionUnsafe({
 }
 
 export function runLongTermMemoryRetention(options: Parameters<typeof runLongTermMemoryRetentionUnsafe>[0] = {}) {
-  return withLtmVaultLock(options.root ?? getLongTermMemoryRoot(), () =>
-    runLongTermMemoryRetentionUnsafe(options),
-  );
+  return withLtmVaultLock(options.root ?? getLongTermMemoryRoot(), () => runLongTermMemoryRetentionUnsafe(options));
 }

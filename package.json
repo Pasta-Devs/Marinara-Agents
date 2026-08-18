@@ -10,13 +10,24 @@
     "chess.js": "1.4.0"
   },
   "devDependencies": {
+    "@eslint/js": "9.39.4",
     "@playwright/test": "1.61.0",
+    "eslint": "9.39.4",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.11.0",
+    "prettier": "3.8.3",
     "tsx": "4.23.12",
+    "typescript-eslint": "8.59.1",
     "zod": "3.25.76"
   },
   "scripts": {
+    "check": "npm run format:check && npm run lint",
+    "format": "prettier --write \"packages/**/src/**/*.{js,mjs,ts,tsx}\" \"scripts/**/*.{js,mjs}\" \"tests/**/*.{js,mjs,ts,tsx}\" eslint.config.mjs",
+    "format:check": "prettier --check \"packages/**/src/**/*.{js,mjs,ts,tsx}\" \"scripts/**/*.{js,mjs}\" \"tests/**/*.{js,mjs,ts,tsx}\" eslint.config.mjs",
+    "lint": "eslint \"packages/**/src/**/*.{js,mjs,ts,tsx}\" \"scripts/**/*.{js,mjs}\" \"tests/**/*.{js,mjs,ts,tsx}\" eslint.config.mjs",
     "test:browser:noodle": "node scripts/run-package-browser-tests.mjs noodle tests/package-noodle.e2e.ts",
-    "test:noodle:regressions": "sh -c 'for test in tests/noodle*.regression.ts; do tsx \"$test\" || exit 1; done'",
+    "test:browser:slurp": "node scripts/run-package-browser-tests.mjs slurp tests/package-slurp.e2e.ts",
+    "test:noodle:regressions": "sh -c 'for test in tests/noodle*.regression.ts tests/noodler-*.regression.ts tests/slurp-*.regression.ts; do tsx \"$test\" || exit 1; done'",
     "test:noodle:quality": "node scripts/evaluate-noodle-generation.mjs tests/fixtures/noodle-generation-quality.samples.json",
     "test:security": "node scripts/tests/catalog-path-safety.regression.mjs && tsx tests/long-term-memory-index-keys.regression.ts"
   }

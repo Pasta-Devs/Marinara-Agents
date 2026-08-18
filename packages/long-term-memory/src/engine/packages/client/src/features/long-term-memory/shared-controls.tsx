@@ -15,8 +15,7 @@ import { useLtmTranslation } from "./localization";
 let activePopover: { id: string; close: () => void } | null = null;
 
 export const inputClass = "mari-editor-field min-h-11 w-full px-3 text-sm";
-export const compactInputClass =
-  "mari-editor-field min-h-8 w-full px-2.5 text-[0.6875rem]";
+export const compactInputClass = "mari-editor-field min-h-8 w-full px-2.5 text-[0.6875rem]";
 
 export const Button = forwardRef<
   HTMLButtonElement,
@@ -25,33 +24,15 @@ export const Button = forwardRef<
     primary?: boolean;
     destructive?: boolean;
   }
->(function Button(
-  {
-    children,
-    primary = false,
-    destructive = false,
-    className = "",
-    style,
-    ...props
-  },
-  ref,
-) {
-  const tone = primary
-    ? "mari-editor-action--primary"
-    : destructive
-      ? "mari-editor-action--danger"
-      : "";
+>(function Button({ children, primary = false, destructive = false, className = "", style, ...props }, ref) {
+  const tone = primary ? "mari-editor-action--primary" : destructive ? "mari-editor-action--danger" : "";
   return (
     <button
       ref={ref}
       type="button"
       data-ltm-control="button"
       className={`mari-editor-action min-h-11 px-3 ${tone} ${className}`}
-      style={
-        className.includes("mari-editor-action--compact")
-          ? style
-          : { minHeight: "2.75rem", ...style }
-      }
+      style={className.includes("mari-editor-action--compact") ? style : { minHeight: "2.75rem", ...style }}
       {...props}
     >
       {children}
@@ -86,10 +67,7 @@ export function IconButton({
   );
 }
 
-export function ClickSurface({
-  className = "",
-  ...props
-}: HTMLAttributes<HTMLDivElement>) {
+export function ClickSurface({ className = "", ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={`focus-within:outline-none focus-within:ring-2 focus-within:ring-[var(--ring)] ${className}`}
@@ -102,7 +80,6 @@ export function InfoPopover({
   label,
   content,
   wide = false,
-  compact = false,
 }: {
   label: string;
   content: ReactNode;
@@ -117,16 +94,17 @@ export function InfoPopover({
   const [open, setOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
-  const closeRef = useRef<() => void>(() => undefined);
+  const closeRef = useRef<(restoreFocus?: boolean) => void>(() => undefined);
 
   const clearCloseTimer = () => {
     if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
     closeTimer.current = null;
   };
-  const close = () => {
+  const close = (restoreFocus = false) => {
     clearCloseTimer();
     setOpen(false);
     setPinned(false);
+    if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
   };
   closeRef.current = close;
   const show = () => {
@@ -149,15 +127,9 @@ export function InfoPopover({
       const width = panelRef.current?.offsetWidth ?? (wide ? 416 : 288);
       const height = panelRef.current?.offsetHeight ?? 160;
       const gap = 8;
-      const left = Math.min(
-        Math.max(8, trigger.left),
-        Math.max(8, window.innerWidth - width - 8),
-      );
+      const left = Math.min(Math.max(8, trigger.left), Math.max(8, window.innerWidth - width - 8));
       const below = trigger.bottom + gap;
-      const top =
-        below + height <= window.innerHeight - 8
-          ? below
-          : Math.max(8, trigger.top - gap - height);
+      const top = below + height <= window.innerHeight - 8 ? below : Math.max(8, trigger.top - gap - height);
       setPosition({ top, left });
     };
     updatePosition();
@@ -172,15 +144,11 @@ export function InfoPopover({
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeRef.current();
+      if (event.key === "Escape") closeRef.current(true);
     };
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (
-        !triggerRef.current?.contains(target) &&
-        !panelRef.current?.contains(target)
-      )
-        closeRef.current();
+      if (!triggerRef.current?.contains(target) && !panelRef.current?.contains(target)) closeRef.current();
     };
     document.addEventListener("keydown", onKeyDown);
     document.addEventListener("pointerdown", onPointerDown);
@@ -211,18 +179,13 @@ export function InfoPopover({
         aria-controls={open ? `${id}-panel` : undefined}
         aria-describedby={open && !pinned ? `${id}-panel` : undefined}
         data-ltm-info={label}
-        className={`${compact ? "h-7 w-7" : "h-11 w-11"} inline-grid shrink-0 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]`}
-        style={
-          compact
-            ? { height: "1.75rem", width: "1.75rem", flexShrink: 0 }
-            : { height: "2.75rem", width: "2.75rem", flexShrink: 0 }
-        }
+        className="inline-grid h-11 w-11 shrink-0 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+        style={{ height: "2.75rem", width: "2.75rem", flexShrink: 0 }}
         onMouseEnter={show}
         onMouseLeave={scheduleClose}
         onFocus={show}
         onBlur={(event) => {
-          if (!panelRef.current?.contains(event.relatedTarget as Node))
-            scheduleClose();
+          if (!panelRef.current?.contains(event.relatedTarget as Node)) scheduleClose();
         }}
         onClick={() => {
           if (pinned) close();
@@ -231,7 +194,6 @@ export function InfoPopover({
             setPinned(true);
           }
         }}
-        onMouseDown={(event) => event.preventDefault()}
       >
         <Info aria-hidden="true" size="0.875rem" />
       </button>
@@ -303,14 +265,10 @@ export function NumberField({
     committedText.current = String(value);
   }, [value]);
   return (
-    <div
-      className={`space-y-1 font-medium text-[var(--muted-foreground)] ${compact ? "text-[0.625rem]" : "text-xs"}`}
-    >
+    <div className={`space-y-1 font-medium text-[var(--muted-foreground)] ${compact ? "text-[0.625rem]" : "text-xs"}`}>
       <span className="flex items-center gap-1">
         <span id={`${id}-label`}>{label}</span>
-        {help ? (
-          <InfoPopover label={label} content={help} compact={compact} />
-        ) : null}
+        {help ? <InfoPopover label={label} content={help} compact={compact} /> : null}
       </span>
       <input
         id={id}
@@ -352,31 +310,23 @@ export function StatusSurface({
   busy?: boolean;
   compact?: boolean;
   className?: string;
-} & HTMLAttributes<HTMLParagraphElement>) {
+} & HTMLAttributes<HTMLDivElement>) {
   const toneClass = {
     neutral: "text-[var(--marinara-editor-muted)]",
-    success:
-      "border-[var(--marinara-editor-accent)]/35 text-[var(--marinara-editor-accent)]",
-    warning:
-      "border-[var(--marinara-editor-warning)]/40 text-[var(--marinara-editor-warning)]",
+    success: "border-[var(--marinara-editor-accent)]/35 text-[var(--marinara-editor-accent)]",
+    warning: "border-[var(--marinara-editor-warning)]/40 text-[var(--marinara-editor-warning)]",
     danger: "border-[var(--destructive)]/35 text-[var(--destructive)]",
   }[tone];
   return (
-    <p
+    <div
       role={tone === "danger" ? "alert" : "status"}
       aria-live="polite"
       data-ltm-status={tone}
       className={`mari-editor-panel mari-editor-panel--soft flex items-center gap-2 ${compact ? "px-2 py-1.5 text-[0.625rem]" : "min-h-11 px-3 text-xs"} ${toneClass} ${className}`}
       {...props}
     >
-      {busy ? (
-        <Loader2
-          aria-hidden="true"
-          size="0.875rem"
-          className="animate-spin motion-reduce:animate-none"
-        />
-      ) : null}
+      {busy ? <Loader2 aria-hidden="true" size="0.875rem" className="animate-spin motion-reduce:animate-none" /> : null}
       {children}
-    </p>
+    </div>
   );
 }

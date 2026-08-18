@@ -129,9 +129,7 @@ export function reconcileCommittedSpatialTravel(
     setPendingSpatialTransitionStatus(chatId, "needs_review", "The next route step is no longer available.");
     return;
   }
-  const targetDestination = spatial.destinations.find(
-    (destination) => destination.id === travel.targetLocationId,
-  );
+  const targetDestination = spatial.destinations.find((destination) => destination.id === travel.targetLocationId);
   const { reviewMessage: _reviewMessage, ...pendingWithoutReview } = pending;
   setPendingSpatialTransition(chatId, {
     ...pendingWithoutReview,

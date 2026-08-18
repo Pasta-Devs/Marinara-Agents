@@ -20,12 +20,7 @@ export interface ResolvedLongTermMemoryRecallSettings {
   recallPreamble: string;
 }
 
-function parseSparseNumber(
-  value: unknown,
-  min: number,
-  max: number,
-  integer = false,
-) {
+function parseSparseNumber(value: unknown, min: number, max: number, integer = false) {
   if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
   if (integer && !Number.isInteger(value)) return undefined;
   if (value < min || value > max) return undefined;
@@ -52,14 +47,8 @@ function readBoolean(value: unknown) {
   return typeof value === "boolean" ? value : undefined;
 }
 
-function readRecallStyle(
-  value: unknown,
-): LongTermMemoryRecallStyle | undefined {
-  return value === "balanced" ||
-    value === "exact" ||
-    value === "broad" ||
-    value === "custom" ||
-    value === "story"
+function readRecallStyle(value: unknown): LongTermMemoryRecallStyle | undefined {
+  return value === "balanced" || value === "exact" || value === "broad" || value === "custom" || value === "story"
     ? value
     : undefined;
 }
@@ -71,35 +60,15 @@ function readRecallPreamble(value: unknown) {
 }
 
 function readWeight(value: unknown, fallback: number) {
-  return typeof value === "number" &&
-    Number.isFinite(value) &&
-    value >= 0 &&
-    value <= 1
-    ? value
-    : fallback;
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1 ? value : fallback;
 }
 
-function resolveWeights(
-  metadata: Record<string, unknown>,
-  fallback: LtmRecallWeights,
-): LtmRecallWeights {
+function resolveWeights(metadata: Record<string, unknown>, fallback: LtmRecallWeights): LtmRecallWeights {
   return {
-    semanticWeight: readWeight(
-      metadata.longTermMemorySemanticWeight,
-      fallback.semanticWeight,
-    ),
-    lexicalWeight: readWeight(
-      metadata.longTermMemoryLexicalWeight,
-      fallback.lexicalWeight,
-    ),
-    graphWeight: readWeight(
-      metadata.longTermMemoryGraphWeight,
-      fallback.graphWeight,
-    ),
-    keywordWeight: readWeight(
-      metadata.longTermMemoryKeywordWeight,
-      fallback.keywordWeight,
-    ),
+    semanticWeight: readWeight(metadata.longTermMemorySemanticWeight, fallback.semanticWeight),
+    lexicalWeight: readWeight(metadata.longTermMemoryLexicalWeight, fallback.lexicalWeight),
+    graphWeight: readWeight(metadata.longTermMemoryGraphWeight, fallback.graphWeight),
+    keywordWeight: readWeight(metadata.longTermMemoryKeywordWeight, fallback.keywordWeight),
   };
 }
 
@@ -109,22 +78,10 @@ function resolveGlobalWeights(
 ): LtmRecallWeights {
   if (!globalSettings) return fallback;
   return {
-    semanticWeight: readWeight(
-      globalSettings.longTermMemorySemanticWeight,
-      fallback.semanticWeight,
-    ),
-    lexicalWeight: readWeight(
-      globalSettings.longTermMemoryLexicalWeight,
-      fallback.lexicalWeight,
-    ),
-    graphWeight: readWeight(
-      globalSettings.longTermMemoryGraphWeight,
-      fallback.graphWeight,
-    ),
-    keywordWeight: readWeight(
-      globalSettings.longTermMemoryKeywordWeight,
-      fallback.keywordWeight,
-    ),
+    semanticWeight: readWeight(globalSettings.longTermMemorySemanticWeight, fallback.semanticWeight),
+    lexicalWeight: readWeight(globalSettings.longTermMemoryLexicalWeight, fallback.lexicalWeight),
+    graphWeight: readWeight(globalSettings.longTermMemoryGraphWeight, fallback.graphWeight),
+    keywordWeight: readWeight(globalSettings.longTermMemoryKeywordWeight, fallback.keywordWeight),
   };
 }
 
@@ -140,11 +97,8 @@ export function resolveLongTermMemoryRecallSettings(input: {
   requestDebug?: boolean;
 }): ResolvedLongTermMemoryRecallSettings {
   const { chatMetadata, globalSettings } = input;
-  const modeFallback =
-    DEFAULT_LTM_RECALL_STYLE_BY_MODE[ltmModeForChatMode(input.chatMode)];
-  const chatRecallStyle = readRecallStyle(
-    chatMetadata.longTermMemoryRecallStyle,
-  );
+  const modeFallback = DEFAULT_LTM_RECALL_STYLE_BY_MODE[ltmModeForChatMode(input.chatMode)];
+  const chatRecallStyle = readRecallStyle(chatMetadata.longTermMemoryRecallStyle);
   const globalRecallStyle = globalSettings
     ? parseLongTermMemoryRecallStyle(globalSettings.longTermMemoryRecallStyle)
     : modeFallback;
@@ -159,31 +113,21 @@ export function resolveLongTermMemoryRecallSettings(input: {
       parseBudgetTokens(chatMetadata.longTermMemoryBudgetTokens) ??
       parseBudgetTokens(globalSettings?.longTermMemoryBudgetTokens),
     maxChunks:
-      parseMaxChunks(chatMetadata.longTermMemoryMaxChunks) ??
-      parseMaxChunks(globalSettings?.longTermMemoryMaxChunks),
+      parseMaxChunks(chatMetadata.longTermMemoryMaxChunks) ?? parseMaxChunks(globalSettings?.longTermMemoryMaxChunks),
     scoreThreshold:
       parseScoreThreshold(chatMetadata.longTermMemoryScoreThreshold) ??
       parseScoreThreshold(globalSettings?.longTermMemoryScoreThreshold),
     recallStyle,
-    weights: resolveWeights(
-      chatMetadata,
-      recallStyle === "custom" ? globalWeights : styleWeights,
-    ),
+    weights: resolveWeights(chatMetadata, recallStyle === "custom" ? globalWeights : styleWeights),
     debugEnabled:
-      (readBoolean(chatMetadata.longTermMemoryDebug) ??
-        globalSettings?.longTermMemoryDebug ??
-        false) ||
+      (readBoolean(chatMetadata.longTermMemoryDebug) ?? globalSettings?.longTermMemoryDebug ?? false) ||
       input.requestDebug === true,
     contextMessages:
       parseContextMessages(chatMetadata.longTermMemoryRecallContextMessages) ??
-      parseContextMessages(
-        globalSettings?.longTermMemoryRecallContextMessages,
-      ) ??
+      parseContextMessages(globalSettings?.longTermMemoryRecallContextMessages) ??
       4,
     includeResolved:
-      readBoolean(chatMetadata.longTermMemoryIncludeResolved) ??
-      globalSettings?.longTermMemoryIncludeResolved ??
-      false,
+      readBoolean(chatMetadata.longTermMemoryIncludeResolved) ?? globalSettings?.longTermMemoryIncludeResolved ?? false,
     recallPreamble:
       readRecallPreamble(chatMetadata.longTermMemoryRecallPreamble) ??
       globalSettings?.longTermMemoryRecallPreamble ??

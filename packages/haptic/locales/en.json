@@ -6,12 +6,12 @@
   },
   "package": {
     "name": "Haptic Feedback",
-    "description": "Analyzes narrative content and controls connected intimate toys in real time. Requires Intiface Central running locally — connect your toy there first, then enable this agent. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents for Conversation and Roleplay modes."
+    "description": "Analyzes narrative content and controls every supported action and pattern on connected intimate toys in real time. Requires Intiface Central running locally; connect your toy there first, then enable this agent. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents for Conversation, Roleplay, and Game modes."
   },
   "agents": {
     "haptic": {
       "name": "Haptic Feedback",
-      "description": "Analyzes narrative content and controls connected intimate toys in real time. Requires Intiface Central running locally — connect your toy there first, then enable this agent. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents for Conversation and Roleplay modes."
+      "description": "Analyzes narrative content and controls every supported action and pattern on connected intimate toys in real time. Requires Intiface Central running locally; connect your toy there first, then enable this agent. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Misc Agents for Conversation, Roleplay, and Game modes."
     }
   }
 }

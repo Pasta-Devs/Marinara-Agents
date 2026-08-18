@@ -24,11 +24,7 @@ const LEGACY_LABEL_SUFFIX_PATTERN = /\n{2,}\[note:[^\n]*\]\s*$/;
 const INLINE_EVIDENCE_LABEL_PATTERN = /\s*\[evidence:[^\]\n]*\]/g;
 
 export function cleanLongTermMemoryChunkText(text: string) {
-  return text
-    .trim()
-    .replace(LEGACY_LABEL_SUFFIX_PATTERN, "")
-    .replace(INLINE_EVIDENCE_LABEL_PATTERN, "")
-    .trim();
+  return text.trim().replace(LEGACY_LABEL_SUFFIX_PATTERN, "").replace(INLINE_EVIDENCE_LABEL_PATTERN, "").trim();
 }
 
 export function stableJsonHash(value: unknown) {
@@ -44,9 +40,7 @@ export function stableStringify(value: unknown): string {
     return `[${value.map((item) => stableStringify(item)).join(",")}]`;
   }
 
-  const entries = Object.entries(value as Record<string, unknown>).sort(
-    ([a], [b]) => a.localeCompare(b),
-  );
+  const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b));
   return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`).join(",")}}`;
 }
 
@@ -57,9 +51,7 @@ export function isLtmSourceSummaryNote(note: Pick<LtmNote, "type" | "tags">) {
 export function chunkNoteSections(note: LtmNote): LtmMemoryChunk[] {
   const keywords = extractNoteKeywords(note);
   if (note.type === "tone") {
-    const profileText = note.sections.profile?.text
-      ? cleanLongTermMemoryChunkText(note.sections.profile.text)
-      : "";
+    const profileText = note.sections.profile?.text ? cleanLongTermMemoryChunkText(note.sections.profile.text) : "";
     const obsText = note.sections.observations?.text
       ? cleanLongTermMemoryChunkText(note.sections.observations.text)
       : "";
@@ -79,23 +71,12 @@ export function chunkNoteSections(note: LtmNote): LtmMemoryChunk[] {
         scope: note.scope,
         tags: [...note.tags].sort((a, b) => a.localeCompare(b)),
         keywords,
-        salience: Math.max(
-          note.sections.profile?.salience ?? 0,
-          note.sections.observations?.salience ?? 0,
-        ),
-        confidence: Math.max(
-          note.sections.profile?.confidence ?? 0,
-          note.sections.observations?.confidence ?? 0,
-        ),
-        importance:
-          note.sections.profile?.importance ??
-          note.sections.observations?.importance,
+        salience: Math.max(note.sections.profile?.salience ?? 0, note.sections.observations?.salience ?? 0),
+        confidence: Math.max(note.sections.profile?.confidence ?? 0, note.sections.observations?.confidence ?? 0),
+        importance: note.sections.profile?.importance ?? note.sections.observations?.importance,
         dimensions: section.dimensions,
         dimensionChanges: section.dimensionChanges,
-        updatedAt:
-          note.sections.profile?.updatedAt ??
-          note.sections.observations?.updatedAt ??
-          "",
+        updatedAt: note.sections.profile?.updatedAt ?? note.sections.observations?.updatedAt ?? "",
         sourceHash: stableJsonHash({
           noteId: note.id,
           title: note.title?.trim() || undefined,
@@ -150,10 +131,7 @@ export function chunkNoteSections(note: LtmNote): LtmMemoryChunk[] {
     });
 }
 
-export function chunkNotes(
-  notes: LtmNote[],
-  options: ChunkLtmNotesOptions = {},
-) {
+export function chunkNotes(notes: LtmNote[], options: ChunkLtmNotesOptions = {}) {
   return notes
     .slice()
     .filter((note) => {

@@ -1,0 +1,18 @@
+{
+  "frameWidth": 12,
+  "frameHeight": 16,
+  "frames": 4,
+  "rows": [
+    "down",
+    "up",
+    "left",
+    "right"
+  ],
+  "actors": {
+    "player": "sprites/player.png",
+    "mira": "sprites/mira.png",
+    "tam": "sprites/tam.png",
+    "rook": "sprites/rook.png",
+    "fen": "sprites/fen.png"
+  }
+}

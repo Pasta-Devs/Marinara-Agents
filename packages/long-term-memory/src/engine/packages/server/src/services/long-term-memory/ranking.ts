@@ -40,9 +40,7 @@ export function reciprocalRankFuse(lanes: LtmRankLane[], options: { cooldowns?: 
     lane.items.forEach((item, index) => {
       const rank = index + 1;
       const rawScore = typeof item.rawScore === "number" && Number.isFinite(item.rawScore) ? item.rawScore : 0;
-      const normalizedRawScore = lane.name === "bm25"
-        ? rawScore / (rawScore + 1)
-        : Math.max(0, Math.min(1, rawScore));
+      const normalizedRawScore = lane.name === "bm25" ? rawScore / (rawScore + 1) : Math.max(0, Math.min(1, rawScore));
       const rawFactor = typeof item.rawScore === "number" ? normalizedRawScore : 1;
       const score = lane.weight * (1 / (RRF_K + rank)) * rawFactor;
       const rawScoreBoost = rawScore * 0.001 * lane.weight;
@@ -59,10 +57,7 @@ export function reciprocalRankFuse(lanes: LtmRankLane[], options: { cooldowns?: 
         } satisfies LtmRankedCandidate);
       candidate.score += score + rawScoreBoost;
       candidate.normalizedScore = Math.max(candidate.normalizedScore ?? 0, normalizedRawScore);
-      candidate.relevanceScore = Math.max(
-        candidate.relevanceScore,
-        normalizedRawScore * lane.weight,
-      );
+      candidate.relevanceScore = Math.max(candidate.relevanceScore, normalizedRawScore * lane.weight);
       candidate.laneScores ??= {};
       candidate.rawLaneScores ??= {};
       candidate.laneScores[lane.name] = (candidate.laneScores[lane.name] ?? 0) + score + rawScoreBoost;
@@ -87,7 +82,9 @@ export function reciprocalRankFuse(lanes: LtmRankLane[], options: { cooldowns?: 
     candidate.reasons.push(cooldown.reason);
   }
 
-  const ranked = Array.from(candidates.values()).sort((a, b) => b.score - a.score || a.chunkId.localeCompare(b.chunkId));
+  const ranked = Array.from(candidates.values()).sort(
+    (a, b) => b.score - a.score || a.chunkId.localeCompare(b.chunkId),
+  );
   const topScore = ranked[0]?.score ?? 0;
   for (const candidate of ranked) {
     const finalNormalizedScore = topScore > 0 ? candidate.score / topScore : 0;
