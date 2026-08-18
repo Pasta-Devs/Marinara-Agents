@@ -23,6 +23,14 @@ PF.Hud = class {
         "pointer-events:none;opacity:0;transition:opacity .5s;background:rgba(12,14,12,0.72);color:#f3efe2;" +
         "border-radius:10px;padding:10px 16px;font:600 13px/1.55 ui-monospace,Consolas,monospace;z-index:3;",
     });
+    // A beat appears and clears on its own, so the caption has to announce itself:
+    // opacity is invisible to a screen reader, which would neither read a new beat
+    // out nor stop offering the last one long after it faded. `aria-hidden` tracks
+    // the fade so exactly one state is ever in the tree.
+    this.captionEl.setAttribute("role", "status");
+    this.captionEl.setAttribute("aria-live", "polite");
+    this.captionEl.setAttribute("aria-atomic", "true");
+    this.captionEl.setAttribute("aria-hidden", "true");
     this.locChip = PF.el("span", { style: S.chip, text: "…" });
     this.clockChip = PF.el("span", { style: S.chip, text: "" });
     this.topbar = PF.el(
@@ -239,6 +247,7 @@ PF.Hud = class {
     if (caption !== this._caption) {
       this._caption = caption;
       if (caption) this.captionEl.textContent = caption;
+      this.captionEl.setAttribute("aria-hidden", caption ? "false" : "true");
       this.captionEl.style.opacity = caption ? "1" : "0";
     }
     if (this._mode === "walk") {

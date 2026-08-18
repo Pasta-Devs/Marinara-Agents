@@ -195,8 +195,9 @@ response is **never stored** (checkpoints capture by value — see #5110).
      sleeps in the smithy. A shop is stocked and staffed — counter,
      shelves, and the OWNER's working anchor moved inside (only the owner's: the rest of the
      household are residents there, not staff), because an empty shop reads worse than a
-     locked door. The inn keeps four guest beds for the transients who already bedded down there;
-     past the fourth they share the common room as before. None of this adds a save field: the
+     locked door. The inn's guest berths are sized from `scale` and `prosperity` (GUEST_BERTHS —
+     three to ten of them), never from tonight's guest list; whoever arrives past the last berth
+     shares the common room as before. None of this adds a save field: the
      handles are re-baked on every compile and placement is a pure function of the saved clock;
    - **height** is a facade, not a footprint: every body row of a building is already solid wall,
      hidden under roof overhead, so a tall building simply leaves its top rows UNROOFED and the

@@ -180,6 +180,10 @@ PF.core = {
       this._resumeMode = prev; // don't collapse dialogue into walk on exit (review finding)
     }
     this.sim.mode = mode;
+    // Replay returns out of the frame loop before sim.step(), so the sim's own
+    // walk-only guard can never fire for it — the one function that changes mode
+    // drops the beat instead, and the declaration below is honest immediately.
+    if (mode !== "walk") this.sim.cutscene = null;
     this.input.up = this.input.down = this.input.left = this.input.right = false;
     this._declareChrome();
     this.hud?.update();

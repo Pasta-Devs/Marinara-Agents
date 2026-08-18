@@ -2524,6 +2524,22 @@ function floodFill(z, start, closed) {
   sim.y = 20 * loadedPF.TILE;
   sim.step(1 / 60, {});
   assert.equal(sim.cutscene, null, "walking away releases the beat at once");
+
+  // And it never survives the screen changing hands. A beat is walk-only, so a
+  // player who opens the message box (dialogue) or is pulled into combat while
+  // standing in the corner would otherwise leave the request standing over the
+  // whole of it — asking the host to fold away the very narration they switched
+  // modes to read, with the timer frozen so it could not even time out. Replay is
+  // the third case and is cut at core.setMode: it returns before sim.step() runs.
+  for (const mode of ["dialogue", "combat"]) {
+    sim.x = 20 * loadedPF.TILE; sim.y = 20 * loadedPF.TILE; sim.step(1 / 60, {});
+    sim.x = 2 * loadedPF.TILE; sim.y = 2 * loadedPF.TILE; sim.step(1 / 60, {});
+    assert.ok(sim.cutscene, `the corner starts a beat before ${mode}`);
+    sim.mode = mode;
+    sim.step(1 / 60, {});
+    assert.equal(sim.cutscene, null, `a beat does not survive ${mode}`);
+    sim.mode = "walk";
+  }
 }
 
 // ── The sanctuary (0.8.0): a tall facade outside, a room worth entering inside ──

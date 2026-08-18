@@ -582,7 +582,7 @@ PF.brief = (() => {
       `- features: 0-4 of {tag, name} placed in the settlement. tag from: ${[...SETTLEMENT_TAGS].join(", ")}.`,
       "  name <=24 chars — becomes a map location.",
       `- places: 0-4 additional zones of {kind, name, flavor}. kind from: ${PLACE_KINDS.join(" | ")}.`,
-      "  At most 2 wilds, 1 hall, 1 gathering, 1 sanctuary. Home an elder at a sanctuary to keep it. A sanctuary is the settlement's",
+      "  At most 2 wilds, 1 hall, 1 gathering, 1 sanctuary. Home an elder at a sanctuary to give it a keeper. A sanctuary is the settlement's",
       "  church, temple or memorial hall — it is built taller than the houses. wilds may carry",
       "  0-3 features (water-crossing and dense-growth are wilds-only). flavor: ONE sentence <=120 chars.",
       "- cast: 4-10 story-relevant people of {name, role, kind, tint, home, household, persona, standing}.",

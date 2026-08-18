@@ -65,6 +65,14 @@ PF.Sim = class {
 
   step(dt, input) {
     const z = this.zone();
+    // A beat is WALK-ONLY and never survives the screen changing hands. Dialogue,
+    // combat and replay each own the screen, and a beat left standing would keep
+    // asking the host to fold its narration box away for the whole of it — over
+    // exactly the narration the player changed modes to read. Cleared here for the
+    // modes that still step, and at the mode chokepoint (core.setMode) for replay,
+    // which never reaches this function at all. `_vistaArmed` deliberately stays
+    // down: coming back to walk in the same corner must not restart the beat.
+    if (this.mode !== "walk" && this.cutscene) this.cutscene = null;
     if (this.mode === "walk") {
       let dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
       let dy = (input.down ? 1 : 0) - (input.up ? 1 : 0);

@@ -1449,7 +1449,7 @@ PF.brief = (() => {
       `- features: 0-4 of {tag, name} placed in the settlement. tag from: ${[...SETTLEMENT_TAGS].join(", ")}.`,
       "  name <=24 chars — becomes a map location.",
       `- places: 0-4 additional zones of {kind, name, flavor}. kind from: ${PLACE_KINDS.join(" | ")}.`,
-      "  At most 2 wilds, 1 hall, 1 gathering, 1 sanctuary. Home an elder at a sanctuary to keep it. A sanctuary is the settlement's",
+      "  At most 2 wilds, 1 hall, 1 gathering, 1 sanctuary. Home an elder at a sanctuary to give it a keeper. A sanctuary is the settlement's",
       "  church, temple or memorial hall — it is built taller than the houses. wilds may carry",
       "  0-3 features (water-crossing and dense-growth are wilds-only). flavor: ONE sentence <=120 chars.",
       "- cast: 4-10 story-relevant people of {name, role, kind, tint, home, household, persona, standing}.",
@@ -3943,6 +3943,14 @@ PF.Sim = class {
 
   step(dt, input) {
     const z = this.zone();
+    // A beat is WALK-ONLY and never survives the screen changing hands. Dialogue,
+    // combat and replay each own the screen, and a beat left standing would keep
+    // asking the host to fold its narration box away for the whole of it — over
+    // exactly the narration the player changed modes to read. Cleared here for the
+    // modes that still step, and at the mode chokepoint (core.setMode) for replay,
+    // which never reaches this function at all. `_vistaArmed` deliberately stays
+    // down: coming back to walk in the same corner must not restart the beat.
+    if (this.mode !== "walk" && this.cutscene) this.cutscene = null;
     if (this.mode === "walk") {
       let dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
       let dy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
@@ -5407,6 +5415,14 @@ PF.Hud = class {
         "pointer-events:none;opacity:0;transition:opacity .5s;background:rgba(12,14,12,0.72);color:#f3efe2;" +
         "border-radius:10px;padding:10px 16px;font:600 13px/1.55 ui-monospace,Consolas,monospace;z-index:3;",
     });
+    // A beat appears and clears on its own, so the caption has to announce itself:
+    // opacity is invisible to a screen reader, which would neither read a new beat
+    // out nor stop offering the last one long after it faded. `aria-hidden` tracks
+    // the fade so exactly one state is ever in the tree.
+    this.captionEl.setAttribute("role", "status");
+    this.captionEl.setAttribute("aria-live", "polite");
+    this.captionEl.setAttribute("aria-atomic", "true");
+    this.captionEl.setAttribute("aria-hidden", "true");
     this.locChip = PF.el("span", { style: S.chip, text: "…" });
     this.clockChip = PF.el("span", { style: S.chip, text: "" });
     this.topbar = PF.el(
@@ -5623,6 +5639,7 @@ PF.Hud = class {
     if (caption !== this._caption) {
       this._caption = caption;
       if (caption) this.captionEl.textContent = caption;
+      this.captionEl.setAttribute("aria-hidden", caption ? "false" : "true");
       this.captionEl.style.opacity = caption ? "1" : "0";
     }
     if (this._mode === "walk") {
@@ -6087,6 +6104,10 @@ PF.core = {
       this._resumeMode = prev; // don't collapse dialogue into walk on exit (review finding)
     }
     this.sim.mode = mode;
+    // Replay returns out of the frame loop before sim.step(), so the sim's own
+    // walk-only guard can never fire for it — the one function that changes mode
+    // drops the beat instead, and the declaration below is honest immediately.
+    if (mode !== "walk") this.sim.cutscene = null;
     this.input.up = this.input.down = this.input.left = this.input.right = false;
     this._declareChrome();
     this.hud?.update();
