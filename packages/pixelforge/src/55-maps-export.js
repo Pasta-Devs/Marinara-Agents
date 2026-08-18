@@ -163,7 +163,14 @@ PF.mapsExport = {
   async _sync(core, world, rootLoc) {
     const gen = PF.spatial._gen;
     const chatId = core.chatId;
-    const zoneIds = Object.keys(world.zones).filter((zoneId) => zoneId !== world.startZone);
+    // A building is ONE location; its floors are rooms inside it. A zone that is
+    // a room stamps mapExport = false (20-world) and is skipped here — it gets no
+    // row and no binding. This route is additive with NO delete, so a row posted
+    // to a player's real map can never be taken back: the gate belongs on the
+    // same side of the release as the zone type that needs it.
+    const zoneIds = Object.keys(world.zones).filter(
+      (zoneId) => zoneId !== world.startZone && world.zones[zoneId].mapExport !== false,
+    );
     let plan = this._plan(world, zoneIds, rootLoc);
     let missing = plan.filter((entry) => entry.create).map((entry) => entry.zoneId);
     let retriesWithoutProgress = 0;

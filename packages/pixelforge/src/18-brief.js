@@ -17,7 +17,7 @@ PF.brief = (() => {
   };
   const SURROUNDS = ["woods", "fields", "rocky", "water", "barren"];
   const PROSPERITY = ["struggling", "modest", "thriving"];
-  const PLACE_KINDS = ["gathering", "workshop", "hall", "dwelling", "wilds"];
+  const PLACE_KINDS = ["gathering", "workshop", "hall", "sanctuary", "dwelling", "wilds"];
   const CAST_KINDS = [
     "leader",
     "host",
@@ -63,7 +63,17 @@ PF.brief = (() => {
   // Which tags make sense per zone kind (invalid-for-zone drops at compile, not parse).
   const SETTLEMENT_TAGS = new Set(FEATURE_TAGS.filter((t) => t !== "water-crossing" && t !== "dense-growth"));
 
-  const CAPS = { features: 4, places: 4, wilds: 2, hall: 1, gathering: 1, castMin: 4, castMax: 10, household: 6 };
+  const CAPS = {
+    features: 4,
+    places: 4,
+    wilds: 2,
+    hall: 1,
+    gathering: 1,
+    sanctuary: 1,
+    castMin: 4,
+    castMax: 10,
+    household: 6,
+  };
   const BRIEF_BYTE_BUDGET = 8_192;
 
   // ── Deterministic entropy: ONE source ───────────────────────────────────────
@@ -220,6 +230,7 @@ PF.brief = (() => {
     let wildsCount = 0;
     let hallCount = 0;
     let gatheringCount = 0;
+    let sanctuaryCount = 0;
     for (const item of asArray(src.places)) {
       if (brief.places.length >= CAPS.places) break;
       const kind = foldEnum(item?.kind, PLACE_KINDS, null);
@@ -230,9 +241,11 @@ PF.brief = (() => {
       if (kind === "wilds" && wildsCount >= CAPS.wilds) continue;
       if (kind === "hall" && hallCount >= CAPS.hall) continue;
       if (kind === "gathering" && gatheringCount >= CAPS.gathering) continue;
+      if (kind === "sanctuary" && sanctuaryCount >= CAPS.sanctuary) continue;
       if (kind === "wilds") wildsCount++;
       if (kind === "hall") hallCount++;
       if (kind === "gathering") gatheringCount++;
+      if (kind === "sanctuary") sanctuaryCount++;
       const name = dedupeName(capText(item?.name, 24) || PLACE_LABELS[kind], `places[${brief.places.length}]`);
       const place = { kind, name, flavor: capText(item?.flavor, 120) };
       if (kind === "wilds") {
@@ -569,8 +582,9 @@ PF.brief = (() => {
       `- features: 0-4 of {tag, name} placed in the settlement. tag from: ${[...SETTLEMENT_TAGS].join(", ")}.`,
       "  name <=24 chars — becomes a map location.",
       `- places: 0-4 additional zones of {kind, name, flavor}. kind from: ${PLACE_KINDS.join(" | ")}.`,
-      "  At most 2 wilds, 1 hall, 1 gathering. wilds may carry 0-3 features (water-crossing and",
-      "  dense-growth are wilds-only). flavor: ONE sentence <=120 chars.",
+      "  At most 2 wilds, 1 hall, 1 gathering, 1 sanctuary. Home an elder at a sanctuary to give it a keeper. A sanctuary is the settlement's",
+      "  church, temple or memorial hall — it is built taller than the houses. wilds may carry",
+      "  0-3 features (water-crossing and dense-growth are wilds-only). flavor: ONE sentence <=120 chars.",
       "- cast: 4-10 story-relevant people of {name, role, kind, tint, home, household, persona, standing}.",
       `  kind (machine field) from: ${CAST_KINDS.join(" | ")}. role: <=24 chars free text (their title).`,
       `  tint from: ${Object.keys(TINTS).join(" | ")}. home: the NAME of the zone they live in.`,
@@ -660,6 +674,7 @@ PF.brief = (() => {
     gathering: "The Hearth",
     workshop: "The Works",
     hall: "The Hall",
+    sanctuary: "The Sanctuary",
     dwelling: "The House",
     wilds: "The Wilds",
   };

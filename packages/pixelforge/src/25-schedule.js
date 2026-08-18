@@ -18,9 +18,15 @@ PF.schedule = (() => {
   // Handle names: post = the working/day anchor, home = the sleep node,
   // public = the settlement's plaza. See 20-world's cast loop for the geometry.
   const TABLE = {
-    // The innkeeper never leaves the inn — it is the fixed point the evening
-    // crowd converges on, and it means the lit building is never empty.
-    "host:resident": { dawn: "post", day: "post", dusk: "post", night: "post" },
+    // The innkeeper holds the inn all day — it is the fixed point the evening
+    // crowd converges on, and it means the lit building is never empty. At night
+    // they turn in like anybody else: a brief that homes them AT the inn (the
+    // usual shape) puts their bed in the inn's own living quarters, so the
+    // building is still occupied and they are simply in it asleep rather than
+    // standing among the tables at 3am. One homed at a house down the road walks
+    // to it — their guests are still upstairs. With no bed anywhere the handle
+    // falls back to `post` and this row behaves exactly as it always did.
+    "host:resident": { dawn: "post", day: "post", dusk: "post", night: "home" },
     // The watch keeps the night, so the settlement never looks abandoned.
     "guard:resident": { dawn: "home", day: "post", dusk: "post", night: "post" },
     // Trades work their building through the day and sleep at their dwelling.
@@ -30,9 +36,24 @@ PF.schedule = (() => {
     "merchant:resident": { dawn: "home", day: "post", dusk: "post", night: "home" },
     // A travelling trader sleeps at the inn and tends the stall by day.
     "merchant:transient": { dawn: "home", day: "post", dusk: "post", night: "home" },
-    // Everyone else with a roof: at the door at dawn, the square by day (the
-    // plaza should feel busiest in daylight and empty after dark), home at night.
-    "*:resident": { dawn: "home", day: "public", dusk: "home", night: "home" },
+    // A KEEPER — anyone who holds a building the brief NAMED, whatever their kind.
+    // (see the `keeper` flag). Without a row like this the keeper falls to
+    // "*:resident" and spends the daylight hours in the plaza, which is exactly
+    // when a player opens the church door, so the room built around them would
+    // always be empty. Scoped to keepers on purpose: an elder in a settlement with
+    // no sanctuary keeps the plaza habits they have always had. Keyed on holding
+    // the building rather than on being an elder: which KIND ends up keeping a
+    // sanctuary is a question about the kind vocabulary, not about schedules.
+    "*:resident:keeper": { dawn: "post", day: "post", dusk: "post", night: "home" },
+    // Everyone else with a roof: on their own doorstep at dawn and again at dusk,
+    // the square by day, and in bed at night.
+    //
+    // dawn/dusk are `post` — the apron OUTSIDE their door — not `home`. They used to
+    // be `home` and that read correctly while `home` was a one-tile spot at the door.
+    // It stopped being true the moment dwellings gained interiors and `home` became a
+    // bed inside: residents then vanished indoors from 18:00 to 07:00, which is over
+    // half the clock and most of the hours with interesting light. Bed is for night.
+    "*:resident": { dawn: "post", day: "public", dusk: "post", night: "home" },
     // Loiterers hold their public spot all day and take a bed at night.
     "*:transient": { dawn: "post", day: "post", dusk: "post", night: "home" },
     // Fringe NPCs stay out at the margins — meeting one means going to them.
@@ -45,7 +66,15 @@ PF.schedule = (() => {
   /** The handle an NPC should occupy at this daypart, or null when unscheduled. */
   function resolve(sched, daypart) {
     if (!sched) return null;
-    const template = TABLE[`${sched.kind}:${sched.standing}`] ?? TABLE[`*:${sched.standing}`] ?? DEFAULT;
+    // Most specific first. The `:keeper` tier exists so a template can describe
+    // someone who actually holds a building without changing how that same cast
+    // kind behaves when they do not.
+    const template =
+      (sched.keeper ? TABLE[`${sched.kind}:${sched.standing}:keeper`] : null) ??
+      (sched.keeper ? TABLE[`*:${sched.standing}:keeper`] : null) ??
+      TABLE[`${sched.kind}:${sched.standing}`] ??
+      TABLE[`*:${sched.standing}`] ??
+      DEFAULT;
     return sched[template[daypart] ?? "post"] ?? sched.post ?? null;
   }
 
