@@ -120,8 +120,8 @@
         "schemaVersion": 1,
         "id": "beholder",
         "name": "Beholder",
-        "version": "1.2.0",
-        "description": "Tracks each roleplay character's clothing by body slot, held items, wounds, missing parts, bare slots, and species, then keeps that physical state available to the next response. Recommended for SOTA models: OpenAI GPT-5.5+, Claude Opus 4.8+, or Kimi K3+. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+        "version": "1.2.1",
+        "description": "Tracks each roleplay character's clothing by body slot, held items, wounds, missing parts, bare slots, and species, then keeps that physical state available to the next response. Pick the prompt template for your model: one prompt for a SOTA model (GPT-5.5+, Opus 4.8+, Kimi K3+), or five passes for the local Beholder model (GetBeholder/Beholder-GGUF). Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.4.4",
           "maxExclusive": "4.0.0"
@@ -135,8 +135,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "ba7448d8868eb56fd37d879d434fdf1ea2579a449f46efc3c197ff71a9ce75e1",
-            "bytes": 10154
+            "sha256": "1d14c404353bdec08331d2d575d67a3c7ec74476b2d6e0f4e56c7ef46ecbb8ac",
+            "bytes": 10252
           }
         ],
         "permissions": [
@@ -151,9 +151,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/beholder.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/beholder-1.2.0.zip",
-        "sha256": "f3c2c07cde64fb27b5df9cb8f5f5d501b5ee30bc35b9be0df38495b11921f5e9",
-        "bytes": 11269
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/beholder-1.2.1.zip",
+        "sha256": "dde3492ff1fb8d3e3007630fb71f44c2d3d078162939d0c049e1d30c823525f3",
+        "bytes": 11465
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#beholder"
     },
