@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createSlurpActivationLifecycle } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-activation-lifecycle.ts";
 
 const storage = readFileSync("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
 const refreshScheduler = readFileSync(
@@ -7,10 +8,6 @@ const refreshScheduler = readFileSync(
   "utf8",
 );
 const hooks = readFileSync("packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
-const serverEntry = readFileSync(
-  "packages/slurp/src/engine/packages/server/src/services/slurp/server-entry.ts",
-  "utf8",
-);
 
 assert.match(
   storage,
@@ -33,21 +30,40 @@ const viewerHook = hooks.slice(
 );
 assert.match(viewerHook, /refetchInterval: enabled && personaId \? 30_000 : false/u);
 assert.match(hooks, /invalidateQueries\(\{ queryKey: noodleKeys\.viewer\(personaId\) \}\)/u);
-assert.match(
-  serverEntry,
-  /if \(active\) throw new Error\("Slurp is already active"\);\s*active = true/u,
-  "Slurp must claim activation before asynchronous registration can start a second scheduler",
-);
-assert.match(
-  serverEntry,
-  /const teardown = async \(\) => \{[\s\S]*?let failed = false;[\s\S]*?failed = true;[\s\S]*?active = false;/u,
-  "Slurp teardown must release scheduler ownership",
-);
-assert.match(
-  serverEntry,
-  /catch \(error\) \{\s*try \{\s*await teardown\(\);[\s\S]*?\}\s*throw error;/u,
-  "failed Slurp activation must run teardown before it rethrows",
-);
-assert.match(serverEntry, /if \(failed\) throw firstError;/u, "teardown must rethrow falsy cleanup failures");
+async function testActivationLifecycle() {
+  const lifecycle = createSlurpActivationLifecycle();
+  const order: string[] = [];
+  let releaseRegistration!: () => void;
+  const registrationBlocked = new Promise<void>((resolve) => {
+    releaseRegistration = resolve;
+  });
+  const firstActivation = lifecycle.activate(async (addTeardown) => {
+    addTeardown(() => order.push("routes"));
+    await registrationBlocked;
+    addTeardown(() => order.push("service"));
+    addTeardown(() => order.push("scheduler"));
+  });
+  await assert.rejects(
+    lifecycle.activate(async () => {}),
+    /Slurp is already active/u,
+  );
+  releaseRegistration();
+  const stop = await firstActivation;
+  await stop();
+  assert.deepEqual(order, ["scheduler", "service", "routes"]);
 
-console.log("Slurp automatic posting regressions passed.");
+  const activationError = new Error("scheduler failed to start");
+  await assert.rejects(
+    lifecycle.activate((addTeardown) => {
+      addTeardown(() => order.push("partial routes"));
+      throw activationError;
+    }),
+    activationError,
+  );
+  assert.equal(order.at(-1), "partial routes");
+
+  const stopAfterFailure = await lifecycle.activate(async () => {});
+  await stopAfterFailure();
+}
+
+void testActivationLifecycle().then(() => console.log("Slurp automatic posting regressions passed."));
