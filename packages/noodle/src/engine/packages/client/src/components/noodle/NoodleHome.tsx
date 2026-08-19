@@ -79,6 +79,7 @@ import {
 } from "../../hooks/use-prompt-overrides";
 import { useUploadGlobalGalleryImages } from "../../hooks/use-global-gallery";
 import type { ChatImage } from "../../hooks/use-gallery";
+import type { PackageNoodleSettings, PackageNoodleSettingsUpdateInput } from "./noodle-settings-defaults";
 import { HelpTooltip } from "../ui/HelpTooltip";
 import {
   ConversationMediaPickerPanel,
@@ -997,7 +998,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     setRefreshTimeDraft("");
   }, [editingRefreshTime, scheduler?.scheduledTimes]);
 
-  const saveSettings = (patch: NoodleSettingsUpdateInput) => {
+  const saveSettings = (patch: PackageNoodleSettingsUpdateInput) => {
     updateSettings.mutate(patch, {
       onError: (error) =>
         toast.error(
@@ -3573,14 +3574,9 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   <ToggleSetting
                     label={localizeUi("ui.noodle.noodlehome.enableImageInterpretation")}
                     help={localizeUi("ui.noodle.noodlehome.enableImageInterpretationHelp")}
-                    checked={
-                      (settings as NoodleSettings & { enableImageInterpretation?: boolean })
-                        .enableImageInterpretation !== false
-                    }
+                    checked={(settings as PackageNoodleSettings).enableImageInterpretation !== false}
                     disabled={updateSettings.isPending}
-                    onChange={(checked) =>
-                      saveSettings({ enableImageInterpretation: checked } as NoodleSettingsUpdateInput)
-                    }
+                    onChange={(checked) => saveSettings({ enableImageInterpretation: checked })}
                   />
                   <ToggleSetting
                     label={localizeUi("ui.noodle.noodlehome.includeDescriptions")}
