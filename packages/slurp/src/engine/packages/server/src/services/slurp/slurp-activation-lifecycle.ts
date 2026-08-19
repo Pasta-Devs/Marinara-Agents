@@ -38,7 +38,7 @@ export function createSlurpActivationLifecycle() {
       }
     },
     selfCheck() {
-      if (!active) throw new Error("Noodle routes and schedulers did not activate");
+      if (!active) throw new Error("Slurp routes and schedulers did not activate");
     },
   };
 }

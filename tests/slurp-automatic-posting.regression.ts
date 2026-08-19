@@ -60,9 +60,10 @@ async function testActivationLifecycle() {
     }),
     activationError,
   );
-  assert.equal(order.at(-1), "partial routes");
+  assert.deepEqual(order, ["scheduler", "service", "routes", "partial routes"]);
 
   const stopAfterFailure = await lifecycle.activate(async () => {});
+  await stopAfterFailure();
   await stopAfterFailure();
 
   const firstFailureLifecycle = createSlurpActivationLifecycle();
@@ -76,6 +77,15 @@ async function testActivationLifecycle() {
     });
   });
   await assert.rejects(stopWithFailures, (error) => error === undefined);
+
+  const stopAfterTeardownError = await firstFailureLifecycle.activate(async () => {});
+  await stopAfterTeardownError();
 }
 
-void testActivationLifecycle().then(() => console.log("Slurp automatic posting regressions passed."));
+testActivationLifecycle().then(
+  () => console.log("Slurp automatic posting regressions passed."),
+  (error) => {
+    console.error(error);
+    process.exitCode = 1;
+  },
+);
