@@ -80,6 +80,7 @@ export function InfoPopover({
   label,
   content,
   wide = false,
+  compact = false,
 }: {
   label: string;
   content: ReactNode;
@@ -139,7 +140,7 @@ export function InfoPopover({
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [open, wide]);
+  }, [compact, open, wide]);
 
   useEffect(() => {
     if (!open) return;
@@ -156,7 +157,7 @@ export function InfoPopover({
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [open]);
+  }, [id, open]);
 
   useEffect(() => {
     if (open) activePopover = { id, close: closeRef.current };
@@ -164,7 +165,7 @@ export function InfoPopover({
       clearCloseTimer();
       if (activePopover?.id === id) activePopover = null;
     };
-  }, [open]);
+  }, [id, open, pinned]);
 
   return (
     <>
@@ -179,8 +180,12 @@ export function InfoPopover({
         aria-controls={open ? `${id}-panel` : undefined}
         aria-describedby={open && !pinned ? `${id}-panel` : undefined}
         data-ltm-info={label}
-        className="inline-grid h-11 w-11 shrink-0 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-        style={{ height: "2.75rem", width: "2.75rem", flexShrink: 0 }}
+        className={`${compact ? "h-7 w-7" : "h-11 w-11"} inline-grid shrink-0 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]`}
+        style={
+          compact
+            ? { height: "1.75rem", width: "1.75rem", flexShrink: 0 }
+            : { height: "2.75rem", width: "2.75rem", flexShrink: 0 }
+        }
         onMouseEnter={show}
         onMouseLeave={scheduleClose}
         onFocus={show}

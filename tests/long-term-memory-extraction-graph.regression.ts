@@ -749,6 +749,90 @@ async function main() {
     "dedup must characterize same-batch, existing-note, threshold, and exact matches",
   );
 
+  const longTailText = Array.from({ length: 700 }, (_, index) => `filler${index}`).join(" ");
+  const longTailUnit = dedupUnit("The observatory gate remains sealed.", "long_tail_subject");
+  const longTailResult = deduplicateUnits(
+    [longTailUnit],
+    [
+      {
+        ...chat,
+        id: "world_long_tail_subject",
+        type: "world" as const,
+        sections: { facts: { text: `${longTailText} The observatory gate remains sealed.` } },
+      } as any,
+    ],
+  );
+  assert.equal(
+    longTailResult.deduplicated.length,
+    0,
+    "same-section duplicates must still match at a long-section tail",
+  );
+
+  const interiorUnitText = [
+    "observatory",
+    "gate",
+    "remains",
+    "sealed",
+    "during",
+    "nightly",
+    "watch",
+    "despite",
+    "storm",
+    "damage",
+    "around",
+    "hinges",
+    "after",
+    "winter",
+    "repairs",
+  ].join(" ");
+  const interiorCandidateText = interiorUnitText.replace("nightly", "nighttime");
+  const interiorResult = deduplicateUnits(
+    [dedupUnit(interiorUnitText, "interior_subject")],
+    [
+      {
+        ...chat,
+        id: "world_interior_subject",
+        type: "world" as const,
+        sections: {
+          facts: {
+            text: [
+              ...Array.from({ length: 731 }, (_, index) => `interiorfiller${index}`),
+              interiorCandidateText,
+              ...Array.from({ length: 258 }, (_, index) => `interiortail${index}`),
+            ].join(" "),
+          },
+        },
+      } as any,
+    ],
+  );
+  assert.equal(interiorResult.deduplicated.length, 0, "same-section near-duplicates must match at interior offsets");
+
+  const crossSectionResult = deduplicateUnits(
+    [dedupUnit("The observatory gate remains sealed.", "cross_scope_subject", "history")],
+    [
+      {
+        ...chat,
+        id: "world_cross_scope_subject",
+        type: "world" as const,
+        sections: { facts: { text: "The observatory gate remains sealed." } },
+      } as any,
+    ],
+  );
+  assert.equal(crossSectionResult.deduplicated.length, 1, "duplicates must remain section-scoped");
+
+  const crossNoteResult = deduplicateUnits(
+    [dedupUnit("The observatory gate remains sealed.", "cross_note_subject")],
+    [
+      {
+        ...chat,
+        id: "world_other_subject",
+        type: "world" as const,
+        sections: { facts: { text: "The observatory gate remains sealed." } },
+      } as any,
+    ],
+  );
+  assert.equal(crossNoteResult.deduplicated.length, 1, "duplicates must remain target-note scoped");
+
   const subject = (key: string, ref?: { kind: "character"; id: string }) => ({
     key,
     ...(ref ? { ref } : {}),

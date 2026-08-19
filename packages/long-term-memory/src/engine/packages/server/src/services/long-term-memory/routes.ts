@@ -7,6 +7,8 @@ import {
   ltmBulkNoteResultSchema,
   ltmConflictSchema,
   ltmDraftMutationSchema,
+  ltmDraftPreflightRequestSchema,
+  ltmDraftPreflightResponseSchema,
   ltmDraftReviewResponseSchema,
   ltmDraftStatusSchema,
   ltmDebugPhaseSchema,
@@ -63,7 +65,7 @@ import { readLtmIndexState, readLtmNoteSummary } from "./index-state.js";
 import { readLtmActivityEvents } from "./activity-index.js";
 import { CURRENT_LTM_CHUNK_FORMAT_VERSION } from "./chunking.js";
 import { retrieveLongTermMemory } from "./retrieval.js";
-import { applyLongTermMemoryDraft } from "./reconciliation.js";
+import { applyLongTermMemoryDraft, preflightLongTermMemoryDraft } from "./reconciliation.js";
 import { applyLtmScopeLinksToDerivedNotes } from "./scope-links.js";
 import { getLtmGlobalSettings, updateLtmGlobalSettings } from "./settings.js";
 import type { LongTermMemoryDraftStore } from "./draft-store.js";
@@ -1205,6 +1207,27 @@ export function createLongTermMemoryRoutes(runtime: {
         return reply.status(400).send({ error: "Invalid rejected-suggestion ID", code: "ltm_invalid_request" });
       return deleteRejectedSuggestion(parsed.data, root);
     });
+    app.post<{ Params: { id: string }; Body: unknown }>(
+      "/drafts/:id/preflight",
+      { bodyLimit: DRAFT_BODY_LIMIT_BYTES },
+      async (request, reply) => {
+        let result: Awaited<ReturnType<typeof preflightLongTermMemoryDraft>>;
+        try {
+          const id = z.string().uuid().parse(request.params.id);
+          const body = ltmDraftPreflightRequestSchema.parse(request.body ?? {});
+          result = await preflightLongTermMemoryDraft(id, {
+            root,
+            mutationIds: body.mutationIds,
+            editedMutations: body.editedMutations,
+            bulk: body.bulk,
+          });
+        } catch (error) {
+          const result = routeError(error, "Failed to preflight long-term memory draft");
+          return reply.status(result.statusCode).send(result.body);
+        }
+        return ltmDraftPreflightResponseSchema.parse(result);
+      },
+    );
     app.post<{ Params: { id: string }; Body: unknown }>(
       "/drafts/:id/accept",
       { bodyLimit: DRAFT_BODY_LIMIT_BYTES },

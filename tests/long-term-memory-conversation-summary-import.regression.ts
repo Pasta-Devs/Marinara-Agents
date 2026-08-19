@@ -138,6 +138,7 @@ async function main() {
         ["chat-conversation:day:27.07.2026", "chat-conversation:week:27.07.2026", "chat-conversation:day:02.08.2026"],
         "day and week DD.MM.YYYY keys must share one chronological order",
       );
+      assert.ok(candidates.samples.every((candidate) => candidate.importMode === "conversation"));
       const limitedCandidates = await previewPackageInterop(
         { ...request, limit: 2 },
         join(dataDir, "long-term-memory"),
@@ -164,6 +165,11 @@ async function main() {
         new AbortController().signal,
       );
       assert.equal(importedCharacter.imported[0]?.note.modes[0], "roleplay");
+      const characterPreview = await previewPackageInterop(
+        { source: "characters", limit: 100 },
+        join(dataDir, "long-term-memory"),
+      );
+      assert.equal(characterPreview.samples[0]?.importMode, "roleplay");
       const explicitCharacter = await importPackageInterop(
         { source: "characters", sourceIds: ["character-import"], mode: "game", extract: false, limit: 100 },
         join(dataDir, "long-term-memory"),
@@ -172,10 +178,12 @@ async function main() {
       assert.equal(explicitCharacter.imported[0]?.note.modes[0], "game");
 
       const lorebookPreview = await previewPackageLorebooks({ limit: 100 }, join(dataDir, "long-term-memory"));
+      assert.equal(lorebookPreview.books[0]?.entries[0]?.candidates[0]?.importMode, "roleplay");
       const lorebookGamePreview = await previewPackageLorebooks(
         { limit: 100, mode: "game" },
         join(dataDir, "long-term-memory"),
       );
+      assert.equal(lorebookGamePreview.books[0]?.entries[0]?.candidates[0]?.importMode, "game");
       const lorebookSourceId = lorebookPreview.books[0]?.entries[0]?.candidates[0]?.sourceId;
       assert.ok(lorebookSourceId, "lorebook preview must expose an importable candidate");
       assert.equal(lorebookPreview.books[0]?.counts.candidates, 1);
@@ -194,6 +202,30 @@ async function main() {
       );
       assert.equal(explicitLorebook.imported[0]?.note.modes[0], "game");
       assert.equal(explicitLorebook.imported[0]?.extractionStatus, "succeeded");
+
+      for (const [chat, expectedMode] of [
+        [roleplayChat, "roleplay"],
+        [gameChat, "game"],
+      ] as const) {
+        const nativePreview = await previewPackageInterop(
+          { source: "chats", chatId: chat.id, limit: 100 },
+          join(dataDir, "long-term-memory"),
+        );
+        assert.ok(nativePreview.samples.length > 0);
+        assert.ok(nativePreview.samples.every((candidate) => candidate.importMode === expectedMode));
+        const nativeImport = await importPackageInterop(
+          {
+            source: "chats",
+            chatId: chat.id,
+            sourceIds: nativePreview.samples.map((candidate) => candidate.sourceId),
+            extract: false,
+            limit: 100,
+          },
+          join(dataDir, "long-term-memory"),
+          new AbortController().signal,
+        );
+        assert.ok(nativeImport.imported.every((item) => item.note.modes[0] === expectedMode));
+      }
 
       const fixtureByMode: Record<string, typeof conversationChat> = {
         roleplay: roleplayChat,
@@ -222,7 +254,7 @@ async function main() {
       assert.ok(imported.imported.every((item) => item.created));
       const storage = new LongTermMemoryStorage(join(dataDir, "long-term-memory"));
       const notes = await storage.listNotes({ type: "source" });
-      assert.equal(notes.length, 5);
+      assert.equal(notes.length, 7);
       const dayNote = notes.find((note) => note.provenance?.entryId === "day:27.07.2026");
       assert.equal(dayNote?.modes[0], "conversation");
       assert.match(dayNote?.sections.source.text ?? "", /Discussed nikujaga\.\n\nmild\n\nno chili/u);
@@ -235,7 +267,7 @@ async function main() {
       assert.equal(importedAgain.imported.length, 3);
       assert.equal(importedAgain.counts.sourceNotesWritten, 3);
       assert.ok(importedAgain.imported.every((item) => !item.created));
-      assert.equal((await storage.listNotes({ type: "source" })).length, 5);
+      assert.equal((await storage.listNotes({ type: "source" })).length, 7);
     },
     [() => releaseRuntime?.(), () => rm(dataDir, { recursive: true, force: true })],
   );

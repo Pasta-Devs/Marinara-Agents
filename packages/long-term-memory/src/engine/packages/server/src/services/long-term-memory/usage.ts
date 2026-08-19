@@ -59,6 +59,26 @@ export async function readLongTermMemoryInjectionReceipt(chatId: string, root = 
   );
 }
 
+/**
+ * Record a timestamped negative-recall receipt so the client can distinguish
+ * "recall ran and found nothing" from "recall never ran". The usage accounting
+ * path above skips empty injections, so a zero-match recall must write its own
+ * receipt directly.
+ */
+export async function recordLongTermMemoryZeroMatch(chatId: string, root = getLongTermMemoryRoot()) {
+  const trimmed = chatId.trim();
+  if (!trimmed) return null;
+  const receipt = {
+    version: 1,
+    chatId: trimmed,
+    dispatchedAt: new Date().toISOString(),
+    serializedTokenCount: 0,
+    chunks: [],
+  };
+  await writeJsonAtomic(longTermMemoryInjectionReceiptPath(trimmed, root), receipt);
+  return receipt;
+}
+
 const usageLocks = new Map<string, Promise<void>>();
 
 export async function recordLongTermMemoryInjection(
