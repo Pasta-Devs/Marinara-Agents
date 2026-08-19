@@ -131,7 +131,7 @@ export function startNoodleRefreshScheduler(app: FastifyInstance) {
         method: "POST",
         url: "/api/slurp/refresh",
         headers: { [AUTOMATIC_GENERATION_HEADER]: "1" },
-        payload: { mode: "public" },
+        payload: { mode: "noodler" },
       });
       const completedAt = new Date();
       const latest = await noodle.ensureRefreshSchedule(completedAt);

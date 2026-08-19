@@ -26,10 +26,11 @@ export function validateNoodleGeneratedRefresh(
   refresh: NoodleGeneratedRefresh,
   allowedActorHandles: ReadonlySet<string>,
   knownHandles: ReadonlySet<string>,
+  allowEmpty = false,
 ): string | null {
   const hasActivity =
     refresh.posts.length + refresh.interactions.length + refresh.follows.length + refresh.digests.length > 0;
-  if (!hasActivity) return "the response contained no timeline activity";
+  if (!hasActivity) return allowEmpty ? null : "the response contained no timeline activity";
 
   const hasUsableAttribution =
     refresh.posts.some((post) => allowedActorHandles.has(normalizeNoodleHandle(post.authorHandle))) ||
@@ -124,6 +125,24 @@ export function parseNoodleGeneratedRefresh(value: unknown): {
   refresh: NoodleGeneratedRefresh;
   rejected: RejectedNoodleGeneratedRefreshItem[];
 } {
+  if (Array.isArray(value)) {
+    const refresh: NoodleGeneratedRefresh = { posts: [], interactions: [], follows: [], digests: [] };
+    const rejected: RejectedNoodleGeneratedRefreshItem[] = [];
+    value.forEach((row, index) => {
+      let parsedRow = false;
+      for (const collection of Object.keys(collectionSchemas) as RefreshCollection[]) {
+        const parsed = collectionSchemas[collection].safeParse(row);
+        if (parsed.success) {
+          (refresh[collection] as Array<typeof parsed.data>).push(parsed.data);
+          parsedRow = true;
+          break;
+        }
+      }
+      if (!parsedRow) rejected.push({ collection: "posts", index, issueCount: 1 });
+    });
+    return { refresh, rejected };
+  }
+
   const record =
     value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
   if (!record) {
@@ -165,7 +184,7 @@ export function parseNoodleGeneratedRefreshResponse(raw: string): {
   refresh: NoodleGeneratedRefresh;
   rejected: RejectedNoodleGeneratedRefreshItem[];
 } {
-  const parsedValues = parseGameJsonishSequence(raw).flatMap((value) => (Array.isArray(value) ? value : [value]));
+  const parsedValues = parseGameJsonishSequence(raw);
   if (parsedValues.length === 1) return parseNoodleGeneratedRefresh(parsedValues[0]);
 
   const refresh: NoodleGeneratedRefresh = { posts: [], interactions: [], follows: [], digests: [] };

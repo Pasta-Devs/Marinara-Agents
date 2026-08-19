@@ -263,8 +263,7 @@ export function useNoodlerEligibleAccounts(
 }
 
 export type SlurpProfilePost =
-  | { managed: NoodlerManagedPost; viewerPost: NoodlerPostView | null }
-  | { viewerPost: NoodlerPostView };
+  { managed: NoodlerManagedPost; viewerPost: NoodlerPostView | null } | { viewerPost: NoodlerPostView };
 
 export function useNoodlerPosts(accountId: string | null, personaId: string | null) {
   return useQuery({
@@ -704,6 +703,8 @@ export function useNoodlerViewer(personaId: string | null, enabled = true) {
     enabled: enabled && Boolean(personaId),
     staleTime: 10_000,
     refetchOnMount: "always",
+    refetchInterval: enabled && personaId ? 30_000 : false,
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -714,6 +715,8 @@ export function useNoodlerViewer(personaId: string | null, enabled = true) {
  */
 /** Poll the badge without downloading the complete viewer feed or historical media metadata. */
 export function useNoodlerUnseenCount(personaId: string | null, enabled = true) {
+  const qc = useQueryClient();
+  const previousCount = useRef<number | null>(null);
   const { data } = useQuery({
     queryKey: noodleKeys.noodlerUnseenCount(personaId ?? "none"),
     queryFn: () =>
@@ -723,7 +726,16 @@ export function useNoodlerUnseenCount(personaId: string | null, enabled = true) 
     refetchInterval: enabled && personaId ? 30_000 : false,
     refetchIntervalInBackground: false,
   });
-  return Math.max(0, Math.floor(data?.count ?? 0));
+  const count = Math.max(0, Math.floor(data?.count ?? 0));
+  useEffect(() => {
+    if (!enabled || !personaId || previousCount.current === null) {
+      previousCount.current = count;
+      return;
+    }
+    if (count > previousCount.current) void qc.invalidateQueries({ queryKey: noodleKeys.viewer(personaId) });
+    previousCount.current = count;
+  }, [count, enabled, personaId, qc]);
+  return count;
 }
 
 export function useMarkNoodlerFeedSeen() {
