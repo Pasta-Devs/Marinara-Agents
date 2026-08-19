@@ -1211,21 +1211,21 @@ export function createLongTermMemoryRoutes(runtime: {
       "/drafts/:id/preflight",
       { bodyLimit: DRAFT_BODY_LIMIT_BYTES },
       async (request, reply) => {
+        let result: Awaited<ReturnType<typeof preflightLongTermMemoryDraft>>;
         try {
           const id = z.string().uuid().parse(request.params.id);
           const body = ltmDraftPreflightRequestSchema.parse(request.body ?? {});
-          return ltmDraftPreflightResponseSchema.parse(
-            await preflightLongTermMemoryDraft(id, {
-              root,
-              mutationIds: body.mutationIds,
-              editedMutations: body.editedMutations,
-              bulk: body.bulk,
-            }),
-          );
+          result = await preflightLongTermMemoryDraft(id, {
+            root,
+            mutationIds: body.mutationIds,
+            editedMutations: body.editedMutations,
+            bulk: body.bulk,
+          });
         } catch (error) {
           const result = routeError(error, "Failed to preflight long-term memory draft");
           return reply.status(result.statusCode).send(result.body);
         }
+        return ltmDraftPreflightResponseSchema.parse(result);
       },
     );
     app.post<{ Params: { id: string }; Body: unknown }>(

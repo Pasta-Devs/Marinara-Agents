@@ -1,17 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronRight, Loader2, X } from "lucide-react";
-import type {
-  LtmDraftMutation,
-  LtmDraftPreflightResponse,
-  LtmDraftReviewDraft,
-  LtmDraftReviewMutation,
-  LtmDraftReviewResponse,
-  LtmExtractionDropReason,
-  LtmImportance,
-  LtmNote,
-  LtmRejectedSuggestion,
-  LtmRejectedSuggestionsResponse,
+import {
+  ltmDraftMutationSchema,
+  type LtmDraftMutation,
+  type LtmDraftPreflightResponse,
+  type LtmDraftReviewDraft,
+  type LtmDraftReviewMutation,
+  type LtmDraftReviewResponse,
+  type LtmExtractionDropReason,
+  type LtmImportance,
+  type LtmNote,
+  type LtmRejectedSuggestion,
+  type LtmRejectedSuggestionsResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { invalidateLtmQueries, queryKeys, request, requestAllNotes } from "./api";
 import { humanizeLabel, labelKeys, localizedLabel } from "./display-labels";
@@ -69,11 +70,13 @@ type BatchResult = {
 };
 
 type PersistedReviewState = {
-  version: 2;
+  version: 3;
   chatId: string | null;
   drafts: Record<
     string,
     {
+      savedAt: number;
+      draftFingerprint: string;
       contextFingerprint: string;
       mutationFingerprints: Array<[string, string]>;
       selectedIds: string[];
@@ -85,7 +88,12 @@ type PersistedReviewState = {
 type PersistedDraftState = PersistedReviewState["drafts"][string];
 
 const REVIEW_STATE_STORAGE_KEY = "marinara_ltm_review_state";
-const MAX_EDITABLE_TEXT_LENGTH = 20_000;
+const REVIEW_STATE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_APPEND_TEXT_LENGTH = 20_000;
+const MAX_SECTION_TEXT_LENGTH = 24_000;
+const CONFLICT_PREVIEW_LIMIT = 3;
+const CONFLICT_TEXT_PREVIEW_LENGTH = 280;
+const NEAR_TEXT_LIMIT_THRESHOLD = 500;
 
 const importanceOptions: LtmImportance[] = ["critical", "major", "moderate", "minor"];
 
@@ -326,54 +334,18 @@ function selectedEditIsValid(mutation: LtmDraftMutation) {
   return true;
 }
 
-function isPersistedMutation(value: unknown): value is LtmDraftMutation {
-  if (!value || typeof value !== "object") return false;
-  const mutation = value as Record<string, unknown>;
-  const hasSectionText = (section: unknown) =>
-    Boolean(section && typeof section === "object" && typeof (section as Record<string, unknown>).text === "string");
-  if (
-    typeof mutation.id !== "string" ||
-    typeof mutation.kind !== "string" ||
-    typeof mutation.summary !== "string" ||
-    !Array.isArray(mutation.evidence) ||
-    typeof mutation.risk !== "string" ||
-    typeof mutation.confidence !== "number"
-  )
-    return false;
-  if (mutation.kind === "create_note") {
-    const note = mutation.note as Record<string, unknown> | undefined;
-    return Boolean(
-      note &&
-      typeof note === "object" &&
-      note.sections &&
-      typeof note.sections === "object" &&
-      Object.values(note.sections).every(hasSectionText),
-    );
-  }
-  if (mutation.kind === "append_section") return typeof mutation.text === "string";
-  if (mutation.kind === "update_section") return hasSectionText(mutation.section);
-  if (mutation.kind === "add_link") return Boolean(mutation.link && typeof mutation.link === "object");
-  if (mutation.kind === "set_keywords") return Array.isArray(mutation.keywords);
-  if (mutation.kind === "set_status") return typeof mutation.status === "string";
-  if (mutation.kind === "set_subjects") return Array.isArray(mutation.subjects);
-  return [
-    "create_note",
-    "append_section",
-    "update_section",
-    "add_link",
-    "set_keywords",
-    "set_status",
-    "set_subjects",
-  ].includes(mutation.kind);
+function parsePersistedMutation(value: unknown): LtmDraftMutation | null {
+  const parsed = ltmDraftMutationSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }
 
 function mutationHasOverlongText(mutation: LtmDraftMutation) {
   return mutation.kind === "append_section"
-    ? mutation.text.length > MAX_EDITABLE_TEXT_LENGTH
+    ? mutation.text.length > MAX_APPEND_TEXT_LENGTH
     : mutation.kind === "update_section"
-      ? mutation.section.text.length > MAX_EDITABLE_TEXT_LENGTH
+      ? mutation.section.text.length > MAX_SECTION_TEXT_LENGTH
       : mutation.kind === "create_note"
-        ? Object.values(mutation.note.sections).some((section) => section.text.length > MAX_EDITABLE_TEXT_LENGTH)
+        ? Object.values(mutation.note.sections).some((section) => section.text.length > MAX_SECTION_TEXT_LENGTH)
         : false;
 }
 
@@ -381,59 +353,116 @@ function reviewStateStorageKey(chatId: string | null | undefined) {
   return `${REVIEW_STATE_STORAGE_KEY}:${chatId ?? "no-chat"}`;
 }
 
-function readPersistedReviewState(key: string, chatId: string | null): PersistedReviewState | null {
+function safeParse(value: string): unknown {
   try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<PersistedReviewState>;
-    if (
-      parsed.version !== 2 ||
-      parsed.chatId !== chatId ||
-      !parsed.drafts ||
-      typeof parsed.drafts !== "object" ||
-      Array.isArray(parsed.drafts)
-    )
-      return null;
-    const drafts = Object.fromEntries(
-      Object.entries(parsed.drafts).filter(([, value]) => {
-        if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-        const draft = value as Partial<PersistedDraftState>;
-        return (
-          typeof draft.contextFingerprint === "string" &&
-          Array.isArray(draft.mutationFingerprints) &&
-          draft.mutationFingerprints.every(
-            (entry) =>
-              Array.isArray(entry) &&
-              entry.length === 2 &&
-              typeof entry[0] === "string" &&
-              typeof entry[1] === "string",
-          ) &&
-          Array.isArray(draft.selectedIds) &&
-          draft.selectedIds.every((id) => typeof id === "string") &&
-          Array.isArray(draft.editedMutations) &&
-          draft.editedMutations.every(
-            (entry) =>
-              Array.isArray(entry) &&
-              entry.length === 2 &&
-              typeof entry[0] === "string" &&
-              entry[1] &&
-              typeof entry[1] === "object",
-          )
-        );
-      }),
-    );
-    return { ...parsed, drafts } as PersistedReviewState;
+    return JSON.parse(value) as unknown;
   } catch {
     return null;
   }
 }
 
-function writePersistedReviewState(key: string, state: PersistedReviewState | null) {
+function getReviewStateStorage(): Storage | null {
   try {
-    if (!state || !Object.keys(state.drafts).length) window.localStorage.removeItem(key);
-    else window.localStorage.setItem(key, JSON.stringify(state));
+    return window.localStorage;
   } catch {
-    // Local storage is an optional recovery aid; review actions remain usable when it is unavailable.
+    return null;
+  }
+}
+
+function isPersistedReviewState(value: unknown, chatId: string | null): value is PersistedReviewState {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const parsed = value as Partial<PersistedReviewState>;
+  if (
+    parsed.version !== 3 ||
+    parsed.chatId !== chatId ||
+    !parsed.drafts ||
+    typeof parsed.drafts !== "object" ||
+    Array.isArray(parsed.drafts)
+  )
+    return false;
+  return Object.values(parsed.drafts).every((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const draft = value as Partial<PersistedDraftState>;
+    return (
+      typeof draft.savedAt === "number" &&
+      Number.isFinite(draft.savedAt) &&
+      draft.savedAt <= Date.now() &&
+      Date.now() - draft.savedAt <= REVIEW_STATE_MAX_AGE_MS &&
+      typeof draft.draftFingerprint === "string" &&
+      typeof draft.contextFingerprint === "string" &&
+      Array.isArray(draft.mutationFingerprints) &&
+      draft.mutationFingerprints.every(
+        (entry) =>
+          Array.isArray(entry) && entry.length === 2 && typeof entry[0] === "string" && typeof entry[1] === "string",
+      ) &&
+      Array.isArray(draft.selectedIds) &&
+      draft.selectedIds.every((id) => typeof id === "string") &&
+      Array.isArray(draft.editedMutations) &&
+      draft.editedMutations.every(
+        (entry) =>
+          Array.isArray(entry) &&
+          entry.length === 2 &&
+          typeof entry[0] === "string" &&
+          entry[1] &&
+          typeof entry[1] === "object",
+      )
+    );
+  });
+}
+
+function readPersistedReviewState(key: string, chatId: string | null) {
+  const storage = getReviewStateStorage();
+  if (!storage) return { state: null, error: "unavailable" as const };
+  try {
+    const raw = storage.getItem(key);
+    if (!raw) return { state: null, error: null };
+    const parsed = safeParse(raw);
+    if (!isPersistedReviewState(parsed, chatId)) {
+      storage.removeItem(key);
+      return { state: null, error: null };
+    }
+    return { state: parsed, error: null };
+  } catch {
+    return { state: null, error: "failed" as const };
+  }
+}
+
+function writePersistedReviewState(key: string, state: PersistedReviewState | null) {
+  const storage = getReviewStateStorage();
+  if (!storage) return "unavailable" as const;
+  try {
+    if (!state || !Object.keys(state.drafts).length) storage.removeItem(key);
+    else storage.setItem(key, JSON.stringify(state));
+    return "ok" as const;
+  } catch {
+    return "failed" as const;
+  }
+}
+
+function cleanupPersistedReviewStates() {
+  const storage = getReviewStateStorage();
+  if (!storage) return;
+  try {
+    for (let index = storage.length - 1; index >= 0; index -= 1) {
+      const key = storage.key(index);
+      if (!key?.startsWith(`${REVIEW_STATE_STORAGE_KEY}:`)) continue;
+      const value = safeParse(storage.getItem(key) ?? "");
+      if (!value || typeof value !== "object") {
+        storage.removeItem(key);
+        continue;
+      }
+      const state = value as { drafts?: Record<string, { savedAt?: unknown }> };
+      if (
+        !state.drafts ||
+        Object.values(state.drafts).some(
+          (draft) => typeof draft.savedAt !== "number" || Date.now() - draft.savedAt > REVIEW_STATE_MAX_AGE_MS,
+        )
+      ) {
+        storage.removeItem(key);
+      }
+    }
+  } catch {
+    // Local storage is optional; callers surface the failure when their own read/write fails.
   }
 }
 
@@ -462,12 +491,65 @@ function mutationFingerprint(mutation: LtmDraftMutation) {
   return JSON.stringify(mutation);
 }
 
-function remainingCharacters(value: string) {
-  return MAX_EDITABLE_TEXT_LENGTH - value.length;
+function remainingCharacters(value: string, limit: number) {
+  return limit - value.length;
 }
 
 function boundedTrim(value: string, max: number) {
   return value.trim().slice(0, max);
+}
+
+function previewConflictText(value: string) {
+  return value.length > CONFLICT_TEXT_PREVIEW_LENGTH ? `${value.slice(0, CONFLICT_TEXT_PREVIEW_LENGTH)}...` : value;
+}
+
+function ConflictValue({ label, value }: { label: string; value: string }) {
+  if (value.length <= CONFLICT_TEXT_PREVIEW_LENGTH) return <>{label.replace("{{value}}", value)}</>;
+  return (
+    <details>
+      <summary className="cursor-pointer">{label.replace("{{value}}", previewConflictText(value))}</summary>
+      <p className="mt-1 break-words">{value}</p>
+    </details>
+  );
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException
+    ? error.name === "AbortError"
+    : error instanceof Error && error.name === "AbortError";
+}
+
+function ReviewProgress({
+  sources,
+  pending,
+  ready,
+  blocked,
+  reviewed,
+  remaining,
+}: {
+  sources: number;
+  pending: number;
+  ready: number;
+  blocked: number;
+  reviewed: number;
+  remaining: number;
+}) {
+  const { t: localizeUi, locale } = useLtmTranslation();
+  return (
+    <span data-ltm-review-summary data-ltm-review-progress className="text-xs text-[var(--muted-foreground)]">
+      {localizeUi("ui.longTermMemory.reviewqueue.reviewSummary", {
+        sources,
+        source:
+          selectLtmPluralForm(locale, sources) === "one"
+            ? localizeUi("ui.longTermMemory.reviewqueue.source")
+            : localizeUi("ui.longTermMemory.reviewqueue.sources"),
+        pending,
+        ready,
+        blocked,
+      })}
+      {localizeUi("ui.longTermMemory.reviewqueue.reviewProgress", { reviewed, remaining })}
+    </span>
+  );
 }
 
 function recoveryLabel(
@@ -609,7 +691,35 @@ function MutationEditor({
   canEditTitle: boolean;
   onChange: (mutation: LtmDraftMutation) => void;
 }) {
-  const { t: localizeUi } = useLtmTranslation();
+  const { t: localizeUi, locale } = useLtmTranslation();
+  const counterId = useId();
+  const renderCounter = (id: string, value: string, limit: number) => {
+    const count = Math.max(0, remainingCharacters(value, limit));
+    const key =
+      selectLtmPluralForm(locale, count) === "one"
+        ? "ui.longTermMemory.reviewqueue.charactersRemainingOne"
+        : "ui.longTermMemory.reviewqueue.charactersRemainingOther";
+    return (
+      <>
+        <span
+          id={id}
+          data-ltm-character-counter
+          className={`block text-right text-[0.6875rem] font-normal ${
+            count <= NEAR_TEXT_LIMIT_THRESHOLD
+              ? "text-[var(--marinara-editor-warning)]"
+              : "text-[var(--muted-foreground)]"
+          }`}
+        >
+          {localizeUi(key, { count })}
+        </span>
+        {count <= NEAR_TEXT_LIMIT_THRESHOLD ? (
+          <span aria-live="polite" className="sr-only">
+            {localizeUi(key, { count })}
+          </span>
+        ) : null}
+      </>
+    );
+  };
   if (mutation.kind === "create_note") {
     return (
       <div data-ltm-mutation-editor className="space-y-3 pt-3">
@@ -647,7 +757,8 @@ function MutationEditor({
               <span>{humanizeLabel(sectionKey)}</span>
               <textarea
                 className={`${inputClass} min-h-24 py-2`}
-                maxLength={MAX_EDITABLE_TEXT_LENGTH}
+                maxLength={MAX_SECTION_TEXT_LENGTH}
+                aria-describedby={`${counterId}-${sectionKey}`}
                 value={section.text}
                 onChange={(event) =>
                   onChange({
@@ -680,14 +791,7 @@ function MutationEditor({
                   })
                 }
               />
-              <span
-                aria-live="polite"
-                className="block text-right text-[0.6875rem] font-normal text-[var(--muted-foreground)]"
-              >
-                {localizeUi("ui.longTermMemory.reviewqueue.charactersRemaining", {
-                  count: remainingCharacters(section.text),
-                })}
-              </span>
+              {renderCounter(`${counterId}-${sectionKey}`, section.text, MAX_SECTION_TEXT_LENGTH)}
             </label>
             <ImportanceField
               value={section.importance}
@@ -719,7 +823,8 @@ function MutationEditor({
           </span>
           <textarea
             className={`${inputClass} min-h-24 py-2`}
-            maxLength={MAX_EDITABLE_TEXT_LENGTH}
+            maxLength={MAX_APPEND_TEXT_LENGTH}
+            aria-describedby={`${counterId}-text`}
             value={mutation.text}
             onChange={(event) =>
               onChange({
@@ -734,14 +839,7 @@ function MutationEditor({
               })
             }
           />
-          <span
-            aria-live="polite"
-            className="block text-right text-[0.6875rem] font-normal text-[var(--muted-foreground)]"
-          >
-            {localizeUi("ui.longTermMemory.reviewqueue.charactersRemaining", {
-              count: remainingCharacters(mutation.text),
-            })}
-          </span>
+          {renderCounter(`${counterId}-text`, mutation.text, MAX_APPEND_TEXT_LENGTH)}
         </label>
         <ImportanceField value={mutation.importance} onChange={(importance) => onChange({ ...mutation, importance })} />
       </div>
@@ -757,7 +855,8 @@ function MutationEditor({
           </span>
           <textarea
             className={`${inputClass} min-h-24 py-2`}
-            maxLength={MAX_EDITABLE_TEXT_LENGTH}
+            maxLength={MAX_SECTION_TEXT_LENGTH}
+            aria-describedby={`${counterId}-text`}
             value={mutation.section.text}
             onChange={(event) =>
               onChange({
@@ -778,14 +877,7 @@ function MutationEditor({
               })
             }
           />
-          <span
-            aria-live="polite"
-            className="block text-right text-[0.6875rem] font-normal text-[var(--muted-foreground)]"
-          >
-            {localizeUi("ui.longTermMemory.reviewqueue.charactersRemaining", {
-              count: remainingCharacters(mutation.section.text),
-            })}
-          </span>
+          {renderCounter(`${counterId}-text`, mutation.section.text, MAX_SECTION_TEXT_LENGTH)}
         </label>
         <ImportanceField
           value={mutation.section.importance}
@@ -1007,14 +1099,21 @@ export default function ReviewQueue({
     text: string;
   } | null>(null);
   const [reviewStateMessage, setReviewStateMessage] = useState<string | null>(null);
+  const [reviewStatePersisted, setReviewStatePersisted] = useState(true);
+  const [reviewStateMismatch, setReviewStateMismatch] = useState(false);
+  const batchControllerRef = useRef<AbortController | null>(null);
   const reviewStateKey = reviewStateStorageKey(props.chatId);
-  const reviewDataSignature = review.data
-    ? JSON.stringify(
-        review.data.sources.flatMap((source) =>
-          source.drafts.map((item) => [item.draft.id, draftReviewFingerprint(item)]),
-        ),
-      )
-    : null;
+  const reviewDataSignature = useMemo(
+    () =>
+      review.data
+        ? JSON.stringify(
+            review.data.sources.flatMap((source) =>
+              source.drafts.map((item) => [item.draft.id, draftReviewFingerprint(item)]),
+            ),
+          )
+        : null,
+    [review.data],
+  );
 
   useEffect(() => {
     setSelectedIds(new Set());
@@ -1023,6 +1122,7 @@ export default function ReviewQueue({
     setResult(null);
     setReviewStateHydrated(null);
     setReviewStateMessage(null);
+    setReviewStateMismatch(false);
     setPreflightRows(new Map());
     setPreflightByDraftId(new Map());
     setPreflightKey(null);
@@ -1030,16 +1130,25 @@ export default function ReviewQueue({
     setExpandedMutationIds(new Set());
   }, [props.chatId]);
   useEffect(() => {
+    if (!review.isSuccess) return;
+    cleanupPersistedReviewStates();
+  }, [review.isSuccess]);
+  useEffect(
+    () => () => {
+      batchControllerRef.current?.abort();
+      batchControllerRef.current = null;
+    },
+    [],
+  );
+  useEffect(() => {
     setSourceCollapsed(false);
-    setSelectedDraftId((current) =>
-      selectedReviewSource?.drafts.some((item) => item.draft.id === current) ? current : null,
-    );
+    setSelectedDraftId(null);
     setDetailsOpen(false);
     setExpandedMutationIds(new Set());
     setPreflightRows(new Map());
     setPreflightByDraftId(new Map());
     setPreflightKey(null);
-  }, [effectiveSourceId, selectedReviewSource]);
+  }, [effectiveSourceId, selectedReviewSource?.sourceNoteId]);
   useEffect(() => {
     setDetailsOpen(false);
     setExpandedMutationIds(new Set());
@@ -1049,10 +1158,24 @@ export default function ReviewQueue({
   }, [selectedDraft?.draft.id]);
 
   useEffect(() => {
-    if (!review.isSuccess || !reviewDataSignature) return;
+    if (!review.isSuccess) return;
+    if (!reviewDataSignature) {
+      setReviewStatePersisted(writePersistedReviewState(reviewStateKey, null) === "ok");
+      setReviewStateHydrated(`${reviewStateKey}:empty`);
+      return;
+    }
     const hydrationKey = `${reviewStateKey}:${reviewDataSignature}`;
     if (reviewStateHydrated === hydrationKey) return;
-    const persisted = readPersistedReviewState(reviewStateKey, props.chatId ?? null);
+    if (selectedIds.size || editedById.size) {
+      setSelectedIds(new Set());
+      setEditedById(new Map());
+      setReviewStateMismatch(true);
+      setReviewStateMessage(localizeUi("ui.longTermMemory.reviewqueue.savedReviewStateDiscarded"));
+      setReviewStateHydrated(hydrationKey);
+      return;
+    }
+    const persistedResult = readPersistedReviewState(reviewStateKey, props.chatId ?? null);
+    const persisted = persistedResult.state;
     const restoredSelectedIds = new Set<string>();
     const restoredEdits = new Map<string, LtmDraftMutation>();
     let discardedState = false;
@@ -1064,6 +1187,7 @@ export default function ReviewQueue({
       if (
         !current ||
         current.draft.status !== "pending" ||
+        saved.draftFingerprint !== draftReviewFingerprint(current) ||
         saved.contextFingerprint !== draftReviewContextFingerprint(current)
       ) {
         discardedState = true;
@@ -1085,23 +1209,37 @@ export default function ReviewQueue({
           discardedState = true;
           continue;
         }
-        if (isPersistedMutation(mutation) && mutation.id === id) restoredEdits.set(id, mutation);
+        const parsed = parsePersistedMutation(mutation);
+        if (parsed?.id === id) restoredEdits.set(id, parsed);
+        else discardedState = true;
       }
     }
     setSelectedIds(restoredSelectedIds);
     setEditedById(restoredEdits);
     setReviewStateMessage(
-      discardedState ? localizeUi("ui.longTermMemory.reviewqueue.savedReviewStateDiscarded") : null,
+      persistedResult.error
+        ? localizeUi(
+            persistedResult.error === "unavailable"
+              ? "ui.longTermMemory.reviewqueue.reviewStateUnavailable"
+              : "ui.longTermMemory.reviewqueue.reviewStateSaveFailed",
+          )
+        : discardedState
+          ? localizeUi("ui.longTermMemory.reviewqueue.savedReviewStateDiscarded")
+          : null,
     );
+    setReviewStatePersisted(!discardedState && !persistedResult.error);
+    setReviewStateMismatch(discardedState);
     setReviewStateHydrated(hydrationKey);
   }, [
     localizeUi,
     props.chatId,
-    review.data,
     review.isSuccess,
+    review.data,
     reviewDataSignature,
     reviewStateHydrated,
     reviewStateKey,
+    selectedIds.size,
+    editedById.size,
   ]);
 
   useEffect(() => {
@@ -1120,19 +1258,31 @@ export default function ReviewQueue({
       const editedMutations = [...editedById].filter(([id]) => mutationIds.has(id));
       if (selected.length || editedMutations.length)
         drafts[draftId] = {
+          savedAt: Date.now(),
+          draftFingerprint: draftReviewFingerprint(item),
           contextFingerprint: draftReviewContextFingerprint(item),
           mutationFingerprints: pendingMutations.map((mutation) => [mutation.id, mutationFingerprint(mutation)]),
           selectedIds: selected,
           editedMutations,
         };
     }
-    writePersistedReviewState(reviewStateKey, {
-      version: 2,
+    const persisted = writePersistedReviewState(reviewStateKey, {
+      version: 3,
       chatId: props.chatId ?? null,
       drafts,
     });
+    setReviewStatePersisted(persisted === "ok");
+    if (persisted !== "ok")
+      setReviewStateMessage(
+        localizeUi(
+          persisted === "unavailable"
+            ? "ui.longTermMemory.reviewqueue.reviewStateUnavailable"
+            : "ui.longTermMemory.reviewqueue.reviewStateSaveFailed",
+        ),
+      );
   }, [
     editedById,
+    localizeUi,
     props.chatId,
     review.data,
     review.isSuccess,
@@ -1142,40 +1292,7 @@ export default function ReviewQueue({
     selectedIds,
   ]);
 
-  const { rowByMutationId, rows } = useMemo(() => {
-    const rowByMutationId = new Map<string, ReviewRow>();
-    for (const source of review.data?.sources ?? []) {
-      for (const target of source.targets) {
-        for (const row of target.rows) {
-          rowByMutationId.set(row.mutation.id, {
-            sourceNoteId: source.sourceNoteId,
-            ...row,
-            targetId: target.noteId,
-            targetTitle: target.title,
-            targetType: target.noteType,
-          });
-        }
-      }
-      for (const item of source.drafts) {
-        for (const mutation of item.draft.mutations) {
-          if (!rowByMutationId.has(mutation.id)) {
-            rowByMutationId.set(mutation.id, {
-              sourceNoteId: source.sourceNoteId,
-              draftId: item.draft.id,
-              mutation,
-              disposition: "unavailable",
-              diagnostics: [],
-              changes: [],
-              targetId: mutationTarget(mutation),
-              targetTitle: mutation.kind === "create_note" ? mutation.note.title : undefined,
-              targetType: mutation.kind === "create_note" ? mutation.note.type : undefined,
-            });
-          }
-        }
-      }
-    }
-    return { rowByMutationId, rows: [...rowByMutationId.values()] };
-  }, [review.data]);
+  const { rowByMutationId, rows } = useMemo(() => buildReviewRows(review.data), [review.data]);
   const mutationDisplayLabels = useMemo(
     () =>
       new Map(
@@ -1227,7 +1344,10 @@ export default function ReviewQueue({
       localizeUi("ui.longTermMemory.reviewqueue.thisSource"),
     );
   const reviewDraftTitle = (item: LtmDraftReviewDraft) => draftDisplayTitle(item, localizeUi);
-  useEffect(() => onDirtyChange?.(false), [onDirtyChange]);
+  useEffect(
+    () => onDirtyChange?.(reviewStateMismatch || (!reviewStatePersisted && editedById.size > 0)),
+    [editedById.size, onDirtyChange, reviewStateMismatch, reviewStatePersisted],
+  );
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   const sourceRows = useMemo(
@@ -1253,7 +1373,9 @@ export default function ReviewQueue({
   for (const source of review.data?.sources ?? []) {
     for (const item of source.drafts) {
       if (item.freshness !== "fresh" || item.blockReasons.length) continue;
-      for (const mutation of item.draft.mutations) eligibleIds.add(mutation.id);
+      for (const mutation of item.draft.mutations) {
+        if (!item.draft.appliedMutationIds?.includes(mutation.id)) eligibleIds.add(mutation.id);
+      }
     }
   }
   const eligibleSelectedRows = selectedRows.filter((row) => eligibleIds.has(row.mutation.id));
@@ -1269,6 +1391,31 @@ export default function ReviewQueue({
   });
   const allSelected = activeDraftRows.length > 0 && selectedRows.length === activeDraftRows.length;
   const someSelected = selectedRows.length > 0 && !allSelected;
+  const reviewMutationIds = useMemo(
+    () =>
+      new Set(
+        review.data?.sources.flatMap((source) =>
+          source.drafts.flatMap((item) =>
+            item.draft.mutations
+              .filter((mutation) => !item.draft.appliedMutationIds?.includes(mutation.id))
+              .map((mutation) => mutation.id),
+          ),
+        ) ?? [],
+      ),
+    [review.data],
+  );
+  const reviewProgress = {
+    sources: review.data?.counts.sources ?? 0,
+    pending: reviewMutationIds.size,
+    ready: eligibleIds.size,
+    blocked: review.data?.counts.blockedDrafts ?? 0,
+    reviewed: reviewedIds.size,
+    remaining: Math.max(
+      0,
+      (review.data?.counts.mutations ?? 0) - [...reviewedIds].filter((id) => reviewMutationIds.has(id)).length,
+    ),
+  };
+  const preflightApplyDisabled = result?.phase === "preflight" && result.ready === 0;
 
   const clearPreflight = () => {
     setPreflightRows(new Map());
@@ -1350,6 +1497,7 @@ export default function ReviewQueue({
     explicitRows?: ReviewRow[],
     allRows: readonly ReviewRow[] = rows,
     allRowByMutationId: ReadonlyMap<string, ReviewRow> = rowByMutationId,
+    retrying = false,
   ) => {
     const applicableRows = explicitRows ?? (action === "accept" ? eligibleSelectedRows : skippableSelectedRows);
     if (!applicableRows.length) return;
@@ -1388,6 +1536,9 @@ export default function ReviewQueue({
     }
     const acceptRequests = action === "accept" ? buildAcceptRequests(applicableRows, allRows) : [];
     const requestKey = action === "accept" ? acceptRequestKey(acceptRequests) : null;
+    batchControllerRef.current?.abort();
+    const controller = new AbortController();
+    batchControllerRef.current = controller;
     if (action === "accept" && preflightKey !== requestKey) {
       setRunning("accept");
       setResult(null);
@@ -1407,11 +1558,13 @@ export default function ReviewQueue({
                 ...(requestBody.editedMutations.length ? { editedMutations: requestBody.editedMutations } : {}),
                 bulk: requestBody.mutationIds.length > 1,
               },
+              controller.signal,
             );
             preflights.set(requestBody.draftId, response);
             response.rows.forEach((row) => nextRows.set(row.mutationId, row));
             response.blockedMutationIds.forEach((id) => blockedMutationIds.add(id));
           } catch (error) {
+            if (isAbortError(error)) return;
             requestBody.mutationIds.forEach((id) => failedMutationIds.add(id));
             messages.push(
               localizeUi("ui.longTermMemory.reviewqueue.draftActionFailed", {
@@ -1420,16 +1573,13 @@ export default function ReviewQueue({
               }),
             );
           }
+          if (controller.signal.aborted) return;
         }
         setPreflightByDraftId(preflights);
         setPreflightRows(nextRows);
         setPreflightKey(messages.length ? null : requestKey);
         setExpandedMutationIds(
-          new Set(
-            [...nextRows.values()]
-              .filter((row) => row.status === "blocked" || row.conflicts.length)
-              .map((row) => row.mutationId),
-          ),
+          new Set([...nextRows.values()].filter((row) => row.status === "blocked").map((row) => row.mutationId)),
         );
         setResult({
           action: "accepted",
@@ -1443,7 +1593,9 @@ export default function ReviewQueue({
             0,
           ),
           indexRebuildFailures: [],
-          messages,
+          messages: retrying
+            ? [localizeUi("ui.longTermMemory.reviewqueue.retryPreflightReady"), ...messages]
+            : messages,
           cascadeMutationLabels: [],
           savedMemoryIds: [],
           failedMutationIds: [...failedMutationIds],
@@ -1452,7 +1604,10 @@ export default function ReviewQueue({
           blockedMutationIds: [...blockedMutationIds],
         });
       } finally {
-        setRunning(null);
+        if (!controller.signal.aborted && batchControllerRef.current === controller) {
+          batchControllerRef.current = null;
+          setRunning(null);
+        }
       }
       return;
     }
@@ -1478,16 +1633,21 @@ export default function ReviewQueue({
             const readyIds = new Set(preflight.readyMutationIds);
             if (!readyIds.size) continue;
             const requestBody = acceptRequests.find((request) => request.draftId === draftId)!;
-            const response = await request<ApplyDraftResponse>(`/drafts/${draftId}/accept`, "POST", {
-              mutationIds: [...readyIds],
-              ...(requestBody.editedMutations.length
-                ? { editedMutations: requestBody.editedMutations.filter((mutation) => readyIds.has(mutation.id)) }
-                : {}),
-            });
+            const response = await request<ApplyDraftResponse>(
+              `/drafts/${draftId}/accept`,
+              "POST",
+              {
+                mutationIds: [...readyIds],
+                ...(requestBody.editedMutations.length
+                  ? { editedMutations: requestBody.editedMutations.filter((mutation) => readyIds.has(mutation.id)) }
+                  : {}),
+              },
+              controller.signal,
+            );
             const applied = new Set(response.appliedMutationIds);
             const skipped = new Set(response.skippedMutationIds);
             response.skippedMutationIds.forEach((id) => remainingIds.add(id));
-            mutationIds.forEach((id) => {
+            readyIds.forEach((id) => {
               if (applied.has(id)) completedIds.add(id);
               else if (skipped.has(id)) return;
               else failedIds.add(id);
@@ -1498,7 +1658,12 @@ export default function ReviewQueue({
             });
             if (response.indexRebuild.status === "failed") indexRebuildFailures.push(response.indexRebuild.error);
           } else {
-            const response = await request<SkipDraftResponse>(`/drafts/${draftId}/skip`, "POST", { mutationIds });
+            const response = await request<SkipDraftResponse>(
+              `/drafts/${draftId}/skip`,
+              "POST",
+              { mutationIds },
+              controller.signal,
+            );
             const deleted = new Set(response.mutationIds);
             response.mutationIds.forEach((id) => {
               completedIds.add(id);
@@ -1514,8 +1679,13 @@ export default function ReviewQueue({
           }
           if (mutationIds.some((id) => failedIds.has(id))) failedDraftIds.add(draftId);
         } catch (error) {
-          mutationIds.forEach((id) => failedIds.add(id));
-          failedDraftIds.add(draftId);
+          if (isAbortError(error)) return;
+          const failedRequestIds =
+            action === "accept"
+              ? new Set(preflightByDraftId.get(draftId)?.readyMutationIds ?? [])
+              : new Set(mutationIds);
+          failedRequestIds.forEach((id) => failedIds.add(id));
+          if (failedRequestIds.size) failedDraftIds.add(draftId);
           messages.push(
             localizeUi("ui.longTermMemory.reviewqueue.draftActionFailed", {
               message:
@@ -1523,6 +1693,7 @@ export default function ReviewQueue({
             }),
           );
         }
+        if (controller.signal.aborted) return;
       }
       setSelectedIds((current) => {
         const next = new Set(current);
@@ -1572,14 +1743,18 @@ export default function ReviewQueue({
         ]);
       }
     } finally {
-      setRunning(null);
+      if (!controller.signal.aborted && batchControllerRef.current === controller) {
+        batchControllerRef.current = null;
+        setRunning(null);
+      }
     }
   };
 
+  const retryInFlightRef = useRef(false);
   const retryFailed = async () => {
-    if (!result?.failedMutationIds.length || running !== null) return;
+    if (!result?.failedMutationIds.length || running !== null || retryInFlightRef.current) return;
     const action = result.action === "accepted" ? "accept" : "skip";
-    setRunning(action);
+    retryInFlightRef.current = true;
     try {
       const refreshed = await review.refetch();
       if (refreshed.error) throw refreshed.error;
@@ -1600,12 +1775,19 @@ export default function ReviewQueue({
         .map((id) => refreshedRows.rowByMutationId.get(id))
         .filter((row): row is ReviewRow => Boolean(row));
       if (!failedRows.length) {
-        setResult(null);
+        setResult((current) =>
+          current
+            ? {
+                ...current,
+                messages: [...current.messages, localizeUi("ui.longTermMemory.reviewqueue.retryNoLongerNeeded")],
+              }
+            : current,
+        );
         return;
       }
       setSelectedIds((current) => new Set([...current, ...failedRows.map((row) => row.mutation.id)]));
       const pendingRows = refreshedRows.rows.filter((row) => pendingMutationIds.has(row.mutation.id));
-      await runBatch(action, failedRows, pendingRows, refreshedRows.rowByMutationId);
+      await runBatch(action, failedRows, pendingRows, refreshedRows.rowByMutationId, true);
     } catch (error) {
       setResult((current) =>
         current
@@ -1622,7 +1804,7 @@ export default function ReviewQueue({
           : current,
       );
     } finally {
-      setRunning(null);
+      retryInFlightRef.current = false;
     }
   };
 
@@ -2005,25 +2187,71 @@ export default function ReviewQueue({
                 {preflight.conflicts.length ? (
                   <details data-ltm-review-conflicts>
                     <summary className="cursor-pointer font-medium">
-                      {localizeUi("ui.longTermMemory.reviewqueue.conflictsFound", {
-                        count: preflight.conflicts.length,
-                      })}
+                      {localizeUi(
+                        selectLtmPluralForm(locale, preflight.conflicts.length) === "one"
+                          ? "ui.longTermMemory.reviewqueue.conflictsFoundOne"
+                          : "ui.longTermMemory.reviewqueue.conflictsFoundOther",
+                        { count: preflight.conflicts.length },
+                      )}
                     </summary>
                     <div className="mt-2 space-y-2">
-                      {preflight.conflicts.map((conflict, index) => (
+                      {preflight.conflicts.slice(0, CONFLICT_PREVIEW_LIMIT).map((conflict, index) => (
                         <div key={`${conflict.field}-${index}`} className="space-y-1">
                           <p className="font-medium">{humanizeLabel(conflict.field)}</p>
-                          <p>
-                            {localizeUi("ui.longTermMemory.reviewqueue.existingValue", { value: conflict.existing })}
-                          </p>
-                          <p>
-                            {localizeUi("ui.longTermMemory.reviewqueue.proposedValue", { value: conflict.proposed })}
-                          </p>
+                          <div>
+                            <ConflictValue
+                              label={localizeUi("ui.longTermMemory.reviewqueue.existingValue", { value: "{{value}}" })}
+                              value={conflict.existing}
+                            />
+                          </div>
+                          <div>
+                            <ConflictValue
+                              label={localizeUi("ui.longTermMemory.reviewqueue.proposedValue", { value: "{{value}}" })}
+                              value={conflict.proposed}
+                            />
+                          </div>
                           <p>
                             {localizeUi("ui.longTermMemory.reviewqueue.conflictPolicy", { value: conflict.policy })}
                           </p>
                         </div>
                       ))}
+                      {preflight.conflicts.length > CONFLICT_PREVIEW_LIMIT ? (
+                        <details>
+                          <summary className="cursor-pointer text-[var(--muted-foreground)]">
+                            {localizeUi("ui.longTermMemory.reviewqueue.moreConflicts", {
+                              count: preflight.conflicts.length - CONFLICT_PREVIEW_LIMIT,
+                            })}
+                          </summary>
+                          <div className="mt-2 space-y-2">
+                            {preflight.conflicts.slice(CONFLICT_PREVIEW_LIMIT).map((conflict, index) => (
+                              <div key={`${conflict.field}-${index + CONFLICT_PREVIEW_LIMIT}`} className="space-y-1">
+                                <p className="font-medium">{humanizeLabel(conflict.field)}</p>
+                                <div>
+                                  <ConflictValue
+                                    label={localizeUi("ui.longTermMemory.reviewqueue.existingValue", {
+                                      value: "{{value}}",
+                                    })}
+                                    value={conflict.existing}
+                                  />
+                                </div>
+                                <div>
+                                  <ConflictValue
+                                    label={localizeUi("ui.longTermMemory.reviewqueue.proposedValue", {
+                                      value: "{{value}}",
+                                    })}
+                                    value={conflict.proposed}
+                                  />
+                                </div>
+                                <p>
+                                  {localizeUi("ui.longTermMemory.reviewqueue.conflictPolicy", {
+                                    value: conflict.policy,
+                                  })}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      ) : null}
                     </div>
                   </details>
                 ) : null}
@@ -2059,7 +2287,9 @@ export default function ReviewQueue({
             />
             {mutationHasOverlongText(mutation) ? (
               <p role="alert" className="text-xs text-[var(--destructive)]">
-                {localizeUi("ui.longTermMemory.reviewqueue.textExceedsLimit")}
+                {localizeUi("ui.longTermMemory.reviewqueue.textExceedsLimit", {
+                  limit: mutation.kind === "append_section" ? MAX_APPEND_TEXT_LENGTH : MAX_SECTION_TEXT_LENGTH,
+                })}
               </p>
             ) : !valid ? (
               <p role="alert" className="text-xs text-[var(--destructive)]">
@@ -2233,22 +2463,7 @@ export default function ReviewQueue({
                 <h2 className="text-base font-semibold tracking-tight">
                   {localizeUi("ui.longTermMemory.reviewqueue.reviewQueue")}
                 </h2>
-                <p data-ltm-review-summary data-ltm-review-progress className="text-xs text-[var(--muted-foreground)]">
-                  {localizeUi("ui.longTermMemory.reviewqueue.reviewSummary", {
-                    sources: review.data?.counts.sources ?? 0,
-                    source:
-                      review.data?.counts.sources === 1
-                        ? localizeUi("ui.longTermMemory.reviewqueue.source")
-                        : localizeUi("ui.longTermMemory.reviewqueue.sources"),
-                    pending: review.data?.counts.mutations ?? 0,
-                    ready: eligibleIds.size,
-                    blocked: review.data?.counts.blockedDrafts ?? 0,
-                  })}
-                  {localizeUi("ui.longTermMemory.reviewqueue.reviewProgress", {
-                    reviewed: reviewedIds.size,
-                    remaining: review.data?.counts.mutations ?? 0,
-                  })}
-                </p>
+                <ReviewProgress {...reviewProgress} />
               </header>
               <div className="mari-editor-panel overflow-hidden">
                 {sourceIds.map((id) => {
@@ -2536,22 +2751,7 @@ export default function ReviewQueue({
                         );
                   }}
                 />
-                <span data-ltm-review-progress className="text-xs text-[var(--muted-foreground)]">
-                  {localizeUi("ui.longTermMemory.reviewqueue.reviewSummary", {
-                    sources: review.data?.counts.sources ?? 0,
-                    source:
-                      review.data?.counts.sources === 1
-                        ? localizeUi("ui.longTermMemory.reviewqueue.source")
-                        : localizeUi("ui.longTermMemory.reviewqueue.sources"),
-                    pending: review.data?.counts.mutations ?? 0,
-                    ready: eligibleIds.size,
-                    blocked: review.data?.counts.blockedDrafts ?? 0,
-                  })}
-                  {localizeUi("ui.longTermMemory.reviewqueue.reviewProgress", {
-                    reviewed: reviewedIds.size,
-                    remaining: review.data?.counts.mutations ?? 0,
-                  })}
-                </span>
+                <ReviewProgress {...reviewProgress} />
               </div>
               {selectedRows.length ? (
                 <div
@@ -2562,7 +2762,12 @@ export default function ReviewQueue({
                 >
                   <Button
                     primary
-                    disabled={!eligibleSelectedRows.length || invalidSelectedEdits.length > 0 || running !== null}
+                    disabled={
+                      !eligibleSelectedRows.length ||
+                      invalidSelectedEdits.length > 0 ||
+                      preflightApplyDisabled ||
+                      running !== null
+                    }
                     onClick={() => void runBatch("accept")}
                   >
                     {running === "accept"

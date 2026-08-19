@@ -2292,10 +2292,10 @@ export const ltmDraftPreflightResponseSchema = z
   .object({
     draftId: z.string().uuid(),
     selectedMutationIds: z.array(z.string().uuid()).max(1_000),
-    readyMutationIds: z.array(z.string().uuid()).max(1_000),
-    blockedMutationIds: z.array(z.string().uuid()).max(1_000),
-    autoIncludedMutationIds: z.array(z.string().uuid()).max(1_000),
-    rows: z.array(ltmDraftPreflightRowSchema).max(1_000),
+    readyMutationIds: z.array(z.string().uuid()).max(10_000),
+    blockedMutationIds: z.array(z.string().uuid()).max(10_000),
+    autoIncludedMutationIds: z.array(z.string().uuid()).max(10_000),
+    rows: z.array(ltmDraftPreflightRowSchema).max(10_000),
   })
   .strict();
 

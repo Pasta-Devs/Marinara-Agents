@@ -19,7 +19,7 @@ async function main() {
   );
   const { activate } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/server-entry.ts");
-  const { ltmExtractionSettingsPatchSchema, ltmExtractionSettingsSchema } =
+  const { ltmDraftPreflightResponseSchema, ltmExtractionSettingsPatchSchema, ltmExtractionSettingsSchema } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
   const { addRejectedSuggestions } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/rejected-suggestions.ts");
@@ -478,6 +478,14 @@ async function main() {
     });
     assert.equal(recalledZeroMatch.json().state, "no_matches");
     assert.equal(recalledZeroMatch.json().memoryCount, 0);
+    const missingDraft = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/drafts/10000000-0000-4000-8000-000000000099/accept",
+      headers,
+      payload: {},
+    });
+    assert.equal(missingDraft.statusCode, 404, missingDraft.body);
+    assert.equal(missingDraft.json().code, "ltm_draft_not_found");
     assert.deepEqual(Object.keys(status.json().indexes).sort(), [
       "chunkCount",
       "chunkFormatVersion",
@@ -3296,7 +3304,7 @@ async function main() {
             summary: "Link to missing memory",
             evidence: ["source_note:source_route_blocked"],
             noteId: "world_eastern_gate",
-            link: { target: "world_missing_target", relation: "related_to" },
+            link: { target: "world_missing_target", relation: "evidenced_by" },
           },
         ],
       },
@@ -3310,7 +3318,21 @@ async function main() {
     assert.equal(blockedPreflight.statusCode, 200, blockedPreflight.body);
     assert.deepEqual(blockedPreflight.json().blockedMutationIds, [blockedMutationId]);
     assert.equal(blockedPreflight.json().rows[0].status, "blocked");
-    assert.equal(blockedPreflight.json().rows[0].blockers[0].code, "preflight_blocked");
+    assert.match(blockedPreflight.json().rows[0].blockers[0].message, /link target not found/u);
+    const emptyDraft = await storageService.drafts.createDraft({
+      source: { sourceNoteId: "source_route_blocked", chatId: "chat-a" },
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      modes: ["roleplay"],
+      response: { summary: "Empty pending draft", mutations: [] },
+    });
+    const emptyDraftAccept = await app.inject({
+      method: "POST",
+      url: `/api/long-term-memory/drafts/${emptyDraft.id}/accept`,
+      headers,
+      payload: {},
+    });
+    assert.equal(emptyDraftAccept.statusCode, 409, emptyDraftAccept.body);
+    assert.equal(emptyDraftAccept.json().code, "ltm_draft_no_pending_mutations");
     const conflictMutationId = "10000000-0000-4000-8000-000000000004";
     await storageService.storage.createNote({
       id: "world_existing_conflict",
@@ -3387,6 +3409,56 @@ async function main() {
     assert.equal(conflictPreflight.statusCode, 200, conflictPreflight.body);
     assert.equal(conflictPreflight.json().rows[0].status, "blocked");
     assert.equal(conflictPreflight.json().rows[0].blockers[0].code, "unresolved_conflict");
+    const missingCreateConflictMutationId = "10000000-0000-4000-8000-000000000007";
+    const missingCreateConflictDraft = await storageService.drafts.createDraft({
+      source: { sourceNoteId: "source_route_blocked", chatId: "chat-a" },
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      modes: ["roleplay"],
+      response: {
+        summary: "Pending conflict on a new memory",
+        mutations: [
+          {
+            id: missingCreateConflictMutationId,
+            claimKind: "change",
+            kind: "create_note",
+            risk: "medium",
+            confidence: 0.8,
+            summary: "Create a new conflicted memory",
+            evidence: ["source_note:source_route_blocked"],
+            note: {
+              id: "world_missing_create_conflict",
+              title: "New conflicted memory",
+              type: "world",
+              status: "active",
+              modes: ["roleplay"],
+              scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+              tags: [],
+              keywords: [],
+              links: [],
+              conflicts: [
+                {
+                  field: "facts",
+                  existing: "An earlier claim.",
+                  proposed: "A new claim.",
+                  resolution: "pending",
+                  policy: "manual_review",
+                },
+              ],
+              sections: { facts: { text: "A new claim.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+            },
+          },
+        ],
+      },
+    });
+    const missingCreateConflictPreflight = await app.inject({
+      method: "POST",
+      url: `/api/long-term-memory/drafts/${missingCreateConflictDraft.id}/preflight`,
+      headers,
+      payload: { mutationIds: [missingCreateConflictMutationId] },
+    });
+    assert.equal(missingCreateConflictPreflight.statusCode, 200, missingCreateConflictPreflight.body);
+    assert.equal(missingCreateConflictPreflight.json().rows[0].targetId, "world_missing_create_conflict");
+    assert.equal(missingCreateConflictPreflight.json().rows[0].blockers[0].code, "unresolved_conflict");
     const capSourceId = "source_route_cap";
     await storageService.storage.createNote({
       id: capSourceId,
@@ -3497,7 +3569,17 @@ async function main() {
     });
     assert.equal(groundingPreflight.statusCode, 200, groundingPreflight.body);
     assert.equal(groundingPreflight.json().rows[0].status, "blocked");
+    assert.equal(groundingPreflight.json().rows[0].blockers[0].code, "missing_timeline_grounding");
     assert.match(groundingPreflight.json().rows[0].blockers[0].message, /timeline event grounded/u);
+    const expandedPreflightResponse = ltmDraftPreflightResponseSchema.parse({
+      draftId: draft.id,
+      selectedMutationIds: [mutationId],
+      readyMutationIds: Array.from({ length: 1_001 }, () => mutationId),
+      blockedMutationIds: [],
+      autoIncludedMutationIds: [],
+      rows: [],
+    });
+    assert.equal(expandedPreflightResponse.readyMutationIds.length, 1_001);
     assert.equal(
       (
         await app.inject({
@@ -3520,6 +3602,11 @@ async function main() {
     assert.equal(
       (await storageService.storage.getNote("world_eastern_gate"))?.sections.facts.text,
       "The eastern gate is sealed at dusk.",
+    );
+    assert.deepEqual(
+      (await storageService.storage.getNote("world_eastern_gate"))?.links,
+      [{ target: "timeline_eastern_gate_sealed", relation: "evidenced_by" }],
+      "accepted memories preserve their evidenced_by timeline link",
     );
     const integrity = await app.inject({
       method: "GET",

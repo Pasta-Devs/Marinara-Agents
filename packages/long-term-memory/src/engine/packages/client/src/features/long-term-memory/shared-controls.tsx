@@ -140,7 +140,7 @@ export function InfoPopover({
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [open, wide]);
+  }, [compact, open, wide]);
 
   useEffect(() => {
     if (!open) return;
@@ -157,7 +157,7 @@ export function InfoPopover({
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [open]);
+  }, [id, open]);
 
   useEffect(() => {
     if (open) activePopover = { id, close: closeRef.current };
@@ -165,7 +165,7 @@ export function InfoPopover({
       clearCloseTimer();
       if (activePopover?.id === id) activePopover = null;
     };
-  }, [open]);
+  }, [id, open, pinned]);
 
   return (
     <>

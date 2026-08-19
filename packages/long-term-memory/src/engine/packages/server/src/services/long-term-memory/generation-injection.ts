@@ -13,7 +13,7 @@ import { retrieveLongTermMemory } from "./retrieval.js";
 import { getLtmGlobalSettings } from "./settings.js";
 import { recordLongTermMemoryInjection, recordLongTermMemoryZeroMatch } from "./usage.js";
 import { recordLtmDebugEvent } from "./debug-log.js";
-import { getPackagePersistence, withKeyedLock } from "./package-runtime.js";
+import { getPackagePersistence, logger, withKeyedLock } from "./package-runtime.js";
 
 export type LongTermMemoryRecallReceipt = {
   version: 1;
@@ -89,7 +89,9 @@ export async function prepareGenerationLongTermMemory(input: {
     signal: input.signal,
   });
   if (retrieval.chunks.length === 0) {
-    await recordLongTermMemoryZeroMatch(input.chatId, input.root);
+    await recordLongTermMemoryZeroMatch(input.chatId, input.root).catch((error) =>
+      logger.warn(error, "[ltm] Failed to record zero-match recall for chat %s", input.chatId),
+    );
     return null;
   }
   const artifact = serializeLongTermMemoryPrompt(retrieval.chunks, {

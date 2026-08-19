@@ -369,18 +369,20 @@ assert.match(reviewQueue, /appliedMutationIds/u);
 assert.match(reviewQueue, /setResult\(null\)/u);
 assert.match(reviewQueue, /reviewFailed/u);
 assert.match(reviewQueue, /reviewProgress/u);
-assert.match(reviewQueue, /MAX_EDITABLE_TEXT_LENGTH = 20_000/u);
-assert.match(reviewQueue, /charactersRemaining/u);
+assert.match(reviewQueue, /MAX_APPEND_TEXT_LENGTH = 20_000/u);
+assert.match(reviewQueue, /MAX_SECTION_TEXT_LENGTH = 24_000/u);
+assert.match(reviewQueue, /charactersRemaining(?:One|Other)/u);
 assert.match(reviewQueue, /textExceedsLimit/u);
-assert.equal(locale["ui.longTermMemory.reviewqueue.retryFailed"], "Retry failed");
-assert.equal(locale["ui.longTermMemory.reviewqueue.reviewFailed"], "Review failed");
-assert.equal(locale["ui.longTermMemory.reviewqueue.charactersRemaining"], "{{count}} characters remaining");
 assert.match(reviewQueue, /preflight/u);
 assert.match(reviewQueue, /data-ltm-review-preflight/u);
 assert.match(reviewQueue, /data-ltm-review-conflicts/u);
 assert.match(reviewQueue, /preflightBlocked/u);
 assert.match(reviewQueue, /preflightSummary/u);
 assert.match(reviewQueue, /applyPreflighted/u);
+assert.equal(locale["ui.longTermMemory.reviewqueue.retryFailed"], "Retry failed review actions");
+assert.equal(locale["ui.longTermMemory.reviewqueue.reviewFailed"], "Review failed drafts");
+assert.equal(locale["ui.longTermMemory.reviewqueue.charactersRemainingOne"], "{{count}} character remaining");
+assert.equal(locale["ui.longTermMemory.reviewqueue.charactersRemainingOther"], "{{count}} characters remaining");
 assert.match(locale["ui.longTermMemory.sourceoperation.deleteDetachment"], /detached/u);
 
 process.stdout.write(
