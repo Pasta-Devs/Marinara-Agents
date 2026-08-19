@@ -34,10 +34,12 @@ export async function activate({
     if (tornDown) return;
     tornDown = true;
     let firstError: unknown = null;
+    let failed = false;
     for (const scheduler of schedulers.reverse()) {
       try {
         await scheduler.stop();
       } catch (error) {
+        failed = true;
         firstError ??= error;
       }
     }
@@ -45,11 +47,12 @@ export async function activate({
       try {
         await cleanup();
       } catch (error) {
+        failed = true;
         firstError ??= error;
       }
     }
     active = false;
-    if (firstError) throw firstError;
+    if (failed) throw firstError;
   };
   try {
     cleanups.push(await api.registerPrivilegedRoutes(routes, { prefix: "/api/slurp" }));

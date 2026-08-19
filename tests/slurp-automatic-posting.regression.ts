@@ -40,7 +40,7 @@ assert.match(
 );
 assert.match(
   serverEntry,
-  /const teardown = async \(\) => \{[\s\S]*?active = false;/u,
+  /const teardown = async \(\) => \{[\s\S]*?let failed = false;[\s\S]*?failed = true;[\s\S]*?active = false;/u,
   "Slurp teardown must release scheduler ownership",
 );
 assert.match(
@@ -48,5 +48,6 @@ assert.match(
   /catch \(error\) \{\s*try \{\s*await teardown\(\);[\s\S]*?\}\s*throw error;/u,
   "failed Slurp activation must run teardown before it rethrows",
 );
+assert.match(serverEntry, /if \(failed\) throw firstError;/u, "teardown must rethrow falsy cleanup failures");
 
 console.log("Slurp automatic posting regressions passed.");
