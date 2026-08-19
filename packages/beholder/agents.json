@@ -14,8 +14,8 @@
     "defaultTools": [],
     "defaultSettings": {
       "resultType": "context_injection",
-      "contextSize": 16,
-      "maxTokens": 8192,
+      "contextSize": 2,
+      "maxTokens": 4096,
       "temperature": 0,
       "defaultPromptTemplateName": "SOTA model — one prompt",
       "defaultPromptTemplateDescription": "One extraction call covering every tracked field. Built for a strong general model (OpenAI GPT-5.5+, Claude Opus 4.8+, Kimi K3+)."
