@@ -58,7 +58,7 @@ async function testActivationLifecycle() {
       addTeardown(() => order.push("partial routes"));
       throw activationError;
     }),
-    activationError,
+    (error) => error === activationError,
   );
   assert.deepEqual(order, ["scheduler", "service", "routes", "partial routes"]);
 
