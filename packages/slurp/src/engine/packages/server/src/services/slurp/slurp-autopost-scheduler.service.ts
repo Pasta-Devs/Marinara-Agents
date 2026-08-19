@@ -31,7 +31,7 @@ export function noodlerReservePollIsIdle(settings: { autoPostingScheduleEnabled:
   return !settings.autoPostingScheduleEnabled;
 }
 
-export function startNoodleAutoPostScheduler(app: FastifyInstance) {
+export function startNoodleAutoPostScheduler(app: FastifyInstance, registerStop?: (stop: () => Promise<void>) => void) {
   let stopped = false;
   let running: Promise<void> = Promise.resolve();
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -74,6 +74,14 @@ export function startNoodleAutoPostScheduler(app: FastifyInstance) {
     }
   };
 
+  const stop = async () => {
+    stopped = true;
+    if (timer) clearTimeout(timer);
+    timer = null;
+    await running.catch(() => {});
+  };
+  registerStop?.(stop);
+
   // Own reserve-state initialization here so upgrades begin their hold at server startup,
   // even when automatic posting is disabled. Provider work still waits for the normal delay.
   running = (async () => {
@@ -91,12 +99,5 @@ export function startNoodleAutoPostScheduler(app: FastifyInstance) {
     await running.catch(() => {});
   });
   logger.info("[noodle-autopost] Private reserve scheduler started");
-  return {
-    stop: async () => {
-      stopped = true;
-      if (timer) clearTimeout(timer);
-      timer = null;
-      await running.catch(() => {});
-    },
-  };
+  return { stop };
 }
