@@ -1080,7 +1080,7 @@
         "schemaVersion": 1,
         "id": "noodle",
         "name": "Noodle",
-        "version": "1.2.4",
+        "version": "1.3.0",
         "description": "Explore the Noodle public timeline as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
         "localizations": {
           "de": {
@@ -1140,13 +1140,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "9c63468c9f0b9d566d88076234f02d979f4928e37b803b2e7918bc2e7181d51f",
-            "bytes": 2283661
+            "sha256": "40afbba80d4bf27ab1cecaac589bbfe435a68dea7c1360be9c790c94227be4ce",
+            "bytes": 2284069
           },
           {
             "path": "client.js",
-            "sha256": "b7a431c7f00aff3e67ab6eab6b413053c859866f2875d647f4b5f112976c6f3a",
-            "bytes": 2304139
+            "sha256": "b74fb0bd02b7de42922cc7c1a2914a6b635d4eab2ccf7139117824978fe71f7e",
+            "bytes": 2305502
           },
           {
             "path": "noodle-klusek.png",
@@ -1167,9 +1167,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.2.4.zip",
-        "sha256": "f37907598de7da729b797a161fecae1632691bb91cfe4904327790fcd59a3fc5",
-        "bytes": 4619789
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.3.0.zip",
+        "sha256": "8e62f4806a7826a7ca25bf2317549d73a88d4ab124da0f4e6e129673d913048d",
+        "bytes": 4621560
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },
@@ -1442,7 +1442,7 @@
         "schemaVersion": 1,
         "id": "slurp",
         "name": "Slurp",
-        "version": "1.0.8",
+        "version": "1.1.0",
         "description": "The standalone successor to NoodleR: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
         "localizations": {
           "de": {
@@ -1502,13 +1502,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "ce0f0c40ee4a422972cb74443b7e630e9c1a20bde49aac5cf2c927ed5dd7dec8",
-            "bytes": 2262607
+            "sha256": "dc7da780442e479abfd4f88e5a2c0d55a4ef4fef035a5d0191721b801371cb80",
+            "bytes": 2266073
           },
           {
             "path": "client.js",
-            "sha256": "78ac26568611ddda24dc57439bb1cca48a8c82e052ef76e551c81ea4fee17ed6",
-            "bytes": 2329508
+            "sha256": "a9e1bee35b3e21ea2bb9194e4af811965c6ed477e63ae195cbdd5c478db5774e",
+            "bytes": 2397976
           },
           {
             "path": "slurp-logo.png",
@@ -1533,9 +1533,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp-1.0.8.zip",
-        "sha256": "71c30bc6f5592dc33998f46bea9983b63203c34a0ced5a8731904fee05945a4f",
-        "bytes": 4748645
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp-1.1.0.zip",
+        "sha256": "94c4d0a4c7b12f3fc12b25cbcebf30af210e25f86d85271e8898a855015642a1",
+        "bytes": 4820579
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp/README.md"
     },
