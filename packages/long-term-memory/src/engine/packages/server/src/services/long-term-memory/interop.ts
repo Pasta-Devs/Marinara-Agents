@@ -272,6 +272,9 @@ function scoped(candidate: Candidate, override?: LtmScope) {
 function mode(candidate: Candidate, value?: LtmMode) {
   return value ? { ...candidate, modes: [value], extractionMode: value } : candidate;
 }
+function importedSourceMode(source: Candidate["provenance"]["kind"], requested?: LtmMode) {
+  return requested ?? (source === "chat_summary" ? undefined : DEFAULT_LTM_IMPORTED_SOURCE_MODE);
+}
 function fingerprint(candidate: Candidate, scope: LtmScope) {
   return extractionFingerprintForLtmSourceMaterial({
     noteId: candidate.sourceNoteId,
@@ -489,9 +492,7 @@ async function candidates(
     ordered = selected ? [...selected].flatMap((id) => filtered.filter((item) => item.sourceId === id)) : filtered;
   return ordered
     .slice(0, Math.max(request.limit, selected?.size ?? 0))
-    .map((item) =>
-      mode(item, request.mode ?? (request.source === "chats" ? undefined : DEFAULT_LTM_IMPORTED_SOURCE_MODE)),
-    );
+    .map((item) => mode(item, importedSourceMode(item.provenance.kind, request.mode)));
 }
 
 function provenanceKey(provenance: LtmSourceProvenance) {
@@ -529,6 +530,7 @@ function previewSample(row: Candidate, note: LtmNote | undefined, scope?: LtmSco
   const base = {
     sourceId: row.sourceId,
     title: row.title,
+    importMode: row.extractionMode,
     mutationCount: row.mutationCount,
     summary: row.summary,
     snippet: row.sourceText.length > 200 ? `${row.sourceText.slice(0, 200)}...` : row.sourceText,
@@ -572,7 +574,7 @@ export async function previewPackageLorebooks(
     books = normalizeLorebooks(resources).map((book) => {
       const rows = book.candidates
           .filter((row) => (!request.mode || row.modes.includes(request.mode)) && matchesScope(row, request.scope))
-          .map((row) => mode(row, request.mode ?? DEFAULT_LTM_IMPORTED_SOURCE_MODE)),
+          .map((row) => mode(row, importedSourceMode(row.provenance.kind, request.mode))),
         grouped = new Map<
           string,
           {

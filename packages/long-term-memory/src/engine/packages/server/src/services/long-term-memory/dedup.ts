@@ -10,8 +10,10 @@ type ExistingSectionCandidate = {
   noteId: string;
   sectionKey: string;
   text: string;
-  tokens: Set<string>;
+  tokens: string[];
 };
+
+const MAX_COMPARISON_TOKENS = 500;
 
 export function deduplicateUnits(units: LtmEvidenceUnit[], existingNotes: LtmNote[]) {
   const lexicalThreshold = 0.85;
@@ -28,9 +30,8 @@ export function deduplicateUnits(units: LtmEvidenceUnit[], existingNotes: LtmNot
     const candidates = [...(seenInBatch.get(key) ?? []), ...(existingCandidates.get(key) ?? [])];
     const duplicate = candidates.find((candidate) => {
       if (normalizeText(candidate.text) === unitText) return true;
-      if (candidate.tokens.size === 0 || unitTokens.size === 0) return false;
-      if (!hasTokenIntersection(unitTokens, candidate.tokens)) return false;
-      return jaccardSimilarity(unitTokens, candidate.tokens) >= lexicalThreshold;
+      if (!candidate.tokens.length || !unitTokens.size) return false;
+      return hasLexicalDuplicate(candidate.tokens, unitTokens, lexicalThreshold);
     });
 
     if (duplicate) {
@@ -51,7 +52,7 @@ export function deduplicateUnits(units: LtmEvidenceUnit[], existingNotes: LtmNot
       noteId,
       sectionKey: unit.sectionKey,
       text: unit.text,
-      tokens: unitTokens,
+      tokens: allTokens(unit.text),
     });
     seenInBatch.set(key, bucket);
   }
@@ -67,7 +68,7 @@ function existingSectionCandidates(notes: LtmNote[]): Map<string, ExistingSectio
       if (!text) continue;
       const key = `${note.id}\u0000${sectionKey}`;
       const bucket = candidates.get(key) ?? [];
-      bucket.push({ noteId: note.id, sectionKey, text, tokens: tokenize(text) });
+      bucket.push({ noteId: note.id, sectionKey, text, tokens: allTokens(text) });
       candidates.set(key, bucket);
     }
   }
@@ -78,9 +79,45 @@ function normalizeText(text: string) {
   return text.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-function hasTokenIntersection(left: Set<string>, right: Set<string>) {
-  for (const token of left) {
-    if (right.has(token)) return true;
+function allTokens(text: string) {
+  return (
+    text
+      .toLowerCase()
+      .match(/[a-z0-9]+/g)
+      ?.filter((token) => token.length >= 4) ?? []
+  );
+}
+
+function hasLexicalDuplicate(tokens: string[], unitTokens: Set<string>, threshold: number) {
+  if (tokens.length <= MAX_COMPARISON_TOKENS) {
+    return jaccardSimilarity(unitTokens, new Set(tokens)) >= threshold;
+  }
+
+  const size = Math.min(Math.max(unitTokens.size, 1), MAX_COMPARISON_TOKENS);
+  const counts = new Map<string, number>();
+  let shared = 0;
+
+  const add = (token: string) => {
+    const count = counts.get(token) ?? 0;
+    counts.set(token, count + 1);
+    if (count === 0 && unitTokens.has(token)) shared++;
+  };
+  const remove = (token: string) => {
+    const count = counts.get(token)!;
+    if (count === 1) {
+      counts.delete(token);
+      if (unitTokens.has(token)) shared--;
+    } else counts.set(token, count - 1);
+  };
+
+  tokens.slice(0, size).forEach(add);
+  for (let start = 0; start <= tokens.length - size; start++) {
+    const similarity = shared / (unitTokens.size + counts.size - shared);
+    if (shared > 0 && similarity >= threshold) return true;
+    if (start < tokens.length - size) {
+      remove(tokens[start]!);
+      add(tokens[start + size]!);
+    }
   }
   return false;
 }
