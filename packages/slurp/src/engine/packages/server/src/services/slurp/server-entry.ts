@@ -29,6 +29,28 @@ export async function activate({
   };
   const cleanups: Array<() => void | Promise<void>> = [];
   const schedulers: Array<{ stop: () => void | Promise<void> }> = [];
+  let tornDown = false;
+  const teardown = async () => {
+    if (tornDown) return;
+    tornDown = true;
+    let firstError: unknown = null;
+    for (const scheduler of schedulers.reverse()) {
+      try {
+        await scheduler.stop();
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+    for (const cleanup of cleanups.reverse()) {
+      try {
+        await cleanup();
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+    active = false;
+    if (firstError) throw firstError;
+  };
   try {
     cleanups.push(await api.registerPrivilegedRoutes(routes, { prefix: "/api/slurp" }));
     cleanups.push(
@@ -39,15 +61,13 @@ export async function activate({
     schedulers.push(startNoodleAutoPostScheduler(app));
     schedulers.push(startNoodlerFanActivityScheduler(app));
     schedulers.push(startNoodleRefreshScheduler(app));
-    return async () => {
-      active = false;
-      for (const scheduler of schedulers.reverse()) await scheduler.stop();
-      for (const cleanup of cleanups.reverse()) await cleanup();
-    };
+    return teardown;
   } catch (error) {
-    for (const scheduler of schedulers.reverse()) await scheduler.stop();
-    for (const cleanup of cleanups.reverse()) await cleanup();
-    active = false;
+    try {
+      await teardown();
+    } catch {
+      // Preserve the activation error after best-effort rollback.
+    }
     throw error;
   }
 }

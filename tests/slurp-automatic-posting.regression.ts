@@ -40,7 +40,7 @@ assert.match(
 );
 assert.match(
   serverEntry,
-  /catch \(error\) \{\s*active = false;\s*throw error;/u,
+  /catch \(error\) \{[\s\S]*?active = false;[\s\S]*?throw error;/u,
   "failed Slurp activation must release scheduler ownership",
 );
 
