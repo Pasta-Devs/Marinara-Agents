@@ -1080,7 +1080,7 @@
         "schemaVersion": 1,
         "id": "noodle",
         "name": "Noodle",
-        "version": "1.3.0",
+        "version": "1.2.5",
         "description": "Explore the Noodle public timeline as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
         "localizations": {
           "de": {
@@ -1145,7 +1145,7 @@
           },
           {
             "path": "client.js",
-            "sha256": "b74fb0bd02b7de42922cc7c1a2914a6b635d4eab2ccf7139117824978fe71f7e",
+            "sha256": "24d282a22f1043c4a40d674820e70c477840834b00cbcff918859abfe19892a1",
             "bytes": 2305502
           },
           {
@@ -1167,8 +1167,8 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.3.0.zip",
-        "sha256": "8e62f4806a7826a7ca25bf2317549d73a88d4ab124da0f4e6e129673d913048d",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.2.5.zip",
+        "sha256": "86d4493e763cf1162aa20c06326eaf051cb7c933828b8c64402ea443b6c8935f",
         "bytes": 4621560
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
@@ -1442,7 +1442,7 @@
         "schemaVersion": 1,
         "id": "slurp",
         "name": "Slurp",
-        "version": "1.1.0",
+        "version": "1.0.9",
         "description": "The standalone successor to NoodleR: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
         "localizations": {
           "de": {
@@ -1533,8 +1533,8 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp-1.1.0.zip",
-        "sha256": "94c4d0a4c7b12f3fc12b25cbcebf30af210e25f86d85271e8898a855015642a1",
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp-1.0.9.zip",
+        "sha256": "00b58e1032130e70bee907e5beec6f4e62d351b53dcbf949317f57eb2914525b",
         "bytes": 4820579
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp/README.md"
