@@ -11,7 +11,13 @@
   "agents": {
     "beholder": {
       "name": "Beholder",
-      "description": "Tracks each roleplay character's clothing by body slot, held items, wounds, missing parts, bare slots, and species, then keeps that physical state available to the next response. Recommended for SOTA models: OpenAI GPT-5.5+, Claude Opus 4.8+, or Kimi K3+. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode."
+      "description": "Tracks each roleplay character's clothing by body slot, held items, wounds, missing parts, bare slots, and species, then keeps that physical state available to the next response. Recommended for SOTA models: OpenAI GPT-5.5+, Claude Opus 4.8+, or Kimi K3+. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+      "promptTemplates": {
+        "beholder-local-five-pass": {
+          "name": "Beholder local model — five passes",
+          "description": "Five narrow calls, one per tracked lane, for a locally hosted Beholder extractor (for example Beholder-Q8 behind koboldcpp or llama.cpp). That model is trained to answer one lane at a time, so the single-prompt option is off-distribution for it. Requires an Engine build with multi-pass Beholder support."
+        }
+      }
     }
   }
 }
