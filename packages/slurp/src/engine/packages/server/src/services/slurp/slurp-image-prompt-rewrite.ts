@@ -39,7 +39,7 @@ export async function rewriteNoodleImagePrompt(input: {
 }): Promise<string | null> {
   const instructions = input.instructions?.trim().replace(/\s+/g, " ").slice(0, MAX_INSTRUCTIONS_LENGTH) || "";
   const prompt = input.prompt.trim().slice(0, MAX_REWRITTEN_PROMPT_LENGTH);
-  if ((!instructions && !input.styleGuidance?.trim()) || !prompt) return null;
+  if ((!instructions && !input.characterContext?.trim() && !input.styleGuidance?.trim()) || !prompt) return null;
   const characterContext =
     input.characterContext?.trim().slice(0, 8_000) || "No additional character context was provided.";
   const styleGuidance = input.styleGuidance?.trim().slice(0, 5_000) || "";

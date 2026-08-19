@@ -151,6 +151,7 @@ export const slurpSettingsSchema = z.object({
   generationConnectionId: z.string().nullable(),
   imageGenerationConnectionId: z.string().nullable(),
   imageGenerationPrompt: z.string(),
+  enableImageInterpretation: z.boolean(),
   imageGenerationUseAvatarReferences: z.boolean(),
   imageGenerationIncludeDescriptions: z.boolean(),
   autoPostingImagesEnabled: z.boolean(),
@@ -251,7 +252,11 @@ export function noodlerReservePolicyFingerprint(
   account: SlurpAccount,
   settings?: Pick<
     SlurpSettings,
-    "imageGenerationPrompt" | "imageGenerationUseAvatarReferences" | "imageGenerationIncludeDescriptions" | "nightQuiet"
+    | "imageGenerationPrompt"
+    | "imageGenerationUseAvatarReferences"
+    | "imageGenerationIncludeDescriptions"
+    | "enableImageInterpretation"
+    | "nightQuiet"
   >,
   sourceUpdatedAt?: string | null,
 ): string {
@@ -263,6 +268,7 @@ export function noodlerReservePolicyFingerprint(
         imageGenerationPrompt: settings.imageGenerationPrompt,
         imageGenerationUseAvatarReferences: settings.imageGenerationUseAvatarReferences,
         imageGenerationIncludeDescriptions: settings.imageGenerationIncludeDescriptions,
+        enableImageInterpretation: settings.enableImageInterpretation,
         nightQuiet: settings.nightQuiet,
       }
     : null;
@@ -636,6 +642,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   generationConnectionId: null,
   imageGenerationConnectionId: null,
   imageGenerationPrompt: NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT,
+  enableImageInterpretation: true,
   imageGenerationUseAvatarReferences: false,
   imageGenerationIncludeDescriptions: false,
   autoPostingImagesEnabled: false,

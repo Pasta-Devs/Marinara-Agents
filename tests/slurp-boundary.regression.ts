@@ -136,6 +136,22 @@ assert.match(
 );
 assert.match(
   slurpImages,
+  /imagePromptInstructions \|\| characterContext \|\| styleGuidance/u,
+  "Slurp image prompts must interpret character context without connection instructions",
+);
+assert.match(slurpImages, /enableImageInterpretation !== false/u);
+const slurpPublicImages = readFileSync(
+  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-public-images.service.ts"),
+  "utf8",
+);
+assert.match(
+  slurpPublicImages,
+  /imagePromptInstructions \|\| characterContext \|\| styleGuidance/u,
+  "public Slurp image prompts must interpret character context without connection instructions",
+);
+assert.match(slurpPublicImages, /enableImageInterpretation !== false/u);
+assert.match(
+  slurpImages,
   /input\.disclosureMode !== "secret"[\s\S]*referenceImages/u,
   "secret Slurp identities must not receive avatar reference images",
 );
