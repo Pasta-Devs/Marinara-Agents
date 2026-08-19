@@ -7,6 +7,10 @@ const refreshScheduler = readFileSync(
   "utf8",
 );
 const hooks = readFileSync("packages/slurp/src/engine/packages/client/src/hooks/use-slurp.ts", "utf8");
+const serverEntry = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/slurp/server-entry.ts",
+  "utf8",
+);
 
 assert.match(
   storage,
@@ -29,5 +33,15 @@ const viewerHook = hooks.slice(
 );
 assert.match(viewerHook, /refetchInterval: enabled && personaId \? 30_000 : false/u);
 assert.match(hooks, /invalidateQueries\(\{ queryKey: noodleKeys\.viewer\(personaId\) \}\)/u);
+assert.match(
+  serverEntry,
+  /if \(active\) throw new Error\("Slurp is already active"\);\s*active = true/u,
+  "Slurp must claim activation before asynchronous registration can start a second scheduler",
+);
+assert.match(
+  serverEntry,
+  /catch \(error\) \{\s*active = false;\s*throw error;/u,
+  "failed Slurp activation must release scheduler ownership",
+);
 
 console.log("Slurp automatic posting regressions passed.");

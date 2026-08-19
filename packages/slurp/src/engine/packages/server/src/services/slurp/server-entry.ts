@@ -19,29 +19,35 @@ export async function activate({
     ): Promise<() => void | Promise<void>>;
   };
 }) {
+  if (active) throw new Error("Slurp is already active");
+  active = true;
   // Capability routes are registered through the host's revocable privileged route slots.
   // Noodle's existing plugin creates storage adapters while it registers, so
   // expose only the host database on the otherwise constrained collector.
   const routes: FastifyPluginAsync = async (router) => {
     await slurpRoutes(Object.assign(router, { db: app.db }) as FastifyInstance);
   };
-  const cleanups = [
-    await api.registerPrivilegedRoutes(routes, { prefix: "/api/slurp" }),
-    api.registerService("slurp:backup", {
-      pause: async <T>(run: () => Promise<T>) => run(),
-    }),
-  ];
-  const schedulers = [
-    startNoodleAutoPostScheduler(app),
-    startNoodlerFanActivityScheduler(app),
-    startNoodleRefreshScheduler(app),
-  ];
-  active = true;
-  return async () => {
+  try {
+    const cleanups = [
+      await api.registerPrivilegedRoutes(routes, { prefix: "/api/slurp" }),
+      api.registerService("slurp:backup", {
+        pause: async <T>(run: () => Promise<T>) => run(),
+      }),
+    ];
+    const schedulers = [
+      startNoodleAutoPostScheduler(app),
+      startNoodlerFanActivityScheduler(app),
+      startNoodleRefreshScheduler(app),
+    ];
+    return async () => {
+      active = false;
+      for (const scheduler of schedulers.reverse()) await scheduler.stop();
+      for (const cleanup of cleanups.reverse()) await cleanup();
+    };
+  } catch (error) {
     active = false;
-    for (const scheduler of schedulers.reverse()) await scheduler.stop();
-    for (const cleanup of cleanups.reverse()) await cleanup();
-  };
+    throw error;
+  }
 }
 
 export async function selfCheck() {
