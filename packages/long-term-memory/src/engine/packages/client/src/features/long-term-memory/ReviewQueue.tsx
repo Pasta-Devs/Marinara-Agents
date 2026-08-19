@@ -504,10 +504,20 @@ function previewConflictText(value: string) {
 }
 
 function ConflictValue({ label, value }: { label: string; value: string }) {
-  if (value.length <= CONFLICT_TEXT_PREVIEW_LENGTH) return <>{label.replace("{{value}}", value)}</>;
+  const labelParts = label.split("{{value}}", 2);
+  const renderedLabel = (
+    <>
+      {labelParts[0]}
+      <span className="font-normal">
+        {value.length <= CONFLICT_TEXT_PREVIEW_LENGTH ? value : previewConflictText(value)}
+      </span>
+      {labelParts[1]}
+    </>
+  );
+  if (value.length <= CONFLICT_TEXT_PREVIEW_LENGTH) return renderedLabel;
   return (
     <details>
-      <summary className="cursor-pointer">{label.replace("{{value}}", previewConflictText(value))}</summary>
+      <summary className="cursor-pointer">{renderedLabel}</summary>
       <p className="mt-1 break-words">{value}</p>
     </details>
   );
@@ -1628,7 +1638,7 @@ export default function ReviewQueue({
         try {
           if (action === "accept") {
             const preflight = preflightByDraftId.get(draftId);
-            if (!preflight) throw new Error("Review preflight is missing. Run preflight again before applying.");
+            if (!preflight) throw new Error(localizeUi("ui.longTermMemory.reviewqueue.preflightMissing"));
             preflight.blockedMutationIds.forEach((id) => blockedMutationIds.add(id));
             const readyIds = new Set(preflight.readyMutationIds);
             if (!readyIds.size) continue;
@@ -2218,9 +2228,14 @@ export default function ReviewQueue({
                       {preflight.conflicts.length > CONFLICT_PREVIEW_LIMIT ? (
                         <details>
                           <summary className="cursor-pointer text-[var(--muted-foreground)]">
-                            {localizeUi("ui.longTermMemory.reviewqueue.moreConflicts", {
-                              count: preflight.conflicts.length - CONFLICT_PREVIEW_LIMIT,
-                            })}
+                            {localizeUi(
+                              selectLtmPluralForm(locale, preflight.conflicts.length - CONFLICT_PREVIEW_LIMIT) === "one"
+                                ? "ui.longTermMemory.reviewqueue.moreConflictsOne"
+                                : "ui.longTermMemory.reviewqueue.moreConflictsOther",
+                              {
+                                count: preflight.conflicts.length - CONFLICT_PREVIEW_LIMIT,
+                              },
+                            )}
                           </summary>
                           <div className="mt-2 space-y-2">
                             {preflight.conflicts.slice(CONFLICT_PREVIEW_LIMIT).map((conflict, index) => (

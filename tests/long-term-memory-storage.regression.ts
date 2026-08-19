@@ -1136,6 +1136,16 @@ async function main() {
         destructiveBlocker?.message,
         "Rewrite and other destructive changes must be reviewed and applied one at a time.",
       );
+      await assert.rejects(
+        applyLongTermMemoryDraft(destructiveDraft.id, {
+          root,
+          mutationIds: [destructiveMutationId, destructiveLinkId],
+          rebuildIndexes: false,
+        }),
+        (error: unknown) =>
+          error instanceof Error &&
+          error.message === "Rewrite and other destructive changes must be reviewed and applied one at a time.",
+      );
       const destructiveApplied = await applyLongTermMemoryDraft(destructiveDraft.id, {
         root,
         mutationIds: [destructiveMutationId],
