@@ -481,6 +481,8 @@
   "ui.noodle.noodlehome.editPoll": "Edit poll",
   "ui.noodle.noodlehome.editPrompt": "Edit prompt",
   "ui.noodle.noodlehome.emojiGifsAndStickers": "Emoji, GIFs and stickers",
+  "ui.noodle.noodlehome.enableImageInterpretation": "Interpret image prompts",
+  "ui.noodle.noodlehome.enableImageInterpretationHelp": "Routes image prompts through the text connection first so character style and image instructions are applied coherently.",
   "ui.noodle.noodlehome.enableNoodler": "Enable NoodleR",
   "ui.noodle.noodlehome.enabled": "Enabled",
   "ui.noodle.noodlehome.enhancedToneContinuity": "Enhanced tone & continuity",

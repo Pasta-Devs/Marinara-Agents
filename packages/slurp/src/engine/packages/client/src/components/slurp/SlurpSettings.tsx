@@ -381,6 +381,12 @@ export function SlurpSettings({
               </Field>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Toggle
+                  label={t("ui.slurp.settings.images.interpretPrompts")}
+                  detail={t("ui.slurp.settings.images.interpretPromptsDetail")}
+                  value={settings.enableImageInterpretation}
+                  onChange={(value) => update("enableImageInterpretation", value)}
+                />
+                <Toggle
                   label={t("ui.slurp.settings.images.useAvatarReferences")}
                   detail={t("ui.slurp.settings.images.useAvatarReferencesDetail")}
                   value={settings.imageGenerationUseAvatarReferences}

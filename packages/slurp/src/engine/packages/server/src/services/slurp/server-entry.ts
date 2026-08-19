@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import { slurpRoutes } from "../../routes/slurp.routes.js";
 import { startNoodleAutoPostScheduler } from "./slurp-autopost-scheduler.service.js";
 import { startNoodlerFanActivityScheduler } from "./slurp-fan-activity-scheduler.service.js";
+import { startNoodleRefreshScheduler } from "./slurp-refresh-scheduler.service.js";
 
 let active = false;
 
@@ -30,7 +31,11 @@ export async function activate({
       pause: async <T>(run: () => Promise<T>) => run(),
     }),
   ];
-  const schedulers = [startNoodleAutoPostScheduler(app), startNoodlerFanActivityScheduler(app)];
+  const schedulers = [
+    startNoodleAutoPostScheduler(app),
+    startNoodlerFanActivityScheduler(app),
+    startNoodleRefreshScheduler(app),
+  ];
   active = true;
   return async () => {
     active = false;

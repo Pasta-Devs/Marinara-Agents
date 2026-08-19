@@ -330,7 +330,12 @@ export function createPublicNoodleGenerationService(db: DB) {
         const knownHandles = new Set(activeAccounts.map((account) => normalizeNoodleHandle(account.handle)));
         try {
           parsedGenerated = parseNoodleGeneratedRefreshResponse(content);
-          retryReason = validateNoodleGeneratedRefresh(parsedGenerated.refresh, allowedActorHandles, knownHandles);
+          retryReason = validateNoodleGeneratedRefresh(
+            parsedGenerated.refresh,
+            allowedActorHandles,
+            knownHandles,
+            content.trim() === "[]",
+          );
         } catch (error) {
           retryReason = `the response was not valid timeline JSON (${getErrorMessage(error)})`;
         }
@@ -375,6 +380,7 @@ export function createPublicNoodleGenerationService(db: DB) {
               parsedGenerated.refresh,
               allowedActorHandles,
               knownHandles,
+              content.trim() === "[]",
             );
           } catch (error) {
             correctedRetryReason = `the response was not valid timeline JSON (${getErrorMessage(error)})`;
