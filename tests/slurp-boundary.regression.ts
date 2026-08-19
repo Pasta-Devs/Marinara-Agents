@@ -54,6 +54,16 @@ assert.match(
   "Slurp must start the automatic timeline refresh scheduler",
 );
 assert.match(
+  slurpServerEntry,
+  /startNoodleAutoPostScheduler\(app, addTeardown\)/u,
+  "Slurp must register automatic posting teardown before scheduler startup",
+);
+assert.match(
+  slurpServerEntry,
+  /startNoodlerFanActivityScheduler\(app, addTeardown\)/u,
+  "Slurp must register fan activity teardown before scheduler startup",
+);
+assert.match(
   slurpRoutes,
   /app\.delete\("\/noodler\/posts\/:id"[\s\S]*?accountId is required[\s\S]*?existing\.authorAccountId !== accountId/u,
   "NoodleR post deletion must require and verify the owning account",
