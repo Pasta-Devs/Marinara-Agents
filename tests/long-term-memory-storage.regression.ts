@@ -1006,15 +1006,18 @@ async function main() {
           ],
         },
       });
+      const groundingResult = await applyLongTermMemoryDraft(existingEventDependencyDraft.id, {
+        root,
+        mutationIds: [groundEventMutationId],
+        rebuildIndexes: false,
+      });
+      assert.deepEqual(groundingResult.appliedMutationIds, [groundEventMutationId]);
       const existingEventDependencyResult = await applyLongTermMemoryDraft(existingEventDependencyDraft.id, {
         root,
         mutationIds: [updateRelationshipMutationId],
         rebuildIndexes: false,
       });
-      assert.deepEqual(
-        new Set(existingEventDependencyResult.appliedMutationIds),
-        new Set([groundEventMutationId, updateRelationshipMutationId]),
-      );
+      assert.deepEqual(existingEventDependencyResult.appliedMutationIds, [updateRelationshipMutationId]);
 
       const staticMutationId = randomUUID();
       const staticDraft = await draftStore.createDraft({
