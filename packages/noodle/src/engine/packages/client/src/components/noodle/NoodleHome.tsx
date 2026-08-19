@@ -3571,6 +3571,18 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                     }
                   />
                   <ToggleSetting
+                    label={localizeUi("ui.noodle.noodlehome.enableImageInterpretation")}
+                    help={localizeUi("ui.noodle.noodlehome.enableImageInterpretationHelp")}
+                    checked={
+                      (settings as NoodleSettings & { enableImageInterpretation?: boolean })
+                        .enableImageInterpretation !== false
+                    }
+                    disabled={updateSettings.isPending}
+                    onChange={(checked) =>
+                      saveSettings({ enableImageInterpretation: checked } as NoodleSettingsUpdateInput)
+                    }
+                  />
+                  <ToggleSetting
                     label={localizeUi("ui.noodle.noodlehome.includeDescriptions")}
                     help={localizeUi("ui.noodle.noodlehome.addsCharacterAppearanceAndDescriptionNotesToTheFinal")}
                     checked={settings.imageGenerationIncludeDescriptions}

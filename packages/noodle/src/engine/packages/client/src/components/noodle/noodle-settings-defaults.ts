@@ -22,6 +22,7 @@ export const NOODLE_SETTINGS_SECTION_KEYS: Record<NoodleSettingsSectionId, reado
     "imageGenerationPrompt",
     "imageGenerationUseAvatarReferences",
     "imageGenerationIncludeDescriptions",
+    "enableImageInterpretation" as keyof NoodleSettings,
     "allowGalleryImageAttachments",
     "maxImagesPerRefresh",
     "imageCaptioningEnabled",
