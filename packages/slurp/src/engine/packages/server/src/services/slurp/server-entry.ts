@@ -27,24 +27,26 @@ export async function activate({
   const routes: FastifyPluginAsync = async (router) => {
     await slurpRoutes(Object.assign(router, { db: app.db }) as FastifyInstance);
   };
+  const cleanups: Array<() => void | Promise<void>> = [];
+  const schedulers: Array<{ stop: () => void | Promise<void> }> = [];
   try {
-    const cleanups = [
-      await api.registerPrivilegedRoutes(routes, { prefix: "/api/slurp" }),
+    cleanups.push(await api.registerPrivilegedRoutes(routes, { prefix: "/api/slurp" }));
+    cleanups.push(
       api.registerService("slurp:backup", {
         pause: async <T>(run: () => Promise<T>) => run(),
       }),
-    ];
-    const schedulers = [
-      startNoodleAutoPostScheduler(app),
-      startNoodlerFanActivityScheduler(app),
-      startNoodleRefreshScheduler(app),
-    ];
+    );
+    schedulers.push(startNoodleAutoPostScheduler(app));
+    schedulers.push(startNoodlerFanActivityScheduler(app));
+    schedulers.push(startNoodleRefreshScheduler(app));
     return async () => {
       active = false;
       for (const scheduler of schedulers.reverse()) await scheduler.stop();
       for (const cleanup of cleanups.reverse()) await cleanup();
     };
   } catch (error) {
+    for (const scheduler of schedulers.reverse()) await scheduler.stop();
+    for (const cleanup of cleanups.reverse()) await cleanup();
     active = false;
     throw error;
   }
