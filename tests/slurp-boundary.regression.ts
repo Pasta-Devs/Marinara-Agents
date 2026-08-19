@@ -21,6 +21,38 @@ const slurpRoutes = readFileSync(
   join(root, "packages/slurp/src/engine/packages/server/src/routes/slurp.routes.ts"),
   "utf8",
 );
+const slurpEntry = readFileSync(
+  join(root, "packages/slurp/src/engine/packages/client/src/slurp-package-entry.tsx"),
+  "utf8",
+);
+const slurpFanActivity = readFileSync(
+  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-fan-activity.service.ts"),
+  "utf8",
+);
+const slurpServerEntry = readFileSync(
+  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/server-entry.ts"),
+  "utf8",
+);
+assert.match(
+  slurpEntry,
+  /AppDialogRenderer/u,
+  "Slurp must render the dialog host used by creator and post confirmation actions",
+);
+assert.match(
+  slurpFanActivity,
+  /content: row\.content \?\? null/u,
+  "fan activity parsing must accept providers that omit null content fields",
+);
+assert.match(
+  slurpServerEntry,
+  /import \{ startNoodleRefreshScheduler \} from "\.\/slurp-refresh-scheduler\.service\.js"/u,
+  "Slurp must import the automatic timeline refresh scheduler",
+);
+assert.match(
+  slurpServerEntry,
+  /startNoodleRefreshScheduler\(app\)/u,
+  "Slurp must start the automatic timeline refresh scheduler",
+);
 assert.match(
   slurpRoutes,
   /app\.delete\("\/noodler\/posts\/:id"[\s\S]*?accountId is required[\s\S]*?existing\.authorAccountId !== accountId/u,
