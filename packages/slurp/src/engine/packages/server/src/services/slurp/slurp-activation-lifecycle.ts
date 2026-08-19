@@ -18,8 +18,8 @@ export function createSlurpActivationLifecycle() {
           try {
             await run();
           } catch (error) {
+            if (!failed) firstError = error;
             failed = true;
-            firstError ??= error;
           }
         }
         active = false;

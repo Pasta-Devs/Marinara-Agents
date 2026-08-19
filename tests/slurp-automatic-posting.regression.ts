@@ -64,6 +64,18 @@ async function testActivationLifecycle() {
 
   const stopAfterFailure = await lifecycle.activate(async () => {});
   await stopAfterFailure();
+
+  const firstFailureLifecycle = createSlurpActivationLifecycle();
+  const laterError = new Error("later cleanup failed");
+  const stopWithFailures = await firstFailureLifecycle.activate((addTeardown) => {
+    addTeardown(() => {
+      throw laterError;
+    });
+    addTeardown(() => {
+      throw undefined;
+    });
+  });
+  await assert.rejects(stopWithFailures, (error) => error === undefined);
 }
 
 void testActivationLifecycle().then(() => console.log("Slurp automatic posting regressions passed."));

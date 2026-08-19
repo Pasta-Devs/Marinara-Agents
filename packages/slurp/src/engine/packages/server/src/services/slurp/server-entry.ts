@@ -33,9 +33,9 @@ export async function activate({
         pause: async <T>(run: () => Promise<T>) => run(),
       }),
     );
-    addTeardown(startNoodleAutoPostScheduler(app).stop);
-    addTeardown(startNoodlerFanActivityScheduler(app).stop);
-    addTeardown(startNoodleRefreshScheduler(app).stop);
+    startNoodleAutoPostScheduler(app, addTeardown);
+    startNoodlerFanActivityScheduler(app, addTeardown);
+    startNoodleRefreshScheduler(app, addTeardown);
   });
 }
 

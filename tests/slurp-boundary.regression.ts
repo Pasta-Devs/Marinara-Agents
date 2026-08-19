@@ -50,7 +50,7 @@ assert.match(
 );
 assert.match(
   slurpServerEntry,
-  /startNoodleRefreshScheduler\(app\)/u,
+  /startNoodleRefreshScheduler\(app, addTeardown\)/u,
   "Slurp must start the automatic timeline refresh scheduler",
 );
 assert.match(
