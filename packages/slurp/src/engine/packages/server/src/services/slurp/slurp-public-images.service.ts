@@ -216,7 +216,9 @@ export async function generateNoodlePostImage(input: {
     .filter(Boolean)
     .join("\n\n");
   const rewrittenPrompt =
-    (imagePromptInstructions || styleGuidance) && !input.promptOverride
+    (imagePromptInstructions || characterContext || styleGuidance) &&
+    input.settings.enableImageInterpretation !== false &&
+    !input.promptOverride
       ? await rewriteNoodleImagePrompt({
           db: input.db,
           prompt: rawFinalPrompt,

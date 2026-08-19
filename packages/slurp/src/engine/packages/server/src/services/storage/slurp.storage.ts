@@ -151,6 +151,7 @@ export const slurpSettingsSchema = z.object({
   generationConnectionId: z.string().nullable(),
   imageGenerationConnectionId: z.string().nullable(),
   imageGenerationPrompt: z.string(),
+  enableImageInterpretation: z.boolean(),
   imageGenerationUseAvatarReferences: z.boolean(),
   imageGenerationIncludeDescriptions: z.boolean(),
   autoPostingImagesEnabled: z.boolean(),
@@ -251,7 +252,11 @@ export function noodlerReservePolicyFingerprint(
   account: SlurpAccount,
   settings?: Pick<
     SlurpSettings,
-    "imageGenerationPrompt" | "imageGenerationUseAvatarReferences" | "imageGenerationIncludeDescriptions" | "nightQuiet"
+    | "imageGenerationPrompt"
+    | "imageGenerationUseAvatarReferences"
+    | "imageGenerationIncludeDescriptions"
+    | "enableImageInterpretation"
+    | "nightQuiet"
   >,
   sourceUpdatedAt?: string | null,
 ): string {
@@ -263,6 +268,7 @@ export function noodlerReservePolicyFingerprint(
         imageGenerationPrompt: settings.imageGenerationPrompt,
         imageGenerationUseAvatarReferences: settings.imageGenerationUseAvatarReferences,
         imageGenerationIncludeDescriptions: settings.imageGenerationIncludeDescriptions,
+        enableImageInterpretation: settings.enableImageInterpretation,
         nightQuiet: settings.nightQuiet,
       }
     : null;
@@ -636,6 +642,7 @@ export const DEFAULT_SLURP_SETTINGS: SlurpSettings = {
   generationConnectionId: null,
   imageGenerationConnectionId: null,
   imageGenerationPrompt: NOODLER_DEFAULT_IMAGE_GENERATION_PROMPT,
+  enableImageInterpretation: true,
   imageGenerationUseAvatarReferences: false,
   imageGenerationIncludeDescriptions: false,
   autoPostingImagesEnabled: false,
@@ -2214,9 +2221,13 @@ export function createSlurpStorage(db: DB) {
         const observedMs = Math.max(at.getTime(), Number.isNaN(parsed) ? 0 : parsed);
         if (existing) {
           const observed = new Date(observedMs).toISOString();
-          const preparationNotBefore = Number.isNaN(Date.parse(existing.preparationNotBefore))
-            ? new Date(observedMs + ROLLING_DAY_MS).toISOString()
-            : existing.preparationNotBefore;
+          const storedPreparationMs = Date.parse(existing.preparationNotBefore);
+          // Repair the startup hold written by the first reserve-state version. It blocked the
+          // first scheduled post for a full day after the package started.
+          const preparationNotBefore =
+            Number.isNaN(storedPreparationMs) || storedPreparationMs > observedMs
+              ? observed
+              : existing.preparationNotBefore;
           if (observed !== existing.lastObservedBudgetTime || preparationNotBefore !== existing.preparationNotBefore) {
             await tx
               .update(noodlerReserveState)
@@ -2226,11 +2237,10 @@ export function createSlurpStorage(db: DB) {
           return { lastObservedBudgetTime: observed, preparationNotBefore };
         }
         const timestamp = at.toISOString();
-        const preparationNotBefore = new Date(at.getTime() + ROLLING_DAY_MS).toISOString();
         await tx.insert(noodlerReserveState).values({
           id: NOODLER_RESERVE_STATE_ID,
           lastObservedBudgetTime: timestamp,
-          preparationNotBefore,
+          preparationNotBefore: timestamp,
           createdAt: timestamp,
           updatedAt: timestamp,
         });
@@ -2252,7 +2262,7 @@ export function createSlurpStorage(db: DB) {
           await tx.insert(noodlerReserveState).values({
             id: NOODLER_RESERVE_STATE_ID,
             lastObservedBudgetTime: timestamp,
-            preparationNotBefore: new Date(at.getTime() + ROLLING_DAY_MS).toISOString(),
+            preparationNotBefore: timestamp,
             createdAt: timestamp,
             updatedAt: timestamp,
           });
