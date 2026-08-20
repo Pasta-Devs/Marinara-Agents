@@ -55,7 +55,7 @@ async function openNoodle(page: Page) {
   await expect(page.locator('[data-component="NoodleView"]')).toBeVisible();
   const welcomeDialog = page.getByRole("dialog", { name: "Welcome to Noodle" });
   if (await welcomeDialog.isVisible().catch(() => false)) {
-    await welcomeDialog.getByRole("button", { name: "Open Noodle" }).click();
+    await welcomeDialog.getByRole("button", { name: "Start reading" }).click();
   }
 }
 
