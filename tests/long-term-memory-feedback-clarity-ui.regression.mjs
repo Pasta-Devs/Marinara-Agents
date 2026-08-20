@@ -293,6 +293,29 @@ assert.match(vault, /extractionImportance/u);
 assert.match(vault, /extractionConfidence/u);
 assert.match(vault, /data-ltm-validation-summary/u);
 assert.match(vault, /data-ltm-vault-feedback/u);
+const clearFiltersMatch = vault.match(/const clearNavigatorFilters = \(\) => \{\n([\s\S]*?)\n\s+\};/u);
+assert.ok(clearFiltersMatch, "clearNavigatorFilters handler must exist");
+const clearFiltersBody = clearFiltersMatch?.[1] ?? "";
+assert.match(clearFiltersBody, /setSearch\(""\);/u);
+assert.match(clearFiltersBody, /setStatusFilter\("all"\);/u);
+assert.match(clearFiltersBody, /setSourceFilter\(false\);/u);
+assert.match(clearFiltersBody, /setSort\("updated"\);/u);
+assert.doesNotMatch(clearFiltersBody, /setTarget/u);
+assert.match(
+  vault,
+  /const hasFilterableNotes = allNotes\.length > 0 && \(sourceFilter \|\| allNotes\.some\(\(note\) => note\.type !== "source"\)\);/u,
+);
+const emptyStateStart = vault.indexOf("{hasFilterableNotes ? (");
+const emptyStateEnd = vault.indexOf("\n                  </div>", emptyStateStart);
+assert.ok(emptyStateStart >= 0 && emptyStateEnd > emptyStateStart, "complete empty-state conditional must exist");
+assert.match(
+  vault.slice(emptyStateStart, emptyStateEnd),
+  /hasFilterableNotes \? \([\s\S]*filteredEmptyDescription[\s\S]*filteredEmptyFilters[\s\S]*onClick=\{clearNavigatorFilters\}[\s\S]*\)\s*:\s*\([\s\S]*noMemoriesFound[\s\S]*\)/u,
+);
+assert.match(vault, /filteredEmptyFilters[\s\S]*activeFilterLabels\.join\(", "\)/u);
+assert.match(vault, /filteredEmptySourcesOnly/u);
+assert.match(vault, /onClick=\{clearNavigatorFilters\}/u);
+assert.match(vault, /value1: target\?\.label \?\? localizeUi\("ui\.longTermMemory\.memoryvault\.allMemories"\)/u);
 assert.ok(
   vault.indexOf("data-ltm-vault-feedback") < vault.indexOf("<LtmWorkspace\n"),
   "shared Vault feedback must stay visible above the pane-switching workspace",

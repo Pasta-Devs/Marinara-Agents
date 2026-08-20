@@ -1434,6 +1434,13 @@ export default function MemoryVault({
           ? right.createdAt.localeCompare(left.createdAt)
           : right.updatedAt.localeCompare(left.updatedAt),
     );
+  const hasFilterableNotes = allNotes.length > 0 && (sourceFilter || allNotes.some((note) => note.type !== "source"));
+  const clearNavigatorFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+    setSourceFilter(false);
+    setSort("updated");
+  };
   const hiddenChecked = [...checked].filter((id) => !visible.some((note) => note.id === id)).length;
   const toggleVisibleSelection = (selected: boolean) =>
     setChecked((current) => {
@@ -1589,6 +1596,18 @@ export default function MemoryVault({
       label: localizeUi("ui.longTermMemory.memoryvault.sortCreated"),
     },
   ];
+  const activeFilterLabels = [
+    search.trim() ? localizeUi("ui.longTermMemory.memoryvault.filteredEmptySearch", { value1: search.trim() }) : "",
+    statusFilter !== "all"
+      ? localizeUi("ui.longTermMemory.memoryvault.filteredEmptyStatus", { value1: statusLabel(statusFilter) })
+      : "",
+    sourceFilter ? localizeUi("ui.longTermMemory.memoryvault.filteredEmptySourcesOnly") : "",
+    sort !== "updated"
+      ? localizeUi("ui.longTermMemory.memoryvault.filteredEmptySort", {
+          value1: sortScopeTargets.find((candidate) => candidate.id === sort)?.label ?? sort,
+        })
+      : "",
+  ].filter(Boolean);
   const pickerTargets = useMemo<PickerTarget[]>(
     () => [
       ...(scopeTargets.data?.chats ?? []).map((chat) => ({
@@ -3096,7 +3115,25 @@ export default function MemoryVault({
                 notes.isSuccess &&
                 !visible.length ? (
                   <div className="p-5 text-center text-xs text-[var(--muted-foreground)]">
-                    <p>{localizeUi("ui.longTermMemory.memoryvault.noMemoriesFound")}</p>
+                    {hasFilterableNotes ? (
+                      <>
+                        <p>
+                          {localizeUi("ui.longTermMemory.memoryvault.filteredEmptyDescription", {
+                            value1: target?.label ?? localizeUi("ui.longTermMemory.memoryvault.allMemories"),
+                          })}
+                        </p>
+                        <p className="mt-2">
+                          {localizeUi("ui.longTermMemory.memoryvault.filteredEmptyFilters", {
+                            value1: activeFilterLabels.join(", "),
+                          })}
+                        </p>
+                        <Button className="mt-3" onClick={clearNavigatorFilters}>
+                          {localizeUi("ui.longTermMemory.memoryvault.clearFilters")}
+                        </Button>
+                      </>
+                    ) : (
+                      <p>{localizeUi("ui.longTermMemory.memoryvault.noMemoriesFound")}</p>
+                    )}
                   </div>
                 ) : null}
               </section>
