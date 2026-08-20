@@ -114,6 +114,7 @@ const noodleOwnedSourcePaths = [
   "packages/server/src/services/noodle/noodle-image-prompt.ts",
   "packages/server/src/services/noodle/noodle-image-retry.ts",
   "packages/server/src/services/noodle/noodle-interaction-policy.ts",
+  "packages/server/src/services/noodle/noodle-model-capabilities.ts",
   "packages/server/src/services/noodle/noodle-participant-selection.ts",
   "packages/server/src/services/noodle/noodle-post-target.ts",
   "packages/server/src/services/noodle/noodle-profile-avatar.ts",
@@ -254,7 +255,7 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.2.9",
+    version: "1.2.10",
     minEngineVersion: "2.4.2",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
