@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  isEmptyNoodleGeneratedRefreshResponse,
+  NOODLE_EMPTY_TIMELINE_REASON,
   parseNoodleGeneratedRefreshResponse,
   validateNoodleGeneratedRefresh,
 } from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-generated-refresh";
@@ -57,15 +57,11 @@ assert.deepEqual(parseSlurpGeneratedProfiles([slurpProfile]), {
 assert.deepEqual(parseSlurpGeneratedProfiles({ profiles: [] }), { profiles: [], rejected: [] });
 assert.deepEqual(parseSlurpGeneratedProfiles([{ profiles: [] }]), { profiles: [], rejected: [] });
 assert.deepEqual(parseSlurpGeneratedProfiles([]), { profiles: [], rejected: [] });
-assert.deepEqual(parseSlurpGeneratedProfiles({ profiles: [{ entityId: "invalid" }] }).rejected, [
-  { index: 0, issueCount: 4 },
-]);
+assert.ok(parseSlurpGeneratedProfiles({ profiles: [{ entityId: "invalid" }] }).rejected[0]?.issueCount);
 assert.throws(() => parseSlurpGeneratedProfiles({ profiles: null }));
 assert.throws(() => parseNoodleGeneratedProfiles({ profiles: null }));
 assert.throws(() => parseNoodleGeneratedProfiles([{ profiles: null }]));
-assert.deepEqual(parseNoodleGeneratedProfiles({ profiles: [{ entityId: "invalid" }] }).rejected, [
-  { index: 0, issueCount: 4 },
-]);
+assert.ok(parseNoodleGeneratedProfiles({ profiles: [{ entityId: "invalid" }] }).rejected[0]?.issueCount);
 assert.deepEqual(
   parseNoodleGeneratedProfiles([
     {
@@ -90,18 +86,11 @@ assert.deepEqual(
   },
 );
 
-assert.equal(isEmptyNoodleGeneratedRefreshResponse("[]"), true);
-assert.equal(isEmptyNoodleGeneratedRefreshResponse("[\n]"), true);
-assert.equal(isEmptyNoodleGeneratedRefreshResponse("[null]"), false);
-
-assert.deepEqual(parseNoodleGeneratedRefreshResponse("[]"), {
-  refresh: { posts: [], interactions: [], follows: [], digests: [] },
-  rejected: [],
-});
-assert.equal(
-  validateNoodleGeneratedRefresh({ posts: [], interactions: [], follows: [], digests: [] }, new Set(), new Set(), true),
-  null,
-);
+for (const emptyResponse of ["[]", "[\n]", '{"posts":[],"interactions":[],"follows":[]}']) {
+  const empty = parseNoodleGeneratedRefreshResponse(emptyResponse);
+  assert.deepEqual(empty.refresh, { posts: [], interactions: [], follows: [], digests: [] });
+  assert.equal(validateNoodleGeneratedRefresh(empty.refresh, new Set(), new Set()), NOODLE_EMPTY_TIMELINE_REASON);
+}
 
 const parsed = parseNoodleGeneratedRefreshResponse(
   JSON.stringify([

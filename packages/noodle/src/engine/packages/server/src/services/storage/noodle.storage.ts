@@ -1020,8 +1020,17 @@ export function createNoodleStorage(db: DB) {
         .from(noodleRefreshRuns)
         .where(options.status ? eq(noodleRefreshRuns.status, options.status) : undefined)
         .orderBy(desc(noodleRefreshRuns.createdAt))
-        .limit(Math.max(1, Math.min(20, Math.floor(options.limit ?? 5))));
+        .limit(Math.max(1, Math.min(100, Math.floor(options.limit ?? 5))));
       return rows.map(mapRun);
+    },
+    async listCompletedRefreshRunAccountIds(limit = 5) {
+      const rows = await db
+        .select({ activeAccountIds: noodleRefreshRuns.activeAccountIds })
+        .from(noodleRefreshRuns)
+        .where(eq(noodleRefreshRuns.status, "completed"))
+        .orderBy(desc(noodleRefreshRuns.createdAt))
+        .limit(Math.max(1, Math.min(100, Math.floor(limit))));
+      return rows.map((row) => strings(row.activeAccountIds));
     },
     async recordRefreshAttempt(id: string, attempt: any) {
       const rows = await db.select().from(noodleRefreshRuns).where(eq(noodleRefreshRuns.id, id));

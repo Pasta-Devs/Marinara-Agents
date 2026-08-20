@@ -26,7 +26,7 @@ import { createPromptOverridesStorage } from "../storage/prompt-overrides.storag
 import { commitGeneratedNoodleActivity, prepareGeneratedNoodleMedia } from "./noodle-generated-activity.service.js";
 import {
   deduplicateGeneratedNoodleContent,
-  isEmptyNoodleGeneratedRefreshResponse,
+  NOODLE_EMPTY_TIMELINE_REASON,
   parseNoodleGeneratedRefreshResponse,
   validateNoodleGeneratedRefresh,
 } from "./noodle-generated-refresh.js";
@@ -193,7 +193,7 @@ export function createPublicNoodleGenerationService(db: DB) {
         ];
         const [recentSelectionInteractions, recentCompletedRuns] = await Promise.all([
           noodle.listInteractions(recentSelectionPosts.map((post) => post.id)),
-          noodle.listRefreshRuns({ status: "completed", limit: 1 }),
+          noodle.listCompletedRefreshRunAccountIds(settings.participantSelectionMode === "all" ? 100 : 1),
         ]);
         const priorityAccountIds = collectNoodlePriorityAccountIds({
           accounts: participantAccounts,
@@ -206,7 +206,8 @@ export function createPublicNoodleGenerationService(db: DB) {
           settings,
           selectedGroupCharacterIds,
           followedAccountIds: new Set(personaAccount?.settings.social.followingAccountIds ?? []),
-          recentlyActiveAccountIds: new Set(recentCompletedRuns[0]?.activeAccountIds ?? []),
+          recentlyActiveAccountIds: new Set(recentCompletedRuns[0] ?? []),
+          recentlyActiveAccountIdsByRun: recentCompletedRuns.map((accountIds) => new Set(accountIds)),
           priorityAccountIds,
         });
         if (selectedParticipants.length === 0) {
@@ -331,12 +332,7 @@ export function createPublicNoodleGenerationService(db: DB) {
         const knownHandles = new Set(activeAccounts.map((account) => normalizeNoodleHandle(account.handle)));
         try {
           parsedGenerated = parseNoodleGeneratedRefreshResponse(content);
-          retryReason = validateNoodleGeneratedRefresh(
-            parsedGenerated.refresh,
-            allowedActorHandles,
-            knownHandles,
-            isEmptyNoodleGeneratedRefreshResponse(content),
-          );
+          retryReason = validateNoodleGeneratedRefresh(parsedGenerated.refresh, allowedActorHandles, knownHandles);
         } catch (error) {
           retryReason = `the response was not valid timeline JSON (${getErrorMessage(error)})`;
         }
@@ -356,6 +352,7 @@ export function createPublicNoodleGenerationService(db: DB) {
             `Reason: ${retryReason}.`,
             `Regenerate the complete JSON object now. Authors and actors must use only these selected participant handles: ${allowedHandles.join(", ")}.`,
             `Follow targets may additionally use these known handles: ${knownTargetHandles.join(", ")}.`,
+            "Return at least one activity permitted by the configured quotas. [] and an object whose activity collections are all empty are invalid.",
             "Do not invent, rename, or omit an authorHandle, actorHandle, or targetHandle. Return JSON only.",
           ].join("\n");
           const correctionMessages = [...requestMessages, { role: "user" as const, content: correction }];
@@ -381,7 +378,6 @@ export function createPublicNoodleGenerationService(db: DB) {
               parsedGenerated.refresh,
               allowedActorHandles,
               knownHandles,
-              isEmptyNoodleGeneratedRefreshResponse(content),
             );
           } catch (error) {
             correctedRetryReason = `the response was not valid timeline JSON (${getErrorMessage(error)})`;
@@ -393,6 +389,11 @@ export function createPublicNoodleGenerationService(db: DB) {
             rejectionReason: correctedRetryReason,
             createdAt: new Date().toISOString(),
           });
+          if (retryReason === NOODLE_EMPTY_TIMELINE_REASON && correctedRetryReason === NOODLE_EMPTY_TIMELINE_REASON) {
+            throw new Error(
+              "The generation model returned no timeline activity twice. No timeline changes were saved. Try again, or lower Accounts per refresh.",
+            );
+          }
           if (correctedRetryReason)
             throw new Error(`Noodle timeline correction could not be used because ${correctedRetryReason}.`);
         }
