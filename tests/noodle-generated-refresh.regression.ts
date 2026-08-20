@@ -48,8 +48,13 @@ assert.deepEqual(parseSlurpGeneratedProfiles([{ profiles: [slurpProfile] }]), {
   profiles: [slurpProfile],
   rejected: [],
 });
+assert.deepEqual(parseSlurpGeneratedProfiles([slurpProfile]), {
+  profiles: [slurpProfile],
+  rejected: [],
+});
 assert.deepEqual(parseSlurpGeneratedProfiles({ profiles: [] }), { profiles: [], rejected: [] });
 assert.deepEqual(parseSlurpGeneratedProfiles([{ profiles: [] }]), { profiles: [], rejected: [] });
+assert.deepEqual(parseSlurpGeneratedProfiles([]), { profiles: [], rejected: [] });
 assert.deepEqual(parseSlurpGeneratedProfiles({ profiles: [{ entityId: "invalid" }] }).rejected, [
   { index: 0, issueCount: 4 },
 ]);
