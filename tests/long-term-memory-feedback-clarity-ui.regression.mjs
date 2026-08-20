@@ -266,6 +266,11 @@ assert.equal(locale["ui.longTermMemory.memoryvault.saveAndContinue"], "Save and 
 assert.match(vault, /extractionImportance/u);
 assert.match(vault, /extractionConfidence/u);
 assert.match(vault, /data-ltm-validation-summary/u);
+assert.match(vault, /data-ltm-vault-feedback/u);
+assert.ok(
+  vault.indexOf("data-ltm-vault-feedback") < vault.indexOf("<LtmWorkspace\n"),
+  "shared Vault feedback must stay visible above the pane-switching workspace",
+);
 assert.match(sharedControls, /HTMLAttributes<HTMLDivElement>/u);
 assert.match(sharedControls, /<div\s+role=\{tone === "danger" \? "alert" : "status"\}/u);
 assert.doesNotMatch(vault, /<div role="alert"><StatusSurface tone="danger">/u);
