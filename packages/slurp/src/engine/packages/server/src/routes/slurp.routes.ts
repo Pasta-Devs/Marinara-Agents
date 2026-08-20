@@ -283,8 +283,7 @@ async function importNoodlerMedia(imageUrl: string): Promise<NoodlerPostMediaUpl
 }
 
 type DecodedNoodlerMediaRequest<T> =
-  | { success: true; data: T; media: NoodlerPostMediaUpload | undefined }
-  | { success: false; error: z.ZodError };
+  { success: true; data: T; media: NoodlerPostMediaUpload | undefined } | { success: false; error: z.ZodError };
 
 async function decodeNoodlerMediaRequest<WithMediaSchema extends z.ZodTypeAny, WithoutMediaSchema extends z.ZodTypeAny>(
   req: FastifyRequest,
