@@ -23,6 +23,11 @@ assert.match(
 );
 assert.match(
   storage,
+  /return \{ lastObservedBudgetTime: timestamp, preparationNotBefore: timestamp \};/u,
+  "new reserve state must return the timestamp it persisted instead of an undefined shorthand",
+);
+assert.match(
+  storage,
   /storedPreparationMs > observedMs\s*\n\s*\? observed/u,
   "upgraded reserve state must repair the old future startup hold",
 );

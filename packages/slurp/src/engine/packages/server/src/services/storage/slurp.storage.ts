@@ -2273,7 +2273,7 @@ export function createSlurpStorage(db: DB) {
           createdAt: timestamp,
           updatedAt: timestamp,
         });
-        return { lastObservedBudgetTime: timestamp, preparationNotBefore };
+        return { lastObservedBudgetTime: timestamp, preparationNotBefore: timestamp };
       });
     },
 
