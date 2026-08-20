@@ -4,6 +4,7 @@ import {
   validateNoodleGeneratedRefresh,
 } from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-generated-refresh";
 import { parseNoodleGeneratedProfiles } from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-generated-profiles";
+import { parseNoodleGeneratedProfiles as parseSlurpGeneratedProfiles } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generated-profiles";
 
 assert.deepEqual(parseNoodleGeneratedProfiles([]), { profiles: [], rejected: [] });
 assert.deepEqual(
@@ -31,6 +32,9 @@ assert.deepEqual(
     rejected: [],
   },
 );
+assert.deepEqual(parseNoodleGeneratedProfiles([{ profiles: [] }]), { profiles: [], rejected: [] });
+assert.deepEqual(parseSlurpGeneratedProfiles({ profiles: [] }), { profiles: [], rejected: [] });
+assert.deepEqual(parseSlurpGeneratedProfiles([{ profiles: [] }]), { profiles: [], rejected: [] });
 assert.throws(() => parseNoodleGeneratedProfiles({ profiles: null }));
 assert.throws(() => parseNoodleGeneratedProfiles([{ profiles: null }]));
 assert.deepEqual(parseNoodleGeneratedProfiles({ profiles: [{ entityId: "invalid" }] }).rejected, [
