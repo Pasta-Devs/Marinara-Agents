@@ -4,6 +4,7 @@ import { startNoodleAutoPostScheduler } from "./slurp-autopost-scheduler.service
 import { startNoodlerFanActivityScheduler } from "./slurp-fan-activity-scheduler.service.js";
 import { startNoodleRefreshScheduler } from "./slurp-refresh-scheduler.service.js";
 import { createSlurpActivationLifecycle } from "./slurp-activation-lifecycle.js";
+import { createSlurpStorage } from "../storage/slurp.storage.js";
 
 const lifecycle = createSlurpActivationLifecycle();
 
@@ -21,6 +22,7 @@ export async function activate({
   };
 }) {
   return lifecycle.activate(async (addTeardown) => {
+    await createSlurpStorage(app.db).migrateLegacyNoodlerSourceSnapshots();
     // Capability routes are registered through the host's revocable privileged route slots.
     // Noodle's existing plugin creates storage adapters while it registers, so expose only the
     // host database on the otherwise constrained collector.

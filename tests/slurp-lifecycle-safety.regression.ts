@@ -18,6 +18,7 @@ const settings = read("packages/slurp/src/engine/packages/client/src/components/
 const profileSurface = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpProfileSurface.tsx");
 const artwork = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-artwork.operation.ts");
 const shell = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpShell.tsx");
+const serverEntry = read("packages/slurp/src/engine/packages/server/src/services/slurp/server-entry.ts");
 
 const updateRoute = routes.slice(
   routes.indexOf('app.put("/noodler/accounts/:id/stage-profile"'),
@@ -50,6 +51,16 @@ assert.match(imageConnections, /storage\.get\(KEY\)[\s\S]*?storage\.get\(LEGACY_
 assert.doesNotMatch(home, /canQuieten|makeQuieter|quieterPending/u);
 assert.match(home, /const viewingOwnCreator = profile\.sourceAccountId === viewerAccount\?\.entityId/u);
 assert.match(home, /const managedCreator = true/u);
+assert.match(home, /const personaBackedCreator = viewerAccounts\.some/u);
+assert.match(home, /const accessViewerAccounts = viewerAccounts\.filter/u);
+assert.match(home, /!personaBackedCreator && \([\s\S]*?setAutomationOpen\(true\)/u);
+assert.match(storage, /withoutNoodlerSelfHiddenAccountId\([\s\S]*?row\.sourceEntityId \?\? row\.entityId/u);
+assert.match(shell, /CSS\.supports\?\.\("-webkit-touch-callout", "none"\)/u);
+assert.match(shell, /style=\{\{ paddingBottom: `max\(1rem, \$\{BOTTOM_SAFE_INSET\}\)` \}\}/u);
+assert.match(shell, /pb-\[calc\(56px\+var\(--slurp-bottom-safe-inset\)\)\]/u);
+assert.match(shell, /style=\{\{ paddingBottom: BOTTOM_SAFE_INSET \}\}/u);
+assert.match(home, /<SlurpMobileHeader[\s\S]*?triggerRef=\{mobileDrawerTriggerRef\}/u);
+assert.match(home, /ref=\{setStickyHeader\}[\s\S]*?HIDE_ON_SCROLL_CLASS/u);
 assert.match(home, /function DisclosureBadge[\s\S]*?HelpTooltip/u);
 assert.match(home, /confirmProviderDisclosure/u);
 assert.doesNotMatch(home, /findLastIndex/u, "Slurp hub must support the Engine ES2020 target");
@@ -64,6 +75,25 @@ assert.match(
   /cleanupRetiredViewer[\s\S]*?noodleAccountSubscriptions[\s\S]*?noodlePostUnlocks[\s\S]*?slurpViewerSettingsKey/u,
 );
 assert.match(settings, /ui\.slurp\.settings\.creators\.sourceChanged/u);
+const profileList = storage.slice(
+  storage.indexOf("async listNoodlerStageProfiles"),
+  storage.indexOf("async migrateLegacyNoodlerSourceSnapshots"),
+);
+assert.ok(profileList.length > 0, "listNoodlerStageProfiles must precede migrateLegacyNoodlerSourceSnapshots");
+assert.doesNotMatch(profileList, /updateNoodlerSourceSnapshot|patchAccountSettings/u);
+assert.match(storage, /async migrateLegacyNoodlerSourceSnapshots/u);
+assert.match(storage, /minimizeNoodlerSourceSnapshot\(baseline, disclosureMode\)/u);
+assert.match(storage, /NOODLER_SOURCE_SNAPSHOT_MIGRATION_KEY/u);
+assert.match(storage, /settingsStore\.set\(NOODLER_SOURCE_SNAPSHOT_MIGRATION_KEY, "1"\)/u);
+assert.match(serverEntry, /await createSlurpStorage\(app\.db\)\.migrateLegacyNoodlerSourceSnapshots\(\)/u);
+const dismissRoute = routes.slice(
+  routes.indexOf('app.post("/noodler/accounts/:id/source/dismiss"'),
+  routes.indexOf('app.post("/noodler/accounts/:id/source/adopt-identity"'),
+);
+assert.match(dismissRoute, /updateNoodlerSourceSnapshot/u);
+assert.match(dismissRoute, /listNoodlerStageProfiles/u);
+assert.match(settings, /sourceStatus\.\$\{creator\.sourceStatus\.state\}/u);
+assert.match(settings, /ui\.slurp\.settings\.creators\.acceptChanges/u);
 assert.match(settings, /onRedraftCreator/u);
 assert.match(settings, /import \{ Avatar, getNoodleAccentStyle, NOODLE_PINK \} from "\.\/SlurpShell"/u);
 assert.match(routes, /app\.post\("\/noodler\/accounts\/:id\/banner"/u);

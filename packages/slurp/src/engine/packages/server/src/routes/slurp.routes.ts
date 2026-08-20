@@ -1676,6 +1676,17 @@ export async function slurpRoutes(app: FastifyInstance) {
     return noodle.getNoodlerReserveStatus();
   });
 
+  app.patch("/noodler/auto-post/schedule/:slotId", async (req, reply) => {
+    const body = z.object({ publishAt: z.string().datetime() }).safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    const { slotId } = req.params as { slotId: string };
+    const result = await noodle.rescheduleNoodlerPost(slotId, body.data.publishAt);
+    if (result === "not_found") return reply.code(404).send({ error: "Scheduled Slurp post not found." });
+    if (result === "not_future") return reply.code(400).send({ error: "Publication time must be in the future." });
+    if (result === "not_editable") return reply.code(409).send({ error: "This Slurp post is no longer editable." });
+    return noodle.getNoodlerReserveStatus();
+  });
+
   app.get("/noodler/image-connections", async () => getNoodlerImageConnections(app.db));
 
   app.patch("/noodler/image-connections", async (req, reply) => {
@@ -1697,9 +1708,9 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (creatorId && !(await noodle.getNoodlerAccountById(creatorId))) {
       return reply.code(404).send({ error: "NoodleR stage profile not found" });
     }
-    for (const connectionId of [defaultConnectionId, connectionId]) {
-      if (connectionId === undefined || connectionId === null) continue;
-      const connection = await connections.getWithKey(connectionId);
+    for (const candidateConnectionId of [defaultConnectionId, connectionId]) {
+      if (candidateConnectionId === undefined || candidateConnectionId === null) continue;
+      const connection = await connections.getWithKey(candidateConnectionId);
       if (!connection || connection.provider !== "image_generation") {
         return reply.code(404).send({ error: "Noodle image connection not found" });
       }

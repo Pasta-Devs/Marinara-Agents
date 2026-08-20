@@ -214,6 +214,7 @@ export async function persistGeneratedNoodleActivity(input: {
   const existingInteractions = [...existingInteractionById.values()];
   const tempIdToPostId = new Map<string, string>();
   const imagePromptReviewItems: NoodleImagePromptReviewItem[] = [];
+  const committedCounts = { posts: 0, interactions: 0, follows: 0 };
 
   for (const generatedPost of input.generated.posts.slice(0, input.settings.maxGeneratedPostsPerRefresh)) {
     const account = handleToAccount.get(normalizeNoodleHandle(generatedPost.authorHandle));
@@ -255,6 +256,7 @@ export async function persistGeneratedNoodleActivity(input: {
     }
     allowedPostIds.add(post.id);
     if (preparedMedia.preview) imagePromptReviewItems.push({ id: post.id, ...preparedMedia.preview });
+    committedCounts.posts += 1;
     if (generatedPost.tempId) tempIdToPostId.set(generatedPost.tempId, post.id);
     const digest = await input.noodle.createDigest({
       accountIds: [account.id, ...mentionedAccounts.map((mentionedAccount) => mentionedAccount.id)],
@@ -319,6 +321,7 @@ export async function persistGeneratedNoodleActivity(input: {
       parentInteractionId: parentInteraction?.id ?? null,
     });
     if (!interaction) continue;
+    committedCounts.interactions += 1;
     existingInteractions.push(interaction);
     existingInteractionById.set(interaction.id, interaction);
     quotas[interactionType] = (quotas[interactionType] ?? 0) - 1;
@@ -354,13 +357,18 @@ export async function persistGeneratedNoodleActivity(input: {
     seenGeneratedFollows.add(followKey);
     const follow = await input.noodle.updateAccountFollow(actor.id, target.id, true);
     if (!follow?.changed) continue;
+    committedCounts.follows += 1;
     await input.noodle.createDigest({
       accountIds: [actor.id, target.id],
       content: `${noodleDigestAccountLabel(actor)} followed ${noodleDigestAccountLabel(target)} on Noodle.`,
       sourceRunId: input.runId,
     });
   }
-  return { imagePromptReviewItems };
+  return {
+    imagePromptReviewItems,
+    committedCounts,
+    committedCount: committedCounts.posts + committedCounts.interactions + committedCounts.follows,
+  };
 }
 
 export async function commitGeneratedNoodleActivity(input: {
@@ -373,6 +381,7 @@ export async function commitGeneratedNoodleActivity(input: {
   result: string;
   recalledPostIds: string[];
   preparedMedia: PreparedGeneratedNoodleMedia;
+  rejectedActivityCount: number;
 }) {
   try {
     for (const media of input.preparedMedia.stagedMedia) media.file.promote();
@@ -389,9 +398,22 @@ export async function commitGeneratedNoodleActivity(input: {
         recalledPostIds: input.recalledPostIds,
         preparedMedia: input.preparedMedia,
       });
+      const candidateCount =
+        input.generated.posts.length + input.generated.interactions.length + input.generated.follows.length;
+      if (persisted.committedCount === 0) {
+        throw new Error(
+          `Timeline generation produced no activity that could be committed (0 committed; ${input.rejectedActivityCount + candidateCount} rejected).`,
+        );
+      }
       const completedRun = await noodle.finishRefreshRun(input.runId, {
         status: "completed",
-        result: input.result,
+        result: JSON.stringify({
+          response: input.result,
+          activityCounts: {
+            ...persisted.committedCounts,
+            rejected: input.rejectedActivityCount + Math.max(0, candidateCount - persisted.committedCount),
+          },
+        }),
       });
       if (!completedRun) throw new Error("Noodle refresh run disappeared during activity commit.");
       return persisted;
