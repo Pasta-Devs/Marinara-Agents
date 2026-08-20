@@ -158,6 +158,9 @@ type AvailabilityTargets = {
   branches: AvailabilityChatTarget[];
 };
 type BulkAvailabilityTargetKind = "group" | "chat" | "branch" | "character" | "persona";
+type ArchiveUndoState = {
+  notes: Array<{ id: string; status: LtmStatus }>;
+};
 
 function splitBulkAvailabilityTarget(target: string): [BulkAvailabilityTargetKind, string] {
   const [kind, ...parts] = target.split(":");
@@ -1219,6 +1222,7 @@ export default function MemoryVault({
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [archiveUndo, setArchiveUndo] = useState<ArchiveUndoState | null>(null);
   const [recoverySuggestionId, setRecoverySuggestionId] = useState<string | null>(null);
   const [bulkStatus, setBulkStatus] = useState<LtmStatus>("active");
   const [bulkModes, setBulkModes] = useState<LtmMode[]>(["roleplay"]);
@@ -1358,6 +1362,7 @@ export default function MemoryVault({
     setBusy("");
     setError("");
     setNotice("");
+    setArchiveUndo(null);
     setOpenActionNoteId(null);
     setDetailsOpen(false);
     setLinkTarget("");
@@ -1812,6 +1817,7 @@ export default function MemoryVault({
     setDraft(null);
     setAvailabilityOpen(null);
     setChecked(new Set());
+    setArchiveUndo(null);
     setSaved("");
     setIsNew(false);
     setRecoverySuggestionId(null);
@@ -1919,6 +1925,53 @@ export default function MemoryVault({
   }
   async function invalidate() {
     await invalidateLtmQueries(client, [queryKeys.notes, queryKeys.status, queryKeys.activity]);
+  }
+  async function undoArchive(recovery: ArchiveUndoState) {
+    if (archiveUndo !== recovery) return;
+    const session = editorSession.current;
+    setArchiveUndo(null);
+    setBusy("undo-archive");
+    setError("");
+    try {
+      const notesByStatus = new Map<LtmStatus, string[]>();
+      for (const note of recovery.notes) {
+        const ids = notesByStatus.get(note.status) ?? [];
+        ids.push(note.id);
+        notesByStatus.set(note.status, ids);
+      }
+      const results = await Promise.all(
+        [...notesByStatus].map(([status, noteIds]) =>
+          request<LtmBulkNoteResult>("/notes/batch", "POST", { noteIds, status }),
+        ),
+      );
+      if (session !== editorSession.current) return;
+      const restoredIds = new Set(results.flatMap((result) => result.updatedNoteIds));
+      if (
+        results.some(
+          (result) =>
+            result.status !== "complete" || result.skippedNoteIds.length > 0 || result.failedNoteIds.length > 0,
+        ) ||
+        restoredIds.size !== recovery.notes.length ||
+        recovery.notes.some((note) => !restoredIds.has(note.id))
+      )
+        throw new Error("Archive undo did not restore every memory.");
+      setNotice(
+        localizeUi(
+          selectLtmPluralForm(locale, recovery.notes.length) === "one"
+            ? "ui.longTermMemory.memoryvault.archiveUndoSuccessOne"
+            : "ui.longTermMemory.memoryvault.archiveUndoSuccessOther",
+          { count: recovery.notes.length },
+        ),
+      );
+      await invalidate();
+    } catch {
+      if (session === editorSession.current) {
+        setNotice("");
+        setError(localizeUi("ui.longTermMemory.memoryvault.archiveUndoFailed"));
+      }
+    } finally {
+      if (session === editorSession.current) setBusy("");
+    }
   }
   function openAvailability() {
     if (!draft) return;
@@ -2266,9 +2319,17 @@ export default function MemoryVault({
     )
       return;
     if (action === "delete") {
+      setArchiveUndo(null);
       await deleteSelected(ids);
       return;
     }
+    setArchiveUndo(null);
+    const previousArchiveStatuses = new Map(
+      ids.flatMap((id) => {
+        const status = allNotes.find((note) => note.id === id)?.status;
+        return status ? [[id, status] as const] : [];
+      }),
+    );
     setBusy(action);
     try {
       const availabilityScope = bulkAvailabilityScope(bulkAvailabilityTargets);
@@ -2305,20 +2366,36 @@ export default function MemoryVault({
         setChecked(unresolved);
       }
       const updatedForm = selectLtmPluralForm(locale, result.updatedNoteIds.length);
+      const archiveUndoNotes =
+        action === "archive" && !unresolved.size
+          ? result.updatedNoteIds.flatMap((id) => {
+              const status = previousArchiveStatuses.get(id);
+              return status ? [{ id, status }] : [];
+            })
+          : [];
       const message = localizeUi(
-        unresolved.size
+        action === "archive" && !unresolved.size
           ? updatedForm === "one"
-            ? "ui.longTermMemory.memoryvault.batchUpdatedWithIssuesOne"
-            : "ui.longTermMemory.memoryvault.batchUpdatedWithIssuesOther"
-          : updatedForm === "one"
-            ? "ui.longTermMemory.memoryvault.batchUpdatedOne"
-            : "ui.longTermMemory.memoryvault.batchUpdatedOther",
+            ? "ui.longTermMemory.memoryvault.archiveSuccessOne"
+            : "ui.longTermMemory.memoryvault.archiveSuccessOther"
+          : unresolved.size
+            ? updatedForm === "one"
+              ? "ui.longTermMemory.memoryvault.batchUpdatedWithIssuesOne"
+              : "ui.longTermMemory.memoryvault.batchUpdatedWithIssuesOther"
+            : updatedForm === "one"
+              ? "ui.longTermMemory.memoryvault.batchUpdatedOne"
+              : "ui.longTermMemory.memoryvault.batchUpdatedOther",
         {
           updated: result.updatedNoteIds.length,
           skipped: result.skippedNoteIds.length,
           failed: result.failedNoteIds.length,
+          count: result.updatedNoteIds.length,
         },
       );
+      if (action === "archive" && archiveUndoNotes.length === result.updatedNoteIds.length) {
+        if (archiveUndoNotes.length) setArchiveUndo({ notes: archiveUndoNotes });
+        else setArchiveUndo(null);
+      }
       setOpenActionNoteId(null);
       if (unresolved.size) {
         setNotice("");
@@ -2538,10 +2615,19 @@ export default function MemoryVault({
           transform: rotate(90deg);
         }
       `}</style>
-      {error || notice ? (
+      {error || notice || archiveUndo ? (
         <div data-ltm-vault-feedback className="contents">
           {error ? <StatusSurface tone="danger">{error}</StatusSurface> : null}
-          {notice ? <StatusSurface tone="success">{notice}</StatusSurface> : null}
+          {notice || archiveUndo ? (
+            <StatusSurface tone="success">
+              <span className="min-w-0 flex-1">{notice}</span>
+              {archiveUndo ? (
+                <Button disabled={Boolean(busy)} onClick={() => void undoArchive(archiveUndo)}>
+                  {localizeUi("ui.longTermMemory.memoryvault.undo")}
+                </Button>
+              ) : null}
+            </StatusSurface>
+          ) : null}
         </div>
       ) : null}
       <LtmWorkspace
@@ -3045,7 +3131,10 @@ export default function MemoryVault({
                                 ) : null}
                               </button>
                               {note.type !== "source" ? (
-                                <div className="hidden flex-col items-start gap-1 pt-1 opacity-0 transition-opacity pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto group-hover:opacity-100 group-focus-within:opacity-100 md:flex">
+                                <div
+                                  data-ltm-note-actions-desktop
+                                  className="hidden shrink-0 flex-col items-start gap-1 pt-1 text-[var(--muted-foreground)] md:flex"
+                                >
                                   <IconButton
                                     icon={Archive}
                                     label={localizeUi("ui.longTermMemory.memoryvault.archiveValue1", {
