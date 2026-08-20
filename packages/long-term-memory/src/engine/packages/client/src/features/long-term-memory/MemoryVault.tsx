@@ -1434,6 +1434,7 @@ export default function MemoryVault({
           ? right.createdAt.localeCompare(left.createdAt)
           : right.updatedAt.localeCompare(left.updatedAt),
     );
+  const hasFilterableNotes = allNotes.length > 0 && (sourceFilter || allNotes.some((note) => note.type !== "source"));
   const clearNavigatorFilters = () => {
     setSearch("");
     setStatusFilter("all");
@@ -3114,7 +3115,7 @@ export default function MemoryVault({
                 notes.isSuccess &&
                 !visible.length ? (
                   <div className="p-5 text-center text-xs text-[var(--muted-foreground)]">
-                    {allNotes.length ? (
+                    {hasFilterableNotes ? (
                       <>
                         <p>
                           {localizeUi("ui.longTermMemory.memoryvault.filteredEmptyDescription", {

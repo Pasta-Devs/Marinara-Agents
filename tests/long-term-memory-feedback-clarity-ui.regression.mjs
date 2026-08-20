@@ -298,11 +298,15 @@ assert.match(
   vault,
   /setSearch\(""\);[\s\S]*setStatusFilter\("all"\);[\s\S]*setSourceFilter\(false\);[\s\S]*setSort\("updated"\);/u,
 );
+assert.match(
+  vault,
+  /const hasFilterableNotes = allNotes\.length > 0 && \(sourceFilter \|\| allNotes\.some\(\(note\) => note\.type !== "source"\)\);/u,
+);
+assert.match(vault, /hasFilterableNotes \? \([\s\S]*filteredEmptyDescription/u);
 const clearFiltersStart = vault.indexOf("const clearNavigatorFilters");
 const clearFiltersEnd = vault.indexOf("const hiddenChecked", clearFiltersStart);
 assert.ok(clearFiltersStart >= 0 && clearFiltersEnd > clearFiltersStart);
 assert.doesNotMatch(vault.slice(clearFiltersStart, clearFiltersEnd), /setTarget/u);
-assert.match(vault, /allNotes\.length \? \([\s\S]*filteredEmptyDescription/u);
 assert.match(vault, /filteredEmptyFilters[\s\S]*activeFilterLabels\.join\(", "\)/u);
 assert.match(vault, /filteredEmptySourcesOnly/u);
 assert.match(vault, /onClick=\{clearNavigatorFilters\}/u);
