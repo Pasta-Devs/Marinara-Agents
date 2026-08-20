@@ -132,7 +132,10 @@ assert.equal(locale["ui.longTermMemory.memoryvault.chooseWhereUsed"], "Choose wh
 assert.equal(locale["ui.longTermMemory.memoryvault.saveAvailability"], "Save availability");
 assert.equal(locale["ui.longTermMemory.memoryvault.addMemoryTo"], "Add this memory to:");
 assert.match(vault, /data-ltm-select-mode/u);
-assert.match(vault, /const scopeTargetResolved = Boolean\(target && targetContextKey\.current === contextKey\)/u);
+assert.match(
+  vault,
+  /const scopeTargetResolved = Boolean\(target && targetContextKey\.current === contextKey && scopeTargets\.isSuccess\)/u,
+);
 assert.match(vault, /scopeTargets\.isLoading/u);
 assert.match(vault, /scopeTargets\.isError/u);
 assert.match(vault, /scopeTargets\.refetch\(\)/u);

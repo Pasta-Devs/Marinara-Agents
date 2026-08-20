@@ -1378,7 +1378,7 @@ export default function MemoryVault({
       setTarget((current) => (current ? { ...current, scope: scopeTargets.data!.currentScope! } : current));
     }
   }, [props.chatId, scopeTargets.data, target?.id]);
-  const scopeTargetResolved = Boolean(target && targetContextKey.current === contextKey);
+  const scopeTargetResolved = Boolean(target && targetContextKey.current === contextKey && scopeTargets.isSuccess);
   const notes = useQuery({
     queryKey: [...queryKeys.notes, contextKey, target?.id, target?.scope],
     enabled: scopeTargetResolved,
@@ -1536,8 +1536,8 @@ export default function MemoryVault({
     selectedConversationId,
   ]);
   const selectedCharacter = scopeTargets.data?.characters.find((character) => character.id === selectedCharacterId);
-  const characterScopeTargets = (scopeTargets.data?.characters ?? []).map((character) =>
-    targets.find((candidate) => candidate.id === `character:${character.id}`)!,
+  const characterScopeTargets = (scopeTargets.data?.characters ?? []).map(
+    (character) => targets.find((candidate) => candidate.id === `character:${character.id}`)!,
   );
   const conversationScopeTargets = conversations.map((conversation) => {
     const [kind, id] = conversation.id.split(/:(.+)/, 2);
