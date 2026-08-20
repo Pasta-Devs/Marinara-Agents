@@ -7,6 +7,36 @@ import { parseNoodleGeneratedProfiles } from "../packages/noodle/src/engine/pack
 
 assert.deepEqual(parseNoodleGeneratedProfiles([]), { profiles: [], rejected: [] });
 assert.deepEqual(
+  parseNoodleGeneratedProfiles({
+    profiles: [
+      {
+        entityId: "character-2",
+        name: "Lygus",
+        handle: "lygus",
+        bio: "A spectator.",
+        location: "The Exomyth",
+      },
+    ],
+  }),
+  {
+    profiles: [
+      {
+        entityId: "character-2",
+        name: "Lygus",
+        handle: "lygus",
+        bio: "A spectator.",
+        location: "The Exomyth",
+      },
+    ],
+    rejected: [],
+  },
+);
+assert.throws(() => parseNoodleGeneratedProfiles({ profiles: null }));
+assert.throws(() => parseNoodleGeneratedProfiles([{ profiles: null }]));
+assert.deepEqual(parseNoodleGeneratedProfiles({ profiles: [{ entityId: "invalid" }] }).rejected, [
+  { index: 0, issueCount: 4 },
+]);
+assert.deepEqual(
   parseNoodleGeneratedProfiles([
     {
       entityId: "character-1",

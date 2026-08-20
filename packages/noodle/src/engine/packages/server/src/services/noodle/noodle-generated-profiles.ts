@@ -18,7 +18,12 @@ export function parseNoodleGeneratedProfiles(value: unknown): {
   rejected: RejectedNoodleGeneratedProfile[];
 } {
   const wrappedValue =
-    Array.isArray(value) && value.length === 1 && value[0] && typeof value[0] === "object" && !Array.isArray(value[0])
+    Array.isArray(value) &&
+    value.length === 1 &&
+    value[0] &&
+    typeof value[0] === "object" &&
+    !Array.isArray(value[0]) &&
+    Object.prototype.hasOwnProperty.call(value[0], "profiles")
       ? (value[0] as Record<string, unknown>)
       : null;
   const normalizedValue = wrappedValue ?? value;
@@ -26,7 +31,7 @@ export function parseNoodleGeneratedProfiles(value: unknown): {
     normalizedValue && typeof normalizedValue === "object" && !Array.isArray(normalizedValue)
       ? (normalizedValue as Record<string, unknown>)
       : null;
-  const rawProfiles = Array.isArray(value) ? (wrappedValue?.profiles ?? value) : record?.profiles;
+  const rawProfiles = Array.isArray(value) ? (wrappedValue ? wrappedValue.profiles : value) : record?.profiles;
   if (!Array.isArray(rawProfiles)) {
     // Preserve the useful top-level validation error for a wholly malformed
     // response. Only a single object wrapper and individual profile failures
