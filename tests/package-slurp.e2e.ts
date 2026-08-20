@@ -346,9 +346,16 @@ test.describe("standalone Slurp package", () => {
           })
           .catch(() => undefined);
       }
-      for (const connectionId of imageConnectionIds) {
-        const response = await page.request.delete(`/api/connections/${connectionId}`, { timeout: 5_000 });
-        expect(response.ok()).toBe(true);
+      const connectionCleanupResults = await Promise.allSettled(
+        imageConnectionIds.map((connectionId) =>
+          page.request.delete(`/api/connections/${connectionId}`, { timeout: 5_000 }),
+        ),
+      );
+      for (const result of connectionCleanupResults) {
+        expect(result.status).toBe("fulfilled");
+        if (result.status === "fulfilled") {
+          expect(result.value.ok()).toBe(true);
+        }
       }
       await page.request.delete(`/api/characters/personas/${persona.id}`, { timeout: 5_000 }).catch(() => undefined);
     }
