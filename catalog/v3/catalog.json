@@ -152,8 +152,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/beholder.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/beholder-1.2.2.zip",
-        "sha256": "9839d3d1a6b199105bb112d68a43d06e05071c4b98b448885159419487fece56",
-        "bytes": 11526
+        "sha256": "adc9baaff16fc2f5ed769f9d178a45b0fd6171a986ab2ffff9c523716fd8eeaf",
+        "bytes": 5033
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#beholder"
     },
@@ -1080,7 +1080,7 @@
         "schemaVersion": 1,
         "id": "noodle",
         "name": "Noodle",
-        "version": "1.2.7",
+        "version": "1.2.8",
         "description": "Explore the Noodle public timeline as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
         "localizations": {
           "de": {
@@ -1140,8 +1140,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "e32a85cea66aaeb6ba6dfbe3723807f14d3f9ef03e963318c77444e7df50a3de",
-            "bytes": 2284528
+            "sha256": "6f8fa7d6be355fea084e803f68965273b0cdc484ed269e518780cabc388214d7",
+            "bytes": 2284560
           },
           {
             "path": "client.js",
@@ -1167,9 +1167,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.2.7.zip",
-        "sha256": "798fdec2e40b1c174030afbd350c9c6ee84099ecefc08845b686eb868cf169f2",
-        "bytes": 4561479
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.2.8.zip",
+        "sha256": "5c3d12c27ac3c4a9db147f4996c70fcf9896dbeb5912cb6bb4d98c740409ba39",
+        "bytes": 4561511
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },
