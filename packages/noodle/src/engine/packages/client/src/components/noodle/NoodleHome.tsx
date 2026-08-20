@@ -3030,7 +3030,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   setPromptPresetName("");
                   setPromptPresetDialogOpen(true);
                 }}
-                disabled={updateSettings.isPending}
+                disabled={updateSettings.isPending || !noodlePromptDraft.trim()}
                 title={localizeUi("ui.noodle.noodlehome.savePromptPreset")}
                 className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border border-[var(--noodle-accent)]/35 px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-45"
               >
