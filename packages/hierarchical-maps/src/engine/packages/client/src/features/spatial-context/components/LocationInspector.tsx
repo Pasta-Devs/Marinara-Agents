@@ -36,6 +36,7 @@ import { GameMapBindingsPanel } from "./GameMapBindingsPanel";
 import {
   DEFAULT_SPATIAL_LINK_PICKER_COLOR,
   SPATIAL_LOCATION_ICON_MAX_LENGTH,
+  globalGallerySpatialReferenceId,
   hierarchyTypeForLocation,
   resolveSpatialLinkPresentation,
   withoutSpatialLinkPresentation,
@@ -47,6 +48,7 @@ import {
   resolveSpatialArtworkImage,
   spatialArtworkImages,
   uploadSpatialGalleryImage,
+  uploadSpatialGlobalGalleryImage,
   useGenerateSpatialGalleryImage,
   useSpatialGalleryImages,
   useSpatialGlobalGalleryImages,
@@ -473,23 +475,27 @@ export function LocationInspector({
   const handleArtworkUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (!file || !location || !uploadTarget || !allowChatArtwork || !chatId) return;
+    if (!file || !location || !uploadTarget || (allowChatArtwork && !chatId)) return;
     setUploadingArtwork(true);
     setUploadError(null);
     try {
-      const uploaded = await uploadSpatialGalleryImage(chatId, file, {
+      const metadata = {
         prompt: `Uploaded ${uploadTarget === "reference" ? "location reference" : "child map background"} for ${location.name}.`,
         provider: "upload",
         model: "user-upload",
         width: null,
         height: null,
-      });
-      await galleryImages.refetch();
+      };
+      const uploadedReferenceId = allowChatArtwork
+        ? (await uploadSpatialGalleryImage(chatId, file, metadata)).id
+        : globalGallerySpatialReferenceId((await uploadSpatialGlobalGalleryImage(file, metadata)).id);
+      if (allowChatArtwork) await galleryImages.refetch();
+      else await globalGalleryImages.refetch();
       if (uploadTarget === "reference") {
-        onUpdate({ referenceImageId: uploaded.id, useReferenceImage: true });
+        onUpdate({ referenceImageId: uploadedReferenceId, useReferenceImage: true });
       } else {
         onUpdate({
-          mapBackgroundImageId: uploaded.id,
+          mapBackgroundImageId: uploadedReferenceId,
           mapBackgroundPosition: location.mapBackgroundPosition ?? { x: 50, y: 50 },
         });
       }
@@ -674,17 +680,15 @@ export function LocationInspector({
               )}
             </div>
 
-            {allowChatArtwork && (
-              <input
-                ref={uploadInputRef}
-                type="file"
-                accept="image/*"
-                className="sr-only"
-                tabIndex={-1}
-                aria-hidden="true"
-                onChange={(event) => void handleArtworkUpload(event)}
-              />
-            )}
+            <input
+              ref={uploadInputRef}
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              tabIndex={-1}
+              aria-hidden="true"
+              onChange={(event) => void handleArtworkUpload(event)}
+            />
 
             <div className={cn("mt-3 grid gap-2", allowChatArtwork ? "grid-cols-3" : "grid-cols-1")}>
               <button
@@ -726,7 +730,9 @@ export function LocationInspector({
                 </button>
               )}
             </div>
-            {uploadError && <p className="mt-2 text-[0.6875rem] text-red-400">{uploadError}</p>}
+            {uploadError && uploadTarget === "reference" && (
+              <p className="mt-2 text-[0.6875rem] text-red-400">{uploadError}</p>
+            )}
             {location.referenceImageId && (
               <button
                 type="button"
@@ -1165,7 +1171,7 @@ export function LocationInspector({
                     </div>
                   )}
                 </div>
-                <div className={cn("mt-2 grid gap-2", allowChatArtwork ? "grid-cols-3" : "grid-cols-2")}>
+                <div className="mt-2 grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => openGalleryPicker("background")}
@@ -1173,22 +1179,20 @@ export function LocationInspector({
                   >
                     <ImageIcon size="0.75rem" /> Choose artwork
                   </button>
-                  {allowChatArtwork && (
-                    <button
-                      type="button"
-                      disabled={uploadingArtwork}
-                      onClick={() => beginArtworkUpload("background")}
-                      className="mari-chrome-control min-h-11 justify-center px-3 text-xs disabled:opacity-45"
-                      aria-label="Upload child map background"
-                    >
-                      {uploadingArtwork && uploadTarget === "background" ? (
-                        <Loader2 size="0.75rem" className="animate-spin" />
-                      ) : (
-                        <Upload size="0.75rem" />
-                      )}{" "}
-                      Upload
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    disabled={uploadingArtwork}
+                    onClick={() => beginArtworkUpload("background")}
+                    className="mari-chrome-control min-h-11 justify-center px-3 text-xs disabled:opacity-45"
+                    aria-label="Upload child map background"
+                  >
+                    {uploadingArtwork && uploadTarget === "background" ? (
+                      <Loader2 size="0.75rem" className="animate-spin" />
+                    ) : (
+                      <Upload size="0.75rem" />
+                    )}{" "}
+                    Upload
+                  </button>
                   <button
                     type="button"
                     disabled={!location.mapBackgroundImageId}
@@ -1198,6 +1202,9 @@ export function LocationInspector({
                     <Trash2 size="0.75rem" /> Remove
                   </button>
                 </div>
+                {uploadError && uploadTarget === "background" && (
+                  <p className="mt-2 text-[0.6875rem] text-red-400">{uploadError}</p>
+                )}
                 {galleryPickerTarget === "background" && (
                   <GalleryImagePicker
                     title="Choose child map background"

@@ -1080,7 +1080,7 @@
         "schemaVersion": 1,
         "id": "noodle",
         "name": "Noodle",
-        "version": "1.2.9",
+        "version": "1.2.10",
         "description": "Explore the Noodle public timeline as an optional local social world. Install it, restart Marinara Engine when prompted, then open Home → Noodle.",
         "localizations": {
           "de": {
@@ -1140,8 +1140,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "54045b0f2e5ad2deff5aaaa7c26016a2a22480c3b5d253463e975155b0f87ac7",
-            "bytes": 2285690
+            "sha256": "b3f53007b031a890e1665bf137f12a206b9a9f8b82308921e759fbd3ade74988",
+            "bytes": 2287091
           },
           {
             "path": "client.js",
@@ -1167,9 +1167,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/noodle.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.2.9.zip",
-        "sha256": "30ffac56be80e3e6f21c6758346a34422f16cd12195960e2cf6b3c4e4f1bbdf5",
-        "bytes": 4563156
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/noodle-1.2.10.zip",
+        "sha256": "67d993a18648c0ade2dfc27e8f24e81e4a43435661b419b5ff124e112be75d08",
+        "bytes": 4564558
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/noodle/README.md"
     },
@@ -1731,7 +1731,7 @@
         },
         "id": "hierarchical-maps",
         "name": "World Maps",
-        "version": "1.4.0",
+        "version": "1.4.1",
         "description": "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, customizable Direct Link lines, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
         "engine": {
           "min": "2.4.2",
@@ -1772,8 +1772,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "b8dfd2f604c826cdbc87c3a781293cd08782471ecc55b490ff1c801af0834a02",
-            "bytes": 926112
+            "sha256": "d680a32a7d2a3adca459f48ade430dfb1dc6165c7dcf2ea56b7a8ce5f4f61b19",
+            "bytes": 926252
           }
         ],
         "permissions": [
@@ -1791,9 +1791,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/hierarchical-maps.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.4.0.zip",
-        "sha256": "1511592418178492ee13887c80f615fbd73030953274cd2ed84069f4313c241f",
-        "bytes": 1240586
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/hierarchical-maps-1.4.1.zip",
+        "sha256": "3e400e01bdadbd14a5244fe82bd59c8e634977cf785dc6089919502d919eefd5",
+        "bytes": 1240726
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/main/docs/agents/hierarchical-maps.md"
     },

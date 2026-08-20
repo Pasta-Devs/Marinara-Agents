@@ -14,7 +14,7 @@ import { clampGenerationMaxOutputTokens } from "../generation/output-token-limit
 import { noodleSamplingOptions } from "./noodle-sampling-options.js";
 import { noodleTimelineRefreshMaxTokens } from "./noodle-post-target.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
-import type { ChatMessage } from "../llm/base-provider.js";
+import { llmFetch, type ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createCharacterGalleryStorage } from "../storage/character-gallery.storage.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
@@ -50,6 +50,11 @@ import type { ConnectionAdmissionMode } from "../generation/connection-admission
 import { isUnsupportedNoodleVisionInputError } from "./noodle-vision.js";
 import { formatNoodleMessagesForLog } from "./noodle-generation-log.js";
 import { ensureAmbientNoodleAccounts } from "./noodle-ambient-profiles.js";
+import {
+  canRetryNoodleVisionRequest,
+  resolveNoodleVisionSupport,
+  selectNoodleVisionRequest,
+} from "./noodle-model-capabilities.js";
 
 type PublicGenerationConnection = NonNullable<
   Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>
@@ -246,8 +251,27 @@ export function createPublicNoodleGenerationService(db: DB) {
           imageCaptioning,
           debugMode,
         });
-        logDebugOverride(debugMode, "[debug/noodle] Prompt sent to model:\n%s", prompt.promptForLog);
-        if (prompt.visionAttachmentCount > 0)
+        let visionSupport: boolean | null = null;
+        if (prompt.visionAttachmentCount > 0) {
+          try {
+            visionSupport = await resolveNoodleVisionSupport(input.connection, llmFetch);
+          } catch (error) {
+            logger.debug(error, "[noodle/vision] Could not preflight the selected model's vision capability");
+          }
+        }
+        const initialRequest = selectNoodleVisionRequest(prompt, visionSupport);
+        const useTextOnlyPreflight = initialRequest.attemptKind === "text_only_fallback";
+        let requestMessages: ChatMessage[] = initialRequest.messages;
+        let firstAttemptKind: NoodleRefreshAttemptKind = initialRequest.attemptKind;
+        const firstPromptForLog = initialRequest.promptForLog;
+        logDebugOverride(debugMode, "[debug/noodle] Prompt sent to model:\n%s", firstPromptForLog);
+        if (useTextOnlyPreflight)
+          logDebugOverride(
+            debugMode,
+            "[debug/noodle] Omitted %d timeline image input(s) because the selected NanoGPT model reports no vision support",
+            prompt.visionAttachmentCount,
+          );
+        else if (prompt.visionAttachmentCount > 0)
           logDebugOverride(
             debugMode,
             "[debug/noodle] Attached %d timeline image input(s) to the refresh prompt",
@@ -269,7 +293,7 @@ export function createPublicNoodleGenerationService(db: DB) {
         }
         run = await noodle.createRefreshRun({
           activeAccountIds: activeAccounts.map((account) => account.id),
-          prompt: prompt.promptForLog,
+          prompt: firstPromptForLog,
         });
         const runId = run.id;
         const timelineMaxTokens = clampGenerationMaxOutputTokens({
@@ -296,13 +320,15 @@ export function createPublicNoodleGenerationService(db: DB) {
           debugMode,
           responseFormat: noodleResponseFormat(input.connection.model, "timeline"),
         } as const;
-        let requestMessages: ChatMessage[] = prompt.messages;
-        let firstAttemptKind: NoodleRefreshAttemptKind = "initial";
         let result: Awaited<ReturnType<typeof provider.chatComplete>>;
         try {
-          result = await provider.chatComplete(prompt.messages, completionOptions);
+          result = await provider.chatComplete(requestMessages, completionOptions);
         } catch (error) {
-          if (prompt.visionAttachmentCount === 0 || !isUnsupportedNoodleVisionInputError(error)) throw error;
+          if (
+            !canRetryNoodleVisionRequest(firstAttemptKind, prompt.visionAttachmentCount) ||
+            !isUnsupportedNoodleVisionInputError(error)
+          )
+            throw error;
           logger.warn(
             error,
             "[noodle/vision] The selected timeline model rejected image input; retrying the refresh as text-only",
