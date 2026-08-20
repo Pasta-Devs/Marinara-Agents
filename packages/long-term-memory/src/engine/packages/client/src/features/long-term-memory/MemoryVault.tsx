@@ -2511,6 +2511,12 @@ export default function MemoryVault({
           transform: rotate(90deg);
         }
       `}</style>
+      {error || notice ? (
+        <div data-ltm-vault-feedback className="contents">
+          {error ? <StatusSurface tone="danger">{error}</StatusSurface> : null}
+          {notice ? <StatusSurface tone="success">{notice}</StatusSurface> : null}
+        </div>
+      ) : null}
       <LtmWorkspace
         activeMobilePane={mobilePane}
         onMobilePaneChange={setMobilePane}
@@ -2717,12 +2723,6 @@ export default function MemoryVault({
                   </span>
                 </div>
               </section>
-              {error || notice ? (
-                <div data-ltm-vault-feedback className="contents">
-                  {error ? <StatusSurface tone="danger">{error}</StatusSurface> : null}
-                  {notice ? <StatusSurface tone="success">{notice}</StatusSurface> : null}
-                </div>
-              ) : null}
               {checked.size ? (
                 <section
                   data-ltm-bulk-actions
