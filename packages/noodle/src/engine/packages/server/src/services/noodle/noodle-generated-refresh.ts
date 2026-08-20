@@ -17,9 +17,7 @@ export type RejectedNoodleGeneratedRefreshItem = {
   issueCount: number;
 };
 
-export function isEmptyNoodleGeneratedRefreshResponse(raw: string): boolean {
-  return /^\[\s*\]$/u.test(raw.trim());
-}
+export const NOODLE_EMPTY_TIMELINE_REASON = "the response contained no timeline activity";
 
 /**
  * Require a refresh to contain usable activity attributed to the exact cast
@@ -30,11 +28,10 @@ export function validateNoodleGeneratedRefresh(
   refresh: NoodleGeneratedRefresh,
   allowedActorHandles: ReadonlySet<string>,
   knownHandles: ReadonlySet<string>,
-  allowEmpty = false,
 ): string | null {
   const hasActivity =
     refresh.posts.length + refresh.interactions.length + refresh.follows.length + refresh.digests.length > 0;
-  if (!hasActivity) return allowEmpty ? null : "the response contained no timeline activity";
+  if (!hasActivity) return NOODLE_EMPTY_TIMELINE_REASON;
 
   const hasUsableAttribution =
     refresh.posts.some((post) => allowedActorHandles.has(normalizeNoodleHandle(post.authorHandle))) ||
