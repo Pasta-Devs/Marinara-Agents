@@ -1972,6 +1972,7 @@ export default function MemoryVault({
             request<LtmBulkNoteResult>("/notes/batch", "POST", { noteIds, status: "archived" }),
           ),
         );
+        await invalidate();
         throw new Error("Archive undo did not restore every memory.");
       }
       setArchiveUndo(null);
