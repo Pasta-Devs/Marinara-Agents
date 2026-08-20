@@ -85,6 +85,8 @@ import type { ChatImage } from "../../hooks/use-gallery";
 import type { PackageNoodleSettings, PackageNoodleSettingsUpdateInput } from "./noodle-settings-defaults";
 import {
   mergeNoodlePromptPreset,
+  NOODLE_PROMPT_PRESET_LIMIT,
+  NOODLE_PROMPT_PRESET_NAME_LIMIT,
   parseNoodlePromptPresetImport,
   sanitizeNoodlePromptPresets,
   type NoodlePromptPreset,
@@ -664,6 +666,10 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const accountSwitcherRef = useRef<HTMLDivElement | null>(null);
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
   const [timelineScroller, setTimelineScroller] = useState<HTMLDivElement | null>(null);
+  const setTimelineScrollerRef = useCallback((node: HTMLDivElement | null) => {
+    timelineScrollRef.current = node;
+    setTimelineScroller(node);
+  }, []);
   const setStickyHeader = useHideOnScroll(timelineScroller);
   const [introOpen, dismissIntro] = useNoodleIntro();
   const mobileDrawerTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -1025,6 +1031,14 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     });
   };
 
+  const saveSettingsAsync = (patch: PackageNoodleSettingsUpdateInput): Promise<void> =>
+    new Promise((resolve, reject) => {
+      updateSettings.mutate(patch, {
+        onSuccess: () => resolve(),
+        onError: reject,
+      });
+    });
+
   const openNoodlePromptEditor = () => {
     if (!noodlePromptText) {
       toast.error(localizeUi("ui.noodle.noodlehome.theDefaultNoodlePromptIsStillLoading"));
@@ -1060,26 +1074,40 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   };
 
   const promptPresets = sanitizeNoodlePromptPresets((settings as PackageNoodleSettings | undefined)?.promptPresets);
-  const savePromptPreset = () => {
+  const savePromptPreset = async () => {
     if (!noodlePromptDraft.trim()) {
       toast.error(localizeUi("ui.noodle.noodlehome.theNoodlePromptCannotBeEmpty"));
       return;
     }
-    const next = mergeNoodlePromptPreset(promptPresets, { name: promptPresetName, template: noodlePromptDraft });
-    if (next.length === promptPresets.length && !promptPresetName.trim()) {
+    if (!promptPresetName.trim()) {
       toast.error(localizeUi("ui.noodle.noodlehome.promptPresetNameRequired"));
       return;
     }
-    saveSettings({ promptPresets: next });
-    setPromptPresetDialogOpen(false);
-    setPromptPresetName("");
-    toast.success(localizeUi("ui.noodle.noodlehome.promptPresetSaved"));
+    const normalizedName = promptPresetName.trim().slice(0, NOODLE_PROMPT_PRESET_NAME_LIMIT);
+    const hasExistingName = promptPresets.some(
+      (preset) => preset.name.toLocaleLowerCase() === normalizedName.toLocaleLowerCase(),
+    );
+    if (promptPresets.length >= NOODLE_PROMPT_PRESET_LIMIT && !hasExistingName) {
+      toast.error(localizeUi("ui.noodle.noodlehome.promptPresetLimitReached"));
+      return;
+    }
+    const next = mergeNoodlePromptPreset(promptPresets, { name: normalizedName, template: noodlePromptDraft });
+    try {
+      await saveSettingsAsync({ promptPresets: next });
+      setPromptPresetDialogOpen(false);
+      setPromptPresetName("");
+      toast.success(localizeUi("ui.noodle.noodlehome.promptPresetSaved"));
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : localizeUi("ui.noodle.noodlehome.couldNotUpdateNoodleSettings"),
+      );
+    }
   };
 
   const applyPromptPreset = async (preset: NoodlePromptPreset) => {
     try {
       await saveNoodlePrompt.mutateAsync({
-        key: "noodle.timelineBase",
+        key: NOODLE_TIMELINE_BASE_PROMPT_KEY,
         template: preset.template,
         enabled: true,
       });
@@ -1093,7 +1121,13 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     }
   };
 
-  const deletePromptPreset = (name: string) => {
+  const deletePromptPreset = async (name: string) => {
+    const confirmed = await showConfirmDialog({
+      title: localizeUi("ui.noodle.noodlehome.promptPresetDeleteTitle"),
+      message: localizeUi("ui.noodle.noodlehome.promptPresetDeleteMessage", { name }),
+      confirmLabel: localizeUi("ui.noodle.noodlehome.promptPresetDeleteConfirm"),
+    });
+    if (!confirmed) return;
     saveSettings({ promptPresets: promptPresets.filter((preset) => preset.name !== name) });
   };
 
@@ -1105,8 +1139,12 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = "marinara-noodle-prompts.json";
+    document.body.append(anchor);
     anchor.click();
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => {
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    }, 0);
   };
 
   const importPromptPresets = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -1117,16 +1155,28 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       const imported = parseNoodlePromptPresetImport(JSON.parse(await file.text()));
       if (!imported.length) throw new Error(localizeUi("ui.noodle.noodlehome.promptPresetImportInvalid"));
       const merged = [...promptPresets];
+      let kept = 0;
       for (const preset of imported) {
+        if (merged.length >= NOODLE_PROMPT_PRESET_LIMIT) break;
         let name = preset.name;
         let suffix = 2;
         while (merged.some((item) => item.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
-          name = `${preset.name} (${suffix++})`;
+          const suffixText = ` (${suffix++})`;
+          name = `${preset.name.slice(0, NOODLE_PROMPT_PRESET_NAME_LIMIT - suffixText.length)}${suffixText}`;
         }
         merged.push({ ...preset, name });
+        kept += 1;
       }
-      saveSettings({ promptPresets: sanitizeNoodlePromptPresets(merged) });
-      toast.success(localizeUi("ui.noodle.noodlehome.promptPresetsImported"));
+      const next = sanitizeNoodlePromptPresets(merged);
+      if (kept > 0) await saveSettingsAsync({ promptPresets: next });
+      toast.success(
+        kept === imported.length
+          ? localizeUi("ui.noodle.noodlehome.promptPresetsImported")
+          : localizeUi("ui.noodle.noodlehome.promptPresetsImportedPartial", {
+              kept,
+              total: imported.length,
+            }),
+      );
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : localizeUi("ui.noodle.noodlehome.promptPresetImportInvalid"),
@@ -3020,7 +3070,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   <button
                     key={preset.name}
                     type="button"
-                    onClick={() => deletePromptPreset(preset.name)}
+                    onClick={() => void deletePromptPreset(preset.name)}
                     title={`${localizeUi("ui.noodle.noodlehome.deletePromptPreset")}: ${preset.name}`}
                     className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[0.68rem] text-[var(--muted-foreground)] hover:bg-[var(--destructive)]/10 hover:text-[var(--destructive)]"
                   >
@@ -4544,10 +4594,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       }
     >
       <div
-        ref={(node) => {
-          timelineScrollRef.current = node;
-          setTimelineScroller(node);
-        }}
+        ref={setTimelineScrollerRef}
         data-component="NoodleView.TimelineScroller"
         className="min-h-0 flex-1 overflow-y-auto"
         data-noodle-content-scroll="true"

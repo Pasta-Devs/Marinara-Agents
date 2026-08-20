@@ -6,7 +6,7 @@
 const modelsRejectingVision = new Set<string>();
 
 export function noodleVisionModelKey(provider: string, model: string): string {
-  return `${provider}:${model}`;
+  return JSON.stringify([provider, model]);
 }
 
 export function noodleModelRejectsVisionInput(provider: string, model: string): boolean {

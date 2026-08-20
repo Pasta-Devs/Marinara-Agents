@@ -5,7 +5,12 @@ import {
   rememberNoodleVisionRejection,
 } from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-vision-support";
 
-assert.equal(noodleVisionModelKey("nanogpt", "zai-org/glm-5.2"), "nanogpt:zai-org/glm-5.2");
+assert.equal(noodleVisionModelKey("nanogpt", "zai-org/glm-5.2"), '["nanogpt","zai-org/glm-5.2"]');
+assert.notEqual(
+  noodleVisionModelKey("nanogpt:team", "glm-5.2"),
+  noodleVisionModelKey("nanogpt", "team:glm-5.2"),
+  "provider and model separators must not create key collisions",
+);
 assert.equal(noodleModelRejectsVisionInput("nanogpt", "zai-org/glm-5.2"), false);
 
 rememberNoodleVisionRejection("nanogpt", "zai-org/glm-5.2");

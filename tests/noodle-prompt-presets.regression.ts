@@ -29,4 +29,17 @@ const bounded = sanitizeNoodlePromptPresets(
 assert.equal(bounded.length, 20);
 assert.equal(bounded[0]?.template.length, 20_000);
 
+const fullShelf = Array.from({ length: 20 }, (_, index) => ({
+  name: `Preset ${index}`,
+  key: "noodle.timelineBase" as const,
+  template: `Prompt ${index}`,
+}));
+const replacedOldest = mergeNoodlePromptPreset(fullShelf, { name: "Newest", template: "New prompt" });
+assert.equal(replacedOldest.length, 20);
+assert.equal(replacedOldest[0]?.name, "Newest");
+assert.equal(
+  replacedOldest.some((preset) => preset.name === "Preset 19"),
+  false,
+);
+
 console.log("noodle prompt preset regression: ok");
