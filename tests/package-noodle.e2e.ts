@@ -121,6 +121,10 @@ test.beforeEach(async ({ page }) => {
   });
   expect(resetUiSettings.ok()).toBeTruthy();
   await prepareFreshClient(page);
+  const welcomeDialog = page.getByRole("dialog", { name: "Welcome to Noodle" });
+  if (await welcomeDialog.isVisible().catch(() => false)) {
+    await welcomeDialog.getByRole("button", { name: "Open Noodle" }).click();
+  }
 });
 
 test.describe("package-owned Noodle interface", () => {
