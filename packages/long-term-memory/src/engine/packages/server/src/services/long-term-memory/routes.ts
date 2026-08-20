@@ -121,6 +121,10 @@ const scopedIds = z.preprocess(
   },
   z.array(z.string().min(1).max(120)).max(100).optional(),
 );
+const noteIds = z.preprocess((value) => {
+  const values = Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : value;
+  return Array.isArray(values) ? [...new Set(values.map(String).map((item) => item.trim()))] : values;
+}, z.array(ltmNoteIdSchema).min(1).max(100).optional());
 const queryBoolean = z.preprocess(
   (value) => (value === "true" ? true : value === "false" ? false : value),
   z.boolean().optional(),
@@ -137,10 +141,34 @@ const listNotesQuery = z
     scopePersonaId: z.string().min(1).max(120).optional(),
     scopePersonaIds: scopedIds,
     includeGlobal: queryBoolean,
-    offset: z.coerce.number().int().min(0).default(0),
-    limit: z.coerce.number().int().min(1).max(500).default(100),
+    ids: noteIds,
+    offset: z.coerce.number().int().min(0).optional(),
+    limit: z.coerce.number().int().min(1).max(500).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((query, context) => {
+    if (!query.ids) return;
+    const incompatibleKeys = [
+      "type",
+      "status",
+      "tag",
+      "scopeChatIds",
+      "scopeGroupId",
+      "scopeGroupIds",
+      "scopeCharacterIds",
+      "scopePersonaId",
+      "scopePersonaIds",
+      "includeGlobal",
+      "offset",
+      "limit",
+    ] as const;
+    for (const key of incompatibleKeys) {
+      const value = query[key];
+      if (Array.isArray(value) ? value.length > 0 : value !== undefined) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: `Cannot combine ${key} with ids.` });
+      }
+    }
+  });
 const scopeTargetsQuery = z
   .object({
     chatId: z.string().min(1).max(120).optional(),
@@ -582,37 +610,51 @@ export function createLongTermMemoryRoutes(runtime: {
       },
     );
     app.get<{ Querystring: unknown }>("/notes", async (request, reply) => {
-      const query = listNotesQuery.parse(request.query);
-      const scope =
-        query.scopeChatIds?.length ||
-        query.scopeGroupId ||
-        query.scopeGroupIds?.length ||
-        query.scopeCharacterIds?.length ||
-        query.scopePersonaId ||
-        query.scopePersonaIds?.length
-          ? {
-              ...(query.scopeChatIds?.length ? { chatIds: query.scopeChatIds, chatId: query.scopeChatIds[0] } : {}),
-              ...(query.scopeGroupId ? { groupId: query.scopeGroupId } : {}),
-              ...(query.scopeGroupIds?.length ? { groupIds: query.scopeGroupIds } : {}),
-              ...(query.scopeCharacterIds?.length ? { characterIds: query.scopeCharacterIds } : {}),
-              ...(query.scopePersonaId ? { personaId: query.scopePersonaId } : {}),
-              ...(query.scopePersonaIds?.length ? { personaIds: query.scopePersonaIds } : {}),
-            }
-          : undefined;
-      const notes = await storage.listNotes({
-        type: query.type,
-        status: query.status,
-        tag: query.tag,
-        scope,
-        characterIds: query.scopeCharacterIds,
-        includeGlobal: query.includeGlobal,
-        offset: query.offset,
-        limit: query.limit + 1,
-      });
-      const hasMore = notes.length > query.limit;
-      reply.header("x-ltm-has-more", String(hasMore));
-      if (hasMore) reply.header("x-ltm-next-offset", String(query.offset + query.limit));
-      return notes.slice(0, query.limit);
+      try {
+        const query = listNotesQuery.parse(request.query);
+        if (query.ids) {
+          const notesById = await storage.getNotesByIds(query.ids);
+          return query.ids.flatMap((id) => {
+            const note = notesById.get(id);
+            return note ? [note] : [];
+          });
+        }
+        const offset = query.offset ?? 0;
+        const limit = query.limit ?? 100;
+        const scope =
+          query.scopeChatIds?.length ||
+          query.scopeGroupId ||
+          query.scopeGroupIds?.length ||
+          query.scopeCharacterIds?.length ||
+          query.scopePersonaId ||
+          query.scopePersonaIds?.length
+            ? {
+                ...(query.scopeChatIds?.length ? { chatIds: query.scopeChatIds, chatId: query.scopeChatIds[0] } : {}),
+                ...(query.scopeGroupId ? { groupId: query.scopeGroupId } : {}),
+                ...(query.scopeGroupIds?.length ? { groupIds: query.scopeGroupIds } : {}),
+                ...(query.scopeCharacterIds?.length ? { characterIds: query.scopeCharacterIds } : {}),
+                ...(query.scopePersonaId ? { personaId: query.scopePersonaId } : {}),
+                ...(query.scopePersonaIds?.length ? { personaIds: query.scopePersonaIds } : {}),
+              }
+            : undefined;
+        const notes = await storage.listNotes({
+          type: query.type,
+          status: query.status,
+          tag: query.tag,
+          scope,
+          characterIds: query.scopeCharacterIds,
+          includeGlobal: query.includeGlobal,
+          offset,
+          limit: limit + 1,
+        });
+        const hasMore = notes.length > limit;
+        reply.header("x-ltm-has-more", String(hasMore));
+        if (hasMore) reply.header("x-ltm-next-offset", String(offset + limit));
+        return notes.slice(0, limit);
+      } catch (error) {
+        const result = routeError(error, "Could not list long-term memory notes.");
+        return reply.status(result.statusCode).send(result.body);
+      }
     });
     app.get<{ Querystring: unknown }>("/scope-targets", async (request) => {
       const { chatId, includeAllChats } = scopeTargetsQuery.parse(request.query);

@@ -289,6 +289,7 @@ async function main() {
       let deletedSuggestionId: string | null = null;
       const scopeTargetQueries: string[] = [];
       const noteQueries: string[] = [];
+      const reviewContextQueries: string[] = [];
       const reviewQueries: string[] = [];
       const rejectedSuggestionQueries: string[] = [];
       const reviewActionCalls: Array<{
@@ -528,6 +529,7 @@ async function main() {
       let noteTotal = 5;
       let pendingDraftCount = 2;
       let failSecondReviewAccept = false;
+      let failReviewContext = false;
       let reviewPreflightBlocked = false;
       let reviewFingerprintRevision = 0;
       let lastInjectionRequests = 0;
@@ -751,9 +753,48 @@ async function main() {
               updatedAt: "2026-07-30T00:00:00.000Z",
               version: 1,
             },
+            {
+              id: "source_mobile_recovery",
+              title: "Mobile recovery source",
+              type: "source",
+              status: "active",
+              modes: ["roleplay"],
+              scope: {},
+              tags: [],
+              keywords: [],
+              links: [],
+              sections: { source: { text: "Mobile recovery source text.", updatedAt: noteTimestamp } },
+              createdAt: noteTimestamp,
+              updatedAt: noteTimestamp,
+              version: 1,
+            },
+            {
+              id: "world_mobile_recovery",
+              title: "Mobile recovery memory",
+              type: "world",
+              status: "active",
+              modes: ["roleplay"],
+              scope: {},
+              tags: [],
+              keywords: [],
+              links: [],
+              sections: { facts: { text: "Mobile recovery memory text.", updatedAt: noteTimestamp } },
+              createdAt: noteTimestamp,
+              updatedAt: noteTimestamp,
+              version: 1,
+            },
             legacyGlobalNote,
             scopedDesktopNote,
           ];
+          if (url.searchParams.has("ids")) {
+            reviewContextQueries.push(url.search);
+            if (failReviewContext) return send(503, { error: "review context temporarily unavailable" });
+            const requestedIds = new Set(url.searchParams.get("ids")?.split(",") ?? []);
+            return send(
+              200,
+              notes.filter((note) => requestedIds.has(note.id)),
+            );
+          }
           return send(
             200,
             url.searchParams.get("scopeCharacterIds") === "character-a"
@@ -1341,7 +1382,29 @@ async function main() {
         element.dispatchEvent(new CustomEvent("marinara-capability-props"));
         localStorage.removeItem("marinara-long-term-memory-onboarding-v1");
       });
-      await page.locator("[data-ltm-review-mutation] textarea").first().fill("Dirty memory");
+      await page.evaluate(() => {
+        window.eval(`
+          (() => {
+            let writes = 0;
+            const originalSetItem = localStorage.setItem.bind(localStorage);
+            localStorage.setItem = function (key, value) {
+              if (key.startsWith("marinara_ltm_review_state:")) writes += 1;
+              return originalSetItem(key, value);
+            };
+            Object.defineProperty(window, "reviewStateWriteCount", {
+              configurable: true,
+              get: () => writes,
+            });
+          })();
+        `);
+      });
+      const dirtyEditor = page.locator("[data-ltm-review-mutation] textarea").first();
+      await dirtyEditor.fill("Dirty memory draft");
+      await dirtyEditor.fill("Dirty memory latest");
+      await dirtyEditor.fill("Dirty memory");
+      await page.waitForTimeout(350);
+      assert.equal(await page.evaluate(() => (window as any).reviewStateWriteCount), 1);
+      await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
       await page.locator('[data-ltm-review-source-select="source_mobile_recovery"]').click();
       await page.locator('[data-ltm-review-source-select="source_mobile_review"]').click();
       await page.locator("[data-ltm-review-mutation-toggle]").click();
@@ -1681,6 +1744,16 @@ async function main() {
       assert.ok(reviewQueries.every((query) => query === "?includeInvalidated=true"));
       assert.ok(rejectedSuggestionQueries.length > 0);
       assert.ok(rejectedSuggestionQueries.every((query) => query === ""));
+      assert.ok(reviewContextQueries.length > 0);
+      assert.ok(reviewContextQueries.every((query) => query.startsWith("?ids=")));
+      assert.equal(
+        reviewContextQueries.some((query) => query.includes("includeGlobal")),
+        false,
+      );
+      assert.equal(
+        reviewContextQueries.some((query) => query.includes("limit=500")),
+        false,
+      );
       await page.setViewportSize({ width: 390, height: 844 });
       healthState = "degraded";
       await page.reload();
@@ -1752,10 +1825,49 @@ async function main() {
       assert.match(await healthInfoPanel.innerText(), /12 indexed chunks/u);
       assert.match(await healthInfoPanel.innerText(), /Check Settings > Maintenance > Reindex recall data\./u);
 
+      failReviewContext = true;
       await page.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="review"]').click();
-      await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
+      const reviewContextError = page
+        .locator('[data-ltm-status="danger"]')
+        .filter({ hasText: "Memory context could not load." });
+      await reviewContextError.waitFor();
       await page.locator('[data-ltm-review-source-select="source_mobile_review"]').click();
       await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      const reviewUtilitySizes = await page
+        .locator('[data-ltm-status="danger"] button, [data-ltm-review-rejected-count]')
+        .evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().toJSON()));
+      assert.ok(
+        reviewUtilitySizes.length >= 2 && reviewUtilitySizes.every((rect) => rect.width >= 44 && rect.height >= 44),
+        JSON.stringify(reviewUtilitySizes),
+      );
+      await page.locator('[data-ltm-review-draft-select="10000000-0000-4000-8000-000000000011"]').click();
+      await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
+      const unavailableAccept = page.locator(
+        `[data-ltm-review-mutation="${reviewMutationIds.first}"] [aria-label^="Accept "]`,
+      );
+      const unavailableSkip = page.locator(
+        `[data-ltm-review-mutation="${reviewMutationIds.first}"] [aria-label^="Skip "]`,
+      );
+      assert.equal(await unavailableAccept.isDisabled(), true);
+      assert.equal(await unavailableSkip.isDisabled(), false);
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-control="review-select"]`)
+        .check();
+      assert.equal(await page.getByRole("button", { name: "Accept eligible (1)" }).isDisabled(), true);
+      assert.equal(await page.getByRole("button", { name: "Skip selected (1)" }).isDisabled(), false);
+      failReviewContext = false;
+      await reviewContextError.getByRole("button", { name: "Retry" }).click();
+      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
+      assert.equal(await unavailableAccept.isDisabled(), false);
+      await page.locator('[data-ltm-review-source-select="source_mobile_review"]').click();
+      await page.getByRole("button", { name: "Clear" }).click();
+      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      const restoredReviewSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
+      if ((await restoredReviewSource.getAttribute("aria-expanded")) === "false") {
+        await restoredReviewSource.click();
+        await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      }
       await page.locator('[data-ltm-review-draft-select="10000000-0000-4000-8000-000000000012"]').click();
       await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
       await page.locator("[data-ltm-review-draft-title]").waitFor();
@@ -1945,6 +2057,9 @@ async function main() {
           ),
       );
       await page.locator("[data-ltm-rejected-suggestions] > summary").click();
+      const recoveryReviewText = await page.locator('[data-ltm-workspace-pane="workbench"]').innerText();
+      assert.match(recoveryReviewText, /Mobile recovery source/u);
+      assert.match(recoveryReviewText, /Mobile recovery memory/u);
       await page.getByRole("button", { name: /^Recover suggestion:/u }).click();
       await page.locator("[data-ltm-note-editor]").waitFor();
       await page.locator("[data-ltm-details-toggle]").click();
