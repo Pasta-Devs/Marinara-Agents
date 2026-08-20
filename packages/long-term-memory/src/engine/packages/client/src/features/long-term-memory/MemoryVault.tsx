@@ -1378,18 +1378,25 @@ export default function MemoryVault({
       setTarget((current) => (current ? { ...current, scope: scopeTargets.data!.currentScope! } : current));
     }
   }, [props.chatId, scopeTargets.data, target?.id]);
-  const scopeTargetResolved = Boolean(target && targetContextKey.current === contextKey && scopeTargets.isSuccess);
+  const currentScope = scopeTargets.data?.currentScope;
+  const targetScopeResolved =
+    target?.id !== `chat:${props.chatId}` ||
+    Boolean(target.scope && currentScope && sameScope(target.scope, currentScope));
+  const scopeTargetResolved = Boolean(
+    target && targetContextKey.current === contextKey && scopeTargets.isSuccess && targetScopeResolved,
+  );
+  const notesScope = target?.id === `chat:${props.chatId}` ? currentScope : target?.scope;
   const notes = useQuery({
-    queryKey: [...queryKeys.notes, contextKey, target?.id, target?.scope],
+    queryKey: [...queryKeys.notes, contextKey, target?.id, notesScope],
     enabled: scopeTargetResolved,
     queryFn: () =>
       requestAllNotes<LtmNote>(
         `/notes?${new URLSearchParams({
-          ...(target?.scope?.chatIds?.length ? { scopeChatIds: target.scope.chatIds.join(",") } : {}),
-          ...(target?.scope?.groupId ? { scopeGroupId: target.scope.groupId } : {}),
-          ...(target?.scope?.characterIds?.length ? { scopeCharacterIds: target.scope.characterIds.join(",") } : {}),
-          ...(target?.scope?.personaId ? { scopePersonaId: target.scope.personaId } : {}),
-          ...(target?.scope ? { includeGlobal: "false" } : {}),
+          ...(notesScope?.chatIds?.length ? { scopeChatIds: notesScope.chatIds.join(",") } : {}),
+          ...(notesScope?.groupId ? { scopeGroupId: notesScope.groupId } : {}),
+          ...(notesScope?.characterIds?.length ? { scopeCharacterIds: notesScope.characterIds.join(",") } : {}),
+          ...(notesScope?.personaId ? { scopePersonaId: notesScope.personaId } : {}),
+          ...(notesScope ? { includeGlobal: "false" } : {}),
         })}`,
       ),
   });
@@ -3086,6 +3093,7 @@ export default function MemoryVault({
                 !scopeTargets.isError &&
                 !notes.isLoading &&
                 !notes.isError &&
+                notes.isSuccess &&
                 !visible.length ? (
                   <div className="p-5 text-center text-xs text-[var(--muted-foreground)]">
                     <p>{localizeUi("ui.longTermMemory.memoryvault.noMemoriesFound")}</p>
