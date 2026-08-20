@@ -1378,17 +1378,25 @@ export default function MemoryVault({
       setTarget((current) => (current ? { ...current, scope: scopeTargets.data!.currentScope! } : current));
     }
   }, [props.chatId, scopeTargets.data, target?.id]);
+  const currentScope = scopeTargets.data?.currentScope;
+  const targetScopeResolved =
+    target?.id !== `chat:${props.chatId}` ||
+    Boolean(target.scope && currentScope && sameScope(target.scope, currentScope));
+  const scopeTargetResolved = Boolean(
+    target && targetContextKey.current === contextKey && scopeTargets.isSuccess && targetScopeResolved,
+  );
+  const notesScope = target?.id === `chat:${props.chatId}` ? currentScope : target?.scope;
   const notes = useQuery({
-    queryKey: [...queryKeys.notes, contextKey, target?.id, target?.scope],
-    enabled: Boolean(target) && targetContextKey.current === contextKey,
+    queryKey: [...queryKeys.notes, contextKey, target?.id, notesScope],
+    enabled: scopeTargetResolved,
     queryFn: () =>
       requestAllNotes<LtmNote>(
         `/notes?${new URLSearchParams({
-          ...(target?.scope?.chatIds?.length ? { scopeChatIds: target.scope.chatIds.join(",") } : {}),
-          ...(target?.scope?.groupId ? { scopeGroupId: target.scope.groupId } : {}),
-          ...(target?.scope?.characterIds?.length ? { scopeCharacterIds: target.scope.characterIds.join(",") } : {}),
-          ...(target?.scope?.personaId ? { scopePersonaId: target.scope.personaId } : {}),
-          ...(target?.scope ? { includeGlobal: "false" } : {}),
+          ...(notesScope?.chatIds?.length ? { scopeChatIds: notesScope.chatIds.join(",") } : {}),
+          ...(notesScope?.groupId ? { scopeGroupId: notesScope.groupId } : {}),
+          ...(notesScope?.characterIds?.length ? { scopeCharacterIds: notesScope.characterIds.join(",") } : {}),
+          ...(notesScope?.personaId ? { scopePersonaId: notesScope.personaId } : {}),
+          ...(notesScope ? { includeGlobal: "false" } : {}),
         })}`,
       ),
   });
@@ -2919,10 +2927,21 @@ export default function MemoryVault({
                   if (state) state.scrollTop = event.currentTarget.scrollTop;
                 }}
               >
-                {notes.isLoading ? (
+                {scopeTargets.isError ? (
+                  <StatusSurface tone="danger">
+                    {localizeUi("ui.longTermMemory.memoryvault.memoryScopeCouldNotLoad")}{" "}
+                    <button type="button" className="underline" onClick={() => void scopeTargets.refetch()}>
+                      {localizeUi("ui.longTermMemory.memoryvault.retryMemoryScope")}
+                    </button>
+                  </StatusSurface>
+                ) : null}
+                {!scopeTargetResolved && scopeTargets.isLoading ? (
+                  <StatusSurface busy>{localizeUi("ui.longTermMemory.memoryvault.loadingMemoryScope")}</StatusSurface>
+                ) : null}
+                {scopeTargetResolved && notes.isLoading ? (
                   <StatusSurface busy>{localizeUi("ui.longTermMemory.memoryvault.loadingMemories")}</StatusSurface>
                 ) : null}
-                {notes.isError ? (
+                {scopeTargetResolved && notes.isError ? (
                   <StatusSurface tone="danger">
                     {localizeUi("ui.longTermMemory.memoryvault.memoriesCouldNotLoad")}{" "}
                     <button type="button" className="underline" onClick={() => void notes.refetch()}>
@@ -3070,7 +3089,12 @@ export default function MemoryVault({
                     </details>
                   );
                 })}
-                {!notes.isLoading && !notes.isError && !visible.length ? (
+                {scopeTargetResolved &&
+                !scopeTargets.isError &&
+                !notes.isLoading &&
+                !notes.isError &&
+                notes.isSuccess &&
+                !visible.length ? (
                   <div className="p-5 text-center text-xs text-[var(--muted-foreground)]">
                     <p>{localizeUi("ui.longTermMemory.memoryvault.noMemoriesFound")}</p>
                   </div>
