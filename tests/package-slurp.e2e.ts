@@ -210,6 +210,54 @@ test.describe("standalone Slurp package", () => {
         }),
       ).toBeVisible();
 
+      await page.evaluate(
+        ({ personaId }) => {
+          localStorage.setItem(
+            "marinara:slurp:package-ui",
+            JSON.stringify({
+              navigation: { mode: "creator-settings", section: "creators" },
+              viewerPersonaId: personaId,
+              onboardingState: "completed",
+            }),
+          );
+        },
+        { personaId: persona.id },
+      );
+      await page.reload();
+      await openSlurp(page);
+
+      const scheduleButton = page.getByRole("button", { name: `Edit schedule for ${stageProfile.displayName}` });
+      await expect(scheduleButton).toBeVisible();
+      await scheduleButton.click();
+      const scheduleDialog = page.getByRole("dialog", { name: `Schedule for ${stageProfile.displayName}` });
+      await expect(scheduleDialog).toBeVisible();
+      await expect(scheduleDialog.getByText("No upcoming scheduled posts yet.")).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(scheduleDialog).toBeHidden();
+
+      await page.getByRole("button", { name: "Publishing" }).click();
+      await page.getByRole("button", { name: "Edit prompt" }).click();
+      const promptDialog = page.getByRole("dialog", { name: "Edit generation guidance" });
+      const savePrompt = promptDialog.getByRole("button", { name: "Save prompt" });
+      await expect(savePrompt).toBeVisible();
+      await expect
+        .poll(() =>
+          savePrompt.evaluate((element) => {
+            const style = getComputedStyle(element);
+            return style.backgroundColor !== "rgba(0, 0, 0, 0)" && style.color !== "rgba(0, 0, 0, 0)";
+          }),
+        )
+        .toBe(true);
+      await expect
+        .poll(() =>
+          page
+            .locator('[data-marinara-capability-scope="slurp"]')
+            .evaluate((element) => getComputedStyle(element).getPropertyValue("--noodle-accent").trim().toLowerCase()),
+        )
+        .toBe("#ff7ec1");
+      await page.keyboard.press("Escape");
+      await expect(promptDialog).toBeHidden();
+
       expect(errors).toEqual([]);
     } finally {
       if (postId) {

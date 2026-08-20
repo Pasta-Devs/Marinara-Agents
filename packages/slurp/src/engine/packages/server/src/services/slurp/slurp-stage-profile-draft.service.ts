@@ -14,7 +14,7 @@ import { resolveStoredChatOptions, resolveStoredMaxTokens } from "../generation/
 import { clampGenerationMaxOutputTokens } from "../generation/output-token-limits.js";
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { parseGameJsonish } from "../game/jsonish.js";
-import { requireModelAnswer } from "./slurp-model-answer.js";
+import { modelAnswerForCorrection, requireModelAnswer } from "./slurp-model-answer.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
 import type { ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
@@ -140,9 +140,9 @@ export function buildNoodlerStageProfileDraftMessages(input: {
     {
       role: "system",
       content: [
-        "Create one editable NoodleR creator profile draft.",
+        "Create one editable Slurp creator profile draft.",
         "Return JSON only with displayName, handle, bio, stagePersonality, and disclosureMode.",
-        "Make the profile concise and usable for future NoodleR post generation. Follow the disclosure rules exactly.",
+        "Make the profile concise and usable for future Slurp post generation. Follow the disclosure rules exactly.",
         disclosureRules(input.request.disclosureMode, identity),
       ].join("\n"),
     },
@@ -271,7 +271,9 @@ export async function generateNoodlerStageProfileDraft(
       [
         ...messages,
         // An empty assistant turn is rejected by several providers, so only echo a real answer.
-        ...(response.content?.trim() ? [{ role: "assistant" as const, content: response.content }] : []),
+        ...(modelAnswerForCorrection(response.content)
+          ? [{ role: "assistant" as const, content: modelAnswerForCorrection(response.content)! }]
+          : []),
         {
           role: "user",
           content:

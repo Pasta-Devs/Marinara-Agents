@@ -1724,29 +1724,7 @@ export function createSlurpStorage(db: DB) {
           const disclosureMode = account.settings.privacy.identityDisclosure ?? null;
           const publicAccount = await this.resolveAccountSource(account);
           const currentSource = publicAccount ? await resolveNoodlerSourceSnapshot(db, publicAccount) : null;
-          let baseline = account.settings.profile.noodlerSourceSnapshot;
-          const needsMinimization =
-            (disclosureMode === "hinted" || disclosureMode === "secret") &&
-            baseline &&
-            !isMinimizedNoodlerSourceSnapshot(baseline);
-          if (currentSource && (!baseline || needsMinimization)) {
-            const minimized = minimizeNoodlerSourceSnapshot(currentSource, disclosureMode ?? "secret");
-            const updated = await this.updateNoodlerSourceSnapshot(account.id, minimized);
-            baseline = updated?.settings.profile.noodlerSourceSnapshot ?? minimized;
-          } else if (!currentSource && needsMinimization && baseline) {
-            // The linked source account is gone, but a legacy full snapshot
-            // remains for a hinted/secret profile — minimize it in place rather
-            // than leaving it unminimized forever.
-            const minimized = minimizeNoodlerSourceSnapshot(baseline, disclosureMode ?? "secret");
-            const updated = await this.updateNoodlerSourceSnapshot(account.id, minimized);
-            baseline = updated?.settings.profile.noodlerSourceSnapshot ?? minimized;
-          }
-          if (!currentSource && account.settings.scheduler.autoPosting?.enabled) {
-            await this.patchAccountSettings(account.id, {
-              subtree: "scheduler",
-              patch: { autoPosting: { enabled: false } },
-            });
-          }
+          const baseline = account.settings.profile.noodlerSourceSnapshot;
           return {
             id: account.id,
             sourceAccountId: account.sourceEntityId,
@@ -1779,6 +1757,29 @@ export function createSlurpStorage(db: DB) {
           };
         }),
       );
+    },
+
+    /** One-time compatibility write; normal profile reads never change source-review state. */
+    async migrateLegacyNoodlerSourceSnapshots(): Promise<number> {
+      const accounts = await this.listNoodlerAccounts();
+      let migrated = 0;
+      for (const account of accounts) {
+        const disclosureMode = account.settings.privacy.identityDisclosure ?? "secret";
+        const baseline = account.settings.profile.noodlerSourceSnapshot;
+        const publicAccount = await this.resolveAccountSource(account);
+        const currentSource = publicAccount ? await resolveNoodlerSourceSnapshot(db, publicAccount) : null;
+        const next = !baseline
+          ? currentSource
+            ? minimizeNoodlerSourceSnapshot(currentSource, disclosureMode)
+            : null
+          : (disclosureMode === "hinted" || disclosureMode === "secret") && !isMinimizedNoodlerSourceSnapshot(baseline)
+            ? minimizeNoodlerSourceSnapshot(baseline, disclosureMode)
+            : null;
+        if (!next) continue;
+        await this.updateNoodlerSourceSnapshot(account.id, next);
+        migrated += 1;
+      }
+      return migrated;
     },
 
     async createNoodlerAccount(
@@ -2397,13 +2398,14 @@ export function createSlurpStorage(db: DB) {
       id: string,
       input: {
         generatedAt: string;
+        expectedPublishAt: string;
         payload: NoodlerPreparedPostPayload;
         policyFingerprint: string;
       },
     ): Promise<boolean> {
       return db.transaction(async (tx) => {
         const current = (await tx.select().from(noodlerPreparedPosts).where(eq(noodlerPreparedPosts.id, id)))[0];
-        if (!current || current.state !== "scheduled") return false;
+        if (!current || current.state !== "scheduled" || current.publishAt !== input.expectedPublishAt) return false;
         await tx
           .update(noodlerPreparedPosts)
           .set({

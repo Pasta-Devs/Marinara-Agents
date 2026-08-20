@@ -18,6 +18,7 @@ const settings = read("packages/slurp/src/engine/packages/client/src/components/
 const profileSurface = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpProfileSurface.tsx");
 const artwork = read("packages/slurp/src/engine/packages/server/src/services/slurp/slurp-artwork.operation.ts");
 const shell = read("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpShell.tsx");
+const serverEntry = read("packages/slurp/src/engine/packages/server/src/services/slurp/server-entry.ts");
 
 const updateRoute = routes.slice(
   routes.indexOf('app.put("/noodler/accounts/:id/stage-profile"'),
@@ -64,6 +65,22 @@ assert.match(
   /cleanupRetiredViewer[\s\S]*?noodleAccountSubscriptions[\s\S]*?noodlePostUnlocks[\s\S]*?slurpViewerSettingsKey/u,
 );
 assert.match(settings, /ui\.slurp\.settings\.creators\.sourceChanged/u);
+const profileList = storage.slice(
+  storage.indexOf("async listNoodlerStageProfiles"),
+  storage.indexOf("async migrateLegacyNoodlerSourceSnapshots"),
+);
+assert.doesNotMatch(profileList, /updateNoodlerSourceSnapshot|patchAccountSettings/u);
+assert.match(storage, /async migrateLegacyNoodlerSourceSnapshots/u);
+assert.match(storage, /minimizeNoodlerSourceSnapshot\(baseline, disclosureMode\)/u);
+assert.match(serverEntry, /await createSlurpStorage\(app\.db\)\.migrateLegacyNoodlerSourceSnapshots\(\)/u);
+const dismissRoute = routes.slice(
+  routes.indexOf('app.post("/noodler/accounts/:id/source/dismiss"'),
+  routes.indexOf('app.post("/noodler/accounts/:id/source/adopt-identity"'),
+);
+assert.match(dismissRoute, /updateNoodlerSourceSnapshot/u);
+assert.match(dismissRoute, /listNoodlerStageProfiles/u);
+assert.match(settings, /sourceStatus\.\$\{creator\.sourceStatus\.state\}/u);
+assert.match(settings, /ui\.slurp\.settings\.creators\.acceptChanges/u);
 assert.match(settings, /onRedraftCreator/u);
 assert.match(settings, /import \{ Avatar, getNoodleAccentStyle, NOODLE_PINK \} from "\.\/SlurpShell"/u);
 assert.match(routes, /app\.post\("\/noodler\/accounts\/:id\/banner"/u);

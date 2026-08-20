@@ -468,8 +468,8 @@ export async function generateNoodlerPost(
       {
         role: "user",
         content: imagesEnabled
-          ? "The response was not one valid NoodleR-post JSON object. Return exactly one object with title, content, and imagePrompt. title and imagePrompt must both be non-empty. Do not include a poll. Return JSON only."
-          : "The response was not one valid NoodleR-post JSON object. Return exactly one object with title and content only. Do not include a poll or image prompt. Return JSON only.",
+          ? "The response was not one valid Slurp-post JSON object. Return exactly one object with title, content, and imagePrompt. title and imagePrompt must both be non-empty. Do not include a poll. Return JSON only."
+          : "The response was not one valid Slurp-post JSON object. Return exactly one object with title and content only. Do not include a poll or image prompt. Return JSON only.",
       },
     ];
     logDebugOverride(
@@ -494,7 +494,7 @@ export async function generateNoodlerPost(
     publicIdentity,
     NOODLER_FORMAT_MAX_LENGTH[format],
   );
-  if (!protectedContent) throw new Error("NoodleR generation returned no usable post content.");
+  if (!protectedContent) throw new Error("Slurp generation returned no usable post content.");
   const protectedGenerated = {
     // Every format shows a title now. Weak models still drop the field, so fall back to the
     // opening of the post rather than failing a whole generation over a headline.
@@ -516,12 +516,12 @@ export async function generateNoodlerPost(
   let lockedFollowUpPostId = input.request.lockedFollowUpPostId;
   const pendingLockedFollowUp = input.request.lockedFollowUp;
   if (lockedFollowUpPostId && pendingLockedFollowUp) {
-    throw new Error("A NoodleR post links either an existing follow-up or a new one, not both.");
+    throw new Error("A Slurp post links either an existing follow-up or a new one, not both.");
   }
   if (lockedFollowUpPostId) {
     const followUp = await noodle.getNoodlerPostById(lockedFollowUpPostId);
     if (!followUp || followUp.authorAccountId !== account.id || followUp.access !== "locked") {
-      throw new Error("The linked NoodleR follow-up must be a locked post from this creator.");
+      throw new Error("The linked Slurp follow-up must be a locked post from this creator.");
     }
   } else if (pendingLockedFollowUp) lockedFollowUpPostId = newId();
 
@@ -580,7 +580,7 @@ export async function generateNoodlerPost(
         : [main],
     );
     const post = posts?.at(-1);
-    if (!post) throw new Error("Failed to persist the generated NoodleR post.");
+    if (!post) throw new Error("Failed to persist the generated Slurp post.");
     return post;
   };
 
@@ -593,7 +593,7 @@ export async function generateNoodlerPost(
         metadata: { noodlerMediaPath: persistedMedia.noodlerMediaPath },
       }),
     );
-    if (!post) throw new Error("Failed to persist the generated NoodleR post.");
+    if (!post) throw new Error("Failed to persist the generated Slurp post.");
     return { post, imagePromptReview: null };
   }
 

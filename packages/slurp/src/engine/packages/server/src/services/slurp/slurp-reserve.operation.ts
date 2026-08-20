@@ -8,6 +8,7 @@ import { tryNoodlerAccountOperation } from "./slurp-account-operation-lock.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
 import { BackgroundConnectionBusyError, ConnectionAttemptRejectedError } from "../generation/connection-admission.js";
+import { runSlurpAutoPostPollOperations, type SlurpReservePollOutcome } from "./slurp-autopost-poll.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -29,12 +30,7 @@ export function isNoodlerNightQuietTime(at: Date): boolean {
   return hour >= 23 || hour < 7;
 }
 
-export async function prepareNextNoodlerReservePost(
-  db: DB,
-  at = new Date(),
-): Promise<
-  "scheduled" | "prepared" | "covered" | "disabled" | "holding" | "exhausted" | "busy" | "ineligible" | "missed"
-> {
+export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Promise<SlurpReservePollOutcome> {
   const noodle = createSlurpStorage(db);
   const settings = await noodle.getSettings();
   if (!settings.autoPostingScheduleEnabled || settings.postsPerDay <= 0) return "disabled";
@@ -211,6 +207,7 @@ export async function prepareNextNoodlerReservePost(
       try {
         const filled = await noodle.fillNoodlerScheduledPost(selectedSlotId, {
           generatedAt: completedAt.toISOString(),
+          expectedPublishAt: selectedPublishAt,
           payload,
           policyFingerprint: noodlerReservePolicyFingerprint(
             selectedAccount,
@@ -253,14 +250,12 @@ export async function runNoodlerAutoPostPoll(
   at = new Date(),
 ): Promise<{ published: number; reserve: Awaited<ReturnType<typeof prepareNextNoodlerReservePost>> }> {
   const noodle = createSlurpStorage(db);
-  await noodle.reconcileNoodlerPreparedPosts(at);
-  let published = await noodle.publishDueNoodlerPreparedPosts(at);
-  const reserve = await prepareNextNoodlerReservePost(db, at);
-  if (reserve === "prepared") {
-    published += await noodle.publishDueNoodlerPreparedPosts(at);
-    if ((await noodle.getSettings()).autoPostGenerationMode === "on_demand") {
-      await prepareNextNoodlerReservePost(db, at);
-    }
-  }
-  return { published, reserve };
+  return runSlurpAutoPostPollOperations({
+    reconcile: async () => {
+      await noodle.reconcileNoodlerPreparedPosts(at);
+    },
+    publishDue: () => noodle.publishDueNoodlerPreparedPosts(at),
+    prepare: () => prepareNextNoodlerReservePost(db, at),
+    generationMode: async () => (await noodle.getSettings()).autoPostGenerationMode,
+  });
 }

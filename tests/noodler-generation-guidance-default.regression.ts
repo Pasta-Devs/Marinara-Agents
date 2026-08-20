@@ -16,6 +16,18 @@ const settings = readFileSync(
 );
 const readme = readFileSync("packages/slurp/README.md", "utf8");
 const enLocale = readFileSync("packages/slurp/src/engine/packages/client/src/localization/locales/en.json", "utf8");
+const generation = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
+  "utf8",
+);
+const stageDraft = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-stage-profile-draft.service.ts",
+  "utf8",
+);
+const replyGeneration = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-reply-generation.service.ts",
+  "utf8",
+);
 
 function defaultGuidance(source: string): string {
   const match = source.match(
@@ -43,6 +55,9 @@ assert.doesNotMatch(serverDefault, /norm here, not the exception|most posts are 
 // The exact previously shipped prompt migrates, while any customized value remains untouched.
 assert.match(storage, /LEGACY_NOODLER_DEFAULT_GENERATION_GUIDANCE/u);
 assert.match(storage, /rawRecord\.generationGuidance === LEGACY_NOODLER_DEFAULT_GENERATION_GUIDANCE/u);
+assert.doesNotMatch(generation, /"[^"\n]*NoodleR/u);
+assert.doesNotMatch(stageDraft, /"[^"\n]*NoodleR/u);
+assert.doesNotMatch(replyGeneration, /"[^"\n]*NoodleR/u);
 
 // Creator settings must stay package-owned. The migration reads prior Slurp values once, but
 // active normalization and writes must not use the public Noodle schema, defaults, or key.
