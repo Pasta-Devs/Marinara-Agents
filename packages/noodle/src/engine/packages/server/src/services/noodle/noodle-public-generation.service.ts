@@ -48,6 +48,7 @@ import {
 import { noodleResponseFormat } from "./noodle-response-format.js";
 import type { ConnectionAdmissionMode } from "../generation/connection-admission.js";
 import { isUnsupportedNoodleVisionInputError } from "./noodle-vision.js";
+import { noodleModelRejectsVisionInput, rememberNoodleVisionRejection } from "./noodle-vision-support.js";
 import { formatNoodleMessagesForLog } from "./noodle-generation-log.js";
 import { ensureAmbientNoodleAccounts } from "./noodle-ambient-profiles.js";
 
@@ -296,13 +297,24 @@ export function createPublicNoodleGenerationService(db: DB) {
           debugMode,
           responseFormat: noodleResponseFormat(input.connection.model, "timeline"),
         } as const;
-        let requestMessages: ChatMessage[] = prompt.messages;
-        let firstAttemptKind: NoodleRefreshAttemptKind = "initial";
+        const modelRefusedVisionBefore = noodleModelRejectsVisionInput(
+          input.connection.provider,
+          input.connection.model,
+        );
+        const sendVision = prompt.visionAttachmentCount > 0 && !modelRefusedVisionBefore;
+        if (prompt.visionAttachmentCount > 0 && modelRefusedVisionBefore)
+          logDebugOverride(
+            debugMode,
+            "[debug/noodle] The selected timeline model rejected image input earlier; sending this refresh as text-only",
+          );
+        let requestMessages: ChatMessage[] = sendVision ? prompt.messages : prompt.textOnlyMessages;
+        let firstAttemptKind: NoodleRefreshAttemptKind = sendVision ? "initial" : "text_only_fallback";
         let result: Awaited<ReturnType<typeof provider.chatComplete>>;
         try {
-          result = await provider.chatComplete(prompt.messages, completionOptions);
+          result = await provider.chatComplete(requestMessages, completionOptions);
         } catch (error) {
-          if (prompt.visionAttachmentCount === 0 || !isUnsupportedNoodleVisionInputError(error)) throw error;
+          if (!sendVision || !isUnsupportedNoodleVisionInputError(error)) throw error;
+          rememberNoodleVisionRejection(input.connection.provider, input.connection.model);
           logger.warn(
             error,
             "[noodle/vision] The selected timeline model rejected image input; retrying the refresh as text-only",
