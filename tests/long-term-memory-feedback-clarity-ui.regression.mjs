@@ -104,6 +104,10 @@ assert.match(settings, /reasoningEffort: resolved\.reasoningEffort \?\? "low"/u)
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.syncSelected_8c57bdb"], undefined);
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.refreshSelectedSources"], "Refresh selected sources");
 assert.equal(locale["ui.longTermMemory.activityview.totalTokens"], "Total: {{count}} tokens");
+assert.equal(
+  locale["ui.longTermMemory.longtermmemorydetail.savedButNotSearchable"],
+  "Saved with lexical recall only: semantic embeddings are unavailable.",
+);
 assert.match(vault, /function MemoryAvailabilityWorkbench/u);
 assert.match(vault, /data-ltm-availability-workbench/u);
 assert.ok(vault.lastIndexOf("data-ltm-availability-summary") < vault.lastIndexOf("data-ltm-details"));
@@ -128,6 +132,13 @@ assert.equal(locale["ui.longTermMemory.memoryvault.chooseWhereUsed"], "Choose wh
 assert.equal(locale["ui.longTermMemory.memoryvault.saveAvailability"], "Save availability");
 assert.equal(locale["ui.longTermMemory.memoryvault.addMemoryTo"], "Add this memory to:");
 assert.match(vault, /data-ltm-select-mode/u);
+const vaultFeedbackIndex = vault.indexOf("data-ltm-vault-feedback");
+const workspaceIndex = vault.indexOf("<LtmWorkspace", vault.indexOf("</style>"));
+const navigatorContentStart = vault.indexOf("content: (", workspaceIndex);
+const navigatorContentEnd = vault.indexOf("workbench={{", navigatorContentStart);
+assert.ok(vaultFeedbackIndex >= 0 && vaultFeedbackIndex < workspaceIndex);
+assert.ok(navigatorContentStart >= 0 && navigatorContentEnd > navigatorContentStart);
+assert.doesNotMatch(vault.slice(navigatorContentStart, navigatorContentEnd), /data-ltm-vault-feedback/u);
 assert.match(vault, /sourceFilter/u);
 assert.doesNotMatch(vault, /availableEverywhereFilter|setAvailableEverywhereFilter/u);
 assert.match(vault, /data-ltm-source-readonly/u);
@@ -262,6 +273,11 @@ assert.equal(locale["ui.longTermMemory.memoryvault.saveAndContinue"], "Save and 
 assert.match(vault, /extractionImportance/u);
 assert.match(vault, /extractionConfidence/u);
 assert.match(vault, /data-ltm-validation-summary/u);
+assert.match(vault, /data-ltm-vault-feedback/u);
+assert.ok(
+  vault.indexOf("data-ltm-vault-feedback") < vault.indexOf("<LtmWorkspace\n"),
+  "shared Vault feedback must stay visible above the pane-switching workspace",
+);
 assert.match(sharedControls, /HTMLAttributes<HTMLDivElement>/u);
 assert.match(sharedControls, /<div\s+role=\{tone === "danger" \? "alert" : "status"\}/u);
 assert.doesNotMatch(vault, /<div role="alert"><StatusSurface tone="danger">/u);

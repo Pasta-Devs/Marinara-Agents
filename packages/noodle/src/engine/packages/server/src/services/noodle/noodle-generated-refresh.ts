@@ -17,6 +17,10 @@ export type RejectedNoodleGeneratedRefreshItem = {
   issueCount: number;
 };
 
+export function isEmptyNoodleGeneratedRefreshResponse(raw: string): boolean {
+  return /^\[\s*\]$/u.test(raw.trim());
+}
+
 /**
  * Require a refresh to contain usable activity attributed to the exact cast
  * selected for this run. The persona may be a follow target, but generations
