@@ -1708,9 +1708,9 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (creatorId && !(await noodle.getNoodlerAccountById(creatorId))) {
       return reply.code(404).send({ error: "NoodleR stage profile not found" });
     }
-    for (const connectionId of [defaultConnectionId, connectionId]) {
-      if (connectionId === undefined || connectionId === null) continue;
-      const connection = await connections.getWithKey(connectionId);
+    for (const candidateConnectionId of [defaultConnectionId, connectionId]) {
+      if (candidateConnectionId === undefined || candidateConnectionId === null) continue;
+      const connection = await connections.getWithKey(candidateConnectionId);
       if (!connection || connection.provider !== "image_generation") {
         return reply.code(404).send({ error: "Noodle image connection not found" });
       }

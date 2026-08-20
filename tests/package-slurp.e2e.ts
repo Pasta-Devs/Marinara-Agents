@@ -116,6 +116,7 @@ test.describe("standalone Slurp package", () => {
 
     let stageProfileId: string | null = null;
     let postId: string | null = null;
+    const imageConnectionIds: string[] = [];
     try {
       await getSlurpSettings(page);
       const settingsResponse = await page.request.patch("/api/slurp/settings", {
@@ -142,6 +143,24 @@ test.describe("standalone Slurp package", () => {
         displayName: string;
       };
       stageProfileId = stageProfile.id;
+
+      for (const [name, isDefault] of [
+        [`Slurp image default ${suffix}`, true],
+        [`Slurp image alternate ${suffix}`, false],
+      ] as const) {
+        const connectionResponse = await page.request.post("/api/connections", {
+          data: {
+            name,
+            provider: "image_generation",
+            baseUrl: "https://example.invalid",
+            apiKey: "package-browser-test",
+            model: "package-browser-image",
+            defaultForAgents: isDefault,
+          },
+        });
+        expect(connectionResponse.ok()).toBe(true);
+        imageConnectionIds.push(((await connectionResponse.json()) as { id: string }).id);
+      }
 
       const postContent = `Standalone Slurp viewer post ${suffix}`;
       const postResponse = await page.request.post("/api/slurp/noodler/posts", {
@@ -226,6 +245,18 @@ test.describe("standalone Slurp package", () => {
       await page.reload();
       await openSlurp(page);
 
+      const imageConnectionSelect = page.getByLabel(`Image connection for ${stageProfile.displayName}`);
+      await expect(imageConnectionSelect).toBeEnabled();
+      await imageConnectionSelect.selectOption(imageConnectionIds[1]);
+      await expect
+        .poll(async () => {
+          const response = await page.request.get("/api/slurp/noodler/image-connections");
+          if (!response.ok()) return null;
+          const mappings = (await response.json()) as { creatorConnectionIds: Record<string, string> };
+          return mappings.creatorConnectionIds[stageProfile.id] ?? null;
+        })
+        .toBe(imageConnectionIds[1]);
+
       const scheduleButton = page.getByRole("button", { name: `Edit schedule for ${stageProfile.displayName}` });
       await expect(scheduleButton).toBeVisible();
       await scheduleButton.click();
@@ -269,6 +300,10 @@ test.describe("standalone Slurp package", () => {
             timeout: 5_000,
           })
           .catch(() => undefined);
+      }
+      for (const connectionId of imageConnectionIds) {
+        const response = await page.request.delete(`/api/connections/${connectionId}`, { timeout: 5_000 });
+        expect(response.ok()).toBe(true);
       }
       await page.request.delete(`/api/characters/personas/${persona.id}`, { timeout: 5_000 }).catch(() => undefined);
     }
