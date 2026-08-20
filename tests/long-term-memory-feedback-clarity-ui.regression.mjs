@@ -132,6 +132,18 @@ assert.equal(locale["ui.longTermMemory.memoryvault.chooseWhereUsed"], "Choose wh
 assert.equal(locale["ui.longTermMemory.memoryvault.saveAvailability"], "Save availability");
 assert.equal(locale["ui.longTermMemory.memoryvault.addMemoryTo"], "Add this memory to:");
 assert.match(vault, /data-ltm-select-mode/u);
+assert.match(vault, /const scopeTargetResolved = Boolean\(target && targetContextKey\.current === contextKey\)/u);
+assert.match(vault, /scopeTargets\.isLoading/u);
+assert.match(vault, /scopeTargets\.isError/u);
+assert.match(vault, /scopeTargets\.refetch\(\)/u);
+assert.ok(vault.indexOf("scopeTargets.isError") < vault.indexOf("noMemoriesFound"));
+assert.match(
+  vault,
+  /scopeTargetResolved\s*&&\s*!scopeTargets\.isError\s*&&\s*!notes\.isLoading\s*&&\s*!notes\.isError\s*&&\s*!visible\.length/u,
+);
+assert.match(vault, /loadingMemoryScope/u);
+assert.match(vault, /memoryScopeCouldNotLoad/u);
+assert.match(vault, /retryMemoryScope/u);
 const vaultFeedbackIndex = vault.indexOf("data-ltm-vault-feedback");
 const workspaceIndex = vault.indexOf("<LtmWorkspace", vault.indexOf("</style>"));
 const navigatorContentStart = vault.indexOf("content: (", workspaceIndex);
