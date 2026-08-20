@@ -2550,6 +2550,12 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
         onError: (error) =>
           toast.error(
             error instanceof Error ? error.message : localizeUi("ui.noodle.noodlehome.couldNotRefreshNoodle"),
+            {
+              action: {
+                label: localizeUi("capabilities.actions.tryAgain"),
+                onClick: triggerRefresh,
+              },
+            },
           ),
       },
     );
@@ -3430,6 +3436,16 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                       participantMax: value,
                     })
                   }
+                />
+              )}
+              {settings.participantSelectionMode === "all" && (
+                <NumberSetting
+                  label={localizeUi("ui.noodle.noodlehome.accountsPerRefresh")}
+                  help={localizeUi("ui.noodle.noodlehome.allInvitedRotationHelp")}
+                  value={settings.participantMax}
+                  min={1}
+                  max={100}
+                  onCommit={(value) => saveSettings({ participantMax: value })}
                 />
               )}
             </div>
