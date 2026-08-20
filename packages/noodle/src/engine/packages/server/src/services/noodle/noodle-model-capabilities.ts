@@ -7,6 +7,13 @@ type NoodleVisionConnection = {
 
 type NoodleModelCatalogRequest = (url: string | URL, init?: RequestInit) => Promise<Response>;
 
+type NoodleVisionPrompt<T> = {
+  messages: T;
+  textOnlyMessages: T;
+  promptForLog: string;
+  textOnlyPromptForLog: string;
+};
+
 function readRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -21,6 +28,24 @@ export function readNoodleVisionSupport(catalog: unknown, modelId: string): bool
   return typeof vision === "boolean" ? vision : null;
 }
 
+export function selectNoodleVisionRequest<T>(prompt: NoodleVisionPrompt<T>, visionSupport: boolean | null) {
+  return visionSupport === false
+    ? {
+        messages: prompt.textOnlyMessages,
+        promptForLog: prompt.textOnlyPromptForLog,
+        attemptKind: "text_only_fallback" as const,
+      }
+    : {
+        messages: prompt.messages,
+        promptForLog: prompt.promptForLog,
+        attemptKind: "initial" as const,
+      };
+}
+
+export function canRetryNoodleVisionRequest(attemptKind: string, visionAttachmentCount: number): boolean {
+  return attemptKind === "initial" && visionAttachmentCount > 0;
+}
+
 export async function resolveNoodleVisionSupport(
   connection: NoodleVisionConnection,
   request: NoodleModelCatalogRequest,
@@ -28,6 +53,7 @@ export async function resolveNoodleVisionSupport(
   if (connection.provider !== "nanogpt" || !connection.baseUrl || !connection.model) return null;
 
   const url = new URL(`${connection.baseUrl.replace(/\/+$/u, "")}/models`);
+  if (url.protocol !== "https:") return null;
   url.searchParams.set("detailed", "true");
   const response = await request(url, {
     headers: connection.apiKey ? { Authorization: `Bearer ${connection.apiKey}` } : undefined,

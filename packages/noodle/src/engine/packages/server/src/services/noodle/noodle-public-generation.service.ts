@@ -50,7 +50,11 @@ import type { ConnectionAdmissionMode } from "../generation/connection-admission
 import { isUnsupportedNoodleVisionInputError } from "./noodle-vision.js";
 import { formatNoodleMessagesForLog } from "./noodle-generation-log.js";
 import { ensureAmbientNoodleAccounts } from "./noodle-ambient-profiles.js";
-import { resolveNoodleVisionSupport } from "./noodle-model-capabilities.js";
+import {
+  canRetryNoodleVisionRequest,
+  resolveNoodleVisionSupport,
+  selectNoodleVisionRequest,
+} from "./noodle-model-capabilities.js";
 
 type PublicGenerationConnection = NonNullable<
   Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>
@@ -255,10 +259,11 @@ export function createPublicNoodleGenerationService(db: DB) {
             logger.debug(error, "[noodle/vision] Could not preflight the selected model's vision capability");
           }
         }
-        const useTextOnlyPreflight = visionSupport === false;
-        let requestMessages: ChatMessage[] = useTextOnlyPreflight ? prompt.textOnlyMessages : prompt.messages;
-        let firstAttemptKind: NoodleRefreshAttemptKind = useTextOnlyPreflight ? "text_only_fallback" : "initial";
-        const firstPromptForLog = useTextOnlyPreflight ? prompt.textOnlyPromptForLog : prompt.promptForLog;
+        const initialRequest = selectNoodleVisionRequest(prompt, visionSupport);
+        const useTextOnlyPreflight = initialRequest.attemptKind === "text_only_fallback";
+        let requestMessages: ChatMessage[] = initialRequest.messages;
+        let firstAttemptKind: NoodleRefreshAttemptKind = initialRequest.attemptKind;
+        const firstPromptForLog = initialRequest.promptForLog;
         logDebugOverride(debugMode, "[debug/noodle] Prompt sent to model:\n%s", firstPromptForLog);
         if (useTextOnlyPreflight)
           logDebugOverride(
@@ -320,8 +325,7 @@ export function createPublicNoodleGenerationService(db: DB) {
           result = await provider.chatComplete(requestMessages, completionOptions);
         } catch (error) {
           if (
-            firstAttemptKind !== "initial" ||
-            prompt.visionAttachmentCount === 0 ||
+            !canRetryNoodleVisionRequest(firstAttemptKind, prompt.visionAttachmentCount) ||
             !isUnsupportedNoodleVisionInputError(error)
           )
             throw error;

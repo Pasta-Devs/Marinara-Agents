@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import {
+  canRetryNoodleVisionRequest,
   readNoodleVisionSupport,
   resolveNoodleVisionSupport,
+  selectNoodleVisionRequest,
 } from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-model-capabilities";
 
 const catalog = {
@@ -16,6 +18,28 @@ assert.equal(readNoodleVisionSupport(catalog, "vision-model"), true);
 assert.equal(readNoodleVisionSupport(catalog, "text-model"), false);
 assert.equal(readNoodleVisionSupport(catalog, "unknown-model"), null);
 assert.equal(readNoodleVisionSupport(catalog, "missing-model"), null);
+
+const prompt = {
+  messages: ["vision"],
+  textOnlyMessages: ["text"],
+  promptForLog: "vision prompt",
+  textOnlyPromptForLog: "text prompt",
+};
+assert.deepEqual(selectNoodleVisionRequest(prompt, false), {
+  messages: prompt.textOnlyMessages,
+  promptForLog: prompt.textOnlyPromptForLog,
+  attemptKind: "text_only_fallback",
+});
+for (const support of [true, null]) {
+  assert.deepEqual(selectNoodleVisionRequest(prompt, support), {
+    messages: prompt.messages,
+    promptForLog: prompt.promptForLog,
+    attemptKind: "initial",
+  });
+}
+assert.equal(canRetryNoodleVisionRequest("initial", 1), true);
+assert.equal(canRetryNoodleVisionRequest("initial", 0), false);
+assert.equal(canRetryNoodleVisionRequest("text_only_fallback", 1), false);
 
 async function main() {
   const requests: Array<{ url: string; authorization: string | null }> = [];
@@ -52,6 +76,20 @@ async function main() {
       {
         provider: "openrouter",
         baseUrl: "https://openrouter.ai/api/v1",
+        apiKey: "test-key",
+        model: "text-model",
+      },
+      request,
+    ),
+    null,
+  );
+  assert.equal(requests.length, 1);
+
+  assert.equal(
+    await resolveNoodleVisionSupport(
+      {
+        provider: "nanogpt",
+        baseUrl: "http://nano-gpt.example/api/v1",
         apiKey: "test-key",
         model: "text-model",
       },
