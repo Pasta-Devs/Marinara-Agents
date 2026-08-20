@@ -293,6 +293,20 @@ assert.match(vault, /extractionImportance/u);
 assert.match(vault, /extractionConfidence/u);
 assert.match(vault, /data-ltm-validation-summary/u);
 assert.match(vault, /data-ltm-vault-feedback/u);
+assert.match(vault, /const clearNavigatorFilters = \(\) => \{/u);
+assert.match(
+  vault,
+  /setSearch\(""\);[\s\S]*setStatusFilter\("all"\);[\s\S]*setSourceFilter\(false\);[\s\S]*setSort\("updated"\);/u,
+);
+const clearFiltersStart = vault.indexOf("const clearNavigatorFilters");
+const clearFiltersEnd = vault.indexOf("const hiddenChecked", clearFiltersStart);
+assert.ok(clearFiltersStart >= 0 && clearFiltersEnd > clearFiltersStart);
+assert.doesNotMatch(vault.slice(clearFiltersStart, clearFiltersEnd), /setTarget/u);
+assert.match(vault, /allNotes\.length \? \([\s\S]*filteredEmptyDescription/u);
+assert.match(vault, /filteredEmptyFilters[\s\S]*activeFilterLabels\.join\(", "\)/u);
+assert.match(vault, /filteredEmptySourcesOnly/u);
+assert.match(vault, /onClick=\{clearNavigatorFilters\}/u);
+assert.match(vault, /value1: target\?\.label \?\? localizeUi\("ui\.longTermMemory\.memoryvault\.allMemories"\)/u);
 assert.ok(
   vault.indexOf("data-ltm-vault-feedback") < vault.indexOf("<LtmWorkspace\n"),
   "shared Vault feedback must stay visible above the pane-switching workspace",
