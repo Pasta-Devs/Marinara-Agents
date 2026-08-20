@@ -26,6 +26,7 @@ import { createPromptOverridesStorage } from "../storage/prompt-overrides.storag
 import { commitGeneratedNoodleActivity, prepareGeneratedNoodleMedia } from "./noodle-generated-activity.service.js";
 import {
   deduplicateGeneratedNoodleContent,
+  isEmptyNoodleGeneratedRefreshResponse,
   parseNoodleGeneratedRefreshResponse,
   validateNoodleGeneratedRefresh,
 } from "./noodle-generated-refresh.js";
@@ -334,7 +335,7 @@ export function createPublicNoodleGenerationService(db: DB) {
             parsedGenerated.refresh,
             allowedActorHandles,
             knownHandles,
-            content.trim() === "[]",
+            isEmptyNoodleGeneratedRefreshResponse(content),
           );
         } catch (error) {
           retryReason = `the response was not valid timeline JSON (${getErrorMessage(error)})`;
@@ -380,7 +381,7 @@ export function createPublicNoodleGenerationService(db: DB) {
               parsedGenerated.refresh,
               allowedActorHandles,
               knownHandles,
-              content.trim() === "[]",
+              isEmptyNoodleGeneratedRefreshResponse(content),
             );
           } catch (error) {
             correctedRetryReason = `the response was not valid timeline JSON (${getErrorMessage(error)})`;

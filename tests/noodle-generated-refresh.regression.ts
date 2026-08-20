@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import {
+  isEmptyNoodleGeneratedRefreshResponse,
   parseNoodleGeneratedRefreshResponse,
   validateNoodleGeneratedRefresh,
 } from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-generated-refresh";
+
+assert.equal(isEmptyNoodleGeneratedRefreshResponse("[]"), true);
+assert.equal(isEmptyNoodleGeneratedRefreshResponse("[\n]"), true);
+assert.equal(isEmptyNoodleGeneratedRefreshResponse("[null]"), false);
 import { parseNoodleGeneratedProfiles } from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-generated-profiles";
 import { parseNoodleGeneratedProfiles as parseSlurpGeneratedProfiles } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generated-profiles";
 
