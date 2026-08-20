@@ -105,7 +105,8 @@ export function chooseNoodleParticipantAccounts(input: {
     };
     const priority = byAge(pool.filter((account) => priorityAccountIds.has(account.id)));
     const ordinary = byAge(pool.filter((account) => !priorityAccountIds.has(account.id)));
-    if (priority.length === 0 || ordinary.length === 0 || count <= 1) return byAge(pool);
+    if (priority.length === 0 || ordinary.length === 0) return byAge(pool);
+    if (count === 1) return priority;
 
     // Keep current persona activity responsive without letting a permanently-priority account
     // consume the whole cohort forever. At least one character slot continues the rotation.

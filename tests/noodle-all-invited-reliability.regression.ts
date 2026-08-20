@@ -57,6 +57,15 @@ assert.deepEqual(
   ["a", "d"],
   "A priority account gets a slot while another slot continues the rotation",
 );
+assert.deepEqual(
+  select({
+    settings: { ...settings, participantMax: 1 } as NoodleSettings,
+    priorityAccountIds: new Set(["a"]),
+    recentlyActiveAccountIdsByRun: [new Set(["a"]), new Set(["b", "c", "d"])],
+  }).map(({ id }) => id),
+  ["a"],
+  "A priority account wins the only slot when participantMax is one",
+);
 
 assert.equal(
   select({ settings: { ...settings, participantSelectionMode: "exact" } as NoodleSettings }).length,
@@ -82,8 +91,17 @@ const generation = readFileSync(
 );
 assert.match(
   generation,
-  /listRefreshRuns\(\{[\s\S]*?status: "completed"[\s\S]*?participantSelectionMode === "all" \? 100 : 1/u,
-  "Only completed runs feed the rotation and All mode reads the retained history",
+  /listCompletedRefreshRunAccountIds\(settings\.participantSelectionMode === "all" \? 100 : 1\)/u,
+  "All mode reads sufficient projected completed-run history for rotation",
+);
+const storage = readFileSync(
+  "packages/noodle/src/engine/packages/server/src/services/storage/noodle.storage.ts",
+  "utf8",
+);
+assert.match(
+  storage,
+  /listCompletedRefreshRunAccountIds[\s\S]*?select\(\{ activeAccountIds: noodleRefreshRuns\.activeAccountIds \}\)[\s\S]*?status, "completed"/u,
+  "Rotation history fetches only active account IDs from completed runs",
 );
 assert.match(generation, /Return at least one activity permitted by the configured quotas/u);
 assert.match(generation, /\[\] and an object whose activity collections are all empty are invalid/u);

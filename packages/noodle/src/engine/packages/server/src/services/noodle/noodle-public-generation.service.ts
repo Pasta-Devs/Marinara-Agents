@@ -193,10 +193,7 @@ export function createPublicNoodleGenerationService(db: DB) {
         ];
         const [recentSelectionInteractions, recentCompletedRuns] = await Promise.all([
           noodle.listInteractions(recentSelectionPosts.map((post) => post.id)),
-          noodle.listRefreshRuns({
-            status: "completed",
-            limit: settings.participantSelectionMode === "all" ? 100 : 1,
-          }),
+          noodle.listCompletedRefreshRunAccountIds(settings.participantSelectionMode === "all" ? 100 : 1),
         ]);
         const priorityAccountIds = collectNoodlePriorityAccountIds({
           accounts: participantAccounts,
@@ -209,8 +206,8 @@ export function createPublicNoodleGenerationService(db: DB) {
           settings,
           selectedGroupCharacterIds,
           followedAccountIds: new Set(personaAccount?.settings.social.followingAccountIds ?? []),
-          recentlyActiveAccountIds: new Set(recentCompletedRuns[0]?.activeAccountIds ?? []),
-          recentlyActiveAccountIdsByRun: recentCompletedRuns.map((recentRun) => new Set(recentRun.activeAccountIds)),
+          recentlyActiveAccountIds: new Set(recentCompletedRuns[0] ?? []),
+          recentlyActiveAccountIdsByRun: recentCompletedRuns.map((accountIds) => new Set(accountIds)),
           priorityAccountIds,
         });
         if (selectedParticipants.length === 0) {
