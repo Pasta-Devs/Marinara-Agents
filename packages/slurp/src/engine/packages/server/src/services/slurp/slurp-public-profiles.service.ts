@@ -5,7 +5,7 @@ import { clampGenerationMaxOutputTokens } from "../generation/output-token-limit
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { resolveStoredChatOptions, resolveStoredMaxTokens } from "../generation/generation-parameters.js";
 import { parseGameJsonish } from "../game/jsonish.js";
-import { requireModelAnswer } from "./slurp-model-answer.js";
+import { modelAnswerForCorrection, requireModelAnswer } from "./slurp-model-answer.js";
 import type { BaseLLMProvider, ChatMessage } from "../llm/base-provider.js";
 import { createCharacterGalleryStorage } from "../storage/character-gallery.storage.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
@@ -172,7 +172,9 @@ export async function generateMissingNoodleProfiles(input: {
     const retry = await input.provider.chatComplete(
       [
         ...messages,
-        ...(result.content?.trim() ? [{ role: "assistant" as const, content: result.content }] : []),
+        ...(modelAnswerForCorrection(result.content)
+          ? [{ role: "assistant" as const, content: modelAnswerForCorrection(result.content)! }]
+          : []),
         {
           role: "user",
           content: `The previous response contained no usable profiles. Return exactly one valid profile for every requested entityId. Use the requested JSON profile schema. Return JSON only.`,
@@ -183,6 +185,9 @@ export async function generateMissingNoodleProfiles(input: {
     generated = parseNoodleGeneratedProfiles(
       parseGameJsonish(requireModelAnswer(retry.content ?? "", "public profiles")),
     );
+  }
+  if (generated.profiles.length === 0) {
+    throw new Error("Profile generation returned no usable profiles after correction.");
   }
   if (generated.rejected.length > 0) {
     logger.warn(

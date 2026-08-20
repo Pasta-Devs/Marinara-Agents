@@ -45,7 +45,7 @@ export function buildNoodlerCreatorReplyMessages(input: {
   const protect = (value: string | null | undefined) =>
     protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
   const system = [
-    "You write exactly one direct reply from one NoodleR creator to one real viewer comment on the creator's post.",
+    "You write exactly one direct reply from one Slurp creator to one real viewer comment on the creator's post.",
     "Write only as the supplied creator's stage persona. Address the viewer's comment naturally and do not write for the viewer.",
     NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
     input.generationGuidance.trim(),
@@ -77,7 +77,7 @@ export function buildNoodlerCreatorReplyMessages(input: {
     { role: "system", content: system },
     {
       role: "user",
-      content: `# Untrusted NoodleR data\n${JSON.stringify(data, null, 2)}`,
+      content: `# Untrusted Slurp data\n${JSON.stringify(data, null, 2)}`,
     },
   ];
 }
@@ -158,6 +158,6 @@ export async function generateNoodlerCreatorReply(input: {
     publicIdentity,
     NOODLER_REPLY_CONTENT_MAX_LENGTH,
   );
-  if (!protectedContent) throw new Error("NoodleR creator reply generation returned no usable content.");
+  if (!protectedContent) throw new Error("Slurp creator reply generation returned no usable content.");
   return protectedContent;
 }
