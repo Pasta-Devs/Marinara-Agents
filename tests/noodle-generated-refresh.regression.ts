@@ -6,6 +6,10 @@ import {
 } from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-generated-refresh";
 import { parseNoodleGeneratedProfiles } from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-generated-profiles";
 import { parseNoodleGeneratedProfiles as parseSlurpGeneratedProfiles } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generated-profiles";
+import {
+  isEmptyNoodleGeneratedRefreshResponse as isEmptySlurpGeneratedRefreshResponse,
+  validateNoodleGeneratedRefresh as validateSlurpGeneratedRefresh,
+} from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generated-refresh";
 
 assert.deepEqual(parseNoodleGeneratedProfiles([]), { profiles: [], rejected: [] });
 assert.deepEqual(
@@ -92,6 +96,9 @@ assert.deepEqual(
 assert.equal(isEmptyNoodleGeneratedRefreshResponse("[]"), true);
 assert.equal(isEmptyNoodleGeneratedRefreshResponse("[\n]"), true);
 assert.equal(isEmptyNoodleGeneratedRefreshResponse("[null]"), false);
+assert.equal(isEmptySlurpGeneratedRefreshResponse("[]"), true);
+assert.equal(isEmptySlurpGeneratedRefreshResponse("[\n]"), true);
+assert.equal(isEmptySlurpGeneratedRefreshResponse("[null]"), false);
 import { parseNoodleGeneratedProfiles } from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-generated-profiles";
 import { parseNoodleGeneratedProfiles as parseSlurpGeneratedProfiles } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generated-profiles";
 
@@ -201,5 +208,9 @@ const parsed = parseNoodleGeneratedRefreshResponse(
 assert.equal(parsed.refresh.posts.length, 1);
 assert.equal(parsed.refresh.posts[0]?.authorHandle, "character");
 assert.equal(validateNoodleGeneratedRefresh(parsed.refresh, new Set(["character"]), new Set(["character"])), null);
+assert.equal(
+  validateSlurpGeneratedRefresh({ posts: [], interactions: [], follows: [], digests: [] }, new Set(), new Set(), true),
+  null,
+);
 
 console.log("Noodle generated refresh regressions passed.");

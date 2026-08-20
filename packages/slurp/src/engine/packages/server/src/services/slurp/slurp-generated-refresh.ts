@@ -17,6 +17,10 @@ export type RejectedNoodleGeneratedRefreshItem = {
   issueCount: number;
 };
 
+export function isEmptyNoodleGeneratedRefreshResponse(raw: string): boolean {
+  return /^\[\s*\]$/u.test(raw.trim());
+}
+
 /**
  * Require a refresh to contain usable activity attributed to the exact cast
  * selected for this run. The persona may be a follow target, but generations
@@ -26,10 +30,11 @@ export function validateNoodleGeneratedRefresh(
   refresh: NoodleGeneratedRefresh,
   allowedActorHandles: ReadonlySet<string>,
   knownHandles: ReadonlySet<string>,
+  allowEmpty = false,
 ): string | null {
   const hasActivity =
     refresh.posts.length + refresh.interactions.length + refresh.follows.length + refresh.digests.length > 0;
-  if (!hasActivity) return "the response contained no timeline activity";
+  if (!hasActivity) return allowEmpty ? null : "the response contained no timeline activity";
 
   const hasUsableAttribution =
     refresh.posts.some((post) => allowedActorHandles.has(normalizeNoodleHandle(post.authorHandle))) ||

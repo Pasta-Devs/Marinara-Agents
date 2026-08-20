@@ -26,6 +26,7 @@ import { createPromptOverridesStorage } from "../storage/prompt-overrides.storag
 import { commitGeneratedNoodleActivity, prepareGeneratedNoodleMedia } from "./slurp-generated-activity.service.js";
 import {
   deduplicateGeneratedNoodleContent,
+  isEmptyNoodleGeneratedRefreshResponse,
   parseNoodleGeneratedRefreshResponse,
   validateNoodleGeneratedRefresh,
 } from "./slurp-generated-refresh.js";
@@ -330,7 +331,12 @@ export function createPublicNoodleGenerationService(db: DB) {
         const knownHandles = new Set(activeAccounts.map((account) => normalizeNoodleHandle(account.handle)));
         try {
           parsedGenerated = parseNoodleGeneratedRefreshResponse(content);
-          retryReason = validateNoodleGeneratedRefresh(parsedGenerated.refresh, allowedActorHandles, knownHandles);
+          retryReason = validateNoodleGeneratedRefresh(
+            parsedGenerated.refresh,
+            allowedActorHandles,
+            knownHandles,
+            isEmptyNoodleGeneratedRefreshResponse(content),
+          );
         } catch (error) {
           retryReason = `the response was not valid timeline JSON (${getErrorMessage(error)})`;
         }
@@ -375,6 +381,7 @@ export function createPublicNoodleGenerationService(db: DB) {
               parsedGenerated.refresh,
               allowedActorHandles,
               knownHandles,
+              isEmptyNoodleGeneratedRefreshResponse(content),
             );
           } catch (error) {
             correctedRetryReason = `the response was not valid timeline JSON (${getErrorMessage(error)})`;
