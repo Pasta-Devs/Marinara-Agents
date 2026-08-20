@@ -53,6 +53,10 @@ async function prepareFreshClient(page: Page) {
 async function openNoodle(page: Page) {
   await page.getByRole("tab", { name: "Open Noodle" }).click();
   await expect(page.locator('[data-component="NoodleView"]')).toBeVisible();
+  const welcomeDialog = page.getByRole("dialog", { name: "Welcome to Noodle" });
+  if (await welcomeDialog.isVisible().catch(() => false)) {
+    await welcomeDialog.getByRole("button", { name: "Open Noodle" }).click();
+  }
 }
 
 async function setStoredTheme(page: Page, theme: "dark" | "light") {
@@ -121,10 +125,6 @@ test.beforeEach(async ({ page }) => {
   });
   expect(resetUiSettings.ok()).toBeTruthy();
   await prepareFreshClient(page);
-  const welcomeDialog = page.getByRole("dialog", { name: "Welcome to Noodle" });
-  if (await welcomeDialog.isVisible().catch(() => false)) {
-    await welcomeDialog.getByRole("button", { name: "Open Noodle" }).click();
-  }
 });
 
 test.describe("package-owned Noodle interface", () => {
