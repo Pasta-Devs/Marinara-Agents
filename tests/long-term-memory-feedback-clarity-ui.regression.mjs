@@ -303,6 +303,13 @@ assert.match(vault, /async function undoArchive/u);
 assert.match(vault, /previousArchiveStatuses/u);
 assert.match(vault, /setArchiveUndo\(\{ notes: archiveUndoNotes \}\)/u);
 assert.match(vault, /archiveUndoFailed/u);
+assert.match(vault, /Promise\.allSettled/u);
+assert.match(vault, /successfulRestores[\s\S]*status: "archived"/u);
+assert.match(
+  vault,
+  /const archiveCompleted\s*=\s*[\s\S]*result\.status === "complete"[\s\S]*ids\.every\(\(id\) => updatedNoteIds\.has\(id\)\)/u,
+);
+assert.match(vault, /if \(archiveCompleted && archiveUndoNotes\.length === ids\.length\) setArchiveUndo/u);
 assert.equal(locale["ui.longTermMemory.memoryvault.undo"], "Undo");
 assert.equal(locale["ui.longTermMemory.memoryvault.archiveSuccessOne"], "{{count}} memory archived.");
 assert.equal(locale["ui.longTermMemory.memoryvault.archiveSuccessOther"], "{{count}} memories archived.");

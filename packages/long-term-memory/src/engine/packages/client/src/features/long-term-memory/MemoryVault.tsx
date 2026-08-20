@@ -1929,7 +1929,6 @@ export default function MemoryVault({
   async function undoArchive(recovery: ArchiveUndoState) {
     if (archiveUndo !== recovery) return;
     const session = editorSession.current;
-    setArchiveUndo(null);
     setBusy("undo-archive");
     setError("");
     try {
@@ -1939,22 +1938,43 @@ export default function MemoryVault({
         ids.push(note.id);
         notesByStatus.set(note.status, ids);
       }
-      const results = await Promise.all(
-        [...notesByStatus].map(([status, noteIds]) =>
+      const restoreGroups = [...notesByStatus].map(([status, noteIds]) => ({ status, noteIds }));
+      const results = await Promise.allSettled(
+        restoreGroups.map(({ status, noteIds }) =>
           request<LtmBulkNoteResult>("/notes/batch", "POST", { noteIds, status }),
         ),
       );
       if (session !== editorSession.current) return;
-      const restoredIds = new Set(results.flatMap((result) => result.updatedNoteIds));
-      if (
-        results.some(
-          (result) =>
-            result.status !== "complete" || result.skippedNoteIds.length > 0 || result.failedNoteIds.length > 0,
-        ) ||
-        restoredIds.size !== recovery.notes.length ||
-        recovery.notes.some((note) => !restoredIds.has(note.id))
-      )
+      const successfulRestores = results.flatMap((result, index) => {
+        const group = restoreGroups[index];
+        if (!group || result.status !== "fulfilled") return [];
+        const expectedIds = new Set(group.noteIds);
+        const restoredIds = result.value.updatedNoteIds.filter((id) => expectedIds.has(id));
+        return restoredIds.length ? [{ noteIds: restoredIds }] : [];
+      });
+      const allRestored = results.every((result, index) => {
+        const group = restoreGroups[index];
+        if (!group || result.status !== "fulfilled") return false;
+        const expectedIds = new Set(group.noteIds);
+        const actualIds = result.value.updatedNoteIds;
+        return (
+          result.value.status === "complete" &&
+          result.value.skippedNoteIds.length === 0 &&
+          result.value.failedNoteIds.length === 0 &&
+          actualIds.length === expectedIds.size &&
+          new Set(actualIds).size === expectedIds.size &&
+          actualIds.every((id) => expectedIds.has(id))
+        );
+      });
+      if (!allRestored) {
+        await Promise.allSettled(
+          successfulRestores.map(({ noteIds }) =>
+            request<LtmBulkNoteResult>("/notes/batch", "POST", { noteIds, status: "archived" }),
+          ),
+        );
         throw new Error("Archive undo did not restore every memory.");
+      }
+      setArchiveUndo(null);
       setNotice(
         localizeUi(
           selectLtmPluralForm(locale, recovery.notes.length) === "one"
@@ -1966,7 +1986,6 @@ export default function MemoryVault({
       await invalidate();
     } catch {
       if (session === editorSession.current) {
-        setNotice("");
         setError(localizeUi("ui.longTermMemory.memoryvault.archiveUndoFailed"));
       }
     } finally {
@@ -2366,15 +2385,21 @@ export default function MemoryVault({
         setChecked(unresolved);
       }
       const updatedForm = selectLtmPluralForm(locale, result.updatedNoteIds.length);
-      const archiveUndoNotes =
-        action === "archive" && !unresolved.size
-          ? result.updatedNoteIds.flatMap((id) => {
-              const status = previousArchiveStatuses.get(id);
-              return status ? [{ id, status }] : [];
-            })
-          : [];
+      const updatedNoteIds = new Set(result.updatedNoteIds);
+      const archiveCompleted =
+        action === "archive" &&
+        result.status === "complete" &&
+        updatedNoteIds.size === ids.length &&
+        updatedNoteIds.size === result.updatedNoteIds.length &&
+        ids.every((id) => updatedNoteIds.has(id));
+      const archiveUndoNotes = archiveCompleted
+        ? result.updatedNoteIds.flatMap((id) => {
+            const status = previousArchiveStatuses.get(id);
+            return status ? [{ id, status }] : [];
+          })
+        : [];
       const message = localizeUi(
-        action === "archive" && !unresolved.size
+        archiveCompleted
           ? updatedForm === "one"
             ? "ui.longTermMemory.memoryvault.archiveSuccessOne"
             : "ui.longTermMemory.memoryvault.archiveSuccessOther"
@@ -2392,10 +2417,7 @@ export default function MemoryVault({
           count: result.updatedNoteIds.length,
         },
       );
-      if (action === "archive" && archiveUndoNotes.length === result.updatedNoteIds.length) {
-        if (archiveUndoNotes.length) setArchiveUndo({ notes: archiveUndoNotes });
-        else setArchiveUndo(null);
-      }
+      if (archiveCompleted && archiveUndoNotes.length === ids.length) setArchiveUndo({ notes: archiveUndoNotes });
       setOpenActionNoteId(null);
       if (unresolved.size) {
         setNotice("");
