@@ -1735,6 +1735,11 @@ test("Map templates are created outside chats and copied into Roleplay", async (
     await workspace.getByRole("button", { name: "Use selected" }).click();
     const locationDetails = workspace.getByRole("region", { name: "Details for New world" });
     await locationDetails.getByLabel("Child presentation").selectOption("map");
+    const globalGalleryBeforeUploadResponse = await page.request.get("/api/global-gallery");
+    expect(globalGalleryBeforeUploadResponse.ok(), await globalGalleryBeforeUploadResponse.text()).toBeTruthy();
+    const globalGalleryIdsBeforeUpload = new Set(
+      ((await globalGalleryBeforeUploadResponse.json()) as Array<{ id: string }>).map((image) => image.id),
+    );
     const uploadBackground = locationDetails.getByRole("button", { name: "Upload child map background" });
     await expectMinimumInteractiveSize(uploadBackground, "Template child-map background upload");
     const fileChooserPromise = page.waitForEvent("filechooser");
@@ -1758,7 +1763,8 @@ test("Map templates are created outside chats and copied into Roleplay", async (
       model: string;
     }>;
     const uploadedBackground = globalGalleryAfterUpload.find(
-      (image) => image.prompt === "Uploaded child map background for New world.",
+      (image) =>
+        !globalGalleryIdsBeforeUpload.has(image.id) && image.prompt === "Uploaded child map background for New world.",
     );
     expect(uploadedBackground).toMatchObject({ provider: "upload", model: "user-upload" });
     uploadedBackgroundId = uploadedBackground?.id ?? null;
