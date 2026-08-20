@@ -889,7 +889,7 @@
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.2.8",
+        "version": "1.2.9",
         "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
         "engine": {
           "min": "2.4.1",
@@ -921,13 +921,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "9510e20d3b5e40332f8d9924377b32eca39f0d41bb799f1282b6de960900c348",
-            "bytes": 379528
+            "sha256": "6ca638f0a66cf8fcb2da20628bfc222f8a99289ca72996312c5f6d2416f28b18",
+            "bytes": 379860
           },
           {
             "path": "client.js",
-            "sha256": "a6e60291ba20873d913aaf5e93c48802b0cfa5ebf329cabc916d89121b095707",
-            "bytes": 821076
+            "sha256": "2f3fc123034a316d1259221b43e29a47336881ccc68a2d3e84093f41b78ac1e6",
+            "bytes": 821054
           }
         ],
         "permissions": [
@@ -943,9 +943,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.2.8.zip",
-        "sha256": "179d15c869cde12f09cae99660f7ff3cdedca464ff2a17b62e7aed6fa7f95f5d",
-        "bytes": 1203302
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.2.9.zip",
+        "sha256": "12d4a5a2a6a0221d86dcf9d5baa277963b50354e8b80ec223f4d1b7aefc37567",
+        "bytes": 1203612
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },
@@ -954,10 +954,10 @@
         "schemaVersion": 1,
         "id": "lorebook-keeper",
         "name": "Lorebook Keeper",
-        "version": "1.0.3",
+        "version": "1.0.4",
         "description": "Creates and updates durable chat lorebook entries from important story facts, characters, places, and world changes. Add the Agent in Chat Settings → Agents → Misc Agents/Lorebook Keeper for Roleplay and Game modes.",
         "engine": {
-          "min": "2.4.3",
+          "min": "2.4.4",
           "maxExclusive": "4.0.0"
         },
         "kind": [
@@ -969,8 +969,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "d9feeef9138673d9d2e31168b52288d43ca46adf9369557f2b0c535a344d784a",
-            "bytes": 2048
+            "sha256": "8fcbddc79b42f5db40d4a1802ba5e0aa824b07e8b3384973ceebb09a7b66c9e6",
+            "bytes": 2793
           }
         ],
         "permissions": [
@@ -985,9 +985,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/lorebook-keeper.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/lorebook-keeper-1.0.3.zip",
-        "sha256": "ed62272fa8fcd0591a085d90ce5f32e29cefb930291089c03a9e52ee057d3b29",
-        "bytes": 1686
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/lorebook-keeper-1.0.4.zip",
+        "sha256": "3463bde561830a3170c9031f2a0e82e52451bda32761ac5769a5a2fc99b805a4",
+        "bytes": 1956
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#lorebook-keeper"
     },
