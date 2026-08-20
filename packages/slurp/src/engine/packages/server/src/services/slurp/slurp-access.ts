@@ -1,6 +1,18 @@
 import type { NoodleAccount, NoodlePost } from "@marinara-engine/shared";
 
-export function isNoodlerHiddenFromViewer(account: NoodleAccount, viewerAccountId: string): boolean {
+type NoodlerAccessAccount = NoodleAccount & { sourceEntityId?: string | null };
+
+export function withoutNoodlerSelfHiddenAccountId(
+  hiddenFromAccountIds: readonly string[],
+  sourceEntityId: string | null | undefined,
+): string[] {
+  return sourceEntityId
+    ? hiddenFromAccountIds.filter((accountId) => accountId !== sourceEntityId)
+    : [...hiddenFromAccountIds];
+}
+
+export function isNoodlerHiddenFromViewer(account: NoodlerAccessAccount, viewerAccountId: string): boolean {
+  if (account.sourceEntityId === viewerAccountId) return false;
   return account.settings.privacy.access.hiddenFromAccountIds.includes(viewerAccountId);
 }
 

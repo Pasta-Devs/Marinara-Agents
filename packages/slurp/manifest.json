@@ -62,13 +62,13 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "6b81c26ab5cbfc8191b7e7f615bdb2f95565f52a2d9aa767a8de15e7b342ad08",
-      "bytes": 2718774
+      "sha256": "2da39ccd133a4166f07cae4fc62d1f28f5981aa94034a4a9f9b274f93539349f",
+      "bytes": 2718942
     },
     {
       "path": "client.js",
-      "sha256": "7585ca014c60518bce85d715a1dbcd1ca6333010443ba1d9295f06752b41d285",
-      "bytes": 2410745
+      "sha256": "959f80c10703b7dfbd0e63f3cf14eb663b1a87aa558e4cd64c594af349451219",
+      "bytes": 2412036
     },
     {
       "path": "slurp-logo.png",

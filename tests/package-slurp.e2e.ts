@@ -115,6 +115,7 @@ test.describe("standalone Slurp package", () => {
     const persona = (await personaResponse.json()) as { id: string };
 
     let stageProfileId: string | null = null;
+    let personaStageProfileId: string | null = null;
     let postId: string | null = null;
     const imageConnectionIds: string[] = [];
     try {
@@ -143,6 +144,21 @@ test.describe("standalone Slurp package", () => {
         displayName: string;
       };
       stageProfileId = stageProfile.id;
+
+      const personaStageProfileResponse = await page.request.post(`/api/slurp/accounts/${persona.id}/noodler`, {
+        data: {
+          stageProfile: {
+            displayName: personaName,
+            handle: `slurp_persona_${suffix}`,
+            bio: "Persona-owned Slurp profile proof.",
+            stagePersonality: "Direct and self-authored.",
+            disclosureMode: "open",
+          },
+        },
+      });
+      expect(personaStageProfileResponse.ok()).toBe(true);
+      const personaStageProfile = (await personaStageProfileResponse.json()) as { id: string };
+      personaStageProfileId = personaStageProfile.id;
 
       for (const [name, isDefault] of [
         [`Slurp image default ${suffix}`, true],
@@ -289,6 +305,28 @@ test.describe("standalone Slurp package", () => {
       await page.keyboard.press("Escape");
       await expect(promptDialog).toBeHidden();
 
+      await page.evaluate(
+        ({ personaId, accountId }) => {
+          localStorage.setItem(
+            "marinara:slurp:package-ui",
+            JSON.stringify({
+              navigation: { mode: "creator", view: "profile", accountId },
+              viewerPersonaId: personaId,
+              onboardingState: "completed",
+            }),
+          );
+        },
+        { personaId: persona.id, accountId: personaStageProfile.id },
+      );
+      await page.reload();
+      await openSlurp(page);
+      await page.getByText("Additional controls", { exact: true }).click();
+      await expect(page.getByRole("button", { name: /^Automation/u })).toHaveCount(0);
+      await page.getByRole("button", { name: "Access", exact: true }).click();
+      const accessDialog = page.getByRole("dialog", { name: "Viewer access" });
+      await expect(accessDialog).toBeVisible();
+      await expect(accessDialog.getByText(personaName, { exact: true })).toHaveCount(0);
+
       expect(errors).toEqual([]);
     } finally {
       if (postId) {
@@ -297,6 +335,13 @@ test.describe("standalone Slurp package", () => {
       if (stageProfileId) {
         await page.request
           .delete(`/api/slurp/noodler/accounts/${stageProfileId}`, {
+            timeout: 5_000,
+          })
+          .catch(() => undefined);
+      }
+      if (personaStageProfileId) {
+        await page.request
+          .delete(`/api/slurp/noodler/accounts/${personaStageProfileId}`, {
             timeout: 5_000,
           })
           .catch(() => undefined);

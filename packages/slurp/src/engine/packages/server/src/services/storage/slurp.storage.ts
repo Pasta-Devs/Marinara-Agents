@@ -62,7 +62,11 @@ import {
   parsePersistedNoodleFanActivityDayPlan,
 } from "../slurp/slurp-fan-activity-day-plan.js";
 import { NOODLER_FAN_IDENTITY_PREFIX } from "../slurp/slurp-fan-identity-provider.js";
-import { canViewNoodlerPost, isNoodlerHiddenFromViewer } from "../slurp/slurp-access.js";
+import {
+  canViewNoodlerPost,
+  isNoodlerHiddenFromViewer,
+  withoutNoodlerSelfHiddenAccountId,
+} from "../slurp/slurp-access.js";
 import {
   NOODLER_MEDIA_URL_PREFIX,
   noodlerPostMediaUrl,
@@ -2176,12 +2180,19 @@ export function createSlurpStorage(db: DB) {
             },
           };
         } else {
+          const access = { ...current.privacy.access, ...input.patch.access };
           next = {
             ...current,
             privacy: {
               ...current.privacy,
               ...input.patch,
-              access: { ...current.privacy.access, ...input.patch.access },
+              access: {
+                ...access,
+                hiddenFromAccountIds: withoutNoodlerSelfHiddenAccountId(
+                  access.hiddenFromAccountIds,
+                  row.sourceEntityId ?? row.entityId,
+                ),
+              },
             },
           };
         }

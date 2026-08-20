@@ -51,6 +51,16 @@ assert.match(imageConnections, /storage\.get\(KEY\)[\s\S]*?storage\.get\(LEGACY_
 assert.doesNotMatch(home, /canQuieten|makeQuieter|quieterPending/u);
 assert.match(home, /const viewingOwnCreator = profile\.sourceAccountId === viewerAccount\?\.entityId/u);
 assert.match(home, /const managedCreator = true/u);
+assert.match(home, /const personaBackedCreator = viewerAccounts\.some/u);
+assert.match(home, /const accessViewerAccounts = viewerAccounts\.filter/u);
+assert.match(home, /!personaBackedCreator && \([\s\S]*?setAutomationOpen\(true\)/u);
+assert.match(storage, /withoutNoodlerSelfHiddenAccountId\([\s\S]*?row\.sourceEntityId \?\? row\.entityId/u);
+assert.match(shell, /CSS\.supports\?\.\("-webkit-touch-callout", "none"\)/u);
+assert.match(shell, /style=\{\{ paddingBottom: `max\(1rem, \$\{BOTTOM_SAFE_INSET\}\)` \}\}/u);
+assert.match(shell, /pb-\[calc\(56px\+var\(--slurp-bottom-safe-inset\)\)\]/u);
+assert.match(shell, /style=\{\{ paddingBottom: BOTTOM_SAFE_INSET \}\}/u);
+assert.match(home, /<SlurpMobileHeader[\s\S]*?triggerRef=\{mobileDrawerTriggerRef\}/u);
+assert.match(home, /ref=\{setStickyHeader\}[\s\S]*?HIDE_ON_SCROLL_CLASS/u);
 assert.match(home, /function DisclosureBadge[\s\S]*?HelpTooltip/u);
 assert.match(home, /confirmProviderDisclosure/u);
 assert.doesNotMatch(home, /findLastIndex/u, "Slurp hub must support the Engine ES2020 target");
