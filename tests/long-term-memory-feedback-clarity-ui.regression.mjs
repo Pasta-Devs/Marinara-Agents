@@ -104,6 +104,10 @@ assert.match(settings, /reasoningEffort: resolved\.reasoningEffort \?\? "low"/u)
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.syncSelected_8c57bdb"], undefined);
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.refreshSelectedSources"], "Refresh selected sources");
 assert.equal(locale["ui.longTermMemory.activityview.totalTokens"], "Total: {{count}} tokens");
+assert.equal(
+  locale["ui.longTermMemory.longtermmemorydetail.savedButNotSearchable"],
+  "Saved with lexical recall only: semantic embeddings are unavailable.",
+);
 assert.match(vault, /function MemoryAvailabilityWorkbench/u);
 assert.match(vault, /data-ltm-availability-workbench/u);
 assert.ok(vault.lastIndexOf("data-ltm-availability-summary") < vault.lastIndexOf("data-ltm-details"));

@@ -733,7 +733,7 @@
   "ui.longTermMemory.longtermmemorydetail.import": "Import",
   "ui.longTermMemory.longtermmemorydetail.loadingDestination": "Loading {{destination}}…",
   "ui.longTermMemory.longtermmemorydetail.rebuildFailed": "Rebuild failed",
-  "ui.longTermMemory.longtermmemorydetail.savedButNotSearchable": "Saved, not searchable: semantic embeddings are unavailable. Lexical recall can still work.",
+  "ui.longTermMemory.longtermmemorydetail.savedButNotSearchable": "Saved with lexical recall only: semantic embeddings are unavailable.",
   "ui.longTermMemory.longtermmemorydetail.semanticRecallUnavailable": "Semantic recall is unavailable until the recall index is repaired.",
   "ui.longTermMemory.longtermmemorydetail.reindexRecall": "Reindex recall",
   "ui.longTermMemory.longtermmemorydetail.reindexComplete": "Recall index repair completed.",
