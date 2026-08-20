@@ -56,6 +56,7 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
   carryoverMaxItems: 8,
   theme: "system",
   generationConnectionId: null,
+  promptPresets: [],
 };
 const PUBLIC_SETTING_KEYS = new Set([...Object.keys(DEFAULT_SETTINGS), "refreshSchedule"]);
 const DEFAULT_ACCOUNT_SETTINGS = { profile: {}, social: {} };
@@ -95,6 +96,27 @@ function recordArray(value: string): unknown {
 
 function bool(value: unknown): boolean {
   return value === true || value === "true";
+}
+
+function sanitizePromptPresets(value: unknown): unknown[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value
+    .filter(
+      (item): item is Record<string, unknown> => item !== null && typeof item === "object" && !Array.isArray(item),
+    )
+    .map((item) => ({
+      name: typeof item.name === "string" ? item.name.trim().slice(0, 60) : "",
+      key: item.key === "noodle.timelineBase" ? item.key : "",
+      template: typeof item.template === "string" ? item.template.trim().slice(0, 20_000) : "",
+    }))
+    .filter((item) => {
+      const normalized = item.name.toLocaleLowerCase();
+      if (!item.name || !item.key || !item.template || seen.has(normalized)) return false;
+      seen.add(normalized);
+      return true;
+    })
+    .slice(0, 20);
 }
 function handle(value: string, fallback: string): string {
   return (
@@ -341,6 +363,7 @@ export function createNoodleStorage(db: DB) {
       const patch = Object.fromEntries(
         Object.entries(input).filter(([key]) => PUBLIC_SETTING_KEYS.has(key) && key !== "refreshSchedule"),
       );
+      if ("promptPresets" in patch) patch.promptPresets = sanitizePromptPresets(patch.promptPresets);
       const next = { ...(await this.getSettings()), ...patch };
       await saveSettingsRaw(next);
       const schedule = await this.getRefreshSchedule();

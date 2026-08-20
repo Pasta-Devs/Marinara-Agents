@@ -1,11 +1,16 @@
 import { DEFAULT_NOODLE_SETTINGS, type NoodleSettings, type NoodleSettingsUpdateInput } from "@marinara-engine/shared";
 
-export type PackageNoodleSettings = NoodleSettings & { enableImageInterpretation: boolean };
+export type PackageNoodleSettings = NoodleSettings & {
+  enableImageInterpretation: boolean;
+  promptPresets: import("./noodle-prompt-presets").NoodlePromptPreset[];
+};
 export type PackageNoodleSettingsUpdateInput = NoodleSettingsUpdateInput &
-  Partial<Pick<PackageNoodleSettings, "enableImageInterpretation">>;
+  Partial<Pick<PackageNoodleSettings, "enableImageInterpretation">> &
+  Partial<Pick<PackageNoodleSettings, "promptPresets">>;
 const PACKAGE_NOODLE_SETTINGS_DEFAULTS: PackageNoodleSettings = {
   ...DEFAULT_NOODLE_SETTINGS,
   enableImageInterpretation: true,
+  promptPresets: [],
 };
 
 /**
@@ -53,6 +58,7 @@ export const NOODLE_SETTINGS_SECTION_KEYS: Record<NoodleSettingsSectionId, reado
     "carryoverModes",
     "carryoverHours",
     "carryoverMaxItems",
+    "promptPresets",
   ],
 };
 
@@ -69,6 +75,7 @@ const NOODLE_SETTINGS_RESET_EXCLUDED: ReadonlySet<keyof PackageNoodleSettings> =
   "generationConnectionId",
   "imageGenerationConnectionId",
   "imageCaptioningConnectionId",
+  "promptPresets",
 ]);
 
 function isDefault(settings: PackageNoodleSettings, key: keyof PackageNoodleSettings): boolean {

@@ -172,8 +172,18 @@ const noodleHome = readFileSync(
 );
 assert.match(
   noodleHome,
-  /settingsContent[\s\S]*pb-\[calc\(56px\+env\(safe-area-inset-bottom\)\)\]/u,
+  /settingsContent[\s\S]*pb-\[calc\(56px\+var\(--noodle-safe-bottom\)\)\]/u,
   "Noodle settings must reserve space for the mobile bottom navigation",
+);
+
+const noodleShell = readFileSync(
+  join(root, "packages/noodle/src/engine/packages/client/src/components/noodle/NoodleShell.tsx"),
+  "utf8",
+);
+assert.match(
+  noodleShell,
+  /BOTTOM_SAFE_INSET =[\s\S]*-webkit-touch-callout[\s\S]*env\(safe-area-inset-bottom\)[\s\S]*"0px"/u,
+  "the bottom safe-area inset must stay WebKit-only, or Android gains an empty strip under the nav",
 );
 
 for (const file of files) {
