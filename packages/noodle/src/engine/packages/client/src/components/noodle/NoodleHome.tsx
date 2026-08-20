@@ -10,6 +10,7 @@ import {
   CalendarClock,
   Crop,
   Dices,
+  Download,
   FileText,
   FolderOpen,
   Heart,
@@ -19,6 +20,7 @@ import {
   Loader2,
   MessageCircle,
   Pencil,
+  Plus,
   RefreshCw,
   RotateCcw,
   Save,
@@ -26,6 +28,7 @@ import {
   Settings2,
   Smile,
   Trash2,
+  Upload,
   X,
   UserMinus,
   UserPlus,
@@ -80,6 +83,12 @@ import {
 import { useUploadGlobalGalleryImages } from "../../hooks/use-global-gallery";
 import type { ChatImage } from "../../hooks/use-gallery";
 import type { PackageNoodleSettings, PackageNoodleSettingsUpdateInput } from "./noodle-settings-defaults";
+import {
+  mergeNoodlePromptPreset,
+  parseNoodlePromptPresetImport,
+  sanitizeNoodlePromptPresets,
+  type NoodlePromptPreset,
+} from "./noodle-prompt-presets";
 import { HelpTooltip } from "../ui/HelpTooltip";
 import {
   ConversationMediaPickerPanel,
@@ -731,6 +740,9 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const [confirmAction, setConfirmAction] = useState<NoodleConfirmAction | null>(null);
   const [noodlePromptEditorOpen, setNoodlePromptEditorOpen] = useState(false);
   const [noodlePromptDraft, setNoodlePromptDraft] = useState("");
+  const [promptPresetName, setPromptPresetName] = useState("");
+  const [promptPresetDialogOpen, setPromptPresetDialogOpen] = useState(false);
+  const promptPresetImportRef = useRef<HTMLInputElement | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
   const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
@@ -1043,6 +1055,81 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : localizeUi("ui.noodle.noodlehome.couldNotSaveTheNoodlePrompt"),
+      );
+    }
+  };
+
+  const promptPresets = sanitizeNoodlePromptPresets((settings as PackageNoodleSettings | undefined)?.promptPresets);
+  const savePromptPreset = () => {
+    if (!noodlePromptDraft.trim()) {
+      toast.error(localizeUi("ui.noodle.noodlehome.theNoodlePromptCannotBeEmpty"));
+      return;
+    }
+    const next = mergeNoodlePromptPreset(promptPresets, { name: promptPresetName, template: noodlePromptDraft });
+    if (next.length === promptPresets.length && !promptPresetName.trim()) {
+      toast.error(localizeUi("ui.noodle.noodlehome.promptPresetNameRequired"));
+      return;
+    }
+    saveSettings({ promptPresets: next });
+    setPromptPresetDialogOpen(false);
+    setPromptPresetName("");
+    toast.success(localizeUi("ui.noodle.noodlehome.promptPresetSaved"));
+  };
+
+  const applyPromptPreset = async (preset: NoodlePromptPreset) => {
+    try {
+      await saveNoodlePrompt.mutateAsync({
+        key: "noodle.timelineBase",
+        template: preset.template,
+        enabled: true,
+      });
+      setNoodlePromptDraft(preset.template);
+      setPromptPresetDialogOpen(false);
+      toast.success(localizeUi("ui.noodle.noodlehome.promptPresetLoaded"));
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : localizeUi("ui.noodle.noodlehome.couldNotSaveTheNoodlePrompt"),
+      );
+    }
+  };
+
+  const deletePromptPreset = (name: string) => {
+    saveSettings({ promptPresets: promptPresets.filter((preset) => preset.name !== name) });
+  };
+
+  const exportPromptPresets = () => {
+    const blob = new Blob([JSON.stringify({ marinaraNoodlePrompts: 1, presets: promptPresets }, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "marinara-noodle-prompts.json";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importPromptPresets = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      const imported = parseNoodlePromptPresetImport(JSON.parse(await file.text()));
+      if (!imported.length) throw new Error(localizeUi("ui.noodle.noodlehome.promptPresetImportInvalid"));
+      const merged = [...promptPresets];
+      for (const preset of imported) {
+        let name = preset.name;
+        let suffix = 2;
+        while (merged.some((item) => item.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+          name = `${preset.name} (${suffix++})`;
+        }
+        merged.push({ ...preset, name });
+      }
+      saveSettings({ promptPresets: sanitizeNoodlePromptPresets(merged) });
+      toast.success(localizeUi("ui.noodle.noodlehome.promptPresetsImported"));
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : localizeUi("ui.noodle.noodlehome.promptPresetImportInvalid"),
       );
     }
   };
@@ -2863,6 +2950,92 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
               <Pencil size={14} aria-hidden="true" className="shrink-0 text-[var(--noodle-accent)]" />
               <span>{localizeUi("ui.noodle.noodlehome.editPrompt")}</span>
             </button>
+          </div>
+          <div className="border-t border-[var(--marinara-chat-chrome-panel-border)] pt-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className={labelClass}>{localizeUi("ui.noodle.noodlehome.savedPrompts")}</p>
+              <span className="text-[0.68rem] text-[var(--muted-foreground)]">{promptPresets.length}/20</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <select
+                aria-label={localizeUi("ui.noodle.noodlehome.savedPrompts")}
+                className={`${fieldClass} max-w-full flex-1 sm:max-w-xs`}
+                defaultValue=""
+                onChange={(event) => {
+                  const preset = promptPresets.find((item) => item.name === event.target.value);
+                  if (preset) void applyPromptPreset(preset);
+                  event.target.value = "";
+                }}
+              >
+                <option value="">{localizeUi("ui.noodle.noodlehome.selectSavedPrompt")}</option>
+                {promptPresets.map((preset) => (
+                  <option key={preset.name} value={preset.name}>
+                    {preset.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => {
+                  setPromptPresetName("");
+                  setPromptPresetDialogOpen(true);
+                }}
+                disabled={
+                  updateSettings.isPending ||
+                  (promptPresets.length >= 20 &&
+                    !promptPresets.some(
+                      (preset) => preset.name.toLocaleLowerCase() === promptPresetName.toLocaleLowerCase(),
+                    ))
+                }
+                title={localizeUi("ui.noodle.noodlehome.savePromptPreset")}
+                className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border border-[var(--noodle-accent)]/35 px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <Plus size={13} />
+                {localizeUi("ui.noodle.noodlehome.saveAs")}
+              </button>
+              <button
+                type="button"
+                onClick={exportPromptPresets}
+                disabled={!promptPresets.length}
+                title={localizeUi("ui.noodle.noodlehome.exportPrompts")}
+                className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border border-[var(--border)] px-3 text-xs font-semibold text-[var(--foreground)] hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <Download size={13} />
+                <span className="sr-only">{localizeUi("ui.noodle.noodlehome.exportPrompts")}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => promptPresetImportRef.current?.click()}
+                title={localizeUi("ui.noodle.noodlehome.importPrompts")}
+                className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border border-[var(--border)] px-3 text-xs font-semibold text-[var(--foreground)] hover:bg-[var(--accent)]"
+              >
+                <Upload size={13} />
+                <span className="sr-only">{localizeUi("ui.noodle.noodlehome.importPrompts")}</span>
+              </button>
+              <input
+                ref={promptPresetImportRef}
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={importPromptPresets}
+              />
+            </div>
+            {promptPresets.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {promptPresets.map((preset) => (
+                  <button
+                    key={preset.name}
+                    type="button"
+                    onClick={() => deletePromptPreset(preset.name)}
+                    title={`${localizeUi("ui.noodle.noodlehome.deletePromptPreset")}: ${preset.name}`}
+                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[0.68rem] text-[var(--muted-foreground)] hover:bg-[var(--destructive)]/10 hover:text-[var(--destructive)]"
+                  >
+                    <Trash2 size={11} />
+                    {preset.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </Section>
@@ -5063,6 +5236,51 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
           </div>
         }
       />
+      <Modal
+        open={promptPresetDialogOpen}
+        onClose={() => setPromptPresetDialogOpen(false)}
+        title={localizeUi("ui.noodle.noodlehome.savePromptPreset")}
+        width="max-w-sm"
+        panelClassName={NOODLE_ICON_SCOPE_CLASS}
+        panelStyle={getNoodleAccentStyle(NOODLE_BLUE)}
+      >
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            savePromptPreset();
+          }}
+        >
+          <label className="block space-y-2">
+            <span className={labelClass}>{localizeUi("ui.noodle.noodlehome.promptPresetName")}</span>
+            <input
+              autoFocus
+              value={promptPresetName}
+              onChange={(event) => setPromptPresetName(event.target.value)}
+              maxLength={60}
+              className={fieldClass}
+              placeholder={localizeUi("ui.noodle.noodlehome.promptPresetNamePlaceholder")}
+            />
+          </label>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setPromptPresetDialogOpen(false)}
+              className="h-9 rounded-md border border-[var(--border)] px-4 text-xs font-semibold hover:bg-[var(--accent)]"
+            >
+              {localizeUi("chat.delete.dialog.cancel")}
+            </button>
+            <button
+              type="submit"
+              disabled={!promptPresetName.trim() || updateSettings.isPending}
+              className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              <Save size={13} />
+              {localizeUi("ui.noodle.noodlehome.savePrompt")}
+            </button>
+          </div>
+        </form>
+      </Modal>
       <ExpandedTextarea
         open={noodlePromptEditorOpen}
         onClose={closeNoodlePromptEditor}
@@ -5087,6 +5305,19 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
               {localizeUi("ui.noodle.noodlehome.restoreDefault")}
             </button>
             <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setPromptPresetName("");
+                  setPromptPresetDialogOpen(true);
+                }}
+                disabled={!noodlePromptDraft.trim() || saveNoodlePrompt.isPending || resetNoodlePrompt.isPending}
+                title={localizeUi("ui.noodle.noodlehome.savePromptPreset")}
+                className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md border border-[var(--noodle-accent)]/35 px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <Plus size={13} />
+                <span className="hidden sm:inline">{localizeUi("ui.noodle.noodlehome.saveAs")}</span>
+              </button>
               <button
                 type="button"
                 onClick={closeNoodlePromptEditor}
