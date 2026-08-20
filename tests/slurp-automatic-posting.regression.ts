@@ -94,6 +94,24 @@ async function testPollOrdering() {
   assert.deepEqual(operations, ["reconcile", "publish:1", "prepare:1", "publish:2", "prepare:2"]);
   assert.deepEqual(result, { published: 2, reserve: "prepared" });
 
+  const preGeneratedOperations: string[] = [];
+  const preGenerated = await runSlurpAutoPostPollOperations({
+    reconcile: async () => {
+      preGeneratedOperations.push("reconcile");
+    },
+    publishDue: async () => {
+      preGeneratedOperations.push("publish");
+      return 1;
+    },
+    prepare: async () => {
+      preGeneratedOperations.push("prepare");
+      return "prepared";
+    },
+    generationMode: async () => "pre_generate",
+  });
+  assert.deepEqual(preGeneratedOperations, ["reconcile", "publish", "prepare", "publish"]);
+  assert.deepEqual(preGenerated, { published: 2, reserve: "prepared" });
+
   const failedOperations: string[] = [];
   const failed = await runSlurpAutoPostPollOperations({
     reconcile: async () => {
