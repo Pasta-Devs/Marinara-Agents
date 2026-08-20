@@ -132,6 +132,13 @@ assert.equal(locale["ui.longTermMemory.memoryvault.chooseWhereUsed"], "Choose wh
 assert.equal(locale["ui.longTermMemory.memoryvault.saveAvailability"], "Save availability");
 assert.equal(locale["ui.longTermMemory.memoryvault.addMemoryTo"], "Add this memory to:");
 assert.match(vault, /data-ltm-select-mode/u);
+const vaultFeedbackIndex = vault.indexOf("data-ltm-vault-feedback");
+const workspaceIndex = vault.indexOf("<LtmWorkspace", vault.indexOf("</style>"));
+const navigatorContentStart = vault.indexOf("content: (", workspaceIndex);
+const navigatorContentEnd = vault.indexOf("workbench={{", navigatorContentStart);
+assert.ok(vaultFeedbackIndex >= 0 && vaultFeedbackIndex < workspaceIndex);
+assert.ok(navigatorContentStart >= 0 && navigatorContentEnd > navigatorContentStart);
+assert.doesNotMatch(vault.slice(navigatorContentStart, navigatorContentEnd), /data-ltm-vault-feedback/u);
 assert.match(vault, /sourceFilter/u);
 assert.doesNotMatch(vault, /availableEverywhereFilter|setAvailableEverywhereFilter/u);
 assert.match(vault, /data-ltm-source-readonly/u);
