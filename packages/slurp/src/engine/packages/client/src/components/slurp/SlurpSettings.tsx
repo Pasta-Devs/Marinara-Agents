@@ -932,7 +932,24 @@ export function SlurpSettings({
       >
         <div className="space-y-4">
           <p className="text-sm text-[var(--muted-foreground)]">{t("ui.slurp.settings.creators.scheduleDetail")}</p>
-          {scheduleSlots.length > 0 ? (
+          {reserveStatusQuery.isLoading ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-sm text-[var(--muted-foreground)]">
+              <Loader2 size={18} className="animate-spin" />
+              {t("ui.noodle.noodlerschedulemanagermodal.loadingStatus")}
+            </div>
+          ) : reserveStatusQuery.isError ? (
+            <div className="rounded-md border border-red-400/30 p-5 text-sm">
+              <p>{t("ui.noodle.noodlerschedulemanagermodal.couldNotLoadStatus")}</p>
+              <button
+                type="button"
+                onClick={() => void reserveStatusQuery.refetch()}
+                className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--border)] px-3 font-semibold"
+              >
+                <RefreshCw size={14} />
+                {t("capabilities.actions.tryAgain")}
+              </button>
+            </div>
+          ) : scheduleSlots.length > 0 ? (
             <div className="space-y-3">
               {scheduleSlots.map((slot) => (
                 <ScheduleSlotEditor

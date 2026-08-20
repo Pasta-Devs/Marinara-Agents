@@ -60,6 +60,13 @@ assert.match(immediateTiming, /Current local date and time:/u);
 assert.match(immediateTiming, /Write for publication now/u);
 assert.match(scheduledTiming, /Expected publication date and time:/u);
 assert.match(scheduledTiming, /Write as if the post is being published at that expected time/u);
+assert.doesNotMatch(scheduledTiming, /Write for publication now/u);
+
+const reschedule = storage.slice(
+  storage.indexOf("async rescheduleNoodlerPost"),
+  storage.indexOf("async listNoodlerPreparedPosts"),
+);
+assert.match(reschedule, /policyFingerprint: noodlerReservePolicyFingerprint\(account, settings, source\?\.updatedAt/u);
 
 async function testPollOrdering() {
   const operations: string[] = [];

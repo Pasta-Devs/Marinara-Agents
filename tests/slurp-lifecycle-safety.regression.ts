@@ -69,9 +69,12 @@ const profileList = storage.slice(
   storage.indexOf("async listNoodlerStageProfiles"),
   storage.indexOf("async migrateLegacyNoodlerSourceSnapshots"),
 );
+assert.ok(profileList.length > 0, "listNoodlerStageProfiles must precede migrateLegacyNoodlerSourceSnapshots");
 assert.doesNotMatch(profileList, /updateNoodlerSourceSnapshot|patchAccountSettings/u);
 assert.match(storage, /async migrateLegacyNoodlerSourceSnapshots/u);
 assert.match(storage, /minimizeNoodlerSourceSnapshot\(baseline, disclosureMode\)/u);
+assert.match(storage, /NOODLER_SOURCE_SNAPSHOT_MIGRATION_KEY/u);
+assert.match(storage, /settingsStore\.set\(NOODLER_SOURCE_SNAPSHOT_MIGRATION_KEY, "1"\)/u);
 assert.match(serverEntry, /await createSlurpStorage\(app\.db\)\.migrateLegacyNoodlerSourceSnapshots\(\)/u);
 const dismissRoute = routes.slice(
   routes.indexOf('app.post("/noodler/accounts/:id/source/dismiss"'),

@@ -52,6 +52,7 @@ assert.equal(normalizeNoodlerStageProfileDraft("Sure, here is a profile"), null)
 assert.equal(normalizeNoodlerStageProfileDraft(null), null);
 assert.equal(modelAnswerForCorrection("[]"), null);
 assert.equal(modelAnswerForCorrection("```json\n[ ]\n```"), null);
+assert.equal(modelAnswerForCorrection("```json\n\n```"), null);
 assert.equal(modelAnswerForCorrection('{"displayName":"Nine"}'), '{"displayName":"Nine"}');
 
 console.log("NoodleR stage profile draft regressions passed.");

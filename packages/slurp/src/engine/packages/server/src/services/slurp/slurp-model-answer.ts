@@ -22,5 +22,5 @@ export function modelAnswerForCorrection(content: string | null | undefined): st
     .replace(/^```(?:json)?\s*/iu, "")
     .replace(/\s*```$/u, "")
     .trim();
-  return /^\[\s*\]$/u.test(unfenced) ? null : trimmed;
+  return !unfenced || /^\[\s*\]$/u.test(unfenced) ? null : trimmed;
 }

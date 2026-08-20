@@ -110,6 +110,7 @@ import {
 
 const SLURP_SETTINGS_KEY = "slurp.settings";
 const NOODLE_REFRESH_SCHEDULE_KEY = "slurp.refresh-schedule";
+const NOODLER_SOURCE_SNAPSHOT_MIGRATION_KEY = "slurp.migration.noodler-source-snapshots-v1";
 const slurpViewerSettingsKey = (personaId: string) => `slurp.viewer.${personaId}.settings`;
 const NOODLER_RESERVE_STATE_ID = "noodler-reserve";
 let slurpSettingsUpdateQueue: Promise<unknown> = Promise.resolve();
@@ -1761,6 +1762,7 @@ export function createSlurpStorage(db: DB) {
 
     /** One-time compatibility write; normal profile reads never change source-review state. */
     async migrateLegacyNoodlerSourceSnapshots(): Promise<number> {
+      if ((await settingsStore.get(NOODLER_SOURCE_SNAPSHOT_MIGRATION_KEY)) === "1") return 0;
       const accounts = await this.listNoodlerAccounts();
       let migrated = 0;
       for (const account of accounts) {
@@ -1779,6 +1781,7 @@ export function createSlurpStorage(db: DB) {
         await this.updateNoodlerSourceSnapshot(account.id, next);
         migrated += 1;
       }
+      await settingsStore.set(NOODLER_SOURCE_SNAPSHOT_MIGRATION_KEY, "1");
       return migrated;
     },
 
@@ -2430,6 +2433,7 @@ export function createSlurpStorage(db: DB) {
     ): Promise<"updated" | "not_found" | "not_future" | "not_editable"> {
       const publishMs = Date.parse(publishAt);
       if (Number.isNaN(publishMs) || publishMs <= at.getTime()) return "not_future";
+      const settings = await this.getSettings();
       let mediaPath: string | null = null;
       const result = await db.transaction(async (tx) => {
         const current = (await tx.select().from(noodlerPreparedPosts).where(eq(noodlerPreparedPosts.id, id)))[0];
@@ -2438,6 +2442,12 @@ export function createSlurpStorage(db: DB) {
         if (current.state === "prepared") {
           mediaPath = String(parseRecord(parseRecord(current.payload).metadata).noodlerMediaPath ?? "") || null;
         }
+        const accountRow = (
+          await tx.select().from(noodleAccounts).where(eq(noodleAccounts.id, current.creatorAccountId))
+        )[0];
+        if (!accountRow || accountRow.platform !== "slurp") return "not_found" as const;
+        const account = mapAccount(accountRow);
+        const source = await this.resolveAccountSource(account);
         const timestamp = at.toISOString();
         await tx
           .update(noodlerPreparedPosts)
@@ -2445,6 +2455,7 @@ export function createSlurpStorage(db: DB) {
             publishAt: new Date(publishMs).toISOString(),
             generatedAt: timestamp,
             payload: "{}",
+            policyFingerprint: noodlerReservePolicyFingerprint(account, settings, source?.updatedAt ?? null),
             state: "scheduled",
             publishedPostId: null,
             imageState: "none",
