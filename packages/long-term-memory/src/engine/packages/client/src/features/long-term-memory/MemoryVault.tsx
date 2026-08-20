@@ -1535,8 +1535,8 @@ export default function MemoryVault({
     selectedConversationId,
   ]);
   const selectedCharacter = scopeTargets.data?.characters.find((character) => character.id === selectedCharacterId);
-  const characterScopeTargets = (scopeTargets.data?.characters ?? []).map(
-    (character) => targets.find((candidate) => candidate.id === `character:${character.id}`)!,
+  const characterScopeTargets = (scopeTargets.data?.characters ?? []).map((character) =>
+    targets.find((candidate) => candidate.id === `character:${character.id}`)!,
   );
   const conversationScopeTargets = conversations.map((conversation) => {
     const [kind, id] = conversation.id.split(/:(.+)/, 2);

@@ -58,11 +58,7 @@ export interface GameMapBindingReconciliationSelection {
 export class GameMapBindingError extends Error {
   constructor(
     readonly code:
-      | "map_missing"
-      | "target_missing"
-      | "target_type_mismatch"
-      | "target_already_bound"
-      | "reconciliation_stale",
+      "map_missing" | "target_missing" | "target_type_mismatch" | "target_already_bound" | "reconciliation_stale",
     message: string,
   ) {
     super(message);

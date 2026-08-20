@@ -143,8 +143,7 @@ async function generateTurn(
 
 function savedAssistantMessage(events: Array<{ type?: string; data?: unknown }>, source: string) {
   const saved = events.find((event) => event.type === "message_saved")?.data as
-    | { id?: unknown; role?: unknown; activeSwipeIndex?: unknown; content?: unknown }
-    | undefined;
+    { id?: unknown; role?: unknown; activeSwipeIndex?: unknown; content?: unknown } | undefined;
   expect(saved, `${source} must save an assistant message`).toBeTruthy();
   expect(saved?.role, `${source} must save an assistant role`).toBe("assistant");
   expect(typeof saved?.id, `${source} must return the saved message ID`).toBe("string");
@@ -1309,8 +1308,7 @@ test("global World Maps home activates and opens the current chat map", async ({
             ? (JSON.parse(mapsAgent.settings) as Record<string, unknown>)
             : ((mapsAgent?.settings ?? {}) as Record<string, unknown>);
         const libraries = settings.spatialMapGenerationPromptLibraries as
-          | { roleplay?: { options?: Array<{ name?: string }> } }
-          | undefined;
+          { roleplay?: { options?: Array<{ name?: string }> } } | undefined;
         const templates = settings.spatialMapTurnPromptTemplates as { roleplay?: string; game?: string } | undefined;
         return {
           author: settings.author,
@@ -1389,8 +1387,7 @@ test("global World Maps home activates and opens the current chat map", async ({
       await expect
         .poll(() => {
           const preferences = generatedRequest?.generationPreferencesOverride as
-            | { activeOptionId?: string; options?: Array<{ name?: string }> }
-            | undefined;
+            { activeOptionId?: string; options?: Array<{ name?: string }> } | undefined;
           return {
             activeOptionId: preferences?.activeOptionId,
             optionNames: preferences?.options?.map((option) => option.name),
@@ -5722,8 +5719,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     // submitted command, never the newly queued route command.
     await page.evaluate(() => {
       const runtime = document.querySelector("marinara-capability-hierarchical-maps[view='runtime']") as
-        | (HTMLElement & { capabilityProps?: Record<string, unknown> })
-        | null;
+        (HTMLElement & { capabilityProps?: Record<string, unknown> }) | null;
       if (!runtime?.capabilityProps) throw new Error("World Maps runtime capability was not mounted");
       runtime.capabilityProps = { ...runtime.capabilityProps, pendingTransition: null };
       runtime.dispatchEvent(new CustomEvent("marinara-capability-props"));
