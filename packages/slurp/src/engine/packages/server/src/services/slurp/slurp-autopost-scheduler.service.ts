@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { logger } from "../../lib/logger.js";
 import { sweepStagedImages } from "../image/image-generation.js";
 import { createSlurpStorage } from "../storage/slurp.storage.js";
-import { prepareNextNoodlerReservePost, reconcileNoodlerReserve } from "./slurp-reserve.operation.js";
+import { reconcileNoodlerReserve, runNoodlerAutoPostPoll } from "./slurp-reserve.operation.js";
 import { tryBackfillNextNoodlerCreatorArtwork } from "./slurp-artwork.operation.js";
 
 const INITIAL_DELAY_MS = 30_000;
@@ -64,9 +64,10 @@ export function startNoodleAutoPostScheduler(app: FastifyInstance, registerStop?
       if (artwork !== "idle" && artwork !== "unavailable")
         logger.info("[noodle-autopost] Filled in a creator %s", artwork);
       if (noodlerReservePollIsIdle(settings) && !(await noodle.hasNoodlerPreparedPosts())) return;
-      await reconcileNoodlerReserve(app.db);
-      const outcome = await prepareNextNoodlerReservePost(app.db);
-      if (outcome === "prepared") logger.info("[noodle-autopost] Prepared one future NoodleR post");
+      const outcome = await runNoodlerAutoPostPoll(app.db);
+      if (outcome.published > 0) logger.info("[noodle-autopost] Published %d due Slurp post(s)", outcome.published);
+      if (outcome.reserve === "prepared") logger.info("[noodle-autopost] Prepared one Slurp post");
+      if (outcome.reserve === "scheduled") logger.info("[noodle-autopost] Scheduled one on-demand Slurp post");
     } catch (error) {
       logger.error(error, "[noodle-autopost] Reserve poll failed");
     } finally {

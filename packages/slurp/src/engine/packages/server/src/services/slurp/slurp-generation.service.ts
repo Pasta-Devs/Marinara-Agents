@@ -39,6 +39,7 @@ import {
 import type { NoodleImagePromptReviewItem } from "./slurp-public-images.service.js";
 import { getErrorMessage } from "./slurp-public-support.js";
 import { noodleResponseFormat } from "./slurp-response-format.js";
+import { buildSlurpPostTimingContext } from "./slurp-post-timing.js";
 
 export type GeneratedNoodlerPostResult = {
   post: NoodlerManagedPost;
@@ -89,6 +90,10 @@ export type NoodlerPostGenerationInput = {
   prepareOnly?: boolean;
   /** Scheduler-owned automatic runs pass background so they yield to user generation. */
   admissionMode?: ConnectionAdmissionMode;
+  /** Clock captured by the caller so prompt construction and scheduling agree in tests and production. */
+  generatedAt?: Date;
+  /** Scheduled publication time. Omitted for posts generated for immediate publication. */
+  publicationTime?: Date;
 };
 
 const NOODLER_POST_MAX_TOKENS = 2048;
@@ -274,7 +279,7 @@ export function protectBoundedNoodlerGeneratedText(
 }
 
 function formatNoodlerPostHistory(posts: NoodlerManagedPost[], protect: (value: string) => string): string {
-  if (posts.length === 0) return "No previous posts on this NoodleR page.";
+  if (posts.length === 0) return "No previous posts on this Slurp page.";
   return posts
     .slice()
     .reverse()
@@ -291,16 +296,18 @@ export function buildNoodlerPostMessages(input: {
   request: Pick<FormattedNoodlerGenerationRequest, "noodlerPostGuide" | "noodlerProjectWork" | "format">;
   allowImagePrompt: boolean;
   generationGuidance: string;
+  generatedAt?: Date;
+  publicationTime?: Date;
 }): ChatMessage[] {
   const protect = (value: string) =>
     protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
   const guidance = input.generationGuidance.trim();
   const format = input.request.format ?? "caption";
   const system = [
-    "You write exactly one post for one NoodleR creator page in Marinara Engine.",
-    "Write only as the supplied NoodleR account. Do not create other accounts, interactions, follows, or public timeline activity.",
+    "You write exactly one post for one Slurp creator page in Marinara Engine.",
+    "Write only as the supplied Slurp account. Do not create other accounts, interactions, follows, or public timeline activity.",
     NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
-    "Use the NoodleR stage profile as supplied.",
+    "Use the Slurp stage profile as supplied.",
     ...(guidance ? [guidance] : []),
     noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
     NOODLER_FORMAT_PROMPTS[format],
@@ -314,14 +321,17 @@ export function buildNoodlerPostMessages(input: {
     "Return JSON only. No prose outside the JSON object.",
   ].join("\n");
   const user = [
-    "# NoodleR account",
+    "# Slurp account",
     `Display name: ${protect(input.account.displayName)}`,
     `Handle: @${protect(input.account.handle)}`,
     `Bio: ${protect(input.account.bio) || "No bio provided."}`,
     `Stage voice: ${protect(input.stagePersonality) || "No additional stage voice provided."}`,
     `Content format: ${format}`,
     "",
-    "# Recent NoodleR posts",
+    "# Publication timing",
+    buildSlurpPostTimingContext(input.generatedAt ?? new Date(), input.publicationTime),
+    "",
+    "# Recent Slurp posts",
     formatNoodlerPostHistory(input.recentPosts, protect),
     ...(input.request.noodlerPostGuide ? ["", "# Post direction", protect(input.request.noodlerPostGuide)] : []),
     ...(input.request.noodlerProjectWork
@@ -411,6 +421,8 @@ export async function generateNoodlerPost(
     request: input.request,
     allowImagePrompt: imagesEnabled,
     generationGuidance: settings.generationGuidance,
+    generatedAt: input.generatedAt ?? new Date(),
+    publicationTime: input.publicationTime,
   });
   const debugMode = input.request.debugMode === true || isDebugAgentsEnabled();
   logDebugOverride(

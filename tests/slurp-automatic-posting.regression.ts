@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createSlurpActivationLifecycle } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-activation-lifecycle.ts";
+import { buildSlurpPostTimingContext } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-post-timing.ts";
 
 const storage = readFileSync("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
 const refreshScheduler = readFileSync(
@@ -30,6 +31,18 @@ const viewerHook = hooks.slice(
 );
 assert.match(viewerHook, /refetchInterval: enabled && personaId \? 30_000 : false/u);
 assert.match(hooks, /invalidateQueries\(\{ queryKey: noodleKeys\.viewer\(personaId\) \}\)/u);
+assert.match(storage, /autoPostGenerationMode: z\.enum\(\["pre_generate", "on_demand"\]\)/u);
+assert.match(storage, /autoPostGenerationMode: "pre_generate"/u);
+assert.match(storage, /state: "scheduled"/u);
+
+const generatedAt = new Date("2026-08-20T15:25:00.000Z");
+const publicationTime = new Date("2026-08-21T08:30:00.000Z");
+const immediateTiming = buildSlurpPostTimingContext(generatedAt);
+const scheduledTiming = buildSlurpPostTimingContext(generatedAt, publicationTime);
+assert.match(immediateTiming, /Current local date and time:/u);
+assert.match(immediateTiming, /Write for publication now/u);
+assert.match(scheduledTiming, /Expected publication date and time:/u);
+assert.match(scheduledTiming, /Write as if the post is being published at that expected time/u);
 async function testActivationLifecycle() {
   const lifecycle = createSlurpActivationLifecycle();
   const order: string[] = [];
