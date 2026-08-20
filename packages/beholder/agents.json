@@ -14,7 +14,7 @@
     "defaultTools": [],
     "defaultSettings": {
       "resultType": "context_injection",
-      "contextSize": 2,
+      "contextSize": 1,
       "maxTokens": 4096,
       "temperature": 0,
       "defaultPromptTemplateName": "SOTA model — one prompt",
