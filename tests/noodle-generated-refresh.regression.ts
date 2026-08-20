@@ -33,8 +33,27 @@ assert.deepEqual(
   },
 );
 assert.deepEqual(parseNoodleGeneratedProfiles([{ profiles: [] }]), { profiles: [], rejected: [] });
+const slurpProfile = {
+  entityId: "slurp-character-1",
+  name: "Lygus",
+  handle: "lygus",
+  bio: "A spectator.",
+  location: "The Exomyth",
+};
+assert.deepEqual(parseSlurpGeneratedProfiles({ profiles: [slurpProfile] }), {
+  profiles: [slurpProfile],
+  rejected: [],
+});
+assert.deepEqual(parseSlurpGeneratedProfiles([{ profiles: [slurpProfile] }]), {
+  profiles: [slurpProfile],
+  rejected: [],
+});
 assert.deepEqual(parseSlurpGeneratedProfiles({ profiles: [] }), { profiles: [], rejected: [] });
 assert.deepEqual(parseSlurpGeneratedProfiles([{ profiles: [] }]), { profiles: [], rejected: [] });
+assert.deepEqual(parseSlurpGeneratedProfiles({ profiles: [{ entityId: "invalid" }] }).rejected, [
+  { index: 0, issueCount: 4 },
+]);
+assert.throws(() => parseSlurpGeneratedProfiles({ profiles: null }));
 assert.throws(() => parseNoodleGeneratedProfiles({ profiles: null }));
 assert.throws(() => parseNoodleGeneratedProfiles([{ profiles: null }]));
 assert.deepEqual(parseNoodleGeneratedProfiles({ profiles: [{ entityId: "invalid" }] }).rejected, [
