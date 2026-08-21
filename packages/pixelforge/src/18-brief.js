@@ -9,18 +9,28 @@ PF.brief = (() => {
   const VERSION = 1;
 
   // ── Vocabularies (the form does the teaching) ───────────────────────────────
+  // Sized so the STREET GRID has somewhere to put a street. The grid lays a lot
+  // every 8 rows and every 9 columns, and a map only 30 tall has room for two
+  // rows of them however wide it is — so a village used to lay six lots on 1320
+  // tiles and read as a hamlet with a lot of grass. Lots per rank now run
+  // 4 / 8 / 16 / 36 / 80, which is the first progression where each rank looks
+  // like a bigger VERSION of the one below rather than the same place zoomed.
+  //
+  // `buildings` is the ceiling on how many of those lots get laid out, and it is
+  // deliberately kept ABOVE what the population arithmetic asks for at each rank
+  // (20-world's RESIDENT_HOUSEHOLDS). The ground should permit and the people
+  // should decide; when this number binds first, every settlement of a rank comes
+  // out the same size no matter who lives there, which is the bug that made a
+  // city eighteen buildings wide whatever its brief said.
   const SCALES = {
     outpost: { w: 28, h: 20, buildings: 4 },
-    hamlet: { w: 34, h: 24, buildings: 6 },
-    village: { w: 44, h: 30, buildings: 8 },
-    town: { w: 56, h: 38, buildings: 12 },
-    // A CITY, and the first scale where the map has more ground than the brief
-    // has claimants: 96x72 lays 18 lots against a cast capped at 10, so
-    // `buildings` finally stops being decoration and the constraint moves from
-    // the ground to the people standing on it. Deliberately roomy — most of it
-    // is open at first, and that is the point: it shows in thirty seconds which
-    // of the layout constants are absolute and which actually scale.
-    city: { w: 96, h: 72, buildings: 40 },
+    hamlet: { w: 48, h: 28, buildings: 8 },
+    village: { w: 60, h: 40, buildings: 16 },
+    town: { w: 76, h: 52, buildings: 34 },
+    // A CITY. Roomy on purpose: it is the rank where districts (roadmap W3) will
+    // eventually carve the map into wards with their own gravity, and the ground
+    // wants to be there before the machinery that divides it.
+    city: { w: 104, h: 72, buildings: 76 },
   };
   const SURROUNDS = ["woods", "fields", "rocky", "water", "barren"];
   const PROSPERITY = ["struggling", "modest", "thriving"];

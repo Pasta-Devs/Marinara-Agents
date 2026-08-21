@@ -876,18 +876,28 @@ PF.brief = (() => {
   const VERSION = 1;
 
   // ── Vocabularies (the form does the teaching) ───────────────────────────────
+  // Sized so the STREET GRID has somewhere to put a street. The grid lays a lot
+  // every 8 rows and every 9 columns, and a map only 30 tall has room for two
+  // rows of them however wide it is — so a village used to lay six lots on 1320
+  // tiles and read as a hamlet with a lot of grass. Lots per rank now run
+  // 4 / 8 / 16 / 36 / 80, which is the first progression where each rank looks
+  // like a bigger VERSION of the one below rather than the same place zoomed.
+  //
+  // `buildings` is the ceiling on how many of those lots get laid out, and it is
+  // deliberately kept ABOVE what the population arithmetic asks for at each rank
+  // (20-world's RESIDENT_HOUSEHOLDS). The ground should permit and the people
+  // should decide; when this number binds first, every settlement of a rank comes
+  // out the same size no matter who lives there, which is the bug that made a
+  // city eighteen buildings wide whatever its brief said.
   const SCALES = {
     outpost: { w: 28, h: 20, buildings: 4 },
-    hamlet: { w: 34, h: 24, buildings: 6 },
-    village: { w: 44, h: 30, buildings: 8 },
-    town: { w: 56, h: 38, buildings: 12 },
-    // A CITY, and the first scale where the map has more ground than the brief
-    // has claimants: 96x72 lays 18 lots against a cast capped at 10, so
-    // `buildings` finally stops being decoration and the constraint moves from
-    // the ground to the people standing on it. Deliberately roomy — most of it
-    // is open at first, and that is the point: it shows in thirty seconds which
-    // of the layout constants are absolute and which actually scale.
-    city: { w: 96, h: 72, buildings: 40 },
+    hamlet: { w: 48, h: 28, buildings: 8 },
+    village: { w: 60, h: 40, buildings: 16 },
+    town: { w: 76, h: 52, buildings: 34 },
+    // A CITY. Roomy on purpose: it is the rank where districts (roadmap W3) will
+    // eventually carve the map into wards with their own gravity, and the ground
+    // wants to be there before the machinery that divides it.
+    city: { w: 104, h: 72, buildings: 76 },
   };
   const SURROUNDS = ["woods", "fields", "rocky", "water", "barren"];
   const PROSPERITY = ["struggling", "modest", "thriving"];
@@ -1856,6 +1866,50 @@ PF.world = (() => {
     }
   }
 
+  /** Close any walkable tile the player could never reach.
+   *
+   *  A random scatter can ring a square completely — four trunks around one tile
+   *  of grass — and what is left is a hole in the map that reads as somewhere you
+   *  can go and is not. It is cheaper to close the pockets than to constrain the
+   *  scatter, and closing them is right for the pockets a BUILDING makes too.
+   *
+   *  Marked solid rather than planted: a pocket is by definition adjacent to no
+   *  reachable tile, so the player can never walk up to one, and an invisible
+   *  wall nobody can touch is safer than a tree that might land under a roofline
+   *  or in the middle of a paved yard. */
+  function sealPockets(z, from) {
+    if (!from || z.solid[idx(z, from.x, from.y)]) return 0;
+    const seen = new Set([idx(z, from.x, from.y)]);
+    const queue = [[from.x, from.y]];
+    while (queue.length) {
+      const [x, y] = queue.pop();
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ]) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= z.w || ny >= z.h) continue;
+        const at = idx(z, nx, ny);
+        if (seen.has(at) || z.solid[at]) continue;
+        seen.add(at);
+        queue.push([nx, ny]);
+      }
+    }
+    let closed = 0;
+    for (let y = 0; y < z.h; y++) {
+      for (let x = 0; x < z.w; x++) {
+        const at = idx(z, x, y);
+        if (z.solid[at] || seen.has(at)) continue;
+        z.solid[at] = true;
+        closed++;
+      }
+    }
+    return closed;
+  }
+
   function borderTrees(z) {
     for (let x = 0; x < z.w; x++) {
       for (const y of [0, z.h - 1]) {
@@ -2133,6 +2187,126 @@ PF.world = (() => {
   // never depend on model-written names. See docs/brief-schema.md §4.5:
   // buildings derive from households + cast kinds, over-subscription MERGES
   // households into shared blocks — a named NPC's home is never dropped.
+  // Names for the residents the COMPILER mints. A brief may name ten people; a
+  // city holds dozens of households, and everybody else still has to be called
+  // something. Two books because a name is theme-bearing: "Maud Thatch" belongs
+  // to a village and "Sona Rask" does not.
+  const RESIDENT_NAMES = {
+    "cozy-village": {
+      given: [
+        "Alwin",
+        "Bryn",
+        "Cassa",
+        "Dermot",
+        "Edda",
+        "Fenn",
+        "Gret",
+        "Hallam",
+        "Isolde",
+        "Jarek",
+        "Kestrel",
+        "Linnet",
+        "Maud",
+        "Nyle",
+        "Orla",
+        "Pell",
+        "Rowan",
+        "Sable",
+        "Thom",
+        "Ursel",
+        "Vane",
+        "Wick",
+        "Yarrow",
+        "Zeb",
+      ],
+      family: [
+        "Ash",
+        "Barrow",
+        "Cobb",
+        "Dray",
+        "Ember",
+        "Fallow",
+        "Garrick",
+        "Holt",
+        "Ives",
+        "Kettle",
+        "Marsh",
+        "Oakes",
+        "Pike",
+        "Quarry",
+        "Reed",
+        "Stile",
+        "Thatch",
+        "Vale",
+        "Wren",
+        "Yale",
+      ],
+    },
+    "sci-fi-colony": {
+      given: [
+        "Anj",
+        "Bex",
+        "Corva",
+        "Dax",
+        "Eno",
+        "Fira",
+        "Gita",
+        "Hale",
+        "Ilva",
+        "Jex",
+        "Kai",
+        "Lume",
+        "Mira",
+        "Nox",
+        "Oren",
+        "Pax",
+        "Quen",
+        "Rho",
+        "Sona",
+        "Tev",
+        "Ulla",
+        "Vek",
+        "Wen",
+        "Zia",
+      ],
+      family: [
+        "Ansari",
+        "Brandt",
+        "Chen",
+        "Dovic",
+        "Eskil",
+        "Ferro",
+        "Grath",
+        "Haas",
+        "Ibori",
+        "Jansen",
+        "Koba",
+        "Lind",
+        "Mwangi",
+        "Nakai",
+        "Osei",
+        "Petrov",
+        "Rask",
+        "Solheim",
+        "Tamm",
+        "Vance",
+      ],
+    },
+  };
+  // Deliberately none of SPECIAL_BUILDING_KINDS' keys: a minted resident must
+  // never mint a hall, a shop or a farm behind itself. Those belong to people
+  // the brief NAMED, and a nameless leader is a building with nobody in it.
+  const MINTED_KINDS = ["folk", "folk", "folk", "folk", "child", "healer", "scholar"];
+  // Grey reads as "extra" and the named cast should keep the loud end of the
+  // palette, so a minted resident draws from the quieter buckets.
+  const MINT_TINTS = ["green", "teal", "blue", "grey", "amber", "rose"];
+  const MINTED_ROLES = {
+    folk: ["hand", "carter", "cooper", "weaver", "digger", "porter", "tanner", "miller", "drover", "thatcher"],
+    child: ["child"],
+    healer: ["herbalist"],
+    scholar: ["copyist"],
+  };
+
   const SPECIAL_BUILDING_KINDS = {
     leader: "hall",
     host: "gathering",
@@ -3108,7 +3282,7 @@ PF.world = (() => {
     const townHouseholds = (built) =>
       [
         ...new Set(
-          brief.cast
+          roster
             .filter(
               (m) => (m.standing ?? "resident") === "resident" && (m.home === brief.name || strandedFrom(m, built)),
             )
@@ -3117,6 +3291,10 @@ PF.world = (() => {
       ].sort((a, b) => a - b);
     const specials = [];
     const seenSpecial = new Set();
+    // brief.cast, not the roster: a special is the building a NAMED person runs,
+    // and MINTED_KINDS holds none of SPECIAL_BUILDING_KINDS' keys anyway, so the
+    // minted residents could only ever iterate past this. Reading the sealed cast
+    // says so out loud, and keeps the mint below free to move.
     for (const member of brief.cast) {
       // Only residents run a permanent special building (the hall, the shop, the
       // post…); a transient/fringe/destitute NPC never anchors one.
@@ -3207,6 +3385,111 @@ PF.world = (() => {
       return da - db || a.y - b.y || a.x - b.x;
     });
     slots.length = Math.min(slots.length, budget + interiorPlaces.length);
+
+    // ── The residents the brief never named (§4.5) ─────────────────────────────
+    // A brief may name ten people. Until now those ten WERE the population: the
+    // street grid lays sixty-four lots in a city and the arithmetic below had
+    // demand for eighteen, so a city compiled to a village with long walks
+    // between the houses. Everybody else in town lives here.
+    //
+    // Sized from the two FOLDED axes — scale and prosperity — for the same reason
+    // the guest-berth table is: both are enums, so the table is total by
+    // construction and every settlement of a size reads as that size.
+    // `backgroundPopulation` is the brief's least-constrained number, a free
+    // 0-500 the guidance calls narrative texture. It moves the settlement WITHIN
+    // its rank's band and is never allowed to set the band: a hamlet whose brief
+    // claims five hundred souls is still a hamlet, and a model that leaves the
+    // field at zero still gets a full town.
+    const RESIDENT_HOUSEHOLDS = { outpost: 3, hamlet: 6, village: 12, town: 24, city: 45 };
+    const HOUSEHOLD_LEAN = { struggling: 0.75, modest: 1, thriving: 1.15 };
+    const householdBand = Math.max(
+      1,
+      Math.round(
+        (RESIDENT_HOUSEHOLDS[brief.scale] ?? RESIDENT_HOUSEHOLDS.village) * (HOUSEHOLD_LEAN[brief.prosperity] ?? 1),
+      ),
+    );
+    // Three to a household is the average the mint below actually produces
+    // (sizes one to four, uniform), so a brief's own headcount reads as a
+    // household count on the same scale the band is written in.
+    const impliedHouseholds = brief.backgroundPopulation > 0 ? brief.backgroundPopulation / 3 : householdBand;
+    // Households that actually want a house on the ROOT map, which is the only
+    // demand the lots below answer. Two exclusions, and both were bugs when they
+    // were missing: a transient at the inn or a beggar on the steps occupies no
+    // dwelling, and neither does a resident whose home is the fen or her own
+    // church — she lives THERE. Counting either against the target builds the
+    // town one house smaller for every person in it who needs no house.
+    const namedHouseholds = new Set(
+      brief.cast
+        .filter((m) => (m.standing ?? "resident") === "resident" && m.home === brief.name)
+        .map((m) => m.household),
+    );
+    // A transient merchant's stall takes a LOT, and the mint runs before the lots
+    // are laid, so the houses have to leave room for the market on their way in.
+    // Without this the town fills to the last lot and a visiting trader finds
+    // nowhere to set up — silently, because the stall loop simply stops.
+    const stallDemand = brief.cast.filter(
+      (m) => (m.standing ?? "resident") === "transient" && m.kind === "merchant",
+    ).length;
+    // The band says how big the town WANTS to be; the lots say how big it can
+    // be. Minting past the lots is not a bigger town, it is the same town with
+    // more people merged under each roof — and it silently eats the ground a
+    // market stall or a named place still needed. So the ask is clamped to the
+    // ground that is actually left after the places, the trades and the market
+    // have taken theirs.
+    const lotsForHouses = Math.max(0, slots.length - interiorPlaces.length - specials.length - stallDemand);
+    const bandTarget = Math.max(
+      Math.round(householdBand * 0.75),
+      Math.min(Math.round(householdBand * 1.25), Math.round(impliedHouseholds)),
+    );
+    const householdTarget = Math.max(namedHouseholds.size, Math.min(bandTarget, lotsForHouses));
+    // A side stream, so minting residents does not shift the tile RNG under the
+    // ground cover and every world that had no minting still lays the same grass.
+    const mintRnd = PF.rng(PF.hashStr(`${seed >>> 0}|residents|${brief.name}`));
+    const nameBook = RESIDENT_NAMES[activeTheme] ?? RESIDENT_NAMES["cozy-village"];
+    const takenNames = new Set(brief.cast.map((m) => m.name));
+    const minted = [];
+    // Off EVERY sealed household, resident or not: the target ignores the
+    // non-residents but their household numbers are still taken.
+    let nextHousehold = Math.max(0, ...brief.cast.map((m) => m.household)) + 1;
+    for (let i = namedHouseholds.size; i < householdTarget; i++) {
+      const household = nextHousehold++;
+      const family = nameBook.family[(mintRnd() * nameBook.family.length) | 0];
+      const size = 1 + ((mintRnd() * 4) | 0);
+      for (let k = 0; k < size; k++) {
+        const kind = MINTED_KINDS[(mintRnd() * MINTED_KINDS.length) | 0];
+        // Bounded, then suffixed. Two dozen given names against twenty families
+        // is a lot of room, but "room" is not "proof", and a name collision must
+        // never be able to spin here.
+        let name = "";
+        for (let tries = 0; tries < 8 && (!name || takenNames.has(name)); tries++) {
+          name = `${nameBook.given[(mintRnd() * nameBook.given.length) | 0]} ${family}`;
+        }
+        if (takenNames.has(name)) name = `${name} the ${MINTED_ROLES[kind][0]}`;
+        if (takenNames.has(name)) name = `${name} ${household}`;
+        takenNames.add(name);
+        const roles = MINTED_ROLES[kind] ?? MINTED_ROLES.folk;
+        minted.push({
+          name,
+          role: roles[(mintRnd() * roles.length) | 0],
+          kind,
+          tint: MINT_TINTS[(mintRnd() * MINT_TINTS.length) | 0],
+          home: brief.name,
+          household,
+          standing: "resident",
+          persona: "",
+          // Runtime-only, like _sched: the mint is re-run on every compile from
+          // the seed, so this never reaches a save.
+          _minted: true,
+          // A quarter of the town has business in the square. Without this the
+          // streets fill and the PLAZA empties, which is the same failure the
+          // other way round — a market town whose market nobody attends.
+          _square: mintRnd() < 0.25,
+        });
+      }
+    }
+    // Appended, never spliced: `roster.indexOf(owner)` names the special zones
+    // below, so a minted resident must not renumber anybody the brief named.
+    const roster = minted.length ? [...brief.cast, ...minted] : brief.cast;
     let slotIndex = 0;
     const takeSlot = () => slots[slotIndex++] ?? null;
 
@@ -3349,7 +3632,7 @@ PF.world = (() => {
     // permanent shop). They tend it; with no free lot they fall back to the
     // public rest spot in the cast loop. Other non-resident kinds build nothing.
     const stalls = [];
-    for (const member of brief.cast) {
+    for (const member of roster) {
       if ((member.standing ?? "resident") !== "transient" || member.kind !== "merchant") continue;
       const slot = takeSlot();
       if (!slot) break;
@@ -3498,6 +3781,10 @@ PF.world = (() => {
         wildsArrivals,
       ),
     );
+    // Last thing done to the settlement's tiles, so it sees the trees, the
+    // buildings, the stalls and the features together — a pocket is usually made
+    // by two of them meeting, not by either alone.
+    sealPockets(v, v.spawn);
     zones.z1 = v;
 
     // ── Interior zones ──
@@ -3531,7 +3818,7 @@ PF.world = (() => {
       // church, the alewife over her own tap room — so the building has to sleep
       // them. Without this they stood on the bare floor of the building they live
       // in at midnight, which is the exact opposite of what the rooms were for.
-      const residents = brief.cast.filter(
+      const residents = roster.filter(
         (member) => (member.standing ?? "resident") === "resident" && zoneIdByName.get(member.home) === id,
       );
       const living = ownerFirst(residents, facade.owner);
@@ -3600,6 +3887,7 @@ PF.world = (() => {
         { x: zone.w - 4, y: wMidY },
       ]);
       zone.spawn = { x: 3, y: wMidY };
+      sealPockets(zone, zone.spawn);
       // Two-tile edge portals: east edge of the settlement for the first wilds,
       // west edge for the second.
       const vx = east ? v.w - 1 : 0;
@@ -3655,7 +3943,7 @@ PF.world = (() => {
       // Everyone sleeping under this roof, in cast order — the same predicate
       // `households` was derived from, so the room's beds and the lot arithmetic
       // can never disagree about who lives here.
-      const residents = brief.cast.filter(
+      const residents = roster.filter(
         (m) =>
           (m.standing ?? "resident") === "resident" &&
           (m.home === brief.name || strandedFrom(m, placesBuilt)) &&
@@ -3666,7 +3954,7 @@ PF.world = (() => {
       // sealed brief data either way, so the id is stable across rebuilds and
       // additive against saved zone ids (60-save restores a zone by id). A loop
       // counter would move the moment a household merged differently.
-      const id = b.special ? `s${brief.cast.indexOf(b.owner) + 1}` : `h${Math.min(...b.households)}`;
+      const id = b.special ? `s${roster.indexOf(b.owner) + 1}` : `h${Math.min(...b.households)}`;
       const name = b.special ? `${b.owner.name}'s ${interior.label}` : `${residents[0]?.name ?? brief.name}'s home`;
       // A live-work premises houses the tradesman who runs it, so they get the
       // private room too — the same rule as a keeper's, for the same reason.
@@ -3707,6 +3995,18 @@ PF.world = (() => {
     const gatheringZoneId = gatheringPlace ? zoneIdForPlace(gatheringPlace) : null;
     const wildsZoneId = wildsPlaces.length ? zoneIdForPlace(wildsPlaces[0]) : null;
     const plazaBox = () => ({ x0: midX - 6, y0: midY - 5, x1: midX + 6, y1: midY + 5 });
+    /** The stretch of street outside one door. The plaza is thirteen tiles by
+     *  eleven; a thriving city now holds a hundred people, and sending all of
+     *  them to the same square at noon builds a crush in the middle of an empty
+     *  map rather than a city. The brief's OWN cast still keeps the square —
+     *  they are the people a player came to meet — while everybody the compiler
+     *  minted holds their own street, so the whole town reads as lived in. */
+    const streetBox = (rect) => ({
+      x0: Math.max(2, rect.x - 3),
+      y0: Math.max(2, rect.y - 2),
+      x1: Math.min(v.w - 3, rect.x + rect.w + 2),
+      y1: Math.min(v.h - 3, rect.y + rect.h + 3),
+    });
     // The walkable middle of a zone — but only the COMMON half of one that has
     // rooms partitioned into it. A private room is somewhere an NPC is SENT (a
     // bed, at night), never somewhere they drift: standable() rules out door
@@ -3809,12 +4109,12 @@ PF.world = (() => {
     // worker tier when the brief said where they work — which is the right
     // answer for the eight sisters who live at the convent and work at the church.
     const headOfBuilding = new Map();
-    brief.cast.forEach((member) => {
+    roster.forEach((member) => {
       if ((member.standing ?? "resident") !== "resident") return;
       const id = zoneIdByName.get(member.home);
       if (id && !headOfBuilding.has(id)) headOfBuilding.set(id, member);
     });
-    brief.cast.forEach((member, index) => {
+    roster.forEach((member, index) => {
       const npcId = `n${index + 1}`;
       const standing = member.standing ?? "resident";
       let zone = zones[zoneIdByName.get(member.home) ?? "z1"] ?? v;
@@ -3827,6 +4127,9 @@ PF.world = (() => {
       // at its own hashed tile inside the box; anyone stacked under another
       // sprite can never be selected by talk-targeting (review finding).
       let spread = true;
+      // Null until the resident branch finds the door they live behind; the
+      // plaza is the fallback and stays the named cast's day box.
+      let publicBox = null;
       // Holds a building the brief NAMED (a sanctuary today). It unlocks the keeper
       // schedule tier, so the same cast kind keeps its ordinary habits without one.
       let keeper = false;
@@ -3842,6 +4145,7 @@ PF.world = (() => {
           buildings.find((b) => (b.households ?? []).includes(member.household));
         keeper = !!(owned && owned.boundPlace && PLACE_BOUND_SPECIALS.has(owned.boundPlace.kind));
         const dwelling = buildings.find((b) => (b.households ?? []).includes(member.household));
+        if (member._minted && !member._square && dwelling?.rect) publicBox = streetBox(dwelling.rect);
         const ownBed = bedFor.get(member);
         if (zone === v && owned) {
           if (owned.owner === member && owned.interior?.post && zones[owned.interior.zoneId]) {
@@ -4003,7 +4307,7 @@ PF.world = (() => {
           keeper,
           worker,
           home,
-          public: { zoneId: v.id, wander: plazaBox() },
+          public: { zoneId: v.id, wander: publicBox ?? plazaBox() },
         },
       });
     });

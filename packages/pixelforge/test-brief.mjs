@@ -293,7 +293,11 @@ function checkWorld(w, sealed, label) {
   // Row h-2 carries zone.spawn AND both stair tiles, and put() overwrites
   // unconditionally, so a wall laid across it makes a storey unreachable.
   for (const zone of Object.values(w.zones)) {
-    if (!/^(h\d+|z\d+|s\d+)[ub]?$/.test(zone.id) || zone.id === "z1") continue;
+    // By mapKind, not by the SHAPE of the id. `z\d+` also matches the wilds,
+    // whose row h-2 is forest floor and carries no spawn and no stairs — one
+    // scattered trunk landing there read as a paved-over service row and failed
+    // a case about building interiors. Only a building has a service row.
+    if (zone.mapKind !== "building") continue;
     const c = (zone.w / 2) | 0;
     for (const x of [c - 1, c, c + 1]) {
       assert.ok(
@@ -397,7 +401,12 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   checkWorld(world.build(424242, theme, sealed), sealed, `defaults(${theme})`);
 }
 
-// 11. The farm-village case compiles: four households → four-ish roofs, never thirty.
+// 11. The farm-village case compiles: thirty souls -> a village's worth of roofs,
+// never thirty of them. The bound used to be "four-ish", because the four named
+// households were the entire population; a brief that said thirty people lived
+// here built four houses and the number was decoration. The compiler now mints
+// the rest of the village, so the honest claim is about the RATIO — people live
+// several to a household, and a door per soul would be a suburb of bedsits.
 {
   const sealed = brief.validate(
     {
@@ -423,7 +432,11 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   checkWorld(w, sealed, "mossbrook");
   const v = w.zones.z1;
   const doorCount = v.object.filter((t) => t === "door").length;
-  assert.ok(doorCount >= 4 && doorCount <= 10, `a handful of doors (${doorCount}), never thirty`);
+  assert.ok(doorCount >= 4, `every named household got a roof (${doorCount} doors)`);
+  assert.ok(
+    doorCount <= Math.ceil(sealed.backgroundPopulation / 2),
+    `thirty souls are not thirty households (${doorCount} doors for ${sealed.backgroundPopulation} people)`,
+  );
   assert.ok(w.zones.z2 && w.zones.z3, "hall and gathering interiors compiled");
   // The only fixture that proves home-to-zone binding for a NON-root home:
   // resolve the gathering's ordinal id and assert membership in THAT zone.
@@ -525,9 +538,19 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
 
 // 11c. Standing SUPPRESSION + the no-inn / no-wilds fallbacks. A non-resident
 // holding a special-kind that no resident claims builds nothing; non-resident
-// households add no roof (exact door count catches a deleted gate); and with no
-// gathering/wilds present, transient falls back to the plaza and fringe to the
-// settlement's outer margin.
+// households add no roof; and with no gathering/wilds present, transient falls
+// back to the plaza and fringe to the settlement's outer margin.
+//
+// The roof half used to pin an exact door count, which stopped being a statement
+// about non-residents the moment the compiler began minting residents of its own
+// — the number moved for a reason the fixture was not about. It now measures the
+// DIFFERENCE the non-residents make, which is what "adds no roof" always meant
+// and is a tighter assertion besides: it fails if they add a door OR take one.
+const wayrestCast = [
+  { name: "Ada", role: "elder", kind: "folk", tint: "blue", home: "Wayrest", household: 1 },
+  { name: "Ben", role: "cooper", kind: "folk", tint: "amber", home: "Wayrest", household: 2 },
+  { name: "Cal", role: "digger", kind: "folk", tint: "green", home: "Wayrest", household: 3 },
+];
 {
   const sealed = brief.validate(
     {
@@ -572,11 +595,23 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   const w = world.build(4242, "cozy-village", sealed);
   checkWorld(w, sealed, "standing-suppression");
   const v = w.zones.z1;
-  // 3 resident dwellings + 1 hall facade = 4 doors. The transient guard's
-  // "post" is suppressed and no non-resident household adds a dwelling; deleting
-  // either the specials gate or the households filter would raise this count.
+  // The same settlement with the non-residents struck out. The transient guard's
+  // "post" is suppressed and no non-resident household adds a dwelling, so the
+  // two towns must have exactly the same doors in them; deleting either the
+  // specials gate or the households filter separates the counts.
+  const residentsOnly = brief.validate(
+    { scale: "village", name: "Wayrest", places: [{ kind: "hall", name: "The Moot Hall" }], cast: wayrestCast },
+    ctx,
+  );
   const doorCount = v.object.filter((t) => t === "door").length;
-  assert.equal(doorCount, 4, `only residents build (got ${doorCount} doors, expected 4)`);
+  const controlDoors = world
+    .build(4242, "cozy-village", residentsOnly)
+    .zones.z1.object.filter((t) => t === "door").length;
+  assert.equal(
+    doorCount,
+    controlDoors,
+    `only residents build (${doorCount} doors with the non-residents, ${controlDoors} without)`,
+  );
   assert.equal(v.object.filter((t) => t === "table").length, 0, "a transient non-merchant lays no stall");
   assert.ok(!Object.values(w.zones).some((z) => z.mapKind === "place"), "no wilds synthesized (places is non-empty)");
   const mX = (v.w / 2) | 0;
@@ -698,19 +733,33 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
 }
 
 // 11f. A transient merchant with NO free lot lays no stall and still loiters at
-// a public spot (here the residents' buildings consume every lot: a hall, a
-// duty-station post, the farmer's live-work farm and three dwellings — six lots,
-// which is every lot a village's rows fit).
+// a public spot.
+//
+// RE-SHAPED. This used to starve a VILLAGE, whose rows fit six lots, with six
+// claimants. A village now lays sixteen and the housing arithmetic holds a lot
+// back for the market besides, so the old shape stopped reaching the fallback —
+// it asserted an outcome the compiler was no longer capable of producing. An
+// OUTPOST is the small ground now: four lots against a hall, a gathering, the
+// farm, the watch post and six households is a settlement that is genuinely
+// full, which is the only honest way to ask what happens when a trader arrives
+// and there is nowhere to stand.
 {
   const sealed = brief.validate(
     {
-      scale: "village",
+      scale: "outpost",
       name: "Fullford",
+      // A hall and NO gathering: the second half of this fixture is that the
+      // stall-less trader still stands somewhere public, and an inn would give
+      // him somewhere else to be — the transient fallback prefers a bed over a
+      // square, so adding one quietly stops testing the plaza.
+      places: [{ kind: "hall", name: "The Moot" }],
       cast: [
         { name: "Ona", role: "reeve", kind: "leader", tint: "blue", home: "Fullford", household: 1 },
         { name: "Pel", role: "farmer", kind: "grower", tint: "green", home: "Fullford", household: 2 },
         { name: "Gar", role: "watch", kind: "guard", tint: "red", home: "Fullford", household: 3 },
         { name: "Tam", role: "cooper", kind: "folk", tint: "amber", home: "Fullford", household: 5 },
+        { name: "Ivy", role: "weaver", kind: "folk", tint: "teal", home: "Fullford", household: 6 },
+        { name: "Rue", role: "digger", kind: "folk", tint: "violet", home: "Fullford", household: 7 },
         {
           name: "Sol",
           role: "peddler",
@@ -807,12 +856,31 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   const rootHouseholds = new Set(
     sealed.cast.filter((c) => c.home === rootName && (c.standing ?? "resident") === "resident").map((c) => c.household),
   );
+  // The forager adds no door. Measured as a difference rather than against
+  // `rootHouseholds.size` directly, because the sealed cast stopped being the
+  // whole population when the compiler began minting residents of its own — the
+  // count moved for a reason this fixture is not about. The claim under test is
+  // that a resident who lives in the fen costs the settlement no roof, and a
+  // difference says exactly that.
   const doorCount = v.object.filter((t) => t === "door").length;
+  const withoutForager = brief.validate(
+    {
+      scale: "village",
+      name: "Wold",
+      places: [{ kind: "wilds", name: "The Fen" }],
+      cast: sealed.cast.filter((c) => c.home !== "The Fen"),
+    },
+    ctx,
+  );
+  const controlDoors = world
+    .build(7, "cozy-village", withoutForager)
+    .zones.z1.object.filter((t) => t === "door").length;
   assert.equal(
     doorCount,
-    rootHouseholds.size,
-    `a door per root household, none for the wilds resident (${doorCount} doors vs ${rootHouseholds.size} root households)`,
+    controlDoors,
+    `a door per root household, none for the wilds resident (${doorCount} doors with the forager, ${controlDoors} without)`,
   );
+  assert.equal(rootHouseholds.size, 4, "the fixture still names four root households");
   const fenId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Fen")[0];
   assert.ok(
     w.zones[fenId].npcs.some((n) => n.name === "Fenn"),
@@ -3630,6 +3698,24 @@ const bunkhouseBrief = (hands) => ({
   ],
 });
 
+/** Sealed as a VILLAGE — where six households and three places seal clean with
+ *  no repairs — and then handed the ground of an outpost.
+ *
+ *  This brief exists to reach the over-subscription MERGE: several whole
+ *  households squeezed onto the last free lot, which is the only way a dormitory
+ *  can still happen now that no single household may exceed its cap. A village
+ *  used to lay six lots, so six households over-subscribed it by simply
+ *  existing. A village now lays sixteen and every household can have its own
+ *  door, so the merge stopped firing and five fixtures quietly stopped testing
+ *  what they were written for. Shrinking the ground restores the pressure
+ *  without changing what the brief SAYS — the same trick, and the same reason,
+ *  as case 65b. */
+const bunkhouseSealed = (hands) => {
+  const sealed = brief.validate(bunkhouseBrief(hands), ctx);
+  sealed.scale = "outpost";
+  return sealed;
+};
+
 // 54. A small household sleeps behind a bedroom DOOR, and both sleepers are
 // inside that room at night on tiles of their own. The partition is asserted in
 // the TILES — a wall run below the shell's own wall row with a door in it —
@@ -3737,10 +3823,25 @@ const bunkhouseBrief = (hands) => ({
       // A partition is still not a zone. Two bedrooms cost ONE storey between
       // them, not one zone each — which is the whole reason a bedroom is walls
       // and a floor is a zone.
-      assert.equal(
-        Object.values(w.zones).filter((z) => z.id === home.id || z.id.startsWith(`${home.id}`)).length,
-        floorIds(w, home.id).length,
-        `seed ${seed}: the bedrooms mint no zones of their own`,
+      //
+      // Matched EXACTLY rather than by prefix. `startsWith("h1")` also catches
+      // h10 and h11, which cost nothing while a settlement could only hold nine
+      // households and turned into a false failure the moment one could hold
+      // forty. Ids are a set, not a string space.
+      const underThisRoof = Object.values(w.zones).filter(
+        (z) => /^(.*?)(u|b)?$/.test(z.id) && floorIds(w, home.id).includes(z.id),
+      );
+      assert.equal(underThisRoof.length, floorIds(w, home.id).length, `seed ${seed}: every floor is a zone`);
+      // Non-vacuous, and the half that actually catches a bedroom-as-zone: the
+      // rooms outnumber the storeys they are carved into, so if a partition ever
+      // did mint a zone the count above could not still match.
+      const bedrooms = floorsOf(w, home.id).reduce(
+        (n, z) => n + (z.rooms ?? []).filter((r) => (r.beds ?? []).length).length,
+        0,
+      );
+      assert.ok(
+        bedrooms >= floorIds(w, home.id).length,
+        `seed ${seed}: the bedrooms mint no zones of their own (${bedrooms} bedrooms, ${floorIds(w, home.id).length} floors)`,
       );
       assert.ok(floorIds(w, home.id).length <= 3, `seed ${seed}: a building is a ground floor and at most two floors`);
     }
@@ -3985,7 +4086,7 @@ const bunkhouseBrief = (hands) => ({
     ["bunked-bedrooms", brief.validate(houseBrief("Sixfold", 6, "folk"), ctx)],
     ["four", brief.validate(houseBrief("Fourfold", 4, "child"), ctx)],
     ["lone", brief.validate(houseBrief("Onefold", 1, "folk"), ctx)],
-    ["dormitory", brief.validate(bunkhouseBrief(5), ctx)],
+    ["dormitory", bunkhouseSealed(5)],
     ["town-inn", brief.validate({ ...bedsBrief(), scale: "town", prosperity: "thriving" }, ctx)],
     ["defaults", brief.defaults("cozy-village", 424242)],
     ["colony", brief.defaults("sci-fi-colony", 424242)],
@@ -4063,11 +4164,15 @@ const bunkhouseBrief = (hands) => ({
 {
   for (const seed of [1, 3, 11]) {
     const roofs = {};
+    // hands + the FIVE named households, all of which the merge now sweeps onto
+    // the one free lot an outpost has left after its three places. It used to be
+    // four of them — the trader kept his own shop when there was a lot spare for
+    // it — so the same sleeper counts need one fewer hand apiece.
     for (const [label, hands] of [
-      ["eight", 4],
-      ["nine", 5],
+      ["eight", 3],
+      ["nine", 4],
     ]) {
-      const sealed = brief.validate(bunkhouseBrief(hands), ctx);
+      const sealed = bunkhouseSealed(hands);
       assert.equal(sealed._repairs.length, 0, `${label}: the fixture seals untouched (${sealed._repairs.join("; ")})`);
       const w = world.build(seed, "cozy-village", sealed);
       const roof = findZone(w, "Ada's home");
@@ -4084,7 +4189,7 @@ const bunkhouseBrief = (hands) => ({
       const sleepers = Object.values(w.zones)
         .flatMap((zone) => zone.npcs)
         .filter((npc) => under.has(npc._sched.home?.zoneId));
-      assert.equal(sleepers.length, 4 + hands, `seed ${seed}: everyone in the ${label} fixture sleeps under it`);
+      assert.equal(sleepers.length, 5 + hands, `seed ${seed}: everyone in the ${label} fixture sleeps under it`);
       roofs[label] = bedFloor(w, roof);
     }
     // Eight is a crowded house and keeps its walls; nine is an institution.
@@ -4111,7 +4216,7 @@ const bunkhouseBrief = (hands) => ({
   // And the bunkhouse world holds every NPC invariant the others do, around the
   // clock: nine people resolving to one interior is the densest night the
   // compiler can produce, which is exactly where stacking would show up first.
-  const sealed = brief.validate(bunkhouseBrief(5), ctx);
+  const sealed = bunkhouseSealed(5);
   for (const seed of [1, 3, 11]) {
     const w = world.build(seed, "cozy-village", sealed);
     const sim = new loadedPF.Sim(w);
@@ -4451,12 +4556,20 @@ const liveWorkBrief = (overrides = {}) => ({
       if (tile === "door") doorTiles.add(`${index % v.w},${(index / v.w) | 0}`);
     });
     const opened = new Set(v.portals.filter((p) => doorTiles.has(`${p.x},${p.y}`)).map((p) => p.toZone));
-    assert.equal(
-      doorTiles.size,
-      5,
-      `seed ${seed}: inn, smithy, farm, post and the watchman's house (${doorTiles.size})`,
+    // Exactly ONE door in the settlement opens onto nothing, and it is the post's.
+    // This used to be spelled "five doors, four of them open", which stopped being
+    // a statement about the post the moment the compiler began minting houses of
+    // its own — the total moved, the claim did not. A difference of one says the
+    // same thing and keeps saying it however big the town gets.
+    assert.ok(
+      doorTiles.size >= 5,
+      `seed ${seed}: inn, smithy, farm, post and the watchman's house all stand (${doorTiles.size} doors)`,
     );
-    assert.equal(opened.size, 4, `seed ${seed}: four of the five open — the post is the facade (${opened.size})`);
+    assert.equal(
+      doorTiles.size - opened.size,
+      1,
+      `seed ${seed}: exactly one facade — the post (${doorTiles.size} doors, ${opened.size} open)`,
+    );
 
     const sim = new loadedPF.Sim(w);
     sim.clockMin = 23 * 60;
@@ -5581,7 +5694,7 @@ const cellarBrief = (prosperity) => ({
     ["inn", brief.validate(innBrief({ scale: "town", prosperity: "thriving" }, 6), ctx)],
     ["sanctuary", brief.validate(sanctuaryBrief(), ctx)],
     ["cellars", brief.validate(cellarBrief("thriving"), ctx)],
-    ["bunkhouse", brief.validate(bunkhouseBrief(5), ctx)],
+    ["bunkhouse", bunkhouseSealed(5)],
     ["six", brief.validate(houseBrief("Sixfold", 6, "folk"), ctx)],
     ["bellwether", brief.validate(bellwetherBrief(), ctx)],
     ["defaults", brief.defaults("cozy-village", 424242)],
@@ -5633,7 +5746,7 @@ const cellarBrief = (prosperity) => ({
     ["hearthwick", brief.validate(bedsBrief(), ctx)],
     ["packed-inn", brief.validate(innBrief({ prosperity: "struggling" }, 6), ctx)],
     ["cellars", brief.validate(cellarBrief("thriving"), ctx)],
-    ["bunkhouse", brief.validate(bunkhouseBrief(5), ctx)],
+    ["bunkhouse", bunkhouseSealed(5)],
     ["six", brief.validate(houseBrief("Sixfold", 6, "folk"), ctx)],
   ];
   let stood = 0;
@@ -6104,8 +6217,13 @@ const cellarBrief = (prosperity) => ({
   sim.clockMin = 12 * 60;
   sim.resolveSchedules();
   assert.equal(inn.npcs.length, 1, `at midday only the head is inside (${inn.npcs.map((n) => n.name).join()})`);
-  // Non-vacuous: they went somewhere real rather than being dropped.
-  assert.equal(everyone.length, 10, "and nobody was lost doing it");
+  // Non-vacuous: they went somewhere real rather than being dropped. By name
+  // rather than by headcount — the world now also holds residents the compiler
+  // minted, so a total is no longer a statement about THESE ten.
+  const standing = new Set(everyone.map((npc) => npc.name));
+  for (const member of sealed.cast) {
+    assert.ok(standing.has(member.name), `${member.name} is somewhere in the world, not lost moving out of the inn`);
+  }
   // Nobody loiters on a bed by day — the open plan walls nothing, so this is
   // the assertion that catches a resident being held indoors by mistake.
   for (const npc of inn.npcs) {
@@ -6494,6 +6612,144 @@ const cellarBrief = (prosperity) => ({
       for (let y = dining.y0; y <= dining.y1; y++) if (!zone.solid[zone.w * y + x]) open++;
     assert.ok(open > 0, `${zone.id}: the recorded open area has walkable floor in it`);
   }
+}
+
+// ── A SETTLEMENT IS AS POPULOUS AS ITS RANK, NOT AS ITS CAST (0.10.0) ──────
+// A brief may name ten people, and for a long time those ten WERE the town: the
+// compiler built a house per named household and stopped. A city compiled to
+// eighteen buildings on a 96x72 map whatever the brief said, which is a village
+// with a long walk between the houses, and no amount of population in the brief
+// changed it. The compiler now mints the rest of the town itself.
+//
+// Three axes, asserted separately because they fail separately.
+{
+  const CAST = [
+    { name: "Ivy", role: "warden", kind: "leader", tint: "blue", home: "Probe", household: 1 },
+    { name: "Bett", role: "innkeep", kind: "host", tint: "amber", home: "Probe", household: 2 },
+    { name: "Tam", role: "smith", kind: "maker", tint: "red", home: "Probe", household: 3 },
+  ];
+  const build = (over, seed = 7) =>
+    world.build(
+      seed,
+      "cozy-village",
+      brief.validate(
+        { scale: "village", prosperity: "modest", name: "Probe", places: [], cast: CAST, ...over },
+        { theme: "cozy-village", seed },
+      ),
+    );
+  const souls = (w) => Object.values(w.zones).reduce((n, z) => n + z.npcs.length, 0);
+  const roofs = (w) => Object.values(w.zones).filter((z) => z.mapKind === "building").length;
+
+  // AXIS 1 — size. Each rank holds more people than the one below it. Strictly:
+  // a city that merely ties a town is the bug this whole slice exists to fix.
+  const ranks = ["outpost", "hamlet", "village", "town", "city"].map((scale) => ({
+    scale,
+    souls: souls(build({ scale, prosperity: "thriving" })),
+  }));
+  const shown = () => ranks.map((r) => `${r.scale}:${r.souls}`).join(" ");
+  for (let i = 1; i < ranks.length; i++) {
+    assert.ok(
+      ranks[i].souls >= ranks[i - 1].souls,
+      `a ${ranks[i].scale} is never smaller than a ${ranks[i - 1].scale} (${shown()})`,
+    );
+  }
+  // Strict from the village up, and NOT below it — measured, not conceded. An
+  // outpost and a hamlet with a four-person cast come out the same size because
+  // at those ranks the named cast IS the town: a hamlet's eight lots are a
+  // gathering, three trades and four households, which is full. The ground stops
+  // being the constraint at village, and from there each rank must genuinely
+  // outgrow the one below or the whole exercise failed.
+  for (let i = ranks.findIndex((r) => r.scale === "village"); i < ranks.length; i++) {
+    assert.ok(
+      ranks[i].souls > ranks[i - 1].souls,
+      `a ${ranks[i].scale} holds more than a ${ranks[i - 1].scale} (${shown()})`,
+    );
+  }
+  // And the top of the range is a CITY and not a hamlet with ambition.
+  assert.ok(
+    ranks[4].souls >= 60,
+    `a thriving city is populous in absolute terms, not just relatively (${ranks[4].souls} souls)`,
+  );
+
+  // AXIS 2 — prosperity. Same ground, fewer people, and the houses that do stand
+  // are fewer: a struggling town is emptier, not merely poorer-looking.
+  for (const scale of ["village", "town", "city"]) {
+    const poor = build({ scale, prosperity: "struggling" });
+    const rich = build({ scale, prosperity: "thriving" });
+    assert.ok(
+      souls(rich) > souls(poor),
+      `a thriving ${scale} outnumbers a struggling one (${souls(rich)} vs ${souls(poor)})`,
+    );
+    assert.ok(roofs(rich) >= roofs(poor), `and never has fewer roofs (${roofs(rich)} vs ${roofs(poor)})`);
+  }
+
+  // AXIS 3 — population, and the LIMIT on it. backgroundPopulation is the
+  // brief's least-constrained number: a free 0-500 the guidance calls narrative
+  // texture. It may move a settlement within its rank's band; it may never make
+  // a hamlet into a city, or a model's typo re-founds the town.
+  const quiet = souls(build({ scale: "town", backgroundPopulation: 12 }));
+  const busy = souls(build({ scale: "town", backgroundPopulation: 400 }));
+  assert.ok(busy > quiet, `population moves the town within its band (${busy} vs ${quiet})`);
+  const hugeHamlet = souls(build({ scale: "hamlet", prosperity: "thriving", backgroundPopulation: 500 }));
+  const smallTown = souls(build({ scale: "town", prosperity: "struggling", backgroundPopulation: 0 }));
+  assert.ok(
+    hugeHamlet < smallTown,
+    `a hamlet claiming five hundred souls is still smaller than a struggling town (${hugeHamlet} vs ${smallTown})`,
+  );
+
+  // The minted residents are RESIDENTS, not scenery: every one of them has a bed
+  // and is in it at 23:00. This is the assertion that catches a mint which
+  // outruns the housing arithmetic and leaves people on the plaza all night.
+  for (const scale of ["village", "town", "city"]) {
+    const w = build({ scale, prosperity: "thriving" });
+    const sim = new loadedPF.Sim(w);
+    sim.clockMin = 23 * 60;
+    sim.resolveSchedules();
+    const outdoors = w.zones.z1.npcs.filter((npc) => (npc._sched.standing ?? "resident") === "resident");
+    assert.equal(
+      outdoors.length,
+      0,
+      `${scale}: no resident sleeps outdoors (${outdoors.map((n) => n.name).join() || "-"})`,
+    );
+  }
+
+  // A minted resident never anchors a special building — the hall, the shop and
+  // the farm belong to people the brief NAMED, and a nameless leader would be a
+  // building with nobody worth meeting in it.
+  {
+    const w = build({ scale: "city", prosperity: "thriving" });
+    const named = new Set(CAST.map((c) => c.name));
+    for (const zone of Object.values(w.zones)) {
+      if (zone.mapKind !== "building") continue;
+      const owner = zone.name.includes("'s ") ? zone.name.split("'s ")[0] : null;
+      // "X's home", and also "X's home, upstairs" and "X's home cellar" — a
+      // dwelling's floors are named off the dwelling, so an endsWith test misses
+      // two of the three and asks a question about houses that only makes sense
+      // about workplaces.
+      if (!owner || zone.name.includes("'s home")) continue;
+      assert.ok(owner && named.has(owner), `${zone.name} is run by somebody the brief named`);
+    }
+  }
+
+  // Determinism: the mint is a pure function of the seed and the sealed brief,
+  // so two builds agree down to the name of every last resident. Without this
+  // the roster would drift between the compile that saved and the compile that
+  // restored, and a save would come back to a different town.
+  const roster = (w) =>
+    Object.values(w.zones)
+      .flatMap((z) => z.npcs.map((n) => `${n.name}@${z.id}:${Math.round(n.x)},${Math.round(n.y)}`))
+      .sort()
+      .join("|");
+  assert.equal(
+    roster(build({ scale: "city", prosperity: "thriving" })),
+    roster(build({ scale: "city", prosperity: "thriving" })),
+    "the same brief mints the same city twice",
+  );
+  assert.notEqual(
+    roster(build({ scale: "city", prosperity: "thriving" }, 7)),
+    roster(build({ scale: "city", prosperity: "thriving" }, 8)),
+    "and a different seed mints a different one",
+  );
 }
 
 console.log("brief validator + compiler: all cases passed");
