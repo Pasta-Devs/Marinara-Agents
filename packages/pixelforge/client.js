@@ -397,6 +397,26 @@ PF.art = (() => {
     },
     // The shop's stock: the tile that says there is something here to buy. Solid,
     // so it reads as furniture the shopkeeper stands in front of.
+    /** The fire a household lives around, and the first thing in a dwelling that
+     *  is neither a bed nor a surface to put something down on.
+     *
+     *  Painted as a stone surround with the opening cut into it rather than as a
+     *  free-standing object, because a hearth is part of the WALL it is set in —
+     *  a fireplace in the middle of a room reads as a barbecue. The glow uses
+     *  `windowGlow`, which the colony palette turns from firelight to cold blue,
+     *  so the same silhouette is a hab's heat exchanger over there without
+     *  needing a painter override.
+     *
+     *  Laid solid: you warm yourself in front of a fire, not on top of one. */
+    hearth(g) {
+      px(g, 0, 0, T, T, PAL.floor1);
+      px(g, 1, 1, 14, 14, PAL.stone);
+      px(g, 1, 1, 14, 2, PAL.stoneDark);
+      px(g, 3, 4, 10, 1, PAL.stoneDark);
+      px(g, 4, 5, 8, 10, PAL.ink);
+      px(g, 5, 9, 6, 5, PAL.windowGlow);
+      px(g, 6, 11, 4, 3, PAL.white);
+    },
     shelf(g) {
       px(g, 0, 0, T, T, PAL.counter);
       px(g, 0, 0, T, 1, PAL.beam);
@@ -680,6 +700,14 @@ PF.art = (() => {
 
   return {
     PAL,
+    /** Every object name this module can actually draw.
+     *
+     *  Exported for one reason: nothing anywhere checked that a tile the compiler
+     *  PLACES has a painter to draw it with. A new object compiled, passed the
+     *  whole harness, and would have rendered as bare floor in the browser — the
+     *  one failure a headless test suite cannot see and the only one a player
+     *  would notice immediately. The harness now compares the two sets. */
+    painterNames: () => Object.keys(PAINTERS),
     tile,
     actor,
     drawActor,
@@ -2903,7 +2931,12 @@ PF.world = (() => {
       // every bedroom door opens onto.
       put(z, 2, h - 3, "object", "table", true);
       fillRect(z, w - 6, h - 4, 3, 2, "ground", "rug", false);
-      z.lights.push({ x: 2, y: h - 3 });
+      // THE HEARTH. Set into the east wall of the living half — a fire is part of
+      // the wall it is built into, and one standing in the middle of the floor
+      // reads as a barbecue. Not on row h-2: that row carries the zone's spawn and
+      // both stair tiles, and it is walkable by contract.
+      put(z, w - 2, h - 3, "object", "hearth", true);
+      z.lights.push({ x: 2, y: h - 3 }, { x: w - 2, y: h - 3 });
       return sleeping;
     },
   };

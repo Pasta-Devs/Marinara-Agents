@@ -6876,4 +6876,68 @@ const cellarBrief = (prosperity) => ({
   );
 }
 
+// ── EVERY TILE THE COMPILER PLACES HAS ART (0.10.0) ────────────────────────
+// Found by walking into it: `hearth` was added to the dwelling furnisher and the
+// painter patch silently missed its anchor, so the compiler placed an object no
+// renderer could draw. The entire harness passed — every assertion here is about
+// geometry, occupancy and schedule, and none of them look at whether a tile can
+// be SEEN. In the browser it would have been a solid square of bare floor in the
+// corner of every house in the world.
+{
+  const drawable = new Set(loadedPF.art.painterNames());
+  assert.ok(drawable.size > 10, `the art module reported its painters (${drawable.size})`);
+  const missing = new Map();
+  const look = (w, label) => {
+    for (const zone of Object.values(w.zones)) {
+      for (const layer of ["object", "overhead"]) {
+        for (const tile of zone[layer]) {
+          if (!tile || drawable.has(tile)) continue;
+          if (!missing.has(tile)) missing.set(tile, `${label} ${zone.id}`);
+        }
+      }
+    }
+  };
+  for (const theme of ["cozy-village", "sci-fi-colony"]) {
+    for (const seed of [1, 7, 424242]) look(world.build(seed, theme, brief.defaults(theme, seed)), `${theme}/${seed}`);
+    for (const scale of ["outpost", "hamlet", "village", "town", "city"]) {
+      for (const prosperity of ["struggling", "thriving"]) {
+        const sealed = brief.validate(
+          {
+            scale,
+            prosperity,
+            name: "Artcheck",
+            features: [
+              { tag: "market-stalls", name: "F0" },
+              { tag: "water-feature", name: "F1" },
+              { tag: "ruin", name: "F2" },
+              { tag: "landmark-stone", name: "F3" },
+            ],
+            places: [
+              { kind: "gathering", name: "P0" },
+              { kind: "hall", name: "P1" },
+              { kind: "sanctuary", name: "P2" },
+              { kind: "wilds", name: "P3" },
+            ],
+            cast: [
+              { name: "A", role: "reeve", kind: "leader", tint: "blue", home: "Artcheck", household: 1 },
+              { name: "B", role: "innkeep", kind: "host", tint: "amber", home: "P0", household: 2 },
+              { name: "C", role: "smith", kind: "maker", tint: "red", home: "Artcheck", household: 3 },
+              { name: "D", role: "farmer", kind: "grower", tint: "green", home: "Artcheck", household: 4 },
+              { name: "E", role: "watch", kind: "guard", tint: "grey", home: "Artcheck", household: 5 },
+              { name: "F", role: "elder", kind: "elder", tint: "violet", home: "P2", household: 6 },
+            ],
+          },
+          { theme, seed: 11 },
+        );
+        look(world.build(11, theme, sealed), `${theme}/${scale}/${prosperity}`);
+      }
+    }
+  }
+  assert.equal(
+    missing.size,
+    0,
+    `every placed tile can be drawn (${[...missing].map(([tile, where]) => `${tile} in ${where}`).join(", ")})`,
+  );
+}
+
 console.log("brief validator + compiler: all cases passed");

@@ -1134,7 +1134,12 @@ PF.world = (() => {
       // every bedroom door opens onto.
       put(z, 2, h - 3, "object", "table", true);
       fillRect(z, w - 6, h - 4, 3, 2, "ground", "rug", false);
-      z.lights.push({ x: 2, y: h - 3 });
+      // THE HEARTH. Set into the east wall of the living half — a fire is part of
+      // the wall it is built into, and one standing in the middle of the floor
+      // reads as a barbecue. Not on row h-2: that row carries the zone's spawn and
+      // both stair tiles, and it is walkable by contract.
+      put(z, w - 2, h - 3, "object", "hearth", true);
+      z.lights.push({ x: 2, y: h - 3 }, { x: w - 2, y: h - 3 });
       return sleeping;
     },
   };
