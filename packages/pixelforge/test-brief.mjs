@@ -234,6 +234,40 @@ function checkWorld(w, sealed, label) {
     }
     assert.equal(w.zones[id].name, name, `${label}: ${id} keeps its display name`);
   }
+  // ── I1: no sealed pocket, anywhere ────────────────────────────────────────
+  // The reachability invariant is STRUCTURAL by construction — rooms open onto
+  // a floor that touches the entry — but nothing asserted it whole-zone, so a
+  // partitioner that walls a pocket off would compile silently. Measured: an
+  // inverted wander box passes the entire suite without this.
+  for (const zone of Object.values(w.zones)) {
+    // INTERIORS ONLY. Measured on staging: 0 of 133 interiors and floors have a
+    // sealed pocket, while 2 of 20 settlement exteriors do (worst 19 tiles) —
+    // scenery fenced in by trees or buildings, which costs nothing because
+    // nobody is ever placed there. An interior pocket strands whoever is in it,
+    // and the partitioner is about to start cutting interiors up.
+    if (!zone.spawn || zone.mapKind === "settlement") continue;
+    const reached = floodFill(zone, zone.spawn);
+    let walkable = 0;
+    for (let i = 0; i < zone.solid.length; i++) if (!zone.solid[i]) walkable++;
+    assert.equal(
+      reached.size,
+      walkable,
+      `${label}: ${zone.id} (${zone.name}) has ${walkable - reached.size} walkable tiles sealed off from its own spawn`,
+    );
+  }
+  // ── I2: the apron row is walkable at the door columns ─────────────────────
+  // Row h-2 carries zone.spawn AND both stair tiles, and put() overwrites
+  // unconditionally, so a wall laid across it makes a storey unreachable.
+  for (const zone of Object.values(w.zones)) {
+    if (!/^(h\d+|z\d+|s\d+)[ub]?$/.test(zone.id) || zone.id === "z1") continue;
+    const c = (zone.w / 2) | 0;
+    for (const x of [c - 1, c, c + 1]) {
+      assert.ok(
+        !zone.solid[zone.w * (zone.h - 2) + x],
+        `${label}: ${zone.id} paved its apron row at ${x},${zone.h - 2} — that row carries the spawn and both stairs`,
+      );
+    }
+  }
   // Every cast member is placed in a real zone, with a legal wander rect.
   const placed = Object.values(w.zones).flatMap((z) => z.npcs.map((n) => n.name));
   for (const member of sealed.cast) assert.ok(placed.includes(member.name), `${label}: ${member.name} placed`);
@@ -241,6 +275,13 @@ function checkWorld(w, sealed, label) {
     for (const npc of zone.npcs) {
       assert.ok(npc.wander.x0 >= 0 && npc.wander.x1 < zone.w && npc.wander.y0 >= 0 && npc.wander.y1 < zone.h,
         `${label}: ${npc.name} wander inside ${zone.id}`);
+      // I3: and not INVERTED. fullZoneBox is a single y-floor over zone.rooms,
+      // so a second band can push y0 past y1; walkableIn normalises the corners
+      // and the NPC silently ends up on the entry apron instead of in the room.
+      assert.ok(
+        npc.wander.y0 <= npc.wander.y1 && npc.wander.x0 <= npc.wander.x1,
+        `${label}: ${npc.name} has an inverted wander box in ${zone.id} (${JSON.stringify(npc.wander)})`,
+      );
       // Never spawned ON a solid tile — a scattered wilds trunk on the zone
       // center used to swallow the NPC anchored there (stepNpcs vets only the
       // tiles it moves TO, so the overlap persists until a lucky step). Bounds
@@ -3544,6 +3585,7 @@ const bunkhouseBrief = (hands) => ({
     ["colony", brief.defaults("sci-fi-colony", 424242)],
   ];
   let checked = 0;
+  let roomsChecked = 0;
   for (const [label, sealed] of fixtures) {
     for (const seed of [1, 3, 11, 424242]) {
       const w = world.build(seed, "cozy-village", sealed);
@@ -3553,7 +3595,15 @@ const bunkhouseBrief = (hands) => ({
         // floor for a tile up the stairs would prove nothing either way. Quarters
         // ride along, which is free and strictly more coverage than before.
         const sleeping = [...(zone.beds ?? []), ...(zone.homeBeds ?? [])].filter((bed) => bed.zoneId === zone.id);
-        if (!sleeping.length) continue;
+        // The BED loop is gated on there being beds. The ROOM loop is NOT — it
+        // used to be, because both sat under one `continue`, and that skipped
+        // the whole zone whenever it had rooms but no sleeping tiles of its own:
+        // cellars, named-place ground floors, the ground floor of any house
+        // whose band went upstairs. Measured at 89 of 225 interior zones over
+        // this case's own fixtures. Rooms that are not bedrooms are the entire
+        // premise of the room vocabulary, so the one loop that checks them has
+        // to run on exactly the zones that have no beds.
+        if (!sleeping.length && !zone.rooms.length) continue;
         const reached = floodFill(zone, zone.spawn);
         for (const bed of sleeping) {
           assert.ok(
@@ -3562,18 +3612,39 @@ const bunkhouseBrief = (hands) => ({
           );
           checked++;
         }
-        // And the room's own door is reachable, so the sleeper can be talked to
-        // rather than merely stood next to through a wall.
         for (const room of zone.rooms) {
+          // The door's OUTSIDE face — you can reach the doorway.
           assert.ok(
             reached.has(`${room.doorX},${room.y1 + 1}`),
             `${label} seed ${seed}: ${zone.name} has an unreachable room door at ${room.doorX},${room.y1 + 1}`,
           );
+          // And its INSIDE face, and every walkable tile of the room. A
+          // furnisher that lays a solid run along the row below the door leaves
+          // the doorway reachable and the room sealed behind it — which is
+          // precisely what a per-purpose furnisher is now able to do.
+          assert.ok(
+            reached.has(`${room.doorX},${room.y1}`),
+            `${label} seed ${seed}: ${zone.name} room ${room.purpose} is sealed behind its own door`,
+          );
+          for (let ry = room.y0; ry <= room.y1; ry++) {
+            for (let rx = room.x0; rx <= room.x1; rx++) {
+              if (zone.solid[zone.w * ry + rx]) continue;
+              assert.ok(
+                reached.has(`${rx},${ry}`),
+                `${label} seed ${seed}: ${zone.name} room ${room.purpose} walls off its own tile ${rx},${ry}`,
+              );
+            }
+          }
+          roomsChecked++;
         }
       }
     }
   }
   assert.ok(checked > 100, `the sweep actually visited sleeping tiles (${checked})`);
+  // Counted separately, because `checked` counts BEDS: emptying zone.rooms
+  // across the whole compiler would leave this case green on the bed count
+  // alone. The room vocabulary needs its own non-vacuity floor.
+  assert.ok(roomsChecked > 200, `the sweep actually visited rooms (${roomsChecked})`);
 }
 
 // 59. The open plan survives, for the roof that has genuinely earned it. Bunked
