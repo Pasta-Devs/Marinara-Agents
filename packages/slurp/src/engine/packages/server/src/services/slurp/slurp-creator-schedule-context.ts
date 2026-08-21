@@ -117,14 +117,21 @@ export async function resolveSlurpCreatorScheduleContext(
   const schedule = parseSlurpWeekSchedule(record(record(character?.data).extensions).conversationSchedule);
   if (!schedule) return "No active Conversation Schedule is available for this Creator today.";
 
+  let enabledZone: string | undefined;
   for (const chat of await chats.list()) {
     if (chat.mode !== "conversation" || !stringArray(chat.characterIds).includes(source.entityId)) continue;
     const metadata = record(chat.metadata);
-    const enabled = metadata.conversationSchedulesEnabled === true;
-    const zone =
+    if (metadata.conversationSchedulesEnabled !== true) continue;
+    enabledZone ??=
       timeZone(metadata.conversationTimeZone) ?? timeZone(metadata.promptTimeZone) ?? timeZone(fallbackTimeZone);
-    const context = buildSlurpCreatorScheduleContext(enabled, schedule, source, zonedDate(now, zone), zone);
-    if (context) return context;
   }
+  const context = buildSlurpCreatorScheduleContext(
+    enabledZone !== undefined,
+    schedule,
+    source,
+    zonedDate(now, enabledZone),
+    enabledZone,
+  );
+  if (context) return context;
   return "No active Conversation Schedule is available for this Creator today.";
 }

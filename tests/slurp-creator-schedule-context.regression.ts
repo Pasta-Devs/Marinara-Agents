@@ -29,6 +29,16 @@ const chats = (enabled: boolean, zone = "America/New_York") => ({
     },
   ],
 });
+const oppositeChats = {
+  list: async () => [
+    ...((await chats(false).list()) as never[]),
+    {
+      mode: "conversation",
+      characterIds: JSON.stringify([source.entityId]),
+      metadata: JSON.stringify({ conversationSchedulesEnabled: true, conversationTimeZone: "America/New_York" }),
+    },
+  ],
+};
 const characters = (value: typeof character | null) => ({ getById: async () => value });
 
 async function main() {
@@ -36,6 +46,15 @@ async function main() {
   assert.match(context, /busy at work and slow to reply/u);
   assert.match(context, /Tuesday/u);
   assert.match(context, /America\/New_York/u);
+
+  const orderIndependent = await resolveSlurpCreatorScheduleContext(
+    oppositeChats,
+    characters(character),
+    source,
+    "UTC",
+    fixed,
+  );
+  assert.match(orderIndependent, /busy at work and slow to reply/u);
 
   const disabled = await resolveSlurpCreatorScheduleContext(chats(false), characters(character), source, "UTC", fixed);
   assert.match(disabled, /No active Conversation Schedule/u);
