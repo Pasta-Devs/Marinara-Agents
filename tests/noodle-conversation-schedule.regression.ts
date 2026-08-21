@@ -24,7 +24,16 @@ function chat(id: string, metadata: Record<string, unknown>, characterIds = [cha
 }
 
 function fixtureChats(chats: ReturnType<typeof chat>[]) {
-  return { list: async () => chats } as never;
+  return {
+    list: async () => chats,
+    resolveConversationPresenceState: async (id: string) => {
+      const current = chats.find((item) => item.id === id);
+      if (current?.metadata.conversationSchedulesEnabled === false) return { schedules: {} };
+      const cardSchedule = current?.metadata.characterScheduleOnCard;
+      if (cardSchedule) return { schedules: { [characterId]: cardSchedule } };
+      return { schedules: (current?.metadata.characterSchedules as Record<string, unknown>) ?? {} };
+    },
+  } as never;
 }
 
 async function contextAt(instant: string, chats: ReturnType<typeof chat>[], timeZone?: string) {
@@ -60,6 +69,10 @@ async function main() {
   assert.equal(
     await contextAt("2026-08-17T08:00:00.000Z", [chat("chat-1", {})], "UTC"),
     "No generated schedules are available for today.",
+  );
+  assert.match(
+    await contextAt("2026-08-17T08:00:00.000Z", [chat("chat-1", { characterScheduleOnCard: schedule })], "UTC"),
+    /eating breakfast/u,
   );
   assert.equal(
     await contextAt(
