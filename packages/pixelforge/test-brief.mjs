@@ -5311,7 +5311,28 @@ const cellarBrief = (prosperity) => ({
 
   // Night still belongs to the bed: a day job has no opinion about where you sleep.
   at(23 * 60);
-  assert.notEqual(whereIs("Bel"), sanctuaryId, "a named worker goes home to sleep like anybody else");
+  const npcOf = (name) => {
+    for (const zoneId in w.zones) {
+      const npc = w.zones[zoneId].npcs.find((n) => n.name === name);
+      if (npc) return npc;
+    }
+    return null;
+  };
+  for (const name of ["Bel", "Corin"]) {
+    const npc = npcOf(name);
+    const bed = npc._sched.home;
+    // Not the workplace, and NOT THE SQUARE EITHER. A bare notEqual against the
+    // sanctuary also passed for an acolyte who drifted to the plaza at 23:00 —
+    // the same "nobody is where they are scheduled to be" gap the night handle
+    // exists to close, so the negative case has to name the square too.
+    assert.notEqual(whereIs(name), sanctuaryId, `${name} goes home to sleep like anybody else`);
+    assert.notEqual(whereIs(name), "z1", `${name} sleeps under a roof, not out in the square`);
+    // The night handle is only worth asserting against once the two lines above
+    // have pinned the destination independently: `_sched.home` is the very field
+    // a broken binding would have rewritten.
+    assert.equal(whereIs(name), bed.zoneId, `${name} is in the zone their night handle names`);
+    assert.equal(`${npc.x},${npc.y}`, `${bed.wander.x0},${bed.wander.y0}`, `${name} is ON their berth, not loose in the room`);
+  }
 }
 
 // ── NOBODY LOSES THEIR BED TO SOMEBODY WHO IS ALSO LEAVING (0.9.0) ─────────
