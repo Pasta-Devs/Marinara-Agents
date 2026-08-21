@@ -1,4 +1,4 @@
-// Pixelforge 0.8.0 — Marinara Engine game-surface Experience (single-file client bundle)
+// Pixelforge 0.9.0 — Marinara Engine game-surface Experience (single-file client bundle)
 // Built from packages/pixelforge/src (14 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -2296,7 +2296,15 @@ PF.world = (() => {
       put(zone, doorX, area.y1 + 1, "object", "door", false);
       if (x1 < area.x1) for (let wy = area.y0; wy <= area.y1; wy++) put(zone, x1 + 1, wy, "object", "wall", true);
       const rect = { x0: x, y0: area.y0, x1, y1: area.y1 };
-      const furnished = ROOM_FURNISH[room.purpose]?.(zone, rect, room) ?? {};
+      // LOUD, the way an unknown feature tag already is. An optional call here
+      // carved the walls and the door and then furnished nothing, so an unknown
+      // purpose compiled a sealed empty box that looks deliberate — and the room
+      // vocabulary is about to grow from one purpose to a dozen. A feature tag
+      // with no placer throws at startup; a room purpose with no furnisher had
+      // no check at all, which is precisely backwards.
+      const furnish = ROOM_FURNISH[room.purpose];
+      if (!furnish) throw new Error(`pixelforge: room purpose "${room.purpose}" has no furnisher`);
+      const furnished = furnish(zone, rect, room) ?? {};
       placed.push({ purpose: room.purpose, ...(room.private ? { private: true } : {}), ...rect, doorX, ...furnished });
       x = x1 + 2;
     }

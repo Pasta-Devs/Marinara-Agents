@@ -22,9 +22,12 @@ through the derivations below.
   theme: "cozy-village",    // echo only — ALWAYS overwritten with the wizard's theme, valid or
                             // not, so the stored brief is self-contained and the model can never
                             // pick a skin that fights the wizard.
-  scale: "village",         // ENUM outpost|hamlet|village|town — the ONLY size input.
+  scale: "village",         // ENUM outpost|hamlet|village|town|city — the ONLY size input.
                             //   outpost 28x20 / base 4 buildings   hamlet 34x24 / 6
                             //   village 44x30 / 8                  town 56x38 / 12
+                            //   city 96x72 / 40 — the first scale where `buildings` can
+                            //   actually bind: the ground outruns the cast (capped at 10),
+                            //   so the constraint moves from the map to the claimants.
   surround: "fields",       // ENUM woods|fields|rocky|water|barren → ground mix, border ring,
                             // scatter density. Theme-neutral.
   prosperity: "modest",     // ENUM struggling|modest|thriving. Consumers: path material, fence
@@ -135,7 +138,7 @@ response is **never stored** (checkpoints capture by value — see #5110).
    `features` arrives as an OBJECT keyed by anything, take `Object.values()` before the array
    check. A truncated array keeps its complete elements and drops the partial one.
 2. **Scalars.** Enum folds (trim/case). `scale` receiving a NUMBER buckets it (<8 outpost, <20
-   hamlet, <60 village, else town) — the most-observed weak-model slip (population dumped into the
+   hamlet, <60 village, <200 town, else city) — the most-observed weak-model slip (population dumped into the
    size slot). Unknown enum → field default. All text sanitized (markdown/HTML/backticks/control
    chars stripped), grapheme-truncated at word boundaries; a clause-losing truncation of
    `situation` degrades to empty instead (a cut hook is worse than none).
