@@ -2936,6 +2936,11 @@ PF.world = (() => {
       // reads as a barbecue. Not on row h-2: that row carries the zone's spawn and
       // both stair tiles, and it is walkable by contract.
       put(z, w - 2, h - 3, "object", "hearth", true);
+      // Recorded, not just painted: the dawn and dusk schedule tiers point at it,
+      // so it has to be findable from a zone rather than recomputed from `w` and
+      // `h` by whoever wants it. Runtime-only, like the rest of the schedule
+      // furniture — re-baked on every compile, never serialized.
+      z.hearth = { x: w - 2, y: h - 3 };
       z.lights.push({ x: 2, y: h - 3 }, { x: w - 2, y: h - 3 });
       return sleeping;
     },
@@ -4331,6 +4336,28 @@ PF.world = (() => {
       const id = zoneIdByName.get(member.home);
       if (id && !headOfBuilding.has(id)) headOfBuilding.set(id, member);
     });
+    /** The fireside handle for whoever sleeps in this zone.
+     *
+     *  Resolved from the BED's zone rather than the building's, because a big
+     *  household sleeps upstairs and the fire is on the ground floor — the floor
+     *  suffix is stripped to find the room the hearth is actually in. Null when
+     *  there is no hearth to stand at (a named place's quarters, a wilds
+     *  resident, anybody sleeping rough), and `resolve` falls back to `post` on
+     *  its own, so a missing handle is a quiet no-op rather than an NPC standing
+     *  in a wall.
+     *
+     *  The box stops one column short of the fire itself. It is solid: you warm
+     *  yourself in front of one, not on top of it. */
+    const hearthHandle = (zoneId) => {
+      if (!zoneId) return null;
+      const ground = zones[String(zoneId).replace(/[ub]$/, "")];
+      if (!ground?.hearth) return null;
+      const { x, y } = ground.hearth;
+      return {
+        zoneId: ground.id,
+        wander: { x0: Math.max(1, x - 3), y0: Math.max(2, y - 1), x1: Math.max(1, x - 1), y1: y },
+      };
+    };
     roster.forEach((member, index) => {
       const npcId = `n${index + 1}`;
       const standing = member.standing ?? "resident";
@@ -4524,6 +4551,11 @@ PF.world = (() => {
           keeper,
           worker,
           home,
+          // Where a household is at first light and at last light: in, around the
+          // fire. Before this a resident's dawn and dusk were both `post`, so the
+          // whole settlement stood at its work anchors from waking to sleeping and
+          // the only thing a day did was empty the houses at noon.
+          hearth: hearthHandle(home?.zoneId ?? (zone !== v ? zone.id : null)),
           public: { zoneId: v.id, wander: publicBox ?? plazaBox() },
         },
       });
@@ -4629,7 +4661,16 @@ PF.schedule = (() => {
     // It stopped being true the moment dwellings gained interiors and `home` became a
     // bed inside: residents then vanished indoors from 18:00 to 07:00, which is over
     // half the clock and most of the hours with interesting light. Bed is for night.
-    "*:resident": { dawn: "post", day: "public", dusk: "post", night: "home" },
+    // DAWN AND DUSK BELONG TO THE HEARTH. Both used to be `post`, so an ordinary
+    // resident stood at their work anchor from waking until sleeping and the only
+    // thing a whole day did was empty the houses at noon. A household is in and
+    // around the fire at first light and again at last light, which is also what
+    // makes a lit window at dusk mean somebody is behind it.
+    //
+    // `resolve` falls back to `post` when an NPC has no `hearth` handle, so
+    // anyone with no fire to stand at — a wilds resident, a lodger in a named
+    // place's quarters — keeps exactly the day they had.
+    "*:resident": { dawn: "hearth", day: "public", dusk: "hearth", night: "home" },
     // Loiterers hold their public spot all day and take a bed at night.
     "*:transient": { dawn: "post", day: "post", dusk: "post", night: "home" },
     // Fringe NPCs stay out at the margins — meeting one means going to them.

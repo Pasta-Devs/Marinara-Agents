@@ -6940,4 +6940,58 @@ const cellarBrief = (prosperity) => ({
   );
 }
 
+// ── A DAY HAS A SHAPE (0.10.0) ─────────────────────────────────────────────
+// An ordinary resident's dawn and dusk were both `post`, so a settlement stood
+// at its work anchors from waking until sleeping and the only thing a whole day
+// did was empty the houses at noon. Dawn and dusk belong to the HEARTH: the
+// household is in and around the fire at first light and again at last, which is
+// also what makes a lit window at dusk mean somebody is behind it.
+{
+  const cast = [
+    { name: "Ivy", role: "warden", kind: "leader", tint: "blue", home: "Dayshape", household: 1 },
+    { name: "Bett", role: "innkeep", kind: "host", tint: "amber", home: "Dayshape", household: 2 },
+    { name: "Tam", role: "smith", kind: "maker", tint: "red", home: "Dayshape", household: 3 },
+  ];
+  const sealed = brief.validate(
+    { scale: "village", prosperity: "thriving", name: "Dayshape", places: [], cast },
+    { theme: "cozy-village", seed: 7 },
+  );
+  const w = world.build(7, "cozy-village", sealed);
+  const fireside = () =>
+    Object.values(w.zones)
+      .filter((z) => z.hearth)
+      .reduce((n, z) => n + z.npcs.length, 0);
+  const at = (hour) => {
+    const sim = new loadedPF.Sim(w);
+    sim.clockMin = hour * 60;
+    sim.resolveSchedules();
+    return { outdoors: w.zones.z1.npcs.length, indoors: fireside() };
+  };
+  const dawn = at(6);
+  const noon = at(12);
+  const dusk = at(19);
+  const souls = Object.values(w.zones).reduce((n, z) => n + z.npcs.length, 0);
+  assert.ok(souls >= 12, `the fixture has a settlement in it (${souls} souls)`);
+  // The shape itself: in at first light, out at noon, in again at last light.
+  assert.ok(dawn.indoors > dawn.outdoors, `at dawn a village is indoors (${dawn.indoors} in, ${dawn.outdoors} out)`);
+  assert.ok(noon.outdoors > noon.indoors, `at noon it is out (${noon.outdoors} out, ${noon.indoors} in)`);
+  assert.ok(dusk.indoors > dusk.outdoors, `at dusk it is back in (${dusk.indoors} in, ${dusk.outdoors} out)`);
+  // Non-vacuous: they are at the FIRE, not merely somewhere indoors. Every one of
+  // them is within reach of a hearth tile on the floor they are standing on.
+  const sim = new loadedPF.Sim(w);
+  sim.clockMin = 6 * 60;
+  sim.resolveSchedules();
+  let besideAFire = 0;
+  for (const zone of Object.values(w.zones)) {
+    if (!zone.hearth) continue;
+    for (const npc of zone.npcs) {
+      if (Math.abs(npc.x - zone.hearth.x) <= 4 && Math.abs(npc.y - zone.hearth.y) <= 2) besideAFire++;
+    }
+  }
+  assert.ok(
+    besideAFire >= dawn.indoors / 2,
+    `and they are AT the fire rather than merely under the roof (${besideAFire} of ${dawn.indoors})`,
+  );
+}
+
 console.log("brief validator + compiler: all cases passed");

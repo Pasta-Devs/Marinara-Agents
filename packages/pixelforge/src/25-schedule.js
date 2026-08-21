@@ -75,7 +75,16 @@ PF.schedule = (() => {
     // It stopped being true the moment dwellings gained interiors and `home` became a
     // bed inside: residents then vanished indoors from 18:00 to 07:00, which is over
     // half the clock and most of the hours with interesting light. Bed is for night.
-    "*:resident": { dawn: "post", day: "public", dusk: "post", night: "home" },
+    // DAWN AND DUSK BELONG TO THE HEARTH. Both used to be `post`, so an ordinary
+    // resident stood at their work anchor from waking until sleeping and the only
+    // thing a whole day did was empty the houses at noon. A household is in and
+    // around the fire at first light and again at last light, which is also what
+    // makes a lit window at dusk mean somebody is behind it.
+    //
+    // `resolve` falls back to `post` when an NPC has no `hearth` handle, so
+    // anyone with no fire to stand at — a wilds resident, a lodger in a named
+    // place's quarters — keeps exactly the day they had.
+    "*:resident": { dawn: "hearth", day: "public", dusk: "hearth", night: "home" },
     // Loiterers hold their public spot all day and take a bed at night.
     "*:transient": { dawn: "post", day: "post", dusk: "post", night: "home" },
     // Fringe NPCs stay out at the margins — meeting one means going to them.
