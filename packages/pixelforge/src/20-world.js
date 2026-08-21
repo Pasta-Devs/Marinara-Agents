@@ -2219,6 +2219,46 @@ PF.world = (() => {
       PLACERS[denseRank ? "park" : "crop-plots"](v, lot.x, lot.y);
       greens++;
     }
+    // ── THE SQUARE ─────────────────────────────────────────────────────────────
+    // A plaza was eight by eight tiles of paving and nothing else — the one place
+    // in a settlement everybody walks through, and the only one with nothing in
+    // it. Every settlement gets its well: it is the oldest reason for a village
+    // to have a centre at all, and it gives the square something to be the middle
+    // OF. A thriving one lays market boards beside it.
+    //
+    // AFTER the buildings, not before. Laid before them, an outpost — whose lots
+    // sit tight against the crossroad on a 28x20 map — simply built a house over
+    // the well and the square came out empty on exactly the settlements that
+    // could least afford to lose it. So each piece checks the ground is still
+    // free, and a square with no room for a well honestly has none.
+    const squareTile = (x, y, what) => {
+      if (x < 1 || y < 1 || x >= v.w - 1 || y >= v.h - 1) return false;
+      const at = idx(v, x, y);
+      if (v.solid[at] || v.object[at] || v.overhead[at]) return false;
+      put(v, x, y, "object", what, true);
+      return true;
+    };
+    // All four quadrants tried in turn, not just the north-east one. An outpost's
+    // lots sit tight against the crossroad, so its first choice is often inside
+    // somebody's front room, and one refusal used to leave the smallest
+    // settlements — the ones that can least afford a bare square — with no well
+    // at all.
+    const QUADRANTS = [
+      [midX + 2, midY - 3],
+      [midX - 3, midY - 3],
+      [midX + 2, midY + 2],
+      [midX - 3, midY + 2],
+    ];
+    const well = QUADRANTS.find(([x, y]) => squareTile(x, y, "well"));
+    if (well) v.lights.push({ x: well[0], y: well[1] });
+    if (brief.prosperity === "thriving") {
+      let boards = 0;
+      for (const [x, y] of QUADRANTS) {
+        if (boards >= 2) break;
+        if (well && x === well[0] && y === well[1]) continue;
+        if (squareTile(x, y, "table")) boards++;
+      }
+    }
     // Last thing done to the settlement's tiles, so it sees the trees, the
     // buildings, the stalls, the features and the greens together — a pocket is
     // usually made by two of them meeting, not by either alone.

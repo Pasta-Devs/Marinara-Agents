@@ -7031,4 +7031,49 @@ const cellarBrief = (prosperity) => ({
   }
 }
 
+// ── THE SQUARE HAS A WELL IN IT (0.10.0) ───────────────────────────────────
+// A plaza was eight by eight tiles of paving and nothing else: the one place in
+// a settlement everybody walks through, and the only one with nothing in it. The
+// well is the oldest reason for a village to have a centre at all.
+//
+// Laid AFTER the buildings and only onto free ground — placed before them, an
+// outpost simply built a house over it, and the settlements that can least
+// afford a bare square were exactly the ones that got one. All four quadrants
+// are tried, which is what makes this hold at every rank rather than only where
+// the ground is loose.
+{
+  const cast = [
+    { name: "Ivy", role: "warden", kind: "leader", tint: "blue", home: "Wellsq", household: 1 },
+    { name: "Bett", role: "innkeep", kind: "host", tint: "amber", home: "Wellsq", household: 2 },
+  ];
+  let checked = 0;
+  for (const scale of ["outpost", "hamlet", "village", "town", "city"]) {
+    for (const prosperity of ["struggling", "modest", "thriving"]) {
+      for (const seed of [1, 7, 424242]) {
+        const sealed = brief.validate(
+          { scale, prosperity, name: "Wellsq", places: [], cast },
+          { theme: "cozy-village", seed },
+        );
+        const v = world.build(seed, "cozy-village", sealed).zones.z1;
+        assert.ok(v.object.includes("well"), `${scale}/${prosperity} seed ${seed}: the square has a well`);
+        // Never on the crossroad or the arrival tile. Those two rows and two
+        // columns are the settlement's through-traffic, and the spawn sits on
+        // one of them — a well there blocks the way in on the first frame.
+        const midX = (v.w / 2) | 0;
+        const midY = (v.h / 2) | 0;
+        for (const [x, y] of [
+          [midX, midY],
+          [midX - 1, midY],
+          [midX, midY - 1],
+          [v.spawn.x, v.spawn.y],
+        ]) {
+          assert.ok(!v.solid[v.w * y + x], `${scale}/${prosperity} seed ${seed}: ${x},${y} stays walkable`);
+        }
+        checked++;
+      }
+    }
+  }
+  assert.equal(checked, 45, `the sweep ran (${checked})`);
+}
+
 console.log("brief validator + compiler: all cases passed");
