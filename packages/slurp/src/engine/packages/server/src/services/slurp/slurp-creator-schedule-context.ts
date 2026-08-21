@@ -77,12 +77,18 @@ function zonedDate(now: Date, zone?: string): Date {
   return new Date(part("year"), part("month") - 1, part("day"), part("hour"), part("minute"), part("second"));
 }
 
+function dateKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 function isStale(schedule: WeekSchedule, localNow: Date): boolean {
   const monday = new Date(localNow);
   const day = monday.getDay();
   monday.setDate(monday.getDate() - (day === 0 ? 6 : day - 1));
   monday.setHours(0, 0, 0, 0);
-  return new Date(schedule.weekStart).getTime() < monday.getTime();
+  const weekStart = new Date(schedule.weekStart);
+  const storedWeekKey = `${weekStart.getUTCFullYear()}-${String(weekStart.getUTCMonth() + 1).padStart(2, "0")}-${String(weekStart.getUTCDate()).padStart(2, "0")}`;
+  return storedWeekKey < dateKey(monday);
 }
 
 export function buildSlurpCreatorScheduleContext(
