@@ -6752,4 +6752,52 @@ const cellarBrief = (prosperity) => ({
   );
 }
 
+// ── A TOWN IS NOT ONE BUILDING STAMPED OUT (0.10.0) ────────────────────────
+// Every dwelling was 6x4 unless the over-subscription merge widened it, and every
+// workplace was 6x4 full stop, so a town was thirty identical boxes on a grid.
+// Nothing failed: the houses were the right count, in the right places, with the
+// right people asleep in them. It just read as one building repeated, which is a
+// large part of what "it looks like a game from 1996" actually means.
+//
+// Size follows PROGRAM now — a roof is sized by what has to fit under it — so
+// this asserts on the SPREAD of footprints rather than on any particular one.
+{
+  const cast = [
+    { name: "Ivy", role: "warden", kind: "leader", tint: "blue", home: "Bigg", household: 1 },
+    { name: "Bett", role: "innkeep", kind: "host", tint: "amber", home: "Bigg", household: 2 },
+    { name: "Tam", role: "smith", kind: "maker", tint: "red", home: "Bigg", household: 3 },
+    { name: "Pel", role: "farmer", kind: "grower", tint: "green", home: "Bigg", household: 4 },
+    { name: "Gar", role: "watch", kind: "guard", tint: "grey", home: "Bigg", household: 5 },
+  ];
+  const sealed = brief.validate(
+    { scale: "town", prosperity: "thriving", name: "Bigg", places: [], cast },
+    { theme: "cozy-village", seed: 7 },
+  );
+  const w = world.build(7, "cozy-village", sealed);
+  // Footprints are read off the TILES, not off the compiler's bookkeeping: a
+  // roof somebody widened in a variable but never painted is not a wider house.
+  // A door's building is the run of wall it sits in, and its height the stack of
+  // stone above that run.
+  const v = w.zones.z1;
+  const solidAt = (x, y) => x >= 0 && y >= 0 && x < v.w && y < v.h && !!v.solid[v.w * y + x];
+  const shapes = new Set();
+  v.object.forEach((tile, index) => {
+    if (tile !== "door") return;
+    const dx = index % v.w;
+    const dy = (index / v.w) | 0;
+    let x0 = dx;
+    while (solidAt(x0 - 1, dy)) x0--;
+    let x1 = dx;
+    while (solidAt(x1 + 1, dy)) x1++;
+    let y0 = dy;
+    while (solidAt(dx, y0 - 1) || v.object[v.w * (y0 - 1) + dx] === "wallStone") y0--;
+    shapes.add(`${x1 - x0 + 1}x${dy - y0 + 1}`);
+  });
+  assert.ok(shapes.size >= 3, `a town is built of more than one shape (${[...shapes].sort().join(" ") || "none"})`);
+  // Non-vacuous: it really did find buildings, and enough of them that a spread
+  // of three is a spread rather than an accident of a tiny sample.
+  const doors = v.object.filter((tile) => tile === "door").length;
+  assert.ok(doors >= 12, `and there are enough of them for that to mean anything (${doors} doors)`);
+}
+
 console.log("brief validator + compiler: all cases passed");

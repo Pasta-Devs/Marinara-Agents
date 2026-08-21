@@ -1915,10 +1915,26 @@ PF.world = (() => {
       }
       const slot = takeSlot();
       if (!slot) break;
-      const b = building(v, slot.x, slot.y, 6, 4, 2, [4]);
+      // A trade's premises is sized by the trade, for the same reason a house is
+      // sized by its household: every workplace at 6x4 made the working half of
+      // a settlement as uniform as the sleeping half. A farm has a yard's worth
+      // of frontage, a smith needs floor for the work, and a duty station is a
+      // hut with a door — it is the smallest thing anybody builds on purpose.
+      const SPECIAL_FOOTPRINT = {
+        farm: { w: 8, h: 5 },
+        shop: { w: 7, h: 5 },
+        post: { w: 5, h: 4 },
+      };
+      // ...but not on ground that cannot spare it. An outpost is 28x20, and a
+      // farm with a full frontage there takes the room its named features were
+      // going to stand on — measured: two of two refused. A frontier smithy is a
+      // shed, which is the truthful answer as well as the one that fits.
+      const roomy = brief.scale !== "outpost" && brief.scale !== "hamlet";
+      const foot = (roomy && SPECIAL_FOOTPRINT[special]) || { w: 6, h: 4 };
+      const b = building(v, slot.x, slot.y, foot.w, foot.h, 2, foot.h > 4 ? [1, 4] : [4]);
       buildings.push({
         door: b,
-        rect: { x: slot.x, y: slot.y, w: 6, h: 4 },
+        rect: { x: slot.x, y: slot.y, w: foot.w, h: foot.h },
         special,
         owner,
         // A live-work premises carries its owner's household: the same field a
@@ -1930,9 +1946,23 @@ PF.world = (() => {
     for (const group of householdGroups) {
       const slot = takeSlot();
       if (!slot) break;
-      const width = Math.min(8, 5 + group.length); // merged blocks read larger
-      const b = building(v, slot.x, slot.y, width, 4, 2, [1]);
-      buildings.push({ door: b, rect: { x: slot.x, y: slot.y, w: width, h: 4 }, households: group });
+      // SIZE FOLLOWS PROGRAM. A house used to be 6x4 unless the merge widened it,
+      // so a town was thirty identical boxes on a grid and read as one building
+      // stamped out — which is most of what "it looks like a game from 1996"
+      // actually is. A roof is now sized by what has to fit under it: the people
+      // who sleep there, and how many households share the address.
+      //
+      // Width 5..8 is the lot (MAX_LOT_W), and the height is the honest half —
+      // a fourth row is a second band of rooms, so a big household reads taller
+      // as well as wider from across the square. Five still fits BUILDING_H, so
+      // the eave clears the lot above exactly as a four-row body does.
+      const souls = roster.filter(
+        (m) => (m.standing ?? "resident") === "resident" && group.includes(m.household),
+      ).length;
+      const width = PF.clamp(5 + Math.ceil(souls / 2) + (group.length > 1 ? 1 : 0), 5, MAX_LOT_W);
+      const height = souls >= 4 || group.length > 1 ? 5 : 4;
+      const b = building(v, slot.x, slot.y, width, height, 2, height > 4 ? [1, 4] : [1]);
+      buildings.push({ door: b, rect: { x: slot.x, y: slot.y, w: width, h: height }, households: group });
     }
 
     // ── Transient merchants set up a light market stall in a free lot (never a
