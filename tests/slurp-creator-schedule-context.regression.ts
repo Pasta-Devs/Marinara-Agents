@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
+import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { buildSlurpCreatorScheduleContext } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-creator-schedule-context";
+
+const root = join(import.meta.dirname, "..");
 
 const schedule = {
   weekStart: "2026-08-17T00:00:00.000Z",
@@ -49,6 +53,14 @@ async function main() {
   assert.match(context, /busy at work and slow to reply/u);
   assert.match(context, /Tuesday/u);
   assert.match(context, /America\/New_York/u);
+  assert.match(
+    readFileSync(
+      join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-creator-schedule.ts"),
+      "utf8",
+    ),
+    /conversationSchedule/u,
+    "Slurp must read the character-owned schedule field",
+  );
 
   // This is the exact block added to post and reply generation requests.
   assert.match(context, /Current Conversation Schedule for Ari/u);

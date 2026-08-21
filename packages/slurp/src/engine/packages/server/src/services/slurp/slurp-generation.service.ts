@@ -417,6 +417,7 @@ export async function generateNoodlerPost(
   const scheduleContext = linkedPublicAccount
     ? await resolveSlurpCreatorScheduleContext(
         createChatsStorage(db),
+        createCharactersStorage(db),
         linkedPublicAccount,
         undefined,
         input.generatedAt ?? new Date(),

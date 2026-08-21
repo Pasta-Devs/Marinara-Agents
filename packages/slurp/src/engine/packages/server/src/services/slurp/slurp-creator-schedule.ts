@@ -1,6 +1,7 @@
 import { areConversationSchedulesEnabled } from "../generation/conversation-context-utils.js";
 import { scheduleNeedsRefresh } from "../conversation/schedule.service.js";
 import { createChatsStorage } from "../storage/chats.storage.js";
+import { createCharactersStorage } from "../storage/characters.storage.js";
 import {
   normalizePromptTimeZone,
   resolveConversationTimeZone,
@@ -26,6 +27,7 @@ function parseWeekSchedule(value: unknown): WeekSchedule | null {
 
 export async function resolveSlurpCreatorScheduleContext(
   chats: ReturnType<typeof createChatsStorage>,
+  characters: ReturnType<typeof createCharactersStorage>,
   source: CreatorSource,
   fallbackTimeZone?: string,
   now: Date = new Date(),
@@ -33,7 +35,14 @@ export async function resolveSlurpCreatorScheduleContext(
   const sourceId = source.entityId;
   for (const chat of await chats.list()) {
     if (chat.mode !== "conversation" || !parseStringArray(chat.characterIds).includes(sourceId)) continue;
-    const context = buildSlurpCreatorScheduleContext(parseRecord(chat.metadata), source, fallbackTimeZone, now);
+    const schedule = await resolveCharacterSchedule(characters, source);
+    const context = buildSlurpCreatorScheduleContext(
+      parseRecord(chat.metadata),
+      source,
+      fallbackTimeZone,
+      now,
+      schedule,
+    );
     if (context) return context;
   }
   return "No active Conversation Schedule is available for this Creator today.";
@@ -44,12 +53,23 @@ export function buildSlurpCreatorScheduleContext(
   source: CreatorSource,
   fallbackTimeZone?: string,
   now: Date = new Date(),
+  scheduleOverride?: WeekSchedule | null,
 ): string | null {
   if (!areConversationSchedulesEnabled(metadata)) return null;
-  const schedule = parseWeekSchedule(parseRecord(metadata.characterSchedules)[source.entityId]);
+  const schedule = scheduleOverride ?? parseWeekSchedule(parseRecord(metadata.characterSchedules)[source.entityId]);
   if (!schedule) return null;
   const timeZone = resolveConversationTimeZone(metadata) ?? normalizePromptTimeZone(fallbackTimeZone);
   const localNow = toZonedWallClockDate(now, timeZone);
   if (scheduleNeedsRefresh(schedule, localNow)) return null;
   return formatScheduleContext(true, schedule, source, localNow, timeZone);
+}
+
+async function resolveCharacterSchedule(
+  characters: ReturnType<typeof createCharactersStorage>,
+  source: CreatorSource,
+): Promise<WeekSchedule | null> {
+  if (source.kind !== "character") return null;
+  const character = await characters.getById(source.entityId);
+  const extensions = parseRecord(parseRecord(character?.data).extensions);
+  return parseWeekSchedule(extensions.conversationSchedule);
 }

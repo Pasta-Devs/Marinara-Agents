@@ -32,6 +32,7 @@ import {
 import { noodleResponseFormat } from "./slurp-response-format.js";
 import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
 import { createChatsStorage } from "../storage/chats.storage.js";
+import { createCharactersStorage } from "../storage/characters.storage.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -119,7 +120,7 @@ export async function generateNoodlerCreatorReply(input: {
   const settings = await createSlurpStorage(input.db).getSettings();
   const source = await createSlurpStorage(input.db).resolveAccountSource(input.creator);
   const scheduleContext = source
-    ? await resolveSlurpCreatorScheduleContext(createChatsStorage(input.db), source)
+    ? await resolveSlurpCreatorScheduleContext(createChatsStorage(input.db), createCharactersStorage(input.db), source)
     : undefined;
   const messages = buildNoodlerCreatorReplyMessages({
     ...input,
