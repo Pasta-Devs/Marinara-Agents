@@ -201,6 +201,38 @@ PF.world = (() => {
       put(z, x + 1, y + 1, "object", "table", true);
       put(z, x + 3, y + 2, "object", "well", true);
     },
+    /** A PUBLIC park: the dense-settlement answer to a lawn.
+     *
+     *  A town or a city has no room for a garden around every house and would
+     *  not have had one anyway — the ground between the terraces is public, not
+     *  private. Eight by five, the same footprint as the lot it stands on, so it
+     *  reads as a block somebody chose not to build on rather than a gap.
+     *
+     *  Cleared first, object AND overhead together: this runs after the tree
+     *  scatter, and clearing a trunk while leaving its canopy hangs a crown in
+     *  the air over nothing. */
+    park(z, x, y) {
+      for (let dy = 0; dy < 5; dy++) {
+        for (let dx = 0; dx < 8; dx++) {
+          put(z, x + dx, y + dy, "object", null, false);
+          put(z, x + dx, y + dy, "overhead", null);
+          put(z, x + dx, y + dy, "ground", "grass");
+        }
+      }
+      for (let dx = 0; dx < 8; dx++) put(z, x + dx, y + 2, "ground", "path");
+      for (let dy = 0; dy < 5; dy++) put(z, x + 3, y + dy, "ground", "path");
+      for (const [tx, ty] of [
+        [1, 1],
+        [6, 1],
+        [1, 4],
+        [6, 4],
+      ]) {
+        put(z, x + tx, y + ty, "object", "trunk", true);
+        put(z, x + tx, y + ty - 1, "overhead", "canopy");
+      }
+      put(z, x + 5, y + 2, "object", "well", true);
+      z.lights.push({ x: x + 5, y: y + 2 });
+    },
     "landmark-stone"(z, x, y) {
       put(z, x + 1, y + 1, "object", "wallStone", true);
       z.lights.push({ x: x + 1, y: y + 1 });
@@ -1590,27 +1622,48 @@ PF.world = (() => {
     const MAX_LOT_W = 8; // the widest building() ever draws
     // A row must clear the border and its own overhang above, and the horizontal
     // road plus its apron below. Bands are computed from those, not guessed.
-    const rowYs = [];
+    /** A run of lot origins inside [lo, hi], CENTRED on that span.
+     *
+     *  A fixed pitch marching from one end leaves whatever does not divide
+     *  evenly in one lump at the other end, and the lump is always on the same
+     *  side, so a town came out with its lots hard against the western trees and
+     *  eleven empty columns down the east. Splitting the remainder puts the same
+     *  number of lots on the same pitch with a margin at both ends, which is
+     *  what a laid-out settlement looks like instead of a shunted one.
+     *
+     *  `lo` and `hi` are the first and last tile the lot may OCCUPY, so a lot at
+     *  `start` ends at `start + size - 1` and that must not pass `hi`. */
+    const runOf = (lo, hi, size, pitch) => {
+      const span = hi - lo + 1;
+      if (span < size) return [];
+      const count = 1 + (((span - size) / pitch) | 0);
+      const used = size + (count - 1) * pitch;
+      const start = lo + (((span - used) / 2) | 0);
+      return Array.from({ length: count }, (_, index) => start + index * pitch);
+    };
     // Row 4, not 3: a sanctuary lifts its facade by up to two rows above the lot,
     // so the top band needs headroom for the eave above THAT or it paints into
     // the border ring. The old two-row allocator carried the same floor as a
     // Math.max, and it was load-bearing rather than decorative.
-    // `<=`, not `<`: a body starting at y ends at y + BUILDING_H - 1, so it clears
-    // a road at midY - 1 when y + BUILDING_H <= midY - 1. One too strict and an
+    //
+    // The band's last usable row is midY - 2: a body starting at y ends at
+    // y + BUILDING_H - 1, and it clears a road at midY - 1. One too strict and an
     // outpost loses its whole northern band — which is most of what "an outpost
     // is two buildings" turned out to be.
-    for (let y = 4; y + BUILDING_H <= midY - 1; y += LOT_PITCH_Y) rowYs.push(y);
+    //
     // The band below starts one row under the road, not three: a building's SOLID
     // body must clear the street, but its overhang is an overhead tile and may
     // hang over it exactly as a real eave does. Requiring three cost the outpost
-    // its entire southern row, which is most of what "an outpost is two
-    // buildings" was.
-    for (let y = midY + 1; y + BUILDING_H <= v.h - 3; y += LOT_PITCH_Y) rowYs.push(y);
+    // its entire southern row.
+    const rowYs = [
+      ...runOf(4, midY - 2, BUILDING_H, LOT_PITCH_Y),
+      ...runOf(midY + 1, v.h - 4, BUILDING_H, LOT_PITCH_Y),
+    ];
     // Columns, per side. West stops before the road; east starts after it. The
     // road is never tested against a lot because a lot is never laid across it.
-    const colXs = [];
-    for (let x = 4; x + MAX_LOT_W - 1 <= midX - 2; x += LOT_PITCH_X) colXs.push(x);
-    for (let x = midX + 1; x + MAX_LOT_W < v.w - 4; x += LOT_PITCH_X) colXs.push(x);
+    // The east band may reach v.w - 4: the border ring is the last column and the
+    // two inside it are verge.
+    const colXs = [...runOf(4, midX - 2, MAX_LOT_W, LOT_PITCH_X), ...runOf(midX + 1, v.w - 4, MAX_LOT_W, LOT_PITCH_X)];
     for (const rowY of rowYs) for (const x of colXs) slots.push({ x, y: rowY });
     // ── Claim order: OUTWARD FROM THE PLAZA ───────────────────────────────────
     // Row-major order filled the northernmost row first, which put a small
@@ -1803,8 +1856,18 @@ PF.world = (() => {
 
     const dwellingSlots = Math.min(free, dwellingHouseholds.length);
     const householdGroups = [];
+    // Round-robin, so over-subscription SHARES rather than stacks. This used to
+    // pile every household past the last lot onto that lot — twelve families in
+    // one house and eleven houses holding one each — which is a dormitory
+    // wherever it happens rather than only where the ground is genuinely that
+    // tight. Spread evenly it is an address holding more than one household,
+    // which is what a dense settlement is made of.
+    //
+    // Identical when there is only one lot to merge into: `index % 1` is always
+    // zero, so a settlement squeezed down to its last lot still builds the
+    // bunkhouse it always did.
     for (const [index, household] of dwellingHouseholds.entries()) {
-      const slot = index < dwellingSlots ? index : dwellingSlots - 1;
+      const slot = dwellingSlots > 0 ? index % dwellingSlots : 0;
       (householdGroups[slot] ??= []).push(household);
     }
     // Head-room over a lot. A tall building grows UPWARD so its door stays on the
@@ -2025,9 +2088,27 @@ PF.world = (() => {
         wildsArrivals,
       ),
     );
+    // ── Open ground ────────────────────────────────────────────────────────────
+    // What a settlement does with a lot it did not build on, and it is not the
+    // same answer everywhere. A village leaves kitchen gardens between its
+    // houses; a town does not have a lawn around every door, because the ground
+    // between terraces is PUBLIC. So the loose ranks get fenced gardens and the
+    // dense ones get parks, on the lots the buildings never claimed.
+    //
+    // Every third leftover and no more than six, deliberately: a settlement that
+    // turned every spare lot into a park would be a park with houses in it, and
+    // the empty ground between buildings is doing work of its own.
+    const leftoverLots = slots.slice(slotIndex);
+    const denseRank = brief.scale === "town" || brief.scale === "city";
+    let greens = 0;
+    for (let i = 0; i < leftoverLots.length && greens < 6; i += 3) {
+      const lot = leftoverLots[i];
+      PLACERS[denseRank ? "park" : "crop-plots"](v, lot.x, lot.y);
+      greens++;
+    }
     // Last thing done to the settlement's tiles, so it sees the trees, the
-    // buildings, the stalls and the features together — a pocket is usually made
-    // by two of them meeting, not by either alone.
+    // buildings, the stalls, the features and the greens together — a pocket is
+    // usually made by two of them meeting, not by either alone.
     sealPockets(v, v.spawn);
     zones.z1 = v;
 
