@@ -1469,20 +1469,21 @@ async function main() {
         localStorage.removeItem("marinara-long-term-memory-onboarding-v1");
       });
       await page.evaluate(() => {
-        window.eval(`
-          (() => {
-            let writes = 0;
-            const originalSetItem = localStorage.setItem.bind(localStorage);
-            localStorage.setItem = function (key, value) {
-              if (key.startsWith("marinara_ltm_review_state:")) writes += 1;
-              return originalSetItem(key, value);
-            };
-            Object.defineProperty(window, "reviewStateWriteCount", {
-              configurable: true,
-              get: () => writes,
-            });
-          })();
-        `);
+        let writes = 0;
+        const originalSetItem = localStorage.setItem.bind(localStorage);
+        localStorage.setItem = function (key, value) {
+          if (key.startsWith("marinara_ltm_review_state:")) writes += 1;
+          return originalSetItem(key, value);
+        };
+        const counter = {
+          get value() {
+            return writes;
+          },
+        };
+        Object.defineProperty(window, "reviewStateWriteCount", {
+          configurable: true,
+          get: Object.getOwnPropertyDescriptor(counter, "value")?.get,
+        });
       });
       const dirtyEditor = page.locator("[data-ltm-review-mutation] textarea").first();
       await dirtyEditor.fill("Dirty memory draft");
