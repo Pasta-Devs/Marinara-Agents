@@ -118,6 +118,11 @@ const collectionSchemas = {
   digests: noodleGeneratedDigestSchema,
 } as const;
 
+function isNoodleGeneratedRefresh(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.keys(collectionSchemas).some((collection) => collection in value);
+}
+
 /**
  * Validate generated timeline rows independently. LLM output is untrusted and a
  * single malformed interaction must not discard otherwise valid activity.
@@ -186,7 +191,13 @@ export function parseNoodleGeneratedRefreshResponse(raw: string): {
   rejected: RejectedNoodleGeneratedRefreshItem[];
 } {
   const parsedValues = parseGameJsonishSequence(raw);
-  if (parsedValues.length === 1) return parseNoodleGeneratedRefresh(parsedValues[0]);
+  if (parsedValues.length === 1) {
+    const value = parsedValues[0];
+    if (Array.isArray(value) && value.length === 1 && isNoodleGeneratedRefresh(value[0])) {
+      return parseNoodleGeneratedRefresh(value[0]);
+    }
+    return parseNoodleGeneratedRefresh(value);
+  }
 
   const refresh: NoodleGeneratedRefresh = { posts: [], interactions: [], follows: [], digests: [] };
   const rejected: RejectedNoodleGeneratedRefreshItem[] = [];
