@@ -3785,7 +3785,13 @@ const bunkhouseSealed = (hands) => {
 // neither half can go vacuous.
 {
   for (const seed of [1, 3, 11]) {
-    for (const size of [5, 6]) {
+    // Five and six GROW the house (the sleep plan wants two to a room, so three
+    // rooms); seven and eight meet the three-room cap and the ROOM takes the
+    // extra body instead. Both halves are here so neither can go vacuous: drop
+    // the growth and 5 fails, drop the bunk and 7 fails.
+    const SOFT = 2;
+    const ROOM_CAP = 3;
+    for (const size of [5, 6, 7, 8]) {
       const sealed = brief.validate(houseBrief("Kinfold", size, "folk"), ctx);
       assert.equal(
         sealed.cast.filter((c) => c.household === sealed.cast[0].household).length,
@@ -3802,12 +3808,27 @@ const bunkhouseSealed = (hands) => {
       const sleeping = bedFloor(w, home);
       const { walls, doors } = partitionTiles(sleeping);
       assert.ok(walls.length > 0, `seed ${seed}: ${size} sleepers keep an interior wall run`);
-      assert.equal(sleeping.rooms.length, 2, `seed ${seed}: ${size} sleepers, two bedrooms (${sleeping.rooms.length})`);
+      const wantRooms = Math.min(ROOM_CAP, Math.ceil(size / SOFT));
+      assert.equal(
+        sleeping.rooms.length,
+        wantRooms,
+        `seed ${seed}: ${size} sleepers want ${wantRooms} bedrooms (${sleeping.rooms.length})`,
+      );
       assert.equal(doors.length, sleeping.rooms.length, `seed ${seed}: one door per bedroom, so nobody is sealed in`);
       assert.ok(home.beds.length >= size, `seed ${seed}: ${size} sleepers, ${home.beds.length} places`);
-      assert.ok(
-        sleeping.rooms.some((room) => room.beds.every((bed) => sleeping.object[sleeping.w * bed.y + bed.x] === "bunk")),
-        `seed ${seed}: the crowded bedroom bunks rather than the house losing its walls`,
+      // Only once the cap BINDS. Below it the house answers density by growing a
+      // room, which is the better answer and the one the sizer exists to give;
+      // demanding a bunk at five would be demanding the old shortage back.
+      const crowded = size > ROOM_CAP * SOFT;
+      const bunked = sleeping.rooms.some((room) =>
+        room.beds.every((bed) => sleeping.object[sleeping.w * bed.y + bed.x] === "bunk"),
+      );
+      assert.equal(
+        bunked,
+        crowded,
+        crowded
+          ? `seed ${seed}: ${size} sleepers past ${ROOM_CAP} rooms bunk rather than the house losing its walls`
+          : `seed ${seed}: ${size} sleepers fit in rooms of ${SOFT} and should not be bunked`,
       );
       // And every bedroom is a ROOM: shut its door and its beds leave the map.
       // Without this the case passes on a partition of loose wall stubs.
@@ -4031,11 +4052,19 @@ const bunkhouseSealed = (hands) => {
 // bed: one sleeper is not dense, whatever their age.
 {
   for (const seed of [1, 3, 11]) {
-    // Six is a LARGE household, so the sleeping rooms are up the stairs (0.8.0
-    // floors). The question here is whose beds they are, which the floor does not
-    // change — so both fixtures are compared on the floor their bedrooms are on.
+    // NINE, not six. This case is about whether AGE changes the bedding, so it
+    // has to be run at a density that bunks at all — and six stopped bunking when
+    // the house learned to grow a third bedroom rather than crowd two. Nine is
+    // past the three-room cap, so the room takes the extra bodies and the question
+    // this fixture asks is live again.
+    //
+    // A household this size sleeps up the stairs (0.8.0 floors). Which floor is
+    // not what this is about, so both sides are compared on the floor their
+    // bedrooms are actually on. Nine rather than eight because nine divides evenly
+    // across three rooms — eight leaves one room of two, which does not bunk, and
+    // the assertion below is about EVERY bed.
     const built = (kind) => {
-      const w = world.build(seed, "cozy-village", brief.validate(houseBrief("Wardhome", 6, kind), ctx));
+      const w = world.build(seed, "cozy-village", brief.validate(houseBrief("Wardhome", 9, kind), ctx));
       const home = findZone(w, "Kin0's home");
       assert.ok(home, `seed ${seed}: the ${kind} household compiled a dwelling`);
       return bedFloor(w, home);
@@ -4043,7 +4072,7 @@ const bunkhouseSealed = (hands) => {
     const wards = built("child");
     const adults = built("folk");
     // Non-vacuous: both really are dense, and dense really does mean bunks.
-    assert.equal(wards.beds.length, 6, `seed ${seed}: six wards, six places`);
+    assert.equal(wards.beds.length, 9, `seed ${seed}: nine wards, nine places`);
     assert.ok(
       wards.beds.every((bed) => wards.object[wards.w * bed.y + bed.x] === "bunk"),
       `seed ${seed}: a house full of children at that density gets bunks`,
@@ -6798,6 +6827,53 @@ const cellarBrief = (prosperity) => ({
   // of three is a spread rather than an accident of a tiny sample.
   const doors = v.object.filter((tile) => tile === "door").length;
   assert.ok(doors >= 12, `and there are enough of them for that to mean anything (${doors} doors)`);
+}
+
+// ── A HOUSE IS AS BIG AS ITS HOUSEHOLD (0.10.0) ────────────────────────────
+// INTERIOR_DIMS handed every dwelling the same fourteen columns, and fourteen
+// fits two bedrooms. So a household of six fell straight past the partitioner
+// into the open plan — not because six people cannot have bedrooms, but because
+// the shell they were given had two. The building was answering a question about
+// its own width and reporting the answer as a fact about the family.
+{
+  const dwelling = (size, seed = 1) => {
+    const w = world.build(seed, "cozy-village", brief.validate(houseBrief("Growhome", size, "folk"), ctx));
+    const home = findZone(w, "Kin0's home");
+    assert.ok(home, `the ${size}-person household compiled a dwelling`);
+    return { home, sleeping: bedFloor(w, home) };
+  };
+  const small = dwelling(2);
+  const large = dwelling(6);
+  assert.ok(
+    large.home.w > small.home.w,
+    `six under a roof get a wider roof than two (${small.home.w} vs ${large.home.w})`,
+  );
+  assert.ok(
+    large.sleeping.rooms.length > small.sleeping.rooms.length,
+    `and more rooms with it (${small.sleeping.rooms.length} vs ${large.sleeping.rooms.length})`,
+  );
+  // The shell grew for a REASON, so the rooms it grew for are really in it: every
+  // one walled, doored, and holding somebody. A wider box with the same two rooms
+  // rattling about in it would pass the width assertion above and be worthless.
+  for (const room of large.sleeping.rooms) {
+    assert.ok(room.beds.length > 0, `every room the house grew has somebody in it`);
+    assert.ok(Number.isInteger(room.doorX), `and a door of its own`);
+  }
+  assert.ok(large.home.beds.length + (large.sleeping.beds?.length ?? 0) > 0, "the large house has beds at all");
+
+  // ...but a TENEMENT does not grow. A block the over-subscription merge put
+  // several households into should run out of rooms and fall to the open plan:
+  // a building holding five families is a bunkhouse, and that is a fact about the
+  // building rather than a shortfall in it. Same total headcount, different
+  // answer, which is the whole distinction.
+  const merged = world.build(1, "cozy-village", bunkhouseSealed(4));
+  const block = findZone(merged, "Ada's home");
+  assert.ok(block, "the merged block compiled");
+  assert.equal(
+    block.w,
+    small.home.w,
+    `a tenement keeps the plain shell (${block.w} vs ${small.home.w}) — it is a bunkhouse, not a big family`,
+  );
 }
 
 console.log("brief validator + compiler: all cases passed");

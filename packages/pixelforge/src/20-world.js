@@ -1374,9 +1374,53 @@ PF.world = (() => {
     return zone;
   }
 
+  /** How many bedrooms one household may grow before the roof stops following it.
+   *
+   *  Three, and the number is load-bearing in both directions. Below it the house
+   *  grows and the family gets doors; at it the house stops and the ROOM absorbs
+   *  the next body instead — which is what `bunk` is for. Set high enough to hold
+   *  a household of ten in rooms of two, nothing would ever bunk again and the
+   *  density rule would be dead code that still passes its own tests. Three
+   *  bedrooms is a large house; past that a household is crowded, and crowded is
+   *  a thing the tiles are supposed to be able to say. */
+  const DWELLING_ROOMS_MAX = 3;
+
+  /** A shell wide enough for the rooms the household actually needs.
+   *
+   *  INTERIOR_DIMS handed every dwelling the same fourteen columns, and fourteen
+   *  fits two bedrooms. So a household of six fell straight past the partitioner
+   *  into the open plan — not because six people cannot have bedrooms, but
+   *  because the shell they were given had two, and `dormitory()` is what happens
+   *  when the bodies outrun the rooms. The building was answering a question
+   *  about its own width and reporting it as a fact about the family.
+   *
+   *  Size follows PROGRAM: count the rooms the sleep plan asks for, then put the
+   *  east wall far enough out to hold them. The arithmetic is `layoutSleeping`'s
+   *  own, deliberately — if the two ever disagree the partitioner throws rather
+   *  than dropping a room, so they are kept as one formula in two places rather
+   *  than two formulas.
+   *
+   *  ONE household only. A block the over-subscription merge put several
+   *  households into is a tenement, and it SHOULD run out of rooms and fall to
+   *  the open plan — a building holding five families is a bunkhouse, and that is
+   *  a fact about the building rather than a shortfall in it. */
+  const widthForProgram = (kind, base, opts) => {
+    const plan = SLEEP_PLANS[kind];
+    const sleepers = opts.sleepers ?? 0;
+    if (!plan || kind !== "dwelling" || opts.merged || sleepers <= 0) return base;
+    const priv = !!opts.owned && plan.privateSpan > 0;
+    const rest = sleepers - (priv ? 1 : 0);
+    const rooms = PF.clamp(Math.ceil(rest / plan.soft), 1, DWELLING_ROOMS_MAX);
+    const shareFrom = 1 + (priv ? plan.privateSpan + 1 : 0);
+    const lastEnd = shareFrom + (rooms - 1) * (plan.span + 1) + plan.span - 1;
+    // +1 for the divider east of the last room, +1 for the shell's own wall.
+    return Math.max(base, lastEnd + 2);
+  };
+
   function interiorRoom(id, name, kind, options) {
-    const [w, baseH] = INTERIOR_DIMS[kind] || INTERIOR_DIMS.dwelling;
+    const [baseW, baseH] = INTERIOR_DIMS[kind] || INTERIOR_DIMS.dwelling;
     const opts = options || {};
+    const w = widthForProgram(kind, baseW, opts);
     // The floor ABOVE, decided before a single tile is laid. A sleeping band that
     // is going upstairs must not also be laid down here — the household would get
     // two beds each and the ground floor would carve rooms nobody sleeps in — so
