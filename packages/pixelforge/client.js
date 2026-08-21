@@ -938,6 +938,11 @@ PF.brief = (() => {
   const SETTLEMENT_TAGS = new Set(FEATURE_TAGS.filter((t) => t !== "water-crossing" && t !== "dense-growth"));
 
   const CAPS = {
+    // The ceiling a brief may ASK for. What a settlement can actually hold is
+    // per-scale (FEATURE_ROOM below) — an outpost is 560 tiles and four of its
+    // lots are now houses, so four named features have nowhere to stand and the
+    // last two are dropped in silence. Small settlements holding fewer features
+    // is correct; asking for four and losing two without a word is not.
     features: 4,
     places: 4,
     wilds: 2,
@@ -955,6 +960,15 @@ PF.brief = (() => {
     // caps the members of a group any more.
     household: 10,
   };
+  // How many named features the GROUND of each rank can actually carry, measured
+  // rather than guessed: with the street-grid allocator an outpost seats two, a
+  // hamlet three, and everything from a village up seats the full ask.
+  const FEATURE_ROOM = { outpost: 2, hamlet: 3, village: 4, town: 4, city: 4 };
+  // Named places take LOTS, and an outpost lays four of them. Four places leave
+  // nothing for the houses the cast still needs, so the drop guard fires and the
+  // brief loses buildings it named. What the rank can seat, it seals; the rest
+  // never gets promised.
+  const PLACE_ROOM = { outpost: 2, hamlet: 3, village: 4, town: 4, city: 4 };
   const BRIEF_BYTE_BUDGET = 8_192;
 
   // ── Deterministic entropy: ONE source ───────────────────────────────────────
@@ -1059,7 +1073,7 @@ PF.brief = (() => {
     // The cap applies to KEPT items (a leading run of junk must not discard
     // the valid features behind it — the places loop's semantics).
     for (const item of asArray(src.features)) {
-      if (brief.features.length >= CAPS.features) break;
+      if (brief.features.length >= Math.min(CAPS.features, FEATURE_ROOM[brief.scale] ?? CAPS.features)) break;
       const tag = foldEnum(item?.tag, FEATURE_TAGS, null);
       if (!tag || !SETTLEMENT_TAGS.has(tag)) {
         repairs.push(`features: dropped item with tag ${JSON.stringify(item?.tag ?? null)}`);
@@ -1114,7 +1128,7 @@ PF.brief = (() => {
     let gatheringCount = 0;
     let sanctuaryCount = 0;
     for (const item of asArray(src.places)) {
-      if (brief.places.length >= CAPS.places) break;
+      if (brief.places.length >= Math.min(CAPS.places, PLACE_ROOM[brief.scale] ?? CAPS.places)) break;
       const kind = foldEnum(item?.kind, PLACE_KINDS, null);
       if (!kind) {
         repairs.push(`places: dropped item with kind ${JSON.stringify(item?.kind ?? null)}`);
@@ -1148,7 +1162,7 @@ PF.brief = (() => {
     // named from the host — the player must be able to walk into the inn.
     const rawCast = asArray(src.cast);
     const hasGathering = brief.places.some((p) => p.kind === "gathering");
-    if (!hasGathering && brief.places.length < CAPS.places) {
+    if (!hasGathering && brief.places.length < Math.min(CAPS.places, PLACE_ROOM[brief.scale] ?? CAPS.places)) {
       const host = rawCast.find((item) => foldEnum(item?.kind ?? item?.role, CAST_KINDS, null) === "host");
       const hostName = host ? capText(host.name, 20) : "";
       if (hostName) {
@@ -3133,13 +3147,66 @@ PF.world = (() => {
     // out a dwelling slot that no lot ever backed.
     const buildings = [];
     const slots = [];
-    const rowYs = [Math.max(4, midY - 9), Math.min(v.h - 8, midY + 4)];
-    for (const rowY of rowYs) {
-      for (let x = 4; x + 8 < v.w - 4 && slots.length < budget + interiorPlaces.length; x += 9) {
-        if (Math.abs(x + 3 - midX) < 4) continue; // keep the vertical road clear
-        slots.push({ x, y: rowY });
-      }
-    }
+    // ── The street grid ────────────────────────────────────────────────────────
+    // Lots are laid in ROWS along the horizontal road and in COLUMNS either side
+    // of the vertical one. Both used to be one hard-coded pair: exactly two rows
+    // whatever the map's height, and a single column grid marching from x=4 that
+    // the road then punched a hole through.
+    //
+    // The hole was the worse half. On a narrow map only two columns fit at all,
+    // and the road ate one of them, so an outpost and a hamlet laid ONE lot per
+    // row — measured: two buildings total, with nine of ten people sharing the
+    // single cottage. Laying each side of the road independently costs nothing
+    // and gives the small ranks their second column back.
+    //
+    // The two rows were the other half: every door in a 96x72 city landed in
+    // rows 25-43, leaving 65% of the map as lawn nobody had a reason to cross.
+    // Rows now come from the height the map actually has.
+    const BUILDING_H = 5; // the tallest a lot is ever painted (a named place)
+    const LOT_PITCH_Y = BUILDING_H + 3; // overhang above, apron below, one to breathe // overhang above, apron below, one to breathe
+    const LOT_PITCH_X = 9;
+    const MAX_LOT_W = 8; // the widest building() ever draws
+    // A row must clear the border and its own overhang above, and the horizontal
+    // road plus its apron below. Bands are computed from those, not guessed.
+    const rowYs = [];
+    // Row 4, not 3: a sanctuary lifts its facade by up to two rows above the lot,
+    // so the top band needs headroom for the eave above THAT or it paints into
+    // the border ring. The old two-row allocator carried the same floor as a
+    // Math.max, and it was load-bearing rather than decorative.
+    // `<=`, not `<`: a body starting at y ends at y + BUILDING_H - 1, so it clears
+    // a road at midY - 1 when y + BUILDING_H <= midY - 1. One too strict and an
+    // outpost loses its whole northern band — which is most of what "an outpost
+    // is two buildings" turned out to be.
+    for (let y = 4; y + BUILDING_H <= midY - 1; y += LOT_PITCH_Y) rowYs.push(y);
+    // The band below starts one row under the road, not three: a building's SOLID
+    // body must clear the street, but its overhang is an overhead tile and may
+    // hang over it exactly as a real eave does. Requiring three cost the outpost
+    // its entire southern row, which is most of what "an outpost is two
+    // buildings" was.
+    for (let y = midY + 1; y + BUILDING_H <= v.h - 3; y += LOT_PITCH_Y) rowYs.push(y);
+    // Columns, per side. West stops before the road; east starts after it. The
+    // road is never tested against a lot because a lot is never laid across it.
+    const colXs = [];
+    for (let x = 4; x + MAX_LOT_W - 1 <= midX - 2; x += LOT_PITCH_X) colXs.push(x);
+    for (let x = midX + 1; x + MAX_LOT_W < v.w - 4; x += LOT_PITCH_X) colXs.push(x);
+    for (const rowY of rowYs) for (const x of colXs) slots.push({ x, y: rowY });
+    // ── Claim order: OUTWARD FROM THE PLAZA ───────────────────────────────────
+    // Row-major order filled the northernmost row first, which put a small
+    // settlement's entire building stock against the top border with its own
+    // square left bare — and handed the first lots the row with the least
+    // head-room, so a church could never build tall on a map that had the space
+    // for one two rows down.
+    //
+    // Distance from the crossroad instead. A hamlet now grows around its square
+    // the way a settlement actually does, the lots that fill first are the ones a
+    // player stands nearest, and depth into a band comes free with it. Ties break
+    // on y then x so the order stays deterministic.
+    slots.sort((a, b) => {
+      const da = (a.x + 3 - midX) ** 2 + (a.y + 2 - midY) ** 2;
+      const db = (b.x + 3 - midX) ** 2 + (b.y + 2 - midY) ** 2;
+      return da - db || a.y - b.y || a.x - b.x;
+    });
+    slots.length = Math.min(slots.length, budget + interiorPlaces.length);
     let slotIndex = 0;
     const takeSlot = () => slots[slotIndex++] ?? null;
 
@@ -3220,6 +3287,12 @@ PF.world = (() => {
     // a roof would erase them) in the top row, and clear of the crossroad in the
     // bottom one: a roofed road reads as a tunnel. An outpost's rows sit tight
     // against both, so there the clamp is simply zero and the facade carries it.
+    // How many rows a facade may rise before its eave hits something. The floors
+    // look conservative and are not: above the road the eave must leave a CLEAR
+    // row under the border ring, because the ring is overhead tiles too and a
+    // roof laid against it reads as one continuous mass. Relaxing 4 to 3 on the
+    // reasoning that "the eave only has to stay off row 0" put a hamlet church's
+    // eave on row 1 and merged it into the trees.
     const headroom = (slotY) => Math.max(0, slotY - (slotY > midY ? midY + 3 : 4));
     for (const place of placesBuilt) {
       const slot = takeSlot();
@@ -3290,7 +3363,13 @@ PF.world = (() => {
     // orphaned the zone and the NPC inside it (review blocker). A feature with
     // no clear anchor is dropped: a plainer settlement, never a sealed one.
     const claimed = buildings
-      .map((b) => ({ x: b.rect.x - 1, y: b.rect.y - 3, w: b.rect.w + 2, h: b.rect.h + 5 }))
+      // What a building ACTUALLY occupies: its overhang two rows above, its solid
+      // body, and the door apron one row below — y-2 through y+h. The old rect
+      // padded a further row top and bottom and a column each side, which is
+      // breathing room rather than footprint, and on a small map that padding is
+      // the difference between a feature fitting and being dropped. Measured at
+      // hamlet: two of four features placed with the padding, four without it.
+      .map((b) => ({ x: b.rect.x, y: b.rect.y - 2, w: b.rect.w, h: b.rect.h + 3 }))
       .concat(stalls.map((s) => ({ x: s.x - 1, y: s.y - 1, w: 7, h: 5 })));
     const intersects = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
     const featureAnchors = [
@@ -3354,16 +3433,29 @@ PF.world = (() => {
     // feature still rings the settlement the way a corner one does rather than
     // landing in the middle of the green. Bounded by the tallest footprint, and
     // the per-feature test below is what actually decides a fit.
-    const scanRows = [];
-    for (let top = 3, bottom = v.h - 9; top <= bottom; top++, bottom--) {
-      scanRows.push(top);
-      if (bottom !== top) scanRows.push(bottom);
-    }
+    // Outside-in, and sized PER FEATURE. This bound used to be a fixed `v.h - 9`
+    // — the row a 6-tall crop plot must start above — applied to every tag
+    // regardless of height, so a 2-tall market stall was refused every row a
+    // crop plot could not use. On a short map that is most of the south half:
+    // measured at hamlet, one feature of four placed until this was per-size.
+    const scanRowsFor = (size) => {
+      const rows = [];
+      // The last row a rect may START on: it occupies y .. y + h - 1, and the
+      // last usable row is v.h - 3 (the apron and the border ring take the two
+      // below it). So the bound is v.h - 2 - h, not v.h - 3 - h — one row short
+      // cost a hamlet the entire strip south of its buildings, which is the only
+      // open ground a short feature had left.
+      for (let top = 3, bottom = v.h - 2 - size.h; top <= bottom; top++, bottom--) {
+        rows.push(top);
+        if (bottom !== top) rows.push(bottom);
+      }
+      return rows;
+    };
     for (const feature of brief.features) {
       const size = FEATURE_RECTS[feature.tag] ?? FEATURE_RECT;
       let anchor = featureAnchors.find((candidate) => anchorFree(candidate.x, candidate.y, size));
       if (!anchor) {
-        for (const y of scanRows) {
+        for (const y of scanRowsFor(size)) {
           for (let x = 4; x + size.w <= v.w - 3; x++) {
             if (!anchorFree(x, y, size)) continue;
             anchor = { x, y };

@@ -36,7 +36,9 @@ const ctx = { theme: "cozy-village", seed: 424242 };
 {
   const sealed = brief.validate(
     {
-      scale: "village", name: "Mossbrook", backgroundPopulation: 30,
+      scale: "village",
+      name: "Mossbrook",
+      backgroundPopulation: 30,
       situation: "Mayor Alder is hiding the survey that says the north field is sinking.",
       cast: [
         { name: "Alder Vance", role: "mayor", kind: "leader", tint: "blue", home: "Mossbrook", household: 1 },
@@ -60,14 +62,18 @@ const ctx = { theme: "cozy-village", seed: 424242 };
 {
   const sealed = brief.validate({ scale: 30, name: "Testton", cast: [] }, ctx);
   assert.equal(sealed.scale, "village", "numeric scale bucketed");
-  assert.ok(sealed._repairs.some((r) => r.includes("bucketed")), "repair logged");
+  assert.ok(
+    sealed._repairs.some((r) => r.includes("bucketed")),
+    "repair logged",
+  );
 }
 
 // 3. Degenerate-but-valid: one household, one zone, all-grey tints, tiny cast.
 {
   const sealed = brief.validate(
     {
-      scale: "hamlet", name: "Greyfold",
+      scale: "hamlet",
+      name: "Greyfold",
       cast: [
         { name: "A", kind: "folk", tint: "grey", home: "Greyfold", household: 1 },
         { name: "B", kind: "folk", tint: "grey", home: "Greyfold", household: 1 },
@@ -85,7 +91,8 @@ const ctx = { theme: "cozy-village", seed: 424242 };
 {
   const sealed = brief.validate(
     {
-      scale: "village", name: "**Objton**",
+      scale: "village",
+      name: "**Objton**",
       cast: {
         a: { name: "`One`", kind: "folk", tint: "red", home: "Objton", household: 99 },
         b: { name: "<b>Two</b>", kind: "folk", tint: "blue", home: "nowhere", household: 0 },
@@ -108,15 +115,20 @@ const ctx = { theme: "cozy-village", seed: 424242 };
 {
   const sealed = brief.validate(
     {
-      scale: "town", name: "Capston",
+      scale: "town",
+      name: "Capston",
       features: [
         { tag: "crop-plots", name: "Plots" },
         { tag: "not-a-tag", name: "Ghost" },
         { tag: "dense-growth", name: "WrongZone" }, // wilds-only tag in the settlement
       ],
       places: [
-        { kind: "wilds", name: "Wood" }, { kind: "wilds", name: "Wood" }, { kind: "wilds", name: "Wood3" },
-        { kind: "hall", name: "Hall A" }, { kind: "hall", name: "Hall B" }, { kind: "gathering", name: "Inn" },
+        { kind: "wilds", name: "Wood" },
+        { kind: "wilds", name: "Wood" },
+        { kind: "wilds", name: "Wood3" },
+        { kind: "hall", name: "Hall A" },
+        { kind: "hall", name: "Hall B" },
+        { kind: "gathering", name: "Inn" },
       ],
       cast: [
         { name: "X", kind: "folk", tint: "red", home: "Wood", household: 1 },
@@ -143,7 +155,10 @@ const ctx = { theme: "cozy-village", seed: 424242 };
   // Bounded-enum picks can collide between two PARTICULAR seeds, so require
   // only that some nearby seed diverges — non-probabilistic across the set.
   const variants = [7, 8, 9, 10, 11].map((seed) => JSON.stringify(brief.validate(degenerate, { ...ctx, seed })));
-  assert.ok(variants.some((v) => v !== a), "top-ups derive from the seed");
+  assert.ok(
+    variants.some((v) => v !== a),
+    "top-ups derive from the seed",
+  );
 }
 
 // 7. Defaults: both themes produce valid sealed briefs with the known casts.
@@ -152,7 +167,10 @@ const ctx = { theme: "cozy-village", seed: 424242 };
     const sealed = brief.defaults(theme, 424242);
     assert.equal(sealed.theme, theme);
     assert.ok(sealed.cast.length >= 4);
-    assert.ok(sealed.places.some((p) => p.kind === "gathering"), `${theme} default has a gathering place`);
+    assert.ok(
+      sealed.places.some((p) => p.kind === "gathering"),
+      `${theme} default has a gathering place`,
+    );
     assert.ok(JSON.stringify(sealed).length <= 8_192, "default brief inside the byte budget");
   }
 }
@@ -161,7 +179,8 @@ const ctx = { theme: "cozy-village", seed: 424242 };
 {
   const sealed = brief.validate(
     {
-      scale: "village", name: "囲炉裏の村",
+      scale: "village",
+      name: "囲炉裏の村",
       places: [{ kind: "gathering", name: "琥珀の炉亭" }],
       cast: [
         { name: "ミラ", kind: "host", tint: "rose", home: "琥珀の炉亭", household: 1 },
@@ -260,8 +279,12 @@ function checkWorld(w, sealed, label) {
   for (const zone of Object.values(w.zones)) {
     for (const area of zone.areas ?? []) {
       assert.ok(
-        area.x0 <= area.x1 && area.y0 <= area.y1 &&
-          area.x0 >= 0 && area.y0 >= 0 && area.x1 < zone.w && area.y1 < zone.h,
+        area.x0 <= area.x1 &&
+          area.y0 <= area.y1 &&
+          area.x0 >= 0 &&
+          area.y0 >= 0 &&
+          area.x1 < zone.w &&
+          area.y1 < zone.h,
         `${label}: ${zone.id} has a malformed open area ${JSON.stringify(area)}`,
       );
     }
@@ -284,8 +307,10 @@ function checkWorld(w, sealed, label) {
   for (const member of sealed.cast) assert.ok(placed.includes(member.name), `${label}: ${member.name} placed`);
   for (const zone of Object.values(w.zones)) {
     for (const npc of zone.npcs) {
-      assert.ok(npc.wander.x0 >= 0 && npc.wander.x1 < zone.w && npc.wander.y0 >= 0 && npc.wander.y1 < zone.h,
-        `${label}: ${npc.name} wander inside ${zone.id}`);
+      assert.ok(
+        npc.wander.x0 >= 0 && npc.wander.x1 < zone.w && npc.wander.y0 >= 0 && npc.wander.y1 < zone.h,
+        `${label}: ${npc.name} wander inside ${zone.id}`,
+      );
       // I3: and not INVERTED. fullZoneBox is a single y-floor over zone.rooms,
       // so a second band can push y0 past y1; walkableIn normalises the corners
       // and the NPC silently ends up on the entry apron instead of in the room.
@@ -300,7 +325,12 @@ function checkWorld(w, sealed, label) {
       // a negated undefined would wave the invalid spawn through (review
       // finding); walkable is exactly 0 — put() only ever writes 0 or 1.
       assert.ok(
-        Number.isInteger(npc.x) && npc.x >= 0 && npc.x < zone.w && Number.isInteger(npc.y) && npc.y >= 0 && npc.y < zone.h,
+        Number.isInteger(npc.x) &&
+          npc.x >= 0 &&
+          npc.x < zone.w &&
+          Number.isInteger(npc.y) &&
+          npc.y >= 0 &&
+          npc.y < zone.h,
         `${label}: ${npc.name} spawn inside ${zone.id}`,
       );
       assert.equal(zone.solid[zone.w * npc.y + npc.x], 0, `${label}: ${npc.name} spawns walkable in ${zone.id}`);
@@ -371,8 +401,13 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
 {
   const sealed = brief.validate(
     {
-      scale: "village", name: "Mossbrook", backgroundPopulation: 30,
-      places: [{ kind: "hall", name: "The Grange Hall" }, { kind: "gathering", name: "The Wet Boot" }],
+      scale: "village",
+      name: "Mossbrook",
+      backgroundPopulation: 30,
+      places: [
+        { kind: "hall", name: "The Grange Hall" },
+        { kind: "gathering", name: "The Wet Boot" },
+      ],
       cast: [
         { name: "Alder", role: "mayor", kind: "leader", tint: "blue", home: "Mossbrook", household: 1 },
         { name: "Nessa", role: "daughter", kind: "folk", tint: "violet", home: "Mossbrook", household: 1 },
@@ -403,15 +438,51 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
 {
   const sealed = brief.validate(
     {
-      scale: "village", name: "Crossford",
-      places: [{ kind: "gathering", name: "The Ford Inn" }, { kind: "wilds", name: "The Reach" }],
+      scale: "village",
+      name: "Crossford",
+      places: [
+        { kind: "gathering", name: "The Ford Inn" },
+        { kind: "wilds", name: "The Reach" },
+      ],
       cast: [
         { name: "Alder", role: "reeve", kind: "leader", tint: "blue", home: "Crossford", household: 1 },
         { name: "Bram", role: "smith", kind: "maker", tint: "amber", home: "Crossford", household: 2 },
-        { name: "Sil", role: "wayfarer", kind: "wanderer", tint: "green", home: "Crossford", household: 3, standing: "transient" },
-        { name: "Wyn", role: "hermit", kind: "wanderer", tint: "teal", home: "Crossford", household: 4, standing: "fringe" },
-        { name: "Gad", role: "beggar", kind: "folk", tint: "rose", home: "Crossford", household: 5, standing: "destitute" },
-        { name: "Rue", role: "weaver", kind: "elder", tint: "violet", home: "Crossford", household: 2, standing: "nonsense" },
+        {
+          name: "Sil",
+          role: "wayfarer",
+          kind: "wanderer",
+          tint: "green",
+          home: "Crossford",
+          household: 3,
+          standing: "transient",
+        },
+        {
+          name: "Wyn",
+          role: "hermit",
+          kind: "wanderer",
+          tint: "teal",
+          home: "Crossford",
+          household: 4,
+          standing: "fringe",
+        },
+        {
+          name: "Gad",
+          role: "beggar",
+          kind: "folk",
+          tint: "rose",
+          home: "Crossford",
+          household: 5,
+          standing: "destitute",
+        },
+        {
+          name: "Rue",
+          role: "weaver",
+          kind: "elder",
+          tint: "violet",
+          home: "Crossford",
+          household: 2,
+          standing: "nonsense",
+        },
       ],
     },
     ctx,
@@ -430,7 +501,10 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   const innId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Ford Inn")?.[0];
   const woodsId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Reach")?.[0];
   assert.ok(innId && woodsId, "the inn and the wilds have ordinal ids");
-  assert.ok(w.zones[woodsId].npcs.some((n) => n.name === "Wyn"), "fringe retreats to the wilds");
+  assert.ok(
+    w.zones[woodsId].npcs.some((n) => n.name === "Wyn"),
+    "fringe retreats to the wilds",
+  );
   const gad = v.npcs.find((n) => n.name === "Gad");
   assert.ok(gad, "destitute stays in the settlement");
   const mX = (v.w / 2) | 0;
@@ -464,9 +538,33 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
         { name: "Ada", role: "elder", kind: "folk", tint: "blue", home: "Wayrest", household: 1 },
         { name: "Ben", role: "cooper", kind: "folk", tint: "amber", home: "Wayrest", household: 2 },
         { name: "Cal", role: "digger", kind: "folk", tint: "green", home: "Wayrest", household: 3 },
-        { name: "Dov", role: "sellsword", kind: "guard", tint: "red", home: "Wayrest", household: 4, standing: "transient" },
-        { name: "Esk", role: "hermit", kind: "wanderer", tint: "teal", home: "Wayrest", household: 5, standing: "fringe" },
-        { name: "Fyn", role: "beggar", kind: "folk", tint: "rose", home: "Wayrest", household: 6, standing: "destitute" },
+        {
+          name: "Dov",
+          role: "sellsword",
+          kind: "guard",
+          tint: "red",
+          home: "Wayrest",
+          household: 4,
+          standing: "transient",
+        },
+        {
+          name: "Esk",
+          role: "hermit",
+          kind: "wanderer",
+          tint: "teal",
+          home: "Wayrest",
+          household: 5,
+          standing: "fringe",
+        },
+        {
+          name: "Fyn",
+          role: "beggar",
+          kind: "folk",
+          tint: "rose",
+          home: "Wayrest",
+          household: 6,
+          standing: "destitute",
+        },
       ],
     },
     ctx,
@@ -506,7 +604,15 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
         { name: "Ona", role: "elder", kind: "folk", tint: "blue", home: "Fairmarket", household: 1 },
         { name: "Pel", role: "cooper", kind: "folk", tint: "green", home: "Fairmarket", household: 2 },
         { name: "Rin", role: "weaver", kind: "folk", tint: "amber", home: "Fairmarket", household: 3 },
-        { name: "Sol", role: "spice trader", kind: "merchant", tint: "rose", home: "Fairmarket", household: 4, standing: "transient" },
+        {
+          name: "Sol",
+          role: "spice trader",
+          kind: "merchant",
+          tint: "rose",
+          home: "Fairmarket",
+          household: 4,
+          standing: "transient",
+        },
       ],
     },
     ctx,
@@ -536,9 +642,33 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
         { name: "Ada", role: "elder", kind: "folk", tint: "blue", home: "Tradeholm", household: 1 },
         { name: "Ben", role: "farmer", kind: "folk", tint: "green", home: "Tradeholm", household: 2 },
         { name: "Cor", role: "shopkeep", kind: "merchant", tint: "amber", home: "Tradeholm", household: 3 },
-        { name: "Vye", role: "pilgrim", kind: "scholar", tint: "teal", home: "Tradeholm", household: 4, standing: "transient" },
-        { name: "Wil", role: "drifter", kind: "wanderer", tint: "rose", home: "Tradeholm", household: 5, standing: "transient" },
-        { name: "Xio", role: "envoy", kind: "elder", tint: "violet", home: "Tradeholm", household: 6, standing: "transient" },
+        {
+          name: "Vye",
+          role: "pilgrim",
+          kind: "scholar",
+          tint: "teal",
+          home: "Tradeholm",
+          household: 4,
+          standing: "transient",
+        },
+        {
+          name: "Wil",
+          role: "drifter",
+          kind: "wanderer",
+          tint: "rose",
+          home: "Tradeholm",
+          household: 5,
+          standing: "transient",
+        },
+        {
+          name: "Xio",
+          role: "envoy",
+          kind: "elder",
+          tint: "violet",
+          home: "Tradeholm",
+          household: 6,
+          standing: "transient",
+        },
       ],
     },
     ctx,
@@ -581,7 +711,15 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
         { name: "Pel", role: "farmer", kind: "grower", tint: "green", home: "Fullford", household: 2 },
         { name: "Gar", role: "watch", kind: "guard", tint: "red", home: "Fullford", household: 3 },
         { name: "Tam", role: "cooper", kind: "folk", tint: "amber", home: "Fullford", household: 5 },
-        { name: "Sol", role: "peddler", kind: "merchant", tint: "rose", home: "Fullford", household: 4, standing: "transient" },
+        {
+          name: "Sol",
+          role: "peddler",
+          kind: "merchant",
+          tint: "rose",
+          home: "Fullford",
+          household: 4,
+          standing: "transient",
+        },
       ],
     },
     ctx,
@@ -609,8 +747,24 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
         { name: "Ada", role: "elder", kind: "folk", tint: "blue", home: "Forgeton", household: 1 },
         { name: "Ben", role: "cooper", kind: "folk", tint: "green", home: "Forgeton", household: 2 },
         { name: "Cor", role: "smith", kind: "maker", tint: "amber", home: "The Forge", household: 3 },
-        { name: "Vye", role: "pilgrim", kind: "scholar", tint: "teal", home: "Forgeton", household: 4, standing: "transient" },
-        { name: "Wil", role: "drifter", kind: "wanderer", tint: "rose", home: "Forgeton", household: 5, standing: "transient" },
+        {
+          name: "Vye",
+          role: "pilgrim",
+          kind: "scholar",
+          tint: "teal",
+          home: "Forgeton",
+          household: 4,
+          standing: "transient",
+        },
+        {
+          name: "Wil",
+          role: "drifter",
+          kind: "wanderer",
+          tint: "rose",
+          home: "Forgeton",
+          household: 5,
+          standing: "transient",
+        },
       ],
     },
     ctx,
@@ -687,7 +841,10 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     );
     const v = world.build(seed, "cozy-village", sealed).zones.z1;
     // Guard against a trivially-passing check: the world must actually have roofs.
-    assert.ok(v.overhead.some((t) => t === "roof" || t === "roofEdge"), `seed ${seed}: has roofs to test against`);
+    assert.ok(
+      v.overhead.some((t) => t === "roof" || t === "roofEdge"),
+      `seed ${seed}: has roofs to test against`,
+    );
     for (let i = 0; i < v.object.length; i++) {
       if (v.object[i] !== "trunk") continue;
       const oh = v.overhead[i];
@@ -705,8 +862,24 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
       name: "Twomarket",
       cast: [
         { name: "Ona", role: "elder", kind: "folk", tint: "blue", home: "Twomarket", household: 1 },
-        { name: "Sol", role: "spice trader", kind: "merchant", tint: "rose", home: "Twomarket", household: 2, standing: "transient" },
-        { name: "Tam", role: "silk trader", kind: "merchant", tint: "teal", home: "Twomarket", household: 3, standing: "transient" },
+        {
+          name: "Sol",
+          role: "spice trader",
+          kind: "merchant",
+          tint: "rose",
+          home: "Twomarket",
+          household: 2,
+          standing: "transient",
+        },
+        {
+          name: "Tam",
+          role: "silk trader",
+          kind: "merchant",
+          tint: "teal",
+          home: "Twomarket",
+          household: 3,
+          standing: "transient",
+        },
       ],
     },
     ctx,
@@ -740,13 +913,30 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
 {
   const sealed = brief.validate(
     {
-      scale: "village", name: "Meterton",
+      scale: "village",
+      name: "Meterton",
       flavor: "Dust and patience.",
       situation: "Foreman Vex is hiding the cracked dome report from surveyor Yun.",
       places: [{ kind: "gathering", name: "The Bar", flavor: "Low lights, long tabs." }],
       cast: [
-        { name: "Vex", role: "foreman", kind: "leader", tint: "red", home: "Meterton", household: 1, persona: "Wants quota; hiding the report." },
-        { name: "Yun", role: "surveyor", kind: "scholar", tint: "teal", home: "Meterton", household: 2, persona: "Wants truth; hiding the source." },
+        {
+          name: "Vex",
+          role: "foreman",
+          kind: "leader",
+          tint: "red",
+          home: "Meterton",
+          household: 1,
+          persona: "Wants quota; hiding the report.",
+        },
+        {
+          name: "Yun",
+          role: "surveyor",
+          kind: "scholar",
+          tint: "teal",
+          home: "Meterton",
+          household: 2,
+          persona: "Wants truth; hiding the source.",
+        },
         { name: "Bel", role: "barkeep", kind: "host", tint: "amber", home: "The Bar", household: 3, persona: "" },
         { name: "Six", role: "runner", kind: "wanderer", tint: "violet", home: "Meterton", household: 4, persona: "" },
       ],
@@ -758,8 +948,13 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   assert.equal(w.zones.z2.flavor, "Low lights, long tabs.", "zone flavor rides the zone");
   // A minimal sim stub exercising composePrefix without the full Sim class.
   const sim = {
-    world: w, zoneId: "z1", nearNpc: null, dirty: false,
-    zone() { return this.world.zones[this.zoneId]; },
+    world: w,
+    zoneId: "z1",
+    nearNpc: null,
+    dirty: false,
+    zone() {
+      return this.world.zones[this.zoneId];
+    },
     clockLabel: () => "Day 1 · 08:00",
     daypart: () => "day",
   };
@@ -767,7 +962,9 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   sim.header = loadedPF.Sim.prototype.header.bind(sim);
   sim.composePrefix = loadedPF.Sim.prototype.composePrefix.bind(sim);
   sim.commitIntro = loadedPF.Sim.prototype.commitIntro.bind(sim);
-  const npcVex = Object.values(w.zones).flatMap((z) => z.npcs).find((n) => n.name === "Vex");
+  const npcVex = Object.values(w.zones)
+    .flatMap((z) => z.npcs)
+    .find((n) => n.name === "Vex");
   const first = sim.composePrefix(npcVex);
   assert.ok(first.includes("[Setting: Foreman Vex is hiding"), "situation injected on the first message");
   assert.ok(first.includes("[Vex: Wants quota"), "persona injected on first talk");
@@ -800,7 +997,10 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   const truncated = brief.salvageText('{"name":"Cut","cast":[{"name":"A","kind":"folk"},{"name":"B","ki');
   assert.equal(truncated?.name, "Cut", "truncated document closed and parsed");
   assert.deepEqual(truncated.cast[0], { name: "A", kind: "folk" }, "complete array elements survive the cut");
-  assert.ok(truncated.cast.every((c) => !("ki" in c)), "the partial trailing field is dropped");
+  assert.ok(
+    truncated.cast.every((c) => !("ki" in c)),
+    "the partial trailing field is dropped",
+  );
   assert.equal(brief.salvageText("no json here"), null, "no object → null");
   assert.equal(brief.salvageText(""), null, "empty → null");
 }
@@ -814,14 +1014,18 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   rawCast.push({ name: "Mayor Last", kind: "leader", tint: "blue", home: "Hoistton", household: 1 });
   const sealed = brief.validate({ scale: "village", name: "Hoistton", cast: rawCast }, ctx);
   assert.ok(sealed.cast.length <= brief.CAPS.castMax, "cast capped");
-  assert.ok(sealed.cast.some((c) => c.name === "Mayor Last" && c.kind === "leader"), "the leader is hoisted into the kept set");
+  assert.ok(
+    sealed.cast.some((c) => c.name === "Mayor Last" && c.kind === "leader"),
+    "the leader is hoisted into the kept set",
+  );
 }
 
 // 17. Host synthesis: a host with no gathering place gets an interior to keep.
 {
   const sealed = brief.validate(
     {
-      scale: "village", name: "Hostville",
+      scale: "village",
+      name: "Hostville",
       places: [{ kind: "wilds", name: "The Briar" }],
       cast: [
         { name: "Perrin", kind: "host", tint: "amber", home: "Hostville", household: 1 },
@@ -841,7 +1045,8 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
 {
   const sealed = brief.validate(
     {
-      scale: "village", name: "Sameton",
+      scale: "village",
+      name: "Sameton",
       places: [
         { kind: "gathering", name: "The Same" },
         { kind: "hall", name: "The Same" },
@@ -875,7 +1080,8 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
 {
   const sealed = brief.validate(
     {
-      scale: "village", name: "Twinwood",
+      scale: "village",
+      name: "Twinwood",
       places: [
         { kind: "wilds", name: "East Reach" },
         { kind: "wilds", name: "West Reach" },
@@ -892,11 +1098,19 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   );
   const w = world.build(424242, "cozy-village", sealed);
   checkWorld(w, sealed, "twinwood");
-  const wildsIds = Object.values(w.zones).filter((z) => sealed.places.some((p, i) => p.kind === "wilds" && `z${i + 2}` === z.id)).map((z) => z.id);
+  const wildsIds = Object.values(w.zones)
+    .filter((z) => sealed.places.some((p, i) => p.kind === "wilds" && `z${i + 2}` === z.id))
+    .map((z) => z.id);
   assert.equal(wildsIds.length, 2, "both wilds compiled");
   for (const id of wildsIds) {
-    assert.ok(w.zones.z1.portals.some((p) => p.toZone === id), `settlement has a portal to ${id}`);
-    assert.ok(w.zones[id].portals.some((p) => p.toZone === "z1"), `${id} leads back to the settlement`);
+    assert.ok(
+      w.zones.z1.portals.some((p) => p.toZone === id),
+      `settlement has a portal to ${id}`,
+    );
+    assert.ok(
+      w.zones[id].portals.some((p) => p.toZone === "z1"),
+      `${id} leads back to the settlement`,
+    );
   }
 }
 
@@ -906,28 +1120,49 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   const sealed = brief.defaults("cozy-village", 99);
   const w = world.build(99, "cozy-village", sealed);
   const sim = {
-    world: w, zoneId: w.startZone, mode: "walk",
-    zone() { return this.world.zones[this.zoneId]; },
-    teleport(zoneId) { this.zoneId = zoneId; },
+    world: w,
+    zoneId: w.startZone,
+    mode: "walk",
+    zone() {
+      return this.world.zones[this.zoneId];
+    },
+    teleport(zoneId) {
+      this.zoneId = zoneId;
+    },
   };
   let dirtied = false;
-  const core = { chatId: "chat-spatial", sim, markDirty: () => { dirtied = true; }, hud: { toast() {}, refreshChips() {} } };
+  const core = {
+    chatId: "chat-spatial",
+    sim,
+    markDirty: () => {
+      dirtied = true;
+    },
+    hud: { toast() {}, refreshChips() {} },
+  };
   loadedPF.api = loadedPF.api ?? {};
   const prevGetSpatial = loadedPF.api.getSpatial;
   loadedPF.api.getSpatial = async () => ({
-    definition: { revision: 1 }, currentLocationId: "loc-root",
-    breadcrumb: [{ name: "Rootville" }], destinations: [],
+    definition: { revision: 1 },
+    currentLocationId: "loc-root",
+    breadcrumb: [{ name: "Rootville" }],
+    destinations: [],
   });
   loadedPF.spatial.reset();
   await loadedPF.spatial.refresh(core);
-  assert.equal(w.bindings["loc-root"], "z1", "first-seen location binds the compiled start zone, never a legacy literal");
+  assert.equal(
+    w.bindings["loc-root"],
+    "z1",
+    "first-seen location binds the compiled start zone, never a legacy literal",
+  );
   assert.equal(w.zones.z1.spatialLocationId, "loc-root", "the zone records its location id");
   assert.ok(dirtied, "the seeded binding persists via a save");
   // Narrated drift onto a STALE binding (zone gone) must not throw or teleport.
   w.bindings["loc-ghost"] = "no-such-zone";
   loadedPF.api.getSpatial = async () => ({
-    definition: { revision: 1 }, currentLocationId: "loc-ghost",
-    breadcrumb: [{ name: "Ghost" }], destinations: [],
+    definition: { revision: 1 },
+    currentLocationId: "loc-ghost",
+    breadcrumb: [{ name: "Ghost" }],
+    destinations: [],
   });
   await loadedPF.spatial.refresh(core);
   assert.equal(sim.zoneId, "z1", "a stale binding degrades to staying put");
@@ -970,7 +1205,10 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   assert.equal(calls.length, 2, "exactly one re-roll");
   assert.ok(!("maxTokens" in calls[1]), "the re-roll carries no maxTokens override");
   assert.equal(salvagedSeal.name, "Longton", "the LONGEST raw wins the salvage even when the retry's is shorter");
-  assert.ok(salvagedSeal._repairs.some((r) => r.includes("salvaged")), "salvage recorded in _repairs");
+  assert.ok(
+    salvagedSeal._repairs.some((r) => r.includes("salvaged")),
+    "salvage recorded in _repairs",
+  );
 
   // 24. Deterministic provider failure → sealed themed default (a paid call
   // per visit would be worse than the default world).
@@ -987,7 +1225,12 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     { status: 409, body: { code: "chat_busy" } },
     { status: 200, body: { ok: true, data: { scale: "hamlet", name: "Busyville", cast: [] } } },
   ]);
-  const busySeal = await brief.generate("c", { theme: "cozy-village", seed: 3, preferences: "x".repeat(9000), busyWaitMs: 0 });
+  const busySeal = await brief.generate("c", {
+    theme: "cozy-village",
+    seed: 3,
+    preferences: "x".repeat(9000),
+    busyWaitMs: 0,
+  });
   assert.equal(calls.length, 2, "busy → one wait-out retry");
   assert.ok(calls[0].userContent.length <= 7_801, "userContent clamped under the route cap");
   assert.equal(busySeal.name, "Busyville", "the wait-out retry seals the real brief");
@@ -1048,12 +1291,19 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     loadedPF.art.setTheme("sci-fi-colony");
     void loadedPF.assets.load(core); // hits the loading guard — must be QUEUED, not dropped
     await first;
-    for (let i = 0; i < 40 && !(loadedPF.assets.status === "ready" && loadedPF.assets._requestedTheme === "sci-fi-colony"); i++) {
+    for (
+      let i = 0;
+      i < 40 && !(loadedPF.assets.status === "ready" && loadedPF.assets._requestedTheme === "sci-fi-colony");
+      i++
+    ) {
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
     assert.equal(loadedPF.assets.status, "ready", "chase load settles");
     assert.equal(loadedPF.assets.atlasTheme, "sci-fi-colony", "the mid-load theme change is chased, not dropped");
-    assert.ok(requested.some((u) => u.includes("tiles-sci-fi-colony.png")), "the themed atlas sheet was requested");
+    assert.ok(
+      requested.some((u) => u.includes("tiles-sci-fi-colony.png")),
+      "the themed atlas sheet was requested",
+    );
   } finally {
     globalThis.fetch = prevFetch;
     globalThis.Image = prevImage;
@@ -1076,7 +1326,14 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   const toasts = [];
   const core = {
     chatId: "chat-events",
-    sim: { world: { zones: {}, bindings: { seeded: true }, startZone: "z1" }, zoneId: "z1", mode: "walk", zone() { return { name: "z1" }; } },
+    sim: {
+      world: { zones: {}, bindings: { seeded: true }, startZone: "z1" },
+      zoneId: "z1",
+      mode: "walk",
+      zone() {
+        return { name: "z1" };
+      },
+    },
     markDirty() {},
     hud: { toast: (t) => toasts.push(t), refreshChips() {} },
   };
@@ -1087,7 +1344,11 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   // 28. committed with a matching commandId resolves the journey instantly.
   spatial.pending = { commandId: "cmd-1", destinationId: "bar", name: "Bar", staleCount: 0 };
   spatialState.loc = "bar";
-  spatial.onHostEvent(core, { type: "spatial_transition_committed", chatId: core.chatId, data: { commandId: "cmd-1" } });
+  spatial.onHostEvent(core, {
+    type: "spatial_transition_committed",
+    chatId: core.chatId,
+    data: { commandId: "cmd-1" },
+  });
   assert.equal(spatial.pending, null, "committed event clears the pending journey");
   await new Promise((r) => setTimeout(r, 5));
   assert.equal(spatial._lastLocationId, "bar", "the event-driven refresh applied the new location");
@@ -1095,24 +1356,36 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   // 29. stepwise journeys survive intermediate hops; the completing event ends them.
   spatial.pending = { commandId: "cmd-2", destinationId: "far", name: "Far", staleCount: 0 };
   spatial.onHostEvent(core, {
-    type: "spatial_transition_committed", chatId: core.chatId,
+    type: "spatial_transition_committed",
+    chatId: core.chatId,
     data: { commandId: "cmd-2", travel: { mode: "step_by_step", complete: false } },
   });
-  assert.ok(spatial.pending && spatial.pending.stepwise, "incomplete stepwise leg keeps (and marks) the pending journey");
+  assert.ok(
+    spatial.pending && spatial.pending.stepwise,
+    "incomplete stepwise leg keeps (and marks) the pending journey",
+  );
   spatialState.loc = "midway";
   await spatial.refresh(core);
   assert.ok(spatial.pending, "an intermediate hop is progress, not supersession");
   spatial.onHostEvent(core, {
-    type: "spatial_transition_committed", chatId: core.chatId,
+    type: "spatial_transition_committed",
+    chatId: core.chatId,
     data: { commandId: "cmd-2", travel: { mode: "step_by_step", complete: true } },
   });
   assert.equal(spatial.pending, null, "the completing event ends the stepwise journey");
 
   // Rejected event: instant clear + toast; stale-count untouched by event refreshes.
   spatial.pending = { commandId: "cmd-3", destinationId: "nope", name: "Nope", staleCount: 0 };
-  spatial.onHostEvent(core, { type: "spatial_transition_rejected", chatId: core.chatId, data: { commandId: "cmd-3", code: "spatial_transition_stale_definition" } });
+  spatial.onHostEvent(core, {
+    type: "spatial_transition_rejected",
+    chatId: core.chatId,
+    data: { commandId: "cmd-3", code: "spatial_transition_stale_definition" },
+  });
   assert.equal(spatial.pending, null, "rejected event clears the journey immediately");
-  assert.ok(toasts.some((t) => t.includes("stayed put")), "rejection toasts immediately");
+  assert.ok(
+    toasts.some((t) => t.includes("stayed put")),
+    "rejection toasts immediately",
+  );
 
   // countStale:false refreshes never burn the two-turn fallback budget.
   spatial.pending = { commandId: "cmd-4", destinationId: "slow", name: "Slow", staleCount: 0 };
@@ -1131,7 +1404,8 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     sendMessage: async () => {
       // Simulate the engine's synthesized reject arriving mid-await.
       spatial.onHostEvent(core, {
-        type: "spatial_transition_rejected", chatId: core.chatId,
+        type: "spatial_transition_rejected",
+        chatId: core.chatId,
         data: { commandId: spatial.pending.commandId, code: "spatial_transition_stale_definition" },
       });
       return false;
@@ -1141,8 +1415,14 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   core.sim.composePrefix = () => "[World]";
   core.sim.commitIntro = () => {};
   await spatial.travel(core, { id: "bar", name: "Bar" });
-  assert.ok(toasts.some((t) => t.includes("stayed put")), "the event toast fired");
-  assert.ok(!toasts.some((t) => t.includes("isn't accepting")), "no contradictory second toast after the event handled it");
+  assert.ok(
+    toasts.some((t) => t.includes("stayed put")),
+    "the event toast fired",
+  );
+  assert.ok(
+    !toasts.some((t) => t.includes("isn't accepting")),
+    "no contradictory second toast after the event handled it",
+  );
 
   loadedPF.api.getSpatial = prevGetSpatial;
   spatial.reset();
@@ -1154,12 +1434,18 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   const exportScaffold = (seed, chatId, prebuilt) => {
     const w = prebuilt ?? world.build(seed, "cozy-village", brief.defaults("cozy-village", seed));
     const sim = {
-      world: w, zoneId: w.startZone, mode: "walk",
-      zone() { return this.world.zones[this.zoneId]; },
+      world: w,
+      zoneId: w.startZone,
+      mode: "walk",
+      zone() {
+        return this.world.zones[this.zoneId];
+      },
       teleport() {},
     };
     const core = { chatId, sim, dirty: 0, hud: { toast() {}, refreshChips() {} } };
-    core.markDirty = () => { core.dirty++; };
+    core.markDirty = () => {
+      core.dirty++;
+    };
     return { w, core };
   };
   // The zones the export is allowed to touch. The exterior IS the root, and a
@@ -1194,11 +1480,16 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     assert.ok(zoneIds.length >= 2, "the default brief compiles interior and wilds zones");
     const preSeeded = mapsExport.idFor(w, zoneIds[0]);
     let revision = 5;
-    let serverLocs = [{ id: "loc-root", kind: "settlement" }, { id: preSeeded, kind: "building" }];
+    let serverLocs = [
+      { id: "loc-root", kind: "settlement" },
+      { id: preSeeded, kind: "building" },
+    ];
     const posts = [];
     loadedPF.api.getSpatial = async () => ({
       definition: { revision, locations: serverLocs.slice() },
-      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+      currentLocationId: "loc-root",
+      breadcrumb: [{ name: "Rootville" }],
+      destinations: [],
     });
     loadedPF.api.postSpatialLocations = async (chatId, body) => {
       posts.push(body);
@@ -1218,7 +1509,11 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
       assert.equal(row.kind, w.zones[zoneId].mapKind === "building" ? "building" : "place", "kind follows the zone");
     }
     for (const zoneId of zoneIds) {
-      assert.equal(w.bindings[mapsExport.idFor(w, zoneId)], zoneId, `zone ${zoneId} is bound (including the pre-seeded one)`);
+      assert.equal(
+        w.bindings[mapsExport.idFor(w, zoneId)],
+        zoneId,
+        `zone ${zoneId} is bound (including the pre-seeded one)`,
+      );
       assert.equal(w.zones[zoneId].spatialLocationId, mapsExport.idFor(w, zoneId), "the zone records its location id");
     }
     assert.ok(core.dirty > 0, "bindings persist via a save");
@@ -1235,7 +1530,9 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     const posts = [];
     loadedPF.api.getSpatial = async () => ({
       definition: { revision, locations: serverLocs.slice() },
-      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+      currentLocationId: "loc-root",
+      breadcrumb: [{ name: "Rootville" }],
+      destinations: [],
     });
     loadedPF.api.postSpatialLocations = async (chatId, body) => {
       posts.push(body);
@@ -1269,7 +1566,9 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
           raced ? zoneIds.map((zoneId) => ({ id: mapsExport.idFor(w, zoneId) })) : [],
         ),
       },
-      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+      currentLocationId: "loc-root",
+      breadcrumb: [{ name: "Rootville" }],
+      destinations: [],
     });
     loadedPF.api.postSpatialLocations = async () => {
       posts.push(1);
@@ -1291,7 +1590,9 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     const posts = [];
     loadedPF.api.getSpatial = async () => ({
       definition: { revision: 1, locations: [{ id: "loc-root" }] },
-      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+      currentLocationId: "loc-root",
+      breadcrumb: [{ name: "Rootville" }],
+      destinations: [],
     });
     loadedPF.api.postSpatialLocations = async () => {
       posts.push(1);
@@ -1313,7 +1614,9 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     const posts = [];
     loadedPF.api.getSpatial = async () => ({
       definition: { revision: ++revision, locations: [{ id: "loc-root" }] },
-      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+      currentLocationId: "loc-root",
+      breadcrumb: [{ name: "Rootville" }],
+      destinations: [],
     });
     loadedPF.api.postSpatialLocations = async () => {
       posts.push(1);
@@ -1334,7 +1637,9 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     const { w, core } = exportScaffold(1234, "chat-export-36");
     loadedPF.api.getSpatial = async () => ({
       definition: { revision: 2, locations: [{ id: "loc-root" }] },
-      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+      currentLocationId: "loc-root",
+      breadcrumb: [{ name: "Rootville" }],
+      destinations: [],
     });
     loadedPF.api.postSpatialLocations = async () => {
       core.chatId = "some-other-chat"; // the user switched chats mid-await
@@ -1362,7 +1667,9 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     ];
     loadedPF.api.getSpatial = async () => ({
       definition: { revision: 4, locations: serverLocs.slice() },
-      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+      currentLocationId: "loc-root",
+      breadcrumb: [{ name: "Rootville" }],
+      destinations: [],
     });
     loadedPF.api.postSpatialLocations = async (chatId, body) => {
       posts.push(body);
@@ -1376,7 +1683,11 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
       !posts.flatMap((p) => p.locations).some((row) => row.name === adoptedName),
       "the adopted zone is never posted as a twin",
     );
-    assert.equal(w.bindings["authored-1"], adoptedZone, "the authored location is bound (name match is trim+case-insensitive)");
+    assert.equal(
+      w.bindings["authored-1"],
+      adoptedZone,
+      "the authored location is bound (name match is trim+case-insensitive)",
+    );
     assert.equal(w.zones[adoptedZone].spatialLocationId, "authored-1", "the zone records the adopted id");
     for (const zoneId of zoneIds.slice(1)) {
       assert.equal(w.bindings[mapsExport.idFor(w, zoneId)], zoneId, "non-adopted zones still create and bind pf ids");
@@ -1392,13 +1703,12 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     const adoptedZone = zoneIds[0];
     const adoptedName = w.zones[adoptedZone].name;
     const posts = [];
-    let serverLocs = [
-      { id: "loc-root" },
-      { id: "authored-1", parentId: "loc-root", name: adoptedName },
-    ];
+    let serverLocs = [{ id: "loc-root" }, { id: "authored-1", parentId: "loc-root", name: adoptedName }];
     loadedPF.api.getSpatial = async () => ({
       definition: { revision: 4, locations: serverLocs.slice() },
-      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+      currentLocationId: "loc-root",
+      breadcrumb: [{ name: "Rootville" }],
+      destinations: [],
     });
     loadedPF.api.postSpatialLocations = async (chatId, body) => {
       posts.push(body);
@@ -1422,7 +1732,11 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
       delete w.bindings[mapsExport.idFor(w, adoptedZone)];
       await mapsExport.maybeSync(core);
       assert.equal(w.bindings["authored-1"], otherZone, "a foreign binding is never stolen");
-      assert.equal(w.bindings[mapsExport.idFor(w, adoptedZone)], adoptedZone, "the shadowed zone creates its own id instead");
+      assert.equal(
+        w.bindings[mapsExport.idFor(w, adoptedZone)],
+        adoptedZone,
+        "the shadowed zone creates its own id instead",
+      );
     }
   }
 
@@ -1434,7 +1748,9 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     const posts = [];
     loadedPF.api.getSpatial = async () => ({
       definition: { revision: 1, locations: [{ id: "loc-root" }] },
-      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+      currentLocationId: "loc-root",
+      breadcrumb: [{ name: "Rootville" }],
+      destinations: [],
     });
     loadedPF.api.postSpatialLocations = async () => {
       posts.push(1);
@@ -1458,7 +1774,9 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     const posts = [];
     loadedPF.api.getSpatial = async () => ({
       definition: { revision: 2, locations: serverLocs.slice() },
-      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+      currentLocationId: "loc-root",
+      breadcrumb: [{ name: "Rootville" }],
+      destinations: [],
     });
     loadedPF.api.postSpatialLocations = async (chatId, body) => {
       posts.push(body);
@@ -1473,8 +1791,12 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     const sealed = brief.defaults("cozy-village", 1357);
     const w2 = world.build(1357, "cozy-village", sealed);
     core.sim = {
-      world: w2, zoneId: w2.startZone, mode: "walk",
-      zone() { return this.world.zones[this.zoneId]; },
+      world: w2,
+      zoneId: w2.startZone,
+      mode: "walk",
+      zone() {
+        return this.world.zones[this.zoneId];
+      },
       teleport() {},
     };
     w2.bindings["loc-root"] = w2.startZone;
@@ -1495,7 +1817,9 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     const posts = [];
     loadedPF.api.getSpatial = async () => ({
       definition: { revision: 1, locations: [{ id: "loc-root" }] },
-      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+      currentLocationId: "loc-root",
+      breadcrumb: [{ name: "Rootville" }],
+      destinations: [],
     });
     loadedPF.api.postSpatialLocations = async () => {
       posts.push(1);
@@ -1516,7 +1840,9 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     const posts = [];
     loadedPF.api.getSpatial = async () => ({
       definition: { revision: 1, locations: [{ id: "loc-root" }] },
-      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+      currentLocationId: "loc-root",
+      breadcrumb: [{ name: "Rootville" }],
+      destinations: [],
       sharedWorld: { mode: "linked", worldId: "world-1", pendingChanges: false },
     });
     loadedPF.api.postSpatialLocations = async () => {
@@ -1538,7 +1864,9 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     const posts = [];
     loadedPF.api.getSpatial = async () => ({
       definition: { revision: 5, locations: [{ id: "loc-new-root" }] },
-      currentLocationId: "loc-new-root", breadcrumb: [{ name: "New Root" }], destinations: [],
+      currentLocationId: "loc-new-root",
+      breadcrumb: [{ name: "New Root" }],
+      destinations: [],
     });
     loadedPF.api.postSpatialLocations = async () => {
       posts.push(1);
@@ -1552,7 +1880,12 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     // The save restored bindings from BEFORE the map was replaced.
     delete w.bindings["loc-new-root"];
     w.bindings["loc-dead-root"] = w.startZone;
-    w.bindings[mapsExport.idFor(w, Object.keys(w.zones).find((id) => id !== w.startZone))] = "z2";
+    w.bindings[
+      mapsExport.idFor(
+        w,
+        Object.keys(w.zones).find((id) => id !== w.startZone),
+      )
+    ] = "z2";
     core.dirty = 0;
     await mapsExport.maybeSync(core);
     assert.equal(posts.length, 0, "nothing posts under a dead root");
@@ -1568,7 +1901,9 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     const posts = [];
     loadedPF.api.getSpatial = async () => ({
       definition: { revision: 3, locations: [{ id: "loc-root" }] },
-      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+      currentLocationId: "loc-root",
+      breadcrumb: [{ name: "Rootville" }],
+      destinations: [],
     });
     loadedPF.api.postSpatialLocations = async () => {
       posts.push(1);
@@ -1603,7 +1938,9 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
           ...(reads++ % 2 === 0 ? [{ id: "flippy", parentId: "loc-root", name: flipName }] : []),
         ],
       },
-      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+      currentLocationId: "loc-root",
+      breadcrumb: [{ name: "Rootville" }],
+      destinations: [],
     });
     loadedPF.api.postSpatialLocations = async () => {
       posts.push(1);
@@ -1673,7 +2010,9 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     const posted = [];
     loadedPF.api.getSpatial = async () => ({
       definition: { revision: 2, locations: serverLocs.slice() },
-      currentLocationId: "loc-root", breadcrumb: [{ name: "Rootville" }], destinations: [],
+      currentLocationId: "loc-root",
+      breadcrumb: [{ name: "Rootville" }],
+      destinations: [],
     });
     loadedPF.api.postSpatialLocations = async (chatId, body) => {
       posted.push(...body.locations);
@@ -1729,7 +2068,15 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
         { name: "Tolm", role: "smith", kind: "maker", tint: "green", home: "Dayhold", household: 2 },
         { name: "Gart", role: "watch", kind: "guard", tint: "red", home: "Dayhold", household: 3 },
         { name: "Peb", role: "cooper", kind: "folk", tint: "blue", home: "Dayhold", household: 4 },
-        { name: "Wisp", role: "drifter", kind: "wanderer", tint: "rose", home: "Dayhold", household: 5, standing: "transient" },
+        {
+          name: "Wisp",
+          role: "drifter",
+          kind: "wanderer",
+          tint: "rose",
+          home: "Dayhold",
+          household: 5,
+          standing: "transient",
+        },
       ],
     },
     ctx,
@@ -1865,7 +2212,9 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   rebuiltSim.clockMin = 23 * 60;
   rebuiltSim.resolveSchedules();
   assert.equal(
-    JSON.stringify(Object.keys(rebuilt.zones).map((id) => rebuilt.zones[id].npcs.map((n) => `${n.name}@${n.x},${n.y}`))),
+    JSON.stringify(
+      Object.keys(rebuilt.zones).map((id) => rebuilt.zones[id].npcs.map((n) => `${n.name}@${n.x},${n.y}`)),
+    ),
     nightPlacement,
     "a rebuild at the same clock reproduces placement exactly (no save fields needed)",
   );
@@ -1944,7 +2293,15 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
         { name: "Ada", role: "reeve", kind: "leader", tint: "blue", home: "Standfast", household: 1 },
         { name: "Ben", role: "cooper", kind: "folk", tint: "green", home: "Standfast", household: 2 },
         { name: "Cyd", role: "innkeep", kind: "host", tint: "amber", home: "The Lamp", household: 3 },
-        { name: "Sol", role: "trader", kind: "merchant", tint: "rose", home: "Standfast", household: 4, standing: "transient" },
+        {
+          name: "Sol",
+          role: "trader",
+          kind: "merchant",
+          tint: "rose",
+          home: "Standfast",
+          household: 4,
+          standing: "transient",
+        },
       ],
     },
     ctx,
@@ -1973,10 +2330,7 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
         const x = Math.round(npc.x);
         const y = Math.round(npc.y);
         assert.notEqual(z.object[z.w * y + x], "door", `${npc.name} does not stand in a doorway at ${min}`);
-        assert.ok(
-          !z.portals.some((p) => p.x === x && p.y === y),
-          `${npc.name} does not stand on a portal at ${min}`,
-        );
+        assert.ok(!z.portals.some((p) => p.x === x && p.y === y), `${npc.name} does not stand on a portal at ${min}`);
       }
     }
   }
@@ -2178,7 +2532,8 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
     // undersized box — the overflow path simply would not run, and the case
     // would go quietly green while testing nothing.
     const hearths = [];
-    for (const zoneId in w.zones) for (const npc of w.zones[zoneId].npcs) if (npc.name.startsWith("Hearth")) hearths.push(npc);
+    for (const zoneId in w.zones)
+      for (const npc of w.zones[zoneId].npcs) if (npc.name.startsWith("Hearth")) hearths.push(npc);
     assert.equal(hearths.length, 6, `seed ${seed}: the whole household compiles`);
     // Force the pre-0.8.0 shape: the whole household onto the ONE door apron in
     // front of their dwelling. The apron is still real geometry — it is the tile
@@ -2336,9 +2691,36 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   const sealed = brief.defaults("cozy-village", 808);
   const w = world.build(808, "cozy-village", sealed);
   const meta = { pixelforgeBrief: sealed };
+  // A WALKABLE tile that is not the spawn, found rather than assumed. This used
+  // to be the literal (5, 4), which quietly stopped being floor the moment the
+  // lot allocator changed — and the restore path's solid-tile rescue then did
+  // exactly its job and bounced the player to spawn, so the case failed while
+  // testing nothing about saving. The intent is "a resolvable zone honours its
+  // saved position", and that intent must not depend on where a house lands.
+  const start = w.zones[w.startZone];
+  let savedX = -1;
+  let savedY = -1;
+  for (let y = 2; y < start.h - 2 && savedY < 0; y++) {
+    for (let x = 2; x < start.w - 2; x++) {
+      if (start.solid[start.w * y + x]) continue;
+      if (x === start.spawn.x && y === start.spawn.y) continue;
+      savedX = x;
+      savedY = y;
+      break;
+    }
+  }
+  assert.ok(savedY >= 0, "the settlement has a walkable tile that is not the spawn");
   const restore = (savedZone) =>
     loadedPF.save.simFromSaved(
-      { v: 1, seed: 808, theme: "cozy-village", zone: savedZone, x: 5 * loadedPF.TILE, y: 4 * loadedPF.TILE, facing: 0 },
+      {
+        v: 1,
+        seed: 808,
+        theme: "cozy-village",
+        zone: savedZone,
+        x: savedX * loadedPF.TILE,
+        y: savedY * loadedPF.TILE,
+        facing: 0,
+      },
       meta,
       "chat-test",
     );
@@ -2346,14 +2728,18 @@ for (const theme of ["cozy-village", "sci-fi-colony"]) {
   const gone = restore("zDoesNotExist");
   const spawn = w.zones[w.startZone].spawn;
   assert.equal(gone.zoneId, w.startZone, "an unresolvable zone falls back to the start zone");
-  assert.equal(gone.x, (spawn.x + 0.5) * loadedPF.TILE, "and the player lands on the spawn tile, not stale coordinates");
+  assert.equal(
+    gone.x,
+    (spawn.x + 0.5) * loadedPF.TILE,
+    "and the player lands on the spawn tile, not stale coordinates",
+  );
   assert.equal(gone.y, (spawn.y + 0.5) * loadedPF.TILE, "on both axes");
 
   // A zone that DOES resolve still restores its exact saved position.
   const kept = restore(w.startZone);
   assert.equal(kept.zoneId, w.startZone, "a resolvable zone is honored");
-  assert.equal(kept.x, 5 * loadedPF.TILE, "and its saved coordinates survive");
-  assert.equal(kept.y, 4 * loadedPF.TILE, "on both axes");
+  assert.equal(kept.x, savedX * loadedPF.TILE, "and its saved coordinates survive");
+  assert.equal(kept.y, savedY * loadedPF.TILE, "on both axes");
 }
 
 // 14f. wait-until is reachable as a player action and lands on the boundary.
@@ -2588,8 +2974,12 @@ function floodFill(z, start, closed) {
   // modes to read, with the timer frozen so it could not even time out. Replay is
   // the third case and is cut at core.setMode: it returns before sim.step() runs.
   for (const mode of ["dialogue", "combat"]) {
-    sim.x = 20 * loadedPF.TILE; sim.y = 20 * loadedPF.TILE; sim.step(1 / 60, {});
-    sim.x = 2 * loadedPF.TILE; sim.y = 2 * loadedPF.TILE; sim.step(1 / 60, {});
+    sim.x = 20 * loadedPF.TILE;
+    sim.y = 20 * loadedPF.TILE;
+    sim.step(1 / 60, {});
+    sim.x = 2 * loadedPF.TILE;
+    sim.y = 2 * loadedPF.TILE;
+    sim.step(1 / 60, {});
     assert.ok(sim.cutscene, `the corner starts a beat before ${mode}`);
     sim.mode = mode;
     sim.step(1 / 60, {});
@@ -2810,7 +3200,12 @@ const zoneNamed = (w, name) => Object.values(w.zones).find((zone) => zone.name =
       assert.ok(church.top >= 2, `${label}: the eave stays clear of the border ring (top row ${church.top})`);
       // The clamp only has to protect a lot that was clear to begin with: an
       // outpost's lower row already eaves over its crossroad with any building.
-      if (plain.doorY > church.midY && plain.top > church.midY) {
+      // Asked of the CHURCH's own lot, not of the plain building's. Inferring one
+      // building's band from another's position held only while every row carried
+      // two lots and the pair therefore landed together; once lots are claimed
+      // outward from the plaza the two can sit in different bands entirely, and
+      // the check then demanded a top-band church stay below the crossroad.
+      if (church.doorY > church.midY && church.top > church.midY) {
         assert.ok(church.top > church.midY, `${label}: the extra height never roofs the crossroad`);
       }
       if (church.top < plain.top) {
@@ -4225,7 +4620,15 @@ function assertEveryoneHoused(sealed, label, seeds = [1, 3, 11, 424242], minOwed
         { name: "Sten", role: "smith", kind: "maker", tint: "amber", home: "Edgewood", household: 1 },
         { name: "Tam", role: "farmer", kind: "grower", tint: "green", home: "Edgewood", household: 2 },
         { name: "Cass", role: "cooper", kind: "folk", tint: "rose", home: "Edgewood", household: 3 },
-        { name: "Wyn", role: "hermit", kind: "wanderer", tint: "teal", home: "Edgewood", household: 4, standing: "fringe" },
+        {
+          name: "Wyn",
+          role: "hermit",
+          kind: "wanderer",
+          tint: "teal",
+          home: "Edgewood",
+          household: 4,
+          standing: "fringe",
+        },
       ],
     },
     ctx,
@@ -4351,20 +4754,56 @@ const bellwetherBrief = (overrides = {}) => ({
 // does not exist, so the town owes them a roof like anyone else. Before this they
 // spent the night on the plaza in a settlement they are a resident of.
 {
-  const sealed = brief.validate(bellwetherBrief({ scale: "outpost" }), ctx);
+  // RE-SHAPED TWICE, exactly as the note below instructed. The outpost used to
+  // lay two lots, so two places plus two root households over-subscribed it on
+  // their own. The street-grid allocator lays four, and then the validator
+  // learned to seal only as many places as a rank can actually seat — so no
+  // brief that survives validation can over-subscribe the ground any more, and
+  // the drop guard became unreachable through the front door.
+  //
+  // That is the RIGHT end state and it is worth keeping proven: the guard is the
+  // floor under a promise the validator now keeps, not dead code. To reach it we
+  // seal at a rank that permits four places and then hand the compiler the
+  // smaller ground, which is precisely the shape a future scale change would
+  // produce by accident.
+  const sealed = brief.validate(
+    bellwetherBrief({
+      scale: "village",
+      places: [
+        { kind: "sanctuary", name: "St Brannock's" },
+        { kind: "gathering", name: "The Ploughshare" },
+        { kind: "hall", name: "The Moot" },
+        { kind: "workshop", name: "The Forge Yard" },
+      ],
+      // Somebody has to LIVE at the place that gets dropped, or the fallback
+      // under test is never entered. Places claim lots in claim order, so the
+      // resident goes at the end of the list where the ground runs out.
+      cast: [
+        ...bellwetherBrief().cast,
+        { name: "Orrin", role: "yardman", kind: "folk", tint: "teal", home: "The Forge Yard", household: 5 },
+      ],
+    }),
+    ctx,
+  );
+  sealed.scale = "outpost";
+  const NAMED = ["St Brannock's", "The Ploughshare", "The Moot", "The Forge Yard"];
   for (const seed of [80021, 1, 3, 424242]) {
     const w = world.build(seed, "cozy-village", sealed);
     checkWorld(w, sealed, `dropped-home seed ${seed}`);
-    // Non-vacuous: a place really was dropped, and it really is the one Bett was
-    // homed at. If the outpost ever fits both, this fixture stops testing the
-    // fallback and should be re-shaped rather than relaxed.
-    const named = ["St Brannock's", "The Ploughshare"].filter((name) => findZone(w, name));
-    assert.equal(named.length, 1, `seed ${seed}: exactly one named place fits an outpost (${named.join()})`);
-    assert.ok(!findZone(w, "The Ploughshare"), `seed ${seed}: the inn is the one dropped`);
+    // Non-vacuous: the ground really did run out, so the fallback really is the
+    // path under test rather than a branch nothing reaches.
+    const built = NAMED.filter((name) => findZone(w, name));
+    assert.ok(
+      built.length < NAMED.length,
+      `seed ${seed}: the outpost cannot hold all four named places (built ${built.join()})`,
+    );
+    // And whoever was homed at a dropped one is not left standing in the square.
+    const stranded = sealed.cast.filter((c) => NAMED.includes(c.home) && !built.includes(c.home));
+    assert.ok(stranded.length > 0, `seed ${seed}: somebody really is homed at a dropped place`);
     const sim = new loadedPF.Sim(w);
     sim.clockMin = 23 * 60;
     sim.resolveSchedules();
-    for (const name of ["Ivy", "Bett", "Tam", "Nan"]) {
+    for (const name of ["Ivy", "Bett", "Tam", "Nan", "Orrin"]) {
       const hit = Object.values(w.zones)
         .map((zone) => ({ zone, npc: zone.npcs.find((n) => n.name === name) }))
         .find((entry) => entry.npc);
@@ -5270,8 +5709,24 @@ const cellarBrief = (prosperity) => ({
         // Two acolytes who LIVE in the village and WORK at the sanctuary. Neither
         // owns it — the prior does — so without the field both would spend the
         // day in the plaza and the church would be a room with one person in it.
-        { name: "Bel", role: "acolyte", kind: "folk", tint: "rose", home: "Cadenhall", workplace: "St Aldwin's", household: 2 },
-        { name: "Corin", role: "acolyte", kind: "folk", tint: "teal", home: "Cadenhall", workplace: "St Aldwin's", household: 2 },
+        {
+          name: "Bel",
+          role: "acolyte",
+          kind: "folk",
+          tint: "rose",
+          home: "Cadenhall",
+          workplace: "St Aldwin's",
+          household: 2,
+        },
+        {
+          name: "Corin",
+          role: "acolyte",
+          kind: "folk",
+          tint: "teal",
+          home: "Cadenhall",
+          workplace: "St Aldwin's",
+          household: 2,
+        },
         { name: "Halla", role: "farmer", kind: "grower", tint: "green", home: "Cadenhall", household: 3 },
       ],
     },
@@ -5324,7 +5779,15 @@ const cellarBrief = (prosperity) => ({
       name: "Cadenhall",
       scale: "hamlet",
       cast: [
-        { name: "Bel", role: "acolyte", kind: "folk", tint: "rose", home: "Cadenhall", workplace: "A Church That Is Not There", household: 1 },
+        {
+          name: "Bel",
+          role: "acolyte",
+          kind: "folk",
+          tint: "rose",
+          home: "Cadenhall",
+          workplace: "A Church That Is Not There",
+          household: 1,
+        },
         { name: "Halla", role: "farmer", kind: "grower", tint: "green", home: "Cadenhall", household: 2 },
       ],
     },
@@ -5361,8 +5824,24 @@ const cellarBrief = (prosperity) => ({
       places: [{ kind: "sanctuary", name: "St Aldwin's", flavor: "A cold stone nave." }],
       cast: [
         { name: "Prior Wen", role: "prior", kind: "elder", tint: "violet", home: "St Aldwin's", household: 1 },
-        { name: "Bel", role: "acolyte", kind: "folk", tint: "rose", home: "Cadenhall", workplace: "St Aldwin's", household: 2 },
-        { name: "Corin", role: "acolyte", kind: "folk", tint: "teal", home: "Cadenhall", workplace: "St Aldwin's", household: 2 },
+        {
+          name: "Bel",
+          role: "acolyte",
+          kind: "folk",
+          tint: "rose",
+          home: "Cadenhall",
+          workplace: "St Aldwin's",
+          household: 2,
+        },
+        {
+          name: "Corin",
+          role: "acolyte",
+          kind: "folk",
+          tint: "teal",
+          home: "Cadenhall",
+          workplace: "St Aldwin's",
+          household: 2,
+        },
         { name: "Halla", role: "farmhand", kind: "folk", tint: "green", home: "Cadenhall", household: 3 },
       ],
     },
@@ -5429,7 +5908,11 @@ const cellarBrief = (prosperity) => ({
     // have pinned the destination independently: `_sched.home` is the very field
     // a broken binding would have rewritten.
     assert.equal(whereIs(name), bed.zoneId, `${name} is in the zone their night handle names`);
-    assert.equal(`${npc.x},${npc.y}`, `${bed.wander.x0},${bed.wander.y0}`, `${name} is ON their berth, not loose in the room`);
+    assert.equal(
+      `${npc.x},${npc.y}`,
+      `${bed.wander.x0},${bed.wander.y0}`,
+      `${name} is ON their berth, not loose in the room`,
+    );
   }
 }
 
@@ -5536,7 +6019,15 @@ const cellarBrief = (prosperity) => ({
         // An ELDER has no row of its own in the schedule table, so without the
         // keeper tier this is the exact case that leaks to the square.
         { name: "Reeve Ott", role: "reeve", kind: "elder", tint: "grey", home: "The Moot House", household: 1 },
-        { name: "Wick", role: "forager", kind: "folk", tint: "green", home: "The Long Coppice", household: 2, standing: "fringe" },
+        {
+          name: "Wick",
+          role: "forager",
+          kind: "folk",
+          tint: "green",
+          home: "The Long Coppice",
+          household: 2,
+          standing: "fringe",
+        },
         { name: "Halla", role: "farmer", kind: "grower", tint: "green", home: "Cadenhall", household: 3 },
       ],
     },
@@ -5652,11 +6143,7 @@ const cellarBrief = (prosperity) => ({
     },
     ctx,
   );
-  assert.equal(
-    new Set(solo.cast.map((c) => c.household)).size,
-    10,
-    "ten unrelated people can be ten households",
-  );
+  assert.equal(new Set(solo.cast.map((c) => c.household)).size, 10, "ten unrelated people can be ten households");
 
   // 2. A big family STAYS a big family. Seven under one number used to be torn
   //    into two by a repair pass; a brief that says seven kin means seven kin.
@@ -5666,7 +6153,12 @@ const cellarBrief = (prosperity) => ({
       name: "Clanhome",
       cast: [
         ...Array.from({ length: 7 }, (_, i) => ({
-          name: `C${i}`, role: "kin", kind: "folk", tint: "green", home: "Clanhome", household: 3,
+          name: `C${i}`,
+          role: "kin",
+          kind: "folk",
+          tint: "green",
+          home: "Clanhome",
+          household: 3,
         })),
         { name: "D0", role: "kin", kind: "folk", tint: "blue", home: "Clanhome", household: 4 },
         { name: "D1", role: "kin", kind: "folk", tint: "rose", home: "Clanhome", household: 5 },
@@ -5696,7 +6188,12 @@ const cellarBrief = (prosperity) => ({
         name: "Clanhome",
         cast: [
           ...Array.from({ length: 7 }, (_, i) => ({
-            name: `C${i}`, role: "kin", kind: "folk", tint: "green", home: "Clanhome", household: 3,
+            name: `C${i}`,
+            role: "kin",
+            kind: "folk",
+            tint: "green",
+            home: "Clanhome",
+            household: 3,
           })),
           { name: "D0", role: "kin", kind: "folk", tint: "blue", home: "Clanhome", household: 4 },
           { name: "D1", role: "kin", kind: "folk", tint: "rose", home: "Clanhome", household: 5 },
@@ -5721,7 +6218,12 @@ const cellarBrief = (prosperity) => ({
       prosperity: "modest",
       name: "Commonhold",
       cast: Array.from({ length: 9 }, (_, i) => ({
-        name: `M${i}`, role: "member", kind: "folk", tint: "green", home: "Commonhold", household: 1,
+        name: `M${i}`,
+        role: "member",
+        kind: "folk",
+        tint: "green",
+        home: "Commonhold",
+        household: 1,
       })),
     },
     ctx,
@@ -5804,12 +6306,18 @@ const cellarBrief = (prosperity) => ({
   for (const scale of ["outpost", "hamlet", "village", "town", "city"]) {
     for (const placeCount of [0, 4]) {
       for (const seed of [1, 8080]) {
+        // Against what the rank actually SEALS, not a flat four: a settlement
+        // that can only carry two features is not failing when it places two.
+        const asked = brief.validate(
+          { scale, prosperity: "thriving", name: "Probe", features: FEATURES, places: [], cast: CAST },
+          { theme: "cozy-village", seed },
+        ).features.length;
         const placed = placedCount(scale, placeCount, seed);
         // At most ONE of four may be refused. A settlement genuinely runs out
         // of ground — that is honest — but it does not lose the lot.
         assert.ok(
-          placed >= FEATURES.length - 1,
-          `${scale} seed ${seed} (${placeCount} places): placed ${placed} of ${FEATURES.length} features`,
+          placed >= asked - 1,
+          `${scale} seed ${seed} (${placeCount} places): placed ${placed} of the ${asked} features the rank sealed`,
         );
       }
     }
@@ -5825,7 +6333,8 @@ const cellarBrief = (prosperity) => ({
       [0, bedsWithout],
     ]) {
       const w = build(scale, count, 4, 8080);
-      for (const zone of Object.values(w.zones)) for (const bed of zone.beds ?? []) into.add(`${bed.zoneId ?? zone.id}:${bed.x},${bed.y}`);
+      for (const zone of Object.values(w.zones))
+        for (const bed of zone.beds ?? []) into.add(`${bed.zoneId ?? zone.id}:${bed.x},${bed.y}`);
     }
     assert.equal(
       bedsWith.size,
@@ -5853,8 +6362,15 @@ const cellarBrief = (prosperity) => ({
     return ["dawn", "day", "dusk", "night"].map((part) => loadedPF.schedule.resolve(sched, part)).join(" ");
   };
   // THE REGRESSION: the watch survives being given a workplace.
-  assert.equal(handles("guard", true), handles("guard", false), "a guard with a named workplace keeps the kind's own hours");
-  assert.ok(handles("guard", true).includes("night=POST".replace("night=", "")), "sanity: the guard row is post-at-night");
+  assert.equal(
+    handles("guard", true),
+    handles("guard", false),
+    "a guard with a named workplace keeps the kind's own hours",
+  );
+  assert.ok(
+    handles("guard", true).includes("night=POST".replace("night=", "")),
+    "sanity: the guard row is post-at-night",
+  );
   assert.equal(
     handles("guard", true).split(" ")[3],
     "POST",
@@ -5863,7 +6379,11 @@ const cellarBrief = (prosperity) => ({
   // And the tier still does the job it was added for: the row-less kinds hold
   // their post through the day instead of leaking to the plaza.
   for (const kind of ["folk", "healer", "scholar", "elder", "child", "wanderer"]) {
-    assert.equal(handles(kind, false).split(" ")[1], "PLAZA", `${kind} has no row of its own, so it defaults to the square`);
+    assert.equal(
+      handles(kind, false).split(" ")[1],
+      "PLAZA",
+      `${kind} has no row of its own, so it defaults to the square`,
+    );
     assert.equal(handles(kind, true).split(" ")[1], "POST", `${kind} with a named workplace is AT it at midday`);
   }
 }
@@ -5942,7 +6462,12 @@ const cellarBrief = (prosperity) => ({
         // Four under one roof sends the sleeping band UPSTAIRS, which is what
         // vacates the band the long table stands in.
         ...Array.from({ length: 4 }, (_, i) => ({
-          name: `K${i}`, role: "kin", kind: "folk", tint: "green", home: "Bandwick", household: 1,
+          name: `K${i}`,
+          role: "kin",
+          kind: "folk",
+          tint: "green",
+          home: "Bandwick",
+          household: 1,
         })),
         { name: "Solo", role: "hand", kind: "folk", tint: "blue", home: "Bandwick", household: 2 },
       ],
