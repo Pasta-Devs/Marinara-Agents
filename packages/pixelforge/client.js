@@ -1756,6 +1756,14 @@ PF.world = (() => {
       // zone holds two full-size canvases in the render cache, so a bedroom is
       // walls and a FLOOR is a zone. {purpose, x0, y0, x1, y1, doorX, ...}
       rooms: [],
+      // OPEN spans: the common floor, a corridor, the leftover east of a band.
+      // Compiler output exactly like `rooms`, and deliberately a SEPARATE list —
+      // an open span cannot ride in `rooms`, because three assertions require a
+      // door per room record and the reachability sweep resolves one at
+      // `(doorX, y1 + 1)`. A span with no door would read as `undefined,NaN`.
+      // Also deliberately NOT read by fullZoneBox: an open area IS common floor,
+      // and excluding it would move every NPC in every upstairs dwelling.
+      areas: [],
       beds: [], // sleeping tiles this zone offers, in claim order
       // World Maps export gate (spec §8). A building is ONE location and its
       // floors are rooms inside it, so a zone that is a room stamps this false
@@ -2308,7 +2316,14 @@ PF.world = (() => {
       placed.push({ purpose: room.purpose, ...(room.private ? { private: true } : {}), ...rect, doorX, ...furnished });
       x = x1 + 2;
     }
-    return placed;
+    // The leftover east of the last room is returned rather than merely left
+    // unpainted, because it is load-bearing geometry: the wall runs above and
+    // below a band are painted only across ROOM spans (see the Math.min on the
+    // south run, and the divider's `x1 < area.x1` guard), so this span is the
+    // vertical leg by which the rows above and below a mid-building band reach
+    // each other. Naming it lets a caller record it and stops a later tidy-up
+    // from "fixing" those runs into full-width ones and sealing the band.
+    return { placed, open: x <= area.x1 ? { x0: x, y0: area.y0, x1: area.x1, y1: area.y1 } : null };
   }
 
   // How an interior that has to sleep people is arranged. `soft` is the
@@ -2448,7 +2463,7 @@ PF.world = (() => {
     if (priv && (rest > count * holds || (rest > 0 && count < 1)))
       return layoutSleeping(zone, w, h, kind, sleepers, top, false);
     if (!priv && (count < 1 || sleepers > count * holds)) return dormitory(zone, w, h, sleepers, top);
-    const rooms = partitionRooms(
+    const { placed: rooms, open } = partitionRooms(
       zone,
       area,
       (priv ? [{ purpose: "bedroom", span: plan.privateSpan, sleepers: 1, private: true }] : []).concat(
@@ -2464,6 +2479,7 @@ PF.world = (() => {
       ),
       plan.keepOpen,
     );
+    if (open) zone.areas.push({ purpose: "corridor", ...open });
     return { rooms, beds: rooms.flatMap((room) => room.beds ?? []) };
   }
 
@@ -2500,6 +2516,11 @@ PF.world = (() => {
    *  else in any furnisher reaches up there, which is why it can be one call
    *  shared by all of them rather than three near-copies. */
   function vacatedBand(zone, w) {
+    // The band a sleeping wing vacated is an OPEN span, not a room: no walls, no
+    // door, and the common floor runs straight through it. Recording it names
+    // what the long table is standing in, which is what a dining purpose will
+    // read when it stops being painted by hand.
+    zone.areas.push({ purpose: "dining", x0: 1, y0: 2, x1: w - 2, y1: 4 });
     fillRect(zone, 3, 3, w - 6, 1, "object", "table", true);
     zone.lights.push({ x: 3, y: 3 }, { x: w - 4, y: 3 });
   }

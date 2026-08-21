@@ -255,6 +255,17 @@ function checkWorld(w, sealed, label) {
       `${label}: ${zone.id} (${zone.name}) has ${walkable - reached.size} walkable tiles sealed off from its own spawn`,
     );
   }
+  // Every OPEN span is a legal rect inside its zone. `areas` carries no door and
+  // is never walled, so nothing else would notice a malformed one.
+  for (const zone of Object.values(w.zones)) {
+    for (const area of zone.areas ?? []) {
+      assert.ok(
+        area.x0 <= area.x1 && area.y0 <= area.y1 &&
+          area.x0 >= 0 && area.y0 >= 0 && area.x1 < zone.w && area.y1 < zone.h,
+        `${label}: ${zone.id} has a malformed open area ${JSON.stringify(area)}`,
+      );
+    }
+  }
   // ── I2: the apron row is walkable at the door columns ─────────────────────
   // Row h-2 carries zone.spawn AND both stair tiles, and put() overwrites
   // unconditionally, so a wall laid across it makes a storey unreachable.
@@ -5909,6 +5920,55 @@ const cellarBrief = (prosperity) => ({
   sim.clockMin = 12 * 60;
   sim.resolveSchedules();
   assert.equal(at("C"), yardsId, "a named worker is in the workshop at midday");
+}
+
+// ── OPEN SPANS ARE RECORDED, NOT MERELY UNPAINTED (0.10) ───────────────────
+// `zone.areas` is the second half of the geometry: a room is a walled partition
+// with a door, an area is open floor the common room runs through. They cannot
+// be one list — three assertions require a door per `zone.rooms` record, and the
+// reachability sweep resolves one at `(doorX, y1 + 1)`, so a doorless span would
+// read as `undefined,NaN`.
+//
+// Pinned because an empty `areas` is indistinguishable from a working one until
+// something reads it: this is the assertion that catches the list quietly never
+// being filled.
+{
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      prosperity: "thriving",
+      name: "Bandwick",
+      cast: [
+        // Four under one roof sends the sleeping band UPSTAIRS, which is what
+        // vacates the band the long table stands in.
+        ...Array.from({ length: 4 }, (_, i) => ({
+          name: `K${i}`, role: "kin", kind: "folk", tint: "green", home: "Bandwick", household: 1,
+        })),
+        { name: "Solo", role: "hand", kind: "folk", tint: "blue", home: "Bandwick", household: 2 },
+      ],
+    },
+    ctx,
+  );
+  const w = world.build(31, "cozy-village", sealed);
+  checkWorld(w, sealed, "areas");
+
+  const withDining = Object.values(w.zones).filter((z) => (z.areas ?? []).some((a) => a.purpose === "dining"));
+  assert.ok(withDining.length > 0, "a household that sent its beds upstairs records the vacated band as an open area");
+  for (const zone of withDining) {
+    const dining = zone.areas.find((a) => a.purpose === "dining");
+    // It is the band layoutSleeping would have partitioned, and it is OPEN —
+    // no record of it may appear in `rooms`, which is what carries doors.
+    assert.equal(dining.y0, 2, `${zone.id}: the vacated band starts where the sleeping band did`);
+    assert.ok(
+      !zone.rooms.some((r) => r.y0 === dining.y0),
+      `${zone.id}: the vacated band is an AREA, never a room — rooms carry doors and this has none`,
+    );
+    // And it is walkable: the long table is solid, the band around it is not.
+    let open = 0;
+    for (let x = dining.x0; x <= dining.x1; x++)
+      for (let y = dining.y0; y <= dining.y1; y++) if (!zone.solid[zone.w * y + x]) open++;
+    assert.ok(open > 0, `${zone.id}: the recorded open area has walkable floor in it`);
+  }
 }
 
 console.log("brief validator + compiler: all cases passed");
