@@ -130,6 +130,17 @@ function sourceStatusLabel(row: PreviewRow, localizeUi: LtmTranslationFunction) 
   return freshnessLabel(row.freshness, localizeUi);
 }
 
+function sourceModeLabel(mode: LtmMode, localizeUi: LtmTranslationFunction) {
+  const labels: Record<LtmMode, string> = {
+    conversation: "ui.longTermMemory.sourcesworkspace.conversation",
+    roleplay: "ui.longTermMemory.sourcesworkspace.roleplay",
+    game: "ui.longTermMemory.sourcesworkspace.game",
+  };
+  return localizeUi("ui.longTermMemory.sourcesworkspace.importsAsMode", {
+    mode: localizeUi(labels[mode]),
+  });
+}
+
 function entryStatusLabel(entry: LtmLorebookPreviewEntry, localizeUi: LtmTranslationFunction) {
   const labels = new Set(entry.candidates.map((candidate) => freshnessLabel(candidate.freshness, localizeUi)));
   return labels.size === 1 ? [...labels][0] : localizeUi("ui.longTermMemory.sourcesworkspace.mixed");
@@ -1625,6 +1636,9 @@ export default function SourcesWorkspace({
                                         {entry.candidateCount} {localizeUi("ui.longTermMemory.sourcesworkspace.parts")}
                                       </span>
                                     ) : null}
+                                    <span className="text-xs text-[var(--muted-foreground)]">
+                                      {sourceModeLabel(entry.candidates[0]?.importMode ?? "roleplay", localizeUi)}
+                                    </span>
                                   </div>
                                   <p className="mt-1 whitespace-pre-wrap break-words text-xs text-[var(--muted-foreground)]">
                                     {entry.candidates[0]?.snippet}
@@ -1847,6 +1861,12 @@ export default function SourcesWorkspace({
                         >
                           {sourceStatusLabel(row, localizeUi)}
                         </span>
+                        <span
+                          data-ltm-source-import-mode={row.importMode}
+                          className="text-xs text-[var(--muted-foreground)]"
+                        >
+                          {sourceModeLabel(row.importMode, localizeUi)}
+                        </span>
                       </div>
                       <p className="mt-1 text-xs text-[var(--muted-foreground)]">{row.summary}</p>
                       <p className="mt-1 line-clamp-2 text-xs text-[var(--muted-foreground)]">{row.snippet}</p>
@@ -1945,6 +1965,9 @@ export default function SourcesWorkspace({
             >
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <strong>{item.title}</strong>
+                <span data-ltm-import-result-mode={item.note.modes[0]} className="text-[var(--muted-foreground)]">
+                  {sourceModeLabel(item.note.modes[0] ?? "roleplay", localizeUi)}
+                </span>
                 <span
                   data-ltm-source-write-status={item.sourceWriteStatus}
                   className={`rounded-full px-2 py-0.5 ${resultToneClass(item.sourceWriteStatus)}`}

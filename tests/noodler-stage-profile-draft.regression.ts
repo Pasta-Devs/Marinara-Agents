@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { normalizeNoodlerStageProfileDraft } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-stage-profile-normalize";
+import { modelAnswerForCorrection } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-model-answer";
 
 // A model that answers with its own field names used to fail the whole creator, which the
 // wizard reported as "creation failed" for every selected character.
@@ -49,5 +50,9 @@ assert.equal(normalizeNoodlerStageProfileDraft({ displayName: "Velvet Hours!" })
 // Non-objects still fail, so a prose answer reaches the retry instead of being accepted.
 assert.equal(normalizeNoodlerStageProfileDraft("Sure, here is a profile"), null);
 assert.equal(normalizeNoodlerStageProfileDraft(null), null);
+assert.equal(modelAnswerForCorrection("[]"), null);
+assert.equal(modelAnswerForCorrection("```json\n[ ]\n```"), null);
+assert.equal(modelAnswerForCorrection("```json\n\n```"), null);
+assert.equal(modelAnswerForCorrection('{"displayName":"Nine"}'), '{"displayName":"Nine"}');
 
 console.log("NoodleR stage profile draft regressions passed.");

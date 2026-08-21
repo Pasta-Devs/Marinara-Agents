@@ -207,6 +207,8 @@ export async function generateNoodlePostImage(input: {
     imageDefaults,
   });
   const styleGuidance = resolveImageStyleGuidanceText(imageSettings.styleProfiles, compiledPrompt.profile.id);
+  const enableImageInterpretation =
+    (input.settings as NoodleSettings & { enableImageInterpretation?: boolean }).enableImageInterpretation !== false;
   const rawFinalPrompt = input.promptOverride?.prompt.trim() || compiledPrompt.prompt;
   const imagePromptInstructions = input.imageConnection.imagePromptInstructions?.trim();
   const instructionLine = imagePromptInstructions
@@ -220,7 +222,7 @@ export async function generateNoodlePostImage(input: {
     .filter(Boolean)
     .join("\n\n");
   const rewrittenPrompt =
-    (imagePromptInstructions || styleGuidance) && !input.promptOverride
+    (imagePromptInstructions || characterContext || styleGuidance) && enableImageInterpretation && !input.promptOverride
       ? await rewriteNoodleImagePrompt({
           db: input.db,
           prompt: rawFinalPrompt,

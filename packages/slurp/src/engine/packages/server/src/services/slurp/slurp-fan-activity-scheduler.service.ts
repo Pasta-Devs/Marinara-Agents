@@ -5,7 +5,10 @@ import { runNoodlerFanActivity, type NoodlerFanRunResult } from "./slurp-fan-act
 const INITIAL_DELAY_MS = 45_000;
 const POLL_MS = 60_000;
 
-export function startNoodlerFanActivityScheduler(app: FastifyInstance) {
+export function startNoodlerFanActivityScheduler(
+  app: FastifyInstance,
+  registerStop?: (stop: () => Promise<void>) => void,
+) {
   let stopped = false;
   let active: Promise<NoodlerFanRunResult> | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -32,17 +35,17 @@ export function startNoodlerFanActivityScheduler(app: FastifyInstance) {
       schedule(POLL_MS);
     }
   };
+  const stop = async () => {
+    stopped = true;
+    if (timer) clearTimeout(timer);
+    await active?.catch(() => {});
+  };
+  registerStop?.(stop);
   schedule(INITIAL_DELAY_MS);
   app.addHook("onClose", async () => {
     stopped = true;
     if (timer) clearTimeout(timer);
     await active?.catch(() => {});
   });
-  return {
-    stop: async () => {
-      stopped = true;
-      if (timer) clearTimeout(timer);
-      await active?.catch(() => {});
-    },
-  };
+  return { stop };
 }

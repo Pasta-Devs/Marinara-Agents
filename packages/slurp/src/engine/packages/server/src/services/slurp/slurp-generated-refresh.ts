@@ -124,6 +124,24 @@ export function parseNoodleGeneratedRefresh(value: unknown): {
   refresh: NoodleGeneratedRefresh;
   rejected: RejectedNoodleGeneratedRefreshItem[];
 } {
+  if (Array.isArray(value)) {
+    const refresh: NoodleGeneratedRefresh = { posts: [], interactions: [], follows: [], digests: [] };
+    const rejected: RejectedNoodleGeneratedRefreshItem[] = [];
+    value.forEach((row, index) => {
+      let parsedRow = false;
+      for (const collection of Object.keys(collectionSchemas) as RefreshCollection[]) {
+        const parsed = collectionSchemas[collection].safeParse(row);
+        if (parsed.success) {
+          (refresh[collection] as Array<typeof parsed.data>).push(parsed.data);
+          parsedRow = true;
+          break;
+        }
+      }
+      if (!parsedRow) rejected.push({ collection: "posts", index, issueCount: 1 });
+    });
+    return { refresh, rejected };
+  }
+
   const record =
     value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
   if (!record) {
@@ -165,8 +183,21 @@ export function parseNoodleGeneratedRefreshResponse(raw: string): {
   refresh: NoodleGeneratedRefresh;
   rejected: RejectedNoodleGeneratedRefreshItem[];
 } {
-  const parsedValues = parseGameJsonishSequence(raw).flatMap((value) => (Array.isArray(value) ? value : [value]));
-  if (parsedValues.length === 1) return parseNoodleGeneratedRefresh(parsedValues[0]);
+  const parsedValues = parseGameJsonishSequence(raw);
+  if (parsedValues.length === 1) {
+    const value = parsedValues[0];
+    if (
+      Array.isArray(value) &&
+      value.length === 1 &&
+      value[0] &&
+      typeof value[0] === "object" &&
+      !Array.isArray(value[0]) &&
+      Object.keys(collectionSchemas).some((collection) => collection in value[0])
+    ) {
+      return parseNoodleGeneratedRefresh(value[0]);
+    }
+    return parseNoodleGeneratedRefresh(value);
+  }
 
   const refresh: NoodleGeneratedRefresh = { posts: [], interactions: [], follows: [], digests: [] };
   const rejected: RejectedNoodleGeneratedRefreshItem[] = [];

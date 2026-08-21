@@ -143,8 +143,7 @@ async function generateTurn(
 
 function savedAssistantMessage(events: Array<{ type?: string; data?: unknown }>, source: string) {
   const saved = events.find((event) => event.type === "message_saved")?.data as
-    | { id?: unknown; role?: unknown; activeSwipeIndex?: unknown; content?: unknown }
-    | undefined;
+    { id?: unknown; role?: unknown; activeSwipeIndex?: unknown; content?: unknown } | undefined;
   expect(saved, `${source} must save an assistant message`).toBeTruthy();
   expect(saved?.role, `${source} must save an assistant role`).toBe("assistant");
   expect(typeof saved?.id, `${source} must return the saved message ID`).toBe("string");
@@ -836,7 +835,7 @@ async function openGameSetupMapDraftReview(
     await wizard.getByRole("button", { name: /Use a template/ }).click();
     expect(createRequestCount).toBe(0);
     const library = page.locator("[data-marinara-map-template-library]");
-    await expect(library.getByRole("heading", { name: "Map templates", exact: true })).toBeVisible();
+    await expect(library.getByRole("heading", { name: "Independent templates", exact: true })).toBeVisible();
     const card = library.getByRole("heading", { name: template!.name }).locator("xpath=ancestor::article");
     await card.getByRole("button", { name: "Use template", exact: true }).click();
     const confirm = page.getByRole("dialog").filter({ hasText: "Use this map template?" });
@@ -1309,8 +1308,7 @@ test("global World Maps home activates and opens the current chat map", async ({
             ? (JSON.parse(mapsAgent.settings) as Record<string, unknown>)
             : ((mapsAgent?.settings ?? {}) as Record<string, unknown>);
         const libraries = settings.spatialMapGenerationPromptLibraries as
-          | { roleplay?: { options?: Array<{ name?: string }> } }
-          | undefined;
+          { roleplay?: { options?: Array<{ name?: string }> } } | undefined;
         const templates = settings.spatialMapTurnPromptTemplates as { roleplay?: string; game?: string } | undefined;
         return {
           author: settings.author,
@@ -1389,8 +1387,7 @@ test("global World Maps home activates and opens the current chat map", async ({
       await expect
         .poll(() => {
           const preferences = generatedRequest?.generationPreferencesOverride as
-            | { activeOptionId?: string; options?: Array<{ name?: string }> }
-            | undefined;
+            { activeOptionId?: string; options?: Array<{ name?: string }> } | undefined;
           return {
             activeOptionId: preferences?.activeOptionId,
             optionNames: preferences?.options?.map((option) => option.name),
@@ -1696,6 +1693,7 @@ test("Map templates are created outside chats and copied into Roleplay", async (
   });
   expect(sharedArtworkResponse.ok(), await sharedArtworkResponse.text()).toBeTruthy();
   const sharedArtwork = (await sharedArtworkResponse.json()) as { id: string };
+  let uploadedBackgroundId: string | null = null;
 
   try {
     await page.addInitScript((chatId) => {
@@ -1721,8 +1719,8 @@ test("Map templates are created outside chats and copied into Roleplay", async (
     const home = page.locator("[data-marinara-maps-home]");
     await home.getByRole("button", { name: "Open world library" }).click();
     const library = page.locator("[data-marinara-map-template-library]");
-    await expect(library.getByRole("heading", { name: "Map templates", exact: true })).toBeVisible();
-    await expect(library).toContainText("shared Global Gallery artwork");
+    await expect(library.getByRole("heading", { name: "Independent templates", exact: true })).toBeVisible();
+    await expect(library).toContainText(/shared Global Gallery artwork/iu);
     await library.getByRole("button", { name: "New map template" }).first().click();
 
     const workspace = page.locator("[data-marinara-maps-workspace-root]");
@@ -1735,11 +1733,48 @@ test("Map templates are created outside chats and copied into Roleplay", async (
     await expect(sharedArtworkOption.getByText("Shared", { exact: true })).toBeVisible();
     await sharedArtworkOption.click();
     await workspace.getByRole("button", { name: "Use selected" }).click();
+    const locationDetails = workspace.getByRole("region", { name: "Details for New world" });
+    await locationDetails.getByLabel("Child presentation").selectOption("map");
+    const globalGalleryBeforeUploadResponse = await page.request.get("/api/global-gallery");
+    expect(globalGalleryBeforeUploadResponse.ok(), await globalGalleryBeforeUploadResponse.text()).toBeTruthy();
+    const globalGalleryIdsBeforeUpload = new Set(
+      ((await globalGalleryBeforeUploadResponse.json()) as Array<{ id: string }>).map((image) => image.id),
+    );
+    const uploadBackground = locationDetails.getByRole("button", { name: "Upload child map background" });
+    await expectMinimumInteractiveSize(uploadBackground, "Template child-map background upload");
+    const fileChooserPromise = page.waitForEvent("filechooser");
+    await uploadBackground.click();
+    const fileChooser = await fileChooserPromise;
+    await fileChooser.setFiles({
+      name: "template-child-map-background.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    });
+    await expect(locationDetails.getByRole("img", { name: "New world child map background" })).toBeVisible();
+    const globalGalleryAfterUploadResponse = await page.request.get("/api/global-gallery");
+    expect(globalGalleryAfterUploadResponse.ok(), await globalGalleryAfterUploadResponse.text()).toBeTruthy();
+    const globalGalleryAfterUpload = (await globalGalleryAfterUploadResponse.json()) as Array<{
+      id: string;
+      prompt: string;
+      provider: string;
+      model: string;
+    }>;
+    const uploadedBackground = globalGalleryAfterUpload.find(
+      (image) =>
+        !globalGalleryIdsBeforeUpload.has(image.id) && image.prompt === "Uploaded child map background for New world.",
+    );
+    expect(uploadedBackground).toMatchObject({ provider: "upload", model: "user-upload" });
+    uploadedBackgroundId = uploadedBackground?.id ?? null;
+    expect(uploadedBackgroundId).not.toBeNull();
     await workspace.getByRole("button", { name: "Save template", exact: true }).click();
     await expect(workspace).toContainText("Saved");
     const globalGalleryBeforeImport = await page.request.get("/api/global-gallery");
     expect(globalGalleryBeforeImport.ok(), await globalGalleryBeforeImport.text()).toBeTruthy();
     const globalImageCountBeforeImport = ((await globalGalleryBeforeImport.json()) as Array<unknown>).length;
+    await workspace.getByRole("button", { name: "More map actions" }).click();
     await workspace.getByRole("button", { name: "Export world map" }).click();
     const exportDialog = page.getByRole("dialog", { name: "Export portable world map" });
     await expect(exportDialog.getByRole("radio", { name: /Map \+ linked entries/u })).toBeChecked();
@@ -1752,10 +1787,14 @@ test("Map templates are created outside chats and copied into Roleplay", async (
       name?: string;
       artwork?: Array<{ sourceImageId: string }>;
     };
-    expect(exportedTemplate.artwork).toEqual([
-      expect.objectContaining({ sourceImageId: `global-gallery:${sharedArtwork.id}` }),
-    ]);
-    await workspace.getByRole("button", { name: "Back to map templates" }).click();
+    expect(exportedTemplate.artwork).toHaveLength(2);
+    expect(exportedTemplate.artwork).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sourceImageId: `global-gallery:${sharedArtwork.id}` }),
+        expect.objectContaining({ sourceImageId: `global-gallery:${uploadedBackgroundId}` }),
+      ]),
+    );
+    await workspace.getByRole("button", { name: "Back to map library" }).click();
 
     exportedTemplate.name = "Imported Shared Artwork World";
     await library.locator('input[type="file"]').setInputFiles({
@@ -1763,11 +1802,11 @@ test("Map templates are created outside chats and copied into Roleplay", async (
       mimeType: "application/json",
       buffer: Buffer.from(JSON.stringify(exportedTemplate)),
     });
-    await expect(page.getByText("1 existing shared image was reused.")).toBeVisible();
+    await expect(page.getByText("2 existing shared images were reused.")).toBeVisible();
     const globalGalleryAfterImport = await page.request.get("/api/global-gallery");
     expect(globalGalleryAfterImport.ok(), await globalGalleryAfterImport.text()).toBeTruthy();
     expect(((await globalGalleryAfterImport.json()) as Array<unknown>).length).toBe(globalImageCountBeforeImport);
-    await workspace.getByRole("button", { name: "Back to map templates" }).click();
+    await workspace.getByRole("button", { name: "Back to map library" }).click();
 
     const reusableTemplateCard = library
       .getByRole("heading", { name: "Reusable Test World" })
@@ -1779,7 +1818,7 @@ test("Map templates are created outside chats and copied into Roleplay", async (
     await page.getByRole("button", { name: "Chat Settings" }).click();
     const { agentEntry } = await openHierarchicalMapsAgentControls(page);
     await agentEntry.getByRole("button", { name: "Set up world map" }).click();
-    await workspace.getByRole("button", { name: "Open shared worlds and map templates" }).click();
+    await workspace.getByRole("button", { name: "Use template or shared world" }).click();
 
     const chatSettingsLibrary = page.locator("[data-marinara-map-template-library]");
     const chatSettingsTemplateCard = chatSettingsLibrary
@@ -1806,18 +1845,23 @@ test("Map templates are created outside chats and copied into Roleplay", async (
       .poll(async () => {
         const response = await page.request.get(`/api/chats/${chat.id}/spatial-context`);
         const body = (await response.json()) as {
-          definition?: { ownerMode?: string; locations?: Array<{ referenceImageId?: string }> } | null;
+          definition?: {
+            ownerMode?: string;
+            locations?: Array<{ referenceImageId?: string; mapBackgroundImageId?: string }>;
+          } | null;
         };
         return {
           ownerMode: body.definition?.ownerMode,
           locationCount: body.definition?.locations?.length,
           referenceImageId: body.definition?.locations?.[0]?.referenceImageId,
+          mapBackgroundImageId: body.definition?.locations?.[0]?.mapBackgroundImageId,
         };
       })
       .toEqual({
         ownerMode: "roleplay",
         locationCount: 1,
         referenceImageId: `global-gallery:${sharedArtwork.id}`,
+        mapBackgroundImageId: `global-gallery:${uploadedBackgroundId}`,
       });
   } finally {
     const templatesResponse = await page.request.get("/api/chats/spatial-context/templates");
@@ -1831,9 +1875,13 @@ test("Map templates are created outside chats and copied into Roleplay", async (
         expect(response.ok(), await response.text()).toBeTruthy();
       }
     }
+    await expectDeleted(page, `/api/chats/${chat.id}`);
     const deleteSharedArtworkResponse = await page.request.delete(`/api/global-gallery/${sharedArtwork.id}`);
     expect(deleteSharedArtworkResponse.ok(), await deleteSharedArtworkResponse.text()).toBeTruthy();
-    await expectDeleted(page, `/api/chats/${chat.id}`);
+    if (uploadedBackgroundId) {
+      const deleteUploadedBackgroundResponse = await page.request.delete(`/api/global-gallery/${uploadedBackgroundId}`);
+      expect(deleteUploadedBackgroundResponse.ok(), await deleteUploadedBackgroundResponse.text()).toBeTruthy();
+    }
   }
 });
 
@@ -5722,8 +5770,7 @@ test("Roleplay stages story movement separately from prose and recovers stale tu
     // submitted command, never the newly queued route command.
     await page.evaluate(() => {
       const runtime = document.querySelector("marinara-capability-hierarchical-maps[view='runtime']") as
-        | (HTMLElement & { capabilityProps?: Record<string, unknown> })
-        | null;
+        (HTMLElement & { capabilityProps?: Record<string, unknown> }) | null;
       if (!runtime?.capabilityProps) throw new Error("World Maps runtime capability was not mounted");
       runtime.capabilityProps = { ...runtime.capabilityProps, pendingTransition: null };
       runtime.dispatchEvent(new CustomEvent("marinara-capability-props"));

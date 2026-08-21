@@ -11,6 +11,7 @@ import { SlurpHome } from "./components/slurp/SlurpHome";
 import { useSlurpUIStore } from "./stores/slurp-package.store";
 import { configureSlurpPackageState } from "./stores/slurp-package.store";
 import { ModalPortalContext } from "./components/ui/Modal";
+import { AppDialogRenderer } from "./components/ui/AppDialogRenderer";
 
 const SLURP_ELEMENT_TAG = "marinara-capability-slurp";
 const SLURP_STYLE_ID = "marinara-capability-slurp-styles";
@@ -92,6 +93,7 @@ function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
         <ModalPortalContext.Provider value={element.__portal ?? element}>
           <div className="h-full min-h-0 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
             <SlurpHome navigation={navigation} onNavigate={setNavigation} />
+            <AppDialogRenderer />
           </div>
         </ModalPortalContext.Provider>
       </QueryClientProvider>
@@ -108,12 +110,20 @@ class MarinaraSlurpElement extends HTMLElement {
     if (!this.__portal) {
       this.__portal = document.createElement("div");
       this.__portal.dataset.marinaraCapabilityScope = "slurp";
+      this.__portal.classList.add("mari-chrome-token-scope", "noodle-icon-scope");
       Object.assign(this.__portal.style, {
         inset: "0",
         pointerEvents: "none",
         position: "fixed",
         zIndex: "2147483000",
       });
+      this.__portal.style.setProperty("--accent", "rgba(255, 126, 193, 0.14)");
+      this.__portal.style.setProperty("--background", "#17121b");
+      this.__portal.style.setProperty("--border", "rgba(255, 255, 255, 0.18)");
+      this.__portal.style.setProperty("--foreground", "#fff7fc");
+      this.__portal.style.setProperty("--muted-foreground", "#d8c9d4");
+      this.__portal.style.setProperty("--noodle-accent", "#ff7ec1");
+      this.__portal.style.setProperty("--noodle-accent-foreground", "#17121b");
       document.body.appendChild(this.__portal);
     }
     this.__root ??= createRoot(this);

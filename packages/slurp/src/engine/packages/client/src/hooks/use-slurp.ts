@@ -44,7 +44,6 @@ import type {
   NoodlerViewerScope,
   NoodlerCreateInteractionInput,
   NoodlerCreatorReplyResult,
-  NoodlerReserveStatus,
   NoodlerFanActivitySettings,
   NoodlerRemoveInteractionInput,
 } from "@marinara-engine/shared";
@@ -81,10 +80,12 @@ export type SlurpSettings = {
   generationGuidance: string;
   postsPerDay: number;
   autoPostingScheduleEnabled: boolean;
+  autoPostGenerationMode: "pre_generate" | "on_demand";
   fanActivityEnabled: boolean;
   generationConnectionId: string | null;
   imageGenerationConnectionId: string | null;
   imageGenerationPrompt: string;
+  enableImageInterpretation: boolean;
   imageGenerationUseAvatarReferences: boolean;
   imageGenerationIncludeDescriptions: boolean;
   autoPostingImagesEnabled: boolean;
@@ -117,6 +118,27 @@ export type SlurpSettings = {
 };
 
 export type SlurpSettingsUpdate = Partial<SlurpSettings>;
+
+export type SlurpScheduleSlot = {
+  id: string;
+  publishAt: string;
+  state: "scheduled" | "prepared";
+};
+
+export type SlurpReserveStatus = {
+  preparedCount: number;
+  preparedThrough: string | null;
+  textAttemptsUsed: number;
+  imageAttemptsUsed: number;
+  postsPerDay: number;
+  preparationNotBefore: string;
+  creators: Array<{
+    accountId: string;
+    nextPreparedAt: string | null;
+    preparedCount: number;
+    slots: SlurpScheduleSlot[];
+  }>;
+};
 
 export function useSlurpSettings() {
   return useQuery({
@@ -263,8 +285,7 @@ export function useNoodlerEligibleAccounts(
 }
 
 export type SlurpProfilePost =
-  | { managed: NoodlerManagedPost; viewerPost: NoodlerPostView | null }
-  | { viewerPost: NoodlerPostView };
+  { managed: NoodlerManagedPost; viewerPost: NoodlerPostView | null } | { viewerPost: NoodlerPostView };
 
 export function useNoodlerPosts(accountId: string | null, personaId: string | null) {
   return useQuery({
@@ -385,6 +406,7 @@ export function useUpdateNoodlerStageProfile() {
       Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerReserveStatus() }),
       ]),
   });
 }
@@ -399,6 +421,7 @@ function useNoodlerAvatarMutation<TInput extends { accountId: string }>(
       Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerReserveStatus() }),
       ]),
   });
 }
@@ -455,6 +478,7 @@ function useNoodlerSourceAction(action: "dismiss" | "adopt-identity") {
       Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerReserveStatus() }),
       ]),
   });
 }
@@ -704,6 +728,8 @@ export function useNoodlerViewer(personaId: string | null, enabled = true) {
     enabled: enabled && Boolean(personaId),
     staleTime: 10_000,
     refetchOnMount: "always",
+    refetchInterval: enabled && personaId ? 30_000 : false,
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -714,6 +740,8 @@ export function useNoodlerViewer(personaId: string | null, enabled = true) {
  */
 /** Poll the badge without downloading the complete viewer feed or historical media metadata. */
 export function useNoodlerUnseenCount(personaId: string | null, enabled = true) {
+  const qc = useQueryClient();
+  const previousCount = useRef<number | null>(null);
   const { data } = useQuery({
     queryKey: noodleKeys.noodlerUnseenCount(personaId ?? "none"),
     queryFn: () =>
@@ -723,7 +751,16 @@ export function useNoodlerUnseenCount(personaId: string | null, enabled = true) 
     refetchInterval: enabled && personaId ? 30_000 : false,
     refetchIntervalInBackground: false,
   });
-  return Math.max(0, Math.floor(data?.count ?? 0));
+  const count = Math.max(0, Math.floor(data?.count ?? 0));
+  useEffect(() => {
+    if (!enabled || !personaId || previousCount.current === null) {
+      previousCount.current = count;
+      return;
+    }
+    if (count > previousCount.current) void qc.invalidateQueries({ queryKey: noodleKeys.viewer(personaId) });
+    previousCount.current = count;
+  }, [count, enabled, personaId, qc]);
+  return count;
 }
 
 export function useMarkNoodlerFeedSeen() {
@@ -965,12 +1002,23 @@ export function useUpdateNoodlerFanActivity() {
 export function useNoodlerReserveStatus(enabled = true) {
   return useQuery({
     queryKey: noodleKeys.noodlerReserveStatus(),
-    queryFn: () => api.get<NoodlerReserveStatus>("/slurp/noodler/auto-post/status"),
+    queryFn: () => api.get<SlurpReserveStatus>("/slurp/noodler/auto-post/status"),
     enabled,
     // The scheduler prepares posts on its own timer, so nothing here invalidates this key when
     // the counts change. Same 30s cadence the creator list already uses.
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
+  });
+}
+
+export function useUpdateNoodlerScheduleSlot() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ slotId, publishAt }: { slotId: string; publishAt: string }) =>
+      api.patch<SlurpReserveStatus>(`/slurp/noodler/auto-post/schedule/${encodeURIComponent(slotId)}`, {
+        publishAt,
+      }),
+    onSuccess: (status) => qc.setQueryData(noodleKeys.noodlerReserveStatus(), status),
   });
 }
 

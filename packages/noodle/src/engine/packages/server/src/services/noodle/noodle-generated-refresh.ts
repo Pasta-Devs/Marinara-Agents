@@ -17,6 +17,8 @@ export type RejectedNoodleGeneratedRefreshItem = {
   issueCount: number;
 };
 
+export const NOODLE_EMPTY_TIMELINE_REASON = "the response contained no timeline activity";
+
 /**
  * Require a refresh to contain usable activity attributed to the exact cast
  * selected for this run. The persona may be a follow target, but generations
@@ -29,7 +31,7 @@ export function validateNoodleGeneratedRefresh(
 ): string | null {
   const hasActivity =
     refresh.posts.length + refresh.interactions.length + refresh.follows.length + refresh.digests.length > 0;
-  if (!hasActivity) return "the response contained no timeline activity";
+  if (!hasActivity) return NOODLE_EMPTY_TIMELINE_REASON;
 
   const hasUsableAttribution =
     refresh.posts.some((post) => allowedActorHandles.has(normalizeNoodleHandle(post.authorHandle))) ||
@@ -116,6 +118,11 @@ const collectionSchemas = {
   digests: noodleGeneratedDigestSchema,
 } as const;
 
+function isNoodleGeneratedRefresh(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.keys(collectionSchemas).some((collection) => collection in value);
+}
+
 /**
  * Validate generated timeline rows independently. LLM output is untrusted and a
  * single malformed interaction must not discard otherwise valid activity.
@@ -124,6 +131,24 @@ export function parseNoodleGeneratedRefresh(value: unknown): {
   refresh: NoodleGeneratedRefresh;
   rejected: RejectedNoodleGeneratedRefreshItem[];
 } {
+  if (Array.isArray(value)) {
+    const refresh: NoodleGeneratedRefresh = { posts: [], interactions: [], follows: [], digests: [] };
+    const rejected: RejectedNoodleGeneratedRefreshItem[] = [];
+    value.forEach((row, index) => {
+      let parsedRow = false;
+      for (const collection of Object.keys(collectionSchemas) as RefreshCollection[]) {
+        const parsed = collectionSchemas[collection].safeParse(row);
+        if (parsed.success) {
+          (refresh[collection] as Array<typeof parsed.data>).push(parsed.data);
+          parsedRow = true;
+          break;
+        }
+      }
+      if (!parsedRow) rejected.push({ collection: "posts", index, issueCount: 1 });
+    });
+    return { refresh, rejected };
+  }
+
   const record =
     value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
   if (!record) {
@@ -165,8 +190,14 @@ export function parseNoodleGeneratedRefreshResponse(raw: string): {
   refresh: NoodleGeneratedRefresh;
   rejected: RejectedNoodleGeneratedRefreshItem[];
 } {
-  const parsedValues = parseGameJsonishSequence(raw).flatMap((value) => (Array.isArray(value) ? value : [value]));
-  if (parsedValues.length === 1) return parseNoodleGeneratedRefresh(parsedValues[0]);
+  const parsedValues = parseGameJsonishSequence(raw);
+  if (parsedValues.length === 1) {
+    const value = parsedValues[0];
+    if (Array.isArray(value) && value.length === 1 && isNoodleGeneratedRefresh(value[0])) {
+      return parseNoodleGeneratedRefresh(value[0]);
+    }
+    return parseNoodleGeneratedRefresh(value);
+  }
 
   const refresh: NoodleGeneratedRefresh = { posts: [], interactions: [], follows: [], digests: [] };
   const rejected: RejectedNoodleGeneratedRefreshItem[] = [];

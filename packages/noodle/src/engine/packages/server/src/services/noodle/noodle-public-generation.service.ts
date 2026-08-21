@@ -14,7 +14,7 @@ import { clampGenerationMaxOutputTokens } from "../generation/output-token-limit
 import { noodleSamplingOptions } from "./noodle-sampling-options.js";
 import { noodleTimelineRefreshMaxTokens } from "./noodle-post-target.js";
 import { withConnectionFallbackProvider } from "../llm/connection-fallback-provider.js";
-import type { ChatMessage } from "../llm/base-provider.js";
+import { llmFetch, type ChatMessage } from "../llm/base-provider.js";
 import { createLLMProvider } from "../llm/provider-registry.js";
 import { createCharacterGalleryStorage } from "../storage/character-gallery.storage.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
@@ -26,6 +26,7 @@ import { createPromptOverridesStorage } from "../storage/prompt-overrides.storag
 import { commitGeneratedNoodleActivity, prepareGeneratedNoodleMedia } from "./noodle-generated-activity.service.js";
 import {
   deduplicateGeneratedNoodleContent,
+  NOODLE_EMPTY_TIMELINE_REASON,
   parseNoodleGeneratedRefreshResponse,
   validateNoodleGeneratedRefresh,
 } from "./noodle-generated-refresh.js";
@@ -49,6 +50,11 @@ import type { ConnectionAdmissionMode } from "../generation/connection-admission
 import { isUnsupportedNoodleVisionInputError } from "./noodle-vision.js";
 import { formatNoodleMessagesForLog } from "./noodle-generation-log.js";
 import { ensureAmbientNoodleAccounts } from "./noodle-ambient-profiles.js";
+import {
+  canRetryNoodleVisionRequest,
+  resolveNoodleVisionSupport,
+  selectNoodleVisionRequest,
+} from "./noodle-model-capabilities.js";
 
 type PublicGenerationConnection = NonNullable<
   Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>
@@ -192,7 +198,7 @@ export function createPublicNoodleGenerationService(db: DB) {
         ];
         const [recentSelectionInteractions, recentCompletedRuns] = await Promise.all([
           noodle.listInteractions(recentSelectionPosts.map((post) => post.id)),
-          noodle.listRefreshRuns({ status: "completed", limit: 1 }),
+          noodle.listCompletedRefreshRunAccountIds(settings.participantSelectionMode === "all" ? 100 : 1),
         ]);
         const priorityAccountIds = collectNoodlePriorityAccountIds({
           accounts: participantAccounts,
@@ -205,7 +211,8 @@ export function createPublicNoodleGenerationService(db: DB) {
           settings,
           selectedGroupCharacterIds,
           followedAccountIds: new Set(personaAccount?.settings.social.followingAccountIds ?? []),
-          recentlyActiveAccountIds: new Set(recentCompletedRuns[0]?.activeAccountIds ?? []),
+          recentlyActiveAccountIds: new Set(recentCompletedRuns[0] ?? []),
+          recentlyActiveAccountIdsByRun: recentCompletedRuns.map((accountIds) => new Set(accountIds)),
           priorityAccountIds,
         });
         if (selectedParticipants.length === 0) {
@@ -244,8 +251,27 @@ export function createPublicNoodleGenerationService(db: DB) {
           imageCaptioning,
           debugMode,
         });
-        logDebugOverride(debugMode, "[debug/noodle] Prompt sent to model:\n%s", prompt.promptForLog);
-        if (prompt.visionAttachmentCount > 0)
+        let visionSupport: boolean | null = null;
+        if (prompt.visionAttachmentCount > 0) {
+          try {
+            visionSupport = await resolveNoodleVisionSupport(input.connection, llmFetch);
+          } catch (error) {
+            logger.debug(error, "[noodle/vision] Could not preflight the selected model's vision capability");
+          }
+        }
+        const initialRequest = selectNoodleVisionRequest(prompt, visionSupport);
+        const useTextOnlyPreflight = initialRequest.attemptKind === "text_only_fallback";
+        let requestMessages: ChatMessage[] = initialRequest.messages;
+        let firstAttemptKind: NoodleRefreshAttemptKind = initialRequest.attemptKind;
+        const firstPromptForLog = initialRequest.promptForLog;
+        logDebugOverride(debugMode, "[debug/noodle] Prompt sent to model:\n%s", firstPromptForLog);
+        if (useTextOnlyPreflight)
+          logDebugOverride(
+            debugMode,
+            "[debug/noodle] Omitted %d timeline image input(s) because the selected NanoGPT model reports no vision support",
+            prompt.visionAttachmentCount,
+          );
+        else if (prompt.visionAttachmentCount > 0)
           logDebugOverride(
             debugMode,
             "[debug/noodle] Attached %d timeline image input(s) to the refresh prompt",
@@ -267,7 +293,7 @@ export function createPublicNoodleGenerationService(db: DB) {
         }
         run = await noodle.createRefreshRun({
           activeAccountIds: activeAccounts.map((account) => account.id),
-          prompt: prompt.promptForLog,
+          prompt: firstPromptForLog,
         });
         const runId = run.id;
         const timelineMaxTokens = clampGenerationMaxOutputTokens({
@@ -294,13 +320,15 @@ export function createPublicNoodleGenerationService(db: DB) {
           debugMode,
           responseFormat: noodleResponseFormat(input.connection.model, "timeline"),
         } as const;
-        let requestMessages: ChatMessage[] = prompt.messages;
-        let firstAttemptKind: NoodleRefreshAttemptKind = "initial";
         let result: Awaited<ReturnType<typeof provider.chatComplete>>;
         try {
-          result = await provider.chatComplete(prompt.messages, completionOptions);
+          result = await provider.chatComplete(requestMessages, completionOptions);
         } catch (error) {
-          if (prompt.visionAttachmentCount === 0 || !isUnsupportedNoodleVisionInputError(error)) throw error;
+          if (
+            !canRetryNoodleVisionRequest(firstAttemptKind, prompt.visionAttachmentCount) ||
+            !isUnsupportedNoodleVisionInputError(error)
+          )
+            throw error;
           logger.warn(
             error,
             "[noodle/vision] The selected timeline model rejected image input; retrying the refresh as text-only",
@@ -350,6 +378,7 @@ export function createPublicNoodleGenerationService(db: DB) {
             `Reason: ${retryReason}.`,
             `Regenerate the complete JSON object now. Authors and actors must use only these selected participant handles: ${allowedHandles.join(", ")}.`,
             `Follow targets may additionally use these known handles: ${knownTargetHandles.join(", ")}.`,
+            "Return at least one activity permitted by the configured quotas. [] and an object whose activity collections are all empty are invalid.",
             "Do not invent, rename, or omit an authorHandle, actorHandle, or targetHandle. Return JSON only.",
           ].join("\n");
           const correctionMessages = [...requestMessages, { role: "user" as const, content: correction }];
@@ -386,6 +415,11 @@ export function createPublicNoodleGenerationService(db: DB) {
             rejectionReason: correctedRetryReason,
             createdAt: new Date().toISOString(),
           });
+          if (retryReason === NOODLE_EMPTY_TIMELINE_REASON && correctedRetryReason === NOODLE_EMPTY_TIMELINE_REASON) {
+            throw new Error(
+              "The generation model returned no timeline activity twice. No timeline changes were saved. Try again, or lower Accounts per refresh.",
+            );
+          }
           if (correctedRetryReason)
             throw new Error(`Noodle timeline correction could not be used because ${correctedRetryReason}.`);
         }

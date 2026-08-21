@@ -127,7 +127,7 @@ function buildFanActivityMessages(input: {
   settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "fanRepostsPerRefresh">;
 }): ChatMessage[] {
   const system = [
-    "Propose quiet synthetic audience activity for the supplied NoodleR posts.",
+    "Propose quiet synthetic audience activity for the supplied Slurp posts.",
     "Posts marked locked are paid posts. Only subscribers see them, so react to the title and the fact it is paid; never invent or state its hidden contents.",
     "Use only supplied creator IDs, actor handles, and post IDs. Never invent identifiers.",
     "Likes and reposts have null content. Replies are one short sentence, normally under 180 characters, natural, relevant, and not repetitive.",
@@ -153,7 +153,7 @@ function buildFanActivityMessages(input: {
   }));
   return [
     { role: "system", content: system },
-    { role: "user", content: `# NoodleR audience data\n${JSON.stringify({ creators }, null, 2)}` },
+    { role: "user", content: `# Slurp audience data\n${JSON.stringify({ creators }, null, 2)}` },
   ];
 }
 
@@ -225,6 +225,7 @@ export function parseGeneratedFanActivityResponse(value: unknown): {
       ...row,
       creatorAccountId: row.creatorAccountId ?? row.creatorId,
       targetPostId: row.targetPostId ?? row.postId,
+      content: row.content ?? null,
     });
     return parsed.success ? [parsed.data] : [];
   });

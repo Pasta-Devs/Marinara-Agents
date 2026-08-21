@@ -52,6 +52,7 @@ async function main() {
     true,
   );
   const { configurePackageRuntime, getPackageEmbeddingAdapter } = await import(`${source}/package-runtime.ts`);
+  const { embedLongTermMemoryTexts } = await import(`${source}/embedding-adapter.ts`);
   const timestamp = "2026-07-17T00:00:00.000Z";
   const makeChunk = (
     noteType: any,
@@ -489,6 +490,41 @@ async function main() {
           },
         },
       });
+      const embeddingBatchCalls: string[][] = [];
+      const embeddingBatchAdapter = {
+        spaceId: "batch-test-space",
+        label: "batch test embeddings",
+        async embed(texts: string[]) {
+          embeddingBatchCalls.push(texts);
+          if (texts.length > 128 || texts.reduce((total, text) => total + text.length, 0) > 200_000) return null;
+          return texts.map((text) => [Number(text.match(/^chunk-(\d+)/)?.[1] ?? -1)]);
+        },
+      };
+      const countBatchedVectors = await embedLongTermMemoryTexts(
+        Array.from({ length: 129 }, (_, index) => `chunk-${index}`),
+        { embeddingAdapter: embeddingBatchAdapter },
+      );
+      assert.equal(countBatchedVectors?.length, 129);
+      assert.deepEqual(
+        countBatchedVectors?.map((vector) => vector[0]),
+        Array.from({ length: 129 }, (_, index) => index),
+        "embedding batches must preserve vector order",
+      );
+      assert.ok(embeddingBatchCalls.every((texts) => texts.length <= 128));
+      assert.equal(embeddingBatchCalls.length, 2);
+      embeddingBatchCalls.length = 0;
+      const characterBatchedVectors = await embedLongTermMemoryTexts(
+        Array.from({ length: 9 }, (_, index) => `chunk-${index}-${"x".repeat(23_990)}`),
+        { embeddingAdapter: embeddingBatchAdapter },
+      );
+      assert.equal(characterBatchedVectors?.length, 9);
+      assert.deepEqual(
+        characterBatchedVectors?.map((vector) => vector[0]),
+        Array.from({ length: 9 }, (_, index) => index),
+        "character-limited embedding batches must preserve vector order",
+      );
+      assert.ok(embeddingBatchCalls.every((texts) => texts.reduce((total, text) => total + text.length, 0) <= 200_000));
+      assert.equal(embeddingBatchCalls.length, 2);
       await rebuildLongTermMemoryIndexes({ root: storage.root });
       const semantic = await retrieveLongTermMemory({
         root: storage.root,
