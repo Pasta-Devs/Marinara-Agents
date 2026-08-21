@@ -5,7 +5,6 @@ type WeekSchedule = {
   days: Record<string, Array<{ time: string; activity: string }>>;
 };
 
-type ScheduleChat = { mode: string; characterIds: unknown; metadata: unknown };
 type ScheduleCharacter = { data?: unknown } | null;
 
 function record(value: unknown): Record<string, unknown> {
@@ -17,26 +16,6 @@ function record(value: unknown): Record<string, unknown> {
     }
   }
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-}
-
-function stringArray(value: unknown): string[] {
-  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string");
-  if (typeof value !== "string") return [];
-  try {
-    return stringArray(JSON.parse(value));
-  } catch {
-    return [];
-  }
-}
-
-function timeZone(value: unknown): string | undefined {
-  if (typeof value !== "string" || !value.trim()) return undefined;
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: value }).format();
-    return value;
-  } catch {
-    return undefined;
-  }
 }
 
 export function parseSlurpWeekSchedule(value: unknown): WeekSchedule | null {
@@ -81,13 +60,28 @@ function dateKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function isStale(schedule: WeekSchedule, localNow: Date): boolean {
+function dateKeyInTimeZone(date: Date, zone?: string): string {
+  if (!zone) return dateKey(date);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: zone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+function isStale(schedule: WeekSchedule, localNow: Date, zone?: string): boolean {
   const monday = new Date(localNow);
   const day = monday.getDay();
   monday.setDate(monday.getDate() - (day === 0 ? 6 : day - 1));
   monday.setHours(0, 0, 0, 0);
   const weekStart = new Date(schedule.weekStart);
-  const storedWeekKey = `${weekStart.getUTCFullYear()}-${String(weekStart.getUTCMonth() + 1).padStart(2, "0")}-${String(weekStart.getUTCDate()).padStart(2, "0")}`;
+  // Engine schedules store weekStart as the Monday date at UTC midnight. Compare
+  // that stable calendar key with the local Monday instead of shifting the stored
+  // boundary into the host or viewer time zone.
+  const storedWeekKey = dateKeyInTimeZone(weekStart);
   return storedWeekKey < dateKey(monday);
 }
 
@@ -98,7 +92,7 @@ export function buildSlurpCreatorScheduleContext(
   localNow: Date,
   zone?: string,
 ): string | null {
-  if (!enabled || !schedule || isStale(schedule, localNow)) return null;
+  if (!enabled || !schedule || isStale(schedule, localNow, zone)) return null;
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
   const today = schedule.days[days[(localNow.getDay() + 6) % 7]!];
   if (!today?.length) return null;
@@ -112,32 +106,16 @@ export function buildSlurpCreatorScheduleContext(
 }
 
 export async function resolveSlurpCreatorScheduleContext(
-  chats: { list(): Promise<ScheduleChat[]> },
   characters: { getById(id: string): Promise<ScheduleCharacter> },
   source: CreatorSource,
-  fallbackTimeZone?: string,
+  timeZone?: string,
   now: Date = new Date(),
 ): Promise<string> {
   if (source.kind !== "character") return "No active Conversation Schedule is available for this Creator today.";
   const character = await characters.getById(source.entityId);
   const schedule = parseSlurpWeekSchedule(record(record(character?.data).extensions).conversationSchedule);
   if (!schedule) return "No active Conversation Schedule is available for this Creator today.";
-
-  let enabledZone: string | undefined;
-  for (const chat of await chats.list()) {
-    if (chat.mode !== "conversation" || !stringArray(chat.characterIds).includes(source.entityId)) continue;
-    const metadata = record(chat.metadata);
-    if (metadata.conversationSchedulesEnabled !== true) continue;
-    enabledZone ??=
-      timeZone(metadata.conversationTimeZone) ?? timeZone(metadata.promptTimeZone) ?? timeZone(fallbackTimeZone);
-  }
-  const context = buildSlurpCreatorScheduleContext(
-    enabledZone !== undefined,
-    schedule,
-    source,
-    zonedDate(now, enabledZone),
-    enabledZone,
-  );
+  const context = buildSlurpCreatorScheduleContext(true, schedule, source, zonedDate(now, timeZone), timeZone);
   if (context) return context;
   return "No active Conversation Schedule is available for this Creator today.";
 }

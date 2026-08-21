@@ -416,7 +416,6 @@ export async function generateNoodlerPost(
   const linkedPublicAccount = await noodle.resolveAccountSource(account as SlurpAccount);
   const scheduleContext = linkedPublicAccount
     ? await resolveSlurpCreatorScheduleContext(
-        createChatsStorage(db),
         createCharactersStorage(db),
         linkedPublicAccount,
         undefined,

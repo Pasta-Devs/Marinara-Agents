@@ -120,7 +120,7 @@ export async function generateNoodlerCreatorReply(input: {
   const settings = await createSlurpStorage(input.db).getSettings();
   const source = await createSlurpStorage(input.db).resolveAccountSource(input.creator);
   const scheduleContext = source
-    ? await resolveSlurpCreatorScheduleContext(createChatsStorage(input.db), createCharactersStorage(input.db), source)
+    ? await resolveSlurpCreatorScheduleContext(createCharactersStorage(input.db), source)
     : undefined;
   const messages = buildNoodlerCreatorReplyMessages({
     ...input,

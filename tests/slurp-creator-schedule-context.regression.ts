@@ -20,58 +20,26 @@ const schedule = {
 const source = { kind: "character", entityId: "character-1", displayName: "Ari" };
 const fixed = new Date("2026-08-18T05:30:00.000Z");
 const character = { data: JSON.stringify({ extensions: { conversationSchedule: schedule } }) };
-const chats = (enabled: boolean, zone = "America/New_York") => ({
-  list: async () => [
-    {
-      mode: "conversation",
-      characterIds: JSON.stringify([source.entityId]),
-      metadata: JSON.stringify({ conversationSchedulesEnabled: enabled, conversationTimeZone: zone }),
-    },
-  ],
-});
-const oppositeChats = {
-  list: async () => [
-    ...((await chats(false).list()) as never[]),
-    {
-      mode: "conversation",
-      characterIds: JSON.stringify([source.entityId]),
-      metadata: JSON.stringify({ conversationSchedulesEnabled: true, conversationTimeZone: "America/New_York" }),
-    },
-  ],
-};
 const characters = (value: typeof character | null) => ({ getById: async () => value });
 
 async function main() {
-  const context = await resolveSlurpCreatorScheduleContext(chats(true), characters(character), source, "UTC", fixed);
+  const context = await resolveSlurpCreatorScheduleContext(characters(character), source, "America/New_York", fixed);
   assert.match(context, /busy at work and slow to reply/u);
   assert.match(context, /Tuesday/u);
   assert.match(context, /America\/New_York/u);
-
-  const orderIndependent = await resolveSlurpCreatorScheduleContext(
-    oppositeChats,
-    characters(character),
-    source,
-    "UTC",
-    fixed,
-  );
-  assert.match(orderIndependent, /busy at work and slow to reply/u);
-
-  const disabled = await resolveSlurpCreatorScheduleContext(chats(false), characters(character), source, "UTC", fixed);
-  assert.match(disabled, /No active Conversation Schedule/u);
 
   const staleCharacter = {
     data: JSON.stringify({
       extensions: { conversationSchedule: { ...schedule, weekStart: "2026-08-10T00:00:00.000Z" } },
     }),
   };
-  const stale = await resolveSlurpCreatorScheduleContext(chats(true), characters(staleCharacter), source, "UTC", fixed);
+  const stale = await resolveSlurpCreatorScheduleContext(characters(staleCharacter), source, "America/New_York", fixed);
   assert.match(stale, /No active Conversation Schedule/u);
 
-  const missing = await resolveSlurpCreatorScheduleContext(chats(true), characters(null), source, "UTC", fixed);
+  const missing = await resolveSlurpCreatorScheduleContext(characters(null), source, "UTC", fixed);
   assert.match(missing, /No active Conversation Schedule/u);
 
   const persona = await resolveSlurpCreatorScheduleContext(
-    chats(true),
     characters(character),
     { ...source, kind: "persona" },
     "UTC",
