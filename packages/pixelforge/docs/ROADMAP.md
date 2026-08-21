@@ -109,7 +109,17 @@ These five gate more of the roadmap than everything else combined. Marked **LOAD
 
 Only the first option creates a persisted block, and if it is chosen that block is **separate from S5 with its own lifetime** — world mutations answer to the timeline anchor, player state answers to the player. Conflating those two is how an inventory gets rewound because a door was reopened.
 
-**Companion — the rehydration order, which is not obvious and is easy to get wrong.** The block must be restored **after** `PF.world.build` and **before** `saved.zone` resolves. World-derived ids (a discovered sub-zone, a bed, a workplace binding) do not exist until the compile has run, and the restore path already lands the player at spawn for an id it cannot resolve — so a block rehydrated too late is a block whose references are silently dropped, and one rehydrated too early points at nothing.
+**Scope: route-scoped, and that is inherited rather than newly decided.** `60-save.js` states the covenant in its own header — in routes mode "rows anchor to the visible message, so swipes, branches, and checkpoint loads **rewind the world with the story**". Player state rides in that snapshot alongside everything else, so a rewound turn rewinds what happened during it. That is the coherent reading: the turn is the unit, and undoing a turn undoes the fishing trip inside it. Putting the player block *outside* route snapshots would be the exception, and it would need arguing — it buys "your inventory survives a swipe" at the price of leaving you holding a fish you caught in a branch that no longer exists.
+
+One inconsistency to inherit knowingly: **metadata mode** (older engines) does not rewind at all, which `60-save.js` already documents as a limitation. Player state will diverge across a timeline seam there exactly as world state already does. That is a known gap, not a new one.
+
+**Companion — the rehydration order, which is not obvious and is easy to get wrong.** Both blocks restore **after** `PF.world.build` and **before** `saved.zone` resolves, in that window and in this order:
+
+1. **the world-state block** (if the sibling option is chosen) — it can *remove* zones, since a flag may close or destroy one;
+2. **the S5 player block** — its discovery field can *add* zones, since a found sub-zone is compiled on entry;
+3. **then** `saved.zone` resolves, against the set of zones that actually exists.
+
+The window matters at both ends. World-derived ids — a discovered sub-zone, a bed, a workplace binding — do not exist until the compile has run, so a block rehydrated too early points at nothing. And the restore path already lands the player at spawn for an id it cannot resolve, so a block rehydrated too late has its references silently dropped and the player wakes up somewhere else.
 
 **Depends on:** nothing technically; it is a decision, not a dependency. Sequence it **with or before its first consumer** — which under the suggested plan is S3 in 0.11. **Do not let the first consumer define the schema by accident.**
 
