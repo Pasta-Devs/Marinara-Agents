@@ -113,11 +113,18 @@ Only the first option creates a persisted block, and if it is chosen that block 
 
 One inconsistency to inherit knowingly: **metadata mode** (older engines) does not rewind at all, which `60-save.js` already documents as a limitation. Player state will diverge across a timeline seam there exactly as world state already does. That is a known gap, not a new one.
 
-**Companion — the rehydration order, which is not obvious and is easy to get wrong.** Both blocks restore **after** `PF.world.build` and **before** `saved.zone` resolves, in that window and in this order:
+**Companion — the rehydration order, which is not obvious and is easy to get wrong.** The S5 player block restores **after** `PF.world.build` and **before** `saved.zone` resolves. If the sibling world-state option is chosen it restores in the same window, first; under host-authoritative or session-only there is no such block and steps 1 and 2 collapse into one:
 
-1. **the world-state block** (if the sibling option is chosen) — it can *remove* zones, since a flag may close or destroy one;
+1. **the world-state block**, *if there is one* — it can *remove* zones, since a flag may close or destroy one;
 2. **the S5 player block** — its discovery field can *add* zones, since a found sub-zone is compiled on entry;
 3. **then** `saved.zone` resolves, against the set of zones that actually exists.
+
+**Suppression outranks discovery, and the two are not the same kind of fact.** Both can name the same zone — the narrator collapses the cave the player found last week — and running discovery second would otherwise resurrect it. The rule is not disjoint key spaces, which would forbid a perfectly ordinary story; it is that **discovery is a memory and suppression is a present-tense claim**, so:
+
+- a zone the world-state block suppressed **stays suppressed**, whatever discovery says. Gone beats found.
+- but discovery is **not erased** by suppression. The player still knows the cave exists; W6's map still shows it; it simply cannot be entered, and `saved.zone` pointing at it lands them at spawn exactly as an unresolvable id already does.
+
+Which is the better story anyway: a place you found and can no longer reach is content, and a place you never knew about is nothing.
 
 The window matters at both ends. World-derived ids — a discovered sub-zone, a bed, a workplace binding — do not exist until the compile has run, so a block rehydrated too early points at nothing. And the restore path already lands the player at spawn for an id it cannot resolve, so a block rehydrated too late has its references silently dropped and the player wakes up somewhere else.
 
