@@ -2081,13 +2081,18 @@ PF.world = (() => {
       const workZone = member.workplace ? zones[zoneIdByName.get(member.workplace) ?? ""] : null;
       if (workZone) {
         zone = workZone;
-        // Behind the counter when the building keeps one, the room's walkable
-        // middle otherwise — the two boxes an OWNER already gets. A named worker
-        // stands where the owner would stand rather than in some third place
-        // invented for them, so a shop with an assistant reads as one room with
-        // two people working in it.
-        const workBuilding = buildings.find((b) => b.interior?.zoneId === workZone.id);
-        wander = workBuilding?.interior?.post ?? (workZone === v ? plazaBox() : fullZoneBox(workZone));
+        // The room's walkable middle — the SAME box a resident owner of that place
+        // already gets, so a named worker stands where the owner would rather
+        // than in some third place invented for them.
+        //
+        // There is deliberately no "behind the counter" branch. A workplace can
+        // only ever name a zone the BRIEF declared (`workplace` resolves against
+        // brief._ids.zones, so always `z*`), and a work post belongs to a
+        // COMPILER-MINTED building (`s*`/`h*`, keyed by `special` in WORK_POSTS).
+        // The two id spaces are disjoint by construction — see the harness case
+        // that pins it — so a counter lookup here could never match, and one was
+        // removed rather than left reading as though it might.
+        wander = workZone === v ? plazaBox() : fullZoneBox(workZone);
         // Always dispersed: a workplace is a SHARED box by definition — it exists
         // precisely for the cases with more than one person in it — and two sprites
         // on one tile makes the lower one impossible to talk to.

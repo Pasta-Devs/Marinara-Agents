@@ -5770,4 +5770,58 @@ const cellarBrief = (prosperity) => ({
   }
 }
 
+// ── A WORKPLACE AND A WORK POST LIVE IN DIFFERENT ID SPACES ────────────────
+// `workplace` resolves against the BRIEF's declared zones, so it always names a
+// `z*`. A work post (the strip behind a shop counter) belongs to a building the
+// COMPILER minted, which is `s*` or `h*` and has no brief name to be named by.
+// The two can never meet, which is why the cast loop has no counter branch —
+// review flagged the lookup that used to sit there as unreachable, and it was.
+//
+// Pinned because the removal RELIES on it: if a future change ever gives a
+// brief-declared place a compiler work post, or lets a workplace name a minted
+// building, this fails and whoever did it learns that the box a named worker
+// stands in needs revisiting.
+{
+  const sealed = brief.validate(
+    {
+      scale: "town",
+      prosperity: "thriving",
+      name: "Probe",
+      places: [
+        { kind: "workshop", name: "The Yards" },
+        { kind: "gathering", name: "The Kettle" },
+      ],
+      cast: [
+        { name: "A", role: "smith", kind: "maker", tint: "red", home: "Probe", household: 1 },
+        { name: "B", role: "innkeep", kind: "host", tint: "amber", home: "The Kettle", household: 2 },
+        { name: "C", role: "hand", kind: "folk", tint: "green", home: "Probe", workplace: "The Yards", household: 3 },
+        { name: "D", role: "trader", kind: "merchant", tint: "violet", home: "Probe", household: 4 },
+      ],
+    },
+    ctx,
+  );
+  const w = world.build(7, "cozy-village", sealed);
+  const briefZoneIds = new Set(Object.keys(sealed._ids.zones));
+  assert.ok(briefZoneIds.size >= 3, "the brief declared zones to check against");
+  for (const id of briefZoneIds) {
+    assert.ok(/^z\d+$/.test(id), `a brief-declared zone id is always z*, got ${id}`);
+  }
+  // No compiled zone that a workplace could name carries a work post.
+  for (const id of briefZoneIds) {
+    const zone = w.zones[id];
+    if (!zone) continue;
+    assert.ok(!zone.workPost, `${id} is nameable as a workplace, so it must not carry a work post`);
+  }
+  // And the named worker really is inside the zone they were assigned.
+  const at = (name) => {
+    for (const id in w.zones) if (w.zones[id].npcs.some((n) => n.name === name)) return id;
+    return null;
+  };
+  const yardsId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Yards")[0];
+  const sim = new loadedPF.Sim(w);
+  sim.clockMin = 12 * 60;
+  sim.resolveSchedules();
+  assert.equal(at("C"), yardsId, "a named worker is in the workshop at midday");
+}
+
 console.log("brief validator + compiler: all cases passed");
