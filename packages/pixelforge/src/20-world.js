@@ -561,7 +561,15 @@ PF.world = (() => {
     let x = area.x0;
     for (const room of rooms) {
       const x1 = x + room.span - 1;
-      if (x1 > area.x1) break; // the caller sized the list; this is the floor under it
+      // LOUD, matching the unknown-purpose throw below and the PLACERS startup
+      // check. A `break` here eats the ENTIRE TAIL: one oversized room silently
+      // drops every room after it, and `share()` has already dealt sleepers into
+      // the dropped ones — so those people get no bed, `bedFor` is never set for
+      // them, and their night handle is null. The caller sizes the list, so a
+      // disagreement is a bug in the sizer, not a floor to land on. Measured
+      // across the whole harness corpus: 3003 calls, this has never fired.
+      if (x1 > area.x1)
+        throw new Error(`pixelforge: room "${room.purpose}" span ${room.span} overflows its band (x1 ${x1} > ${area.x1})`);
       // South wall first, then the door back out of it. The run covers the
       // divider column too, so the wall reads as one run rather than a comb.
       for (let wx = x; wx <= Math.min(x1 + 1, area.x1); wx++) {
@@ -1251,6 +1259,21 @@ PF.world = (() => {
     zone.mapKind = "building"; // World Maps export kind (spec §8)
     // The floors, LAST: their stairs land against furniture that is already down,
     // and a storey's own rooms are carved into a shell of its own.
+    // G2 — THE SERVICE ROW. Row h-2 is not merely "the stair row": it carries
+    // `zone.spawn`, both stair steps, the tile linkInterior delivers a player
+    // onto, the tile a sub-floor's return portal delivers onto, and the tile the
+    // save's restore rescue teleports to WITHOUT testing it. `put()` is
+    // bounds-checked and nothing else, so a furnisher that lays a wall across
+    // this row makes a storey unreachable and nothing anywhere says so.
+    //
+    // Three columns, not the whole row, on purpose: the farm already paints a
+    // solid table at (2, h-2) and that is fine — it is nowhere near a stair.
+    // This fires in a PLAYER'S world, where no harness runs.
+    const apronC = (w / 2) | 0;
+    for (const gx of [apronC - 1, apronC, apronC + 1]) {
+      if (zone.solid[(h - 2) * w + gx])
+        throw new Error(`pixelforge: ${kind} paints solid over the service row at ${gx},${h - 2}`);
+    }
     zone.floors = flights.map(([dir, plan]) => subFloor(zone, dir, plan));
     // A building's bed list SPANS its floors. Whoever deals beds out asks the
     // building, not the storey — "the fourth berth at the inn" has to mean the
@@ -1863,12 +1886,18 @@ PF.world = (() => {
     // bed, at night), never somewhere they drift: standable() rules out door
     // tiles, so anyone who wandered into a bedroom could not walk back out of it
     // and would hold the room until the next daypart moved them.
-    const fullZoneBox = (z) => ({
-      x0: 2,
-      y0: z.rooms.reduce((floor, room) => Math.max(floor, room.y1 + 2), 2),
-      x1: z.w - 3,
-      y1: z.h - 3,
-    });
+    // The common floor south of every walled band. A SINGLE y-floor, which is
+    // why a second band can invert it: `walkableIn` normalises the corners and
+    // plants the NPC on the entry apron, while the sim's `inside` test reads the
+    // RAW box — so the snap re-fires every daypart and every candidate step is
+    // rejected. The NPC is not drifting; it is frozen on its own doormat. Today
+    // the minimum slack across every compiled zone is ONE row.
+    const fullZoneBox = (z) => {
+      const y1 = z.h - 3;
+      const y0 = z.rooms.reduce((floor, room) => Math.max(floor, room.y1 + 2), 2);
+      if (y0 > y1) throw new Error(`pixelforge: ${z.id} has no common floor left for a wander box (${y0} > ${y1})`);
+      return { x0: 2, y0, x1: z.w - 3, y1 };
+    };
     // Transients loiter at a public spot — the inn, an existing resident shop's
     // front, or the plaza — spread across whatever the settlement has (seeded).
     const shopSpots = buildings
