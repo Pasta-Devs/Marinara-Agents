@@ -72,7 +72,21 @@ PF.world = (() => {
     for (let x = x0; x < x0 + w; x++) {
       put(z, x, wallY, "object", "wall", true);
       for (let y = y0; y < wallY; y++) put(z, x, y, "object", "wallStone", true);
-      for (let y = y0 - 2; y < y0; y++) put(z, x, y, "overhead", y === y0 - 2 ? "roof" : "roofEdge");
+      // The eave overhangs the verge, NEVER the road. A building's solid body
+      // already clears the street, but its roofline is two overhead rows above
+      // the footprint, and the south band starts one row under the crossroad — so
+      // a row of houses painted its roofs straight across the main street and the
+      // road simply vanished for the whole length of the frontage. Rendered, a
+      // town read as one continuous roof with a lane at either end of it.
+      //
+      // Skipping the paint costs no lots, which setting the band back would: an
+      // outpost is 28x20 and moving its south row two rows down halves the
+      // settlement. A house fronting directly onto the street is also the more
+      // honest shape for a terrace.
+      for (let y = y0 - 2; y < y0; y++) {
+        if (z.ground[idx(z, x, y)] === "path") continue;
+        put(z, x, y, "overhead", y === y0 - 2 ? "roof" : "roofEdge");
+      }
       for (let y = y0; y < facadeY; y++) put(z, x, y, "overhead", "roof");
     }
     for (const wx of windows || []) {
