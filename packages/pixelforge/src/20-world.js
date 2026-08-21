@@ -631,7 +631,12 @@ PF.world = (() => {
   // guidance tells the model is narrative texture for the map description, and
   // letting it size real geometry would hang the building's shape on the least
   // constrained number in the brief.
-  const GUEST_BERTHS = { outpost: 4, hamlet: 5, village: 6, town: 9, city: 12 };
+  // A city is 11 and not 12 for the reason the docstring below states: the wing
+  // holds TWELVE bunked, and `thriving` adds one on top of the table. Twelve
+  // here made a thriving city 13 and the wing fell through to `dormitory()` --
+  // the exact bunkhouse-with-a-bar this table exists to prevent. The bound is on
+  // the table PLUS prosperity, never on the table alone.
+  const GUEST_BERTHS = { outpost: 4, hamlet: 5, village: 6, town: 9, city: 11 };
   const BERTH_PROSPERITY = { struggling: -1, modest: 0, thriving: 1 };
   /** How many guests the settlement's gathering was built to sleep.
    *

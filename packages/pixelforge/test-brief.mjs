@@ -3723,8 +3723,8 @@ const innBrief = (overrides, guests) => ({
   // so nothing here can be reading the cast. `scale` is the size axis…
   const berths = (overrides) =>
     innOf(world.build(424242, "cozy-village", brief.validate(innBrief(overrides, 0), ctx))).beds.length;
-  const bySize = ["outpost", "hamlet", "village", "town"].map((scale) => berths({ scale }));
-  assert.deepEqual(bySize, [4, 5, 6, 9], `a bigger settlement builds a bigger inn (${bySize.join(",")})`);
+  const bySize = ["outpost", "hamlet", "village", "town", "city"].map((scale) => berths({ scale }));
+  assert.deepEqual(bySize, [4, 5, 6, 9, 11], `a bigger settlement builds a bigger inn (${bySize.join(",")})`);
   // …and `prosperity` is the means axis, a step either side of it.
   const byMeans = ["struggling", "modest", "thriving"].map((prosperity) => berths({ prosperity }));
   assert.deepEqual(byMeans, [5, 6, 7], `a richer village builds a roomier inn (${byMeans.join(",")})`);
@@ -3735,8 +3735,11 @@ const innBrief = (overrides, guests) => ({
   // rooms hold bunked — and that is a property of the NUMBERS rather than of a
   // clamp, so it is checked here rather than defended in the compiler. Every
   // combination, zero transients throughout.
+  // EVERY scale, city included. It was omitted when `city` shipped in 0.9, and
+  // the assertion below -- already written, already correct -- then sat
+  // unreached while a thriving city compiled a bunkhouse.
   const built = {};
-  for (const scale of ["outpost", "hamlet", "village", "town"]) {
+  for (const scale of ["outpost", "hamlet", "village", "town", "city"]) {
     for (const prosperity of ["struggling", "modest", "thriving"]) {
       const w = world.build(424242, "cozy-village", brief.validate(innBrief({ scale, prosperity }, 0), ctx));
       const inn = innOf(w);
@@ -3747,6 +3750,13 @@ const innBrief = (overrides, guests) => ({
       const wing = w.zones[`${inn.id}u`];
       const guests = wing.rooms.filter((room) => !room.quarters);
       assert.ok(guests.length > 0, `${label}: the inn keeps guest ROOMS`);
+      // The bound itself, as arithmetic rather than inferred from the collapse
+      // it causes: a new scale added to the table is caught HERE, with a number,
+      // instead of downstream as a missing room.
+      assert.ok(
+        inn.beds.length <= 12,
+        `${label}: ${inn.beds.length} berths exceeds what the wing holds bunked (12) — the table must bound scale PLUS prosperity`,
+      );
       for (const floor of [inn, wing]) {
         assert.equal(partitionTiles(floor).doors.length, floor.rooms.length, `${label}: a door on every room`);
       }
@@ -3774,6 +3784,12 @@ const innBrief = (overrides, guests) => ({
       "town/struggling": 8,
       "town/modest": 9,
       "town/thriving": 10,
+      // A city tops out AT the wing's capacity, never over it. 12 is the bound,
+      // so thriving lands on it exactly and there is no room left for a table
+      // entry of 12 -- which is the mistake this row is pinned to prevent.
+      "city/struggling": 10,
+      "city/modest": 11,
+      "city/thriving": 12,
     },
     `every settlement builds the inn its size and means say (${JSON.stringify(built)})`,
   );
