@@ -42,7 +42,7 @@ The gaps the roadmap exists to close, in order of how much they matter for *this
 5. **Progression** — social progression (rapport, reputation) first; and — revised per Ruling 1 — **light mechanical progression** (skills, tools, money) as the lean-play track. The earlier claim that XP doesn't matter here was half wrong: it doesn't matter *as a substitute for the narrator*, but it does matter as a way to play beside the narrator.
 6. **Call economy** *(new, named by Ruling 1)* — content that plays without spending LLM calls: canned dialogue, offline quests, deterministic weather. The header-and-injection discipline was already serving this pillar unnamed.
 
-Also load-bearing but not a "pillar": **soft stakes** (closed doors, missed people, weather — the only grade of risk this game needs) and **time-meaning** (the clock should be a decision, not a toll).
+**Secondary tags.** Items below also carry lighter tags that are not pillars — they describe a quality an item serves rather than a gap it closes. The full set, so filtering stays consistent: **soft stakes** (closed doors, missed people, weather — the only grade of risk this game needs), **time-meaning** (the clock should be a decision, not a toll), **world-aliveness**, **world agency**, **world variety**, **world coherence**, **ownership**, **RP frame variety**, and **legibility**. A secondary tag never substitutes for a pillar; an item with only a secondary tag is polish, and should be read as such when sequencing.
 
 ---
 
@@ -52,7 +52,7 @@ Also load-bearing but not a "pillar": **soft stakes** (closed doors, missed peop
 |---|---|---|---|---|
 | 1 | E1 | | 11 | E3 |
 | 2 | E2 | | 12 | L1 |
-| 3 | W6 | | 13 | **0.10 (shipped arc)** + L3 |
+| 3 | W6 | | 13 | **0.10 (next release)** + L3 |
 | 4 | W6 | | 14 | E6 |
 | 5 | E4 | | 15 | W4 |
 | 6 | E5 | | 16 | folded into S1 (first consumer) |
@@ -164,7 +164,7 @@ These four gate more of the roadmap than everything else combined. Marked **LOAD
 
 **What:** a package-side journal buffer that accumulates one-line entries through the day — quests taken/completed, notable catches, money earned, weather worth mentioning — and flushes as **one metered injection when the player sleeps** ("You quested; here is what happened"), burning on accepted turn exactly like the existing one-shots. The maintainer's wrap-up boundary, built as a general mechanism: useful even with zero quests ("you fished all afternoon and the rain came in"), so the GM stays honest about offline time at day grain without per-step taxation.
 
-**Pillar:** Call economy; Consequence (the narration side of it). **Unlocks:** P4's GM-awareness contract; a natural save/chapter rhythm. **Depends on:** P1 (a bed to trigger it; inn berths also count); the injection-discipline machinery (exists).
+**Pillar:** Call economy; Consequence (the narration side of it). **Unlocks:** P4's GM-awareness contract; a natural save/chapter rhythm. **Depends on:** P1 — **hard**, not soft: the wrap-up fires when the player sleeps, so with no bed anywhere there is no boundary and the ledger never flushes (inn berths count as a bed). Plus the injection-discipline machinery, which exists.
 
 ### P6. Resources, building, upgrading *(old 8)*
 
@@ -186,7 +186,7 @@ These four gate more of the roadmap than everything else combined. Marked **LOAD
 
 **What:** enterable ruins and lookouts — plus the reason to enter: **lazily-compiled sub-zones** chained off wilds edges and enterable features (the cave behind the ruin, deeper woods, a derelict deck below the hull), deterministic from `hash(seed, edgeId, depth)`, compiled on first entry. The unknown *exists without pre-existing*; the sealed brief stays sealed.
 
-**Pillar:** the unknown — the missing half of exploration: destinations that don't exist yet. **Unlocks:** W1 gets something behind the gate; P3's mining/foraging get places that feel earned; sailing gets shores worth landing on. **Companions:** discovery state (a found place stays found), and the S2 once-per-feature flavor injection so first entry always lands prose. **Depends on:** S2; benefits from 0.10's room vocabulary; deliberately sequenced late because its payoff multiplies with what's coming — the one deferral justified by dependency, not art.
+**Pillar:** the unknown — the missing half of exploration: destinations that don't exist yet. **Unlocks:** W1 gets something behind the gate; P3's mining/foraging get places that feel earned; sailing gets shores worth landing on. **Companions:** the S2 once-per-feature flavor injection, so first entry always lands prose — and **discovery state**, which needs saying precisely because it is a promise the save format cannot currently keep. A found place staying found is save data, and the snapshot has no discovery field; `simFromSaved` restores none. So either it rides the versioned player block of Open Question 2 (rehydrated after `PF.world.build` and before `saved.zone` resolves), or **discovery is session-only and W2 must say so out loud**. Do not ship the ladder with the stronger promise implied and the weaker behaviour built. **Depends on:** S2; benefits from 0.10's room vocabulary; deliberately sequenced late because its payoff multiplies with what's coming — the one deferral justified by dependency, not art.
 
 ### W3. Cities and districts *(old 17 — half shipped)*
 
@@ -266,7 +266,7 @@ These four gate more of the roadmap than everything else combined. Marked **LOAD
 
 **Suggested next three releases** (a suggestion, not a commitment):
 
-- **0.11** — S2 + S3 + L2 (+P1 if it fits): the second verb, things, weather; the world becomes touchable.
+- **0.11** — S2 + S3 + L2 + **P1**: the second verb, things, weather, and a bed; the world becomes touchable. P1 is not optional here — P5 in 0.12 has no trigger without a bed to sleep in, so slipping it silently strands the release after.
 - **0.12** — S4 + P3 (fishing first, per the ruling's specified model) + P5's ledger buffer: the first full action stack.
 - **0.13** — P4 quests + E1 offline content pack (one generation batch) + the quest board: the lean-play mode complete.
 - **S1 lands whenever the engine channel does** — slot its first consumers (shelter, boarded door) into whichever release that is.
