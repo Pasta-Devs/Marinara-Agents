@@ -36,9 +36,22 @@ function fixtureChats(chats: ReturnType<typeof chat>[]) {
   } as never;
 }
 
+function legacyFixtureChats(chats: ReturnType<typeof chat>[]) {
+  return { list: async () => chats } as never;
+}
+
 async function contextAt(instant: string, chats: ReturnType<typeof chat>[], timeZone?: string) {
   return buildGeneratedCharacterScheduleContext(
     fixtureChats(chats),
+    new Map([[characterId, "Breakfast Character"]]),
+    timeZone,
+    new Date(instant),
+  );
+}
+
+async function legacyContextAt(instant: string, chats: ReturnType<typeof chat>[], timeZone?: string) {
+  return buildGeneratedCharacterScheduleContext(
+    legacyFixtureChats(chats),
     new Map([[characterId, "Breakfast Character"]]),
     timeZone,
     new Date(instant),
@@ -68,6 +81,15 @@ async function main() {
   );
   assert.equal(
     await contextAt("2026-08-17T08:00:00.000Z", [chat("chat-1", {})], "UTC"),
+    "No generated schedules are available for today.",
+  );
+  assert.match(await legacyContextAt("2026-08-17T08:00:00.000Z", [enabledChat()], "UTC"), /eating breakfast/u);
+  assert.equal(
+    await legacyContextAt(
+      "2026-08-17T08:00:00.000Z",
+      [chat("chat-1", { conversationSchedulesEnabled: false, characterSchedules: { [characterId]: schedule } })],
+      "UTC",
+    ),
     "No generated schedules are available for today.",
   );
   assert.match(
