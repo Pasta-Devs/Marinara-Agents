@@ -108,6 +108,28 @@ assert.equal(parsed.refresh.posts.length, 1);
 assert.equal(parsed.refresh.posts[0]?.authorHandle, "character");
 assert.equal(validateNoodleGeneratedRefresh(parsed.refresh, new Set(["character"]), new Set(["character"])), null);
 
+const slurpFlatActivity = parseSlurpGeneratedRefreshResponse(
+  JSON.stringify([
+    {
+      tempId: "slurp-post-1",
+      authorHandle: "@character",
+      content: "A Slurp update.",
+      poll: null,
+      imagePrompt: null,
+      attachGalleryImage: false,
+    },
+    { tempId: "invalid" },
+  ]),
+);
+assert.equal(slurpFlatActivity.refresh.posts.length, 1);
+assert.equal(slurpFlatActivity.refresh.posts[0]?.tempId, "slurp-post-1");
+assert.equal(slurpFlatActivity.refresh.posts[0]?.authorHandle, "@character");
+assert.equal(slurpFlatActivity.refresh.posts[0]?.content, "A Slurp update.");
+assert.equal(slurpFlatActivity.rejected.length, 1);
+assert.equal(slurpFlatActivity.rejected[0]?.collection, "posts");
+assert.equal(slurpFlatActivity.rejected[0]?.index, 1);
+assert.ok(slurpFlatActivity.rejected[0]?.issueCount);
+
 const wrappedRefresh = parseNoodleGeneratedRefreshResponse(
   JSON.stringify([
     {

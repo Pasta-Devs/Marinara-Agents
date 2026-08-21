@@ -2360,7 +2360,7 @@ function StageProfileForm({
       <WizardFooter
         step={2}
         onBack={onCancel}
-        backLabel={isEditing ? "Cancel" : "Back"}
+        backLabel={localizeUi("ui.slurp.creatorForm.cancel")}
         showProgress={!isEditing}
         disabled={isPending || isGenerating}
         finalAction={
