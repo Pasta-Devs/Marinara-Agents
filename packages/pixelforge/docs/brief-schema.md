@@ -22,9 +22,12 @@ through the derivations below.
   theme: "cozy-village",    // echo only — ALWAYS overwritten with the wizard's theme, valid or
                             // not, so the stored brief is self-contained and the model can never
                             // pick a skin that fights the wizard.
-  scale: "village",         // ENUM outpost|hamlet|village|town — the ONLY size input.
+  scale: "village",         // ENUM outpost|hamlet|village|town|city — the ONLY size input.
                             //   outpost 28x20 / base 4 buildings   hamlet 34x24 / 6
                             //   village 44x30 / 8                  town 56x38 / 12
+                            //   city 96x72 / 40 — the first scale where `buildings` can
+                            //   actually bind: the ground outruns the cast (capped at 10),
+                            //   so the constraint moves from the map to the claimants.
   surround: "fields",       // ENUM woods|fields|rocky|water|barren → ground mix, border ring,
                             // scatter density. Theme-neutral.
   prosperity: "modest",     // ENUM struggling|modest|thriving. Consumers: path material, fence
@@ -70,7 +73,20 @@ through the derivations below.
                             // (case/whitespace/diacritics) → the settlement root. NO substring
                             // matching — a deterministic guess can bind an NPC to the wrong zone
                             // forever. Reads only the already-finalized zone list.
-      household: 1,         // int 1-6. SAME NUMBER = SAME ROOF. The way a RESIDENT (see standing)
+      workplace: "St Aldwin's",
+                            // OPTIONAL zone NAME reference, same exact → folded resolution as
+                            // `home` and the same refusal to substring-match. Where the working
+                            // day is spent when OWNERSHIP cannot say: the compiler infers a work
+                            // anchor from what somebody owns, but ownership is one building per
+                            // person and one person per building, so a school's second teacher, a
+                            // market's fourth seller and a shop assistant have no way to be placed
+                            // without this. Unresolved falls to NONE, never to the root the way
+                            // `home` does — "works at the settlement" is not a box anyone can stand
+                            // in — and the drop is recorded in `_repairs`. Omitted for anyone who
+                            // works where they live or runs the place themselves, and a brief that
+                            // never sets it compiles exactly as it did before the field existed.
+                            // Moves the WORKING anchor only: it never rehouses anybody.
+      household: 1,         // int 1-10. SAME NUMBER = SAME ROOF. The way a RESIDENT (see standing)
                             // causes a dwelling to exist, bounded by construction:
                             // "30 people → 30 houses" is inexpressible in this schema.
       persona: "…",         // TEXT ≤100 — "what they want, and what they are hiding."
@@ -122,7 +138,7 @@ response is **never stored** (checkpoints capture by value — see #5110).
    `features` arrives as an OBJECT keyed by anything, take `Object.values()` before the array
    check. A truncated array keeps its complete elements and drops the partial one.
 2. **Scalars.** Enum folds (trim/case). `scale` receiving a NUMBER buckets it (<8 outpost, <20
-   hamlet, <60 village, else town) — the most-observed weak-model slip (population dumped into the
+   hamlet, <60 village, <200 town, else city) — the most-observed weak-model slip (population dumped into the
    size slot). Unknown enum → field default. All text sanitized (markdown/HTML/backticks/control
    chars stripped), grapheme-truncated at word boundaries; a clause-losing truncation of
    `situation` degrades to empty instead (a cut hook is worse than none).
@@ -130,9 +146,10 @@ response is **never stored** (checkpoints capture by value — see #5110).
    drop feature items with unknown tags whole; a `host` in the cast with no gathering place
    synthesizes AT MOST ONE interior named from the host (the player can walk into the inn).
 4. **Cast.** Bounds 4-10 (over → keep `leader` + first-N by array order, hoisting a `leader`
-   found past the cap into the kept set); `home` resolution per §1; a household >6 members
-   splits **per member** by `hash(seed, "household-split-<memberId>")`, scanning forward
-   (wraparound) to the first household with room — deterministic, no clustering on one target.
+   found past the cap into the kept set); `home` resolution per §1. There is NO cap on how many
+   people share a household number — unrelated lodgers, sisters at a convent and recruits in a
+   barracks are all one number, and `CAPS.household` bounds only WHICH numbers exist (an id
+   space the size of the cast), never how many share one.
 5. **Derivation & caps** (buildings — the "30 people" rule; **only `resident`-standing cast
    members generate buildings** — see the §1 `standing` note):
    - dwellings = distinct **resident** households **homed at the settlement root** (a resident
@@ -173,7 +190,7 @@ response is **never stored** (checkpoints capture by value — see #5110).
      the keeper's bed. Only a gathering lays berths at all; a named house or church sleeps its own
      people and lets nothing;
    - **lots are physical**, not budgeted: the row placer lays what the map is wide enough for
-     (two on an outpost or a hamlet, six in a village, eight in a town), which is under
+     (two on an outpost or a hamlet, six in a village, eight in a town, eighteen in a city), which is under
      `BASE[scale]` at every size. They are claimed in order — named places, then specials, then
      dwellings, then market stalls — with ONE floor: while any household is still unhoused, the
      **last free lot goes to housing**. A workshop or a named place that would leave a family with
@@ -196,7 +213,7 @@ response is **never stored** (checkpoints capture by value — see #5110).
      shelves, and the OWNER's working anchor moved inside (only the owner's: the rest of the
      household are residents there, not staff), because an empty shop reads worse than a
      locked door. The inn's guest berths are sized from `scale` and `prosperity` (GUEST_BERTHS —
-     three to ten of them), never from tonight's guest list; whoever arrives past the last berth
+     three to thirteen of them), never from tonight's guest list; whoever arrives past the last berth
      shares the common room as before. None of this adds a save field: the
      handles are re-baked on every compile and placement is a pure function of the saved clock;
    - **height** is a facade, not a footprint: every body row of a building is already solid wall,

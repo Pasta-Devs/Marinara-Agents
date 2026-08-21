@@ -564,7 +564,15 @@ PF.world = (() => {
       put(zone, doorX, area.y1 + 1, "object", "door", false);
       if (x1 < area.x1) for (let wy = area.y0; wy <= area.y1; wy++) put(zone, x1 + 1, wy, "object", "wall", true);
       const rect = { x0: x, y0: area.y0, x1, y1: area.y1 };
-      const furnished = ROOM_FURNISH[room.purpose]?.(zone, rect, room) ?? {};
+      // LOUD, the way an unknown feature tag already is. An optional call here
+      // carved the walls and the door and then furnished nothing, so an unknown
+      // purpose compiled a sealed empty box that looks deliberate — and the room
+      // vocabulary is about to grow from one purpose to a dozen. A feature tag
+      // with no placer throws at startup; a room purpose with no furnisher had
+      // no check at all, which is precisely backwards.
+      const furnish = ROOM_FURNISH[room.purpose];
+      if (!furnish) throw new Error(`pixelforge: room purpose "${room.purpose}" has no furnisher`);
+      const furnished = furnish(zone, rect, room) ?? {};
       placed.push({ purpose: room.purpose, ...(room.private ? { private: true } : {}), ...rect, doorX, ...furnished });
       x = x1 + 2;
     }
@@ -599,8 +607,9 @@ PF.world = (() => {
     // band is the only one that can land in the MIDDLE of a building: the columns
     // it leaves free are how the rest of the building is reached past it, and a
     // wing that took the whole width would seal off everything above it. The
-    // reserve caps the wing at two rooms — eight bunked, above CAPS.household —
-    // and anything past that falls to the open plan, which walls nothing.
+    // reserve caps the wing at two rooms — eight bunked — and anything past that
+    // falls to the open plan, which walls nothing. Eight used to be above
+    // CAPS.household and so unreachable; the cap is an id space now, so it is not.
     quarters: { band: 3, span: 4, soft: 3, max: 4, keepOpen: true, privateSpan: 2 },
   };
 
@@ -622,7 +631,7 @@ PF.world = (() => {
   // guidance tells the model is narrative texture for the map description, and
   // letting it size real geometry would hang the building's shape on the least
   // constrained number in the brief.
-  const GUEST_BERTHS = { outpost: 4, hamlet: 5, village: 6, town: 9 };
+  const GUEST_BERTHS = { outpost: 4, hamlet: 5, village: 6, town: 9, city: 12 };
   const BERTH_PROSPERITY = { struggling: -1, modest: 0, thriving: 1 };
   /** How many guests the settlement's gathering was built to sleep.
    *
@@ -650,10 +659,17 @@ PF.world = (() => {
    *  lie about the building and the whole interior becomes the sleeping room.
    *
    *  Bunked bedrooms put that line at NINE in a dwelling — two rooms of four —
-   *  and nine is past CAPS.household, so no single household can reach it. Only
-   *  the compiler's own over-subscription merge does, and a roof carrying two or
-   *  three whole households IS a bunkhouse. Which is the point: the open plan has
-   *  to mean an orphanage, a barracks or a doss-house, never a big family. */
+   *  Bunked bedrooms put that line at NINE in a dwelling — two rooms of four.
+   *  That used to be past CAPS.household, so only the compiler's own
+   *  over-subscription merge could reach it and the open plan always meant an
+   *  orphanage, a barracks or a doss-house. It no longer does: the household
+   *  number is an ID SPACE the size of the cast, so a brief can put nine or ten
+   *  people under one roof deliberately, and the open plan is what they get.
+   *
+   *  Which is right rather than a regression — nine people sharing a roof ARE a
+   *  communal arrangement however they are related, and the brief said so. What
+   *  it costs is the old inference "open plan implies no kinship", which was only
+   *  ever true because the cap made a big family inexpressible. */
   function layoutSleeping(zone, w, h, kind, sleepers, top = 2, owned = false) {
     const plan = SLEEP_PLANS[kind];
     const area = { x0: 1, y0: top, x1: w - 2, y1: top - 1 + plan.band };
@@ -686,8 +702,10 @@ PF.world = (() => {
     // EVERYONE SLEEPS SOMEWHERE outranks the private room. If reserving it would
     // leave the rest of the household without a bed, give the room up and lay the
     // wing the ordinary way; the open plan below is the floor under that in turn.
-    // (No band is wide enough to grow into here: a household is capped at six, and
-    // six — the owner plus five — fits every wing the compiler builds. This is the
+    // (The household cap USED to make this unreachable — six, the owner plus five,
+    // fits every wing the compiler builds. The cap is now an id space, so a brief
+    // can seal a household of ten and this path is live; it stays correct because
+    // the fallback below is a real floor and not a formality. This is the
     // path for a place several households are homed at, where it is a fallback and
     // not a silent drop.)
     if (priv && (rest > count * holds || (rest > 0 && count < 1)))
@@ -867,9 +885,11 @@ PF.world = (() => {
     dwelling(z, w, h, options) {
       // The beds ARE the feature: one per resident, 1x1 and non-solid, so a night
       // visit finds the household asleep in them instead of milling on a doorstep.
-      // Behind BEDROOM DOORS, bunked once a room has to take more than two — a
-      // household at CAPS.household is a big family and keeps its walls, and the
-      // open plan is reserved for the roofs that are genuinely institutional.
+      // Behind BEDROOM DOORS, bunked once a room has to take more than two. A big
+      // family keeps those walls up to nine under one roof; at ten — the id space
+      // ceiling — the wing runs out and the whole floor becomes the sleeping room.
+      // (Measured: rooms survive at 9, zero rooms at 10.) That used to be
+      // unreachable, and the comment here used to say so; a brief can seal it now.
       // SKIPPED, not called with a count of zero, when the band is upstairs — and
       // the rows it would have taken become part of the room (vacatedBand).
       const sleeping = options.upstairs
@@ -1323,7 +1343,8 @@ PF.world = (() => {
     // Laid BEFORE the arithmetic below, because the lots are the arithmetic's
     // input: `scale.buildings` only caps how many the placer bothers to lay, and
     // the map's own width is what actually decides (two on an outpost or a
-    // hamlet, six in a village, eight in a town — all well under the budget).
+    // hamlet, six in a village, eight in a town, eighteen in a city). Under the
+    // budget at every scale below `city`, where the ground finally outruns it.
     // Sizing the dwellings off the budget instead was half of the housing bug:
     // the sum promised slots the ground did not have, so `Math.max(1, …)` handed
     // out a dwelling slot that no lot ever backed.
@@ -1495,15 +1516,82 @@ PF.world = (() => {
       { x: v.w - 12, y: v.h - 8 },
       { x: 4, y: v.h - 8 },
     ];
+    // WHAT EACH FEATURE ACTUALLY PAINTS. One 9x6 rect used to stand for all of
+    // them, and it was a fiction: `market-stalls` paints three tables on a
+    // single row and `landmark-stone` paints ONE tile. Both were being refused
+    // for want of fifty times the ground they use, which is most of why a
+    // village placed nothing — its lot claims leave gaps, just not 9x6 ones.
+    //
+    // Each rect is the placer's true extent plus a one-tile margin, so a feature
+    // still never abuts a wall. Keyed by tag with a conservative default, so a
+    // new tag is safe before anyone measures it.
+    const FEATURE_RECTS = {
+      "water-feature": { w: 8, h: 5 }, // 6x4 pool + the well at x+6
+      "crop-plots": { w: 9, h: 6 }, // the fenced plot is the big one: 8x5
+      "market-stalls": { w: 6, h: 2 }, // three tables on one row
+      workyard: { w: 6, h: 5 },
+      "landmark-stone": { w: 3, h: 3 }, // a single stone
+      shrine: { w: 4, h: 4 },
+      ruin: { w: 6, h: 5 },
+      lookout: { w: 4, h: 4 },
+    };
     const FEATURE_RECT = { w: 9, h: 6 };
+    // The four corners are the PREFERRED anchors — they are what gives a
+    // settlement its recognisable shape — but there are only four of them and a
+    // row of lots sits directly under two. Once the buildings claim their
+    // footprints the corners go with them, and every named feature the model
+    // authored vanished with no error and no trace. Measured, with all four
+    // declared together: 0 of 4 placed at a village, 2 of 4 at an outpost, a
+    // hamlet and a town. Only a city had room, which is exactly the wrong way
+    // round — and the brief tells the model its features WILL exist.
+    //
+    // So a SCAN is the floor under the corners: the first free 9x6 anywhere on
+    // the map. Rows are walked from the outside in — top edge, bottom edge, then
+    // inward — so a displaced feature still rings the settlement the way a
+    // corner one does instead of clumping in the middle of the green.
+    //
+    // A small settlement still places fewer than a large one, because there is
+    // genuinely less ground; what it no longer does is place none.
+    // The two ARTERIES only. The plaza is deliberately NOT excluded: a market or
+    // a well standing in the square is right rather than wrong, and on a small
+    // map an 8x8 plaza reaches every corner rect, so excluding it took an
+    // outpost from two features to none.
+    const roads = [
+      { x: 2, y: midY - 1, w: v.w - 4, h: 2 },
+      { x: midX - 1, y: 2, w: 2, h: v.h - 4 },
+    ];
+    const anchorFree = (x, y, size) => {
+      const rect = { x, y, ...size };
+      return !claimed.some((busy) => intersects(rect, busy)) && !roads.some((busy) => intersects(rect, busy));
+    };
+    // Outside-in row order, computed once. The corners already avoid the roads
+    // at every scale the tables offer, so adding that test to them changes no
+    // placement that works today — it only stops the scan paving the crossroad.
+    // Outside-in row order: top edge, bottom edge, then inward, so a displaced
+    // feature still rings the settlement the way a corner one does rather than
+    // landing in the middle of the green. Bounded by the tallest footprint, and
+    // the per-feature test below is what actually decides a fit.
+    const scanRows = [];
+    for (let top = 3, bottom = v.h - 9; top <= bottom; top++, bottom--) {
+      scanRows.push(top);
+      if (bottom !== top) scanRows.push(bottom);
+    }
     for (const feature of brief.features) {
-      const anchor = featureAnchors.find((candidate) => {
-        const rect = { x: candidate.x, y: candidate.y, ...FEATURE_RECT };
-        return !claimed.some((busy) => intersects(rect, busy));
-      });
-      if (!anchor) continue; // dropped, not misplaced
+      const size = FEATURE_RECTS[feature.tag] ?? FEATURE_RECT;
+      let anchor = featureAnchors.find((candidate) => anchorFree(candidate.x, candidate.y, size));
+      if (!anchor) {
+        for (const y of scanRows) {
+          for (let x = 4; x + size.w <= v.w - 3; x++) {
+            if (!anchorFree(x, y, size)) continue;
+            anchor = { x, y };
+            break;
+          }
+          if (anchor) break;
+        }
+      }
+      if (!anchor) continue; // genuinely nowhere left: a plainer settlement, never a sealed one
       PLACERS[feature.tag]?.(v, anchor.x, anchor.y);
-      claimed.push({ x: anchor.x, y: anchor.y, ...FEATURE_RECT });
+      claimed.push({ x: anchor.x, y: anchor.y, ...size });
     }
     const doorRects = buildings.map((b) => ({ x: b.door.doorX, y: b.door.doorY }));
     const stallReserved = stalls.flatMap((s) => [
@@ -1822,6 +1910,29 @@ PF.world = (() => {
       x1: Math.min(v.w - 3, door.doorX + reach),
       y1: Math.min(v.h - 3, door.doorY + depth),
     });
+    // THE HEAD OF A NAMED BUILDING: the first resident homed there in cast
+    // order. Cast order is already a statement of importance — pass 4 of the
+    // validator hoists a leader ahead of the cap — and a cast list is written
+    // head-first by every model that has ever written one.
+    //
+    // This exists because KEEPING a building and SLEEPING in it are different
+    // facts, and conflating them breaks the moment a brief homes a crowd
+    // somewhere. Ten residents at one address are a dormitory, a barracks or a
+    // boarding house, and the defining thing about all three is that the people
+    // in them LEAVE during the day. Marking every one of them a keeper held the
+    // whole roll indoors around the clock — and on the open plan, which walls
+    // nothing, the wander box covers the bed rows and beds are non-solid, so
+    // they spent the afternoon standing on their own bunks.
+    //
+    // One head each. Everyone else falls to the ordinary resident row, or to the
+    // worker tier when the brief said where they work — which is the right
+    // answer for the eight sisters who live at the convent and work at the church.
+    const headOfBuilding = new Map();
+    brief.cast.forEach((member) => {
+      if ((member.standing ?? "resident") !== "resident") return;
+      const id = zoneIdByName.get(member.home);
+      if (id && !headOfBuilding.has(id)) headOfBuilding.set(id, member);
+    });
     brief.cast.forEach((member, index) => {
       const npcId = `n${index + 1}`;
       const standing = member.standing ?? "resident";
@@ -1888,6 +1999,23 @@ PF.world = (() => {
           // a householder's. Left null when the place laid them none — a resident
           // homed at a WILDS sleeps rough, which is what living in the woods is.
           if (ownBed) home = { zoneId: ownBed.zoneId, wander: bedBox(ownBed), spread: false };
+          // KEEPING A NAMED BUILDING. The tier used to be reachable only by OWNING
+          // a sanctuary, and ownership is one building per person, so exactly one
+          // keeper was possible in a whole world. Everyone else the brief housed in
+          // a named building — a healer at an infirmary, a scholar at a school, an
+          // elder at the moot house — fell to "*:resident", whose DAY entry is the
+          // plaza. They lived in the building and then walked out of it for the
+          // whole of daylight.
+          //
+          // The HEAD of the building, not everyone under its roof: see
+          // headOfBuilding above for why sleeping somewhere is not keeping it.
+          //
+          // `mapKind` is the right question because it is the compiler's own word
+          // for "this place has a room you can stand in": every named place that
+          // grows an interior is stamped "building", and a WILDS is stamped
+          // "place". So a forager homed in the woods is untouched — they have no
+          // building to keep, which is the point of living out there.
+          if (zone.mapKind === "building" && headOfBuilding.get(zone.id) === member) keeper = true;
         }
       } else if (standing === "transient" && stalls.some((s) => s.owner === member)) {
         const stall = stalls.find((s) => s.owner === member);
@@ -1935,6 +2063,42 @@ PF.world = (() => {
           spread: !guest,
         };
       }
+      // A NAMED WORKPLACE OUTRANKS THE DERIVED ONE. Ownership is the only guess
+      // the compiler can make about where somebody spends the day, and it is a
+      // good one — but it is strictly one building per person and one person per
+      // building, so it can never place a school's second teacher, a market's
+      // fourth seller or a shop assistant. The moment a brief says outright where
+      // someone works, that statement beats the inference.
+      //
+      // Only the WORKING anchor moves. `home` was resolved above and is left
+      // exactly as it was: naming a workplace must never take anybody out of
+      // their own bed, and the night handle is the one thing a day job cannot
+      // have an opinion about.
+      //
+      // Unset for everyone the brief does not speak for (18-brief only emits the
+      // field when it RESOLVES), so this whole block is inert for every brief that
+      // compiled before it existed.
+      const workZone = member.workplace ? zones[zoneIdByName.get(member.workplace) ?? ""] : null;
+      if (workZone) {
+        zone = workZone;
+        // The room's walkable middle — the SAME box a resident owner of that place
+        // already gets, so a named worker stands where the owner would rather
+        // than in some third place invented for them.
+        //
+        // There is deliberately no "behind the counter" branch. A workplace can
+        // only ever name a zone the BRIEF declared (`workplace` resolves against
+        // brief._ids.zones, so always `z*`), and a work post belongs to a
+        // COMPILER-MINTED building (`s*`/`h*`, keyed by `special` in WORK_POSTS).
+        // The two id spaces are disjoint by construction — see the harness case
+        // that pins it — so a counter lookup here could never match, and one was
+        // removed rather than left reading as though it might.
+        wander = workZone === v ? plazaBox() : fullZoneBox(workZone);
+        // Always dispersed: a workplace is a SHARED box by definition — it exists
+        // precisely for the cases with more than one person in it — and two sprites
+        // on one tile makes the lower one impossible to talk to.
+        spread = true;
+      }
+      const worker = !!workZone;
       const spawnAt = walkableSpawn(zone, wander, spread ? npcId : null);
       zone.npcs.push({
         id: npcId,
@@ -1956,6 +2120,7 @@ PF.world = (() => {
           // stall counter); shared boxes disperse by NPC id.
           post: { zoneId: zone.id, wander, spread },
           keeper,
+          worker,
           home,
           public: { zoneId: v.id, wander: plazaBox() },
         },
