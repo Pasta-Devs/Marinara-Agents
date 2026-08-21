@@ -81,7 +81,7 @@ function isStale(schedule: WeekSchedule, localNow: Date, zone?: string): boolean
   // Engine schedules store weekStart as the Monday date at UTC midnight. Compare
   // that stable calendar key with the local Monday instead of shifting the stored
   // boundary into the host or viewer time zone.
-  const storedWeekKey = dateKeyInTimeZone(weekStart);
+  const storedWeekKey = dateKeyInTimeZone(weekStart, "UTC");
   return storedWeekKey < dateKey(monday);
 }
 
