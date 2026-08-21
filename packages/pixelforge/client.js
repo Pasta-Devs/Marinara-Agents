@@ -2301,7 +2301,9 @@ PF.world = (() => {
       // disagreement is a bug in the sizer, not a floor to land on. Measured
       // across the whole harness corpus: 3003 calls, this has never fired.
       if (x1 > area.x1)
-        throw new Error(`pixelforge: room "${room.purpose}" span ${room.span} overflows its band (x1 ${x1} > ${area.x1})`);
+        throw new Error(
+          `pixelforge: room "${room.purpose}" span ${room.span} overflows its band (x1 ${x1} > ${area.x1})`,
+        );
       // South wall first, then the door back out of it. The run covers the
       // divider column too, so the wall reads as one run rather than a comb.
       for (let wx = x; wx <= Math.min(x1 + 1, area.x1); wx++) {
