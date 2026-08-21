@@ -410,7 +410,7 @@ const features = [
   {
     id: "conversation-calls",
     name: "Calls",
-    version: "1.0.9",
+    version: "1.0.11",
     minEngineVersion: "2.4.1",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
@@ -1329,7 +1329,7 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Loader2, Phone, PhoneIncoming, PhoneOff } from "lucide-react";
+import { ChevronRight, Loader2, Phone, PhoneIncoming, PhoneOff } from "lucide-react";
 import { Toaster, toast } from "sonner";
 import { ConversationCallSurface } from ${JSON.stringify(surface)};
 import { useAcceptConversationCall, useConversationCallStatus, useDeclineConversationCall, useStartConversationCall } from ${JSON.stringify(hooks)};
@@ -1371,14 +1371,20 @@ function Settings({ props }) {
   const videoPresence = value?.callCharacterVideoEnabled === true;
   const automaticClips = videoPresence && value?.callAutomaticVideoClipsEnabled === true;
   const customClips = videoPresence && value?.callCustomVideoClipsEnabled === true;
-  return <section style={props.style} className={"mari-chat-option-field space-y-3 rounded-lg px-3 py-2.5 transition-all" + (callsEnabled ? " mari-chat-option-field--active" : "")}>
-    <div className="flex items-start gap-2">
-      <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--secondary)] text-[var(--muted-foreground)]"><Phone size="0.875rem" /></span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-xs font-medium text-[var(--foreground)]">Calls</span>
-        <span className="text-[0.625rem] leading-snug text-[var(--muted-foreground)]">Per-chat call access, microphone handling, camera/screen input, and character video setup.</span>
-      </span>
+  const open = props.expanded === true;
+  const setOpen = typeof props.onExpandedChange === "function" ? props.onExpandedChange : () => {};
+  return <section style={props.style} className="rounded-xl border border-[var(--border)] bg-[var(--secondary)]/70">
+    <div className="flex items-start p-3">
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="-m-1 flex min-w-0 flex-1 items-start gap-2 rounded-lg p-1 text-left transition-colors hover:bg-[var(--accent)]/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--primary)]/60">
+        <Phone size="0.75rem" className="mt-0.5 text-[var(--primary)]" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-[0.6875rem] font-medium text-[var(--foreground)]">Calls</span>
+          <span className="mt-1 block text-[0.625rem] text-[var(--muted-foreground)]">Per-chat call access.</span>
+        </span>
+        <ChevronRight size="0.75rem" className={"mt-0.5 shrink-0 text-[var(--muted-foreground)] transition-transform" + (open ? " rotate-90" : "")} />
+      </button>
     </div>
+    {open ? <div className="space-y-3 px-3 pb-2">
     <Toggle label="Audio/Video Calls" description="Show the call button for you in this conversation." enabled={callsEnabled} onClick={() => updateMetadata({ conversationCallsEnabled: !callsEnabled })} />
     {callsEnabled ? <>
       <div className="space-y-1.5 border-t border-[var(--border)]/60 pt-3">
@@ -1410,6 +1416,7 @@ function Settings({ props }) {
         {videoPresence ? <p className="text-[0.55rem] leading-snug text-[var(--muted-foreground)]">Character video presence uses clips from Character Sprites. Automatic clips generate cached idle and talking clips from character avatars; Custom clips let characters sparsely create one-off requested clips.</p> : null}
       </div> : <p className="rounded-lg border border-dashed border-[var(--border)] px-2.5 py-2 text-[0.59375rem] leading-snug text-[var(--muted-foreground)]">Turn on the call audio pipeline here to use local mic transcription, browser speech recognition, manual system dictation, optional provider-native audio/video input, and call controls.</p>}
     </> : null}
+    </div> : null}
   </section>;
 }
 function Root({ element }) {
