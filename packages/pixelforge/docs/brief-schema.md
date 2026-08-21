@@ -86,7 +86,7 @@ through the derivations below.
                             // works where they live or runs the place themselves, and a brief that
                             // never sets it compiles exactly as it did before the field existed.
                             // Moves the WORKING anchor only: it never rehouses anybody.
-      household: 1,         // int 1-6. SAME NUMBER = SAME ROOF. The way a RESIDENT (see standing)
+      household: 1,         // int 1-10. SAME NUMBER = SAME ROOF. The way a RESIDENT (see standing)
                             // causes a dwelling to exist, bounded by construction:
                             // "30 people → 30 houses" is inexpressible in this schema.
       persona: "…",         // TEXT ≤100 — "what they want, and what they are hiding."
@@ -190,7 +190,7 @@ response is **never stored** (checkpoints capture by value — see #5110).
      the keeper's bed. Only a gathering lays berths at all; a named house or church sleeps its own
      people and lets nothing;
    - **lots are physical**, not budgeted: the row placer lays what the map is wide enough for
-     (two on an outpost or a hamlet, six in a village, eight in a town), which is under
+     (two on an outpost or a hamlet, six in a village, eight in a town, eighteen in a city), which is under
      `BASE[scale]` at every size. They are claimed in order — named places, then specials, then
      dwellings, then market stalls — with ONE floor: while any household is still unhoused, the
      **last free lot goes to housing**. A workshop or a named place that would leave a family with
@@ -213,7 +213,7 @@ response is **never stored** (checkpoints capture by value — see #5110).
      shelves, and the OWNER's working anchor moved inside (only the owner's: the rest of the
      household are residents there, not staff), because an empty shop reads worse than a
      locked door. The inn's guest berths are sized from `scale` and `prosperity` (GUEST_BERTHS —
-     three to ten of them), never from tonight's guest list; whoever arrives past the last berth
+     three to thirteen of them), never from tonight's guest list; whoever arrives past the last berth
      shares the common room as before. None of this adds a save field: the
      handles are re-baked on every compile and placement is a pure function of the saved clock;
    - **height** is a facade, not a footprint: every body row of a building is already solid wall,

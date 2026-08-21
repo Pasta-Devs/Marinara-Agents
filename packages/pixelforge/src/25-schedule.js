@@ -57,6 +57,15 @@ PF.schedule = (() => {
     // tier is keyed on holding a building: it says nothing about WHO someone is,
     // only that the brief already answered where they are. Night is still `home`,
     // because a day job has no opinion about a bed.
+    //
+    // BELOW the per-kind rows, deliberately. This tier exists for the SIX kinds
+    // that have no row at all; a kind that has one already spends its day at
+    // `post`, and `post` is the named workplace by the time this resolves — so
+    // the kind row and the workplace agree without this row's help. Placing it
+    // above them broke exactly the one row that disagrees on purpose: a guard
+    // given a workplace stopped keeping the night watch, because this row sends
+    // everybody home at night and "the watch keeps the night, so the settlement
+    // never looks abandoned" is the whole point of `guard:resident`.
     "*:resident:worker": { dawn: "post", day: "post", dusk: "post", night: "home" },
     // Everyone else with a roof: on their own doorstep at dawn and again at dusk,
     // the square by day, and in bed at night.
@@ -86,8 +95,8 @@ PF.schedule = (() => {
       (sched.keeper ? TABLE[`${sched.kind}:${sched.standing}:keeper`] : null) ??
       (sched.keeper ? TABLE[`*:${sched.standing}:keeper`] : null) ??
       (sched.worker ? TABLE[`${sched.kind}:${sched.standing}:worker`] : null) ??
-      (sched.worker ? TABLE[`*:${sched.standing}:worker`] : null) ??
       TABLE[`${sched.kind}:${sched.standing}`] ??
+      (sched.worker ? TABLE[`*:${sched.standing}:worker`] : null) ??
       TABLE[`*:${sched.standing}`] ??
       DEFAULT;
     return sched[template[daypart] ?? "post"] ?? sched.post ?? null;
@@ -167,8 +176,8 @@ PF.schedule = (() => {
     // The box is FULL. Widen to the zone before giving up. The old fallback
     // dropped straight onto zone.spawn — ONE fixed tile that honours neither
     // `taken` nor standable() — so every NPC overflowing the same box in a
-    // single pass landed on top of the last. A household at the CAPS.household
-    // cap of 6 shares a 3x2 door apron whose door tile standable() excludes, so
+    // single pass landed on top of the last. A household of six shares a 3x2 door
+    // apron whose door tile standable() excludes, so
     // it overflowed on every seed tried, and the losers were both un-talkable
     // (nearest wins on a strict <) and frozen: their wander box is the very box
     // they could not fit in, so every candidate step fails its bounds test.

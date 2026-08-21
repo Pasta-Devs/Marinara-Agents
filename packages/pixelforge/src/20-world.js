@@ -607,8 +607,9 @@ PF.world = (() => {
     // band is the only one that can land in the MIDDLE of a building: the columns
     // it leaves free are how the rest of the building is reached past it, and a
     // wing that took the whole width would seal off everything above it. The
-    // reserve caps the wing at two rooms — eight bunked, above CAPS.household —
-    // and anything past that falls to the open plan, which walls nothing.
+    // reserve caps the wing at two rooms — eight bunked — and anything past that
+    // falls to the open plan, which walls nothing. Eight used to be above
+    // CAPS.household and so unreachable; the cap is an id space now, so it is not.
     quarters: { band: 3, span: 4, soft: 3, max: 4, keepOpen: true, privateSpan: 2 },
   };
 
@@ -701,8 +702,10 @@ PF.world = (() => {
     // EVERYONE SLEEPS SOMEWHERE outranks the private room. If reserving it would
     // leave the rest of the household without a bed, give the room up and lay the
     // wing the ordinary way; the open plan below is the floor under that in turn.
-    // (No band is wide enough to grow into here: a household is capped at six, and
-    // six — the owner plus five — fits every wing the compiler builds. This is the
+    // (The household cap USED to make this unreachable — six, the owner plus five,
+    // fits every wing the compiler builds. The cap is now an id space, so a brief
+    // can seal a household of ten and this path is live; it stays correct because
+    // the fallback below is a real floor and not a formality. This is the
     // path for a place several households are homed at, where it is a fallback and
     // not a silent drop.)
     if (priv && (rest > count * holds || (rest > 0 && count < 1)))
@@ -882,9 +885,11 @@ PF.world = (() => {
     dwelling(z, w, h, options) {
       // The beds ARE the feature: one per resident, 1x1 and non-solid, so a night
       // visit finds the household asleep in them instead of milling on a doorstep.
-      // Behind BEDROOM DOORS, bunked once a room has to take more than two — a
-      // household at CAPS.household is a big family and keeps its walls, and the
-      // open plan is reserved for the roofs that are genuinely institutional.
+      // Behind BEDROOM DOORS, bunked once a room has to take more than two. A big
+      // family keeps those walls up to nine under one roof; at ten — the id space
+      // ceiling — the wing runs out and the whole floor becomes the sleeping room.
+      // (Measured: rooms survive at 9, zero rooms at 10.) That used to be
+      // unreachable, and the comment here used to say so; a brief can seal it now.
       // SKIPPED, not called with a count of zero, when the band is upstairs — and
       // the rows it would have taken become part of the room (vacatedBand).
       const sleeping = options.upstairs
@@ -1338,7 +1343,8 @@ PF.world = (() => {
     // Laid BEFORE the arithmetic below, because the lots are the arithmetic's
     // input: `scale.buildings` only caps how many the placer bothers to lay, and
     // the map's own width is what actually decides (two on an outpost or a
-    // hamlet, six in a village, eight in a town — all well under the budget).
+    // hamlet, six in a village, eight in a town, eighteen in a city). Under the
+    // budget at every scale below `city`, where the ground finally outruns it.
     // Sizing the dwellings off the budget instead was half of the housing bug:
     // the sum promised slots the ground did not have, so `Math.max(1, …)` handed
     // out a dwelling slot that no lot ever backed.

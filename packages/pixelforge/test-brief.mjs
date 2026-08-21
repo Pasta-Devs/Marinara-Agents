@@ -5716,4 +5716,37 @@ const cellarBrief = (prosperity) => ({
   }
 }
 
+// ── A NAMED WORKPLACE DOES NOT OVERRULE A KIND THAT DISAGREES ON PURPOSE ────
+// The `worker` tier exists for the SIX cast kinds with no row of their own,
+// which otherwise fall to "*:resident" and spend the day in the plaza. Placed
+// ABOVE the per-kind rows it also shadowed the kinds that DO have one — and it
+// broke the single row that disagrees deliberately: `guard:resident` keeps the
+// night at `post` so the settlement never looks abandoned, and the generic
+// worker row sends everybody home at night. Naming a guard's workplace
+// therefore switched off the watch, silently.
+//
+// A kind that has a row already spends its day at `post`, and `post` IS the
+// named workplace by the time this resolves, so the two agree without the
+// generic row's help. It belongs below them.
+{
+  const handles = (kind, worker) => {
+    const sched = { kind, standing: "resident", worker, post: "POST", home: "HOME", public: "PLAZA" };
+    return ["dawn", "day", "dusk", "night"].map((part) => loadedPF.schedule.resolve(sched, part)).join(" ");
+  };
+  // THE REGRESSION: the watch survives being given a workplace.
+  assert.equal(handles("guard", true), handles("guard", false), "a guard with a named workplace keeps the kind's own hours");
+  assert.ok(handles("guard", true).includes("night=POST".replace("night=", "")), "sanity: the guard row is post-at-night");
+  assert.equal(
+    handles("guard", true).split(" ")[3],
+    "POST",
+    "a named guard still keeps the night watch — the settlement never looks abandoned",
+  );
+  // And the tier still does the job it was added for: the row-less kinds hold
+  // their post through the day instead of leaking to the plaza.
+  for (const kind of ["folk", "healer", "scholar", "elder", "child", "wanderer"]) {
+    assert.equal(handles(kind, false).split(" ")[1], "PLAZA", `${kind} has no row of its own, so it defaults to the square`);
+    assert.equal(handles(kind, true).split(" ")[1], "POST", `${kind} with a named workplace is AT it at midday`);
+  }
+}
+
 console.log("brief validator + compiler: all cases passed");
