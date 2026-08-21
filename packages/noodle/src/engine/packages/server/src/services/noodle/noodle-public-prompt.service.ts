@@ -94,8 +94,16 @@ export async function buildGeneratedCharacterScheduleContext(
   for (const chat of await chats.list()) {
     if (chat.mode !== "conversation" || missingCharacterIds.size === 0) continue;
     const metadata = parseRecord(chat.metadata);
-    if (!areConversationSchedulesEnabled(metadata)) continue;
-    const schedules = parseRecord(metadata.characterSchedules);
+    const resolvePresence = (
+      chats as ReturnType<typeof createChatsStorage> & {
+        resolveConversationPresenceState?: (id: string) => Promise<{ schedules: Record<string, unknown> }>;
+      }
+    ).resolveConversationPresenceState;
+    const schedules = resolvePresence
+      ? (await resolvePresence(chat.id)).schedules
+      : areConversationSchedulesEnabled(metadata)
+        ? parseRecord(metadata.characterSchedules)
+        : {};
     const timeZone = resolveConversationTimeZone(metadata) ?? normalizePromptTimeZone(fallbackTimeZone);
     const scheduleNow = toZonedWallClockDate(now, timeZone);
 
