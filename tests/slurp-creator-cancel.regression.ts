@@ -14,9 +14,13 @@ const locale = JSON.parse(
 assert.equal(locale["ui.slurp.creatorForm.cancel"], "Cancel");
 assert.match(
   home,
-  /backLabel=\{localizeUi\("ui\.slurp\.creatorForm\.cancel"\)\}/u,
+  /<StageProfileForm[\s\S]*?onCancel=\{editingProfileId \? closeProfileEditor : cancelCreateProfile\}[\s\S]*?backLabel=\{localizeUi\("ui\.slurp\.creatorForm\.cancel"\)\}/u,
   "Discarding a new Creator profile must be named Cancel",
 );
-assert.match(home, /setCreationStep\("source"\)/u, "Back must remain navigation between setup steps");
+assert.match(
+  home,
+  /onBack=\{[\s\S]*?\(\) => setCreationStep\("source"\)[\s\S]*?\}/u,
+  "Back must remain navigation between setup steps",
+);
 
 console.log("Slurp Creator cancel action regression passed");

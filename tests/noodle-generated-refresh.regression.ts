@@ -118,10 +118,17 @@ const slurpFlatActivity = parseSlurpGeneratedRefreshResponse(
       imagePrompt: null,
       attachGalleryImage: false,
     },
+    { tempId: "invalid" },
   ]),
 );
 assert.equal(slurpFlatActivity.refresh.posts.length, 1);
-assert.equal(slurpFlatActivity.rejected.length, 0);
+assert.equal(slurpFlatActivity.refresh.posts[0]?.tempId, "slurp-post-1");
+assert.equal(slurpFlatActivity.refresh.posts[0]?.authorHandle, "@character");
+assert.equal(slurpFlatActivity.refresh.posts[0]?.content, "A Slurp update.");
+assert.equal(slurpFlatActivity.rejected.length, 1);
+assert.equal(slurpFlatActivity.rejected[0]?.collection, "posts");
+assert.equal(slurpFlatActivity.rejected[0]?.index, 1);
+assert.ok(slurpFlatActivity.rejected[0]?.issueCount);
 
 const invitedOnlyFixture = parseSlurpGeneratedRefreshResponse(
   JSON.stringify([

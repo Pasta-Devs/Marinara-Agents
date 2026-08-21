@@ -1195,11 +1195,14 @@ export async function slurpRoutes(app: FastifyInstance) {
         connection,
       });
     } catch (error) {
-      logger.error(error, "[noodler] Stage profile draft generation failed");
-      const detail = error instanceof Error ? error.message : "Unknown provider error.";
-      return reply.code(500).send({
-        error: `Stage profile draft generation failed for the selected Creator using ${connection.model || connection.provider}. ${detail}`,
-      });
+      logger.error(
+        error,
+        "[noodler] Stage profile draft generation failed using %s",
+        connection.model || connection.provider,
+      );
+      return reply
+        .code(500)
+        .send({ error: "Stage profile draft generation failed. Check the generation connection and try again." });
     }
   });
 
