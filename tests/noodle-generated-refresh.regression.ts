@@ -130,6 +130,33 @@ assert.equal(slurpFlatActivity.rejected[0]?.collection, "posts");
 assert.equal(slurpFlatActivity.rejected[0]?.index, 1);
 assert.ok(slurpFlatActivity.rejected[0]?.issueCount);
 
+const wrappedRefresh = parseNoodleGeneratedRefreshResponse(
+  JSON.stringify([
+    {
+      posts: [
+        {
+          tempId: "post-1",
+          authorHandle: "@character",
+          content: "A short update.",
+          poll: null,
+          imagePrompt: null,
+          attachGalleryImage: false,
+        },
+      ],
+      interactions: [],
+      follows: [],
+      digests: [],
+    },
+  ]),
+);
+assert.equal(wrappedRefresh.refresh.posts.length, 1, "a wrapped refresh object must be unwrapped");
+assert.equal(wrappedRefresh.rejected.length, 0);
+assert.equal(wrappedRefresh.refresh.posts[0]?.authorHandle, "@character");
+assert.equal(
+  validateNoodleGeneratedRefresh(wrappedRefresh.refresh, new Set(["@character"]), new Set(["@character"])),
+  null,
+);
+
 const invitedOnlyFixture = parseSlurpGeneratedRefreshResponse(
   JSON.stringify([
     {
