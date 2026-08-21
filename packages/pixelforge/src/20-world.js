@@ -215,6 +215,24 @@ PF.world = (() => {
       put(z, x + 1, y + 1, "object", "table", true);
       put(z, x + 3, y + 2, "object", "well", true);
     },
+    /** A WARD SQUARE: the district's own centre, for a city too big to have one.
+     *
+     *  A settlement has a plaza at its crossroad, and at 104x72 that plaza is a
+     *  ten-minute walk from three quarters of the town — one square serving a
+     *  city is a village in a coat. A ward square is the same idea at district
+     *  grain: paving, a well, and light, so a quarter of the city has somewhere
+     *  of its own to be. Sized to the lot it stands on, like a park. */
+    "ward-square"(z, x, y) {
+      for (let dy = 0; dy < 5; dy++) {
+        for (let dx = 0; dx < 8; dx++) {
+          put(z, x + dx, y + dy, "object", null, false);
+          put(z, x + dx, y + dy, "overhead", null);
+          put(z, x + dx, y + dy, "ground", "stone");
+        }
+      }
+      put(z, x + 3, y + 2, "object", "well", true);
+      z.lights.push({ x: x + 3, y: y + 2 });
+    },
     /** A PUBLIC park: the dense-settlement answer to a lawn.
      *
      *  A town or a city has no room for a garden around every house and would
@@ -1878,6 +1896,11 @@ PF.world = (() => {
           // streets fill and the PLAZA empties, which is the same failure the
           // other way round — a market town whose market nobody attends.
           _square: mintRnd() < 0.25,
+          // Of the rest, half keep their WARD's square rather than the stretch of
+          // street outside their own door — where there are wards at all. Three
+          // grains of public life instead of one: the town's centre, the
+          // quarter's centre, and your own doorstep.
+          _ward: mintRnd() < 0.5,
         });
       }
     }
@@ -2227,6 +2250,55 @@ PF.world = (() => {
     // the empty ground between buildings is doing work of its own.
     const leftoverLots = slots.slice(slotIndex);
     const denseRank = brief.scale === "town" || brief.scale === "city";
+
+    // ── WARDS ──────────────────────────────────────────────────────────────────
+    // A city is 104x72, and its one plaza sits at the crossroad — which is a long
+    // walk from three quarters of the map. So a city carves WARDS: one square per
+    // quadrant, each with its own well, and the residents of that quarter keep it
+    // rather than all walking to the middle of town.
+    //
+    // Only where it is a real problem. A village has one centre because a village
+    // IS one centre, and giving it four would be four empty squares.
+    const wards = [];
+    if (brief.scale === "city") {
+      const taken = new Set();
+      for (const [qx, qy] of [
+        [0.25, 0.25],
+        [0.75, 0.25],
+        [0.25, 0.75],
+        [0.75, 0.75],
+      ]) {
+        const cx = v.w * qx;
+        const cy = v.h * qy;
+        let best = -1;
+        let bestD = Infinity;
+        leftoverLots.forEach((lot, index) => {
+          if (taken.has(index)) return;
+          const d = (lot.x + 4 - cx) ** 2 + (lot.y + 2 - cy) ** 2;
+          if (d < bestD) {
+            bestD = d;
+            best = index;
+          }
+        });
+        if (best < 0) continue;
+        taken.add(best);
+        const lot = leftoverLots[best];
+        PLACERS["ward-square"](v, lot.x, lot.y);
+        wards.push({
+          x: lot.x + 3,
+          y: lot.y + 2,
+          wander: {
+            x0: Math.max(2, lot.x),
+            y0: Math.max(2, lot.y),
+            x1: Math.min(v.w - 3, lot.x + 7),
+            y1: Math.min(v.h - 3, lot.y + 4),
+          },
+        });
+      }
+      // The greens take what the wards did not.
+      for (let i = leftoverLots.length - 1; i >= 0; i--) if (taken.has(i)) leftoverLots.splice(i, 1);
+    }
+
     let greens = 0;
     for (let i = 0; i < leftoverLots.length && greens < 6; i += 3) {
       const lot = leftoverLots[i];
@@ -2664,7 +2736,21 @@ PF.world = (() => {
           buildings.find((b) => (b.households ?? []).includes(member.household));
         keeper = !!(owned && owned.boundPlace && PLACE_BOUND_SPECIALS.has(owned.boundPlace.kind));
         const dwelling = buildings.find((b) => (b.households ?? []).includes(member.household));
-        if (member._minted && !member._square && dwelling?.rect) publicBox = streetBox(dwelling.rect);
+        if (member._minted && !member._square && dwelling?.rect) {
+          // Nearest ward, measured from the door they actually live behind — a
+          // resident belongs to the quarter they live in, not to whichever
+          // quadrant of the arithmetic their household id fell into.
+          const ward =
+            member._ward && wards.length
+              ? wards.reduce((best, w) =>
+                  (w.x - dwelling.rect.x) ** 2 + (w.y - dwelling.rect.y) ** 2 <
+                  (best.x - dwelling.rect.x) ** 2 + (best.y - dwelling.rect.y) ** 2
+                    ? w
+                    : best,
+                )
+              : null;
+          publicBox = ward ? ward.wander : streetBox(dwelling.rect);
+        }
         const ownBed = bedFor.get(member);
         if (zone === v && owned) {
           if (owned.owner === member && owned.interior?.post && zones[owned.interior.zoneId]) {

@@ -7076,4 +7076,71 @@ const cellarBrief = (prosperity) => ({
   assert.equal(checked, 45, `the sweep ran (${checked})`);
 }
 
+// ── A CITY HAS QUARTERS (0.10.0) ───────────────────────────────────────────
+// One plaza at the crossroad is a ten-minute walk from three quarters of a
+// 104x72 map — a city served by a single square is a village in a coat. A city
+// carves WARDS: one square per quadrant, each with its own well, and the people
+// of that quarter keep it instead of all walking to the middle of town.
+//
+// Only where it is a real problem: a village has one centre because a village IS
+// one centre, and four would be four empty squares.
+{
+  const cast = [
+    { name: "Ivy", role: "provost", kind: "leader", tint: "blue", home: "Wardsby", household: 1 },
+    { name: "Bett", role: "innkeep", kind: "host", tint: "amber", home: "Wardsby", household: 2 },
+  ];
+  const built = (scale) => {
+    const sealed = brief.validate(
+      { scale, prosperity: "thriving", name: "Wardsby", places: [], cast },
+      { theme: "cozy-village", seed: 7 },
+    );
+    return world.build(7, "cozy-village", sealed).zones.z1;
+  };
+  // A ward is paving with a well in it, away from the crossroad. Counted off the
+  // TILES rather than a bookkeeping array, so a ward recorded but never painted
+  // does not pass.
+  const wardWells = (v) => {
+    const midX = (v.w / 2) | 0;
+    const midY = (v.h / 2) | 0;
+    let found = 0;
+    v.object.forEach((tile, index) => {
+      if (tile !== "well") return;
+      const x = index % v.w;
+      const y = (index / v.w) | 0;
+      if (Math.abs(x - midX) <= 8 && Math.abs(y - midY) <= 7) return; // the town's own well
+      if (v.ground[index] !== "stone") return; // a park's well stands on grass
+      found++;
+    });
+    return found;
+  };
+  const city = built("city");
+  assert.equal(wardWells(city), 4, `a city carves four ward squares (${wardWells(city)})`);
+  for (const scale of ["village", "town"]) {
+    assert.equal(wardWells(built(scale)), 0, `a ${scale} has one centre, not four`);
+  }
+
+  // And they are USED. Three grains of public life at midday — the town's centre,
+  // the quarter's centre, and the street outside your own door — with nobody
+  // grain holding everybody, which is the failure this replaced in both
+  // directions (a hundred in one plaza, or a plaza nobody attends).
+  const sim = new loadedPF.Sim({ zones: { z1: city }, startZone: "z1" });
+  sim.clockMin = 12 * 60;
+  sim.resolveSchedules();
+  const midX = (city.w / 2) | 0;
+  const midY = (city.h / 2) | 0;
+  const outdoors = city.npcs.length;
+  const plaza = city.npcs.filter((n) => Math.abs(n.x - midX) <= 6 && Math.abs(n.y - midY) <= 5).length;
+  const onWard = city.npcs.filter((n) => {
+    const at = city.w * Math.round(n.y) + Math.round(n.x);
+    return city.ground[at] === "stone" && (Math.abs(n.x - midX) > 8 || Math.abs(n.y - midY) > 7);
+  }).length;
+  assert.ok(outdoors > 60, `the city is out of doors at noon (${outdoors})`);
+  assert.ok(plaza > 5, `the town's own square is still busy (${plaza})`);
+  assert.ok(onWard > 5, `and the wards are used (${onWard})`);
+  assert.ok(
+    plaza < outdoors / 2 && onWard < outdoors / 2,
+    `no single square holds the city (plaza ${plaza}, wards ${onWard}, of ${outdoors})`,
+  );
+}
+
 console.log("brief validator + compiler: all cases passed");
