@@ -101,7 +101,7 @@ const artifactClient = execFileSync("unzip", ["-p", artifactPath, "client.js"], 
 assert.deepEqual(artifactManifest, manifest);
 assert.match(artifactClient, /Call summary connection/u);
 assert.match(artifactClient, /Loading connection(?:…|\\u2026)/u);
-assert.match(artifactClient, /mari-chrome-control flex h-8 w-8 items-center justify-center p-0 max-md:h-9 max-md:w-9/u);
+assert.match(artifactClient, /mari-chrome-control flex h-9 w-9 items-center justify-center p-0/u);
 assert.match(artifactClient, /Per-chat call access\./u);
 assert.match(artifactClient, /aria-expanded/u);
 assert.doesNotMatch(artifactClient, /Per-chat call access, microphone handling/u);
