@@ -116,6 +116,11 @@ export async function requestNotesByIds<T extends { id: string }>(ids: readonly 
     const notes = await request<T[]>(`/notes?${params}`, "GET", undefined, signal);
     for (const note of notes) notesById.set(note.id, note);
   }
+  const missingIds = requestedIds.filter((id) => !notesById.has(id));
+  if (missingIds.length)
+    throw new Error(
+      `Long-Term Memory context unavailable for ${missingIds.length} note${missingIds.length === 1 ? "" : "s"}.`,
+    );
   return requestedIds.flatMap((id) => {
     const note = notesById.get(id);
     return note ? [note] : [];

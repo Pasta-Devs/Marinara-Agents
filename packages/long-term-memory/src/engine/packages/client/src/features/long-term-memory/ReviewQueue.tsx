@@ -1111,7 +1111,7 @@ export default function ReviewQueue({
     for (const source of review.data?.sources ?? []) {
       ids.add(source.sourceNoteId);
       source.targets.forEach((target) => {
-        if (target.rows.some((row) => row.mutation.kind !== "create_note")) ids.add(target.noteId);
+        if (target.rows.some((row) => row.disposition !== "new")) ids.add(target.noteId);
       });
       source.drafts.forEach((item) =>
         item.draft.mutations.forEach((mutation) => {

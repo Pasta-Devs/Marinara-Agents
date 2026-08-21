@@ -302,11 +302,13 @@ async function main() {
         first: "10000000-0000-4000-8000-000000000011",
         second: "10000000-0000-4000-8000-000000000012",
         recovery: "10000000-0000-4000-8000-000000000013",
+        merge: "10000000-0000-4000-8000-000000000014",
       };
       const reviewMutationIds = {
         first: "10000000-0000-4000-8000-000000000021",
         second: "10000000-0000-4000-8000-000000000022",
         partial: "10000000-0000-4000-8000-000000000023",
+        merge: "10000000-0000-4000-8000-000000000024",
       };
       const makeReviewDraft = (
         draftId: string,
@@ -402,6 +404,19 @@ async function main() {
           },
         },
       });
+      const makeMergeCreateMutation = () => {
+        const mutation = makePartialReviewMutation();
+        return {
+          ...mutation,
+          id: reviewMutationIds.merge,
+          summary: "Merge proposed mobile memory",
+          note: {
+            ...mutation.note,
+            id: "world_merge_proposal_mobile",
+            title: "Merge proposed mobile memory",
+          },
+        };
+      };
       let reviewSources: any[] = [
         {
           sourceNoteId: "source_mobile_recovery",
@@ -446,6 +461,19 @@ async function main() {
                 makeExistingReviewMutation(),
                 makePartialReviewMutation(),
               ]),
+              freshness: "fresh",
+              blockReasons: [],
+              diagnostics: [],
+              candidateRejections: [],
+              deduplications: [],
+            },
+            {
+              draft: makeReviewDraft(
+                reviewDraftIds.merge,
+                reviewMutationIds.merge,
+                "Merge proposed mobile memory",
+                makeMergeCreateMutation(),
+              ),
               freshness: "fresh",
               blockReasons: [],
               diagnostics: [],
@@ -522,6 +550,20 @@ async function main() {
                 },
               ],
             },
+            {
+              noteId: "world_merge_target_mobile",
+              title: "Existing merge target",
+              noteType: "world",
+              rows: [
+                {
+                  draftId: reviewDraftIds.merge,
+                  mutation: makeMergeCreateMutation(),
+                  disposition: "merge",
+                  diagnostics: [],
+                  changes: [],
+                },
+              ],
+            },
           ],
         },
       ];
@@ -530,6 +572,7 @@ async function main() {
       let pendingDraftCount = 2;
       let failSecondReviewAccept = false;
       let failReviewContext = false;
+      let omitReviewContextId: string | null = null;
       let reviewPreflightBlocked = false;
       let reviewFingerprintRevision = 0;
       let lastInjectionRequests = 0;
@@ -733,6 +776,27 @@ async function main() {
               version: 1,
             },
             {
+              id: "world_merge_target_mobile",
+              title: "Existing merge target",
+              type: "world",
+              status: "active",
+              modes: ["roleplay"],
+              scope: {},
+              tags: [],
+              keywords: [],
+              links: [],
+              sections: {
+                facts: {
+                  text: "Existing merge target text.",
+                  importance: "major",
+                  updatedAt: "2026-07-30T00:00:00.000Z",
+                },
+              },
+              createdAt: "2026-07-30T00:00:00.000Z",
+              updatedAt: "2026-07-30T00:00:00.000Z",
+              version: 1,
+            },
+            {
               id: "world_outside_current_chat",
               title: "Memory outside current chat",
               type: "world",
@@ -792,7 +856,7 @@ async function main() {
             const requestedIds = new Set(url.searchParams.get("ids")?.split(",") ?? []);
             return send(
               200,
-              notes.filter((note) => requestedIds.has(note.id)),
+              notes.filter((note) => requestedIds.has(note.id) && note.id !== omitReviewContextId),
             );
           }
           return send(
@@ -818,6 +882,28 @@ async function main() {
             sections: {
               facts: {
                 text: "Second mobile review memory text.",
+                importance: "major",
+                updatedAt: "2026-07-30T00:00:00.000Z",
+              },
+            },
+            createdAt: "2026-07-30T00:00:00.000Z",
+            updatedAt: "2026-07-30T00:00:00.000Z",
+            version: 1,
+          });
+        if (request.method === "GET" && url.pathname.endsWith("/notes/world_merge_target_mobile"))
+          return send(200, {
+            id: "world_merge_target_mobile",
+            title: "Existing merge target",
+            type: "world",
+            status: "active",
+            modes: ["roleplay"],
+            scope: {},
+            tags: [],
+            keywords: [],
+            links: [],
+            sections: {
+              facts: {
+                text: "Existing merge target text.",
                 importance: "major",
                 updatedAt: "2026-07-30T00:00:00.000Z",
               },
@@ -1746,6 +1832,7 @@ async function main() {
       assert.ok(rejectedSuggestionQueries.every((query) => query === ""));
       assert.ok(reviewContextQueries.length > 0);
       assert.ok(reviewContextQueries.every((query) => query.startsWith("?ids=")));
+      assert.ok(reviewContextQueries.some((query) => query.includes("world_merge_target_mobile")));
       assert.equal(
         reviewContextQueries.some((query) => query.includes("includeGlobal")),
         false,
@@ -1855,13 +1942,34 @@ async function main() {
         .check();
       assert.equal(await page.getByRole("button", { name: "Accept eligible (1)" }).isDisabled(), true);
       assert.equal(await page.getByRole("button", { name: "Skip selected (1)" }).isDisabled(), false);
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-control="review-select"]`)
+        .uncheck();
       failReviewContext = false;
+      omitReviewContextId = "world_second_mobile";
+      await reviewContextError.getByRole("button", { name: "Retry" }).click();
+      await reviewContextError.waitFor();
+      assert.equal(await unavailableAccept.isDisabled(), true);
+      omitReviewContextId = null;
       await reviewContextError.getByRole("button", { name: "Retry" }).click();
       await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
       await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
       assert.equal(await unavailableAccept.isDisabled(), false);
-      await page.locator('[data-ltm-review-source-select="source_mobile_review"]').click();
-      await page.getByRole("button", { name: "Clear" }).click();
+      const mergeSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
+      if ((await mergeSource.getAttribute("aria-expanded")) === "false") {
+        await mergeSource.click();
+        await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      }
+      await page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.merge}"]`).click();
+      await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
+      const mergeMutation = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.merge}"]`);
+      await mergeMutation.locator("[data-ltm-review-mutation-toggle]").click();
+      await mergeMutation.getByRole("button", { name: "Open memory" }).click();
+      await page.locator('[data-ltm-surface="vault"]').waitFor();
+      await page.locator("[data-ltm-note-editor]").waitFor();
+      assert.equal(await page.locator("[data-ltm-note-editor] input").first().inputValue(), "Existing merge target");
+      await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').last().click();
+      await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
       await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
       const restoredReviewSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
       if ((await restoredReviewSource.getAttribute("aria-expanded")) === "false") {
