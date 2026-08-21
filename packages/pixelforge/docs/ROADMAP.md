@@ -65,7 +65,7 @@ The gaps the roadmap exists to close, in order of how much they matter for *this
 
 ## S — Substrate (load-bearing)
 
-These four gate more of the roadmap than everything else combined. Marked **LOAD-BEARING** with what each gates.
+These five gate more of the roadmap than everything else combined. Marked **LOAD-BEARING** with what each gates.
 
 ### S1. The GM write-back channel — LOAD-BEARING
 
@@ -90,6 +90,18 @@ These four gate more of the roadmap than everything else combined. Marked **LOAD
 **What:** the shared progression substrate Ruling 2 implies. **Skills:** a small fixed vocabulary aligned to the action verbs (fishing, foraging, mining, crafting — extend only with new verbs), leveling with use and with quest XP; levels shift the RNG tables. **Tools:** items with a quality tier (crude/decent/fine/masterwork, theme-skinned) plus consumable modifiers (bait, charge cells, coffee). Split out as its own item — not folded into fishing — because *every* time-passing action reads it, quests pay into it, and the economy sells it.
 
 **Pillar:** Progression (mechanical); Call economy. **Unlocks / gates:** the specified fishing model (P3), the quest XP loop (P4), the money sink that makes P6's economy circulate (better rod costs money; crafting makes better rods). **Depends on:** S3. **Companion:** visibility policy decided up front (see Open Questions — numbers on screen vs. diegetic prose), so the RP half of the audience never sees a spreadsheet they didn't ask for.
+
+### S5. The player state block — LOAD-BEARING *(promoted from open question 2)*
+
+**What:** one namespaced, versioned block in the save holding everything that belongs to the *player* rather than to the world — inventory and money (S3), skills and tool quality (S4), quest state (P4), the day ledger (P5), the relationship ledger (P2), and discovery state (W2). One block, one version integer, migration on read, and unknown keys preserved rather than dropped so a downgrade does not silently destroy data a newer build wrote.
+
+**Why it is its own item and not a footnote on each consumer.** The package has held **zero new save fields since 0.7**, and that discipline is load-bearing: schedules, placement, floors and rooms are all a pure function of `(seed, brief, clock)`, which is what makes rewind safe and a rebuild byte-identical. Every item above wants to be the first to break it. If they break it one at a time the save grows a field per feature, each with its own ad-hoc default and no migration story, and the first version skew corrupts somebody's game. Designed once, it is a single block with a single version and one rehydration path.
+
+**Pillar:** substrate for Things and both kinds of Progression. **Unlocks / gates:** S3, S4, P2, P4, P5, W2 — every item that has to remember something between sessions. Nothing in L or E needs it, which is worth knowing when sequencing: the world stays derived, the player is what persists.
+
+**Companion — the rehydration order, which is not obvious and is easy to get wrong.** The block must be restored **after** `PF.world.build` and **before** `saved.zone` resolves. World-derived ids (a discovered sub-zone, a bed, a workplace binding) do not exist until the compile has run, and the restore path already lands the player at spawn for an id it cannot resolve — so a block rehydrated too late is a block whose references are silently dropped, and one rehydrated too early points at nothing.
+
+**Depends on:** nothing technically; it is a decision, not a dependency. Sequence it **with or before its first consumer** — which under the suggested plan is S3 in 0.11. **Do not let the first consumer define the schema by accident.**
 
 ---
 
@@ -256,17 +268,18 @@ These four gate more of the roadmap than everything else combined. Marked **LOAD
 
 ## Sequencing
 
-**The three load-bearing items and what they gate** (S4 joins them per Ruling 2):
+**The load-bearing items and what they gate** (S4 joins them per Ruling 2; S5 was promoted out of the open questions):
 
 1. **S1 write-back** — gates consequence everywhere: old 16, quest outcomes, construction, recruit holes, GM hails, disposition bumps. Has the only hard external dependency (engine channel) — *open that conversation first regardless of ship order.*
 2. **S2 Inspect/Use** — gates the entire action layer, the quest board, enterables, and the reserved feature-name consumer.
 3. **S3 pouch + S4 skills/tools** — gate actions' yields, quest rewards, keys, gifts, the economy loop.
+4. **S5 player state block** — gates everything that has to survive a reload: S3, S4, P2, P4, P5, W2. Not a dependency so much as a decision that must be made *before* the first thing that needs it, or it gets made badly four times.
 
 **The independent cheap track: L2 weather/calendar** — gates nothing, gated by nothing, pure function of the saved clock, zero save fields, immediate felt difference. The dessert; don't let it displace the substrate, don't let it wait a year either.
 
 **Suggested next three releases** (a suggestion, not a commitment):
 
-- **0.11** — S2 + S3 + L2 + **P1**: the second verb, things, weather, and a bed; the world becomes touchable. P1 is not optional here — P5 in 0.12 has no trigger without a bed to sleep in, so slipping it silently strands the release after.
+- **0.11** — **S5** + S2 + S3 + L2 + **P1**: the save block first, then the second verb, things, weather, and a bed; the world becomes touchable. S5 leads because S3 is the first thing that has to persist, and a schema retrofitted around an existing pouch is a migration nobody wanted to write. P1 is not optional here — P5 in 0.12 has no trigger without a bed to sleep in, so slipping it silently strands the release after.
 - **0.12** — S4 + P3 (fishing first, per the ruling's specified model) + P5's ledger buffer: the first full action stack.
 - **0.13** — P4 quests + E1 offline content pack (one generation batch) + the quest board: the lean-play mode complete.
 - **S1 lands whenever the engine channel does** — slot its first consumers (shelter, boarded door) into whichever release that is.
@@ -290,7 +303,7 @@ Kept deliberately, so old bad ideas are not re-litigated every few months. The q
 Flagged so a future session doesn't rediscover them the hard way.
 
 1. **The S1 channel's shape.** Custom tool call? Tracker/state-patch? A capability-API addition? This is an *engine* conversation and the roadmap's only hard external dependency. Decide the vocabulary's size cap and the validation story (flags are untrusted model output — same repair discipline as the brief).
-2. **The save-field budget.** Pouch, skills, quests, ledger, relationship state genuinely break the zero-new-save-fields ethos — the first real player-state the package has. Decide the schema **once** (a single namespaced `player` block with its own version) rather than accreting fields item by item.
+2. **The player block's shape** *(the "whether" is settled — see S5; this is the "how")*. Open: the version/migration policy (migrate on read, or refuse and start fresh past N versions?); whether quest state stores completions only or full in-progress objectives; whether the relationship ledger's "last thing between you" line is worth its bytes; and how discovery state keys sub-zones so a re-seeded world does not resurrect a place that no longer compiles.
 3. **Brief schema v2 timing.** E3 (kind split, agenda), E6 (ties), and possibly W4 (specialization) all want brief changes. Bundle them into one `briefVersion` bump with one migration, and decide what happens to sealed v1 briefs (presumably: compile exactly as today — the 0.8 elder precedent).
 4. **Travel keys vs. forced questing.** W1's "by quest" key must never conscript slice-of-life players — codified in P4 as multiple-keys, but each gate's key *set* is a design decision per gate type. Who decides — brief, theme, or wizard?
 5. **Skill/XP visibility.** Numbers on screen serve the grind audience; diegetic prose ("your casts feel surer") serves the RP audience. Both? A HUD toggle? Decide before S4 ships, not after.
