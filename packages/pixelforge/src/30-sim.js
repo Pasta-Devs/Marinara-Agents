@@ -267,8 +267,18 @@ PF.Sim = class {
 
   /** Is another NPC standing on — or already walking onto — this tile? Terrain
    *  alone is not enough: two NPCs would pick the same free tile and slide
-   *  through each other. Casts are capped at ~10, so a scan is cheaper than
-   *  maintaining an occupancy index. */
+   *  through each other.
+   *
+   *  A LINEAR SCAN, and the reason it used to give for that is no longer true.
+   *  It said casts are capped at ~10; the compiler now mints residents to fill a
+   *  settlement, and a thriving city puts a hundred and thirteen of them on one
+   *  exterior zone at midday. So this was re-measured rather than left on a stale
+   *  assumption: `stepNpcs` over that zone costs 0.0039ms a frame, against 0.0019
+   *  for a village of 25. Four thousandths of a millisecond is 0.02% of a 60fps
+   *  budget, so an occupancy index would still be the more expensive of the two.
+   *
+   *  It stays a scan because it is cheap, NOT because the cast is small. If a
+   *  zone ever holds several hundred, measure again before believing this. */
   npcOccupies(z, x, y, exclude, ignore) {
     for (const other of z.npcs) {
       if (other === exclude) continue;
