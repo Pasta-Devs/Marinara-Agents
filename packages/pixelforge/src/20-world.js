@@ -1681,7 +1681,12 @@ PF.world = (() => {
       const db = (b.x + 3 - midX) ** 2 + (b.y + 2 - midY) ** 2;
       return da - db || a.y - b.y || a.x - b.x;
     });
-    slots.length = Math.min(slots.length, budget + interiorPlaces.length);
+    // `budget` alone. Adding the places on top made `scale.buildings` mean
+    // "buildings, plus however many places the brief happened to name", so a
+    // city with four of them could claim all 80 lots against a declared capacity
+    // of 76. The allocation below already reserves lots for places, trades and
+    // the market out of this number.
+    slots.length = Math.min(slots.length, budget);
 
     // ── The residents the brief never named (§4.5) ─────────────────────────────
     // A brief may name ten people. Until now those ten WERE the population: the
@@ -1762,7 +1767,13 @@ PF.world = (() => {
           name = `${nameBook.given[(mintRnd() * nameBook.given.length) | 0]} ${family}`;
         }
         if (takenNames.has(name)) name = `${name} the ${MINTED_ROLES[kind][0]}`;
-        if (takenNames.has(name)) name = `${name} ${household}`;
+        // Counted off a fixed BASE rather than re-suffixing the last candidate:
+        // appending to the running name would give "Maud Thatch 2 3 4" on a
+        // third collision. The loop terminates because each candidate is
+        // distinct and takenNames is finite.
+        const base = takenNames.has(name) ? `${name} ${household}` : name;
+        name = base;
+        for (let suffix = 2; takenNames.has(name); suffix++) name = `${base} ${suffix}`;
         takenNames.add(name);
         const roles = MINTED_ROLES[kind] ?? MINTED_ROLES.folk;
         minted.push({
@@ -2241,7 +2252,12 @@ PF.world = (() => {
         { x: zone.w - 3, y: wMidY },
         { x: zone.w - 4, y: wMidY },
       ]);
-      zone.spawn = { x: 3, y: wMidY };
+      // Set BEFORE the pockets are closed, not after. The west wilds moves its
+      // spawn to the far side further down, and sealing from the east side first
+      // would mark the west half — the future spawn and the tile the portal
+      // actually delivers the player onto — solid whenever the scatter happens to
+      // separate the two.
+      zone.spawn = east ? { x: 3, y: wMidY } : { x: zone.w - 4, y: wMidY };
       sealPockets(zone, zone.spawn);
       // Two-tile edge portals: east edge of the settlement for the first wilds,
       // west edge for the second.
@@ -2270,7 +2286,7 @@ PF.world = (() => {
           label: `Back to ${brief.name}`,
         });
       }
-      if (!east) zone.spawn = { x: zone.w - 4, y: wMidY };
+      // (the west spawn is set above, before sealPockets reads it)
       zone.flavor = place.flavor;
       zone.mapKind = "place"; // World Maps export kind (spec §8)
       zones[id] = zone;

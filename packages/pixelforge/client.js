@@ -1082,8 +1082,17 @@ PF.brief = (() => {
     // Pass 3 — zones. Item-level drop: an unknown tag drops the WHOLE feature.
     // The cap applies to KEPT items (a leading run of junk must not discard
     // the valid features behind it — the places loop's semantics).
+    const featureRoom = Math.min(CAPS.features, FEATURE_ROOM[brief.scale] ?? CAPS.features);
     for (const item of asArray(src.features)) {
-      if (brief.features.length >= Math.min(CAPS.features, FEATURE_ROOM[brief.scale] ?? CAPS.features)) break;
+      if (brief.features.length >= featureRoom) {
+        // SAID OUT LOUD. Everything else in this pass records what it dropped
+        // and why; a rank running out of ground is a better reason than most,
+        // and the whole point of the cap is that a settlement stops PROMISING
+        // what it cannot hold. Losing the promise silently would just move the
+        // silence one layer up.
+        repairs.push(`features: ${brief.scale} has room for ${featureRoom}; dropped the rest`);
+        break;
+      }
       const tag = foldEnum(item?.tag, FEATURE_TAGS, null);
       if (!tag || !SETTLEMENT_TAGS.has(tag)) {
         repairs.push(`features: dropped item with tag ${JSON.stringify(item?.tag ?? null)}`);
@@ -1137,8 +1146,12 @@ PF.brief = (() => {
     let hallCount = 0;
     let gatheringCount = 0;
     let sanctuaryCount = 0;
+    const placeRoom = Math.min(CAPS.places, PLACE_ROOM[brief.scale] ?? CAPS.places);
     for (const item of asArray(src.places)) {
-      if (brief.places.length >= Math.min(CAPS.places, PLACE_ROOM[brief.scale] ?? CAPS.places)) break;
+      if (brief.places.length >= placeRoom) {
+        repairs.push(`places: ${brief.scale} has room for ${placeRoom}; dropped the rest`);
+        break;
+      }
       const kind = foldEnum(item?.kind, PLACE_KINDS, null);
       if (!kind) {
         repairs.push(`places: dropped item with kind ${JSON.stringify(item?.kind ?? null)}`);
@@ -1172,7 +1185,7 @@ PF.brief = (() => {
     // named from the host — the player must be able to walk into the inn.
     const rawCast = asArray(src.cast);
     const hasGathering = brief.places.some((p) => p.kind === "gathering");
-    if (!hasGathering && brief.places.length < Math.min(CAPS.places, PLACE_ROOM[brief.scale] ?? CAPS.places)) {
+    if (!hasGathering && brief.places.length < placeRoom) {
       const host = rawCast.find((item) => foldEnum(item?.kind ?? item?.role, CAST_KINDS, null) === "host");
       const hostName = host ? capText(host.name, 20) : "";
       if (hostName) {
@@ -3437,7 +3450,12 @@ PF.world = (() => {
       const db = (b.x + 3 - midX) ** 2 + (b.y + 2 - midY) ** 2;
       return da - db || a.y - b.y || a.x - b.x;
     });
-    slots.length = Math.min(slots.length, budget + interiorPlaces.length);
+    // `budget` alone. Adding the places on top made `scale.buildings` mean
+    // "buildings, plus however many places the brief happened to name", so a
+    // city with four of them could claim all 80 lots against a declared capacity
+    // of 76. The allocation below already reserves lots for places, trades and
+    // the market out of this number.
+    slots.length = Math.min(slots.length, budget);
 
     // ── The residents the brief never named (§4.5) ─────────────────────────────
     // A brief may name ten people. Until now those ten WERE the population: the
@@ -3518,7 +3536,13 @@ PF.world = (() => {
           name = `${nameBook.given[(mintRnd() * nameBook.given.length) | 0]} ${family}`;
         }
         if (takenNames.has(name)) name = `${name} the ${MINTED_ROLES[kind][0]}`;
-        if (takenNames.has(name)) name = `${name} ${household}`;
+        // Counted off a fixed BASE rather than re-suffixing the last candidate:
+        // appending to the running name would give "Maud Thatch 2 3 4" on a
+        // third collision. The loop terminates because each candidate is
+        // distinct and takenNames is finite.
+        const base = takenNames.has(name) ? `${name} ${household}` : name;
+        name = base;
+        for (let suffix = 2; takenNames.has(name); suffix++) name = `${base} ${suffix}`;
         takenNames.add(name);
         const roles = MINTED_ROLES[kind] ?? MINTED_ROLES.folk;
         minted.push({
@@ -3997,7 +4021,12 @@ PF.world = (() => {
         { x: zone.w - 3, y: wMidY },
         { x: zone.w - 4, y: wMidY },
       ]);
-      zone.spawn = { x: 3, y: wMidY };
+      // Set BEFORE the pockets are closed, not after. The west wilds moves its
+      // spawn to the far side further down, and sealing from the east side first
+      // would mark the west half — the future spawn and the tile the portal
+      // actually delivers the player onto — solid whenever the scatter happens to
+      // separate the two.
+      zone.spawn = east ? { x: 3, y: wMidY } : { x: zone.w - 4, y: wMidY };
       sealPockets(zone, zone.spawn);
       // Two-tile edge portals: east edge of the settlement for the first wilds,
       // west edge for the second.
@@ -4026,7 +4055,7 @@ PF.world = (() => {
           label: `Back to ${brief.name}`,
         });
       }
-      if (!east) zone.spawn = { x: zone.w - 4, y: wMidY };
+      // (the west spawn is set above, before sealPockets reads it)
       zone.flavor = place.flavor;
       zone.mapKind = "place"; // World Maps export kind (spec §8)
       zones[id] = zone;

@@ -215,8 +215,17 @@ PF.brief = (() => {
     // Pass 3 — zones. Item-level drop: an unknown tag drops the WHOLE feature.
     // The cap applies to KEPT items (a leading run of junk must not discard
     // the valid features behind it — the places loop's semantics).
+    const featureRoom = Math.min(CAPS.features, FEATURE_ROOM[brief.scale] ?? CAPS.features);
     for (const item of asArray(src.features)) {
-      if (brief.features.length >= Math.min(CAPS.features, FEATURE_ROOM[brief.scale] ?? CAPS.features)) break;
+      if (brief.features.length >= featureRoom) {
+        // SAID OUT LOUD. Everything else in this pass records what it dropped
+        // and why; a rank running out of ground is a better reason than most,
+        // and the whole point of the cap is that a settlement stops PROMISING
+        // what it cannot hold. Losing the promise silently would just move the
+        // silence one layer up.
+        repairs.push(`features: ${brief.scale} has room for ${featureRoom}; dropped the rest`);
+        break;
+      }
       const tag = foldEnum(item?.tag, FEATURE_TAGS, null);
       if (!tag || !SETTLEMENT_TAGS.has(tag)) {
         repairs.push(`features: dropped item with tag ${JSON.stringify(item?.tag ?? null)}`);
@@ -270,8 +279,12 @@ PF.brief = (() => {
     let hallCount = 0;
     let gatheringCount = 0;
     let sanctuaryCount = 0;
+    const placeRoom = Math.min(CAPS.places, PLACE_ROOM[brief.scale] ?? CAPS.places);
     for (const item of asArray(src.places)) {
-      if (brief.places.length >= Math.min(CAPS.places, PLACE_ROOM[brief.scale] ?? CAPS.places)) break;
+      if (brief.places.length >= placeRoom) {
+        repairs.push(`places: ${brief.scale} has room for ${placeRoom}; dropped the rest`);
+        break;
+      }
       const kind = foldEnum(item?.kind, PLACE_KINDS, null);
       if (!kind) {
         repairs.push(`places: dropped item with kind ${JSON.stringify(item?.kind ?? null)}`);
@@ -305,7 +318,7 @@ PF.brief = (() => {
     // named from the host — the player must be able to walk into the inn.
     const rawCast = asArray(src.cast);
     const hasGathering = brief.places.some((p) => p.kind === "gathering");
-    if (!hasGathering && brief.places.length < Math.min(CAPS.places, PLACE_ROOM[brief.scale] ?? CAPS.places)) {
+    if (!hasGathering && brief.places.length < placeRoom) {
       const host = rawCast.find((item) => foldEnum(item?.kind ?? item?.role, CAST_KINDS, null) === "host");
       const hostName = host ? capText(host.name, 20) : "";
       if (hostName) {
