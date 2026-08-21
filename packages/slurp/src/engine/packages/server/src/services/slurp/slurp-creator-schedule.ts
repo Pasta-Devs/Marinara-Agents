@@ -56,7 +56,10 @@ export function buildSlurpCreatorScheduleContext(
   scheduleOverride?: WeekSchedule | null,
 ): string | null {
   if (!areConversationSchedulesEnabled(metadata)) return null;
-  const schedule = scheduleOverride ?? parseWeekSchedule(parseRecord(metadata.characterSchedules)[source.entityId]);
+  const schedule =
+    scheduleOverride === undefined
+      ? parseWeekSchedule(parseRecord(metadata.characterSchedules)[source.entityId])
+      : scheduleOverride;
   if (!schedule) return null;
   const timeZone = resolveConversationTimeZone(metadata) ?? normalizePromptTimeZone(fallbackTimeZone);
   const localNow = toZonedWallClockDate(now, timeZone);

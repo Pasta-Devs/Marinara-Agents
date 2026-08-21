@@ -78,6 +78,14 @@ async function main() {
     ],
   } as never;
   assert.equal(buildSlurpCreatorScheduleContext(false, schedule, source, fixed), null);
+  assert.match(
+    readFileSync(
+      join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-creator-schedule.ts"),
+      "utf8",
+    ),
+    /scheduleOverride === undefined/u,
+    "An explicit missing character schedule must not fall back to a chat cache",
+  );
 
   const stale = { ...schedule, weekStart: "2026-08-10T00:00:00.000Z" };
   const staleChats = {
