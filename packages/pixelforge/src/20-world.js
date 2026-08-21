@@ -1132,8 +1132,26 @@ PF.world = (() => {
       // — and so a dwelling with no sleepers of its own is still a furnished room.
       // Nothing solid on the row under the bedroom wall: that row is the corridor
       // every bedroom door opens onto.
-      put(z, 2, h - 3, "object", "table", true);
       fillRect(z, w - 6, h - 4, 3, 2, "ground", "rug", false);
+      // THE KITCHEN, as an open corner of the common floor rather than a room
+      // behind a door. A cottage's kitchen IS the main room — walling it off
+      // would need a second band, a second band needs a door row of its own, and
+      // that row would eat the living half a dwelling this size barely has.
+      // Recorded as an AREA for the same reason the vacated band is: open floor
+      // with a purpose is still a purpose, and the vocabulary is about what a
+      // space is FOR rather than how many walls stand around it.
+      //
+      // Row h-3, NOT h-4. Row h-4 is the corridor every bedroom door opens onto,
+      // and a counter laid across it walls the household into its own bedrooms —
+      // thirteen tiles sealed behind a door that opened onto a kitchen bench. The
+      // comment four lines above says that row is untouchable and I put a counter
+      // there anyway; the reachability sweep caught it on the first run.
+      // Counter, never `shelf`: shelving is a SHOP's stock, and telling a home
+      // from a workplace by whether it has any is a distinction the harness makes
+      // and a player reads at a glance.
+      fillRect(z, 1, h - 3, 3, 1, "object", "counter", true);
+      put(z, 5, h - 3, "object", "table", true);
+      z.areas.push({ purpose: "kitchen", x0: 1, y0: h - 3, x1: 3, y1: h - 3 });
       // THE HEARTH. Set into the east wall of the living half — a fire is part of
       // the wall it is built into, and one standing in the middle of the floor
       // reads as a barbecue. Not on row h-2: that row carries the zone's spawn and
@@ -1144,7 +1162,7 @@ PF.world = (() => {
       // `h` by whoever wants it. Runtime-only, like the rest of the schedule
       // furniture — re-baked on every compile, never serialized.
       z.hearth = { x: w - 2, y: h - 3 };
-      z.lights.push({ x: 2, y: h - 3 }, { x: w - 2, y: h - 3 });
+      z.lights.push({ x: 5, y: h - 3 }, { x: w - 2, y: h - 3 });
       return sleeping;
     },
   };

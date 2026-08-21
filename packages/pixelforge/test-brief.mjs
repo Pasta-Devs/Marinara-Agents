@@ -6994,4 +6994,41 @@ const cellarBrief = (prosperity) => ({
   );
 }
 
+// ── A DWELLING HAS A KITCHEN AND A FIRE (0.10.0) ───────────────────────────
+// The room vocabulary, in the dimension a cottage actually has one: a kitchen is
+// not a room behind a door in a house this size, it is the corner of the main
+// room with the counter in it. Recorded as an AREA, the same way the vacated
+// band records itself, because open floor with a purpose is still a purpose.
+{
+  const w = world.build(1, "cozy-village", brief.defaults("cozy-village", 1));
+  const homes = Object.values(w.zones).filter((z) => z.mapKind === "building" && /'s home$/.test(z.name));
+  assert.ok(homes.length >= 2, `the default world has houses in it (${homes.length})`);
+  for (const home of homes) {
+    const kitchen = (home.areas ?? []).find((a) => a.purpose === "kitchen");
+    assert.ok(kitchen, `${home.name} has a kitchen recorded`);
+    // The counter is really THERE, not merely declared — an area record with no
+    // furniture in it is a comment, not a kitchen.
+    let counters = 0;
+    for (let x = kitchen.x0; x <= kitchen.x1; x++) {
+      if (home.object[home.w * kitchen.y0 + x] === "counter") counters++;
+    }
+    assert.ok(counters > 0, `${home.name}'s kitchen has a counter in it`);
+    assert.ok(home.hearth, `${home.name} has a hearth`);
+    assert.equal(
+      home.object[home.w * home.hearth.y + home.hearth.x],
+      "hearth",
+      `${home.name}'s hearth is painted where it is recorded`,
+    );
+    // And the corridor stays clear. Row h-4 is what every bedroom door opens
+    // onto; the kitchen was laid across it once and sealed a household into its
+    // own bedrooms, so this is the specific row that must never carry furniture.
+    for (let x = 1; x < home.w - 1; x++) {
+      assert.ok(
+        !home.solid[home.w * (home.h - 4) + x],
+        `${home.name} left the corridor row clear at ${x},${home.h - 4}`,
+      );
+    }
+  }
+}
+
 console.log("brief validator + compiler: all cases passed");
