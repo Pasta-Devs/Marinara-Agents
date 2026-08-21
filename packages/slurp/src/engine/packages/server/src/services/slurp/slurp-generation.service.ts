@@ -40,6 +40,8 @@ import type { NoodleImagePromptReviewItem } from "./slurp-public-images.service.
 import { getErrorMessage } from "./slurp-public-support.js";
 import { noodleResponseFormat } from "./slurp-response-format.js";
 import { buildSlurpPostTimingContext } from "./slurp-post-timing.js";
+import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
+import { createChatsStorage } from "../storage/chats.storage.js";
 
 export type GeneratedNoodlerPostResult = {
   post: NoodlerManagedPost;
@@ -296,6 +298,7 @@ export function buildNoodlerPostMessages(input: {
   request: Pick<FormattedNoodlerGenerationRequest, "noodlerPostGuide" | "noodlerProjectWork" | "format">;
   allowImagePrompt: boolean;
   generationGuidance: string;
+  scheduleContext?: string;
   generatedAt?: Date;
   publicationTime?: Date;
 }): ChatMessage[] {
@@ -326,6 +329,7 @@ export function buildNoodlerPostMessages(input: {
     `Handle: @${protect(input.account.handle)}`,
     `Bio: ${protect(input.account.bio) || "No bio provided."}`,
     `Stage voice: ${protect(input.stagePersonality) || "No additional stage voice provided."}`,
+    input.scheduleContext ?? "No active Conversation Schedule is available for this Creator today.",
     `Content format: ${format}`,
     "",
     "# Publication timing",
@@ -410,6 +414,14 @@ export async function generateNoodlerPost(
   const recentPosts = await noodle.listNoodlerPostsByAccount(account.id, 8);
   const disclosureMode = account.settings.privacy.identityDisclosure ?? "secret";
   const linkedPublicAccount = await noodle.resolveAccountSource(account as SlurpAccount);
+  const scheduleContext = linkedPublicAccount
+    ? await resolveSlurpCreatorScheduleContext(
+        createChatsStorage(db),
+        linkedPublicAccount,
+        undefined,
+        input.generatedAt ?? new Date(),
+      )
+    : undefined;
   // Derive the identity from the row already in hand; resolving it again would re-read it.
   const publicIdentity = await noodlerPublicIdentityFor(db, linkedPublicAccount);
   const messages = buildNoodlerPostMessages({
@@ -421,6 +433,7 @@ export async function generateNoodlerPost(
     request: input.request,
     allowImagePrompt: imagesEnabled,
     generationGuidance: settings.generationGuidance,
+    scheduleContext,
     generatedAt: input.generatedAt ?? new Date(),
     publicationTime: input.publicationTime,
   });

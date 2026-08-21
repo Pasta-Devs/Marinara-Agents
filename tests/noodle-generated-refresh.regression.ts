@@ -108,6 +108,21 @@ assert.equal(parsed.refresh.posts.length, 1);
 assert.equal(parsed.refresh.posts[0]?.authorHandle, "character");
 assert.equal(validateNoodleGeneratedRefresh(parsed.refresh, new Set(["character"]), new Set(["character"])), null);
 
+const slurpFlatActivity = parseSlurpGeneratedRefreshResponse(
+  JSON.stringify([
+    {
+      tempId: "slurp-post-1",
+      authorHandle: "@character",
+      content: "A Slurp update.",
+      poll: null,
+      imagePrompt: null,
+      attachGalleryImage: false,
+    },
+  ]),
+);
+assert.equal(slurpFlatActivity.refresh.posts.length, 1);
+assert.equal(slurpFlatActivity.rejected.length, 0);
+
 const invitedOnlyFixture = parseSlurpGeneratedRefreshResponse(
   JSON.stringify([
     {
