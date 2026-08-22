@@ -62,18 +62,8 @@ export function normalizeMemoryNagSettings(value: unknown): MemoryNagSettings {
   return {
     scanConnectionId,
     messagesPerBatch: boundedInteger(source.messagesPerBatch, MEMORY_NAG_DEFAULTS.messagesPerBatch, 5, 200),
-    memoriesPerCharacter: boundedInteger(
-      source.memoriesPerCharacter,
-      MEMORY_NAG_DEFAULTS.memoriesPerCharacter,
-      1,
-      50,
-    ),
-    memoriesToConsider: boundedInteger(
-      source.memoriesToConsider,
-      MEMORY_NAG_DEFAULTS.memoriesToConsider,
-      1,
-      50,
-    ),
+    memoriesPerCharacter: boundedInteger(source.memoriesPerCharacter, MEMORY_NAG_DEFAULTS.memoriesPerCharacter, 1, 50),
+    memoriesToConsider: boundedInteger(source.memoriesToConsider, MEMORY_NAG_DEFAULTS.memoriesToConsider, 1, 50),
     memoriesToInject: boundedInteger(source.memoriesToInject, MEMORY_NAG_DEFAULTS.memoriesToInject, 1, 20),
   };
 }

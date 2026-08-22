@@ -34,7 +34,11 @@ function recordName(data: unknown, fallback: string): string {
 export async function contributeMemoryNags(request: PromptContextRequest) {
   if (request.mode !== "roleplay") return null;
   const metadata = metadataRecord(request.chatMeta);
-  if (metadata.enableAgents !== true || !Array.isArray(metadata.activeAgentIds) || !metadata.activeAgentIds.includes("memory-nag")) {
+  if (
+    metadata.enableAgents !== true ||
+    !Array.isArray(metadata.activeAgentIds) ||
+    !metadata.activeAgentIds.includes("memory-nag")
+  ) {
     return null;
   }
   const vault = await readMemoryNagVault(request.chatId);
@@ -42,7 +46,8 @@ export async function contributeMemoryNags(request: PromptContextRequest) {
 
   const runtime = getMemoryNagRuntime();
   const characterRecords = await runtime.resources.listCharacters(request.targetCharacterIds ?? []);
-  const characterName = characterRecords.length > 0 ? recordName(characterRecords[0]!.data, "the character") : "the character";
+  const characterName =
+    characterRecords.length > 0 ? recordName(characterRecords[0]!.data, "the character") : "the character";
   const personaRecords = request.personaId ? await runtime.resources.listPersonas([request.personaId]) : [];
   const personaName = recordName(personaRecords[0]?.data, "User");
   const lines = vault.lastRecall.nags.map((nag) => {

@@ -2,30 +2,53 @@ import { randomUUID } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 import { normalizeMemoryNagSettings } from "../../../../shared/src/features/agents/memory-nag/schema.js";
 import { loadMemoryNagParticipants } from "./participants.js";
+import { getMemoryNagRuntime } from "./package-runtime.js";
 import { scanMemoryNagBatch } from "./scanner.js";
 import { readMemoryNagVault, updateMemoryNagVault } from "./vault.js";
 
 function requiredId(value: unknown, label: string): string {
-  if (typeof value !== "string" || !value.trim() || value.length > 160) throw new Error(`${label} is required.`);
+  if (typeof value !== "string" || !value.trim() || value.length > 160) {
+    throw Object.assign(new Error(`${label} is required.`), { statusCode: 400 });
+  }
   return value.trim();
 }
 
 function memoryText(value: unknown): string {
-  if (typeof value !== "string" || !value.trim()) throw new Error("Memory text is required.");
+  if (typeof value !== "string" || !value.trim()) {
+    throw Object.assign(new Error("Memory text is required."), { statusCode: 400 });
+  }
   return value.trim().replace(/\s+/g, " ").slice(0, 500);
 }
 
 export const memoryNagRoutes: FastifyPluginAsync = async (app) => {
+  app.addHook("preHandler", async (request) => {
+    const params = request.params as { chatId?: unknown };
+    const chatId = requiredId(params.chatId, "Chat ID");
+    const chat = await getMemoryNagRuntime().persistence.getChat(chatId);
+    if (!chat || chat.mode !== "roleplay") {
+      throw Object.assign(new Error("Memory Nag is available only in Roleplay chats."), { statusCode: 400 });
+    }
+  });
+
   app.get<{ Params: { chatId: string } }>("/vault/:chatId", async (request) => {
     const chatId = requiredId(request.params.chatId, "Chat ID");
     return readMemoryNagVault(chatId);
+  });
+
+  app.get<{ Params: { chatId: string } }>("/recall/:chatId", async (request) => {
+    const vault = await readMemoryNagVault(requiredId(request.params.chatId, "Chat ID"));
+    return vault.lastRecall;
+  });
+
+  app.get<{ Params: { chatId: string } }>("/participants/:chatId", async (request) => {
+    return loadMemoryNagParticipants(requiredId(request.params.chatId, "Chat ID"));
   });
 
   app.patch<{ Params: { chatId: string }; Body: unknown }>("/settings/:chatId", async (request) => {
     const chatId = requiredId(request.params.chatId, "Chat ID");
     return updateMemoryNagVault(chatId, (current) => ({
       ...current,
-      settings: normalizeMemoryNagSettings(request.body),
+      settings: normalizeMemoryNagSettings({ ...current.settings, ...(request.body as Record<string, unknown>) }),
     }));
   });
 
@@ -40,9 +63,15 @@ export const memoryNagRoutes: FastifyPluginAsync = async (app) => {
       const participants = await loadMemoryNagParticipants(chatId);
       const allowedIds = new Set(participants.map((participant) => participant.id));
       const characterIds = Array.isArray(request.body?.characterIds)
-        ? [...new Set(request.body.characterIds.filter((id): id is string => typeof id === "string" && allowedIds.has(id)))]
+        ? [
+            ...new Set(
+              request.body.characterIds.filter((id): id is string => typeof id === "string" && allowedIds.has(id)),
+            ),
+          ]
         : [];
-      if (characterIds.length === 0) throw new Error("Choose at least one character.");
+      if (characterIds.length === 0) {
+        throw Object.assign(new Error("Choose at least one character."), { statusCode: 400 });
+      }
       const now = new Date().toISOString();
       return updateMemoryNagVault(chatId, (current) => ({
         ...current,
@@ -77,13 +106,22 @@ export const memoryNagRoutes: FastifyPluginAsync = async (app) => {
       memories: current.memories.map((memory) => {
         if (memory.id !== memoryId) return memory;
         const characterIds = Array.isArray(request.body?.characterIds)
-          ? [...new Set(request.body.characterIds.filter((id): id is string => typeof id === "string" && allowedIds.has(id)))]
+          ? [
+              ...new Set(
+                request.body.characterIds.filter((id): id is string => typeof id === "string" && allowedIds.has(id)),
+              ),
+            ]
           : memory.characterIds;
         return {
           ...memory,
           text: request.body?.text === undefined ? memory.text : memoryText(request.body.text),
           characterIds: characterIds.length > 0 ? characterIds : memory.characterIds,
-          status: request.body?.status === "resolved" ? "resolved" : request.body?.status === "active" ? "active" : memory.status,
+          status:
+            request.body?.status === "resolved"
+              ? "resolved"
+              : request.body?.status === "active"
+                ? "active"
+                : memory.status,
           updatedAt: new Date().toISOString(),
         };
       }),

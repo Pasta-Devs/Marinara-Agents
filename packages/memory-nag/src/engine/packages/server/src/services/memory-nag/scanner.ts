@@ -3,7 +3,6 @@ import type { CapabilityMessageRecord } from "@marinara-engine/shared";
 import type {
   MemoryNagMemory,
   MemoryNagParticipant,
-  MemoryNagVault,
 } from "../../../../shared/src/features/agents/memory-nag/schema.js";
 import { getMemoryNagRuntime } from "./package-runtime.js";
 import { loadMemoryNagParticipants } from "./participants.js";
@@ -23,7 +22,7 @@ function transcriptLine(message: CapabilityMessageRecord, participants: MemoryNa
   const name =
     message.role === "user"
       ? "User"
-      : participants.find((participant) => participant.id === message.characterId)?.name ?? "Assistant";
+      : (participants.find((participant) => participant.id === message.characterId)?.name ?? "Assistant");
   return `[${message.createdAt}] ${name} (${message.characterId ?? message.role}): ${message.content}`;
 }
 
@@ -98,17 +97,22 @@ function buildScanMessages(input: {
       role: "system" as const,
       content: [
         "Read this roleplay batch and save only details worth nagging a character about later.",
+        "The user message is JSON with the character list, active vault memories, and chat batch.",
         "Keep each memory to one short sentence. Record promises, meaningful actions, relationship changes, mistakes, debts, injuries, and memorable admissions.",
         "A memory may belong to more than one character. Do not create memories about the user unless the user explicitly asked a character to remember something.",
         'You may preserve a short dialogue line verbatim when its exact wording matters, then add the speaker and rough context, for example: "I eat glue," Dottore admitted while drinking one night.',
         "Resolve an existing memory only when this batch clearly settles it. Never invent character IDs.",
         `Create at most ${input.perCharacter} memories for any one character. Fewer or none is fine.`,
-        "Return only JSON: {\"memories\":[{\"text\":\"...\",\"characterIds\":[\"id\"]}],\"resolvedMemoryIds\":[\"existing-id\"]}",
+        'Return only JSON: {"memories":[{"text":"...","characterIds":["id"]}],"resolvedMemoryIds":["existing-id"]}',
       ].join("\n"),
     },
     {
       role: "user" as const,
-      content: `<characters>\n${characterList}\n</characters>\n<active_memories>\n${memories}\n</active_memories>\n<chat_batch>\n${input.transcript}\n</chat_batch>`,
+      content: JSON.stringify({
+        characters: characterList,
+        activeMemories: memories,
+        chatBatch: input.transcript,
+      }),
     },
   ];
 }
@@ -177,19 +181,23 @@ export async function scanMemoryNagBatch(chatId: string): Promise<MemoryNagScanP
   const activeIds = new Set(vault.memories.filter((memory) => memory.status === "active").map((memory) => memory.id));
   const resolvedIds = new Set(parsed.resolvedMemoryIds.filter((id) => activeIds.has(id)));
   const checkpointMessageId = batch.at(-1)!.id;
-  await updateMemoryNagVault(chatId, (current) => ({
-    ...current,
-    participants,
-    checkpointMessageId,
-    memories: [
-      ...current.memories.map((memory) =>
-        resolvedIds.has(memory.id)
-          ? { ...memory, status: "resolved" as const, updatedAt: new Date().toISOString() }
-          : memory,
-      ),
-      ...created,
-    ],
-  }));
+  await updateMemoryNagVault(chatId, (current) => {
+    const currentTexts = new Set(current.memories.map((memory) => memory.text.trim().toLowerCase()));
+    const newMemories = created.filter((memory) => !currentTexts.has(memory.text.trim().toLowerCase()));
+    return {
+      ...current,
+      participants,
+      checkpointMessageId,
+      memories: [
+        ...current.memories.map((memory) =>
+          resolvedIds.has(memory.id)
+            ? { ...memory, status: "resolved" as const, updatedAt: new Date().toISOString() }
+            : memory,
+        ),
+        ...newMemories,
+      ],
+    };
+  });
   const processed = start + batch.length;
   return {
     processed,
@@ -203,10 +211,7 @@ export async function scanMemoryNagBatch(chatId: string): Promise<MemoryNagScanP
 
 export async function scanMemoryNagIfDue(chatId: string): Promise<void> {
   const runtime = getMemoryNagRuntime();
-  const [vault, messages] = await Promise.all([
-    readMemoryNagVault(chatId),
-    runtime.persistence.listMessages(chatId),
-  ]);
+  const [vault, messages] = await Promise.all([readMemoryNagVault(chatId), runtime.persistence.listMessages(chatId)]);
   const relevant = messages.filter((message) => message.role === "user" || message.role === "assistant");
   const checkpointIndex = vault.checkpointMessageId
     ? relevant.findIndex((message) => message.id === vault.checkpointMessageId)

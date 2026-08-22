@@ -84,7 +84,9 @@ export function shortlistMemoryNags(input: {
     if (normalizedText.includes(normalized(participant.name))) relevantIds.add(participant.id);
   }
   if (relevantIds.size === 0) {
-    input.participants.filter((participant) => participant.current).forEach((participant) => relevantIds.add(participant.id));
+    input.participants
+      .filter((participant) => participant.current)
+      .forEach((participant) => relevantIds.add(participant.id));
   }
 
   const scored = input.memories
@@ -136,7 +138,10 @@ export function shortlistMemoriesForScan(
         tokenOverlap(tokens(memory.text), transcriptTokens) +
         memory.characterIds.filter((id) => mentionedIds.has(id)).length * 6,
     }))
-    .sort((left, right) => right.score - left.score || Date.parse(right.memory.updatedAt) - Date.parse(left.memory.updatedAt))
+    .sort(
+      (left, right) =>
+        right.score - left.score || Date.parse(right.memory.updatedAt) - Date.parse(left.memory.updatedAt),
+    )
     .slice(0, limit)
     .map((entry) => entry.memory);
 }
