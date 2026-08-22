@@ -18,14 +18,24 @@ through the derivations below.
 
 ```js
 {
-  briefVersion: 1,          // int. Bumped only when a field's MEANING changes.
+  briefVersion: 1,          // int. Bumped only when a field's MEANING changes — but nothing
+                            // reads it yet, so a bump is bookkeeping for a migration that does
+                            // not exist. 0.10 changed `backgroundPopulation`'s meaning and did
+                            // NOT bump: the number moves once, when the queued v2 bundle lands
+                            // (ROADMAP open question 3), not once per change.
   theme: "cozy-village",    // echo only — ALWAYS overwritten with the wizard's theme, valid or
                             // not, so the stored brief is self-contained and the model can never
                             // pick a skin that fights the wizard.
   scale: "village",         // ENUM outpost|hamlet|village|town|city — the ONLY size input.
-                            //   outpost 28x20 / 4 buildings   hamlet 48x28 / 8
-                            //   village 60x40 / 16            town 76x52 / 34
+                            //   outpost 28x20 / 4-building budget   hamlet 48x28 / 8
+                            //   village 60x40 / 16                  town 76x52 / 34
                             //   city 104x72 / 76
+                            //   The building figure is a BUDGET — the most lots the street
+                            //   grid may claim — not a promise of roofs. The grid offers
+                            //   4/8/20/36/80 lots, so the budget is met exactly at outpost
+                            //   and hamlet and BINDS from village up; of the lots it claims
+                            //   only some become door-bearing buildings. Measured across
+                            //   seeds: 4 / 6-7 / 13-14 / 26-27 / 47-48 doors.
                             //   Current tuning, not contract — the authoritative table is
                             //   SCALES in 18-brief.js and it moves with the game (it already
                             //   grew once, in 0.10). Since 0.10 the compiler also MINTS

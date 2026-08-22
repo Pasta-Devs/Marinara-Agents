@@ -3600,17 +3600,20 @@ PF.world = (() => {
     // hall to the leader's — their doors become the interior portals.
     const interiorPlaces = brief.places.filter((p) => p.kind !== "wilds");
     const wildsPlaces = brief.places.filter((p) => p.kind === "wilds");
-    // How many lots the row placer bothers to lay out. It is a ceiling and never
-    // the binding one — the map's own width runs out first at every scale — so
-    // the arithmetic below counts the lots that actually exist, not this.
+    // How many lots the row placer may keep. It is a ceiling, and from `village`
+    // up it is the binding one — the grid offers more ground than the budget
+    // allows — so the arithmetic below counts the lots that survive the cap,
+    // neither this number nor the raw grid.
     const budget = scale.buildings;
 
     // Row-placed buildings in the upper and lower thirds, straddling the plaza.
     // Laid BEFORE the arithmetic below, because the lots are the arithmetic's
-    // input: `scale.buildings` only caps how many the placer bothers to lay, and
-    // the map's own width is what actually decides (two on an outpost or a
-    // hamlet, six in a village, eight in a town, eighteen in a city). Under the
-    // budget at every scale below `city`, where the ground finally outruns it.
+    // input: `scale.buildings` caps how many lots the placer keeps, and the map's
+    // own width decides how many it had to offer — four on an outpost, eight in a
+    // hamlet, twenty in a village, thirty-six in a town, eighty in a city. So the
+    // budget is met exactly at the two smallest ranks and bites at the other
+    // three; it is never left unspent. Fewer lots still become door-bearing
+    // buildings — the rest go to places, trades and the market.
     // Sizing the dwellings off the budget instead was half of the housing bug:
     // the sum promised slots the ground did not have, so `Math.max(1, …)` handed
     // out a dwelling slot that no lot ever backed.
