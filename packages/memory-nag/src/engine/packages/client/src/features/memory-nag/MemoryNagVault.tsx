@@ -28,7 +28,6 @@ function useModalDialog(active: boolean, onClose: () => void, restoreSelector?: 
     if (!dialog) return;
     const focusFrame = requestAnimationFrame(() => (dialog.querySelector<HTMLElement>(FOCUSABLE) ?? dialog).focus());
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!dialog.contains(document.activeElement)) return;
       if (event.key === "Escape") {
         event.preventDefault();
         onCloseRef.current();
@@ -36,6 +35,11 @@ function useModalDialog(active: boolean, onClose: () => void, restoreSelector?: 
       }
       if (event.key !== "Tab") return;
       const focusable = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE)];
+      if (!dialog.contains(document.activeElement)) {
+        event.preventDefault();
+        (focusable[0] ?? dialog).focus();
+        return;
+      }
       if (focusable.length === 0) {
         event.preventDefault();
         dialog.focus();

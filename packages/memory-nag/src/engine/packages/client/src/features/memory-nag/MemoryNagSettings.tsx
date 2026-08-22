@@ -42,6 +42,14 @@ const NUMBER_FIELDS = [
   },
 ] as const;
 
+function clampSettings(settings: MemoryNagSettings): MemoryNagSettings {
+  const clamped = { ...settings };
+  for (const field of NUMBER_FIELDS) {
+    clamped[field.key] = Math.min(field.max, Math.max(field.min, Math.trunc(clamped[field.key])));
+  }
+  return clamped;
+}
+
 export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
   const { t } = useMemoryNagTranslation();
   const chatId = props.chatId ?? "";
@@ -68,10 +76,12 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
     setSaving(true);
     setMessage("");
     try {
+      const nextSettings = clampSettings(settings);
+      setSettings(nextSettings);
       const saved = await memoryNagRequest<MemoryNagVault>(
         `/settings/${encodeURIComponent(chatId)}`,
         "PATCH",
-        settings,
+        nextSettings,
       );
       setSettings(saved.settings);
       if (showSuccess) setMessage(t("memoryNag.settings.saved"));
@@ -91,6 +101,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
     setProgress(null);
     let created = 0;
     let resolved = 0;
+    let previousProgress: Pick<MemoryNagScanProgress, "checkpointMessageId" | "processed"> | null = null;
     try {
       await saveSettings(false);
       while (!controller.signal.aborted) {
@@ -107,6 +118,14 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
           setMessage(t("memoryNag.settings.complete"));
           break;
         }
+        if (
+          previousProgress?.checkpointMessageId === next.checkpointMessageId &&
+          previousProgress.processed === next.processed
+        ) {
+          setMessage(t("memoryNag.settings.stalled"));
+          break;
+        }
+        previousProgress = next;
       }
       await vault.refetch();
     } catch (error) {
@@ -153,9 +172,9 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
               onChange={(event) => {
                 const parsed = Number.parseInt(event.target.value, 10);
                 if (!Number.isFinite(parsed)) return;
-                const clamped = Math.min(field.max, Math.max(field.min, parsed));
-                setSettings((current) => ({ ...current, [field.key]: clamped }));
+                setSettings((current) => ({ ...current, [field.key]: parsed }));
               }}
+              onBlur={() => setSettings((current) => clampSettings(current))}
             />
             <small>{t(field.help)}</small>
           </label>

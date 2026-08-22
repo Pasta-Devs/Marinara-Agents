@@ -25,6 +25,7 @@
   "memoryNag.settings.vault": "Open vault",
   "memoryNag.settings.progress": "Scanned {{processed}} of {{total}} messages · {{created}} added · {{resolved}} resolved",
   "memoryNag.settings.complete": "Vault scan complete.",
+  "memoryNag.settings.stalled": "Vault scan paused because the chat did not advance. Try again.",
   "memoryNag.vault.title": "Memory Nag Vault",
   "memoryNag.vault.loading": "Loading vault…",
   "memoryNag.vault.expandedTitle": "Expanded memory editor",

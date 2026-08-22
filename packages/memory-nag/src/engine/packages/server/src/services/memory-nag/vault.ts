@@ -116,6 +116,18 @@ function vaultDocumentId(chatId: string): string {
   return createHash("sha256").update(`${PACKAGE_ID}\0${DOCUMENT_KIND}\0${chatId}`).digest("hex");
 }
 
+function isVaultCreateConflict(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const conflict = error as { code?: unknown; table?: unknown; keys?: unknown };
+  return (
+    conflict.code === "FILE_UNIQUE_CONSTRAINT" &&
+    conflict.table === "capability_documents" &&
+    Array.isArray(conflict.keys) &&
+    conflict.keys.length === 1 &&
+    conflict.keys[0] === "id"
+  );
+}
+
 async function findDocument(chatId: string): Promise<CapabilityDocumentRecord | null> {
   return getMemoryNagRuntime().persistence.documents.getById(PACKAGE_ID, vaultDocumentId(chatId));
 }
@@ -130,6 +142,7 @@ export async function updateMemoryNagVault(
   update: (current: MemoryNagVault) => MemoryNagVault | Promise<MemoryNagVault>,
 ): Promise<MemoryNagVault> {
   const runtime = getMemoryNagRuntime();
+  let lastCreateError: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {
     const document = await findDocument(chatId);
     const current = normalizeMemoryNagVault(chatId, document?.data);
@@ -148,7 +161,9 @@ export async function updateMemoryNagVault(
           updatedAt: now,
         });
         return next;
-      } catch {
+      } catch (error) {
+        lastCreateError = error;
+        if (!isVaultCreateConflict(error)) throw error;
         continue;
       }
     }
@@ -163,5 +178,6 @@ export async function updateMemoryNagVault(
     });
     if (saved) return next;
   }
+  if (lastCreateError instanceof Error) throw lastCreateError;
   throw new Error("Memory Nag vault changed while it was being saved. Try again.");
 }
