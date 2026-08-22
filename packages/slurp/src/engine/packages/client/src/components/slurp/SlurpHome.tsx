@@ -3402,6 +3402,9 @@ function StageProfileView({
           <p className="text-xs leading-5 text-[var(--muted-foreground)]">
             {localizeUi("ui.noodle.stageprofileview.whenOnThisCreatorPostsOnItsOwnWhile")}
           </p>
+          <p className="text-xs leading-5 text-[var(--muted-foreground)]">
+            {localizeUi("ui.noodle.stageprofileview.automaticPostingProviderDisclosure")}
+          </p>
           <button
             type="button"
             onClick={() => {

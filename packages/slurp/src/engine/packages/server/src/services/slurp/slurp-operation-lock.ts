@@ -1,4 +1,5 @@
 const activeNoodleOperations = new Set<string>();
+let slurpDataDeletionActive = false;
 
 function claimNoodleOperation(key: string): (() => void) | null {
   if (activeNoodleOperations.has(key)) return null;
@@ -22,6 +23,21 @@ export async function tryNoodleOperation<T>(
     return { acquired: true, value: await operation() };
   } finally {
     release();
+  }
+}
+
+export async function trySlurpWrite<T>(operation: () => Promise<T>) {
+  if (slurpDataDeletionActive) return { acquired: false as const };
+  return tryNoodleOperation("slurp-write", operation);
+}
+
+export async function trySlurpDataDeletion<T>(operation: () => Promise<T>) {
+  if (slurpDataDeletionActive || activeNoodleOperations.has("slurp-write")) return { acquired: false as const };
+  slurpDataDeletionActive = true;
+  try {
+    return { acquired: true as const, value: await operation() };
+  } finally {
+    slurpDataDeletionActive = false;
   }
 }
 
