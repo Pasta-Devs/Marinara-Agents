@@ -1237,13 +1237,16 @@ export function createNoodleStorage(db: DB) {
             !liveAccountIdSet.has(interaction.actorAccountId),
         )
         .map((interaction) => interaction.id);
+      const staleInteractionIdSet = new Set(staleInteractionIds);
       const digests = await db.select().from(noodleActivityDigests);
       const staleDigestIds = digests
         .filter(
           (digest) =>
-            (digest.sourcePostId && !posts.some((post) => post.id === digest.sourcePostId)) ||
+            (digest.sourcePostId &&
+              (!posts.some((post) => post.id === digest.sourcePostId) || stalePostIdSet.has(digest.sourcePostId))) ||
             (digest.sourceInteractionId &&
-              !interactions.some((interaction) => interaction.id === digest.sourceInteractionId)) ||
+              (!interactions.some((interaction) => interaction.id === digest.sourceInteractionId) ||
+                staleInteractionIdSet.has(digest.sourceInteractionId))) ||
             strings(digest.accountIds).some((accountId) => !liveAccountIdSet.has(accountId)),
         )
         .map((digest) => digest.id);
@@ -1257,7 +1260,10 @@ export function createNoodleStorage(db: DB) {
       const unlocks = await db.select().from(noodlePostUnlocks);
       const staleUnlockIds = unlocks
         .filter(
-          (unlock) => !liveAccountIdSet.has(unlock.viewerAccountId) || !posts.some((post) => post.id === unlock.postId),
+          (unlock) =>
+            !liveAccountIdSet.has(unlock.viewerAccountId) ||
+            !posts.some((post) => post.id === unlock.postId) ||
+            stalePostIdSet.has(unlock.postId),
         )
         .map((unlock) => unlock.id);
       const runs = await db.select().from(noodleRefreshRuns);
@@ -1269,13 +1275,13 @@ export function createNoodleStorage(db: DB) {
           await tx.delete(noodleActivityDigests).where(inArray(noodleActivityDigests.id, staleDigestIds));
         if (staleInteractionIds.length)
           await tx.delete(noodleInteractions).where(inArray(noodleInteractions.id, staleInteractionIds));
-        if (stalePostIds.length) await tx.delete(noodlePosts).where(inArray(noodlePosts.id, stalePostIds));
         if (staleSubscriptionIds.length)
           await tx
             .delete(noodleAccountSubscriptions)
             .where(inArray(noodleAccountSubscriptions.id, staleSubscriptionIds));
         if (staleUnlockIds.length)
           await tx.delete(noodlePostUnlocks).where(inArray(noodlePostUnlocks.id, staleUnlockIds));
+        if (stalePostIds.length) await tx.delete(noodlePosts).where(inArray(noodlePosts.id, stalePostIds));
         if (staleRunIds.length) await tx.delete(noodleRefreshRuns).where(inArray(noodleRefreshRuns.id, staleRunIds));
         if (staleAccountIds.length) await tx.delete(noodleAccounts).where(inArray(noodleAccounts.id, staleAccountIds));
       });

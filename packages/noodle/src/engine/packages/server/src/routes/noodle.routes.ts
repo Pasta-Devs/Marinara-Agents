@@ -80,7 +80,11 @@ export async function noodleRoutes(app: FastifyInstance) {
       personaIds: new Set(personas.map((persona) => persona.id)),
     });
   });
-  app.delete("/data", async () => noodle.deleteAllData());
+  app.delete("/data", async (request, reply) => {
+    const parsed = z.object({ confirmation: z.literal("DELETE") }).safeParse(request.query);
+    if (!parsed.success) return reply.code(400).send({ error: "Type DELETE to confirm removal of all Noodle data." });
+    return noodle.deleteAllData();
+  });
   app.post("/ambient-profiles/reroll", async (request, reply) => {
     const { rerollAmbientNoodleProfiles } =
       await import("../services/noodle/noodle-ambient-profile-generation.service.js");

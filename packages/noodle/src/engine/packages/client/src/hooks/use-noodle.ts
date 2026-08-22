@@ -294,7 +294,7 @@ export function useCleanupUnusedNoodleData() {
 export function useDeleteAllNoodleData() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => api.delete<NoodleDataDeletionCounts>("/noodle/data"),
+    mutationFn: () => api.delete<NoodleDataDeletionCounts>("/noodle/data?confirmation=DELETE"),
     onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
   });
 }
