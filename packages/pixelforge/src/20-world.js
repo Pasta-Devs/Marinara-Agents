@@ -1222,11 +1222,16 @@ PF.world = (() => {
     dwelling(z, w, h, options) {
       // The beds ARE the feature: one per resident, 1x1 and non-solid, so a night
       // visit finds the household asleep in them instead of milling on a doorstep.
-      // Behind BEDROOM DOORS, bunked once a room has to take more than two. A big
-      // family keeps those walls up to nine under one roof; at ten — the id space
-      // ceiling — the wing runs out and the whole floor becomes the sleeping room.
-      // (Measured: rooms survive at 9, zero rooms at 10.) That used to be
-      // unreachable, and the comment here used to say so; a brief can seal it now.
+      // Behind BEDROOM DOORS, bunked once a room has to take more than two.
+      //
+      // This used to say a family kept its walls up to nine under one roof and
+      // lost them at ten, and that stopped being true when the shell learned to
+      // follow its household: a house grows to three bedrooms and the ROOM takes
+      // the crowding after that, so the walls no longer run out at all.
+      // Re-measured, one household with a second present to stop the validator's
+      // split repair: seven sleepers → 3 rooms and 4 bunk tiles, eight → 3 and 8,
+      // nine → 3 and 12. The open plan is now reached by the over-subscription
+      // MERGE (several households on one lot), not by one family being large.
       // SKIPPED, not called with a count of zero, when the band is upstairs — and
       // the rows it would have taken become part of the room (vacatedBand).
       const sleeping = options.upstairs
