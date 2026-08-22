@@ -21,6 +21,7 @@ import {
 } from "../noodle/noodle-refresh-schedule.js";
 import { pruneNoodleRefreshRuns } from "./noodle-refresh-run-retention.js";
 import { createNoodlePoll, readNoodlePollFromMetadata } from "@marinara-engine/shared";
+import { staleNoodleAccountIds } from "../noodle/noodle-data-cleanup.js";
 
 const SETTINGS_ID = "noodle.settings";
 const DEFAULT_SETTINGS: Record<string, unknown> = {
@@ -67,6 +68,16 @@ type PostRow = Row<typeof noodlePosts>;
 type InteractionRow = Row<typeof noodleInteractions>;
 type DigestRow = Row<typeof noodleActivityDigests>;
 type RefreshRunRow = Row<typeof noodleRefreshRuns>;
+
+export type NoodleDataDeletionCounts = {
+  accounts: number;
+  posts: number;
+  interactions: number;
+  digests: number;
+  refreshRuns: number;
+  subscriptions: number;
+  unlocks: number;
+};
 
 function record(value: unknown): Record<string, any> {
   if (typeof value !== "string")
@@ -1206,6 +1217,98 @@ export function createNoodleStorage(db: DB) {
         }
         await tx.delete(noodleRefreshRuns);
       });
+    },
+    async cleanupUnusedData(input: { characterIds: ReadonlySet<string>; personaIds: ReadonlySet<string> }) {
+      const accounts = await publicAccounts();
+      const staleAccountIds = [...staleNoodleAccountIds(accounts, input.characterIds, input.personaIds)];
+      const staleAccountIdSet = new Set(staleAccountIds);
+      const liveAccountIdSet = new Set(
+        accounts.filter((account) => !staleAccountIdSet.has(account.id)).map((account) => account.id),
+      );
+      const posts = await db.select().from(noodlePosts);
+      const stalePostIds = posts.filter((post) => !liveAccountIdSet.has(post.authorAccountId)).map((post) => post.id);
+      const stalePostIdSet = new Set(stalePostIds);
+      const interactions = await db.select().from(noodleInteractions);
+      const staleInteractionIds = interactions
+        .filter(
+          (interaction) =>
+            stalePostIdSet.has(interaction.postId) ||
+            !posts.some((post) => post.id === interaction.postId) ||
+            !liveAccountIdSet.has(interaction.actorAccountId),
+        )
+        .map((interaction) => interaction.id);
+      const digests = await db.select().from(noodleActivityDigests);
+      const staleDigestIds = digests
+        .filter(
+          (digest) =>
+            (digest.sourcePostId && !posts.some((post) => post.id === digest.sourcePostId)) ||
+            (digest.sourceInteractionId &&
+              !interactions.some((interaction) => interaction.id === digest.sourceInteractionId)) ||
+            strings(digest.accountIds).some((accountId) => !liveAccountIdSet.has(accountId)),
+        )
+        .map((digest) => digest.id);
+      const subscriptions = await db.select().from(noodleAccountSubscriptions);
+      const staleSubscriptionIds = subscriptions
+        .filter(
+          (subscription) =>
+            !liveAccountIdSet.has(subscription.viewerAccountId) || !liveAccountIdSet.has(subscription.creatorAccountId),
+        )
+        .map((subscription) => subscription.id);
+      const unlocks = await db.select().from(noodlePostUnlocks);
+      const staleUnlockIds = unlocks
+        .filter(
+          (unlock) => !liveAccountIdSet.has(unlock.viewerAccountId) || !posts.some((post) => post.id === unlock.postId),
+        )
+        .map((unlock) => unlock.id);
+      const runs = await db.select().from(noodleRefreshRuns);
+      const staleRunIds = runs
+        .filter((run) => strings(run.activeAccountIds).some((accountId) => !liveAccountIdSet.has(accountId)))
+        .map((run) => run.id);
+      await db.transaction(async (tx) => {
+        if (staleDigestIds.length)
+          await tx.delete(noodleActivityDigests).where(inArray(noodleActivityDigests.id, staleDigestIds));
+        if (staleInteractionIds.length)
+          await tx.delete(noodleInteractions).where(inArray(noodleInteractions.id, staleInteractionIds));
+        if (stalePostIds.length) await tx.delete(noodlePosts).where(inArray(noodlePosts.id, stalePostIds));
+        if (staleSubscriptionIds.length)
+          await tx
+            .delete(noodleAccountSubscriptions)
+            .where(inArray(noodleAccountSubscriptions.id, staleSubscriptionIds));
+        if (staleUnlockIds.length)
+          await tx.delete(noodlePostUnlocks).where(inArray(noodlePostUnlocks.id, staleUnlockIds));
+        if (staleRunIds.length) await tx.delete(noodleRefreshRuns).where(inArray(noodleRefreshRuns.id, staleRunIds));
+        if (staleAccountIds.length) await tx.delete(noodleAccounts).where(inArray(noodleAccounts.id, staleAccountIds));
+      });
+      return {
+        accounts: staleAccountIds.length,
+        posts: stalePostIds.length,
+        interactions: staleInteractionIds.length,
+        digests: staleDigestIds.length,
+        refreshRuns: staleRunIds.length,
+        subscriptions: staleSubscriptionIds.length,
+        unlocks: staleUnlockIds.length,
+      } satisfies NoodleDataDeletionCounts;
+    },
+    async deleteAllData() {
+      const counts = {
+        accounts: (await publicAccounts()).length,
+        posts: (await db.select().from(noodlePosts)).length,
+        interactions: (await db.select().from(noodleInteractions)).length,
+        digests: (await db.select().from(noodleActivityDigests)).length,
+        refreshRuns: (await db.select().from(noodleRefreshRuns)).length,
+        subscriptions: (await db.select().from(noodleAccountSubscriptions)).length,
+        unlocks: (await db.select().from(noodlePostUnlocks)).length,
+      } satisfies NoodleDataDeletionCounts;
+      await db.transaction(async (tx) => {
+        await tx.delete(noodleActivityDigests);
+        await tx.delete(noodleInteractions);
+        await tx.delete(noodlePosts);
+        await tx.delete(noodleAccountSubscriptions);
+        await tx.delete(noodlePostUnlocks);
+        await tx.delete(noodleRefreshRuns);
+        await tx.delete(noodleAccounts);
+      });
+      return counts;
     },
     async bootstrap() {
       const settings = await this.getSettings();
