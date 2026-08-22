@@ -1308,9 +1308,9 @@ export function createNoodleStorage(db: DB) {
       await db.transaction(async (tx) => {
         await tx.delete(noodleActivityDigests);
         await tx.delete(noodleInteractions);
-        await tx.delete(noodlePosts);
         await tx.delete(noodleAccountSubscriptions);
         await tx.delete(noodlePostUnlocks);
+        await tx.delete(noodlePosts);
         await tx.delete(noodleRefreshRuns);
         await tx.delete(noodleAccounts);
       });
