@@ -316,6 +316,28 @@ function checkWorld(w, sealed, label) {
     }
   }
 
+  // ── I3c: OUTDOORS, a light stands on the thing that is lit ────────────────
+  // Out of doors every `z.lights.push` sits beside the `put()` that placed a
+  // window, a well, a stall or a shrine. So a light over bare ground means
+  // somebody deleted the object and left the glow behind: the renderer draws a
+  // warm radial on empty grass, every night, forever, for that seed. That is
+  // exactly what the greens pass did when it cleared a named feature — 32 of 108
+  // worlds carried one.
+  //
+  // INDOORS IT IS NOT A RULE, and this was measured rather than assumed before
+  // the exclusion was written: a cellar is lit at (11,2) with nothing under it
+  // and a farmhouse lights its rug, on this branch and on staging alike. Those
+  // are lanterns, and a room may be lit without something standing in the middle
+  // of it. Rate per building is 0.23 here against 0.31 on staging, so nothing has
+  // regressed; extending this check indoors would fail 55 honest buildings.
+  for (const zone of Object.values(w.zones)) {
+    if (zone.mapKind !== "settlement" && zone.mapKind !== "place") continue;
+    for (const light of zone.lights ?? []) {
+      const at = zone.w * light.y + light.x;
+      assert.ok(zone.object[at], `${label}: ${zone.id} lights ${light.x},${light.y}, where nothing stands`);
+    }
+  }
+
   // ── I4: the paint contract ────────────────────────────────────────────────
   // Three passes paint across ground another pass already owns, and `put()`
   // overwrites without asking. Every one of these was live in a shipped build and
@@ -7309,6 +7331,182 @@ const cellarBrief = (prosperity) => ({
     }
   }
   assert.equal(checked, 54, `the sweep ran (${checked})`);
+}
+
+// ── A WILDS NEVER SWALLOWS THE WAY IN (pre-existing, fixed 0.10.0) ─────────
+// `place.features` — up to three features on a named place — was an entirely
+// untested path. All sixteen `kind: "wilds"` fixtures in this file are
+// featureless, and every `features:` here is on the top-level brief.
+//
+// What lived in it: the wilds builder dropped features at a hard-coded anchor
+// with no test of the road, the stream, the spawn, or the tile the portal
+// delivers the player onto. `crop-plots` is a fenced 8x5 whose fence at anchor
+// 26 covers x 26..33 — exactly where a WEST-hung wilds puts its spawn (w-4) and
+// one of its two arrival tiles (w-3). The player walked west out of town, landed
+// inside a solid fence, and could not move in any direction; reloading returned
+// them to the other fence tile. Measured on staging: 24 of 48 wilds zones.
+//
+// Swept over every feature tag rather than the one that bit, because the fault
+// was the missing test, not the crop plot.
+{
+  const cast = [
+    { name: "Ivy", role: "warden", kind: "leader", tint: "blue", home: "Wildway", household: 1 },
+    { name: "Bett", role: "innkeep", kind: "host", tint: "amber", home: "Wildway", household: 2 },
+  ];
+  const TAGS = [
+    "crop-plots",
+    "water-feature",
+    "ruin",
+    "lookout",
+    "shrine",
+    "workyard",
+    "landmark-stone",
+    "market-stalls",
+  ];
+  let wilds = 0;
+  for (const theme of ["cozy-village", "sci-fi-colony"]) {
+    for (const scale of ["outpost", "village", "city"]) {
+      for (const tag of TAGS) {
+        for (const seed of [1, 7]) {
+          const sealed = brief.validate(
+            {
+              scale,
+              prosperity: "modest",
+              name: "Wildway",
+              surround: "woods",
+              // BOTH sides: the east-hung wilds keeps its spawn at x=3 and the
+              // west-hung one moves it across, and only the second was ever hit.
+              places: [
+                { kind: "wilds", name: "East Wood", features: [{ tag, name: "F" }] },
+                { kind: "wilds", name: "West Fen", features: [{ tag, name: "G" }] },
+              ],
+              cast,
+            },
+            { theme, seed },
+          );
+          const w = world.build(seed, theme, sealed);
+          const where = `${theme}/${scale}/${tag}/seed ${seed}`;
+          for (const zone of Object.values(w.zones)) {
+            if (zone.mapKind !== "place") continue;
+            wilds++;
+            const spawnAt = zone.w * zone.spawn.y + zone.spawn.x;
+            assert.ok(
+              !zone.solid[spawnAt],
+              `${where}: ${zone.id} spawns at ${zone.spawn.x},${zone.spawn.y}, which is solid`,
+            );
+            // The tile the SETTLEMENT hands the player, which is not the spawn.
+            for (const portal of w.zones.z1.portals) {
+              if (portal.toZone !== zone.id) continue;
+              assert.ok(
+                !zone.solid[zone.w * portal.toY + portal.toX],
+                `${where}: arriving in ${zone.id} at ${portal.toX},${portal.toY} lands in something solid`,
+              );
+            }
+            // And they can actually walk once they are there — the assertion the
+            // tile checks above only imply. Driven through the real Sim, because
+            // the feet box spans more than the tile underfoot.
+            const sim = new loadedPF.Sim(w);
+            sim.zoneId = zone.id;
+            sim.x = zone.spawn.x * loadedPF.TILE + loadedPF.TILE / 2;
+            sim.y = zone.spawn.y * loadedPF.TILE + loadedPF.TILE / 2;
+            const free = ["right", "left", "down", "up"].filter((dir) => {
+              const probe = new loadedPF.Sim(w);
+              probe.zoneId = zone.id;
+              probe.x = sim.x;
+              probe.y = sim.y;
+              const x0 = probe.x;
+              const y0 = probe.y;
+              for (let i = 0; i < 30; i++) probe.step(1 / 60, { [dir]: true });
+              return Math.hypot(probe.x - x0, probe.y - y0) > 1;
+            });
+            assert.ok(free.length > 0, `${where}: ${zone.id} spawns the player somewhere they cannot move from`);
+          }
+        }
+      }
+    }
+  }
+  assert.ok(wilds >= 90, `the sweep visited the wilds (${wilds} zones)`);
+}
+
+// ── A GREEN NEVER EATS A NAMED FEATURE (0.10.0) ────────────────────────────
+// The greens and the wards take the lots no BUILDING claimed, and `clearFootprint`
+// nulls whatever is on them. "Leftover" means empty for buildings — they are
+// disjoint from those lots by construction — and NOT for features, which are
+// anchored by a pass that tests `claimed` and the roads but not the lot grid. So
+// a ruin or a shrine legitimately stands on a lot nobody built on, and a park
+// would quietly delete it: 40 of 108 worlds, 168 tiles, with the feature's name
+// still in the sealed brief and its id still in `_ids.features`.
+//
+// Measured as a DIFFERENCE, three builds deep, because there is no other way to
+// know which tiles a feature owns: bare, features-without-greens, and both.
+{
+  const cast = [
+    { name: "Ivy", role: "warden", kind: "leader", tint: "blue", home: "Greenwood", household: 1 },
+    { name: "Bett", role: "innkeep", kind: "host", tint: "amber", home: "Greenwood", household: 2 },
+  ];
+  const FEATURES = [
+    { tag: "ruin", name: "The Old Gate" },
+    { tag: "shrine", name: "The Shrine" },
+    { tag: "landmark-stone", name: "The Reckoning Stone" },
+    { tag: "water-feature", name: "The Millpond" },
+  ];
+  const build = (features, scale, prosperity, surround, seed) =>
+    world.build(
+      seed,
+      "cozy-village",
+      brief.validate(
+        { scale, prosperity, name: "Greenwood", surround, features, places: [], cast },
+        { theme: "cozy-village", seed },
+      ),
+    ).zones.z1;
+
+  let checked = 0;
+  let featureTiles = 0;
+  let ponds = 0;
+  for (const scale of ["village", "town", "city"]) {
+    for (const prosperity of ["struggling", "thriving"]) {
+      for (const surround of ["woods", "fields"]) {
+        for (const seed of [1, 3, 6]) {
+          const bare = build([], scale, prosperity, surround, seed);
+          const withFeatures = build(FEATURES, scale, prosperity, surround, seed);
+          const painted = [];
+          for (let i = 0; i < bare.object.length; i++) {
+            if (withFeatures.object[i] !== bare.object[i] || withFeatures.ground[i] !== bare.ground[i]) painted.push(i);
+          }
+          featureTiles += painted.length;
+          const where = `${scale}/${prosperity}/${surround} seed ${seed}`;
+          // THE POND IS THE INSTRUMENT. `water-feature` paints a 6x4 pool and a
+          // well beside it, `surround` is never "water" here, so open water on the
+          // map can only be the millpond — a signature nothing else forges.
+          //
+          // A feature that found no room is DROPPED, which is deliberate and
+          // documented ("a plainer settlement, never a sealed one"), so a pond
+          // that is not there at all proves nothing and is skipped. A pond that IS
+          // there must be WHOLE: twenty-four tiles and its well. Something eating
+          // a corner of it is the fault, and it shows as 22.
+          //
+          // Two detectors were written before this one and both were useless. A
+          // count of differing tiles is tautological — `painted` is defined as the
+          // tiles that differ, so filtering it for tiles that match is empty by
+          // construction. A floor on that count then failed honest worlds, because
+          // a legitimately dropped feature and an eaten one look identical from a
+          // total. Only "placed, therefore whole" separates them.
+          const water = withFeatures.ground.filter((g) => g === "water").length;
+          if (water > 0) {
+            ponds++;
+            assert.equal(water, 24, `${where}: the millpond holds ${water} tiles, not 24 — something painted over it`);
+            assert.ok(withFeatures.object.includes("well"), `${where}: the millpond kept its well`);
+          }
+          checked++;
+        }
+      }
+    }
+  }
+  assert.equal(checked, 36, `the sweep ran (${checked})`);
+  assert.ok(featureTiles > 1000, `and it saw real ground (${featureTiles} feature tiles across the sweep)`);
+  // Non-vacuous: the instrument was actually present most of the time, so the
+  // skip-if-dropped branch is not quietly swallowing the whole case.
+  assert.ok(ponds >= 24, `and the pond was built in most of them (${ponds} of ${checked})`);
 }
 
 console.log("brief validator + compiler: all cases passed");

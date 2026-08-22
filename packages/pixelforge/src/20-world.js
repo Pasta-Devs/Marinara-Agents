@@ -184,7 +184,24 @@ PF.world = (() => {
    *  wall nobody can touch is safer than a tree that might land under a roofline
    *  or in the middle of a paved yard. */
   function sealPockets(z, from) {
-    if (!from || z.solid[idx(z, from.x, from.y)]) return 0;
+    if (!from) return 0;
+    // LOUD, and this is the line that matters most in the function.
+    //
+    // It used to return 0 here, which reads as caution and is the opposite. A
+    // zone whose spawn is solid is never a legal world — the player stands in a
+    // wall — and returning quietly meant that zone ALSO shipped with no pocket
+    // sealing at all. Measured on a west-hung wilds with a crop plot over its
+    // spawn: 711 walkable tiles, 0 of them reachable from the declared spawn,
+    // and the reachability invariant silently switched off for the whole zone.
+    // The one condition that guarantees a broken world was the one condition
+    // that skipped the check for it.
+    //
+    // The compiler falls back to the legacy world on a throw, so the worst this
+    // can do in a player's hands is give them a plain world instead of their
+    // brief. In the harness it is a red line with a name.
+    if (z.solid[idx(z, from.x, from.y)]) {
+      throw new Error(`pixelforge: zone "${z.id}" spawns at ${from.x},${from.y}, which is solid`);
+    }
     const seen = new Set([idx(z, from.x, from.y)]);
     const queue = [[from.x, from.y]];
     while (queue.length) {
@@ -2335,7 +2352,23 @@ PF.world = (() => {
     // Every third leftover and no more than six, deliberately: a settlement that
     // turned every spare lot into a park would be a park with houses in it, and
     // the empty ground between buildings is doing work of its own.
-    const leftoverLots = slots.slice(slotIndex);
+    // LEFTOVER IS NOT THE SAME AS EMPTY, and the difference is a named feature.
+    //
+    // The greens and the wards are handed the lots no BUILDING took and trust
+    // that to mean nothing is there. It is true of buildings — they are disjoint
+    // from these lots by construction — and false of features, which are anchored
+    // by a different pass that tests `claimed` and the roads but NOT the lot grid,
+    // so a ruin or a shrine legitimately stands on a lot nobody built on.
+    // `clearFootprint` then nulls it. Measured: 40 of 108 worlds lost feature
+    // tiles, 168 tiles in all — a named ruin coming out half-eaten, with its name
+    // still in the sealed brief and its id still in `_ids.features`.
+    //
+    // `claimed` already carries the feature rects (they are pushed as each one
+    // lands), so respecting it is the whole fix. `y - 1` and `h: 6` because
+    // `clearFootprint` reaches one row above its rect.
+    const leftoverLots = slots
+      .slice(slotIndex)
+      .filter((lot) => !claimed.some((busy) => intersects({ x: lot.x, y: lot.y - 1, w: 8, h: 6 }, busy)));
     const denseRank = brief.scale === "town" || brief.scale === "city";
 
     // ── WARDS ──────────────────────────────────────────────────────────────────
@@ -2517,11 +2550,47 @@ PF.world = (() => {
         PLACERS["water-crossing"](zone, 20, wMidY);
         fillRect(zone, 22, wMidY, 4, 2, "ground", "path");
       }
+      // GROUND THE WILDS CANNOT GIVE AWAY. A feature here used to be dropped at a
+      // hard-coded anchor with no test of anything — not the road it had just
+      // laid, not the stream, not the spawn, not the tile the portal delivers the
+      // player onto. The settlement pass has tested its anchors against the roads
+      // and the claimed lots for a long time; this one never did, and it is the
+      // only builder that pass missed.
+      //
+      // What that cost: `crop-plots` is a fenced 8x5, and at anchor 26 its fence
+      // lands on x 26..33, which is exactly where a WEST-hung wilds puts its
+      // spawn (w-4) and one of its two arrival tiles (w-3). The player walks west
+      // out of town, arrives inside a solid fence, and every direction is refused
+      // — measured on the real Sim, four directions x two seconds of held input,
+      // zero pixels. Reloading does not help: the save falls back to `zone.spawn`,
+      // which is the other fence tile. 24 of 48 wilds zones on staging, so this
+      // ships today and is not something this branch introduced.
+      const wildsReserved = [
+        east ? { x: 1, y: wMidY, w: 19, h: 2 } : { x: zone.w - 20, y: wMidY, w: 19, h: 2 },
+        { x: 1, y: wMidY, w: 4, h: 2 },
+        { x: zone.w - 5, y: wMidY, w: 4, h: 2 },
+      ];
+      if (tags.has("water-crossing")) {
+        wildsReserved.push({ x: 20, y: 1, w: 2, h: 22 }, { x: 20, y: wMidY, w: 6, h: 2 });
+      }
       let anchorX = 26;
       for (const feature of place.features ?? []) {
         if (feature.tag === "water-crossing") continue;
-        PLACERS[feature.tag]?.(zone, anchorX, 8 + (((anchorX / 3) | 0) % 4));
-        anchorX = Math.max(6, (anchorX + 9) % (zone.w - 10));
+        const size = FEATURE_RECTS[feature.tag] ?? FEATURE_RECT;
+        // The anchor SEQUENCE is unchanged, so a wilds whose features already fit
+        // compiles exactly what it did. Only an anchor that would block the way
+        // is stepped over, and a feature with nowhere safe is dropped — the same
+        // policy the settlement states as "a plainer settlement, never a sealed
+        // one", which reads here as a plainer wood.
+        for (let attempt = 0; attempt < 8; attempt++) {
+          const ax = anchorX;
+          const ay = 8 + (((ax / 3) | 0) % 4);
+          anchorX = Math.max(6, (anchorX + 9) % (zone.w - 10));
+          if (ax < 1 || ay < 1 || ax + size.w > zone.w - 1 || ay + size.h > zone.h - 1) continue;
+          if (wildsReserved.some((r) => intersects({ x: ax, y: ay, ...size }, r))) continue;
+          PLACERS[feature.tag]?.(zone, ax, ay);
+          break;
+        }
       }
       // Reserve BOTH sides' arrival tiles and spawns — the west-hung wilds'
       // arrival used to land inside scattered trunks on some seeds.
