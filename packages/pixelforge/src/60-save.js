@@ -56,15 +56,39 @@ const FLUSH_BACKOFF_GIVEUP = 8;
 // up to 100 anchors. Refusing locally keeps the 422 retry loop unreachable.
 // The snapshot's own design budget is 24 KB (plan §4); this is the backstop.
 const MAX_SNAPSHOT_CHARS = 32_768;
+// Teardown sends a PAIR of keepalive requests in routes mode, and the Fetch
+// standard caps TOTAL in-flight keepalive body bytes at 64 KiB (65,536) per
+// origin — the whole pair against one quota, not one budget each. So the wall
+// is 2 × the UTF-8 byte length of the snapshot, plus the two JSON wrappers
+// (`{"state":…}` and `{"pixelforge":…}`, ~26 bytes together) and whatever else
+// the page has in flight at unload. 57,000 leaves ~8.5 KB of that headroom.
+// MAX_SNAPSHOT_CHARS alone does NOT imply the pair fits: 32,768 ASCII chars
+// doubles to 65,536, over the quota on its own.
+const KEEPALIVE_PAIR_BUDGET_BYTES = 57_000;
 // Re-probe cadence while a probe FAILURE pinned the session to metadata mode
 // (plan §Q2a): a transient 500 at boot otherwise costs timeline rewind for the
 // entire session, because adopt() short-circuits on mode !== null forever.
 const REPROBE_INTERVAL_MS = 60_000;
+// …and the cadence is bounded for the same reason the write ladder is: a route
+// that has answered wrong eight times running is not coming back inside this
+// session, and a minute-timer asking forever is a background request leak.
+const REPROBE_GIVEUP = 8;
 
 PF.save = {
   _timer: 0,
+  /** The debounce and the retry ladder share _timer (a busy player must not be
+   *  able to reset a backoff to 2.5s on every zone change). This says which of
+   *  the two the live timer is, so a flush from any other trigger can decline to
+   *  cancel a rung: the ladder has to measure ELAPSED time, not requested time. */
+  _timerIsBackoff: false,
   _lastSerialized: null,
   _flushChain: null,
+  /** The next write goes up whatever the dedupe caches say, and only the write
+   *  that CONSUMES it clears it. Promotion out of a pinned metadata session sets
+   *  it: `_lastSerialized = null` alone is undone by any flush already parked in
+   *  an await, which then reassigns the cache and cancels the promotion's first
+   *  write with no trace. */
+  _forceWrite: false,
   /** null until adopt() probes; then "routes" | "metadata". */
   mode: null,
   /** Serialized last-known server-side route state (ours or adopted). */
@@ -82,21 +106,30 @@ PF.save = {
   _reprobeTimer: 0,
   _reprobeInFlight: false,
   _reprobedAfterFlush: false,
+  /** Consecutive failed re-probes; bounded by REPROBE_GIVEUP. */
+  _reprobeFailures: 0,
+  /** The envelope-key registry, exposed so the completeness assertion below and
+   *  the harness can check the list against what snapshot() actually emits. */
+  _envelopeKeys: ENVELOPE_KEYS,
 
   /** Reads core.sim and core.chatId and NOTHING else: 80-setup calls this with
    *  a synthetic two-key core, and reaching for core.host/hud/render there
-   *  throws inside the wizard's launch handler. */
-  snapshot(core) {
+   *  throws inside the wizard's launch handler.
+   *
+   *  `dropCarry` is the pre-flight fallback (see _snapshotWithoutCarry): the
+   *  same snapshot with a newer build's unreadable block left out. */
+  snapshot(core, dropCarry) {
     const sim = core.sim;
     if (!sim) return null;
     // Unknown keys FIRST, known keys assigned over them: a newer build's field
-    // rides through untouched but can never shadow one of ours. Emitted in
-    // SORTED order — the flush dedupe, the adopt comparison, and the rewind
-    // comparison are all string equality over JSON.stringify, so a key order
-    // that drifted with the source would forge both spurious saves and
-    // spurious "The world rewound with the story." toasts.
+    // rides through untouched but can never shadow one of ours. The property
+    // that matters is DETERMINISM, not alphabetical order — the flush dedupe,
+    // the adopt comparison, and the rewind comparison are all string equality
+    // over JSON.stringify, so any order that drifted with the source would forge
+    // both spurious saves and spurious "The world rewound with the story."
+    // toasts. Sorting is simply the cheapest order that cannot drift.
     const snap = {};
-    const extra = sim._envelopeExtra;
+    const extra = dropCarry ? null : sim._envelopeExtra;
     if (extra) {
       for (const key of Object.keys(extra).sort()) {
         if (extra[key] === undefined) continue; // JSON.stringify would drop it anyway
@@ -117,6 +150,12 @@ PF.save = {
     // §7 one-shot injection flags: persisted so a reload never re-taxes the
     // GM context with prose that already lives in chat history.
     snap.intro = sim.intro ?? { world: false, zones: {}, npcs: {} };
+    // Slice 3 lands `player` here, and it MUST be emitted UNCONDITIONALLY, like
+    // every line above it. A key that is listed in ENVELOPE_KEYS but only
+    // SOMETIMES emitted is worse than one that is missing from the list: the
+    // list makes simFromSaved skip it on the way in, so it never reaches
+    // _envelopeExtra either, and the write silently deletes a newer build's
+    // field. That is the exact slice-1 failure, rebuilt one branch at a time.
     return snap;
   },
 
@@ -294,6 +333,13 @@ PF.save = {
     // (§8) never registers its zones on the user's map. A sealed brief or a
     // {skipped:true} marker makes the world final.
     if (!brief && meta?.pixelforgeBrief === undefined && this._configGenerate(meta)) world.interim = true;
+    // A save row is untrusted JSON and `world.zones` is a plain object, so a
+    // bare `zones[id]` truthiness test reads straight through Object.prototype.
+    // Two demonstrated outcomes: `zone: "constructor"` resolves to a FUNCTION,
+    // which crashes the mount the first time anything reads z.w; and a binding
+    // naming "constructor" writes `spatialLocationId` onto the global Object
+    // itself. Own-property only, both places.
+    const hasZone = (id) => typeof id === "string" && Object.prototype.hasOwnProperty.call(world.zones, id);
     const sim = new PF.Sim(world);
     // Additive-only by policy (plan §Q1): keys a NEWER build added ride through
     // this one instead of being erased by the next flush. Collected OUTSIDE the
@@ -323,7 +369,7 @@ PF.save = {
       // solid-tile rescue below only fires if that lands in a wall, so the
       // player would silently reappear in a random corner. Land them at the
       // spawn instead, which is the one tile every zone guarantees is walkable.
-      const zoneResolved = typeof saved.zone === "string" && !!world.zones[saved.zone];
+      const zoneResolved = hasZone(saved.zone);
       if (zoneResolved) sim.zoneId = saved.zone;
       const z = sim.zone();
       if (zoneResolved) {
@@ -350,7 +396,7 @@ PF.save = {
       }
       if (saved.bindings && typeof saved.bindings === "object") {
         for (const [loc, zone] of Object.entries(saved.bindings)) {
-          if (typeof zone === "string" && world.zones[zone]) {
+          if (hasZone(zone)) {
             world.bindings[loc] = zone;
             world.zones[zone].spatialLocationId = loc;
           }
@@ -389,9 +435,11 @@ PF.save = {
       clearTimeout(this._timer);
       this._timer = 0;
     }
+    this._timerIsBackoff = false;
     this._stopReprobe();
     this._lastSerialized = null;
     this._metaSerialized = null;
+    this._forceWrite = false;
     this.mode = null;
     this._serverSerialized = null;
     this._rewindCheckInFlight = false;
@@ -400,6 +448,7 @@ PF.save = {
     this._degradeToasted = false;
     this._probePinned = false;
     this._reprobedAfterFlush = false;
+    this._reprobeFailures = 0;
     // _flushChain is deliberately NOT cleared: the chat-switch flush of the
     // chat we are LEAVING rides it, and it must still land before the new
     // chat's first write. _writeSeq is process-monotonic and never resets.
@@ -410,8 +459,21 @@ PF.save = {
    *  metadata-booted sim (e.g. the user swiped or loaded a checkpoint since the
    *  last visit), the world is rebuilt from it; if the server has no row yet,
    *  the current world (which may be a migrated legacy metadata save) is
-   *  written up. Any probe failure degrades to metadata mode. */
-  async adopt(core) {
+   *  written up. Any probe failure degrades to metadata mode.
+   *
+   *  On the flush chain, for the same reason checkRewind is: _switchChat
+   *  captures the LEAVING chat's pending write and queues it, and the probe of
+   *  the chat we arrive at (or arrive BACK at) must not run beside it. Off the
+   *  chain, that probe can read the row the queued write is about to replace,
+   *  latch it as _serverSerialized, and rebuild the sim onto a state we
+   *  ourselves superseded a moment later. */
+  adopt(core) {
+    const task = () => this._adoptNow(core);
+    this._flushChain = (this._flushChain ?? Promise.resolve()).then(task, task);
+    return this._flushChain;
+  },
+
+  async _adoptNow(core) {
     if (!core.chatId || this.mode !== null) return;
     const gen = this._gen ?? 0;
     const chatId = core.chatId;
@@ -439,12 +501,22 @@ PF.save = {
         this.markDirty(core);
       }
     } catch (err) {
+      // Fenced FIRST, exactly like the success path above: a rejection for the
+      // chat we LEFT would otherwise demote the chat we are now on to metadata
+      // mode — and the demotion sticks, because adopt() short-circuits on
+      // mode !== null and the new chat's own probe already ran.
+      if (gen !== (this._gen ?? 0) || chatId !== core.chatId) return;
       // A transient 500 or a network blip at boot used to cost timeline rewind
       // for the WHOLE session: adopt() short-circuits on mode !== null and
       // nothing ever probed again. Pin it instead — a pin is re-probed.
       this.mode = "metadata";
-      this._pinMetadataMode(core);
-      console.warn("[pixelforge] experience-state probe failed; using metadata saves (will re-probe)", err);
+      // …but only when re-asking could plausibly get a different answer. No
+      // status at all is a transport failure and 5xx is the server having a bad
+      // minute; 401/403 and every other status the route MEANT is an answer,
+      // and a minute-timer re-asking it is noise the player pays for.
+      const status = err && typeof err.status === "number" ? err.status : 0;
+      if (status === 0 || status >= 500) this._pinMetadataMode(core);
+      console.warn("[pixelforge] experience-state probe failed; using metadata saves", err);
     }
   },
 
@@ -456,6 +528,7 @@ PF.save = {
     this._probePinned = true;
     this._reprobedAfterFlush = false;
     if (this._reprobeTimer) return;
+    this._reprobeFailures = 0; // a fresh pin gets a fresh rung count, not the last one's
     const gen = this._gen ?? 0;
     this._reprobeTimer = setInterval(() => {
       if (gen !== (this._gen ?? 0)) return; // reset() clears the timer; belt and braces
@@ -497,9 +570,18 @@ PF.save = {
       this._stopReprobe();
       this._serverSerialized = null;
       this._lastSerialized = null;
+      // …and a flush already parked in an await would put _lastSerialized
+      // straight back when it lands, cancelling the promotion's first write
+      // with nothing to show for it. The force flag outlives that: only the
+      // write that consumes it clears it.
+      this._forceWrite = true;
       this.markDirty(core);
     } catch {
-      // Still pinned; the interval tries again.
+      // Still pinned, but not forever: eight failed rungs and the timer stops.
+      // The pin itself stays set, so a metadata write that lands later still
+      // earns its one-shot re-probe on real evidence the network came back.
+      this._reprobeFailures += 1;
+      if (this._reprobeFailures >= REPROBE_GIVEUP) this._stopReprobe();
     } finally {
       if (gen === (this._gen ?? 0)) this._reprobeInFlight = false;
     }
@@ -577,9 +659,11 @@ PF.save = {
   },
 
   markDirty(core) {
-    if (this._timer) return;
+    if (this._timer) return; // a live timer already covers it — a backoff rung included
+    this._timerIsBackoff = false;
     this._timer = setTimeout(() => {
       this._timer = 0;
+      this._timerIsBackoff = false;
       void this.flush(core, false);
     }, 2500);
   },
@@ -594,8 +678,11 @@ PF.save = {
     const snap = this.snapshot(core);
     if (!snap || !core.chatId) return null;
     const serialized = JSON.stringify(snap);
-    const routeNeeded = serialized !== this._lastSerialized;
-    const metaNeeded = this._metaSerialized !== serialized;
+    // _forceWrite outranks both caches: it exists precisely because a cache can
+    // be reassigned by a flush that was already in flight when the force was set.
+    const forced = this._forceWrite;
+    const routeNeeded = forced || serialized !== this._lastSerialized;
+    const metaNeeded = forced || this._metaSerialized !== serialized;
     if (!routeNeeded && (this.mode !== "routes" || !metaNeeded)) return null;
     return {
       chatId: core.chatId,
@@ -604,9 +691,30 @@ PF.save = {
       serialized,
       routeNeeded,
       metaNeeded,
+      forced,
       mode: this.mode,
       gen: this._gen ?? 0,
     };
+  },
+
+  /** Pre-flight fallback. When the snapshot will not fit, the FIRST thing to
+   *  drop is a newer build's block: our own state is what this session is
+   *  playing, and a build older than slice 1 wrote rows without any carry at
+   *  all — so dropping it is a return to the previous contract, not new loss.
+   *  Returns null when there is no carry to drop; the caller decides whether
+   *  what comes back actually fits.
+   *
+   *  A slim write leaves the caches holding the SLIM bytes, so the next flush
+   *  re-snapshots with the carry and trips the pre-flight again. That is the
+   *  point: the moment the newer build's block shrinks back under the wall we
+   *  start carrying it again, and the cost meanwhile is one repeat write of
+   *  bytes the server already has, on save events the player generates anyway. */
+  _snapshotWithoutCarry(sim, chatId) {
+    const extra = sim && sim._envelopeExtra;
+    if (!extra || Object.keys(extra).length === 0) return null;
+    const snap = this.snapshot({ sim, chatId }, true);
+    if (!snap) return null;
+    return { snap, serialized: JSON.stringify(snap) };
   },
 
   /** Chat switch: the pending write belongs to the chat being LEFT, so it has
@@ -637,7 +745,12 @@ PF.save = {
   },
 
   async _flushNow(core, teardown, capture) {
-    if (!capture && this._timer) {
+    // A backoff rung is NOT cancellable by an unrelated flush. Cancelling it
+    // and letting _rearm re-arm from here would make the ladder measure the
+    // time since the last TRIGGER instead of the time since the outage began —
+    // and a teardown flush, which never re-arms at all, would silently delete
+    // the pending retry outright.
+    if (!capture && this._timer && !this._timerIsBackoff) {
       clearTimeout(this._timer);
       this._timer = 0;
     }
@@ -653,38 +766,77 @@ PF.save = {
       // none of the new chat's caches, dirty flag, or retry state.
       const fresh = () => job.gen === (this._gen ?? 0);
       if (job.serialized.length > MAX_SNAPSHOT_CHARS) {
-        if (fresh()) this._degrade(core, `snapshot is ${job.serialized.length} chars`);
-        return;
+        // Before giving up on the session, drop the one part of the payload
+        // that is not ours. A newer build's block is unreadable here and can be
+        // arbitrarily large; the world the player is standing in outranks it.
+        const slim = this._snapshotWithoutCarry(job.sim, job.chatId);
+        if (!slim || slim.serialized.length > MAX_SNAPSHOT_CHARS) {
+          if (fresh()) {
+            this._degrade(
+              core,
+              slim
+                ? `this world's own save is ${slim.serialized.length} chars, over the limit even with a newer build's block dropped`
+                : `this world's own save is ${job.serialized.length} chars`,
+            );
+          }
+          return;
+        }
+        console.warn(
+          `[pixelforge] a newer build's data does not fit (${job.serialized.length} chars); saving this world's own state without it`,
+        );
+        job = { ...job, snap: slim.snap, serialized: slim.serialized };
       }
+      // Did anything reach the server? A flush where the route row landed and
+      // the write-through cache did NOT is a partial write, and counting it as
+      // landed resets the failure counter — which pins the ladder at its bottom
+      // rung and retries a broken metadata route every 2.5s for the session.
+      let landed = false;
       if (job.mode === "routes") {
         // Route row first (the authority), metadata second as write-through
         // boot cache + old-engine fallback. A metadata failure is non-fatal
         // once the route write landed — but it stays pending and retries.
         if (job.routeNeeded) {
           await PF.api.putExperienceState(job.chatId, job.snap, teardown);
+          // Bumped OUTSIDE the fence: _writeSeq is process-global, not per-chat.
+          // A captured chat-switch PUT is stale for every cache on this object
+          // and still completed on the wire, so a GET issued before it must not
+          // be adopted as authority. A spurious bump costs one discarded rewind
+          // check; a missed one costs a rewind onto a superseded row.
+          _writeSeq += 1;
+          landed = true;
           if (fresh()) {
-            _writeSeq += 1; // any GET issued before this point is now stale
             this._serverSerialized = job.serialized;
             this._lastSerialized = job.serialized;
+            if (job.forced) this._forceWrite = false;
             if (job.sim) job.sim.dirty = false;
           }
         }
+        let cacheError = null;
         if (job.metaNeeded) {
           try {
             await PF.api.patchMetadata(job.chatId, { pixelforge: job.snap }, teardown);
+            landed = true;
             if (fresh()) this._metaSerialized = job.serialized;
           } catch (err) {
-            if (!teardown && fresh()) this.markDirty(core); // schedule a cache repair pass
-            console.warn("[pixelforge] metadata cache save failed (route save landed); will retry", err);
+            cacheError = err;
           }
         }
-        if (fresh()) this._onWriteLanded(core);
+        if (cacheError) {
+          // Through the classifier, not a bare markDirty: that re-armed a flat
+          // 2.5s retry forever against a route that had already refused. The
+          // 409 branch is suppressed — a 409 HERE is the metadata route
+          // talking, and dropping route authority on it would be a non sequitur.
+          this._onWriteFailed(core, cacheError, teardown, job, true);
+        } else if (landed && fresh()) {
+          this._onWriteLanded(core);
+        }
         return;
       }
       await PF.api.patchMetadata(job.chatId, { pixelforge: job.snap }, teardown);
       if (fresh()) {
         this._lastSerialized = job.serialized;
         this._metaSerialized = job.serialized;
+        if (job.forced) this._forceWrite = false;
         if (job.sim) job.sim.dirty = false;
         this._onWriteLanded(core);
       }
@@ -707,9 +859,14 @@ PF.save = {
   },
 
   /** Classify a failed write. Silence was the old policy — one console.warn
-   *  and the hope that some unrelated future dirty event would retry. */
-  _onWriteFailed(core, err, teardown, job) {
-    console.warn("[pixelforge] save failed", err);
+   *  and the hope that some unrelated future dirty event would retry.
+   *
+   *  `cacheOnly` marks the routes-mode write-through PATCH: same ladder, same
+   *  terminal statuses, but never the 409 fallback. A 409 from the metadata
+   *  route says nothing about whether this chat still holds its Experience
+   *  stamp, and dropping route authority on it would be a non sequitur. */
+  _onWriteFailed(core, err, teardown, job, cacheOnly) {
+    console.warn(cacheOnly ? "[pixelforge] metadata cache save failed; will retry" : "[pixelforge] save failed", err);
     // No job means snapshot/stringify itself threw: a code fault, not a write
     // failure. It costs this one flush and nothing else — backing off would
     // just re-run the same throw on a timer.
@@ -723,7 +880,7 @@ PF.save = {
       this._degrade(core, `server refused the save (${status})`);
       return;
     }
-    if (status === 409 && job.mode === "routes") {
+    if (status === 409 && job.mode === "routes" && !cacheOnly) {
       // The chat lost its Experience stamp after adopt() committed to routes
       // mode. Every later PUT would fail exactly this way forever, so fall
       // back and let the re-probe machinery promote it again if it returns.
@@ -744,12 +901,16 @@ PF.save = {
     if (teardown || this.degraded) return;
     this._flushFailures += 1;
     if (this._flushFailures > FLUSH_BACKOFF_GIVEUP) return; // fall back to trigger-driven saves
-    if (this._timer) return; // a live debounce already covers it, and sooner
+    if (this._timer) return; // a live timer already covers it, and sooner
     const delay = FLUSH_BACKOFF_MS[Math.min(this._flushFailures - 1, FLUSH_BACKOFF_MS.length - 1)];
     // Shares markDirty's timer on purpose: while a server is failing, a busy
     // player must not be able to reset the backoff to 2.5s on every zone change.
+    // _timerIsBackoff is what makes that hold in the other direction too — see
+    // _flushNow, which declines to cancel a rung it did not arm.
+    this._timerIsBackoff = true;
     this._timer = setTimeout(() => {
       this._timer = 0;
+      this._timerIsBackoff = false;
       void this.flush(core, false);
     }, delay);
   },
@@ -770,10 +931,14 @@ PF.save = {
    *  BOTH keepalive requests without awaiting between them — awaiting the PUT
    *  first lets the unload land before the PATCH is even dispatched.
    *
-   *  Sized against the keepalive wall, not the route's: the Fetch standard caps
-   *  total in-flight keepalive bodies at 64 KiB per origin and routes mode
-   *  sends two, so the pair only fits while the snapshot stays well inside the
-   *  24 KB design budget (plan §4).
+   *  Sized against the keepalive wall, not the route's, and the arithmetic is
+   *  explicit because MAX_SNAPSHOT_CHARS does not imply it: the Fetch standard
+   *  caps TOTAL in-flight keepalive body bytes at 64 KiB (65,536) per origin,
+   *  routes mode sends two bodies against that one quota, and 32,768 ASCII
+   *  chars doubled is already 65,536. So the gate here is
+   *  2 × TextEncoder-encoded bytes ≤ KEEPALIVE_PAIR_BUDGET_BYTES, and when the
+   *  pair does not fit the PUT goes alone — losing the write-through cache is a
+   *  repairable inconvenience, losing both is the session.
    *
    *  Remount-detach keeps the ordinary chained path (90-element) — the page is
    *  alive there and a re-arm is still worth something. */
@@ -795,21 +960,97 @@ PF.save = {
     // other call site uses today.
     if (serialized === this._lastSerialized) return;
     if (serialized.length > MAX_SNAPSHOT_CHARS) {
-      this._degrade(core, `snapshot is ${serialized.length} chars`);
-      return;
+      // Same order as the ordinary flush: a newer build's block is the first
+      // thing to drop, and this world's own state is the last.
+      const slim = this._snapshotWithoutCarry(core.sim, core.chatId);
+      if (!slim || slim.serialized.length > MAX_SNAPSHOT_CHARS) {
+        this._degrade(
+          core,
+          slim
+            ? `this world's own save is ${slim.serialized.length} chars, over the limit even with a newer build's block dropped`
+            : `this world's own save is ${serialized.length} chars`,
+        );
+        return;
+      }
+      console.warn(
+        `[pixelforge] a newer build's data does not fit (${serialized.length} chars); saving this world's own state without it`,
+      );
+      snap = slim.snap;
+      serialized = slim.serialized;
     }
     const chatId = core.chatId;
-    const settle = (promise, what) => {
-      if (promise && typeof promise.catch === "function") {
-        promise.catch((err) => console.warn(`[pixelforge] teardown ${what} failed`, err));
-      }
+    const routes = this.mode === "routes";
+    // The keepalive quota is shared by the pair; see the docstring.
+    const pairFits = 2 * new TextEncoder().encode(serialized).length <= KEEPALIVE_PAIR_BUDGET_BYTES;
+    if (routes && !pairFits) {
+      console.warn(
+        "[pixelforge] teardown pair exceeds the keepalive budget; sending the route save alone (the metadata cache repairs on the next load)",
+      );
+    }
+    // A pagehide is not always a death: bfcache restores the page and play
+    // carries on against this very singleton. Leaving the caches holding the
+    // PRE-teardown bytes then makes the next checkRewind read the row we just
+    // wrote, find it different from _serverSerialized, and "rewind" the world
+    // onto our own write — discarding whatever happened after the restore, with
+    // a toast to announce it. So each request updates the cache it owns WHEN IT
+    // LANDS, fenced on the generation the teardown was taken at. If the page
+    // really does die, none of these handlers ever run, which is the point.
+    const gen = this._gen ?? 0;
+    const fresh = () => gen === (this._gen ?? 0);
+    const settle = (promise, what, onLanded) => {
+      if (!promise || typeof promise.then !== "function") return;
+      promise.then(
+        () => {
+          if (fresh()) onLanded();
+        },
+        (err) => console.warn(`[pixelforge] teardown ${what} failed`, err),
+      );
     };
-    // Both started before either is awaited. Deliberately no cache updates:
-    // the page is leaving, and a bfcache restore is better off re-writing than
-    // trusting a write it never saw finish.
-    const put = this.mode === "routes" ? PF.api.putExperienceState(chatId, snap, true) : null;
-    const patch = PF.api.patchMetadata(chatId, { pixelforge: snap }, true);
-    settle(put, "route save");
-    settle(patch, "metadata save");
+    // Both started before either is awaited.
+    const put = routes ? PF.api.putExperienceState(chatId, snap, true) : null;
+    const patch = routes && !pairFits ? null : PF.api.patchMetadata(chatId, { pixelforge: snap }, true);
+    settle(put, "route save", () => {
+      _writeSeq += 1; // any GET issued before this point read a superseded row
+      this._serverSerialized = serialized;
+      this._lastSerialized = serialized;
+    });
+    settle(patch, "metadata save", () => {
+      this._metaSerialized = serialized;
+      // In metadata mode the PATCH is the authority, not a cache, so it owns
+      // the route-side dedupe too — exactly as _flushNow assigns them together.
+      if (!routes) this._lastSerialized = serialized;
+    });
   },
 };
+
+// Registry completeness, in 20-world's startup-assertion idiom: ENVELOPE_KEYS
+// and the snapshot literal have to agree in BOTH directions, and neither
+// direction fails loudly on its own.
+//   • a key emitted but NOT listed → simFromSaved treats it as foreign on the
+//     way in and parks a stale copy of our own field on _envelopeExtra;
+//   • a key listed but NOT emitted → the read skips it and the write omits it,
+//     so a newer build's field is silently deleted. That is the slice-1 bug.
+// Cheap enough to run at load: one snapshot off a synthetic sim.
+{
+  const probe = PF.save.snapshot({
+    chatId: "",
+    sim: {
+      world: { seed: 0, theme: "", bindings: {} },
+      zoneId: "",
+      x: 0,
+      y: 0,
+      facing: 0,
+      clockMin: 0,
+      day: 1,
+      intro: null,
+      _envelopeExtra: null,
+    },
+  });
+  for (const key of Object.keys(probe)) {
+    if (!ENVELOPE_KEYS.has(key))
+      throw new Error(`pixelforge: snapshot emits "${key}", which ENVELOPE_KEYS does not list`);
+  }
+  for (const key of ENVELOPE_KEYS) {
+    if (!(key in probe)) throw new Error(`pixelforge: ENVELOPE_KEYS lists "${key}", which snapshot does not emit`);
+  }
+}

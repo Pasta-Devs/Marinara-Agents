@@ -7671,10 +7671,21 @@ const cellarBrief = (prosperity) => ({
     "exactly the unrecognized top-level keys are retained",
   );
   assert.equal(sim._envelopeExtra.player.pouch.money, 7, "retained by value, not by name");
-  assert.equal({}.polluted, undefined, "and a __proto__ key never reached Object.prototype");
+  // The real shape of the "__proto__" hazard. A naive `extra[key] = saved[key]`
+  // does NOT reach Object.prototype — it hits the __proto__ setter and repoints
+  // the CARRY's prototype at the attacker's object, which then rides back out
+  // through snapshot()'s own key loop. So the honest instrument is the carry's
+  // prototype, not a probe of a fresh {} (that one cannot fail either way).
+  assert.equal(
+    Object.getPrototypeOf(sim._envelopeExtra),
+    Object.prototype,
+    "the carry is still an ordinary object — a __proto__ key never repointed it",
+  );
 
-  // snapshot() re-emits them FIRST, in sorted order, with our own keys written
-  // over the top — and it does it off a synthetic two-key core.
+  // snapshot() re-emits them FIRST, in a fixed order, with our own keys written
+  // over the top — and it does it off a synthetic two-key core. Sorted is the
+  // implementation; DETERMINISM is the property under test, because the dedupe,
+  // the adopt compare and the rewind compare are all string equality.
   const snap = loadedPF.save.snapshot({ sim, chatId: "chat-forward" });
   assert.deepEqual(
     Object.keys(snap).slice(0, 3),
@@ -7684,12 +7695,6 @@ const cellarBrief = (prosperity) => ({
   assert.equal(snap.v, 1, "this build still stamps its own envelope version");
   assert.equal(snap.zone, otherZone, "and the known keys are ours, not the row's");
   assert.deepEqual(snap.player, { v: 1, pouch: { money: 7 } }, "the newer build's block survives the flush");
-  assert.equal(
-    JSON.stringify(snap),
-    JSON.stringify(loadedPF.save.snapshot({ sim, chatId: "chat-forward" })),
-    "and the serialization is byte-stable — the dedupe and the rewind compare are string equality",
-  );
-  assert.ok(!JSON.stringify(snap).includes("undefined"), "no undefined values reach the wire");
 
   // The whole point: it round-trips. Feed the flushed blob back in and nothing
   // has been shaved off.
@@ -7700,6 +7705,87 @@ const cellarBrief = (prosperity) => ({
   // is a floor, not an "anything goes".
   const junk = loadedPF.save.simFromSaved({ v: "1", seed: 1107, theme: "cozy-village", zone: otherZone }, meta, "c");
   assert.equal(junk.zoneId, w.startZone, "a non-numeric v is still refused");
+}
+
+// ── THE WIRE FORMAT IS PINNED TO A LITERAL (S5 slice 1) ────────────────────
+// Every dedupe in the save path is string equality over JSON.stringify: the
+// flush's _lastSerialized/_metaSerialized, adopt's comparison against the
+// server row, and checkRewind's. So the exact bytes of a snapshot are an
+// interface, and "the same function called twice agrees with itself" is not a
+// test of it — it cannot fail, whatever the function does. This is the version
+// that can: a fresh LEGACY sim, no carry, against a string built once by hand.
+//
+// When this fails, read the diff before touching it. A key reordered, renamed
+// or dropped here means every save in the wild re-writes on first load and
+// every open chat gets one spurious "The world rewound with the story."
+{
+  const frozen =
+    '{"v":1,"chatId":"chat-frozen","seed":9001,"theme":"cozy-village","zone":"village",' +
+    '"x":344,"y":280,"facing":0,"clockMin":480,"day":1,"bindings":{},' +
+    '"intro":{"world":false,"zones":{},"npcs":{}}}';
+  const legacy = new loadedPF.Sim(world.build(9001, "cozy-village"));
+  assert.equal(
+    JSON.stringify(loadedPF.save.snapshot({ sim: legacy, chatId: "chat-frozen" })),
+    frozen,
+    "the legacy envelope serializes to exactly the bytes every deployed save compares against",
+  );
+}
+
+// ── ENVELOPE_KEYS AND snapshot() CANNOT DRIFT APART (S5 slice 1) ───────────
+// The registry is load-bearing in BOTH directions and neither one fails loudly:
+//   • emitted but not listed → simFromSaved reads our own key back as "foreign"
+//     and parks a stale copy of it on the carry;
+//   • listed but not emitted → the read skips it and the write omits it, so a
+//     newer build's field is deleted on the way through. That is the slice-1
+//     bug, rebuilt one branch at a time — which is exactly how it will come
+//     back when slice 3 adds `player` behind an `if`.
+// 60-save asserts this at load (20-world's placer idiom); this drives it
+// against a real sim as well, so the synthetic probe there cannot go stale.
+{
+  const keys = loadedPF.save._envelopeKeys;
+  assert.ok(keys && typeof keys.has === "function", "the registry is reachable from outside the module");
+  const sim = new loadedPF.Sim(world.build(515, "sci-fi-colony"));
+  sim._envelopeExtra = { fromTheFuture: 1 };
+  const snap = loadedPF.save.snapshot({ sim, chatId: "chat-registry" });
+  const emitted = Object.keys(snap).filter((key) => key !== "fromTheFuture");
+  for (const key of emitted) {
+    assert.ok(keys.has(key), `snapshot emits "${key}" — ENVELOPE_KEYS has to list it or the read treats it as foreign`);
+  }
+  for (const key of keys) {
+    assert.ok(
+      emitted.includes(key),
+      `ENVELOPE_KEYS lists "${key}" — snapshot has to emit it UNCONDITIONALLY or the write deletes a newer build's field`,
+    );
+  }
+  assert.equal(emitted.length, keys.size, "and the two lists are the same size, so neither check is vacuous");
+}
+
+// ── A HOSTILE ROW BOOTS INSTEAD OF BRICKING (S5 slice 1) ───────────────────
+// A save row is untrusted JSON and `world.zones` is a plain object, so the old
+// `!!world.zones[saved.zone]` truthiness test read straight through
+// Object.prototype. Two measured outcomes, both from one row:
+//   • zone "constructor" resolves to a FUNCTION, is accepted as a real zone,
+//     and the first read of z.w throws inside the mount;
+//   • a binding naming "constructor" writes spatialLocationId onto the global
+//     Object — a page-wide mutation from a chat's metadata.
+{
+  const before = "spatialLocationId" in Object;
+  assert.equal(before, false, "the fixture starts from an unpolluted global");
+  const w = world.build(1234, "cozy-village");
+  const row = JSON.parse(
+    `{"__proto__":{"polluted":true},"v":1,"seed":1234,"theme":"cozy-village","zone":"constructor",` +
+      `"x":99,"y":99,"bindings":{"pf.evil":"constructor","pf.also":"toString","pf.real":"${w.startZone}"}}`,
+  );
+  const sim = loadedPF.save.simFromSaved(row, {}, "chat-hostile");
+  assert.equal(sim.zoneId, w.startZone, "a prototype key is not a zone — the restore falls back to the start zone");
+  assert.equal(sim.x, (sim.zone().spawn.x + 0.5) * loadedPF.TILE, "and lands the player on the spawn tile");
+  assert.equal("spatialLocationId" in Object, false, "and nothing from a chat's metadata was written onto Object");
+  assert.equal(sim.world.bindings["pf.evil"], undefined, "the hostile binding is dropped");
+  assert.equal(sim.world.bindings["pf.also"], undefined, "and so is every other inherited name");
+  assert.equal(sim.world.bindings["pf.real"], w.startZone, "while an honest binding in the same object still hangs");
+  assert.equal(Object.getPrototypeOf(sim._envelopeExtra), Object.prototype, "the carry's prototype is untouched too");
+  // The mount reads the zone immediately; this is the crash, reduced.
+  assert.equal(typeof sim.zone().w, "number", "and the resolved zone is a real zone, not Object");
 }
 
 // ── SNAPSHOT() STILL SURVIVES A TWO-KEY CORE (S5 slice 1) ──────────────────
@@ -7947,7 +8033,15 @@ await withSavePath(async ({ calls, armed, behavior, makeCore }) => {
   behavior.put = async () => {
     if (networkDown) throw new TypeError("NetworkError when attempting to fetch resource");
   };
-  for (let i = 0; i < 9; i++) await loadedPF.save.flush(core, false);
+  // Driven the way the real ladder is driven: each rung FIRES and the flush it
+  // starts is the next attempt. Calling flush() nine times in a row instead
+  // would measure nine triggers against one clock, which is the thing the
+  // shared timer exists to prevent (see _timerIsBackoff).
+  await loadedPF.save.flush(core, false);
+  for (let i = 0; i < 8; i++) {
+    armed[armed.length - 1].fn();
+    await loadedPF.save._flushChain;
+  }
   assert.deepEqual(
     armed.map((a) => a.ms),
     [2500, 5000, 10_000, 30_000, 60_000, 60_000, 60_000, 60_000],
@@ -7955,6 +8049,7 @@ await withSavePath(async ({ calls, armed, behavior, makeCore }) => {
   );
 
   networkDown = false;
+  loadedPF.save._timer = 0; // the last rung never armed; nothing is pending
   await loadedPF.save.flush(core, false);
   assert.equal(loadedPF.save._flushFailures, 0, "a landed write clears the counter");
   armed.length = 0;
@@ -8107,6 +8202,370 @@ await withSavePath(async ({ behavior, tick, makeCore }) => {
   await loadedPF.save.adopt(makeCore("chat-old-engine", 34));
   assert.equal(loadedPF.save.mode, "metadata", "an older engine still lands in metadata mode");
   assert.equal(loadedPF.save._probePinned, false, "and is never pinned — that answer is not going to change");
+});
+
+// (i) A FOREIGN BLOCK TOO BIG TO SEND MUST NOT COST US OUR OWN SAVE.
+// Slice 1 made the envelope carry a newer build's top-level keys. Slice 2 put a
+// 32,768-char pre-flight in front of every write. Together they hand a newer
+// build a switch that turns THIS build's persistence off: park 40 KB on the row
+// once and every later flush trips the pre-flight and degrades the session,
+// with the player's own zone, clock and intro flags never reaching the server
+// again. Our own state outranks a block we cannot read — and dropping the carry
+// is what every build before slice 1 did, so it is a return to the old contract
+// rather than new loss.
+await withSavePath(async ({ calls, behavior, makeCore }) => {
+  loadedPF.save.mode = "routes";
+  const core = makeCore("chat-fat-carry", 808);
+  core.sim._envelopeExtra = { fromTheFuture: "x".repeat(40_000) };
+  await loadedPF.save.flush(core, false);
+  const put = calls.find((c) => c.kind === "put");
+  assert.ok(put, "the write still goes out");
+  assert.equal(put.state.fromTheFuture, undefined, "without the block that does not fit");
+  assert.equal(put.state.zone, core.sim.zoneId, "and carrying this world's own state, which is what is being played");
+  assert.equal(loadedPF.save.degraded, false, "the session is NOT degraded");
+  assert.deepEqual(core.toasts, [], "and the player is told nothing — nothing of theirs was lost");
+
+  calls.length = 0;
+  core.sim.day += 1;
+  await loadedPF.save.flush(core, false);
+  const next = calls.find((c) => c.kind === "put");
+  assert.ok(next, "a later mutation writes too — persistence is not bricked");
+  assert.equal(next.state.day, core.sim.day, "with the new value on it");
+
+  // A world whose OWN save is over the wall is the case the degrade exists for,
+  // and it still degrades. The two conditions must not be confused: one loses a
+  // newer build's data, the other loses the player's.
+  loadedPF.save.reset();
+  loadedPF.save.mode = "routes";
+  calls.length = 0;
+  core.sim._envelopeExtra = {};
+  core.sim.intro = { world: true, zones: { huge: "y".repeat(40_000) }, npcs: {} };
+  await loadedPF.save.flush(core, false);
+  assert.equal(calls.length, 0, "an oversized world of our own writes nothing");
+  assert.equal(loadedPF.save.degraded, true, "and degrades");
+  assert.equal(core.toasts.length, 1, "and says so once");
+});
+
+// (j) PAGEHIDE IS NOT ALWAYS A DEATH.
+// flushTeardown updated no bookkeeping at all — the comment said a bfcache
+// restore "is better off re-writing than trusting a write it never saw finish",
+// but the caches were left holding the PRE-teardown bytes, which is not
+// "re-write", it is "believe the server holds something it does not". The very
+// next checkRewind then reads the row the teardown just wrote, finds it
+// different from _serverSerialized, and rewinds the restored session onto our
+// own write — toast and all. The handlers only run if the page survived.
+await withSavePath(async ({ calls, behavior, tick, makeCore }) => {
+  loadedPF.save.mode = "routes";
+  const core = makeCore("chat-bfcache", 4242);
+  await loadedPF.save.flush(core, false); // the session has a row, caches agree
+  calls.length = 0;
+
+  core.sim.day += 1; // the last thing the player did before the tab was hidden
+  loadedPF.save.flushTeardown(core);
+  await tick();
+  const wrote = calls.find((c) => c.kind === "put");
+  assert.ok(wrote, "the teardown wrote the route row");
+  const after = JSON.stringify(wrote.state);
+  assert.equal(loadedPF.save._serverSerialized, after, "and the client now knows what the server holds");
+  assert.equal(loadedPF.save._lastSerialized, after, "the route dedupe is current");
+  assert.equal(loadedPF.save._metaSerialized, after, "and so is the cache dedupe");
+
+  // The consequence, which is the actual finding: the page came back.
+  const simBefore = core.sim;
+  calls.length = 0;
+  behavior.get = async () => ({ available: true, status: 200, body: { exists: true, state: wrote.state } });
+  await loadedPF.save.checkRewind(core);
+  assert.equal(core.sim, simBefore, "a restored page is not rebuilt onto its own last write");
+  assert.deepEqual(core.toasts, [], "and the player is not told the world rewound");
+
+  // The keepalive quota is shared by the PAIR: 64 KiB per origin for every
+  // in-flight body together, and routes mode sends two. Losing the cache PATCH
+  // is repairable on the next load; losing both is the session.
+  loadedPF.save.reset();
+  loadedPF.save.mode = "routes";
+  calls.length = 0;
+  const fat = makeCore("chat-fat-exit", 4243);
+  fat.sim._envelopeExtra = { fromTheFuture: "z".repeat(30_000) };
+  const fatBytes = new TextEncoder().encode(JSON.stringify(loadedPF.save.snapshot(fat))).length;
+  assert.ok(fatBytes < 32_768, "the fixture is under the single-request pre-flight");
+  assert.ok(2 * fatBytes > 57_000, "and over the pair budget — which is the whole point of the fixture");
+  loadedPF.save.flushTeardown(fat);
+  assert.deepEqual(
+    calls.map((c) => c.kind),
+    ["put"],
+    "over the pair budget the authority goes alone instead of both being dropped",
+  );
+});
+
+// (k) THE CAPTURED CHAT-SWITCH WRITE IS NOT INVISIBLE.
+// Two seams, one cause: a write taken at the old chat's generation is stale for
+// every per-chat cache on this object and STILL happened on the wire.
+await withSavePath(async ({ calls, behavior, tick, makeCore }) => {
+  // (k1) _writeSeq is process-global, so the bump belongs OUTSIDE the fence.
+  // Driven through _flushNow directly on purpose: the flush chain is what keeps
+  // these two apart today, and the sequence has to be right independently of it
+  // — flushTeardown bumps it from off the chain entirely.
+  loadedPF.save.mode = "routes";
+  const core = makeCore("chat-seq", 21);
+  const capture = loadedPF.save.captureFlush(core);
+  assert.ok(capture, "there is a pending write to capture");
+  loadedPF.save.reset(); // the chat switch: the capture is stale from here on
+  loadedPF.save.mode = "routes";
+  loadedPF.save._serverSerialized = '{"anchor":1}';
+
+  let releaseGet;
+  behavior.get = () => new Promise((resolve) => (releaseGet = resolve));
+  const rewind = loadedPF.save.checkRewind(core);
+  await tick();
+  assert.ok(releaseGet, "the rewind check has a GET in flight");
+
+  let releasePut;
+  behavior.put = () => new Promise((resolve) => (releasePut = resolve));
+  const stale = loadedPF.save._flushNow(core, false, capture);
+  releasePut();
+  await stale;
+
+  releaseGet({ available: true, status: 200, body: { exists: true, state: { v: 1, moved: true } } });
+  await rewind;
+  assert.deepEqual(core.toasts, [], "a GET our own PUT overtook is discarded, not adopted as an external move");
+  assert.equal(loadedPF.save._serverSerialized, '{"anchor":1}', "and it never becomes the anchor");
+
+  // (k2) adopt() rides the chain, like checkRewind. Off it, the new chat's
+  // probe can latch a row while the leaving chat's captured write is still in
+  // the air — and on a return visit that row is the one about to be replaced.
+  loadedPF.save.reset();
+  loadedPF.save.mode = "routes";
+  calls.length = 0;
+  behavior.get = async () => ({ available: false, status: 404 });
+  const core2 = makeCore("chat-adopt", 44);
+  const capture2 = loadedPF.save.captureFlush(core2);
+  loadedPF.save.reset();
+  behavior.put = () => new Promise((resolve) => (releasePut = resolve));
+  void loadedPF.save.flush(core2, false, capture2);
+  const adopting = loadedPF.save.adopt(core2);
+  await tick();
+  assert.deepEqual(calls.map((c) => c.kind), ["put"], "the probe is not issued while the captured write is in flight");
+  releasePut();
+  await adopting;
+  assert.deepEqual(
+    calls.map((c) => c.kind),
+    ["put", "patch", "get"],
+    "it runs only once that write — route row and write-through cache — has landed",
+  );
+});
+
+// (l) A PROBE REJECTION FROM THE CHAT YOU LEFT.
+// adopt()'s success path was fenced on the captured generation and chat id; its
+// CATCH was not. So a probe that finally rejects after a chat switch sets
+// mode = "metadata" and pins — and because adopt() short-circuits on
+// mode !== null, the chat the player is actually on never gets a probe of its
+// own. One stale rejection costs the new chat timeline rewind for the session.
+await withSavePath(async ({ behavior, tick, makeCore }) => {
+  const core = makeCore("chat-a", 55);
+  let rejectProbe;
+  behavior.get = () => new Promise((resolve, reject) => (rejectProbe = reject));
+  void loadedPF.save.adopt(core);
+  await tick();
+  assert.ok(rejectProbe, "the first chat's probe is in flight");
+
+  loadedPF.save.reset();
+  core.chatId = "chat-b";
+  core.sim = new loadedPF.Sim(world.build(56, "cozy-village"));
+  behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+  const adoptingB = loadedPF.save.adopt(core);
+
+  rejectProbe(new TypeError("NetworkError when attempting to fetch resource"));
+  await adoptingB;
+  await tick();
+  assert.equal(loadedPF.save.mode, "routes", "the chat we are ON keeps the mode its own probe earned");
+  assert.equal(loadedPF.save._probePinned, false, "and a rejection addressed to the chat we left pins nothing");
+});
+
+// (m) A HALF-LANDED FLUSH IS NOT A LANDED FLUSH.
+// In routes mode the write-through cache PATCH had its own catch: a console
+// warning and a bare markDirty. Two consequences, both silent. _onWriteLanded
+// still ran, so the failure counter reset on every round — and markDirty
+// re-armed a flat 2.5s. A broken metadata route therefore got retried every 2.5
+// seconds for the whole session instead of walking the ladder that exists for
+// exactly this.
+await withSavePath(async ({ armed, behavior, makeCore }) => {
+  loadedPF.save.mode = "routes";
+  const core = makeCore("chat-cache", 66);
+  behavior.patch = async () => {
+    throw new TypeError("NetworkError when attempting to fetch resource");
+  };
+  await loadedPF.save.flush(core, false);
+  assert.equal(loadedPF.save._flushFailures, 1, "the route row landed and the cache did not — that is a failure");
+  assert.deepEqual(
+    armed.map((a) => a.ms),
+    [2500],
+    "and it takes the ladder's bottom rung",
+  );
+  for (let i = 0; i < 3; i++) {
+    armed[armed.length - 1].fn();
+    await loadedPF.save._flushChain;
+  }
+  assert.deepEqual(
+    armed.map((a) => a.ms),
+    [2500, 5000, 10_000, 30_000],
+    "and the ladder WALKS — it is not reset to 2.5s by the route row landing every round",
+  );
+
+  behavior.patch = async () => {};
+  core.sim.day += 1;
+  await loadedPF.save.flush(core, false);
+  assert.equal(loadedPF.save._flushFailures, 0, "a flush where BOTH writes land still clears the counter");
+
+  // A 409 from the metadata route is the metadata route talking. Dropping the
+  // experience-state authority on it would be a non sequitur.
+  loadedPF.save.reset();
+  loadedPF.save.mode = "routes";
+  armed.length = 0;
+  behavior.patch = async () => {
+    throw Object.assign(new Error("PATCH metadata → 409"), { status: 409 });
+  };
+  core.sim.day += 1;
+  await loadedPF.save.flush(core, false);
+  assert.equal(loadedPF.save.mode, "routes", "a cache 409 does not fall back to metadata mode");
+  assert.equal(loadedPF.save._probePinned, false, "and does not pin for re-probe");
+  assert.deepEqual(
+    armed.map((a) => a.ms),
+    [2500],
+    "it takes the ladder like any other cache failure",
+  );
+});
+
+// (n) A BACKOFF RUNG IS NOT CANCELLABLE.
+// The ladder shares markDirty's timer so a busy player cannot reset it — but
+// the sharing only worked in one direction. _flushNow cleared the timer at the
+// top whatever it was for, so any flush from another trigger deleted the
+// pending rung; and a TEARDOWN flush, which never re-arms, deleted it outright.
+// The ladder has to measure elapsed time, not requested time.
+await withSavePath(async ({ armed, behavior, makeCore }) => {
+  loadedPF.save.mode = "metadata";
+  const core = makeCore("chat-ladder", 77);
+  behavior.patch = async () => {
+    throw new TypeError("NetworkError when attempting to fetch resource");
+  };
+  await loadedPF.save.flush(core, false);
+  for (let i = 0; i < 4; i++) {
+    armed[armed.length - 1].fn();
+    await loadedPF.save._flushChain;
+  }
+  assert.deepEqual(
+    armed.map((a) => a.ms),
+    [2500, 5000, 10_000, 30_000, 60_000],
+    "the session has climbed to the 60s rung",
+  );
+  const pending = loadedPF.save._timer;
+  assert.notEqual(pending, 0, "with that rung actually armed");
+
+  loadedPF.save.markDirty(core);
+  loadedPF.save.markDirty(core);
+  assert.equal(loadedPF.save._timer, pending, "a busy player cannot reset a live rung to 2.5s");
+  assert.equal(armed.length, 5, "and arms nothing of their own");
+
+  await loadedPF.save.flush(core, true);
+  assert.equal(loadedPF.save._timer, pending, "and a teardown flush — which never re-arms — must not delete it");
+  assert.equal(loadedPF.save._timerIsBackoff, true, "the timer is still a rung, not a debounce");
+});
+
+// (o) A PROBE FAILURE THE ROUTE MEANT IS NOT A BLIP.
+// The pin exists for a transport failure or a server having a bad minute. A 401
+// or a 403 will say the same thing in sixty seconds, and in six hundred: pinning
+// on it buys a background request every minute for the life of the tab and
+// changes nothing. And even a genuine blip gets a bounded number of asks, on the
+// same discipline the write ladder already has.
+{
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: false, status: 503 });
+  try {
+    await assert.rejects(
+      () => loadedPF.api.getExperienceState("chat-probe"),
+      (err) => err.status === 503 && err.message === "GET experience-state → 503",
+      "a rejected probe carries its status, and keeps the message it always had",
+    );
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+await withSavePath(async ({ armed, behavior, tick, makeCore }) => {
+  const httpError = (status) => Object.assign(new Error(`GET experience-state → ${status}`), { status });
+  for (const status of [401, 403]) {
+    loadedPF.save.reset();
+    behavior.get = async () => {
+      throw httpError(status);
+    };
+    await loadedPF.save.adopt(makeCore(`chat-${status}`, 88));
+    assert.equal(loadedPF.save.mode, "metadata", `a ${status} still degrades to metadata mode`);
+    assert.equal(loadedPF.save._probePinned, false, `but a ${status} is an answer, not a blip — it never pins`);
+  }
+
+  loadedPF.save.reset();
+  armed.length = 0;
+  behavior.get = async () => {
+    throw httpError(503);
+  };
+  await loadedPF.save.adopt(makeCore("chat-503", 89));
+  assert.equal(loadedPF.save._probePinned, true, "a 5xx is the server having a bad minute, and that is worth re-asking");
+  const interval = armed.find((a) => a.interval);
+  assert.ok(interval, "on an interval");
+  assert.equal(interval.ms, 60_000, "at ~60s");
+
+  let fired = 0;
+  while (loadedPF.save._reprobeTimer && fired < 20) {
+    interval.fn();
+    await tick();
+    fired++;
+  }
+  assert.equal(fired, 8, "which gives up after eight failed rungs rather than asking for the life of the tab");
+  assert.equal(loadedPF.save._reprobeTimer, 0, "the interval is cleared");
+  assert.equal(
+    loadedPF.save._probePinned,
+    true,
+    "the pin itself stays — a metadata write that lands later still earns its one-shot attempt",
+  );
+});
+
+// (p) THE PROMOTION'S FIRST WRITE IS NOT CANCELLABLE EITHER.
+// _reprobe promotes a pinned session with FIRST-WRITE semantics, and the whole
+// mechanism was `_lastSerialized = null`. A flush already parked inside its
+// PATCH when the promotion happens lands afterwards and assigns that cache
+// straight back — so the next flush dedupes to nothing and the promotion's
+// first route write never happens. The session sits in "routes" mode with no
+// row of its own until something else changes the world.
+await withSavePath(async ({ calls, behavior, tick, makeCore }) => {
+  const core = makeCore("chat-promote", 91);
+  behavior.get = async () => {
+    throw new TypeError("NetworkError when attempting to fetch resource");
+  };
+  await loadedPF.save.adopt(core);
+  assert.equal(loadedPF.save._probePinned, true, "the session is pinned to metadata mode");
+
+  let releasePatch;
+  behavior.patch = () => new Promise((resolve) => (releasePatch = resolve));
+  core.sim.day += 1;
+  const parked = loadedPF.save.flush(core, false);
+  await tick();
+  assert.ok(releasePatch, "an ordinary metadata flush is parked inside its PATCH");
+
+  behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+  await loadedPF.save._reprobe(core);
+  assert.equal(loadedPF.save.mode, "routes", "the re-probe promotes the session");
+  assert.equal(loadedPF.save._lastSerialized, null, "forcing the first write up");
+
+  releasePatch();
+  await parked;
+  assert.notEqual(loadedPF.save._lastSerialized, null, "and the late flush does put the dedupe cache back");
+
+  calls.length = 0;
+  behavior.patch = async () => {};
+  await loadedPF.save.flush(core, false);
+  assert.ok(
+    calls.some((c) => c.kind === "put"),
+    "the promotion's first route write happens anyway — a flush that landed after it cannot un-force it",
+  );
+  assert.equal(loadedPF.save._forceWrite, false, "and the force is spent by the write that consumed it");
 });
 
 console.log("brief validator + compiler: all cases passed");

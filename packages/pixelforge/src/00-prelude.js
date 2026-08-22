@@ -100,13 +100,16 @@ PF.api = {
   },
   /** Host-owned per-timeline save slot (engine #5102). 404 = route absent (older
    *  engine), 409 = chat not stamped for an Experience — both are mode signals,
-   *  not errors, so this never throws on them. */
+   *  not errors, so this never throws on them. Everything else rejects through
+   *  PF.httpError: adopt() has to tell a 5xx blip (worth re-probing every minute)
+   *  from a 401/403 the route MEANT (re-asking is noise), and it can only do that
+   *  off a status on the object. */
   async getExperienceState(chatId) {
     const res = await fetch(`/api/game/${encodeURIComponent(chatId)}/experience-state`, {
       headers: { Accept: "application/json" },
     });
     if (res.status === 404 || res.status === 409) return { available: false, status: res.status };
-    if (!res.ok) throw new Error(`GET experience-state → ${res.status}`);
+    if (!res.ok) throw PF.httpError("GET experience-state", res.status);
     return { available: true, status: res.status, body: await res.json() };
   },
   async putExperienceState(chatId, state, keepalive = false) {
