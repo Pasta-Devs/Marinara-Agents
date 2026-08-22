@@ -813,8 +813,8 @@ if (JSON.stringify(guidanceIds) !== JSON.stringify([...ids].sort())) {
 // Staging-only packages live in the preview overlay and are counted separately.
 const agentOnly = publishedCatalog.packages.filter((entry) => !entry.manifest.entrypoints.server).length;
 const features = publishedCatalog.packages.length - agentOnly;
-if (publishedCatalog.packages.length !== 35 || agentOnly !== 24 || features !== 11) {
-  throw new Error(`Expected 24 agents and 11 features, found ${agentOnly} and ${features}`);
+if (publishedCatalog.packages.length !== 36 || agentOnly !== 24 || features !== 12) {
+  throw new Error(`Expected 24 agents and 12 features, found ${agentOnly} and ${features}`);
 }
 console.log(`Catalog valid: ${publishedCatalog.packages.length} packages (${agentOnly} agents, ${features} features).`);
 if (previewCatalog.packages.length > 0) {

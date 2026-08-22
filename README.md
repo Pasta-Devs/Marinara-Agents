@@ -67,7 +67,6 @@ These packages are being built in this repository but are not ready for the stab
 
 | Package | ID | Availability | Status |
 | --- | --- | --- | --- |
-| Memory Nag | [`memory-nag`](packages/memory-nag/manifest.json) | Staging only | A per-chat Roleplay memory tracker with checkpointed scanning, editable active and resolved memories, and context-sensitive recall. |
 | Pixelforge | [`pixelforge`](packages/pixelforge/manifest.json) | In development | A walkable pixel-art RPG Experience for Game Mode: generated settlements, NPCs, and story-driven exploration. Under active development; not yet listed for users. |
 
 ### Localization sources
