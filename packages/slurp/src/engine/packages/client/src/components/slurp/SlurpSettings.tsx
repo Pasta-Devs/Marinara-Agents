@@ -5,6 +5,8 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   useDeleteNoodlerStageProfile,
+  useDeleteAllSlurpData,
+  useDeleteUnusedSlurpData,
   useAdoptNoodlerSourceIdentity,
   useDismissNoodlerSourceChanges,
   useNoodlerAccounts,
@@ -143,6 +145,8 @@ export function SlurpSettings({
   const refreshCreators = useRefreshTargetedNoodlerCreatorsNow();
   const updateImages = useUpdateSlurpImageConnections();
   const deleteCreator = useDeleteNoodlerStageProfile();
+  const deleteAllData = useDeleteAllSlurpData();
+  const deleteUnusedData = useDeleteUnusedSlurpData();
   const adoptSourceIdentity = useAdoptNoodlerSourceIdentity();
   const dismissSourceChanges = useDismissNoodlerSourceChanges();
   const connectionsQuery = useSlurpConnections(section === "general" || section === "images" || section === "creators");
@@ -675,6 +679,60 @@ export function SlurpSettings({
                 >
                   <RefreshCw size={14} />
                   {t("ui.slurp.settings.advanced.restartSetup")}
+                </button>
+              </div>
+              <div className="rounded-md border border-red-400/30 p-4">
+                <h2 className="text-sm font-semibold">{t("ui.slurp.settings.advanced.deleteAllTitle")}</h2>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
+                  {t("ui.slurp.settings.advanced.deleteAllDetail")}
+                </p>
+                <button
+                  type="button"
+                  disabled={deleteAllData.isPending}
+                  onClick={() =>
+                    void showConfirmDialog({
+                      title: t("ui.slurp.settings.advanced.deleteAllConfirmTitle"),
+                      message: t("ui.slurp.settings.advanced.deleteAllConfirmDetail"),
+                      confirmLabel: t("ui.slurp.settings.advanced.deleteAllButton"),
+                    }).then((confirmed) => {
+                      if (!confirmed) return;
+                      deleteAllData.mutate(undefined, {
+                        onSuccess: () => toast.success(t("ui.slurp.settings.advanced.deleteAllSuccess")),
+                        onError: (error) => toast.error(errorMessage(error)),
+                      });
+                    })
+                  }
+                  className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md border border-red-400/50 px-3 text-xs font-semibold text-red-300 hover:bg-red-400/10 disabled:opacity-50"
+                >
+                  <Trash2 size={14} />
+                  {t("ui.slurp.settings.advanced.deleteAllButton")}
+                </button>
+              </div>
+              <div className="rounded-md border border-[var(--border)] p-4">
+                <h2 className="text-sm font-semibold">{t("ui.slurp.settings.advanced.deleteUnusedTitle")}</h2>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
+                  {t("ui.slurp.settings.advanced.deleteUnusedDetail")}
+                </p>
+                <button
+                  type="button"
+                  disabled={deleteUnusedData.isPending || deleteAllData.isPending}
+                  onClick={() =>
+                    void showConfirmDialog({
+                      title: t("ui.slurp.settings.advanced.deleteUnusedConfirmTitle"),
+                      message: t("ui.slurp.settings.advanced.deleteUnusedConfirmDetail"),
+                      confirmLabel: t("ui.slurp.settings.advanced.deleteUnusedButton"),
+                    }).then((confirmed) => {
+                      if (!confirmed) return;
+                      deleteUnusedData.mutate(undefined, {
+                        onSuccess: () => toast.success(t("ui.slurp.settings.advanced.deleteUnusedSuccess")),
+                        onError: (error) => toast.error(errorMessage(error)),
+                      });
+                    })
+                  }
+                  className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                >
+                  <Trash2 size={14} />
+                  {t("ui.slurp.settings.advanced.deleteUnusedButton")}
                 </button>
               </div>
             </div>

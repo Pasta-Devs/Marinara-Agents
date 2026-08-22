@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { createSlurpActivationLifecycle } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-activation-lifecycle.ts";
 import { buildSlurpPostTimingContext } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-post-timing.ts";
 import { runSlurpAutoPostPollOperations } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-autopost-poll.ts";
+import { normalizeSlurpFanActivityRows } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-fan-activity-response.ts";
 
 const storage = readFileSync("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
 const refreshScheduler = readFileSync(
@@ -15,6 +16,17 @@ const settingsUi = readFileSync(
   "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx",
   "utf8",
 );
+const homeUi = readFileSync(
+  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
+  "utf8",
+);
+const onboardingUi = readFileSync(
+  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx",
+  "utf8",
+);
+const locale = JSON.parse(
+  readFileSync("packages/slurp/src/engine/packages/client/src/localization/locales/en.json", "utf8"),
+) as Record<string, string>;
 
 assert.match(
   storage,
@@ -51,11 +63,33 @@ assert.match(routes, /app\.patch\("\/noodler\/auto-post\/schedule\/:slotId"/u);
 assert.match(hooks, /slots: SlurpScheduleSlot\[\]/u);
 assert.match(settingsUi, /useUpdateNoodlerScheduleSlot/u);
 assert.match(settingsUi, /type="datetime-local"/u);
+assert.match(homeUi, /ui\.noodle\.stageprofileview\.automaticPostingProviderDisclosure/u);
+assert.match(onboardingUi, /ui\.noodle\.noodlerwizard\.autoPostingHelp/u);
+for (const key of [
+  "ui.noodle.stageprofileview.automaticPostingProviderDisclosure",
+  "ui.noodle.noodlerwizard.autoPostingHelp",
+]) {
+  assert.match(locale[key] ?? "", /provider|API/u, `${key} must disclose provider or API use`);
+}
 assert.match(
   storage,
   /current\.publishAt !== input\.expectedPublishAt/u,
   "an in-flight generation must not overwrite a slot that was rescheduled",
 );
+const koboldActivity = normalizeSlurpFanActivityRows(
+  [
+    { actor: "late_night_raider", type: "like", targetId: "post-1" },
+    { actor: "new_visitor", type: "reply", targetId: "post-2", content: "Worth it though." },
+  ],
+  new Map([
+    ["post-1", "creator-1"],
+    ["post-2", "creator-1"],
+  ]),
+);
+assert.equal(koboldActivity.rows.length, 2, "KoboldCpp audience arrays and field aliases must normalize");
+assert.equal(koboldActivity.rows[1]?.creatorAccountId, "creator-1");
+assert.equal(koboldActivity.rows[0]?.actorHandle, "late_night_raider");
+assert.equal(koboldActivity.rows[0]?.targetPostId, "post-1");
 
 const generatedAt = new Date("2026-08-20T15:25:00.000Z");
 const publicationTime = new Date("2026-08-21T08:30:00.000Z");
