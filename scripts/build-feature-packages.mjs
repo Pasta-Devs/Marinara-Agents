@@ -255,7 +255,7 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.2.11",
+    version: "1.2.12",
     minEngineVersion: "2.4.4",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
@@ -311,7 +311,7 @@ const features = [
   },
   {
     id: "slurp",
-    version: "1.0.14",
+    version: "1.0.15",
     minEngineVersion: "2.4.3",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
