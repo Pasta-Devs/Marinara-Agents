@@ -73,6 +73,18 @@ export async function noodleRoutes(app: FastifyInstance) {
     return { marker: latest ? `${latest.id}:${latest.updatedAt}` : null };
   });
   app.put("/settings", async (request) => noodle.updateSettings(request.body as Record<string, unknown>));
+  app.post("/data/cleanup-unused", async () => {
+    const [charactersList, personas] = await Promise.all([characters.list(), characters.listPersonas()]);
+    return noodle.cleanupUnusedData({
+      characterIds: new Set(charactersList.map((character) => character.id)),
+      personaIds: new Set(personas.map((persona) => persona.id)),
+    });
+  });
+  app.delete("/data", async (request, reply) => {
+    const parsed = z.object({ confirmation: z.literal("DELETE") }).safeParse(request.query);
+    if (!parsed.success) return reply.code(400).send({ error: "Type DELETE to confirm removal of all Noodle data." });
+    return noodle.deleteAllData();
+  });
   app.post("/ambient-profiles/reroll", async (request, reply) => {
     const { rerollAmbientNoodleProfiles } =
       await import("../services/noodle/noodle-ambient-profile-generation.service.js");
