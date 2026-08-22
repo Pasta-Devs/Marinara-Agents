@@ -22,6 +22,12 @@ PF.Sim = class {
     this._npcTimers = new Map();
     this._rnd = PF.rng((world.seed ^ 0x9e3779b9) >>> 0);
     this.dirty = false; // save-worthy change happened
+    // Envelope keys a NEWER build wrote that this one does not understand,
+    // re-emitted verbatim by snapshot() (60-save ENVELOPE_KEYS). Initialized
+    // here EXPLICITLY rather than lazily like `intro`: snapshot() reads it on
+    // the wizard's throwaway sim too, and an undefined-shaped field is exactly
+    // the trap `intro` already is.
+    this._envelopeExtra = {};
     this._daypart = null;
     // Cutscene beat (see stepCutscene): while set, the package asks the host to
     // fold its narration box away so the world has the screen to itself.

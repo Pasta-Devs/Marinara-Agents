@@ -5181,6 +5181,12 @@ PF.Sim = class {
     this._npcTimers = new Map();
     this._rnd = PF.rng((world.seed ^ 0x9e3779b9) >>> 0);
     this.dirty = false; // save-worthy change happened
+    // Envelope keys a NEWER build wrote that this one does not understand,
+    // re-emitted verbatim by snapshot() (60-save ENVELOPE_KEYS). Initialized
+    // here EXPLICITLY rather than lazily like `intro`: snapshot() reads it on
+    // the wizard's throwaway sim too, and an undefined-shaped field is exactly
+    // the trap `intro` already is.
+    this._envelopeExtra = {};
     this._daypart = null;
     // Cutscene beat (see stepCutscene): while set, the package asks the host to
     // fold its narration box away so the world has the screen to itself.
@@ -6263,6 +6269,28 @@ PF.mapsExport = {
 //     timeline seams do not rewind it.
 // Both: debounced, event-driven, flushed with keepalive on teardown — never
 // per-frame (Android whole-blob-rewrite shape, exploration R11/R28).
+
+// The envelope keys THIS build understands. Anything else on a restored save
+// was written by a NEWER build: simFromSaved parks it on sim._envelopeExtra and
+// snapshot() re-emits it. Without that, round-tripping a chat through an older
+// client is data-destructive — the older read drops the fields on the floor and
+// the very next flush overwrites the row without them (plan §Q1, additive-only
+// by policy). Additions to the snapshot literal below MUST be added here too.
+const ENVELOPE_KEYS = new Set([
+  "v",
+  "chatId",
+  "seed",
+  "theme",
+  "zone",
+  "x",
+  "y",
+  "facing",
+  "clockMin",
+  "day",
+  "bindings",
+  "intro",
+]);
+
 PF.save = {
   _timer: 0,
   _lastSerialized: null,
@@ -6273,25 +6301,41 @@ PF.save = {
   _serverSerialized: null,
   _rewindCheckInFlight: false,
 
+  /** Reads core.sim and core.chatId and NOTHING else: 80-setup calls this with
+   *  a synthetic two-key core, and reaching for core.host/hud/render there
+   *  throws inside the wizard's launch handler. */
   snapshot(core) {
     const sim = core.sim;
     if (!sim) return null;
-    return {
-      v: 1,
-      chatId: core.chatId,
-      seed: sim.world.seed,
-      theme: sim.world.theme,
-      zone: sim.zoneId,
-      x: Math.round(sim.x),
-      y: Math.round(sim.y),
-      facing: sim.facing,
-      clockMin: sim.clockMin,
-      day: sim.day,
-      bindings: sim.world.bindings,
-      // §7 one-shot injection flags: persisted so a reload never re-taxes the
-      // GM context with prose that already lives in chat history.
-      intro: sim.intro ?? { world: false, zones: {}, npcs: {} },
-    };
+    // Unknown keys FIRST, known keys assigned over them: a newer build's field
+    // rides through untouched but can never shadow one of ours. Emitted in
+    // SORTED order — the flush dedupe, the adopt comparison, and the rewind
+    // comparison are all string equality over JSON.stringify, so a key order
+    // that drifted with the source would forge both spurious saves and
+    // spurious "The world rewound with the story." toasts.
+    const snap = {};
+    const extra = sim._envelopeExtra;
+    if (extra) {
+      for (const key of Object.keys(extra).sort()) {
+        if (extra[key] === undefined) continue; // JSON.stringify would drop it anyway
+        snap[key] = extra[key];
+      }
+    }
+    snap.v = 1;
+    snap.chatId = core.chatId;
+    snap.seed = sim.world.seed;
+    snap.theme = sim.world.theme;
+    snap.zone = sim.zoneId;
+    snap.x = Math.round(sim.x);
+    snap.y = Math.round(sim.y);
+    snap.facing = sim.facing;
+    snap.clockMin = sim.clockMin;
+    snap.day = sim.day;
+    snap.bindings = sim.world.bindings;
+    // §7 one-shot injection flags: persisted so a reload never re-taxes the
+    // GM context with prose that already lives in chat history.
+    snap.intro = sim.intro ?? { world: false, zones: {}, npcs: {} };
+    return snap;
   },
 
   /** Where /game/create actually stores the wizard config (review finding):
@@ -6413,7 +6457,12 @@ PF.save = {
       if (!stored || chatId !== core.chatId) return;
       // Rebuild onto the generated world (the default one has only seconds of
       // play on it). Fresh sim, fresh bindings; spatial re-seeds next turn.
+      // The envelope carry is NOT play state — it is a newer build's fields —
+      // so it transplants across the wholesale sim replacement rather than
+      // dying with the throwaway world (_rebuild gets it via simFromSaved).
+      const carriedExtra = core.sim?._envelopeExtra;
       core.sim = new PF.Sim(PF.world.build(seed, theme, sealed));
+      if (carriedExtra) core.sim._envelopeExtra = carriedExtra;
       this._lastSerialized = null;
       core.render?.clearZones?.();
       void PF.assets.load(core);
@@ -6464,7 +6513,27 @@ PF.save = {
     // {skipped:true} marker makes the world final.
     if (!brief && meta?.pixelforgeBrief === undefined && this._configGenerate(meta)) world.interim = true;
     const sim = new PF.Sim(world);
-    if (saved && saved.v === 1) {
+    // Additive-only by policy (plan §Q1): keys a NEWER build added ride through
+    // this one instead of being erased by the next flush. Collected OUTSIDE the
+    // version gate deliberately — a build that cannot even parse `v` is exactly
+    // the build most likely to be destroying data it does not understand.
+    if (saved && typeof saved === "object") {
+      const extra = {};
+      for (const key of Object.keys(saved)) {
+        // "__proto__" arrives as an own property from JSON.parse; assigning it
+        // onto a plain object would set the prototype instead of a key.
+        if (ENVELOPE_KEYS.has(key) || key === "__proto__") continue;
+        if (saved[key] === undefined) continue;
+        extra[key] = saved[key];
+      }
+      sim._envelopeExtra = extra;
+    }
+    // Tolerant read (plan §Q1): the old strict `saved.v === 1` half-applied a
+    // forward-version save — right world (seed/theme resolve above the gate),
+    // but spawn/08:00/day-1, no intro flags, no bindings. Every field below
+    // carries its own type check, so a higher envelope version restores exactly
+    // the fields it still shares with us.
+    if (saved && typeof saved.v === "number" && saved.v >= 1) {
       // A saved zone that no longer exists (world gen changed between versions,
       // or an interior that this build no longer compiles) falls back to the
       // start zone — but the saved x/y belonged to the OLD zone, and carrying

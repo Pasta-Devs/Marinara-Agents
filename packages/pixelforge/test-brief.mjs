@@ -7598,4 +7598,180 @@ const cellarBrief = (prosperity) => ({
   assert.ok(ponds >= 24, `and the pond was built in most of them (${ponds} of ${checked})`);
 }
 
+// ── A FORWARD-VERSION SAVE IS READ, NOT HALF-APPLIED (S5 slice 1) ──────────
+// `saved.v === 1` was a STRICT equality gate, and seed/theme resolve ABOVE it.
+// A save written by a newer build therefore produced the right world with a
+// reset player — start-zone spawn, 08:00, day 1, no intro flags, no World Maps
+// bindings — and the very next flush overwrote that newer row with a `v:1`
+// blob carrying none of the newer build's fields. Round-tripping one chat
+// through an older client was silently, permanently data-destructive.
+//
+// Two halves and both are load-bearing: the gate becomes a FLOOR (`v >= 1`,
+// every field inside keeping the type check it already had), and the top-level
+// keys this build does not recognize are parked on the sim and re-emitted by
+// snapshot() so no flush of ours can strip them.
+//
+// The blob is built with JSON.parse rather than a literal, because that is what
+// a real row is — and because it is the only way to get a `"__proto__"` key,
+// which JSON.parse hands over as an own property and a naive copy loop would
+// assign straight onto Object.prototype.
+{
+  const sealed = brief.defaults("cozy-village", 1107);
+  const w = world.build(1107, "cozy-village", sealed);
+  const meta = { pixelforgeBrief: sealed };
+  // A resolvable zone that is NOT the start zone: restoring it proves the gate
+  // ran, rather than proving the Sim constructor's own default.
+  const otherZone = Object.keys(w.zones).find((id) => id !== w.startZone);
+  assert.ok(otherZone, "the compiled world has a second zone to restore into");
+  const z = w.zones[otherZone];
+  const savedX = Math.round((z.spawn.x + 0.5) * loadedPF.TILE);
+  const savedY = Math.round((z.spawn.y + 0.5) * loadedPF.TILE);
+  const body = JSON.stringify({
+    v: 7, // a build seven envelope versions ahead of this one
+    chatId: "chat-forward",
+    seed: 1107,
+    theme: "cozy-village",
+    zone: otherZone,
+    x: savedX,
+    y: savedY,
+    facing: 3,
+    clockMin: 21 * 60 + 7,
+    day: 12,
+    bindings: { "pf.1.kept": w.startZone, "pf.2.dead": "zNoSuchZone" },
+    intro: { world: true, zones: { [w.startZone]: true }, npcs: { n1: true } },
+    // Three unknown keys, deliberately out of alphabetical order.
+    zzTop: "kept verbatim",
+    player: { v: 1, pouch: { money: 7 } },
+    aaFirst: [1, 2, 3],
+  });
+  const row = JSON.parse(`{"__proto__":{"polluted":true},${body.slice(1)}`);
+  assert.equal(row.zzTop, "kept verbatim", "the fixture really carries its unknown keys");
+
+  const sim = loadedPF.save.simFromSaved(row, meta, "chat-forward");
+  assert.equal(sim.zoneId, otherZone, "a v:7 save still restores its zone");
+  assert.equal(
+    sim.x,
+    loadedPF.clamp(savedX, loadedPF.TILE, (z.w - 1) * loadedPF.TILE),
+    "and its x, through the same clamp v:1 gets",
+  );
+  assert.equal(sim.y, loadedPF.clamp(savedY, loadedPF.TILE, (z.h - 1) * loadedPF.TILE), "and its y");
+  assert.equal(sim.facing, 3, "and its facing");
+  assert.equal(sim.clockMin, 21 * 60 + 7, "and its clock — not 08:00");
+  assert.equal(sim.day, 12, "and its day — not day 1");
+  assert.equal(sim.intro.world, true, "and the one-shot world intro stays burned");
+  assert.equal(sim.intro.zones[w.startZone], true, "and the zone flags survive");
+  assert.equal(sim.world.bindings["pf.1.kept"], w.startZone, "and a live World Maps binding is re-hung");
+  assert.equal(sim.world.bindings["pf.2.dead"], undefined, "while one naming a dead zone is still dropped");
+
+  // The unknown keys landed on the sim, and only the unknown ones.
+  assert.ok(sim._envelopeExtra, "the restore parked the unrecognized keys on the sim");
+  assert.deepEqual(
+    Object.keys(sim._envelopeExtra).sort(),
+    ["aaFirst", "player", "zzTop"],
+    "exactly the unrecognized top-level keys are retained",
+  );
+  assert.equal(sim._envelopeExtra.player.pouch.money, 7, "retained by value, not by name");
+  assert.equal({}.polluted, undefined, "and a __proto__ key never reached Object.prototype");
+
+  // snapshot() re-emits them FIRST, in sorted order, with our own keys written
+  // over the top — and it does it off a synthetic two-key core.
+  const snap = loadedPF.save.snapshot({ sim, chatId: "chat-forward" });
+  assert.deepEqual(
+    Object.keys(snap).slice(0, 3),
+    ["aaFirst", "player", "zzTop"],
+    "the carried keys are emitted first and sorted, whatever order they arrived in",
+  );
+  assert.equal(snap.v, 1, "this build still stamps its own envelope version");
+  assert.equal(snap.zone, otherZone, "and the known keys are ours, not the row's");
+  assert.deepEqual(snap.player, { v: 1, pouch: { money: 7 } }, "the newer build's block survives the flush");
+  assert.equal(
+    JSON.stringify(snap),
+    JSON.stringify(loadedPF.save.snapshot({ sim, chatId: "chat-forward" })),
+    "and the serialization is byte-stable — the dedupe and the rewind compare are string equality",
+  );
+  assert.ok(!JSON.stringify(snap).includes("undefined"), "no undefined values reach the wire");
+
+  // The whole point: it round-trips. Feed the flushed blob back in and nothing
+  // has been shaved off.
+  const again = loadedPF.save.simFromSaved(JSON.parse(JSON.stringify(snap)), meta, "chat-forward");
+  assert.deepEqual(again._envelopeExtra, sim._envelopeExtra, "a second pass through the save path keeps them all");
+
+  // A genuinely unreadable row still restores nothing but the world: the gate
+  // is a floor, not an "anything goes".
+  const junk = loadedPF.save.simFromSaved({ v: "1", seed: 1107, theme: "cozy-village", zone: otherZone }, meta, "c");
+  assert.equal(junk.zoneId, w.startZone, "a non-numeric v is still refused");
+}
+
+// ── SNAPSHOT() STILL SURVIVES A TWO-KEY CORE (S5 slice 1) ──────────────────
+// 80-setup seeds a brand-new chat by calling PF.save.snapshot({ sim, chatId })
+// — literally two keys, no host, no hud, no render — inside the wizard's launch
+// handler, whose catch renders as a generic "Launch failed". Anything the
+// snapshot grows that reaches past core.sim/core.chatId breaks chat creation
+// itself, and it breaks it in the one place the player cannot work around.
+// Pinned as its own case because the envelope carry made snapshot() read a
+// second thing off the sim, and every later slice adds more.
+{
+  const w = world.build(4242, "cozy-village");
+  const wizardSim = new loadedPF.Sim(w); // exactly what 80-setup builds
+  const seeded = loadedPF.save.snapshot({ sim: wizardSim, chatId: "chat-wizard" });
+  assert.equal(seeded.chatId, "chat-wizard", "the wizard's seed snapshot still builds");
+  assert.equal(seeded.v, 1, "with the envelope version");
+  assert.equal(seeded.zone, w.startZone, "and the start-zone world it just compiled");
+  assert.deepEqual(wizardSim._envelopeExtra, {}, "a fresh sim carries an EMPTY carry, never undefined");
+
+  // And a restored sim's carry rides the same two-key call — this is the path
+  // the seeding snapshot and the flush snapshot share.
+  const carried = loadedPF.save.simFromSaved({ v: 1, seed: 4242, theme: "cozy-village", mystery: 9 }, {}, "chat-2key");
+  const snap = loadedPF.save.snapshot({ sim: carried, chatId: "chat-2key" });
+  assert.equal(snap.mystery, 9, "an unknown key round-trips through the synthetic core too");
+}
+
+// ── THE CARRY SURVIVES THE WHOLESALE SIM REPLACEMENT (S5 slice 1) ──────────
+// maybeGenerateBrief throws the whole sim away when the generated brief lands
+// ("Fresh sim, fresh bindings", 60-save) and carries nothing over. That is fine
+// for play state on a throwaway world; it is NOT fine for a newer build's
+// envelope keys, which are not play state at all and would be erased by the
+// markDirty at the end of that very function. _rebuild gets the carry back for
+// free through simFromSaved; this seam has to transplant it by hand.
+{
+  const savedAssets = { status: loadedPF.assets.status, noPackage: loadedPF.assets._noPackage };
+  const realGenerate = brief.generate;
+  const realPatch = loadedPF.api.patchMetadata;
+  const patched = [];
+  loadedPF.api.patchMetadata = async (chatId, patch) => void patched.push({ chatId, patch });
+  brief.generate = async () => brief.defaults("cozy-village", 2211);
+  try {
+    const meta = { gameSetupConfig: { experienceConfig: { seed: 2211, theme: "cozy-village", generate: true } } };
+    const core = { chatId: "chat-generate", host: { chatMeta: meta }, sim: null };
+    core.sim = loadedPF.save.simFromSaved(
+      { v: 1, seed: 2211, theme: "cozy-village", ministry: { of: "silly walks" } },
+      meta,
+      core.chatId,
+    );
+    const before = core.sim;
+    assert.deepEqual(before._envelopeExtra, { ministry: { of: "silly walks" } }, "the interim sim holds the carry");
+
+    await loadedPF.save.maybeGenerateBrief(core);
+
+    assert.notEqual(core.sim, before, "the generated brief did replace the sim wholesale");
+    assert.ok(core.sim.world.brieved, "and the new world is the compiled one");
+    assert.deepEqual(
+      core.sim._envelopeExtra,
+      { ministry: { of: "silly walks" } },
+      "and the newer build's keys came across with it",
+    );
+    assert.equal(
+      loadedPF.save.snapshot(core).ministry.of,
+      "silly walks",
+      "so the markDirty at the end of generation cannot flush them away",
+    );
+  } finally {
+    brief.generate = realGenerate;
+    loadedPF.api.patchMetadata = realPatch;
+    loadedPF.save.reset(); // maybeGenerateBrief arms the 2.5s debounce
+    loadedPF.assets.status = savedAssets.status;
+    loadedPF.assets._noPackage = savedAssets.noPackage;
+  }
+}
+
 console.log("brief validator + compiler: all cases passed");
