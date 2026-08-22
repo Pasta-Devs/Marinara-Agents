@@ -9,18 +9,28 @@ PF.brief = (() => {
   const VERSION = 1;
 
   // ── Vocabularies (the form does the teaching) ───────────────────────────────
+  // Sized so the STREET GRID has somewhere to put a street. The grid lays a lot
+  // every 8 rows and every 9 columns, and a map only 30 tall has room for two
+  // rows of them however wide it is — so a village used to lay six lots on 1320
+  // tiles and read as a hamlet with a lot of grass. Lots per rank now run
+  // 4 / 8 / 16 / 36 / 80, which is the first progression where each rank looks
+  // like a bigger VERSION of the one below rather than the same place zoomed.
+  //
+  // `buildings` is the ceiling on how many of those lots get laid out, and it is
+  // deliberately kept ABOVE what the population arithmetic asks for at each rank
+  // (20-world's RESIDENT_HOUSEHOLDS). The ground should permit and the people
+  // should decide; when this number binds first, every settlement of a rank comes
+  // out the same size no matter who lives there, which is the bug that made a
+  // city eighteen buildings wide whatever its brief said.
   const SCALES = {
     outpost: { w: 28, h: 20, buildings: 4 },
-    hamlet: { w: 34, h: 24, buildings: 6 },
-    village: { w: 44, h: 30, buildings: 8 },
-    town: { w: 56, h: 38, buildings: 12 },
-    // A CITY, and the first scale where the map has more ground than the brief
-    // has claimants: 96x72 lays 18 lots against a cast capped at 10, so
-    // `buildings` finally stops being decoration and the constraint moves from
-    // the ground to the people standing on it. Deliberately roomy — most of it
-    // is open at first, and that is the point: it shows in thirty seconds which
-    // of the layout constants are absolute and which actually scale.
-    city: { w: 96, h: 72, buildings: 40 },
+    hamlet: { w: 48, h: 28, buildings: 8 },
+    village: { w: 60, h: 40, buildings: 16 },
+    town: { w: 76, h: 52, buildings: 34 },
+    // A CITY. Roomy on purpose: it is the rank where districts (roadmap W3) will
+    // eventually carve the map into wards with their own gravity, and the ground
+    // wants to be there before the machinery that divides it.
+    city: { w: 104, h: 72, buildings: 76 },
   };
   const SURROUNDS = ["woods", "fields", "rocky", "water", "barren"];
   const PROSPERITY = ["struggling", "modest", "thriving"];
@@ -71,6 +81,11 @@ PF.brief = (() => {
   const SETTLEMENT_TAGS = new Set(FEATURE_TAGS.filter((t) => t !== "water-crossing" && t !== "dense-growth"));
 
   const CAPS = {
+    // The ceiling a brief may ASK for. What a settlement can actually hold is
+    // per-scale (FEATURE_ROOM below) — an outpost is 560 tiles and four of its
+    // lots are now houses, so four named features have nowhere to stand and the
+    // last two are dropped in silence. Small settlements holding fewer features
+    // is correct; asking for four and losing two without a word is not.
     features: 4,
     places: 4,
     wilds: 2,
@@ -88,6 +103,15 @@ PF.brief = (() => {
     // caps the members of a group any more.
     household: 10,
   };
+  // How many named features the GROUND of each rank can actually carry, measured
+  // rather than guessed: with the street-grid allocator an outpost seats two, a
+  // hamlet three, and everything from a village up seats the full ask.
+  const FEATURE_ROOM = { outpost: 2, hamlet: 3, village: 4, town: 4, city: 4 };
+  // Named places take LOTS, and an outpost lays four of them. Four places leave
+  // nothing for the houses the cast still needs, so the drop guard fires and the
+  // brief loses buildings it named. What the rank can seat, it seals; the rest
+  // never gets promised.
+  const PLACE_ROOM = { outpost: 2, hamlet: 3, village: 4, town: 4, city: 4 };
   const BRIEF_BYTE_BUDGET = 8_192;
 
   // ── Deterministic entropy: ONE source ───────────────────────────────────────
@@ -191,8 +215,17 @@ PF.brief = (() => {
     // Pass 3 — zones. Item-level drop: an unknown tag drops the WHOLE feature.
     // The cap applies to KEPT items (a leading run of junk must not discard
     // the valid features behind it — the places loop's semantics).
+    const featureRoom = Math.min(CAPS.features, FEATURE_ROOM[brief.scale] ?? CAPS.features);
     for (const item of asArray(src.features)) {
-      if (brief.features.length >= CAPS.features) break;
+      if (brief.features.length >= featureRoom) {
+        // SAID OUT LOUD. Everything else in this pass records what it dropped
+        // and why; a rank running out of ground is a better reason than most,
+        // and the whole point of the cap is that a settlement stops PROMISING
+        // what it cannot hold. Losing the promise silently would just move the
+        // silence one layer up.
+        repairs.push(`features: ${brief.scale} has room for ${featureRoom}; dropped the rest`);
+        break;
+      }
       const tag = foldEnum(item?.tag, FEATURE_TAGS, null);
       if (!tag || !SETTLEMENT_TAGS.has(tag)) {
         repairs.push(`features: dropped item with tag ${JSON.stringify(item?.tag ?? null)}`);
@@ -246,8 +279,12 @@ PF.brief = (() => {
     let hallCount = 0;
     let gatheringCount = 0;
     let sanctuaryCount = 0;
+    const placeRoom = Math.min(CAPS.places, PLACE_ROOM[brief.scale] ?? CAPS.places);
     for (const item of asArray(src.places)) {
-      if (brief.places.length >= CAPS.places) break;
+      if (brief.places.length >= placeRoom) {
+        repairs.push(`places: ${brief.scale} has room for ${placeRoom}; dropped the rest`);
+        break;
+      }
       const kind = foldEnum(item?.kind, PLACE_KINDS, null);
       if (!kind) {
         repairs.push(`places: dropped item with kind ${JSON.stringify(item?.kind ?? null)}`);
@@ -281,7 +318,7 @@ PF.brief = (() => {
     // named from the host — the player must be able to walk into the inn.
     const rawCast = asArray(src.cast);
     const hasGathering = brief.places.some((p) => p.kind === "gathering");
-    if (!hasGathering && brief.places.length < CAPS.places) {
+    if (!hasGathering && brief.places.length < placeRoom) {
       const host = rawCast.find((item) => foldEnum(item?.kind ?? item?.role, CAST_KINDS, null) === "host");
       const hostName = host ? capText(host.name, 20) : "";
       if (hostName) {
