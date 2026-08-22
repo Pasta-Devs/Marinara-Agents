@@ -529,6 +529,79 @@ async function main() {
       },
     });
     assert.equal(created.statusCode, 201, created.body);
+    const secondCreated = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes",
+      headers,
+      payload: {
+        ...created.json().note,
+        id: "world_route_second",
+        title: "Second route fixture",
+        scope: { chatId: "chat-z", chatIds: ["chat-z"] },
+      },
+    });
+    assert.equal(secondCreated.statusCode, 201, secondCreated.body);
+    const unfiltered = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/notes",
+      headers,
+    });
+    assert.equal(unfiltered.statusCode, 200, unfiltered.body);
+    assert.equal(
+      unfiltered.json().some((note: any) => note.id === "world_route_fixture"),
+      true,
+    );
+    const byIds = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/notes?ids=world_route_second,world_route_fixture,world_route_second,world_missing_route",
+      headers,
+    });
+    assert.equal(byIds.statusCode, 200, byIds.body);
+    assert.deepEqual(
+      byIds.json().map((note: any) => note.id),
+      ["world_route_second", "world_route_fixture"],
+    );
+    assert.equal(byIds.headers["x-ltm-has-more"], undefined);
+    assert.equal(byIds.headers["x-ltm-next-offset"], undefined);
+    for (const [key, value] of [
+      ["type", "world"],
+      ["status", "active"],
+      ["tag", "route_fixture"],
+      ["scopeChatIds", "chat-a"],
+      ["scopeGroupId", "group-a"],
+      ["scopeGroupIds", "group-a"],
+      ["scopeCharacterIds", "character-a"],
+      ["scopePersonaId", "persona-a"],
+      ["scopePersonaIds", "persona-a"],
+      ["includeGlobal", "false"],
+      ["offset", "0"],
+      ["limit", "1"],
+    ]) {
+      const incompatible = await app.inject({
+        method: "GET",
+        url: `/api/long-term-memory/notes?ids=world_route_fixture&${key}=${value}`,
+        headers,
+      });
+      assert.equal(incompatible.statusCode, 400, `${key}: ${incompatible.body}`);
+    }
+    const emptyIds = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/notes?ids=",
+      headers,
+    });
+    assert.equal(emptyIds.statusCode, 400, emptyIds.body);
+    const malformedIds = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/notes?ids=INVALID-ID",
+      headers,
+    });
+    assert.equal(malformedIds.statusCode, 400, malformedIds.body);
+    const overflowIds = await app.inject({
+      method: "GET",
+      url: `/api/long-term-memory/notes?ids=${Array.from({ length: 101 }, (_, index) => `world_route_overflow_${index}`).join(",")}`,
+      headers,
+    });
+    assert.equal(overflowIds.statusCode, 400, overflowIds.body);
     const conflictingScope = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes",

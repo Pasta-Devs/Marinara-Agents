@@ -120,8 +120,8 @@
         "schemaVersion": 1,
         "id": "beholder",
         "name": "Beholder",
-        "version": "1.2.2",
-        "description": "Tracks each roleplay character's clothing by body slot, held items, wounds, missing parts, bare slots, and species, then keeps that physical state available to the next response. Pick the prompt template for your model: one prompt for a SOTA model (GPT-5.5+, Opus 4.8+, Kimi K3+), or five passes for the local Beholder model (GetBeholder/Beholder-GGUF) — free, offline, and private. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+        "version": "1.3.0",
+        "description": "Tracks each roleplay character's clothing by body slot, held items, wounds, missing parts, bare slots, and species, then keeps that physical state available to the next response, and shows it on a paper doll you can open from the roleplay toolbar. Pick the prompt template for your model: one prompt for a SOTA model (GPT-5.5+, Opus 4.8+, Kimi K3+), or five passes for the local Beholder model (GetBeholder/Beholder-GGUF) — free, offline, and private. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.4.4",
           "maxExclusive": "4.0.0"
@@ -130,13 +130,24 @@
           "agent"
         ],
         "entrypoints": {
-          "agents": "agents.json"
+          "agents": "agents.json",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "conversation-toolbar"
+          ]
         },
         "files": [
           {
             "path": "agents.json",
-            "sha256": "eb0a349ea0d715a78eed51f2140a94a0fcfc0fb617547c39f6686fa96a9deaad",
-            "bytes": 10282
+            "sha256": "0cb1d88b09d7fe607331f005193152bb1bacc2fc8cdd68b18d4dab78c825834f",
+            "bytes": 10351
+          },
+          {
+            "path": "client.js",
+            "sha256": "393dde949e20f0d9b06c13af47e9e66a31ce16db7ed57b2689c5aae8b883a751",
+            "bytes": 260103
           }
         ],
         "permissions": [
@@ -151,9 +162,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/beholder.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/beholder-1.2.2.zip",
-        "sha256": "adc9baaff16fc2f5ed769f9d178a45b0fd6171a986ab2ffff9c523716fd8eeaf",
-        "bytes": 5033
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/beholder-1.3.0.zip",
+        "sha256": "7a9948b7646a1df3fba596265b5362a521dc2c923da5735f84979e7a0885517b",
+        "bytes": 272110
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#beholder"
     },
@@ -162,7 +173,7 @@
         "schemaVersion": 1,
         "id": "conversation-calls",
         "name": "Calls",
-        "version": "1.0.11",
+        "version": "1.0.12",
         "description": "Adds live audio and video calls with Conversation characters. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Calls for Conversation mode.",
         "engine": {
           "min": "2.4.1",
@@ -197,8 +208,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "80d00ca1cbfe27c05885e700973c6b33ce491ca06254888e0a8d28c69afef494",
-            "bytes": 850019
+            "sha256": "8ac214d6043795482fad97ba903fc27a655b69432f11bcb41737147f7bd19550",
+            "bytes": 850104
           }
         ],
         "permissions": [
@@ -215,9 +226,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/conversation-calls.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.11.zip",
-        "sha256": "a5e4054d38bc618caf056063c905fd4c591b8504e8ecd6b3c7d087c5db53b261",
-        "bytes": 3681440
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.12.zip",
+        "sha256": "ab3983e6c9105c2d7a50424083dc074d5be6ec4cd2594ed9c4be14bb591b8ed2",
+        "bytes": 3681525
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#conversation-calls"
     },
@@ -889,7 +900,7 @@
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.2.9",
+        "version": "1.2.10",
         "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
         "engine": {
           "min": "2.4.1",
@@ -921,13 +932,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "6ca638f0a66cf8fcb2da20628bfc222f8a99289ca72996312c5f6d2416f28b18",
-            "bytes": 379860
+            "sha256": "2d0e823f8e9047ec208339dd5f0b6c45556bab398944cc787d1bd0dd60039f5c",
+            "bytes": 380626
           },
           {
             "path": "client.js",
-            "sha256": "2f3fc123034a316d1259221b43e29a47336881ccc68a2d3e84093f41b78ac1e6",
-            "bytes": 821054
+            "sha256": "cee8bc29165c2995d722e3fdce9de52bc9339d700ac5caaf58e8c77cbe7cdc65",
+            "bytes": 828981
           }
         ],
         "permissions": [
@@ -943,9 +954,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.2.9.zip",
-        "sha256": "12d4a5a2a6a0221d86dcf9d5baa277963b50354e8b80ec223f4d1b7aefc37567",
-        "bytes": 1203612
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.2.10.zip",
+        "sha256": "45774a567cdf3903621e84a92bcba70ab921edbcd037d56e51a6a264a023155e",
+        "bytes": 1212306
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },
@@ -1442,7 +1453,7 @@
         "schemaVersion": 1,
         "id": "slurp",
         "name": "Slurp",
-        "version": "1.0.14",
+        "version": "1.0.15",
         "description": "The standalone successor to NoodleR: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
         "localizations": {
           "de": {
@@ -1502,8 +1513,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "ee60e25e94d76115a8e1003963a0acad7c6588c48e05f30350d532fc018bea5e",
-            "bytes": 2274710
+            "sha256": "be9d5c3e59d169dc4cfffb4945b8d99d44dd070d8b7acb3150fb5dd17d52aad2",
+            "bytes": 2721942
           },
           {
             "path": "client.js",
@@ -1533,9 +1544,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/slurp.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp-1.0.14.zip",
-        "sha256": "0a236393d7fde0404db1b8fe1d6c2225e237ff835b3f5b74363a989b09084af2",
-        "bytes": 4778232
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/slurp-1.0.15.zip",
+        "sha256": "d3ef2eeb849ff185f586b243497e1895c2661523b8db37bfc352e11606b30d71",
+        "bytes": 5225464
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/slurp/README.md"
     },

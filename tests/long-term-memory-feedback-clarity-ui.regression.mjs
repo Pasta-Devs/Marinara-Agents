@@ -52,6 +52,13 @@ const reviewQueue = readFileSync(
   ),
   "utf8",
 );
+const api = readFileSync(
+  new URL(
+    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/api.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const workspaceLayout = readFileSync(
   new URL(
     "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/LtmWorkspace.tsx",
@@ -438,6 +445,24 @@ assert.equal(
   "Permanently delete the source and {{count}} selected linked memories?",
 );
 assert.match(types, /onOpenSources\?: \(source\?: SourceTab\) => boolean \| Promise<boolean>/u);
+assert.match(api, /export async function requestNotesByIds/u);
+assert.match(api, /if \(!requestedIds\.length\) return \[\] as T\[\]/u);
+assert.match(api, /new URLSearchParams/u);
+assert.match(api, /undefined, signal/u);
+assert.match(api, /const missingIds = requestedIds\.filter/u);
+assert.doesNotMatch(reviewQueue, /requestAllNotes/u);
+assert.match(reviewQueue, /requestNotesByIds<LtmNote>\(contextNoteIds, signal\)/u);
+assert.match(reviewQueue, /"review-context", contextNoteIds/u);
+assert.match(reviewQueue, /row\.disposition !== "new"/u);
+assert.match(reviewQueue, /reviewContextReady/u);
+assert.match(reviewQueue, /reviewContextFailed/u);
+assert.match(reviewQueue, /memoryContextUnavailable/u);
+assert.match(reviewQueue, /data-ltm-review-rejected-count/);
+assert.match(reviewQueue, /onSaveRequest/);
+assert.match(reviewQueue, /buildPersistedReviewState/);
+assert.match(reviewQueue, /window\.setTimeout/);
+assert.match(reviewQueue, /pagehide/);
+assert.match(reviewQueue, /onBlur=\{\(\) => queueMicrotask/);
 assert.match(reviewQueue, /item\.draft\.status === "pending"/u);
 assert.match(reviewQueue, /skippableSelectedRows/u);
 assert.match(reviewQueue, /REVIEW_STATE_STORAGE_KEY/u);
@@ -468,6 +493,8 @@ assert.match(reviewQueue, /preflightBlocked/u);
 assert.match(reviewQueue, /preflightSummary/u);
 assert.match(reviewQueue, /applyPreflighted/u);
 assert.equal(locale["ui.longTermMemory.reviewqueue.retryFailed"], "Retry failed review actions");
+assert.equal(locale["ui.longTermMemory.reviewqueue.loadingMemoryContext"], "Loading memory context.");
+assert.equal(locale["ui.longTermMemory.reviewqueue.memoryContextUnavailable"], "Memory context unavailable");
 assert.equal(locale["ui.longTermMemory.reviewqueue.reviewFailed"], "Review failed drafts");
 assert.equal(locale["ui.longTermMemory.reviewqueue.charactersRemainingOne"], "{{count}} character remaining");
 assert.equal(locale["ui.longTermMemory.reviewqueue.charactersRemainingOther"], "{{count}} characters remaining");

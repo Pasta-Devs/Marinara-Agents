@@ -139,7 +139,9 @@ export function supportsSceneIllustrationStructuredCharacterPrompts(
 ): boolean {
   if (resolveSceneIllustrationImageBackend(req) !== "novelai") return false;
   if (!req.imgBaseUrl.toLowerCase().includes("novelai.net")) return false;
-  return /^nai-diffusion-(?:4(?:-(?:curated-preview|full))?|4-5(?:-(?:curated|full))?)$/i.test(req.imgModel.trim());
+  return /^nai-diffusion-(?:4(?:-(?:curated-preview|full))?|4-5(?:-(?:curated|full))?|5(?:-(?:curated|full))?)$/i.test(
+    req.imgModel.trim(),
+  );
 }
 
 export function resolveSceneIllustrationReferenceImageLimit(
