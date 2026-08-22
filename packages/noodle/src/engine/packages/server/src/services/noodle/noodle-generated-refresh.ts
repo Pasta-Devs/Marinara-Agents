@@ -36,9 +36,7 @@ export function validateNoodleGeneratedRefresh(
 
   const hasUsableAttribution =
     refresh.posts.some((post) => noodleHandleKeySetHas(allowedActorHandles, post.authorHandle)) ||
-    refresh.interactions.some((interaction) =>
-      noodleHandleKeySetHas(allowedActorHandles, interaction.actorHandle),
-    ) ||
+    refresh.interactions.some((interaction) => noodleHandleKeySetHas(allowedActorHandles, interaction.actorHandle)) ||
     refresh.follows.some(
       (follow) =>
         noodleHandleKeySetHas(allowedActorHandles, follow.actorHandle) &&
