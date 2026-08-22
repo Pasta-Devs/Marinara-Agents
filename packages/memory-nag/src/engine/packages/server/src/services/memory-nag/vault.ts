@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import type { CapabilityDocumentRecord } from "@marinara-engine/shared";
 import {
   emptyMemoryNagVault,
@@ -112,9 +112,12 @@ export function reconcileMemoryNagRecall(current: MemoryNagVault, next: MemoryNa
   return valid ? next : { ...next, lastRecall: null };
 }
 
+function vaultDocumentId(chatId: string): string {
+  return createHash("sha256").update(`${PACKAGE_ID}\0${DOCUMENT_KIND}\0${chatId}`).digest("hex");
+}
+
 async function findDocument(chatId: string): Promise<CapabilityDocumentRecord | null> {
-  const documents = await getMemoryNagRuntime().persistence.documents.list(PACKAGE_ID, DOCUMENT_KIND);
-  return documents.find((document) => document.name === chatId) ?? null;
+  return getMemoryNagRuntime().persistence.documents.getById(PACKAGE_ID, vaultDocumentId(chatId));
 }
 
 export async function readMemoryNagVault(chatId: string): Promise<MemoryNagVault> {
@@ -135,7 +138,7 @@ export async function updateMemoryNagVault(
     if (!document) {
       try {
         await runtime.persistence.documents.create({
-          id: randomUUID(),
+          id: vaultDocumentId(chatId),
           packageId: PACKAGE_ID,
           kind: DOCUMENT_KIND,
           name: chatId,

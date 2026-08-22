@@ -84,6 +84,11 @@ function contextText(context: AgentContext): string {
   ].join("\n");
 }
 
+function containsName(text: string, name: string): boolean {
+  const needle = normalized(name);
+  return needle.length > 0 && ` ${text} `.includes(` ${needle} `);
+}
+
 export function shortlistMemoryNags(input: {
   memories: MemoryNagMemory[];
   participants: MemoryNagParticipant[];
@@ -101,7 +106,7 @@ export function shortlistMemoryNags(input: {
     if (segment.characterId) relevantIds.add(segment.characterId);
   }
   for (const participant of input.participants) {
-    if (normalizedText.includes(normalized(participant.name))) relevantIds.add(participant.id);
+    if (containsName(normalizedText, participant.name)) relevantIds.add(participant.id);
   }
   if (relevantIds.size === 0) {
     input.participants
@@ -138,7 +143,7 @@ export function shortlistMemoriesForScan(
   const normalizedTranscript = normalized(transcript);
   const mentionedIds = new Set(
     participants
-      .filter((participant) => normalizedTranscript.includes(normalized(participant.name)))
+      .filter((participant) => containsName(normalizedTranscript, participant.name))
       .map((participant) => participant.id),
   );
   return memories

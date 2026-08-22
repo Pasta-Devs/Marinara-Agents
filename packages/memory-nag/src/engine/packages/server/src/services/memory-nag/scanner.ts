@@ -146,18 +146,14 @@ export function memoryNagScanStart(
   return Math.min(vault.checkpointMessageCount, messages.length);
 }
 
-function sameMemoryState(left: MemoryNagMemory[], right: MemoryNagMemory[]): boolean {
-  return (
-    left.length === right.length &&
-    left.every((memory, index) => {
-      const other = right[index];
-      return (
-        memory.id === other?.id &&
-        memory.text === other.text &&
-        memory.status === other.status &&
-        memory.characterIds.join("\0") === other.characterIds.join("\0")
-      );
-    })
+function memoryMatchesScan(current: MemoryNagMemory, scanned: MemoryNagMemory | undefined): boolean {
+  return Boolean(
+    scanned &&
+    current.status === "active" &&
+    scanned.status === "active" &&
+    current.updatedAt === scanned.updatedAt &&
+    current.text === scanned.text &&
+    current.characterIds.join("\0") === scanned.characterIds.join("\0"),
   );
 }
 
@@ -224,16 +220,14 @@ async function scanMemoryNagBatchUnlocked(chatId: string): Promise<MemoryNagScan
   const checkpointMessageId = batch.at(-1)!.id;
   let createdCount = 0;
   let resolvedCount = 0;
+  const scannedById = new Map(vault.memories.map((memory) => [memory.id, memory]));
   const saved = await updateMemoryNagVault(chatId, (current) => {
-    const memoryStateChanged = !sameMemoryState(vault.memories, current.memories);
     const currentTexts = new Set(current.memories.map((memory) => memory.text.trim().toLowerCase()));
-    const newMemories = memoryStateChanged
-      ? []
-      : created.filter((memory) => !currentTexts.has(memory.text.trim().toLowerCase()));
+    const newMemories = created.filter((memory) => !currentTexts.has(memory.text.trim().toLowerCase()));
     createdCount = newMemories.length;
-    resolvedCount = memoryStateChanged
-      ? 0
-      : current.memories.filter((memory) => memory.status === "active" && resolvedIds.has(memory.id)).length;
+    resolvedCount = current.memories.filter(
+      (memory) => resolvedIds.has(memory.id) && memoryMatchesScan(memory, scannedById.get(memory.id)),
+    ).length;
     const checkpointAdvanced = current.checkpointMessageCount > start + batch.length;
     return {
       ...current,
@@ -242,7 +236,7 @@ async function scanMemoryNagBatchUnlocked(chatId: string): Promise<MemoryNagScan
       checkpointMessageCount: Math.max(current.checkpointMessageCount, start + batch.length),
       memories: [
         ...current.memories.map((memory) =>
-          !memoryStateChanged && resolvedIds.has(memory.id)
+          resolvedIds.has(memory.id) && memoryMatchesScan(memory, scannedById.get(memory.id))
             ? { ...memory, status: "resolved" as const, updatedAt: new Date().toISOString() }
             : memory,
         ),

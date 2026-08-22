@@ -17,10 +17,11 @@ function recallWords(nags: string[], empty: string): string[] {
 export function MemoryNagToolbar({ props }: { props: CapabilityProps }) {
   const { t } = useMemoryNagTranslation();
   const chatId = props.chatId ?? "";
+  const enabled = props.chatMode === "roleplay" && Boolean(chatId);
   const [open, setOpen] = useState(false);
   const [wordIndex, setWordIndex] = useState(0);
   const vault = useQuery({
-    enabled: Boolean(chatId),
+    enabled,
     queryKey: ["memory-nag", "recall", chatId],
     queryFn: () => memoryNagRequest<MemoryNagRecall | null>(`/recall/${encodeURIComponent(chatId)}`),
     refetchInterval: 2500,
@@ -38,7 +39,7 @@ export function MemoryNagToolbar({ props }: { props: CapabilityProps }) {
     return () => window.clearInterval(timer);
   }, [nags.length, words]);
 
-  if (!chatId || props.mobileCompact) return null;
+  if (!enabled || props.mobileCompact) return null;
   return (
     <div className="mn-shell mn-toolbar">
       <button

@@ -27,6 +27,19 @@ assert.deepEqual(
 assert.deepEqual(selectMemoryNagRecall({ nags_needed: true, memoryIds: ["invented"] }, candidates, 3), {
   nags_needed: false,
 });
+assert.deepEqual(selectMemoryNagRecall({ nags_needed: true, memory_ids: ["promise"] }, candidates, 3), {
+  nags_needed: true,
+  memoryIds: ["promise"],
+  nags: ["Dottore promised Pierro to capture Columbina."],
+});
+assert.deepEqual(selectMemoryNagRecall({ nags_needed: true, nags: [{ id: "injury" }] }, candidates, 3), {
+  nags_needed: true,
+  memoryIds: ["injury"],
+  nags: ["Dottore cut his finger the last time he used a scalpel."],
+});
+assert.deepEqual(selectMemoryNagRecall({ nags_needed: true, nags: ["remember the promise"] }, candidates, 3), {
+  nags_needed: false,
+});
 
 const shortlisted = shortlistMemoryNags({
   memories: [

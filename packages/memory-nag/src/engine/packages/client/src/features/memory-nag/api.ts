@@ -4,6 +4,7 @@ const CSRF_HEADER_VALUE = "1";
 const ADMIN_SECRET_STORAGE_KEY = "marinara_admin_secret";
 
 function adminHeaders(): Record<string, string> {
+  if (window.location.protocol !== "https:") return {};
   try {
     const secret = window.localStorage.getItem(ADMIN_SECRET_STORAGE_KEY)?.trim();
     return secret ? { "X-Admin-Secret": secret } : {};

@@ -74,12 +74,14 @@ function MemoryEditor({
   participants,
   memory,
   onClose,
+  onExpandedChange,
   onSaved,
 }: {
   chatId: string;
   participants: MemoryNagParticipant[];
   memory: MemoryNagMemory | null;
   onClose: () => void;
+  onExpandedChange: (expanded: boolean) => void;
   onSaved: () => Promise<void>;
 }) {
   const { t } = useMemoryNagTranslation();
@@ -93,6 +95,8 @@ function MemoryEditor({
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const expandedDialogRef = useModalDialog(expanded, () => setExpanded(false), "#mn-memory-nag-expand-button");
+
+  useEffect(() => onExpandedChange(expanded), [expanded, onExpandedChange]);
 
   const insertMacro = (macro: string) => {
     const textarea = textareaRef.current;
@@ -244,8 +248,9 @@ export function MemoryNagVaultModal({ props, onClose }: { props: CapabilityProps
   const [characterId, setCharacterId] = useState("");
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<MemoryNagMemory | "new" | null>(null);
+  const [editorExpanded, setEditorExpanded] = useState(false);
   const [message, setMessage] = useState("");
-  const vaultDialogRef = useModalDialog(true, onClose);
+  const vaultDialogRef = useModalDialog(!editorExpanded, onClose);
   const vault = useQuery({
     enabled: Boolean(chatId),
     queryKey: ["memory-nag", "vault", chatId],
@@ -312,10 +317,11 @@ export function MemoryNagVaultModal({ props, onClose }: { props: CapabilityProps
       <section
         ref={vaultDialogRef}
         className="mn-modal mn-shell"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("memoryNag.vault.title")}
-        tabIndex={-1}
+        role={editorExpanded ? undefined : "dialog"}
+        aria-modal={editorExpanded ? undefined : true}
+        aria-hidden={editorExpanded || undefined}
+        aria-label={editorExpanded ? undefined : t("memoryNag.vault.title")}
+        tabIndex={editorExpanded ? undefined : -1}
       >
         <div className="mn-modal-head">
           <div className="mn-row">
@@ -371,7 +377,11 @@ export function MemoryNagVaultModal({ props, onClose }: { props: CapabilityProps
               chatId={chatId}
               participants={participants}
               memory={editing === "new" ? null : editing}
-              onClose={() => setEditing(null)}
+              onClose={() => {
+                setEditing(null);
+                setEditorExpanded(false);
+              }}
+              onExpandedChange={setEditorExpanded}
               onSaved={async () => {
                 await vault.refetch();
               }}

@@ -35,7 +35,7 @@ function contextSize(agent: AgentConfig): number {
   const raw = agent.settings.contextSize;
   if (raw === null || raw === undefined || raw === "") return 5;
   const value = Number(raw);
-  return Number.isFinite(value) && value > 0 ? Math.min(200, Math.trunc(value)) : 5;
+  return Number.isFinite(value) && value > 0 ? Math.max(1, Math.min(200, Math.trunc(value))) : 5;
 }
 
 function sameParticipants(
@@ -99,23 +99,41 @@ export const memoryNagAgentRuntime = {
     let finalized = result;
     if (result.success && prepared) {
       const data = selectMemoryNagRecall(result.data, prepared.candidates, prepared.maximumNags);
-      await updateMemoryNagVault(context.chatId, (current) => ({
-        ...current,
-        lastRecall: data.nags_needed
-          ? { memoryIds: data.memoryIds, nags: data.nags, createdAt: new Date().toISOString() }
-          : null,
-      }));
       finalized = { ...result, data };
+      try {
+        await updateMemoryNagVault(context.chatId, (current) => ({
+          ...current,
+          lastRecall: data.nags_needed
+            ? { memoryIds: data.memoryIds, nags: data.nags, createdAt: new Date().toISOString() }
+            : null,
+        }));
+      } catch (error) {
+        getMemoryNagRuntime().logger.warn(
+          "[memory-nag] Recall state failed to save for chat %s: %s",
+          context.chatId,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
     } else if (prepared) {
-      await updateMemoryNagVault(context.chatId, (current) => ({ ...current, lastRecall: null }));
+      try {
+        await updateMemoryNagVault(context.chatId, (current) => ({ ...current, lastRecall: null }));
+      } catch (error) {
+        getMemoryNagRuntime().logger.warn(
+          "[memory-nag] Recall state failed to clear for chat %s: %s",
+          context.chatId,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
     }
-    void scanMemoryNagIfDue(context.chatId).catch((error) => {
-      getMemoryNagRuntime().logger.warn(
-        "[memory-nag] Automatic vault scan failed for %s: %s",
-        context.chatId,
-        error instanceof Error ? error.message : String(error),
-      );
-    });
+    if (prepared) {
+      void scanMemoryNagIfDue(context.chatId).catch((error) => {
+        getMemoryNagRuntime().logger.warn(
+          "[memory-nag] Automatic vault scan failed for %s: %s",
+          context.chatId,
+          error instanceof Error ? error.message : String(error),
+        );
+      });
+    }
     return finalized;
   },
 };

@@ -9,9 +9,10 @@ import type { CapabilityProps } from "./types";
 export function MemoryNagTrackerPanel({ props }: { props: CapabilityProps }) {
   const { t } = useMemoryNagTranslation();
   const chatId = props.chatId ?? "";
+  const enabled = props.chatMode === "roleplay" && Boolean(chatId);
   const [index, setIndex] = useState(0);
   const vault = useQuery({
-    enabled: Boolean(chatId),
+    enabled,
     queryKey: ["memory-nag", "recall", chatId],
     queryFn: () => memoryNagRequest<MemoryNagRecall | null>(`/recall/${encodeURIComponent(chatId)}`),
     refetchInterval: 2500,
@@ -25,7 +26,7 @@ export function MemoryNagTrackerPanel({ props }: { props: CapabilityProps }) {
     return () => window.clearInterval(timer);
   }, [nags.length]);
 
-  if (!chatId) return null;
+  if (!enabled) return null;
   return (
     <section className="mn-shell mn-tracker">
       <div className="mn-row">
