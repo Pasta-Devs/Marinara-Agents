@@ -965,7 +965,7 @@
         "schemaVersion": 1,
         "id": "lorebook-keeper",
         "name": "Lorebook Keeper",
-        "version": "1.0.4",
+        "version": "1.0.5",
         "description": "Creates and updates durable chat lorebook entries from important story facts, characters, places, and world changes. Add the Agent in Chat Settings → Agents → Misc Agents/Lorebook Keeper for Roleplay and Game modes.",
         "engine": {
           "min": "2.4.4",
@@ -980,8 +980,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "8fcbddc79b42f5db40d4a1802ba5e0aa824b07e8b3384973ceebb09a7b66c9e6",
-            "bytes": 2793
+            "sha256": "19c306f52e18388501982271ce0ebe5f6057a9d17d9719793ab28b8c9bfe953b",
+            "bytes": 3612
           }
         ],
         "permissions": [
@@ -996,9 +996,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/lorebook-keeper.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/lorebook-keeper-1.0.4.zip",
-        "sha256": "3463bde561830a3170c9031f2a0e82e52451bda32761ac5769a5a2fc99b805a4",
-        "bytes": 1956
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/lorebook-keeper-1.0.5.zip",
+        "sha256": "1c215d3047b55825bbf3a8564eceb384603c6c0ff90cbfe26a9ff75bd15a88b9",
+        "bytes": 2256
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#lorebook-keeper"
     },
