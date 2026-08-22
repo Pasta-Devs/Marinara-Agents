@@ -3756,7 +3756,21 @@ PF.world = (() => {
     // market stall or a named place still needed. So the ask is clamped to the
     // ground that is actually left after the places, the trades and the market
     // have taken theirs.
-    const lotsForHouses = Math.max(0, slots.length - interiorPlaces.length - specials.length - stallDemand);
+    //
+    // "The trades" means the trades that BUY GROUND. A special bound to a named
+    // place — the host's inn IS the gathering, the maker's shop IS the workshop
+    // — shares that place's facade and never reaches takeSlot() (see the
+    // boundPlace branch below), so charging it a lot here starved the mint on
+    // exactly the briefs rich enough to bind: measured across 9,600 worlds, one
+    // hamlet/village/town in three with a bound special compiled households
+    // short while the lots they were owed sat bare. This prediction can still
+    // run high when a special is later SKIPPED for want of ground, but that
+    // only happens once the ground is already gone — conservative there, exact
+    // everywhere else.
+    const lotHungrySpecials = specials.filter(
+      (entry) => !interiorPlaces.some((place) => interiorKindForSpecial(entry.special) === place.kind),
+    ).length;
+    const lotsForHouses = Math.max(0, slots.length - interiorPlaces.length - lotHungrySpecials - stallDemand);
     const bandTarget = Math.max(
       Math.round(householdBand * 0.75),
       Math.min(Math.round(householdBand * 1.25), Math.round(impliedHouseholds)),

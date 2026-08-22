@@ -352,4 +352,4 @@ Flagged so a future session doesn't rediscover them the hard way.
 
 ---
 
-*Prepared 2026-08-21 from the design brief of the same date and three maintainer rulings, against source at `packages/pixelforge` (0.9 in PR; 0.10 in progress). The through-line, one sentence: Pixelforge built a beautiful one-way radio — the world describes itself to the narrator every turn and can't hear anything back — and almost everything stubbed on this roadmap is stubbed because one of the two missing directions (GM→world, player→world) hasn't been opened yet.*
+*Prepared 2026-08-21 from the design brief of the same date and three maintainer rulings, against source at `packages/pixelforge` (0.9 merged; 0.10 on PR #491). The through-line, one sentence: Pixelforge built a beautiful one-way radio — the world describes itself to the narrator every turn and can't hear anything back — and almost everything stubbed on this roadmap is stubbed because one of the two missing directions (GM→world, player→world) hasn't been opened yet.*

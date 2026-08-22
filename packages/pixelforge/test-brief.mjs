@@ -6899,6 +6899,83 @@ const cellarBrief = (prosperity) => ({
   );
 }
 
+// ── A BOUND SPECIAL SHARES A FACADE, AND THE MINT MUST KNOW IT (0.10.0) ────
+// lotsForHouses is a forward prediction made before a single lot is claimed,
+// and it used to charge every special a lot — but a special bound to a named
+// place (the host's inn IS the gathering, the maker's shop IS the workshop)
+// shares that place's facade and never takes one. Charging it anyway starved
+// the mint on exactly the briefs rich enough to bind: one hamlet in three with
+// a bound special compiled households short while the lots they were owed sat
+// bare. This fixture binds three of its four specials, so the old arithmetic
+// predicted ONE house lot where the ground held four.
+{
+  const CAST = [
+    { name: "Bram", role: "innkeep", kind: "host", tint: "amber", home: "Bindstead", household: 1 },
+    { name: "Wren", role: "reeve", kind: "leader", tint: "blue", home: "Bindstead", household: 1 },
+    { name: "Osk", role: "smith", kind: "maker", tint: "red", home: "Bindstead", household: 1 },
+    { name: "Pell", role: "farmer", kind: "grower", tint: "green", home: "Bindstead", household: 1 },
+  ];
+  const PLACES = [
+    { kind: "gathering", name: "The Kettle" },
+    { kind: "hall", name: "The Moot" },
+    { kind: "workshop", name: "The Forge" },
+  ];
+  for (const seed of [7, 11]) {
+    const sealed = brief.validate(
+      { scale: "hamlet", prosperity: "modest", name: "Bindstead", places: PLACES, cast: CAST },
+      { theme: "cozy-village", seed },
+    );
+    const w = world.build(seed, "cozy-village", sealed);
+    checkWorld(w, sealed, `bound-special mint seed ${seed}`);
+    // Eight lots, three places, and only the farm buys its own ground — the
+    // inn, the hall and the shop ride the facades the places already paid for.
+    // Four lots remain, so four households resolve: three street houses and
+    // one family housed over its trade. Under the old arithmetic the target
+    // was ONE, the named household took it, and the mint added nobody — the
+    // hamlet compiled with four souls and three lots of bare grass.
+    const houses = Object.keys(w.zones).filter((id) => /^h\d+$/.test(id)).length;
+    assert.equal(houses, 3, `seed ${seed}: the mint fills the ground the bound specials never took (${houses})`);
+    const soulCount = Object.values(w.zones).reduce((n, z) => n + z.npcs.length, 0);
+    assert.ok(
+      soulCount > CAST.length,
+      `seed ${seed}: minted residents exist beyond the named cast (${soulCount} souls)`,
+    );
+  }
+
+  // And the geometry half of the backgroundPopulation contract the schema doc
+  // states: the dial builds HOUSES within the band — not just walkers — while
+  // the map stays its size and the guest wing never reads it. The doc quotes
+  // seed-7 figures as illustration; this is the claim those figures illustrate.
+  const dial = (backgroundPopulation) => {
+    const sealed = brief.validate(
+      {
+        scale: "town",
+        prosperity: "modest",
+        name: "Dialton",
+        places: [{ kind: "gathering", name: "The Ladle" }],
+        cast: [{ name: "Mip", role: "cook", kind: "folk", tint: "teal", home: "Dialton", household: 1 }],
+        backgroundPopulation,
+      },
+      { theme: "cozy-village", seed: 7 },
+    );
+    return world.build(7, "cozy-village", sealed);
+  };
+  const quietTown = dial(12);
+  const busyTown = dial(400);
+  const roofCount = (w) => Object.keys(w.zones).filter((id) => /^h\d+$/.test(id)).length;
+  assert.ok(
+    roofCount(busyTown) > roofCount(quietTown),
+    `population builds houses within the band (${roofCount(busyTown)} vs ${roofCount(quietTown)})`,
+  );
+  assert.equal(busyTown.zones.z1.w, quietTown.zones.z1.w, "and never resizes the map");
+  assert.equal(busyTown.zones.z1.h, quietTown.zones.z1.h, "in either direction");
+  assert.equal(
+    findZone(busyTown, "The Ladle").beds.length,
+    findZone(quietTown, "The Ladle").beds.length,
+    "and the guest wing never reads it",
+  );
+}
+
 // ── A TOWN IS NOT ONE BUILDING STAMPED OUT (0.10.0) ────────────────────────
 // Every dwelling was 6x4 unless the over-subscription merge widened it, and every
 // workplace was 6x4 full stop, so a town was thirty identical boxes on a grid.

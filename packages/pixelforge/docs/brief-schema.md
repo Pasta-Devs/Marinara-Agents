@@ -123,8 +123,11 @@ through the derivations below.
                             // and the rank's own band applies.
                             // It moves BUILT GEOMETRY, not just headcount: the target decides
                             // how many households are minted, so dwellings and doors move with
-                            // it. Measured on a city at seed 7, band floor to band ceiling —
-                            // 76→133 residents, 52→94 dwellings, 36→58 doors on the map.
+                            // it. (Illustrative, at 0.10 tuning: a seed-7 city moved roughly
+                            // 76→133 residents and 36→58 doors from band floor to ceiling.
+                            // The harness pins the PROPERTY — floor to ceiling grows houses
+                            // and doors while the rank and the guest wing hold still — not
+                            // these figures, which move with tuning.)
                             // What it CANNOT reach: the rank itself (the band clamps it), and
                             // the guest wing — GUEST_BERTHS is keyed on scale + prosperity
                             // alone, so an inn offers the same berths whatever this says.
@@ -218,9 +221,11 @@ response is **never stored** (checkpoints capture by value — see #5110).
      building, lists that never intersect: a keeper is not a lodger and a traveller is never dealt
      the keeper's bed. Only a gathering lays berths at all; a named house or church sleeps its own
      people and lets nothing;
-   - **lots are physical**, not budgeted: the row placer lays what the map is wide enough for
-     (two on an outpost or a hamlet, six in a village, eight in a town, eighteen in a city), which is under
-     `BASE[scale]` at every size. They are claimed in order — named places, then specials, then
+   - **lots are physical**: the street grid lays what the map is wide enough for — 4/8/20/36/80
+     at the five ranks, before the `scale.buildings` budget clamps village and up to 16/34/76
+     (§1's scale table is the authoritative pair of numbers). They are claimed in order — named
+     places, then the specials that buy their own ground (a special bound to a named place shares
+     its facade and claims no lot), then
      dwellings, then market stalls — with ONE floor: while any household is still unhoused, the
      **last free lot goes to housing**. A workshop or a named place that would leave a family with
      nowhere to sleep is not built; the house is, and the merge below puts every remaining
