@@ -1858,6 +1858,25 @@ PF.world = (() => {
    *  church or a keep stand over the houses beside it, and it costs no extra footprint.
    *  `options.facadeWindows` lights the topmost exposed row, so the storey reads as a
    *  storey rather than a blank slab. */
+  /** May a roofline be painted over this tile?
+   *
+   *  Public ground only — the roads and the plaza, recorded as rects when they
+   *  are painted so that a prosperity recolour cannot disguise them. Everything
+   *  else is verge, and verge is what an eave is for.
+   *
+   *  It is deliberately no wider than that. Tests for a neighbour's fabric and
+   *  for its doorstep were written here first and then MEASURED as dead: a
+   *  roofline and the building it would cover arrive in either order, and when
+   *  the roof comes first — which is the case that actually happens, since lots
+   *  are claimed nearest-the-crossroad first — there is nothing here yet to find.
+   *  Both are handled where they work in either order instead, by the arriving
+   *  building taking back the sky over its own frontage and its own doorstep.
+   *  Removing those two tests changed nothing across 162 and 225 probe worlds. */
+  function eaveMayCover(z, x, y) {
+    if (x < 0 || y < 0 || x >= z.w || y >= z.h) return false;
+    return !z.publicGround?.some((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
+  }
+
   function building(z, x0, y0, w, h, doorOffset, windows, options) {
     // walls occupy the bottom wall row; roof covers the rest as overhead
     const wallY = y0 + h - 1;
@@ -1868,20 +1887,38 @@ PF.world = (() => {
     fillRect(z, x0, y0, w, h, "ground", "stone", false);
     for (let x = x0; x < x0 + w; x++) {
       put(z, x, wallY, "object", "wall", true);
+      // ...and takes back the sky over its own frontage. A neighbour's roofline
+      // may already be lying here: lots are eight rows apart and a body is five
+      // tall, so a sanctuary that rises two paints its eave onto `slotY - 4` —
+      // exactly this row on the lot above it — before this building exists to
+      // object. Measured at 24 wall tiles under a foreign roof across 225 worlds.
+      // The building's own roof never covers its wall row (the facade loop stops
+      // at `facadeY`), so this can only ever be somebody else's.
+      put(z, x, wallY, "overhead", null);
       for (let y = y0; y < wallY; y++) put(z, x, y, "object", "wallStone", true);
-      // The eave overhangs the verge, NEVER the road. A building's solid body
+      // THE EAVE OVERHANGS THE VERGE, AND NOTHING ELSE. A building's solid body
       // already clears the street, but its roofline is two overhead rows above
-      // the footprint, and the south band starts one row under the crossroad — so
-      // a row of houses painted its roofs straight across the main street and the
-      // road simply vanished for the whole length of the frontage. Rendered, a
-      // town read as one continuous roof with a lane at either end of it.
+      // the footprint, and those rows belong to whatever is already standing in
+      // them.
       //
-      // Skipping the paint costs no lots, which setting the band back would: an
-      // outpost is 28x20 and moving its south row two rows down halves the
-      // settlement. A house fronting directly onto the street is also the more
-      // honest shape for a terrace.
+      // Two faults in one line, and the first fix was too narrow to catch the
+      // second. The south band starts one row under the crossroad, so a row of
+      // houses painted its roofs straight across the main street and a town
+      // rendered as one continuous roof with a lane at either end. Testing the
+      // GROUND for `path` fixed the modest case and missed two more: a
+      // `struggling` settlement scuffs 18% of its road to `dirt` before a single
+      // building is laid, and a `thriving` one paves its plaza `stone` —
+      // measured, 41 to 99 roofed road tiles per ten seeds at struggling and ten
+      // at thriving. And a sanctuary that rises two rows reaches `slotY - 3`,
+      // which is the NEXT lot row's door apron: eighteen doorsteps roofed over in
+      // seventy-two probe worlds, with whoever lives there standing hidden
+      // underneath.
+      //
+      // So the test is TERRITORY, not tile colour. Overhead composites over
+      // actors, so every tile this skips is one a player would otherwise walk
+      // under and vanish.
       for (let y = y0 - 2; y < y0; y++) {
-        if (z.ground[idx(z, x, y)] === "path") continue;
+        if (!eaveMayCover(z, x, y)) continue;
         put(z, x, y, "overhead", y === y0 - 2 ? "roof" : "roofEdge");
       }
       for (let y = y0; y < facadeY; y++) put(z, x, y, "overhead", "roof");
@@ -1899,6 +1936,17 @@ PF.world = (() => {
     const dx = x0 + doorOffset;
     put(z, dx, wallY, "object", "door", false);
     put(z, dx, wallY, "overhead", null);
+    // A BUILDING OWNS ITS DOORSTEP. Lots are claimed nearest-the-crossroad first
+    // and a named place is claimed before the houses, so a sanctuary rising two
+    // rows paints its eave onto the lot row above it long before the dwelling
+    // that will stand there exists to object. Clearing on arrival works whichever
+    // order the two land in; refusing the paint only works in one, which is why
+    // that version of the fix is not the one that survived.
+    //
+    // The door tile one row up has always been cleared. The step it opens onto —
+    // where the household stands to be spoken to, and where overhead composites
+    // over them — was not.
+    put(z, dx, wallY + 1, "overhead", null);
     return { doorX: dx, doorY: wallY };
   }
 
@@ -1987,12 +2035,47 @@ PF.world = (() => {
   // zone builder has reserved on grass and returns nothing; positions are the
   // builder's, never the model's. The startup assertion below keeps the shipped
   // tag vocabulary and this registry in lockstep.
+  /** Clear a rect of everything a previous pass left standing in it.
+   *
+   *  Anything laid on a LEFTOVER LOT runs after the tree scatter, and `put()`
+   *  overwrites without asking. Two different corruptions came out of that, both
+   *  measured: a crop fill sets `solid = false` under a standing trunk, so the
+   *  tree is still drawn and the player walks through it (8 across 120 worlds);
+   *  and a fence overwrites a trunk while its canopy, which lives one row ABOVE,
+   *  survives — a crown hanging over nothing (21 over fences, 17 more over the
+   *  parks' own clears, which stopped at their rect edge).
+   *
+   *  So the clear reaches one row above the rect. That row is not decoration: a
+   *  trunk on the top row keeps its canopy there, and clearing the trunk without
+   *  it is exactly the bug. */
+  function clearFootprint(z, x, y, w, h) {
+    for (let dy = -1; dy < h; dy++) {
+      for (let dx = 0; dx < w; dx++) {
+        const cx = x + dx;
+        const cy = y + dy;
+        if (cx < 0 || cy < 0 || cx >= z.w || cy >= z.h) continue;
+        // The row above is cleared of CANOPY only — it is somebody else's ground
+        // and may legitimately carry a roofline or a wall.
+        if (dy === -1) {
+          if (z.overhead[idx(z, cx, cy)] === "canopy") put(z, cx, cy, "overhead", null);
+          continue;
+        }
+        put(z, cx, cy, "object", null, false);
+        put(z, cx, cy, "overhead", null);
+      }
+    }
+  }
+
   const PLACERS = {
     "water-feature"(z, x, y) {
       fillRect(z, x, y, 6, 4, "ground", "water", true);
       put(z, x + 6, y + 1, "object", "well", true);
     },
     "crop-plots"(z, x, y) {
+      // Cleared first: on a leftover lot this runs after the tree scatter, and
+      // the crop fill would otherwise un-solid a standing trunk and the fence
+      // would behead one.
+      clearFootprint(z, x, y, 8, 5);
       fillRect(z, x + 1, y + 1, 6, 3, "ground", "crop", false);
       for (let cx = x; cx <= x + 7; cx++) {
         put(z, cx, y, "object", "fence", true);
@@ -2020,13 +2103,8 @@ PF.world = (() => {
      *  grain: paving, a well, and light, so a quarter of the city has somewhere
      *  of its own to be. Sized to the lot it stands on, like a park. */
     "ward-square"(z, x, y) {
-      for (let dy = 0; dy < 5; dy++) {
-        for (let dx = 0; dx < 8; dx++) {
-          put(z, x + dx, y + dy, "object", null, false);
-          put(z, x + dx, y + dy, "overhead", null);
-          put(z, x + dx, y + dy, "ground", "stone");
-        }
-      }
+      clearFootprint(z, x, y, 8, 5);
+      for (let dy = 0; dy < 5; dy++) for (let dx = 0; dx < 8; dx++) put(z, x + dx, y + dy, "ground", "stone");
       put(z, x + 3, y + 2, "object", "well", true);
       z.lights.push({ x: x + 3, y: y + 2 });
     },
@@ -2041,13 +2119,8 @@ PF.world = (() => {
      *  scatter, and clearing a trunk while leaving its canopy hangs a crown in
      *  the air over nothing. */
     park(z, x, y) {
-      for (let dy = 0; dy < 5; dy++) {
-        for (let dx = 0; dx < 8; dx++) {
-          put(z, x + dx, y + dy, "object", null, false);
-          put(z, x + dx, y + dy, "overhead", null);
-          put(z, x + dx, y + dy, "ground", "grass");
-        }
-      }
+      clearFootprint(z, x, y, 8, 5);
+      for (let dy = 0; dy < 5; dy++) for (let dx = 0; dx < 8; dx++) put(z, x + dx, y + dy, "ground", "grass");
       for (let dx = 0; dx < 8; dx++) put(z, x + dx, y + 2, "ground", "path");
       for (let dy = 0; dy < 5; dy++) put(z, x + 3, y + dy, "ground", "path");
       for (const [tx, ty] of [
@@ -3436,6 +3509,15 @@ PF.world = (() => {
     if (brief.prosperity === "struggling") {
       for (let i = 0; i < v.ground.length; i++) if (v.ground[i] === "path" && rnd() < 0.18) v.ground[i] = "dirt";
     }
+    // PUBLIC GROUND, recorded as rects the moment it is laid. The roofline test
+    // used to read the ground id, which the two lines above and the `thriving`
+    // paving both defeat — a scuffed road is `dirt` and a paved plaza is `stone`,
+    // and neither is any less a street for it. Rects cannot be recoloured.
+    v.publicGround = [
+      { x: 2, y: midY - 1, w: v.w - 4, h: 2 },
+      { x: midX - 1, y: 2, w: 2, h: v.h - 4 },
+      { x: midX - 4, y: midY - 4, w: 8, h: 8 },
+    ];
     v.spawn = { x: midX, y: midY + 2 };
     // Injection-discipline prose (§7) rides the world so the runtime never
     // needs the brief: zone flavor injects once on first entry, the situation

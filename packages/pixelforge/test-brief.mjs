@@ -289,6 +289,67 @@ function checkWorld(w, sealed, label) {
       );
     }
   }
+  // ── I4: the paint contract ────────────────────────────────────────────────
+  // Three passes paint across ground another pass already owns, and `put()`
+  // overwrites without asking. Every one of these was live in a shipped build and
+  // NONE of them failed an assertion — they are invisible to geometry,
+  // reachability and occupancy alike, and visible immediately to a player.
+  //
+  // Checked on the settlement itself rather than in one fixture, because the
+  // faults appear at particular ranks, prosperities and place orders, and a case
+  // that names its own inputs is exactly the case that misses them.
+  {
+    const v = w.zones.z1;
+    if (v && v.mapKind === "settlement") {
+      const midX = (v.w / 2) | 0;
+      const midY = (v.h / 2) | 0;
+      for (let y = 0; y < v.h; y++) {
+        for (let x = 0; x < v.w; x++) {
+          const at = v.w * y + x;
+          const roof = v.overhead[at] === "roof" || v.overhead[at] === "roofEdge";
+          // (a) A ROOFLINE OVER PUBLIC GROUND. Overhead composites over actors, so
+          // a roofed street is one a player walks down invisibly. Tested by
+          // POSITION: a `struggling` settlement scuffs its road to `dirt` and a
+          // `thriving` one paves its plaza `stone`, so the ground id lies.
+          // A building's own body may stand on the plaza's outer ring — that is
+          // the allocator's business and not a paint fault — so solid tiles are
+          // excluded and only the OVERHANG is asserted.
+          const onRoad =
+            (y >= midY - 1 && y <= midY && x >= 2 && x < v.w - 2) ||
+            (x >= midX - 1 && x <= midX && y >= 2 && y < v.h - 2);
+          if (roof && onRoad && !v.solid[at]) {
+            assert.fail(`${label}: a roofline overhangs the road at ${x},${y}`);
+          }
+          // (b) A ROOFLINE OVER SOMEBODY'S DOORSTEP. The tile under a door is
+          // where that household stands to be spoken to.
+          if (roof && y > 0 && v.object[v.w * (y - 1) + x] === "door" && !v.solid[at]) {
+            assert.fail(`${label}: a roofline covers the doorstep at ${x},${y}`);
+          }
+          // (b2) A ROOFLINE ON SOMEBODY'S FRONT WALL. Lots are eight rows apart
+          // and a body is five tall, so a sanctuary that rises two paints its
+          // eave onto `slotY - 4` — the wall row of the lot above it — and that
+          // building's whole frontage is drawn under a neighbour's roof.
+          if (roof && v.object[at] === "wall") {
+            assert.fail(`${label}: a roofline lies on a front wall at ${x},${y}`);
+          }
+          // (c) A TREE YOU CAN WALK THROUGH. A ground fill clears solidity; a
+          // trunk painted before it is still drawn and no longer there.
+          if (v.object[at] === "trunk" && !v.solid[at]) {
+            assert.fail(`${label}: a trunk at ${x},${y} is drawn but walk-through`);
+          }
+          // (d) A CANOPY OVER NOTHING. A canopy sits on its trunk's tile (the
+          // border ring) or one row above it; anything else is a crown hanging in
+          // the air where something overwrote the trunk and left the crown.
+          if (v.overhead[at] === "canopy") {
+            const onTrunk = v.object[at] === "trunk";
+            const overTrunk = y + 1 < v.h && v.object[v.w * (y + 1) + x] === "trunk";
+            if (!onTrunk && !overTrunk) assert.fail(`${label}: a canopy floats at ${x},${y}`);
+          }
+        }
+      }
+    }
+  }
+
   // ── I2: the apron row is walkable at the door columns ─────────────────────
   // Row h-2 carries zone.spawn AND both stair tiles, and put() overwrites
   // unconditionally, so a wall laid across it makes a storey unreachable.
@@ -7141,6 +7202,86 @@ const cellarBrief = (prosperity) => ({
     plaza < outdoors / 2 && onWard < outdoors / 2,
     `no single square holds the city (plaza ${plaza}, wards ${onWard}, of ${outdoors})`,
   );
+}
+
+// ── A RISEN SANCTUARY DOES NOT ROOF ITS NEIGHBOUR (0.10.0) ─────────────────
+// A sanctuary lifts its facade by up to two rows, and `headroom()` checks the
+// border ring and the road — but not the LOT ROW eight tiles above it. Rows are
+// laid on a pitch of 8 and a body is 5 tall, so a sanctuary that rises two puts
+// its eave on `slotY - 3`: the next row's door apron, the tile that household
+// stands on to be spoken to. Overhead composites over actors, so they stand
+// there invisible.
+//
+// It needs a specific shape to reproduce — a village or larger, with the place
+// order handing the sanctuary a slot that HAS a neighbour above it — which is
+// why it survived a harness with two hundred cases in it and was caught by
+// sweeping place orders instead. Both directions of the fix are exercised here:
+// the sanctuary is built before the dwelling above it (the dwelling clears its
+// own step) and other pairs land the other way round (the roofline is refused).
+{
+  const cast = [
+    { name: "Ivy", role: "reeve", kind: "leader", tint: "blue", home: "Spire", household: 1 },
+    { name: "Bett", role: "innkeep", kind: "host", tint: "amber", home: "Spire", household: 2 },
+    { name: "Nel", role: "chaplain", kind: "elder", tint: "violet", home: "Spire", household: 3 },
+    { name: "Tam", role: "smith", kind: "maker", tint: "red", home: "Spire", household: 4 },
+  ];
+  // ORDER IS THE POINT, and one order is not enough. The sanctuary must not be
+  // first, so that it claims a slot with a lot row still above it — and WHICH
+  // slot decides which row its eave lands on. Third in the list puts the eave on
+  // the neighbour's DOORSTEP; fourth puts it on their FRONT WALL. Sweeping one
+  // order proves half the fix and leaves the other half a comment.
+  const ORDERS = [
+    [
+      { kind: "hall", name: "The Moot" },
+      { kind: "sanctuary", name: "St Brannock's" },
+      { kind: "gathering", name: "The Kettle" },
+    ],
+    [
+      { kind: "hall", name: "The Moot" },
+      { kind: "gathering", name: "The Kettle" },
+      { kind: "workshop", name: "The Yards" },
+      { kind: "sanctuary", name: "St Brannock's" },
+    ],
+  ];
+  let checked = 0;
+  for (const PLACES of ORDERS) {
+    for (const scale of ["village", "town", "city"]) {
+      for (const prosperity of ["struggling", "modest", "thriving"]) {
+        // Seeds chosen because they REPRODUCE, not because they are round. Seed 1
+        // lands the eave on a doorstep; 9 and 13 land it on a front wall. Swept
+        // for: with the fix removed, seeds 1/2/3 pass and the case is decoration.
+        for (const seed of [1, 9, 13]) {
+          const sealed = brief.validate(
+            { scale, prosperity, name: "Spire", places: PLACES, cast },
+            { theme: "cozy-village", seed },
+          );
+          const w = world.build(seed, "cozy-village", sealed);
+          // checkWorld carries the paint contract, so this case is mostly about
+          // REACHING the shape; the assertions below keep the intent local.
+          checkWorld(w, sealed, `spire/${scale}/${prosperity} seed ${seed}`);
+          const v = w.zones.z1;
+          assert.ok(findZone(w, "St Brannock's"), `${scale}/${prosperity} seed ${seed}: the sanctuary compiled`);
+          for (let y = 1; y < v.h; y++) {
+            for (let x = 0; x < v.w; x++) {
+              const at = v.w * y + x;
+              const over = v.overhead[at];
+              if (over !== "roof" && over !== "roofEdge") continue;
+              assert.notEqual(
+                v.object[at],
+                "wall",
+                `${scale}/${prosperity} seed ${seed}: a front wall at ${x},${y} is under ${over}`,
+              );
+              if (v.object[v.w * (y - 1) + x] === "door" && !v.solid[at]) {
+                assert.fail(`${scale}/${prosperity} seed ${seed}: a doorstep at ${x},${y} is under ${over}`);
+              }
+            }
+          }
+          checked++;
+        }
+      }
+    }
+  }
+  assert.equal(checked, 54, `the sweep ran (${checked})`);
 }
 
 console.log("brief validator + compiler: all cases passed");
