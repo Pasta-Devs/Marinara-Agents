@@ -102,6 +102,9 @@ for (const marker of [
   "bh-slot-bare", // uncovered slot
   "bleeding", // wound detail
   "bh-chip", // the chip the color and damage layers decorate
+  "torn", // the damage word itself, not just the chip that carries it
+  "white", // and the colour word
+  "bh-c-white", // the swatch class derived from it
 ]) {
   assert.ok(
     populated.includes(marker),
@@ -160,3 +163,37 @@ for (const entry of manifest.files) {
 }
 
 console.log("beholder client contract: renderer snapshots + bundle contract OK");
+
+// ── Escaping ────────────────────────────────────────────────────────────────
+// Every value on a slot originates in prose, so it is attacker-influenced by the
+// time it reaches markup. Two of these reached a title="…" attribute unescaped
+// (the colour word, and the damage word whenever it fell outside the known tiers
+// and was echoed back raw), which let a crafted value close the attribute and add
+// one of its own. Render each field with a breakout payload and require that the
+// raw payload never survives into the markup.
+const BREAKOUT = 'white" onmouseover="alert(1)" data-x="';
+const escapingCases: Array<[string, unknown]> = [
+  ["color", { Maggie: { body: { chest: { worn: [{ item: "blouse", color: BREAKOUT }] } } } }],
+  ["item", { Maggie: { body: { chest: { worn: [{ item: BREAKOUT }] } } } }],
+  ["damage", { Maggie: { body: { chest: { worn: [{ item: "blouse", damage: BREAKOUT }] } } } }],
+  ["material", { Maggie: { body: { chest: { worn: [{ item: "blouse", material: BREAKOUT }] } } } }],
+  ["woundType", { Maggie: { body: { head: { wounds: [{ type: BREAKOUT, severity: "minor" }] } } } }],
+  ["woundSeverity", { Maggie: { body: { head: { wounds: [{ type: "cut", severity: BREAKOUT }] } } } }],
+  ["holding", { Maggie: { body: { left_hand: { holding: { item: BREAKOUT } } } } }],
+  ["species", { Maggie: { species: BREAKOUT, body: { chest: { worn: [{ item: "blouse" }] } } } }],
+  ["characterName", { [BREAKOUT]: { body: { chest: { worn: [{ item: "blouse" }] } } } }],
+];
+for (const [field, state] of escapingCases) {
+  const html = renderDollPanel(state, "Maggie", new Set(), "front").html;
+  assert.ok(
+    !html.includes(BREAKOUT),
+    `${field} reaches the markup unescaped — a crafted value can close the attribute it lands in`,
+  );
+}
+
+// A null slot must not take the panel down: the renderer already treats slots as
+// possibly absent in some branches, so every branch has to agree.
+assert.doesNotThrow(
+  () => renderDollPanel({ Maggie: { body: { chest: null, head: undefined } } }, "Maggie", new Set(), "front"),
+  "a null slot must render, not throw",
+);

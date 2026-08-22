@@ -442,21 +442,21 @@ function computeSlotStates(state) {
       missing: sd?.missing === true,
       bare: sd?.bare === true,
     };
-    if (sd.worn?.length) {
+    if (sd?.worn?.length) {
       s.wornCount = sd.worn.length;
       for (const w of sd.worn) {
         const t = tierOf(w.damage);
         if (t > s.tier) s.tier = t;
       }
     }
-    if (sd.wounds?.length) {
+    if (sd?.wounds?.length) {
       s.wounds = sd.wounds.length;
       for (const w of sd.wounds) {
         const sev = woundSeverity(w);
         if (sev > s.maxWoundSev) s.maxWoundSev = sev;
       }
     }
-    if (sd.holding) s.hasHolding = true;
+    if (sd?.holding) s.hasHolding = true;
     out[slot] = s;
   }
   return out;
@@ -880,7 +880,7 @@ function collectSlotRows(state) {
   // distinctly (a red shirt and a blue shirt aren't "both shirts").
   const wornGroups = new Map();
   for (const [slot, sd] of Object.entries(body)) {
-    if (!sd.worn?.length) continue;
+    if (!sd?.worn?.length) continue;
     for (const w of sd.worn) {
       const item = w.item || "?";
       const dmg = w.damage || "";
@@ -901,7 +901,7 @@ function collectSlotRows(state) {
   // holding is {item, damage, [color]} (with a bare-string fallback).
   const holdRows = [];
   for (const [slot, sd] of Object.entries(body)) {
-    const h = normalizeHolding(sd.holding);
+    const h = normalizeHolding(sd?.holding);
     if (h) {
       holdRows.push({ kind: "holding", item: h.item, damage: h.damage, color: h.color, slots: [slot] });
     }
@@ -914,7 +914,7 @@ function collectSlotRows(state) {
   // subtle pulse, separating fresh wounds from sealed/scabbed ones.
   const woundRows = [];
   for (const [slot, sd] of Object.entries(body)) {
-    if (!sd.wounds?.length) continue;
+    if (!sd?.wounds?.length) continue;
     for (const w of sd.wounds) {
       const bleeding = typeof w === "object" && w !== null && w.bleeding === true;
       woundRows.push({
@@ -990,7 +990,7 @@ function renderCharacterDoll(name, state, view, opts = {}) {
   // need a separate wounds list here.
   const holding = [];
   for (const [slot, sd] of Object.entries(body)) {
-    const h = normalizeHolding(sd.holding);
+    const h = normalizeHolding(sd?.holding);
     if (h) holding.push({ slot, item: h.item, damage: h.damage });
   }
 
@@ -1139,7 +1139,9 @@ function renderCharacterDoll(name, state, view, opts = {}) {
     const cls = colorClass(row.color);
     return `<span class="bh-chip-swatch ${cls}" title="color: ${escapeHtml(row.color)}"></span>`;
   };
-  const colorTitle = (row) => (row.color ? ` · color: ${row.color}` : "");
+  // Escaped like every sibling label: this lands inside a title="…" attribute,
+  // and the colour word comes from the extractor, i.e. ultimately from prose.
+  const colorTitle = (row) => (row.color ? ` · color: ${escapeHtml(row.color)}` : "");
 
   // (Severity dots ▪/▪▪/▪▪▪ removed — the wound chip's COLOR already
   // encodes severity, the dots were redundant noise.)
@@ -1201,14 +1203,14 @@ function renderCharacterDoll(name, state, view, opts = {}) {
       // worn so .bh-chip-dot picks up the right color; the ✦ glyph stays
       // the "held" identifier.
       const meta = damageMeta(row.damage);
-      const dmgTitle = row.damage ? ` · ${meta.label}` : "";
+      const dmgTitle = row.damage ? ` · ${escapeHtml(meta.label)}` : "";
       return `<span class="bh-chip bh-chip-hold ${meta.class}" title="held${dmgTitle}${colorTitle(row)}">
                 <span class="bh-chip-head"><span class="bh-chip-dot"></span><span class="bh-chip-glyph">✦</span>${colorSwatch(row)}<span class="bh-chip-text">${escapeHtml(row.item)}</span>${multiSlot(row)}</span>${verboseRow([dmgLabel(row.damage), colorLabel(row)])}
             </span>`;
     }
     // worn
     const meta = damageMeta(row.damage);
-    const dmgTitle = row.damage ? ` · ${meta.label}` : "";
+    const dmgTitle = row.damage ? ` · ${escapeHtml(meta.label)}` : "";
     return `<span class="bh-chip ${meta.class}" title="worn${dmgTitle}${colorTitle(row)}">
             <span class="bh-chip-head"><span class="bh-chip-dot"></span>${colorSwatch(row)}<span class="bh-chip-text">${escapeHtml(row.item)}</span>${multiSlot(row)}</span>${verboseRow([dmgLabel(row.damage), colorLabel(row)])}
         </span>`;

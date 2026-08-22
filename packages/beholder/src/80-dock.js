@@ -110,7 +110,7 @@ BH.dock = {
     const say = (key, fallback) => BH.escapeHtml(BH.localize(this.props, key, fallback));
     panel.innerHTML = `
       <div class="beholder-panel-header">
-        <span class="bh-dock-close fa-solid fa-xmark" role="button" tabindex="0" title="${say("dockClose", "Close Beholder")}" aria-label="${say("dockClose", "Close Beholder")}"></span>
+        <button type="button" class="bh-dock-close fa-solid fa-xmark" title="${say("dockClose", "Close Beholder")}" aria-label="${say("dockClose", "Close Beholder")}"></button>
         <span class="beholder-panel-title">${say("dockTitle", "Beholder")}</span>
         <span class="beholder-panel-controls"></span>
       </div>
@@ -158,9 +158,14 @@ BH.dock = {
     this.applyLayers();
     if (!this._resizeBound) {
       this._resizeBound = true;
+      let frame = 0;
       window.addEventListener("resize", () => {
-        this.syncOffset();
-        this.render();
+        if (frame) return;
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          this.syncOffset();
+          this.render();
+        });
       });
     }
     return panel;
