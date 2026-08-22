@@ -136,14 +136,12 @@ function buildScanMessages(input: {
 }
 
 export function memoryNagScanStart(
-  vault: Pick<MemoryNagVault, "checkpointMessageId" | "checkpointMessageCount">,
+  vault: Pick<MemoryNagVault, "checkpointMessageId">,
   messages: Array<{ id: string }>,
 ): number {
-  if (vault.checkpointMessageId) {
-    const checkpointIndex = messages.findIndex((message) => message.id === vault.checkpointMessageId);
-    if (checkpointIndex >= 0) return checkpointIndex + 1;
-  }
-  return Math.min(vault.checkpointMessageCount, messages.length);
+  if (!vault.checkpointMessageId) return 0;
+  const checkpointIndex = messages.findIndex((message) => message.id === vault.checkpointMessageId);
+  return checkpointIndex >= 0 ? checkpointIndex + 1 : 0;
 }
 
 function memoryMatchesScan(current: MemoryNagMemory, scanned: MemoryNagMemory | undefined): boolean {
@@ -228,12 +226,14 @@ async function scanMemoryNagBatchUnlocked(chatId: string): Promise<MemoryNagScan
     resolvedCount = current.memories.filter(
       (memory) => resolvedIds.has(memory.id) && memoryMatchesScan(memory, scannedById.get(memory.id)),
     ).length;
-    const checkpointAdvanced = memoryNagScanStart(current, messages) > start + batch.length;
+    const currentStart = memoryNagScanStart(current, messages);
+    const processed = start + batch.length;
+    const checkpointAdvanced = currentStart > processed;
     return {
       ...current,
       participants,
       checkpointMessageId: checkpointAdvanced ? current.checkpointMessageId : checkpointMessageId,
-      checkpointMessageCount: Math.max(current.checkpointMessageCount, start + batch.length),
+      checkpointMessageCount: checkpointAdvanced ? currentStart : processed,
       memories: [
         ...current.memories.map((memory) =>
           resolvedIds.has(memory.id) && memoryMatchesScan(memory, scannedById.get(memory.id))
@@ -244,12 +244,13 @@ async function scanMemoryNagBatchUnlocked(chatId: string): Promise<MemoryNagScan
       ],
     };
   });
+  const processed = memoryNagScanStart(saved, messages);
   return {
-    processed: Math.min(saved.checkpointMessageCount, messages.length),
+    processed,
     total: messages.length,
     created: createdCount,
     resolved: resolvedCount,
-    done: saved.checkpointMessageCount >= messages.length,
+    done: processed >= messages.length,
     checkpointMessageId: saved.checkpointMessageId,
   };
 }

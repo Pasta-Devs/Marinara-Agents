@@ -97,7 +97,7 @@ assert.equal(
     checkpointVault,
     Array.from({ length: 25 }, (_, index) => ({ id: `m-${index}` })),
   ),
-  20,
+  0,
 );
 assert.equal(
   memoryNagScanStart({ ...checkpointVault, checkpointMessageId: "m-9" }, [{ id: "m-9" }, { id: "m-10" }]),

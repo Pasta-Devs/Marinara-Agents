@@ -19,9 +19,7 @@ const FOCUSABLE =
 function useModalDialog(active: boolean, onClose: () => void, restoreSelector?: string, restoreFocus = true) {
   const dialogRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
-  const restoreFocusRef = useRef(restoreFocus);
   onCloseRef.current = onClose;
-  restoreFocusRef.current = restoreFocus;
 
   useEffect(() => {
     if (!active) return;
@@ -61,7 +59,7 @@ function useModalDialog(active: boolean, onClose: () => void, restoreSelector?: 
     return () => {
       cancelAnimationFrame(focusFrame);
       document.removeEventListener("keydown", onKeyDown);
-      if (!restoreFocusRef.current) return;
+      if (!restoreFocus) return;
       requestAnimationFrame(() => {
         const requestedTarget = restoreSelector ? document.querySelector<HTMLElement>(restoreSelector) : previousFocus;
         const restoreTarget =
@@ -71,7 +69,7 @@ function useModalDialog(active: boolean, onClose: () => void, restoreSelector?: 
         restoreTarget?.focus();
       });
     };
-  }, [active, restoreSelector]);
+  }, [active, restoreFocus, restoreSelector]);
 
   return dialogRef;
 }
@@ -257,7 +255,16 @@ export function MemoryNagVaultModal({ props, onClose }: { props: CapabilityProps
   const [editing, setEditing] = useState<MemoryNagMemory | "new" | null>(null);
   const [editorExpanded, setEditorExpanded] = useState(false);
   const [message, setMessage] = useState("");
-  const vaultDialogRef = useModalDialog(!editorExpanded, onClose, undefined, !editorExpanded);
+  const vaultDialogRef = useModalDialog(!editorExpanded, onClose, undefined, false);
+
+  useEffect(() => {
+    const restoreTarget = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return () => {
+      requestAnimationFrame(() => {
+        if (restoreTarget?.isConnected) restoreTarget.focus();
+      });
+    };
+  }, []);
   const vault = useQuery({
     enabled: Boolean(chatId),
     queryKey: ["memory-nag", "vault", chatId],
