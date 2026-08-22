@@ -302,8 +302,7 @@ export function useNoodlerEligibleAccounts(
 }
 
 export type SlurpProfilePost =
-  | { managed: NoodlerManagedPost; viewerPost: NoodlerPostView | null }
-  | { viewerPost: NoodlerPostView };
+  { managed: NoodlerManagedPost; viewerPost: NoodlerPostView | null } | { viewerPost: NoodlerPostView };
 
 export function useNoodlerPosts(accountId: string | null, personaId: string | null) {
   return useQuery({
