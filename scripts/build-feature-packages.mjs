@@ -410,7 +410,7 @@ const features = [
   {
     id: "conversation-calls",
     name: "Calls",
-    version: "1.0.11",
+    version: "1.0.12",
     minEngineVersion: "2.4.1",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
@@ -1436,11 +1436,12 @@ function Root({ element }) {
   const expanded = useExpanded(chatId);
   const active = status.data?.activeCall || null;
   const ringing = status.data?.ringingCall || null;
+  const toolbarButtonClass = typeof props.toolbarButtonClass === "string" ? props.toolbarButtonClass : "mari-chrome-control flex h-8 w-8 items-center justify-center p-0 max-md:h-9 max-md:w-9";
   if (!chatId) return null;
   if (element.getAttribute("view") === "settings") return <Settings props={props} />;
   if (element.getAttribute("view") === "toolbar") {
     if (!callsEnabled && !active) return null;
-    return <button type="button" className="mari-chrome-control flex h-9 w-9 items-center justify-center p-0" title={active ? "Open call" : "Start call"} onClick={async () => {
+    return <button type="button" className={toolbarButtonClass} title={active ? "Open call" : "Start call"} onClick={async () => {
       if (active) return setExpanded(chatId);
       try {
         await start.mutateAsync();
