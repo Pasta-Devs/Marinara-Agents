@@ -56,7 +56,7 @@ import {
   updateNoodlerPostWithMedia,
 } from "../services/slurp/slurp-post.operation.js";
 import { tryNoodlerAccountOperation } from "../services/slurp/slurp-account-operation-lock.js";
-import { tryNoodleOperation } from "../services/slurp/slurp-operation-lock.js";
+import { trySlurpDataDeletion, trySlurpWrite } from "../services/slurp/slurp-operation-lock.js";
 import { removeAllNoodlerMedia } from "../services/slurp/slurp-media.js";
 import { clearNoodlerImageConnections } from "../services/slurp/slurp-image-connections.js";
 import { generateAndApplyNoodlerCreatorReply } from "../services/slurp/slurp-creator-reply.operation.js";
@@ -221,16 +221,20 @@ async function readNoodlerMultipart(req: FastifyRequest): Promise<{ payload: unk
       throw new NoodlerMediaRequestError("Unsupported image file type.", 400);
     }
     let buffer: Buffer;
-    try {
-      buffer = await part.toBuffer();
-    } catch (error) {
-      const truncated = (part.file as typeof part.file & { truncated?: boolean }).truncated === true;
-      const tooLarge = truncated || (error as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE";
-      throw new NoodlerMediaRequestError(
-        tooLarge ? "NoodleR image is too large." : "Failed to read the uploaded image.",
-        tooLarge ? 413 : 400,
-      );
-    }
+    const write = await trySlurpWrite(async () => {
+      try {
+        buffer = await part.toBuffer();
+      } catch (error) {
+        const truncated = (part.file as typeof part.file & { truncated?: boolean }).truncated === true;
+        const tooLarge = truncated || (error as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE";
+        throw new NoodlerMediaRequestError(
+          tooLarge ? "NoodleR image is too large." : "Failed to read the uploaded image.",
+          tooLarge ? 413 : 400,
+        );
+      }
+    });
+    if (!write.acquired) return reply.code(409).send({ error: "Slurp data cleanup is in progress." });
+    return write.value;
     const detected = isAllowedImageBuffer(buffer, extension);
     if (!detected || (extension === ".jpeg" ? "jpg" : extension.slice(1)) !== detected.ext) {
       throw new NoodlerMediaRequestError("Unsupported or invalid image file.", 400);
@@ -1630,7 +1634,7 @@ export async function slurpRoutes(app: FastifyInstance) {
   });
 
   app.delete("/data", async (_req, reply) => {
-    const locked = await tryNoodleOperation("slurp-data-delete", async () => {
+    const locked = await trySlurpDataDeletion(async () => {
       const result = await noodle.deleteAllSlurpData();
       await clearNoodlerImageConnections(app.db);
       removeAllNoodlerMedia();
@@ -1641,7 +1645,7 @@ export async function slurpRoutes(app: FastifyInstance) {
   });
 
   app.delete("/data/unused", async (_req, reply) => {
-    const locked = await tryNoodleOperation("slurp-data-delete", () => noodle.deleteUnusedSlurpData());
+    const locked = await trySlurpDataDeletion(() => noodle.deleteUnusedSlurpData());
     if (!locked.acquired) return reply.code(409).send({ error: "Another Slurp operation is already running." });
     return locked.value;
   });

@@ -694,13 +694,15 @@ export function SlurpSettings({
                       title: t("ui.slurp.settings.advanced.deleteAllConfirmTitle"),
                       message: t("ui.slurp.settings.advanced.deleteAllConfirmDetail"),
                       confirmLabel: t("ui.slurp.settings.advanced.deleteAllButton"),
-                    }).then((confirmed) => {
-                      if (!confirmed) return;
-                      deleteAllData.mutate(undefined, {
-                        onSuccess: () => toast.success(t("ui.slurp.settings.advanced.deleteAllSuccess")),
-                        onError: (error) => toast.error(errorMessage(error)),
-                      });
                     })
+                      .then((confirmed) => {
+                        if (!confirmed) return;
+                        deleteAllData.mutate(undefined, {
+                          onSuccess: () => toast.success(t("ui.slurp.settings.advanced.deleteAllSuccess")),
+                          onError: (error) => toast.error(errorMessage(error)),
+                        });
+                      })
+                      .catch((error) => toast.error(errorMessage(error)))
                   }
                   className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md border border-red-400/50 px-3 text-xs font-semibold text-red-300 hover:bg-red-400/10 disabled:opacity-50"
                 >
@@ -721,13 +723,15 @@ export function SlurpSettings({
                       title: t("ui.slurp.settings.advanced.deleteUnusedConfirmTitle"),
                       message: t("ui.slurp.settings.advanced.deleteUnusedConfirmDetail"),
                       confirmLabel: t("ui.slurp.settings.advanced.deleteUnusedButton"),
-                    }).then((confirmed) => {
-                      if (!confirmed) return;
-                      deleteUnusedData.mutate(undefined, {
-                        onSuccess: () => toast.success(t("ui.slurp.settings.advanced.deleteUnusedSuccess")),
-                        onError: (error) => toast.error(errorMessage(error)),
-                      });
                     })
+                      .then((confirmed) => {
+                        if (!confirmed) return;
+                        deleteUnusedData.mutate(undefined, {
+                          onSuccess: () => toast.success(t("ui.slurp.settings.advanced.deleteUnusedSuccess")),
+                          onError: (error) => toast.error(errorMessage(error)),
+                        });
+                      })
+                      .catch((error) => toast.error(errorMessage(error)))
                   }
                   className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
                 >

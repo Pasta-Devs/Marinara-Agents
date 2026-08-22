@@ -163,7 +163,7 @@ export function removeNoodlerAccountMedia(accountId: string): void {
 
 /** Remove only the Slurp media namespace. Engine and Noodle media stay outside this path. */
 export function removeAllNoodlerMedia(): void {
-  const dir = resolveNoodlerMediaAbsolutePath(NOODLER_MEDIA_PREFIX);
+  const dir = resolveNoodlerMediaAbsolutePath("noodler-media");
   if (!dir) return;
   try {
     rmSync(dir, { recursive: true, force: true });
