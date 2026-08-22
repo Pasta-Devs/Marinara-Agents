@@ -18,32 +18,65 @@ function executableSource(source: string): string {
   return source.replace(/:\s*(?:boolean|string)/g, "");
 }
 
-const runtime = runInNewContext(`
-${executableSource(sourceBetween(imageSource, "function isNovelAiV4Model", "function collectNovelAiReferenceImages"))}
-${executableSource(sourceBetween(imageSource, "function sanitizeNovelAiV4Prompt", "function prepareNovelAiPrompt"))}
-({ isNovelAiV4Model, isNovelAiV5Model, isNovelAiPreciseReferenceModel, sanitizeNovelAiV4Prompt });
-`) as {
+type NovelAiRuntime = {
   isNovelAiV4Model(model: string): boolean;
   isNovelAiV5Model(model: string): boolean;
   isNovelAiPreciseReferenceModel(model: string): boolean;
   sanitizeNovelAiV4Prompt(prompt: string, allowUnicode?: boolean): string;
 };
 
-assert.equal(runtime.isNovelAiV4Model("nai-diffusion-5-full"), true);
-assert.equal(runtime.isNovelAiV5Model("nai-diffusion-5-curated"), true);
-assert.equal(runtime.isNovelAiPreciseReferenceModel("nai-diffusion-5-full"), false);
-assert.equal(runtime.isNovelAiPreciseReferenceModel("nai-diffusion-4-5-full"), true);
-assert.equal(runtime.sanitizeNovelAiV4Prompt("少女 naïve 😀", true), "少女 naïve 😀");
-assert.equal(runtime.sanitizeNovelAiV4Prompt("少女 naïve 😀"), "naive");
-assert.equal(runtime.sanitizeNovelAiV4Prompt("e\u0301", true), "é");
+function assertNovelAiV5Runtime(runtime: NovelAiRuntime): void {
+  assert.equal(runtime.isNovelAiV4Model("nai-diffusion-5-full"), true);
+  assert.equal(runtime.isNovelAiV5Model("nai-diffusion-5-curated"), true);
+  assert.equal(runtime.isNovelAiPreciseReferenceModel("nai-diffusion-5-full"), false);
+  assert.equal(runtime.isNovelAiPreciseReferenceModel("nai-diffusion-4-5-full"), true);
+  assert.equal(runtime.sanitizeNovelAiV4Prompt("少女 naïve 😀", true), "少女 naïve 😀");
+  assert.equal(runtime.sanitizeNovelAiV4Prompt("少女 naïve 😀"), "naive");
+  assert.equal(runtime.sanitizeNovelAiV4Prompt("e\u0301", true), "é");
+}
+
+const sourceRuntime = runInNewContext(`
+${executableSource(sourceBetween(imageSource, "function isNovelAiV4Model", "function collectNovelAiReferenceImages"))}
+${executableSource(sourceBetween(imageSource, "function sanitizeNovelAiV4Prompt", "function prepareNovelAiPrompt"))}
+({ isNovelAiV4Model, isNovelAiV5Model, isNovelAiPreciseReferenceModel, sanitizeNovelAiV4Prompt });
+`) as NovelAiRuntime;
+
+assertNovelAiV5Runtime(sourceRuntime);
 
 assert.match(imageSource, /NovelAI V5 prompts support up to 1471 tokens/);
 assert.match(gameSource, /4-5.*\|5\(\?:-\(\?:curated\|full\)\)\?/s);
 
+function bundledFunction(bundle: string, marker: string): { name: string; source: string } {
+  const markerIndex = bundle.indexOf(marker);
+  const startIndex = bundle.lastIndexOf("function ", markerIndex);
+  const endIndex = bundle.indexOf("}", markerIndex);
+  assert.ok(markerIndex >= 0 && startIndex >= 0 && endIndex > markerIndex, `expected bundled function for ${marker}`);
+  const source = bundle.slice(startIndex, endIndex + 1);
+  const name = /^function ([\w$]+)/.exec(source)?.[1];
+  assert.ok(name, `expected bundled function name for ${marker}`);
+  return { name, source };
+}
+
 for (const packageId of ["noodle", "slurp"]) {
   const bundle = readFileSync(`packages/${packageId}/server.mjs`, "utf8");
   assert.match(bundle, /NovelAI V5 prompts support up to 1471 tokens/);
-  assert.match(bundle, /nai-diffusion-5/);
+  const v4 = bundledFunction(bundle, "return/^nai-diffusion-(?:4");
+  const v5 = bundledFunction(bundle, "return/^nai-diffusion-5");
+  const preciseReference = bundledFunction(bundle, "return/^nai-diffusion-4-5");
+  const sanitizePrompt = bundledFunction(bundle, '.normalize(t?"NFC":"NFKD")');
+  const bundleRuntime = runInNewContext(`
+${v4.source}
+${v5.source}
+${preciseReference.source}
+${sanitizePrompt.source}
+({
+  isNovelAiV4Model: ${v4.name},
+  isNovelAiV5Model: ${v5.name},
+  isNovelAiPreciseReferenceModel: ${preciseReference.name},
+  sanitizeNovelAiV4Prompt: ${sanitizePrompt.name},
+});
+`) as NovelAiRuntime;
+  assertNovelAiV5Runtime(bundleRuntime);
 }
 
 console.log("Noodle and Slurp NovelAI V5 runtime regressions passed.");
