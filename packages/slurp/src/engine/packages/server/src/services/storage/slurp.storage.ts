@@ -1375,6 +1375,72 @@ export function createSlurpStorage(db: DB) {
       return this.updateSettings(input);
     },
 
+    async deleteAllSlurpData(): Promise<{ deletedCreators: number; deletedPosts: number }> {
+      const accounts = await db.select().from(noodleAccounts).where(eq(noodleAccounts.platform, "slurp"));
+      const accountIds = accounts.map((account) => account.id);
+      const personaIds = (await characters.listPersonas()).map((persona) => persona.id);
+      const posts = accountIds.length
+        ? await db.select().from(noodlePosts).where(inArray(noodlePosts.authorAccountId, accountIds))
+        : [];
+      const postIds = posts.map((post) => post.id);
+      await db.transaction(async (tx) => {
+        for (const table of [
+          noodleActivityDigests,
+          noodleRefreshRuns,
+          noodlerFanActivityState,
+          noodlerAutomaticAttempts,
+          noodlerReserveState,
+          noodlerPreparedPosts,
+          noodlerCreatorReplyClaims,
+        ]) {
+          await tx.delete(table);
+        }
+        if (postIds.length) {
+          await tx.delete(noodleInteractions).where(inArray(noodleInteractions.postId, postIds));
+          await tx.delete(noodlePostUnlocks).where(inArray(noodlePostUnlocks.postId, postIds));
+          await tx.delete(noodlePosts).where(inArray(noodlePosts.id, postIds));
+        }
+        if (accountIds.length) {
+          await tx.delete(noodleInteractions).where(inArray(noodleInteractions.actorAccountId, accountIds));
+          await tx
+            .delete(noodleAccountSubscriptions)
+            .where(
+              or(
+                inArray(noodleAccountSubscriptions.viewerAccountId, accountIds),
+                inArray(noodleAccountSubscriptions.creatorAccountId, accountIds),
+              ),
+            );
+          await tx.delete(noodleAccounts).where(inArray(noodleAccounts.id, accountIds));
+        }
+        const settings = createAppSettingsStorage(tx);
+        for (const personaId of personaIds) await settings.remove(slurpViewerSettingsKey(personaId));
+        await settings.remove(SLURP_SETTINGS_KEY);
+        await settings.remove(NOODLE_REFRESH_SCHEDULE_KEY);
+        await settings.remove(NOODLER_SOURCE_SNAPSHOT_MIGRATION_KEY);
+        await tx._fileStore.flush();
+      });
+      return { deletedCreators: accounts.length, deletedPosts: posts.length };
+    },
+
+    async deleteUnusedSlurpData(): Promise<{ deletedPreparedPosts: number; deletedAttempts: number; deletedRuns: number }> {
+      const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      const prepared = await db.select().from(noodlerPreparedPosts);
+      const attempts = await db.select().from(noodlerAutomaticAttempts);
+      const runs = await db.select().from(noodleRefreshRuns);
+      const oldPrepared = prepared.filter(
+        (row) => ["published", "discarded"].includes(row.state) && Date.parse(row.updatedAt) < cutoff,
+      );
+      const oldAttempts = attempts.filter((row) => Date.parse(row.claimedAt) < cutoff);
+      const oldRuns = runs.filter((row) => ["completed", "failed", "abandoned"].includes(row.status) && Date.parse(row.updatedAt) < cutoff);
+      await db.transaction(async (tx) => {
+        if (oldPrepared.length) await tx.delete(noodlerPreparedPosts).where(inArray(noodlerPreparedPosts.id, oldPrepared.map((row) => row.id)));
+        if (oldAttempts.length) await tx.delete(noodlerAutomaticAttempts).where(inArray(noodlerAutomaticAttempts.id, oldAttempts.map((row) => row.id)));
+        if (oldRuns.length) await tx.delete(noodleRefreshRuns).where(inArray(noodleRefreshRuns.id, oldRuns.map((row) => row.id)));
+        await tx._fileStore.flush();
+      });
+      return { deletedPreparedPosts: oldPrepared.length, deletedAttempts: oldAttempts.length, deletedRuns: oldRuns.length };
+    },
+
     async updateSettings(input: SlurpSettingsUpdateInput): Promise<SlurpSettings> {
       const run = slurpSettingsUpdateQueue.then(async () => {
         const current = await this.getSettings();

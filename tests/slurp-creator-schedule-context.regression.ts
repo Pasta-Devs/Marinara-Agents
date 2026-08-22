@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  buildSlurpCreatorScheduleContext,
   parseSlurpWeekSchedule,
   resolveSlurpCreatorScheduleContext,
 } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-creator-schedule-context";
@@ -28,6 +29,26 @@ async function main() {
   assert.match(context, /Tuesday/u);
   assert.match(context, /America\/New_York/u);
 
+  const utcDateOnPreviousLocalDay = new Date("2026-08-18T02:30:00.000Z");
+  const localDay = await resolveSlurpCreatorScheduleContext(
+    characters(character),
+    source,
+    "America/Los_Angeles",
+    utcDateOnPreviousLocalDay,
+  );
+  assert.match(localDay, /Monday/u);
+  assert.match(localDay, /eating breakfast and preparing for work/u);
+
+  const disabled = buildSlurpCreatorScheduleContext(false, schedule, source, fixed, "UTC");
+  assert.equal(disabled, null);
+  const disabledCharacter = {
+    data: JSON.stringify({ extensions: { conversationSchedulesEnabled: false, conversationSchedule: schedule } }),
+  };
+  assert.match(
+    await resolveSlurpCreatorScheduleContext(characters(disabledCharacter), source, "UTC", fixed),
+    /No active Conversation Schedule/u,
+  );
+
   const staleCharacter = {
     data: JSON.stringify({
       extensions: { conversationSchedule: { ...schedule, weekStart: "2026-08-10T00:00:00.000Z" } },
@@ -52,6 +73,7 @@ async function main() {
     null,
     "Malformed schedule blocks must not reach generation",
   );
+  assert.equal(parseSlurpWeekSchedule({ ...schedule, enabled: "yes" }), null);
 
   console.log("Slurp Creator schedule context regression passed");
 }

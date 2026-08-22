@@ -2,6 +2,7 @@ type CreatorSource = { kind: string; entityId: string; displayName: string };
 
 type WeekSchedule = {
   weekStart: string;
+  enabled?: boolean;
   days: Record<string, Array<{ time: string; activity: string }>>;
 };
 
@@ -22,6 +23,7 @@ export function parseSlurpWeekSchedule(value: unknown): WeekSchedule | null {
   const schedule = record(value);
   const days = record(schedule.days);
   if (!Number.isFinite(Date.parse(String(schedule.weekStart))) || Object.keys(days).length === 0) return null;
+  if (schedule.enabled !== undefined && typeof schedule.enabled !== "boolean") return null;
   if (
     !Object.values(days).every(
       (day) =>
@@ -38,6 +40,14 @@ export function parseSlurpWeekSchedule(value: unknown): WeekSchedule | null {
   )
     return null;
   return schedule as unknown as WeekSchedule;
+}
+
+function scheduleEnabled(character: ScheduleCharacter): boolean {
+  const extensions = record(record(character?.data).extensions);
+  for (const key of ["conversationSchedulesEnabled", "conversationScheduleEnabled"]) {
+    if (typeof extensions[key] === "boolean") return extensions[key];
+  }
+  return true;
 }
 
 function zonedDate(now: Date, zone?: string): Date {
@@ -113,8 +123,9 @@ export async function resolveSlurpCreatorScheduleContext(
 ): Promise<string> {
   if (source.kind !== "character") return "No active Conversation Schedule is available for this Creator today.";
   const character = await characters.getById(source.entityId);
+  if (!scheduleEnabled(character)) return "No active Conversation Schedule is available for this Creator today.";
   const schedule = parseSlurpWeekSchedule(record(record(character?.data).extensions).conversationSchedule);
-  if (!schedule) return "No active Conversation Schedule is available for this Creator today.";
+  if (!schedule || schedule.enabled === false) return "No active Conversation Schedule is available for this Creator today.";
   const context = buildSlurpCreatorScheduleContext(true, schedule, source, zonedDate(now, timeZone), timeZone);
   if (context) return context;
   return "No active Conversation Schedule is available for this Creator today.";

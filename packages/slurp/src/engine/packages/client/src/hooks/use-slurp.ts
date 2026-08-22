@@ -159,6 +159,22 @@ export function useUpdateSlurpSettings() {
   });
 }
 
+export function useDeleteAllSlurpData() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.delete<{ deletedCreators: number; deletedPosts: number }>("/slurp/data"),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.all }),
+  });
+}
+
+export function useDeleteUnusedSlurpData() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.delete<{ deletedPreparedPosts: number; deletedAttempts: number; deletedRuns: number }>("/slurp/data/unused"),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.all }),
+  });
+}
+
 export function useSlurpConnections(enabled = true) {
   return useQuery({
     queryKey: ["slurp", "connections"],
