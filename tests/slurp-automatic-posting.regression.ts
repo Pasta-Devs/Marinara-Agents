@@ -16,10 +16,7 @@ const settingsUi = readFileSync(
   "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpSettings.tsx",
   "utf8",
 );
-const homeUi = readFileSync(
-  "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx",
-  "utf8",
-);
+const homeUi = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
 const onboardingUi = readFileSync(
   "packages/slurp/src/engine/packages/client/src/components/slurp/SlurpOnboardingPanel.tsx",
   "utf8",

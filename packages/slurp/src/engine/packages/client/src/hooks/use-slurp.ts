@@ -170,7 +170,8 @@ export function useDeleteAllSlurpData() {
 export function useDeleteUnusedSlurpData() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => api.delete<{ deletedPreparedPosts: number; deletedAttempts: number; deletedRuns: number }>("/slurp/data/unused"),
+    mutationFn: () =>
+      api.delete<{ deletedPreparedPosts: number; deletedAttempts: number; deletedRuns: number }>("/slurp/data/unused"),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.all }),
   });
 }
@@ -301,7 +302,8 @@ export function useNoodlerEligibleAccounts(
 }
 
 export type SlurpProfilePost =
-  { managed: NoodlerManagedPost; viewerPost: NoodlerPostView | null } | { viewerPost: NoodlerPostView };
+  | { managed: NoodlerManagedPost; viewerPost: NoodlerPostView | null }
+  | { viewerPost: NoodlerPostView };
 
 export function useNoodlerPosts(accountId: string | null, personaId: string | null) {
   return useQuery({

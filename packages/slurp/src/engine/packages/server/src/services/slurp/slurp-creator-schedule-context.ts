@@ -125,7 +125,8 @@ export async function resolveSlurpCreatorScheduleContext(
   const character = await characters.getById(source.entityId);
   if (!scheduleEnabled(character)) return "No active Conversation Schedule is available for this Creator today.";
   const schedule = parseSlurpWeekSchedule(record(record(character?.data).extensions).conversationSchedule);
-  if (!schedule || schedule.enabled === false) return "No active Conversation Schedule is available for this Creator today.";
+  if (!schedule || schedule.enabled === false)
+    return "No active Conversation Schedule is available for this Creator today.";
   const context = buildSlurpCreatorScheduleContext(true, schedule, source, zonedDate(now, timeZone), timeZone);
   if (context) return context;
   return "No active Conversation Schedule is available for this Creator today.";
