@@ -15,7 +15,10 @@ function sourceBetween(source: string, start: string, end: string): string {
 }
 
 function executableSource(source: string): string {
-  return source.replace(/:\s*(?:boolean|string)/g, "");
+  return source
+    .replace(/^export /gm, "")
+    .replace(/:\s*Pick<[^>]+>/g, "")
+    .replace(/:\s*(?:boolean|string)/g, "");
 }
 
 type NovelAiRuntime = {
@@ -44,7 +47,33 @@ ${executableSource(sourceBetween(imageSource, "function sanitizeNovelAiV4Prompt"
 assertNovelAiV5Runtime(sourceRuntime);
 
 assert.match(imageSource, /NovelAI V5 prompts support up to 1471 tokens/);
-assert.match(gameSource, /4-5.*\|5\(\?:-\(\?:curated\|full\)\)\?/s);
+const gameRuntime = runInNewContext(`
+function resolveSceneIllustrationImageBackend() { return "novelai"; }
+${executableSource(
+  sourceBetween(
+    gameSource,
+    "export function supportsSceneIllustrationStructuredCharacterPrompts",
+    "export function resolveSceneIllustrationReferenceImageLimit",
+  ),
+)}
+({ supportsSceneIllustrationStructuredCharacterPrompts });
+`) as {
+  supportsSceneIllustrationStructuredCharacterPrompts(request: {
+    imgSource: string;
+    imgModel: string;
+    imgBaseUrl: string;
+    imgService: string;
+  }): boolean;
+};
+assert.equal(
+  gameRuntime.supportsSceneIllustrationStructuredCharacterPrompts({
+    imgSource: "novelai",
+    imgModel: "nai-diffusion-5-full",
+    imgBaseUrl: "https://image.novelai.net",
+    imgService: "novelai",
+  }),
+  true,
+);
 
 function bundledFunction(bundle: string, marker: string): { name: string; source: string } {
   const markerIndex = bundle.indexOf(marker);
