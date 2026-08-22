@@ -228,7 +228,7 @@ async function scanMemoryNagBatchUnlocked(chatId: string): Promise<MemoryNagScan
     resolvedCount = current.memories.filter(
       (memory) => resolvedIds.has(memory.id) && memoryMatchesScan(memory, scannedById.get(memory.id)),
     ).length;
-    const checkpointAdvanced = current.checkpointMessageCount > start + batch.length;
+    const checkpointAdvanced = memoryNagScanStart(current, messages) > start + batch.length;
     return {
       ...current,
       participants,

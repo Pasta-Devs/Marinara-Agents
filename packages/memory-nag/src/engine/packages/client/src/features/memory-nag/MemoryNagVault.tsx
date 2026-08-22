@@ -16,10 +16,12 @@ type MemoryDraft = {
 const FOCUSABLE =
   'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-function useModalDialog(active: boolean, onClose: () => void, restoreSelector?: string) {
+function useModalDialog(active: boolean, onClose: () => void, restoreSelector?: string, restoreFocus = true) {
   const dialogRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
+  const restoreFocusRef = useRef(restoreFocus);
   onCloseRef.current = onClose;
+  restoreFocusRef.current = restoreFocus;
 
   useEffect(() => {
     if (!active) return;
@@ -59,6 +61,7 @@ function useModalDialog(active: boolean, onClose: () => void, restoreSelector?: 
     return () => {
       cancelAnimationFrame(focusFrame);
       document.removeEventListener("keydown", onKeyDown);
+      if (!restoreFocusRef.current) return;
       requestAnimationFrame(() => {
         const requestedTarget = restoreSelector ? document.querySelector<HTMLElement>(restoreSelector) : previousFocus;
         const restoreTarget =
@@ -254,7 +257,7 @@ export function MemoryNagVaultModal({ props, onClose }: { props: CapabilityProps
   const [editing, setEditing] = useState<MemoryNagMemory | "new" | null>(null);
   const [editorExpanded, setEditorExpanded] = useState(false);
   const [message, setMessage] = useState("");
-  const vaultDialogRef = useModalDialog(!editorExpanded, onClose);
+  const vaultDialogRef = useModalDialog(!editorExpanded, onClose, undefined, !editorExpanded);
   const vault = useQuery({
     enabled: Boolean(chatId),
     queryKey: ["memory-nag", "vault", chatId],
