@@ -1229,15 +1229,34 @@ export function createNoodleStorage(db: DB) {
       const stalePostIds = posts.filter((post) => !liveAccountIdSet.has(post.authorAccountId)).map((post) => post.id);
       const stalePostIdSet = new Set(stalePostIds);
       const interactions = await db.select().from(noodleInteractions);
-      const staleInteractionIds = interactions
-        .filter(
-          (interaction) =>
-            stalePostIdSet.has(interaction.postId) ||
-            !posts.some((post) => post.id === interaction.postId) ||
-            !liveAccountIdSet.has(interaction.actorAccountId),
-        )
-        .map((interaction) => interaction.id);
-      const staleInteractionIdSet = new Set(staleInteractionIds);
+      const interactionIdSet = new Set(interactions.map((interaction) => interaction.id));
+      const staleInteractionIdSet = new Set(
+        interactions
+          .filter(
+            (interaction) =>
+              stalePostIdSet.has(interaction.postId) ||
+              !posts.some((post) => post.id === interaction.postId) ||
+              !liveAccountIdSet.has(interaction.actorAccountId) ||
+              (interaction.parentInteractionId && !interactionIdSet.has(interaction.parentInteractionId)),
+          )
+          .map((interaction) => interaction.id),
+      );
+      let staleInteractionCount = -1;
+      while (staleInteractionIdSet.size !== staleInteractionCount) {
+        staleInteractionCount = staleInteractionIdSet.size;
+        for (const interaction of interactions) {
+          if (interaction.parentInteractionId && staleInteractionIdSet.has(interaction.parentInteractionId)) {
+            staleInteractionIdSet.add(interaction.id);
+          }
+        }
+      }
+      const staleInteractionIds = [...staleInteractionIdSet];
+      const runs = await db.select().from(noodleRefreshRuns);
+      const staleRunIds = runs
+        .filter((run) => strings(run.activeAccountIds).some((accountId) => !liveAccountIdSet.has(accountId)))
+        .map((run) => run.id);
+      const runIdSet = new Set(runs.map((run) => run.id));
+      const staleRunIdSet = new Set(staleRunIds);
       const digests = await db.select().from(noodleActivityDigests);
       const staleDigestIds = digests
         .filter(
@@ -1247,6 +1266,7 @@ export function createNoodleStorage(db: DB) {
             (digest.sourceInteractionId &&
               (!interactions.some((interaction) => interaction.id === digest.sourceInteractionId) ||
                 staleInteractionIdSet.has(digest.sourceInteractionId))) ||
+            (digest.sourceRunId && (!runIdSet.has(digest.sourceRunId) || staleRunIdSet.has(digest.sourceRunId))) ||
             strings(digest.accountIds).some((accountId) => !liveAccountIdSet.has(accountId)),
         )
         .map((digest) => digest.id);
@@ -1266,10 +1286,6 @@ export function createNoodleStorage(db: DB) {
             stalePostIdSet.has(unlock.postId),
         )
         .map((unlock) => unlock.id);
-      const runs = await db.select().from(noodleRefreshRuns);
-      const staleRunIds = runs
-        .filter((run) => strings(run.activeAccountIds).some((accountId) => !liveAccountIdSet.has(accountId)))
-        .map((run) => run.id);
       await db.transaction(async (tx) => {
         if (staleDigestIds.length)
           await tx.delete(noodleActivityDigests).where(inArray(noodleActivityDigests.id, staleDigestIds));
