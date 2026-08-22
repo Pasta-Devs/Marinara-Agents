@@ -2130,6 +2130,18 @@ PF.world = (() => {
       );
       buildings.push({ door: b, rect: { x: slot.x, y: top, w: width, h: height }, boundPlace: place });
     }
+    // A trade's premises is sized by the trade, for the same reason a house is
+    // sized by its household: every workplace at 6x4 made the working half of a
+    // settlement as uniform as the sleeping half. A farm has a yard's worth of
+    // frontage, a smith needs floor for the work, and a duty station is a hut with
+    // a door — the smallest thing anybody builds on purpose. Beside the loop
+    // rather than inside it, where `FEATURE_RECTS` and the other layout tables
+    // live.
+    const SPECIAL_FOOTPRINT = {
+      farm: { w: 8, h: 5 },
+      shop: { w: 7, h: 5 },
+      post: { w: 5, h: 4 },
+    };
     for (const { special, owner, boundPlace, household } of specialsBuilt) {
       // A special whose interior already exists as a place shares that facade.
       if (boundPlace) {
@@ -2139,16 +2151,6 @@ PF.world = (() => {
       }
       const slot = takeSlot();
       if (!slot) break;
-      // A trade's premises is sized by the trade, for the same reason a house is
-      // sized by its household: every workplace at 6x4 made the working half of
-      // a settlement as uniform as the sleeping half. A farm has a yard's worth
-      // of frontage, a smith needs floor for the work, and a duty station is a
-      // hut with a door — it is the smallest thing anybody builds on purpose.
-      const SPECIAL_FOOTPRINT = {
-        farm: { w: 8, h: 5 },
-        shop: { w: 7, h: 5 },
-        post: { w: 5, h: 4 },
-      };
       // ...but not on ground that cannot spare it. An outpost is 28x20, and a
       // farm with a full frontage there takes the room its named features were
       // going to stand on — measured: two of two refused. A frontier smithy is a
@@ -2896,11 +2898,16 @@ PF.world = (() => {
           // Nearest ward, measured from the door they actually live behind — a
           // resident belongs to the quarter they live in, not to whichever
           // quadrant of the arithmetic their household id fell into.
+          // From the DOOR, which is what the sentence above claims and what the
+          // code did not do: it measured from `rect.x/y`, the lot's north-west
+          // corner. The two differ by a few tiles and it is not cosmetic —
+          // measured, 5 of 30 city worlds put somebody in a different quarter.
+          const home = dwelling.door;
           const ward =
-            member._ward && wards.length
+            member._ward && wards.length && home
               ? wards.reduce((best, w) =>
-                  (w.x - dwelling.rect.x) ** 2 + (w.y - dwelling.rect.y) ** 2 <
-                  (best.x - dwelling.rect.x) ** 2 + (best.y - dwelling.rect.y) ** 2
+                  (w.x - home.doorX) ** 2 + (w.y - home.doorY) ** 2 <
+                  (best.x - home.doorX) ** 2 + (best.y - home.doorY) ** 2
                     ? w
                     : best,
                 )

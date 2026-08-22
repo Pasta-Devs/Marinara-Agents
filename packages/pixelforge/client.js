@@ -347,8 +347,14 @@ PF.art = (() => {
       px(g, 12, 4, 2, 10, PAL.fence);
       px(g, 0, 6, T, 2, PAL.fence);
     },
+    /** NO GROUND FILL. The renderer draws an object tile straight over the ground
+     *  tile and the draw is opaque, so a painter that fills its own background is
+     *  declaring what it stands on. A well does not get to: it is the middle of
+     *  the plaza, where the ground is paving, and filling grass1 put a green
+     *  square in the middle of every square in the game — including the four ward
+     *  squares, which are stone by definition. Left transparent, the paving shows
+     *  through and the same sprite works on grass, path and stone alike. */
     well(g) {
-      px(g, 0, 0, T, T, PAL.grass1);
       px(g, 2, 4, 12, 10, PAL.well);
       px(g, 4, 6, 8, 6, PAL.ink);
       px(g, 2, 2, 12, 2, PAL.beam);
@@ -367,8 +373,11 @@ PF.art = (() => {
       dither(g, rnd, PAL.leafHi, 9);
       dither(g, rnd, PAL.grass3, 4);
     },
+    /** Also unfilled, and for the same reason plus one: `floor1` is an INTERIOR
+     *  timber colour, so a market board on the square used to lay a plank of
+     *  floorboard down outdoors. Transparent works indoors too — the floor tile
+     *  it sits on is the one it was imitating. */
     table(g) {
-      px(g, 0, 0, T, T, PAL.floor1);
       px(g, 2, 3, 12, 9, PAL.counter);
       px(g, 3, 4, 10, 7, PAL.path1);
     },
@@ -601,8 +610,9 @@ PF.art = (() => {
           dither(g, rnd, PAL.cropRipe, 3);
         },
         // atmosphere recycler where the village well stood
+        // Unfilled, like the village well it replaces — a recycler stands on the
+        // colony's paving, not on a patch of turf it brought with it.
         well(g) {
-          px(g, 0, 0, T, T, PAL.grass1);
           px(g, 3, 3, 10, 11, PAL.well);
           px(g, 4, 4, 8, 2, PAL.leafHi);
           px(g, 4, 7, 8, 1, PAL.wallDark);
@@ -3927,6 +3937,18 @@ PF.world = (() => {
       );
       buildings.push({ door: b, rect: { x: slot.x, y: top, w: width, h: height }, boundPlace: place });
     }
+    // A trade's premises is sized by the trade, for the same reason a house is
+    // sized by its household: every workplace at 6x4 made the working half of a
+    // settlement as uniform as the sleeping half. A farm has a yard's worth of
+    // frontage, a smith needs floor for the work, and a duty station is a hut with
+    // a door — the smallest thing anybody builds on purpose. Beside the loop
+    // rather than inside it, where `FEATURE_RECTS` and the other layout tables
+    // live.
+    const SPECIAL_FOOTPRINT = {
+      farm: { w: 8, h: 5 },
+      shop: { w: 7, h: 5 },
+      post: { w: 5, h: 4 },
+    };
     for (const { special, owner, boundPlace, household } of specialsBuilt) {
       // A special whose interior already exists as a place shares that facade.
       if (boundPlace) {
@@ -3936,16 +3958,6 @@ PF.world = (() => {
       }
       const slot = takeSlot();
       if (!slot) break;
-      // A trade's premises is sized by the trade, for the same reason a house is
-      // sized by its household: every workplace at 6x4 made the working half of
-      // a settlement as uniform as the sleeping half. A farm has a yard's worth
-      // of frontage, a smith needs floor for the work, and a duty station is a
-      // hut with a door — it is the smallest thing anybody builds on purpose.
-      const SPECIAL_FOOTPRINT = {
-        farm: { w: 8, h: 5 },
-        shop: { w: 7, h: 5 },
-        post: { w: 5, h: 4 },
-      };
       // ...but not on ground that cannot spare it. An outpost is 28x20, and a
       // farm with a full frontage there takes the room its named features were
       // going to stand on — measured: two of two refused. A frontier smithy is a
@@ -4693,11 +4705,16 @@ PF.world = (() => {
           // Nearest ward, measured from the door they actually live behind — a
           // resident belongs to the quarter they live in, not to whichever
           // quadrant of the arithmetic their household id fell into.
+          // From the DOOR, which is what the sentence above claims and what the
+          // code did not do: it measured from `rect.x/y`, the lot's north-west
+          // corner. The two differ by a few tiles and it is not cosmetic —
+          // measured, 5 of 30 city worlds put somebody in a different quarter.
+          const home = dwelling.door;
           const ward =
-            member._ward && wards.length
+            member._ward && wards.length && home
               ? wards.reduce((best, w) =>
-                  (w.x - dwelling.rect.x) ** 2 + (w.y - dwelling.rect.y) ** 2 <
-                  (best.x - dwelling.rect.x) ** 2 + (best.y - dwelling.rect.y) ** 2
+                  (w.x - home.doorX) ** 2 + (w.y - home.doorY) ** 2 <
+                  (best.x - home.doorX) ** 2 + (best.y - home.doorY) ** 2
                     ? w
                     : best,
                 )

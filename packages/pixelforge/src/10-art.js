@@ -174,8 +174,14 @@ PF.art = (() => {
       px(g, 12, 4, 2, 10, PAL.fence);
       px(g, 0, 6, T, 2, PAL.fence);
     },
+    /** NO GROUND FILL. The renderer draws an object tile straight over the ground
+     *  tile and the draw is opaque, so a painter that fills its own background is
+     *  declaring what it stands on. A well does not get to: it is the middle of
+     *  the plaza, where the ground is paving, and filling grass1 put a green
+     *  square in the middle of every square in the game — including the four ward
+     *  squares, which are stone by definition. Left transparent, the paving shows
+     *  through and the same sprite works on grass, path and stone alike. */
     well(g) {
-      px(g, 0, 0, T, T, PAL.grass1);
       px(g, 2, 4, 12, 10, PAL.well);
       px(g, 4, 6, 8, 6, PAL.ink);
       px(g, 2, 2, 12, 2, PAL.beam);
@@ -194,8 +200,11 @@ PF.art = (() => {
       dither(g, rnd, PAL.leafHi, 9);
       dither(g, rnd, PAL.grass3, 4);
     },
+    /** Also unfilled, and for the same reason plus one: `floor1` is an INTERIOR
+     *  timber colour, so a market board on the square used to lay a plank of
+     *  floorboard down outdoors. Transparent works indoors too — the floor tile
+     *  it sits on is the one it was imitating. */
     table(g) {
-      px(g, 0, 0, T, T, PAL.floor1);
       px(g, 2, 3, 12, 9, PAL.counter);
       px(g, 3, 4, 10, 7, PAL.path1);
     },
@@ -428,8 +437,9 @@ PF.art = (() => {
           dither(g, rnd, PAL.cropRipe, 3);
         },
         // atmosphere recycler where the village well stood
+        // Unfilled, like the village well it replaces — a recycler stands on the
+        // colony's paving, not on a patch of turf it brought with it.
         well(g) {
-          px(g, 0, 0, T, T, PAL.grass1);
           px(g, 3, 3, 10, 11, PAL.well);
           px(g, 4, 4, 8, 2, PAL.leafHi);
           px(g, 4, 7, 8, 1, PAL.wallDark);
