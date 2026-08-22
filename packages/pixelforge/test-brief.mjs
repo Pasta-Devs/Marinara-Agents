@@ -289,6 +289,33 @@ function checkWorld(w, sealed, label) {
       );
     }
   }
+  // ── I3b: every door a portal promises is still a door ─────────────────────
+  // The passes that lay parks, ward squares and kitchen gardens CLEAR the ground
+  // they take, and none of them checks what is standing there first — they are
+  // handed leftover lots and trust that leftover means empty. Measured across 360
+  // worlds it always has been. But `clearFootprint` nulls objects, so the day one
+  // of them lands on a building it will erase that building's shell and its door
+  // while leaving the interior zone and its portal intact: a house you can see
+  // the inside of and can no longer enter, and NOTHING else here would notice —
+  // the exterior stays reachable, the interior stays reachable, and every NPC
+  // still has a bed.
+  //
+  // So the promise is checked directly, which costs one pass over the portals.
+  // From the SETTLEMENT only: a portal between two floors of one building stands
+  // on a stair, which is the correct thing for it to stand on.
+  for (const zone of Object.values(w.zones)) {
+    if (zone.mapKind !== "settlement") continue;
+    for (const portal of zone.portals) {
+      if (w.zones[portal.toZone]?.mapKind !== "building") continue;
+      const at = zone.w * portal.y + portal.x;
+      assert.equal(
+        zone.object[at],
+        "door",
+        `${label}: the way into ${portal.toZone} stands on ${zone.object[at] ?? "bare ground"}, not a door`,
+      );
+    }
+  }
+
   // ── I4: the paint contract ────────────────────────────────────────────────
   // Three passes paint across ground another pass already owns, and `put()`
   // overwrites without asking. Every one of these was live in a shipped build and
