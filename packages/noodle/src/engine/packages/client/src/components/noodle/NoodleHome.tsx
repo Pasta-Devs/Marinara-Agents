@@ -108,10 +108,12 @@ import {
 } from "../ui/ImagePromptReviewModal";
 import {
   useConfirmNoodleImagePrompts,
+  useCleanupUnusedNoodleData,
   useClearNoodleInvites,
   useCreateNoodleInteraction,
   useCreateNoodlePost,
   useDeleteNoodleInteraction,
+  useDeleteAllNoodleData,
   useDeleteNoodlePost,
   useInviteNoodleCharacter,
   useInviteNoodleCharacters,
@@ -247,6 +249,12 @@ type NoodleConfirmAction =
     }
   | {
       kind: "reset-timeline";
+      title: string;
+      message: string;
+      confirmLabel: string;
+    }
+  | {
+      kind: "cleanup-unused" | "delete-all-data";
       title: string;
       message: string;
       confirmLabel: string;
@@ -638,6 +646,8 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const refreshNoodle = useRefreshNoodle();
   const confirmNoodleImagePrompts = useConfirmNoodleImagePrompts();
   const resetNoodleTimeline = useResetNoodleTimeline();
+  const cleanupUnusedData = useCleanupUnusedNoodleData();
+  const deleteAllData = useDeleteAllNoodleData();
   const noodlePromptDetail = usePromptOverride(NOODLE_TIMELINE_BASE_PROMPT_KEY);
   const noodlePromptDefault = usePromptOverrideDefault(NOODLE_TIMELINE_BASE_PROMPT_KEY);
   const saveNoodlePrompt = useSavePromptOverride();
@@ -744,6 +754,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const [editingReplyId, setEditingReplyId] = useState<string | null>(null);
   const [editingReplyContent, setEditingReplyContent] = useState("");
   const [confirmAction, setConfirmAction] = useState<NoodleConfirmAction | null>(null);
+  const [deleteAllConfirmation, setDeleteAllConfirmation] = useState("");
   const [noodlePromptEditorOpen, setNoodlePromptEditorOpen] = useState(false);
   const [noodlePromptDraft, setNoodlePromptDraft] = useState("");
   const [promptPresetName, setPromptPresetName] = useState("");
@@ -1690,7 +1701,11 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
           ? resetNoodleTimeline.isPending
           : confirmAction?.kind === "uninvite-everybody"
             ? clearInvites.isPending
-            : false;
+            : confirmAction?.kind === "cleanup-unused"
+              ? cleanupUnusedData.isPending
+              : confirmAction?.kind === "delete-all-data"
+                ? deleteAllData.isPending
+                : false;
   const normalizedProfileHandle = profileHandle.trim().replace(/^@+/, "");
   const isEditingProfile = canEditViewedProfile && profileEditing;
   const profileDisplayName = canEditViewedProfile
@@ -2599,6 +2614,25 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     });
   };
 
+  const cleanupUnusedNoodleData = () => {
+    setConfirmAction({
+      kind: "cleanup-unused",
+      title: localizeUi("ui.noodle.noodlehome.cleanupUnusedNoodleData"),
+      message: localizeUi("ui.noodle.noodlehome.cleanupUnusedNoodleDataMessage"),
+      confirmLabel: localizeUi("ui.noodle.noodlehome.cleanupUnusedNoodleDataConfirm"),
+    });
+  };
+
+  const deleteAllNoodleData = () => {
+    setDeleteAllConfirmation("");
+    setConfirmAction({
+      kind: "delete-all-data",
+      title: localizeUi("ui.noodle.noodlehome.deleteAllNoodleData"),
+      message: localizeUi("ui.noodle.noodlehome.deleteAllNoodleDataMessage"),
+      confirmLabel: localizeUi("ui.noodle.noodlehome.deleteAllNoodleDataConfirm"),
+    });
+  };
+
   const confirmNoodleAction = () => {
     if (!confirmAction) return;
     if (confirmAction.kind === "delete-post") {
@@ -2646,6 +2680,44 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
         onError: (error) =>
           toast.error(
             error instanceof Error ? error.message : localizeUi("ui.noodle.noodlehome.couldNotClearNoodleInvites"),
+          ),
+      });
+      return;
+    }
+    if (confirmAction.kind === "cleanup-unused") {
+      cleanupUnusedData.mutate(undefined, {
+        onSuccess: (counts) => {
+          setConfirmAction(null);
+          toast.success(
+            localizeUi("ui.noodle.noodlehome.cleanupUnusedNoodleDataDone", {
+              accounts: counts.accounts,
+              posts: counts.posts,
+            }),
+          );
+        },
+        onError: (error) =>
+          toast.error(
+            error instanceof Error ? error.message : localizeUi("ui.noodle.noodlehome.cleanupUnusedNoodleDataFailed"),
+          ),
+      });
+      return;
+    }
+    if (confirmAction.kind === "delete-all-data") {
+      if (deleteAllConfirmation !== "DELETE") return;
+      deleteAllData.mutate(undefined, {
+        onSuccess: (counts) => {
+          setConfirmAction(null);
+          setDeleteAllConfirmation("");
+          toast.success(
+            localizeUi("ui.noodle.noodlehome.deleteAllNoodleDataDone", {
+              accounts: counts.accounts,
+              posts: counts.posts,
+            }),
+          );
+        },
+        onError: (error) =>
+          toast.error(
+            error instanceof Error ? error.message : localizeUi("ui.noodle.noodlehome.deleteAllNoodleDataFailed"),
           ),
       });
       return;
@@ -4033,6 +4105,24 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                 ? localizeUi("ui.noodle.noodlehome.resettingNoodle")
                 : localizeUi("ui.noodle.noodlehome.resetNoodleTimeline")}
             </button>
+            <button
+              type="button"
+              onClick={cleanupUnusedNoodleData}
+              disabled={cleanupUnusedData.isPending || deleteAllData.isPending}
+              className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] transition-colors hover:border-[var(--noodle-accent)]/60 hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Trash2 size={14} className="text-[var(--noodle-accent)]" />
+              {localizeUi("ui.noodle.noodlehome.cleanupUnusedNoodleData")}
+            </button>
+            <button
+              type="button"
+              onClick={deleteAllNoodleData}
+              disabled={cleanupUnusedData.isPending || deleteAllData.isPending}
+              className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-[var(--destructive)] px-3 py-2 text-xs font-bold text-[var(--destructive-foreground)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Trash2 size={14} />
+              {localizeUi("ui.noodle.noodlehome.deleteAllNoodleData")}
+            </button>
           </Section>
         </>
       )}
@@ -5398,11 +5488,24 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
         >
           <div className="space-y-4">
             <p className="text-sm leading-6 text-[var(--foreground)]">{confirmAction.message}</p>
+            {confirmAction.kind === "delete-all-data" && (
+              <input
+                value={deleteAllConfirmation}
+                onChange={(event) => setDeleteAllConfirmation(event.target.value)}
+                placeholder="DELETE"
+                aria-label="DELETE"
+                className={fieldClass}
+                autoFocus
+              />
+            )}
             <div className="flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setConfirmAction(null)}
-                disabled={confirmActionPending}
+                disabled={
+                  confirmActionPending ||
+                  (confirmAction.kind === "delete-all-data" && deleteAllConfirmation !== "DELETE")
+                }
                 className="h-9 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] px-4 text-xs font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {localizeUi("chat.delete.dialog.cancel")}
@@ -5415,7 +5518,8 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   "flex h-9 items-center justify-center gap-2 rounded-md px-4 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
                   confirmAction.kind === "delete-post" ||
                     confirmAction.kind === "delete-reply" ||
-                    confirmAction.kind === "reset-timeline"
+                    confirmAction.kind === "reset-timeline" ||
+                    confirmAction.kind === "delete-all-data"
                     ? "bg-[var(--destructive)] text-[var(--destructive-foreground)] [&_svg]:!text-[var(--destructive-foreground)] hover:opacity-90"
                     : "border border-[var(--noodle-accent)]/45 bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950 hover:bg-[var(--noodle-accent)]/85",
                 )}
