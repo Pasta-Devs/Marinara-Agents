@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   NOODLE_EMPTY_TIMELINE_REASON,
+  parseNoodleGeneratedRefresh,
   parseNoodleGeneratedRefreshResponse,
   validateNoodleGeneratedRefresh,
 } from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-generated-refresh";
@@ -188,5 +189,28 @@ assert.equal(invitedOnlyFixture.refresh.posts.length, 2, "wrapped valid posts mu
 assert.equal(invitedOnlyFixture.rejected.length, 1);
 assert.equal(invitedOnlyFixture.rejected[0]?.collection, "interactions");
 assert.equal(invitedOnlyFixture.rejected[0]?.index, 0);
+
+// Over-long generated text is clipped to the field limit instead of losing the
+// whole row, in the keyed-object form and in the top-level array form.
+const overLongPost = {
+  tempId: "post_003",
+  authorHandle: "@dottore",
+  content: "n".repeat(4600),
+  poll: null,
+  imagePrompt: null,
+  attachGalleryImage: false,
+};
+const clippedObject = parseNoodleGeneratedRefresh({ posts: [overLongPost], interactions: [], follows: [] });
+assert.equal(clippedObject.rejected.length, 0, "an over-long post must not be rejected");
+assert.equal(clippedObject.refresh.posts.length, 1);
+assert.equal(clippedObject.refresh.posts[0]?.content.length, 4000);
+
+const clippedArray = parseNoodleGeneratedRefresh([
+  overLongPost,
+  { actorHandle: "@dottore", type: "reply", targetTempId: "post_003", content: "r".repeat(2600) },
+]);
+assert.equal(clippedArray.rejected.length, 0, "an over-long array row must not be rejected");
+assert.equal(clippedArray.refresh.posts[0]?.content.length, 4000);
+assert.equal(clippedArray.refresh.interactions[0]?.content?.length, 2000);
 
 console.log("Noodle generated refresh regressions passed.");

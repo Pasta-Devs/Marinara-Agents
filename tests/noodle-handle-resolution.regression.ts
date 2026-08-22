@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import {
   createNoodleHandleResolver,
   noodleHandleKeySet,
@@ -37,11 +36,4 @@ const keys = noodleHandleKeySet(accounts);
 assert.ok(noodleHandleKeySetHas(keys, "@Lena Kowalska"));
 assert.ok(!noodleHandleKeySetHas(keys, "@ghost"));
 
-// Over-long generated text is clipped, not discarded with the whole row.
-const generatedRefresh = readFileSync(
-  "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-generated-refresh.ts",
-  "utf8",
-);
-// Both parsing paths clip: the keyed-object branch and the top-level array.
-assert.equal(generatedRefresh.match(/clipGeneratedContent\(collection, row\)/gu)?.length, 2);
-assert.match(generatedRefresh, /content: content\.slice\(0, limit\)/u);
+// Clipping is covered behaviorally in tests/noodle-generated-refresh.regression.ts.
