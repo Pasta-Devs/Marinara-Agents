@@ -27,34 +27,39 @@ const STATE = {
   Maggie: {
     species: "human",
     body: {
-      torso: { worn: [{ item: "blouse", color: "white", damage: "torn" }], bare: false },
-      legs: { worn: [{ item: "trouser", color: "black" }] },
+      chest: { worn: [{ item: "blouse", color: "white", damage: "torn" }] },
+      back: { worn: [{ item: "cloak", color: "green", damage: "pristine" }] },
+      waist: { worn: [{ item: "belt", color: "brown" }], bare: false },
+      left_leg: { worn: [{ item: "trouser", color: "black", damage: "bloodied" }] },
       left_foot: { worn: [{ item: "boot", color: "brown", damage: "scuffed" }] },
-      right_foot: { worn: [], bare: true },
+      right_foot: { bare: true },
       head: { wounds: [{ type: "cut", severity: "moderate", bleeding: true }] },
-      left_hand: { holding: [{ item: "lantern" }] },
+      left_arm: { wounds: [{ type: "burn", severity: "critical", bleeding: false }] },
+      left_hand: { holding: { item: "lantern" } },
       right_arm: { missing: true },
+      left_eye: { missing: true },
     },
   },
   Kheza: {
     species: "naga",
     body: {
-      torso: { worn: [{ item: "harness", color: "crimson", damage: "pristine" }] },
+      chest: { worn: [{ item: "harness", color: "crimson", damage: "pristine" }] },
       tail: { bare: true },
       head: { worn: [{ item: "circlet", color: "gold" }] },
-      right_hand: { holding: [{ item: "spear" }, { item: "torch" }] },
+      right_hand: { holding: { item: "spear", damage: "charred" } },
+      neck: { worn: [{ item: "torc", color: "silver", damage: "tarnished" }] },
     },
   },
 };
 
 // Markup digests produced by the extension's renderer for the fixture above.
 const EXPECTED_RENDER = {
-  "paired/front": "265cc2a62c3aed2f",
-  "paired/back": "f56d1f04688a4165",
-  "columns/front": "61dce444cfad6cba",
-  "columns/back": "3903121d72e85c92",
-  "list/front": "406aba438e113932",
-  "list/back": "9b3f318026967a3f",
+  "paired/front": "64cd9fee2ac71a31",
+  "paired/back": "9ae3c8247520f181",
+  "columns/front": "f6dd8dc85e3a833b",
+  "columns/back": "06dc2548b64d47b0",
+  "list/front": "32aa4e2856cb4201",
+  "list/back": "d96c948af5a6a897",
 };
 
 // The renderer half of the bundle: everything before the dock, which is the part
@@ -83,6 +88,25 @@ for (const layout of ["paired", "columns", "list"]) {
       `Beholder doll markup changed for ${key} — update the snapshot only if the change is intended`,
     );
   }
+}
+
+// A fixture that used slot names the schema does not have would render empty cards
+// and the snapshots above would pass while covering nothing. Pin the size of the
+// markup so that failure mode cannot pass unnoticed.
+setDollLayout("paired");
+const populated = renderDollPanel(STATE, "Maggie", new Set(), "front").html;
+for (const marker of [
+  "blouse", // worn item
+  "lantern", // held item — `holding` is one object, not a list; an array renders nothing
+  "bh-slot-missing-tag", // acquired loss
+  "bh-slot-bare", // uncovered slot
+  "bleeding", // wound detail
+  "bh-chip", // the chip the color and damage layers decorate
+]) {
+  assert.ok(
+    populated.includes(marker),
+    `fixture must exercise ${marker} — a fixture using names the schema lacks renders empty cards and these snapshots would prove nothing`,
+  );
 }
 
 // The renderer must resolve an active character even when the caller's choice is gone,
