@@ -3,6 +3,7 @@ import type { QueryClient, QueryKey } from "@tanstack/react-query";
 const CSRF_HEADER = "x-marinara-csrf";
 const CSRF_HEADER_VALUE = "1";
 const ADMIN_SECRET_STORAGE_KEY = "marinara_admin_secret";
+const MAX_NOTE_IDS_PER_REQUEST = 100;
 
 export const API_ROOT = "/api/long-term-memory";
 
@@ -102,6 +103,28 @@ export async function requestAllNotes<T>(path: string): Promise<T[]> {
   const overflow = await request<T[]>(`${path}${path.includes("?") ? "&" : "?"}limit=500&offset=100000`);
   if (overflow.length) throw new Error("Long-Term Memory note limit exceeded (100,000 notes)");
   return notes;
+}
+
+export async function requestNotesByIds<T extends { id: string }>(ids: readonly string[], signal?: AbortSignal) {
+  const requestedIds = [...new Set(ids)];
+  if (!requestedIds.length) return [] as T[];
+  const notesById = new Map<string, T>();
+  for (let offset = 0; offset < requestedIds.length; offset += MAX_NOTE_IDS_PER_REQUEST) {
+    const params = new URLSearchParams({
+      ids: requestedIds.slice(offset, offset + MAX_NOTE_IDS_PER_REQUEST).join(","),
+    });
+    const notes = await request<T[]>(`/notes?${params}`, "GET", undefined, signal);
+    for (const note of notes) notesById.set(note.id, note);
+  }
+  const missingIds = requestedIds.filter((id) => !notesById.has(id));
+  if (missingIds.length)
+    throw new Error(
+      `Long-Term Memory context unavailable for ${missingIds.length} note${missingIds.length === 1 ? "" : "s"}.`,
+    );
+  return requestedIds.flatMap((id) => {
+    const note = notesById.get(id);
+    return note ? [note] : [];
+  });
 }
 
 /** Invalidations must name each affected resource rather than clearing the package cache. */
