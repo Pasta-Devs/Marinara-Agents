@@ -48,7 +48,7 @@ assertNovelAiV5Runtime(sourceRuntime);
 
 assert.match(imageSource, /NovelAI V5 prompts support up to 1471 tokens/);
 const gameRuntime = runInNewContext(`
-function resolveSceneIllustrationImageBackend() { return "novelai"; }
+function resolveSceneIllustrationImageBackend(req) { return req.imgService; }
 ${executableSource(
   sourceBetween(
     gameSource,
@@ -73,6 +73,15 @@ assert.equal(
     imgService: "novelai",
   }),
   true,
+);
+assert.equal(
+  gameRuntime.supportsSceneIllustrationStructuredCharacterPrompts({
+    imgSource: "openai",
+    imgModel: "nai-diffusion-5-full",
+    imgBaseUrl: "https://image.novelai.net",
+    imgService: "openai",
+  }),
+  false,
 );
 
 function bundledFunction(bundle: string, marker: string): { name: string; source: string } {
