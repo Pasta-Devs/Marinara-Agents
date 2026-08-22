@@ -154,7 +154,7 @@ assert.equal(wrappedRefresh.refresh.posts.length, 1, "a wrapped refresh object m
 assert.equal(wrappedRefresh.rejected.length, 0);
 assert.equal(wrappedRefresh.refresh.posts[0]?.authorHandle, "@character");
 assert.equal(
-  validateNoodleGeneratedRefresh(wrappedRefresh.refresh, new Set(["@character"]), new Set(["@character"])),
+  validateNoodleGeneratedRefresh(wrappedRefresh.refresh, new Set(["character"]), new Set(["character"])),
   null,
 );
 
