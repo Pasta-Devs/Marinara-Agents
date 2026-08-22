@@ -104,7 +104,9 @@ const ctx = { theme: "cozy-village", seed: 424242 };
   );
   assert.equal(sealed.name, "Objton", "markdown stripped from names");
   assert.equal(sealed.cast[0].name, "One", "backticks stripped");
-  assert.equal(sealed.cast[0].household, 10, "household clamped to cap");
+  // 99 over-supplies whatever the cap is, so this keeps asserting "clamped to
+  // the cap" even when CAPS.household moves.
+  assert.equal(sealed.cast[0].household, brief.CAPS.household, "household clamped to cap");
   assert.equal(sealed.cast[1].home, "Objton", "unresolved home falls to root");
   assert.equal(sealed.cast[2].kind, "folk", "unknown kind folds to folk");
   assert.ok(Object.keys(brief.TINTS).includes(sealed.cast[2].tint), "unknown tint replaced from the enum");
@@ -140,8 +142,12 @@ const ctx = { theme: "cozy-village", seed: 424242 };
     ctx,
   );
   assert.equal(sealed.features.length, 1, "unknown and wrong-zone feature items dropped whole");
-  assert.equal(sealed.places.filter((p) => p.kind === "wilds").length, 2, "wilds capped at 2");
-  assert.equal(sealed.places.filter((p) => p.kind === "hall").length, 1, "hall capped at 1");
+  // Asserted against CAPS so a raised cap moves the claim instead of failing it.
+  // The fixture supplies one MORE of each kind than today's caps (3 wilds, 2
+  // halls) — if a cap ever rises past that, grow the fixture's over-supply too
+  // or the clamp under test never fires.
+  assert.equal(sealed.places.filter((p) => p.kind === "wilds").length, brief.CAPS.wilds, "wilds clamped to cap");
+  assert.equal(sealed.places.filter((p) => p.kind === "hall").length, brief.CAPS.hall, "hall clamped to cap");
   const names = sealed.places.map((p) => p.name);
   assert.equal(new Set(names.map((n) => n.toLowerCase())).size, names.length, "duplicate zone names deduped");
 }
@@ -5731,7 +5737,9 @@ const cellarBrief = (prosperity) => ({
       // ALWAYS, at every prosperity — including struggling, where no house has one.
       assert.equal(dug("The Forge"), true, `${label}: the workshop always has an undercroft`);
       assert.equal(dug("The Kettle"), true, `${label}: and the gathering always has a cellar`);
-      // NEVER: a hall is a duty station and nobody asked for a cellar under it.
+      // Current design, not doctrine: a hall is a duty station and nobody has
+      // asked for a cellar under it YET. An archive or records vault under the
+      // hall would be a legitimate future — update this pin with that feature.
       assert.equal(dug("The Moot"), false, `${label}: the hall digs nothing`);
       // Houses, by prosperity. Counted over the whole world so the case does not
       // depend on which household won which lot.
@@ -7223,6 +7231,10 @@ const cellarBrief = (prosperity) => ({
     });
     return found;
   };
+  // CURRENT TUNING, pinned on purpose: four wards per city, none below city
+  // (wards are cities-only today — a village IS one centre). If a rank ever
+  // earns more wards or a town earns its first, move these numbers with the
+  // change; red here after such a change is the pin aging, not a regression.
   const city = built("city");
   assert.equal(wardWells(city), 4, `a city carves four ward squares (${wardWells(city)})`);
   for (const scale of ["village", "town"]) {

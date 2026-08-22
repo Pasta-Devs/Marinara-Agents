@@ -23,11 +23,14 @@ through the derivations below.
                             // not, so the stored brief is self-contained and the model can never
                             // pick a skin that fights the wizard.
   scale: "village",         // ENUM outpost|hamlet|village|town|city — the ONLY size input.
-                            //   outpost 28x20 / base 4 buildings   hamlet 34x24 / 6
-                            //   village 44x30 / 8                  town 56x38 / 12
-                            //   city 96x72 / 40 — the first scale where `buildings` can
-                            //   actually bind: the ground outruns the cast (capped at 10),
-                            //   so the constraint moves from the map to the claimants.
+                            //   outpost 28x20 / 4 buildings   hamlet 48x28 / 8
+                            //   village 60x40 / 16            town 76x52 / 34
+                            //   city 104x72 / 76
+                            //   Current tuning, not contract — the authoritative table is
+                            //   SCALES in 18-brief.js and it moves with the game (it already
+                            //   grew once, in 0.10). Since 0.10 the compiler also MINTS
+                            //   residents to a rank-sized population, so the named cast is a
+                            //   minority of the town, not its whole headcount.
   surround: "fields",       // ENUM woods|fields|rocky|water|barren → ground mix, border ring,
                             // scatter density. Theme-neutral.
   prosperity: "modest",     // ENUM struggling|modest|thriving. Consumers: path material, fence
@@ -102,9 +105,15 @@ through the derivations below.
                             // pariah) stay a GM-runtime matter; wealth/class is a separate layer.
   ],
 
-  backgroundPopulation: 30, // int 0-500, cast included. NARRATIVE TEXTURE, never geometry:
-                            // consumers are the World Maps root description phrase and ambient
-                            // walker density clamp(round(pop/12), 0, 8). No other reader.
+  backgroundPopulation: 30, // int 0-500, cast included. A dial, not a ruler: since 0.10 its one
+                            // consumer (20-world.js) reads it as a household count (÷3) that
+                            // leans the minted population WITHIN the rank's band — it can move
+                            // a settlement inside its size class but never set the class, so a
+                            // hamlet claiming 500 souls stays a hamlet. Zero means "no claim"
+                            // and the rank's own band applies. Current design, revisitable —
+                            // how hard this field bites is an open tuning question, and future
+                            // consumers (district walker density, the §8 population phrase)
+                            // remain planned.
 }
 ```
 
@@ -327,13 +336,14 @@ Not yet exported (still §9 territory): the root's population phrase and per-fea
 features have no zones of their own, and decorating the root would edit a location the user may
 have authored (the route deliberately cannot).
 
-## 9. Reserved consumers (sealed now, wired in 0.5.x)
+## 9. Reserved consumers
 
-Three sealed fields have no in-world consumer yet: `backgroundPopulation` (planned: ambient
-walker density + the §8 population phrase), `prosperity` (planned: building extras/decoration
-density), and feature `name` labels (planned: on-map signage/inspect text). They are validated,
-repaired, and stored **now** so shipped briefs never need regeneration when the consumers land —
-the schema is the contract, not the renderer.
+The schema seals fields before their consumers exist, so shipped briefs never need regeneration
+when a consumer lands — the schema is the contract, not the renderer. The pattern has paid out
+twice already: `prosperity` now drives dress (path material, fence quality, night-light density,
+ground-fill bias) and `backgroundPopulation` now leans the minted population within its rank's
+band (0.10, §1). Still waiting for a consumer: feature `name` labels (planned: on-map
+signage/inspect text — roadmap S2) and the root's population phrase (§8).
 
 ## 10. Guidance note on theme mismatch
 

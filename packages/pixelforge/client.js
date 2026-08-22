@@ -5125,8 +5125,10 @@ PF.schedule = (() => {
     // compiled zones tried, but the guarantee should live in the code.
     //
     // Unreachable in practice, and deliberately not escalated to a null return:
-    // the smallest zone measured holds 119 standable tiles against a cast capped
-    // at 10, so this is a floor under a contract, not a live path.
+    // the smallest zone measured holds 119 standable tiles, comfortably more
+    // than any one zone's occupants even now that the mint fills a city (see
+    // npcOccupies in 30-sim.js for the measured population numbers), so this is
+    // a floor under a contract, not a live path.
     if (standable(zone, zone.spawn.x, zone.spawn.y)) return { x: zone.spawn.x, y: zone.spawn.y };
     for (let y = 0; y < zone.h; y++) {
       for (let x = 0; x < zone.w; x++) if (standable(zone, x, y)) return { x, y };
