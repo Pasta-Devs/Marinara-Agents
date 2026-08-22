@@ -14,8 +14,11 @@ for (const category of ["npc", "world", "scene", "player"]) {
   assert.equal(typeof keeper.defaultSettings.lorebookNamingScheme[category], "string");
 }
 assert.match(keeper.defaultPromptTemplate, /Inspect <writable_lorebooks>/u);
-assert.match(keeper.defaultPromptTemplate, /Never use an alias when a matching writable book already exists/u);
-assert.match(keeper.defaultPromptTemplate, /If none exists, set targetLorebook to the category alias/u);
+assert.match(keeper.defaultPromptTemplate, /If one exists, set targetLorebook to that exact listed name/u);
+assert.match(
+  keeper.defaultPromptTemplate,
+  /If none exists, set targetLorebook to the category alias npc, world, scene, or player so the host creates and links the configured category book/u,
+);
 assert.match(keeper.defaultPromptTemplate, /never omit targetLorebook/u);
 assert.match(
   keeper.defaultPromptTemplate,
