@@ -1195,8 +1195,14 @@ export async function slurpRoutes(app: FastifyInstance) {
         connection,
       });
     } catch (error) {
-      logger.error(error, "[noodler] Stage profile draft generation failed");
-      return reply.code(500).send({ error: "Stage profile draft generation failed." });
+      logger.error(
+        error,
+        "[noodler] Stage profile draft generation failed using %s",
+        connection.model || connection.provider,
+      );
+      return reply
+        .code(500)
+        .send({ error: "Stage profile draft generation failed. Check the generation connection and try again." });
     }
   });
 

@@ -108,6 +108,55 @@ assert.equal(parsed.refresh.posts.length, 1);
 assert.equal(parsed.refresh.posts[0]?.authorHandle, "character");
 assert.equal(validateNoodleGeneratedRefresh(parsed.refresh, new Set(["character"]), new Set(["character"])), null);
 
+const slurpFlatActivity = parseSlurpGeneratedRefreshResponse(
+  JSON.stringify([
+    {
+      tempId: "slurp-post-1",
+      authorHandle: "@character",
+      content: "A Slurp update.",
+      poll: null,
+      imagePrompt: null,
+      attachGalleryImage: false,
+    },
+    { tempId: "invalid" },
+  ]),
+);
+assert.equal(slurpFlatActivity.refresh.posts.length, 1);
+assert.equal(slurpFlatActivity.refresh.posts[0]?.tempId, "slurp-post-1");
+assert.equal(slurpFlatActivity.refresh.posts[0]?.authorHandle, "@character");
+assert.equal(slurpFlatActivity.refresh.posts[0]?.content, "A Slurp update.");
+assert.equal(slurpFlatActivity.rejected.length, 1);
+assert.equal(slurpFlatActivity.rejected[0]?.collection, "posts");
+assert.equal(slurpFlatActivity.rejected[0]?.index, 1);
+assert.ok(slurpFlatActivity.rejected[0]?.issueCount);
+
+const wrappedRefresh = parseNoodleGeneratedRefreshResponse(
+  JSON.stringify([
+    {
+      posts: [
+        {
+          tempId: "post-1",
+          authorHandle: "@character",
+          content: "A short update.",
+          poll: null,
+          imagePrompt: null,
+          attachGalleryImage: false,
+        },
+      ],
+      interactions: [],
+      follows: [],
+      digests: [],
+    },
+  ]),
+);
+assert.equal(wrappedRefresh.refresh.posts.length, 1, "a wrapped refresh object must be unwrapped");
+assert.equal(wrappedRefresh.rejected.length, 0);
+assert.equal(wrappedRefresh.refresh.posts[0]?.authorHandle, "@character");
+assert.equal(
+  validateNoodleGeneratedRefresh(wrappedRefresh.refresh, new Set(["@character"]), new Set(["@character"])),
+  null,
+);
+
 const invitedOnlyFixture = parseSlurpGeneratedRefreshResponse(
   JSON.stringify([
     {

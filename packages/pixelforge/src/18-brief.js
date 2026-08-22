@@ -14,6 +14,13 @@ PF.brief = (() => {
     hamlet: { w: 34, h: 24, buildings: 6 },
     village: { w: 44, h: 30, buildings: 8 },
     town: { w: 56, h: 38, buildings: 12 },
+    // A CITY, and the first scale where the map has more ground than the brief
+    // has claimants: 96x72 lays 18 lots against a cast capped at 10, so
+    // `buildings` finally stops being decoration and the constraint moves from
+    // the ground to the people standing on it. Deliberately roomy — most of it
+    // is open at first, and that is the point: it shows in thirty seconds which
+    // of the layout constants are absolute and which actually scale.
+    city: { w: 96, h: 72, buildings: 40 },
   };
   const SURROUNDS = ["woods", "fields", "rocky", "water", "barren"];
   const PROSPERITY = ["struggling", "modest", "thriving"];
@@ -72,7 +79,14 @@ PF.brief = (() => {
     sanctuary: 1,
     castMin: 4,
     castMax: 10,
-    household: 6,
+    // AN ID SPACE, not an occupancy bound. The two were the same constant, and
+    // that conflation is the same bug as `household` carrying both kinship and
+    // address: `Math.min(CAPS.household, n)` clamps WHICH group you are in, while
+    // the oversize-split pass used the identical number to bound HOW MANY share
+    // one. Ten people must be able to be ten unrelated households — a convent, a
+    // barracks, a boarding house — so the id space is the cast size, and nothing
+    // caps the members of a group any more.
+    household: 10,
   };
   const BRIEF_BYTE_BUDGET = 8_192;
 
@@ -127,7 +141,8 @@ PF.brief = (() => {
   /** scale may arrive as a POPULATION NUMBER (the most-observed weak-model slip). */
   function foldScale(value, repairs) {
     if (typeof value === "number" && Number.isFinite(value)) {
-      const bucket = value < 8 ? "outpost" : value < 20 ? "hamlet" : value < 60 ? "village" : "town";
+      const bucket =
+        value < 8 ? "outpost" : value < 20 ? "hamlet" : value < 60 ? "village" : value < 200 ? "town" : "city";
       repairs.push(`scale: bucketed number ${value} -> ${bucket}`);
       return bucket;
     }
@@ -304,6 +319,22 @@ PF.brief = (() => {
         if (homeRaw) repairs.push(`cast[${brief.cast.length}].home: unresolved ${JSON.stringify(homeRaw)} -> root`);
         home = brief.name;
       }
+      // WORKPLACE — where the working day is spent, when OWNERSHIP cannot say.
+      // Ownership answers it for a smith with a forge, but it is one building per
+      // person and one person per building, so it can never place a school's second
+      // teacher, a market's fourth seller, or a shop assistant.
+      //
+      // Same exact -> folded resolution as `home`, and no substring matching for the
+      // same reason: a guessed binding is forever.
+      //
+      // Unresolved falls to NULL, not to the root the way `home` does. "Works at the
+      // settlement" says nothing a wander box could be built from, and a null
+      // workplace IS every brief that has ever compiled — so the derivation in
+      // 20-world runs exactly as before for anyone who does not name one.
+      const workplaceRaw = capText(item?.workplace, 24);
+      const workplace = zoneNames.includes(workplaceRaw) ? workplaceRaw : (zoneFolds.get(fold(workplaceRaw)) ?? null);
+      if (workplaceRaw && !workplace)
+        repairs.push(`cast[${brief.cast.length}].workplace: unresolved ${JSON.stringify(workplaceRaw)} -> none`);
       const householdNumber = Number(item?.household);
       brief.cast.push({
         name: dedupeName(name, `cast[${brief.cast.length}]`),
@@ -315,6 +346,7 @@ PF.brief = (() => {
           pick(seed, `cast-tint-${brief.cast.length}`, Object.keys(TINTS)),
         ),
         home,
+        ...(workplace ? { workplace } : {}),
         household: Number.isFinite(householdNumber)
           ? Math.max(1, Math.min(CAPS.household, Math.round(householdNumber)))
           : 1,
@@ -348,23 +380,16 @@ PF.brief = (() => {
       for (let i = splitAt; i < brief.cast.length; i++) brief.cast[i].household = 2;
       repairs.push("cast: single household split into two");
     }
-    // Oversized households split (>6 members share a number).
-    const byHousehold = new Map();
-    for (const member of brief.cast) {
-      const list = byHousehold.get(member.household) ?? [];
-      list.push(member);
-      byHousehold.set(member.household, list);
-    }
-    for (const [id, members] of byHousehold) {
-      if (members.length <= CAPS.household) continue;
-      // Seed-derived target (§3's single-entropy rule): scan from a seeded
-      // offset for the first free household number.
-      let next = 1 + ((det(seed, `household-split-${id}`)() * CAPS.household) | 0);
-      while (byHousehold.has(next)) next = (next % (CAPS.household * 2)) + 1;
-      for (const member of members.slice(CAPS.household)) member.household = next;
-      byHousehold.set(next, members.slice(CAPS.household));
-      repairs.push(`cast: household ${id} split (over ${CAPS.household} members)`);
-    }
+    // The oversized-household split is GONE. It bounded how many people could
+    // share one number, using the same constant that bounds which numbers exist —
+    // and a group is no longer bounded at all, because ten unrelated lodgers under
+    // one roof is a thing a brief has to be able to say.
+    //
+    // It also shipped a live contract violation. `next` escaped its own cap by
+    // `(next % (CAPS.household * 2)) + 1`, so the pass sealed household numbers
+    // ABOVE the schema's own maximum: measured at 263 members over 400 seeds with
+    // seven kin and three singletons. And it wrote into `byHousehold` while
+    // iterating that same Map. Deleting the pass retires both.
     const tints = new Set(brief.cast.map((c) => c.tint));
     if (tints.size < Math.min(3, brief.cast.length)) {
       const keys = Object.keys(TINTS);
@@ -588,8 +613,13 @@ PF.brief = (() => {
       "- cast: 4-10 story-relevant people of {name, role, kind, tint, home, household, persona, standing}.",
       `  kind (machine field) from: ${CAST_KINDS.join(" | ")}. role: <=24 chars free text (their title).`,
       `  tint from: ${Object.keys(TINTS).join(" | ")}. home: the NAME of the zone they live in.`,
-      "  household: 1-6 — people sharing a number share a roof; buildings are derived from",
-      "  households, so do NOT list one household per person unless they truly live alone.",
+      "  workplace (optional): the NAME of the zone they work in, when it is not the one they",
+      "  live in and they do not run it themselves — a second teacher at the school, a shop",
+      "  assistant, one of several sellers at a market. Omit it for anyone who works at home.",
+      "  household: 1-10 — people sharing a number share a roof. Buildings are derived from",
+      "  households, so do NOT give everyone their own number unless they truly live apart.",
+      "  Unrelated people CAN share one: lodgers at a boarding house, sisters at a convent,",
+      "  recruits in a barracks are all one number, and there is no limit on how many.",
       "  persona: <=100 chars — what they want, and what they are hiding.",
       `  standing (optional, default resident): one of ${STANDING.join(" | ")}. transient = passing`,
       "  through; fringe = lives apart at the edges (hermit, outcast, refugee); destitute = no home.",
@@ -644,7 +674,8 @@ PF.brief = (() => {
               kind: { type: "string", enum: CAST_KINDS },
               tint: { type: "string", enum: Object.keys(TINTS) },
               home: text(24),
-              household: { type: "integer", minimum: 1, maximum: 6 },
+              workplace: text(24),
+              household: { type: "integer", minimum: 1, maximum: 10 },
               persona: text(100),
               standing: { type: "string", enum: STANDING },
             },

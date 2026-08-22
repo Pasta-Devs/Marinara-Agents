@@ -1359,6 +1359,7 @@
   "ui.slurp.settings.creators.deleteLabel": "Delete {{name}}",
   "ui.slurp.settings.creators.deleteTitle": "Delete creator profile?",
   "ui.slurp.settings.creators.deleteDetail": "Delete {{name}} and its Slurp profile?",
+  "ui.slurp.creatorForm.cancel": "Cancel",
   "ui.slurp.settings.creators.deleted": "{{name}} deleted.",
   "ui.slurp.settings.creators.sourceMissing": "The linked source is missing. This Creator and its posts are retained, but source-based generation and automatic posting are paused.",
   "ui.slurp.settings.creators.sourceChanged": "Linked source changes need review.",

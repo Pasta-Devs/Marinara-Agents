@@ -30,6 +30,9 @@ import {
   type PublicIdentity,
 } from "./slurp-generation.service.js";
 import { noodleResponseFormat } from "./slurp-response-format.js";
+import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
+import { createChatsStorage } from "../storage/chats.storage.js";
+import { createCharactersStorage } from "../storage/characters.storage.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -41,6 +44,7 @@ export function buildNoodlerCreatorReplyMessages(input: {
   disclosureMode: NoodleIdentityDisclosure;
   publicIdentity: PublicIdentity | null;
   generationGuidance: string;
+  scheduleContext?: string;
 }): ChatMessage[] {
   const protect = (value: string | null | undefined) =>
     protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
@@ -72,6 +76,7 @@ export function buildNoodlerCreatorReplyMessages(input: {
       handle: protect(input.viewer.handle),
     },
     viewerComment: protect(input.parent.content) || (input.parent.imageUrl ? "[image reply]" : ""),
+    scheduleContext: input.scheduleContext ?? "No active Conversation Schedule is available for this Creator today.",
   };
   return [
     { role: "system", content: system },
@@ -113,11 +118,16 @@ export async function generateNoodlerCreatorReply(input: {
   const disclosureMode = input.creator.settings.privacy.identityDisclosure ?? "secret";
   const publicIdentity = await resolveNoodlerPublicIdentity(input.db, input.creator);
   const settings = await createSlurpStorage(input.db).getSettings();
+  const source = await createSlurpStorage(input.db).resolveAccountSource(input.creator);
+  const scheduleContext = source
+    ? await resolveSlurpCreatorScheduleContext(createCharactersStorage(input.db), source)
+    : undefined;
   const messages = buildNoodlerCreatorReplyMessages({
     ...input,
     disclosureMode,
     publicIdentity,
     generationGuidance: settings.generationGuidance,
+    scheduleContext,
   });
   const debugMode = input.debugMode === true || isDebugAgentsEnabled();
   const options = {
