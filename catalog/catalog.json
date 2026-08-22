@@ -1044,8 +1044,8 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "a1892f2b04d60d48d784b7cce847b625af52a82eb770c7e514930aa8f90a1dc3",
-            "bytes": 18947
+            "sha256": "a9f2e5b299c94e6a84d3a82815c03194808accc1cd879fbaa58fd07f01a66aa1",
+            "bytes": 18940
           },
           {
             "path": "client.js",
@@ -1067,8 +1067,8 @@
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/memory-nag.png",
       "artifact": {
         "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/memory-nag-1.0.0.zip",
-        "sha256": "c4f76257fee3d35afa1d2ee3321173bb7855b362190c099f5928314786008e57",
-        "bytes": 285263
+        "sha256": "c790100ae1468b4ca9bbc98163ce1c4fdc72ea159f4e21f4ff21e1ed362943c8",
+        "bytes": 285256
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#memory-nag"
     },

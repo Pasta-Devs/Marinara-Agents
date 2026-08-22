@@ -109,15 +109,13 @@ export const memoryNagAgentRuntime = {
     } else if (prepared) {
       await updateMemoryNagVault(context.chatId, (current) => ({ ...current, lastRecall: null }));
     }
-    try {
-      await scanMemoryNagIfDue(context.chatId);
-    } catch (error) {
+    void scanMemoryNagIfDue(context.chatId).catch((error) => {
       getMemoryNagRuntime().logger.warn(
         "[memory-nag] Automatic vault scan failed for %s: %s",
         context.chatId,
         error instanceof Error ? error.message : String(error),
       );
-    }
+    });
     return finalized;
   },
 };
