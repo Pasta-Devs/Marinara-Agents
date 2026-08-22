@@ -34,6 +34,7 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
   maxLikesPerRefresh: 18,
   maxImagesPerRefresh: 3,
   enableImagePrompts: false,
+  enableImageInterpretation: true,
   imageGenerationConnectionId: null,
   imageGenerationPrompt:
     "Create either a social-media-ready character image or an in-character meme for the post. For character images, mention build, clothing, visible appearance, pose, expression, setting, lighting, mood, and composition. For memes, mention meme format, visual gag, composition, and short readable caption/text when relevant.",

@@ -1,12 +1,20 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import {
   noodleTimelinePostTargetRange,
   noodleTimelineRefreshMaxTokens,
 } from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-post-target";
 import { noodleSamplingOptions } from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-sampling-options";
+import { readFileSync } from "node:fs";
 
 const prompt = readFileSync("packages/noodle/src/engine/packages/server/src/services/noodle/noodle-prompt.ts", "utf8");
+const noodleImages = readFileSync(
+  "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-public-images.service.ts",
+  "utf8",
+);
+const noodleRewrite = readFileSync(
+  "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-image-prompt-rewrite.ts",
+  "utf8",
+);
 const responseFormat = readFileSync(
   "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-response-format.ts",
   "utf8",
@@ -51,6 +59,9 @@ assert.deepEqual(noodleTimelinePostTargetRange(0, 25), {
 });
 assert.equal(noodleTimelineRefreshMaxTokens(100), 106_496);
 assert.equal(noodleTimelineRefreshMaxTokens(67 + 33), 106_496);
+assert.match(noodleImages, /imagePromptInstructions \|\| characterContext \|\| styleGuidance/u);
+assert.match(noodleImages, /enableImageInterpretation !== false/u);
+assert.match(noodleRewrite, /!input\.characterContext\?\.trim\(\)/u);
 assert.match(publicPrompt, /activeCharacters\.length \+ activeRandomUsers\.length/u);
 assert.match(publicGeneration, /noodleTimelineRefreshMaxTokens\(selectedParticipants\.length\)/u);
 assert.match(

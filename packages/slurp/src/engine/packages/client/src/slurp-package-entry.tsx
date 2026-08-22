@@ -11,6 +11,7 @@ import { SlurpHome } from "./components/slurp/SlurpHome";
 import { useSlurpUIStore } from "./stores/slurp-package.store";
 import { configureSlurpPackageState } from "./stores/slurp-package.store";
 import { ModalPortalContext } from "./components/ui/Modal";
+import { AppDialogRenderer } from "./components/ui/AppDialogRenderer";
 
 const SLURP_ELEMENT_TAG = "marinara-capability-slurp";
 const SLURP_STYLE_ID = "marinara-capability-slurp-styles";
@@ -92,6 +93,7 @@ function SlurpPackageRoot({ element }: { element: CapabilityElement }) {
         <ModalPortalContext.Provider value={element.__portal ?? element}>
           <div className="h-full min-h-0 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
             <SlurpHome navigation={navigation} onNavigate={setNavigation} />
+            <AppDialogRenderer />
           </div>
         </ModalPortalContext.Provider>
       </QueryClientProvider>

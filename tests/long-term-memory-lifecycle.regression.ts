@@ -296,6 +296,7 @@ async function main() {
         draftId: string;
         mutationIds: string[];
       }> = [];
+      const reviewEditedMutationIds: string[][] = [];
       const reviewDraftIds = {
         first: "10000000-0000-4000-8000-000000000011",
         second: "10000000-0000-4000-8000-000000000012",
@@ -304,12 +305,13 @@ async function main() {
       const reviewMutationIds = {
         first: "10000000-0000-4000-8000-000000000021",
         second: "10000000-0000-4000-8000-000000000022",
+        partial: "10000000-0000-4000-8000-000000000023",
       };
       const makeReviewDraft = (
         draftId: string,
         mutationId?: string,
         title = "Review fixture memory",
-        mutation?: Record<string, unknown>,
+        mutation?: Record<string, unknown> | Record<string, unknown>[],
       ) => ({
         id: draftId,
         status: "pending",
@@ -323,35 +325,37 @@ async function main() {
         modes: ["roleplay"],
         summary: `${title} summary`,
         mutations: mutationId
-          ? [
-              mutation ?? {
-                id: mutationId,
-                kind: "create_note",
-                claimKind: "addition",
-                risk: "low",
-                confidence: 0.9,
-                summary: title,
-                evidence: ["source_note:source_mobile_review"],
-                note: {
-                  id: `world_${mutationId.slice(-3)}`,
-                  title,
-                  type: "world",
-                  status: "active",
-                  modes: ["roleplay"],
-                  scope: {},
-                  tags: [],
-                  keywords: [],
-                  links: [],
-                  sections: {
-                    facts: {
-                      text: `${title} content.`,
-                      importance: "major",
-                      updatedAt: "2026-07-30T00:00:00.000Z",
+          ? Array.isArray(mutation)
+            ? mutation
+            : [
+                mutation ?? {
+                  id: mutationId,
+                  kind: "create_note",
+                  claimKind: "static",
+                  risk: "low",
+                  confidence: 0.9,
+                  summary: title,
+                  evidence: ["source_note:source_mobile_review"],
+                  note: {
+                    id: `world_${mutationId.slice(-3)}`,
+                    title,
+                    type: "world",
+                    status: "active",
+                    modes: ["roleplay"],
+                    scope: {},
+                    tags: [],
+                    keywords: [],
+                    links: [],
+                    sections: {
+                      facts: {
+                        text: `${title} content.`,
+                        importance: "major",
+                        updatedAt: "2026-07-30T00:00:00.000Z",
+                      },
                     },
                   },
                 },
-              },
-            ]
+              ]
           : [],
       });
       const makeExistingReviewMutation = () => ({
@@ -368,6 +372,33 @@ async function main() {
           text: "Updated second mobile review memory text.",
           importance: "major",
           updatedAt: "2026-07-30T00:00:00.000Z",
+        },
+      });
+      const makePartialReviewMutation = () => ({
+        id: reviewMutationIds.partial,
+        kind: "create_note",
+        claimKind: "static",
+        risk: "low",
+        confidence: 0.9,
+        summary: "Pending partial review memory",
+        evidence: ["source_note:source_mobile_review"],
+        note: {
+          id: "world_partial_mobile",
+          title: "Pending partial review memory",
+          type: "world",
+          status: "active",
+          modes: ["roleplay"],
+          scope: {},
+          tags: [],
+          keywords: [],
+          links: [],
+          sections: {
+            facts: {
+              text: "Pending partial review memory content.",
+              importance: "major",
+              updatedAt: "2026-07-30T00:00:00.000Z",
+            },
+          },
         },
       });
       let reviewSources: any[] = [
@@ -410,12 +441,10 @@ async function main() {
               deduplications: [],
             },
             {
-              draft: makeReviewDraft(
-                reviewDraftIds.second,
-                reviewMutationIds.second,
-                "Second mobile review memory",
+              draft: makeReviewDraft(reviewDraftIds.second, reviewMutationIds.second, "Second mobile review memory", [
                 makeExistingReviewMutation(),
-              ),
+                makePartialReviewMutation(),
+              ]),
               freshness: "fresh",
               blockReasons: [],
               diagnostics: [],
@@ -434,7 +463,7 @@ async function main() {
                   mutation: {
                     id: reviewMutationIds.first,
                     kind: "create_note",
-                    claimKind: "addition",
+                    claimKind: "static",
                     risk: "low",
                     confidence: 0.9,
                     summary: "First mobile review memory",
@@ -478,12 +507,29 @@ async function main() {
                 },
               ],
             },
+            {
+              noteId: "world_partial_mobile",
+              title: "Pending partial review memory",
+              noteType: "world",
+              rows: [
+                {
+                  draftId: reviewDraftIds.second,
+                  mutation: makePartialReviewMutation(),
+                  disposition: "new",
+                  diagnostics: [],
+                  changes: [],
+                },
+              ],
+            },
           ],
         },
       ];
       let healthState: "healthy" | "degraded" = "healthy";
       let noteTotal = 5;
       let pendingDraftCount = 2;
+      let failSecondReviewAccept = false;
+      let reviewPreflightBlocked = false;
+      let reviewFingerprintRevision = 0;
       let lastInjectionRequests = 0;
       browserServer = createServer(async (request, response) => {
         const url = new URL(request.url ?? "/", "http://127.0.0.1");
@@ -507,7 +553,14 @@ async function main() {
           return send(200, {
             initialized: true,
             directory: "long-term-memory",
-            notes: { total: noteTotal, byType: {}, byStatus: {} },
+            notes: {
+              total: noteTotal,
+              sourceNotes: 1,
+              savedMemories: Math.max(0, noteTotal - 1),
+              pendingDrafts: pendingDraftCount,
+              byType: {},
+              byStatus: {},
+            },
             events: { logAvailable: false, bytes: null },
             indexes: {
               health: healthState,
@@ -572,7 +625,16 @@ async function main() {
             });
           return send(200, {
             generatedAt: "2026-07-30T00:00:00.000Z",
-            sources: reviewSources,
+            sources: reviewSources.map((source) => ({
+              ...source,
+              drafts: source.drafts.map((item: any) => ({
+                ...item,
+                draft: {
+                  ...item.draft,
+                  updatedAt: reviewFingerprintRevision ? "2026-07-30T00:00:01.000Z" : item.draft.updatedAt,
+                },
+              })),
+            })),
             counts: {
               sources: reviewSources.length,
               drafts: reviewSources.reduce((count, source) => count + source.drafts.length, 0),
@@ -750,6 +812,7 @@ async function main() {
               {
                 sourceId: "chat-a:summary-desktop-reextract",
                 title: "Desktop re-extract source",
+                importMode: "conversation",
                 mutationCount: 0,
                 summary: "An imported source held open for re-extraction.",
                 snippet: "The re-extract action should show progress.",
@@ -787,6 +850,7 @@ async function main() {
                       {
                         sourceId: "lorebook_mobile_fixture:entry_mobile_harbor:0",
                         title: "Mobile Field Guide: Harbor Signals",
+                        importMode: "roleplay",
                         mutationCount: 1,
                         summary: "Harbor signal colors and their meanings.",
                         snippet: "A blue lantern marks the safe channel after dusk.",
@@ -849,22 +913,128 @@ async function main() {
               resolve();
             };
           });
-        if (request.method === "POST" && (url.pathname.endsWith("/accept") || url.pathname.endsWith("/skip"))) {
+        if (request.method === "POST" && url.pathname.endsWith("/preflight")) {
           const chunks: Buffer[] = [];
           for await (const chunk of request) chunks.push(Buffer.from(chunk));
           const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
             mutationIds?: string[];
           };
+          const mutationIds = body.mutationIds ?? [];
+          const targetByMutationId: Record<string, string> = {
+            [reviewMutationIds.first]: "world_new_mobile",
+            [reviewMutationIds.second]: "world_second_mobile",
+            [reviewMutationIds.partial]: "world_partial_mobile",
+          };
+          const blockedMutationIds = reviewPreflightBlocked ? [reviewMutationIds.second] : [];
+          const conflictMutationIds = reviewPreflightBlocked ? [reviewMutationIds.partial] : [];
+          return send(200, {
+            draftId: decodeURIComponent(url.pathname.split("/").at(-2)!),
+            selectedMutationIds: mutationIds,
+            readyMutationIds: mutationIds.filter((id) => !blockedMutationIds.includes(id)),
+            blockedMutationIds,
+            autoIncludedMutationIds: [],
+            rows: mutationIds.map((mutationId) => ({
+              mutationId,
+              targetId: targetByMutationId[mutationId] ?? `world_${mutationId.slice(-3)}`,
+              disposition: "new",
+              status: blockedMutationIds.includes(mutationId) ? "blocked" : "ready",
+              autoIncluded: false,
+              blockers: blockedMutationIds.includes(mutationId)
+                ? [{ code: "fixture_blocked", message: "Fixture preflight blocked this mutation." }]
+                : [],
+              conflicts: conflictMutationIds.includes(mutationId)
+                ? [
+                    {
+                      field: "facts",
+                      existing: "Existing fixture value",
+                      proposed: "Proposed fixture value",
+                      resolution: "pending",
+                      policy: "manual review",
+                    },
+                  ]
+                : [],
+            })),
+          });
+        }
+        if (request.method === "POST" && (url.pathname.endsWith("/accept") || url.pathname.endsWith("/skip"))) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+            mutationIds?: string[];
+            editedMutations?: Array<{ id: string }>;
+          };
           const action = url.pathname.endsWith("/accept") ? "accept" : "skip";
           const draftId = decodeURIComponent(url.pathname.split("/").at(-2)!);
           const mutationIds = body.mutationIds ?? [];
+          reviewEditedMutationIds.push((body.editedMutations ?? []).map((mutation) => mutation.id));
           reviewActionCalls.push({ action, draftId, mutationIds });
-          reviewSources = reviewSources
-            .map((source) => ({
+          if (
+            action === "accept" &&
+            draftId === reviewDraftIds.second &&
+            mutationIds.includes(reviewMutationIds.second)
+          ) {
+            if (failSecondReviewAccept) return send(503, { error: "temporary review failure" });
+            reviewSources = reviewSources.map((source) => ({
               ...source,
-              drafts: source.drafts.filter((item: any) => item.draft.id !== draftId),
-            }))
-            .filter((source) => source.drafts.length > 0);
+              drafts: source.drafts.map((item: any) =>
+                item.draft.id === draftId
+                  ? {
+                      ...item,
+                      draft: {
+                        ...item.draft,
+                        updatedAt: "2026-07-30T00:00:01.000Z",
+                        appliedMutationIds: [reviewMutationIds.second],
+                        mutations: item.draft.mutations.filter(
+                          (mutation: any) => mutation.id === reviewMutationIds.partial,
+                        ),
+                      },
+                    }
+                  : item,
+              ),
+              targets: source.targets.map((target: any) => ({
+                ...target,
+                rows: target.rows.filter(
+                  (row: any) => row.draftId !== draftId || row.mutation.id === reviewMutationIds.partial,
+                ),
+              })),
+            }));
+          } else if (
+            action === "accept" &&
+            draftId === reviewDraftIds.second &&
+            mutationIds.includes(reviewMutationIds.partial)
+          ) {
+            reviewSources = reviewSources
+              .map((source) => ({
+                ...source,
+                drafts: source.drafts.map((item: any) =>
+                  item.draft.id === draftId
+                    ? {
+                        ...item,
+                        draft: {
+                          ...item.draft,
+                          mutations: item.draft.mutations.filter(
+                            (mutation: any) => mutation.id !== reviewMutationIds.partial,
+                          ),
+                        },
+                      }
+                    : item,
+                ),
+                targets: source.targets.map((target: any) => ({
+                  ...target,
+                  rows: target.rows.filter(
+                    (row: any) => row.draftId !== draftId || row.mutation.id !== reviewMutationIds.partial,
+                  ),
+                })),
+              }))
+              .filter((source) => source.drafts.some((item: any) => item.draft.mutations.length > 0));
+          } else {
+            reviewSources = reviewSources
+              .map((source) => ({
+                ...source,
+                drafts: source.drafts.filter((item: any) => item.draft.id !== draftId),
+              }))
+              .filter((source) => source.drafts.length > 0);
+          }
           return action === "accept"
             ? send(200, {
                 appliedMutationIds: mutationIds,
@@ -1153,7 +1323,9 @@ async function main() {
       await page.getByRole("button", { name: "Cancel" }).click();
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
       await page.locator('[data-ltm-review-source-select="source_mobile_review"]').click();
-      await page.locator("[data-ltm-review-mutation-toggle]").click();
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-review-mutation-toggle]`)
+        .click();
       await page.evaluate(() => {
         const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
           capabilityProps?: Record<string, unknown>;
@@ -1170,6 +1342,14 @@ async function main() {
         localStorage.removeItem("marinara-long-term-memory-onboarding-v1");
       });
       await page.locator("[data-ltm-review-mutation] textarea").first().fill("Dirty memory");
+      await page.locator('[data-ltm-review-source-select="source_mobile_recovery"]').click();
+      await page.locator('[data-ltm-review-source-select="source_mobile_review"]').click();
+      await page.locator("[data-ltm-review-mutation-toggle]").click();
+      assert.equal(await page.locator("[data-ltm-review-mutation] textarea").first().inputValue(), "Dirty memory");
+      assert.deepEqual(
+        await page.evaluate(() => Object.keys(localStorage).filter((key) => key.includes("review_state"))),
+        ["marinara_ltm_review_state:desktop-chat"],
+      );
       await setupGuide.click();
       await page.getByRole("button", { name: "Next: How recall works" }).click();
       await page.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
@@ -1184,6 +1364,7 @@ async function main() {
       );
       await page.getByRole("button", { name: "Close", exact: true }).click();
       pendingDraftCount = 0;
+      reviewFingerprintRevision = 0;
       await page.reload();
       await page.evaluate((version) => {
         const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
@@ -1211,7 +1392,28 @@ async function main() {
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
       await page.locator('[data-ltm-review-source-select="source_mobile_review"]').click();
       await page.locator("[data-ltm-review-mutation-toggle]").click();
-      await page.locator("[data-ltm-review-mutation] textarea").first().fill("Dirty memory");
+      assert.equal(await page.locator("[data-ltm-review-mutation] textarea").first().inputValue(), "Dirty memory");
+      reviewFingerprintRevision = 1;
+      await page.reload();
+      await page.evaluate((version) => {
+        const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: unknown;
+        };
+        element.setAttribute("view", "detail");
+        element.capabilityProps = {
+          agent: { name: "Long-Term Memory" },
+          chatId: "desktop-chat",
+          chatName: "desktop chat",
+          chatMode: "conversation",
+          enabledForChat: true,
+          package: { version },
+        };
+        document.body.append(element);
+      }, packageManifest.version);
+      await page.locator('[data-ltm-surface="detail"]').waitFor();
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
+      await page.locator("[data-ltm-review-state-warning]").waitFor();
+      reviewFingerprintRevision = 0;
       await setupGuide.click();
       await page.getByRole("button", { name: "Next: How recall works" }).click();
       await page.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
@@ -1568,7 +1770,9 @@ async function main() {
       assert.match(reviewText, /Update section/u);
       assert.match(reviewText, /Major/u);
       assert.equal(await page.locator("[data-ltm-review-operation]").count(), 1);
-      await page.locator("[data-ltm-review-mutation-toggle]").click();
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-review-mutation-toggle]`)
+        .click();
       await page.getByRole("button", { name: "Open memory" }).click();
       await page.locator('[data-ltm-surface="vault"]').waitFor();
       await page.locator("[data-ltm-note-editor]").waitFor();
@@ -1620,7 +1824,56 @@ async function main() {
       await page
         .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-control="review-select"]`)
         .check();
-      await page.getByRole("button", { name: "Skip selected (1)" }).click();
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-review-mutation-toggle]`)
+        .click();
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] textarea`)
+        .fill("Edited pending partial memory");
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-control="review-select"]`)
+        .check();
+      reviewPreflightBlocked = true;
+      failSecondReviewAccept = false;
+      await page.getByRole("button", { name: "Accept eligible (2)" }).click();
+      await page.locator("[data-ltm-review-preflight]").first().waitFor();
+      assert.equal(await page.locator('[data-ltm-review-preflight][role="alert"]').count(), 1);
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-review-mutation-toggle]`)
+        .click();
+      assert.equal(await page.locator("[data-ltm-review-conflicts]").count(), 1);
+      assert.equal(
+        await page
+          .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [aria-label^="Accept "]`)
+          .isDisabled(),
+        true,
+      );
+      assert.equal(await page.getByRole("button", { name: /^Apply preflighted \(1\)/ }).count(), 1);
+      assert.deepEqual(reviewActionCalls, []);
+      reviewPreflightBlocked = false;
+      await page.getByRole("button", { name: "Clear" }).click();
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-control="review-select"]`)
+        .check();
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-control="review-select"]`)
+        .check();
+      failSecondReviewAccept = true;
+      await page.getByRole("button", { name: "Accept eligible (2)" }).click();
+      await page.getByRole("button", { name: /^Apply preflighted \(2\)/ }).click();
+      await page.getByRole("button", { name: "Retry failed review actions" }).waitFor();
+      failSecondReviewAccept = false;
+      await page.getByRole("button", { name: "Retry failed review actions" }).click();
+      await page.getByText("Retry preflight complete. Review the results before applying again.").waitFor();
+      await page.getByRole("button", { name: /^Apply preflighted \(/ }).click();
+      await page.waitForFunction(
+        (mutationId) => !document.querySelector(`[data-ltm-review-mutation="${mutationId}"]`),
+        reviewMutationIds.second,
+      );
+      assert.deepEqual(reviewEditedMutationIds.at(-1), [reviewMutationIds.partial]);
+      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      await page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.first}"]`).click();
+      await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
       const firstMutation = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"]`);
       await firstMutation.waitFor({ state: "visible" });
       await page.waitForFunction(
@@ -1634,14 +1887,21 @@ async function main() {
         .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-control="review-select"]`)
         .check();
       await page.getByRole("button", { name: "Accept eligible (1)" }).click();
+      await page.getByRole("button", { name: /^Apply preflighted \(/ }).click();
       await page.waitForFunction(
-        () => !document.querySelector('[data-ltm-review-source-select="source_mobile_review"]'),
+        (mutationId) => !document.querySelector(`[data-ltm-review-mutation="${mutationId}"]`),
+        reviewMutationIds.first,
       );
       assert.deepEqual(reviewActionCalls, [
         {
-          action: "skip",
+          action: "accept",
           draftId: reviewDraftIds.second,
-          mutationIds: [reviewMutationIds.second],
+          mutationIds: [reviewMutationIds.second, reviewMutationIds.partial],
+        },
+        {
+          action: "accept",
+          draftId: reviewDraftIds.second,
+          mutationIds: [reviewMutationIds.second, reviewMutationIds.partial],
         },
         {
           action: "accept",

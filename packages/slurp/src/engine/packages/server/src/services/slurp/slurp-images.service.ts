@@ -50,7 +50,10 @@ export async function generateNoodlerPostImage(input: {
   draftPrompt: string;
   settings: Pick<
     SlurpSettings,
-    "imageGenerationPrompt" | "imageGenerationUseAvatarReferences" | "imageGenerationIncludeDescriptions"
+    | "imageGenerationPrompt"
+    | "imageGenerationUseAvatarReferences"
+    | "imageGenerationIncludeDescriptions"
+    | "enableImageInterpretation"
   >;
   characters: ReturnType<typeof createCharactersStorage>;
   promptOverrides: ReturnType<typeof createPromptOverridesStorage>;
@@ -192,7 +195,9 @@ export async function generateNoodlerPostImage(input: {
     .filter(Boolean)
     .join("\n\n");
   const rewrittenPrompt =
-    (imagePromptInstructions || styleGuidance) && !input.promptOverride
+    (imagePromptInstructions || characterContext || styleGuidance) &&
+    input.settings.enableImageInterpretation !== false &&
+    !input.promptOverride
       ? await rewriteNoodleImagePrompt({
           db: input.db,
           prompt: rawFinalPrompt,

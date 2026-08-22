@@ -225,6 +225,7 @@ export function parseGeneratedFanActivityResponse(value: unknown): {
       ...row,
       creatorAccountId: row.creatorAccountId ?? row.creatorId,
       targetPostId: row.targetPostId ?? row.postId,
+      content: row.content ?? null,
     });
     return parsed.success ? [parsed.data] : [];
   });

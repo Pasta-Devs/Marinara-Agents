@@ -57,7 +57,7 @@ export function nextNoodleSchedulerPollDelayMs(schedule: PersistedNoodleRefreshS
   return Math.max(1_000, Math.min(NOODLE_SCHEDULER_MAX_POLL_MS, Date.parse(nextRefreshAt) - now));
 }
 
-export function startNoodleRefreshScheduler(app: FastifyInstance) {
+export function startNoodleRefreshScheduler(app: FastifyInstance, registerStop?: (stop: () => Promise<void>) => void) {
   const noodle = createSlurpStorage(app.db);
   let stopped = false;
   let polling = false;
@@ -131,7 +131,7 @@ export function startNoodleRefreshScheduler(app: FastifyInstance) {
         method: "POST",
         url: "/api/slurp/refresh",
         headers: { [AUTOMATIC_GENERATION_HEADER]: "1" },
-        payload: { mode: "public" },
+        payload: { mode: "noodler" },
       });
       const completedAt = new Date();
       const latest = await noodle.ensureRefreshSchedule(completedAt);
@@ -171,6 +171,13 @@ export function startNoodleRefreshScheduler(app: FastifyInstance) {
     }
   };
 
+  const stop = async () => {
+    stopped = true;
+    if (timer) clearTimeout(timer);
+    timer = null;
+    await active?.catch(() => {});
+  };
+  registerStop?.(stop);
   scheduleNext(NOODLE_SCHEDULER_INITIAL_DELAY_MS);
   app.addHook("onClose", async () => {
     stopped = true;
@@ -180,12 +187,5 @@ export function startNoodleRefreshScheduler(app: FastifyInstance) {
   });
 
   logger.info("[noodle-scheduler] Automatic timeline refresh scheduler started");
-  return {
-    async stop() {
-      stopped = true;
-      if (timer) clearTimeout(timer);
-      timer = null;
-      await active?.catch(() => {});
-    },
-  };
+  return { stop };
 }
