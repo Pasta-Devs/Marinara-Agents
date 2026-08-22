@@ -53,8 +53,8 @@ for (const [file, source] of Object.entries(parsers)) {
 }
 assert.match(
   draft,
-  /response\.content\?\.trim\(\)\s*\?\s*\[\{ role: "assistant"/u,
-  "The repair retry must not send an empty assistant turn",
+  /modelAnswerForCorrection\(response\.content\)/u,
+  "The repair retry must filter empty and empty-array assistant answers",
 );
 
 // Every bulk exclusion carries a reason against its creator, or the wizard cannot say which

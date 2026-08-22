@@ -53,6 +53,13 @@ async function prepareFreshClient(page: Page) {
 async function openNoodle(page: Page) {
   await page.getByRole("tab", { name: "Open Noodle" }).click();
   await expect(page.locator('[data-component="NoodleView"]')).toBeVisible();
+  const welcomeDialog = page.getByRole("dialog", { name: "Welcome to Noodle" });
+  try {
+    await welcomeDialog.waitFor({ state: "visible", timeout: 2_000 });
+  } catch {
+    return;
+  }
+  await welcomeDialog.getByRole("button", { name: "Start reading" }).click();
 }
 
 async function setStoredTheme(page: Page, theme: "dark" | "light") {

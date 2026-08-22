@@ -4,7 +4,16 @@
 // ──────────────────────────────────────────────
 import { AtSign, Bell, Home, MoreHorizontal, Pencil, Search, Settings2, User, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { createContext, type CSSProperties, type ReactNode, type RefObject, useContext, useRef } from "react";
+import {
+  createContext,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import type { NoodleAccount } from "@marinara-engine/shared";
 import type { AvatarCrop } from "@marinara-engine/shared";
 import { cn, getAvatarCropStyle } from "../../lib/utils";
@@ -12,6 +21,98 @@ import { useDialogFocusScope } from "../../hooks/use-dialog-focus-scope";
 import { useTranslation as useUiTranslation } from "react-i18next";
 
 export const NOODLE_BLUE = "#7EA7FF";
+
+// The Engine viewport uses `viewport-fit=cover`, so `env(safe-area-inset-bottom)`
+// reports the Android system navigation bar as well. Gecko on Android keeps the
+// layout viewport above that bar, so honouring the inset there paints an empty
+// strip under the mobile nav. WebKit is the engine that really extends the
+// viewport under the home indicator, so reserve the inset only there.
+// ponytail: WebKit sniff, swap for a measured overhang if another engine ever
+// needs the real inset.
+export const BOTTOM_SAFE_INSET =
+  typeof CSS !== "undefined" && CSS.supports?.("-webkit-touch-callout", "none") === true
+    ? "env(safe-area-inset-bottom)"
+    : "0px";
+
+/**
+ * Ties a sticky header to the scroll position: it travels with the content instead of
+ * snapping between shown and hidden at a threshold, which reads as a jump. The bar
+ * moves pixel for pixel with the scroll, so it feels attached to the reader's finger,
+ * and once scrolling stops it settles to whichever edge it is nearest — biased open,
+ * so any upward movement finishes with the controls on screen.
+ *
+ * Writes the transform straight to the node rather than through state: a re-render per
+ * scroll event is exactly the stutter this is meant to remove. Overscroll past the top
+ * always shows the bar, or a rubber-band bounce leaves it stranded half-way.
+ *
+ * Takes the scrolling element as state, not a ref, and the sticky element the same way
+ * through a callback ref: either node can be swapped out while the other stays mounted,
+ * and a plain ref would leave this driving a detached node.
+ *
+ * @returns a callback ref for the sticky element itself.
+ */
+export function useHideOnScroll(scroller: HTMLElement | null) {
+  const [bar, setBar] = useState<HTMLDivElement | null>(null);
+  const reduceMotion = useReducedMotion();
+  useEffect(() => {
+    if (!scroller || !bar) return;
+    // Reduced motion asks for no travel at all, not a faster version of it.
+    if (reduceMotion) return;
+    const SETTLE_MS = 140;
+    const EASE = "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)";
+    let tucked = 0;
+    let previousTop = scroller.scrollTop;
+    let rising = false;
+    let frame = 0;
+    let settleTimer = 0;
+
+    const move = (next: number, eased: boolean) => {
+      tucked = next;
+      bar.style.transition = eased ? EASE : "none";
+      bar.style.transform = `translate3d(0, ${-tucked}px, 0)`;
+    };
+
+    const settle = () => {
+      const height = bar.offsetHeight;
+      if (!height || tucked <= 0 || tucked >= height) return;
+      // A part-hidden bar is nobody's intent, so finish the movement the reader
+      // started: open if they were coming back up, closed if they were still going.
+      move(rising ? 0 : height, true);
+    };
+
+    const read = () => {
+      frame = 0;
+      const height = bar.offsetHeight;
+      if (!height) return;
+      const top = scroller.scrollTop;
+      const delta = top - previousTop;
+      previousTop = top;
+      if (delta !== 0) rising = delta < 0;
+      const next = top <= 0 ? 0 : Math.min(height, Math.max(0, tucked + delta));
+      if (next !== tucked) move(next, false);
+      window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(settle, SETTLE_MS);
+    };
+
+    const onScroll = () => {
+      // One read per frame: scroll fires far more often than the screen redraws.
+      if (!frame) frame = window.requestAnimationFrame(read);
+    };
+
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      scroller.removeEventListener("scroll", onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+      window.clearTimeout(settleTimer);
+      bar.style.transition = "";
+      bar.style.transform = "";
+    };
+  }, [scroller, bar, reduceMotion]);
+  return setBar;
+}
+
+/** Base classes for a sticky bar driven by {@link useHideOnScroll}. */
+export const HIDE_ON_SCROLL_CLASS = "will-change-transform";
 
 // The accent hex that drives `--noodle-accent` for every reused Noodle surface.
 // Provided at the shell root so descendants inherit via CSS var, and read here
@@ -28,6 +129,9 @@ export function getNoodleAccentStyle(accent: string, style: CSSProperties = {}):
     "--noodle-accent-foreground":
       "light-dark(color-mix(in srgb, var(--noodle-accent) 65%, var(--foreground)), var(--noodle-accent))",
     "--noodle-divider": "var(--marinara-chat-chrome-panel-divider)",
+    // Every Noodle surface reads the bottom inset from here, so the WebKit-only
+    // rule lives in one place and the rest stays plain Tailwind.
+    "--noodle-safe-bottom": BOTTOM_SAFE_INSET,
     ...style,
   } as CSSProperties;
 }
@@ -222,7 +326,7 @@ export function NoodleShell({
                 aria-modal="true"
                 aria-label={localizeUi("ui.noodle.noodleshell.noodleAccountMenu")}
                 tabIndex={-1}
-                className="mari-chrome-token-scope flex h-full w-full flex-col overflow-y-auto bg-[var(--background)] px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-5 text-[var(--foreground)]"
+                className="mari-chrome-token-scope flex h-full w-full flex-col overflow-y-auto bg-[var(--background)] px-5 pb-[max(1rem,var(--noodle-safe-bottom))] pt-5 text-[var(--foreground)]"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -545,7 +649,7 @@ export function NoodleShell({
               </div>
             </aside>
 
-            <main className="flex min-h-0 w-full flex-1 flex-col pb-[calc(56px+env(safe-area-inset-bottom))] @min-[1024px]:max-w-[640px] @min-[1024px]:border-r @min-[1024px]:border-[var(--noodle-divider)] @min-[1024px]:pb-0">
+            <main className="flex min-h-0 w-full flex-1 flex-col pb-[calc(56px+var(--noodle-safe-bottom))] @min-[1024px]:max-w-[640px] @min-[1024px]:border-r @min-[1024px]:border-[var(--noodle-divider)] @min-[1024px]:pb-0">
               {children}
             </main>
             {rightRail}
@@ -553,7 +657,7 @@ export function NoodleShell({
         </div>
 
         <nav
-          className="absolute inset-x-0 bottom-0 z-50 border-t border-[var(--noodle-divider)] bg-[var(--background)]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur @min-[1024px]:hidden"
+          className="absolute inset-x-0 bottom-0 z-50 border-t border-[var(--noodle-divider)] bg-[var(--background)]/95 pb-[var(--noodle-safe-bottom)] backdrop-blur @min-[1024px]:hidden"
           aria-label={localizeUi("ui.noodle.noodleshell.noodleMobileNavigation")}
           data-component="NoodleView.MobileBottomNav"
         >

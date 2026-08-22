@@ -80,6 +80,44 @@ export function NoodleLogo({ className, src = NOODLE_LOGO_SRC }: { className?: s
   return <img src={src} alt="" className={cn("object-contain", className)} />;
 }
 
+/** Phone header carried forward from the pre-split NoodleR surface. */
+export function SlurpMobileHeader({
+  personaAccount,
+  onOpenDrawer,
+  triggerRef,
+}: {
+  personaAccount: NoodleAccount | null;
+  onOpenDrawer: () => void;
+  triggerRef?: RefObject<HTMLButtonElement | null>;
+}) {
+  const { t: localizeUi } = useUiTranslation();
+  return (
+    <div
+      className="grid h-14 grid-cols-[3rem_minmax(0,1fr)_3rem] items-center border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 px-3 backdrop-blur @min-[1024px]:hidden"
+      data-component="SlurpHome.MobileHeader"
+    >
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={onOpenDrawer}
+        className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-[var(--accent)]"
+        title={localizeUi("ui.slurp.navigation.menu")}
+        aria-label={localizeUi("ui.slurp.navigation.menu")}
+      >
+        {personaAccount ? (
+          <Avatar account={personaAccount} size="sm" />
+        ) : (
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 ring-1 ring-[var(--noodle-accent)]/25">
+            <AtSign size={18} />
+          </span>
+        )}
+      </button>
+      <NoodleLogo className="mx-auto h-9 w-14" />
+      <span aria-hidden="true" />
+    </div>
+  );
+}
+
 /**
  * Ties a sticky header to the scroll position: it travels with the content instead of
  * snapping between shown and hidden at a threshold, which reads as a jump. The bar

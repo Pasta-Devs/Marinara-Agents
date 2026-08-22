@@ -433,6 +433,7 @@ export function createPublicNoodleGenerationService(db: DB) {
           result: content,
           recalledPostIds: prompt.recalledPostIds,
           preparedMedia,
+          rejectedActivityCount: parsedGenerated.rejected.length + deduplicated.removedCount,
         });
         run = null;
         return {
@@ -440,6 +441,7 @@ export function createPublicNoodleGenerationService(db: DB) {
           result: {
             bootstrap: await bootstrapVisibleNoodle(noodle, characters),
             imagePromptReviewItems: activity.imagePromptReviewItems,
+            activityCounts: activity.committedCounts,
           },
         };
       } catch (error) {

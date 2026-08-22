@@ -110,12 +110,20 @@ class MarinaraSlurpElement extends HTMLElement {
     if (!this.__portal) {
       this.__portal = document.createElement("div");
       this.__portal.dataset.marinaraCapabilityScope = "slurp";
+      this.__portal.classList.add("mari-chrome-token-scope", "noodle-icon-scope");
       Object.assign(this.__portal.style, {
         inset: "0",
         pointerEvents: "none",
         position: "fixed",
         zIndex: "2147483000",
       });
+      this.__portal.style.setProperty("--accent", "rgba(255, 126, 193, 0.14)");
+      this.__portal.style.setProperty("--background", "#17121b");
+      this.__portal.style.setProperty("--border", "rgba(255, 255, 255, 0.18)");
+      this.__portal.style.setProperty("--foreground", "#fff7fc");
+      this.__portal.style.setProperty("--muted-foreground", "#d8c9d4");
+      this.__portal.style.setProperty("--noodle-accent", "#ff7ec1");
+      this.__portal.style.setProperty("--noodle-accent-foreground", "#17121b");
       document.body.appendChild(this.__portal);
     }
     this.__root ??= createRoot(this);

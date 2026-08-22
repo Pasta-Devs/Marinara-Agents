@@ -39,6 +39,9 @@ import {
 import type { NoodleImagePromptReviewItem } from "./slurp-public-images.service.js";
 import { getErrorMessage } from "./slurp-public-support.js";
 import { noodleResponseFormat } from "./slurp-response-format.js";
+import { buildSlurpPostTimingContext } from "./slurp-post-timing.js";
+import { resolveSlurpCreatorScheduleContext } from "./slurp-creator-schedule.js";
+import { createChatsStorage } from "../storage/chats.storage.js";
 
 export type GeneratedNoodlerPostResult = {
   post: NoodlerManagedPost;
@@ -89,6 +92,10 @@ export type NoodlerPostGenerationInput = {
   prepareOnly?: boolean;
   /** Scheduler-owned automatic runs pass background so they yield to user generation. */
   admissionMode?: ConnectionAdmissionMode;
+  /** Clock captured by the caller so prompt construction and scheduling agree in tests and production. */
+  generatedAt?: Date;
+  /** Scheduled publication time. Omitted for posts generated for immediate publication. */
+  publicationTime?: Date;
 };
 
 const NOODLER_POST_MAX_TOKENS = 2048;
@@ -274,7 +281,7 @@ export function protectBoundedNoodlerGeneratedText(
 }
 
 function formatNoodlerPostHistory(posts: NoodlerManagedPost[], protect: (value: string) => string): string {
-  if (posts.length === 0) return "No previous posts on this NoodleR page.";
+  if (posts.length === 0) return "No previous posts on this Slurp page.";
   return posts
     .slice()
     .reverse()
@@ -291,16 +298,19 @@ export function buildNoodlerPostMessages(input: {
   request: Pick<FormattedNoodlerGenerationRequest, "noodlerPostGuide" | "noodlerProjectWork" | "format">;
   allowImagePrompt: boolean;
   generationGuidance: string;
+  scheduleContext?: string;
+  generatedAt?: Date;
+  publicationTime?: Date;
 }): ChatMessage[] {
   const protect = (value: string) =>
     protectNoodlerGeneratedIdentity(value, input.disclosureMode, input.publicIdentity) ?? "";
   const guidance = input.generationGuidance.trim();
   const format = input.request.format ?? "caption";
   const system = [
-    "You write exactly one post for one NoodleR creator page in Marinara Engine.",
-    "Write only as the supplied NoodleR account. Do not create other accounts, interactions, follows, or public timeline activity.",
+    "You write exactly one post for one Slurp creator page in Marinara Engine.",
+    "Write only as the supplied Slurp account. Do not create other accounts, interactions, follows, or public timeline activity.",
     NOODLER_UNTRUSTED_CONTENT_INSTRUCTION,
-    "Use the NoodleR stage profile as supplied.",
+    "Use the Slurp stage profile as supplied.",
     ...(guidance ? [guidance] : []),
     noodlerIdentityInstruction(input.disclosureMode, input.publicIdentity),
     NOODLER_FORMAT_PROMPTS[format],
@@ -314,14 +324,18 @@ export function buildNoodlerPostMessages(input: {
     "Return JSON only. No prose outside the JSON object.",
   ].join("\n");
   const user = [
-    "# NoodleR account",
+    "# Slurp account",
     `Display name: ${protect(input.account.displayName)}`,
     `Handle: @${protect(input.account.handle)}`,
     `Bio: ${protect(input.account.bio) || "No bio provided."}`,
     `Stage voice: ${protect(input.stagePersonality) || "No additional stage voice provided."}`,
+    input.scheduleContext ?? "No active Conversation Schedule is available for this Creator today.",
     `Content format: ${format}`,
     "",
-    "# Recent NoodleR posts",
+    "# Publication timing",
+    buildSlurpPostTimingContext(input.generatedAt ?? new Date(), input.publicationTime),
+    "",
+    "# Recent Slurp posts",
     formatNoodlerPostHistory(input.recentPosts, protect),
     ...(input.request.noodlerPostGuide ? ["", "# Post direction", protect(input.request.noodlerPostGuide)] : []),
     ...(input.request.noodlerProjectWork
@@ -400,6 +414,14 @@ export async function generateNoodlerPost(
   const recentPosts = await noodle.listNoodlerPostsByAccount(account.id, 8);
   const disclosureMode = account.settings.privacy.identityDisclosure ?? "secret";
   const linkedPublicAccount = await noodle.resolveAccountSource(account as SlurpAccount);
+  const scheduleContext = linkedPublicAccount
+    ? await resolveSlurpCreatorScheduleContext(
+        createCharactersStorage(db),
+        linkedPublicAccount,
+        undefined,
+        input.generatedAt ?? new Date(),
+      )
+    : undefined;
   // Derive the identity from the row already in hand; resolving it again would re-read it.
   const publicIdentity = await noodlerPublicIdentityFor(db, linkedPublicAccount);
   const messages = buildNoodlerPostMessages({
@@ -411,6 +433,9 @@ export async function generateNoodlerPost(
     request: input.request,
     allowImagePrompt: imagesEnabled,
     generationGuidance: settings.generationGuidance,
+    scheduleContext,
+    generatedAt: input.generatedAt ?? new Date(),
+    publicationTime: input.publicationTime,
   });
   const debugMode = input.request.debugMode === true || isDebugAgentsEnabled();
   logDebugOverride(
@@ -456,8 +481,8 @@ export async function generateNoodlerPost(
       {
         role: "user",
         content: imagesEnabled
-          ? "The response was not one valid NoodleR-post JSON object. Return exactly one object with title, content, and imagePrompt. title and imagePrompt must both be non-empty. Do not include a poll. Return JSON only."
-          : "The response was not one valid NoodleR-post JSON object. Return exactly one object with title and content only. Do not include a poll or image prompt. Return JSON only.",
+          ? "The response was not one valid Slurp-post JSON object. Return exactly one object with title, content, and imagePrompt. title and imagePrompt must both be non-empty. Do not include a poll. Return JSON only."
+          : "The response was not one valid Slurp-post JSON object. Return exactly one object with title and content only. Do not include a poll or image prompt. Return JSON only.",
       },
     ];
     logDebugOverride(
@@ -482,7 +507,7 @@ export async function generateNoodlerPost(
     publicIdentity,
     NOODLER_FORMAT_MAX_LENGTH[format],
   );
-  if (!protectedContent) throw new Error("NoodleR generation returned no usable post content.");
+  if (!protectedContent) throw new Error("Slurp generation returned no usable post content.");
   const protectedGenerated = {
     // Every format shows a title now. Weak models still drop the field, so fall back to the
     // opening of the post rather than failing a whole generation over a headline.
@@ -504,12 +529,12 @@ export async function generateNoodlerPost(
   let lockedFollowUpPostId = input.request.lockedFollowUpPostId;
   const pendingLockedFollowUp = input.request.lockedFollowUp;
   if (lockedFollowUpPostId && pendingLockedFollowUp) {
-    throw new Error("A NoodleR post links either an existing follow-up or a new one, not both.");
+    throw new Error("A Slurp post links either an existing follow-up or a new one, not both.");
   }
   if (lockedFollowUpPostId) {
     const followUp = await noodle.getNoodlerPostById(lockedFollowUpPostId);
     if (!followUp || followUp.authorAccountId !== account.id || followUp.access !== "locked") {
-      throw new Error("The linked NoodleR follow-up must be a locked post from this creator.");
+      throw new Error("The linked Slurp follow-up must be a locked post from this creator.");
     }
   } else if (pendingLockedFollowUp) lockedFollowUpPostId = newId();
 
@@ -568,7 +593,7 @@ export async function generateNoodlerPost(
         : [main],
     );
     const post = posts?.at(-1);
-    if (!post) throw new Error("Failed to persist the generated NoodleR post.");
+    if (!post) throw new Error("Failed to persist the generated Slurp post.");
     return post;
   };
 
@@ -581,7 +606,7 @@ export async function generateNoodlerPost(
         metadata: { noodlerMediaPath: persistedMedia.noodlerMediaPath },
       }),
     );
-    if (!post) throw new Error("Failed to persist the generated NoodleR post.");
+    if (!post) throw new Error("Failed to persist the generated Slurp post.");
     return { post, imagePromptReview: null };
   }
 

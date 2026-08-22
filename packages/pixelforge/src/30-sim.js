@@ -203,6 +203,22 @@ PF.Sim = class {
     for (const zoneId in this.world.zones) {
       for (const npc of this.world.zones[zoneId].npcs) all.push([zoneId, npc]);
     }
+    // TWO PASSES, and the split is the whole correctness argument. Placement
+    // consults `taken` so nobody is stacked under anybody — but in a single pass
+    // "taken" is read against wherever people happen to be standing from the
+    // LAST daypart, and half of them are about to leave. An NPC whose own bed is
+    // still warm under a housemate who has not been processed yet gets shunted
+    // to the nearest free tile, the housemate then walks off, and the sleeper
+    // spends the night on the floorboards beside an empty bed. It is purely an
+    // ordering accident: the same world, resolved in a different NPC order, puts
+    // a different person on the floor, and going straight to a daypart rather
+    // than arriving from another one hides it entirely.
+    //
+    // So: move everybody between zones first, then place them, counting only the
+    // people whose position is final — anyone not scheduled, anyone held, and
+    // anyone already placed in this pass.
+    const pending = [];
+    const unplaced = new Set();
     for (const [fromId, npc] of all) {
       if (!npc._sched || npc._hold) continue; // _hold reserves a GM override seam
       const handle = PF.schedule.resolve(npc._sched, this._daypart);
@@ -210,24 +226,11 @@ PF.Sim = class {
       const target = this.world.zones[handle.zoneId];
       if (!target) continue;
       const box = handle.wander;
-      // spread:false keeps a private, meaningful placement (a merchant's own
-      // stall counter); every other handle is SHARED geometry, so disperse by
-      // id. `taken` then closes the gap the hash cannot: colliding ids, and the
-      // NPCs already standing in the destination, would otherwise stack — and a
-      // sprite underneath another one can never be selected by talk-targeting.
-      const spreadKey = handle.spread === false ? null : npc.id;
-      const taken = (x, y) => this.npcOccupies(target, x, y, npc);
-      if (handle.zoneId === fromId) {
-        // In-zone: swap the box, and only snap when the NPC is outside it —
-        // overlapping day/night boxes should not pop.
-        const inside = npc.x >= box.x0 && npc.x <= box.x1 && npc.y >= box.y0 && npc.y <= box.y1;
-        npc.wander = box;
-        if (!inside) {
-          const at = PF.schedule.walkableIn(target, box, spreadKey, taken);
-          npc.x = at.x;
-          npc.y = at.y;
-        }
-      } else {
+      // Only snap when the NPC is OUTSIDE the new box — overlapping day/night
+      // boxes should not pop. Read here, before anybody has moved, because that
+      // is the position the question is about.
+      const inside = npc.x >= box.x0 && npc.x <= box.x1 && npc.y >= box.y0 && npc.y <= box.y1;
+      if (handle.zoneId !== fromId) {
         // Cross-zone: the renderer and talk-detection only walk the CURRENT
         // zone's array, so a spliced NPC simply leaves one zone and appears in
         // the other — no visibility flag needed.
@@ -235,27 +238,54 @@ PF.Sim = class {
         const index = from.npcs.indexOf(npc);
         if (index >= 0) from.npcs.splice(index, 1);
         target.npcs.push(npc);
-        npc.wander = box;
-        // Push FIRST so `taken` sees the destination's real occupants and skips
-        // only this NPC. Without the spread key every transient bedding down at
-        // the same inn box landed on its center tile.
-        const at = PF.schedule.walkableIn(target, box, spreadKey, taken);
-        npc.x = at.x;
-        npc.y = at.y;
       }
+      npc.wander = box;
       // stepNpcs caches float fx/fy per id; a stale timer would drag the token
-      // back toward the old box. Dropping it re-seeds at the new position.
+      // back toward the old box. Dropping it re-seeds at the new position, and
+      // dropping it HERE also stops an in-flight destination from being read as
+      // an occupied tile by somebody being placed below.
       this._npcTimers.delete(npc.id);
+      // An in-zone NPC that is already inside its new box keeps its exact tile,
+      // so its position is final and it must block others from now on.
+      if (handle.zoneId === fromId && inside) continue;
+      pending.push({ npc, target, box, spreadKey: handle.spread === false ? null : npc.id });
+      unplaced.add(npc);
+    }
+    for (const move of pending) {
+      unplaced.delete(move.npc);
+      // spread:false keeps a private, meaningful placement (a merchant's own
+      // stall counter); every other handle is SHARED geometry, so disperse by
+      // id. `taken` then closes the gap the hash cannot: colliding ids, and the
+      // NPCs already standing in the destination, would otherwise stack — and a
+      // sprite underneath another one can never be selected by talk-targeting.
+      const taken = (x, y) => this.npcOccupies(move.target, x, y, move.npc, unplaced);
+      const at = PF.schedule.walkableIn(move.target, move.box, move.spreadKey, taken);
+      move.npc.x = at.x;
+      move.npc.y = at.y;
     }
   }
 
   /** Is another NPC standing on — or already walking onto — this tile? Terrain
    *  alone is not enough: two NPCs would pick the same free tile and slide
-   *  through each other. Casts are capped at ~10, so a scan is cheaper than
-   *  maintaining an occupancy index. */
-  npcOccupies(z, x, y, exclude) {
+   *  through each other.
+   *
+   *  A LINEAR SCAN, and the reason it used to give for that is no longer true.
+   *  It said casts are capped at ~10; the compiler now mints residents to fill a
+   *  settlement, and a thriving city puts a hundred and thirteen of them on one
+   *  exterior zone at midday. So this was re-measured rather than left on a stale
+   *  assumption: `stepNpcs` over that zone costs 0.0039ms a frame, against 0.0019
+   *  for a village of 25. Four thousandths of a millisecond is 0.02% of a 60fps
+   *  budget, so an occupancy index would still be the more expensive of the two.
+   *
+   *  It stays a scan because it is cheap, NOT because the cast is small. If a
+   *  zone ever holds several hundred, measure again before believing this. */
+  npcOccupies(z, x, y, exclude, ignore) {
     for (const other of z.npcs) {
       if (other === exclude) continue;
+      // Anyone still waiting to be placed this pass is standing on LAST
+      // daypart's tile, which says nothing about where they will be. Counting
+      // them would let a stale position evict somebody from their own bed.
+      if (ignore && ignore.has(other)) continue;
       if (Math.round(other.x) === x && Math.round(other.y) === y) return true;
       const timer = this._npcTimers.get(other.id);
       if (timer && (timer.dx || timer.dy) && timer.tx === x && timer.ty === y) return true;

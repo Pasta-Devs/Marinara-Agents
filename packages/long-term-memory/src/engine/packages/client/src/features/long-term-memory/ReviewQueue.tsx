@@ -14,7 +14,7 @@ import {
   type LtmRejectedSuggestion,
   type LtmRejectedSuggestionsResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
-import { invalidateLtmQueries, queryKeys, request, requestAllNotes } from "./api";
+import { invalidateLtmQueries, queryKeys, request, requestNotesByIds } from "./api";
 import { humanizeLabel, labelKeys, localizedLabel } from "./display-labels";
 import { Button, IconButton, InfoPopover, inputClass, StatusSurface } from "./shared-controls";
 import type { LongTermMemoryDestinationProps } from "./types";
@@ -491,6 +491,46 @@ function mutationFingerprint(mutation: LtmDraftMutation) {
   return JSON.stringify(mutation);
 }
 
+function buildPersistedReviewState(
+  reviewData: LtmDraftReviewResponse | undefined,
+  reviewDataSignature: string | null,
+  reviewStateHydrated: string | null,
+  reviewStateKey: string,
+  chatId: string | null | undefined,
+  selectedIds: ReadonlySet<string>,
+  editedById: ReadonlyMap<string, LtmDraftMutation>,
+) {
+  if (!reviewData || !reviewDataSignature || reviewStateHydrated !== `${reviewStateKey}:${reviewDataSignature}`)
+    return null;
+  const drafts: PersistedReviewState["drafts"] = {};
+  const currentDrafts = new Map(
+    reviewData.sources.flatMap((source) => source.drafts.map((item) => [item.draft.id, item] as const)),
+  );
+  for (const [draftId, item] of currentDrafts) {
+    if (item.draft.status !== "pending") continue;
+    const appliedMutationIds = new Set(item.draft.appliedMutationIds ?? []);
+    const pendingMutations = item.draft.mutations.filter((mutation) => !appliedMutationIds.has(mutation.id));
+    const mutationIds = new Set(pendingMutations.map((mutation) => mutation.id));
+    const selected = [...selectedIds].filter((id) => mutationIds.has(id));
+    const editedMutations = [...editedById].filter(([id]) => mutationIds.has(id));
+    if (selected.length || editedMutations.length) {
+      drafts[draftId] = {
+        savedAt: Date.now(),
+        draftFingerprint: draftReviewFingerprint(item),
+        contextFingerprint: draftReviewContextFingerprint(item),
+        mutationFingerprints: pendingMutations.map((mutation) => [mutation.id, mutationFingerprint(mutation)]),
+        selectedIds: selected,
+        editedMutations,
+      };
+    }
+  }
+  return {
+    version: 3 as const,
+    chatId: chatId ?? null,
+    drafts,
+  };
+}
+
 function remainingCharacters(value: string, limit: number) {
   return limit - value.length;
 }
@@ -566,6 +606,7 @@ function recoveryLabel(
   recovery: NonNullable<LtmDraftReviewDraft["candidateRejections"][number]["recovery"]>,
   localizeUi: ReturnType<typeof useLtmTranslation>["t"],
   noteById: ReadonlyMap<string, LtmNote>,
+  missingNoteFallback: string,
 ) {
   const hints = [
     recovery.noteType
@@ -575,10 +616,7 @@ function recoveryLabel(
       : null,
     recovery.noteId
       ? localizeUi("ui.longTermMemory.reviewqueue.recoveryMemory", {
-          value: noteDisplayTitle(
-            noteById.get(recovery.noteId),
-            localizeUi("ui.longTermMemory.reviewqueue.untitledMemory"),
-          ),
+          value: noteDisplayTitle(noteById.get(recovery.noteId), missingNoteFallback),
         })
       : null,
     recovery.sectionKey
@@ -659,9 +697,11 @@ function SelectionCheckbox({
 function ImportanceField({
   value,
   onChange,
+  onBlur,
 }: {
   value: LtmImportance | undefined;
   onChange: (value: LtmImportance | undefined) => void;
+  onBlur?: () => void;
 }) {
   const { t: localizeUi } = useLtmTranslation();
   return (
@@ -680,6 +720,7 @@ function ImportanceField({
         className={inputClass}
         value={value ?? ""}
         onChange={(event) => onChange((event.target.value || undefined) as LtmImportance | undefined)}
+        onBlur={onBlur}
       >
         <option value="">{localizeUi("ui.longTermMemory.importancefield.notSpecified")}</option>
         {importanceOptions.map((importance) => (
@@ -696,10 +737,12 @@ function MutationEditor({
   mutation,
   canEditTitle,
   onChange,
+  onBlur,
 }: {
   mutation: LtmDraftMutation;
   canEditTitle: boolean;
   onChange: (mutation: LtmDraftMutation) => void;
+  onBlur?: () => void;
 }) {
   const { t: localizeUi, locale } = useLtmTranslation();
   const counterId = useId();
@@ -749,15 +792,16 @@ function MutationEditor({
                   },
                 })
               }
-              onBlur={(event) =>
+              onBlur={(event) => {
                 onChange({
                   ...mutation,
                   note: {
                     ...mutation.note,
                     title: boundedTrim(event.target.value, 240) || undefined,
                   },
-                })
-              }
+                });
+                onBlur?.();
+              }}
             />
           </label>
         ) : null}
@@ -785,7 +829,7 @@ function MutationEditor({
                     },
                   })
                 }
-                onBlur={(event) =>
+                onBlur={(event) => {
                   onChange({
                     ...mutation,
                     note: {
@@ -798,8 +842,9 @@ function MutationEditor({
                         },
                       },
                     },
-                  })
-                }
+                  });
+                  onBlur?.();
+                }}
               />
               {renderCounter(`${counterId}-${sectionKey}`, section.text, MAX_SECTION_TEXT_LENGTH)}
             </label>
@@ -817,6 +862,7 @@ function MutationEditor({
                   },
                 })
               }
+              onBlur={onBlur}
             />
           </div>
         ))}
@@ -842,16 +888,21 @@ function MutationEditor({
                 text: event.target.value,
               })
             }
-            onBlur={(event) =>
+            onBlur={(event) => {
               onChange({
                 ...mutation,
                 text: event.target.value.trim(),
-              })
-            }
+              });
+              onBlur?.();
+            }}
           />
           {renderCounter(`${counterId}-text`, mutation.text, MAX_APPEND_TEXT_LENGTH)}
         </label>
-        <ImportanceField value={mutation.importance} onChange={(importance) => onChange({ ...mutation, importance })} />
+        <ImportanceField
+          value={mutation.importance}
+          onChange={(importance) => onChange({ ...mutation, importance })}
+          onBlur={onBlur}
+        />
       </div>
     );
   }
@@ -877,15 +928,16 @@ function MutationEditor({
                 },
               })
             }
-            onBlur={(event) =>
+            onBlur={(event) => {
               onChange({
                 ...mutation,
                 section: {
                   ...mutation.section,
                   text: event.target.value.trim(),
                 },
-              })
-            }
+              });
+              onBlur?.();
+            }}
           />
           {renderCounter(`${counterId}-text`, mutation.section.text, MAX_SECTION_TEXT_LENGTH)}
         </label>
@@ -897,6 +949,7 @@ function MutationEditor({
               section: { ...mutation.section, importance },
             })
           }
+          onBlur={onBlur}
         />
       </div>
     );
@@ -1013,6 +1066,7 @@ function ExtractionDetails({
 export default function ReviewQueue({
   props,
   onDirtyChange,
+  onSaveRequest,
   onOpenMemory,
   onOpenVault,
   onRecoverCandidate,
@@ -1052,11 +1106,38 @@ export default function ReviewQueue({
     queryKey: queryKeys.rejectedSuggestions,
     queryFn: () => request<LtmRejectedSuggestionsResponse>("/rejected-suggestions"),
   });
+  const contextNoteIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const source of review.data?.sources ?? []) {
+      ids.add(source.sourceNoteId);
+      source.targets.forEach((target) => {
+        if (target.rows.some((row) => row.disposition !== "new")) ids.add(target.noteId);
+      });
+      source.drafts.forEach((item) =>
+        item.draft.mutations.forEach((mutation) => {
+          if (mutation.kind !== "create_note") ids.add(mutationTarget(mutation));
+        }),
+      );
+    }
+    for (const suggestion of rejectedSuggestions.data?.suggestions ?? []) {
+      ids.add(suggestion.source.sourceNoteId);
+      if (suggestion.candidate.recovery?.noteId) ids.add(suggestion.candidate.recovery.noteId);
+    }
+    return [...ids].sort();
+  }, [rejectedSuggestions.data?.suggestions, review.data?.sources]);
   const notes = useQuery({
-    queryKey: queryKeys.notes,
-    queryFn: () => requestAllNotes<LtmNote>("/notes?includeGlobal=true"),
+    queryKey: [...queryKeys.notes, "review-context", contextNoteIds],
+    queryFn: ({ signal }) => requestNotesByIds<LtmNote>(contextNoteIds, signal),
+    enabled: review.isSuccess && rejectedSuggestions.isSuccess,
   });
   const noteById = useMemo(() => new Map((notes.data ?? []).map((note) => [note.id, note])), [notes.data]);
+  const reviewContextBusy =
+    review.isSuccess && rejectedSuggestions.isSuccess && !notes.isError && (!notes.isSuccess || notes.isFetching);
+  const reviewContextFailed = notes.isError;
+  const reviewContextReady = notes.isSuccess && !notes.isFetching;
+  const missingContextTitle = reviewContextFailed
+    ? localizeUi("ui.longTermMemory.reviewqueue.memoryContextUnavailable")
+    : localizeUi("ui.longTermMemory.reviewqueue.untitledMemory");
   const sourceIds = useMemo(
     () => [
       ...new Set([
@@ -1112,6 +1193,15 @@ export default function ReviewQueue({
   const [reviewStatePersisted, setReviewStatePersisted] = useState(true);
   const [reviewStateMismatch, setReviewStateMismatch] = useState(false);
   const batchControllerRef = useRef<AbortController | null>(null);
+  const selectedIdsRef = useRef(selectedIds);
+  const editedByIdRef = useRef(editedById);
+  const reviewDataRef = useRef(review.data);
+  const reviewDataSignatureRef = useRef<string | null>(null);
+  const reviewStateHydratedRef = useRef<string | null>(null);
+  const persistenceTimerRef = useRef<number | null>(null);
+  const mountedRef = useRef(true);
+  const persistReviewStateSnapshotRef = useRef<(key: string, chatId: string | null | undefined) => boolean>(() => true);
+  const flushReviewStateRef = useRef<() => boolean>(() => true);
   const reviewStateKey = reviewStateStorageKey(props.chatId);
   const reviewDataSignature = useMemo(
     () =>
@@ -1124,6 +1214,46 @@ export default function ReviewQueue({
         : null,
     [review.data],
   );
+  selectedIdsRef.current = selectedIds;
+  editedByIdRef.current = editedById;
+  reviewDataRef.current = review.data;
+  reviewDataSignatureRef.current = reviewDataSignature;
+  reviewStateHydratedRef.current = reviewStateHydrated;
+
+  const persistReviewStateSnapshot = (key: string, chatId: string | null | undefined) => {
+    const state = buildPersistedReviewState(
+      reviewDataRef.current,
+      reviewDataSignatureRef.current,
+      reviewStateHydratedRef.current,
+      key,
+      chatId,
+      selectedIdsRef.current,
+      editedByIdRef.current,
+    );
+    if (!state) return true;
+    const persisted = writePersistedReviewState(key, state);
+    if (mountedRef.current) {
+      setReviewStatePersisted(persisted === "ok");
+      if (persisted !== "ok")
+        setReviewStateMessage(
+          localizeUi(
+            persisted === "unavailable"
+              ? "ui.longTermMemory.reviewqueue.reviewStateUnavailable"
+              : "ui.longTermMemory.reviewqueue.reviewStateSaveFailed",
+          ),
+        );
+    }
+    return persisted === "ok";
+  };
+  const flushReviewState = () => {
+    if (persistenceTimerRef.current !== null) {
+      window.clearTimeout(persistenceTimerRef.current);
+      persistenceTimerRef.current = null;
+    }
+    return persistReviewStateSnapshot(reviewStateKey, props.chatId);
+  };
+  persistReviewStateSnapshotRef.current = persistReviewStateSnapshot;
+  flushReviewStateRef.current = flushReviewState;
 
   useEffect(() => {
     setSelectedIds(new Set());
@@ -1151,6 +1281,36 @@ export default function ReviewQueue({
     [],
   );
   useEffect(() => {
+    const key = reviewStateKey;
+    const chatId = props.chatId;
+    return () => {
+      if (persistenceTimerRef.current !== null) {
+        window.clearTimeout(persistenceTimerRef.current);
+        persistenceTimerRef.current = null;
+      }
+      persistReviewStateSnapshotRef.current(key, chatId);
+    };
+  }, [props.chatId, reviewStateKey]);
+  useEffect(() => {
+    const handlePageHide = () => flushReviewStateRef.current();
+    window.addEventListener("pagehide", handlePageHide);
+    return () => window.removeEventListener("pagehide", handlePageHide);
+  }, []);
+  useEffect(() => {
+    if (reviewStatePersisted || !editedById.size) {
+      onSaveRequest?.(null);
+      return;
+    }
+    onSaveRequest?.(async () => flushReviewStateRef.current());
+    return () => onSaveRequest?.(null);
+  }, [editedById.size, onSaveRequest, reviewStatePersisted]);
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
+  useEffect(() => {
     setSourceCollapsed(false);
     setSelectedDraftId(null);
     setDetailsOpen(false);
@@ -1166,6 +1326,12 @@ export default function ReviewQueue({
     setPreflightByDraftId(new Map());
     setPreflightKey(null);
   }, [selectedDraft?.draft.id]);
+  useEffect(() => {
+    setPreflightRows(new Map());
+    setPreflightByDraftId(new Map());
+    setPreflightKey(null);
+    setResult(null);
+  }, [contextNoteIds, notes.data, notes.isError, notes.isFetching, notes.isSuccess]);
 
   useEffect(() => {
     if (!review.isSuccess) return;
@@ -1255,52 +1421,18 @@ export default function ReviewQueue({
   useEffect(() => {
     if (!review.isSuccess || !reviewDataSignature || reviewStateHydrated !== `${reviewStateKey}:${reviewDataSignature}`)
       return;
-    const drafts: PersistedReviewState["drafts"] = {};
-    const currentDrafts = new Map(
-      review.data.sources.flatMap((source) => source.drafts.map((item) => [item.draft.id, item] as const)),
-    );
-    for (const [draftId, item] of currentDrafts) {
-      if (item.draft.status !== "pending") continue;
-      const appliedMutationIds = new Set(item.draft.appliedMutationIds ?? []);
-      const pendingMutations = item.draft.mutations.filter((mutation) => !appliedMutationIds.has(mutation.id));
-      const mutationIds = new Set(pendingMutations.map((mutation) => mutation.id));
-      const selected = [...selectedIds].filter((id) => mutationIds.has(id));
-      const editedMutations = [...editedById].filter(([id]) => mutationIds.has(id));
-      if (selected.length || editedMutations.length)
-        drafts[draftId] = {
-          savedAt: Date.now(),
-          draftFingerprint: draftReviewFingerprint(item),
-          contextFingerprint: draftReviewContextFingerprint(item),
-          mutationFingerprints: pendingMutations.map((mutation) => [mutation.id, mutationFingerprint(mutation)]),
-          selectedIds: selected,
-          editedMutations,
-        };
-    }
-    const persisted = writePersistedReviewState(reviewStateKey, {
-      version: 3,
-      chatId: props.chatId ?? null,
-      drafts,
-    });
-    setReviewStatePersisted(persisted === "ok");
-    if (persisted !== "ok")
-      setReviewStateMessage(
-        localizeUi(
-          persisted === "unavailable"
-            ? "ui.longTermMemory.reviewqueue.reviewStateUnavailable"
-            : "ui.longTermMemory.reviewqueue.reviewStateSaveFailed",
-        ),
-      );
-  }, [
-    editedById,
-    localizeUi,
-    props.chatId,
-    review.data,
-    review.isSuccess,
-    reviewDataSignature,
-    reviewStateHydrated,
-    reviewStateKey,
-    selectedIds,
-  ]);
+    if (persistenceTimerRef.current !== null) window.clearTimeout(persistenceTimerRef.current);
+    persistenceTimerRef.current = window.setTimeout(() => {
+      persistenceTimerRef.current = null;
+      flushReviewStateRef.current();
+    }, 250);
+    return () => {
+      if (persistenceTimerRef.current !== null) {
+        window.clearTimeout(persistenceTimerRef.current);
+        persistenceTimerRef.current = null;
+      }
+    };
+  }, [editedById, review.isSuccess, reviewDataSignature, reviewStateHydrated, reviewStateKey, selectedIds]);
 
   const { rowByMutationId, rows } = useMemo(() => buildReviewRows(review.data), [review.data]);
   const mutationDisplayLabels = useMemo(
@@ -1351,7 +1483,7 @@ export default function ReviewQueue({
       replacementEntries.pattern,
       replacementEntries.replacements,
       localizeUi("ui.longTermMemory.reviewqueue.sourcePrefix"),
-      localizeUi("ui.longTermMemory.reviewqueue.thisSource"),
+      missingContextTitle,
     );
   const reviewDraftTitle = (item: LtmDraftReviewDraft) => draftDisplayTitle(item, localizeUi);
   useEffect(
@@ -1511,6 +1643,7 @@ export default function ReviewQueue({
   ) => {
     const applicableRows = explicitRows ?? (action === "accept" ? eligibleSelectedRows : skippableSelectedRows);
     if (!applicableRows.length) return;
+    if (action === "accept" && !reviewContextReady) return;
     const invalidEditIds = action === "accept" ? invalidClosureEditIds(applicableRows, allRows) : [];
     if (invalidEditIds.length) {
       setResult({
@@ -1862,8 +1995,7 @@ export default function ReviewQueue({
   };
 
   const deleteRejectedSuggestion = async (suggestion: LtmRejectedSuggestion) => {
-    const title =
-      noteById.get(suggestion.source.sourceNoteId)?.title ?? localizeUi("ui.longTermMemory.reviewqueue.untitledMemory");
+    const title = noteById.get(suggestion.source.sourceNoteId)?.title ?? missingContextTitle;
     const confirmed = props.confirmAction
       ? await props.confirmAction({
           title: localizeUi("ui.longTermMemory.reviewqueue.deleteRejectedSuggestion"),
@@ -1967,10 +2099,7 @@ export default function ReviewQueue({
     const mutationLabel = localizeUi(mutationLabels[mutation.kind]);
     const dispositionLabel = localizeUi(dispositionLabels[row.disposition]);
     const targetNote = mutation.kind === "create_note" ? mutation.note : noteById.get(row.targetId);
-    const targetTitle = noteDisplayTitle(
-      targetNote,
-      row.targetTitle ?? localizeUi("ui.longTermMemory.reviewqueue.untitledMemory"),
-    );
+    const targetTitle = noteDisplayTitle(targetNote, row.targetTitle ?? missingContextTitle);
     const targetBody = noteBody(targetNote);
     const targetType =
       noteById.get(row.targetId)?.type ??
@@ -2095,7 +2224,13 @@ export default function ReviewQueue({
               iconSize="1rem"
               className="mari-editor-action--primary !h-11 !min-h-11 !w-11 !min-w-11"
               style={{ height: 44, minHeight: 44, width: 44, minWidth: 44 }}
-              disabled={!eligibleIds.has(row.mutation.id) || !valid || preflightBlocked || running !== null}
+              disabled={
+                !eligibleIds.has(row.mutation.id) ||
+                !valid ||
+                preflightBlocked ||
+                !reviewContextReady ||
+                running !== null
+              }
               onClick={() => void runBatch("accept", [row])}
             />
             <IconButton
@@ -2299,6 +2434,7 @@ export default function ReviewQueue({
               mutation={mutation}
               canEditTitle={canEditTitle}
               onChange={(next) => updateMutation(row.mutation, next)}
+              onBlur={() => queueMicrotask(() => flushReviewStateRef.current())}
             />
             {mutationHasOverlongText(mutation) ? (
               <p role="alert" className="text-xs text-[var(--destructive)]">
@@ -2338,14 +2474,9 @@ export default function ReviewQueue({
           {review.error instanceof Error
             ? review.error.message
             : localizeUi("ui.longTermMemory.reviewqueue.pendingReviewDraftsCouldNotLoad")}{" "}
-          <button
-            type="button"
-            className="underline"
-            disabled={review.isFetching}
-            onClick={() => void review.refetch()}
-          >
+          <Button className="shrink-0" disabled={review.isFetching} onClick={() => void review.refetch()}>
             {localizeUi("ui.longTermMemory.activityview.retry")}
-          </button>
+          </Button>
         </StatusSurface>
       ) : null}
       {result ? (
@@ -2456,14 +2587,25 @@ export default function ReviewQueue({
       {rejectedSuggestions.isError ? (
         <StatusSurface tone="danger">
           {localizeUi("ui.longTermMemory.reviewqueue.rejectedSuggestionsCouldNotLoad")}{" "}
-          <button
-            type="button"
-            className="underline"
+          <Button
+            className="shrink-0"
             disabled={rejectedSuggestions.isFetching}
             onClick={() => void rejectedSuggestions.refetch()}
           >
             {localizeUi("ui.longTermMemory.activityview.retry")}
-          </button>
+          </Button>
+        </StatusSurface>
+      ) : null}
+      {reviewContextBusy ? (
+        <StatusSurface busy>{localizeUi("ui.longTermMemory.reviewqueue.loadingMemoryContext")}</StatusSurface>
+      ) : null}
+      {reviewContextFailed ? (
+        <StatusSurface tone="danger">
+          {localizeUi("ui.longTermMemory.reviewqueue.memoryContextCouldNotLoad")}{" "}
+          {notes.error instanceof Error ? notes.error.message : ""}{" "}
+          <Button className="shrink-0" disabled={notes.isFetching} onClick={() => void notes.refetch()}>
+            {localizeUi("ui.longTermMemory.activityview.retry")}
+          </Button>
         </StatusSurface>
       ) : null}
       <LtmWorkspace
@@ -2513,17 +2655,17 @@ export default function ReviewQueue({
                             className={`shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`}
                           />
                           <span className="min-w-0 flex-1 truncate font-semibold">
-                            {noteById.get(id)?.title || localizeUi("ui.longTermMemory.reviewqueue.untitledMemory")}
+                            {noteById.get(id)?.title || missingContextTitle}
                           </span>
                           <span className="shrink-0 text-xs text-[var(--muted-foreground)]">
                             {(source?.drafts.length ?? 0) + rejectedCount}
                           </span>
                         </button>
                         {rejectedCount ? (
-                          <button
-                            type="button"
+                          <Button
                             data-ltm-review-rejected-count={rejectedCount}
-                            className="shrink-0 rounded-full border border-[var(--marinara-editor-warning)]/40 px-2 py-0.5 text-[0.625rem] font-semibold text-[var(--marinara-editor-warning)] underline underline-offset-2"
+                            className="!min-h-11 !min-w-11 shrink-0 rounded-full border border-[var(--marinara-editor-warning)]/40 px-2 py-0.5 text-[0.625rem] font-semibold text-[var(--marinara-editor-warning)] underline underline-offset-2"
+                            style={{ minHeight: 44, minWidth: 44 }}
                             onClick={() => {
                               setSelectedSourceId(id);
                               setSelectedDraftId(null);
@@ -2538,7 +2680,7 @@ export default function ReviewQueue({
                             }}
                           >
                             {localizeUi("ui.longTermMemory.reviewqueue.rejectedCount", { count: rejectedCount })}
-                          </button>
+                          </Button>
                         ) : null}
                       </div>
                       <div id={panelId} hidden={!expanded}>
@@ -2594,9 +2736,7 @@ export default function ReviewQueue({
                 <div className="min-w-0">
                   <h2 data-ltm-review-draft-title className="truncate text-base font-semibold tracking-tight">
                     {localizeUi("ui.longTermMemory.reviewqueue.sourceNote", {
-                      title:
-                        noteById.get(effectiveSourceId ?? "")?.title ||
-                        localizeUi("ui.longTermMemory.reviewqueue.untitledMemory"),
+                      title: noteById.get(effectiveSourceId ?? "")?.title || missingContextTitle,
                     })}
                   </h2>
                   <p className="mt-1 text-xs text-[var(--muted-foreground)]">
@@ -2706,7 +2846,7 @@ export default function ReviewQueue({
                                   {localizeUi("ui.longTermMemory.reviewqueue.whatWasExpected")}:
                                 </span>{" "}
                                 {item.candidate.recovery
-                                  ? recoveryLabel(item.candidate.recovery, localizeUi, noteById)
+                                  ? recoveryLabel(item.candidate.recovery, localizeUi, noteById, missingContextTitle)
                                   : localizeUi("ui.longTermMemory.reviewqueue.reviewAndCorrectSuggestion")}
                               </p>
                               <p>
@@ -2781,6 +2921,7 @@ export default function ReviewQueue({
                       !eligibleSelectedRows.length ||
                       invalidSelectedEdits.length > 0 ||
                       preflightApplyDisabled ||
+                      !reviewContextReady ||
                       running !== null
                     }
                     onClick={() => void runBatch("accept")}

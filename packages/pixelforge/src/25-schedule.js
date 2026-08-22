@@ -45,6 +45,28 @@ PF.schedule = (() => {
     // the building rather than on being an elder: which KIND ends up keeping a
     // sanctuary is a question about the kind vocabulary, not about schedules.
     "*:resident:keeper": { dawn: "post", day: "post", dusk: "post", night: "home" },
+    // SOMEBODY THE BRIEF PLACED BY NAME (see the `worker` flag — a resolved
+    // `workplace`). Without a row like this the binding inverts itself exactly
+    // where it was supposed to help: half the cast kinds have no row of their own,
+    // so an acolyte or a shop assistant falls to "*:resident", whose DAY entry is
+    // the plaza — they would hold the building they were assigned to at dawn and
+    // dusk and then leave it for the eleven hours of daylight a player is most
+    // likely to open the door.
+    //
+    // Keyed on being named rather than on a kind, for the same reason the keeper
+    // tier is keyed on holding a building: it says nothing about WHO someone is,
+    // only that the brief already answered where they are. Night is still `home`,
+    // because a day job has no opinion about a bed.
+    //
+    // BELOW the per-kind rows, deliberately. This tier exists for the SIX kinds
+    // that have no row at all; a kind that has one already spends its day at
+    // `post`, and `post` is the named workplace by the time this resolves — so
+    // the kind row and the workplace agree without this row's help. Placing it
+    // above them broke exactly the one row that disagrees on purpose: a guard
+    // given a workplace stopped keeping the night watch, because this row sends
+    // everybody home at night and "the watch keeps the night, so the settlement
+    // never looks abandoned" is the whole point of `guard:resident`.
+    "*:resident:worker": { dawn: "post", day: "post", dusk: "post", night: "home" },
     // Everyone else with a roof: on their own doorstep at dawn and again at dusk,
     // the square by day, and in bed at night.
     //
@@ -53,7 +75,16 @@ PF.schedule = (() => {
     // It stopped being true the moment dwellings gained interiors and `home` became a
     // bed inside: residents then vanished indoors from 18:00 to 07:00, which is over
     // half the clock and most of the hours with interesting light. Bed is for night.
-    "*:resident": { dawn: "post", day: "public", dusk: "post", night: "home" },
+    // DAWN AND DUSK BELONG TO THE HEARTH. Both used to be `post`, so an ordinary
+    // resident stood at their work anchor from waking until sleeping and the only
+    // thing a whole day did was empty the houses at noon. A household is in and
+    // around the fire at first light and again at last light, which is also what
+    // makes a lit window at dusk mean somebody is behind it.
+    //
+    // `resolve` falls back to `post` when an NPC has no `hearth` handle, so
+    // anyone with no fire to stand at — a wilds resident, a lodger in a named
+    // place's quarters — keeps exactly the day they had.
+    "*:resident": { dawn: "hearth", day: "public", dusk: "hearth", night: "home" },
     // Loiterers hold their public spot all day and take a bed at night.
     "*:transient": { dawn: "post", day: "post", dusk: "post", night: "home" },
     // Fringe NPCs stay out at the margins — meeting one means going to them.
@@ -72,7 +103,9 @@ PF.schedule = (() => {
     const template =
       (sched.keeper ? TABLE[`${sched.kind}:${sched.standing}:keeper`] : null) ??
       (sched.keeper ? TABLE[`*:${sched.standing}:keeper`] : null) ??
+      (sched.worker ? TABLE[`${sched.kind}:${sched.standing}:worker`] : null) ??
       TABLE[`${sched.kind}:${sched.standing}`] ??
+      (sched.worker ? TABLE[`*:${sched.standing}:worker`] : null) ??
       TABLE[`*:${sched.standing}`] ??
       DEFAULT;
     return sched[template[daypart] ?? "post"] ?? sched.post ?? null;
@@ -152,8 +185,8 @@ PF.schedule = (() => {
     // The box is FULL. Widen to the zone before giving up. The old fallback
     // dropped straight onto zone.spawn — ONE fixed tile that honours neither
     // `taken` nor standable() — so every NPC overflowing the same box in a
-    // single pass landed on top of the last. A household at the CAPS.household
-    // cap of 6 shares a 3x2 door apron whose door tile standable() excludes, so
+    // single pass landed on top of the last. A household of six shares a 3x2 door
+    // apron whose door tile standable() excludes, so
     // it overflowed on every seed tried, and the losers were both un-talkable
     // (nearest wins on a strict <) and frozen: their wander box is the very box
     // they could not fit in, so every candidate step fails its bounds test.
@@ -175,8 +208,10 @@ PF.schedule = (() => {
     // compiled zones tried, but the guarantee should live in the code.
     //
     // Unreachable in practice, and deliberately not escalated to a null return:
-    // the smallest zone measured holds 119 standable tiles against a cast capped
-    // at 10, so this is a floor under a contract, not a live path.
+    // the smallest zone measured holds 119 standable tiles, comfortably more
+    // than any one zone's occupants even now that the mint fills a city (see
+    // npcOccupies in 30-sim.js for the measured population numbers), so this is
+    // a floor under a contract, not a live path.
     if (standable(zone, zone.spawn.x, zone.spawn.y)) return { x: zone.spawn.x, y: zone.spawn.y };
     for (let y = 0; y < zone.h; y++) {
       for (let x = 0; x < zone.w; x++) if (standable(zone, x, y)) return { x, y };

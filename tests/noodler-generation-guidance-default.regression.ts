@@ -16,9 +16,23 @@ const settings = readFileSync(
 );
 const readme = readFileSync("packages/slurp/README.md", "utf8");
 const enLocale = readFileSync("packages/slurp/src/engine/packages/client/src/localization/locales/en.json", "utf8");
+const generation = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-generation.service.ts",
+  "utf8",
+);
+const stageDraft = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-stage-profile-draft.service.ts",
+  "utf8",
+);
+const replyGeneration = readFileSync(
+  "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-reply-generation.service.ts",
+  "utf8",
+);
 
 function defaultGuidance(source: string): string {
-  const match = source.match(/NOODLER_DEFAULT_GENERATION_GUIDANCE\s*(?::\s*string\s*)?=\s*\n?\s*"((?:[^"\\]|\\.)*)";/u);
+  const match = source.match(
+    /(?:^|\n)(?:export )?const NOODLER_DEFAULT_GENERATION_GUIDANCE\s*(?::\s*string\s*)?=\s*\n?\s*"((?:[^"\\]|\\.)*)";/u,
+  );
   assert.ok(match, "NOODLER_DEFAULT_GENERATION_GUIDANCE must be a single double-quoted literal");
   return match[1];
 }
@@ -34,20 +48,16 @@ assert.equal(clientDefault, serverDefault, "Slurp settings and server defaults m
 // posts appear regularly but are neither mandatory nor necessarily the majority, and that
 // ordinary posts stay important rather than being demoted to filler.
 assert.match(serverDefault, /adults \(18\+\)/u);
-assert.match(serverDefault, /^All NoodleR creators and viewers/u);
+assert.match(serverDefault, /^All Slurp creators and viewers/u);
 assert.match(serverDefault, /not required and need not be the majority/u);
 assert.doesNotMatch(serverDefault, /norm here, not the exception|most posts are lewd|the minority/u);
 
-// Old Noodler installations are intentionally unsupported. Slurp no longer carries legacy
-// guidance aliases or migration defaults.
-const legacyBlock = storage.slice(
-  storage.indexOf("NOODLER_LEGACY_GENERATION_GUIDANCE_DEFAULTS = ["),
-  storage.indexOf("export function normalizeSlurpSettings"),
-);
-assert.equal(legacyBlock, "", "legacy generation defaults must be removed");
-assert.doesNotMatch(storage, /NOODLER_LEGACY_GENERATION_GUIDANCE_DEFAULTS/u);
-
-assert.match(storage, /rawRecord\.generationGuidance \?\? NOODLER_DEFAULT_GENERATION_GUIDANCE/u);
+// The exact previously shipped prompt migrates, while any customized value remains untouched.
+assert.match(storage, /LEGACY_NOODLER_DEFAULT_GENERATION_GUIDANCE/u);
+assert.match(storage, /rawRecord\.generationGuidance === LEGACY_NOODLER_DEFAULT_GENERATION_GUIDANCE/u);
+assert.doesNotMatch(generation, /"[^"\n]*NoodleR/u);
+assert.doesNotMatch(stageDraft, /"[^"\n]*NoodleR/u);
+assert.doesNotMatch(replyGeneration, /"[^"\n]*NoodleR/u);
 
 // Creator settings must stay package-owned. The migration reads prior Slurp values once, but
 // active normalization and writes must not use the public Noodle schema, defaults, or key.

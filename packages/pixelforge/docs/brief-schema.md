@@ -18,13 +18,29 @@ through the derivations below.
 
 ```js
 {
-  briefVersion: 1,          // int. Bumped only when a field's MEANING changes.
+  briefVersion: 1,          // int. Bumped only when a field's MEANING changes — but nothing
+                            // reads it yet, so a bump is bookkeeping for a migration that does
+                            // not exist. 0.10 changed `backgroundPopulation`'s meaning and did
+                            // NOT bump: the number moves once, when the queued v2 bundle lands
+                            // (ROADMAP open question 3), not once per change.
   theme: "cozy-village",    // echo only — ALWAYS overwritten with the wizard's theme, valid or
                             // not, so the stored brief is self-contained and the model can never
                             // pick a skin that fights the wizard.
-  scale: "village",         // ENUM outpost|hamlet|village|town — the ONLY size input.
-                            //   outpost 28x20 / base 4 buildings   hamlet 34x24 / 6
-                            //   village 44x30 / 8                  town 56x38 / 12
+  scale: "village",         // ENUM outpost|hamlet|village|town|city — the ONLY size input.
+                            //   outpost 28x20 / 4-building budget   hamlet 48x28 / 8
+                            //   village 60x40 / 16                  town 76x52 / 34
+                            //   city 104x72 / 76
+                            //   The building figure is a BUDGET — the most lots the street
+                            //   grid may claim — not a promise of roofs. The grid offers
+                            //   4/8/20/36/80 lots, so the budget is met exactly at outpost
+                            //   and hamlet and BINDS from village up; of the lots it claims
+                            //   only some become door-bearing buildings. Measured across
+                            //   seeds: 4 / 6-7 / 13-14 / 26-27 / 47-48 doors.
+                            //   Current tuning, not contract — the authoritative table is
+                            //   SCALES in 18-brief.js and it moves with the game (it already
+                            //   grew once, in 0.10). Since 0.10 the compiler also MINTS
+                            //   residents to a rank-sized population, so the named cast is a
+                            //   minority of the town, not its whole headcount.
   surround: "fields",       // ENUM woods|fields|rocky|water|barren → ground mix, border ring,
                             // scatter density. Theme-neutral.
   prosperity: "modest",     // ENUM struggling|modest|thriving. Consumers: path material, fence
@@ -70,7 +86,20 @@ through the derivations below.
                             // (case/whitespace/diacritics) → the settlement root. NO substring
                             // matching — a deterministic guess can bind an NPC to the wrong zone
                             // forever. Reads only the already-finalized zone list.
-      household: 1,         // int 1-6. SAME NUMBER = SAME ROOF. The way a RESIDENT (see standing)
+      workplace: "St Aldwin's",
+                            // OPTIONAL zone NAME reference, same exact → folded resolution as
+                            // `home` and the same refusal to substring-match. Where the working
+                            // day is spent when OWNERSHIP cannot say: the compiler infers a work
+                            // anchor from what somebody owns, but ownership is one building per
+                            // person and one person per building, so a school's second teacher, a
+                            // market's fourth seller and a shop assistant have no way to be placed
+                            // without this. Unresolved falls to NONE, never to the root the way
+                            // `home` does — "works at the settlement" is not a box anyone can stand
+                            // in — and the drop is recorded in `_repairs`. Omitted for anyone who
+                            // works where they live or runs the place themselves, and a brief that
+                            // never sets it compiles exactly as it did before the field existed.
+                            // Moves the WORKING anchor only: it never rehouses anybody.
+      household: 1,         // int 1-10. SAME NUMBER = SAME ROOF. The way a RESIDENT (see standing)
                             // causes a dwelling to exist, bounded by construction:
                             // "30 people → 30 houses" is inexpressible in this schema.
       persona: "…",         // TEXT ≤100 — "what they want, and what they are hiding."
@@ -86,14 +115,33 @@ through the derivations below.
                             // pariah) stay a GM-runtime matter; wealth/class is a separate layer.
   ],
 
-  backgroundPopulation: 30, // int 0-500, cast included. NARRATIVE TEXTURE, never geometry:
-                            // consumers are the World Maps root description phrase and ambient
-                            // walker density clamp(round(pop/12), 0, 8). No other reader.
+  backgroundPopulation: 30, // int 0-500, cast included. A dial, not a ruler: since 0.10 its one
+                            // consumer (20-world.js) reads it as a household count (÷3) that
+                            // sets `householdTarget` WITHIN the rank's band — it can move
+                            // a settlement inside its size class but never set the class, so a
+                            // hamlet claiming 500 souls stays a hamlet. Zero means "no claim"
+                            // and the rank's own band applies.
+                            // It moves BUILT GEOMETRY, not just headcount: the target decides
+                            // how many households are minted, so dwellings and doors move with
+                            // it. (Illustrative, at 0.10 tuning: a seed-7 city moved roughly
+                            // 76→133 residents and 36→58 doors from band floor to ceiling.
+                            // The harness pins the PROPERTY — floor to ceiling grows houses
+                            // and doors while the rank and the guest wing hold still — not
+                            // these figures, which move with tuning.)
+                            // What it CANNOT reach: the rank itself (the band clamps it), and
+                            // the guest wing — GUEST_BERTHS is keyed on scale + prosperity
+                            // alone, so an inn offers the same berths whatever this says.
+                            // Current design, revisitable —
+                            // how hard this field bites is an open tuning question, and future
+                            // consumers (district walker density, the §8 population phrase)
+                            // remain planned.
 }
 ```
 
 Exactly three numbers exist in the document (`briefVersion`, `household`, `backgroundPopulation`),
-and none of them is a count of buildings, tiles, or zones.
+and none of them is a count of buildings, tiles, or zones. `backgroundPopulation` does reach
+geometry — households minted become dwellings that get built — but only through the derivation
+above and only inside the rank's band, which is the sanctioned route, not a size input.
 
 ## 2. Identity across time (compiler-owned)
 
@@ -122,7 +170,7 @@ response is **never stored** (checkpoints capture by value — see #5110).
    `features` arrives as an OBJECT keyed by anything, take `Object.values()` before the array
    check. A truncated array keeps its complete elements and drops the partial one.
 2. **Scalars.** Enum folds (trim/case). `scale` receiving a NUMBER buckets it (<8 outpost, <20
-   hamlet, <60 village, else town) — the most-observed weak-model slip (population dumped into the
+   hamlet, <60 village, <200 town, else city) — the most-observed weak-model slip (population dumped into the
    size slot). Unknown enum → field default. All text sanitized (markdown/HTML/backticks/control
    chars stripped), grapheme-truncated at word boundaries; a clause-losing truncation of
    `situation` degrades to empty instead (a cut hook is worse than none).
@@ -130,9 +178,10 @@ response is **never stored** (checkpoints capture by value — see #5110).
    drop feature items with unknown tags whole; a `host` in the cast with no gathering place
    synthesizes AT MOST ONE interior named from the host (the player can walk into the inn).
 4. **Cast.** Bounds 4-10 (over → keep `leader` + first-N by array order, hoisting a `leader`
-   found past the cap into the kept set); `home` resolution per §1; a household >6 members
-   splits **per member** by `hash(seed, "household-split-<memberId>")`, scanning forward
-   (wraparound) to the first household with room — deterministic, no clustering on one target.
+   found past the cap into the kept set); `home` resolution per §1. There is NO cap on how many
+   people share a household number — unrelated lodgers, sisters at a convent and recruits in a
+   barracks are all one number, and `CAPS.household` bounds only WHICH numbers exist (an id
+   space the size of the cast), never how many share one.
 5. **Derivation & caps** (buildings — the "30 people" rule; **only `resident`-standing cast
    members generate buildings** — see the §1 `standing` note):
    - dwellings = distinct **resident** households **homed at the settlement root** (a resident
@@ -172,9 +221,11 @@ response is **never stored** (checkpoints capture by value — see #5110).
      building, lists that never intersect: a keeper is not a lodger and a traveller is never dealt
      the keeper's bed. Only a gathering lays berths at all; a named house or church sleeps its own
      people and lets nothing;
-   - **lots are physical**, not budgeted: the row placer lays what the map is wide enough for
-     (two on an outpost or a hamlet, six in a village, eight in a town), which is under
-     `BASE[scale]` at every size. They are claimed in order — named places, then specials, then
+   - **lots are physical**: the street grid lays what the map is wide enough for — 4/8/20/36/80
+     at the five ranks, before the `scale.buildings` budget clamps village and up to 16/34/76
+     (§1's scale table is the authoritative pair of numbers). They are claimed in order — named
+     places, then the specials that buy their own ground (a special bound to a named place shares
+     its facade and claims no lot), then
      dwellings, then market stalls — with ONE floor: while any household is still unhoused, the
      **last free lot goes to housing**. A workshop or a named place that would leave a family with
      nowhere to sleep is not built; the house is, and the merge below puts every remaining
@@ -196,7 +247,7 @@ response is **never stored** (checkpoints capture by value — see #5110).
      shelves, and the OWNER's working anchor moved inside (only the owner's: the rest of the
      household are residents there, not staff), because an empty shop reads worse than a
      locked door. The inn's guest berths are sized from `scale` and `prosperity` (GUEST_BERTHS —
-     three to ten of them), never from tonight's guest list; whoever arrives past the last berth
+     three to thirteen of them), never from tonight's guest list; whoever arrives past the last berth
      shares the common room as before. None of this adds a save field: the
      handles are re-baked on every compile and placement is a pure function of the saved clock;
    - **height** is a facade, not a footprint: every body row of a building is already solid wall,
@@ -310,13 +361,14 @@ Not yet exported (still §9 territory): the root's population phrase and per-fea
 features have no zones of their own, and decorating the root would edit a location the user may
 have authored (the route deliberately cannot).
 
-## 9. Reserved consumers (sealed now, wired in 0.5.x)
+## 9. Reserved consumers
 
-Three sealed fields have no in-world consumer yet: `backgroundPopulation` (planned: ambient
-walker density + the §8 population phrase), `prosperity` (planned: building extras/decoration
-density), and feature `name` labels (planned: on-map signage/inspect text). They are validated,
-repaired, and stored **now** so shipped briefs never need regeneration when the consumers land —
-the schema is the contract, not the renderer.
+The schema seals fields before their consumers exist, so shipped briefs never need regeneration
+when a consumer lands — the schema is the contract, not the renderer. The pattern has paid out
+twice already: `prosperity` now drives dress (path material, fence quality, night-light density,
+ground-fill bias) and `backgroundPopulation` now leans the minted population within its rank's
+band (0.10, §1). Still waiting for a consumer: feature `name` labels (planned: on-map
+signage/inspect text — roadmap S2) and the root's population phrase (§8).
 
 ## 10. Guidance note on theme mismatch
 

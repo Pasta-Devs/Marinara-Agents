@@ -56,6 +56,9 @@ import {
   updateNoodlerPostWithMedia,
 } from "../services/slurp/slurp-post.operation.js";
 import { tryNoodlerAccountOperation } from "../services/slurp/slurp-account-operation-lock.js";
+import { trySlurpDataDeletion, trySlurpWrite } from "../services/slurp/slurp-operation-lock.js";
+import { removeAllNoodlerMedia } from "../services/slurp/slurp-media.js";
+import { clearNoodlerImageConnections } from "../services/slurp/slurp-image-connections.js";
 import { generateAndApplyNoodlerCreatorReply } from "../services/slurp/slurp-creator-reply.operation.js";
 import { getNoodlerFanActivityStatus, runNoodlerFanActivity } from "../services/slurp/slurp-fan-activity.operation.js";
 import { admissionModeForRequest, isConnectionAdmissionFailure } from "../services/generation/connection-admission.js";
@@ -218,16 +221,20 @@ async function readNoodlerMultipart(req: FastifyRequest): Promise<{ payload: unk
       throw new NoodlerMediaRequestError("Unsupported image file type.", 400);
     }
     let buffer: Buffer;
-    try {
-      buffer = await part.toBuffer();
-    } catch (error) {
-      const truncated = (part.file as typeof part.file & { truncated?: boolean }).truncated === true;
-      const tooLarge = truncated || (error as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE";
-      throw new NoodlerMediaRequestError(
-        tooLarge ? "NoodleR image is too large." : "Failed to read the uploaded image.",
-        tooLarge ? 413 : 400,
-      );
-    }
+    const write = await trySlurpWrite(async () => {
+      try {
+        buffer = await part.toBuffer();
+      } catch (error) {
+        const truncated = (part.file as typeof part.file & { truncated?: boolean }).truncated === true;
+        const tooLarge = truncated || (error as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE";
+        throw new NoodlerMediaRequestError(
+          tooLarge ? "NoodleR image is too large." : "Failed to read the uploaded image.",
+          tooLarge ? 413 : 400,
+        );
+      }
+    });
+    if (!write.acquired) return reply.code(409).send({ error: "Slurp data cleanup is in progress." });
+    return write.value;
     const detected = isAllowedImageBuffer(buffer, extension);
     if (!detected || (extension === ".jpeg" ? "jpg" : extension.slice(1)) !== detected.ext) {
       throw new NoodlerMediaRequestError("Unsupported or invalid image file.", 400);
@@ -283,8 +290,7 @@ async function importNoodlerMedia(imageUrl: string): Promise<NoodlerPostMediaUpl
 }
 
 type DecodedNoodlerMediaRequest<T> =
-  | { success: true; data: T; media: NoodlerPostMediaUpload | undefined }
-  | { success: false; error: z.ZodError };
+  { success: true; data: T; media: NoodlerPostMediaUpload | undefined } | { success: false; error: z.ZodError };
 
 async function decodeNoodlerMediaRequest<WithMediaSchema extends z.ZodTypeAny, WithoutMediaSchema extends z.ZodTypeAny>(
   req: FastifyRequest,
@@ -1196,8 +1202,14 @@ export async function slurpRoutes(app: FastifyInstance) {
         connection,
       });
     } catch (error) {
-      logger.error(error, "[noodler] Stage profile draft generation failed");
-      return reply.code(500).send({ error: "Stage profile draft generation failed." });
+      logger.error(
+        error,
+        "[noodler] Stage profile draft generation failed using %s",
+        connection.model || connection.provider,
+      );
+      return reply
+        .code(500)
+        .send({ error: "Stage profile draft generation failed. Check the generation connection and try again." });
     }
   });
 
@@ -1621,6 +1633,23 @@ export async function slurpRoutes(app: FastifyInstance) {
     return deleted;
   });
 
+  app.delete("/data", async (_req, reply) => {
+    const locked = await trySlurpDataDeletion(async () => {
+      const result = await noodle.deleteAllSlurpData();
+      await clearNoodlerImageConnections(app.db);
+      removeAllNoodlerMedia();
+      return result;
+    });
+    if (!locked.acquired) return reply.code(409).send({ error: "Another Slurp operation is already running." });
+    return locked.value;
+  });
+
+  app.delete("/data/unused", async (_req, reply) => {
+    const locked = await trySlurpDataDeletion(() => noodle.deleteUnusedSlurpData());
+    if (!locked.acquired) return reply.code(409).send({ error: "Another Slurp operation is already running." });
+    return locked.value;
+  });
+
   app.get("/noodler/accounts/:id/posts", async (req, reply) => {
     const parsed = noodlerProfilePostsQuerySchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
@@ -1677,6 +1706,17 @@ export async function slurpRoutes(app: FastifyInstance) {
     return noodle.getNoodlerReserveStatus();
   });
 
+  app.patch("/noodler/auto-post/schedule/:slotId", async (req, reply) => {
+    const body = z.object({ publishAt: z.string().datetime() }).safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.flatten() });
+    const { slotId } = req.params as { slotId: string };
+    const result = await noodle.rescheduleNoodlerPost(slotId, body.data.publishAt);
+    if (result === "not_found") return reply.code(404).send({ error: "Scheduled Slurp post not found." });
+    if (result === "not_future") return reply.code(400).send({ error: "Publication time must be in the future." });
+    if (result === "not_editable") return reply.code(409).send({ error: "This Slurp post is no longer editable." });
+    return noodle.getNoodlerReserveStatus();
+  });
+
   app.get("/noodler/image-connections", async () => getNoodlerImageConnections(app.db));
 
   app.patch("/noodler/image-connections", async (req, reply) => {
@@ -1698,9 +1738,9 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (creatorId && !(await noodle.getNoodlerAccountById(creatorId))) {
       return reply.code(404).send({ error: "NoodleR stage profile not found" });
     }
-    for (const connectionId of [defaultConnectionId, connectionId]) {
-      if (connectionId === undefined || connectionId === null) continue;
-      const connection = await connections.getWithKey(connectionId);
+    for (const candidateConnectionId of [defaultConnectionId, connectionId]) {
+      if (candidateConnectionId === undefined || candidateConnectionId === null) continue;
+      const connection = await connections.getWithKey(candidateConnectionId);
       if (!connection || connection.provider !== "image_generation") {
         return reply.code(404).send({ error: "Noodle image connection not found" });
       }

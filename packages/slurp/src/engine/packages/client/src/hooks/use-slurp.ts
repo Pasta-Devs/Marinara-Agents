@@ -44,7 +44,6 @@ import type {
   NoodlerViewerScope,
   NoodlerCreateInteractionInput,
   NoodlerCreatorReplyResult,
-  NoodlerReserveStatus,
   NoodlerFanActivitySettings,
   NoodlerRemoveInteractionInput,
 } from "@marinara-engine/shared";
@@ -81,6 +80,7 @@ export type SlurpSettings = {
   generationGuidance: string;
   postsPerDay: number;
   autoPostingScheduleEnabled: boolean;
+  autoPostGenerationMode: "pre_generate" | "on_demand";
   fanActivityEnabled: boolean;
   generationConnectionId: string | null;
   imageGenerationConnectionId: string | null;
@@ -119,6 +119,27 @@ export type SlurpSettings = {
 
 export type SlurpSettingsUpdate = Partial<SlurpSettings>;
 
+export type SlurpScheduleSlot = {
+  id: string;
+  publishAt: string;
+  state: "scheduled" | "prepared";
+};
+
+export type SlurpReserveStatus = {
+  preparedCount: number;
+  preparedThrough: string | null;
+  textAttemptsUsed: number;
+  imageAttemptsUsed: number;
+  postsPerDay: number;
+  preparationNotBefore: string;
+  creators: Array<{
+    accountId: string;
+    nextPreparedAt: string | null;
+    preparedCount: number;
+    slots: SlurpScheduleSlot[];
+  }>;
+};
+
 export function useSlurpSettings() {
   return useQuery({
     queryKey: noodleKeys.settings(),
@@ -135,6 +156,23 @@ export function useUpdateSlurpSettings() {
       queryClient.setQueryData(noodleKeys.settings(), settings);
       return queryClient.invalidateQueries({ queryKey: noodleKeys.noodlerFanStatus() });
     },
+  });
+}
+
+export function useDeleteAllSlurpData() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.delete<{ deletedCreators: number; deletedPosts: number }>("/slurp/data"),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.all }),
+  });
+}
+
+export function useDeleteUnusedSlurpData() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.delete<{ deletedPreparedPosts: number; deletedAttempts: number; deletedRuns: number }>("/slurp/data/unused"),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: noodleKeys.all }),
   });
 }
 
@@ -264,8 +302,7 @@ export function useNoodlerEligibleAccounts(
 }
 
 export type SlurpProfilePost =
-  | { managed: NoodlerManagedPost; viewerPost: NoodlerPostView | null }
-  | { viewerPost: NoodlerPostView };
+  { managed: NoodlerManagedPost; viewerPost: NoodlerPostView | null } | { viewerPost: NoodlerPostView };
 
 export function useNoodlerPosts(accountId: string | null, personaId: string | null) {
   return useQuery({
@@ -386,6 +423,7 @@ export function useUpdateNoodlerStageProfile() {
       Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerReserveStatus() }),
       ]),
   });
 }
@@ -400,6 +438,7 @@ function useNoodlerAvatarMutation<TInput extends { accountId: string }>(
       Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerReserveStatus() }),
       ]),
   });
 }
@@ -456,6 +495,7 @@ function useNoodlerSourceAction(action: "dismiss" | "adopt-identity") {
       Promise.all([
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerAccounts() }),
         qc.invalidateQueries({ queryKey: noodleKeys.noodlerViewers() }),
+        qc.invalidateQueries({ queryKey: noodleKeys.noodlerReserveStatus() }),
       ]),
   });
 }
@@ -979,12 +1019,23 @@ export function useUpdateNoodlerFanActivity() {
 export function useNoodlerReserveStatus(enabled = true) {
   return useQuery({
     queryKey: noodleKeys.noodlerReserveStatus(),
-    queryFn: () => api.get<NoodlerReserveStatus>("/slurp/noodler/auto-post/status"),
+    queryFn: () => api.get<SlurpReserveStatus>("/slurp/noodler/auto-post/status"),
     enabled,
     // The scheduler prepares posts on its own timer, so nothing here invalidates this key when
     // the counts change. Same 30s cadence the creator list already uses.
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
+  });
+}
+
+export function useUpdateNoodlerScheduleSlot() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ slotId, publishAt }: { slotId: string; publishAt: string }) =>
+      api.patch<SlurpReserveStatus>(`/slurp/noodler/auto-post/schedule/${encodeURIComponent(slotId)}`, {
+        publishAt,
+      }),
+    onSuccess: (status) => qc.setQueryData(noodleKeys.noodlerReserveStatus(), status),
   });
 }
 

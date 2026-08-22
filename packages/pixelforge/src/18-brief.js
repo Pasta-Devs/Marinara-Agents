@@ -9,11 +9,28 @@ PF.brief = (() => {
   const VERSION = 1;
 
   // ── Vocabularies (the form does the teaching) ───────────────────────────────
+  // Sized so the STREET GRID has somewhere to put a street. The grid lays a lot
+  // every 8 rows and every 9 columns, and a map only 30 tall has room for two
+  // rows of them however wide it is — so a village used to lay six lots on 1320
+  // tiles and read as a hamlet with a lot of grass. Lots per rank now run
+  // 4 / 8 / 16 / 36 / 80, which is the first progression where each rank looks
+  // like a bigger VERSION of the one below rather than the same place zoomed.
+  //
+  // `buildings` is the ceiling on how many of those lots get laid out, and it is
+  // deliberately kept ABOVE what the population arithmetic asks for at each rank
+  // (20-world's RESIDENT_HOUSEHOLDS). The ground should permit and the people
+  // should decide; when this number binds first, every settlement of a rank comes
+  // out the same size no matter who lives there, which is the bug that made a
+  // city eighteen buildings wide whatever its brief said.
   const SCALES = {
     outpost: { w: 28, h: 20, buildings: 4 },
-    hamlet: { w: 34, h: 24, buildings: 6 },
-    village: { w: 44, h: 30, buildings: 8 },
-    town: { w: 56, h: 38, buildings: 12 },
+    hamlet: { w: 48, h: 28, buildings: 8 },
+    village: { w: 60, h: 40, buildings: 16 },
+    town: { w: 76, h: 52, buildings: 34 },
+    // A CITY. Roomy on purpose: it is the rank where districts (roadmap W3) will
+    // eventually carve the map into wards with their own gravity, and the ground
+    // wants to be there before the machinery that divides it.
+    city: { w: 104, h: 72, buildings: 76 },
   };
   const SURROUNDS = ["woods", "fields", "rocky", "water", "barren"];
   const PROSPERITY = ["struggling", "modest", "thriving"];
@@ -64,6 +81,11 @@ PF.brief = (() => {
   const SETTLEMENT_TAGS = new Set(FEATURE_TAGS.filter((t) => t !== "water-crossing" && t !== "dense-growth"));
 
   const CAPS = {
+    // The ceiling a brief may ASK for. What a settlement can actually hold is
+    // per-scale (FEATURE_ROOM below) — an outpost is 560 tiles and four of its
+    // lots are now houses, so four named features have nowhere to stand and the
+    // last two are dropped in silence. Small settlements holding fewer features
+    // is correct; asking for four and losing two without a word is not.
     features: 4,
     places: 4,
     wilds: 2,
@@ -72,8 +94,24 @@ PF.brief = (() => {
     sanctuary: 1,
     castMin: 4,
     castMax: 10,
-    household: 6,
+    // AN ID SPACE, not an occupancy bound. The two were the same constant, and
+    // that conflation is the same bug as `household` carrying both kinship and
+    // address: `Math.min(CAPS.household, n)` clamps WHICH group you are in, while
+    // the oversize-split pass used the identical number to bound HOW MANY share
+    // one. Ten people must be able to be ten unrelated households — a convent, a
+    // barracks, a boarding house — so the id space is the cast size, and nothing
+    // caps the members of a group any more.
+    household: 10,
   };
+  // How many named features the GROUND of each rank can actually carry, measured
+  // rather than guessed: with the street-grid allocator an outpost seats two, a
+  // hamlet three, and everything from a village up seats the full ask.
+  const FEATURE_ROOM = { outpost: 2, hamlet: 3, village: 4, town: 4, city: 4 };
+  // Named places take LOTS, and an outpost lays four of them. Four places leave
+  // nothing for the houses the cast still needs, so the drop guard fires and the
+  // brief loses buildings it named. What the rank can seat, it seals; the rest
+  // never gets promised.
+  const PLACE_ROOM = { outpost: 2, hamlet: 3, village: 4, town: 4, city: 4 };
   const BRIEF_BYTE_BUDGET = 8_192;
 
   // ── Deterministic entropy: ONE source ───────────────────────────────────────
@@ -127,7 +165,8 @@ PF.brief = (() => {
   /** scale may arrive as a POPULATION NUMBER (the most-observed weak-model slip). */
   function foldScale(value, repairs) {
     if (typeof value === "number" && Number.isFinite(value)) {
-      const bucket = value < 8 ? "outpost" : value < 20 ? "hamlet" : value < 60 ? "village" : "town";
+      const bucket =
+        value < 8 ? "outpost" : value < 20 ? "hamlet" : value < 60 ? "village" : value < 200 ? "town" : "city";
       repairs.push(`scale: bucketed number ${value} -> ${bucket}`);
       return bucket;
     }
@@ -176,8 +215,17 @@ PF.brief = (() => {
     // Pass 3 — zones. Item-level drop: an unknown tag drops the WHOLE feature.
     // The cap applies to KEPT items (a leading run of junk must not discard
     // the valid features behind it — the places loop's semantics).
+    const featureRoom = Math.min(CAPS.features, FEATURE_ROOM[brief.scale] ?? CAPS.features);
     for (const item of asArray(src.features)) {
-      if (brief.features.length >= CAPS.features) break;
+      if (brief.features.length >= featureRoom) {
+        // SAID OUT LOUD. Everything else in this pass records what it dropped
+        // and why; a rank running out of ground is a better reason than most,
+        // and the whole point of the cap is that a settlement stops PROMISING
+        // what it cannot hold. Losing the promise silently would just move the
+        // silence one layer up.
+        repairs.push(`features: ${brief.scale} has room for ${featureRoom}; dropped the rest`);
+        break;
+      }
       const tag = foldEnum(item?.tag, FEATURE_TAGS, null);
       if (!tag || !SETTLEMENT_TAGS.has(tag)) {
         repairs.push(`features: dropped item with tag ${JSON.stringify(item?.tag ?? null)}`);
@@ -231,8 +279,12 @@ PF.brief = (() => {
     let hallCount = 0;
     let gatheringCount = 0;
     let sanctuaryCount = 0;
+    const placeRoom = Math.min(CAPS.places, PLACE_ROOM[brief.scale] ?? CAPS.places);
     for (const item of asArray(src.places)) {
-      if (brief.places.length >= CAPS.places) break;
+      if (brief.places.length >= placeRoom) {
+        repairs.push(`places: ${brief.scale} has room for ${placeRoom}; dropped the rest`);
+        break;
+      }
       const kind = foldEnum(item?.kind, PLACE_KINDS, null);
       if (!kind) {
         repairs.push(`places: dropped item with kind ${JSON.stringify(item?.kind ?? null)}`);
@@ -266,7 +318,7 @@ PF.brief = (() => {
     // named from the host — the player must be able to walk into the inn.
     const rawCast = asArray(src.cast);
     const hasGathering = brief.places.some((p) => p.kind === "gathering");
-    if (!hasGathering && brief.places.length < CAPS.places) {
+    if (!hasGathering && brief.places.length < placeRoom) {
       const host = rawCast.find((item) => foldEnum(item?.kind ?? item?.role, CAST_KINDS, null) === "host");
       const hostName = host ? capText(host.name, 20) : "";
       if (hostName) {
@@ -304,6 +356,22 @@ PF.brief = (() => {
         if (homeRaw) repairs.push(`cast[${brief.cast.length}].home: unresolved ${JSON.stringify(homeRaw)} -> root`);
         home = brief.name;
       }
+      // WORKPLACE — where the working day is spent, when OWNERSHIP cannot say.
+      // Ownership answers it for a smith with a forge, but it is one building per
+      // person and one person per building, so it can never place a school's second
+      // teacher, a market's fourth seller, or a shop assistant.
+      //
+      // Same exact -> folded resolution as `home`, and no substring matching for the
+      // same reason: a guessed binding is forever.
+      //
+      // Unresolved falls to NULL, not to the root the way `home` does. "Works at the
+      // settlement" says nothing a wander box could be built from, and a null
+      // workplace IS every brief that has ever compiled — so the derivation in
+      // 20-world runs exactly as before for anyone who does not name one.
+      const workplaceRaw = capText(item?.workplace, 24);
+      const workplace = zoneNames.includes(workplaceRaw) ? workplaceRaw : (zoneFolds.get(fold(workplaceRaw)) ?? null);
+      if (workplaceRaw && !workplace)
+        repairs.push(`cast[${brief.cast.length}].workplace: unresolved ${JSON.stringify(workplaceRaw)} -> none`);
       const householdNumber = Number(item?.household);
       brief.cast.push({
         name: dedupeName(name, `cast[${brief.cast.length}]`),
@@ -315,6 +383,7 @@ PF.brief = (() => {
           pick(seed, `cast-tint-${brief.cast.length}`, Object.keys(TINTS)),
         ),
         home,
+        ...(workplace ? { workplace } : {}),
         household: Number.isFinite(householdNumber)
           ? Math.max(1, Math.min(CAPS.household, Math.round(householdNumber)))
           : 1,
@@ -348,23 +417,16 @@ PF.brief = (() => {
       for (let i = splitAt; i < brief.cast.length; i++) brief.cast[i].household = 2;
       repairs.push("cast: single household split into two");
     }
-    // Oversized households split (>6 members share a number).
-    const byHousehold = new Map();
-    for (const member of brief.cast) {
-      const list = byHousehold.get(member.household) ?? [];
-      list.push(member);
-      byHousehold.set(member.household, list);
-    }
-    for (const [id, members] of byHousehold) {
-      if (members.length <= CAPS.household) continue;
-      // Seed-derived target (§3's single-entropy rule): scan from a seeded
-      // offset for the first free household number.
-      let next = 1 + ((det(seed, `household-split-${id}`)() * CAPS.household) | 0);
-      while (byHousehold.has(next)) next = (next % (CAPS.household * 2)) + 1;
-      for (const member of members.slice(CAPS.household)) member.household = next;
-      byHousehold.set(next, members.slice(CAPS.household));
-      repairs.push(`cast: household ${id} split (over ${CAPS.household} members)`);
-    }
+    // The oversized-household split is GONE. It bounded how many people could
+    // share one number, using the same constant that bounds which numbers exist —
+    // and a group is no longer bounded at all, because ten unrelated lodgers under
+    // one roof is a thing a brief has to be able to say.
+    //
+    // It also shipped a live contract violation. `next` escaped its own cap by
+    // `(next % (CAPS.household * 2)) + 1`, so the pass sealed household numbers
+    // ABOVE the schema's own maximum: measured at 263 members over 400 seeds with
+    // seven kin and three singletons. And it wrote into `byHousehold` while
+    // iterating that same Map. Deleting the pass retires both.
     const tints = new Set(brief.cast.map((c) => c.tint));
     if (tints.size < Math.min(3, brief.cast.length)) {
       const keys = Object.keys(TINTS);
@@ -588,8 +650,13 @@ PF.brief = (() => {
       "- cast: 4-10 story-relevant people of {name, role, kind, tint, home, household, persona, standing}.",
       `  kind (machine field) from: ${CAST_KINDS.join(" | ")}. role: <=24 chars free text (their title).`,
       `  tint from: ${Object.keys(TINTS).join(" | ")}. home: the NAME of the zone they live in.`,
-      "  household: 1-6 — people sharing a number share a roof; buildings are derived from",
-      "  households, so do NOT list one household per person unless they truly live alone.",
+      "  workplace (optional): the NAME of the zone they work in, when it is not the one they",
+      "  live in and they do not run it themselves — a second teacher at the school, a shop",
+      "  assistant, one of several sellers at a market. Omit it for anyone who works at home.",
+      "  household: 1-10 — people sharing a number share a roof. Buildings are derived from",
+      "  households, so do NOT give everyone their own number unless they truly live apart.",
+      "  Unrelated people CAN share one: lodgers at a boarding house, sisters at a convent,",
+      "  recruits in a barracks are all one number, and there is no limit on how many.",
       "  persona: <=100 chars — what they want, and what they are hiding.",
       `  standing (optional, default resident): one of ${STANDING.join(" | ")}. transient = passing`,
       "  through; fringe = lives apart at the edges (hermit, outcast, refugee); destitute = no home.",
@@ -644,7 +711,8 @@ PF.brief = (() => {
               kind: { type: "string", enum: CAST_KINDS },
               tint: { type: "string", enum: Object.keys(TINTS) },
               home: text(24),
-              household: { type: "integer", minimum: 1, maximum: 6 },
+              workplace: text(24),
+              household: { type: "integer", minimum: 1, maximum: 10 },
               persona: text(100),
               standing: { type: "string", enum: STANDING },
             },

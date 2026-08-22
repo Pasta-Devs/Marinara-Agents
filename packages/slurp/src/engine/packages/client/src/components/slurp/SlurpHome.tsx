@@ -115,6 +115,7 @@ import {
   HIDE_ON_SCROLL_CLASS,
   NoodleShell,
   ProfileInitial,
+  SlurpMobileHeader,
   useHideOnScroll,
   NOODLE_PERSONA_SWITCHER_PAGE_SIZE,
   NOODLE_PINK,
@@ -349,6 +350,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     null;
   const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const mobileDrawerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [mobileAccountSwitcherOpen, setMobileAccountSwitcherOpen] = useState(false);
   const [personaAccountLimit, setPersonaAccountLimit] = useState(NOODLE_PERSONA_SWITCHER_PAGE_SIZE);
   const accountSwitcherRef = useRef<HTMLDivElement | null>(null);
@@ -1182,6 +1184,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     accountSwitcherRef,
     mobileDrawerOpen,
     onMobileDrawerOpenChange: setMobileDrawerOpen,
+    mobileDrawerTriggerRef,
     mobileAccountSwitcherOpen,
     onMobileAccountSwitcherOpenChange: setMobileAccountSwitcherOpen,
     onOpenHome: exitToCreatorHub,
@@ -1754,6 +1757,9 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   return (
     <NoodleShell {...shellProps} rightRail={feedRightRail}>
       <ViewerHub
+        personaAccount={shellPersonaAccount}
+        onOpenMobileDrawer={() => setMobileDrawerOpen(true)}
+        mobileDrawerTriggerRef={mobileDrawerTriggerRef}
         personas={personas}
         personasLoading={personasQuery.isLoading}
         personasError={personasQuery.isError}
@@ -2354,7 +2360,7 @@ function StageProfileForm({
       <WizardFooter
         step={2}
         onBack={onCancel}
-        backLabel={isEditing ? "Cancel" : "Back"}
+        backLabel={localizeUi("ui.slurp.creatorForm.cancel")}
         showProgress={!isEditing}
         disabled={isPending || isGenerating}
         finalAction={
@@ -2841,6 +2847,8 @@ function StageProfileView({
   const subscriberTotal = subscribersQuery.data?.pages[0]?.total ?? subscribers.length;
   const accent = profileAccent(profile.id);
   const viewingOwnCreator = profile.sourceAccountId === viewerAccount?.entityId;
+  const personaBackedCreator = viewerAccounts.some((account) => account.id === profile.sourceAccountId);
+  const accessViewerAccounts = viewerAccounts.filter((account) => account.id !== profile.sourceAccountId);
   // Every Slurp Creator profile is operator-managed, so post controls and artwork editing stay
   // available regardless of which viewer persona is looking at the profile.
   const managedCreator = true;
@@ -3212,15 +3220,17 @@ function StageProfileView({
                   >
                     {localizeUi("ui.noodle.stageprofileview.access")}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setAutomationOpen(true)}
-                    className="h-9 rounded-md border border-[var(--noodle-divider)] px-4 text-xs font-bold hover:bg-[var(--accent)]"
-                  >
-                    {autoPosting.enabled
-                      ? localizeUi("ui.noodle.stageprofileview.automationOn")
-                      : localizeUi("ui.noodle.stageprofileview.automation")}
-                  </button>
+                  {!personaBackedCreator && (
+                    <button
+                      type="button"
+                      onClick={() => setAutomationOpen(true)}
+                      className="h-9 rounded-md border border-[var(--noodle-divider)] px-4 text-xs font-bold hover:bg-[var(--accent)]"
+                    >
+                      {autoPosting.enabled
+                        ? localizeUi("ui.noodle.stageprofileview.automationOn")
+                        : localizeUi("ui.noodle.stageprofileview.automation")}
+                    </button>
+                  )}
                 </div>
                 <div className="border-t border-[var(--noodle-divider)] bg-[var(--background)]">
                   <NoodlerPostComposer
@@ -3348,14 +3358,13 @@ function StageProfileView({
             </p>
             {accessPending && <Loader2 size={16} className="shrink-0 animate-spin text-[var(--noodle-accent)]" />}
           </div>
-          {viewerAccounts.length > 0 && (
+          {accessViewerAccounts.length > 0 && (
             <fieldset>
               <legend className="text-xs font-bold">
                 {localizeUi("ui.noodle.stageprofileview.hiddenFromPersonas")}
               </legend>
               <div className="mt-2 divide-y divide-[var(--noodle-divider)] rounded-md border border-[var(--noodle-divider)]">
-                {viewerAccounts.map((account) => {
-                  const owningAccount = profile.sourceAccountId === account.id;
+                {accessViewerAccounts.map((account) => {
                   const checked = profile.access.hiddenFromAccountIds.includes(account.id);
                   return (
                     <label key={account.id} className="flex min-h-11 items-center justify-between gap-3 px-3 py-2">
@@ -3363,7 +3372,7 @@ function StageProfileView({
                       <input
                         type="checkbox"
                         checked={checked}
-                        disabled={accessPending || owningAccount}
+                        disabled={accessPending}
                         onChange={(event) =>
                           onAccessChange({
                             ...profile.access,
@@ -3383,7 +3392,7 @@ function StageProfileView({
         </div>
       </Modal>
       <Modal
-        open={automationOpen}
+        open={automationOpen && !personaBackedCreator}
         onClose={() => setAutomationOpen(false)}
         title={localizeUi("ui.noodle.stageprofileview.automaticPosting")}
         width="max-w-md"
@@ -3392,6 +3401,9 @@ function StageProfileView({
         <div className="space-y-4">
           <p className="text-xs leading-5 text-[var(--muted-foreground)]">
             {localizeUi("ui.noodle.stageprofileview.whenOnThisCreatorPostsOnItsOwnWhile")}
+          </p>
+          <p className="text-xs leading-5 text-[var(--muted-foreground)]">
+            {localizeUi("ui.noodle.stageprofileview.automaticPostingProviderDisclosure")}
           </p>
           <button
             type="button"
@@ -3587,6 +3599,9 @@ function StageProfileView({
 }
 
 function ViewerHub({
+  personaAccount,
+  onOpenMobileDrawer,
+  mobileDrawerTriggerRef,
   personas,
   personasLoading,
   personasError,
@@ -3627,6 +3642,9 @@ function ViewerHub({
   newSinceAt,
   onFeedShown,
 }: {
+  personaAccount: NoodleAccount | null;
+  onOpenMobileDrawer: () => void;
+  mobileDrawerTriggerRef: React.RefObject<HTMLButtonElement | null>;
   personas: Persona[];
   personasLoading: boolean;
   personasError: boolean;
@@ -3932,8 +3950,11 @@ function ViewerHub({
         className={cn("sticky top-0 z-30", HIDE_ON_SCROLL_CLASS)}
         data-component="SlurpHome.StickyHeader"
       >
-        {/* See NoodleHome: the phone wordmark bar is off while the bottom bar
-            carries the branding. */}
+        <SlurpMobileHeader
+          personaAccount={personaAccount}
+          onOpenDrawer={onOpenMobileDrawer}
+          triggerRef={mobileDrawerTriggerRef}
+        />
         <div className="border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 backdrop-blur">
           <div className="flex items-center pr-2">
             <div

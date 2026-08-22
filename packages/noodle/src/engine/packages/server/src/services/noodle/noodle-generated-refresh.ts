@@ -18,6 +18,8 @@ export type RejectedNoodleGeneratedRefreshItem = {
   issueCount: number;
 };
 
+export const NOODLE_EMPTY_TIMELINE_REASON = "the response contained no timeline activity";
+
 /**
  * Require a refresh to contain usable activity attributed to the exact cast
  * selected for this run. The persona may be a follow target, but generations
@@ -27,11 +29,10 @@ export function validateNoodleGeneratedRefresh(
   refresh: NoodleGeneratedRefresh,
   allowedActorHandles: ReadonlySet<string>,
   knownHandles: ReadonlySet<string>,
-  allowEmpty = false,
 ): string | null {
   const hasActivity =
     refresh.posts.length + refresh.interactions.length + refresh.follows.length + refresh.digests.length > 0;
-  if (!hasActivity) return allowEmpty ? null : "the response contained no timeline activity";
+  if (!hasActivity) return NOODLE_EMPTY_TIMELINE_REASON;
 
   const hasUsableAttribution =
     refresh.posts.some((post) => noodleHandleKeySetHas(allowedActorHandles, post.authorHandle)) ||
@@ -136,6 +137,11 @@ const collectionSchemas = {
   digests: noodleGeneratedDigestSchema,
 } as const;
 
+function isNoodleGeneratedRefresh(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.keys(collectionSchemas).some((collection) => collection in value);
+}
+
 /**
  * Validate generated timeline rows independently. LLM output is untrusted and a
  * single malformed interaction must not discard otherwise valid activity.
@@ -204,7 +210,13 @@ export function parseNoodleGeneratedRefreshResponse(raw: string): {
   rejected: RejectedNoodleGeneratedRefreshItem[];
 } {
   const parsedValues = parseGameJsonishSequence(raw);
-  if (parsedValues.length === 1) return parseNoodleGeneratedRefresh(parsedValues[0]);
+  if (parsedValues.length === 1) {
+    const value = parsedValues[0];
+    if (Array.isArray(value) && value.length === 1 && isNoodleGeneratedRefresh(value[0])) {
+      return parseNoodleGeneratedRefresh(value[0]);
+    }
+    return parseNoodleGeneratedRefresh(value);
+  }
 
   const refresh: NoodleGeneratedRefresh = { posts: [], interactions: [], follows: [], digests: [] };
   const rejected: RejectedNoodleGeneratedRefreshItem[] = [];
