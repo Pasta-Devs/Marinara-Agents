@@ -117,10 +117,18 @@ through the derivations below.
 
   backgroundPopulation: 30, // int 0-500, cast included. A dial, not a ruler: since 0.10 its one
                             // consumer (20-world.js) reads it as a household count (÷3) that
-                            // leans the minted population WITHIN the rank's band — it can move
+                            // sets `householdTarget` WITHIN the rank's band — it can move
                             // a settlement inside its size class but never set the class, so a
                             // hamlet claiming 500 souls stays a hamlet. Zero means "no claim"
-                            // and the rank's own band applies. Current design, revisitable —
+                            // and the rank's own band applies.
+                            // It moves BUILT GEOMETRY, not just headcount: the target decides
+                            // how many households are minted, so dwellings and doors move with
+                            // it. Measured on a city at seed 7, band floor to band ceiling —
+                            // 76→133 residents, 52→94 dwellings, 36→58 doors on the map.
+                            // What it CANNOT reach: the rank itself (the band clamps it), and
+                            // the guest wing — GUEST_BERTHS is keyed on scale + prosperity
+                            // alone, so an inn offers the same berths whatever this says.
+                            // Current design, revisitable —
                             // how hard this field bites is an open tuning question, and future
                             // consumers (district walker density, the §8 population phrase)
                             // remain planned.
@@ -128,7 +136,9 @@ through the derivations below.
 ```
 
 Exactly three numbers exist in the document (`briefVersion`, `household`, `backgroundPopulation`),
-and none of them is a count of buildings, tiles, or zones.
+and none of them is a count of buildings, tiles, or zones. `backgroundPopulation` does reach
+geometry — households minted become dwellings that get built — but only through the derivation
+above and only inside the rank's band, which is the sanctioned route, not a size input.
 
 ## 2. Identity across time (compiler-owned)
 
