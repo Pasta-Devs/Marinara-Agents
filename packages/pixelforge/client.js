@@ -1,5 +1,5 @@
 // Pixelforge 0.11.0 — Marinara Engine game-surface Experience (single-file client bundle)
-// Built from packages/pixelforge/src (14 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
+// Built from packages/pixelforge/src (15 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
 // ===== 00-prelude.js =====
@@ -117,6 +117,12 @@ PF.api = {
     if (!res.ok) throw PF.httpError("GET experience-state", res.status);
     return { available: true, status: res.status, body: await res.json() };
   },
+  /** Returns the route's own `{ ok, id, anchor }` echo when it parses. The
+   *  ANCHOR is the point: the row lands at whatever the visible anchor is when
+   *  the write is served, which is not necessarily the one the last GET read —
+   *  a turn can finish in between. The ladder compares the two and takes the
+   *  rewind path next round when they differ (plan §Q2, the PUT-anchor echo).
+   *  A body that will not parse is not an error: the write still landed. */
   async putExperienceState(chatId, state, keepalive = false) {
     const res = await fetch(`/api/game/${encodeURIComponent(chatId)}/experience-state`, {
       method: "PUT",
@@ -125,6 +131,11 @@ PF.api = {
       keepalive,
     });
     if (!res.ok) throw PF.httpError("PUT experience-state", res.status);
+    try {
+      return await res.json();
+    } catch {
+      return null;
+    }
   },
   /** One host-run structured generation call (engine #5135). Returns
    *  {status, body} without throwing on the route's documented 4xx ladder —
@@ -2397,6 +2408,12 @@ PF.world = (() => {
       startZone: "village",
       // The exterior binds to the campaign's starting World Maps location once known.
       bindings: {}, // spatialLocationId → zoneId
+      // The legacy world mints nobody — its three neighbours are written out by
+      // hand above. The stamp is still emitted (never absent, so the S5 read
+      // never has to distinguish "no stamp" from "stamp zero") and moves only
+      // when MINT_V does.
+      minted: [],
+      mintStamp: mintStampOf([]),
     };
   }
 
@@ -2525,6 +2542,22 @@ PF.world = (() => {
     healer: ["herbalist"],
     scholar: ["copyist"],
   };
+  // The mint's own version, folded into every mintStamp. Bump it when a change
+  // here would hand the SAME seed and the SAME brief a different roster — a new
+  // name book, a changed household size distribution, a reordered kind table.
+  // The player block's world stamp (S5 §Q3a) is what turns that into a visible
+  // severance instead of a silent one: relationship rows keyed by "Maud Thatch"
+  // mean nothing once "Maud Thatch" is a different person or nobody at all.
+  const MINT_V = 1;
+  /** Stamp the residents the COMPILER minted, in mint order. Names + kinds +
+   *  households only: tints and wander flags are cosmetic and a change to them
+   *  must not sever a save. Zero save bytes — the stamp is derived on every
+   *  build and only its comparison is persisted. */
+  function mintStampOf(minted) {
+    let text = `mint/v${MINT_V}`;
+    for (const member of minted) text += `|${member.name} ${member.kind} ${member.household}`;
+    return PF.hashStr(text);
+  }
 
   const SPECIAL_BUILDING_KINDS = {
     leader: "hall",
@@ -4931,6 +4964,13 @@ PF.world = (() => {
       zones,
       startZone: "z1",
       bindings: {},
+      // Derived, never saved (S5 §Q3a). `minted` names the residents the brief
+      // did NOT. The severance itself keys off the complement of the brief's
+      // cast rather than this list — a resident the OLD mint produced is in
+      // neither — but the list is what a brief-less world falls back to, and it
+      // is the honest way to say who the compiler invented.
+      minted: minted.map((member) => member.name),
+      mintStamp: mintStampOf(minted),
     };
   }
 
@@ -5201,6 +5241,12 @@ PF.Sim = class {
     // the wizard's throwaway sim too, and an undefined-shaped field is exactly
     // the trap `intro` already is.
     this._envelopeExtra = {};
+    // The S5 player block, default-initialized HERE rather than lazily (plan
+    // §Q5). snapshot() emits `player` unconditionally, so a sim that reached it
+    // without one would either crash or teach the envelope to emit a key
+    // conditionally — which is the exact registry failure ENVELOPE_KEYS exists
+    // to stop. simFromSaved overwrites this with the restored block.
+    this.player = PF.player.defaultPlayer();
     this._daypart = null;
     // Cutscene beat (see stepCutscene): while set, the package asks the host to
     // fold its narration box away so the world has the screen to itself.
@@ -6269,6 +6315,1076 @@ PF.mapsExport = {
   },
 };
 
+// ===== 58-player.js =====
+// ── The player state block (S5) ───────────────────────────────────────────────
+// One namespaced, versioned `player` block inside the save snapshot: inventory
+// and money, skills and equipped tools, the relationship ledger, quest state,
+// the day-ledger buffer, discovery state, and the home anchor. Everything else
+// in the world stays a pure function of (seed, theme, brief, clock) — that is
+// what keeps a rebuild byte-identical and a rewind safe.
+//
+// THREE PROPERTIES, declared per field (plan §0):
+//   • world-free  — means the same thing in any world (pouch, skills, board-done)
+//   • world-bound — meaningless once the world changed under it (rel, quests,
+//                   found, home, ledger lines)
+//   • coupled     — `flushedDay`, which is only interpretable against the lines
+//                   it gates, so it is quarantined WITH them and clamped when
+//                   they go (plan §0, §Q3a)
+//
+// The block carries its OWN version (`player.v`), not the envelope's: an
+// envelope bump would force a player migration that changes nothing, and a
+// player bump would invalidate envelopes that were fine (ROADMAP §S5).
+
+// The player block's schema version is DERIVED from the migration table, never
+// written twice: `MIGRATIONS[i]` takes v(i+1) to v(i+2), so an empty table is
+// exactly "v1, and v1 is the identity". A step and a version constant that can
+// disagree is a bug waiting for its first migration.
+const PLAYER_MIGRATIONS = [];
+const currentPlayerV = () => PLAYER_MIGRATIONS.length + 1;
+
+// Size caps (plan §4). Every one of them is an EVICTION, never a refusal: a
+// mutator that silently did nothing would strand a consumer in slice 6 waiting
+// for state that never arrives.
+const CAPS = {
+  items: 60, // pouch rows, keyed (t,k)
+  relRows: 150, // relationship rows per SAVE, across zones
+  relLines: 30, // rows allowed to hold an `s` line at once
+  lineChars: 80, // graphemes in one `s` line
+  activeQuests: 10,
+  boardDone: 40,
+  packDone: 40,
+  bought: 30,
+  ledgerDays: 3, // days kept in FULL
+  ledgerPerDay: 15,
+  ledgerStubs: 30, // elided days, one stub line each
+  ledgerChars: 200,
+  found: 80,
+  skillLevel: 20,
+};
+
+// Placeholder curve, exported so slice 6 can retune it without touching the
+// mutator: experience needed to leave level `l`.
+const xpPerLevel = (l) => 10 * Math.max(1, l);
+
+// The quarantine bag's own ceiling, independent of the snapshot's (plan §4).
+// It lives in its own metadata key, so it competes with nothing.
+const QUARANTINE_MAX_CHARS = 24_576;
+// Least-recoverable first (plan §Q1a). `setAside` goes before anything else:
+// nothing else in the bag is waiting on a machine to hand it back.
+const QUARANTINE_DROP_ORDER = ["setAside", "stamp", "migration", "version"];
+const QUARANTINE_SLOTS = ["migration", "stamp", "setAside", "version"];
+const QUARANTINE_KEY = "pixelforgeQuarantine";
+
+const isFiniteInt = (v) => typeof v === "number" && Number.isFinite(v) && Math.floor(v) === v;
+const posInt = (v, fallback) => (isFiniteInt(v) && v >= 0 ? v : fallback);
+const str = (v) => (typeof v === "string" ? v : "");
+// JSON.parse hands "__proto__" back as an own property; assigning it onto a
+// plain object sets the PROTOTYPE instead of a key. Every map read below goes
+// through this (the same discipline 60-save's binding read already uses).
+const ownEntries = (obj) => {
+  if (!obj || typeof obj !== "object" || Array.isArray(obj)) return [];
+  const out = [];
+  for (const key of Object.keys(obj)) {
+    if (key === "__proto__") continue;
+    out.push([key, obj[key]]);
+  }
+  return out;
+};
+// Sorted-key rebuild. JS enumerates integer-like keys first whatever the
+// insertion order, so this is deterministic rather than literally sorted for
+// such a key — determinism is the property the dedupe needs, not the ordering.
+const sortedMap = (pairs) => {
+  const out = {};
+  for (const [key, value] of pairs.slice().sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))) {
+    if (value !== undefined) out[key] = value;
+  }
+  return out;
+};
+
+/** Grapheme-aware truncation: an `s` line is player-visible prose and a cut
+ *  through a surrogate pair or a combining mark renders as a broken glyph. */
+const clip = (text, max) => {
+  const s = str(text).replace(/\s+/g, " ").trim();
+  let units;
+  try {
+    units = globalThis.Intl?.Segmenter
+      ? Array.from(new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(s), (part) => part.segment)
+      : Array.from(s);
+  } catch {
+    units = Array.from(s);
+  }
+  return units.length <= max ? s : units.slice(0, max).join("");
+};
+
+PF.player = {
+  CAPS,
+  MIGRATIONS: PLAYER_MIGRATIONS,
+  xpPerLevel,
+  /** The schema version THIS build writes. Derived — see PLAYER_MIGRATIONS. */
+  currentV: currentPlayerV,
+
+  /** A brand-new block. The key order here is the wire order (plan §2) and the
+   *  serializer reproduces it exactly; `bought` boots ABSENT (it is an optional
+   *  seam that activates with the stock-table model) and is only emitted once
+   *  something is in it. */
+  defaultPlayer() {
+    return {
+      v: currentPlayerV(),
+      game: 1,
+      world: { seed: 0, briefHash: 0, mintStamp: 0 },
+      flushedDay: 0,
+      pouch: { money: 0, items: [] },
+      skills: { verbs: {}, equipped: {} },
+      quests_done_board: {},
+      rel: {},
+      quests: { done_pack: {}, active: [] },
+      bought: null,
+      ledger: { lines: [] },
+      found: { zones: [] },
+      home: null,
+    };
+  },
+
+  // ── World identity (plan §Q3, §Q3a) ────────────────────────────────────────
+
+  /** FNV over the SEALED brief, which is the artifact the world was compiled
+   *  from. Absent brief → 0, which is also what a legacy world stamps, so the
+   *  two are deliberately indistinguishable: neither has a brief to change. */
+  briefHashOf(brief) {
+    if (!brief || typeof brief !== "object") return 0;
+    try {
+      return PF.hashStr(JSON.stringify(brief));
+    } catch {
+      return 0;
+    }
+  },
+
+  /** The three stamps a world answers for. `mintStamp` is derived by the
+   *  compiler (20-world `mintStampOf`) and costs zero save bytes. */
+  stampsFor(world, brief) {
+    return {
+      seed: (world?.seed ?? 0) >>> 0,
+      briefHash: this.briefHashOf(brief),
+      mintStamp: (world?.mintStamp ?? 0) >>> 0,
+    };
+  },
+
+  // ── Serialization (plan §2) ────────────────────────────────────────────────
+
+  /** By value, deterministic, byte-stable under JSON.stringify. Every dedupe in
+   *  the save path is string equality over the serialized snapshot, so an order
+   *  that drifted with the source would forge both spurious saves and spurious
+   *  "The world rewound with the story." toasts (60-save snapshot()). */
+  serialize(player) {
+    const p = player && typeof player === "object" ? player : this.defaultPlayer();
+    const out = {};
+    out.v = posInt(p.v, currentPlayerV());
+    out.game = Math.max(1, posInt(p.game, 1));
+    out.world = {
+      seed: posInt(p.world?.seed, 0) >>> 0,
+      briefHash: posInt(p.world?.briefHash, 0) >>> 0,
+      mintStamp: posInt(p.world?.mintStamp, 0) >>> 0,
+    };
+    out.flushedDay = posInt(p.flushedDay, 0);
+    out.pouch = {
+      money: posInt(p.pouch?.money, 0),
+      // Sorted by (t,k): the bag is a SET keyed that way, so insertion order is
+      // an accident of play and would make two identical inventories serialize
+      // to different bytes.
+      items: (Array.isArray(p.pouch?.items) ? p.pouch.items : [])
+        .filter((it) => it && typeof it === "object" && str(it.t))
+        .map((it) => ({ t: str(it.t), q: posInt(it.q, 0), k: str(it.k) }))
+        .sort((a, b) => (a.t === b.t ? (a.k < b.k ? -1 : a.k > b.k ? 1 : 0) : a.t < b.t ? -1 : 1)),
+    };
+    out.skills = {
+      verbs: sortedMap(
+        ownEntries(p.skills?.verbs).map(([verb, row]) => [
+          verb,
+          { l: Math.max(1, posInt(row?.l, 1)), x: posInt(row?.x, 0) },
+        ]),
+      ),
+      equipped: sortedMap(
+        ownEntries(p.skills?.equipped).map(([verb, slots]) => [
+          verb,
+          sortedMap(
+            ownEntries(slots)
+              .filter(([, pair]) => Array.isArray(pair) && str(pair[0]))
+              .map(([slot, pair]) => [slot, [str(pair[0]), str(pair[1])]]),
+          ),
+        ]),
+      ),
+    };
+    out.quests_done_board = sortedMap(ownEntries(p.quests_done_board).map(([id, n]) => [id, posInt(n, 0)]));
+    out.rel = sortedMap(
+      ownEntries(p.rel).map(([zoneId, rows]) => [
+        zoneId,
+        sortedMap(
+          ownEntries(rows).map(([name, row]) => {
+            const cell = { d: PF.clamp(posInt(row?.d, 0), 0, 3), t: posInt(row?.t, 0) };
+            // `h` and `s` are emitted ONLY when set: a hostile flag on every row
+            // and an empty string on every row would be pure size for nothing.
+            if (row?.h) cell.h = 1;
+            const line = clip(row?.s, CAPS.lineChars);
+            if (line) cell.s = line;
+            return [name, cell];
+          }),
+        ),
+      ]),
+    );
+    out.quests = {
+      done_pack: sortedMap(ownEntries(p.quests?.done_pack).map(([id, n]) => [id, posInt(n, 0)])),
+      active: (Array.isArray(p.quests?.active) ? p.quests.active : [])
+        .filter((q) => q && typeof q === "object" && str(q.id))
+        .map((q) => ({
+          id: str(q.id),
+          g: str(q.g),
+          verb: str(q.verb),
+          target: str(q.target),
+          n: posInt(q.n, 0),
+          have: posInt(q.have, 0),
+          r: { money: posInt(q.r?.money, 0), xp: posInt(q.r?.xp, 0) },
+          day: posInt(q.day, 0),
+        }))
+        .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
+    };
+    // The optional shop-depletion seam. Absent unless something bought
+    // something — an empty object every save would be four bytes of nothing.
+    const bought = sortedMap(
+      ownEntries(p.bought).map(([shop, rows]) => [
+        shop,
+        sortedMap(ownEntries(rows).map(([t, n]) => [t, posInt(n, 0)])),
+      ]),
+    );
+    if (Object.keys(bought).length) out.bought = bought;
+    out.ledger = {
+      // CHRONOLOGICAL, never sorted: the buffer is a transcript and its order is
+      // its meaning. A JSON round-trip preserves array order, so it is stable.
+      lines: (Array.isArray(p.ledger?.lines) ? p.ledger.lines : [])
+        .filter((line) => Array.isArray(line) && line.length >= 2)
+        .map((line) => [posInt(line[0], 0), clip(line[1], CAPS.ledgerChars)]),
+    };
+    out.found = {
+      zones: (Array.isArray(p.found?.zones) ? p.found.zones : [])
+        .filter((z) => z && typeof z === "object" && str(z.p))
+        .map((z) => ({
+          p: str(z.p),
+          e: posInt(z.e, 0),
+          d: posInt(z.d, 0),
+          day: posInt(z.day, 0),
+          seen: z.seen === true,
+        }))
+        .sort((a, b) => {
+          const ka = `${a.p}|${a.e}|${a.d}`;
+          const kb = `${b.p}|${b.e}|${b.d}`;
+          return ka < kb ? -1 : ka > kb ? 1 : 0;
+        }),
+    };
+    // A sealed anchor ("z3") or { minted: true } — never a bare h{n} (§2).
+    out.home =
+      typeof p.home === "string" && p.home ? p.home : p.home && p.home.minted === true ? { minted: true } : null;
+    return out;
+  },
+
+  // ── Parse / migrate (plan §Q1) ─────────────────────────────────────────────
+
+  /** Read a saved `player` block. NEVER throws: every failure boots defaults and
+   *  says why, because a save path that can brick the surface is worse than one
+   *  that loses a block. Returns
+   *    { player, source, quarantine: null | { slot, entry } }
+   *  where `source` is "saved" | "defaults" and the caller owns the bag write. */
+  parse(raw) {
+    const fresh = () => this.defaultPlayer();
+    if (raw === undefined || raw === null) return { player: fresh(), source: "defaults", quarantine: null };
+    if (typeof raw !== "object" || Array.isArray(raw)) {
+      // Not even the right kind of thing. There is no corrupt slot (plan §Q1a:
+      // unimplementable client-side), and a scalar carries nothing to recover.
+      return { player: fresh(), source: "defaults", quarantine: null };
+    }
+    const v = raw.v;
+    if (!isFiniteInt(v) || v < 1) {
+      // A block that will not declare its version cannot be migrated and cannot
+      // be trusted. Parked in `migration` rather than dropped: a later build
+      // whose reader is looser is exactly the thing that could still read it.
+      return {
+        player: fresh(),
+        source: "defaults",
+        quarantine: { slot: "migration", entry: { reason: "shape", fromV: null, block: raw } },
+      };
+    }
+    const current = currentPlayerV();
+    if (v > current) {
+      // TOO NEW. Never parsed, never overwritten — quarantined VERBATIM so the
+      // build that wrote it can take it back (plan §Q1). `adoptable` is written
+      // at creation and is what a later build looks for.
+      return {
+        player: fresh(),
+        source: "defaults",
+        quarantine: { slot: "version", entry: { reason: "too-new", fromV: v, adoptable: true, block: raw } },
+      };
+    }
+    let block = raw;
+    try {
+      for (let step = v; step < current; step++) block = PLAYER_MIGRATIONS[step - 1](block);
+    } catch (err) {
+      // A THROWING step keeps its input, not its half-migrated output: the
+      // input is the thing a fixed step will be run against.
+      return {
+        player: fresh(),
+        source: "defaults",
+        quarantine: {
+          slot: "migration",
+          entry: {
+            reason: "throw",
+            fromV: v,
+            message: err && err.message ? String(err.message) : String(err),
+            block: raw,
+          },
+        },
+      };
+    }
+    if (!block || typeof block !== "object" || Array.isArray(block)) {
+      return {
+        player: fresh(),
+        source: "defaults",
+        quarantine: { slot: "migration", entry: { reason: "shape", fromV: v, block: raw } },
+      };
+    }
+    // Shape-validate by NORMALIZING: serialize() already coerces every field to
+    // its declared shape and drops what will not coerce, so one pass through it
+    // is the validator AND guarantees the parsed block round-trips byte-stably.
+    const player = this.serialize(block);
+    player.v = current;
+    // serialize() omits an empty `bought`; the live block wants the null seam
+    // back so a mutator has somewhere to write.
+    if (player.bought === undefined) player.bought = null;
+    return { player, source: "saved", quarantine: null };
+  },
+
+  // ── Stamps, severance, restoration (plan §Q3a) ─────────────────────────────
+
+  /** Are the stamps comparable at all? Never against an absent-or-EXPECTED
+   *  brief: an interim world is a throwaway the sealed brief will replace, and
+   *  severing against it would quarantine a save for a world that never was. */
+  stampsEvaluable(world, brief, briefExpected) {
+    if (!world || world.interim) return false;
+    if (!brief && briefExpected) return false;
+    return true;
+  },
+
+  /** Compare, sever, and hand back what to quarantine. Mutates `player` in
+   *  place (it is the freshly-parsed block, not yet anybody's live state).
+   *  Returns { severed: null | { slot:"stamp", entry }, notices: string[] }. */
+  applyStamps(player, world, brief, briefExpected) {
+    const now = this.stampsFor(world, brief);
+    const notices = [];
+    if (!this.stampsEvaluable(world, brief, briefExpected)) return { severed: null, notices, evaluated: false };
+    const was = player.world;
+    // A block with no stamps of its own (a pre-S5 save, or a fresh default) has
+    // nothing to disagree with: stamp it and move on.
+    const unstamped = !was || (!was.seed && !was.briefHash && !was.mintStamp);
+    if (unstamped) {
+      player.world = { ...now };
+      return { severed: null, notices, evaluated: true };
+    }
+    const briefMoved = was.briefHash !== now.briefHash || was.seed !== now.seed;
+    const mintMoved = was.mintStamp !== now.mintStamp;
+    if (!briefMoved && !mintMoved) {
+      player.world = { ...now };
+      return { severed: null, notices, evaluated: true };
+    }
+    const entry = {
+      reason: briefMoved ? "brief" : "mint",
+      fromV: player.v,
+      stamps: { ...was },
+      fields: {},
+    };
+    if (briefMoved) {
+      // EVERY world-bound field goes. The world this save was played in is not
+      // the world about to be compiled, and a relationship row, a quest, a
+      // discovery or a ledger line means nothing across that line.
+      entry.fields.rel = player.rel;
+      entry.fields.questsActive = player.quests.active;
+      entry.fields.questsDonePack = player.quests.done_pack;
+      entry.fields.found = player.found.zones;
+      entry.fields.home = player.home;
+      entry.fields.ledgerLines = player.ledger.lines;
+      entry.fields.flushedDayWas = player.flushedDay;
+      player.rel = {};
+      player.quests = { done_pack: {}, active: [] };
+      player.found = { zones: [] };
+      player.home = null;
+      const lines = player.ledger.lines;
+      player.ledger = { lines: [] };
+      // COUPLED, and only when lines were ACTUALLY severed (plan §0): an empty
+      // buffer must leave the gate exactly where it was, or a save with nothing
+      // to lose still loses its day boundary.
+      if (lines.length) {
+        const minDay = lines.reduce((low, line) => Math.min(low, posInt(line[0], 0)), Infinity);
+        player.flushedDay = Math.max(0, Math.min(posInt(player.flushedDay, 0), minDay - 1));
+      }
+      entry.fields.flushedDay = player.flushedDay;
+      notices.push("Some of what you had done here belonged to another world. It has been set aside.");
+    } else {
+      // MINT-ONLY: the brief is the same, so everybody the brief NAMED is the
+      // same person and their rows are safe. Everybody else was MINTED, and the
+      // mint just changed under them.
+      //
+      // The test is the COMPLEMENT of the brief's named cast, not membership of
+      // the new world's `minted` list, and the difference is the whole point: a
+      // resident the OLD mint produced and the new one does not is exactly the
+      // row that has to go, and she is in neither list. The `minted` list only
+      // stands in when there is no brief to name anybody — a legacy world, whose
+      // mint is empty and whose stamp moves only when MINT_V does.
+      const named = new Set(
+        brief && Array.isArray(brief.cast) ? brief.cast.map((member) => str(member?.name)).filter(Boolean) : null,
+      );
+      const isMinted = (name) =>
+        brief && Array.isArray(brief.cast)
+          ? !named.has(name)
+          : (Array.isArray(world.minted) ? world.minted : []).includes(name);
+      const minted = { has: isMinted };
+      const severedRel = {};
+      let touched = false;
+      for (const [zoneId, rows] of ownEntries(player.rel)) {
+        const keep = {};
+        const gone = {};
+        for (const [name, row] of ownEntries(rows)) {
+          if (minted.has(name)) gone[name] = row;
+          else keep[name] = row;
+        }
+        if (Object.keys(gone).length) {
+          severedRel[zoneId] = gone;
+          touched = true;
+        }
+        if (Object.keys(keep).length) player.rel[zoneId] = keep;
+        else delete player.rel[zoneId];
+      }
+      const giverName = (g) => {
+        const text = str(g);
+        const bar = text.indexOf("|");
+        return bar >= 0 ? text.slice(bar + 1) : text;
+      };
+      const severedQuests = player.quests.active.filter((q) => minted.has(giverName(q.g)));
+      if (severedQuests.length) {
+        player.quests.active = player.quests.active.filter((q) => !minted.has(giverName(q.g)));
+        touched = true;
+      }
+      if (!touched) {
+        // The mint moved but nothing of the player's hung off it. Re-stamp and
+        // quarantine nothing — an empty entry would only cost a slot.
+        player.world = { ...now };
+        return { severed: null, notices, evaluated: true };
+      }
+      entry.fields.rel = severedRel;
+      entry.fields.questsActive = severedQuests;
+      notices.push("Some of the people you knew here are not the people who live here now.");
+    }
+    player.world = { ...now };
+    return { severed: { slot: "stamp", entry }, notices, evaluated: true };
+  },
+
+  /** The other direction: a stamp slot whose stamps match the world we just
+   *  built is a save coming HOME. Restoration DISCARDS whatever world-bound
+   *  fields were written during the quarantine window (plan §Q3a) — the point
+   *  of the window is that everything in it belonged to the wrong world. */
+  restoreStamped(player, entry, world, brief) {
+    if (!entry || typeof entry !== "object") return false;
+    const now = this.stampsFor(world, brief);
+    const was = entry.stamps || {};
+    if (was.seed !== now.seed || was.briefHash !== now.briefHash || was.mintStamp !== now.mintStamp) return false;
+    const fields = entry.fields || {};
+    if (entry.reason === "mint") {
+      for (const [zoneId, rows] of ownEntries(fields.rel)) {
+        const target = ownEntries(player.rel[zoneId]).length ? player.rel[zoneId] : {};
+        for (const [name, row] of ownEntries(rows)) target[name] = row;
+        player.rel[zoneId] = target;
+      }
+      if (Array.isArray(fields.questsActive)) player.quests.active = [...player.quests.active, ...fields.questsActive];
+    } else {
+      if (fields.rel !== undefined) player.rel = fields.rel && typeof fields.rel === "object" ? fields.rel : {};
+      if (Array.isArray(fields.questsActive)) player.quests.active = fields.questsActive;
+      if (fields.questsDonePack !== undefined)
+        player.quests.done_pack =
+          fields.questsDonePack && typeof fields.questsDonePack === "object" ? fields.questsDonePack : {};
+      if (Array.isArray(fields.found)) player.found = { zones: fields.found };
+      if (fields.home !== undefined) player.home = fields.home;
+      if (Array.isArray(fields.ledgerLines)) player.ledger = { lines: fields.ledgerLines };
+      if (fields.flushedDay !== undefined) player.flushedDay = posInt(fields.flushedDay, player.flushedDay);
+    }
+    // THE GUARD, re-applied rather than trusted. A restored line at or below the
+    // gate would never be told: the flush skips everything the gate covers.
+    const lines = Array.isArray(player.ledger?.lines) ? player.ledger.lines : [];
+    if (lines.length) {
+      const minDay = lines.reduce((low, line) => Math.min(low, posInt(line[0], 0)), Infinity);
+      player.flushedDay = Math.max(0, Math.min(posInt(player.flushedDay, 0), minDay - 1));
+    }
+    // Normalize back through the serializer: the entry came off the wire and its
+    // rows have to satisfy the same shape contract everything else does.
+    const normalized = this.serialize(player);
+    normalized.v = player.v;
+    if (normalized.bought === undefined) normalized.bought = null;
+    return normalized;
+  },
+
+  // ── Quest-dangling repair (plan §Q5) ───────────────────────────────────────
+
+  /** Drop active quests whose giver is not in this world. GATED, because the
+   *  three ways to be wrong all look the same from here: an interim world has
+   *  not been compiled yet, an unevaluated stamp means we do not know whether
+   *  this is even the right world, and EVERY giver dangling says the world is
+   *  wrong rather than the quests. Returns { dropped, notices }. */
+  repairQuests(player, world, evaluated) {
+    const notices = [];
+    const active = Array.isArray(player.quests?.active) ? player.quests.active : [];
+    if (!active.length || !world || world.interim || !evaluated) return { dropped: [], notices };
+    const known = new Set();
+    for (const zoneId of Object.keys(world.zones ?? {})) {
+      for (const npc of world.zones[zoneId].npcs ?? []) if (npc && npc.name) known.add(npc.name);
+    }
+    if (!known.size) return { dropped: [], notices };
+    const giverName = (g) => {
+      const text = str(g);
+      const bar = text.indexOf("|");
+      return bar >= 0 ? text.slice(bar + 1) : text;
+    };
+    const dangling = active.filter((q) => !known.has(giverName(q.g)));
+    if (!dangling.length) return { dropped: [], notices };
+    if (dangling.length === active.length) {
+      // ALL of them. That is a statement about the world, not the quests.
+      return { dropped: [], notices };
+    }
+    player.quests.active = active.filter((q) => known.has(giverName(q.g)));
+    notices.push("A task you had taken on has no one left to hand it back to.");
+    return { dropped: dangling, notices };
+  },
+
+  // ── The brief-arrival transplant (plan §Q5, one release of compat) ─────────
+
+  /** A chat created BEFORE the loading gate boots on a throwaway world and
+   *  rebuilds when its generated brief seals. World-free fields cross; every
+   *  world-bound field goes to the stamp slot with the stamps it belonged to;
+   *  the block is re-stamped for the world that just arrived.
+   *  Returns { player, severed }. */
+  transplant(oldPlayer, world, brief) {
+    const source = oldPlayer && typeof oldPlayer === "object" ? oldPlayer : this.defaultPlayer();
+    const next = this.defaultPlayer();
+    next.game = Math.max(1, posInt(source.game, 1));
+    next.pouch = source.pouch ?? next.pouch;
+    next.skills = source.skills ?? next.skills;
+    next.quests_done_board = source.quests_done_board ?? next.quests_done_board;
+    next.bought = source.bought ?? null;
+    const wasStamps =
+      source.world && typeof source.world === "object" ? { ...source.world } : { seed: 0, briefHash: 0, mintStamp: 0 };
+    const lines = Array.isArray(source.ledger?.lines) ? source.ledger.lines : [];
+    let flushedDay = posInt(source.flushedDay, 0);
+    if (lines.length) {
+      const minDay = lines.reduce((low, line) => Math.min(low, posInt(line[0], 0)), Infinity);
+      flushedDay = Math.max(0, Math.min(flushedDay, minDay - 1));
+    }
+    next.flushedDay = flushedDay;
+    const hadWorldBound =
+      ownEntries(source.rel).length ||
+      (Array.isArray(source.quests?.active) && source.quests.active.length) ||
+      ownEntries(source.quests?.done_pack).length ||
+      (Array.isArray(source.found?.zones) && source.found.zones.length) ||
+      source.home != null ||
+      lines.length;
+    const severed = hadWorldBound
+      ? {
+          slot: "stamp",
+          entry: {
+            reason: "brief",
+            fromV: posInt(source.v, currentPlayerV()),
+            stamps: wasStamps,
+            fields: {
+              rel: source.rel ?? {},
+              questsActive: source.quests?.active ?? [],
+              questsDonePack: source.quests?.done_pack ?? {},
+              found: source.found?.zones ?? [],
+              home: source.home ?? null,
+              ledgerLines: lines,
+              flushedDayWas: posInt(source.flushedDay, 0),
+              flushedDay,
+            },
+          },
+        }
+      : null;
+    next.world = this.stampsFor(world, brief);
+    const normalized = this.serialize(next);
+    normalized.v = currentPlayerV();
+    if (normalized.bought === undefined) normalized.bought = null;
+    return { player: normalized, severed };
+  },
+
+  // ── Mutation API (plan §3) ─────────────────────────────────────────────────
+  // Every mutator RE-RESOLVES core.sim (never a captured sim — a chat switch
+  // reassigns it under any caller holding one), is generation-FENCED on the
+  // optional trailing `gen`, and is SELF-DIRTYING: markDirty lives inside the
+  // mutator so a consumer cannot forget it. Consumers land in slice 6.
+
+  /** The live block, minted on demand. Returns null when the fence says this
+   *  call belongs to a chat we already left. */
+  _live(core, gen) {
+    if (!core || typeof core !== "object") return null;
+    if (gen !== undefined && gen !== (PF.save?._gen ?? 0)) return null;
+    const sim = core.sim;
+    if (!sim) return null;
+    if (!sim.player || typeof sim.player !== "object" || Array.isArray(sim.player)) sim.player = this.defaultPlayer();
+    return sim.player;
+  },
+
+  /** Read-only accessor for consumers that only want to render. */
+  get(core) {
+    return core && core.sim && core.sim.player ? core.sim.player : null;
+  },
+
+  _touch(core) {
+    if (core.sim) core.sim.dirty = true;
+    PF.save?.markDirty?.(core);
+  },
+
+  _itemKey(item) {
+    if (typeof item === "string") return { t: item, k: "" };
+    return { t: str(item?.t), k: str(item?.k) };
+  },
+
+  /** Add to the pouch. Merges by (t,k) — the bag has no uuids by design. */
+  grant(core, item, qty, gen) {
+    const p = this._live(core, gen);
+    if (!p) return 0;
+    const { t, k } = this._itemKey(item);
+    if (!t) return 0;
+    const n = Math.max(1, posInt(qty, 1));
+    let row = p.pouch.items.find((it) => it.t === t && str(it.k) === k);
+    if (!row) {
+      if (p.pouch.items.length >= CAPS.items) return 0;
+      row = { t, q: 0, k };
+      p.pouch.items.push(row);
+    }
+    row.q = posInt(row.q, 0) + n;
+    this._touch(core);
+    return row.q;
+  },
+
+  /** Remove from the pouch. All-or-nothing: a partial take would leave a
+   *  consumer believing it paid a price it only half paid. */
+  take(core, item, qty, gen) {
+    const p = this._live(core, gen);
+    if (!p) return false;
+    const { t, k } = this._itemKey(item);
+    const n = Math.max(1, posInt(qty, 1));
+    const index = p.pouch.items.findIndex((it) => it.t === t && str(it.k) === k);
+    if (index < 0 || posInt(p.pouch.items[index].q, 0) < n) return false;
+    const row = p.pouch.items[index];
+    row.q -= n;
+    if (row.q <= 0) p.pouch.items.splice(index, 1);
+    this._touch(core);
+    return true;
+  },
+
+  /** Apply a reward: money and/or experience in one verb. Money floors at zero
+   *  — a negative purse is a bug that would then price everything wrong. */
+  award(core, reward, gen) {
+    const p = this._live(core, gen);
+    if (!p) return null;
+    const money = isFiniteInt(reward?.money) ? reward.money : 0;
+    const xp = Math.max(0, posInt(reward?.xp, 0));
+    const verb = str(reward?.verb);
+    if (money) p.pouch.money = Math.max(0, posInt(p.pouch.money, 0) + money);
+    let row = null;
+    if (xp && verb) {
+      row = p.skills.verbs[verb];
+      if (!row || typeof row !== "object") {
+        row = { l: 1, x: 0 };
+        p.skills.verbs[verb] = row;
+      }
+      row.x = posInt(row.x, 0) + xp;
+      while (row.l < CAPS.skillLevel && row.x >= xpPerLevel(row.l)) {
+        row.x -= xpPerLevel(row.l);
+        row.l += 1;
+      }
+      if (row.l >= CAPS.skillLevel) row.x = 0;
+    }
+    this._touch(core);
+    return { money: p.pouch.money, level: row ? row.l : null };
+  },
+
+  /** Bind a tool or a modifier to a verb. `item` null clears the slot. Slots are
+   *  a CLOSED vocabulary so the block cannot grow a new dimension by accident. */
+  equip(core, verb, slot, item, gen) {
+    const p = this._live(core, gen);
+    if (!p) return false;
+    const name = str(verb);
+    if (!name || (slot !== "tool" && slot !== "mod")) return false;
+    let slots = p.skills.equipped[name];
+    if (!slots || typeof slots !== "object") {
+      slots = {};
+      p.skills.equipped[name] = slots;
+    }
+    if (item == null) delete slots[slot];
+    else {
+      const { t, k } = this._itemKey(item);
+      if (!t) return false;
+      slots[slot] = [t, k];
+    }
+    if (!Object.keys(slots).length) delete p.skills.equipped[name];
+    this._touch(core);
+    return true;
+  },
+
+  /** Move a relationship. `patch` is { d, t, h, s }: d is the 0-3 ladder, t
+   *  counts encounters, h flags hostility, s is the last line worth remembering.
+   *  Two caps bite here and they bite DIFFERENTLY (plan §4): the row cap evicts
+   *  whole STRANGER rows, and the line cap evicts the oldest LINE and leaves the
+   *  row standing. */
+  bump(core, zoneId, name, patch, gen) {
+    const p = this._live(core, gen);
+    if (!p) return null;
+    const zone = str(zoneId);
+    const who = str(name);
+    if (!zone || !who || who === "__proto__") return null;
+    let rows = p.rel[zone];
+    if (!rows || typeof rows !== "object") {
+      rows = {};
+      p.rel[zone] = rows;
+    }
+    let row = rows[who];
+    const isNew = !row || typeof row !== "object";
+    if (isNew) {
+      if (this._relRowCount(p) >= CAPS.relRows && !this._evictStranger(p)) return null;
+      row = { d: 0, t: 0 };
+      rows[who] = row;
+    }
+    if (patch && typeof patch === "object") {
+      if (patch.d !== undefined) row.d = PF.clamp(posInt(patch.d, 0), 0, 3);
+      row.t = posInt(row.t, 0) + Math.max(0, posInt(patch.t, patch.t === undefined ? 1 : 0));
+      if (patch.h !== undefined) {
+        if (patch.h) row.h = 1;
+        else delete row.h;
+      }
+      if (patch.s !== undefined) {
+        const line = clip(patch.s, CAPS.lineChars);
+        if (line) {
+          row.s = line;
+          row._sAt = this._lineSeq = (this._lineSeq ?? 0) + 1;
+          this._evictLines(p);
+        } else delete row.s;
+      }
+    } else {
+      row.t = posInt(row.t, 0) + 1;
+    }
+    this._touch(core);
+    return row;
+  },
+
+  _relRowCount(p) {
+    let n = 0;
+    for (const [, rows] of ownEntries(p.rel)) n += ownEntries(rows).length;
+    return n;
+  },
+
+  /** Evict one STRANGER-tier row (d === 0, fewest encounters, no line). A row
+   *  the player has actually built something with is never the one that goes. */
+  _evictStranger(p) {
+    let worst = null;
+    for (const [zoneId, rows] of ownEntries(p.rel)) {
+      for (const [name, row] of ownEntries(rows)) {
+        if (posInt(row?.d, 0) !== 0 || row?.s) continue;
+        if (!worst || posInt(row?.t, 0) < worst.t) worst = { zoneId, name, t: posInt(row?.t, 0) };
+      }
+    }
+    if (!worst) return false;
+    delete p.rel[worst.zoneId][worst.name];
+    if (!ownEntries(p.rel[worst.zoneId]).length) delete p.rel[worst.zoneId];
+    return true;
+  },
+
+  /** The LINE cap, which is not the row cap: past thirty lines the OLDEST line
+   *  is dropped and its row stays exactly where it was, with its ladder and its
+   *  encounter count intact. Losing the row instead would lose the relationship
+   *  to make room for a sentence. */
+  _evictLines(p) {
+    const held = [];
+    for (const [zoneId, rows] of ownEntries(p.rel)) {
+      for (const [name, row] of ownEntries(rows)) if (row?.s) held.push({ zoneId, name, row, at: posInt(row._sAt, 0) });
+    }
+    if (held.length <= CAPS.relLines) return;
+    held.sort((a, b) => a.at - b.at);
+    for (const victim of held.slice(0, held.length - CAPS.relLines)) {
+      delete victim.row.s;
+      delete victim.row._sAt;
+    }
+  },
+
+  /** Quest state. `action` is accept | progress | complete | abandon. Board
+   *  completions ("b:") are world-FREE (the board is a generated template); pack
+   *  completions ("p:") are world-bound and live under quests. */
+  quest(core, action, payload, gen) {
+    const p = this._live(core, gen);
+    if (!p) return false;
+    const active = p.quests.active;
+    const id = str(payload?.id ?? payload);
+    if (action === "accept") {
+      if (!id || active.length >= CAPS.activeQuests || active.some((q) => q.id === id)) return false;
+      active.push({
+        id,
+        g: str(payload.g),
+        verb: str(payload.verb),
+        target: str(payload.target),
+        n: Math.max(1, posInt(payload.n, 1)),
+        have: 0,
+        r: { money: posInt(payload.r?.money, 0), xp: posInt(payload.r?.xp, 0) },
+        day: posInt(payload.day, core.sim?.day ?? 0),
+      });
+      this._touch(core);
+      return true;
+    }
+    const index = active.findIndex((q) => q.id === id);
+    if (index < 0) return false;
+    const row = active[index];
+    if (action === "progress") {
+      row.have = PF.clamp(posInt(row.have, 0) + Math.max(1, posInt(payload?.by, 1)), 0, posInt(row.n, 0));
+      this._touch(core);
+      return row.have >= posInt(row.n, 0);
+    }
+    if (action === "abandon") {
+      active.splice(index, 1);
+      this._touch(core);
+      return true;
+    }
+    if (action !== "complete") return false;
+    active.splice(index, 1);
+    // The completion counter is keyed by the quest's TEMPLATE, not its instance:
+    // "b1.d37.2" is the third delivery this world generated, and what the board
+    // needs to know is how many deliveries the player has run.
+    const template = str(payload?.template ?? row.id);
+    const board = template.startsWith("p:") ? p.quests.done_pack : p.quests_done_board;
+    const cap = board === p.quests.done_pack ? CAPS.packDone : CAPS.boardDone;
+    if (board[template] === undefined && Object.keys(board).length >= cap) {
+      // Full. The oldest KEY goes rather than the new completion being dropped:
+      // a counter the player can no longer earn is the cheaper loss.
+      delete board[Object.keys(board).sort()[0]];
+    }
+    if (template && template !== "__proto__") board[template] = posInt(board[template], 0) + 1;
+    this.award(core, { money: row.r?.money, xp: row.r?.xp, verb: row.verb }, gen);
+    this._touch(core);
+    return true;
+  },
+
+  /** Append a day-ledger line. Refuses a day the gate already covers: those
+   *  lines were told and re-telling them is the flaw the gate exists to stop. */
+  log(core, text, day, gen) {
+    const p = this._live(core, gen);
+    if (!p) return false;
+    const line = clip(text, CAPS.ledgerChars);
+    if (!line) return false;
+    const at = posInt(day, core.sim?.day ?? 0);
+    if (at <= posInt(p.flushedDay, 0)) return false;
+    p.ledger.lines.push([at, line]);
+    this._compactLedger(p);
+    this._touch(core);
+    return true;
+  },
+
+  /** Three days in full, one stub per elided day beyond them (plan §4). The
+   *  stub is what keeps an unslept week from silently vanishing. */
+  _compactLedger(p) {
+    const lines = p.ledger.lines;
+    const days = [...new Set(lines.map((l) => posInt(l[0], 0)))].sort((a, b) => a - b);
+    const full = new Set(days.slice(-CAPS.ledgerDays));
+    const out = [];
+    const stubbed = new Set();
+    for (const day of days) {
+      const forDay = lines.filter((l) => posInt(l[0], 0) === day);
+      if (full.has(day)) {
+        // Newest within the day: an over-long day loses its EARLIEST lines, which
+        // are the ones the player is furthest from remembering.
+        for (const line of forDay.slice(-CAPS.ledgerPerDay)) out.push(line);
+      } else if (!stubbed.has(day)) {
+        stubbed.add(day);
+        out.push([day, `Day ${day}: ${forDay.length} thing${forDay.length === 1 ? "" : "s"} happened.`]);
+      }
+    }
+    // Bounded stubs, oldest first: an unslept month is a §5 limitation, not a
+    // licence to grow the block without end.
+    const stubDays = [...stubbed].sort((a, b) => a - b);
+    const dropped = new Set(stubDays.slice(0, Math.max(0, stubDays.length - CAPS.ledgerStubs)));
+    p.ledger.lines = dropped.size ? out.filter((line) => !dropped.has(posInt(line[0], 0))) : out;
+  },
+
+  /** Record a discovery. Composite id (p,e,d) so a sub-zone never collides with
+   *  its parent; upserts, because seeing a place twice is not two discoveries. */
+  discover(core, entry, gen) {
+    const p = this._live(core, gen);
+    if (!p) return false;
+    const place = str(entry?.p);
+    if (!place) return false;
+    const row = {
+      p: place,
+      e: posInt(entry?.e, 0),
+      d: posInt(entry?.d, 0),
+      day: posInt(entry?.day, core.sim?.day ?? 0),
+      seen: entry?.seen !== false,
+    };
+    const zones = p.found.zones;
+    const index = zones.findIndex((z) => z.p === row.p && posInt(z.e, 0) === row.e && posInt(z.d, 0) === row.d);
+    if (index >= 0) zones[index] = { ...zones[index], ...row };
+    else {
+      if (zones.length >= CAPS.found) zones.shift(); // oldest recorded goes first
+      zones.push(row);
+    }
+    this._touch(core);
+    return true;
+  },
+
+  /** Set the home anchor. A SEALED anchor ("z3") or { minted: true } — never a
+   *  bare h{n}, which is a compiler-minted building id that moves with the mint
+   *  and would silently rehome the player on the next world change (§2). */
+  setHome(core, anchor, gen) {
+    const p = this._live(core, gen);
+    if (!p) return false;
+    if (anchor == null) p.home = null;
+    else if (typeof anchor === "string") {
+      if (!anchor || /^h\d+$/.test(anchor)) return false;
+      p.home = anchor;
+    } else if (anchor && anchor.minted === true) p.home = { minted: true };
+    else return false;
+    this._touch(core);
+    return true;
+  },
+};
+
+// ── The quarantine store (plan §Q1a) ─────────────────────────────────────────
+// Its OWN chat-metadata key, never the snapshot and never the route row: the
+// whole point of a quarantine is that it survives the write that replaces the
+// thing it is holding. Written immediately at creation with the brief path's
+// 3-retry backoff, and the in-memory bag is the authority — the same discipline
+// PF.save.ensurePresent already applies to the save key, for the same reason
+// (~40 engine call sites still use the unqueued whole-blob updateMetadata).
+PF.quarantine = {
+  MAX_CHARS: QUARANTINE_MAX_CHARS,
+  SLOTS: QUARANTINE_SLOTS,
+  DROP_ORDER: QUARANTINE_DROP_ORDER,
+  _bag: {},
+  /** Dedupe for the PATCH, entirely separate from the save path's caches. */
+  _bagSerialized: null,
+  _chatId: null,
+
+  /** Per-chat: the bag belongs to the chat it was read from. */
+  reset() {
+    this._bag = {};
+    this._bagSerialized = null;
+    this._chatId = null;
+  },
+
+  /** Boot: read the key into the bag. Called once per chat from PF.save.restore
+   *  — deliberately NOT from simFromSaved, which also runs on every rebuild and
+   *  would resurrect a slot a re-adoption just consumed. */
+  hydrate(meta, chatId) {
+    this._chatId = chatId ?? null;
+    const raw = meta && typeof meta === "object" ? meta[QUARANTINE_KEY] : null;
+    const bag = {};
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      for (const slot of QUARANTINE_SLOTS) {
+        const entry = raw[slot];
+        if (entry && typeof entry === "object" && !Array.isArray(entry)) bag[slot] = entry;
+      }
+    }
+    this._bag = bag;
+    this._bagSerialized = Object.keys(bag).length ? JSON.stringify(bag) : null;
+    return bag;
+  },
+
+  peek(slot) {
+    return this._bag[slot] ?? null;
+  },
+
+  slots() {
+    return Object.keys(this._bag).sort();
+  },
+
+  /** FIRST-LOSS-WINS, and per slot. The first thing a slot lost is the thing
+   *  furthest from being recoverable any other way; a later loss of the same
+   *  kind is usually a repeat of the same cause. Independent across slots — a
+   *  full `version` slot must not silence a `migration` loss. */
+  put(chatId, slot, entry) {
+    if (!QUARANTINE_SLOTS.includes(slot) || !entry || typeof entry !== "object") return false;
+    if (this._bag[slot]) return false;
+    this._bag[slot] = { at: new Date().toISOString(), ...entry };
+    void this._write(chatId ?? this._chatId);
+    return true;
+  },
+
+  /** Take a slot's contents and clear it in one step — the version slot's
+   *  re-adoption CONSUMES it, which is what makes a third boot a no-op. */
+  consume(chatId, slot) {
+    const entry = this._bag[slot];
+    if (!entry) return null;
+    delete this._bag[slot];
+    void this._write(chatId ?? this._chatId);
+    return entry;
+  },
+
+  /** Drop a slot without reading it (explicit discard, or invalidation). */
+  discard(chatId, slot) {
+    if (!this._bag[slot]) return false;
+    delete this._bag[slot];
+    void this._write(chatId ?? this._chatId);
+    return true;
+  },
+
+  /** Same self-heal as the save key, and it needs its own branch: the two keys
+   *  are written by different code paths and an engine whole-blob write erases
+   *  whichever it erases. */
+  ensurePresent(core, meta) {
+    if (!Object.keys(this._bag).length || !core?.chatId) return;
+    if (meta && typeof meta === "object" && meta[QUARANTINE_KEY] == null) {
+      this._bagSerialized = null;
+      void this._write(core.chatId);
+    }
+  },
+
+  /** Serialize the bag, dropping least-recoverable first until it fits its own
+   *  24 KB ceiling. Mutates the bag: a slot that cannot be stored is not being
+   *  held, and pretending otherwise would report a recovery that cannot happen. */
+  _serialize() {
+    let text = JSON.stringify(this._bag);
+    for (const slot of QUARANTINE_DROP_ORDER) {
+      if (text.length <= QUARANTINE_MAX_CHARS) break;
+      if (!this._bag[slot]) continue;
+      console.warn(`[pixelforge] quarantine over ${QUARANTINE_MAX_CHARS} chars; dropping the ${slot} entry`);
+      delete this._bag[slot];
+      text = JSON.stringify(this._bag);
+    }
+    return text;
+  },
+
+  async _write(chatId) {
+    if (!chatId) return false;
+    const text = this._serialize();
+    if (text === this._bagSerialized) return true;
+    const gen = PF.save?._gen ?? 0;
+    const payload = Object.keys(this._bag).length ? JSON.parse(text) : null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await PF.api.patchMetadata(chatId, { [QUARANTINE_KEY]: payload });
+        if (gen === (PF.save?._gen ?? 0)) this._bagSerialized = text;
+        return true;
+      } catch (err) {
+        if (attempt === 2) {
+          // The bag is still the authority in memory, and ensurePresent re-tries
+          // it on the next props delivery. Losing the WRITE is not losing the
+          // entry until the tab does.
+          console.warn("[pixelforge] quarantine storage failed; holding it in memory", err);
+          return false;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+      }
+    }
+    return false;
+  },
+};
+
 // ===== 60-save.js =====
 // ── Persistence ───────────────────────────────────────────────────────────────
 // Two-tier, engine-version adaptive:
@@ -6303,7 +7419,71 @@ const ENVELOPE_KEYS = new Set([
   "day",
   "bindings",
   "intro",
+  "player",
 ]);
+
+// The chat-metadata key a corrupt route row's raw text is parked in before the
+// repairing write replaces it (plan §Q2 row 1, Engine #5407). Bounded hard: this
+// is evidence for a bug report, not a backup — the row it came from is already
+// unreadable by every means the client has.
+const CORRUPT_EXCERPT_KEY = "pixelforgeCorruptExcerpt";
+const CORRUPT_EXCERPT_CHARS = 4_096;
+// How long a successful ladder check stays authoritative. One debounce window:
+// the pre-check exists so a PUT never lands on a row it has not looked at, and
+// a check taken inside the window the write was scheduled in has looked at it.
+const CHECK_FRESH_MS = 2500;
+
+// The ladder's rows and what each one MEANS at each site (plan §Q2). A table
+// rather than a switch in three places: the whole finding behind slice 4 is that
+// the sites disagreed about rows nobody had written down.
+//   adopt  — boot-time probe:  metadata | repair | ignore | first-write | rebuild | reread | none
+//   rewind — turn-edge check:  ignore | latch | rewind | reread | none
+//   flush  — the write site:   proceed | block | fresh (proceed only while the
+//                              last successful check is inside the window)
+// `anchorCache` says whether the row may become _serverSerialized. Rows 1 and 2
+// must never: a damaged row and a retired game's row are both things we are
+// about to overwrite, and treating either as "what the server holds" would make
+// the next honest difference look like a rewind.
+const LADDER = Object.freeze({
+  0: { name: "unavailable", adopt: "metadata", rewind: "none", flush: "proceed", anchorCache: false, toast: null },
+  1: {
+    name: "unparseable",
+    adopt: "repair",
+    rewind: "ignore",
+    flush: "proceed",
+    anchorCache: false,
+    toast: "This world's saved row was damaged. It is being written fresh.",
+  },
+  2: { name: "foreign-game", adopt: "ignore", rewind: "ignore", flush: "proceed", anchorCache: false, toast: null },
+  3: { name: "first-write", adopt: "first-write", rewind: "none", flush: "proceed", anchorCache: false, toast: null },
+  4: {
+    name: "lost-row",
+    adopt: "first-write",
+    rewind: "reread",
+    flush: "block",
+    anchorCache: false,
+    toast: "The world rewound with the story.",
+  },
+  5: { name: "own-commit", adopt: "ignore", rewind: "ignore", flush: "proceed", anchorCache: false, toast: null },
+  6: {
+    name: "differs-unanchored",
+    adopt: "rebuild",
+    rewind: "latch",
+    flush: "proceed",
+    anchorCache: true,
+    toast: null,
+  },
+  7: {
+    name: "differs-anchored",
+    adopt: "rebuild",
+    rewind: "rewind",
+    flush: "block",
+    anchorCache: true,
+    toast: "The world rewound with the story.",
+  },
+  8: { name: "same", adopt: "none", rewind: "latch", flush: "proceed", anchorCache: true, toast: null },
+  9: { name: "get-failed", adopt: "none", rewind: "none", flush: "fresh", anchorCache: false, toast: null },
+});
 
 // Process-monotonic write sequence, deliberately NOT reset per chat. Every one
 // of OUR completed PUTs bumps it; a GET records the value it was issued at. A
@@ -6422,12 +7602,16 @@ PF.save = {
     // §7 one-shot injection flags: persisted so a reload never re-taxes the
     // GM context with prose that already lives in chat history.
     snap.intro = sim.intro ?? { world: false, zones: {}, npcs: {} };
-    // Slice 3 lands `player` here, and it MUST be emitted UNCONDITIONALLY, like
-    // every line above it. A key that is listed in ENVELOPE_KEYS but only
-    // SOMETIMES emitted is worse than one that is missing from the list: the
-    // list makes simFromSaved skip it on the way in, so it never reaches
-    // _envelopeExtra either, and the write silently deletes a newer build's
-    // field. That is the exact slice-1 failure, rebuilt one branch at a time.
+    // The S5 player block, and it is emitted UNCONDITIONALLY like every line
+    // above it — no `if (sim.player)`, no "only when it has something in it".
+    // A key that is listed in ENVELOPE_KEYS but only SOMETIMES emitted is worse
+    // than one missing from the list: the list makes simFromSaved skip it on the
+    // way in, so it never reaches _envelopeExtra either, and the write silently
+    // deletes a newer build's field. That is the exact slice-1 failure, rebuilt
+    // one branch at a time. serialize() takes an absent block and hands back the
+    // default one, which is what makes the unconditional emission possible on
+    // the synthetic cores 80-setup and the load-time assertion build.
+    snap.player = PF.player.serialize(sim.player);
     return snap;
   },
 
@@ -6453,9 +7637,15 @@ PF.save = {
     return null;
   },
 
-  /** Restore a saved state into a freshly built world. Returns the sim. */
+  /** Restore a saved state into a freshly built world. Returns the sim.
+   *
+   *  The one place the quarantine bag is hydrated (plan §Q1a). Deliberately not
+   *  simFromSaved, which also runs on every _rebuild: re-reading the key there
+   *  would resurrect a slot a version re-adoption had just consumed, and the
+   *  re-adoption would then run again on the same boot. */
   restore(meta, chatId) {
     const saved = meta && typeof meta.pixelforge === "object" && meta.pixelforge !== null ? meta.pixelforge : null;
+    PF.quarantine.hydrate(meta, chatId);
     return this.simFromSaved(saved, meta, chatId);
   },
 
@@ -6554,8 +7744,18 @@ PF.save = {
       // so it transplants across the wholesale sim replacement rather than
       // dying with the throwaway world (_rebuild gets it via simFromSaved).
       const carriedExtra = core.sim?._envelopeExtra;
+      // The player block crosses the same seam, and it crosses SPLIT (plan §Q5,
+      // the one-release compat shim for chats created before the loading gate).
+      // World-free fields — the purse, the skills, the board's completion counts
+      // — mean the same thing in the compiled world. Everything world-bound
+      // belonged to the throwaway one and goes to the stamp slot instead of
+      // being silently reinterpreted against people who do not exist here.
+      const carriedPlayer = core.sim?.player;
       core.sim = new PF.Sim(PF.world.build(seed, theme, sealed));
       if (carriedExtra) core.sim._envelopeExtra = carriedExtra;
+      const moved = PF.player.transplant(carriedPlayer, core.sim.world, sealed);
+      core.sim.player = moved.player;
+      if (moved.severed) PF.quarantine.put(chatId, moved.severed.slot, moved.severed.entry);
       this._lastSerialized = null;
       core.render?.clearZones?.();
       void PF.assets.load(core);
@@ -6681,7 +7881,81 @@ PF.save = {
         sim.y = (spawn.y + 0.5) * PF.TILE;
       }
     }
+    // ── The player block, rehydrated in the order §Q5 fixes ───────────────────
+    // parse/migrate → stamps/severance → gated dangling repair → notices. The
+    // order is the whole correctness argument: a repair run before severance
+    // would drop quests the severance was about to quarantine intact, and a
+    // notice appended before severance would be severed along with the lines it
+    // is explaining. Deliberately OUTSIDE the `saved.v` gate, like the carry
+    // above it and for the same reason — `player` carries its own version and a
+    // build that cannot read the envelope's is the one most likely to be
+    // destroying what it does not understand.
+    sim.player = this._rehydratePlayer(saved, world, brief, meta, chatId, sim);
     return sim;
+  },
+
+  /** The §Q5 rehydration, factored out so the ordering is one readable list
+   *  rather than a tail on a 90-line function. Never throws: every branch has a
+   *  defaults boot behind it. */
+  _rehydratePlayer(saved, world, brief, meta, chatId, sim) {
+    const briefExpected = !brief && meta?.pixelforgeBrief === undefined && this._configGenerate(meta);
+    // 1. PARSE / MIGRATE.
+    const parsed = PF.player.parse(saved && typeof saved === "object" ? saved.player : null);
+    const player = parsed.player;
+    if (parsed.quarantine) PF.quarantine.put(chatId, parsed.quarantine.slot, parsed.quarantine.entry);
+
+    // 1b. VERSION RE-ADOPTION. A block this build could not read last time is
+    // readable now. It CONSUMES the slot — that is what makes a third boot a
+    // no-op — and the block it displaces is parked in setAside, which no machine
+    // ever restores: two live blocks cannot both be the player's state, and only
+    // the player can say which one they meant.
+    const held = PF.quarantine.peek("version");
+    const heldV = held && typeof held.fromV === "number" && Number.isFinite(held.fromV) ? held.fromV : null;
+    if (held && held.adoptable === true && heldV !== null && heldV <= PF.player.currentV()) {
+      const readopted = PF.player.parse(held.block);
+      if (readopted.source === "saved") {
+        PF.quarantine.consume(chatId, "version");
+        // A stamp entry from a DIFFERENT lineage is not evidence about this one.
+        const stamp = PF.quarantine.peek("stamp");
+        if (stamp && stamp.fromV !== held.fromV) PF.quarantine.discard(chatId, "stamp");
+        PF.quarantine.put(chatId, "setAside", {
+          reason: "displaced",
+          fromV: player.v,
+          block: PF.player.serialize(player),
+        });
+        Object.assign(player, readopted.player);
+      }
+    }
+
+    // 2. STAMPS / SEVERANCE, then the other direction: a stamp slot whose world
+    // is the world we just built is a save coming home.
+    const applied = PF.player.applyStamps(player, world, brief, briefExpected);
+    if (applied.severed) PF.quarantine.put(chatId, applied.severed.slot, applied.severed.entry);
+    const notices = [...applied.notices];
+    if (applied.evaluated && !applied.severed) {
+      const stamp = PF.quarantine.peek("stamp");
+      if (stamp) {
+        const restored = PF.player.restoreStamped(player, stamp, world, brief);
+        if (restored) {
+          Object.assign(player, restored);
+          PF.quarantine.consume(chatId, "stamp");
+          notices.push("What was set aside when this world changed is back.");
+        }
+      }
+    }
+
+    // 3. GATED DANGLING REPAIR. A repair is a NON-MUTATION: it does not dirty
+    // the sim and does not arm a write of its own. The next real save carries it.
+    const repaired = PF.player.repairQuests(player, world, applied.evaluated);
+    notices.push(...repaired.notices);
+
+    // 4. NOTICES, appended to the LIVE ledger — after the severance that emptied
+    // it, so the one thing that survives the window is the explanation for it.
+    // Never at or below the gate: a line the gate covers is one the flush will
+    // skip, and a notice nobody is ever told is worse than no notice at all.
+    const noticeDay = Math.max(sim.day, player.flushedDay + 1);
+    for (const text of notices) player.ledger.lines.push([noticeDay, text]);
+    return player;
   },
 
   /** Self-heal (review finding): ~40 engine call sites still use the unqueued
@@ -6689,6 +7963,12 @@ PF.save = {
    *  erase our key between turns. If we have saved state but the incoming
    *  chatMeta lost the key, re-save from the in-memory authority. */
   ensurePresent(core, meta) {
+    // The quarantine key has its OWN branch, and it needs one: it is written by
+    // a different code path on a different cadence, and the save key being
+    // intact says nothing about whether the quarantine key survived the same
+    // whole-blob write. It is also not gated on _lastSerialized — a bag can be
+    // the only thing this chat has written.
+    PF.quarantine.ensurePresent(core, meta);
     if (!this._lastSerialized || !core.sim || !core.chatId) return;
     if (meta && typeof meta === "object" && meta.pixelforge == null) {
       this._lastSerialized = null; // force the next flush to actually write
@@ -6721,6 +8001,17 @@ PF.save = {
     this._probePinned = false;
     this._reprobedAfterFlush = false;
     this._reprobeFailures = 0;
+    // Ladder state (slice 4). _lastCheck is what teardown's clean-gate derives
+    // from, so it must not survive into a chat whose row it never looked at.
+    this._lastCheck = null;
+    this._lastCheckAt = 0;
+    this._lastCheckedAnchor = null;
+    this._anchorMoved = false;
+    this._corruptToasted = false;
+    this._corruptParked = false;
+    // The in-memory quarantine bag is per-chat, exactly like the caches above:
+    // restore() hydrates the arriving chat's key into it a few lines later.
+    PF.quarantine.reset();
     // _flushChain is deliberately NOT cleared: the chat-switch flush of the
     // chat we are LEAVING rides it, and it must still land before the new
     // chat's first write. _writeSeq is process-monotonic and never resets.
@@ -6739,6 +8030,223 @@ PF.save = {
    *  chain, that probe can read the row the queued write is about to replace,
    *  latch it as _serverSerialized, and rebuild the sim onto a state we
    *  ourselves superseded a moment later. */
+  /** THE DECISION LADDER (plan §Q2) — ONE implementation, three consumers, and
+   *  a fourth that derives from it. Every site used to ask its own version of
+   *  "is this row mine, and is it newer than what I hold?", and they disagreed:
+   *  adopt compared against the local snapshot, checkRewind against the last
+   *  known row, the flush against nothing at all, and teardown against a byte
+   *  cache. The rows below are evaluated IN ORDER and the first match wins.
+   *
+   *  `get` is { failed, error } or { failed:false, probe }, exactly as PF.api
+   *  hands it back. `ctx` is:
+   *    serverSerialized  the last row we know the server held, or null
+   *    localSerialized   our current snapshot's bytes, or null
+   *    seqAtIssue        _writeSeq at the moment the GET was issued
+   *    game              our "New game" ordinal
+   *    anchorMoved       a PUT of ours echoed an anchor we had not checked
+   *    lastOkCheckAt     epoch ms of the last SUCCESSFUL check (row 9 only)
+   *    now               epoch ms
+   *
+   *  The result carries the row, the parsed state, and a PER-SITE action map —
+   *  `adopt`, `rewind`, `flush` — because the same row means different things at
+   *  different sites: row 6 is "the row wins" at adopt and "latch it, do not
+   *  rebuild" at a rewind check.
+   *
+   *  #5406 SEAM: when the engine's authoritative write ordinal lands, the
+   *  own-commit test at row 5 and the byte comparison at rows 6-8 collapse into
+   *  one comparison of ordinals, and _writeSeq stops being a proxy. Not consumed
+   *  yet — the contract is still moving in review. */
+  classify(get, ctx) {
+    const c = ctx || {};
+    const decide = (row, extra) => ({
+      row,
+      ...LADDER[row],
+      state: null,
+      serialized: null,
+      rawState: null,
+      anchor: null,
+      ...extra,
+    });
+
+    // Row 9 is CLASSIFIED SEPARATELY and never consumes the PUT ladder's
+    // ceiling: a probe that did not answer is not a write that failed, and
+    // spending a backoff rung on it would take the session's saves down with
+    // the network's bad minute.
+    if (!get || get.failed) {
+      const fresh =
+        typeof c.lastOkCheckAt === "number" && c.lastOkCheckAt > 0 && (c.now ?? 0) - c.lastOkCheckAt < CHECK_FRESH_MS;
+      return decide(9, { fresh, error: get?.error ?? null });
+    }
+    const probe = get.probe || {};
+    // Not a row at all: 404/409 are the route saying it is not here, which is a
+    // MODE signal the caller acts on, not a state of the row.
+    if (!probe.available) return decide(0, { status: probe.status ?? 0 });
+    const body = probe.body || {};
+    const anchor = body.anchor && typeof body.anchor === "object" ? body.anchor : null;
+    const exists = body.exists === true;
+    const state = body.state;
+    const shaped = !!state && typeof state === "object" && !Array.isArray(state);
+
+    // ── 1. UNPARSEABLE ────────────────────────────────────────────────────────
+    // Engine #5407 hands the raw stored text back on the failure path only, so
+    // the PRESENCE of the key is the corruption signal — that is what keeps a
+    // damaged row distinguishable from a legitimately stored null. Older engines
+    // ship neither, so the legacy inference stands in: we only ever PUT a shaped
+    // object, so exists-with-nothing-shaped can only be damage.
+    // NEVER rebuild from this row. At the flush site the PUT proceeds, because
+    // the write IS the repair.
+    if (exists) {
+      const rawState = typeof body.rawState === "string" ? body.rawState : null;
+      if (body.stateUnparseable === true || rawState !== null || !shaped) {
+        return decide(1, { anchor, rawState, rawStateTruncated: body.rawStateTruncated === true });
+      }
+      // ── 2. FOREIGN GAME ORDINAL ─────────────────────────────────────────────
+      // TOTAL by construction: a row with no player block, or one whose ordinal
+      // is not a finite number, reads as game 1 — which is what every row
+      // written before S5 is. Unshaped rows never reach here; they are row 1.
+      // The row is IGNORED outright: no rebuild, no toast, and _serverSerialized
+      // is NOT updated, because a row from a game the player retired is not
+      // evidence about the game they are in.
+      const ordinal = state.player;
+      const g =
+        ordinal && typeof ordinal === "object" && typeof ordinal.game === "number" && Number.isFinite(ordinal.game)
+          ? ordinal.game
+          : 1;
+      const ours = typeof c.game === "number" && Number.isFinite(c.game) ? c.game : 1;
+      if (g !== ours) return decide(2, { anchor, state, foreignGame: g });
+    }
+
+    // ── 3 / 4. NO ROW AT THIS ANCHOR, split by whether we ever had one ────────
+    if (!exists) {
+      if (c.serverSerialized === null || c.serverSerialized === undefined) return decide(3, { anchor });
+      // We held an anchor and the row is gone: the timeline rewound PAST our
+      // first save. Re-read once — a GET that lands inside the PUT route's
+      // delete-then-insert window finds no row at all — and only then rewind.
+      return decide(4, { anchor });
+    }
+
+    const serialized = JSON.stringify(state);
+
+    // ── 5. OWN-COMMIT SUSPECT ─────────────────────────────────────────────────
+    // A PUT of ours completed while this GET was in flight, so the row it read
+    // predates the one we just wrote. Adopting it would rewind the world onto a
+    // state we superseded ourselves; the cure at a write site is to re-PUT.
+    if (typeof c.seqAtIssue === "number" && c.seqAtIssue !== _writeSeq) {
+      return decide(5, { anchor, state, serialized });
+    }
+
+    // ── 6 / 7 / 8. THE BYTE COMPARISON ────────────────────────────────────────
+    // The baseline is the last row we know the server held; with none, it is our
+    // own snapshot, which is what makes adopt's "the row wins" and a rewind
+    // check's "latch it" the same comparison with different actions.
+    //
+    // An echoed anchor MOVE forces the ANCHORED branch on even without a
+    // baseline of our own: the write landed somewhere nobody looked, so a
+    // difference there is a genuine external state and takes the rewind path
+    // rather than being latched in silence. It deliberately does NOT change the
+    // baseline itself — comparing against the local snapshot instead would make
+    // every step the player took since the write look like an external move and
+    // rewind their own walking away.
+    const anchored = (c.serverSerialized !== null && c.serverSerialized !== undefined) || c.anchorMoved === true;
+    const baseline =
+      c.serverSerialized !== null && c.serverSerialized !== undefined
+        ? c.serverSerialized
+        : (c.localSerialized ?? null);
+    if (serialized !== baseline) return decide(anchored ? 7 : 6, { anchor, state, serialized });
+    return decide(8, { anchor, state, serialized });
+  },
+
+  /** Bookkeeping every site shares: what the last completed check decided, when
+   *  the last SUCCESSFUL one was, and the anchor it read. Teardown's clean-gate
+   *  reads all three. */
+  _recordCheck(decided) {
+    this._lastCheck = decided;
+    if (decided.row !== 9) {
+      this._lastCheckAt = Date.now();
+      this._anchorMoved = false; // consumed by the check it forced
+      if (decided.anchor) this._lastCheckedAnchor = decided.anchor;
+    }
+    return decided;
+  },
+
+  /** One GET, classified. Returns null when the generation fence closed under
+   *  it — a response for the chat we left decides nothing about this one. */
+  async _check(core, chatId, gen, seqAtIssue, localSerialized) {
+    let get;
+    try {
+      get = { failed: false, probe: await PF.api.getExperienceState(chatId) };
+    } catch (err) {
+      get = { failed: true, error: err };
+    }
+    if (gen !== (this._gen ?? 0) || chatId !== core.chatId) return null;
+    return this._recordCheck(
+      this.classify(get, {
+        serverSerialized: this._serverSerialized,
+        localSerialized: localSerialized ?? this._localSerialized(core),
+        seqAtIssue,
+        game: this._gameOrdinal(core),
+        anchorMoved: this._anchorMoved,
+        lastOkCheckAt: this._lastCheckAt,
+        now: Date.now(),
+      }),
+    );
+  },
+
+  _localSerialized(core) {
+    try {
+      const snap = this.snapshot(core);
+      return snap ? JSON.stringify(snap) : null;
+    } catch {
+      return null;
+    }
+  },
+
+  /** The "New game" ordinal this session is playing. Older-game rows are inert
+   *  at every ladder site and are RETAINED — deletion is the player's explicit
+   *  choice through the engine's management verbs (plan §8 #5). */
+  _gameOrdinal(core) {
+    const g = core?.sim?.player?.game;
+    return typeof g === "number" && Number.isFinite(g) ? g : 1;
+  },
+
+  /** Apply a classification at a REWIND-shaped site (the turn-edge check and the
+   *  flush pre-check both land here). `reread` marks the second pass row 4 asks
+   *  for. Returns true when it acted on the world. */
+  async _applyRewind(core, decided, chatId, gen, seqAtIssue, reread) {
+    if (decided.rewind === "latch") {
+      this._serverSerialized = decided.serialized;
+      return false;
+    }
+    if (decided.row === 4) {
+      if (!reread) {
+        // ONE re-read. A GET landing inside the PUT route's delete-then-insert
+        // window sees no row and would otherwise rewind a perfectly live world
+        // back to its baseline, toast and all.
+        const again = await this._check(core, chatId, gen, seqAtIssue);
+        if (!again) return false;
+        return this._applyRewind(core, again, chatId, gen, seqAtIssue, true);
+      }
+      this._serverSerialized = null;
+      this._rebuild(core, null);
+      core.hud?.toast(decided.toast);
+      this.markDirty(core);
+      this._lastCheck = null; // acted on; it no longer gates teardown
+      return true;
+    }
+    if (decided.row === 7) {
+      this._serverSerialized = decided.serialized;
+      this._rebuild(core, decided.state);
+      core.hud?.toast(decided.toast);
+      // The rebuilt snapshot need not serialize to the row's own bytes (a pre-S5
+      // row rebuilds with a default player block on it), so the world we now
+      // show still owes the server a write.
+      this.markDirty(core);
+      this._lastCheck = null;
+      return true;
+    }
+    return false;
+  },
+
   adopt(core) {
     const task = () => this._adoptNow(core);
     this._flushChain = (this._flushChain ?? Promise.resolve()).then(task, task);
@@ -6749,46 +8257,98 @@ PF.save = {
     if (!core.chatId || this.mode !== null) return;
     const gen = this._gen ?? 0;
     const chatId = core.chatId;
-    try {
-      const probe = await PF.api.getExperienceState(chatId);
-      // Switched mid-probe: fence on the CAPTURED generation and chat id — a
-      // response for the old chat must never rebuild the new one.
-      if (gen !== (this._gen ?? 0) || chatId !== core.chatId) return;
-      if (!probe.available) {
-        this.mode = "metadata";
-        return;
-      }
-      this.mode = "routes";
-      const body = probe.body || {};
-      if (body.exists && body.state && typeof body.state === "object") {
-        this._serverSerialized = JSON.stringify(body.state);
-        const current = this.snapshot(core);
-        if (current && JSON.stringify(current) !== this._serverSerialized) {
-          this._rebuild(core, body.state);
-        }
-      } else {
-        // No server row yet: adopt the in-memory world (implicitly migrating a
-        // legacy metadata save into the timeline-anchored store).
-        this._lastSerialized = null; // force the write even if metadata matched
-        this.markDirty(core);
-      }
-    } catch (err) {
-      // Fenced FIRST, exactly like the success path above: a rejection for the
-      // chat we LEFT would otherwise demote the chat we are now on to metadata
-      // mode — and the demotion sticks, because adopt() short-circuits on
-      // mode !== null and the new chat's own probe already ran.
-      if (gen !== (this._gen ?? 0) || chatId !== core.chatId) return;
+    const seqAtIssue = _writeSeq;
+    const decided = await this._check(core, chatId, gen, seqAtIssue);
+    // Switched mid-probe: _check fences on the CAPTURED generation and chat id —
+    // a response for the old chat must never rebuild the new one, and its
+    // REJECTION must never demote the new one either (adopt() short-circuits on
+    // mode !== null, so the demotion would stick for the session).
+    if (!decided) return;
+    if (decided.row === 9) {
+      const err = decided.error;
       // A transient 500 or a network blip at boot used to cost timeline rewind
-      // for the WHOLE session: adopt() short-circuits on mode !== null and
-      // nothing ever probed again. Pin it instead — a pin is re-probed.
+      // for the WHOLE session. Pin it instead — a pin is re-probed. …but only
+      // when re-asking could plausibly get a different answer: no status at all
+      // is a transport failure and 5xx is the server having a bad minute, while
+      // 401/403 and every other status the route MEANT is an answer, and a
+      // minute-timer re-asking it is noise the player pays for.
       this.mode = "metadata";
-      // …but only when re-asking could plausibly get a different answer. No
-      // status at all is a transport failure and 5xx is the server having a bad
-      // minute; 401/403 and every other status the route MEANT is an answer,
-      // and a minute-timer re-asking it is noise the player pays for.
       const status = err && typeof err.status === "number" ? err.status : 0;
       if (status === 0 || status >= 500) this._pinMetadataMode(core);
       console.warn("[pixelforge] experience-state probe failed; using metadata saves", err);
+      return;
+    }
+    if (decided.adopt === "metadata") {
+      this.mode = "metadata";
+      return;
+    }
+    this.mode = "routes";
+    if (decided.adopt === "repair") {
+      // CORRUPT ROW. Boot from metadata (which is exactly what already happened
+      // — restore() ran before the probe), tell the player once, and park a
+      // bounded excerpt of the damaged bytes BEFORE the repairing write goes
+      // out. The row's own contents are recoverable by no other client-side
+      // means, and the repair destroys them.
+      if (!this._corruptToasted) {
+        this._corruptToasted = true;
+        core.hud?.toast(decided.toast);
+      }
+      await this._parkCorruptExcerpt(core, chatId, decided);
+      this._lastSerialized = null;
+      this.markDirty(core);
+      return;
+    }
+    void this._clearCorruptExcerpt(core, chatId);
+    if (decided.adopt === "rebuild") {
+      // THE ROW WINS (plan §Q2a). No client-visible datum orders the two stores
+      // across a timeline move, so the anchored row is authority and the
+      // metadata-booted world yields to it.
+      this._serverSerialized = decided.serialized;
+      this._rebuild(core, decided.state);
+      return;
+    }
+    if (decided.anchorCache && decided.serialized !== null) this._serverSerialized = decided.serialized;
+    if (decided.adopt === "first-write" || decided.adopt === "ignore") {
+      // No row of ours yet — or one belonging to a game the player retired,
+      // which is the same thing for our purposes. Adopt the in-memory world
+      // (implicitly migrating a legacy metadata save into the anchored store).
+      this._lastSerialized = null; // force the write even if metadata matched
+      this.markDirty(core);
+    }
+  },
+
+  /** Park the raw text of a damaged row under its own metadata key, bounded.
+   *  Evidence for a bug report, not a backup: nothing client-side can turn it
+   *  back into a world, and the write that repairs the row destroys it. */
+  async _parkCorruptExcerpt(core, chatId, decided) {
+    if (this._corruptParked || typeof decided.rawState !== "string" || !decided.rawState) return;
+    this._corruptParked = true;
+    const excerpt = {
+      at: new Date().toISOString(),
+      truncated: decided.rawStateTruncated === true || decided.rawState.length > CORRUPT_EXCERPT_CHARS,
+      text: decided.rawState.slice(0, CORRUPT_EXCERPT_CHARS),
+    };
+    try {
+      await PF.api.patchMetadata(chatId, { [CORRUPT_EXCERPT_KEY]: excerpt });
+    } catch (err) {
+      // The repair still proceeds. Holding the world hostage to a diagnostic
+      // would be the wrong trade.
+      console.warn("[pixelforge] could not park the damaged row's text; repairing anyway", err);
+    }
+  },
+
+  /** …and the next healthy adopt takes it away again. The metadata PATCH has no
+   *  delete-by-null convention (it is a shallow merge), so the key is nulled
+   *  rather than removed. */
+  async _clearCorruptExcerpt(core, chatId) {
+    const meta =
+      core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : null;
+    if (!meta || meta[CORRUPT_EXCERPT_KEY] == null) return;
+    try {
+      await PF.api.patchMetadata(chatId, { [CORRUPT_EXCERPT_KEY]: null });
+      meta[CORRUPT_EXCERPT_KEY] = null;
+    } catch (err) {
+      console.warn("[pixelforge] could not clear the parked damaged-row text", err);
     }
   },
 
@@ -6882,36 +8442,13 @@ PF.save = {
     const chatId = core.chatId;
     const seqAtIssue = _writeSeq;
     try {
-      const probe = await PF.api.getExperienceState(chatId);
-      if (gen !== (this._gen ?? 0) || chatId !== core.chatId) return; // switched mid-probe
-      // A PUT of ours completed while this GET was in flight: the row it read
-      // predates the row we just wrote, so treating it as an external change
-      // would rewind the world onto a state we ourselves superseded.
-      if (seqAtIssue !== _writeSeq) return;
-      if (!probe.available) return;
-      const body = probe.body || {};
-      if (!body.exists || !body.state || typeof body.state !== "object") {
-        // The timeline rewound PAST the first persisted state: this anchor has
-        // no row. Keeping the later local sim would leave the world ahead of
-        // the story — fall back to the baseline build (config seed/theme) and
-        // let the next save write this anchor's row.
-        if (this._serverSerialized !== null) {
-          this._serverSerialized = null;
-          this._rebuild(core, null);
-          core.hud?.toast("The world rewound with the story.");
-        }
-        return;
-      }
-      const serverSerialized = JSON.stringify(body.state);
-      if (this._serverSerialized !== null && serverSerialized !== this._serverSerialized) {
-        this._serverSerialized = serverSerialized;
-        this._rebuild(core, body.state);
-        core.hud?.toast("The world rewound with the story.");
-      } else {
-        this._serverSerialized = serverSerialized;
-      }
-    } catch {
-      // Transient; the next turn edge retries.
+      const decided = await this._check(core, chatId, gen, seqAtIssue);
+      if (!decided) return; // switched mid-probe, or the chat moved under it
+      // Row 9 is transient and the next turn edge retries; rows 1, 2 and 5 all
+      // resolve to "ignore" and touch nothing — a damaged row, a retired game's
+      // row and a row our own write overtook are none of them evidence that the
+      // timeline moved.
+      await this._applyRewind(core, decided, chatId, gen, seqAtIssue, false);
     } finally {
       // A stale completion must not clear the NEW chat's in-flight flag.
       if (gen === (this._gen ?? 0)) this._rewindCheckInFlight = false;
@@ -7064,11 +8601,21 @@ PF.save = {
       // rung and retries a broken metadata route every 2.5s for the session.
       let landed = false;
       if (job.mode === "routes") {
+        // CHECK, THEN WRITE (plan §Q2). A PUT is a full-snapshot overwrite of
+        // whatever stands at the visible anchor, so writing without looking is
+        // how a swipe-back gets clobbered by a debounce timer that fired half a
+        // second later. Rows 4 and 7 are the two that block; everything else
+        // proceeds, including the damaged row (the write is the repair) and the
+        // retired game's row (ours outranks it).
+        if (job.routeNeeded && !teardown) {
+          const gate = await this._precheck(core, job);
+          if (gate === "block") return;
+        }
         // Route row first (the authority), metadata second as write-through
         // boot cache + old-engine fallback. A metadata failure is non-fatal
         // once the route write landed — but it stays pending and retries.
         if (job.routeNeeded) {
-          await PF.api.putExperienceState(job.chatId, job.snap, teardown);
+          const echo = await PF.api.putExperienceState(job.chatId, job.snap, teardown);
           // Bumped OUTSIDE the fence: _writeSeq is process-global, not per-chat.
           // A captured chat-switch PUT is stale for every cache on this object
           // and still completed on the wire, so a GET issued before it must not
@@ -7077,6 +8624,10 @@ PF.save = {
           _writeSeq += 1;
           landed = true;
           if (fresh()) {
+            // INSIDE the fence, unlike _writeSeq: the echoed anchor and the
+            // moved flag are per-chat caches, and a captured chat-switch write
+            // says nothing about the anchor the chat we are now on is sitting on.
+            this._noteAnchorEcho(echo);
             this._serverSerialized = job.serialized;
             this._lastSerialized = job.serialized;
             if (job.forced) this._forceWrite = false;
@@ -7169,6 +8720,84 @@ PF.save = {
     this._rearm(core, teardown);
   },
 
+  /** The flush site's rung of the ladder. Returns "proceed" or "block".
+   *
+   *  The GET is SKIPPED while the last successful check is inside one debounce
+   *  window: the pre-check exists so a PUT never lands on a row nobody looked
+   *  at, and the turn-edge check that ran a moment ago looked at it. Without
+   *  that skip every save would cost two requests instead of one, on a route
+   *  that re-serializes the chat's whole shard.
+   *
+   *  A blocking row is NOT a write failure and must not touch the backoff
+   *  ladder: the server is fine, the timeline moved. The rewind is applied and
+   *  the rebuilt world re-arms an ordinary debounce of its own. */
+  async _precheck(core, job) {
+    const gen = job.gen;
+    if (gen !== (this._gen ?? 0)) return "proceed"; // a chat-switch capture owns none of this
+    const now = Date.now();
+    if (
+      this._lastCheck &&
+      this._lastCheck.row !== 9 &&
+      now - this._lastCheckAt < CHECK_FRESH_MS &&
+      !this._anchorMoved
+    ) {
+      return this._lastCheck.flush === "block" ? "block" : "proceed";
+    }
+    const seqAtIssue = _writeSeq;
+    const decided = await this._check(core, job.chatId, gen, seqAtIssue, job.serialized);
+    if (!decided) return "proceed"; // fenced out: the capture's write still belongs on the wire
+    if (decided.flush === "fresh") {
+      // The probe did not answer. That is not a reason to spend a backoff rung —
+      // but it is a reason not to overwrite a row we have not seen in a while.
+      const fresh = decided.fresh === true;
+      if (!fresh) {
+        this.markDirty(core);
+        return "block";
+      }
+      return "proceed";
+    }
+    if (decided.flush === "block") {
+      await this._applyRewind(core, decided, job.chatId, gen, seqAtIssue, false);
+      return "block";
+    }
+    if (decided.anchorCache && decided.serialized !== null && this._serverSerialized !== null) {
+      // Latch a row we agree with, so the next check has a current baseline.
+      this._serverSerialized = decided.serialized;
+    }
+    return "proceed";
+  },
+
+  /** THE PUT-ANCHOR ECHO (plan §Q2). The row lands at whatever the visible
+   *  anchor is when the write is SERVED, and a turn can finish between the check
+   *  and the write. When the echoed anchor is not the one we checked, two things
+   *  follow and both are load-bearing: the next flush may NOT skip its pre-check
+   *  as fresh (that freshness was about a different anchor), and a difference
+   *  found there takes the rewind path instead of being latched in silence. */
+  _noteAnchorEcho(echo) {
+    const anchor =
+      echo && typeof echo === "object" && echo.anchor && typeof echo.anchor === "object" ? echo.anchor : null;
+    if (!anchor) return;
+    const last = this._lastCheckedAnchor;
+    if (last && (anchor.messageId !== last.messageId || anchor.swipeIndex !== last.swipeIndex))
+      this._anchorMoved = true;
+    this._lastCheckedAnchor = anchor;
+  },
+
+  /** Teardown's clean-gate, DERIVED from the ladder rather than guessed at.
+   *  Only rows 4 and 7 block — the two that say the timeline moved and our
+   *  snapshot is the stale one. Row 9 blocks only once its freshness lapses: a
+   *  probe that failed thirty seconds ago says nothing useful about the row, and
+   *  a keepalive PUT is the one write nobody gets to take back. Never having
+   *  checked at all is a PROCEED: that is a fresh chat, and its first write is
+   *  the row's creation. */
+  _teardownAllowed() {
+    const last = this._lastCheck;
+    if (!last) return true;
+    if (last.flush === "block") return false;
+    if (last.flush === "fresh") return Date.now() - this._lastCheckAt < CHECK_FRESH_MS;
+    return true;
+  },
+
   _rearm(core, teardown) {
     if (teardown || this.degraded) return;
     this._flushFailures += 1;
@@ -7226,11 +8855,16 @@ PF.save = {
       console.warn("[pixelforge] teardown snapshot failed", err);
       return;
     }
-    // TODO(plan §3.4): the clean-gate here should be DERIVED from the decision
-    // ladder — only rows 4 and 7 block the write — once the slice-4 ladder
-    // lands. Until then it is the byte comparison alone, which is what every
-    // other call site uses today.
+    // THE CLEAN-GATE, derived from the decision ladder (plan §3.4): the write
+    // goes out iff the bytes actually changed AND the last completed check
+    // resolved to a proceed row. Teardown cannot afford a GET of its own — the
+    // page is going away and an await would spend the unload window — so it
+    // spends the last check's verdict instead. Only rows 4 and 7 block.
     if (serialized === this._lastSerialized) return;
+    if (!this._teardownAllowed()) {
+      console.warn("[pixelforge] teardown declined: the last check said the timeline moved under this world");
+      return;
+    }
     if (serialized.length > MAX_SNAPSHOT_CHARS) {
       // Same order as the ordinary flush: a newer build's block is the first
       // thing to drop, and this world's own state is the last.
@@ -7272,8 +8906,8 @@ PF.save = {
     const settle = (promise, what, onLanded) => {
       if (!promise || typeof promise.then !== "function") return;
       promise.then(
-        () => {
-          if (fresh()) onLanded();
+        (value) => {
+          if (fresh()) onLanded(value);
         },
         (err) => console.warn(`[pixelforge] teardown ${what} failed`, err),
       );
@@ -7281,8 +8915,12 @@ PF.save = {
     // Both started before either is awaited.
     const put = routes ? PF.api.putExperienceState(chatId, snap, true) : null;
     const patch = routes && !pairFits ? null : PF.api.patchMetadata(chatId, { pixelforge: snap }, true);
-    settle(put, "route save", () => {
+    settle(put, "route save", (echo) => {
       _writeSeq += 1; // any GET issued before this point read a superseded row
+      // A pagehide is not always a death: if the page comes back, the anchor the
+      // teardown write actually landed on is what the next check has to reason
+      // against.
+      this._noteAnchorEcho(echo);
       this._serverSerialized = serialized;
       this._lastSerialized = serialized;
     });

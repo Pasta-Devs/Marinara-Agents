@@ -576,6 +576,12 @@ PF.world = (() => {
       startZone: "village",
       // The exterior binds to the campaign's starting World Maps location once known.
       bindings: {}, // spatialLocationId → zoneId
+      // The legacy world mints nobody — its three neighbours are written out by
+      // hand above. The stamp is still emitted (never absent, so the S5 read
+      // never has to distinguish "no stamp" from "stamp zero") and moves only
+      // when MINT_V does.
+      minted: [],
+      mintStamp: mintStampOf([]),
     };
   }
 
@@ -704,6 +710,22 @@ PF.world = (() => {
     healer: ["herbalist"],
     scholar: ["copyist"],
   };
+  // The mint's own version, folded into every mintStamp. Bump it when a change
+  // here would hand the SAME seed and the SAME brief a different roster — a new
+  // name book, a changed household size distribution, a reordered kind table.
+  // The player block's world stamp (S5 §Q3a) is what turns that into a visible
+  // severance instead of a silent one: relationship rows keyed by "Maud Thatch"
+  // mean nothing once "Maud Thatch" is a different person or nobody at all.
+  const MINT_V = 1;
+  /** Stamp the residents the COMPILER minted, in mint order. Names + kinds +
+   *  households only: tints and wander flags are cosmetic and a change to them
+   *  must not sever a save. Zero save bytes — the stamp is derived on every
+   *  build and only its comparison is persisted. */
+  function mintStampOf(minted) {
+    let text = `mint/v${MINT_V}`;
+    for (const member of minted) text += `|${member.name} ${member.kind} ${member.household}`;
+    return PF.hashStr(text);
+  }
 
   const SPECIAL_BUILDING_KINDS = {
     leader: "hall",
@@ -3110,6 +3132,13 @@ PF.world = (() => {
       zones,
       startZone: "z1",
       bindings: {},
+      // Derived, never saved (S5 §Q3a). `minted` names the residents the brief
+      // did NOT. The severance itself keys off the complement of the brief's
+      // cast rather than this list — a resident the OLD mint produced is in
+      // neither — but the list is what a brief-less world falls back to, and it
+      // is the honest way to say who the compiler invented.
+      minted: minted.map((member) => member.name),
+      mintStamp: mintStampOf(minted),
     };
   }
 

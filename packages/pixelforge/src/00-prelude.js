@@ -112,6 +112,12 @@ PF.api = {
     if (!res.ok) throw PF.httpError("GET experience-state", res.status);
     return { available: true, status: res.status, body: await res.json() };
   },
+  /** Returns the route's own `{ ok, id, anchor }` echo when it parses. The
+   *  ANCHOR is the point: the row lands at whatever the visible anchor is when
+   *  the write is served, which is not necessarily the one the last GET read —
+   *  a turn can finish in between. The ladder compares the two and takes the
+   *  rewind path next round when they differ (plan §Q2, the PUT-anchor echo).
+   *  A body that will not parse is not an error: the write still landed. */
   async putExperienceState(chatId, state, keepalive = false) {
     const res = await fetch(`/api/game/${encodeURIComponent(chatId)}/experience-state`, {
       method: "PUT",
@@ -120,6 +126,11 @@ PF.api = {
       keepalive,
     });
     if (!res.ok) throw PF.httpError("PUT experience-state", res.status);
+    try {
+      return await res.json();
+    } catch {
+      return null;
+    }
   },
   /** One host-run structured generation call (engine #5135). Returns
    *  {status, body} without throwing on the route's documented 4xx ladder —

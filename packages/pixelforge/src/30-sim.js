@@ -28,6 +28,12 @@ PF.Sim = class {
     // the wizard's throwaway sim too, and an undefined-shaped field is exactly
     // the trap `intro` already is.
     this._envelopeExtra = {};
+    // The S5 player block, default-initialized HERE rather than lazily (plan
+    // §Q5). snapshot() emits `player` unconditionally, so a sim that reached it
+    // without one would either crash or teach the envelope to emit a key
+    // conditionally — which is the exact registry failure ENVELOPE_KEYS exists
+    // to stop. simFromSaved overwrites this with the restored block.
+    this.player = PF.player.defaultPlayer();
     this._daypart = null;
     // Cutscene beat (see stepCutscene): while set, the package asks the host to
     // fold its narration box away so the world has the screen to itself.
