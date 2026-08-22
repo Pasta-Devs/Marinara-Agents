@@ -68,7 +68,9 @@ BH.fetchState = async function fetchState(chatId) {
   const body = await res.json();
   const characters = Array.isArray(body?.state?.characters) ? body.state.characters : [];
   // The renderer keys state by character name — the shape the extension panel uses.
-  const byName = {};
+  // Null-prototype: the keys are character names straight out of the chat, and a
+  // character called __proto__ must land as an entry, not as the map's prototype.
+  const byName = Object.create(null);
   for (const character of characters) {
     if (!character || typeof character.name !== "string") continue;
     byName[character.name] = {
