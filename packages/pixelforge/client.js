@@ -73,6 +73,17 @@ PF.offscreen = (w, h) => {
   return c;
 };
 
+/** An HTTP failure that carries its status. The save path classifies write
+ *  failures by it — transient (network, no status, 5xx) backs off and retries,
+ *  413/422 is terminal and degrades the session, 409 means the chat lost its
+ *  Experience stamp and routes mode has to fall back — and a status parsed back
+ *  out of the message string would be a trap the first time a message changes. */
+PF.httpError = (label, status) => {
+  const err = new Error(`${label} → ${status}`);
+  err.status = status;
+  return err;
+};
+
 // ── REST helpers (same-origin /api, cookie auth rides along) ─────────────────
 PF.api = {
   async getJson(path) {
@@ -90,7 +101,7 @@ PF.api = {
       body: JSON.stringify(patch),
       keepalive,
     });
-    if (!res.ok) throw new Error(`PATCH metadata → ${res.status}`);
+    if (!res.ok) throw PF.httpError("PATCH metadata", res.status);
   },
   /** Host-owned per-timeline save slot (engine #5102). 404 = route absent (older
    *  engine), 409 = chat not stamped for an Experience — both are mode signals,
@@ -110,7 +121,7 @@ PF.api = {
       body: JSON.stringify({ state }),
       keepalive,
     });
-    if (!res.ok) throw new Error(`PUT experience-state → ${res.status}`);
+    if (!res.ok) throw PF.httpError("PUT experience-state", res.status);
   },
   /** One host-run structured generation call (engine #5135). Returns
    *  {status, body} without throwing on the route's documented 4xx ladder —
@@ -6291,6 +6302,34 @@ const ENVELOPE_KEYS = new Set([
   "intro",
 ]);
 
+// Process-monotonic write sequence, deliberately NOT reset per chat. Every one
+// of OUR completed PUTs bumps it; a GET records the value it was issued at. A
+// response still in flight across our own write read a row that predates the
+// one we just wrote, so adopting it as authority would rewind the world to a
+// state we ourselves superseded. Infrastructure for the decision ladder
+// (plan §Q2) — checkRewind is its one consumer today, more arrive with it.
+let _writeSeq = 0;
+
+// Retry backoff for a transient write failure. Today a failed PUT waits for
+// some UNRELATED future dirty event (a turn edge, a zone change, 30s of
+// walking) — and in a quiet moment there is no such event, so the write is
+// simply lost with a console warning. The ladder is bounded: after the last
+// rung the session falls back to exactly that trigger-driven behavior rather
+// than polling a dead server forever.
+const FLUSH_BACKOFF_MS = [2500, 5000, 10_000, 30_000, 60_000];
+const FLUSH_BACKOFF_GIVEUP = 8;
+// Local pre-flight. The route's own ceiling is 262,144 chars (422) behind a
+// ~1.59 MB body limit (413), but neither is the real wall: teardown fires TWO
+// keepalive requests and the Fetch standard caps in-flight keepalive bodies at
+// 64 KiB per origin, and every PUT re-serializes the chat's whole shard across
+// up to 100 anchors. Refusing locally keeps the 422 retry loop unreachable.
+// The snapshot's own design budget is 24 KB (plan §4); this is the backstop.
+const MAX_SNAPSHOT_CHARS = 32_768;
+// Re-probe cadence while a probe FAILURE pinned the session to metadata mode
+// (plan §Q2a): a transient 500 at boot otherwise costs timeline rewind for the
+// entire session, because adopt() short-circuits on mode !== null forever.
+const REPROBE_INTERVAL_MS = 60_000;
+
 PF.save = {
   _timer: 0,
   _lastSerialized: null,
@@ -6300,6 +6339,18 @@ PF.save = {
   /** Serialized last-known server-side route state (ours or adopted). */
   _serverSerialized: null,
   _rewindCheckInFlight: false,
+  /** Consecutive transient write failures; any success resets it. */
+  _flushFailures: 0,
+  /** A terminal write refusal (too large): mutations continue in memory, but
+   *  nothing re-arms. Cleared by the next write that actually lands. */
+  degraded: false,
+  _degradeToasted: false,
+  /** Metadata mode was forced by a FAILURE, not by a 404/409 mode signal —
+   *  so it is worth re-probing. A genuine "no routes here" never pins. */
+  _probePinned: false,
+  _reprobeTimer: 0,
+  _reprobeInFlight: false,
+  _reprobedAfterFlush: false,
 
   /** Reads core.sim and core.chatId and NOTHING else: 80-setup calls this with
    *  a synthetic two-key core, and reaching for core.host/hud/render there
@@ -6607,11 +6658,20 @@ PF.save = {
       clearTimeout(this._timer);
       this._timer = 0;
     }
+    this._stopReprobe();
     this._lastSerialized = null;
     this._metaSerialized = null;
     this.mode = null;
     this._serverSerialized = null;
     this._rewindCheckInFlight = false;
+    this._flushFailures = 0;
+    this.degraded = false;
+    this._degradeToasted = false;
+    this._probePinned = false;
+    this._reprobedAfterFlush = false;
+    // _flushChain is deliberately NOT cleared: the chat-switch flush of the
+    // chat we are LEAVING rides it, and it must still land before the new
+    // chat's first write. _writeSeq is process-monotonic and never resets.
   },
 
   /** Probe the experience-state routes once per chat and pick the mode. In
@@ -6648,8 +6708,69 @@ PF.save = {
         this.markDirty(core);
       }
     } catch (err) {
+      // A transient 500 or a network blip at boot used to cost timeline rewind
+      // for the WHOLE session: adopt() short-circuits on mode !== null and
+      // nothing ever probed again. Pin it instead — a pin is re-probed.
       this.mode = "metadata";
-      console.warn("[pixelforge] experience-state probe failed; using metadata saves", err);
+      this._pinMetadataMode(core);
+      console.warn("[pixelforge] experience-state probe failed; using metadata saves (will re-probe)", err);
+    }
+  },
+
+  /** Metadata mode entered by FAILURE rather than by a 404/409 mode signal
+   *  (plan §Q2a). Re-probed once after the first metadata write that lands and
+   *  on a ~60s timer until it clears, which shrinks the window in which a
+   *  pinned session's play is stranded outside the timeline-anchored store. */
+  _pinMetadataMode(core) {
+    this._probePinned = true;
+    this._reprobedAfterFlush = false;
+    if (this._reprobeTimer) return;
+    const gen = this._gen ?? 0;
+    this._reprobeTimer = setInterval(() => {
+      if (gen !== (this._gen ?? 0)) return; // reset() clears the timer; belt and braces
+      void this._reprobe(core);
+    }, REPROBE_INTERVAL_MS);
+  },
+
+  _stopReprobe() {
+    if (this._reprobeTimer) {
+      clearInterval(this._reprobeTimer);
+      this._reprobeTimer = 0;
+    }
+    this._reprobeInFlight = false;
+  },
+
+  /** Retry the routes probe for a pinned session. On success this is a FIRST
+   *  WRITE, never the rewind path: the pinned session has been playing against
+   *  metadata, so its in-memory world is the live one and the route store has
+   *  nothing of ours to compare against. _lastSerialized = null forces the
+   *  write; _serverSerialized stays null so checkRewind's own null guards keep
+   *  it inert until that write establishes the anchor. */
+  async _reprobe(core) {
+    if (!this._probePinned || this.mode !== "metadata" || !core.chatId || this._reprobeInFlight) return;
+    this._reprobeInFlight = true;
+    const gen = this._gen ?? 0;
+    const chatId = core.chatId;
+    try {
+      const probe = await PF.api.getExperienceState(chatId);
+      if (gen !== (this._gen ?? 0) || chatId !== core.chatId) return;
+      if (!probe.available) {
+        // Not a failure after all — this engine or chat genuinely has no
+        // Experience row. Stop asking.
+        this._probePinned = false;
+        this._stopReprobe();
+        return;
+      }
+      this.mode = "routes";
+      this._probePinned = false;
+      this._stopReprobe();
+      this._serverSerialized = null;
+      this._lastSerialized = null;
+      this.markDirty(core);
+    } catch {
+      // Still pinned; the interval tries again.
+    } finally {
+      if (gen === (this._gen ?? 0)) this._reprobeInFlight = false;
     }
   },
 
@@ -6657,14 +6778,31 @@ PF.save = {
    *  (swipe, branch, checkpoint load — all rewrite the visible anchor), rebuild
    *  the world from it. Our own writes keep _serverSerialized current, so this
    *  only fires on external timeline changes. */
-  async checkRewind(core) {
+  checkRewind(core) {
+    // On the flush chain, not beside it. The "our own writes keep
+    // _serverSerialized current" invariant that makes this safe lived entirely
+    // in a comment: a rewind check interleaving with a flush's awaits could
+    // read the row we were halfway through replacing and rebuild the sim onto
+    // it, discarding the pending local mutation. Serializing them makes the
+    // arrangement structural instead of accidental.
+    const task = () => this._checkRewindNow(core);
+    this._flushChain = (this._flushChain ?? Promise.resolve()).then(task, task);
+    return this._flushChain;
+  },
+
+  async _checkRewindNow(core) {
     if (this.mode !== "routes" || !core.chatId || this._rewindCheckInFlight) return;
     this._rewindCheckInFlight = true;
     const gen = this._gen ?? 0;
     const chatId = core.chatId;
+    const seqAtIssue = _writeSeq;
     try {
       const probe = await PF.api.getExperienceState(chatId);
       if (gen !== (this._gen ?? 0) || chatId !== core.chatId) return; // switched mid-probe
+      // A PUT of ours completed while this GET was in flight: the row it read
+      // predates the row we just wrote, so treating it as an external change
+      // would rewind the world onto a state we ourselves superseded.
+      if (seqAtIssue !== _writeSeq) return;
       if (!probe.available) return;
       const body = probe.body || {};
       if (!body.exists || !body.state || typeof body.state !== "object") {
@@ -6715,57 +6853,233 @@ PF.save = {
     }, 2500);
   },
 
+  /** What a flush would write, decided against the caches AS THEY STAND NOW.
+   *  Route persistence and metadata-cache persistence dedupe SEPARATELY: a
+   *  failed cache write must keep retrying on later flushes even while the
+   *  route row is already current. Returns null when there is nothing pending.
+   *  Throws whatever snapshot/stringify throws — every caller is inside a
+   *  guard, and swallowing it here would hide a real serialization bug. */
+  _pendingWrite(core) {
+    const snap = this.snapshot(core);
+    if (!snap || !core.chatId) return null;
+    const serialized = JSON.stringify(snap);
+    const routeNeeded = serialized !== this._lastSerialized;
+    const metaNeeded = this._metaSerialized !== serialized;
+    if (!routeNeeded && (this.mode !== "routes" || !metaNeeded)) return null;
+    return {
+      chatId: core.chatId,
+      sim: core.sim,
+      snap,
+      serialized,
+      routeNeeded,
+      metaNeeded,
+      mode: this.mode,
+      gen: this._gen ?? 0,
+    };
+  },
+
+  /** Chat switch: the pending write belongs to the chat being LEFT, so it has
+   *  to be captured SYNCHRONOUSLY. The chained flush that used to serve this
+   *  seam snapshotted when the chain got round to it — by which time reset()
+   *  had cleared the dedupe caches and core.chatId/core.sim had been
+   *  reassigned, so it wrote the NEW chat's world under the new id and the
+   *  mutation still sitting in the old chat's 2.5s debounce window was gone. */
+  captureFlush(core) {
+    try {
+      return this._pendingWrite(core);
+    } catch (err) {
+      console.warn("[pixelforge] chat-switch snapshot failed", err);
+      return null;
+    }
+  },
+
   /** Serialize flushes: a teardown flush and a debounced flush can otherwise
    *  overlap and double-write (the dedupe check reads _lastSerialized, which is
-   *  only written after the awaits). */
-  flush(core, teardown) {
-    this._flushChain = (this._flushChain ?? Promise.resolve()).then(() => this._flushNow(core, teardown));
+   *  only written after the awaits). `.then(task, task)` and not `.then(task)`:
+   *  a rejected link used to skip every task queued behind it and leave the
+   *  chain permanently rejected, so one bad flush killed all later saves.
+   *  `capture` is a pre-taken _pendingWrite for the chat-switch seam. */
+  flush(core, teardown, capture) {
+    const task = () => this._flushNow(core, teardown, capture);
+    this._flushChain = (this._flushChain ?? Promise.resolve()).then(task, task);
     return this._flushChain;
   },
 
-  async _flushNow(core, teardown) {
-    if (this._timer) {
+  async _flushNow(core, teardown, capture) {
+    if (!capture && this._timer) {
       clearTimeout(this._timer);
       this._timer = 0;
     }
-    const snap = this.snapshot(core);
-    if (!snap || !core.chatId) return;
-    const serialized = JSON.stringify(snap);
-    // Route persistence and metadata-cache persistence dedupe SEPARATELY: a
-    // failed cache write must keep retrying on later flushes even while the
-    // route row is already current.
-    const metaCurrent = this.mode !== "routes" || this._metaSerialized === serialized;
-    if (serialized === this._lastSerialized && metaCurrent) return;
+    let job = null;
     try {
-      if (this.mode === "routes") {
+      // Snapshot and stringify INSIDE the try: outside it, a throwing
+      // serialization rejected the chain rather than costing one flush.
+      job = capture ?? this._pendingWrite(core);
+      if (!job) return;
+      // Every post-await assignment is fenced on the generation the job was
+      // built at. A chat-switch capture is stale by construction (reset()
+      // bumped the counter before this ran), so its write lands but touches
+      // none of the new chat's caches, dirty flag, or retry state.
+      const fresh = () => job.gen === (this._gen ?? 0);
+      if (job.serialized.length > MAX_SNAPSHOT_CHARS) {
+        if (fresh()) this._degrade(core, `snapshot is ${job.serialized.length} chars`);
+        return;
+      }
+      if (job.mode === "routes") {
         // Route row first (the authority), metadata second as write-through
         // boot cache + old-engine fallback. A metadata failure is non-fatal
         // once the route write landed — but it stays pending and retries.
-        if (serialized !== this._lastSerialized) {
-          await PF.api.putExperienceState(core.chatId, snap, teardown);
-          this._serverSerialized = serialized;
-          this._lastSerialized = serialized;
-          if (core.sim) core.sim.dirty = false;
+        if (job.routeNeeded) {
+          await PF.api.putExperienceState(job.chatId, job.snap, teardown);
+          if (fresh()) {
+            _writeSeq += 1; // any GET issued before this point is now stale
+            this._serverSerialized = job.serialized;
+            this._lastSerialized = job.serialized;
+            if (job.sim) job.sim.dirty = false;
+          }
         }
-        if (this._metaSerialized !== serialized) {
+        if (job.metaNeeded) {
           try {
-            await PF.api.patchMetadata(core.chatId, { pixelforge: snap }, teardown);
-            this._metaSerialized = serialized;
+            await PF.api.patchMetadata(job.chatId, { pixelforge: job.snap }, teardown);
+            if (fresh()) this._metaSerialized = job.serialized;
           } catch (err) {
-            if (!teardown) this.markDirty(core); // schedule a cache repair pass
+            if (!teardown && fresh()) this.markDirty(core); // schedule a cache repair pass
             console.warn("[pixelforge] metadata cache save failed (route save landed); will retry", err);
           }
         }
+        if (fresh()) this._onWriteLanded(core);
         return;
       }
-      await PF.api.patchMetadata(core.chatId, { pixelforge: snap }, teardown);
-      this._lastSerialized = serialized;
-      this._metaSerialized = serialized;
-      if (core.sim) core.sim.dirty = false;
+      await PF.api.patchMetadata(job.chatId, { pixelforge: job.snap }, teardown);
+      if (fresh()) {
+        this._lastSerialized = job.serialized;
+        this._metaSerialized = job.serialized;
+        if (job.sim) job.sim.dirty = false;
+        this._onWriteLanded(core);
+      }
     } catch (err) {
-      // A failed save retries on the next dirty mark; never interrupts play.
-      console.warn("[pixelforge] save failed", err);
+      this._onWriteFailed(core, err, teardown, job);
     }
+  },
+
+  /** A write landed. Clears the backoff and the degraded flag — claiming a
+   *  session is still degraded after a successful write would be a lie — but
+   *  NOT _degradeToasted, so the player is told once per chat, not once per
+   *  flap. Also the moment a pinned session earns its first re-probe. */
+  _onWriteLanded(core) {
+    this._flushFailures = 0;
+    this.degraded = false;
+    if (this._probePinned && !this._reprobedAfterFlush) {
+      this._reprobedAfterFlush = true;
+      void this._reprobe(core);
+    }
+  },
+
+  /** Classify a failed write. Silence was the old policy — one console.warn
+   *  and the hope that some unrelated future dirty event would retry. */
+  _onWriteFailed(core, err, teardown, job) {
+    console.warn("[pixelforge] save failed", err);
+    // No job means snapshot/stringify itself threw: a code fault, not a write
+    // failure. It costs this one flush and nothing else — backing off would
+    // just re-run the same throw on a timer.
+    if (!job) return;
+    if (job.gen !== (this._gen ?? 0)) return; // a stale capture owns none of this state
+    const status = err && typeof err.status === "number" ? err.status : 0;
+    if (status === 413 || status === 422) {
+      // Terminal: the payload is refused at this size and will be refused at
+      // this size again. Retrying is a loop, so stop, say so, and keep
+      // mutating in memory.
+      this._degrade(core, `server refused the save (${status})`);
+      return;
+    }
+    if (status === 409 && job.mode === "routes") {
+      // The chat lost its Experience stamp after adopt() committed to routes
+      // mode. Every later PUT would fail exactly this way forever, so fall
+      // back and let the re-probe machinery promote it again if it returns.
+      this.mode = "metadata";
+      this._serverSerialized = null;
+      this._pinMetadataMode(core);
+      console.warn("[pixelforge] experience-state route rejected the chat (409); falling back to metadata saves");
+      if (!teardown) this.markDirty(core);
+      return;
+    }
+    // Everything else — network, no status, 5xx, and any other 4xx — takes the
+    // bounded ladder. An unretryable 4xx costs eight quiet attempts and then
+    // stops, which is cheaper than enumerating statuses we have never seen.
+    this._rearm(core, teardown);
+  },
+
+  _rearm(core, teardown) {
+    if (teardown || this.degraded) return;
+    this._flushFailures += 1;
+    if (this._flushFailures > FLUSH_BACKOFF_GIVEUP) return; // fall back to trigger-driven saves
+    if (this._timer) return; // a live debounce already covers it, and sooner
+    const delay = FLUSH_BACKOFF_MS[Math.min(this._flushFailures - 1, FLUSH_BACKOFF_MS.length - 1)];
+    // Shares markDirty's timer on purpose: while a server is failing, a busy
+    // player must not be able to reset the backoff to 2.5s on every zone change.
+    this._timer = setTimeout(() => {
+      this._timer = 0;
+      void this.flush(core, false);
+    }, delay);
+  },
+
+  /** Stop retrying, tell the player once, keep playing. Mutations continue in
+   *  memory; they are simply not reaching the server. */
+  _degrade(core, reason) {
+    this.degraded = true;
+    console.warn(`[pixelforge] save degraded: ${reason}; progress stays in this session`);
+    if (this._degradeToasted) return;
+    this._degradeToasted = true;
+    core.hud?.toast("This world is too large to save — progress stays in this session only.");
+  },
+
+  /** The page is going away (pagehide). This must NOT queue behind _flushChain:
+   *  an ordinary flush sitting mid-await would swallow the last write of the
+   *  session entirely. So it snapshots synchronously off the live sim and fires
+   *  BOTH keepalive requests without awaiting between them — awaiting the PUT
+   *  first lets the unload land before the PATCH is even dispatched.
+   *
+   *  Sized against the keepalive wall, not the route's: the Fetch standard caps
+   *  total in-flight keepalive bodies at 64 KiB per origin and routes mode
+   *  sends two, so the pair only fits while the snapshot stays well inside the
+   *  24 KB design budget (plan §4).
+   *
+   *  Remount-detach keeps the ordinary chained path (90-element) — the page is
+   *  alive there and a re-arm is still worth something. */
+  flushTeardown(core) {
+    if (!core || !core.chatId || !core.sim) return;
+    let snap = null;
+    let serialized = "";
+    try {
+      snap = this.snapshot(core);
+      if (!snap) return;
+      serialized = JSON.stringify(snap);
+    } catch (err) {
+      console.warn("[pixelforge] teardown snapshot failed", err);
+      return;
+    }
+    // TODO(plan §3.4): the clean-gate here should be DERIVED from the decision
+    // ladder — only rows 4 and 7 block the write — once the slice-4 ladder
+    // lands. Until then it is the byte comparison alone, which is what every
+    // other call site uses today.
+    if (serialized === this._lastSerialized) return;
+    if (serialized.length > MAX_SNAPSHOT_CHARS) {
+      this._degrade(core, `snapshot is ${serialized.length} chars`);
+      return;
+    }
+    const chatId = core.chatId;
+    const settle = (promise, what) => {
+      if (promise && typeof promise.catch === "function") {
+        promise.catch((err) => console.warn(`[pixelforge] teardown ${what} failed`, err));
+      }
+    };
+    // Both started before either is awaited. Deliberately no cache updates:
+    // the page is leaving, and a bfcache restore is better off re-writing than
+    // trusting a write it never saw finish.
+    const put = this.mode === "routes" ? PF.api.putExperienceState(chatId, snap, true) : null;
+    const patch = PF.api.patchMetadata(chatId, { pixelforge: snap }, true);
+    settle(put, "route save");
+    settle(patch, "metadata save");
   },
 };
 
@@ -7387,7 +7701,9 @@ PF.core = {
     if (!this._underlayEl && !this._mainEl) {
       // Last detach: stop the loop and flush. Element remounts (version bump,
       // retry) recreate both instances momentarily; state stays in the module
-      // so the rebuild is seamless.
+      // so the rebuild is seamless. The page is still alive here — a real exit
+      // fires pagehide, which takes the out-of-band teardown path — so this
+      // keeps the ordinary checked flush and may still re-arm on failure.
       if (this._raf) cancelAnimationFrame(this._raf);
       this._raf = 0;
       void PF.save.flush(this, true);
@@ -7454,9 +7770,15 @@ PF.core = {
   },
 
   _switchChat(p) {
-    if (this.chatId) void PF.save.flush(this, false);
+    // The pending write belongs to the chat we are LEAVING, so capture it
+    // SYNCHRONOUSLY — reset() clears the dedupe caches and the lines below
+    // reassign chatId/sim, and a chained flush that snapshotted later wrote
+    // the NEW chat's world under the new id while the old chat's last
+    // mutation went in the bin.
+    const pending = this.chatId ? PF.save.captureFlush(this) : null;
     PF.spatial.reset();
     PF.save.reset();
+    if (pending) void PF.save.flush(this, false, pending);
     this.chatId = p.chatId;
     // Synchronous boot from the metadata cache (instant world), then adopt()
     // probes the experience-state routes (#5102) and, when available, promotes
@@ -7644,7 +7966,11 @@ PF.core = {
     window.addEventListener("blur", this._onBlur);
     if (!PF.core._pagehideBound) {
       PF.core._pagehideBound = true;
-      window.addEventListener("pagehide", () => void PF.save.flush(PF.core, true));
+      // Out-of-band, NOT on the flush chain: the page is going away, and an
+      // ordinary flush sitting mid-await would swallow the last write of the
+      // session. Last-detach below keeps the chained path — that one is a
+      // remount on a live page as often as it is a real exit.
+      window.addEventListener("pagehide", () => PF.save.flushTeardown(PF.core));
     }
     if (!PF.core._capEventsBound) {
       PF.core._capEventsBound = true;

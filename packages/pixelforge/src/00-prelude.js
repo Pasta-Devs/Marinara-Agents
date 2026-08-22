@@ -68,6 +68,17 @@ PF.offscreen = (w, h) => {
   return c;
 };
 
+/** An HTTP failure that carries its status. The save path classifies write
+ *  failures by it — transient (network, no status, 5xx) backs off and retries,
+ *  413/422 is terminal and degrades the session, 409 means the chat lost its
+ *  Experience stamp and routes mode has to fall back — and a status parsed back
+ *  out of the message string would be a trap the first time a message changes. */
+PF.httpError = (label, status) => {
+  const err = new Error(`${label} → ${status}`);
+  err.status = status;
+  return err;
+};
+
 // ── REST helpers (same-origin /api, cookie auth rides along) ─────────────────
 PF.api = {
   async getJson(path) {
@@ -85,7 +96,7 @@ PF.api = {
       body: JSON.stringify(patch),
       keepalive,
     });
-    if (!res.ok) throw new Error(`PATCH metadata → ${res.status}`);
+    if (!res.ok) throw PF.httpError("PATCH metadata", res.status);
   },
   /** Host-owned per-timeline save slot (engine #5102). 404 = route absent (older
    *  engine), 409 = chat not stamped for an Experience — both are mode signals,
@@ -105,7 +116,7 @@ PF.api = {
       body: JSON.stringify({ state }),
       keepalive,
     });
-    if (!res.ok) throw new Error(`PUT experience-state → ${res.status}`);
+    if (!res.ok) throw PF.httpError("PUT experience-state", res.status);
   },
   /** One host-run structured generation call (engine #5135). Returns
    *  {status, body} without throwing on the route's documented 4xx ladder —

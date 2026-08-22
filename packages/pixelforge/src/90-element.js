@@ -83,7 +83,9 @@ PF.core = {
     if (!this._underlayEl && !this._mainEl) {
       // Last detach: stop the loop and flush. Element remounts (version bump,
       // retry) recreate both instances momentarily; state stays in the module
-      // so the rebuild is seamless.
+      // so the rebuild is seamless. The page is still alive here — a real exit
+      // fires pagehide, which takes the out-of-band teardown path — so this
+      // keeps the ordinary checked flush and may still re-arm on failure.
       if (this._raf) cancelAnimationFrame(this._raf);
       this._raf = 0;
       void PF.save.flush(this, true);
@@ -150,9 +152,15 @@ PF.core = {
   },
 
   _switchChat(p) {
-    if (this.chatId) void PF.save.flush(this, false);
+    // The pending write belongs to the chat we are LEAVING, so capture it
+    // SYNCHRONOUSLY — reset() clears the dedupe caches and the lines below
+    // reassign chatId/sim, and a chained flush that snapshotted later wrote
+    // the NEW chat's world under the new id while the old chat's last
+    // mutation went in the bin.
+    const pending = this.chatId ? PF.save.captureFlush(this) : null;
     PF.spatial.reset();
     PF.save.reset();
+    if (pending) void PF.save.flush(this, false, pending);
     this.chatId = p.chatId;
     // Synchronous boot from the metadata cache (instant world), then adopt()
     // probes the experience-state routes (#5102) and, when available, promotes
@@ -340,7 +348,11 @@ PF.core = {
     window.addEventListener("blur", this._onBlur);
     if (!PF.core._pagehideBound) {
       PF.core._pagehideBound = true;
-      window.addEventListener("pagehide", () => void PF.save.flush(PF.core, true));
+      // Out-of-band, NOT on the flush chain: the page is going away, and an
+      // ordinary flush sitting mid-await would swallow the last write of the
+      // session. Last-detach below keeps the chained path — that one is a
+      // remount on a live page as often as it is a real exit.
+      window.addEventListener("pagehide", () => PF.save.flushTeardown(PF.core));
     }
     if (!PF.core._capEventsBound) {
       PF.core._capEventsBound = true;
