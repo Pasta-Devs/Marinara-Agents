@@ -24,6 +24,15 @@ assert.equal(resolve("Professor Mari")?.handle, "mari");
 assert.equal(resolve("nobody"), undefined);
 assert.equal(resolve(null), undefined);
 
+// A selected account's display-name alias must never claim a handle another
+// account owns exactly, or persistence would resolve it to that other account.
+const collision = createNoodleHandleResolver([
+  { handle: "lenak", displayName: "Persona" },
+  { handle: "lena_k", displayName: "Lena K" },
+]);
+assert.equal(collision("lenak")?.handle, "lenak");
+assert.equal(collision("Lena K")?.handle, "lena_k");
+
 const keys = noodleHandleKeySet(accounts);
 assert.ok(noodleHandleKeySetHas(keys, "@Lena Kowalska"));
 assert.ok(!noodleHandleKeySetHas(keys, "@ghost"));
@@ -33,5 +42,6 @@ const generatedRefresh = readFileSync(
   "packages/noodle/src/engine/packages/server/src/services/noodle/noodle-generated-refresh.ts",
   "utf8",
 );
-assert.match(generatedRefresh, /clipGeneratedContent\(collection, row\)/u);
+// Both parsing paths clip: the keyed-object branch and the top-level array.
+assert.equal(generatedRefresh.match(/clipGeneratedContent\(collection, row\)/gu)?.length, 2);
 assert.match(generatedRefresh, /content: content\.slice\(0, limit\)/u);

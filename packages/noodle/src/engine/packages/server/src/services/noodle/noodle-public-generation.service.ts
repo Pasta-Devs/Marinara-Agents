@@ -30,7 +30,7 @@ import {
   parseNoodleGeneratedRefreshResponse,
   validateNoodleGeneratedRefresh,
 } from "./noodle-generated-refresh.js";
-import { noodleHandleKeySet } from "./noodle-handle.js";
+import { createNoodleHandleResolver, noodleHandleKeySet } from "./noodle-handle.js";
 import { chooseNoodleParticipantAccounts, collectNoodlePriorityAccountIds } from "./noodle-participant-selection.js";
 import { buildRefreshPrompt } from "./noodle-public-prompt.service.js";
 import { generateMissingNoodleProfiles } from "./noodle-public-profiles.service.js";
@@ -352,8 +352,21 @@ export function createPublicNoodleGenerationService(db: DB) {
         );
         let parsedGenerated: ReturnType<typeof parseNoodleGeneratedRefreshResponse> | null = null;
         let retryReason: string | null = null;
-        const allowedActorHandles = noodleHandleKeySet(selectedParticipants);
+        // Validation must agree with the resolver persistence uses, or an alias
+        // that resolves to the persona passes here and is dropped later without
+        // the correction retry ever running.
+        const resolveActiveAccount = createNoodleHandleResolver([
+          ...(personaAccount ? [personaAccount] : []),
+          ...selectedParticipants,
+        ]);
+        const selectedParticipantIds = new Set(selectedParticipants.map((account) => account.id));
         const knownHandles = noodleHandleKeySet(activeAccounts);
+        const allowedActorHandles = new Set(
+          [...knownHandles].filter((key) => {
+            const account = resolveActiveAccount(key);
+            return account ? selectedParticipantIds.has(account.id) : false;
+          }),
+        );
         try {
           parsedGenerated = parseNoodleGeneratedRefreshResponse(content);
           retryReason = validateNoodleGeneratedRefresh(parsedGenerated.refresh, allowedActorHandles, knownHandles);

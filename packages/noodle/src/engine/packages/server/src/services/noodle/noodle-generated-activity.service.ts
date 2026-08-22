@@ -366,7 +366,15 @@ export async function persistGeneratedNoodleActivity(input: {
   for (const generatedFollow of input.generated.follows.slice(0, maxGeneratedFollows)) {
     const actor = resolveAccount(generatedFollow.actorHandle);
     const target = resolveAccount(generatedFollow.targetHandle);
-    if (!actor || !target || actor.id === target.id) continue;
+    if (!actor || !target || actor.id === target.id) {
+      logger.warn(
+        "[noodle] Dropping generated follow %s -> %s: %s",
+        generatedFollow.actorHandle,
+        generatedFollow.targetHandle,
+        !actor || !target ? "unknown handle" : "an account cannot follow itself",
+      );
+      continue;
+    }
     if (!canGenerateNoodleActivityForAccountKind(actor.kind)) {
       logger.warn("[noodle] Ignoring generated follow attributed to persona %s", actor.entityId);
       continue;

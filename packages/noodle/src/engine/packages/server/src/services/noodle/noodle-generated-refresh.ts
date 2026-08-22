@@ -154,7 +154,7 @@ export function parseNoodleGeneratedRefresh(value: unknown): {
     value.forEach((row, index) => {
       let parsedRow = false;
       for (const collection of Object.keys(collectionSchemas) as RefreshCollection[]) {
-        const parsed = collectionSchemas[collection].safeParse(row);
+        const parsed = collectionSchemas[collection].safeParse(clipGeneratedContent(collection, row));
         if (parsed.success) {
           (refresh[collection] as Array<typeof parsed.data>).push(parsed.data);
           parsedRow = true;
