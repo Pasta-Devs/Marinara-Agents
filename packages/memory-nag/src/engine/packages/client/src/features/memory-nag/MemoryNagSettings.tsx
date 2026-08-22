@@ -150,7 +150,12 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
               max={field.max}
               disabled={saving || scanning}
               value={settings[field.key]}
-              onChange={(event) => setSettings((current) => ({ ...current, [field.key]: Number(event.target.value) }))}
+              onChange={(event) => {
+                const parsed = Number.parseInt(event.target.value, 10);
+                if (!Number.isFinite(parsed)) return;
+                const clamped = Math.min(field.max, Math.max(field.min, parsed));
+                setSettings((current) => ({ ...current, [field.key]: clamped }));
+              }}
             />
             <small>{t(field.help)}</small>
           </label>

@@ -49,7 +49,9 @@ export function MemoryNagToolbar({ props }: { props: CapabilityProps }) {
         onClick={() => setOpen((value) => !value)}
       >
         <Brain className="mn-icon" aria-hidden="true" />
-        <span className="mn-toolbar-word">{words[wordIndex] ?? words[0]}</span>
+        <span className="mn-toolbar-word" aria-hidden="true">
+          {words[wordIndex] ?? words[0]}
+        </span>
       </button>
       {open ? (
         <div className="mn-popover">

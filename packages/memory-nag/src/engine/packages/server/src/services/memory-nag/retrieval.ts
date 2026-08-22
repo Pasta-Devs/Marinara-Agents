@@ -49,11 +49,31 @@ function tokens(value: string): Set<string> {
 
 function tokenOverlap(left: Set<string>, right: Set<string>): number {
   let score = 0;
+  const rightTokens = [...right];
   for (const token of left) {
     if (right.has(token)) score += 3;
-    else if ([...right].some((candidate) => candidate.startsWith(token) || token.startsWith(candidate))) score += 1;
+    else if (rightTokens.some((candidate) => candidate.startsWith(token) || token.startsWith(candidate))) score += 1;
   }
   return score;
+}
+
+type ScoredMemory = { memory: MemoryNagMemory; score: number };
+
+function scoreMemory(memory: MemoryNagMemory, textTokens: Set<string>, relevantIds: Set<string>): ScoredMemory {
+  return {
+    memory,
+    score:
+      tokenOverlap(tokens(memory.text), textTokens) +
+      memory.characterIds.filter((id) => relevantIds.has(id)).length * 6,
+  };
+}
+
+function compareScoredMemories(left: ScoredMemory, right: ScoredMemory): number {
+  return (
+    right.score - left.score ||
+    Date.parse(right.memory.updatedAt) - Date.parse(left.memory.updatedAt) ||
+    left.memory.id.localeCompare(right.memory.id)
+  );
 }
 
 function contextText(context: AgentContext): string {
@@ -91,24 +111,15 @@ export function shortlistMemoryNags(input: {
 
   const scored = input.memories
     .filter((memory) => memory.status === "active")
-    .map((memory) => ({
-      memory,
-      score:
-        tokenOverlap(tokens(memory.text), contextTokens) +
-        memory.characterIds.filter((id) => relevantIds.has(id)).length * 6,
-    }))
-    .sort(
-      (left, right) =>
-        right.score - left.score ||
-        Date.parse(right.memory.updatedAt) - Date.parse(left.memory.updatedAt) ||
-        left.memory.id.localeCompare(right.memory.id),
-    );
+    .map((memory) => scoreMemory(memory, contextTokens, relevantIds))
+    .sort(compareScoredMemories);
 
   const selected = new Map<string, MemoryNagMemory>();
   for (const characterId of relevantIds) {
     let count = 0;
     for (const entry of scored) {
       if (!entry.memory.characterIds.includes(characterId)) continue;
+      if (selected.has(entry.memory.id)) continue;
       selected.set(entry.memory.id, entry.memory);
       count++;
       if (count >= input.perCharacter) break;
@@ -132,16 +143,8 @@ export function shortlistMemoriesForScan(
   );
   return memories
     .filter((memory) => memory.status === "active")
-    .map((memory) => ({
-      memory,
-      score:
-        tokenOverlap(tokens(memory.text), transcriptTokens) +
-        memory.characterIds.filter((id) => mentionedIds.has(id)).length * 6,
-    }))
-    .sort(
-      (left, right) =>
-        right.score - left.score || Date.parse(right.memory.updatedAt) - Date.parse(left.memory.updatedAt),
-    )
+    .map((memory) => scoreMemory(memory, transcriptTokens, mentionedIds))
+    .sort(compareScoredMemories)
     .slice(0, limit)
     .map((entry) => entry.memory);
 }

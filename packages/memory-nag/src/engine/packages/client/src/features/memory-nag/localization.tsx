@@ -36,7 +36,13 @@ export function MemoryNagLocalizationProvider({
 }) {
   const direction = localization?.direction === "rtl" ? "rtl" : "ltr";
   const value = useMemo(() => ({ direction, t: translateMemoryNag }), [direction]);
-  return <LocalizationContext.Provider value={value}>{children}</LocalizationContext.Provider>;
+  return (
+    <LocalizationContext.Provider value={value}>
+      <div dir={direction} style={{ display: "contents" }}>
+        {children}
+      </div>
+    </LocalizationContext.Provider>
+  );
 }
 
 export function useMemoryNagTranslation() {

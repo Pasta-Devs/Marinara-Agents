@@ -3,11 +3,29 @@ import type { CapabilityMessageRecord } from "@marinara-engine/shared";
 import type {
   MemoryNagMemory,
   MemoryNagParticipant,
+  MemoryNagVault,
 } from "../../../../shared/src/features/agents/memory-nag/schema.js";
 import { getMemoryNagRuntime } from "./package-runtime.js";
 import { loadMemoryNagParticipants } from "./participants.js";
 import { shortlistMemoriesForScan } from "./retrieval.js";
 import { readMemoryNagVault, updateMemoryNagVault } from "./vault.js";
+
+const scanQueues = new Map<string, Promise<void>>();
+
+async function withScanLock<T>(chatId: string, task: () => Promise<T>): Promise<T> {
+  const previous = scanQueues.get(chatId) ?? Promise.resolve();
+  const run = previous.catch(() => undefined).then(task);
+  const tail = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  scanQueues.set(chatId, tail);
+  try {
+    return await run;
+  } finally {
+    if (scanQueues.get(chatId) === tail) scanQueues.delete(chatId);
+  }
+}
 
 export interface MemoryNagScanProgress {
   processed: number;
@@ -117,7 +135,33 @@ function buildScanMessages(input: {
   ];
 }
 
-export async function scanMemoryNagBatch(chatId: string): Promise<MemoryNagScanProgress> {
+export function memoryNagScanStart(
+  vault: Pick<MemoryNagVault, "checkpointMessageId" | "checkpointMessageCount">,
+  messages: Array<{ id: string }>,
+): number {
+  if (vault.checkpointMessageId) {
+    const checkpointIndex = messages.findIndex((message) => message.id === vault.checkpointMessageId);
+    if (checkpointIndex >= 0) return checkpointIndex + 1;
+  }
+  return Math.min(vault.checkpointMessageCount, messages.length);
+}
+
+function sameMemoryState(left: MemoryNagMemory[], right: MemoryNagMemory[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every((memory, index) => {
+      const other = right[index];
+      return (
+        memory.id === other?.id &&
+        memory.text === other.text &&
+        memory.status === other.status &&
+        memory.characterIds.join("\0") === other.characterIds.join("\0")
+      );
+    })
+  );
+}
+
+async function scanMemoryNagBatchUnlocked(chatId: string): Promise<MemoryNagScanProgress> {
   const runtime = getMemoryNagRuntime();
   const chat = await runtime.persistence.getChat(chatId);
   if (!chat || chat.mode !== "roleplay") throw new Error("Memory Nag is available only in Roleplay chats.");
@@ -125,10 +169,7 @@ export async function scanMemoryNagBatch(chatId: string): Promise<MemoryNagScanP
     (message) => message.role === "user" || message.role === "assistant",
   );
   const vault = await readMemoryNagVault(chatId);
-  const checkpointIndex = vault.checkpointMessageId
-    ? messages.findIndex((message) => message.id === vault.checkpointMessageId)
-    : -1;
-  const start = checkpointIndex >= 0 ? checkpointIndex + 1 : 0;
+  const start = memoryNagScanStart(vault, messages);
   const batch = messages.slice(start, start + vault.settings.messagesPerBatch);
   if (batch.length === 0) {
     return {
@@ -181,16 +222,27 @@ export async function scanMemoryNagBatch(chatId: string): Promise<MemoryNagScanP
   const activeIds = new Set(vault.memories.filter((memory) => memory.status === "active").map((memory) => memory.id));
   const resolvedIds = new Set(parsed.resolvedMemoryIds.filter((id) => activeIds.has(id)));
   const checkpointMessageId = batch.at(-1)!.id;
-  await updateMemoryNagVault(chatId, (current) => {
+  let createdCount = 0;
+  let resolvedCount = 0;
+  const saved = await updateMemoryNagVault(chatId, (current) => {
+    const memoryStateChanged = !sameMemoryState(vault.memories, current.memories);
     const currentTexts = new Set(current.memories.map((memory) => memory.text.trim().toLowerCase()));
-    const newMemories = created.filter((memory) => !currentTexts.has(memory.text.trim().toLowerCase()));
+    const newMemories = memoryStateChanged
+      ? []
+      : created.filter((memory) => !currentTexts.has(memory.text.trim().toLowerCase()));
+    createdCount = newMemories.length;
+    resolvedCount = memoryStateChanged
+      ? 0
+      : current.memories.filter((memory) => memory.status === "active" && resolvedIds.has(memory.id)).length;
+    const checkpointAdvanced = current.checkpointMessageCount > start + batch.length;
     return {
       ...current,
       participants,
-      checkpointMessageId,
+      checkpointMessageId: checkpointAdvanced ? current.checkpointMessageId : checkpointMessageId,
+      checkpointMessageCount: Math.max(current.checkpointMessageCount, start + batch.length),
       memories: [
         ...current.memories.map((memory) =>
-          resolvedIds.has(memory.id)
+          !memoryStateChanged && resolvedIds.has(memory.id)
             ? { ...memory, status: "resolved" as const, updatedAt: new Date().toISOString() }
             : memory,
         ),
@@ -198,24 +250,24 @@ export async function scanMemoryNagBatch(chatId: string): Promise<MemoryNagScanP
       ],
     };
   });
-  const processed = start + batch.length;
   return {
-    processed,
+    processed: Math.min(saved.checkpointMessageCount, messages.length),
     total: messages.length,
-    created: created.length,
-    resolved: resolvedIds.size,
-    done: processed >= messages.length,
-    checkpointMessageId,
+    created: createdCount,
+    resolved: resolvedCount,
+    done: saved.checkpointMessageCount >= messages.length,
+    checkpointMessageId: saved.checkpointMessageId,
   };
+}
+
+export async function scanMemoryNagBatch(chatId: string): Promise<MemoryNagScanProgress> {
+  return withScanLock(chatId, () => scanMemoryNagBatchUnlocked(chatId));
 }
 
 export async function scanMemoryNagIfDue(chatId: string): Promise<void> {
   const runtime = getMemoryNagRuntime();
   const [vault, messages] = await Promise.all([readMemoryNagVault(chatId), runtime.persistence.listMessages(chatId)]);
   const relevant = messages.filter((message) => message.role === "user" || message.role === "assistant");
-  const checkpointIndex = vault.checkpointMessageId
-    ? relevant.findIndex((message) => message.id === vault.checkpointMessageId)
-    : -1;
-  if (relevant.length - (checkpointIndex + 1) < vault.settings.messagesPerBatch) return;
+  if (relevant.length - memoryNagScanStart(vault, relevant) < vault.settings.messagesPerBatch) return;
   await scanMemoryNagBatch(chatId);
 }

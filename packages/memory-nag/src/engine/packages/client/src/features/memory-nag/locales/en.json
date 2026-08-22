@@ -26,6 +26,8 @@
   "memoryNag.settings.progress": "Scanned {{processed}} of {{total}} messages · {{created}} added · {{resolved}} resolved",
   "memoryNag.settings.complete": "Vault scan complete.",
   "memoryNag.vault.title": "Memory Nag Vault",
+  "memoryNag.vault.loading": "Loading vault…",
+  "memoryNag.vault.expandedTitle": "Expanded memory editor",
   "memoryNag.vault.close": "Close vault",
   "memoryNag.vault.active": "Active",
   "memoryNag.vault.resolved": "Resolved",

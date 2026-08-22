@@ -18,21 +18,21 @@ type ActivationContext = {
 let ready = false;
 
 export async function activate({ api }: ActivationContext) {
-  const releaseRuntime = configureMemoryNagRuntime(api.runtime);
+  const releases: Array<() => void> = [configureMemoryNagRuntime(api.runtime)];
+  const unwind = () => {
+    while (releases.length > 0) releases.pop()!();
+  };
   try {
-    const releaseRoutes = await api.registerPrivilegedRoutes(memoryNagRoutes, { prefix: "/api/memory-nag" });
-    const releaseAgent = api.registerService("agent-runtime:memory-nag", memoryNagAgentRuntime);
-    const releasePrompt = api.registerPromptContext(contributeMemoryNags);
+    releases.push(await api.registerPrivilegedRoutes(memoryNagRoutes, { prefix: "/api/memory-nag" }));
+    releases.push(api.registerService("agent-runtime:memory-nag", memoryNagAgentRuntime));
+    releases.push(api.registerPromptContext(contributeMemoryNags));
     ready = true;
     return () => {
       ready = false;
-      releasePrompt();
-      releaseAgent();
-      releaseRoutes();
-      releaseRuntime();
+      unwind();
     };
   } catch (error) {
-    releaseRuntime();
+    unwind();
     throw error;
   }
 }

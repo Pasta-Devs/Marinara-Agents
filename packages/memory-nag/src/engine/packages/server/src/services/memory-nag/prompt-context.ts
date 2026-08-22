@@ -45,12 +45,23 @@ export async function contributeMemoryNags(request: PromptContextRequest) {
   if (!vault.lastRecall?.nags.length) return null;
 
   const runtime = getMemoryNagRuntime();
-  const characterRecords = await runtime.resources.listCharacters(request.targetCharacterIds ?? []);
-  const characterName =
-    characterRecords.length > 0 ? recordName(characterRecords[0]!.data, "the character") : "the character";
+  const memoryById = new Map(vault.memories.map((memory) => [memory.id, memory]));
+  const recalledCharacterIds = vault.lastRecall.memoryIds.flatMap(
+    (memoryId) => memoryById.get(memoryId)?.characterIds ?? [],
+  );
+  const characterIds = [...new Set([...recalledCharacterIds, ...(request.targetCharacterIds ?? [])])];
+  const characterRecords = characterIds.length > 0 ? await runtime.resources.listCharacters(characterIds) : [];
+  const storedNames = new Map(vault.participants.map((participant) => [participant.id, participant.name]));
+  const characterNames = new Map(
+    characterRecords.map((record) => [record.id, recordName(record.data, storedNames.get(record.id) ?? record.id)]),
+  );
   const personaRecords = request.personaId ? await runtime.resources.listPersonas([request.personaId]) : [];
   const personaName = recordName(personaRecords[0]?.data, "User");
-  const lines = vault.lastRecall.nags.map((nag) => {
+  const lines = vault.lastRecall.nags.map((nag, index) => {
+    const memory = memoryById.get(vault.lastRecall!.memoryIds[index] ?? "");
+    const targetIds = memory?.characterIds.length ? memory.characterIds : (request.targetCharacterIds ?? []);
+    const characterName =
+      targetIds.map((id) => characterNames.get(id) ?? storedNames.get(id) ?? id).join(" and ") || "the character";
     const resolved = nag.replaceAll("{{char}}", characterName).replaceAll("{{user}}", personaName);
     return `- ${escapeXml(resolved)}`;
   });

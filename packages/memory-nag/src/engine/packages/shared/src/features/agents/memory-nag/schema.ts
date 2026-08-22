@@ -43,6 +43,7 @@ export interface MemoryNagVault {
   chatId: string;
   settings: MemoryNagSettings;
   checkpointMessageId: string | null;
+  checkpointMessageCount: number;
   participants: MemoryNagParticipant[];
   memories: MemoryNagMemory[];
   lastRecall: MemoryNagRecall | null;
@@ -74,6 +75,7 @@ export function emptyMemoryNagVault(chatId: string): MemoryNagVault {
     chatId,
     settings: { ...MEMORY_NAG_DEFAULTS },
     checkpointMessageId: null,
+    checkpointMessageCount: 0,
     participants: [],
     memories: [],
     lastRecall: null,

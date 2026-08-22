@@ -1,5 +1,5 @@
 import { Brain, Check, ChevronLeft, Maximize2, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { MemoryNagVault } from "../../../../shared/src/features/agents/memory-nag/schema.js";
@@ -12,6 +12,62 @@ type MemoryDraft = {
   text: string;
   characterIds: string[];
 };
+
+const FOCUSABLE =
+  'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function useModalDialog(active: boolean, onClose: () => void, restoreSelector?: string) {
+  const dialogRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    if (!active) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const focusFrame = requestAnimationFrame(() => (dialog.querySelector<HTMLElement>(FOCUSABLE) ?? dialog).focus());
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!dialog.contains(document.activeElement)) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE)];
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0]!;
+      const last = focusable.at(-1)!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", onKeyDown);
+      requestAnimationFrame(() => {
+        const requestedTarget = restoreSelector ? document.querySelector<HTMLElement>(restoreSelector) : previousFocus;
+        const restoreTarget =
+          requestedTarget?.isConnected === true
+            ? requestedTarget
+            : document.querySelector<HTMLElement>('.mn-modal[role="dialog"]');
+        restoreTarget?.focus();
+      });
+    };
+  }, [active, restoreSelector]);
+
+  return dialogRef;
+}
 
 function MemoryEditor({
   chatId,
@@ -36,6 +92,7 @@ function MemoryEditor({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const expandedDialogRef = useModalDialog(expanded, () => setExpanded(false), "#mn-memory-nag-expand-button");
 
   const insertMacro = (macro: string) => {
     const textarea = textareaRef.current;
@@ -104,7 +161,12 @@ function MemoryEditor({
           </button>
         </div>
         {!expanded ? (
-          <button type="button" className="mn-button" onClick={() => setExpanded(true)}>
+          <button
+            id="mn-memory-nag-expand-button"
+            type="button"
+            className="mn-button"
+            onClick={() => setExpanded(true)}
+          >
             <Maximize2 className="mn-icon" aria-hidden="true" />
             {t("memoryNag.vault.expand")}
           </button>
@@ -153,9 +215,16 @@ function MemoryEditor({
   if (!expanded) return <section className="mn-panel">{editor}</section>;
   return createPortal(
     <div className="mn-overlay" role="presentation">
-      <section className="mn-modal mn-shell" role="dialog" aria-modal="true" aria-label={t("memoryNag.vault.expand")}>
+      <section
+        ref={expandedDialogRef}
+        className="mn-modal mn-shell"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("memoryNag.vault.expandedTitle")}
+        tabIndex={-1}
+      >
         <div className="mn-modal-head">
-          <strong>{t("memoryNag.vault.expand")}</strong>
+          <strong>{t("memoryNag.vault.expandedTitle")}</strong>
           <button type="button" className="mn-button" onClick={() => setExpanded(false)}>
             <ChevronLeft className="mn-icon" aria-hidden="true" />
             {t("memoryNag.vault.collapse")}
@@ -176,6 +245,7 @@ export function MemoryNagVaultModal({ props, onClose }: { props: CapabilityProps
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<MemoryNagMemory | "new" | null>(null);
   const [message, setMessage] = useState("");
+  const vaultDialogRef = useModalDialog(true, onClose);
   const vault = useQuery({
     enabled: Boolean(chatId),
     queryKey: ["memory-nag", "vault", chatId],
@@ -239,7 +309,14 @@ export function MemoryNagVaultModal({ props, onClose }: { props: CapabilityProps
 
   return createPortal(
     <div className="mn-overlay" role="presentation">
-      <section className="mn-modal mn-shell" role="dialog" aria-modal="true" aria-label={t("memoryNag.vault.title")}>
+      <section
+        ref={vaultDialogRef}
+        className="mn-modal mn-shell"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("memoryNag.vault.title")}
+        tabIndex={-1}
+      >
         <div className="mn-modal-head">
           <div className="mn-row">
             <Brain className="mn-icon" aria-hidden="true" />
@@ -305,7 +382,7 @@ export function MemoryNagVaultModal({ props, onClose }: { props: CapabilityProps
               {message}
             </div>
           ) : null}
-          {vault.isLoading ? <div className="mn-status">{t("memoryNag.settings.scanning")}</div> : null}
+          {vault.isLoading ? <div className="mn-status">{t("memoryNag.vault.loading")}</div> : null}
           {!vault.isLoading && memories.length === 0 ? (
             <div className="mn-status">{t("memoryNag.vault.empty")}</div>
           ) : null}

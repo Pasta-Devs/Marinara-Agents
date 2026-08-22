@@ -32,8 +32,25 @@ function mergeParticipants(
 }
 
 function contextSize(agent: AgentConfig): number {
-  const value = Number(agent.settings.contextSize);
-  return Number.isFinite(value) ? Math.max(1, Math.min(200, Math.trunc(value))) : 5;
+  const raw = agent.settings.contextSize;
+  if (raw === null || raw === undefined || raw === "") return 5;
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? Math.min(200, Math.trunc(value)) : 5;
+}
+
+function sameParticipants(
+  left: PreparedMemoryNagContext["participants"],
+  right: PreparedMemoryNagContext["participants"],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every(
+      (participant, index) =>
+        participant.id === right[index]?.id &&
+        participant.name === right[index]?.name &&
+        participant.current === right[index]?.current,
+    )
+  );
 }
 
 export const memoryNagAgentRuntime = {
@@ -51,7 +68,7 @@ export const memoryNagAgentRuntime = {
       context: recentContext,
       perCharacter: vault.settings.memoriesToConsider,
     });
-    if (participants.length > 0) {
+    if (participants.length > 0 && !sameParticipants(vault.participants, participants)) {
       await updateMemoryNagVault(context.chatId, (current) => ({ ...current, participants }));
     }
     return {

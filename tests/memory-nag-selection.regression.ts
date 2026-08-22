@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
+import {
+  emptyMemoryNagVault,
+  type MemoryNagMemory,
+} from "../packages/memory-nag/src/engine/packages/shared/src/features/agents/memory-nag/schema.ts";
 import { shortlistMemoryNags } from "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/retrieval.ts";
+import { memoryNagScanStart } from "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/scanner.ts";
 import { selectMemoryNagRecall } from "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/selection.ts";
+import { reconcileMemoryNagRecall } from "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/vault.ts";
 
 const candidates = [
   { id: "promise", text: "Dottore promised Pierro to capture Columbina." },
@@ -26,8 +32,17 @@ const shortlisted = shortlistMemoryNags({
   memories: [
     {
       id: "promise",
-      text: "Dottore promised Pierro to capture Columbina.",
+      text: "A promise remains unsettled.",
       characterIds: ["dottore", "pierro"],
+      status: "active",
+      sourceMessageIds: [],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    },
+    {
+      id: "dottore-note",
+      text: "Dottore mentioned Columbina.",
+      characterIds: ["dottore"],
       status: "active",
       sourceMessageIds: [],
       createdAt: "2026-01-01T00:00:00.000Z",
@@ -50,7 +65,7 @@ const shortlisted = shortlistMemoryNags({
   context: {
     chatId: "chat",
     chatMode: "roleplay",
-    recentMessages: [{ role: "user", content: "Pierro asks Dottore about Columbina.", characterId: "pierro" }],
+    recentMessages: [{ role: "user", content: "Pierro asks Dottore about Columbina." }],
     mainResponse: "Dottore changes the subject.",
     gameState: null,
     characters: [],
@@ -60,7 +75,54 @@ const shortlisted = shortlistMemoryNags({
 });
 assert.deepEqual(
   shortlisted.map((memory) => memory.id),
-  ["promise"],
+  ["dottore-note", "promise"],
 );
 
-console.info("Memory Nag selection regression passed");
+const checkpointVault = { checkpointMessageId: "deleted-message", checkpointMessageCount: 20 };
+assert.equal(
+  memoryNagScanStart(
+    checkpointVault,
+    Array.from({ length: 25 }, (_, index) => ({ id: `m-${index}` })),
+  ),
+  20,
+);
+assert.equal(
+  memoryNagScanStart({ ...checkpointVault, checkpointMessageId: "m-9" }, [{ id: "m-9" }, { id: "m-10" }]),
+  1,
+);
+
+const recalledMemory: MemoryNagMemory = {
+  id: "promise",
+  text: "Dottore promised Pierro to capture Columbina.",
+  characterIds: ["dottore", "pierro"],
+  status: "active",
+  sourceMessageIds: [],
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+};
+const recalledVault = {
+  ...emptyMemoryNagVault("chat"),
+  memories: [recalledMemory],
+  lastRecall: {
+    memoryIds: [recalledMemory.id],
+    nags: [recalledMemory.text],
+    createdAt: "2026-01-01T00:01:00.000Z",
+  },
+};
+assert.ok(reconcileMemoryNagRecall(recalledVault, recalledVault).lastRecall);
+assert.equal(
+  reconcileMemoryNagRecall(recalledVault, {
+    ...recalledVault,
+    memories: [{ ...recalledMemory, status: "resolved" }],
+  }).lastRecall,
+  null,
+);
+assert.equal(
+  reconcileMemoryNagRecall(recalledVault, {
+    ...recalledVault,
+    memories: [{ ...recalledMemory, characterIds: ["dottore"] }],
+  }).lastRecall,
+  null,
+);
+
+console.info("Memory Nag regressions passed");
