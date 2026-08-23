@@ -11047,6 +11047,34 @@ await withSavePath(async ({ calls, armed, behavior, tick, makeCore }) => {
       "which carries the compiled world to the metadata key",
     );
 
+    // ── AND A THROW IS A RETRY SCREEN TOO, NOT A SPINNER FOREVER ──
+    // Every failure the generation ladder KNOWS about comes back as a null seal
+    // and is handled above. This is the one it does not: a throw out of the
+    // compile, the transplant or the park, after the gate is already armed. Left
+    // to escape it takes the `finally` on the way out, clears the in-flight
+    // marker, and leaves the panel reading "writing your world…" with no call
+    // behind it and no button to press — a bricked chat by another route.
+    loadedPF.save.reset();
+    loadedPF.save._briefCache.clear();
+    const thrower = makeCore("chat-gate-throw", 5151);
+    thrower.host.chatMeta = { gameSetupConfig: { experienceConfig: { generate: true, seed: 5151 } } };
+    thrower.sim = loadedPF.save.restore(thrower.host.chatMeta, "chat-gate-throw");
+    assert.equal(loadedPF.save.armGate(thrower, thrower.host.chatMeta), true, "gated");
+    // The throw is planted where a real one would land: the rebuild.
+    const realSim = loadedPF.Sim;
+    loadedPF.Sim = function Exploding() {
+      throw new TypeError("the compiled world would not build");
+    };
+    try {
+      await loadedPF.save.maybeGenerateBrief(thrower);
+      await tick();
+    } finally {
+      loadedPF.Sim = realSim;
+    }
+    assert.ok(loadedPF.save.gate, "the gate is still there rather than half-lifted");
+    assert.equal(loadedPF.save.gate.state, "failed", "…showing retry, not a spinner with nothing behind it");
+    assert.equal(loadedPF.save._generating.has("chat-gate-throw"), false, "and nothing is left marked in flight");
+
     // ── AND A CHAT THAT IS NOT WAITING FOR A BRIEF NEVER GATES ──
     for (const [label, chatMeta] of [
       ["a legacy chat with no config at all", {}],

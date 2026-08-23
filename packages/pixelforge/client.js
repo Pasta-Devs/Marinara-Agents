@@ -8907,6 +8907,17 @@ PF.save = {
       core.hud?.refreshChips();
       core.hud?.toast("The world takes shape.");
       this.markDirty(core);
+    } catch (err) {
+      // NEVER A SPINNER WITH NOTHING BEHIND IT. Every failure the generation
+      // ladder KNOWS about is already a `null` seal handled above; this is the
+      // one it does not — a throw out of the compile, the transplant or the
+      // park, which before this left the gate reading "writing your world…"
+      // forever with no call running and no button to press. A retry screen is
+      // the right answer to an unexpected throw for the same reason it is the
+      // right answer to a refused generation: nothing was sealed, so the chat is
+      // untouched and trying again is free.
+      console.warn("[pixelforge] world generation failed unexpectedly; the chat stays unsealed", err);
+      if (chatId === core.chatId) this._failGate(core);
     } finally {
       this._generating.delete(chatId);
     }
