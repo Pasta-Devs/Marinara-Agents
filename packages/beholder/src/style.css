@@ -1461,7 +1461,7 @@
     animation: bh-onboard-in 0.25s ease-out;
 }
 .beholder-onboard .bh-onboard-title {
-    font-family: "Cinzel", "Trajan Pro", "Georgia", serif;
+    font-family: Cinzel, "Trajan Pro", Georgia, serif;
     font-weight: 600;
     letter-spacing: 0.1em;
     font-size: 1.05em;
