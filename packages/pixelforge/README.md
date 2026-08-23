@@ -59,7 +59,9 @@ purse, skills and equipped tools, a relationship ledger, quest state, a day ledg
 state, and a home anchor. It carries its own version and migrates on read, and a field a newer
 build added survives a round trip through an older one rather than being deleted by its next save.
 Everything else in the world stays a pure function of `(seed, theme, brief, clock)`, which is what
-keeps a rebuild byte-identical and a timeline rewind safe.
+keeps a rebuild byte-identical and a timeline rewind safe. The wire contract, the three field
+classes, the quarantine slots, the save-row decision ladder and the loading gate are specified in
+`docs/player-state.md`.
 
 What is *live* in 0.11 is deliberately small: the purse, the pouch, and one transaction.
 **There is no automatic home** — a modern setting probably houses its protagonist and a wandering
@@ -96,6 +98,7 @@ Two tiers, resolved at runtime with graceful degradation:
 packages/pixelforge/
 ├── src/                  # plain-JS modules, concatenated in filename order into client.js
 ├── docs/brief-schema.md  # the World Brief schema v1 spec (sealed; amendments inline)
+├── docs/player-state.md  # the S5 player block: wire contract, stamps, quarantine, ladder, gate
 ├── test-brief.mjs        # standalone validator/compiler/spatial regression harness
 ├── build/
 │   ├── build-art.mjs     # deterministic Tier-1 art generator (writes build/assets/, untracked)
