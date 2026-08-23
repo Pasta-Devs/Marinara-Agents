@@ -30,24 +30,31 @@ export function MemoryNagTrackerPanel({ props }: { props: CapabilityProps }) {
   if (!enabled) return null;
   return (
     <section className="mn-shell mn-tracker">
-      <button
-        type="button"
-        className="mn-tracker-header mn-tracker-toggle"
-        aria-expanded={!collapsed}
-        aria-label={t("memoryNag.tracker.title")}
-        onClick={() => setCollapsed((value) => !value)}
-      >
-        <ChevronDown className={`mn-tracker-chevron${collapsed ? " mn-tracker-chevron--collapsed" : ""}`} />
-        <span className="mn-tracker-icon" aria-hidden="true">
-          <MessageSquareQuote className="mn-tracker-panel-icon" />
-        </span>
-        <strong className="mn-tracker-title">{t("memoryNag.tracker.title")}</strong>
-      </button>
-      {!collapsed ? (
-        <div className={`mn-tracker-value${nags.length === 0 ? " mn-tracker-value--empty" : ""}`}>
-          {nags[index] ?? t("memoryNag.tracker.none")}
+      <div className="mn-tracker-veil" aria-hidden="true" />
+      <div className="mn-tracker-content">
+        <div className="mn-tracker-header">
+          <button
+            type="button"
+            className="mn-tracker-toggle"
+            aria-expanded={!collapsed}
+            aria-label={t("memoryNag.tracker.title")}
+            onClick={() => setCollapsed((value) => !value)}
+          >
+            <span className="mn-tracker-chevron-frame" aria-hidden="true">
+              <ChevronDown className={`mn-tracker-chevron${collapsed ? " mn-tracker-chevron--collapsed" : ""}`} />
+            </span>
+            <span className="mn-tracker-icon" aria-hidden="true">
+              <MessageSquareQuote className="mn-tracker-panel-icon" />
+            </span>
+            <strong className="mn-tracker-title">{t("memoryNag.tracker.title")}</strong>
+          </button>
         </div>
-      ) : null}
+        {!collapsed ? (
+          <div className={`mn-tracker-value${nags.length === 0 ? " mn-tracker-value--empty" : ""}`}>
+            {nags[index] ?? t("memoryNag.tracker.none")}
+          </div>
+        ) : null}
+      </div>
     </section>
   );
 }

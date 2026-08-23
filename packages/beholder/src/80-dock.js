@@ -13,10 +13,10 @@ const BH_HOST_CSS = `
   --SmartThemeBlurTintColor: var(--card, rgba(20,20,24,.92));
   --SmartThemeBodyColor: var(--foreground, #e0e0e0);
   --SmartThemeBorderColor: var(--border, rgba(255,255,255,.15));
-  --SmartThemeEmColor: var(--marinara-chat-chrome-accent, var(--primary));
-  --SmartThemeQuoteColor: var(--marinara-chat-chrome-accent, var(--primary));
-  --bh-accent-pref: var(--primary);
-  --bh-chroma: var(--marinara-chat-chrome-accent, var(--primary));
+  --SmartThemeEmColor: var(--marinara-chat-chrome-accent, var(--foreground));
+  --SmartThemeQuoteColor: var(--marinara-chat-chrome-accent, var(--foreground));
+  --bh-accent-pref: var(--marinara-chat-chrome-accent, var(--foreground));
+  --bh-chroma: var(--marinara-chat-chrome-accent, var(--foreground));
   --bh-font-display: var(--font-sans, inherit);
   display:flex !important; position:fixed !important; top:var(--bh-dock-top,0px) !important; right:0 !important; left:auto !important; bottom:auto !important;
   height:calc(100vh - var(--bh-dock-top,0px)) !important; max-height:calc(100vh - var(--bh-dock-top,0px)) !important; width:min(500px,94vw) !important; min-width:0 !important;
@@ -35,17 +35,16 @@ const BH_HOST_CSS = `
    --tracker-chat-avoid-right (the shell sets it inline; !important beats the inline value).
    So opening the Beholder dock makes the roleplay view make room, not get covered. */
 body.bh-dock-open .mari-app-background-paint{ --tracker-chat-avoid-right: min(500px,94vw) !important; --tracker-panel-hud-clear-right: min(500px,94vw) !important; }
-.bh-hud-toggle{ display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
-  border-color:var(--primary) !important;color:var(--primary) !important; }
-.bh-hud-toggle:hover,.bh-hud-toggle.bh-active{ color:var(--primary) !important; }
+.bh-hud-toggle{ cursor:pointer; }
 .bh-hud-icon{ display:block;width:16px;height:16px;object-fit:contain; }
-.bh-tracker-launch{display:flex;width:100%;min-height:2rem;align-items:center;gap:.5rem;
+.bh-tracker-launch{display:flex;width:100%;min-height:1.75rem;align-items:center;gap:.25rem;
   border:0;border-bottom:1px solid var(--border);background:var(--tracker-panel-section-background,transparent);
-  padding:.25rem .5rem;color:var(--foreground);cursor:pointer;font:inherit;text-align:left;}
+  padding:.125rem .25rem;color:var(--foreground);cursor:pointer;font:inherit;text-align:left;}
 .bh-tracker-launch:hover{background:color-mix(in srgb,var(--accent) 18%,transparent);}
-.bh-tracker-launch__logo{display:flex;width:1.25rem;height:1.25rem;align-items:center;justify-content:center;
-  border:1px solid var(--primary);border-radius:.25rem;background:color-mix(in srgb,var(--primary) 9%,transparent);}
-.bh-tracker-launch__logo img{display:block;width:.875rem;height:.875rem;object-fit:contain;}
+.bh-tracker-launch__logo{display:flex;width:1rem;height:1rem;align-items:center;justify-content:center;
+  border:1px solid var(--marinara-chat-chrome-accent,var(--border));border-radius:.25rem;
+  background:color-mix(in srgb,var(--marinara-chat-chrome-accent,var(--foreground)) 9%,transparent);}
+.bh-tracker-launch__logo img{display:block;width:.75rem;height:.75rem;object-fit:contain;}
 .bh-tracker-launch__title{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   font-size:.625rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:color-mix(in srgb,var(--foreground) 62%,transparent);}
 .bh-tracker-launch__arrow{color:var(--muted-foreground);font-size:.875rem;opacity:.7;}

@@ -10,7 +10,7 @@
   },
   "id": "memory-nag",
   "name": "Memory Nag",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Keeps a short per-chat vault of roleplay memories and recalls only the unresolved details that matter to the current turn. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode. Once active, configure it in its standalone Memory Nag section.",
   "engine": {
     "min": "2.4.4",
@@ -44,8 +44,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "b9adde59af324367f50407ba8e1d0802df289ca4d638b809ead72b85ee0a3d3e",
-      "bytes": 357795
+      "sha256": "1e6413286cb02f844b1b840d6c2ed37c212b719195f758e6946935db6d1ad6f3",
+      "bytes": 360828
     }
   ],
   "permissions": [
