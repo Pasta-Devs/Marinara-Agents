@@ -146,7 +146,7 @@ function MemoryEditor({
         <strong>{t(memory ? "memoryNag.vault.editorEdit" : "memoryNag.vault.editorNew")}</strong>
         <button
           type="button"
-          className="mari-chrome-control mari-chrome-control--small"
+          className="mari-chrome-control mari-chrome-control--small mn-modal-close"
           onClick={onClose}
           aria-label={t("memoryNag.vault.cancel")}
         >
@@ -246,7 +246,7 @@ function MemoryEditor({
 
   if (!expanded) return <section className="mn-panel">{editor}</section>;
   return createPortal(
-    <div className="mn-overlay" role="presentation">
+    <div className="mn-overlay" role="presentation" onClick={() => setExpanded(false)}>
       <section
         ref={expandedDialogRef}
         className="mn-modal mn-shell"
@@ -254,6 +254,7 @@ function MemoryEditor({
         aria-modal="true"
         aria-label={t("memoryNag.vault.expandedTitle")}
         tabIndex={-1}
+        onClick={(event) => event.stopPropagation()}
       >
         <div className="mn-modal-head">
           <strong>{t("memoryNag.vault.expandedTitle")}</strong>
@@ -354,7 +355,7 @@ export function MemoryNagVaultModal({ props, onClose }: { props: CapabilityProps
   };
 
   return createPortal(
-    <div className="mn-overlay" role="presentation">
+    <div className="mn-overlay" role="presentation" onClick={onClose}>
       <section
         ref={vaultDialogRef}
         className="mn-modal mn-shell"
@@ -363,6 +364,7 @@ export function MemoryNagVaultModal({ props, onClose }: { props: CapabilityProps
         aria-hidden={editorExpanded || undefined}
         aria-label={editorExpanded ? undefined : t("memoryNag.vault.title")}
         tabIndex={editorExpanded ? undefined : -1}
+        onClick={(event) => event.stopPropagation()}
       >
         <div className="mn-modal-head">
           <div className="mn-row">
@@ -371,7 +373,7 @@ export function MemoryNagVaultModal({ props, onClose }: { props: CapabilityProps
           </div>
           <button
             type="button"
-            className="mari-chrome-control mari-chrome-control--small"
+            className="mari-chrome-control mari-chrome-control--small mn-modal-close"
             onClick={onClose}
             aria-label={t("memoryNag.vault.close")}
           >

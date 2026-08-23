@@ -6,6 +6,7 @@ const sourceRoot = new URL(
   import.meta.url,
 );
 const settings = readFileSync(new URL("MemoryNagSettings.tsx", sourceRoot), "utf8");
+const vault = readFileSync(new URL("MemoryNagVault.tsx", sourceRoot), "utf8");
 const styles = readFileSync(new URL("styles.ts", sourceRoot), "utf8");
 
 assert.match(settings, /id="mn-memory-nag-vault-prompt"[\s\S]*rows=\{3\}/u);
@@ -31,5 +32,17 @@ assert.match(
 );
 assert.match(styles, /\.mn-prompt-textarea \{[\s\S]*min-height: 3\.25rem;[\s\S]*border-radius: 0\.375rem;/u);
 assert.match(styles, /\.mn-prompt-tool:not\(:disabled\):hover \{[\s\S]*background: var\(--accent\);/u);
+assert.match(
+  styles,
+  /\.mn-shell \{[\s\S]*--background: var\(--marinara-chat-chrome-panel-bg\);[\s\S]*--border: var\(--marinara-chat-chrome-panel-border\);/u,
+  "Memory Nag windows must reuse the neutral chat-panel token mapping",
+);
+assert.match(
+  styles,
+  /\.mn-modal \{[\s\S]*width: min\(48rem, 100%\);[\s\S]*background: var\(--marinara-chat-chrome-panel-bg\);/u,
+  "Memory Nag Vault must match the standard Assembled Prompt window width and surface",
+);
+assert.match(vault, /className="mari-chrome-control mari-chrome-control--small mn-modal-close"/u);
+assert.match(vault, /className="mn-overlay" role="presentation" onClick=\{onClose\}/u);
 
 process.stdout.write("Memory Nag settings UI contract passed\n");

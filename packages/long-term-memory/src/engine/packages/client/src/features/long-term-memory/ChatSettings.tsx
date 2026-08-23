@@ -6,7 +6,7 @@ import type {
   LtmLastInjectionResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { queryKeys, request } from "./api";
-import { InfoPopover, NumberField, StatusSurface, compactInputClass } from "./shared-controls";
+import { InfoPopover, NumberField, StatusSurface, compactInputClass, compactInputStyle } from "./shared-controls";
 import type { CapabilityProps } from "./types";
 import { LastInjectionSummary } from "./LastInjectionSummary";
 import { useLtmTranslation } from "./localization";
@@ -78,6 +78,7 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
             aria-labelledby={recallStyleLabelId}
             data-ltm-control="select"
             className={compactInputClass}
+            style={compactInputStyle}
             disabled={pending || readOnly}
             value={effectiveStyle}
             onChange={(event) => update({ longTermMemoryRecallStyle: event.target.value })}
