@@ -2,7 +2,9 @@
 
 Memory Nag is a Roleplay-only post-processing tracker. It keeps a short editable vault for each chat, deterministically shortlists relevant active memories, and asks the configured agent whether the current turn actually calls for a reminder.
 
-Restart Marinara Engine after installing the package. Then use **Chat Settings → Agents → Tracker Agents → Memory Nag** to choose the vault scan connection, adjust batch and recall limits, scan the chat, or open the vault. The scan connection affects vault batches only; ordinary tracker turns keep using the agent connection.
+Restart Marinara Engine after installing the package, then add it from **Chat Settings → Agents → Tracker Agents**. Once active, use the standalone **Memory Nag** section to choose the vault scan connection, edit the memory-creation prompt, adjust batch and recall limits, create memories, or open the vault. The scan connection affects vault batches only; ordinary tracker turns keep using the connection specified in the agent editor.
+
+Memory Nag defaults to a 4096-token agent output limit. Vault creation also reserves up to 4096 output tokens per batch.
 
 The vault separates active and resolved memories. Memories may belong to multiple current or past chat characters and can include a short verbatim dialogue line when exact wording matters. Users can add, edit, resolve, restore, search, filter, and delete entries. Deletion asks for confirmation.
 

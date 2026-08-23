@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import {
   emptyMemoryNagVault,
+  MEMORY_NAG_DEFAULT_VAULT_PROMPT,
+  normalizeMemoryNagSettings,
   type MemoryNagMemory,
 } from "../packages/memory-nag/src/engine/packages/shared/src/features/agents/memory-nag/schema.ts";
 import { shortlistMemoryNags } from "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/retrieval.ts";
-import { memoryNagScanStart } from "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/scanner.ts";
+import {
+  buildMemoryNagScanMessages,
+  memoryNagScanStart,
+} from "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/scanner.ts";
 import { memoryNagRoutes } from "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/routes.ts";
 import { selectMemoryNagRecall } from "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/selection.ts";
 import { reconcileMemoryNagRecall } from "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/vault.ts";
@@ -13,6 +18,19 @@ const candidates = [
   { id: "promise", text: "Dottore promised Pierro to capture Columbina." },
   { id: "injury", text: "Dottore cut his finger the last time he used a scalpel." },
 ];
+
+assert.equal(normalizeMemoryNagSettings({}).vaultPrompt, MEMORY_NAG_DEFAULT_VAULT_PROMPT);
+assert.equal(normalizeMemoryNagSettings({ vaultPrompt: "  Keep only promises.  " }).vaultPrompt, "Keep only promises.");
+const customScanMessages = buildMemoryNagScanMessages({
+  participants: [{ id: "dottore", name: "Dottore", current: true }],
+  transcript: "Dottore promised to behave.",
+  existing: [],
+  perCharacter: 3,
+  vaultPrompt: "Keep only promises.",
+});
+assert.match(customScanMessages[0]!.content, /^Keep only promises\./);
+assert.match(customScanMessages[0]!.content, /Create at most 3 memories/);
+assert.match(customScanMessages[0]!.content, /Return only JSON/);
 
 assert.deepEqual(selectMemoryNagRecall({ nags_needed: false, memoryIds: ["promise"] }, candidates, 3), {
   nags_needed: false,
