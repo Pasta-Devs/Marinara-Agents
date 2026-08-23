@@ -572,6 +572,7 @@ async function main() {
       let omitReviewContextId: string | null = null;
       let reviewPreflightBlocked = false;
       let confirmReviewDiscard = false;
+      let lastReviewDiscardMessage = "";
       let reviewQueueEmpty = false;
       let reviewFingerprintRevision = 0;
       let lastInjectionRequests = 0;
@@ -1210,7 +1211,10 @@ async function main() {
         promptPresetEditorOpens.push(Date.now());
       });
       await page.exposeFunction("declineDestinationChange", () => false);
-      await page.exposeFunction("confirmReviewDiscard", () => confirmReviewDiscard);
+      await page.exposeFunction("confirmReviewDiscard", (options: { message?: string }) => {
+        lastReviewDiscardMessage = options.message ?? "";
+        return confirmReviewDiscard;
+      });
       await page.addInitScript(() => {
         Object.defineProperty(Crypto.prototype, "randomUUID", {
           configurable: true,
@@ -2169,12 +2173,17 @@ async function main() {
         };
         element.capabilityProps = {
           ...element.capabilityProps,
-          confirmAction: (window as Window & { confirmReviewDiscard: () => boolean }).confirmReviewDiscard,
+          confirmAction: (
+            window as Window & {
+              confirmReviewDiscard: (options: { message?: string }) => boolean;
+            }
+          ).confirmReviewDiscard,
         };
         element.dispatchEvent(new CustomEvent("marinara-capability-props"));
       });
       await mergeDiscardMutation.getByRole("button", { name: /^Discard proposal /u }).click();
       assert.equal(reviewActionCalls.length, skipCallCountBeforeDecline);
+      assert.match(lastReviewDiscardMessage, /Dependent proposals may also be discarded\./u);
       confirmReviewDiscard = true;
       await page.evaluate(() => {
         const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
@@ -2182,7 +2191,11 @@ async function main() {
         };
         element.capabilityProps = {
           ...element.capabilityProps,
-          confirmAction: (window as Window & { confirmReviewDiscard: () => boolean }).confirmReviewDiscard,
+          confirmAction: (
+            window as Window & {
+              confirmReviewDiscard: (options: { message?: string }) => boolean;
+            }
+          ).confirmReviewDiscard,
         };
         element.dispatchEvent(new CustomEvent("marinara-capability-props"));
       });
