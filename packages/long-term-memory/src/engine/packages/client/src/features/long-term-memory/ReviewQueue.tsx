@@ -1652,32 +1652,8 @@ export default function ReviewQueue({
       })),
     );
 
-  const discardDependentIds = (applicableRows: readonly ReviewRow[], allRows: readonly ReviewRow[]) => {
-    const selectedIds = new Set(applicableRows.map((row) => row.mutation.id));
-    const dependentIds = new Set<string>();
-    for (const [draftId, selectedDraftRows] of groupByDraft(applicableRows)) {
-      const draftRows = allRows.filter((row) => row.draftId === draftId);
-      for (const id of acceptedMutationIds(
-        draftRows,
-        selectedDraftRows.map((row) => row.mutation.id),
-      )) {
-        if (!selectedIds.has(id)) dependentIds.add(id);
-      }
-    }
-    return dependentIds;
-  };
-
-  const confirmDiscard = async (applicableRows: readonly ReviewRow[], allRows: readonly ReviewRow[]) => {
-    const dependentIds = discardDependentIds(applicableRows, allRows);
-    const dependentCount = dependentIds.size;
-    const dependentCopy = localizeUi(
-      dependentCount === 0
-        ? "ui.longTermMemory.reviewqueue.discardDependentNone"
-        : selectLtmPluralForm(locale, dependentCount) === "one"
-          ? "ui.longTermMemory.reviewqueue.discardDependentOne"
-          : "ui.longTermMemory.reviewqueue.discardDependentOther",
-      { count: dependentCount },
-    );
+  const confirmDiscard = async (applicableRows: readonly ReviewRow[]) => {
+    const dependentCopy = localizeUi("ui.longTermMemory.reviewqueue.discardDependentWarning");
     const message = localizeUi(
       applicableRows.length === 1
         ? "ui.longTermMemory.reviewqueue.discardProposalDescription"
@@ -1741,7 +1717,7 @@ export default function ReviewQueue({
       });
       return;
     }
-    if (action === "skip" && !(await confirmDiscard(applicableRows, allRows))) return;
+    if (action === "skip" && !(await confirmDiscard(applicableRows))) return;
     const acceptRequests = action === "accept" ? buildAcceptRequests(applicableRows, allRows) : [];
     const requestKey = action === "accept" ? acceptRequestKey(acceptRequests) : null;
     batchControllerRef.current?.abort();

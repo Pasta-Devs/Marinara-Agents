@@ -498,7 +498,7 @@ assert.match(reviewQueue, /applyChangeForTitle/u);
 assert.match(reviewQueue, /data-ltm-review-summary/u);
 assert.match(reviewQueue, /data-ltm-review-evidence-summary/u);
 assert.match(reviewQueue, /confirmDiscard/u);
-assert.match(reviewQueue, /discardDependentIds/u);
+assert.match(reviewQueue, /discardDependentWarning/u);
 assert.match(reviewQueue, /reviewQueueEmpty/u);
 assert.match(reviewQueue, /className=\{workspaceUnavailable \|\| reviewDataUnavailable \? "hidden" : ""\}/u);
 assert.equal(locale["ui.longTermMemory.reviewqueue.retryFailed"], "Retry failed review actions");
