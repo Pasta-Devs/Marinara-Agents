@@ -121,21 +121,23 @@ let _writeSeq = 0;
 // than polling a dead server forever.
 const FLUSH_BACKOFF_MS = [2500, 5000, 10_000, 30_000, 60_000];
 const FLUSH_BACKOFF_GIVEUP = 8;
-// Local pre-flight. The route's own ceiling is 262,144 chars (422) behind a
-// ~1.59 MB body limit (413), but neither is the real wall: teardown fires TWO
-// keepalive requests and the Fetch standard caps in-flight keepalive bodies at
-// 64 KiB per origin, and every PUT re-serializes the chat's whole shard across
-// up to 100 anchors. Refusing locally keeps the 422 retry loop unreachable.
-// The snapshot's own design budget is 24 KB (plan §4); this is the backstop.
-const MAX_SNAPSHOT_CHARS = 32_768;
+// WALL 1, and it is the ORDINARY path's only one: the Engine's per-row ceiling.
+// The route 422s above 262,144 chars, so this mirrors it exactly — the local
+// pre-flight exists to keep that 422's retry loop unreachable and for no other
+// reason. It was 32,768 (maintainer ruling, round 2: inherited caution from a
+// mobile-payload worry, the same one that shrank the player caps), which refused
+// perfectly savable worlds and degraded the session permanently for doing it.
+const MAX_SNAPSHOT_CHARS = 262_144;
+// WALL 2, and it is REAL but narrow: it binds the pagehide TEARDOWN path only.
 // Teardown sends a PAIR of keepalive requests in routes mode, and the Fetch
 // standard caps TOTAL in-flight keepalive body bytes at 64 KiB (65,536) per
-// origin — the whole pair against one quota, not one budget each. So the wall
-// is 2 × the UTF-8 byte length of the snapshot, plus the two JSON wrappers
-// (`{"state":…}` and `{"pixelforge":…}`, ~26 bytes together) and whatever else
-// the page has in flight at unload. 57,000 leaves ~8.5 KB of that headroom.
-// MAX_SNAPSHOT_CHARS alone does NOT imply the pair fits: 32,768 ASCII chars
-// doubles to 65,536, over the quota on its own.
+// origin — the whole pair against one quota, not one allowance each. So the
+// teardown wall is 2 × the UTF-8 byte length of the snapshot, plus the two JSON
+// wrappers (`{"state":…}` and `{"pixelforge":…}`, ~26 bytes together) and
+// whatever else the page has in flight at unload. 57,000 leaves ~8.5 KB of that
+// headroom. This is a browser constraint, not a policy, and it is why an
+// ordinary flush and a teardown flush are bounded by different numbers: an
+// ordinary flush is bounded by the server cap alone.
 const KEEPALIVE_PAIR_BUDGET_BYTES = 57_000;
 // Re-probe cadence while a probe FAILURE pinned the session to metadata mode
 // (plan §Q2a): a transient 500 at boot otherwise costs timeline rewind for the
@@ -1363,7 +1365,15 @@ PF.save = {
           // …and the derived clean-gate on top, for the detach path: the
           // pre-check may have been skipped as fresh, in which case this is the
           // last completed check's verdict rather than a new one.
-          if (teardown && !this._teardownAllowed()) return;
+          //
+          // SCOPED TO THE ROUTE WRITE (round-2 fix), and the order is why: the
+          // gate protects the PUT, the one write nobody takes back, and row 9
+          // above has already withdrawn it. Unscoped, the gate then re-blocked
+          // on that same row 9 — the cache-only downgrade sets _lastCheck
+          // unconditionally — and killed the metadata PATCH as well, so a detach
+          // during a GET outage wrote NOTHING. There is no route write left here
+          // to gate.
+          if (teardown && job.routeNeeded && !this._teardownAllowed()) return;
         }
         // Route row first (the authority), metadata second as write-through
         // boot cache + old-engine fallback. A metadata failure is non-fatal
@@ -1638,14 +1648,15 @@ PF.save = {
    *  BOTH keepalive requests without awaiting between them — awaiting the PUT
    *  first lets the unload land before the PATCH is even dispatched.
    *
-   *  Sized against the keepalive wall, not the route's, and the arithmetic is
-   *  explicit because MAX_SNAPSHOT_CHARS does not imply it: the Fetch standard
-   *  caps TOTAL in-flight keepalive body bytes at 64 KiB (65,536) per origin,
-   *  routes mode sends two bodies against that one quota, and 32,768 ASCII
-   *  chars doubled is already 65,536. So the gate here is
-   *  2 × TextEncoder-encoded bytes ≤ KEEPALIVE_PAIR_BUDGET_BYTES, and when the
-   *  pair does not fit the PUT goes alone — losing the write-through cache is a
-   *  repairable inconvenience, losing both is the session.
+   *  Sized against the KEEPALIVE wall, which is this path's own and nobody
+   *  else's: the Fetch standard caps TOTAL in-flight keepalive body bytes at
+   *  64 KiB (65,536) per origin, and routes mode sends two bodies against that
+   *  one quota. MAX_SNAPSHOT_CHARS does not imply it and is not meant to — the
+   *  server cap bounds an ORDINARY flush, this bounds the pair a dying page
+   *  fires. So the gate here is 2 × TextEncoder-encoded bytes ≤
+   *  KEEPALIVE_PAIR_BUDGET_BYTES, and when the pair does not fit the PUT goes
+   *  alone — losing the write-through cache is a repairable inconvenience,
+   *  losing both is the session.
    *
    *  Remount-detach keeps the ordinary chained path (90-element) — the page is
    *  alive there and a re-arm is still worth something. */
@@ -1696,7 +1707,7 @@ PF.save = {
     const pairFits = 2 * new TextEncoder().encode(serialized).length <= KEEPALIVE_PAIR_BUDGET_BYTES;
     if (routes && !pairFits) {
       console.warn(
-        "[pixelforge] teardown pair exceeds the keepalive budget; sending the route save alone (the metadata cache repairs on the next load)",
+        "[pixelforge] teardown pair exceeds the keepalive quota; sending the route save alone (the metadata cache repairs on the next load)",
       );
     }
     // A pagehide is not always a death: bfcache restores the page and play

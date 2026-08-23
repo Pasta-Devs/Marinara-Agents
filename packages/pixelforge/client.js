@@ -6357,37 +6357,30 @@ const currentPlayerV = () => PLAYER_MIGRATIONS.length + 1;
 //     `relRows`: bump() returns null when the cap is reached and there is no
 //     STRANGER-tier row left to evict for the newcomer.
 //
-// RETUNED BY THE MAX-SHAPE REGRESSION (slice-4 fix; see test-brief case (ah),
-// which is the mechanism plan §4 names and which had never been written). The
-// caps as first chosen summed to a 31.7 KB block and a 35.4 KB SNAPSHOT on a
-// saturated town — not merely over the plan's 24 KB design budget but over
-// MAX_SNAPSHOT_CHARS, so a fully-played save refused itself at the pre-flight
-// and degraded the session permanently; a city measured 39.7 KB, whose teardown
-// pair also broke the 57 KB keepalive quota. The numbers below hold a saturated
-// TOWN inside the 24 KB budget with ~2 KB of margin and a saturated CITY inside
-// both operational walls with ~6 KB. The levers were the ones whose loss is
-// least felt: the ledger is a rolling transcript (a 110-grapheme line is still
-// a whole sentence), and `relRows` sits above the number of people any world
-// mints that the player has actually built something with — stranger rows are
-// what the cap sheds. A saturated CITY still exceeds the 24 KB DESIGN budget by
-// ~2 KB, and that residual is structural rather than a cap choice: the envelope
-// alone (one intro flag per zone and per resident, one binding per exported
-// zone) is 7.5 KB there, so closing it means either a wire change or caps that
-// contradict W2/P2. Pinned and reported rather than papered over.
+// THESE ARE GAMEPLAY AND HYGIENE BOUNDS, NOT A SIZE BUDGET (maintainer ruling,
+// round 2). A previous pass shrank every one of them to hold a saturated town
+// inside a 24 KB "design budget" carried over from a mobile-payload worry, and
+// what that bought was settlements that feel tiny. The budget is abolished. The
+// only real walls are the Engine's per-row cap (MAX_SNAPSHOT_CHARS, 262,144 —
+// the server 422s above it) and the browser keepalive quota on the pagehide
+// teardown path specifically; a saturated world sits far under both, and
+// test-brief case (ah) MEASURES the shape and asserts against those walls rather
+// than a budget. Size optimization is explicitly deferred: nothing below is
+// chosen for bytes. The numbers are the plan's own.
 const CAPS = {
-  items: 40, // pouch rows, keyed (t,k)
-  relRows: 90, // relationship rows per SAVE, across zones
-  relLines: 20, // rows allowed to hold an `s` line at once
-  lineChars: 64, // graphemes in one `s` line
+  items: 60, // pouch rows, keyed (t,k)
+  relRows: 150, // relationship rows per SAVE, across zones
+  relLines: 30, // rows allowed to hold an `s` line at once
+  lineChars: 80, // graphemes in one `s` line
   activeQuests: 10,
-  boardDone: 30,
-  packDone: 24,
-  bought: 20,
+  boardDone: 40,
+  packDone: 40,
+  bought: 30,
   ledgerDays: 3, // days kept in FULL
-  ledgerPerDay: 10,
-  ledgerStubs: 14, // elided days, one stub line each
-  ledgerChars: 110,
-  found: 60,
+  ledgerPerDay: 15,
+  ledgerStubs: 30, // elided days, one stub line each
+  ledgerChars: 200,
+  found: 80,
   skillLevel: 20,
 };
 
@@ -6396,8 +6389,12 @@ const CAPS = {
 const xpPerLevel = (l) => 10 * Math.max(1, l);
 
 // The quarantine bag's own ceiling, independent of the snapshot's (plan §4).
-// It lives in its own metadata key, so it competes with nothing.
-const QUARANTINE_MAX_CHARS = 24_576;
+// It lives in its own metadata key, so it competes with nothing — which is why
+// this is a TRIPWIRE against a pathological blob bloating the chat's metadata
+// and not a size allowance to fit inside (maintainer ruling, round 2). At any
+// realistic severance size the overflow logic below should never fire; it stays
+// because it is the tripwire's mechanism, and because "held" has to mean held.
+const QUARANTINE_MAX_CHARS = 131_072;
 // Least-recoverable first (plan §Q1a). `setAside` goes before anything else:
 // nothing else in the bag is waiting on a machine to hand it back.
 const QUARANTINE_DROP_ORDER = ["setAside", "stamp", "migration", "version"];
@@ -6609,8 +6606,13 @@ PF.player = {
               // "the oldest line is evicted" degrades after a reload into "the
               // alphabetically-first restored row's line is evicted" — the
               // eviction inverts and drops the NEWEST. Emitted only alongside an
-              // `s`, so a block with no lines gains no bytes.
-              cell.a = posInt(row?.a, 0);
+              // `s`, so a block with no lines gains no bytes, and only when it is
+              // actually SET: a parent build wrote s-lines with no mark at all,
+              // and a flat `"a":0` on every one of them would move bytes this
+              // change never declared. Absent reads back as 0 through posInt,
+              // which is exactly what the ordering already treats it as.
+              const seq = posInt(row?.a, 0);
+              if (seq) cell.a = seq;
             }
             return [name, cell];
           }),
@@ -7134,6 +7136,12 @@ PF.player = {
     // player built something with — the same trade bump() makes.
     let guard = CAPS.relRows * 2 + 8;
     while (this._relRowCount(p) > CAPS.relRows && guard-- > 0 && this._evictStranger(p));
+    // …and then the cap holds WHATEVER is left (round-2 fix). The stranger pass
+    // can run out of strangers with the block still over: hostile rows are not
+    // strangers, so a hostile-on-hostile restore arrives at twice the cap and
+    // the pass has nothing it is willing to take. A cap that a restore can walk
+    // through is not a cap.
+    this._evictToRowCap(p);
     this._evictLines(p);
     // Discoveries: the OLDEST by day goes, which is what the cap has always
     // claimed and what the array order stopped meaning after a reload.
@@ -7414,6 +7422,46 @@ PF.player = {
     delete p.rel[worst.zoneId][worst.name];
     if (!ownEntries(p.rel[worst.zoneId]).length) delete p.rel[worst.zoneId];
     return true;
+  },
+
+  /** The row cap's LAST RESORT, for the paths that put whole fields back by
+   *  assignment (restoration, the transplant) rather than one bump() at a time.
+   *  `_evictStranger` is a preference — it refuses to take a row the player
+   *  built something with — and a preference cannot be the only thing holding an
+   *  invariant. Here the rows are ordered cheapest-loss-first (the ladder tier,
+   *  then whether a remembered line hangs off it, then hostility — an enemy is
+   *  something built — then encounters, then the name for a tie that resolves
+   *  the same way twice) and the head of that order goes until the count fits.
+   *  A row the player built something with is still never the FIRST to go; it is
+   *  just no longer exempt once nothing cheaper is left. */
+  _evictToRowCap(p) {
+    const over = this._relRowCount(p) - CAPS.relRows;
+    if (over <= 0) return;
+    const rows = [];
+    for (const [zoneId, cells] of ownEntries(p.rel)) {
+      for (const [name, row] of ownEntries(cells)) {
+        rows.push({
+          zoneId,
+          name,
+          d: PF.clamp(posInt(row?.d, 0), 0, 3),
+          line: row?.s ? 1 : 0,
+          h: row?.h ? 1 : 0,
+          t: posInt(row?.t, 0),
+        });
+      }
+    }
+    rows.sort(
+      (a, b) =>
+        a.d - b.d ||
+        a.line - b.line ||
+        a.h - b.h ||
+        a.t - b.t ||
+        (a.zoneId < b.zoneId ? -1 : a.zoneId > b.zoneId ? 1 : a.name < b.name ? -1 : a.name > b.name ? 1 : 0),
+    );
+    for (const victim of rows.slice(0, over)) {
+      delete p.rel[victim.zoneId][victim.name];
+      if (!ownEntries(p.rel[victim.zoneId]).length) delete p.rel[victim.zoneId];
+    }
   },
 
   /** The LINE cap, which is not the row cap: past thirty lines the OLDEST line
@@ -7716,14 +7764,19 @@ PF.quarantine = {
    *  memory still held. Serialized, the last bag state is the only thing that
    *  reaches the wire and disk converges on newest memory. */
   _writeChain: null,
-  /** The chat a write is already queued for; a second request for the same chat
-   *  collapses into it rather than adding a round trip that sends the same
-   *  bytes twice. */
-  _pendingFor: null,
-  /** What the bag held when that queued write was ASKED for — the fallback for a
-   *  write that only reaches the wire after we left the chat, when the live bag
-   *  belongs to somebody else. */
-  _pendingText: null,
+  /** `{ id, holder }` for the write already queued but not yet running: the chat
+   *  it belongs to, and the box it will read its payload out of. A second
+   *  request for the same chat refreshes the holder rather than adding a round
+   *  trip that sends the same bytes twice.
+   *
+   *  THE HOLDER IS BOUND TO THE TASK, not to this object, and that is the whole
+   *  point (round-2 fix). The payload used to live in a field the queued task
+   *  read at RUN time, so reset() — which must clear it, or task A writes chat
+   *  B's bytes — left the queued task reading null and _writeNow dropped it on
+   *  the floor. The severance parked at the moment of leaving a chat never
+   *  reached that chat's disk. Now reset() clears the POINTER and the departing
+   *  chat's task still holds the box it was given. */
+  _pending: null,
 
   /** Per-chat: the bag belongs to the chat it was read from. `_writeChain` is
    *  deliberately NOT cleared, exactly as PF.save._flushChain is not: the
@@ -7733,8 +7786,7 @@ PF.quarantine = {
     this._bag = {};
     this._bagSerialized = null;
     this._chatId = null;
-    this._pendingFor = null;
-    this._pendingText = null;
+    this._pending = null;
   },
 
   /** Boot: read the key into the bag. Called once per chat from PF.save.restore
@@ -7824,14 +7876,44 @@ PF.quarantine = {
     return true;
   },
 
-  /** Take a slot's contents and clear it in one step — the version slot's
-   *  re-adoption CONSUMES it, which is what makes a third boot a no-op. */
+  /** THE CONTRACT: `consume` is `peek` that also takes. It returns exactly what
+   *  `peek(slot)` would have returned and removes exactly that — for `setAside`,
+   *  the OLDEST entry, leaving the rest of the list in the bag for the next
+   *  caller. `consumeAll` is the bulk verb and pairs with `peekAll`.
+   *
+   *  Stated because it was not true (round-2 fix): consume returned `setAside`'s
+   *  LIST WRAPPER while peek returned an entry, so the one slot a human resolves
+   *  one item at a time was also the one slot whose two readers disagreed about
+   *  what they were handing back. Slice 6's resolution UI is the first live
+   *  caller and would have found it the hard way.
+   *
+   *  The version slot's re-adoption consumes it, which is what makes a third
+   *  boot a no-op. */
   consume(chatId, slot) {
+    if (slot === "setAside") {
+      const entries = asideEntries(this._bag.setAside);
+      const oldest = entries.shift();
+      if (!oldest) return null;
+      if (entries.length) this._bag.setAside = { entries };
+      else delete this._bag.setAside;
+      void this._write(chatId ?? this._chatId);
+      return oldest;
+    }
     const entry = this._bag[slot];
     if (!entry) return null;
     delete this._bag[slot];
     void this._write(chatId ?? this._chatId);
     return entry;
+  },
+
+  /** Take the WHOLE slot: the list for `setAside`, a one-element list for the
+   *  others, `[]` when it is empty. The bulk mirror of `peekAll`. */
+  consumeAll(chatId, slot) {
+    const held = this.peekAll(slot);
+    if (!held.length) return [];
+    delete this._bag[slot];
+    void this._write(chatId ?? this._chatId);
+    return held;
   },
 
   /** Drop a slot without reading it (explicit discard, or invalidation). */
@@ -7854,8 +7936,10 @@ PF.quarantine = {
   },
 
   /** Serialize the bag, dropping least-recoverable first until it fits its own
-   *  24 KB ceiling. Mutates the bag: a slot that cannot be stored is not being
-   *  held, and pretending otherwise would report a recovery that cannot happen. */
+   *  QUARANTINE_MAX_CHARS ceiling — which a realistic severance is nowhere near,
+   *  so this is the tripwire firing rather than routine housekeeping. Mutates
+   *  the bag: a slot that cannot be stored is not being held, and pretending
+   *  otherwise would report a recovery that cannot happen. */
   _serialize() {
     let text = JSON.stringify(this._bag);
     if (text.length <= QUARANTINE_MAX_CHARS) return text;
@@ -7901,20 +7985,21 @@ PF.quarantine = {
     if (!id) return Promise.resolve(false);
     if (this._chatId === null) this._chatId = id;
     const captured = this._serialize();
-    if (this._pendingFor === id) {
-      // Already queued for this chat: refresh the fallback and let the queued
-      // task pick the bag up when it runs. Two PATCHes of the same bytes are
-      // exactly the reordering hazard this chain exists to remove.
-      this._pendingText = captured;
+    if (this._pending?.id === id) {
+      // Already queued for this chat: refresh the holder the queued task will
+      // read and let it carry the newest bytes. Two PATCHes of the same bytes
+      // are exactly the reordering hazard this chain exists to remove.
+      this._pending.holder.text = captured;
       return this._writeChain;
     }
-    this._pendingFor = id;
-    this._pendingText = captured;
+    const holder = { text: captured };
+    this._pending = { id, holder };
     const task = () => {
-      const text = this._pendingText;
-      this._pendingFor = null;
-      this._pendingText = null;
-      return this._writeNow(id, text);
+      // Only clear the pointer if it is still OURS. After a chat switch it
+      // belongs to the arriving chat, and clearing that would make the next
+      // write for it queue a second task instead of collapsing into the first.
+      if (this._pending?.holder === holder) this._pending = null;
+      return this._writeNow(id, holder.text);
     };
     this._writeChain = (this._writeChain ?? Promise.resolve()).then(task, task);
     return this._writeChain;
@@ -8076,21 +8161,23 @@ let _writeSeq = 0;
 // than polling a dead server forever.
 const FLUSH_BACKOFF_MS = [2500, 5000, 10_000, 30_000, 60_000];
 const FLUSH_BACKOFF_GIVEUP = 8;
-// Local pre-flight. The route's own ceiling is 262,144 chars (422) behind a
-// ~1.59 MB body limit (413), but neither is the real wall: teardown fires TWO
-// keepalive requests and the Fetch standard caps in-flight keepalive bodies at
-// 64 KiB per origin, and every PUT re-serializes the chat's whole shard across
-// up to 100 anchors. Refusing locally keeps the 422 retry loop unreachable.
-// The snapshot's own design budget is 24 KB (plan §4); this is the backstop.
-const MAX_SNAPSHOT_CHARS = 32_768;
+// WALL 1, and it is the ORDINARY path's only one: the Engine's per-row ceiling.
+// The route 422s above 262,144 chars, so this mirrors it exactly — the local
+// pre-flight exists to keep that 422's retry loop unreachable and for no other
+// reason. It was 32,768 (maintainer ruling, round 2: inherited caution from a
+// mobile-payload worry, the same one that shrank the player caps), which refused
+// perfectly savable worlds and degraded the session permanently for doing it.
+const MAX_SNAPSHOT_CHARS = 262_144;
+// WALL 2, and it is REAL but narrow: it binds the pagehide TEARDOWN path only.
 // Teardown sends a PAIR of keepalive requests in routes mode, and the Fetch
 // standard caps TOTAL in-flight keepalive body bytes at 64 KiB (65,536) per
-// origin — the whole pair against one quota, not one budget each. So the wall
-// is 2 × the UTF-8 byte length of the snapshot, plus the two JSON wrappers
-// (`{"state":…}` and `{"pixelforge":…}`, ~26 bytes together) and whatever else
-// the page has in flight at unload. 57,000 leaves ~8.5 KB of that headroom.
-// MAX_SNAPSHOT_CHARS alone does NOT imply the pair fits: 32,768 ASCII chars
-// doubles to 65,536, over the quota on its own.
+// origin — the whole pair against one quota, not one allowance each. So the
+// teardown wall is 2 × the UTF-8 byte length of the snapshot, plus the two JSON
+// wrappers (`{"state":…}` and `{"pixelforge":…}`, ~26 bytes together) and
+// whatever else the page has in flight at unload. 57,000 leaves ~8.5 KB of that
+// headroom. This is a browser constraint, not a policy, and it is why an
+// ordinary flush and a teardown flush are bounded by different numbers: an
+// ordinary flush is bounded by the server cap alone.
 const KEEPALIVE_PAIR_BUDGET_BYTES = 57_000;
 // Re-probe cadence while a probe FAILURE pinned the session to metadata mode
 // (plan §Q2a): a transient 500 at boot otherwise costs timeline rewind for the
@@ -9318,7 +9405,15 @@ PF.save = {
           // …and the derived clean-gate on top, for the detach path: the
           // pre-check may have been skipped as fresh, in which case this is the
           // last completed check's verdict rather than a new one.
-          if (teardown && !this._teardownAllowed()) return;
+          //
+          // SCOPED TO THE ROUTE WRITE (round-2 fix), and the order is why: the
+          // gate protects the PUT, the one write nobody takes back, and row 9
+          // above has already withdrawn it. Unscoped, the gate then re-blocked
+          // on that same row 9 — the cache-only downgrade sets _lastCheck
+          // unconditionally — and killed the metadata PATCH as well, so a detach
+          // during a GET outage wrote NOTHING. There is no route write left here
+          // to gate.
+          if (teardown && job.routeNeeded && !this._teardownAllowed()) return;
         }
         // Route row first (the authority), metadata second as write-through
         // boot cache + old-engine fallback. A metadata failure is non-fatal
@@ -9593,14 +9688,15 @@ PF.save = {
    *  BOTH keepalive requests without awaiting between them — awaiting the PUT
    *  first lets the unload land before the PATCH is even dispatched.
    *
-   *  Sized against the keepalive wall, not the route's, and the arithmetic is
-   *  explicit because MAX_SNAPSHOT_CHARS does not imply it: the Fetch standard
-   *  caps TOTAL in-flight keepalive body bytes at 64 KiB (65,536) per origin,
-   *  routes mode sends two bodies against that one quota, and 32,768 ASCII
-   *  chars doubled is already 65,536. So the gate here is
-   *  2 × TextEncoder-encoded bytes ≤ KEEPALIVE_PAIR_BUDGET_BYTES, and when the
-   *  pair does not fit the PUT goes alone — losing the write-through cache is a
-   *  repairable inconvenience, losing both is the session.
+   *  Sized against the KEEPALIVE wall, which is this path's own and nobody
+   *  else's: the Fetch standard caps TOTAL in-flight keepalive body bytes at
+   *  64 KiB (65,536) per origin, and routes mode sends two bodies against that
+   *  one quota. MAX_SNAPSHOT_CHARS does not imply it and is not meant to — the
+   *  server cap bounds an ORDINARY flush, this bounds the pair a dying page
+   *  fires. So the gate here is 2 × TextEncoder-encoded bytes ≤
+   *  KEEPALIVE_PAIR_BUDGET_BYTES, and when the pair does not fit the PUT goes
+   *  alone — losing the write-through cache is a repairable inconvenience,
+   *  losing both is the session.
    *
    *  Remount-detach keeps the ordinary chained path (90-element) — the page is
    *  alive there and a re-arm is still worth something. */
@@ -9651,7 +9747,7 @@ PF.save = {
     const pairFits = 2 * new TextEncoder().encode(serialized).length <= KEEPALIVE_PAIR_BUDGET_BYTES;
     if (routes && !pairFits) {
       console.warn(
-        "[pixelforge] teardown pair exceeds the keepalive budget; sending the route save alone (the metadata cache repairs on the next load)",
+        "[pixelforge] teardown pair exceeds the keepalive quota; sending the route save alone (the metadata cache repairs on the next load)",
       );
     }
     // A pagehide is not always a death: bfcache restores the page and play

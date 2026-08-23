@@ -8253,17 +8253,18 @@ await withSavePath(async ({ behavior, tick, makeCore }) => {
 
 // (i) A FOREIGN BLOCK TOO BIG TO SEND MUST NOT COST US OUR OWN SAVE.
 // Slice 1 made the envelope carry a newer build's top-level keys. Slice 2 put a
-// 32,768-char pre-flight in front of every write. Together they hand a newer
-// build a switch that turns THIS build's persistence off: park 40 KB on the row
-// once and every later flush trips the pre-flight and degrades the session,
+// pre-flight in front of every write. Together they hand a newer build a switch
+// that turns THIS build's persistence off: park an over-the-wall block on the
+// row once and every later flush trips the pre-flight and degrades the session,
 // with the player's own zone, clock and intro flags never reaching the server
 // again. Our own state outranks a block we cannot read — and dropping the carry
 // is what every build before slice 1 did, so it is a return to the old contract
-// rather than new loss.
+// rather than new loss. The fixtures are sized past MAX_SNAPSHOT_CHARS, which
+// now mirrors the route's own 262,144-char ceiling.
 await withSavePath(async ({ calls, behavior, makeCore }) => {
   loadedPF.save.mode = "routes";
   const core = makeCore("chat-fat-carry", 808);
-  core.sim._envelopeExtra = { fromTheFuture: "x".repeat(40_000) };
+  core.sim._envelopeExtra = { fromTheFuture: "x".repeat(300_000) };
   await loadedPF.save.flush(core, false);
   const put = calls.find((c) => c.kind === "put");
   assert.ok(put, "the write still goes out");
@@ -8279,6 +8280,25 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
   assert.ok(next, "a later mutation writes too — persistence is not bricked");
   assert.equal(next.state.day, core.sim.day, "with the new value on it");
 
+  // …AND THE PRE-FLIGHT ONLY REFUSES WHAT THE SERVER WOULD. It sat at 32,768 —
+  // inherited caution, not a real wall — so a perfectly savable world anywhere
+  // between 33 KB and the route's own 262,144-char cap was refused locally and
+  // the session degraded permanently for it. Nothing is dropped in that band any
+  // more: the whole snapshot, foreign carry included, goes up.
+  loadedPF.save.reset();
+  loadedPF.save.mode = "routes";
+  calls.length = 0;
+  const midband = makeCore("chat-midband", 809);
+  midband.sim._envelopeExtra = { fromTheFuture: "m".repeat(100_000) };
+  await loadedPF.save.flush(midband, false);
+  const sent = calls.find((c) => c.kind === "put");
+  assert.ok(sent, "a 100 KB snapshot writes");
+  const sentChars = JSON.stringify(sent.state).length;
+  assert.ok(sentChars > 32_768 && sentChars < 262_144, `and it really is in the band (${sentChars} chars)`);
+  assert.equal(sent.state.fromTheFuture?.length, 100_000, "with the newer build's block intact — nothing was shed");
+  assert.equal(loadedPF.save.degraded, false, "and the session is not degraded");
+  assert.deepEqual(midband.toasts, [], "nor is the player told a world this size cannot be saved");
+
   // A world whose OWN save is over the wall is the case the degrade exists for,
   // and it still degrades. The two conditions must not be confused: one loses a
   // newer build's data, the other loses the player's.
@@ -8286,7 +8306,7 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
   loadedPF.save.mode = "routes";
   calls.length = 0;
   core.sim._envelopeExtra = {};
-  core.sim.intro = { world: true, zones: { huge: "y".repeat(40_000) }, npcs: {} };
+  core.sim.intro = { world: true, zones: { huge: "y".repeat(300_000) }, npcs: {} };
   await loadedPF.save.flush(core, false);
   assert.equal(calls.length, 0, "an oversized world of our own writes nothing");
   assert.equal(loadedPF.save.degraded, true, "and degrades");
@@ -8334,13 +8354,13 @@ await withSavePath(async ({ calls, behavior, tick, makeCore }) => {
   const fat = makeCore("chat-fat-exit", 4243);
   fat.sim._envelopeExtra = { fromTheFuture: "z".repeat(30_000) };
   const fatBytes = new TextEncoder().encode(JSON.stringify(loadedPF.save.snapshot(fat))).length;
-  assert.ok(fatBytes < 32_768, "the fixture is under the single-request pre-flight");
-  assert.ok(2 * fatBytes > 57_000, "and over the pair budget — which is the whole point of the fixture");
+  assert.ok(fatBytes < 262_144, "the fixture is under the single-request pre-flight (the server's own cap)");
+  assert.ok(2 * fatBytes > 57_000, "and over the keepalive pair quota — which is the whole point of the fixture");
   loadedPF.save.flushTeardown(fat);
   assert.deepEqual(
     calls.map((c) => c.kind),
     ["put"],
-    "over the pair budget the authority goes alone instead of both being dropped",
+    "over the keepalive pair quota the authority goes alone instead of both being dropped",
   );
 });
 
@@ -8844,10 +8864,12 @@ await withSavePath(async ({ tick }) => {
   assert.deepEqual(Q.slots(), ["migration", "version"]);
   await tick();
 
-  // OVERFLOW. Four entries of 6.5 KB is over the bag's own 24 KB ceiling by
-  // about one entry, so exactly one goes — and which one is the whole test.
+  // OVERFLOW. Sized OFF THE CEILING rather than at a literal, so the tripwire's
+  // value can move without re-tuning the case: four entries at 28% of the bag
+  // overflow it by about one entry, so exactly one goes — and which one is the
+  // whole test.
   Q.reset();
-  const fat = (tag) => ({ reason: tag, block: { blob: "x".repeat(6_500) } });
+  const fat = (tag) => ({ reason: tag, block: { blob: "x".repeat(Math.floor(Q.MAX_CHARS * 0.28)) } });
   for (const slot of ["version", "migration", "stamp", "setAside"]) Q.put("chat-fat", slot, fat(slot));
   assert.equal(Q.peek("setAside"), null, "an overflowing bag drops the setAside entry first");
   assert.deepEqual(
@@ -8860,7 +8882,7 @@ await withSavePath(async ({ tick }) => {
 
   // Push harder and the order continues: stamp is next, then migration.
   Q.reset();
-  const fatter = (tag) => ({ reason: tag, block: { blob: "y".repeat(20_000) } });
+  const fatter = (tag) => ({ reason: tag, block: { blob: "y".repeat(Math.floor(Q.MAX_CHARS * 0.55)) } });
   for (const slot of ["version", "migration", "stamp", "setAside"]) Q.put("chat-fatter", slot, fatter(slot));
   assert.deepEqual(Q.slots(), ["version"], "least-recoverable first, all the way down to the adoptable block");
   await tick();
@@ -9612,15 +9634,28 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
 
 // ── S5 SLICE 3-4 GATE FIXES ──────────────────────────────────────────────────
 
-// (ah) THE MAX-SHAPE BUDGET, MEASURED — plan §4 names a max-shape regression as
-// the MECHANISM that enforces the snapshot budget, and it had never been
-// written. Without it the caps were a wish: as first chosen they summed to a
-// 35.4 KB snapshot on a saturated town and 39.7 KB on a saturated city — over
-// MAX_SNAPSHOT_CHARS, so a fully-played save refused itself at the pre-flight
-// and degraded the session for good, and over the 57 KB keepalive quota, so its
-// teardown pair could not go out either. Saturation is driven through the
-// SHIPPED MUTATORS only: a hand-built object could satisfy this while the real
-// code path could not reach the same shape.
+// (ah) THE MAX SHAPE, MEASURED — what a fully-played world actually weighs, and
+// whether it clears the walls that really exist. There is no size budget any
+// more (maintainer ruling, round 2: the 24 KB figure was inherited caution and
+// what it bought was tiny settlements), so this case asserts against the two
+// REAL walls and nothing else:
+//
+//   · MAX_SNAPSHOT_CHARS — 262,144, mirroring the Engine row cap the server
+//     422s above. This binds EVERY write, and tripping it degrades the session
+//     for good, so the margin here is the one that matters.
+//   · The keepalive pair quota — 57,000 bytes for the PAIR, and it binds the
+//     pagehide TEARDOWN path only. Reported here, not asserted as a general
+//     bound: an ordinary flush is not subject to it, and case (j) is where the
+//     teardown path's own behaviour over that quota is pinned. A saturated world
+//     is OVER it (the printed numbers say by how much), which is not a failure:
+//     flushTeardown's documented answer is to send the route PUT alone and let
+//     the write-through cache repair on the next load. Losing the cache PATCH at
+//     pagehide is repairable; losing both is the session.
+//
+// The measurement itself stays, because a cap that moves should say by how much
+// and in which direction. Saturation is driven through the SHIPPED MUTATORS
+// only: a hand-built object could satisfy this while the real code path could
+// not reach the same shape.
 {
   const P = loadedPF.player;
   const CAPS = P.CAPS;
@@ -9735,8 +9770,8 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
   };
 
   const town = saturate("town");
-  // SATURATION IS THE PRECONDITION. A budget measured against a block that
-  // never reached its caps measures nothing.
+  // SATURATION IS THE PRECONDITION. A shape measured against a block that never
+  // reached its caps measures nothing.
   const at = town.parsed;
   assert.equal(at.pouch.items.length, CAPS.items, "the pouch is at its cap");
   assert.equal(
@@ -9759,38 +9794,152 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     "and the ledger holds its full days plus its full run of stubs",
   );
 
-  // THE DESIGN BUDGET (plan §4: snapshot, hard 24 KB), measured on the largest
-  // world the plan's own numbers were sized against.
-  assert.ok(
-    town.snap.length <= 24 * 1024,
-    `a saturated town snapshot is ${town.snap.length} chars, over the 24 KB design budget`,
+  // …AT THE PLAN'S OWN NUMBERS, PINNED. Every assertion above reads CAPS, so it
+  // would go on passing against caps shrunk to anything at all — and they were
+  // shrunk once, to fit a size budget that has since been abolished (maintainer
+  // ruling, round 2), which is what made settlements feel tiny. Pinned so a
+  // size-motivated retune has to be an explicit decision rather than a quiet
+  // one. These are gameplay bounds; the walls below are the size question.
+  assert.deepEqual(
+    {
+      items: CAPS.items,
+      relRows: CAPS.relRows,
+      relLines: CAPS.relLines,
+      lineChars: CAPS.lineChars,
+      boardDone: CAPS.boardDone,
+      packDone: CAPS.packDone,
+      bought: CAPS.bought,
+      ledgerPerDay: CAPS.ledgerPerDay,
+      ledgerStubs: CAPS.ledgerStubs,
+      ledgerChars: CAPS.ledgerChars,
+      found: CAPS.found,
+    },
+    {
+      items: 60,
+      relRows: 150,
+      relLines: 30,
+      lineChars: 80,
+      boardDone: 40,
+      packDone: 40,
+      bought: 30,
+      ledgerPerDay: 15,
+      ledgerStubs: 30,
+      ledgerChars: 200,
+      found: 80,
+    },
+    "the caps are the plan's own numbers, and a saturated block really reaches every one of them",
   );
 
-  // THE OPERATIONAL WALLS, measured on the largest world the compiler builds at
-  // all. A city compiles ~118 zones and ~147 residents, so its ENVELOPE alone is
-  // ~7.5 KB before the player block exists — which is why the design budget does
-  // not hold there and the walls that actually break things are checked instead:
-  // MAX_SNAPSHOT_CHARS is the pre-flight that degrades the session for good, and
-  // KEEPALIVE_PAIR_BUDGET_BYTES is the teardown pair's shared quota.
+  // THE ONE WALL EVERY WRITE IS SUBJECT TO. MAX_SNAPSHOT_CHARS mirrors the
+  // Engine's per-row cap: past it the route 422s, the pre-flight refuses, and
+  // the session degrades permanently. Asserted on the largest world the
+  // compiler builds at all — a city compiles ~118 zones and ~147 residents, so
+  // its ENVELOPE alone is ~7.5 KB before the player block exists.
+  const SERVER_ROW_CAP = 262_144;
   const city = saturate("city");
   assert.ok(city.zones > 100, `the city fixture really is city-sized (${city.zones} zones)`);
-  assert.ok(
-    city.snap.length <= 32_768,
-    `a saturated city snapshot is ${city.snap.length} chars, past the pre-flight — saving would degrade permanently`,
+  for (const [label, shape] of [
+    ["town", town],
+    ["city", city],
+  ]) {
+    assert.ok(
+      shape.snap.length <= SERVER_ROW_CAP,
+      `a saturated ${label} snapshot is ${shape.snap.length} chars, past the server's own row cap — saving would degrade permanently`,
+    );
+    // …with CLEAR margin, not merely under it. A saturated world sitting at 90%
+    // of the wall would be one feature away from the permanent degrade, and the
+    // point of measuring is to see that coming.
+    assert.ok(
+      shape.snap.length <= SERVER_ROW_CAP / 2,
+      `a saturated ${label} snapshot is ${shape.snap.length} chars — over half the server row cap, which is too close to the wall`,
+    );
+  }
+
+  // THE QUARANTINE TRIPWIRE IS NOT A WALL EITHER, and the max shape is how you
+  // tell. Its ceiling exists to stop a pathological blob bloating the chat's
+  // metadata, not to be an allowance the bag is squeezed into — so a REAL
+  // severance of a fully-played world has to fit with every other slot beside it
+  // and room to spare. At 24,576 it did not: a saturated block alone is bigger
+  // than that, and the one thing the bag exists to hold was the first thing it
+  // dropped.
+  const Q = loadedPF.quarantine;
+  Q.reset();
+  Q.put("chat-maxshape", "stamp", {
+    reason: "mint",
+    stamps: { seed: 1, briefHash: 2, mintStamp: 3 },
+    fields: { rel: at.rel, questsActive: at.quests.active, ledgerLines: at.ledger.lines },
+  });
+  Q.put("chat-maxshape", "setAside", { reason: "displaced", fromV: 9, block: at });
+  Q.put("chat-maxshape", "migration", { reason: "throw", block: at });
+  assert.deepEqual(
+    Q.slots(),
+    ["migration", "setAside", "stamp"],
+    "a severance of a fully-played world, a displaced copy of it and a failed migration all fit the bag at once",
   );
-  assert.ok(
-    2 * new TextEncoder().encode(city.snap).length <= 57_000,
-    `a saturated city teardown pair is ${2 * new TextEncoder().encode(city.snap).length} bytes, past the keepalive quota`,
-  );
+  const bagChars = JSON.stringify(Q._bag).length;
+  assert.ok(bagChars < Q.MAX_CHARS, `…with room left over (${bagChars} of ${Q.MAX_CHARS} chars used)`);
+  Q.reset();
 
   // The measured numbers, recorded rather than merely bounded: when a cap moves,
-  // this is the line that says by how much and in which direction.
+  // this is the line that says by how much and in which direction. The keepalive
+  // pair is reported alongside because it binds the TEARDOWN path only — case
+  // (j) is where that path's behaviour over the quota is pinned.
+  const pairBytes = (shape) => 2 * new TextEncoder().encode(shape.snap).length;
   loadedPF.save.reset();
   console.log(
-    `  max shape — town: block ${town.block.length}, snapshot ${town.snap.length} (24 KB budget, ` +
-      `${24 * 1024 - town.snap.length} spare) · city: block ${city.block.length}, snapshot ${city.snap.length} ` +
-      `(32,768 pre-flight, ${32_768 - city.snap.length} spare)`,
+    `  max shape — town: block ${town.block.length}, snapshot ${town.snap.length} ` +
+      `· city: block ${city.block.length}, snapshot ${city.snap.length} ` +
+      `(262,144 server row cap, ${SERVER_ROW_CAP - city.snap.length} spare) ` +
+      `· teardown pair (pagehide only): town ${pairBytes(town)}, city ${pairBytes(city)} bytes vs the 57,000 keepalive quota`,
   );
+}
+
+// (ah2) …AND THE CAPS HOLD ON THE PATHS THAT DO NOT GO THROUGH A MUTATOR.
+// Case (ah) saturates through the shipped mutators, and that is exactly why it
+// missed this: restoration and the transplant put whole fields back BY
+// ASSIGNMENT, so the only thing between a quarantine entry and a block at twice
+// the row cap is _enforceCaps. It held by evicting STRANGER rows — and once a
+// hostile row stopped counting as a stranger, a hostile-on-hostile restore left
+// the pass with nothing it was willing to take and the cap simply did not hold.
+// A cap a restore can walk through is not a cap.
+{
+  const P = loadedPF.player;
+  const CAPS = P.CAPS;
+  const rowsIn = (rel) => Object.values(rel).reduce((n, rows) => n + Object.keys(rows).length, 0);
+
+  const live = P.defaultPlayer();
+  live.rel = { zLive: {} };
+  for (let i = 0; i < CAPS.relRows; i++) live.rel.zLive[`Live_person_number_${i}`] = { d: 0, t: 1, h: 1 };
+  const parked = { zParked: {} };
+  for (let i = 0; i < CAPS.relRows; i++) parked.zParked[`Parked_person_num_${i}`] = { d: 0, t: 1, h: 1 };
+  const stamps = P.stampsFor(null, null);
+  const restored = P.restoreStamped(live, { reason: "mint", stamps, fields: { rel: parked } }, null, null);
+  assert.equal(
+    rowsIn(restored.rel),
+    CAPS.relRows,
+    `a hostile-on-hostile restore left ${rowsIn(restored.rel)} rel rows against a cap of ${CAPS.relRows}`,
+  );
+
+  // …and the eviction still spends the cheapest rows first. The cap holding
+  // unconditionally must not mean it holds ARBITRARILY: a row the player built
+  // something with is never the first to go, it is only no longer exempt.
+  const mixed = P.defaultPlayer();
+  mixed.rel = { z: {} };
+  mixed.rel.z.stranger_a = { d: 0, t: 1 };
+  mixed.rel.z.stranger_b = { d: 0, t: 2 };
+  mixed.rel.z.close_friend = { d: 3, t: 90 };
+  mixed.rel.z.remembered = { d: 0, t: 5, s: "said a thing", a: 4 };
+  for (let i = 0; i < CAPS.relRows; i++) {
+    mixed.rel.z[`hostile_${String(i).padStart(3, "0")}`] = { d: 0, t: 10 + i, h: 1 };
+  }
+  P._enforceCaps(mixed, 0);
+  const left = Object.keys(mixed.rel.z);
+  assert.equal(left.length, CAPS.relRows, "the count lands exactly on the cap");
+  assert.ok(!left.includes("stranger_a") && !left.includes("stranger_b"), "both pure strangers went first");
+  assert.ok(left.includes("close_friend"), "the row at the top of the ladder survived");
+  assert.ok(left.includes("remembered"), "so did the row with a remembered line");
+  assert.ok(!left.includes("hostile_000") && !left.includes("hostile_001"), "the two least-encountered hostiles went");
+  assert.ok(left.includes(`hostile_${String(CAPS.relRows - 1).padStart(3, "0")}`), "the most-encountered one stayed");
 }
 
 // (ai) THE PLAYER BLOCK KEEPS A NEWER BUILD'S KEYS TOO.
@@ -9932,6 +10081,33 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
   assert.equal(Q.peekAll("setAside").length, 1, "a key written before the list shape reads as its one entry");
   assert.equal(Q.peek("setAside").block.tag, "legacy", "…verbatim");
 
+  // AND `consume` IS `peek` THAT ALSO TAKES. It was not: for the one slot that
+  // is a list it handed back the LIST WRAPPER while peek handed back an entry,
+  // so the two readers of the one human-resolved slot disagreed about what they
+  // were returning. Slice 6's resolution UI is the first live caller and would
+  // have found it the hard way.
+  Q.reset();
+  Q.put("chat-consume", "setAside", { reason: "displaced", fromV: 1, block: { tag: "first" } });
+  Q.put("chat-consume", "setAside", { reason: "displaced", fromV: 2, block: { tag: "second" } });
+  const took = Q.consume("chat-consume", "setAside");
+  assert.equal(took.block.tag, "first", "consume() returns the same entry peek() would have");
+  assert.equal(Q.peekAll("setAside").length, 1, "…and takes only that one, leaving the rest held");
+  assert.equal(Q.peek("setAside").block.tag, "second", "the next caller gets the next one");
+  const rest = Q.consumeAll("chat-consume", "setAside");
+  assert.deepEqual(
+    rest.map((e) => e.block.tag),
+    ["second"],
+    "consumeAll() is the bulk verb, and it mirrors peekAll()",
+  );
+  assert.deepEqual(Q.slots(), [], "an emptied list takes its slot with it");
+  assert.equal(Q.consume("chat-consume", "setAside"), null, "consuming an empty slot is null, not an empty wrapper");
+  Q.put("chat-consume", "migration", { reason: "throw", block: { tag: "single" } });
+  assert.deepEqual(
+    Q.consumeAll("chat-consume", "migration").map((e) => e.block.tag),
+    ["single"],
+    "…and a single-entry slot consumes all as a one-element list",
+  );
+
   // OVERFLOW: an entry that cannot be held even on its own is refused OUTRIGHT.
   // The old loop worked down the drop order, spent every other slot making room
   // it could never use, and dropped the oversized entry too — while `put` had
@@ -9941,7 +10117,7 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
   Q.put("chat-fit", "version", { adoptable: true, fromV: 9, block: { blob: "v".repeat(5_000) } });
   const before = Q.slots();
   assert.equal(
-    Q.put("chat-fit", "stamp", { reason: "brief", stamps: {}, fields: { blob: "x".repeat(30_000) } }),
+    Q.put("chat-fit", "stamp", { reason: "brief", stamps: {}, fields: { blob: "x".repeat(Q.MAX_CHARS + 5_000) } }),
     false,
     "an entry larger than the whole bag is refused",
   );
@@ -10000,6 +10176,52 @@ await withSavePath(async ({ calls, armed, behavior, tick }) => {
     wrote.slice(1).every((c) => c.patch.pixelforgeQuarantine === null),
     "…carrying the bag AS IT STANDS — no write after the consume resurrects the slot it cleared",
   );
+  Q.reset();
+
+  // THE CHAT SWITCH, which is where the single writer's own bookkeeping bit it.
+  // The queued task read its payload out of a FIELD at run time, and reset()
+  // has to clear that field or the departing chat's task writes the arriving
+  // chat's bytes. So the task ran, found null, and _writeNow's empty-text guard
+  // dropped it: the severance parked at the very moment of leaving a chat never
+  // reached that chat's disk. The payload is bound to the task now.
+  calls.length = 0;
+  behavior.patch = async () => {};
+  await tick();
+  let release;
+  const gate = new Promise((resolve) => (release = resolve));
+  let inFlight = 0;
+  behavior.patch = async () => {
+    inFlight += 1;
+    if (inFlight === 1) await gate;
+  };
+  Q.reset();
+  Q.hydrate({}, "chat-leaving");
+  Q.put("chat-leaving", "migration", { reason: "throw", block: { a: 1 } });
+  await tick(); // write #1 is parked inside patchMetadata
+  Q.put("chat-leaving", "stamp", { reason: "mint", stamps: { seed: 1 }, fields: { home: "parked-on-the-way-out" } });
+  // …and NOW the chat switches, with that second write still queued behind #1.
+  Q.reset();
+  Q.hydrate({}, "chat-arriving");
+  release();
+  await tick();
+  const landed = bagWrites();
+  assert.ok(
+    landed.every((c) => c.chatId === "chat-leaving"),
+    "the departing chat's queued write is the only thing on the wire",
+  );
+  const parked = landed.filter((c) => c.patch.pixelforgeQuarantine?.stamp);
+  assert.equal(parked.length, 1, "the park queued at the moment of leaving REACHED THE WIRE");
+  assert.equal(
+    parked[0].patch.pixelforgeQuarantine.stamp.fields.home,
+    "parked-on-the-way-out",
+    "…carrying the bytes it was asked for, not the arriving chat's",
+  );
+  assert.deepEqual(
+    landed.map((c) => Object.keys(c.patch.pixelforgeQuarantine ?? {}).sort()),
+    [["migration"], ["migration", "stamp"]],
+    "and both writes landed for that chat, in the order they were asked for",
+  );
+  behavior.patch = async () => {};
   Q.reset();
 });
 
@@ -10214,6 +10436,37 @@ await withSavePath(async ({ makeCore }) => {
   );
   assert.equal(lines.sim.player.rel.village["Newest Person"].s, "the newest line there is", "and the newest stays");
   assert.ok(lines.sim.player.rel.village["Aaa First"], "with its row, its ladder and its count intact");
+
+  // …AND IT COSTS A BLOCK THAT PREDATES IT NOTHING. A build before the mark
+  // wrote s-lines with no `a` at all, so emitting one unconditionally put
+  // `"a":0` on every such row the first time this build re-serialized it —
+  // undeclared byte drift on a wire other builds read. Absent means 0 on the way
+  // in, so nothing is emitted on the way out.
+  const legacy = {
+    v: P.serialize(P.defaultPlayer()).v,
+    game: 1,
+    rel: { z1: { Alder: { d: 2, t: 3, s: "said a thing" } } },
+  };
+  const reEmitted = P.serialize(P.parse(legacy).player);
+  assert.deepEqual(
+    reEmitted.rel.z1.Alder,
+    { d: 2, t: 3, s: "said a thing" },
+    "a parent-written s-line re-serializes without gaining a recency key",
+  );
+  assert.equal(
+    JSON.stringify(P.serialize(P.parse(JSON.parse(JSON.stringify(reEmitted))).player)),
+    JSON.stringify(reEmitted),
+    "and a second round trip is byte-stable",
+  );
+  // The ordering still works on those rows, because absent reads back as the
+  // oldest possible mark — which is what an unmarked line is.
+  const unmarked = P.parse(legacy).player;
+  unmarked.rel.z1.Brint = { d: 1, t: 1, s: "a newer line", a: 5 };
+  P._evictLines(unmarked);
+  for (let i = 0; i < P.CAPS.relLines; i++) unmarked.rel.z1[`Filler ${i}`] = { d: 1, t: 1, s: `f${i}`, a: 10 + i };
+  P._evictLines(unmarked);
+  assert.equal(unmarked.rel.z1.Alder.s, undefined, "the unmarked line evicts first, as the oldest");
+  assert.ok(unmarked.rel.z1.Alder, "…and its row stays, exactly as a marked row's would");
 });
 
 // (ao) THE LADDER'S REMAINING SITES.
@@ -10316,6 +10569,33 @@ await withSavePath(async ({ calls, armed, behavior, tick, makeCore }) => {
   await loadedPF.save.flush(detach, true); // 90-element's last-detach call
   assert.equal(calls.filter((c) => c.kind === "get").length, 1, "the detach flush checks the row first");
   assert.equal(calls.filter((c) => c.kind === "put").length, 0, "and row 7 blocks it, exactly as it blocks any other");
+
+  // …AND A CHECKED DETACH DURING A GET OUTAGE STILL WRITES THE CACHE. Row 9
+  // withdraws the PUT — a full-snapshot overwrite of a row nobody has seen — and
+  // withdraws nothing else. But the clean-gate sat AFTER that downgrade and row 9
+  // sets _lastCheck unconditionally, so the gate then re-blocked on the very row
+  // that had just been handled and killed the metadata PATCH as well: a detach
+  // during an outage wrote NOTHING. The gate protects the ROUTE row, and by that
+  // point there is no route write left to protect.
+  loadedPF.save.reset();
+  loadedPF.save.mode = "routes";
+  const outage = makeCore("chat-detach-outage", 4445);
+  behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+  await loadedPF.save.flush(outage, false);
+  calls.length = 0;
+  loadedPF.save._lastCheckAt = 0;
+  loadedPF.save._lastOkCheckAt = 0;
+  behavior.get = async () => {
+    throw Object.assign(new TypeError("NetworkError"), { status: 0 });
+  };
+  outage.sim.day += 1;
+  await loadedPF.save.flush(outage, true); // 90-element's last-detach call again
+  assert.deepEqual(
+    calls.map((c) => c.kind),
+    ["get", "patch"],
+    "the unanswered GET drops the PUT and the write-through cache still lands",
+  );
+  assert.equal(calls[1].patch.pixelforge.day, outage.sim.day, "carrying the day the player detached on");
 
   // A PROMOTED SESSION HAS NEVER LOOKED AT ITS ROW. The pin is created BY a
   // row-9 boot probe, and the promotion used to carry that row 9 — with no
