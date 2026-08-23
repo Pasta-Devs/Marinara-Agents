@@ -1909,6 +1909,8 @@ body.bh-dock-open .mari-app-background-paint{ --tracker-chat-avoid-right: min(50
   border:0;border-bottom:1px solid var(--border);background:var(--tracker-panel-section-background,transparent);
   padding:.125rem .25rem;color:var(--foreground);cursor:pointer;font:inherit;text-align:left;}
 .bh-tracker-launch:hover{background:color-mix(in srgb,var(--accent) 18%,transparent);}
+.bh-tracker-launch.bh-active{background:color-mix(in srgb,var(--marinara-chat-chrome-accent,var(--foreground)) 14%,transparent);}
+.bh-tracker-launch:focus-visible{outline:2px solid var(--marinara-chat-chrome-accent,var(--foreground));outline-offset:-2px;}
 .bh-tracker-launch__logo{display:flex;width:1rem;height:1rem;align-items:center;justify-content:center;
   border:1px solid var(--marinara-chat-chrome-accent,var(--border));border-radius:.25rem;
   background:color-mix(in srgb,var(--marinara-chat-chrome-accent,var(--foreground)) 9%,transparent);}

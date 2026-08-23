@@ -147,8 +147,18 @@ assert.match(beholderInterfaceSource, /--marinara-chat-chrome-accent/u, "Beholde
 assert.match(beholderInterfaceSource, /bh-hud-icon/u, "the Beholder toolbar mark must be theme-colored");
 assert.doesNotMatch(
   beholderInterfaceSource,
-  /\.bh-hud-toggle[^}]*var\(--primary\)/su,
+  /\.(?:bh-hud-toggle|bh-tracker-launch)[^}]*var\(--primary\)/su,
   "the Beholder launcher must inherit the host toolbar theme instead of primary pink",
+);
+assert.match(
+  beholderInterfaceSource,
+  /\.bh-tracker-launch\.bh-active\{[^}]*--marinara-chat-chrome-accent/u,
+  "the Tracker Panel launcher must visibly reflect its active state",
+);
+assert.match(
+  beholderInterfaceSource,
+  /\.bh-tracker-launch:focus-visible\{[^}]*outline/u,
+  "the Tracker Panel launcher must retain a visible keyboard focus indicator",
 );
 assert.match(
   beholderInterfaceSource,
