@@ -23,13 +23,11 @@ export function LastInjectionSummary({
       data-ltm-last-injection
       aria-busy={loading}
       className={
-        compact
-          ? "rounded-md border border-[var(--border)] bg-[var(--background)]/75"
-          : "mari-editor-panel mari-editor-panel--soft"
+        compact ? "mari-chat-option-field overflow-hidden !rounded-md" : "mari-editor-panel mari-editor-panel--soft"
       }
     >
       <summary
-        className={`flex cursor-pointer items-center justify-between font-semibold ${compact ? "min-h-8 gap-2 px-2.5 py-1.5 text-[0.625rem]" : "min-h-11 gap-3 px-3 py-2 text-xs"}`}
+        className={`flex cursor-pointer items-center justify-between font-semibold ${compact ? "min-h-9 gap-2 px-3 py-2 text-[0.6875rem]" : "min-h-11 gap-3 px-3 py-2 text-xs"}`}
       >
         <span>
           {error
@@ -64,7 +62,7 @@ export function LastInjectionSummary({
           </span>
         ) : null}
       </summary>
-      <div className={`border-t border-[var(--border)] ${compact ? "px-2.5 py-1.5" : "px-3 py-2"}`}>
+      <div className="border-t border-[var(--border)] px-3 py-2">
         {error ? (
           <StatusSurface tone="danger" compact={compact}>
             {localizeUi("ui.longTermMemory.lastinjectionsummary.theLastRecallCouldNotLoad")}

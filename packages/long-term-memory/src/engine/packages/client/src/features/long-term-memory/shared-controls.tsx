@@ -15,7 +15,7 @@ import { useLtmTranslation } from "./localization";
 let activePopover: { id: string; close: () => void } | null = null;
 
 export const inputClass = "mari-editor-field min-h-11 w-full px-3 text-sm";
-export const compactInputClass = "mari-chrome-field mari-chrome-field--compact min-h-8 w-full px-2.5 text-[0.6875rem]";
+export const compactInputClass = "mari-chrome-field min-h-9 w-full !rounded-md px-3 py-2 text-xs";
 
 export const Button = forwardRef<
   HTMLButtonElement,
@@ -270,8 +270,8 @@ export function NumberField({
     committedText.current = String(value);
   }, [value]);
   return (
-    <div className={`space-y-1 font-medium text-[var(--muted-foreground)] ${compact ? "text-[0.625rem]" : "text-xs"}`}>
-      <span className="flex items-center gap-1">
+    <div className={`space-y-1 font-medium ${compact ? "text-[0.625rem]" : "text-xs"}`}>
+      <span className="flex items-center gap-1 text-[var(--foreground)]">
         <span id={`${id}-label`}>{label}</span>
         {help ? <InfoPopover label={label} content={help} compact={compact} /> : null}
       </span>

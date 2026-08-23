@@ -65,8 +65,8 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
           <p>{localizeUi("ui.longTermMemory.chatsettings.recallExplanation")}</p>
           <p>{localizeUi("ui.longTermMemory.chatsettings.lastInjectionSummaryGuidance")}</p>
         </div>
-        <div className="space-y-1 text-[0.625rem] font-medium text-[var(--muted-foreground)]">
-          <span id={recallStyleLabelId} className="flex items-center gap-1">
+        <div className="space-y-1 text-[0.625rem] font-medium">
+          <span id={recallStyleLabelId} className="flex items-center gap-1 text-[var(--foreground)]">
             {localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
             <InfoPopover
               label={localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
