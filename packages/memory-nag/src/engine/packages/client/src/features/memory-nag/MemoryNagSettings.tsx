@@ -66,6 +66,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
   const [scanMessage, setScanMessage] = useState("");
   const [progress, setProgress] = useState<MemoryNagScanProgress | null>(null);
   const scanController = useRef<AbortController | null>(null);
+  const hydratedChatId = useRef<string | null>(null);
   const scanDialogRef = useModalDialog(
     scanOpen,
     () => {
@@ -80,10 +81,11 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
   });
 
   useEffect(() => {
-    if (!vault.data) return;
+    if (!vault.data || vault.data.chatId !== chatId || hydratedChatId.current === chatId) return;
+    hydratedChatId.current = chatId;
     setSettings(vault.data.settings);
     onDirtyChange?.(false);
-  }, [onDirtyChange, vault.data]);
+  }, [chatId, onDirtyChange, vault.data]);
 
   useEffect(() => () => scanController.current?.abort(), []);
 
