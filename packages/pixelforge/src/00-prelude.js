@@ -117,12 +117,28 @@ PF.api = {
    *  the write is served, which is not necessarily the one the last GET read —
    *  a turn can finish in between. The ladder compares the two and takes the
    *  rewind path next round when they differ (plan §Q2, the PUT-anchor echo).
-   *  A body that will not parse is not an error: the write still landed. */
-  async putExperienceState(chatId, state, keepalive = false) {
+   *  A body that will not parse is not an error: the write still landed.
+   *
+   *  `schemaVersion` is the row's OUT-OF-BAND wire era (S5 slice 8). The route
+   *  has always taken it and defaulted it to 1, and the package sent none, so
+   *  every row it has written so far claims era 1 whatever is inside it. Omitted
+   *  when the caller names none, so a call that does not care sends exactly the
+   *  bytes it always did — and omitted when the value is one the route's own
+   *  schema (int 1..1,000,000) would 400 on, because a column nothing reads for
+   *  correctness must never be able to take the save down with it. */
+  async putExperienceState(chatId, state, keepalive = false, schemaVersion) {
+    const body = { state };
+    if (
+      typeof schemaVersion === "number" &&
+      Number.isSafeInteger(schemaVersion) &&
+      schemaVersion >= 1 &&
+      schemaVersion <= 1_000_000
+    )
+      body.schemaVersion = schemaVersion;
     const res = await fetch(`/api/game/${encodeURIComponent(chatId)}/experience-state`, {
       method: "PUT",
       headers: { "Content-Type": "application/json", "x-marinara-csrf": "1" },
-      body: JSON.stringify({ state }),
+      body: JSON.stringify(body),
       keepalive,
     });
     if (!res.ok) throw PF.httpError("PUT experience-state", res.status);

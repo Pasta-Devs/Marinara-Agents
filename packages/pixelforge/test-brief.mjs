@@ -7963,9 +7963,9 @@ const withSavePath = async (run) => {
     patch: async () => {},
     get: async () => ({ available: false, status: 404 }),
   };
-  loadedPF.api.putExperienceState = (chatId, state, keepalive) => {
-    calls.push({ kind: "put", chatId, state, keepalive });
-    return behavior.put(chatId, state, keepalive);
+  loadedPF.api.putExperienceState = (chatId, state, keepalive, schemaVersion) => {
+    calls.push({ kind: "put", chatId, state, keepalive, schemaVersion });
+    return behavior.put(chatId, state, keepalive, schemaVersion);
   };
   loadedPF.api.patchMetadata = (chatId, patch, keepalive) => {
     calls.push({ kind: "patch", chatId, patch, keepalive });
@@ -10389,7 +10389,17 @@ await withSavePath(async ({ calls, armed, behavior, tick }) => {
   // drop-the-oldest ceiling silently re-opened the park loss for whichever chat
   // was furthest back. The one droppable kind is an entry disk is known to hold —
   // `_writeNow` returns early when the live chat's bytes match the dedupe cache
-  // and leaves its record standing — and past that the eviction says what it cost.
+  // and leaves its record standing — and past THAT the map carries the overflow
+  // rather than the loss.
+  //
+  // DELIBERATELY THE SAME TRADE PF.save._cacheBrief MAKES (O-2). Two caches
+  // written in the same commit chose opposite policies at the same fork: the
+  // brief cache refuses to evict an entry that is still the only witness, while
+  // this one force-evicted and warned. They are the same shape of thing — a
+  // per-session map of small byte strings, each entry the sole record of
+  // something a later visit needs — so they now answer the fork the same way. A
+  // ceiling that can only be met by throwing away the thing the map exists to
+  // hold is not a ceiling worth meeting.
   Q.reset();
   Q._unsettled.clear();
   calls.length = 0;
@@ -10413,11 +10423,12 @@ await withSavePath(async ({ calls, armed, behavior, tick }) => {
     for (let i = 0; i < 7; i++) {
       assert.ok(Q._unsettled.has(`chat-owed-${i}`), `and no unstored write was touched (chat-owed-${i})`);
     }
-    Q._write("chat-tenth"); // now the ceiling can only be met by a real loss
-    assert.equal(Q._unsettled.has("chat-owed-0"), false, "past that the oldest unstored write does go");
-    assert.equal(warned.length, 1, "…but never silently");
-    assert.ok(warned[0].includes("chat-owed-0"), "the warning names the chat");
-    assert.ok(warned[0].includes("stamp"), "…and what it was holding");
+    Q._write("chat-tenth"); // now the ceiling could only be met by a real loss
+    assert.equal(Q._unsettled.size, 9, "so it is not met — the map carries the overflow instead");
+    for (let i = 0; i < 7; i++) {
+      assert.ok(Q._unsettled.has(`chat-owed-${i}`), `and still no unstored write went (chat-owed-${i})`);
+    }
+    assert.deepEqual(warned, [], "…with nothing to announce, because nothing was lost");
   } finally {
     console.warn = realWarn;
   }
@@ -12097,6 +12108,194 @@ await withSavePath(async ({ behavior, makeCore }) => {
     assert.equal(E.grantStartingPurse(pcore), false, `${label} is not a new game`);
     assert.ok(P.get(pcore).pouch.money < E.STARTING_PURSE, "…and is not paid");
   }
+  loadedPF.save.reset();
+}
+
+// (ax) THE ROW SAYS WHICH WIRE ERA IT IS, OUT OF BAND (S5 slice 8).
+// #5102's PUT has always accepted a `schemaVersion` (int 1..1,000,000, default 1)
+// and this package sent none, so every row it has ever written claims era 1
+// whatever is inside it. The column exists so a future build — or a tool reading
+// an export — can tell a row's wire era WITHOUT parsing the state, and that only
+// works if somebody fills it in.
+//
+// It is a MIRROR and never the authority, which is the other half of every
+// assertion here. The block's own `player.v` travels with the bytes it describes;
+// the column travels with the ROW, and a row can be cloned to another anchor,
+// hand-edited, or written by something that never paired the two. So: the PUT
+// carries the current version, the state string does not move, and the read still
+// resolves by `v`.
+{
+  // ── THE WIRE ITSELF ──────────────────────────────────────────────────────────
+  // The harness stubs PF.api everywhere else, so this is the one place the actual
+  // request body can be read back.
+  const realFetch = globalThis.fetch;
+  const bodies = [];
+  globalThis.fetch = async (url, init) => {
+    bodies.push(JSON.parse(init.body));
+    return { ok: true, status: 200, json: async () => ({ ok: true }) };
+  };
+  try {
+    await loadedPF.api.putExperienceState("chat-sv", { v: 1, player: { v: 3 } }, false, 3);
+    assert.deepEqual(
+      bodies.at(-1),
+      { state: { v: 1, player: { v: 3 } }, schemaVersion: 3 },
+      "the PUT names the row's era beside the state",
+    );
+    await loadedPF.api.putExperienceState("chat-sv", { v: 1 }, false);
+    assert.deepEqual(
+      bodies.at(-1),
+      { state: { v: 1 } },
+      "…and a caller that names none sends exactly the bytes it always did",
+    );
+    // A DIAGNOSTIC FIELD MUST NEVER BE ABLE TO KILL THE WRITE. The route's schema
+    // 400s on anything outside its own bounds, so a value it would refuse is
+    // dropped here and the row takes the route's default instead of the save
+    // failing over a column nothing reads for correctness.
+    for (const bad of [0, -1, 1.5, "2", null, NaN, 1_000_001, Number.MAX_SAFE_INTEGER + 2]) {
+      await loadedPF.api.putExperienceState("chat-sv", { v: 1 }, false, bad);
+      assert.deepEqual(bodies.at(-1), { state: { v: 1 } }, `a schemaVersion of ${String(bad)} is omitted, not sent`);
+    }
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+
+// ── BOTH WRITE PATHS CARRY IT, AND NEITHER MOVES THE STATE ────────────────────
+await withSavePath(async ({ calls, behavior, makeCore }) => {
+  loadedPF.save.mode = "routes";
+  const core = makeCore("chat-sv-flush", 8181);
+  behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+  await loadedPF.save.flush(core, false);
+  const put = calls.find((c) => c.kind === "put");
+  assert.ok(put, "the ordinary flush wrote the row");
+  assert.equal(put.schemaVersion, loadedPF.player.currentV(), "carrying this build's block version");
+  // THE STATE STRING IS UNTOUCHED. The row's bytes are the interface every dedupe
+  // compares; this is a sibling FIELD on the PUT body, not a field in the state.
+  assert.equal(
+    JSON.stringify(put.state),
+    JSON.stringify(loadedPF.save.snapshot(core)),
+    "…and the state it sent is the snapshot, byte for byte",
+  );
+  assert.equal("schemaVersion" in put.state, false, "the era rides the ROW, never the block's own bytes");
+
+  // The pagehide pair builds its own snapshot and would have been the one path to
+  // forget.
+  core.sim.day += 1;
+  calls.length = 0;
+  loadedPF.save.flushTeardown(core);
+  const tearPut = calls.find((c) => c.kind === "put");
+  assert.ok(tearPut && tearPut.keepalive === true, "the teardown PUT went out on the keepalive path");
+  assert.equal(tearPut.schemaVersion, loadedPF.player.currentV(), "…with the same era on it");
+});
+
+// ── THE COLUMN CORROBORATES; `v` DECIDES ──────────────────────────────────────
+// One migration step in the table, so "the current era" and "era 1" are different
+// numbers and the two can actually disagree.
+{
+  const P = loadedPF.player;
+  const before = P.MIGRATIONS.length;
+  // A step with a visible effect and no new key, so "did the ladder run?" is a
+  // readable question and the carry is not involved in the answer.
+  P.MIGRATIONS.push((block) => ({ ...block, flushedDay: 99 }));
+  try {
+    assert.equal(P.currentV(), 2, "with one step in the table this build writes v2");
+
+    // A LEGACY ROW: the column says era 1 — the route's default, which is what
+    // every row written before this slice claims — while the block inside says v2.
+    await withSavePath(async ({ behavior, makeCore }) => {
+      const core = makeCore("chat-sv-legacy", 8282);
+      behavior.get = async () => ({
+        available: true,
+        status: 200,
+        body: {
+          exists: true,
+          schemaVersion: 1,
+          state: {
+            v: 1,
+            seed: 8282,
+            theme: "cozy-village",
+            player: { v: 2, game: 1, pouch: { money: 7, items: [] } },
+          },
+        },
+      });
+      const warned = [];
+      const realWarn = globalThis.console.warn;
+      globalThis.console.warn = (...args) => warned.push(args.map(String).join(" "));
+      try {
+        await loadedPF.save.adopt(core);
+      } finally {
+        globalThis.console.warn = realWarn;
+      }
+      assert.equal(core.sim.player.v, 2, "the BLOCK's own v decided the read, not the row's column");
+      assert.equal(core.sim.player.pouch.money, 7, "so the block came through whole");
+      assert.equal(core.sim.player.flushedDay, 0, "and the v1→v2 step did not run over a block already at v2");
+      assert.equal(
+        warned.filter((w) => w.includes("schemaVersion")).length,
+        1,
+        "the disagreement is worth saying, once, and it says which side wins",
+      );
+      assert.equal(loadedPF.quarantine.peek("migration"), null, "nothing was quarantined over a column");
+    });
+
+    // …AND THE OTHER DIRECTION: a column claiming an era this build has never
+    // written, over a block that honestly declares v1. The in-band ladder migrates
+    // it; the too-new gate reads `v` and never the column, so nothing is parked.
+    await withSavePath(async ({ behavior, makeCore }) => {
+      const core = makeCore("chat-sv-ahead", 8383);
+      behavior.get = async () => ({
+        available: true,
+        status: 200,
+        body: {
+          exists: true,
+          schemaVersion: 5,
+          state: {
+            v: 1,
+            seed: 8383,
+            theme: "cozy-village",
+            player: { v: 1, game: 1, pouch: { money: 3, items: [] } },
+          },
+        },
+      });
+      await loadedPF.save.adopt(core);
+      assert.equal(core.sim.player.v, 2, "a v1 block is migrated to this build's version");
+      assert.equal(core.sim.player.flushedDay, 99, "…by the step the in-band ladder ran");
+      assert.equal(core.sim.player.pouch.money, 3, "carrying what it held");
+      assert.equal(loadedPF.quarantine.peek("version"), null, "and a column ahead of us is not a too-new BLOCK");
+    });
+  } finally {
+    P.MIGRATIONS.length = before;
+  }
+}
+
+// ── THE CLASSIFIER CARRIES IT AND DECIDES NOTHING WITH IT ─────────────────────
+{
+  const decided = (schemaVersion) =>
+    loadedPF.save.classify(
+      {
+        failed: false,
+        probe: {
+          available: true,
+          status: 200,
+          body: { exists: true, schemaVersion, state: { v: 1, player: { v: 1, game: 1 } } },
+        },
+      },
+      { serverSerialized: null, localSerialized: '{"mine":1}', game: 1, now: Date.now() },
+    );
+  assert.equal(decided(1).rowSchemaVersion, 1, "the decision carries the row's era for a caller to read");
+  assert.equal(decided(9).row, decided(1).row, "…and no value of it moves the verdict");
+  for (const bad of [undefined, null, 0, -3, 2.5, "1", 1_000_001]) {
+    assert.equal(decided(bad).rowSchemaVersion, null, `an unusable column (${String(bad)}) simply says nothing`);
+  }
+  assert.equal(
+    loadedPF.save.classify({ failed: true, error: null }, {}).rowSchemaVersion,
+    null,
+    "a probe that did not answer has no row to describe",
+  );
+  assert.equal(
+    loadedPF.save.classify({ failed: false, probe: { available: false, status: 404 } }, {}).rowSchemaVersion,
+    null,
+    "…and neither does a route that is not there",
+  );
   loadedPF.save.reset();
 }
 

@@ -88,10 +88,19 @@ const QUARANTINE_KEY = "pixelforgeQuarantine";
 // and its overflow sheds the OLDEST entries first — the newest displacement is
 // the one they are most likely to still want back.
 const SETASIDE_MAX = 4;
-// How many chats' unsettled bag writes are remembered at once (PF.quarantine
-// _unsettled). A session visits a handful of chats and each entry is one bag, so
-// this is a leak guard rather than a policy: the oldest chat's unstored write is
-// the one least likely to still matter.
+// The size past which PF.quarantine's `_unsettled` map sheds the records DISK IS
+// KNOWN TO HOLD. It is not a hard cap and deliberately not one: every other entry
+// in that map is a write nobody has managed to store, which is the whole reason
+// the map exists, so past the settled records the map CARRIES THE OVERFLOW rather
+// than the loss.
+//
+// That is the same trade PF.save._cacheBrief makes for the sealed-brief cache,
+// and the alignment is deliberate (O-2): the two are the same shape of thing — a
+// per-session map of small byte strings where each entry is the sole record of
+// something a later visit needs — and they were shipped answering the same fork
+// two different ways. A session visits a handful of chats, and only a chat that
+// both quarantined something AND failed to store it leaves an entry behind at
+// all, so what this is really bounded by is how rare that pair is.
 const UNSETTLED_MAX = 8;
 
 const isFiniteInt = (v) => typeof v === "number" && Number.isFinite(v) && Math.floor(v) === v;
@@ -1493,7 +1502,8 @@ PF.quarantine = {
    *  Kept across reset() on purpose, and deliberately NOT cleared when a write
    *  fails out: an entry nobody managed to store is precisely the one worth
    *  re-trying on the next visit, which is the self-heal ensurePresent already
-   *  performs for the key as a whole. */
+   *  performs for the key as a whole. For the same reason it is never evicted to
+   *  meet a ceiling — see UNSETTLED_MAX and _settledRecord. */
   _unsettled: new Map(),
 
   /** Per-chat: the bag belongs to the chat it was read from. `_writeChain` is
@@ -1731,6 +1741,27 @@ PF.quarantine = {
     return text;
   },
 
+  /** The one `_unsettled` record that is free to drop: a chat whose bytes DISK IS
+   *  KNOWN TO HOLD, excluding the chat the caller is writing for.
+   *
+   *  THE BRANCH IS NARROWER THAN IT SOUNDS, and the comment that used to stand in
+   *  for it read as though it ranged over the whole map (O-4). `_bagSerialized`
+   *  records what we believe disk holds for the LIVE chat and for no other chat
+   *  at all, so "known to hold" is a question that can only be asked about
+   *  `_chatId`'s own record — a record for any other chat has nothing to compare
+   *  against and is never a candidate, whatever its bytes say. What that leaves
+   *  is one real case: a write asked for on a DIFFERENT chat while the live
+   *  chat's record is already stale, which is exactly the state `_writeNow`
+   *  leaves behind when it returns early on bytes that match the dedupe cache.
+   *  Everything else in the map is a real loss and is never taken. */
+  _settledRecord(exceptId) {
+    if (this._bagSerialized === null) return null;
+    for (const [key, bytes] of this._unsettled) {
+      if (key !== exceptId && key === this._chatId && bytes === this._bagSerialized) return key;
+    }
+    return null;
+  },
+
   /** Enqueue a bag write. Collapses onto the queued one for the same chat and
    *  serializes behind everything already on the chain. */
   _write(chatId) {
@@ -1743,45 +1774,18 @@ PF.quarantine = {
     // which a chat round trip can lose it (see _unsettled).
     this._unsettled.delete(id);
     this._unsettled.set(id, captured);
-    // THE LEAK GUARD MUST NOT BECOME THE LEAK. Every entry in this map is by
-    // construction a write that has NOT been shown to reach disk — queued, in
-    // flight, or failed out — so dropping the oldest one silently re-opens the
-    // park loss for that chat, which is the entire bug this map exists to close.
-    // The one droppable kind is an entry disk is known to hold: `_writeNow`
-    // returns early when the live chat's bytes already match `_bagSerialized`
-    // and leaves its record standing. Those go first; past them the eviction is a
-    // real loss, and a loss nobody is told about is the failure mode itself, so
-    // it names the chat and what was in it. The ceiling is a tripwire for a
-    // session that visited thousands of chats, not routine housekeeping.
+    // THE LEAK GUARD MUST NOT BECOME THE LEAK, and the only way to keep that true
+    // is to CARRY THE OVERFLOW rather than the loss (O-2 — see UNSETTLED_MAX, and
+    // PF.save._cacheBrief, which answers the identical fork the identical way).
+    // Every entry in this map is by construction a write that has NOT been shown
+    // to reach disk — queued, in flight, or failed out — so evicting one silently
+    // re-opens the park loss for that chat, which is the entire bug this map
+    // exists to close. Only the records disk is known to hold are shed; when
+    // there are none left to shed, the map is simply larger than UNSETTLED_MAX
+    // and nothing is lost by that.
     while (this._unsettled.size > UNSETTLED_MAX) {
-      let victim = null;
-      for (const [key, bytes] of this._unsettled) {
-        if (key !== id && key === this._chatId && bytes === this._bagSerialized) {
-          victim = key;
-          break;
-        }
-      }
-      if (victim === null) {
-        for (const key of this._unsettled.keys()) {
-          if (key === id) continue;
-          victim = key;
-          break;
-        }
-        if (victim === null) break;
-        let slots = "unreadable";
-        try {
-          slots =
-            Object.keys(JSON.parse(this._unsettled.get(victim)))
-              .sort()
-              .join(", ") || "none";
-        } catch {
-          /* the warning is worth more than the detail */
-        }
-        console.warn(
-          `[pixelforge] over ${UNSETTLED_MAX} chats hold an unstored quarantine write; dropping chat ` +
-            `${victim}'s (slots: ${slots}) — what it was holding is no longer recoverable`,
-        );
-      }
+      const victim = this._settledRecord(id);
+      if (victim === null) break;
       this._unsettled.delete(victim);
     }
     if (this._pending?.id === id) {

@@ -28,7 +28,7 @@ Companion documents: `brief-schema.md` (the world brief, which the block's stamp
 | the mint stamp the block compares against                           | `src/20-world.js` (`mintStampOf`, `MINT_V`) |
 | the block's default-init on a fresh sim                             | `src/30-sim.js` (`new PF.Sim`)              |
 | the transport                                                       | `src/00-prelude.js` (`PF.api`)              |
-| every claim below, driven                                           | `test-brief.mjs` cases (q)–(aw)             |
+| every claim below, driven                                           | `test-brief.mjs` cases (q)–(ax)             |
 
 The block is one key inside the save envelope, not a store of its own. The envelope goes to **two**
 places on every flush in routes mode: the timeline-anchored route row
@@ -272,6 +272,43 @@ an empty one).
 no-op), the live block it displaces is parked in `setAside`, and a `stamp` entry from a different
 lineage (`fromV` differs) is discarded, because it is not evidence about this one. Nothing but the
 player ever resolves `setAside`: two live blocks cannot both be the player's state.
+
+### 2.7 The row's `schemaVersion` column, and why `player.v` outranks it
+
+A row carries its wire era **twice**:
+
+- **in band**, as `state.player.v` — inside the block it describes;
+- **out of band**, as the route row's own `schemaVersion` column (#5102, `z.number().int().min(1)
+.max(1_000_000).default(1)` on the PUT, echoed on the GET).
+
+Both write paths — the ordinary flush and the pagehide teardown — now send
+`PF.player.currentV()` as the column, so every row this build writes agrees with itself. The column
+exists for a reader that has **not parsed the state**: a future build triaging rows, or an external
+tool reading an export, can tell which wire era a row belongs to without unpacking it. Checkpoints
+capture `{ gameType, schemaVersion, state }` by value, so the era travels with a restored checkpoint
+too.
+
+**The in-band value is the authority and the column is corroboration.** The reason is which one
+travels with the bytes: `player.v` is inside the block, so a row cloned to another anchor, restored
+from a checkpoint, hand-edited, or written by a tool that never paired the two still reads at the
+version it honestly declares. Nothing in the ladder or in `parse()` branches on the column —
+`parse()` never even sees it. What the reader does do is **say so once per chat** when the two
+disagree, naming which side won: a row whose column and block are out of step was written by
+something that did not keep them in step, and that is a fact no other signal carries.
+
+Two guards keep the column from ever costing anything:
+
+- the transport **omits** it when the caller names none (so a call that does not care sends exactly
+  the bytes it always did) and when the value is one the route's own schema would 400 on. A column
+  nothing reads for correctness must never be able to take a save down with it.
+- `schemaVersionOf` validates a read-back value the same way the route validates a written one.
+  Absent, `null` (the GET's no-row shape), a float, a string — all of it is "the row does not say",
+  which is no corroboration rather than a claim.
+
+**This changes the PUT payload, not the state string.** The column is a sibling field on the request
+body; the snapshot bytes are untouched, and the frozen literal (§2.4) does not move. A legacy row
+stamped `schemaVersion: 1` — which is what every row written before this change claims, by the
+route's default — carrying a modern block still resolves by the block's own `v`.
 
 ---
 
@@ -580,6 +617,10 @@ Row 4 always gets **one** re-read before it rewinds: a GET landing inside the PU
 delete-then-insert window finds no row at all and would otherwise rewind a perfectly live world back
 to its baseline, toast and all. The pre-check decides on the row that is actually there after that
 re-read, not the one it was handed.
+
+Every decision also carries `rowSchemaVersion` — the row's out-of-band wire era (§2.7) — for a
+caller to read. It is null on rows 0 and 9, which have no row to describe, and **no value of it
+moves a verdict**.
 
 ### 5.2 The #5406 ordinal seam
 

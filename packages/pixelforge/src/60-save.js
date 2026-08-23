@@ -61,6 +61,14 @@ const ORDINAL_MIRROR_KEY = "metadataWriteOrdinals";
  *  order its writes against a number nothing else agrees with. */
 const ordinalOf = (value) => (typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : null);
 
+/** The row's `schemaVersion` column (#5102), validated exactly the way the route's
+ *  own schema validates it: an integer in [1, 1,000,000]. Everything else —
+ *  absent (a pre-slice-8 reader's body), `null` (the GET's no-row shape), a float,
+ *  a string — is "the row does not say", and every reader treats that as no
+ *  corroboration rather than as a claim. */
+const schemaVersionOf = (value) =>
+  typeof value === "number" && Number.isSafeInteger(value) && value >= 1 && value <= 1_000_000 ? value : null;
+
 // Sealed briefs this session stored, by chat id (plan §Q3, "sealed-brief in-memory
 // cache on read and write sides"). Bounded: a brief is a few KB and a long session
 // can visit many chats, so the oldest entry goes rather than the map growing.
@@ -209,6 +217,11 @@ PF.save = {
   /** #5406: the ordinal the engine gave OUR last successful route write on this
    *  chat, straight off the PUT echo. Per-chat, so reset() clears it. */
   _putOrdinal: null,
+  /** One-shot per chat: whether a row has already been seen whose out-of-band
+   *  `schemaVersion` disagreed with the block inside it (S5 slice 8). Said once,
+   *  because it is a fact about how the row was WRITTEN and repeating it every
+   *  turn edge would be noise. */
+  _schemaVersionNoted: false,
   /** THE LOADING GATE (plan §Q3b, maintainer ruling #7). null while the chat plays;
    *  otherwise `{ chatId, state: "generating" | "failed", attempts }`.
    *
@@ -381,7 +394,13 @@ PF.save = {
    *  has been observed to carry are droppable; when none of them is, the cache
    *  carries the overflow rather than the loss. What it is really bounded by is
    *  how many chats one session can have sealed-but-not-yet-acknowledged at once,
-   *  which is a handful of a few KB each. */
+   *  which is a handful of a few KB each.
+   *
+   *  PF.quarantine's `_unsettled` map answers the identical fork identically, and
+   *  the two are deliberately aligned (O-2): both are per-session maps of small
+   *  byte strings in which each entry is the sole record of something a later
+   *  visit needs, so a ceiling that can only be met by dropping one of those is
+   *  not a ceiling either of them meets. */
   _cacheBrief(chatId, sealed) {
     if (!chatId || !sealed || !Array.isArray(sealed.cast)) return;
     this._briefCache.delete(chatId);
@@ -1004,6 +1023,7 @@ PF.save = {
     this._corruptParked = false;
     // #5406's own per-chat cache: the ordinal OUR last route write was given.
     this._putOrdinal = null;
+    this._schemaVersionNoted = false;
     // The loading gate belongs to the chat it was armed for; the arriving chat
     // arms its own (90-element _switchChat) once its metadata has been read.
     // _generating and _briefCache are deliberately NOT cleared — a generation
@@ -1098,6 +1118,12 @@ PF.save = {
    *  falls back to exactly the byte ladder that shipped without it. */
   classify(get, ctx) {
     const c = ctx || {};
+    // The row's out-of-band wire era (S5 slice 8), read once and carried on every
+    // decision below. It is CORROBORATION and never a row of its own: the block's
+    // own `player.v` travels with the bytes it describes, and this travels with
+    // the row, so nothing here may branch on it. Rows 0 and 9 return before it is
+    // read, which is correct — neither has a row to describe.
+    let rowSchemaVersion = null;
     const decide = (row, extra) => ({
       row,
       ...LADDER[row],
@@ -1106,6 +1132,7 @@ PF.save = {
       rawState: null,
       anchor: null,
       writeOrdinal: null,
+      rowSchemaVersion,
       ...extra,
     });
 
@@ -1130,6 +1157,7 @@ PF.save = {
     // MODE signal the caller acts on, not a state of the row.
     if (!probe.available) return decide(0, { status: probe.status ?? 0 });
     const body = probe.body || {};
+    rowSchemaVersion = schemaVersionOf(body.schemaVersion);
     const anchor = body.anchor && typeof body.anchor === "object" ? body.anchor : null;
     const exists = body.exists === true;
     const state = body.state;
@@ -1245,6 +1273,7 @@ PF.save = {
    *  and ship a full-snapshot overwrite on the strength of it. */
   _recordCheck(decided) {
     this._lastCheck = decided;
+    this._noteSchemaVersion(decided);
     if (decided.row !== 9) {
       this._lastCheckAt = Date.now();
       if (decided.flush === "proceed") this._lastOkCheckAt = this._lastCheckAt;
@@ -1253,6 +1282,35 @@ PF.save = {
       if (decided.anchor) this._lastCheckedAnchor = decided.anchor;
     }
     return decided;
+  },
+
+  /** THE PRECEDENCE, stated where it is enforced (S5 slice 8). A row carries its
+   *  wire era twice over: **in band** as `state.player.v`, and **out of band** as
+   *  the route's own `schemaVersion` column. The in-band value is the AUTHORITY
+   *  and the column is corroboration, and the reason is which one travels with
+   *  the bytes: `player.v` is inside the block it describes, so a row cloned to
+   *  another anchor, restored from a checkpoint, hand-edited, or written by a
+   *  tool that never paired the two still reads at the version it honestly
+   *  declares. The column exists so a reader that has NOT parsed the state — a
+   *  future build triaging rows, an external tool reading an export — can tell
+   *  the era anyway.
+   *
+   *  So nothing here branches on the column. The one thing worth doing when the
+   *  two disagree is saying so, once per chat: it means the row was written by
+   *  something that did not keep them in step, which is a fact a bug report
+   *  wants and a fact no other signal carries. */
+  _noteSchemaVersion(decided) {
+    if (this._schemaVersionNoted) return;
+    const row = decided.rowSchemaVersion;
+    if (row === null || row === undefined) return;
+    const block = decided.state && typeof decided.state === "object" ? decided.state.player : null;
+    const inBand = block && typeof block === "object" && Number.isSafeInteger(block.v) && block.v >= 1 ? block.v : null;
+    if (inBand === null || inBand === row) return;
+    this._schemaVersionNoted = true;
+    console.warn(
+      `[pixelforge] this row is stamped schemaVersion ${row} and the player block inside it declares v ${inBand}; ` +
+        "the block's own version is the authority and is what the read used",
+    );
   },
 
   /** One GET, classified. Returns null when the generation fence closed under
@@ -1278,6 +1336,18 @@ PF.save = {
         mirrorOrdinal: this._mirrorOrdinal(core),
       }),
     );
+  },
+
+  /** The wire era this build stamps on a row it writes (S5 slice 8): the player
+   *  block's own derived version, which is the only versioned thing in the
+   *  envelope that moves. Both write paths send it, so a row's column and the
+   *  `player.v` inside it agree on every row this build produces — and _check's
+   *  _noteSchemaVersion is what notices when a row was written by something that
+   *  did not keep them in step. Never read back as authority (see the precedence
+   *  note there); it is what a reader that has not parsed the state gets. */
+  _rowSchemaVersion() {
+    const v = PF.player?.currentV?.();
+    return typeof v === "number" && Number.isSafeInteger(v) && v >= 1 ? v : 1;
   },
 
   /** #5406's mirror entry for OUR metadata key: the ordinal of the last write that
@@ -1826,7 +1896,7 @@ PF.save = {
         // boot cache + old-engine fallback. A metadata failure is non-fatal
         // once the route write landed — but it stays pending and retries.
         if (job.routeNeeded) {
-          const echo = await PF.api.putExperienceState(job.chatId, job.snap, teardown);
+          const echo = await PF.api.putExperienceState(job.chatId, job.snap, teardown, this._rowSchemaVersion());
           // Bumped OUTSIDE the fence: _writeSeq is process-global, not per-chat.
           // A captured chat-switch PUT is stale for every cache on this object
           // and still completed on the wire, so a GET issued before it must not
@@ -2195,7 +2265,7 @@ PF.save = {
       );
     };
     // Both started before either is awaited.
-    const put = routes ? PF.api.putExperienceState(chatId, snap, true) : null;
+    const put = routes ? PF.api.putExperienceState(chatId, snap, true, this._rowSchemaVersion()) : null;
     const patch = routes && !pairFits ? null : PF.api.patchMetadata(chatId, { [SAVE_META_KEY]: snap }, true);
     settle(
       put,
