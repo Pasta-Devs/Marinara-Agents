@@ -162,6 +162,46 @@ assert.match(
 );
 assert.match(
   beholderInterfaceSource,
+  /startInteraction\("move", event\)/u,
+  "the Beholder header must support moving the desktop window",
+);
+assert.match(
+  beholderInterfaceSource,
+  /startInteraction\("resize", event\)/u,
+  "the Beholder resize handle must support two-dimensional desktop resizing",
+);
+assert.match(
+  beholderInterfaceSource,
+  /event\.preventDefault\(\);\s*this\._interaction\?\.\(\);[\s\S]*const startRect/u,
+  "a new pointer interaction must clean up the previous one before capturing body styles",
+);
+assert.match(
+  beholderInterfaceSource,
+  /const pointerId = event\.pointerId;[\s\S]*moveEvent\.pointerId !== pointerId[\s\S]*endEvent\.pointerId === pointerId/u,
+  "only the initiating pointer may move or end a Beholder interaction",
+);
+assert.match(
+  beholderInterfaceSource,
+  /resizeHandle\.addEventListener\("keydown"[\s\S]*this\.resizeBy/u,
+  "the Beholder resize control must remain keyboard-operable",
+);
+assert.match(
+  beholderInterfaceSource,
+  /_boundsObserver = new ResizeObserver\(\(\) => this\.syncGeometry\(\)\)/u,
+  "the floating window must stay inside the chat when the surrounding layout changes",
+);
+assert.match(
+  beholderInterfaceSource,
+  /height:calc\(100dvh - var\(--bh-mobile-top,0px\)\)/u,
+  "mobile Beholder must fill the available viewport below the app top bar",
+);
+assert.doesNotMatch(
+  beholderInterfaceSource,
+  /body\.bh-dock-open/u,
+  "floating Beholder must not reflow the chat like the removed sidebar",
+);
+assert.match(
+  beholderInterfaceSource,
   /\.bh-msg-hold\s*\{[^}]*var\(--bh-chroma\)/u,
   "held-item activity must use the chat chroma instead of a fixed yellow",
 );

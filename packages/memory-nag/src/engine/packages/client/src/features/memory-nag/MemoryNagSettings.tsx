@@ -201,21 +201,9 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
         <small>{t("memoryNag.settings.connectionHelp")}</small>
       </label>
       <div className="mn-label">
-        <span className="mn-row mn-between">
-          <label className="mn-label-title" htmlFor="mn-memory-nag-vault-prompt">
-            {t("memoryNag.settings.vaultPrompt")}
-          </label>
-          <button
-            type="button"
-            className="mari-agent-settings-action mari-agent-settings-action--icon mn-icon-button"
-            disabled={saving || scanning || settings.vaultPrompt === MEMORY_NAG_DEFAULT_VAULT_PROMPT}
-            onClick={() => updateSettings({ vaultPrompt: MEMORY_NAG_DEFAULT_VAULT_PROMPT })}
-            title={t("memoryNag.settings.resetPrompt")}
-            aria-label={t("memoryNag.settings.resetPrompt")}
-          >
-            <RotateCcw className="mn-icon" aria-hidden="true" />
-          </button>
-        </span>
+        <label className="mn-label-title" htmlFor="mn-memory-nag-vault-prompt">
+          {t("memoryNag.settings.vaultPrompt")}
+        </label>
         <small>{t("memoryNag.settings.vaultPromptHelp")}</small>
         <div className="mn-prompt-field">
           <textarea
@@ -223,6 +211,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
             className="mari-chrome-field mn-field mn-textarea mn-prompt-textarea"
             disabled={saving || scanning}
             maxLength={MEMORY_NAG_VAULT_PROMPT_MAX_LENGTH}
+            rows={3}
             value={settings.vaultPrompt}
             onChange={(event) => updateSettings({ vaultPrompt: event.target.value })}
           />
@@ -230,7 +219,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
             <button
               id="mn-memory-nag-expand-prompt"
               type="button"
-              className="mari-agent-settings-action mari-agent-settings-action--icon mn-prompt-tool"
+              className="mn-prompt-tool"
               onClick={() => setPromptExpanded(true)}
               title={t("memoryNag.settings.expandPrompt")}
               aria-label={t("memoryNag.settings.expandPrompt")}
@@ -240,12 +229,22 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
             <button
               id="mn-memory-nag-prompt-macros"
               type="button"
-              className="mari-agent-settings-action mari-agent-settings-action--icon mn-prompt-tool"
+              className="mn-prompt-tool"
               onClick={() => setPromptMacrosOpen(true)}
               title={t("memoryNag.settings.macroReference")}
               aria-label={t("memoryNag.settings.macroReference")}
             >
               <BookOpen className="mn-icon" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="mn-prompt-tool"
+              disabled={saving || scanning || settings.vaultPrompt === MEMORY_NAG_DEFAULT_VAULT_PROMPT}
+              onClick={() => updateSettings({ vaultPrompt: MEMORY_NAG_DEFAULT_VAULT_PROMPT })}
+              title={t("memoryNag.settings.resetPrompt")}
+              aria-label={t("memoryNag.settings.resetPrompt")}
+            >
+              <RotateCcw className="mn-icon" aria-hidden="true" />
             </button>
           </div>
         </div>
