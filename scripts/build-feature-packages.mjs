@@ -90,6 +90,12 @@ const longTermMemoryOwnedSourcePaths = [
   "packages/client/src/features/long-term-memory",
 ];
 const longTermMemorySourceRoot = join(packagesDir, "long-term-memory/src/engine");
+const memoryNagSourceRoot = join(packagesDir, "memory-nag/src/engine");
+const memoryNagOwnedSourcePaths = [
+  "packages/shared/src/features/agents/memory-nag",
+  "packages/server/src/services/memory-nag",
+  "packages/client/src/features/memory-nag",
+];
 const noodleSourceRoot = join(packagesDir, "noodle/src/engine");
 const noodleOwnedSourcePaths = [
   "packages/client/src/components/noodle",
@@ -169,7 +175,7 @@ async function prepareFeatureBuildRoot(feature) {
       cleanup: () => rm(buildRoot, { recursive: true, force: true }),
     };
   }
-  if (feature.id === "long-term-memory") {
+  if (feature.id === "long-term-memory" || feature.id === "memory-nag") {
     if (!existsSync(feature.packageSourceRoot)) {
       throw new Error(`Missing package-owned ${feature.name} source`);
     }
@@ -255,7 +261,7 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.2.11",
+    version: "1.2.13",
     minEngineVersion: "2.4.4",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
@@ -311,7 +317,7 @@ const features = [
   },
   {
     id: "slurp",
-    version: "1.0.14",
+    version: "1.0.15",
     minEngineVersion: "2.4.3",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
@@ -392,6 +398,48 @@ const features = [
     },
   },
   {
+    id: "memory-nag",
+    version: "1.0.1",
+    minEngineVersion: "2.4.4",
+    maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
+    name: "Memory Nag",
+    description:
+      "Keeps a short per-chat vault of roleplay memories and recalls only the unresolved details that matter to the current turn.",
+    category: "tracker",
+    kind: ["agent"],
+    modes: ["roleplay"],
+    permissions: ["agent-runtime", "chat-read", "prompt-context", "routes", "storage", "ui"],
+    serverImport: "packages/server/src/services/memory-nag/server-entry.ts",
+    serverEntry: true,
+    clientImport: "packages/client/src/features/memory-nag/client-entry.tsx",
+    packageSourceRoot: memoryNagSourceRoot,
+    ownedSourcePaths: memoryNagOwnedSourcePaths,
+    engineBoundaryPath: join(packagesDir, "memory-nag/engine-boundary.json"),
+    boundaryDisplayName: "Memory Nag",
+    capabilityApi: { major: 1, minor: 14 },
+    agent: {
+      phase: "post_processing",
+      runtimeDisabled: false,
+      execution: "pipeline",
+      defaultInjectAsSection: false,
+      defaultSettings: {
+        resultType: "memory_nag",
+        contextSize: 5,
+        maxTokens: 512,
+        temperature: 0,
+      },
+      defaultPromptTemplate: [
+        "Decide whether one of the supplied vault memories should nag the roleplay characters after the latest turn.",
+        "Use only memory IDs from <agent_runtime_context>. Never create, rewrite, or combine a memory.",
+        "A nag should fit what is happening now: an unresolved promise, past harm, relationship strain, warning, debt, or relevant admission. Quiet or unrelated moments usually need none.",
+        'Return JSON only. If no nag fits: {"nags_needed":false}. If nags fit: {"nags_needed":true,"memoryIds":["exact-id"]}.',
+      ].join("\n"),
+    },
+    contributions: {
+      slots: ["chat-settings", "roleplay-tracker", "tracker-panel"],
+    },
+  },
+  {
     id: "hierarchical-maps",
     version: "1.4.1",
     minEngineVersion: "2.4.2",
@@ -410,7 +458,7 @@ const features = [
   {
     id: "conversation-calls",
     name: "Calls",
-    version: "1.0.11",
+    version: "1.0.12",
     minEngineVersion: "2.4.1",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
@@ -502,6 +550,14 @@ const longTermMemoryBoundary = selectedFeatures.some((feature) => feature.id ===
       boundaryPath: join(packagesDir, "long-term-memory/engine-boundary.json"),
       displayName: "Long-Term Memory",
       capabilityApi: { major: 1, minor: 6 },
+    })
+  : null;
+const memoryNagBoundary = selectedFeatures.some((feature) => feature.id === "memory-nag")
+  ? await assertPackagePrivateImportBoundary({
+      sourceRoot: memoryNagSourceRoot,
+      boundaryPath: join(packagesDir, "memory-nag/engine-boundary.json"),
+      displayName: "Memory Nag",
+      capabilityApi: { major: 1, minor: 14 },
     })
   : null;
 
@@ -1436,11 +1492,12 @@ function Root({ element }) {
   const expanded = useExpanded(chatId);
   const active = status.data?.activeCall || null;
   const ringing = status.data?.ringingCall || null;
+  const toolbarButtonClass = typeof props.toolbarButtonClass === "string" ? props.toolbarButtonClass : "mari-chrome-control flex h-8 w-8 items-center justify-center p-0 max-md:h-9 max-md:w-9";
   if (!chatId) return null;
   if (element.getAttribute("view") === "settings") return <Settings props={props} />;
   if (element.getAttribute("view") === "toolbar") {
     if (!callsEnabled && !active) return null;
-    return <button type="button" className="mari-chrome-control flex h-9 w-9 items-center justify-center p-0" title={active ? "Open call" : "Start call"} onClick={async () => {
+    return <button type="button" className={toolbarButtonClass} title={active ? "Open call" : "Start call"} onClick={async () => {
       if (active) return setExpanded(chatId);
       try {
         await start.mutateAsync();
@@ -1525,16 +1582,19 @@ for (const feature of selectedFeatures) {
     name: feature.name,
     description,
     author: "Pasta Devs",
-    phase: "pre_generation",
+    phase: feature.agent?.phase ?? "pre_generation",
     enabledByDefault: false,
     category: feature.category ?? "misc",
-    runtimeDisabled: true,
+    runtimeDisabled: feature.agent?.runtimeDisabled ?? true,
+    ...(feature.agent?.defaultInjectAsSection === undefined
+      ? {}
+      : { defaultInjectAsSection: feature.agent.defaultInjectAsSection }),
     ...(feature.libraryHidden ? { libraryHidden: true } : {}),
     modeAllowlist: feature.modes,
     defaultTools: [],
-    defaultSettings: {},
-    defaultPromptTemplate: "",
-    execution: "feature",
+    defaultSettings: feature.agent?.defaultSettings ?? {},
+    defaultPromptTemplate: feature.agent?.defaultPromptTemplate ?? "",
+    execution: feature.agent?.execution ?? "feature",
   };
   const agentsBuffer = Buffer.from(`${JSON.stringify([agentDefinition], null, 2)}\n`);
   const serverPath = join(sourceDir, "server.mjs");
@@ -1576,7 +1636,9 @@ for (const feature of selectedFeatures) {
       ? hierarchicalMapsBoundary
       : feature.id === "long-term-memory"
         ? longTermMemoryBoundary
-        : null;
+        : feature.id === "memory-nag"
+          ? memoryNagBoundary
+          : null;
   const manifest = {
     schemaVersion: boundary ? 2 : 1,
     ...(boundary

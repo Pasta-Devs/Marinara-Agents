@@ -164,11 +164,17 @@ export async function generateMissingNoodleProfiles(input: {
     responseFormat: noodleResponseFormat(input.connection.model, "profiles"),
   } as const;
   const result = await input.provider.chatComplete(messages, completionOptions);
-  let generated = parseNoodleGeneratedProfiles(
-    parseGameJsonish(requireModelAnswer(result.content ?? "", "public profiles")),
-  );
+  let generated: ReturnType<typeof parseNoodleGeneratedProfiles>;
+  try {
+    generated = parseNoodleGeneratedProfiles(
+      parseGameJsonish(requireModelAnswer(result.content ?? "", "public profiles")),
+    );
+  } catch (error) {
+    logger.warn(error, "[noodle] Profile generation returned an unusable response; retrying once");
+    generated = { profiles: [], rejected: [] };
+  }
   if (generated.profiles.length === 0 && targets.length > 0) {
-    logger.warn("[noodle] Profile generation returned no profiles; retrying once after an empty response");
+    logger.warn("[noodle] Profile generation returned no usable profiles; retrying once");
     const retry = await input.provider.chatComplete(
       [
         ...messages,

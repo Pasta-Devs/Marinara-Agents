@@ -3,6 +3,8 @@ import { createAppSettingsStorage } from "../storage/app-settings.storage.js";
 
 const KEY = "slurp.image-connections";
 const LEGACY_KEY = "noodle.noodler-image-connections";
+export const SLURP_IMAGE_CONNECTIONS_KEY = KEY;
+export const LEGACY_NOODLER_IMAGE_CONNECTIONS_KEY = LEGACY_KEY;
 
 export type NoodlerImageConnections = {
   defaultConnectionId: string | null;
@@ -37,6 +39,12 @@ export async function getNoodlerImageConnections(db: DB): Promise<NoodlerImageCo
 
 export async function saveNoodlerImageConnections(db: DB, value: NoodlerImageConnections): Promise<void> {
   await createAppSettingsStorage(db).set(KEY, JSON.stringify(value));
+}
+
+export async function clearNoodlerImageConnections(db: DB): Promise<void> {
+  const storage = createAppSettingsStorage(db);
+  await storage.remove(KEY);
+  await storage.remove(LEGACY_KEY);
 }
 
 // The settings row holds one JSON blob, so a read-modify-write from two concurrent

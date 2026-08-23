@@ -1,4 +1,4 @@
-// Pixelforge 0.9.0 — Marinara Engine game-surface Experience (single-file client bundle)
+// Pixelforge 0.10.0 — Marinara Engine game-surface Experience (single-file client bundle)
 // Built from packages/pixelforge/src (14 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -347,8 +347,14 @@ PF.art = (() => {
       px(g, 12, 4, 2, 10, PAL.fence);
       px(g, 0, 6, T, 2, PAL.fence);
     },
+    /** NO GROUND FILL. The renderer draws an object tile straight over the ground
+     *  tile and the draw is opaque, so a painter that fills its own background is
+     *  declaring what it stands on. A well does not get to: it is the middle of
+     *  the plaza, where the ground is paving, and filling grass1 put a green
+     *  square in the middle of every square in the game — including the four ward
+     *  squares, which are stone by definition. Left transparent, the paving shows
+     *  through and the same sprite works on grass, path and stone alike. */
     well(g) {
-      px(g, 0, 0, T, T, PAL.grass1);
       px(g, 2, 4, 12, 10, PAL.well);
       px(g, 4, 6, 8, 6, PAL.ink);
       px(g, 2, 2, 12, 2, PAL.beam);
@@ -367,8 +373,11 @@ PF.art = (() => {
       dither(g, rnd, PAL.leafHi, 9);
       dither(g, rnd, PAL.grass3, 4);
     },
+    /** Also unfilled, and for the same reason plus one: `floor1` is an INTERIOR
+     *  timber colour, so a market board on the square used to lay a plank of
+     *  floorboard down outdoors. Transparent works indoors too — the floor tile
+     *  it sits on is the one it was imitating. */
     table(g) {
-      px(g, 0, 0, T, T, PAL.floor1);
       px(g, 2, 3, 12, 9, PAL.counter);
       px(g, 3, 4, 10, 7, PAL.path1);
     },
@@ -397,6 +406,26 @@ PF.art = (() => {
     },
     // The shop's stock: the tile that says there is something here to buy. Solid,
     // so it reads as furniture the shopkeeper stands in front of.
+    /** The fire a household lives around, and the first thing in a dwelling that
+     *  is neither a bed nor a surface to put something down on.
+     *
+     *  Painted as a stone surround with the opening cut into it rather than as a
+     *  free-standing object, because a hearth is part of the WALL it is set in —
+     *  a fireplace in the middle of a room reads as a barbecue. The glow uses
+     *  `windowGlow`, which the colony palette turns from firelight to cold blue,
+     *  so the same silhouette is a hab's heat exchanger over there without
+     *  needing a painter override.
+     *
+     *  Laid solid: you warm yourself in front of a fire, not on top of one. */
+    hearth(g) {
+      px(g, 0, 0, T, T, PAL.floor1);
+      px(g, 1, 1, 14, 14, PAL.stone);
+      px(g, 1, 1, 14, 2, PAL.stoneDark);
+      px(g, 3, 4, 10, 1, PAL.stoneDark);
+      px(g, 4, 5, 8, 10, PAL.ink);
+      px(g, 5, 9, 6, 5, PAL.windowGlow);
+      px(g, 6, 11, 4, 3, PAL.white);
+    },
     shelf(g) {
       px(g, 0, 0, T, T, PAL.counter);
       px(g, 0, 0, T, 1, PAL.beam);
@@ -581,8 +610,9 @@ PF.art = (() => {
           dither(g, rnd, PAL.cropRipe, 3);
         },
         // atmosphere recycler where the village well stood
+        // Unfilled, like the village well it replaces — a recycler stands on the
+        // colony's paving, not on a patch of turf it brought with it.
         well(g) {
-          px(g, 0, 0, T, T, PAL.grass1);
           px(g, 3, 3, 10, 11, PAL.well);
           px(g, 4, 4, 8, 2, PAL.leafHi);
           px(g, 4, 7, 8, 1, PAL.wallDark);
@@ -680,6 +710,14 @@ PF.art = (() => {
 
   return {
     PAL,
+    /** Every object name this module can actually draw.
+     *
+     *  Exported for one reason: nothing anywhere checked that a tile the compiler
+     *  PLACES has a painter to draw it with. A new object compiled, passed the
+     *  whole harness, and would have rendered as bare floor in the browser — the
+     *  one failure a headless test suite cannot see and the only one a player
+     *  would notice immediately. The harness now compares the two sets. */
+    painterNames: () => Object.keys(PAINTERS),
     tile,
     actor,
     drawActor,
@@ -876,18 +914,28 @@ PF.brief = (() => {
   const VERSION = 1;
 
   // ── Vocabularies (the form does the teaching) ───────────────────────────────
+  // Sized so the STREET GRID has somewhere to put a street. The grid lays a lot
+  // every 8 rows and every 9 columns, and a map only 30 tall has room for two
+  // rows of them however wide it is — so a village used to lay six lots on 1320
+  // tiles and read as a hamlet with a lot of grass. Lots per rank now run
+  // 4 / 8 / 16 / 36 / 80, which is the first progression where each rank looks
+  // like a bigger VERSION of the one below rather than the same place zoomed.
+  //
+  // `buildings` is the ceiling on how many of those lots get laid out, and it is
+  // deliberately kept ABOVE what the population arithmetic asks for at each rank
+  // (20-world's RESIDENT_HOUSEHOLDS). The ground should permit and the people
+  // should decide; when this number binds first, every settlement of a rank comes
+  // out the same size no matter who lives there, which is the bug that made a
+  // city eighteen buildings wide whatever its brief said.
   const SCALES = {
     outpost: { w: 28, h: 20, buildings: 4 },
-    hamlet: { w: 34, h: 24, buildings: 6 },
-    village: { w: 44, h: 30, buildings: 8 },
-    town: { w: 56, h: 38, buildings: 12 },
-    // A CITY, and the first scale where the map has more ground than the brief
-    // has claimants: 96x72 lays 18 lots against a cast capped at 10, so
-    // `buildings` finally stops being decoration and the constraint moves from
-    // the ground to the people standing on it. Deliberately roomy — most of it
-    // is open at first, and that is the point: it shows in thirty seconds which
-    // of the layout constants are absolute and which actually scale.
-    city: { w: 96, h: 72, buildings: 40 },
+    hamlet: { w: 48, h: 28, buildings: 8 },
+    village: { w: 60, h: 40, buildings: 16 },
+    town: { w: 76, h: 52, buildings: 34 },
+    // A CITY. Roomy on purpose: it is the rank where districts (roadmap W3) will
+    // eventually carve the map into wards with their own gravity, and the ground
+    // wants to be there before the machinery that divides it.
+    city: { w: 104, h: 72, buildings: 76 },
   };
   const SURROUNDS = ["woods", "fields", "rocky", "water", "barren"];
   const PROSPERITY = ["struggling", "modest", "thriving"];
@@ -938,6 +986,11 @@ PF.brief = (() => {
   const SETTLEMENT_TAGS = new Set(FEATURE_TAGS.filter((t) => t !== "water-crossing" && t !== "dense-growth"));
 
   const CAPS = {
+    // The ceiling a brief may ASK for. What a settlement can actually hold is
+    // per-scale (FEATURE_ROOM below) — an outpost is 560 tiles and four of its
+    // lots are now houses, so four named features have nowhere to stand and the
+    // last two are dropped in silence. Small settlements holding fewer features
+    // is correct; asking for four and losing two without a word is not.
     features: 4,
     places: 4,
     wilds: 2,
@@ -955,6 +1008,15 @@ PF.brief = (() => {
     // caps the members of a group any more.
     household: 10,
   };
+  // How many named features the GROUND of each rank can actually carry, measured
+  // rather than guessed: with the street-grid allocator an outpost seats two, a
+  // hamlet three, and everything from a village up seats the full ask.
+  const FEATURE_ROOM = { outpost: 2, hamlet: 3, village: 4, town: 4, city: 4 };
+  // Named places take LOTS, and an outpost lays four of them. Four places leave
+  // nothing for the houses the cast still needs, so the drop guard fires and the
+  // brief loses buildings it named. What the rank can seat, it seals; the rest
+  // never gets promised.
+  const PLACE_ROOM = { outpost: 2, hamlet: 3, village: 4, town: 4, city: 4 };
   const BRIEF_BYTE_BUDGET = 8_192;
 
   // ── Deterministic entropy: ONE source ───────────────────────────────────────
@@ -1058,8 +1120,17 @@ PF.brief = (() => {
     // Pass 3 — zones. Item-level drop: an unknown tag drops the WHOLE feature.
     // The cap applies to KEPT items (a leading run of junk must not discard
     // the valid features behind it — the places loop's semantics).
+    const featureRoom = Math.min(CAPS.features, FEATURE_ROOM[brief.scale] ?? CAPS.features);
     for (const item of asArray(src.features)) {
-      if (brief.features.length >= CAPS.features) break;
+      if (brief.features.length >= featureRoom) {
+        // SAID OUT LOUD. Everything else in this pass records what it dropped
+        // and why; a rank running out of ground is a better reason than most,
+        // and the whole point of the cap is that a settlement stops PROMISING
+        // what it cannot hold. Losing the promise silently would just move the
+        // silence one layer up.
+        repairs.push(`features: ${brief.scale} has room for ${featureRoom}; dropped the rest`);
+        break;
+      }
       const tag = foldEnum(item?.tag, FEATURE_TAGS, null);
       if (!tag || !SETTLEMENT_TAGS.has(tag)) {
         repairs.push(`features: dropped item with tag ${JSON.stringify(item?.tag ?? null)}`);
@@ -1113,8 +1184,12 @@ PF.brief = (() => {
     let hallCount = 0;
     let gatheringCount = 0;
     let sanctuaryCount = 0;
+    const placeRoom = Math.min(CAPS.places, PLACE_ROOM[brief.scale] ?? CAPS.places);
     for (const item of asArray(src.places)) {
-      if (brief.places.length >= CAPS.places) break;
+      if (brief.places.length >= placeRoom) {
+        repairs.push(`places: ${brief.scale} has room for ${placeRoom}; dropped the rest`);
+        break;
+      }
       const kind = foldEnum(item?.kind, PLACE_KINDS, null);
       if (!kind) {
         repairs.push(`places: dropped item with kind ${JSON.stringify(item?.kind ?? null)}`);
@@ -1148,7 +1223,7 @@ PF.brief = (() => {
     // named from the host — the player must be able to walk into the inn.
     const rawCast = asArray(src.cast);
     const hasGathering = brief.places.some((p) => p.kind === "gathering");
-    if (!hasGathering && brief.places.length < CAPS.places) {
+    if (!hasGathering && brief.places.length < placeRoom) {
       const host = rawCast.find((item) => foldEnum(item?.kind ?? item?.role, CAST_KINDS, null) === "host");
       const hostName = host ? capText(host.name, 20) : "";
       if (hostName) {
@@ -1756,6 +1831,14 @@ PF.world = (() => {
       // zone holds two full-size canvases in the render cache, so a bedroom is
       // walls and a FLOOR is a zone. {purpose, x0, y0, x1, y1, doorX, ...}
       rooms: [],
+      // OPEN spans: the common floor, a corridor, the leftover east of a band.
+      // Compiler output exactly like `rooms`, and deliberately a SEPARATE list —
+      // an open span cannot ride in `rooms`, because three assertions require a
+      // door per room record and the reachability sweep resolves one at
+      // `(doorX, y1 + 1)`. A span with no door would read as `undefined,NaN`.
+      // Also deliberately NOT read by fullZoneBox: an open area IS common floor,
+      // and excluding it would move every NPC in every upstairs dwelling.
+      areas: [],
       beds: [], // sleeping tiles this zone offers, in claim order
       // World Maps export gate (spec §8). A building is ONE location and its
       // floors are rooms inside it, so a zone that is a room stamps this false
@@ -1785,6 +1868,25 @@ PF.world = (() => {
    *  church or a keep stand over the houses beside it, and it costs no extra footprint.
    *  `options.facadeWindows` lights the topmost exposed row, so the storey reads as a
    *  storey rather than a blank slab. */
+  /** May a roofline be painted over this tile?
+   *
+   *  Public ground only — the roads and the plaza, recorded as rects when they
+   *  are painted so that a prosperity recolour cannot disguise them. Everything
+   *  else is verge, and verge is what an eave is for.
+   *
+   *  It is deliberately no wider than that. Tests for a neighbour's fabric and
+   *  for its doorstep were written here first and then MEASURED as dead: a
+   *  roofline and the building it would cover arrive in either order, and when
+   *  the roof comes first — which is the case that actually happens, since lots
+   *  are claimed nearest-the-crossroad first — there is nothing here yet to find.
+   *  Both are handled where they work in either order instead, by the arriving
+   *  building taking back the sky over its own frontage and its own doorstep.
+   *  Removing those two tests changed nothing across 162 and 225 probe worlds. */
+  function eaveMayCover(z, x, y) {
+    if (x < 0 || y < 0 || x >= z.w || y >= z.h) return false;
+    return !z.publicGround?.some((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
+  }
+
   function building(z, x0, y0, w, h, doorOffset, windows, options) {
     // walls occupy the bottom wall row; roof covers the rest as overhead
     const wallY = y0 + h - 1;
@@ -1795,8 +1897,40 @@ PF.world = (() => {
     fillRect(z, x0, y0, w, h, "ground", "stone", false);
     for (let x = x0; x < x0 + w; x++) {
       put(z, x, wallY, "object", "wall", true);
+      // ...and takes back the sky over its own frontage. A neighbour's roofline
+      // may already be lying here: lots are eight rows apart and a body is five
+      // tall, so a sanctuary that rises two paints its eave onto `slotY - 4` —
+      // exactly this row on the lot above it — before this building exists to
+      // object. Measured at 24 wall tiles under a foreign roof across 225 worlds.
+      // The building's own roof never covers its wall row (the facade loop stops
+      // at `facadeY`), so this can only ever be somebody else's.
+      put(z, x, wallY, "overhead", null);
       for (let y = y0; y < wallY; y++) put(z, x, y, "object", "wallStone", true);
-      for (let y = y0 - 2; y < y0; y++) put(z, x, y, "overhead", y === y0 - 2 ? "roof" : "roofEdge");
+      // THE EAVE OVERHANGS THE VERGE, AND NOTHING ELSE. A building's solid body
+      // already clears the street, but its roofline is two overhead rows above
+      // the footprint, and those rows belong to whatever is already standing in
+      // them.
+      //
+      // Two faults in one line, and the first fix was too narrow to catch the
+      // second. The south band starts one row under the crossroad, so a row of
+      // houses painted its roofs straight across the main street and a town
+      // rendered as one continuous roof with a lane at either end. Testing the
+      // GROUND for `path` fixed the modest case and missed two more: a
+      // `struggling` settlement scuffs 18% of its road to `dirt` before a single
+      // building is laid, and a `thriving` one paves its plaza `stone` —
+      // measured, 41 to 99 roofed road tiles per ten seeds at struggling and ten
+      // at thriving. And a sanctuary that rises two rows reaches `slotY - 3`,
+      // which is the NEXT lot row's door apron: eighteen doorsteps roofed over in
+      // seventy-two probe worlds, with whoever lives there standing hidden
+      // underneath.
+      //
+      // So the test is TERRITORY, not tile colour. Overhead composites over
+      // actors, so every tile this skips is one a player would otherwise walk
+      // under and vanish.
+      for (let y = y0 - 2; y < y0; y++) {
+        if (!eaveMayCover(z, x, y)) continue;
+        put(z, x, y, "overhead", y === y0 - 2 ? "roof" : "roofEdge");
+      }
       for (let y = y0; y < facadeY; y++) put(z, x, y, "overhead", "roof");
     }
     for (const wx of windows || []) {
@@ -1812,6 +1946,17 @@ PF.world = (() => {
     const dx = x0 + doorOffset;
     put(z, dx, wallY, "object", "door", false);
     put(z, dx, wallY, "overhead", null);
+    // A BUILDING OWNS ITS DOORSTEP. Lots are claimed nearest-the-crossroad first
+    // and a named place is claimed before the houses, so a sanctuary rising two
+    // rows paints its eave onto the lot row above it long before the dwelling
+    // that will stand there exists to object. Clearing on arrival works whichever
+    // order the two land in; refusing the paint only works in one, which is why
+    // that version of the fix is not the one that survived.
+    //
+    // The door tile one row up has always been cleared. The step it opens onto —
+    // where the household stands to be spoken to, and where overhead composites
+    // over them — was not.
+    put(z, dx, wallY + 1, "overhead", null);
     return { doorX: dx, doorY: wallY };
   }
 
@@ -1832,6 +1977,67 @@ PF.world = (() => {
       put(z, x, y, "object", "trunk", true);
       put(z, x, y - 1, "overhead", "canopy");
     }
+  }
+
+  /** Close any walkable tile the player could never reach.
+   *
+   *  A random scatter can ring a square completely — four trunks around one tile
+   *  of grass — and what is left is a hole in the map that reads as somewhere you
+   *  can go and is not. It is cheaper to close the pockets than to constrain the
+   *  scatter, and closing them is right for the pockets a BUILDING makes too.
+   *
+   *  Marked solid rather than planted: a pocket is by definition adjacent to no
+   *  reachable tile, so the player can never walk up to one, and an invisible
+   *  wall nobody can touch is safer than a tree that might land under a roofline
+   *  or in the middle of a paved yard. */
+  function sealPockets(z, from) {
+    if (!from) return 0;
+    // LOUD, and this is the line that matters most in the function.
+    //
+    // It used to return 0 here, which reads as caution and is the opposite. A
+    // zone whose spawn is solid is never a legal world — the player stands in a
+    // wall — and returning quietly meant that zone ALSO shipped with no pocket
+    // sealing at all. Measured on a west-hung wilds with a crop plot over its
+    // spawn: 711 walkable tiles, 0 of them reachable from the declared spawn,
+    // and the reachability invariant silently switched off for the whole zone.
+    // The one condition that guarantees a broken world was the one condition
+    // that skipped the check for it.
+    //
+    // The compiler falls back to the legacy world on a throw, so the worst this
+    // can do in a player's hands is give them a plain world instead of their
+    // brief. In the harness it is a red line with a name.
+    if (z.solid[idx(z, from.x, from.y)]) {
+      throw new Error(`pixelforge: zone "${z.id}" spawns at ${from.x},${from.y}, which is solid`);
+    }
+    const seen = new Set([idx(z, from.x, from.y)]);
+    const queue = [[from.x, from.y]];
+    while (queue.length) {
+      const [x, y] = queue.pop();
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ]) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= z.w || ny >= z.h) continue;
+        const at = idx(z, nx, ny);
+        if (seen.has(at) || z.solid[at]) continue;
+        seen.add(at);
+        queue.push([nx, ny]);
+      }
+    }
+    let closed = 0;
+    for (let y = 0; y < z.h; y++) {
+      for (let x = 0; x < z.w; x++) {
+        const at = idx(z, x, y);
+        if (z.solid[at] || seen.has(at)) continue;
+        z.solid[at] = true;
+        closed++;
+      }
+    }
+    return closed;
   }
 
   function borderTrees(z) {
@@ -1856,12 +2062,47 @@ PF.world = (() => {
   // zone builder has reserved on grass and returns nothing; positions are the
   // builder's, never the model's. The startup assertion below keeps the shipped
   // tag vocabulary and this registry in lockstep.
+  /** Clear a rect of everything a previous pass left standing in it.
+   *
+   *  Anything laid on a LEFTOVER LOT runs after the tree scatter, and `put()`
+   *  overwrites without asking. Two different corruptions came out of that, both
+   *  measured: a crop fill sets `solid = false` under a standing trunk, so the
+   *  tree is still drawn and the player walks through it (8 across 120 worlds);
+   *  and a fence overwrites a trunk while its canopy, which lives one row ABOVE,
+   *  survives — a crown hanging over nothing (21 over fences, 17 more over the
+   *  parks' own clears, which stopped at their rect edge).
+   *
+   *  So the clear reaches one row above the rect. That row is not decoration: a
+   *  trunk on the top row keeps its canopy there, and clearing the trunk without
+   *  it is exactly the bug. */
+  function clearFootprint(z, x, y, w, h) {
+    for (let dy = -1; dy < h; dy++) {
+      for (let dx = 0; dx < w; dx++) {
+        const cx = x + dx;
+        const cy = y + dy;
+        if (cx < 0 || cy < 0 || cx >= z.w || cy >= z.h) continue;
+        // The row above is cleared of CANOPY only — it is somebody else's ground
+        // and may legitimately carry a roofline or a wall.
+        if (dy === -1) {
+          if (z.overhead[idx(z, cx, cy)] === "canopy") put(z, cx, cy, "overhead", null);
+          continue;
+        }
+        put(z, cx, cy, "object", null, false);
+        put(z, cx, cy, "overhead", null);
+      }
+    }
+  }
+
   const PLACERS = {
     "water-feature"(z, x, y) {
       fillRect(z, x, y, 6, 4, "ground", "water", true);
       put(z, x + 6, y + 1, "object", "well", true);
     },
     "crop-plots"(z, x, y) {
+      // Cleared first: on a leftover lot this runs after the tree scatter, and
+      // the crop fill would otherwise un-solid a standing trunk and the fence
+      // would behead one.
+      clearFootprint(z, x, y, 8, 5);
       fillRect(z, x + 1, y + 1, 6, 3, "ground", "crop", false);
       for (let cx = x; cx <= x + 7; cx++) {
         put(z, cx, y, "object", "fence", true);
@@ -1880,6 +2121,46 @@ PF.world = (() => {
       fillRect(z, x, y, 5, 4, "ground", "stone", false);
       put(z, x + 1, y + 1, "object", "table", true);
       put(z, x + 3, y + 2, "object", "well", true);
+    },
+    /** A WARD SQUARE: the district's own centre, for a city too big to have one.
+     *
+     *  A settlement has a plaza at its crossroad, and at 104x72 that plaza is a
+     *  ten-minute walk from three quarters of the town — one square serving a
+     *  city is a village in a coat. A ward square is the same idea at district
+     *  grain: paving, a well, and light, so a quarter of the city has somewhere
+     *  of its own to be. Sized to the lot it stands on, like a park. */
+    "ward-square"(z, x, y) {
+      clearFootprint(z, x, y, 8, 5);
+      for (let dy = 0; dy < 5; dy++) for (let dx = 0; dx < 8; dx++) put(z, x + dx, y + dy, "ground", "stone");
+      put(z, x + 3, y + 2, "object", "well", true);
+      z.lights.push({ x: x + 3, y: y + 2 });
+    },
+    /** A PUBLIC park: the dense-settlement answer to a lawn.
+     *
+     *  A town or a city has no room for a garden around every house and would
+     *  not have had one anyway — the ground between the terraces is public, not
+     *  private. Eight by five, the same footprint as the lot it stands on, so it
+     *  reads as a block somebody chose not to build on rather than a gap.
+     *
+     *  Cleared first, object AND overhead together: this runs after the tree
+     *  scatter, and clearing a trunk while leaving its canopy hangs a crown in
+     *  the air over nothing. */
+    park(z, x, y) {
+      clearFootprint(z, x, y, 8, 5);
+      for (let dy = 0; dy < 5; dy++) for (let dx = 0; dx < 8; dx++) put(z, x + dx, y + dy, "ground", "grass");
+      for (let dx = 0; dx < 8; dx++) put(z, x + dx, y + 2, "ground", "path");
+      for (let dy = 0; dy < 5; dy++) put(z, x + 3, y + dy, "ground", "path");
+      for (const [tx, ty] of [
+        [1, 1],
+        [6, 1],
+        [1, 4],
+        [6, 4],
+      ]) {
+        put(z, x + tx, y + ty, "object", "trunk", true);
+        put(z, x + tx, y + ty - 1, "overhead", "canopy");
+      }
+      put(z, x + 5, y + 2, "object", "well", true);
+      z.lights.push({ x: x + 5, y: y + 2 });
     },
     "landmark-stone"(z, x, y) {
       put(z, x + 1, y + 1, "object", "wallStone", true);
@@ -2111,6 +2392,126 @@ PF.world = (() => {
   // never depend on model-written names. See docs/brief-schema.md §4.5:
   // buildings derive from households + cast kinds, over-subscription MERGES
   // households into shared blocks — a named NPC's home is never dropped.
+  // Names for the residents the COMPILER mints. A brief may name ten people; a
+  // city holds dozens of households, and everybody else still has to be called
+  // something. Two books because a name is theme-bearing: "Maud Thatch" belongs
+  // to a village and "Sona Rask" does not.
+  const RESIDENT_NAMES = {
+    "cozy-village": {
+      given: [
+        "Alwin",
+        "Bryn",
+        "Cassa",
+        "Dermot",
+        "Edda",
+        "Fenn",
+        "Gret",
+        "Hallam",
+        "Isolde",
+        "Jarek",
+        "Kestrel",
+        "Linnet",
+        "Maud",
+        "Nyle",
+        "Orla",
+        "Pell",
+        "Rowan",
+        "Sable",
+        "Thom",
+        "Ursel",
+        "Vane",
+        "Wick",
+        "Yarrow",
+        "Zeb",
+      ],
+      family: [
+        "Ash",
+        "Barrow",
+        "Cobb",
+        "Dray",
+        "Ember",
+        "Fallow",
+        "Garrick",
+        "Holt",
+        "Ives",
+        "Kettle",
+        "Marsh",
+        "Oakes",
+        "Pike",
+        "Quarry",
+        "Reed",
+        "Stile",
+        "Thatch",
+        "Vale",
+        "Wren",
+        "Yale",
+      ],
+    },
+    "sci-fi-colony": {
+      given: [
+        "Anj",
+        "Bex",
+        "Corva",
+        "Dax",
+        "Eno",
+        "Fira",
+        "Gita",
+        "Hale",
+        "Ilva",
+        "Jex",
+        "Kai",
+        "Lume",
+        "Mira",
+        "Nox",
+        "Oren",
+        "Pax",
+        "Quen",
+        "Rho",
+        "Sona",
+        "Tev",
+        "Ulla",
+        "Vek",
+        "Wen",
+        "Zia",
+      ],
+      family: [
+        "Ansari",
+        "Brandt",
+        "Chen",
+        "Dovic",
+        "Eskil",
+        "Ferro",
+        "Grath",
+        "Haas",
+        "Ibori",
+        "Jansen",
+        "Koba",
+        "Lind",
+        "Mwangi",
+        "Nakai",
+        "Osei",
+        "Petrov",
+        "Rask",
+        "Solheim",
+        "Tamm",
+        "Vance",
+      ],
+    },
+  };
+  // Deliberately none of SPECIAL_BUILDING_KINDS' keys: a minted resident must
+  // never mint a hall, a shop or a farm behind itself. Those belong to people
+  // the brief NAMED, and a nameless leader is a building with nobody in it.
+  const MINTED_KINDS = ["folk", "folk", "folk", "folk", "child", "healer", "scholar"];
+  // Grey reads as "extra" and the named cast should keep the loud end of the
+  // palette, so a minted resident draws from the quieter buckets.
+  const MINT_TINTS = ["green", "teal", "blue", "grey", "amber", "rose"];
+  const MINTED_ROLES = {
+    folk: ["hand", "carter", "cooper", "weaver", "digger", "porter", "tanner", "miller", "drover", "thatcher"],
+    child: ["child"],
+    healer: ["herbalist"],
+    scholar: ["copyist"],
+  };
+
   const SPECIAL_BUILDING_KINDS = {
     leader: "hall",
     host: "gathering",
@@ -2285,7 +2686,17 @@ PF.world = (() => {
     let x = area.x0;
     for (const room of rooms) {
       const x1 = x + room.span - 1;
-      if (x1 > area.x1) break; // the caller sized the list; this is the floor under it
+      // LOUD, matching the unknown-purpose throw below and the PLACERS startup
+      // check. A `break` here eats the ENTIRE TAIL: one oversized room silently
+      // drops every room after it, and `share()` has already dealt sleepers into
+      // the dropped ones — so those people get no bed, `bedFor` is never set for
+      // them, and their night handle is null. The caller sizes the list, so a
+      // disagreement is a bug in the sizer, not a floor to land on. Measured
+      // across the whole harness corpus: 3003 calls, this has never fired.
+      if (x1 > area.x1)
+        throw new Error(
+          `pixelforge: room "${room.purpose}" span ${room.span} overflows its band (x1 ${x1} > ${area.x1})`,
+        );
       // South wall first, then the door back out of it. The run covers the
       // divider column too, so the wall reads as one run rather than a comb.
       for (let wx = x; wx <= Math.min(x1 + 1, area.x1); wx++) {
@@ -2308,7 +2719,14 @@ PF.world = (() => {
       placed.push({ purpose: room.purpose, ...(room.private ? { private: true } : {}), ...rect, doorX, ...furnished });
       x = x1 + 2;
     }
-    return placed;
+    // The leftover east of the last room is returned rather than merely left
+    // unpainted, because it is load-bearing geometry: the wall runs above and
+    // below a band are painted only across ROOM spans (see the Math.min on the
+    // south run, and the divider's `x1 < area.x1` guard), so this span is the
+    // vertical leg by which the rows above and below a mid-building band reach
+    // each other. Naming it lets a caller record it and stops a later tidy-up
+    // from "fixing" those runs into full-width ones and sealing the band.
+    return { placed, open: x <= area.x1 ? { x0: x, y0: area.y0, x1: area.x1, y1: area.y1 } : null };
   }
 
   // How an interior that has to sleep people is arranged. `soft` is the
@@ -2363,7 +2781,12 @@ PF.world = (() => {
   // guidance tells the model is narrative texture for the map description, and
   // letting it size real geometry would hang the building's shape on the least
   // constrained number in the brief.
-  const GUEST_BERTHS = { outpost: 4, hamlet: 5, village: 6, town: 9, city: 12 };
+  // A city is 11 and not 12 for the reason the docstring below states: the wing
+  // holds TWELVE bunked, and `thriving` adds one on top of the table. Twelve
+  // here made a thriving city 13 and the wing fell through to `dormitory()` --
+  // the exact bunkhouse-with-a-bar this table exists to prevent. The bound is on
+  // the table PLUS prosperity, never on the table alone.
+  const GUEST_BERTHS = { outpost: 4, hamlet: 5, village: 6, town: 9, city: 11 };
   const BERTH_PROSPERITY = { struggling: -1, modest: 0, thriving: 1 };
   /** How many guests the settlement's gathering was built to sleep.
    *
@@ -2443,7 +2866,7 @@ PF.world = (() => {
     if (priv && (rest > count * holds || (rest > 0 && count < 1)))
       return layoutSleeping(zone, w, h, kind, sleepers, top, false);
     if (!priv && (count < 1 || sleepers > count * holds)) return dormitory(zone, w, h, sleepers, top);
-    const rooms = partitionRooms(
+    const { placed: rooms, open } = partitionRooms(
       zone,
       area,
       (priv ? [{ purpose: "bedroom", span: plan.privateSpan, sleepers: 1, private: true }] : []).concat(
@@ -2459,6 +2882,7 @@ PF.world = (() => {
       ),
       plan.keepOpen,
     );
+    if (open) zone.areas.push({ purpose: "corridor", ...open });
     return { rooms, beds: rooms.flatMap((room) => room.beds ?? []) };
   }
 
@@ -2495,6 +2919,11 @@ PF.world = (() => {
    *  else in any furnisher reaches up there, which is why it can be one call
    *  shared by all of them rather than three near-copies. */
   function vacatedBand(zone, w) {
+    // The band a sleeping wing vacated is an OPEN span, not a room: no walls, no
+    // door, and the common floor runs straight through it. Recording it names
+    // what the long table is standing in, which is what a dining purpose will
+    // read when it stops being painted by hand.
+    zone.areas.push({ purpose: "dining", x0: 1, y0: 2, x1: w - 2, y1: 4 });
     fillRect(zone, 3, 3, w - 6, 1, "object", "table", true);
     zone.lights.push({ x: 3, y: 3 }, { x: w - 4, y: 3 });
   }
@@ -2617,11 +3046,16 @@ PF.world = (() => {
     dwelling(z, w, h, options) {
       // The beds ARE the feature: one per resident, 1x1 and non-solid, so a night
       // visit finds the household asleep in them instead of milling on a doorstep.
-      // Behind BEDROOM DOORS, bunked once a room has to take more than two. A big
-      // family keeps those walls up to nine under one roof; at ten — the id space
-      // ceiling — the wing runs out and the whole floor becomes the sleeping room.
-      // (Measured: rooms survive at 9, zero rooms at 10.) That used to be
-      // unreachable, and the comment here used to say so; a brief can seal it now.
+      // Behind BEDROOM DOORS, bunked once a room has to take more than two.
+      //
+      // This used to say a family kept its walls up to nine under one roof and
+      // lost them at ten, and that stopped being true when the shell learned to
+      // follow its household: a house grows to three bedrooms and the ROOM takes
+      // the crowding after that, so the walls no longer run out at all.
+      // Re-measured, one household with a second present to stop the validator's
+      // split repair: seven sleepers → 3 rooms and 4 bunk tiles, eight → 3 and 8,
+      // nine → 3 and 12. The open plan is now reached by the over-subscription
+      // MERGE (several households on one lot), not by one family being large.
       // SKIPPED, not called with a count of zero, when the band is upstairs — and
       // the rows it would have taken become part of the room (vacatedBand).
       const sleeping = options.upstairs
@@ -2632,9 +3066,37 @@ PF.world = (() => {
       // — and so a dwelling with no sleepers of its own is still a furnished room.
       // Nothing solid on the row under the bedroom wall: that row is the corridor
       // every bedroom door opens onto.
-      put(z, 2, h - 3, "object", "table", true);
       fillRect(z, w - 6, h - 4, 3, 2, "ground", "rug", false);
-      z.lights.push({ x: 2, y: h - 3 });
+      // THE KITCHEN, as an open corner of the common floor rather than a room
+      // behind a door. A cottage's kitchen IS the main room — walling it off
+      // would need a second band, a second band needs a door row of its own, and
+      // that row would eat the living half a dwelling this size barely has.
+      // Recorded as an AREA for the same reason the vacated band is: open floor
+      // with a purpose is still a purpose, and the vocabulary is about what a
+      // space is FOR rather than how many walls stand around it.
+      //
+      // Row h-3, NOT h-4. Row h-4 is the corridor every bedroom door opens onto,
+      // and a counter laid across it walls the household into its own bedrooms —
+      // thirteen tiles sealed behind a door that opened onto a kitchen bench. The
+      // comment four lines above says that row is untouchable and I put a counter
+      // there anyway; the reachability sweep caught it on the first run.
+      // Counter, never `shelf`: shelving is a SHOP's stock, and telling a home
+      // from a workplace by whether it has any is a distinction the harness makes
+      // and a player reads at a glance.
+      fillRect(z, 1, h - 3, 3, 1, "object", "counter", true);
+      put(z, 5, h - 3, "object", "table", true);
+      z.areas.push({ purpose: "kitchen", x0: 1, y0: h - 3, x1: 3, y1: h - 3 });
+      // THE HEARTH. Set into the east wall of the living half — a fire is part of
+      // the wall it is built into, and one standing in the middle of the floor
+      // reads as a barbecue. Not on row h-2: that row carries the zone's spawn and
+      // both stair tiles, and it is walkable by contract.
+      put(z, w - 2, h - 3, "object", "hearth", true);
+      // Recorded, not just painted: the dawn and dusk schedule tiers point at it,
+      // so it has to be findable from a zone rather than recomputed from `w` and
+      // `h` by whoever wants it. Runtime-only, like the rest of the schedule
+      // furniture — re-baked on every compile, never serialized.
+      z.hearth = { x: w - 2, y: h - 3 };
+      z.lights.push({ x: 5, y: h - 3 }, { x: w - 2, y: h - 3 });
       return sleeping;
     },
   };
@@ -2874,9 +3336,53 @@ PF.world = (() => {
     return zone;
   }
 
+  /** How many bedrooms one household may grow before the roof stops following it.
+   *
+   *  Three, and the number is load-bearing in both directions. Below it the house
+   *  grows and the family gets doors; at it the house stops and the ROOM absorbs
+   *  the next body instead — which is what `bunk` is for. Set high enough to hold
+   *  a household of ten in rooms of two, nothing would ever bunk again and the
+   *  density rule would be dead code that still passes its own tests. Three
+   *  bedrooms is a large house; past that a household is crowded, and crowded is
+   *  a thing the tiles are supposed to be able to say. */
+  const DWELLING_ROOMS_MAX = 3;
+
+  /** A shell wide enough for the rooms the household actually needs.
+   *
+   *  INTERIOR_DIMS handed every dwelling the same fourteen columns, and fourteen
+   *  fits two bedrooms. So a household of six fell straight past the partitioner
+   *  into the open plan — not because six people cannot have bedrooms, but
+   *  because the shell they were given had two, and `dormitory()` is what happens
+   *  when the bodies outrun the rooms. The building was answering a question
+   *  about its own width and reporting it as a fact about the family.
+   *
+   *  Size follows PROGRAM: count the rooms the sleep plan asks for, then put the
+   *  east wall far enough out to hold them. The arithmetic is `layoutSleeping`'s
+   *  own, deliberately — if the two ever disagree the partitioner throws rather
+   *  than dropping a room, so they are kept as one formula in two places rather
+   *  than two formulas.
+   *
+   *  ONE household only. A block the over-subscription merge put several
+   *  households into is a tenement, and it SHOULD run out of rooms and fall to
+   *  the open plan — a building holding five families is a bunkhouse, and that is
+   *  a fact about the building rather than a shortfall in it. */
+  const widthForProgram = (kind, base, opts) => {
+    const plan = SLEEP_PLANS[kind];
+    const sleepers = opts.sleepers ?? 0;
+    if (!plan || kind !== "dwelling" || opts.merged || sleepers <= 0) return base;
+    const priv = !!opts.owned && plan.privateSpan > 0;
+    const rest = sleepers - (priv ? 1 : 0);
+    const rooms = PF.clamp(Math.ceil(rest / plan.soft), 1, DWELLING_ROOMS_MAX);
+    const shareFrom = 1 + (priv ? plan.privateSpan + 1 : 0);
+    const lastEnd = shareFrom + (rooms - 1) * (plan.span + 1) + plan.span - 1;
+    // +1 for the divider east of the last room, +1 for the shell's own wall.
+    return Math.max(base, lastEnd + 2);
+  };
+
   function interiorRoom(id, name, kind, options) {
-    const [w, baseH] = INTERIOR_DIMS[kind] || INTERIOR_DIMS.dwelling;
+    const [baseW, baseH] = INTERIOR_DIMS[kind] || INTERIOR_DIMS.dwelling;
     const opts = options || {};
+    const w = widthForProgram(kind, baseW, opts);
     // The floor ABOVE, decided before a single tile is laid. A sleeping band that
     // is going upstairs must not also be laid down here — the household would get
     // two beds each and the ground floor would carve rooms nobody sleeps in — so
@@ -2957,6 +3463,21 @@ PF.world = (() => {
     zone.mapKind = "building"; // World Maps export kind (spec §8)
     // The floors, LAST: their stairs land against furniture that is already down,
     // and a storey's own rooms are carved into a shell of its own.
+    // G2 — THE SERVICE ROW. Row h-2 is not merely "the stair row": it carries
+    // `zone.spawn`, both stair steps, the tile linkInterior delivers a player
+    // onto, the tile a sub-floor's return portal delivers onto, and the tile the
+    // save's restore rescue teleports to WITHOUT testing it. `put()` is
+    // bounds-checked and nothing else, so a furnisher that lays a wall across
+    // this row makes a storey unreachable and nothing anywhere says so.
+    //
+    // Three columns, not the whole row, on purpose: the farm already paints a
+    // solid table at (2, h-2) and that is fine — it is nowhere near a stair.
+    // This fires in a PLAYER'S world, where no harness runs.
+    const apronC = (w / 2) | 0;
+    for (const gx of [apronC - 1, apronC, apronC + 1]) {
+      if (zone.solid[(h - 2) * w + gx])
+        throw new Error(`pixelforge: ${kind} paints solid over the service row at ${gx},${h - 2}`);
+    }
     zone.floors = flights.map(([dir, plan]) => subFloor(zone, dir, plan));
     // A building's bed list SPANS its floors. Whoever deals beds out asks the
     // building, not the storey — "the fourth berth at the inn" has to mean the
@@ -3020,6 +3541,15 @@ PF.world = (() => {
     if (brief.prosperity === "struggling") {
       for (let i = 0; i < v.ground.length; i++) if (v.ground[i] === "path" && rnd() < 0.18) v.ground[i] = "dirt";
     }
+    // PUBLIC GROUND, recorded as rects the moment it is laid. The roofline test
+    // used to read the ground id, which the two lines above and the `thriving`
+    // paving both defeat — a scuffed road is `dirt` and a paved plaza is `stone`,
+    // and neither is any less a street for it. Rects cannot be recoloured.
+    v.publicGround = [
+      { x: 2, y: midY - 1, w: v.w - 4, h: 2 },
+      { x: midX - 1, y: 2, w: 2, h: v.h - 4 },
+      { x: midX - 4, y: midY - 4, w: 8, h: 8 },
+    ];
     v.spawn = { x: midX, y: midY + 2 };
     // Injection-discipline prose (§7) rides the world so the runtime never
     // needs the brief: zone flavor injects once on first entry, the situation
@@ -3043,7 +3573,7 @@ PF.world = (() => {
     const townHouseholds = (built) =>
       [
         ...new Set(
-          brief.cast
+          roster
             .filter(
               (m) => (m.standing ?? "resident") === "resident" && (m.home === brief.name || strandedFrom(m, built)),
             )
@@ -3052,6 +3582,10 @@ PF.world = (() => {
       ].sort((a, b) => a - b);
     const specials = [];
     const seenSpecial = new Set();
+    // brief.cast, not the roster: a special is the building a NAMED person runs,
+    // and MINTED_KINDS holds none of SPECIAL_BUILDING_KINDS' keys anyway, so the
+    // minted residents could only ever iterate past this. Reading the sealed cast
+    // says so out loud, and keeps the mint below free to move.
     for (const member of brief.cast) {
       // Only residents run a permanent special building (the hall, the shop, the
       // post…); a transient/fringe/destitute NPC never anchors one.
@@ -3066,29 +3600,241 @@ PF.world = (() => {
     // hall to the leader's — their doors become the interior portals.
     const interiorPlaces = brief.places.filter((p) => p.kind !== "wilds");
     const wildsPlaces = brief.places.filter((p) => p.kind === "wilds");
-    // How many lots the row placer bothers to lay out. It is a ceiling and never
-    // the binding one — the map's own width runs out first at every scale — so
-    // the arithmetic below counts the lots that actually exist, not this.
+    // How many lots the row placer may keep. It is a ceiling, and from `village`
+    // up it is the binding one — the grid offers more ground than the budget
+    // allows — so the arithmetic below counts the lots that survive the cap,
+    // neither this number nor the raw grid.
     const budget = scale.buildings;
 
     // Row-placed buildings in the upper and lower thirds, straddling the plaza.
     // Laid BEFORE the arithmetic below, because the lots are the arithmetic's
-    // input: `scale.buildings` only caps how many the placer bothers to lay, and
-    // the map's own width is what actually decides (two on an outpost or a
-    // hamlet, six in a village, eight in a town, eighteen in a city). Under the
-    // budget at every scale below `city`, where the ground finally outruns it.
+    // input: `scale.buildings` caps how many lots the placer keeps, and the map's
+    // own width decides how many it had to offer — four on an outpost, eight in a
+    // hamlet, twenty in a village, thirty-six in a town, eighty in a city. So the
+    // budget is met exactly at the two smallest ranks and bites at the other
+    // three; it is never left unspent. Fewer lots still become door-bearing
+    // buildings — the rest go to places, trades and the market.
     // Sizing the dwellings off the budget instead was half of the housing bug:
     // the sum promised slots the ground did not have, so `Math.max(1, …)` handed
     // out a dwelling slot that no lot ever backed.
     const buildings = [];
     const slots = [];
-    const rowYs = [Math.max(4, midY - 9), Math.min(v.h - 8, midY + 4)];
-    for (const rowY of rowYs) {
-      for (let x = 4; x + 8 < v.w - 4 && slots.length < budget + interiorPlaces.length; x += 9) {
-        if (Math.abs(x + 3 - midX) < 4) continue; // keep the vertical road clear
-        slots.push({ x, y: rowY });
+    // ── The street grid ────────────────────────────────────────────────────────
+    // Lots are laid in ROWS along the horizontal road and in COLUMNS either side
+    // of the vertical one. Both used to be one hard-coded pair: exactly two rows
+    // whatever the map's height, and a single column grid marching from x=4 that
+    // the road then punched a hole through.
+    //
+    // The hole was the worse half. On a narrow map only two columns fit at all,
+    // and the road ate one of them, so an outpost and a hamlet laid ONE lot per
+    // row — measured: two buildings total, with nine of ten people sharing the
+    // single cottage. Laying each side of the road independently costs nothing
+    // and gives the small ranks their second column back.
+    //
+    // The two rows were the other half: every door in a 96x72 city landed in
+    // rows 25-43, leaving 65% of the map as lawn nobody had a reason to cross.
+    // Rows now come from the height the map actually has.
+    const BUILDING_H = 5; // the tallest a lot is ever painted (a named place)
+    const LOT_PITCH_Y = BUILDING_H + 3; // overhang above, apron below, one to breathe // overhang above, apron below, one to breathe
+    const LOT_PITCH_X = 9;
+    const MAX_LOT_W = 8; // the widest building() ever draws
+    // A row must clear the border and its own overhang above, and the horizontal
+    // road plus its apron below. Bands are computed from those, not guessed.
+    /** A run of lot origins inside [lo, hi], CENTRED on that span.
+     *
+     *  A fixed pitch marching from one end leaves whatever does not divide
+     *  evenly in one lump at the other end, and the lump is always on the same
+     *  side, so a town came out with its lots hard against the western trees and
+     *  eleven empty columns down the east. Splitting the remainder puts the same
+     *  number of lots on the same pitch with a margin at both ends, which is
+     *  what a laid-out settlement looks like instead of a shunted one.
+     *
+     *  `lo` and `hi` are the first and last tile the lot may OCCUPY, so a lot at
+     *  `start` ends at `start + size - 1` and that must not pass `hi`. */
+    const runOf = (lo, hi, size, pitch) => {
+      const span = hi - lo + 1;
+      if (span < size) return [];
+      const count = 1 + (((span - size) / pitch) | 0);
+      const used = size + (count - 1) * pitch;
+      const start = lo + (((span - used) / 2) | 0);
+      return Array.from({ length: count }, (_, index) => start + index * pitch);
+    };
+    // Row 4, not 3: a sanctuary lifts its facade by up to two rows above the lot,
+    // so the top band needs headroom for the eave above THAT or it paints into
+    // the border ring. The old two-row allocator carried the same floor as a
+    // Math.max, and it was load-bearing rather than decorative.
+    //
+    // The band's last usable row is midY - 2: a body starting at y ends at
+    // y + BUILDING_H - 1, and it clears a road at midY - 1. One too strict and an
+    // outpost loses its whole northern band — which is most of what "an outpost
+    // is two buildings" turned out to be.
+    //
+    // The band below starts one row under the road, not three: a building's SOLID
+    // body must clear the street, but its overhang is an overhead tile and may
+    // hang over it exactly as a real eave does. Requiring three cost the outpost
+    // its entire southern row.
+    const rowYs = [
+      ...runOf(4, midY - 2, BUILDING_H, LOT_PITCH_Y),
+      ...runOf(midY + 1, v.h - 4, BUILDING_H, LOT_PITCH_Y),
+    ];
+    // Columns, per side. West stops before the road; east starts after it. The
+    // road is never tested against a lot because a lot is never laid across it.
+    // The east band may reach v.w - 4: the border ring is the last column and the
+    // two inside it are verge.
+    const colXs = [...runOf(4, midX - 2, MAX_LOT_W, LOT_PITCH_X), ...runOf(midX + 1, v.w - 4, MAX_LOT_W, LOT_PITCH_X)];
+    for (const rowY of rowYs) for (const x of colXs) slots.push({ x, y: rowY });
+    // ── Claim order: OUTWARD FROM THE PLAZA ───────────────────────────────────
+    // Row-major order filled the northernmost row first, which put a small
+    // settlement's entire building stock against the top border with its own
+    // square left bare — and handed the first lots the row with the least
+    // head-room, so a church could never build tall on a map that had the space
+    // for one two rows down.
+    //
+    // Distance from the crossroad instead. A hamlet now grows around its square
+    // the way a settlement actually does, the lots that fill first are the ones a
+    // player stands nearest, and depth into a band comes free with it. Ties break
+    // on y then x so the order stays deterministic.
+    slots.sort((a, b) => {
+      const da = (a.x + 3 - midX) ** 2 + (a.y + 2 - midY) ** 2;
+      const db = (b.x + 3 - midX) ** 2 + (b.y + 2 - midY) ** 2;
+      return da - db || a.y - b.y || a.x - b.x;
+    });
+    // `budget` alone. Adding the places on top made `scale.buildings` mean
+    // "buildings, plus however many places the brief happened to name", so a
+    // city with four of them could claim all 80 lots against a declared capacity
+    // of 76. The allocation below already reserves lots for places, trades and
+    // the market out of this number.
+    slots.length = Math.min(slots.length, budget);
+
+    // ── The residents the brief never named (§4.5) ─────────────────────────────
+    // A brief may name ten people. Until now those ten WERE the population: the
+    // street grid lays sixty-four lots in a city and the arithmetic below had
+    // demand for eighteen, so a city compiled to a village with long walks
+    // between the houses. Everybody else in town lives here.
+    //
+    // Sized from the two FOLDED axes — scale and prosperity — for the same reason
+    // the guest-berth table is: both are enums, so the table is total by
+    // construction and every settlement of a size reads as that size.
+    // `backgroundPopulation` is the brief's least-constrained number, a free
+    // 0-500 the guidance calls narrative texture. It moves the settlement WITHIN
+    // its rank's band and is never allowed to set the band: a hamlet whose brief
+    // claims five hundred souls is still a hamlet, and a model that leaves the
+    // field at zero still gets a full town.
+    const RESIDENT_HOUSEHOLDS = { outpost: 3, hamlet: 6, village: 12, town: 24, city: 45 };
+    const HOUSEHOLD_LEAN = { struggling: 0.75, modest: 1, thriving: 1.15 };
+    const householdBand = Math.max(
+      1,
+      Math.round(
+        (RESIDENT_HOUSEHOLDS[brief.scale] ?? RESIDENT_HOUSEHOLDS.village) * (HOUSEHOLD_LEAN[brief.prosperity] ?? 1),
+      ),
+    );
+    // Three to a household is the average the mint below actually produces
+    // (sizes one to four, uniform), so a brief's own headcount reads as a
+    // household count on the same scale the band is written in.
+    const impliedHouseholds = brief.backgroundPopulation > 0 ? brief.backgroundPopulation / 3 : householdBand;
+    // Households that actually want a house on the ROOT map, which is the only
+    // demand the lots below answer. Two exclusions, and both were bugs when they
+    // were missing: a transient at the inn or a beggar on the steps occupies no
+    // dwelling, and neither does a resident whose home is the fen or her own
+    // church — she lives THERE. Counting either against the target builds the
+    // town one house smaller for every person in it who needs no house.
+    const namedHouseholds = new Set(
+      brief.cast
+        .filter((m) => (m.standing ?? "resident") === "resident" && m.home === brief.name)
+        .map((m) => m.household),
+    );
+    // A transient merchant's stall takes a LOT, and the mint runs before the lots
+    // are laid, so the houses have to leave room for the market on their way in.
+    // Without this the town fills to the last lot and a visiting trader finds
+    // nowhere to set up — silently, because the stall loop simply stops.
+    const stallDemand = brief.cast.filter(
+      (m) => (m.standing ?? "resident") === "transient" && m.kind === "merchant",
+    ).length;
+    // The band says how big the town WANTS to be; the lots say how big it can
+    // be. Minting past the lots is not a bigger town, it is the same town with
+    // more people merged under each roof — and it silently eats the ground a
+    // market stall or a named place still needed. So the ask is clamped to the
+    // ground that is actually left after the places, the trades and the market
+    // have taken theirs.
+    //
+    // "The trades" means the trades that BUY GROUND. A special bound to a named
+    // place — the host's inn IS the gathering, the maker's shop IS the workshop
+    // — shares that place's facade and never reaches takeSlot() (see the
+    // boundPlace branch below), so charging it a lot here starved the mint on
+    // exactly the briefs rich enough to bind: measured across 9,600 worlds, one
+    // hamlet/village/town in three with a bound special compiled households
+    // short while the lots they were owed sat bare. This prediction can still
+    // run high when a special is later SKIPPED for want of ground, but that
+    // only happens once the ground is already gone — conservative there, exact
+    // everywhere else.
+    const lotHungrySpecials = specials.filter(
+      (entry) => !interiorPlaces.some((place) => interiorKindForSpecial(entry.special) === place.kind),
+    ).length;
+    const lotsForHouses = Math.max(0, slots.length - interiorPlaces.length - lotHungrySpecials - stallDemand);
+    const bandTarget = Math.max(
+      Math.round(householdBand * 0.75),
+      Math.min(Math.round(householdBand * 1.25), Math.round(impliedHouseholds)),
+    );
+    const householdTarget = Math.max(namedHouseholds.size, Math.min(bandTarget, lotsForHouses));
+    // A side stream, so minting residents does not shift the tile RNG under the
+    // ground cover and every world that had no minting still lays the same grass.
+    const mintRnd = PF.rng(PF.hashStr(`${seed >>> 0}|residents|${brief.name}`));
+    const nameBook = RESIDENT_NAMES[activeTheme] ?? RESIDENT_NAMES["cozy-village"];
+    const takenNames = new Set(brief.cast.map((m) => m.name));
+    const minted = [];
+    // Off EVERY sealed household, resident or not: the target ignores the
+    // non-residents but their household numbers are still taken.
+    let nextHousehold = Math.max(0, ...brief.cast.map((m) => m.household)) + 1;
+    for (let i = namedHouseholds.size; i < householdTarget; i++) {
+      const household = nextHousehold++;
+      const family = nameBook.family[(mintRnd() * nameBook.family.length) | 0];
+      const size = 1 + ((mintRnd() * 4) | 0);
+      for (let k = 0; k < size; k++) {
+        const kind = MINTED_KINDS[(mintRnd() * MINTED_KINDS.length) | 0];
+        // Bounded, then suffixed. Two dozen given names against twenty families
+        // is a lot of room, but "room" is not "proof", and a name collision must
+        // never be able to spin here.
+        let name = "";
+        for (let tries = 0; tries < 8 && (!name || takenNames.has(name)); tries++) {
+          name = `${nameBook.given[(mintRnd() * nameBook.given.length) | 0]} ${family}`;
+        }
+        if (takenNames.has(name)) name = `${name} the ${MINTED_ROLES[kind][0]}`;
+        // Counted off a fixed BASE rather than re-suffixing the last candidate:
+        // appending to the running name would give "Maud Thatch 2 3 4" on a
+        // third collision. The loop terminates because each candidate is
+        // distinct and takenNames is finite.
+        const base = takenNames.has(name) ? `${name} ${household}` : name;
+        name = base;
+        for (let suffix = 2; takenNames.has(name); suffix++) name = `${base} ${suffix}`;
+        takenNames.add(name);
+        const roles = MINTED_ROLES[kind] ?? MINTED_ROLES.folk;
+        minted.push({
+          name,
+          role: roles[(mintRnd() * roles.length) | 0],
+          kind,
+          tint: MINT_TINTS[(mintRnd() * MINT_TINTS.length) | 0],
+          home: brief.name,
+          household,
+          standing: "resident",
+          persona: "",
+          // Runtime-only, like _sched: the mint is re-run on every compile from
+          // the seed, so this never reaches a save.
+          _minted: true,
+          // A quarter of the town has business in the square. Without this the
+          // streets fill and the PLAZA empties, which is the same failure the
+          // other way round — a market town whose market nobody attends.
+          _square: mintRnd() < 0.25,
+          // Of the rest, half keep their WARD's square rather than the stretch of
+          // street outside their own door — where there are wards at all. Three
+          // grains of public life instead of one: the town's centre, the
+          // quarter's centre, and your own doorstep.
+          _ward: mintRnd() < 0.5,
+        });
       }
     }
+    // Appended, never spliced: `roster.indexOf(owner)` names the special zones
+    // below, so a minted resident must not renumber anybody the brief named.
+    const roster = minted.length ? [...brief.cast, ...minted] : brief.cast;
     let slotIndex = 0;
     const takeSlot = () => slots[slotIndex++] ?? null;
 
@@ -3158,8 +3904,18 @@ PF.world = (() => {
 
     const dwellingSlots = Math.min(free, dwellingHouseholds.length);
     const householdGroups = [];
+    // Round-robin, so over-subscription SHARES rather than stacks. This used to
+    // pile every household past the last lot onto that lot — twelve families in
+    // one house and eleven houses holding one each — which is a dormitory
+    // wherever it happens rather than only where the ground is genuinely that
+    // tight. Spread evenly it is an address holding more than one household,
+    // which is what a dense settlement is made of.
+    //
+    // Identical when there is only one lot to merge into: `index % 1` is always
+    // zero, so a settlement squeezed down to its last lot still builds the
+    // bunkhouse it always did.
     for (const [index, household] of dwellingHouseholds.entries()) {
-      const slot = index < dwellingSlots ? index : dwellingSlots - 1;
+      const slot = dwellingSlots > 0 ? index % dwellingSlots : 0;
       (householdGroups[slot] ??= []).push(household);
     }
     // Head-room over a lot. A tall building grows UPWARD so its door stays on the
@@ -3169,6 +3925,12 @@ PF.world = (() => {
     // a roof would erase them) in the top row, and clear of the crossroad in the
     // bottom one: a roofed road reads as a tunnel. An outpost's rows sit tight
     // against both, so there the clamp is simply zero and the facade carries it.
+    // How many rows a facade may rise before its eave hits something. The floors
+    // look conservative and are not: above the road the eave must leave a CLEAR
+    // row under the border ring, because the ring is overhead tiles too and a
+    // roof laid against it reads as one continuous mass. Relaxing 4 to 3 on the
+    // reasoning that "the eave only has to stay off row 0" put a hamlet church's
+    // eave on row 1 and merged it into the trees.
     const headroom = (slotY) => Math.max(0, slotY - (slotY > midY ? midY + 3 : 4));
     for (const place of placesBuilt) {
       const slot = takeSlot();
@@ -3192,6 +3954,18 @@ PF.world = (() => {
       );
       buildings.push({ door: b, rect: { x: slot.x, y: top, w: width, h: height }, boundPlace: place });
     }
+    // A trade's premises is sized by the trade, for the same reason a house is
+    // sized by its household: every workplace at 6x4 made the working half of a
+    // settlement as uniform as the sleeping half. A farm has a yard's worth of
+    // frontage, a smith needs floor for the work, and a duty station is a hut with
+    // a door — the smallest thing anybody builds on purpose. Beside the loop
+    // rather than inside it, where `FEATURE_RECTS` and the other layout tables
+    // live.
+    const SPECIAL_FOOTPRINT = {
+      farm: { w: 8, h: 5 },
+      shop: { w: 7, h: 5 },
+      post: { w: 5, h: 4 },
+    };
     for (const { special, owner, boundPlace, household } of specialsBuilt) {
       // A special whose interior already exists as a place shares that facade.
       if (boundPlace) {
@@ -3201,10 +3975,16 @@ PF.world = (() => {
       }
       const slot = takeSlot();
       if (!slot) break;
-      const b = building(v, slot.x, slot.y, 6, 4, 2, [4]);
+      // ...but not on ground that cannot spare it. An outpost is 28x20, and a
+      // farm with a full frontage there takes the room its named features were
+      // going to stand on — measured: two of two refused. A frontier smithy is a
+      // shed, which is the truthful answer as well as the one that fits.
+      const roomy = brief.scale !== "outpost" && brief.scale !== "hamlet";
+      const foot = (roomy && SPECIAL_FOOTPRINT[special]) || { w: 6, h: 4 };
+      const b = building(v, slot.x, slot.y, foot.w, foot.h, 2, foot.h > 4 ? [1, 4] : [4]);
       buildings.push({
         door: b,
-        rect: { x: slot.x, y: slot.y, w: 6, h: 4 },
+        rect: { x: slot.x, y: slot.y, w: foot.w, h: foot.h },
         special,
         owner,
         // A live-work premises carries its owner's household: the same field a
@@ -3216,16 +3996,30 @@ PF.world = (() => {
     for (const group of householdGroups) {
       const slot = takeSlot();
       if (!slot) break;
-      const width = Math.min(8, 5 + group.length); // merged blocks read larger
-      const b = building(v, slot.x, slot.y, width, 4, 2, [1]);
-      buildings.push({ door: b, rect: { x: slot.x, y: slot.y, w: width, h: 4 }, households: group });
+      // SIZE FOLLOWS PROGRAM. A house used to be 6x4 unless the merge widened it,
+      // so a town was thirty identical boxes on a grid and read as one building
+      // stamped out — which is most of what "it looks like a game from 1996"
+      // actually is. A roof is now sized by what has to fit under it: the people
+      // who sleep there, and how many households share the address.
+      //
+      // Width 5..8 is the lot (MAX_LOT_W), and the height is the honest half —
+      // a fourth row is a second band of rooms, so a big household reads taller
+      // as well as wider from across the square. Five still fits BUILDING_H, so
+      // the eave clears the lot above exactly as a four-row body does.
+      const souls = roster.filter(
+        (m) => (m.standing ?? "resident") === "resident" && group.includes(m.household),
+      ).length;
+      const width = PF.clamp(5 + Math.ceil(souls / 2) + (group.length > 1 ? 1 : 0), 5, MAX_LOT_W);
+      const height = souls >= 4 || group.length > 1 ? 5 : 4;
+      const b = building(v, slot.x, slot.y, width, height, 2, height > 4 ? [1, 4] : [1]);
+      buildings.push({ door: b, rect: { x: slot.x, y: slot.y, w: width, h: height }, households: group });
     }
 
     // ── Transient merchants set up a light market stall in a free lot (never a
     // permanent shop). They tend it; with no free lot they fall back to the
     // public rest spot in the cast loop. Other non-resident kinds build nothing.
     const stalls = [];
-    for (const member of brief.cast) {
+    for (const member of roster) {
       if ((member.standing ?? "resident") !== "transient" || member.kind !== "merchant") continue;
       const slot = takeSlot();
       if (!slot) break;
@@ -3239,7 +4033,13 @@ PF.world = (() => {
     // orphaned the zone and the NPC inside it (review blocker). A feature with
     // no clear anchor is dropped: a plainer settlement, never a sealed one.
     const claimed = buildings
-      .map((b) => ({ x: b.rect.x - 1, y: b.rect.y - 3, w: b.rect.w + 2, h: b.rect.h + 5 }))
+      // What a building ACTUALLY occupies: its overhang two rows above, its solid
+      // body, and the door apron one row below — y-2 through y+h. The old rect
+      // padded a further row top and bottom and a column each side, which is
+      // breathing room rather than footprint, and on a small map that padding is
+      // the difference between a feature fitting and being dropped. Measured at
+      // hamlet: two of four features placed with the padding, four without it.
+      .map((b) => ({ x: b.rect.x, y: b.rect.y - 2, w: b.rect.w, h: b.rect.h + 3 }))
       .concat(stalls.map((s) => ({ x: s.x - 1, y: s.y - 1, w: 7, h: 5 })));
     const intersects = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
     const featureAnchors = [
@@ -3303,16 +4103,29 @@ PF.world = (() => {
     // feature still rings the settlement the way a corner one does rather than
     // landing in the middle of the green. Bounded by the tallest footprint, and
     // the per-feature test below is what actually decides a fit.
-    const scanRows = [];
-    for (let top = 3, bottom = v.h - 9; top <= bottom; top++, bottom--) {
-      scanRows.push(top);
-      if (bottom !== top) scanRows.push(bottom);
-    }
+    // Outside-in, and sized PER FEATURE. This bound used to be a fixed `v.h - 9`
+    // — the row a 6-tall crop plot must start above — applied to every tag
+    // regardless of height, so a 2-tall market stall was refused every row a
+    // crop plot could not use. On a short map that is most of the south half:
+    // measured at hamlet, one feature of four placed until this was per-size.
+    const scanRowsFor = (size) => {
+      const rows = [];
+      // The last row a rect may START on: it occupies y .. y + h - 1, and the
+      // last usable row is v.h - 3 (the apron and the border ring take the two
+      // below it). So the bound is v.h - 2 - h, not v.h - 3 - h — one row short
+      // cost a hamlet the entire strip south of its buildings, which is the only
+      // open ground a short feature had left.
+      for (let top = 3, bottom = v.h - 2 - size.h; top <= bottom; top++, bottom--) {
+        rows.push(top);
+        if (bottom !== top) rows.push(bottom);
+      }
+      return rows;
+    };
     for (const feature of brief.features) {
       const size = FEATURE_RECTS[feature.tag] ?? FEATURE_RECT;
       let anchor = featureAnchors.find((candidate) => anchorFree(candidate.x, candidate.y, size));
       if (!anchor) {
-        for (const y of scanRows) {
+        for (const y of scanRowsFor(size)) {
           for (let x = 4; x + size.w <= v.w - 3; x++) {
             if (!anchorFree(x, y, size)) continue;
             anchor = { x, y };
@@ -3355,6 +4168,133 @@ PF.world = (() => {
         wildsArrivals,
       ),
     );
+    // ── Open ground ────────────────────────────────────────────────────────────
+    // What a settlement does with a lot it did not build on, and it is not the
+    // same answer everywhere. A village leaves kitchen gardens between its
+    // houses; a town does not have a lawn around every door, because the ground
+    // between terraces is PUBLIC. So the loose ranks get fenced gardens and the
+    // dense ones get parks, on the lots the buildings never claimed.
+    //
+    // Every third leftover and no more than six, deliberately: a settlement that
+    // turned every spare lot into a park would be a park with houses in it, and
+    // the empty ground between buildings is doing work of its own.
+    // LEFTOVER IS NOT THE SAME AS EMPTY, and the difference is a named feature.
+    //
+    // The greens and the wards are handed the lots no BUILDING took and trust
+    // that to mean nothing is there. It is true of buildings — they are disjoint
+    // from these lots by construction — and false of features, which are anchored
+    // by a different pass that tests `claimed` and the roads but NOT the lot grid,
+    // so a ruin or a shrine legitimately stands on a lot nobody built on.
+    // `clearFootprint` then nulls it. Measured: 40 of 108 worlds lost feature
+    // tiles, 168 tiles in all — a named ruin coming out half-eaten, with its name
+    // still in the sealed brief and its id still in `_ids.features`.
+    //
+    // `claimed` already carries the feature rects (they are pushed as each one
+    // lands), so respecting it is the whole fix. `y - 1` and `h: 6` because
+    // `clearFootprint` reaches one row above its rect.
+    const leftoverLots = slots
+      .slice(slotIndex)
+      .filter((lot) => !claimed.some((busy) => intersects({ x: lot.x, y: lot.y - 1, w: 8, h: 6 }, busy)));
+    const denseRank = brief.scale === "town" || brief.scale === "city";
+
+    // ── WARDS ──────────────────────────────────────────────────────────────────
+    // A city is 104x72, and its one plaza sits at the crossroad — which is a long
+    // walk from three quarters of the map. So a city carves WARDS: one square per
+    // quadrant, each with its own well, and the residents of that quarter keep it
+    // rather than all walking to the middle of town.
+    //
+    // Only where it is a real problem. A village has one centre because a village
+    // IS one centre, and giving it four would be four empty squares.
+    const wards = [];
+    if (brief.scale === "city") {
+      const taken = new Set();
+      for (const [qx, qy] of [
+        [0.25, 0.25],
+        [0.75, 0.25],
+        [0.25, 0.75],
+        [0.75, 0.75],
+      ]) {
+        const cx = v.w * qx;
+        const cy = v.h * qy;
+        let best = -1;
+        let bestD = Infinity;
+        leftoverLots.forEach((lot, index) => {
+          if (taken.has(index)) return;
+          const d = (lot.x + 4 - cx) ** 2 + (lot.y + 2 - cy) ** 2;
+          if (d < bestD) {
+            bestD = d;
+            best = index;
+          }
+        });
+        if (best < 0) continue;
+        taken.add(best);
+        const lot = leftoverLots[best];
+        PLACERS["ward-square"](v, lot.x, lot.y);
+        wards.push({
+          x: lot.x + 3,
+          y: lot.y + 2,
+          wander: {
+            x0: Math.max(2, lot.x),
+            y0: Math.max(2, lot.y),
+            x1: Math.min(v.w - 3, lot.x + 7),
+            y1: Math.min(v.h - 3, lot.y + 4),
+          },
+        });
+      }
+      // The greens take what the wards did not.
+      for (let i = leftoverLots.length - 1; i >= 0; i--) if (taken.has(i)) leftoverLots.splice(i, 1);
+    }
+
+    let greens = 0;
+    for (let i = 0; i < leftoverLots.length && greens < 6; i += 3) {
+      const lot = leftoverLots[i];
+      PLACERS[denseRank ? "park" : "crop-plots"](v, lot.x, lot.y);
+      greens++;
+    }
+    // ── THE SQUARE ─────────────────────────────────────────────────────────────
+    // A plaza was eight by eight tiles of paving and nothing else — the one place
+    // in a settlement everybody walks through, and the only one with nothing in
+    // it. Every settlement gets its well: it is the oldest reason for a village
+    // to have a centre at all, and it gives the square something to be the middle
+    // OF. A thriving one lays market boards beside it.
+    //
+    // AFTER the buildings, not before. Laid before them, an outpost — whose lots
+    // sit tight against the crossroad on a 28x20 map — simply built a house over
+    // the well and the square came out empty on exactly the settlements that
+    // could least afford to lose it. So each piece checks the ground is still
+    // free, and a square with no room for a well honestly has none.
+    const squareTile = (x, y, what) => {
+      if (x < 1 || y < 1 || x >= v.w - 1 || y >= v.h - 1) return false;
+      const at = idx(v, x, y);
+      if (v.solid[at] || v.object[at] || v.overhead[at]) return false;
+      put(v, x, y, "object", what, true);
+      return true;
+    };
+    // All four quadrants tried in turn, not just the north-east one. An outpost's
+    // lots sit tight against the crossroad, so its first choice is often inside
+    // somebody's front room, and one refusal used to leave the smallest
+    // settlements — the ones that can least afford a bare square — with no well
+    // at all.
+    const QUADRANTS = [
+      [midX + 2, midY - 3],
+      [midX - 3, midY - 3],
+      [midX + 2, midY + 2],
+      [midX - 3, midY + 2],
+    ];
+    const well = QUADRANTS.find(([x, y]) => squareTile(x, y, "well"));
+    if (well) v.lights.push({ x: well[0], y: well[1] });
+    if (brief.prosperity === "thriving") {
+      let boards = 0;
+      for (const [x, y] of QUADRANTS) {
+        if (boards >= 2) break;
+        if (well && x === well[0] && y === well[1]) continue;
+        if (squareTile(x, y, "table")) boards++;
+      }
+    }
+    // Last thing done to the settlement's tiles, so it sees the trees, the
+    // buildings, the stalls, the features and the greens together — a pocket is
+    // usually made by two of them meeting, not by either alone.
+    sealPockets(v, v.spawn);
     zones.z1 = v;
 
     // ── Interior zones ──
@@ -3388,7 +4328,7 @@ PF.world = (() => {
       // church, the alewife over her own tap room — so the building has to sleep
       // them. Without this they stood on the bare floor of the building they live
       // in at midnight, which is the exact opposite of what the rooms were for.
-      const residents = brief.cast.filter(
+      const residents = roster.filter(
         (member) => (member.standing ?? "resident") === "resident" && zoneIdByName.get(member.home) === id,
       );
       const living = ownerFirst(residents, facade.owner);
@@ -3436,11 +4376,47 @@ PF.world = (() => {
         PLACERS["water-crossing"](zone, 20, wMidY);
         fillRect(zone, 22, wMidY, 4, 2, "ground", "path");
       }
+      // GROUND THE WILDS CANNOT GIVE AWAY. A feature here used to be dropped at a
+      // hard-coded anchor with no test of anything — not the road it had just
+      // laid, not the stream, not the spawn, not the tile the portal delivers the
+      // player onto. The settlement pass has tested its anchors against the roads
+      // and the claimed lots for a long time; this one never did, and it is the
+      // only builder that pass missed.
+      //
+      // What that cost: `crop-plots` is a fenced 8x5, and at anchor 26 its fence
+      // lands on x 26..33, which is exactly where a WEST-hung wilds puts its
+      // spawn (w-4) and one of its two arrival tiles (w-3). The player walks west
+      // out of town, arrives inside a solid fence, and every direction is refused
+      // — measured on the real Sim, four directions x two seconds of held input,
+      // zero pixels. Reloading does not help: the save falls back to `zone.spawn`,
+      // which is the other fence tile. 24 of 48 wilds zones on staging, so this
+      // ships today and is not something this branch introduced.
+      const wildsReserved = [
+        east ? { x: 1, y: wMidY, w: 19, h: 2 } : { x: zone.w - 20, y: wMidY, w: 19, h: 2 },
+        { x: 1, y: wMidY, w: 4, h: 2 },
+        { x: zone.w - 5, y: wMidY, w: 4, h: 2 },
+      ];
+      if (tags.has("water-crossing")) {
+        wildsReserved.push({ x: 20, y: 1, w: 2, h: 22 }, { x: 20, y: wMidY, w: 6, h: 2 });
+      }
       let anchorX = 26;
       for (const feature of place.features ?? []) {
         if (feature.tag === "water-crossing") continue;
-        PLACERS[feature.tag]?.(zone, anchorX, 8 + (((anchorX / 3) | 0) % 4));
-        anchorX = Math.max(6, (anchorX + 9) % (zone.w - 10));
+        const size = FEATURE_RECTS[feature.tag] ?? FEATURE_RECT;
+        // The anchor SEQUENCE is unchanged, so a wilds whose features already fit
+        // compiles exactly what it did. Only an anchor that would block the way
+        // is stepped over, and a feature with nowhere safe is dropped — the same
+        // policy the settlement states as "a plainer settlement, never a sealed
+        // one", which reads here as a plainer wood.
+        for (let attempt = 0; attempt < 8; attempt++) {
+          const ax = anchorX;
+          const ay = 8 + (((ax / 3) | 0) % 4);
+          anchorX = Math.max(6, (anchorX + 9) % (zone.w - 10));
+          if (ax < 1 || ay < 1 || ax + size.w > zone.w - 1 || ay + size.h > zone.h - 1) continue;
+          if (wildsReserved.some((r) => intersects({ x: ax, y: ay, ...size }, r))) continue;
+          PLACERS[feature.tag]?.(zone, ax, ay);
+          break;
+        }
       }
       // Reserve BOTH sides' arrival tiles and spawns — the west-hung wilds'
       // arrival used to land inside scattered trunks on some seeds.
@@ -3456,7 +4432,13 @@ PF.world = (() => {
         { x: zone.w - 3, y: wMidY },
         { x: zone.w - 4, y: wMidY },
       ]);
-      zone.spawn = { x: 3, y: wMidY };
+      // Set BEFORE the pockets are closed, not after. The west wilds moves its
+      // spawn to the far side further down, and sealing from the east side first
+      // would mark the west half — the future spawn and the tile the portal
+      // actually delivers the player onto — solid whenever the scatter happens to
+      // separate the two.
+      zone.spawn = east ? { x: 3, y: wMidY } : { x: zone.w - 4, y: wMidY };
+      sealPockets(zone, zone.spawn);
       // Two-tile edge portals: east edge of the settlement for the first wilds,
       // west edge for the second.
       const vx = east ? v.w - 1 : 0;
@@ -3484,7 +4466,7 @@ PF.world = (() => {
           label: `Back to ${brief.name}`,
         });
       }
-      if (!east) zone.spawn = { x: zone.w - 4, y: wMidY };
+      // (the west spawn is set above, before sealPockets reads it)
       zone.flavor = place.flavor;
       zone.mapKind = "place"; // World Maps export kind (spec §8)
       zones[id] = zone;
@@ -3512,7 +4494,7 @@ PF.world = (() => {
       // Everyone sleeping under this roof, in cast order — the same predicate
       // `households` was derived from, so the room's beds and the lot arithmetic
       // can never disagree about who lives here.
-      const residents = brief.cast.filter(
+      const residents = roster.filter(
         (m) =>
           (m.standing ?? "resident") === "resident" &&
           (m.home === brief.name || strandedFrom(m, placesBuilt)) &&
@@ -3523,7 +4505,7 @@ PF.world = (() => {
       // sealed brief data either way, so the id is stable across rebuilds and
       // additive against saved zone ids (60-save restores a zone by id). A loop
       // counter would move the moment a household merged differently.
-      const id = b.special ? `s${brief.cast.indexOf(b.owner) + 1}` : `h${Math.min(...b.households)}`;
+      const id = b.special ? `s${roster.indexOf(b.owner) + 1}` : `h${Math.min(...b.households)}`;
       const name = b.special ? `${b.owner.name}'s ${interior.label}` : `${residents[0]?.name ?? brief.name}'s home`;
       // A live-work premises houses the tradesman who runs it, so they get the
       // private room too — the same rule as a keeper's, for the same reason.
@@ -3564,17 +4546,35 @@ PF.world = (() => {
     const gatheringZoneId = gatheringPlace ? zoneIdForPlace(gatheringPlace) : null;
     const wildsZoneId = wildsPlaces.length ? zoneIdForPlace(wildsPlaces[0]) : null;
     const plazaBox = () => ({ x0: midX - 6, y0: midY - 5, x1: midX + 6, y1: midY + 5 });
+    /** The stretch of street outside one door. The plaza is thirteen tiles by
+     *  eleven; a thriving city now holds a hundred people, and sending all of
+     *  them to the same square at noon builds a crush in the middle of an empty
+     *  map rather than a city. The brief's OWN cast still keeps the square —
+     *  they are the people a player came to meet — while everybody the compiler
+     *  minted holds their own street, so the whole town reads as lived in. */
+    const streetBox = (rect) => ({
+      x0: Math.max(2, rect.x - 3),
+      y0: Math.max(2, rect.y - 2),
+      x1: Math.min(v.w - 3, rect.x + rect.w + 2),
+      y1: Math.min(v.h - 3, rect.y + rect.h + 3),
+    });
     // The walkable middle of a zone — but only the COMMON half of one that has
     // rooms partitioned into it. A private room is somewhere an NPC is SENT (a
     // bed, at night), never somewhere they drift: standable() rules out door
     // tiles, so anyone who wandered into a bedroom could not walk back out of it
     // and would hold the room until the next daypart moved them.
-    const fullZoneBox = (z) => ({
-      x0: 2,
-      y0: z.rooms.reduce((floor, room) => Math.max(floor, room.y1 + 2), 2),
-      x1: z.w - 3,
-      y1: z.h - 3,
-    });
+    // The common floor south of every walled band. A SINGLE y-floor, which is
+    // why a second band can invert it: `walkableIn` normalises the corners and
+    // plants the NPC on the entry apron, while the sim's `inside` test reads the
+    // RAW box — so the snap re-fires every daypart and every candidate step is
+    // rejected. The NPC is not drifting; it is frozen on its own doormat. Today
+    // the minimum slack across every compiled zone is ONE row.
+    const fullZoneBox = (z) => {
+      const y1 = z.h - 3;
+      const y0 = z.rooms.reduce((floor, room) => Math.max(floor, room.y1 + 2), 2);
+      if (y0 > y1) throw new Error(`pixelforge: ${z.id} has no common floor left for a wander box (${y0} > ${y1})`);
+      return { x0: 2, y0, x1: z.w - 3, y1 };
+    };
     // Transients loiter at a public spot — the inn, an existing resident shop's
     // front, or the plaza — spread across whatever the settlement has (seeded).
     const shopSpots = buildings
@@ -3660,12 +4660,34 @@ PF.world = (() => {
     // worker tier when the brief said where they work — which is the right
     // answer for the eight sisters who live at the convent and work at the church.
     const headOfBuilding = new Map();
-    brief.cast.forEach((member) => {
+    roster.forEach((member) => {
       if ((member.standing ?? "resident") !== "resident") return;
       const id = zoneIdByName.get(member.home);
       if (id && !headOfBuilding.has(id)) headOfBuilding.set(id, member);
     });
-    brief.cast.forEach((member, index) => {
+    /** The fireside handle for whoever sleeps in this zone.
+     *
+     *  Resolved from the BED's zone rather than the building's, because a big
+     *  household sleeps upstairs and the fire is on the ground floor — the floor
+     *  suffix is stripped to find the room the hearth is actually in. Null when
+     *  there is no hearth to stand at (a named place's quarters, a wilds
+     *  resident, anybody sleeping rough), and `resolve` falls back to `post` on
+     *  its own, so a missing handle is a quiet no-op rather than an NPC standing
+     *  in a wall.
+     *
+     *  The box stops one column short of the fire itself. It is solid: you warm
+     *  yourself in front of one, not on top of it. */
+    const hearthHandle = (zoneId) => {
+      if (!zoneId) return null;
+      const ground = zones[String(zoneId).replace(/[ub]$/, "")];
+      if (!ground?.hearth) return null;
+      const { x, y } = ground.hearth;
+      return {
+        zoneId: ground.id,
+        wander: { x0: Math.max(1, x - 3), y0: Math.max(2, y - 1), x1: Math.max(1, x - 1), y1: y },
+      };
+    };
+    roster.forEach((member, index) => {
       const npcId = `n${index + 1}`;
       const standing = member.standing ?? "resident";
       let zone = zones[zoneIdByName.get(member.home) ?? "z1"] ?? v;
@@ -3678,6 +4700,9 @@ PF.world = (() => {
       // at its own hashed tile inside the box; anyone stacked under another
       // sprite can never be selected by talk-targeting (review finding).
       let spread = true;
+      // Null until the resident branch finds the door they live behind; the
+      // plaza is the fallback and stays the named cast's day box.
+      let publicBox = null;
       // Holds a building the brief NAMED (a sanctuary today). It unlocks the keeper
       // schedule tier, so the same cast kind keeps its ordinary habits without one.
       let keeper = false;
@@ -3693,6 +4718,26 @@ PF.world = (() => {
           buildings.find((b) => (b.households ?? []).includes(member.household));
         keeper = !!(owned && owned.boundPlace && PLACE_BOUND_SPECIALS.has(owned.boundPlace.kind));
         const dwelling = buildings.find((b) => (b.households ?? []).includes(member.household));
+        if (member._minted && !member._square && dwelling?.rect) {
+          // Nearest ward, measured from the door they actually live behind — a
+          // resident belongs to the quarter they live in, not to whichever
+          // quadrant of the arithmetic their household id fell into.
+          // From the DOOR, which is what the sentence above claims and what the
+          // code did not do: it measured from `rect.x/y`, the lot's north-west
+          // corner. The two differ by a few tiles and it is not cosmetic —
+          // measured, 5 of 30 city worlds put somebody in a different quarter.
+          const home = dwelling.door;
+          const ward =
+            member._ward && wards.length && home
+              ? wards.reduce((best, w) =>
+                  (w.x - home.doorX) ** 2 + (w.y - home.doorY) ** 2 <
+                  (best.x - home.doorX) ** 2 + (best.y - home.doorY) ** 2
+                    ? w
+                    : best,
+                )
+              : null;
+          publicBox = ward ? ward.wander : streetBox(dwelling.rect);
+        }
         const ownBed = bedFor.get(member);
         if (zone === v && owned) {
           if (owned.owner === member && owned.interior?.post && zones[owned.interior.zoneId]) {
@@ -3854,7 +4899,12 @@ PF.world = (() => {
           keeper,
           worker,
           home,
-          public: { zoneId: v.id, wander: plazaBox() },
+          // Where a household is at first light and at last light: in, around the
+          // fire. Before this a resident's dawn and dusk were both `post`, so the
+          // whole settlement stood at its work anchors from waking to sleeping and
+          // the only thing a day did was empty the houses at noon.
+          hearth: hearthHandle(home?.zoneId ?? (zone !== v ? zone.id : null)),
+          public: { zoneId: v.id, wander: publicBox ?? plazaBox() },
         },
       });
     });
@@ -3959,7 +5009,16 @@ PF.schedule = (() => {
     // It stopped being true the moment dwellings gained interiors and `home` became a
     // bed inside: residents then vanished indoors from 18:00 to 07:00, which is over
     // half the clock and most of the hours with interesting light. Bed is for night.
-    "*:resident": { dawn: "post", day: "public", dusk: "post", night: "home" },
+    // DAWN AND DUSK BELONG TO THE HEARTH. Both used to be `post`, so an ordinary
+    // resident stood at their work anchor from waking until sleeping and the only
+    // thing a whole day did was empty the houses at noon. A household is in and
+    // around the fire at first light and again at last light, which is also what
+    // makes a lit window at dusk mean somebody is behind it.
+    //
+    // `resolve` falls back to `post` when an NPC has no `hearth` handle, so
+    // anyone with no fire to stand at — a wilds resident, a lodger in a named
+    // place's quarters — keeps exactly the day they had.
+    "*:resident": { dawn: "hearth", day: "public", dusk: "hearth", night: "home" },
     // Loiterers hold their public spot all day and take a bed at night.
     "*:transient": { dawn: "post", day: "post", dusk: "post", night: "home" },
     // Fringe NPCs stay out at the margins — meeting one means going to them.
@@ -4083,8 +5142,10 @@ PF.schedule = (() => {
     // compiled zones tried, but the guarantee should live in the code.
     //
     // Unreachable in practice, and deliberately not escalated to a null return:
-    // the smallest zone measured holds 119 standable tiles against a cast capped
-    // at 10, so this is a floor under a contract, not a live path.
+    // the smallest zone measured holds 119 standable tiles, comfortably more
+    // than any one zone's occupants even now that the mint fills a city (see
+    // npcOccupies in 30-sim.js for the measured population numbers), so this is
+    // a floor under a contract, not a live path.
     if (standable(zone, zone.spawn.x, zone.spawn.y)) return { x: zone.spawn.x, y: zone.spawn.y };
     for (let y = 0; y < zone.h; y++) {
       for (let x = 0; x < zone.w; x++) if (standable(zone, x, y)) return { x, y };
@@ -4365,8 +5426,18 @@ PF.Sim = class {
 
   /** Is another NPC standing on — or already walking onto — this tile? Terrain
    *  alone is not enough: two NPCs would pick the same free tile and slide
-   *  through each other. Casts are capped at ~10, so a scan is cheaper than
-   *  maintaining an occupancy index. */
+   *  through each other.
+   *
+   *  A LINEAR SCAN, and the reason it used to give for that is no longer true.
+   *  It said casts are capped at ~10; the compiler now mints residents to fill a
+   *  settlement, and a thriving city puts a hundred and thirteen of them on one
+   *  exterior zone at midday. So this was re-measured rather than left on a stale
+   *  assumption: `stepNpcs` over that zone costs 0.0039ms a frame, against 0.0019
+   *  for a village of 25. Four thousandths of a millisecond is 0.02% of a 60fps
+   *  budget, so an occupancy index would still be the more expensive of the two.
+   *
+   *  It stays a scan because it is cheap, NOT because the cast is small. If a
+   *  zone ever holds several hundred, measure again before believing this. */
   npcOccupies(z, x, y, exclude, ignore) {
     for (const other of z.npcs) {
       if (other === exclude) continue;
