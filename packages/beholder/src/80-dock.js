@@ -13,8 +13,10 @@ const BH_HOST_CSS = `
   --SmartThemeBlurTintColor: var(--card, rgba(20,20,24,.92));
   --SmartThemeBodyColor: var(--foreground, #e0e0e0);
   --SmartThemeBorderColor: var(--border, rgba(255,255,255,.15));
-  --SmartThemeQuoteColor: var(--primary, #ffb3d9);
-  --bh-accent-pref: var(--primary, #ffb3d9);
+  --SmartThemeEmColor: var(--marinara-chat-chrome-accent, var(--primary));
+  --SmartThemeQuoteColor: var(--marinara-chat-chrome-accent, var(--primary));
+  --bh-accent-pref: var(--primary);
+  --bh-chroma: var(--marinara-chat-chrome-accent, var(--primary));
   --bh-font-display: var(--font-sans, inherit);
   display:flex !important; position:fixed !important; top:var(--bh-dock-top,0px) !important; right:0 !important; left:auto !important; bottom:auto !important;
   height:calc(100vh - var(--bh-dock-top,0px)) !important; max-height:calc(100vh - var(--bh-dock-top,0px)) !important; width:min(500px,94vw) !important; min-width:0 !important;
@@ -34,10 +36,10 @@ const BH_HOST_CSS = `
    So opening the Beholder dock makes the roleplay view make room, not get covered. */
 body.bh-dock-open .mari-app-background-paint{ --tracker-chat-avoid-right: min(500px,94vw) !important; --tracker-panel-hud-clear-right: min(500px,94vw) !important; }
 .bh-hud-toggle{ display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
-  background:rgba(201,165,90,.22) !important; border:1px solid rgba(201,165,90,.55) !important;
-  box-shadow:0 0 0 1px rgba(201,165,90,.12) inset !important; }
-.bh-hud-toggle:hover{ background:rgba(201,165,90,.40) !important; border-color:rgba(233,205,119,.85) !important; }
-.bh-hud-toggle:hover img{ filter:brightness(1.12) }
+  color:var(--primary) !important; }
+.bh-hud-toggle:hover,.bh-hud-toggle.bh-active{ color:var(--primary) !important; }
+.bh-hud-icon{ display:block;width:18px;height:18px;background:currentColor;
+  -webkit-mask:url("${BH_LOGO}") center/contain no-repeat;mask:url("${BH_LOGO}") center/contain no-repeat; }
 .bh-dock-close{ cursor:pointer; margin-right:6px; opacity:.75 }
 .bh-dock-close:hover{ opacity:1 }
 `;

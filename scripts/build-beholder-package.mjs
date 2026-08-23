@@ -25,7 +25,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = join(repoRoot, "packages/beholder");
 const artifactsDir = join(repoRoot, "artifacts");
 
-const VERSION = "1.3.0";
+const VERSION = "1.3.1";
 const ENGINE_MIN = "2.4.4";
 const MAX_ENGINE_EXCLUSIVE = "4.0.0";
 const BASE_DESCRIPTION =
@@ -103,7 +103,7 @@ const manifest = {
   // The toolbar toggle mounts in the roleplay toolbar; the panel it opens is
   // owned by the client bundle. The host renders this only for chats where the
   // Beholder agent is switched on, so the control stays opt-in.
-  contributions: { slots: ["conversation-toolbar"] },
+  contributions: { slots: ["roleplay-tracker"] },
   files: [
     { path: "agents.json", sha256: sha256(agentsBuffer), bytes: agentsBuffer.byteLength },
     { path: "client.js", sha256: sha256(clientBuffer), bytes: clientBuffer.byteLength },

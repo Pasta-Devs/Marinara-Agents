@@ -104,7 +104,7 @@ class BeholderElement extends HTMLElement {
       button.type = "button";
       // The extension had to clone a live toolbar button's classes to match the
       // host's controls; here the host hands us the class it uses itself.
-      button.innerHTML = `<img src="${BH_LOGO}" alt="" style="width:18px;height:18px;border-radius:50%;display:block">`;
+      button.innerHTML = '<span class="bh-hud-icon" aria-hidden="true"></span>';
       button.addEventListener("click", () => {
         BH.dock.toggle();
       });

@@ -1,4 +1,4 @@
-import { Brain } from "lucide-react";
+import { MessageSquareQuote } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { MemoryNagRecall } from "../../../../shared/src/features/agents/memory-nag/schema.js";
@@ -29,9 +29,11 @@ export function MemoryNagTrackerPanel({ props }: { props: CapabilityProps }) {
   if (!enabled) return null;
   return (
     <section className="mn-shell mn-tracker">
-      <div className="mn-row">
-        <Brain className="mn-icon" aria-hidden="true" />
-        <strong>{t("memoryNag.tracker.title")}</strong>
+      <div className="mn-tracker-header">
+        <span className="mn-tracker-icon" aria-hidden="true">
+          <MessageSquareQuote className="mn-icon" />
+        </span>
+        <strong className="mn-tracker-title">{t("memoryNag.tracker.title")}</strong>
       </div>
       <div className="mn-tracker-value">{nags[index] ?? t("memoryNag.tracker.none")}</div>
     </section>

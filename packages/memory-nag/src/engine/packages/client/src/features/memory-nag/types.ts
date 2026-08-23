@@ -24,6 +24,7 @@ export type CapabilityProps = {
   chatId?: string | null;
   chatMode?: "conversation" | "roleplay" | "game" | null;
   mobileCompact?: boolean;
+  toolbarButtonClass?: string;
   detached?: boolean;
   connections?: MemoryNagConnection[];
   onDirtyChange?: (dirty: boolean) => void;
