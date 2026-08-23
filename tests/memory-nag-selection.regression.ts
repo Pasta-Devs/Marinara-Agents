@@ -202,17 +202,43 @@ const memoryNagStyles = readFileSync(
   new URL("../packages/memory-nag/src/engine/packages/client/src/features/memory-nag/styles.ts", import.meta.url),
   "utf8",
 );
+const memoryNagTrackerSource = readFileSync(
+  new URL(
+    "../packages/memory-nag/src/engine/packages/client/src/features/memory-nag/MemoryNagTrackerPanel.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
 assert.doesNotMatch(
   memoryNagToolbarSource,
   /!enabled\s*\|\|\s*props\.mobileCompact/u,
   "compact Roleplay layouts must retain the Memory Nag toolbar control",
 );
 assert.match(memoryNagToolbarSource, /toolbarButtonClass/u, "Memory Nag must reuse the host toolbar button class");
-assert.match(memoryNagToolbarSource, /MessageSquareQuote/u, "Memory Nag must use its distinct quote icon");
+assert.match(memoryNagToolbarSource, /\}, 3000\);/u, "Memory Nag toolbar words must cycle at the slower interval");
+assert.match(memoryNagToolbarSource, /data-chat-floating-panel/u, "Memory Nag must portal a floating tracker panel");
+assert.doesNotMatch(
+  memoryNagToolbarSource,
+  /<MessageSquareQuote className="mn-icon"/u,
+  "the fixed-size toolbar button must contain only its cycling word",
+);
+assert.doesNotMatch(
+  memoryNagStyles,
+  /\.mn-toolbar-button\s*\{[^}]*(?:width|height|min-width):/su,
+  "Memory Nag must not override the host tracker button dimensions",
+);
 assert.match(
   memoryNagStyles,
   /--tracker-panel-section-background/u,
   "Memory Nag must reuse the native Tracker Panel section surface",
 );
+assert.match(memoryNagTrackerSource, /setCollapsed/u, "Memory Nag Tracker Panel section must be collapsible");
+assert.match(memoryNagTrackerSource, /mn-tracker-veil/u, "Memory Nag must reuse the Tracker Panel readability veil");
+assert.match(
+  memoryNagStyles,
+  /--tracker-profile-icon, var\(--muted-foreground\)/u,
+  "Memory Nag section icons must inherit the neutral Tracker Panel header color",
+);
+assert.doesNotMatch(memoryNagStyles, /--mn-chroma:[^;]*--primary/u, "Memory Nag must not fall back to primary pink");
 
 console.info("Memory Nag regressions passed");

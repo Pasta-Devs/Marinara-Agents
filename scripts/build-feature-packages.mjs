@@ -374,7 +374,7 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.2.10",
+    version: "1.2.11",
     minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
@@ -399,7 +399,7 @@ const features = [
   },
   {
     id: "memory-nag",
-    version: "1.0.6",
+    version: "1.0.7",
     minEngineVersion: "2.4.4",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Memory Nag",

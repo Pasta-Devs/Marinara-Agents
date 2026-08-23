@@ -138,9 +138,28 @@ assert.ok(
   manifest.contributions?.slots?.includes("roleplay-tracker"),
   "manifest must contribute to the left-side roleplay tracker toolbar",
 );
+assert.ok(
+  manifest.contributions?.slots?.includes("tracker-panel"),
+  "manifest must contribute its Beholder launcher to Tracker Panel",
+);
 assert.ok(manifest.permissions.includes("ui"), "a client-bearing package needs the ui permission");
 assert.match(beholderInterfaceSource, /--marinara-chat-chrome-accent/u, "Beholder must consume the chat chroma token");
 assert.match(beholderInterfaceSource, /bh-hud-icon/u, "the Beholder toolbar mark must be theme-colored");
+assert.doesNotMatch(
+  beholderInterfaceSource,
+  /\.(?:bh-hud-toggle|bh-tracker-launch)[^}]*var\(--primary\)/su,
+  "the Beholder launcher must inherit the host toolbar theme instead of primary pink",
+);
+assert.match(
+  beholderInterfaceSource,
+  /\.bh-tracker-launch\.bh-active\{[^}]*--marinara-chat-chrome-accent/u,
+  "the Tracker Panel launcher must visibly reflect its active state",
+);
+assert.match(
+  beholderInterfaceSource,
+  /\.bh-tracker-launch:focus-visible\{[^}]*outline/u,
+  "the Tracker Panel launcher must retain a visible keyboard focus indicator",
+);
 assert.match(
   beholderInterfaceSource,
   /\.bh-msg-hold\s*\{[^}]*var\(--bh-chroma\)/u,

@@ -1,5 +1,5 @@
 import { MessageSquareQuote } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { MemoryNagRecall } from "../../../../shared/src/features/agents/memory-nag/schema.js";
@@ -19,11 +19,10 @@ export function MemoryNagToolbar({ props }: { props: CapabilityProps }) {
   const { t } = useMemoryNagTranslation();
   const chatId = props.chatId ?? "";
   const enabled = props.chatMode === "roleplay" && Boolean(chatId);
-  const compact = props.mobileCompact === true;
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState({ top: -9999, left: -9999 });
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
   const [wordIndex, setWordIndex] = useState(0);
   const vault = useQuery({
     enabled,
@@ -40,30 +39,43 @@ export function MemoryNagToolbar({ props }: { props: CapabilityProps }) {
       setWordIndex((current) =>
         nags.length > 0 ? Math.floor(Math.random() * words.length) : (current + 1) % words.length,
       );
-    }, 1500);
+    }, 3000);
     return () => window.clearInterval(timer);
   }, [nags.length, words]);
 
+  const computePosition = useCallback(() => {
+    const anchor = buttonRef.current?.getBoundingClientRect();
+    if (!anchor) return null;
+    const width = popoverRef.current?.offsetWidth ?? 288;
+    const height = popoverRef.current?.offsetHeight ?? 160;
+    const left =
+      window.innerWidth < 768
+        ? Math.round((window.innerWidth - width) / 2)
+        : Math.min(anchor.left, window.innerWidth - width - 8);
+    return {
+      top: Math.max(8, Math.min(anchor.bottom + 4, window.innerHeight - height - 8)),
+      left: Math.max(8, Math.min(left, window.innerWidth - width - 8)),
+    };
+  }, []);
+
   useLayoutEffect(() => {
     if (!open) return;
-    const update = () => {
-      const anchor = buttonRef.current?.getBoundingClientRect();
-      if (!anchor) return;
-      const width = popoverRef.current?.offsetWidth ?? 352;
-      const height = popoverRef.current?.offsetHeight ?? 160;
-      setPosition({
-        top: Math.max(8, Math.min(anchor.bottom + 4, window.innerHeight - height - 8)),
-        left: Math.max(8, Math.min(anchor.left, window.innerWidth - width - 8)),
-      });
-    };
-    update();
+    setPosition(computePosition());
+  }, [open, computePosition]);
+
+  useEffect(() => {
+    if (!open) return;
+    const update = () => setPosition(computePosition());
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
+    const observer = new ResizeObserver(update);
+    if (popoverRef.current) observer.observe(popoverRef.current);
     return () => {
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
+      observer.disconnect();
     };
-  }, [open, nags.length]);
+  }, [open, computePosition]);
 
   useEffect(() => {
     if (!open) return;
@@ -88,29 +100,44 @@ export function MemoryNagToolbar({ props }: { props: CapabilityProps }) {
       <button
         ref={buttonRef}
         type="button"
-        className={`${props.toolbarButtonClass ?? "mari-chrome-control mari-chrome-control--small"} mn-toolbar-button${compact ? " mn-toolbar-button--compact" : ""}`}
+        className={`${props.toolbarButtonClass ?? "mari-chrome-control mari-chrome-control--small mn-toolbar-button--fallback"} mn-toolbar-button`}
         aria-expanded={open}
         aria-label={t("memoryNag.toolbar.label")}
         onClick={() => setOpen((value) => !value)}
       >
-        <MessageSquareQuote className="mn-icon" aria-hidden="true" />
         <span className="mn-toolbar-word" aria-hidden="true">
           {words[wordIndex] ?? words[0]}
         </span>
       </button>
       {open
         ? createPortal(
-            <div ref={popoverRef} className="mn-shell mn-popover" style={position}>
-              <strong>{t("memoryNag.toolbar.label")}</strong>
-              {nags.length > 0 ? (
-                <ul>
-                  {nags.map((nag, index) => (
-                    <li key={`${index}-${nag}`}>{nag}</li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="mn-muted">{t("memoryNag.toolbar.none")}</p>
-              )}
+            <div
+              ref={popoverRef}
+              data-chat-floating-panel
+              className="mn-shell mn-popover"
+              style={
+                position
+                  ? { position: "fixed", top: position.top, left: position.left }
+                  : { position: "fixed", top: -9999, left: -9999 }
+              }
+            >
+              <div className="mn-popover-header">
+                <strong className="mn-popover-title">
+                  <MessageSquareQuote className="mn-popover-title-icon" aria-hidden="true" />
+                  {t("memoryNag.toolbar.label")}
+                </strong>
+              </div>
+              <div className="mn-popover-body">
+                {nags.length > 0 ? (
+                  <ul className="mn-popover-list">
+                    {nags.map((nag, index) => (
+                      <li key={`${index}-${nag}`}>{nag}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mn-popover-empty">{t("memoryNag.toolbar.none")}</p>
+                )}
+              </div>
             </div>,
             document.body,
           )

@@ -1,6 +1,6 @@
 export const MEMORY_NAG_STYLES = `
 .mn-shell {
-  --mn-chroma: var(--marinara-chat-chrome-accent, var(--primary));
+  --mn-chroma: var(--marinara-chat-chrome-accent, var(--foreground));
   color: var(--foreground);
   font: inherit;
 }
@@ -311,57 +311,107 @@ export const MEMORY_NAG_STYLES = `
 }
 
 .mn-toolbar {
-  position: relative;
   display: inline-flex;
+  flex: none;
 }
 
 .mn-toolbar-button {
-  width: auto;
-  min-width: 2rem;
-  height: 2rem;
-  padding: 0.375rem 0.5rem;
-  gap: 0.375rem;
-  color: var(--mn-chroma);
-  font-size: 0.5625rem;
+  box-sizing: border-box;
+  flex: none;
+  overflow: hidden;
 }
 
-.mn-toolbar-button--compact {
+.mn-toolbar-button--fallback {
   width: 2rem;
+  min-width: 2rem;
+  height: 2rem;
   padding: 0.25rem;
 }
 
-.mn-toolbar-button--compact .mn-toolbar-word {
-  display: none;
-}
-
 .mn-toolbar-word {
-  max-width: 5rem;
+  display: block;
+  width: 100%;
+  min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
+  color: inherit;
+  font-size: 0.375rem;
+  font-weight: 600;
+  line-height: 0.5rem;
+  letter-spacing: -0.02em;
+  text-align: center;
+  text-overflow: clip;
   white-space: nowrap;
 }
 
 .mn-popover {
-  position: fixed;
   z-index: 9999;
-  width: min(22rem, calc(100vw - 2rem));
-  border: 1px solid var(--border);
+  box-sizing: border-box;
+  width: 18rem;
+  min-width: 15rem;
+  min-height: 6rem;
+  max-width: calc(100vw - 1rem);
+  max-height: min(24rem, calc(100vh - 1rem));
+  overflow: auto;
+  resize: both;
+  border: 1px solid var(--marinara-chat-chrome-panel-border, var(--border));
+  border-radius: 0.75rem;
+  background: var(--marinara-chat-chrome-panel-bg, var(--popover, var(--background)));
+  color: var(--marinara-chat-chrome-panel-text, var(--foreground));
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 40%);
+  backdrop-filter: blur(12px);
+}
+
+.mn-popover-header {
+  border-bottom: 1px solid var(--marinara-chat-chrome-panel-divider, var(--border));
+  padding: 0.625rem 0.75rem;
+}
+
+.mn-popover-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--marinara-chat-chrome-panel-title, var(--foreground));
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1rem;
+}
+
+.mn-popover-title-icon {
+  width: 0.625rem;
+  height: 0.625rem;
+  flex: none;
+  color: var(--marinara-chat-chrome-accent, var(--muted-foreground));
+}
+
+.mn-popover-body {
+  padding: 0.5rem;
+}
+
+.mn-popover-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: 0.375rem;
+  list-style: none;
+}
+
+.mn-popover-list li {
+  border: 1px solid color-mix(in srgb, var(--marinara-chat-chrome-panel-border, var(--border)) 55%, transparent);
   border-radius: 0.5rem;
-  background: var(--popover, var(--background));
-  padding: 0.65rem;
-  color: var(--foreground);
-  box-shadow: 0 12px 35px rgb(0 0 0 / 35%);
-}
-
-.mn-popover ul {
-  margin: 0.35rem 0 0;
-  padding-left: 1.15rem;
-}
-
-.mn-popover li {
-  margin: 0.25rem 0;
+  background: color-mix(in srgb, var(--marinara-chat-chrome-highlight-bg, var(--muted)) 32%, transparent);
+  padding: 0.5rem;
   font-size: 0.7rem;
   line-height: 1.4;
+}
+
+.mn-popover-empty {
+  margin: 0;
+  padding: 0.5rem;
+  color: color-mix(in srgb, var(--marinara-chat-chrome-panel-muted, var(--muted-foreground)) 60%, transparent);
+  font-size: 0.625rem;
+  line-height: 1rem;
+  text-align: center;
 }
 
 .mn-tracker {
@@ -373,21 +423,43 @@ export const MEMORY_NAG_STYLES = `
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--foreground) 5%, transparent);
 }
 
+.mn-tracker-veil {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--background) var(--tracker-profile-contrast-strong-top, 40%), transparent) 0%,
+    color-mix(in srgb, var(--card) var(--tracker-profile-contrast-strong-mid, 30%), transparent) 52%,
+    color-mix(in srgb, var(--background) var(--tracker-profile-contrast-strong-bottom, 42%), transparent) 100%
+  );
+}
+
+.mn-tracker-content {
+  position: relative;
+  z-index: 10;
+}
+
 .mn-tracker-header {
   display: flex;
   min-height: 1.75rem;
   align-items: center;
-  gap: 0.25rem;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 42%, transparent);
   padding: 0.125rem 0.25rem;
 }
 
 .mn-tracker-toggle {
   box-sizing: border-box;
+  display: flex;
+  min-width: 0;
   width: 100%;
-  border-left: 0;
-  border-right: 0;
-  border-top: 0;
+  flex: 1;
+  align-self: stretch;
+  align-items: center;
+  gap: 0.25rem;
+  border: 0;
+  border-radius: 0.125rem;
   background: transparent;
   color: inherit;
   cursor: pointer;
@@ -399,11 +471,25 @@ export const MEMORY_NAG_STYLES = `
   background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
+.mn-tracker-toggle:focus-visible {
+  outline: 1px solid var(--border);
+  outline-offset: -1px;
+}
+
+.mn-tracker-chevron-frame {
+  display: flex;
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+}
+
 .mn-tracker-chevron {
   width: 0.6875rem;
   height: 0.6875rem;
   flex: none;
-  color: var(--tracker-profile-icon, var(--mn-chroma));
+  color: var(--tracker-profile-icon, var(--muted-foreground));
   opacity: 0.6;
   transition: transform 150ms ease;
 }
@@ -419,7 +505,7 @@ export const MEMORY_NAG_STYLES = `
   flex: none;
   align-items: center;
   justify-content: center;
-  color: var(--mn-chroma);
+  color: var(--tracker-profile-icon, var(--muted-foreground));
   opacity: 0.75;
 }
 
@@ -511,8 +597,8 @@ export const MEMORY_NAG_STYLES = `
     padding: 0.75rem;
   }
 
-  .mn-toolbar-word {
-    display: none;
+  .mn-popover {
+    resize: none;
   }
 }
 `;
