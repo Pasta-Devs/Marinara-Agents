@@ -17,7 +17,7 @@ import { createNoodleStorage } from "../storage/noodle.storage.js";
 import { createPromptOverridesStorage } from "../storage/prompt-overrides.storage.js";
 import { canCreateGeneratedNoodleInteraction } from "./noodle-interaction-policy.js";
 import { isConnectionAdmissionFailure, type ConnectionAdmissionMode } from "../generation/connection-admission.js";
-import { normalizeNoodleHandle } from "./noodle-handle.js";
+import { createNoodleHandleResolver } from "./noodle-handle.js";
 import { normalizeNoodleImagePrompt } from "./noodle-image-prompt.js";
 import { canGenerateNoodleActivityForAccountKind } from "./noodle-prompt.js";
 import {
@@ -105,14 +105,14 @@ export async function prepareGeneratedNoodleMedia(input: {
   admissionMode?: ConnectionAdmissionMode;
 }): Promise<PreparedGeneratedNoodleMedia> {
   const activeAccounts = [...(input.personaAccount ? [input.personaAccount] : []), ...input.selectedParticipants];
-  const handleToAccount = new Map(activeAccounts.map((account) => [normalizeNoodleHandle(account.handle), account]));
+  const resolveAccount = createNoodleHandleResolver(activeAccounts);
   const activeCharacterReferenceAccounts = activeAccounts.filter((account) => account.kind === "character");
   const posts = new Map<NoodleGeneratedRefresh["posts"][number], PreparedPostMedia>();
   const stagedMedia: StagedNoodlePostMedia[] = [];
   let remainingImagePrompts = input.settings.enableImagePrompts ? input.settings.maxImagesPerRefresh : 0;
 
   for (const generatedPost of input.generated.posts.slice(0, input.settings.maxGeneratedPostsPerRefresh)) {
-    const account = handleToAccount.get(normalizeNoodleHandle(generatedPost.authorHandle));
+    const account = resolveAccount(generatedPost.authorHandle);
     if (!account || !canGenerateNoodleActivityForAccountKind(account.kind)) continue;
     const imagePrompt = remainingImagePrompts > 0 ? normalizeNoodleImagePrompt(generatedPost.imagePrompt) : null;
     if (imagePrompt) remainingImagePrompts -= 1;
@@ -198,12 +198,10 @@ export async function persistGeneratedNoodleActivity(input: {
   preparedMedia: PreparedGeneratedNoodleMedia;
 }) {
   const activeAccounts = [...input.selectedParticipants, ...(input.personaAccount ? [input.personaAccount] : [])];
-  const handleToAccount = new Map(
-    [...(input.personaAccount ? [input.personaAccount] : []), ...input.selectedParticipants].map((account) => [
-      normalizeNoodleHandle(account.handle),
-      account,
-    ]),
-  );
+  const resolveAccount = createNoodleHandleResolver([
+    ...(input.personaAccount ? [input.personaAccount] : []),
+    ...input.selectedParticipants,
+  ]);
   const freshPosts = await input.noodle.listPosts({
     since: sinceHoursIso(48),
     limit: 200,
@@ -217,8 +215,11 @@ export async function persistGeneratedNoodleActivity(input: {
   const imagePromptReviewItems: NoodleImagePromptReviewItem[] = [];
 
   for (const generatedPost of input.generated.posts.slice(0, input.settings.maxGeneratedPostsPerRefresh)) {
-    const account = handleToAccount.get(normalizeNoodleHandle(generatedPost.authorHandle));
-    if (!account) continue;
+    const account = resolveAccount(generatedPost.authorHandle);
+    if (!account) {
+      logger.warn("[noodle] Dropping generated post from unknown handle %s", generatedPost.authorHandle);
+      continue;
+    }
     if (!canGenerateNoodleActivityForAccountKind(account.kind)) {
       logger.warn("[noodle] Ignoring generated post attributed to persona %s", account.entityId);
       continue;
@@ -277,8 +278,15 @@ export async function persistGeneratedNoodleActivity(input: {
   for (const generatedInteraction of input.generated.interactions) {
     const interactionType = generatedInteraction.type;
     if ((quotas[interactionType] ?? 0) <= 0) continue;
-    const actor = handleToAccount.get(normalizeNoodleHandle(generatedInteraction.actorHandle));
-    if (!actor) continue;
+    const actor = resolveAccount(generatedInteraction.actorHandle);
+    if (!actor) {
+      logger.warn(
+        "[noodle] Dropping generated %s from unknown handle %s",
+        generatedInteraction.type,
+        generatedInteraction.actorHandle,
+      );
+      continue;
+    }
     if (!canGenerateNoodleActivityForAccountKind(actor.kind)) {
       logger.warn(
         "[noodle] Ignoring generated %s interaction attributed to persona %s",
@@ -287,9 +295,22 @@ export async function persistGeneratedNoodleActivity(input: {
       );
       continue;
     }
+    // Models mix the two target fields up freely, so try both maps for both
+    // fields before giving up on an otherwise valid reply.
     const targetPostId =
-      generatedInteraction.targetPostId ?? tempIdToPostId.get(generatedInteraction.targetTempId ?? "");
-    if (!targetPostId || !allowedPostIds.has(targetPostId)) continue;
+      [generatedInteraction.targetPostId, generatedInteraction.targetTempId].find(
+        (candidate) => candidate && allowedPostIds.has(candidate),
+      ) ??
+      tempIdToPostId.get(generatedInteraction.targetTempId ?? "") ??
+      tempIdToPostId.get(generatedInteraction.targetPostId ?? "");
+    if (!targetPostId || !allowedPostIds.has(targetPostId)) {
+      logger.warn(
+        "[noodle] Dropping generated %s from %s: no matching target post",
+        generatedInteraction.type,
+        actor.handle,
+      );
+      continue;
+    }
     const targetPost = await input.noodle.getPostById(targetPostId);
     if (!targetPost) continue;
     const parentInteraction = generatedInteraction.parentInteractionId
@@ -343,9 +364,17 @@ export async function persistGeneratedNoodleActivity(input: {
   const maxGeneratedFollows = Math.max(12, activeAccounts.length * 2);
   const seenGeneratedFollows = new Set<string>();
   for (const generatedFollow of input.generated.follows.slice(0, maxGeneratedFollows)) {
-    const actor = handleToAccount.get(normalizeNoodleHandle(generatedFollow.actorHandle));
-    const target = handleToAccount.get(normalizeNoodleHandle(generatedFollow.targetHandle));
-    if (!actor || !target || actor.id === target.id) continue;
+    const actor = resolveAccount(generatedFollow.actorHandle);
+    const target = resolveAccount(generatedFollow.targetHandle);
+    if (!actor || !target || actor.id === target.id) {
+      logger.warn(
+        "[noodle] Dropping generated follow %s -> %s: %s",
+        generatedFollow.actorHandle,
+        generatedFollow.targetHandle,
+        !actor || !target ? "unknown handle" : "an account cannot follow itself",
+      );
+      continue;
+    }
     if (!canGenerateNoodleActivityForAccountKind(actor.kind)) {
       logger.warn("[noodle] Ignoring generated follow attributed to persona %s", actor.entityId);
       continue;

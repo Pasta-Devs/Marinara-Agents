@@ -7,7 +7,8 @@ import {
   type NoodleGeneratedRefresh,
 } from "@marinara-engine/shared";
 import { parseGameJsonishSequence } from "../game/jsonish.js";
-import { normalizeNoodleHandle } from "./noodle-handle.js";
+import { noodleHandleKeySetHas, normalizeNoodleHandle } from "./noodle-handle.js";
+import { NOODLE_POST_HARD_MAX_LENGTH, NOODLE_REPLY_HARD_MAX_LENGTH } from "./noodle-response-format.js";
 
 type RefreshCollection = keyof NoodleGeneratedRefresh;
 
@@ -34,14 +35,12 @@ export function validateNoodleGeneratedRefresh(
   if (!hasActivity) return NOODLE_EMPTY_TIMELINE_REASON;
 
   const hasUsableAttribution =
-    refresh.posts.some((post) => allowedActorHandles.has(normalizeNoodleHandle(post.authorHandle))) ||
-    refresh.interactions.some((interaction) =>
-      allowedActorHandles.has(normalizeNoodleHandle(interaction.actorHandle)),
-    ) ||
+    refresh.posts.some((post) => noodleHandleKeySetHas(allowedActorHandles, post.authorHandle)) ||
+    refresh.interactions.some((interaction) => noodleHandleKeySetHas(allowedActorHandles, interaction.actorHandle)) ||
     refresh.follows.some(
       (follow) =>
-        allowedActorHandles.has(normalizeNoodleHandle(follow.actorHandle)) &&
-        knownHandles.has(normalizeNoodleHandle(follow.targetHandle)),
+        noodleHandleKeySetHas(allowedActorHandles, follow.actorHandle) &&
+        noodleHandleKeySetHas(knownHandles, follow.targetHandle),
     );
   return hasUsableAttribution ? null : "the response used no selected participant handle";
 }
@@ -111,6 +110,24 @@ export function deduplicateGeneratedNoodleContent(generated: NoodleGeneratedRefr
   };
 }
 
+/**
+ * Trim over-long text to the documented field limit before validation. A local
+ * model that runs past the limit still wrote a usable post, so clip it instead
+ * of discarding the whole row.
+ */
+function clipGeneratedContent(collection: RefreshCollection, row: unknown): unknown {
+  const limit =
+    collection === "posts"
+      ? NOODLE_POST_HARD_MAX_LENGTH
+      : collection === "interactions"
+        ? NOODLE_REPLY_HARD_MAX_LENGTH
+        : 0;
+  if (!limit || !row || typeof row !== "object" || Array.isArray(row)) return row;
+  const content = (row as Record<string, unknown>).content;
+  if (typeof content !== "string" || content.length <= limit) return row;
+  return { ...(row as Record<string, unknown>), content: content.slice(0, limit) };
+}
+
 const collectionSchemas = {
   posts: noodleGeneratedPostSchema,
   interactions: noodleGeneratedInteractionSchema,
@@ -137,7 +154,7 @@ export function parseNoodleGeneratedRefresh(value: unknown): {
     value.forEach((row, index) => {
       let parsedRow = false;
       for (const collection of Object.keys(collectionSchemas) as RefreshCollection[]) {
-        const parsed = collectionSchemas[collection].safeParse(row);
+        const parsed = collectionSchemas[collection].safeParse(clipGeneratedContent(collection, row));
         if (parsed.success) {
           (refresh[collection] as Array<typeof parsed.data>).push(parsed.data);
           parsedRow = true;
@@ -167,7 +184,7 @@ export function parseNoodleGeneratedRefresh(value: unknown): {
       continue;
     }
     rows.forEach((row, index) => {
-      const parsed = collectionSchemas[collection].safeParse(row);
+      const parsed = collectionSchemas[collection].safeParse(clipGeneratedContent(collection, row));
       if (parsed.success) {
         // Each schema is tied to its collection; the indexed assignment keeps
         // that relationship while avoiding four duplicate parsing loops.
