@@ -173,7 +173,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
       <label className="mn-label">
         <span>{t("memoryNag.settings.scanConnection")}</span>
         <select
-          className="mn-select"
+          className="mari-chrome-field mn-field"
           disabled={saving || scanning}
           value={settings.scanConnectionId ?? ""}
           onChange={(event) => updateSettings({ scanConnectionId: event.target.value || null })}
@@ -195,7 +195,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
           </label>
           <button
             type="button"
-            className="mn-icon-button"
+            className="mari-chrome-control mari-chrome-control--small mn-icon-button"
             disabled={saving || scanning || settings.vaultPrompt === MEMORY_NAG_DEFAULT_VAULT_PROMPT}
             onClick={() => updateSettings({ vaultPrompt: MEMORY_NAG_DEFAULT_VAULT_PROMPT })}
             title={t("memoryNag.settings.resetPrompt")}
@@ -207,7 +207,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
         <small>{t("memoryNag.settings.vaultPromptHelp")}</small>
         <textarea
           id="mn-memory-nag-vault-prompt"
-          className="mn-textarea mn-prompt-textarea"
+          className="mari-chrome-field mn-field mn-textarea mn-prompt-textarea"
           disabled={saving || scanning}
           maxLength={MEMORY_NAG_VAULT_PROMPT_MAX_LENGTH}
           value={settings.vaultPrompt}
@@ -222,7 +222,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
               <small>{t(field.help)}</small>
             </span>
             <input
-              className="mn-input mn-number-input"
+              className="mari-chrome-field mn-field mn-number-input"
               type="number"
               min={field.min}
               max={field.max}
@@ -246,7 +246,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
       <div className="mn-actions">
         <button
           type="button"
-          className="mn-button mn-button-primary"
+          className="mari-chrome-control mari-chrome-control--primary mari-chrome-control--small"
           disabled={saving || scanning}
           onClick={() => void saveSettings()}
         >
@@ -256,14 +256,18 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
         <button
           id="mn-memory-nag-create-button"
           type="button"
-          className="mn-button"
+          className="mari-chrome-control mari-chrome-control--small"
           disabled={saving || scanning}
           onClick={() => void scanChat()}
         >
           <Play className="mn-icon" aria-hidden="true" />
           {t("memoryNag.settings.scan")}
         </button>
-        <button type="button" className="mn-button" onClick={() => setVaultOpen(true)}>
+        <button
+          type="button"
+          className="mari-chrome-control mari-chrome-control--small"
+          onClick={() => setVaultOpen(true)}
+        >
           <Database className="mn-icon" aria-hidden="true" />
           {t("memoryNag.settings.vault")}
         </button>
@@ -292,7 +296,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
                   {!scanning ? (
                     <button
                       type="button"
-                      className="mn-icon-button"
+                      className="mari-chrome-control mari-chrome-control--small mn-icon-button"
                       onClick={() => setScanOpen(false)}
                       aria-label={t("memoryNag.settings.closeProgress")}
                     >
@@ -329,18 +333,26 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
                   ) : null}
                   <div className="mn-actions mn-actions-end">
                     {scanning ? (
-                      <button type="button" className="mn-button" onClick={stopScan}>
+                      <button
+                        type="button"
+                        className="mari-chrome-control mari-chrome-control--small"
+                        onClick={stopScan}
+                      >
                         <Square className="mn-icon" aria-hidden="true" />
                         {t("memoryNag.settings.stop")}
                       </button>
                     ) : (
                       <>
-                        <button type="button" className="mn-button" onClick={() => setScanOpen(false)}>
+                        <button
+                          type="button"
+                          className="mari-chrome-control mari-chrome-control--small"
+                          onClick={() => setScanOpen(false)}
+                        >
                           {t("memoryNag.settings.closeProgress")}
                         </button>
                         <button
                           type="button"
-                          className="mn-button mn-button-primary"
+                          className="mari-chrome-control mari-chrome-control--primary mari-chrome-control--small"
                           onClick={() => {
                             setScanOpen(false);
                             setVaultOpen(true);

@@ -1,8 +1,18 @@
-export const MEMORY_NAG_DEFAULT_VAULT_PROMPT = `Read this roleplay batch and save only details worth nagging a character about later.
+const MEMORY_NAG_LEGACY_DEFAULT_VAULT_PROMPT = `Read this roleplay batch and save only details worth nagging a character about later.
 Keep each memory to one short sentence. Capture promises, meaningful actions, relationship changes, mistakes, debts, injuries, and memorable admissions.
 A memory can belong to more than one character. Skip the user unless they explicitly asked a character to remember something.
 You may quote a short dialogue line verbatim when its exact wording matters, then name the speaker and rough context.
 Resolve an existing memory only when this batch clearly settles it. Never invent character IDs.`;
+
+export const MEMORY_NAG_DEFAULT_VAULT_PROMPT = `You are a memory handler. Read the roleplay batch below and save only details worth nagging a character about later or resolve those that have already been addressed:
+- Keep each memory to up to three short sentences.
+- Capture promises, meaningful actions, relationship changes, mistakes, debts, injuries, and memorable admissions.
+- A memory can belong to more than one character.
+- Skip the user unless they asked a character to remember, promise, or do something, but that memory is bounded to the character (or characters) they directed it to.
+- You may quote a short dialogue line verbatim when its exact wording matters, then name the speaker and rough context. Example: "I promise to keep you safe," Dottore promised to Mari after her panic attack at the lab.
+- Resolve an existing memory only when this batch clearly settles it.
+- Do not duplicate existing memories.
+- Never invent character IDs.`;
 
 export const MEMORY_NAG_VAULT_PROMPT_MAX_LENGTH = 12_000;
 
@@ -70,11 +80,12 @@ export function normalizeMemoryNagSettings(value: unknown): MemoryNagSettings {
     typeof source.scanConnectionId === "string" && source.scanConnectionId.trim()
       ? source.scanConnectionId.trim()
       : null;
+  const storedVaultPrompt = typeof source.vaultPrompt === "string" ? source.vaultPrompt.trim() : "";
   return {
     scanConnectionId,
     vaultPrompt:
-      typeof source.vaultPrompt === "string" && source.vaultPrompt.trim()
-        ? source.vaultPrompt.trim().slice(0, MEMORY_NAG_VAULT_PROMPT_MAX_LENGTH)
+      storedVaultPrompt && storedVaultPrompt !== MEMORY_NAG_LEGACY_DEFAULT_VAULT_PROMPT
+        ? storedVaultPrompt.slice(0, MEMORY_NAG_VAULT_PROMPT_MAX_LENGTH)
         : MEMORY_NAG_DEFAULTS.vaultPrompt,
     messagesPerBatch: boundedInteger(source.messagesPerBatch, MEMORY_NAG_DEFAULTS.messagesPerBatch, 5, 200),
     memoriesPerCharacter: boundedInteger(source.memoriesPerCharacter, MEMORY_NAG_DEFAULTS.memoriesPerCharacter, 1, 50),

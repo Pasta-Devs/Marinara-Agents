@@ -20,6 +20,16 @@ const candidates = [
 ];
 
 assert.equal(normalizeMemoryNagSettings({}).vaultPrompt, MEMORY_NAG_DEFAULT_VAULT_PROMPT);
+assert.equal(
+  normalizeMemoryNagSettings({
+    vaultPrompt: `Read this roleplay batch and save only details worth nagging a character about later.
+Keep each memory to one short sentence. Capture promises, meaningful actions, relationship changes, mistakes, debts, injuries, and memorable admissions.
+A memory can belong to more than one character. Skip the user unless they explicitly asked a character to remember something.
+You may quote a short dialogue line verbatim when its exact wording matters, then name the speaker and rough context.
+Resolve an existing memory only when this batch clearly settles it. Never invent character IDs.`,
+  }).vaultPrompt,
+  MEMORY_NAG_DEFAULT_VAULT_PROMPT,
+);
 assert.equal(normalizeMemoryNagSettings({ vaultPrompt: "  Keep only promises.  " }).vaultPrompt, "Keep only promises.");
 const customScanMessages = buildMemoryNagScanMessages({
   participants: [{ id: "dottore", name: "Dottore", current: true }],
@@ -30,7 +40,11 @@ const customScanMessages = buildMemoryNagScanMessages({
 });
 assert.match(customScanMessages[0]!.content, /^Keep only promises\./);
 assert.match(customScanMessages[0]!.content, /Create at most 3 memories/);
-assert.match(customScanMessages[0]!.content, /Return only JSON/);
+assert.ok(
+  customScanMessages[0]!.content.endsWith(
+    'Return only JSON: {"memories":[{"text":"...","characterIds":["id"]}],"resolvedMemoryIds":["existing-id"]}',
+  ),
+);
 
 assert.deepEqual(selectMemoryNagRecall({ nags_needed: false, memoryIds: ["promise"] }, candidates, 3), {
   nags_needed: false,

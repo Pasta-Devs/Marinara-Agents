@@ -51,7 +51,7 @@ function MemoryNagError({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="mn-shell mn-panel mn-stack" role="alert">
       <strong>{t("memoryNag.error.interface")}</strong>
-      <button type="button" className="mn-button" onClick={onRetry}>
+      <button type="button" className="mari-chrome-control mari-chrome-control--small" onClick={onRetry}>
         {t("memoryNag.error.retry")}
       </button>
     </div>
