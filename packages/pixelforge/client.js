@@ -1406,7 +1406,11 @@ PF.brief = (() => {
     return brief;
   }
 
-  // ── defaults(): the themed fallback brief (skip / failure — never a gate) ───
+  // ── defaults(): the themed brief a world compiles to when nobody wrote one ──
+  // NOT a failure path any more (see generate()'s design revision): no failure
+  // seals anything. What it remains is the schema's own worked example per theme —
+  // the fixture the compiler's invariants are driven through, and the answer for
+  // any future caller that needs a brief without a generation call behind it.
   function defaults(theme, seed) {
     return validate(DEFAULT_BRIEFS[theme] || DEFAULT_BRIEFS["cozy-village"], { theme, seed });
   }
@@ -1487,14 +1491,33 @@ PF.brief = (() => {
    *  chat_busy; one plain re-roll on truncation (the route's maxTokens is
    *  min()-only — "never a raise" — so a numeric override could only shrink
    *  the budget); salvage of the LONGEST truncated raw seen across attempts.
-   *  Returns a SEALED brief only for outcomes worth sealing: success, salvage,
-   *  or a deterministic/paid failure (400 contract, 422 provider/parse) →
-   *  themed defaults. Transient outcomes — 404 route-absent, 409, 429, 5xx,
-   *  network error, budget timeout — return NULL so the caller leaves the
-   *  chat unsealed and the next boot simply tries again. */
+   *
+   *  Returns a SEALED brief for the two outcomes that produce a REAL one —
+   *  success and salvage — and NULL for every failure, so the caller leaves the
+   *  chat unsealed and the next visit simply tries again.
+   *
+   *  DESIGN REVISION (this release, maintainer ruling #7 / plan §Q3b). The 0.4.0
+   *  ladder sealed THEMED DEFAULTS on a deterministic/paid failure — 400 contract,
+   *  422 provider/parse — on the reasoning that a paid call per visit is worse
+   *  than the default world. That decision predates the loading gate and does not
+   *  survive it: back then a default world was what the player was already walking
+   *  in, so sealing it changed nothing they could see. Now the gate holds play
+   *  precisely so that nobody invests in a world that is going to be discarded,
+   *  and the README states the contract plainly — "a generation failure is a retry
+   *  screen; nothing is stored". Sealing defaults on a 400 makes that sentence
+   *  false in the one case a player cannot undo: the key is written, the chat is
+   *  permanently a themed default, and the three paragraphs of setting they wrote
+   *  are gone with no way back. The paid-call worry is also nearly hypothetical
+   *  now — capPreferences clamps to 7,800 against the route's 8,000 cap, so the
+   *  reachable 400 is a contract bug rather than a long setting.
+   *
+   *  `onFailure(kind)` reports WHY, once, so the retry screen can say something
+   *  truer than "something went wrong" — a deterministic refusal and a busy engine
+   *  want different sentences from the player. Kinds: "unavailable" (404/409/429/
+   *  5xx), "refused" (400/422 with nothing salvageable), "network", "timeout". */
   async function generate(
     chatId,
-    { theme, seed, preferences, onProgress, budgetMs = 90_000, busyWaitMs = Math.min(15_000, budgetMs / 6) },
+    { theme, seed, preferences, onProgress, onFailure, budgetMs = 90_000, busyWaitMs = Math.min(15_000, budgetMs / 6) },
   ) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), budgetMs);
@@ -1535,24 +1558,34 @@ PF.brief = (() => {
       }
       if (response.status === 404 || response.status === 409 || response.status === 429 || response.status >= 500) {
         console.warn("[pixelforge] world generation unavailable (transient); retrying next visit", response.status);
+        onFailure?.("unavailable");
         return null;
       }
+      // 400 (contract) and 422 (provider/parse, nothing salvageable). Deterministic
+      // — trying again probably gets the same answer — but STILL a retry screen and
+      // still nothing stored, because the alternative is deciding a themed default
+      // world on the player's behalf and writing it down where they cannot undo it.
       console.warn(
-        "[pixelforge] world generation failed; sealing the themed default",
+        "[pixelforge] world generation was refused; the chat stays unsealed",
         response.status,
         response.body?.error ?? null,
       );
+      onFailure?.("refused");
+      return null;
     } catch (err) {
       // Network trouble and the budget timeout are both transient — leave the
       // chat unsealed rather than freezing the default world in forever.
-      if (!controller.signal.aborted)
+      if (!controller.signal.aborted) {
         console.warn("[pixelforge] world generation failed (network); retrying next visit", err);
-      else console.warn("[pixelforge] world generation timed out; retrying next visit");
+        onFailure?.("network");
+      } else {
+        console.warn("[pixelforge] world generation timed out; retrying next visit");
+        onFailure?.("timeout");
+      }
       return null;
     } finally {
       clearTimeout(timer);
     }
-    return defaults(theme, seed);
   }
 
   // ── guidance(): the exact text that ships in the one call ───────────────────
@@ -8992,18 +9025,60 @@ PF.save = {
   /** Generation did not seal. The chat stays UNSEALED — which is the whole
    *  no-bricked-chat argument: nothing was written, so the next visit arms the
    *  gate again and tries again on its own, and no default world was ever sealed
-   *  on a detail-heavy player's behalf. */
-  _failGate(core) {
+   *  on a detail-heavy player's behalf. NO failure seals one now, deterministic
+   *  ones included (18-brief `generate`'s design revision).
+   *
+   *  `kind` is the ladder's own verdict, carried onto the gate so the retry screen
+   *  can say something truer than "something went wrong": a busy engine and a
+   *  refused request are the same screen but not the same sentence, and a
+   *  deterministic 400 that reads as a mystery is a player pressing a button that
+   *  will never work. Absent for the throw path, which has no verdict to report. */
+  _failGate(core, kind) {
     if (!this.gateHolds(core)) return;
-    this.gate = { ...this.gate, state: "failed", attempts: this.gate.attempts + 1 };
+    this.gate = {
+      ...this.gate,
+      state: "failed",
+      attempts: this.gate.attempts + 1,
+      failure: typeof kind === "string" && kind ? kind : null,
+    };
     core.hud?.update?.();
+  },
+
+  /** ONE SENTENCE FOR THE RETRY SCREEN, per failure kind, and it lives here
+   *  rather than in 70-hud for the reason every other decision in this module
+   *  does: the HUD needs a DOM and the harness has none, so a string the player
+   *  reads would be the one part of the screen nothing could pin.
+   *
+   *  The kinds are the ladder's own (18-brief `generate`'s `onFailure`) plus
+   *  "storage", which is this module's — the brief generated fine and the PATCH
+   *  that would have stored it did not. "refused" is the one that earns its own
+   *  sentence: a deterministic 400/422 gives the same answer every time, and a
+   *  player pressing a button that will never work deserves to be told so.
+   *  Unknown or absent kinds fall back to the honest generic — a throw has no
+   *  verdict to report, and a kind a newer ladder invents must not blank the
+   *  panel. */
+  gateReason(kind) {
+    switch (kind) {
+      case "refused":
+        return "The request was turned down rather than delayed, so another attempt may well get the same answer; a shorter, plainer setting description is the likeliest thing to change it.";
+      case "unavailable":
+        return "The engine could not take the request just now — it may be busy with something else.";
+      case "network":
+        return "The request did not get through.";
+      case "timeout":
+        return "It was taking longer than the time set aside for it.";
+      case "storage":
+        return "The world was written, but saving it to this chat did not go through.";
+      default:
+        return "Something went wrong partway through.";
+    }
   },
 
   /** The retry the gate's failure state offers, and the only caller is that
    *  button: everything else re-arms by revisiting the chat. */
   retryGeneration(core) {
     if (!this.gateHolds(core) || this.gate.state !== "failed") return false;
-    this.gate = { ...this.gate, state: "generating" };
+    this.gate = { ...this.gate, state: "generating", failure: null };
     core.hud?.update?.();
     void this.maybeGenerateBrief(core);
     return true;
@@ -9068,14 +9143,24 @@ PF.save = {
       ]
         .filter(Boolean)
         .join("\n");
-      const sealed = await PF.brief.generate(chatId, { theme, seed, preferences });
+      let failure = null;
+      const sealed = await PF.brief.generate(chatId, {
+        theme,
+        seed,
+        preferences,
+        onFailure: (kind) => {
+          failure = kind;
+        },
+      });
       if (!sealed) {
-        // Transient failure (busy engine, network, timeout, route absent): do NOT
-        // seal — the key stays absent, this visit offers retry, and the next visit
+        // EVERY failure — a busy engine, the network, the budget timeout, a route
+        // that is not there, and now a deterministic 400 or 422 as well: do NOT
+        // seal. The key stays absent, this visit offers retry, and the next visit
         // arms the gate again. There is deliberately no "play the default world"
-        // escape here: sealing a default world for a player who wrote three
-        // paragraphs of setting is the outcome ruling #7 exists to forbid.
-        if (chatId === core.chatId) this._failGate(core);
+        // escape on any branch: sealing a default world for a player who wrote
+        // three paragraphs of setting is the outcome ruling #7 exists to forbid,
+        // and a deterministic failure is the one case they could never undo.
+        if (chatId === core.chatId) this._failGate(core, failure);
         return;
       }
       let stored = false;
@@ -9089,7 +9174,7 @@ PF.save = {
         }
       }
       if (!stored) {
-        if (chatId === core.chatId) this._failGate(core);
+        if (chatId === core.chatId) this._failGate(core, "storage");
         return;
       }
       // Cached BEFORE the chat fence below, and that ordering is the gate's
@@ -10935,17 +11020,29 @@ PF.Hud = class {
     // two different screens, and folding them into a boolean would leave the retry
     // button hidden behind a change the memo below never saw.
     const gate = PF.save.gateHolds(this.core) ? PF.save.gate.state : null;
-    if (mode !== this._mode || spatialAvail !== this._spatialAvail || gate !== this._gate) {
+    // WHY it failed is part of the screen, not only THAT it failed. The ladder
+    // refuses to seal a default world on any failure now (18-brief `generate`),
+    // deterministic ones included — which is right, and which also means a
+    // player can be looking at a retry button that will keep giving the same
+    // answer. It has to be in the memo key or the sentence never changes.
+    const gateWhy = gate === "failed" ? (PF.save.gate.failure ?? null) : null;
+    if (
+      mode !== this._mode ||
+      spatialAvail !== this._spatialAvail ||
+      gate !== this._gate ||
+      gateWhy !== this._gateWhy
+    ) {
       this._mode = mode;
       this._spatialAvail = spatialAvail;
       this._gate = gate;
+      this._gateWhy = gateWhy;
       const inWorld = mode === "walk" && !gate;
       this.gateEl.style.display = gate ? "flex" : "none";
       this.gateRetry.style.display = gate === "failed" ? "" : "none";
       this.gateTitle.textContent = gate === "failed" ? "The world didn't finish being written." : "Writing your world…";
       this.gateBody.textContent =
         gate === "failed"
-          ? "Nothing was lost and nothing was decided for you — this chat is exactly as you left it. Try again whenever you like."
+          ? `${PF.save.gateReason(gateWhy)} Nothing was lost and nothing was decided for you — this chat is exactly as you left it. Try again whenever you like.`
           : "One generation call is shaping the settlement, its people and the places in it. This can take a minute.";
       this.topbar.style.display = gate ? "none" : "";
       // Replay: the host owns the whole screen. Combat: keep a minimal HUD —

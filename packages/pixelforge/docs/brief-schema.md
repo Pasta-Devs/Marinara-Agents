@@ -264,24 +264,36 @@ response is **never stored** (checkpoints capture by value — see #5110).
 **Global budget:** the sealed brief must serialize ≤8 KB; over-budget briefs truncate prose fields
 in reverse-leverage order (`persona`s → zone `flavor`s → `flavor`) before anything structural.
 
-## 5. Latency & failure budget (generation never blocks — amended)
+## 5. Latency & failure budget (generation BLOCKS behind a loading gate — amended twice)
 
 *Amended from the sealed draft (which put generation in the wizard with a Skip button): the
 pre-launch chat is not experience-stamped, so the #5135 route 409s before launch, and after
 launch the host tears the setup UI down — there is no wizard window to block.* Generation runs
-**surface-side, after launch**: the wizard stamps `generate: true` into the experience config and
-seeds the themed default world, so the player is walking immediately; the one call runs behind a
-toast. Package-side call budget: 90 s abort; `userContent` clamps to 7,800 chars (the route 400s
+**surface-side, after launch**: the wizard stamps `generate: true` into the experience config.
+*Amended again in 0.11 (maintainer ruling #7, plan §Q3b): it no longer runs behind a toast on a
+throwaway world the player is already walking in. A generate-configured chat whose brief is not
+sealed holds at a **loading gate** — the sim does not step, no mutator resolves, no save is
+written — because a world that is going to be discarded must never be one anybody invested in.*
+Package-side call budget: 90 s abort; `userContent` clamps to 7,800 chars (the route 400s
 past 8,000 — a hard contract). On a 409 `chat_busy` (server-documented transient, Retry-After 15)
 → wait it out **once** inside the budget. On the route's `truncated: true` 422 → **one** plain
 re-roll retry — *amended: the draft said "retry at maxTokens: 4096", but the route treats
 `maxTokens` as min()-only ("never a raise"), so a numeric override could only shrink the budget;
 the retry's value is length variance* — then **salvage** from the LONGEST `raw` seen across both
 attempts (transport pass rules: balanced span, complete array elements) and let the floors top up
-the rest. Only outcomes worth sealing seal: success, salvage, or a deterministic/paid failure
-(400 contract, `provider_error`/parse-failure 422) → themed defaults. Transient outcomes — 404
-route-absent, 409, 429, 5xx, network error, budget timeout — leave the chat **unsealed**: the
-key stays absent and the next visit simply tries again (the default world plays fine meanwhile).
+the rest. **NO FAILURE SEALS A WORLD** — only the two outcomes that produce a real brief do:
+success and salvage. Every other outcome, transient (404 route-absent, 409, 429, 5xx, network
+error, budget timeout) *and deterministic* (400 contract, `provider_error`/parse-failure 422),
+leaves the chat **unsealed**: the key stays absent, the gate shows a retry screen, and the next
+visit arms it again.
+*Revised in 0.11 (maintainer ruling #7, plan §Q3b). The 0.4.0 ladder sealed themed defaults on a
+deterministic/paid failure, on the reasoning that a paid call per visit is worse than the default
+world. That decision predates the loading gate, which now holds play precisely so that nobody
+invests in a world that is going to be discarded — so sealing a default is no longer "the world
+they were already walking in", it is a permanent decision made on their behalf in the one case they
+cannot undo. The `userContent` clamp above also makes a reachable 400 a contract bug rather than a
+long setting. The ladder reports the failure KIND instead (`unavailable` | `refused` | `network` |
+`timeout`), and the retry screen says which.*
 The sealed result stores **atomically** under the top-level `pixelforgeBrief` metadata key
 (shallow-merge PATCH, 3 retries — never a read-modify-write of the whole setup config), and the
 world rebuilds in place when it lands; the stored key doubles as the one-shot guard, so a chat

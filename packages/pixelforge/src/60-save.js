@@ -540,18 +540,60 @@ PF.save = {
   /** Generation did not seal. The chat stays UNSEALED — which is the whole
    *  no-bricked-chat argument: nothing was written, so the next visit arms the
    *  gate again and tries again on its own, and no default world was ever sealed
-   *  on a detail-heavy player's behalf. */
-  _failGate(core) {
+   *  on a detail-heavy player's behalf. NO failure seals one now, deterministic
+   *  ones included (18-brief `generate`'s design revision).
+   *
+   *  `kind` is the ladder's own verdict, carried onto the gate so the retry screen
+   *  can say something truer than "something went wrong": a busy engine and a
+   *  refused request are the same screen but not the same sentence, and a
+   *  deterministic 400 that reads as a mystery is a player pressing a button that
+   *  will never work. Absent for the throw path, which has no verdict to report. */
+  _failGate(core, kind) {
     if (!this.gateHolds(core)) return;
-    this.gate = { ...this.gate, state: "failed", attempts: this.gate.attempts + 1 };
+    this.gate = {
+      ...this.gate,
+      state: "failed",
+      attempts: this.gate.attempts + 1,
+      failure: typeof kind === "string" && kind ? kind : null,
+    };
     core.hud?.update?.();
+  },
+
+  /** ONE SENTENCE FOR THE RETRY SCREEN, per failure kind, and it lives here
+   *  rather than in 70-hud for the reason every other decision in this module
+   *  does: the HUD needs a DOM and the harness has none, so a string the player
+   *  reads would be the one part of the screen nothing could pin.
+   *
+   *  The kinds are the ladder's own (18-brief `generate`'s `onFailure`) plus
+   *  "storage", which is this module's — the brief generated fine and the PATCH
+   *  that would have stored it did not. "refused" is the one that earns its own
+   *  sentence: a deterministic 400/422 gives the same answer every time, and a
+   *  player pressing a button that will never work deserves to be told so.
+   *  Unknown or absent kinds fall back to the honest generic — a throw has no
+   *  verdict to report, and a kind a newer ladder invents must not blank the
+   *  panel. */
+  gateReason(kind) {
+    switch (kind) {
+      case "refused":
+        return "The request was turned down rather than delayed, so another attempt may well get the same answer; a shorter, plainer setting description is the likeliest thing to change it.";
+      case "unavailable":
+        return "The engine could not take the request just now — it may be busy with something else.";
+      case "network":
+        return "The request did not get through.";
+      case "timeout":
+        return "It was taking longer than the time set aside for it.";
+      case "storage":
+        return "The world was written, but saving it to this chat did not go through.";
+      default:
+        return "Something went wrong partway through.";
+    }
   },
 
   /** The retry the gate's failure state offers, and the only caller is that
    *  button: everything else re-arms by revisiting the chat. */
   retryGeneration(core) {
     if (!this.gateHolds(core) || this.gate.state !== "failed") return false;
-    this.gate = { ...this.gate, state: "generating" };
+    this.gate = { ...this.gate, state: "generating", failure: null };
     core.hud?.update?.();
     void this.maybeGenerateBrief(core);
     return true;
@@ -616,14 +658,24 @@ PF.save = {
       ]
         .filter(Boolean)
         .join("\n");
-      const sealed = await PF.brief.generate(chatId, { theme, seed, preferences });
+      let failure = null;
+      const sealed = await PF.brief.generate(chatId, {
+        theme,
+        seed,
+        preferences,
+        onFailure: (kind) => {
+          failure = kind;
+        },
+      });
       if (!sealed) {
-        // Transient failure (busy engine, network, timeout, route absent): do NOT
-        // seal — the key stays absent, this visit offers retry, and the next visit
+        // EVERY failure — a busy engine, the network, the budget timeout, a route
+        // that is not there, and now a deterministic 400 or 422 as well: do NOT
+        // seal. The key stays absent, this visit offers retry, and the next visit
         // arms the gate again. There is deliberately no "play the default world"
-        // escape here: sealing a default world for a player who wrote three
-        // paragraphs of setting is the outcome ruling #7 exists to forbid.
-        if (chatId === core.chatId) this._failGate(core);
+        // escape on any branch: sealing a default world for a player who wrote
+        // three paragraphs of setting is the outcome ruling #7 exists to forbid,
+        // and a deterministic failure is the one case they could never undo.
+        if (chatId === core.chatId) this._failGate(core, failure);
         return;
       }
       let stored = false;
@@ -637,7 +689,7 @@ PF.save = {
         }
       }
       if (!stored) {
-        if (chatId === core.chatId) this._failGate(core);
+        if (chatId === core.chatId) this._failGate(core, "storage");
         return;
       }
       // Cached BEFORE the chat fence below, and that ordering is the gate's

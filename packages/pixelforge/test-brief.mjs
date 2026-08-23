@@ -1363,9 +1363,21 @@ const wayrestCast = [
   loadedPF.spatial.reset();
 }
 
-// 22-25. The §5 failure ladder (amended): transients leave the chat UNSEALED,
-// truncation re-rolls plainly and salvages the longest raw across attempts,
-// and only deterministic/paid failures seal the themed default.
+// 22-25. The §5 failure ladder (REVISED THIS RELEASE): NO failure seals a world.
+// Truncation still re-rolls plainly and salvages the longest raw across attempts,
+// because that path yields a REAL brief — but every outcome that does not is a
+// retry screen with nothing stored, deterministic 400/422 included.
+//
+// THE REVISION, and why the pin below moved. The 0.4.0 ladder sealed themed
+// defaults on a deterministic/paid failure, reasoning that a paid call per visit
+// is worse than the default world. That predates the loading gate: back then the
+// player was already walking in a default world, so sealing it changed nothing
+// they could see. Now the gate holds play precisely so nobody invests in a world
+// that will be discarded, and the README states the contract — "a generation
+// failure is a retry screen; nothing is stored". Sealing on a 400 made that false
+// in the one case a player cannot undo. capPreferences clamping to 7,800 against
+// the route's 8,000 cap also makes a reachable 400 a contract bug rather than a
+// long setting, so the paid-call worry is close to hypothetical now.
 {
   loadedPF.api = loadedPF.api ?? {};
   const prevPost = loadedPF.api.postExperienceGeneration;
@@ -1402,12 +1414,33 @@ const wayrestCast = [
     "salvage recorded in _repairs",
   );
 
-  // 24. Deterministic provider failure → sealed themed default (a paid call
-  // per visit would be worse than the default world).
-  stub([{ status: 422, body: { code: "provider_error", truncated: false } }]);
-  const sealedDefault = await brief.generate("c", { theme: "sci-fi-colony", seed: 2, preferences: "" });
-  assert.ok(sealedDefault && Array.isArray(sealedDefault.cast), "provider_error seals a full brief");
-  assert.equal(sealedDefault.theme, "sci-fi-colony", "the sealed default keeps the theme");
+  // 24. Deterministic failure → NULL, unsealed, a retry screen. REVISED: this
+  // pinned "provider_error seals a full brief" through 0.4.0 and 0.10, and the
+  // revision is deliberate (see the header above). A deterministic verdict is
+  // still a verdict the player is TOLD about, so the kind is reported once.
+  for (const [label, response, kind] of [
+    ["a 422 provider error", { status: 422, body: { code: "provider_error", truncated: false } }, "refused"],
+    ["a 400 contract failure", { status: 400, body: { code: "user_content_too_long" } }, "refused"],
+    ["a 429", { status: 429, body: null }, "unavailable"],
+    ["a 503", { status: 503, body: null }, "unavailable"],
+  ]) {
+    stub([response]);
+    const kinds = [];
+    const outcome = await brief.generate("c", {
+      theme: "sci-fi-colony",
+      seed: 2,
+      preferences: "",
+      onFailure: (k) => kinds.push(k),
+    });
+    assert.equal(outcome, null, `${label} seals NOTHING — no default world decided on the player's behalf`);
+    assert.deepEqual(kinds, [kind], `${label} reports its kind exactly once, so the retry screen can say why`);
+  }
+  // Truncation salvage is untouched by the revision, and this is the line that
+  // says why: that path produces a REAL brief out of what the model actually
+  // wrote, which is nothing like sealing a default nobody asked for.
+  stub([{ status: 422, body: { truncated: true, raw: '{"scale":"village","name":"Halfway","cast":[]}' } }]);
+  const stillSalvages = await brief.generate("c", { theme: "cozy-village", seed: 2, preferences: "" });
+  assert.equal(stillSalvages?.name, "Halfway", "a truncated response is still salvaged and still seals");
 
   // 25. 409 chat_busy waits out Retry-After once inside the budget, then
   // succeeds; oversized preferences clamp under the route's 8,000-char cap.
@@ -11087,8 +11120,8 @@ await withSavePath(async ({ calls, armed, behavior, tick, makeCore }) => {
     core2.sim = loadedPF.save.restore(core2.host.chatMeta, "chat-gate-fail");
     assert.equal(loadedPF.save.armGate(core2, core2.host.chatMeta), true, "gated");
     calls.length = 0;
-    // 503 is the ladder's transient verdict: it returns null rather than sealing
-    // themed defaults, which is exactly the outcome the gate must not paper over.
+    // 503 is the ladder's transient verdict: null, nothing stored. The block below
+    // does the deterministic one, which since 0.11 answers the same way.
     responses.post = async () => ({ status: 503, body: null });
     await loadedPF.save.maybeGenerateBrief(core2);
     await tick();
@@ -11110,6 +11143,7 @@ await withSavePath(async ({ calls, armed, behavior, tick, makeCore }) => {
       true,
       "a failed generation leaves the chat in the state that re-arms the gate on the next visit",
     );
+    assert.equal(loadedPF.save.gate.failure, "unavailable", "and the panel knows WHY, not only that it failed");
 
     // The retry is a real retry: same chat, same gate, one more host call.
     responses.post = async () => ({ status: 200, body: { ok: true, data: gateBriefData } });
@@ -11118,6 +11152,64 @@ await withSavePath(async ({ calls, armed, behavior, tick, makeCore }) => {
     for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
     assert.equal(loadedPF.save.gate, null, "and the retry seals it");
     assert.equal(postCount(), 3, "one call for the failure, one for the retry, on top of the first chat's");
+
+    // ── AND A DETERMINISTIC FAILURE IS THE SAME SCREEN (DESIGN REVISION) ──
+    // The 0.4.0 ladder sealed a themed default on a 400/422, reasoning that a paid
+    // call per visit is worse than the default world. That predates the gate: back
+    // then the default world was what the player was already walking in, so sealing
+    // it changed nothing they could see. Now it would write down a world nobody
+    // asked for, permanently, in the one case a player cannot undo — while the
+    // README promises "a generation failure is a retry screen; nothing is stored".
+    // Revised: no failure seals anything. The gate carries the KIND instead, so a
+    // deterministic refusal is not a mystery button that never works.
+    {
+      loadedPF.save.reset();
+      loadedPF.save._briefCache.clear();
+      const refused = makeCore("chat-gate-400", 400);
+      refused.host.chatMeta = { gameSetupConfig: { experienceConfig: { generate: true, seed: 400 } } };
+      refused.sim = loadedPF.save.restore(refused.host.chatMeta, "chat-gate-400");
+      assert.equal(loadedPF.save.armGate(refused, refused.host.chatMeta), true, "gated");
+      calls.length = 0;
+      responses.post = async () => ({ status: 400, body: { code: "user_content_too_long" } });
+      await loadedPF.save.maybeGenerateBrief(refused);
+      await tick();
+      assert.equal(loadedPF.save.gate.state, "failed", "a 400 is a retry screen");
+      assert.equal(loadedPF.save.gate.failure, "refused", "…that says the request was turned down, not delayed");
+      assert.equal(
+        calls.filter((c) => c.kind === "patch").length,
+        0,
+        "and NOTHING is sealed — no themed default written down where the player cannot undo it",
+      );
+      assert.equal(
+        loadedPF.save.briefExpected(refused.host.chatMeta, "chat-gate-400"),
+        true,
+        "the chat is still exactly a chat waiting for a brief",
+      );
+      assert.equal(refused.sim.world.brieved, undefined, "and the world under the gate is still the placeholder");
+      // The sentences are pinned HERE and not in 70-hud, which the harness cannot
+      // load: a string the player reads with nothing asserting it is a string that
+      // drifts. "refused" earns its own, because trying again really may not help.
+      assert.notEqual(
+        loadedPF.save.gateReason("refused"),
+        loadedPF.save.gateReason("unavailable"),
+        "a refusal and a busy engine do not read the same",
+      );
+      for (const kind of ["refused", "unavailable", "network", "timeout", "storage", null, "a-kind-from-the-future"]) {
+        const text = loadedPF.save.gateReason(kind);
+        assert.ok(text && text.trim().endsWith("."), `${kind} has a whole sentence, not a blank panel`);
+      }
+      // The retry clears the verdict: the panel must not still be explaining the
+      // last failure while a new call is in flight behind it.
+      responses.post = async () => ({ status: 200, body: { ok: true, data: gateBriefData } });
+      assert.equal(loadedPF.save.retryGeneration(refused), true, "the button runs");
+      assert.equal(loadedPF.save.gate.state, "generating", "flipping the panel back synchronously");
+      assert.equal(loadedPF.save.gate.failure, null, "…and clearing the verdict, so it stops explaining a dead one");
+      for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
+      assert.equal(loadedPF.save.gate, null, "and a refusal is not permanent — the retry seals a real world");
+      assert.equal(refused.sim.world.brieved, true, "…which compiles");
+      loadedPF.save.reset();
+      loadedPF.save._briefCache.clear();
+    }
 
     // ── THE LIFT COMES BEFORE THE DIRTY FLAG, AND THIS IS WHERE THAT SHOWS ──
     // markDirty refuses while the gate holds, so arming the save first would arm

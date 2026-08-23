@@ -37,7 +37,9 @@ state until its brief is sealed and its world compiles: the sim does not step, n
 mutator resolves, and no save is written until then.
 
 A generation failure is a **retry screen**, never a default world sealed on the player's behalf:
-nothing is stored, so the chat is exactly as it was and the next visit tries again. Chats that
+nothing is stored, so the chat is exactly as it was and the next visit tries again. That is now
+true of EVERY failure — 0.11 revised the 0.4.0-era ladder, which still sealed a themed default on a
+deterministic 400/422; the retry screen says which kind of failure it was instead. Chats that
 never asked for generation — pre-0.4.0 saves, and any chat whose brief was explicitly declined —
 are untouched and play immediately on the themed default world, exactly as they did in 0.3.0. The
 known cost: on an engine whose generation route is missing entirely, every attempt is a transient

@@ -285,17 +285,29 @@ PF.Hud = class {
     // two different screens, and folding them into a boolean would leave the retry
     // button hidden behind a change the memo below never saw.
     const gate = PF.save.gateHolds(this.core) ? PF.save.gate.state : null;
-    if (mode !== this._mode || spatialAvail !== this._spatialAvail || gate !== this._gate) {
+    // WHY it failed is part of the screen, not only THAT it failed. The ladder
+    // refuses to seal a default world on any failure now (18-brief `generate`),
+    // deterministic ones included — which is right, and which also means a
+    // player can be looking at a retry button that will keep giving the same
+    // answer. It has to be in the memo key or the sentence never changes.
+    const gateWhy = gate === "failed" ? (PF.save.gate.failure ?? null) : null;
+    if (
+      mode !== this._mode ||
+      spatialAvail !== this._spatialAvail ||
+      gate !== this._gate ||
+      gateWhy !== this._gateWhy
+    ) {
       this._mode = mode;
       this._spatialAvail = spatialAvail;
       this._gate = gate;
+      this._gateWhy = gateWhy;
       const inWorld = mode === "walk" && !gate;
       this.gateEl.style.display = gate ? "flex" : "none";
       this.gateRetry.style.display = gate === "failed" ? "" : "none";
       this.gateTitle.textContent = gate === "failed" ? "The world didn't finish being written." : "Writing your world…";
       this.gateBody.textContent =
         gate === "failed"
-          ? "Nothing was lost and nothing was decided for you — this chat is exactly as you left it. Try again whenever you like."
+          ? `${PF.save.gateReason(gateWhy)} Nothing was lost and nothing was decided for you — this chat is exactly as you left it. Try again whenever you like.`
           : "One generation call is shaping the settlement, its people and the places in it. This can take a minute.";
       this.topbar.style.display = gate ? "none" : "";
       // Replay: the host owns the whole screen. Combat: keep a minimal HUD —
