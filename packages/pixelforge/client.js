@@ -9015,8 +9015,14 @@ PF.save = {
     // begins now" and after the lift, because it goes through the mutators the
     // gate was refusing a line ago (PF.economy.grantStartingPurse says why this
     // moment and not a default on the block). armGate pays the same debt on every
-    // boot path that never reaches here.
-    PF.economy.grantStartingPurse(core);
+    // boot path that never reaches here — and applies the same test: SEALED
+    // worlds only. A skipped marker reaches this tail with `sealed` null and a
+    // themed default under it, and a default world is not a world beginning — it
+    // is the world that has always been there, which is what keeps the purse off
+    // every declined and legacy chat alike (armGate's own guard already pays
+    // those nothing; two chats on the identical default world must hold the
+    // same money).
+    if (sealed) PF.economy.grantStartingPurse(core);
     core.hud?.refreshChips();
     core.hud?.toast("The world takes shape.");
     this.markDirty(core);

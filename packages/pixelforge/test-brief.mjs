@@ -11337,6 +11337,34 @@ await withSavePath(async ({ calls, armed, behavior, tick, makeCore }) => {
       loadedPF.save.reset();
     }
 
+    // ── AND A SKIPPED MARKER LANDING MID-GATE LIFTS WITHOUT A PURSE ──
+    // The marker path shares the install tail with the sealed path, and the tail
+    // pays the starting purse — but a default world is not a world beginning, it
+    // is the world that has always been there. armGate already pays a declined
+    // chat nothing at boot; the mid-gate route must agree, or two chats standing
+    // in the IDENTICAL themed default hold different money depending on nothing
+    // but which door they came through.
+    {
+      loadedPF.save.reset();
+      loadedPF.save._briefCache.clear();
+      const declined = makeCore("chat-gate-declined", 5154);
+      declined.host.chatMeta = { gameSetupConfig: { experienceConfig: { generate: true, seed: 5154 } } };
+      declined.sim = loadedPF.save.restore(declined.host.chatMeta, "chat-gate-declined");
+      assert.equal(loadedPF.save.armGate(declined, declined.host.chatMeta), true, "gated");
+      declined.host.chatMeta.pixelforgeBrief = { skipped: true };
+      await loadedPF.save.maybeGenerateBrief(declined);
+      for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
+      assert.equal(loadedPF.save.gate, null, "the marker lifts the gate");
+      assert.equal(declined.sim.world.interim, undefined, "onto the themed default, not the placeholder");
+      assert.equal(declined.sim.world.brieved, undefined, "which no brief describes");
+      assert.equal(
+        P.get(declined).pouch.money,
+        0,
+        "and a marker-lifted default world holds no purse — sealed worlds only",
+      );
+      loadedPF.save.reset();
+    }
+
     // ── AND A THROW BEFORE THE SEAL IS STILL JUST A RETRY ──
     // The other half of the same branch: nothing was stored, so "Try again" is a
     // real second generation call and not a recompile of something that is not
