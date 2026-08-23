@@ -7066,10 +7066,11 @@ PF.player = {
   // ── Quest-dangling repair (plan §Q5) ───────────────────────────────────────
 
   /** Drop active quests whose giver is not in this world. GATED, because the
-   *  three ways to be wrong all look the same from here: an interim world has
+   *  four ways to be wrong all look the same from here: an interim world has
    *  not been compiled yet, an unevaluated stamp means we do not know whether
-   *  this is even the right world, and EVERY giver dangling says the world is
-   *  wrong rather than the quests. Returns { dropped, notices }. */
+   *  this is even the right world, a world with no NPCs at all cannot vouch for
+   *  anyone, and EVERY giver dangling says the world is wrong rather than the
+   *  quests. Returns { dropped, notices }. */
   repairQuests(player, world, evaluated) {
     const notices = [];
     const active = Array.isArray(player.quests?.active) ? player.quests.active : [];
@@ -7861,7 +7862,7 @@ const mergeStampEntries = (held, incoming) => {
 // Its OWN chat-metadata key, never the snapshot and never the route row: the
 // whole point of a quarantine is that it survives the write that replaces the
 // thing it is holding. Written immediately at creation with the brief path's
-// 3-retry backoff, and the in-memory bag is the authority — the same discipline
+// three-attempts-total backoff, and the in-memory bag is the authority — the same discipline
 // PF.save.ensurePresent already applies to the save key, for the same reason
 // (~40 engine call sites still use the unqueued whole-blob updateMetadata).
 PF.quarantine = {
@@ -8125,7 +8126,9 @@ PF.quarantine = {
     // order says. Keeping it costs every other slot and buys nothing: the old
     // loop worked down the order, emptied the bag, and then dropped the
     // oversized entry too. `put`'s fit-check keeps one out of the bag in the
-    // first place; this catches one that grew there through a stamp merge.
+    // first place; this catches one that grew there through a stamp merge or
+    // arrived oversized straight off disk (hydrate's readBag checks shape, not
+    // size).
     for (const slot of QUARANTINE_SLOTS) {
       if (text.length <= QUARANTINE_MAX_CHARS) break;
       if (!this._bag[slot]) continue;
