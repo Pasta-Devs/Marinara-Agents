@@ -44,7 +44,7 @@ export function MemoryNagToolbar({ props }: { props: CapabilityProps }) {
     <div className="mn-shell mn-toolbar">
       <button
         type="button"
-        className="mn-toolbar-button"
+        className="mari-chrome-control mari-chrome-control--small mn-toolbar-button"
         aria-expanded={open}
         aria-label={t("memoryNag.toolbar.label")}
         onClick={() => setOpen((value) => !value)}

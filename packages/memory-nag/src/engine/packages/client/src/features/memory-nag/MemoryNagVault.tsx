@@ -144,7 +144,12 @@ function MemoryEditor({
     <div className="mn-stack">
       <div className="mn-row mn-between">
         <strong>{t(memory ? "memoryNag.vault.editorEdit" : "memoryNag.vault.editorNew")}</strong>
-        <button type="button" className="mn-button" onClick={onClose} aria-label={t("memoryNag.vault.cancel")}>
+        <button
+          type="button"
+          className="mari-chrome-control mari-chrome-control--small"
+          onClick={onClose}
+          aria-label={t("memoryNag.vault.cancel")}
+        >
           <X className="mn-icon" aria-hidden="true" />
         </button>
       </div>
@@ -152,7 +157,7 @@ function MemoryEditor({
         <span>{t("memoryNag.vault.memory")}</span>
         <textarea
           ref={textareaRef}
-          className="mn-textarea"
+          className="mari-chrome-field mn-field mn-textarea"
           value={draft.text}
           maxLength={500}
           placeholder={t("memoryNag.vault.memoryPlaceholder")}
@@ -162,10 +167,18 @@ function MemoryEditor({
       <div className="mn-row mn-between">
         <div className="mn-actions" aria-label={t("memoryNag.vault.macros")}>
           <span className="mn-muted">{t("memoryNag.vault.macros")}</span>
-          <button type="button" className="mn-button" onClick={() => insertMacro("{{char}}")}>
+          <button
+            type="button"
+            className="mari-chrome-control mari-chrome-control--small"
+            onClick={() => insertMacro("{{char}}")}
+          >
             {"{{char}}"}
           </button>
-          <button type="button" className="mn-button" onClick={() => insertMacro("{{user}}")}>
+          <button
+            type="button"
+            className="mari-chrome-control mari-chrome-control--small"
+            onClick={() => insertMacro("{{user}}")}
+          >
             {"{{user}}"}
           </button>
         </div>
@@ -173,7 +186,7 @@ function MemoryEditor({
           <button
             id="mn-memory-nag-expand-button"
             type="button"
-            className="mn-button"
+            className="mari-chrome-control mari-chrome-control--small"
             onClick={() => setExpanded(true)}
           >
             <Maximize2 className="mn-icon" aria-hidden="true" />
@@ -210,11 +223,21 @@ function MemoryEditor({
         </div>
       ) : null}
       <div className="mn-actions">
-        <button type="button" className="mn-button mn-button-primary" disabled={saving} onClick={() => void save()}>
+        <button
+          type="button"
+          className="mari-chrome-control mari-chrome-control--primary mari-chrome-control--small"
+          disabled={saving}
+          onClick={() => void save()}
+        >
           <Check className="mn-icon" aria-hidden="true" />
           {t("memoryNag.vault.save")}
         </button>
-        <button type="button" className="mn-button" disabled={saving} onClick={onClose}>
+        <button
+          type="button"
+          className="mari-chrome-control mari-chrome-control--small"
+          disabled={saving}
+          onClick={onClose}
+        >
           {t("memoryNag.vault.cancel")}
         </button>
       </div>
@@ -234,7 +257,11 @@ function MemoryEditor({
       >
         <div className="mn-modal-head">
           <strong>{t("memoryNag.vault.expandedTitle")}</strong>
-          <button type="button" className="mn-button" onClick={() => setExpanded(false)}>
+          <button
+            type="button"
+            className="mari-chrome-control mari-chrome-control--small"
+            onClick={() => setExpanded(false)}
+          >
             <ChevronLeft className="mn-icon" aria-hidden="true" />
             {t("memoryNag.vault.collapse")}
           </button>
@@ -342,7 +369,12 @@ export function MemoryNagVaultModal({ props, onClose }: { props: CapabilityProps
             <Brain className="mn-icon" aria-hidden="true" />
             <strong>{t("memoryNag.vault.title")}</strong>
           </div>
-          <button type="button" className="mn-button" onClick={onClose} aria-label={t("memoryNag.vault.close")}>
+          <button
+            type="button"
+            className="mari-chrome-control mari-chrome-control--small"
+            onClick={onClose}
+            aria-label={t("memoryNag.vault.close")}
+          >
             <X className="mn-icon" aria-hidden="true" />
           </button>
         </div>
@@ -354,7 +386,7 @@ export function MemoryNagVaultModal({ props, onClose }: { props: CapabilityProps
                   type="button"
                   role="tab"
                   aria-selected={status === tab}
-                  className="mn-button mn-tab"
+                  className="mari-chrome-control mari-chrome-control--small mn-tab"
                   key={tab}
                   onClick={() => setStatus(tab)}
                 >
@@ -362,13 +394,21 @@ export function MemoryNagVaultModal({ props, onClose }: { props: CapabilityProps
                 </button>
               ))}
             </div>
-            <button type="button" className="mn-button mn-button-primary" onClick={() => setEditing("new")}>
+            <button
+              type="button"
+              className="mari-chrome-control mari-chrome-control--primary mari-chrome-control--small"
+              onClick={() => setEditing("new")}
+            >
               <Plus className="mn-icon" aria-hidden="true" />
               {t("memoryNag.vault.add")}
             </button>
           </div>
           <div className="mn-grid">
-            <select className="mn-select" value={characterId} onChange={(event) => setCharacterId(event.target.value)}>
+            <select
+              className="mari-chrome-field mn-field"
+              value={characterId}
+              onChange={(event) => setCharacterId(event.target.value)}
+            >
               <option value="">{t("memoryNag.vault.allCharacters")}</option>
               {participants.map((participant) => (
                 <option key={participant.id} value={participant.id}>
@@ -379,7 +419,7 @@ export function MemoryNagVaultModal({ props, onClose }: { props: CapabilityProps
             </select>
             <input
               type="search"
-              className="mn-input"
+              className="mari-chrome-field mn-field"
               value={search}
               placeholder={t("memoryNag.vault.search")}
               onChange={(event) => setSearch(event.target.value)}
@@ -421,13 +461,17 @@ export function MemoryNagVaultModal({ props, onClose }: { props: CapabilityProps
                 ))}
               </div>
               <div className="mn-actions">
-                <button type="button" className="mn-button" onClick={() => setEditing(memory)}>
+                <button
+                  type="button"
+                  className="mari-chrome-control mari-chrome-control--small"
+                  onClick={() => setEditing(memory)}
+                >
                   <Pencil className="mn-icon" aria-hidden="true" />
                   {t("memoryNag.vault.edit")}
                 </button>
                 <button
                   type="button"
-                  className="mn-button"
+                  className="mari-chrome-control mari-chrome-control--small"
                   onClick={() =>
                     void updateMemory(memory, { status: memory.status === "active" ? "resolved" : "active" })
                   }
@@ -439,7 +483,11 @@ export function MemoryNagVaultModal({ props, onClose }: { props: CapabilityProps
                   )}
                   {t(memory.status === "active" ? "memoryNag.vault.resolve" : "memoryNag.vault.restore")}
                 </button>
-                <button type="button" className="mn-button mn-button-danger" onClick={() => void removeMemory(memory)}>
+                <button
+                  type="button"
+                  className="mari-chrome-control mari-chrome-control--danger mari-chrome-control--small"
+                  onClick={() => void removeMemory(memory)}
+                >
                   <Trash2 className="mn-icon" aria-hidden="true" />
                   {t("memoryNag.vault.delete")}
                 </button>
