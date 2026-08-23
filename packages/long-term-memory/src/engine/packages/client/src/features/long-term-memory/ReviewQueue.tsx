@@ -51,6 +51,8 @@ type SkipDraftResponse = {
   mutationIds: string[];
 };
 
+type ReviewAction = "accept" | "skip";
+
 type BatchResult = {
   action: "accepted" | "skipped";
   phase: "preflight" | "complete";
@@ -347,6 +349,21 @@ function mutationHasOverlongText(mutation: LtmDraftMutation) {
       : mutation.kind === "create_note"
         ? Object.values(mutation.note.sections).some((section) => section.text.length > MAX_SECTION_TEXT_LENGTH)
         : false;
+}
+
+function mutationProposedText(mutation: LtmDraftMutation) {
+  if (mutation.kind === "create_note")
+    return Object.values(mutation.note.sections)
+      .map((section) => section.text.trim())
+      .filter(Boolean)
+      .join(" ");
+  if (mutation.kind === "append_section") return mutation.text.trim();
+  if (mutation.kind === "update_section") return mutation.section.text.trim();
+  if (mutation.kind === "set_keywords") return mutation.keywords.join(", ");
+  if (mutation.kind === "set_status") return mutation.status;
+  if (mutation.kind === "set_subjects") return mutation.subjects.map((subject) => subject.key).join(", ");
+  if (mutation.kind === "add_link") return mutation.link.target;
+  return "";
 }
 
 function reviewStateStorageKey(chatId: string | null | undefined) {
@@ -1137,7 +1154,9 @@ export default function ReviewQueue({
   const reviewContextReady = notes.isSuccess && !notes.isFetching;
   const missingContextTitle = reviewContextFailed
     ? localizeUi("ui.longTermMemory.reviewqueue.memoryContextUnavailable")
-    : localizeUi("ui.longTermMemory.reviewqueue.untitledMemory");
+    : reviewContextBusy
+      ? localizeUi("ui.longTermMemory.reviewqueue.loadingMemoryContext")
+      : localizeUi("ui.longTermMemory.reviewqueue.untitledMemory");
   const sourceIds = useMemo(
     () => [
       ...new Set([
@@ -1330,7 +1349,6 @@ export default function ReviewQueue({
     setPreflightRows(new Map());
     setPreflightByDraftId(new Map());
     setPreflightKey(null);
-    setResult(null);
   }, [contextNoteIds, notes.data, notes.isError, notes.isFetching, notes.isSuccess]);
 
   useEffect(() => {
@@ -1634,8 +1652,54 @@ export default function ReviewQueue({
       })),
     );
 
+  const discardDependentIds = (applicableRows: readonly ReviewRow[], allRows: readonly ReviewRow[]) => {
+    const selectedIds = new Set(applicableRows.map((row) => row.mutation.id));
+    const dependentIds = new Set<string>();
+    for (const [draftId, selectedDraftRows] of groupByDraft(applicableRows)) {
+      const draftRows = allRows.filter((row) => row.draftId === draftId);
+      for (const id of acceptedMutationIds(
+        draftRows,
+        selectedDraftRows.map((row) => row.mutation.id),
+      )) {
+        if (!selectedIds.has(id)) dependentIds.add(id);
+      }
+    }
+    return dependentIds;
+  };
+
+  const confirmDiscard = async (applicableRows: readonly ReviewRow[], allRows: readonly ReviewRow[]) => {
+    const dependentIds = discardDependentIds(applicableRows, allRows);
+    const dependentCount = dependentIds.size;
+    const dependentCopy = localizeUi(
+      dependentCount === 0
+        ? "ui.longTermMemory.reviewqueue.discardDependentNone"
+        : selectLtmPluralForm(locale, dependentCount) === "one"
+          ? "ui.longTermMemory.reviewqueue.discardDependentOne"
+          : "ui.longTermMemory.reviewqueue.discardDependentOther",
+      { count: dependentCount },
+    );
+    const message = localizeUi(
+      applicableRows.length === 1
+        ? "ui.longTermMemory.reviewqueue.discardProposalDescription"
+        : "ui.longTermMemory.reviewqueue.discardSelectedDescription",
+      {
+        count: applicableRows.length,
+        title: mutationDisplayLabel(applicableRows[0]?.mutation, noteById, localizeUi),
+        dependent: dependentCopy,
+      },
+    );
+    return props.confirmAction
+      ? props.confirmAction({
+          title: localizeUi("ui.longTermMemory.reviewqueue.discardProposalTitle"),
+          message,
+          confirmLabel: localizeUi("ui.longTermMemory.reviewqueue.discard"),
+          tone: "destructive",
+        })
+      : window.confirm(`${localizeUi("ui.longTermMemory.reviewqueue.discardProposalTitle")}\n\n${message}`);
+  };
+
   const runBatch = async (
-    action: "accept" | "skip",
+    action: ReviewAction,
     explicitRows?: ReviewRow[],
     allRows: readonly ReviewRow[] = rows,
     allRowByMutationId: ReadonlyMap<string, ReviewRow> = rowByMutationId,
@@ -1677,6 +1741,7 @@ export default function ReviewQueue({
       });
       return;
     }
+    if (action === "skip" && !(await confirmDiscard(applicableRows, allRows))) return;
     const acceptRequests = action === "accept" ? buildAcceptRequests(applicableRows, allRows) : [];
     const requestKey = action === "accept" ? acceptRequestKey(acceptRequests) : null;
     batchControllerRef.current?.abort();
@@ -2094,7 +2159,13 @@ export default function ReviewQueue({
     const previewChanges = hideProjection ? [] : row.changes;
     const expanded = expandedMutationIds.has(row.mutation.id);
     const preflight = preflightRows.get(row.mutation.id);
-    const preflightBlocked = preflight?.status === "blocked";
+    const rowRequestKey = acceptRequestKey(buildAcceptRequests([row], rows));
+    const rowPreflighted = preflightKey === rowRequestKey;
+    const rowPreflight = preflightByDraftId.get(row.draftId)?.selectedMutationIds.includes(row.mutation.id)
+      ? preflight
+      : undefined;
+    const preflightBlocked = rowPreflight?.status === "blocked";
+    const preflightReady = rowPreflighted && rowPreflight?.status === "ready";
     const dependencyCount = dependencyCounts.get(row.mutation.id) ?? 0;
     const mutationLabel = localizeUi(mutationLabels[mutation.kind]);
     const dispositionLabel = localizeUi(dispositionLabels[row.disposition]);
@@ -2111,6 +2182,31 @@ export default function ReviewQueue({
             title: targetTitle,
           })
         : targetTitle;
+    const previewChange = previewChanges[0];
+    const proposedText = mutationProposedText(mutation);
+    const collapsedBody = edited || projectionStale ? proposedText : targetBody;
+    const changeSummary = edited
+      ? localizeUi("ui.longTermMemory.reviewqueue.editedProposalSummary", {
+          value: proposedText || localizeUi("ui.longTermMemory.reviewqueue.editedChange"),
+        })
+      : projectionStale
+        ? localizeUi("ui.longTermMemory.reviewqueue.editedProjectionSummary")
+        : previewChange
+          ? localizeUi("ui.longTermMemory.reviewqueue.changeSummary", {
+              before: previewChange.before || localizeUi("ui.longTermMemory.reviewqueue.newValue"),
+              after: previewChange.after,
+            })
+          : localizeUi("ui.longTermMemory.reviewqueue.proposedSummary", {
+              value: proposedText || mutation.summary,
+            });
+    const rowActionLabel =
+      running === "accept"
+        ? localizeUi("ui.longTermMemory.reviewqueue.applyingChange", { title: targetTitle })
+        : preflightBlocked
+          ? localizeUi("ui.longTermMemory.reviewqueue.applyBlockedForTitle", { title: targetTitle })
+          : preflightReady
+            ? localizeUi("ui.longTermMemory.reviewqueue.applyChangeForTitle", { title: targetTitle })
+            : localizeUi("ui.longTermMemory.reviewqueue.reviewChangeForTitle", { title: targetTitle });
     const importance =
       mutation.kind === "create_note"
         ? importanceOptions.find((value) =>
@@ -2154,8 +2250,8 @@ export default function ReviewQueue({
             data-ltm-disposition={row.disposition}
           >
             <span className="block text-sm font-semibold">{displayTitle}</span>
-            {targetBody ? (
-              <span className="mt-1 block truncate text-xs text-[var(--muted-foreground)]">{targetBody}</span>
+            {collapsedBody ? (
+              <span className="mt-1 block truncate text-xs text-[var(--muted-foreground)]">{collapsedBody}</span>
             ) : null}
             <span className="mt-1 flex flex-wrap gap-1 text-[0.6875rem]">
               {targetType ? (
@@ -2205,6 +2301,23 @@ export default function ReviewQueue({
                 </span>
               ) : null}
             </span>
+            <span data-ltm-review-summary className="mt-3 block space-y-1 text-xs">
+              <span className="block font-semibold text-[var(--foreground)]">
+                {localizeUi("ui.longTermMemory.reviewqueue.changeLabel")}
+              </span>
+              <span className="block line-clamp-2 break-words text-[var(--muted-foreground)]">{changeSummary}</span>
+            </span>
+            <span data-ltm-review-evidence-summary className="mt-2 block space-y-1 text-xs">
+              <span className="block font-semibold text-[var(--foreground)]">
+                {localizeUi("ui.longTermMemory.reviewqueue.evidenceLabel")}
+              </span>
+              <span className="block line-clamp-2 break-words text-[var(--muted-foreground)]">
+                {humanizeText(row.mutation.evidence[0] ?? localizeUi("ui.longTermMemory.reviewqueue.noEvidence"))}
+                {row.mutation.evidence.length > 1
+                  ? ` ${localizeUi("ui.longTermMemory.reviewqueue.moreEvidence", { count: row.mutation.evidence.length - 1 })}`
+                  : ""}
+              </span>
+            </span>
             <ChevronRight
               aria-hidden="true"
               size="0.875rem"
@@ -2218,9 +2331,8 @@ export default function ReviewQueue({
           >
             <IconButton
               icon={Check}
-              label={localizeUi("ui.longTermMemory.reviewqueue.acceptAndSave", {
-                title: targetTitle,
-              })}
+              label={rowActionLabel}
+              data-ltm-review-action={preflightReady ? "apply" : preflightBlocked ? "blocked" : "review"}
               iconSize="1rem"
               className="mari-editor-action--primary !h-11 !min-h-11 !w-11 !min-w-11"
               style={{ height: 44, minHeight: 44, width: 44, minWidth: 44 }}
@@ -2235,7 +2347,7 @@ export default function ReviewQueue({
             />
             <IconButton
               icon={X}
-              label={localizeUi("ui.longTermMemory.reviewqueue.skipProposalTitle", {
+              label={localizeUi("ui.longTermMemory.reviewqueue.discardProposalNamed", {
                 title: targetTitle,
               })}
               iconSize="1rem"
@@ -2453,6 +2565,17 @@ export default function ReviewQueue({
     );
   };
 
+  const reviewQueueEmpty =
+    !review.isLoading &&
+    !review.isError &&
+    !rejectedSuggestions.isLoading &&
+    !rejectedSuggestions.isError &&
+    !review.data?.sources.length &&
+    !rejectedSuggestions.data?.suggestions.length;
+  const workspaceUnavailable = reviewQueueEmpty || reviewContextBusy || reviewContextFailed;
+  const reviewDataUnavailable =
+    review.isLoading || review.isError || rejectedSuggestions.isLoading || rejectedSuggestions.isError;
+
   return (
     <section
       ref={reviewRef}
@@ -2574,12 +2697,7 @@ export default function ReviewQueue({
       {rejectedSuggestions.isLoading ? (
         <StatusSurface busy>{localizeUi("ui.longTermMemory.reviewqueue.loadingRejectedSuggestions")}</StatusSurface>
       ) : null}
-      {!review.isLoading &&
-      !review.isError &&
-      !rejectedSuggestions.isLoading &&
-      !rejectedSuggestions.isError &&
-      !review.data?.sources.length &&
-      !rejectedSuggestions.data?.suggestions.length ? (
+      {reviewQueueEmpty ? (
         <StatusSurface>
           {localizeUi("ui.longTermMemory.reviewqueue.noProposedMemoriesNeedReviewYetImportASource")}
         </StatusSurface>
@@ -2602,18 +2720,18 @@ export default function ReviewQueue({
       {reviewContextFailed ? (
         <StatusSurface tone="danger">
           {localizeUi("ui.longTermMemory.reviewqueue.memoryContextCouldNotLoad")}{" "}
-          {notes.error instanceof Error ? notes.error.message : ""}{" "}
           <Button className="shrink-0" disabled={notes.isFetching} onClick={() => void notes.refetch()}>
             {localizeUi("ui.longTermMemory.activityview.retry")}
           </Button>
         </StatusSurface>
       ) : null}
       <LtmWorkspace
+        className={workspaceUnavailable || reviewDataUnavailable ? "hidden" : ""}
         activeMobilePane={mobilePane}
         onMobilePaneChange={setMobilePane}
         switcherLabel={localizeUi("ui.longTermMemory.longtermmemorynavigation.workspacePanes")}
         navigator={{
-          label: localizeUi("ui.longTermMemory.reviewqueue.reviewQueue"),
+          label: localizeUi("ui.longTermMemory.reviewqueue.sourcesPane"),
           content: (
             <div data-ltm-review-navigator className="space-y-3">
               <header className="space-y-1 px-1">
@@ -2729,7 +2847,7 @@ export default function ReviewQueue({
           ),
         }}
         workbench={{
-          label: localizeUi("ui.longTermMemory.reviewqueue.reviewQueue"),
+          label: localizeUi("ui.longTermMemory.reviewqueue.reviewPane"),
           content: (
             <div data-ltm-review-workbench className="mari-editor-panel min-w-0 space-y-4 p-3 sm:p-4">
               <header className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] pb-4">
