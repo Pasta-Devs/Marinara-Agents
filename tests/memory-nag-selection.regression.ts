@@ -221,6 +221,11 @@ assert.match(
   /return words\.length > 0 \? words : splitWords\(empty\);/u,
   "Memory Nag idle words must drop punctuation before cycling",
 );
+assert.match(
+  memoryNagToolbarSource,
+  /word\.length > 2 && \/\[\\p\{L\}\\p\{N\}\]\/u\.test\(word\)/u,
+  "Memory Nag toolbar words must contain a letter or number",
+);
 assert.match(memoryNagToolbarSource, /data-chat-floating-panel/u, "Memory Nag must portal a floating tracker panel");
 assert.doesNotMatch(
   memoryNagToolbarSource,

@@ -42,7 +42,11 @@ assert.match(
   /\.mn-modal \{[\s\S]*width: min\(48rem, 100%\);[\s\S]*background: var\(--marinara-chat-chrome-panel-bg\);/u,
   "Memory Nag Vault must match the standard Assembled Prompt window width and surface",
 );
-assert.match(vault, /className="mari-chrome-control mari-chrome-control--small mn-modal-close"/u);
+assert.match(
+  vault,
+  /<Brain className="mn-icon"[\s\S]*className="mari-chrome-control mari-chrome-control--small mn-modal-close"/u,
+  "Memory Nag Vault header must retain the standard close control",
+);
 assert.match(vault, /className="mn-overlay" role="presentation" onClick=\{onClose\}/u);
 
 process.stdout.write("Memory Nag settings UI contract passed\n");
