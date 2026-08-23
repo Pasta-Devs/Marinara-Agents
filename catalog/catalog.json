@@ -1004,6 +1004,76 @@
     },
     {
       "manifest": {
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
+          "minor": 14
+        },
+        "builtAgainst": {
+          "engineVersion": "2.4.4",
+          "engineCommit": "3bf9781975a7a172e19784f6be2596fb8a86d4c1"
+        },
+        "id": "memory-nag",
+        "name": "Memory Nag",
+        "version": "1.0.1",
+        "description": "Keeps a short per-chat vault of roleplay memories and recalls only the unresolved details that matter to the current turn. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+        "engine": {
+          "min": "2.4.4",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "server": "server.mjs",
+          "client": "client.js"
+        },
+        "contributions": {
+          "slots": [
+            "chat-settings",
+            "roleplay-tracker",
+            "tracker-panel"
+          ]
+        },
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "2070a461f12ac0c2c1d0b4d9dbbf0ff7c355659923f83a92e495c3cdfbfa8b07",
+            "bytes": 1249
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "8e2c6beb06ed08e9594e284b8ee0f6bfc7029cb9e32c5d8499c3ab91aa8c3e23",
+            "bytes": 20214
+          },
+          {
+            "path": "client.js",
+            "sha256": "eec2979f8590d9b8c949a45b7c557f320b94a3e1f243a6c679db815e64c940bd",
+            "bytes": 326300
+          }
+        ],
+        "permissions": [
+          "agent-runtime",
+          "chat-read",
+          "prompt-context",
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true
+      },
+      "category": "tracker",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/memory-nag.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/memory-nag-1.0.1.zip",
+        "sha256": "61e59745ae822324c1955c7949d74521354c9d1d9a3906623a3e0c1d4668c310",
+        "bytes": 349592
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#memory-nag"
+    },
+    {
+      "manifest": {
         "schemaVersion": 1,
         "id": "spotify",
         "name": "Music DJ",
