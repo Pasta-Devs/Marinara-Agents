@@ -1,4 +1,4 @@
-import { MessageSquareQuote } from "lucide-react";
+import { ChevronDown, MessageSquareQuote } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { MemoryNagRecall } from "../../../../shared/src/features/agents/memory-nag/schema.js";
@@ -11,6 +11,7 @@ export function MemoryNagTrackerPanel({ props }: { props: CapabilityProps }) {
   const chatId = props.chatId ?? "";
   const enabled = props.chatMode === "roleplay" && Boolean(chatId);
   const [index, setIndex] = useState(0);
+  const [collapsed, setCollapsed] = useState(false);
   const vault = useQuery({
     enabled,
     queryKey: ["memory-nag", "recall", chatId],
@@ -29,13 +30,24 @@ export function MemoryNagTrackerPanel({ props }: { props: CapabilityProps }) {
   if (!enabled) return null;
   return (
     <section className="mn-shell mn-tracker">
-      <div className="mn-tracker-header">
+      <button
+        type="button"
+        className="mn-tracker-header mn-tracker-toggle"
+        aria-expanded={!collapsed}
+        aria-label={t("memoryNag.tracker.title")}
+        onClick={() => setCollapsed((value) => !value)}
+      >
+        <ChevronDown className={`mn-tracker-chevron${collapsed ? " mn-tracker-chevron--collapsed" : ""}`} />
         <span className="mn-tracker-icon" aria-hidden="true">
-          <MessageSquareQuote className="mn-icon" />
+          <MessageSquareQuote className="mn-tracker-panel-icon" />
         </span>
         <strong className="mn-tracker-title">{t("memoryNag.tracker.title")}</strong>
-      </div>
-      <div className="mn-tracker-value">{nags[index] ?? t("memoryNag.tracker.none")}</div>
+      </button>
+      {!collapsed ? (
+        <div className={`mn-tracker-value${nags.length === 0 ? " mn-tracker-value--empty" : ""}`}>
+          {nags[index] ?? t("memoryNag.tracker.none")}
+        </div>
+      ) : null}
     </section>
   );
 }

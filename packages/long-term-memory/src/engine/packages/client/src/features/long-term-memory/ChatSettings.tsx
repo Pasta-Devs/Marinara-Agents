@@ -147,7 +147,7 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
         <button
           type="button"
           onClick={props.onOpenAgentSettings}
-          className="inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] px-2.5 text-[0.625rem] font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]"
+          className="mari-agent-settings-action inline-flex min-h-8 w-full items-center justify-center gap-1.5 px-2.5 text-[0.625rem]"
         >
           <Settings2 aria-hidden="true" size="0.75rem" />
           {localizeUi("ui.longTermMemory.chatsettings.openLongTermMemorySettings")}

@@ -1582,7 +1582,7 @@ for (const feature of selectedFeatures) {
   const agentDefinition = {
     id: feature.id,
     name: feature.name,
-    description: feature.agent?.description ?? description,
+    description: feature.agent?.description ?? feature.description,
     author: "Pasta Devs",
     phase: feature.agent?.phase ?? "pre_generation",
     enabledByDefault: false,

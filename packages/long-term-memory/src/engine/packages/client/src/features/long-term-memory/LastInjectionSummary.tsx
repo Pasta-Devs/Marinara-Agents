@@ -19,7 +19,15 @@ export function LastInjectionSummary({
 }) {
   const { t: localizeUi, locale } = useLtmTranslation();
   return (
-    <details data-ltm-last-injection aria-busy={loading} className="mari-editor-panel mari-editor-panel--soft">
+    <details
+      data-ltm-last-injection
+      aria-busy={loading}
+      className={
+        compact
+          ? "rounded-md border border-[var(--border)] bg-[var(--background)]/75"
+          : "mari-editor-panel mari-editor-panel--soft"
+      }
+    >
       <summary
         className={`flex cursor-pointer items-center justify-between font-semibold ${compact ? "min-h-8 gap-2 px-2.5 py-1.5 text-[0.625rem]" : "min-h-11 gap-3 px-3 py-2 text-xs"}`}
       >

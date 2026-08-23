@@ -104,7 +104,59 @@ export const MEMORY_NAG_STYLES = `
 
 .mn-prompt-textarea {
   min-height: 8.5rem;
+  padding-right: 2.5rem;
   font-size: 0.72rem;
+}
+
+.mn-prompt-field {
+  position: relative;
+}
+
+.mn-prompt-tools {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.mn-prompt-tool {
+  height: 1.5rem;
+  width: 1.5rem;
+  min-height: 1.5rem;
+}
+
+.mn-prompt-modal {
+  width: min(64rem, calc(100vw - 2rem));
+}
+
+.mn-expanded-prompt {
+  min-height: min(70vh, 42rem);
+  resize: vertical;
+  padding: 0.85rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+.mn-macro-modal {
+  width: min(30rem, calc(100vw - 2rem));
+}
+
+.mn-macro-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: 0.4rem;
+}
+
+.mn-macro-list code {
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background: var(--muted);
+  padding: 0.45rem 0.55rem;
+  color: var(--foreground);
+  font-size: 0.7rem;
 }
 
 .mn-icon-button {
@@ -270,6 +322,7 @@ export const MEMORY_NAG_STYLES = `
   padding: 0.375rem 0.5rem;
   gap: 0.375rem;
   color: var(--mn-chroma);
+  font-size: 0.5625rem;
 }
 
 .mn-toolbar-button--compact {
@@ -282,17 +335,15 @@ export const MEMORY_NAG_STYLES = `
 }
 
 .mn-toolbar-word {
-  max-width: 7rem;
+  max-width: 5rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .mn-popover {
-  position: absolute;
-  top: calc(100% + 0.4rem);
-  left: 0;
-  z-index: 80;
+  position: fixed;
+  z-index: 9999;
   width: min(22rem, calc(100vw - 2rem));
   border: 1px solid var(--border);
   border-radius: 0.5rem;
@@ -331,6 +382,36 @@ export const MEMORY_NAG_STYLES = `
   padding: 0.125rem 0.25rem;
 }
 
+.mn-tracker-toggle {
+  box-sizing: border-box;
+  width: 100%;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.mn-tracker-toggle:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.mn-tracker-chevron {
+  width: 0.6875rem;
+  height: 0.6875rem;
+  flex: none;
+  color: var(--tracker-profile-icon, var(--mn-chroma));
+  opacity: 0.6;
+  transition: transform 150ms ease;
+}
+
+.mn-tracker-chevron--collapsed {
+  transform: rotate(-90deg);
+}
+
 .mn-tracker-icon {
   display: flex;
   width: 0.875rem;
@@ -338,8 +419,13 @@ export const MEMORY_NAG_STYLES = `
   flex: none;
   align-items: center;
   justify-content: center;
-  color: var(--tracker-profile-icon, var(--mn-chroma));
+  color: var(--mn-chroma);
   opacity: 0.75;
+}
+
+.mn-tracker-panel-icon {
+  width: 0.6875rem;
+  height: 0.6875rem;
 }
 
 .mn-tracker-title {
@@ -363,9 +449,17 @@ export const MEMORY_NAG_STYLES = `
   line-height: 1.4;
 }
 
+.mn-tracker-value--empty {
+  min-height: 0;
+  padding: 0.25rem;
+  color: color-mix(in srgb, var(--foreground) 35%, transparent);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+}
+
 .mn-icon {
-  width: 0.9rem;
-  height: 0.9rem;
+  width: 0.75rem;
+  height: 0.75rem;
   flex: none;
 }
 

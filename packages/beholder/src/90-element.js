@@ -8,7 +8,7 @@
 /** Keep every mounted toggle's pressed state in step with the dock. */
 BH.syncToggles = function syncToggles() {
   const open = BH.dock.isOpen();
-  for (const button of document.querySelectorAll(".bh-hud-toggle")) {
+  for (const button of document.querySelectorAll(".bh-hud-toggle,.bh-tracker-launch")) {
     button.setAttribute("aria-pressed", open ? "true" : "false");
     button.classList.toggle("bh-active", open);
   }
@@ -85,13 +85,15 @@ class BeholderElement extends HTMLElement {
 
   _sync() {
     try {
-      if (this.getAttribute("view") !== "toolbar") return;
+      const view = this.getAttribute("view");
+      if (view !== "toolbar" && view !== "tracker") return;
       const props = this._props;
       if (!props || typeof props.chatId !== "string") return;
       BH.ensureStyles();
       BH.dock.props = props;
       BH.dock.setChat(props.chatId);
-      this._renderToggle(props);
+      if (view === "tracker") this._renderTrackerButton(props);
+      else this._renderToggle(props);
     } catch (error) {
       BH.fail(this, error);
     }
@@ -99,12 +101,12 @@ class BeholderElement extends HTMLElement {
 
   _renderToggle(props) {
     let button = this._button;
-    if (!button || !this.contains(button)) {
+    if (!button || !this.contains(button) || !button.classList.contains("bh-hud-toggle")) {
       button = document.createElement("button");
       button.type = "button";
       // The extension had to clone a live toolbar button's classes to match the
       // host's controls; here the host hands us the class it uses itself.
-      button.innerHTML = '<span class="bh-hud-icon" aria-hidden="true"></span>';
+      button.innerHTML = `<img class="bh-hud-icon" src="${BH_LOGO}" alt="" aria-hidden="true">`;
       button.addEventListener("click", () => {
         BH.dock.toggle();
       });
@@ -114,6 +116,23 @@ class BeholderElement extends HTMLElement {
     const hostClass = typeof props.toolbarButtonClass === "string" ? props.toolbarButtonClass : "";
     button.className = `${hostClass} bh-hud-toggle`.trim();
     const label = BH.localize(props, "toolbarLabel", "Beholder — physical state");
+    button.title = label;
+    button.setAttribute("aria-label", label);
+    BH.syncToggles();
+  }
+
+  _renderTrackerButton(props) {
+    let button = this._button;
+    if (!button || !this.contains(button) || !button.classList.contains("bh-tracker-launch")) {
+      button = document.createElement("button");
+      button.type = "button";
+      button.className = "bh-tracker-launch";
+      button.innerHTML = `<span class="bh-tracker-launch__logo" aria-hidden="true"><img src="${BH_LOGO}" alt=""></span><span class="bh-tracker-launch__title">Beholder</span><span class="bh-tracker-launch__arrow" aria-hidden="true">›</span>`;
+      button.addEventListener("click", () => BH.dock.toggle());
+      this.replaceChildren(button);
+      this._button = button;
+    }
+    const label = BH.localize(props, "trackerPanelLabel", "Open Beholder");
     button.title = label;
     button.setAttribute("aria-label", label);
     BH.syncToggles();

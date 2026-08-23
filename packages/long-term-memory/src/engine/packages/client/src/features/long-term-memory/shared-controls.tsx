@@ -15,7 +15,7 @@ import { useLtmTranslation } from "./localization";
 let activePopover: { id: string; close: () => void } | null = null;
 
 export const inputClass = "mari-editor-field min-h-11 w-full px-3 text-sm";
-export const compactInputClass = "mari-editor-field min-h-8 w-full px-2.5 text-[0.6875rem]";
+export const compactInputClass = "mari-chrome-field mari-chrome-field--compact min-h-8 w-full px-2.5 text-[0.6875rem]";
 
 export const Button = forwardRef<
   HTMLButtonElement,
@@ -327,7 +327,7 @@ export function StatusSurface({
       role={tone === "danger" ? "alert" : "status"}
       aria-live="polite"
       data-ltm-status={tone}
-      className={`mari-editor-panel mari-editor-panel--soft flex items-center gap-2 ${compact ? "px-2 py-1.5 text-[0.625rem]" : "min-h-11 px-3 text-xs"} ${toneClass} ${className}`}
+      className={`${compact ? "rounded-md border border-[var(--border)] bg-[var(--background)]/75 px-2 py-1.5 text-[0.625rem]" : "mari-editor-panel mari-editor-panel--soft min-h-11 px-3 text-xs"} flex items-center gap-2 ${toneClass} ${className}`}
       {...props}
     >
       {busy ? <Loader2 aria-hidden="true" size="0.875rem" className="animate-spin motion-reduce:animate-none" /> : null}

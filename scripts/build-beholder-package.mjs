@@ -29,7 +29,7 @@ const VERSION = "1.3.1";
 const ENGINE_MIN = "2.4.4";
 const MAX_ENGINE_EXCLUSIVE = "4.0.0";
 const BASE_DESCRIPTION =
-  "Tracks each roleplay character's clothing by body slot, held items, wounds, missing parts, bare slots, and species, then keeps that physical state available to the next response, and shows it on a paper doll you can open from the roleplay toolbar. Pick the prompt template for your model: one prompt for a SOTA model (GPT-5.5+, Opus 4.8+, Kimi K3+), or five passes for the local Beholder model (GetBeholder/Beholder-GGUF) — free, offline, and private. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.";
+  "Tracks each roleplay character's clothing by body slot, held items, wounds, missing parts, bare slots, and species, then keeps that physical state available to the next response, and shows it on a paper doll you can open from the roleplay toolbar. Pick the prompt template for your model: one prompt for a SOTA model (GPT-5.5+, Opus 4.8+, Kimi K3+), or five passes for the local Beholder model (GetBeholder/Beholder-GGUF) — free, offline, and private.";
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
@@ -87,7 +87,7 @@ try {
 const description = withPackageActivationGuidance("beholder", BASE_DESCRIPTION);
 const agentDefinitions = JSON.parse(await readFile(join(packageRoot, "agents.json"), "utf8"));
 for (const agent of agentDefinitions) {
-  if (agent.id === "beholder") agent.description = description;
+  if (agent.id === "beholder") agent.description = BASE_DESCRIPTION;
 }
 const agentsBuffer = Buffer.from(`${JSON.stringify(agentDefinitions, null, 2)}\n`);
 await writeFile(join(packageRoot, "agents.json"), agentsBuffer);
