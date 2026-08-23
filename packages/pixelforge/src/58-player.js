@@ -88,6 +88,11 @@ const QUARANTINE_KEY = "pixelforgeQuarantine";
 // and its overflow sheds the OLDEST entries first — the newest displacement is
 // the one they are most likely to still want back.
 const SETASIDE_MAX = 4;
+// How many chats' unsettled bag writes are remembered at once (PF.quarantine
+// _unsettled). A session visits a handful of chats and each entry is one bag, so
+// this is a leak guard rather than a policy: the oldest chat's unstored write is
+// the one least likely to still matter.
+const UNSETTLED_MAX = 8;
 
 const isFiniteInt = (v) => typeof v === "number" && Number.isFinite(v) && Math.floor(v) === v;
 const posInt = (v, fallback) => (isFiniteInt(v) && v >= 0 ? v : fallback);
@@ -1465,6 +1470,31 @@ PF.quarantine = {
    *  reached that chat's disk. Now reset() clears the POINTER and the departing
    *  chat's task still holds the box it was given. */
   _pending: null,
+  /** chatId → the bag bytes a write for that chat produced that are NOT known to
+   *  have reached disk: queued, in flight, or failed out. Bounded by chat count.
+   *
+   *  THE HOLDER ALONE IS NOT ENOUGH, and the case that proves it is a two-chat
+   *  round trip inside one un-drained chain. Park something on chat A, glance at
+   *  B, and come back to A before A's queued write has run: hydrate() rebuilds
+   *  the bag from DISK — which does not have the park, because the write never
+   *  landed — and sets the dedupe cache to those bytes. The queued task then
+   *  wakes, sees `_chatId === "A"`, re-serializes the live bag it now finds (the
+   *  disk bag), and the dedupe says "already stored". The write is dropped and
+   *  the park is gone from disk AND from memory, on the one path most likely to
+   *  have produced a park in the first place.
+   *
+   *  So an unsettled write is remembered BY CHAT, and hydrate() prefers it over
+   *  the disk read for that chat. That is the module's stated invariant being
+   *  served rather than broken: the in-memory bag is the authority, and a disk
+   *  read that silently demotes it to a stale copy is the bug. `_bagSerialized`
+   *  keeps meaning exactly what it always meant — what we believe DISK holds — so
+   *  the next write correctly sees the adopted bag as something disk still needs.
+   *
+   *  Kept across reset() on purpose, and deliberately NOT cleared when a write
+   *  fails out: an entry nobody managed to store is precisely the one worth
+   *  re-trying on the next visit, which is the self-heal ensurePresent already
+   *  performs for the key as a whole. */
+  _unsettled: new Map(),
 
   /** Per-chat: the bag belongs to the chat it was read from. `_writeChain` is
    *  deliberately NOT cleared, exactly as PF.save._flushChain is not: the
@@ -1483,10 +1513,11 @@ PF.quarantine = {
   hydrate(meta, chatId) {
     this._chatId = chatId ?? null;
     const raw = meta && typeof meta === "object" ? meta[QUARANTINE_KEY] : null;
-    const bag = {};
-    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const readBag = (value) => {
+      const bag = {};
+      if (!value || typeof value !== "object" || Array.isArray(value)) return bag;
       for (const slot of QUARANTINE_SLOTS) {
-        const entry = raw[slot];
+        const entry = value[slot];
         if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
         // `setAside` is a list on the wire now. Tolerant in both directions: a
         // key written before it was one is read as its single entry, and a bag
@@ -1495,9 +1526,32 @@ PF.quarantine = {
         bag[slot] = slot === "setAside" ? { entries: asideEntries(entry) } : entry;
       }
       if (bag.setAside && !bag.setAside.entries.length) delete bag.setAside;
+      return bag;
+    };
+    const bag = readBag(raw);
+    // WHAT DISK HOLDS, recorded before anything is preferred over it. That is the
+    // dedupe's whole meaning and it has to keep describing DISK even when the bag
+    // below does not — otherwise the very next write believes disk already has
+    // what only memory has (see _unsettled).
+    this._bagSerialized = Object.keys(bag).length ? JSON.stringify(bag) : null;
+    // An unsettled write for THIS chat is newer than the disk read by
+    // construction: it was produced from this session's own bag and never reached
+    // the wire. Adopt it, so the bag stays the authority and the next write still
+    // owes disk the difference.
+    const held = chatId ? this._unsettled.get(chatId) : null;
+    if (held) {
+      let parked = null;
+      try {
+        parked = JSON.parse(held);
+      } catch {
+        parked = null; // unparseable is not recoverable; the disk read stands
+      }
+      if (parked) {
+        this._bag = readBag(parked);
+        return this._bag;
+      }
     }
     this._bag = bag;
-    this._bagSerialized = Object.keys(bag).length ? JSON.stringify(bag) : null;
     return bag;
   },
 
@@ -1673,6 +1727,12 @@ PF.quarantine = {
     if (!id) return Promise.resolve(false);
     if (this._chatId === null) this._chatId = id;
     const captured = this._serialize();
+    // Remembered per chat from the moment the write is ASKED FOR, not from the
+    // moment it runs: everything between here and a landed PATCH is a window in
+    // which a chat round trip can lose it (see _unsettled).
+    this._unsettled.delete(id);
+    this._unsettled.set(id, captured);
+    while (this._unsettled.size > UNSETTLED_MAX) this._unsettled.delete(this._unsettled.keys().next().value);
     if (this._pending?.id === id) {
       // Already queued for this chat: refresh the holder the queued task will
       // read and let it carry the newest bytes. Two PATCHes of the same bytes
@@ -1709,6 +1769,11 @@ PF.quarantine = {
       try {
         await PF.api.patchMetadata(chatId, { [QUARANTINE_KEY]: payload });
         if (live && gen === (PF.save?._gen ?? 0)) this._bagSerialized = text;
+        // Settled — but only for the bytes we actually wrote. A put() that landed
+        // while this PATCH was in flight has already put NEWER bytes in the map
+        // and queued its own write to clear them; deleting unconditionally here
+        // would drop the record of a write that has not happened yet.
+        if (this._unsettled.get(chatId) === text) this._unsettled.delete(chatId);
         return true;
       } catch (err) {
         if (attempt === 2) {

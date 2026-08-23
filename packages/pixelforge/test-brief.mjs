@@ -10078,7 +10078,12 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
   Q.put("chat-aside", "setAside", { reason: "displaced", fromV: 2, block: { tag: "second" } });
   assert.equal(Q.peekAll("setAside").length, 2, "a second displaced live block is a second thing to offer the player");
   assert.equal(Q.peek("setAside").block.tag, "first", "peek() hands back the oldest, which is what one caller means");
-  Q.hydrate({ pixelforgeQuarantine: { setAside: { reason: "displaced", block: { tag: "legacy" } } } }, "chat-aside");
+  // Read on a DIFFERENT chat, because this line is about hydrate's tolerance for
+  // the pre-list wire SHAPE and nothing else. Reading it on the chat two parks
+  // are still queued for asks a second question — whether a disk read outranks an
+  // unsettled write of our own — and the answer to that one is (ak2)'s: it does
+  // not, and it must not, or a park is lost to a chat round trip.
+  Q.hydrate({ pixelforgeQuarantine: { setAside: { reason: "displaced", block: { tag: "legacy" } } } }, "chat-legacy");
   assert.equal(Q.peekAll("setAside").length, 1, "a key written before the list shape reads as its one entry");
   assert.equal(Q.peek("setAside").block.tag, "legacy", "…verbatim");
 
@@ -10224,6 +10229,66 @@ await withSavePath(async ({ calls, armed, behavior, tick }) => {
   );
   behavior.patch = async () => {};
   Q.reset();
+});
+
+// (ak2) …AND A PARK SURVIVES A ROUND TRIP THROUGH ANOTHER CHAT.
+// The holder fixed the ONE-WAY trip: leave a chat and its queued write still
+// carries that chat's bytes. It does not fix the ROUND trip, and the round trip
+// is the one a player actually makes. Park something on A, glance at B, come back
+// to A before the chain has drained: hydrate() rebuilds A's bag from DISK — which
+// does not have the park, because the write never landed — and sets the dedupe
+// cache to those same bytes. The queued task then wakes, finds itself "live" on
+// A, re-serializes the disk bag it now sees, matches the cache, and drops the
+// write. The park is gone from disk AND from memory, on the one path most likely
+// to have produced a park in the first place.
+await withSavePath(async ({ calls, behavior, tick }) => {
+  const Q = loadedPF.quarantine;
+  const bagWrites = () => calls.filter((c) => c.kind === "patch" && "pixelforgeQuarantine" in c.patch);
+  await tick(); // drain whatever the previous case left on the shared chain
+  Q.reset();
+  Q._unsettled.clear();
+  calls.length = 0;
+  let release;
+  const gate = new Promise((resolve) => (release = resolve));
+  let inFlight = 0;
+  behavior.patch = async () => {
+    inFlight += 1;
+    if (inFlight === 1) await gate;
+  };
+
+  Q.hydrate({}, "chat-round-a");
+  Q.put("chat-round-a", "migration", { reason: "throw", block: { a: 1 } });
+  await tick(); // write #1 is parked inside patchMetadata
+  Q.put("chat-round-a", "stamp", { reason: "mint", stamps: { seed: 1 }, fields: { home: "parked-then-left" } });
+
+  // Away…
+  loadedPF.save.reset();
+  Q.hydrate({}, "chat-round-b");
+  assert.deepEqual(Q.slots(), [], "B's bag is B's");
+
+  // …and BACK, before the chain has drained. The metadata the host hands over is
+  // what actually reached disk, which is write #1 and nothing more.
+  loadedPF.save.reset();
+  Q.hydrate({ pixelforgeQuarantine: { migration: { reason: "throw", block: { a: 1 } } } }, "chat-round-a");
+  assert.deepEqual(
+    Q.slots(),
+    ["migration", "stamp"],
+    "coming back does not demote the bag to whatever disk managed to store",
+  );
+  assert.ok(Q.peek("stamp"), "the park is still held in memory, which is where the authority lives");
+
+  release();
+  await tick();
+  const withStamp = bagWrites().filter((c) => c.patch.pixelforgeQuarantine?.stamp);
+  assert.equal(withStamp.length, 1, "and the write carrying it REACHED THE WIRE");
+  assert.equal(withStamp[0].chatId, "chat-round-a", "for the chat it belongs to");
+  assert.equal(withStamp[0].patch.pixelforgeQuarantine.stamp.fields.home, "parked-then-left", "carrying its own bytes");
+  assert.deepEqual(Q.slots(), ["migration", "stamp"], "and the bag still holds both afterwards");
+  assert.equal(Q._unsettled.has("chat-round-a"), false, "…while the record of the unsettled write settles, not leaks");
+
+  behavior.patch = async () => {};
+  Q.reset();
+  Q._unsettled.clear();
 });
 
 // (al) THE INTERIM WORLD LEAVES A MARK.
