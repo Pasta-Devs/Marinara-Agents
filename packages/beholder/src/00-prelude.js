@@ -7,8 +7,8 @@
 // file, the dock, and the custom element are new: they replace the extension's
 // host shim with the capability contract.
 //
-// BH_STYLE_CSS, BH_FA_CSS and BH_LOGO are emitted ahead of this file by
-// scripts/build-beholder-package.mjs from src/*.css and bh-logo.png.
+// BH_STYLE_CSS and BH_FA_CSS are emitted ahead of this file by
+// scripts/build-beholder-package.mjs from src/*.css.
 
 const BH = {
   PANEL_ID: "beholder_panel",
@@ -42,13 +42,13 @@ BH.localize = function localize(props, key, fallback) {
   return fallback;
 };
 
-/** Inject the panel stylesheet once per document, not once per element mount. */
-BH.ensureStyles = function ensureStyles() {
-  if (document.getElementById("bh-capability-styles")) return;
-  const style = document.createElement("style");
+/** Inject the panel stylesheet once per document, including detached tabs. */
+BH.ensureStyles = function ensureStyles(targetDocument = document) {
+  if (targetDocument.getElementById("bh-capability-styles")) return;
+  const style = targetDocument.createElement("style");
   style.id = "bh-capability-styles";
   style.textContent = `${BH_FA_CSS}\n${BH_STYLE_CSS}\n${BH_HOST_CSS}`;
-  document.head.appendChild(style);
+  targetDocument.head.appendChild(style);
 };
 
 /**

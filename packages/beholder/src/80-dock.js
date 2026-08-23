@@ -13,46 +13,46 @@ const BH_HOST_CSS = `
   --SmartThemeQuoteColor: var(--marinara-chat-chrome-accent, var(--foreground));
   --bh-accent-pref: var(--marinara-chat-chrome-accent, var(--foreground));
   --bh-chroma: var(--marinara-chat-chrome-accent, var(--foreground));
+  --bh-window-accent: var(--marinara-app-accent-static, var(--primary));
   --bh-font-display: var(--font-sans, inherit);
-  box-sizing:border-box; display:flex !important; position:fixed !important;
-  top:var(--bh-window-top,4rem) !important; left:var(--bh-window-left,calc(100vw - 32rem)) !important; right:auto !important; bottom:auto !important;
-  width:var(--bh-window-width,min(500px,calc(100vw - 2rem))) !important; height:var(--bh-window-height,min(620px,calc(100vh - 5rem))) !important;
+  box-sizing:border-box; display:flex !important; position:absolute !important;
+  top:var(--bh-window-top,1rem) !important; left:var(--bh-window-left,1rem) !important; right:auto !important; bottom:auto !important;
+  width:var(--bh-window-width,min(500px,calc(100% - 2rem))) !important; height:var(--bh-window-height,min(620px,calc(100% - 2rem))) !important;
   min-width:0 !important; min-height:0 !important; max-width:none !important; max-height:none !important;
-  border-radius:.75rem !important; transform:none !important; z-index:50; }
+  border-color:var(--bh-window-accent) !important; border-radius:.75rem !important; transform:none !important; z-index:50; }
+.beholder-panel.bh-detached{ position:fixed !important; inset:0 !important; width:100vw !important; height:100dvh !important; border-radius:0 !important; }
 .beholder-panel.bh-collapsed{ display:none !important; }
 .beholder-panel .beholder-close{ display:none !important; }
 .beholder-panel .beholder-resize-handle{ display:block !important; left:auto; right:.25rem; bottom:.25rem; transform:none;
-  width:1.5rem; height:1.5rem; border:0; border-radius:.25rem; background:transparent; color:var(--muted-foreground);
+  width:1.5rem; height:1.5rem; border:0; border-radius:.25rem; background:transparent; color:var(--bh-window-accent);
   cursor:nwse-resize; opacity:.65; touch-action:none; }
 .beholder-panel .beholder-resize-handle::after{ content:""; position:absolute; right:.25rem; bottom:.25rem; width:.625rem; height:.625rem;
   border-right:2px solid currentColor; border-bottom:2px solid currentColor; }
-.beholder-panel .beholder-resize-handle:hover{ width:1.5rem; background:var(--bh-surface-2); color:var(--bh-accent); opacity:1; }
+.beholder-panel .beholder-resize-handle:hover{ width:1.5rem; background:var(--bh-surface-2); color:var(--bh-window-accent); opacity:1; }
 .beholder-panel-header{ touch-action:none; }
 .beholder-panel-controls{ flex-wrap:nowrap; }
-.beholder-panel-controls .bh-dock-close{ box-sizing:border-box; display:inline-flex; width:1.75rem; height:1.75rem; align-items:center; justify-content:center; border:0; border-radius:.375rem;
+.beholder-panel-controls :is(.bh-dock-popout,.bh-dock-close){ box-sizing:border-box; display:inline-flex; width:1.75rem; height:1.75rem; align-items:center; justify-content:center; border:0; border-radius:.375rem;
   padding:0; font-size:.875rem;
-  background:transparent; color:var(--muted-foreground); cursor:pointer; opacity:.8; }
-.bh-dock-close:hover{ background:var(--bh-surface-2); color:var(--foreground); opacity:1; }
-.bh-dock-close:focus-visible{ outline:2px solid var(--bh-accent); outline-offset:1px; }
+  background:transparent; color:var(--bh-window-accent); cursor:pointer; opacity:.8; }
+.beholder-panel-controls :is(.bh-dock-popout,.bh-dock-close):hover{ background:var(--bh-surface-2); color:var(--bh-window-accent); opacity:1; }
+.beholder-panel-controls :is(.bh-dock-popout,.bh-dock-close):focus-visible{ outline:2px solid var(--bh-window-accent); outline-offset:1px; }
+.beholder-panel.bh-detached .bh-dock-popout,.beholder-panel.bh-detached .beholder-resize-handle{ display:none !important; }
 @media (max-width:767px){
-  .beholder-panel{ top:var(--bh-mobile-top,0px) !important; bottom:0 !important; right:0 !important; left:0 !important;
-    width:100% !important; height:calc(100dvh - var(--bh-mobile-top,0px)) !important; max-height:none !important; border-radius:0 !important; }
+  .beholder-panel{ inset:0 !important; width:100% !important; height:100% !important; max-height:none !important; border-radius:0 !important; }
   .beholder-panel-header{ cursor:default; touch-action:auto; }
   .beholder-panel .beholder-resize-handle{ display:none !important; }
   .beholder-panel-body{ padding-bottom:max(var(--bh-space-4),env(safe-area-inset-bottom)); }
 }
 .bh-hud-toggle{ cursor:pointer; }
-.bh-hud-icon{ display:block;width:16px;height:16px;object-fit:contain; }
+.bh-hud-icon{ display:block;width:16px;height:16px;color:var(--marinara-app-accent-static,var(--primary)); }
 .bh-tracker-launch{display:flex;width:100%;min-height:1.75rem;align-items:center;gap:.25rem;
   border:0;border-bottom:1px solid var(--border);background:var(--tracker-panel-section-background,transparent);
   padding:.125rem .25rem;color:var(--foreground);cursor:pointer;font:inherit;text-align:left;}
 .bh-tracker-launch:hover{background:color-mix(in srgb,var(--accent) 18%,transparent);}
 .bh-tracker-launch.bh-active{background:color-mix(in srgb,var(--marinara-chat-chrome-accent,var(--foreground)) 14%,transparent);}
 .bh-tracker-launch:focus-visible{outline:2px solid var(--marinara-chat-chrome-accent,var(--foreground));outline-offset:-2px;}
-.bh-tracker-launch__logo{display:flex;width:1rem;height:1rem;align-items:center;justify-content:center;
-  border:1px solid var(--marinara-chat-chrome-accent,var(--border));border-radius:.25rem;
-  background:color-mix(in srgb,var(--marinara-chat-chrome-accent,var(--foreground)) 9%,transparent);}
-.bh-tracker-launch__logo img{display:block;width:.75rem;height:.75rem;object-fit:contain;}
+.bh-tracker-launch__logo{display:flex;width:1rem;height:1rem;align-items:center;justify-content:center;color:var(--marinara-chat-chrome-accent,var(--foreground));}
+.bh-tracker-launch__icon{display:block;width:.75rem;height:.75rem;}
 .bh-tracker-launch__title{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   font-size:.625rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:color-mix(in srgb,var(--foreground) 62%,transparent);}
 .bh-tracker-launch__arrow{color:var(--muted-foreground);font-size:.875rem;opacity:.7;}
@@ -68,6 +68,23 @@ const BH_WINDOW_MIN_WIDTH = 280;
 const BH_WINDOW_MIN_HEIGHT = 260;
 const BH_WINDOW_DEFAULT_WIDTH = 500;
 const BH_WINDOW_DEFAULT_HEIGHT = 620;
+const BH_WINDOW_MIN_SCALE = 0.72;
+const BH_WINDOW_MAX_SCALE = 1.35;
+const BH_THEME_VARIABLES = [
+  "--background",
+  "--foreground",
+  "--card",
+  "--border",
+  "--accent",
+  "--primary",
+  "--ring",
+  "--muted",
+  "--muted-foreground",
+  "--popover",
+  "--font-sans",
+  "--marinara-app-accent-static",
+  "--marinara-chat-chrome-accent",
+];
 
 const clampWindowValue = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
 
@@ -132,13 +149,53 @@ BH.dock = {
   geometry: BH.readWindowGeometry(),
   viewByChar: new Map(),
   unviewed: new Set(),
+  hostElements: new Set(),
+  hostArea: null,
+  detachedWindow: null,
   _windowBound: false,
   _interaction: null,
   _boundsObserver: null,
+  _detachedResize: null,
+
+  registerHost(element) {
+    const area = element.closest?.(".rpg-chat-area");
+    if (!area) return;
+    this.hostElements.add(element);
+    this.hostArea = area;
+    if (this.panel && !this.isDetached() && this.panel.parentElement !== area) area.appendChild(this.panel);
+    this.observeBounds();
+    this.syncGeometry();
+  },
+
+  releaseHost(element) {
+    this.hostElements.delete(element);
+    requestAnimationFrame(() => {
+      for (const host of this.hostElements) if (!host.isConnected) this.hostElements.delete(host);
+      if (this.hostElements.size === 0 && !this.isDetached()) this.close();
+    });
+  },
+
+  findChatArea() {
+    if (this.hostArea?.isConnected) return this.hostArea;
+    this.hostArea =
+      Array.from(document.querySelectorAll(".rpg-chat-area")).find((area) => {
+        const rect = area.getBoundingClientRect();
+        return rect.width > 1 && rect.height > 1;
+      }) || null;
+    return this.hostArea;
+  },
+
+  isDetached() {
+    return (
+      !!this.detachedWindow && !this.detachedWindow.closed && this.panel?.ownerDocument === this.detachedWindow.document
+    );
+  },
 
   /** Build the panel once. Markup is the extension's, so style.css applies unchanged. */
   ensure() {
-    if (this.panel && document.body.contains(this.panel)) return this.panel;
+    if (this.panel?.isConnected) return this.panel;
+    const hostArea = this.findChatArea();
+    if (!hostArea) return null;
     BH.ensureStyles();
     const panel = document.createElement("div");
     panel.id = BH.PANEL_ID;
@@ -150,7 +207,7 @@ BH.dock = {
     panel.innerHTML = `
       <div class="beholder-panel-header">
         <span class="beholder-panel-title">${say("dockTitle", "Beholder")}</span>
-        <span class="beholder-panel-controls"><button type="button" class="bh-dock-close fa-solid fa-xmark" title="${say("dockClose", "Close Beholder")}" aria-label="${say("dockClose", "Close Beholder")}"></button></span>
+        <span class="beholder-panel-controls"><button type="button" class="bh-dock-popout fa-solid fa-arrow-up-right-from-square" title="${say("dockPopOut", "Open Beholder in a new tab")}" aria-label="${say("dockPopOut", "Open Beholder in a new tab")}"></button><button type="button" class="bh-dock-close fa-solid fa-xmark" title="${say("dockClose", "Close Beholder")}" aria-label="${say("dockClose", "Close Beholder")}"></button></span>
       </div>
       <div class="beholder-layer-bar" role="group" aria-label="${say("layerBarLabel", "Detail layers")}">
         <label class="bh-layer-cell" data-layer="color" title="${say("layerColorHint", "Color word annotation on chips")}"><input type="checkbox" name="bh-view-layer" value="color"><span>${say("layerColor", "Color")}</span></label>
@@ -159,11 +216,12 @@ BH.dock = {
       </div>
       <div class="beholder-panel-body"></div>
       <button type="button" class="beholder-resize-handle" title="${say("resizeWindow", "Resize Beholder")}" aria-label="${say("resizeWindow", "Resize Beholder")}"></button>`;
-    document.body.appendChild(panel);
+    hostArea.appendChild(panel);
     this.panel = panel;
     document.body.classList.remove("bh-dock-open");
 
     panel.querySelector(".bh-dock-close").addEventListener("click", () => this.close());
+    panel.querySelector(".bh-dock-popout").addEventListener("click", () => this.popOut());
     panel.querySelector(".beholder-panel-header").addEventListener("pointerdown", (event) => {
       this.startInteraction("move", event);
     });
@@ -246,6 +304,11 @@ BH.dock = {
 
   toggle() {
     const panel = this.ensure();
+    if (!panel) return;
+    if (this.isDetached()) {
+      this.detachedWindow.focus();
+      return;
+    }
     if (this.isOpen()) {
       this.close();
       return;
@@ -257,6 +320,12 @@ BH.dock = {
   },
 
   close() {
+    if (this.isDetached()) {
+      const popup = this.detachedWindow;
+      this.restoreFromDetached();
+      popup.close();
+      return;
+    }
     if (this.panel) this.panel.classList.add("bh-collapsed");
     BH.syncToggles();
   },
@@ -266,15 +335,24 @@ BH.dock = {
   },
 
   getChatBounds() {
-    const areas = Array.from(document.querySelectorAll(".rpg-chat-area"))
-      .map((element) => element.getBoundingClientRect())
-      .filter((rect) => rect.width > 1 && rect.height > 1)
-      .sort((left, right) => right.width * right.height - left.width * left.height);
-    const rect = areas[0] || { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
-    const topbar = document.querySelector('[data-component="TopBar"], header.mari-topbar');
-    const topbarBottom = topbar ? topbar.getBoundingClientRect().bottom : rect.top;
-    const top = Math.min(rect.bottom, Math.max(rect.top, topbarBottom));
-    return { left: rect.left, top, right: rect.right, bottom: rect.bottom };
+    if (this.isDetached()) {
+      return { left: 0, top: 0, right: this.detachedWindow.innerWidth, bottom: this.detachedWindow.innerHeight };
+    }
+    const area = this.findChatArea();
+    if (!area) return null;
+    const rect = area.getBoundingClientRect();
+    if (rect.width <= 1 || rect.height <= 1) return null;
+    return { left: 0, top: 0, right: area.clientWidth, bottom: area.clientHeight };
+  },
+
+  applyScale(width, height) {
+    if (!this.panel) return;
+    const scale = clampWindowValue(
+      Math.min(width / BH_WINDOW_DEFAULT_WIDTH, height / BH_WINDOW_DEFAULT_HEIGHT),
+      BH_WINDOW_MIN_SCALE,
+      BH_WINDOW_MAX_SCALE,
+    );
+    this.panel.style.setProperty("--bh-ui-scale", scale.toFixed(3));
   },
 
   applyGeometry(geometry) {
@@ -284,14 +362,25 @@ BH.dock = {
     panel.style.setProperty("--bh-window-top", `${Math.round(geometry.top)}px`);
     panel.style.setProperty("--bh-window-width", `${Math.round(geometry.width)}px`);
     panel.style.setProperty("--bh-window-height", `${Math.round(geometry.height)}px`);
+    this.applyScale(geometry.width, geometry.height);
   },
 
   syncGeometry() {
     const panel = this.panel;
     if (!panel) return;
     const bounds = this.getChatBounds();
-    panel.style.setProperty("--bh-mobile-top", `${Math.round(bounds.top)}px`);
-    if (this.isMobile()) return;
+    if (!bounds) {
+      if (this.isOpen() && !this.isDetached()) this.close();
+      return;
+    }
+    if (this.isDetached()) {
+      this.applyScale(bounds.right, bounds.bottom);
+      return;
+    }
+    if (this.isMobile()) {
+      this.applyScale(bounds.right, bounds.bottom);
+      return;
+    }
 
     const availableWidth = Math.max(1, bounds.right - bounds.left);
     const availableHeight = Math.max(1, bounds.bottom - bounds.top);
@@ -321,20 +410,76 @@ BH.dock = {
   observeBounds() {
     if (typeof ResizeObserver !== "function") return;
     this._boundsObserver?.disconnect();
-    this._boundsObserver = new ResizeObserver(() => this.syncGeometry());
-    const area = Array.from(document.querySelectorAll(".rpg-chat-area")).find((element) => {
-      const rect = element.getBoundingClientRect();
-      return rect.width > 1 && rect.height > 1;
+    this._boundsObserver = new ResizeObserver(() => {
+      this.syncGeometry();
+      this.render();
     });
+    const area = this.findChatArea();
     if (area) this._boundsObserver.observe(area);
-    const main = document.querySelector(".mari-main");
-    if (main && main !== area) this._boundsObserver.observe(main);
+  },
+
+  popOut() {
+    const panel = this.ensure();
+    if (!panel || this.isDetached()) return;
+    const popup = window.open("", "_blank");
+    if (!popup) return;
+    const popupDocument = popup.document;
+    popupDocument.title = BH.localize(this.props, "dockTitle", "Beholder");
+    popupDocument.documentElement.lang = document.documentElement.lang || "en";
+    popupDocument.documentElement.dir = document.documentElement.dir || "ltr";
+    const sourceTheme = getComputedStyle(this.findChatArea() || document.documentElement);
+    for (const variable of BH_THEME_VARIABLES) {
+      const value = sourceTheme.getPropertyValue(variable);
+      if (value) popupDocument.documentElement.style.setProperty(variable, value);
+    }
+    popupDocument.documentElement.style.colorScheme = getComputedStyle(document.documentElement).colorScheme;
+    popupDocument.body.replaceChildren();
+    popupDocument.body.style.margin = "0";
+    popupDocument.body.style.overflow = "hidden";
+    popupDocument.body.style.background = "var(--background, #111)";
+    popupDocument.body.style.color = "var(--foreground, #eee)";
+    popupDocument.body.style.fontFamily = sourceTheme.fontFamily;
+    BH.ensureStyles(popupDocument);
+
+    panel.classList.add("bh-detached");
+    popupDocument.body.appendChild(panel);
+    this.detachedWindow = popup;
+    this._detachedResize = () => {
+      this.syncGeometry();
+      this.render();
+    };
+    popup.addEventListener("resize", this._detachedResize);
+    popup.addEventListener("beforeunload", () => this.restoreFromDetached(), { once: true });
+    this.syncGeometry();
+    this.render();
+    popup.focus();
+  },
+
+  restoreFromDetached() {
+    const popup = this.detachedWindow;
+    const panel = this.panel;
+    if (!popup || !panel) return;
+    if (this._detachedResize) popup.removeEventListener("resize", this._detachedResize);
+    this._detachedResize = null;
+    this.detachedWindow = null;
+    panel.classList.remove("bh-detached");
+    const hostArea = this.findChatArea();
+    if (hostArea) {
+      hostArea.appendChild(panel);
+      panel.classList.add("bh-collapsed");
+      this.syncGeometry();
+    } else {
+      panel.remove();
+      this.panel = null;
+    }
+    BH.syncToggles();
   },
 
   resizeBy(deltaWidth, deltaHeight) {
     if (this.isMobile()) return;
     this.syncGeometry();
     const bounds = this.getChatBounds();
+    if (!bounds) return;
     const geometry = this.geometry;
     if (!geometry) return;
     const margin = Math.min(BH_WINDOW_MARGIN, (bounds.right - bounds.left) / 4, (bounds.bottom - bounds.top) / 4);
@@ -351,21 +496,20 @@ BH.dock = {
   },
 
   startInteraction(kind, event) {
-    if (this.isMobile() || event.button !== 0 || !this.panel) return;
+    if (this.isMobile() || this.isDetached() || event.button !== 0 || !this.panel) return;
     const target = event.target instanceof Element ? event.target : null;
     if (kind === "move" && target?.closest("button, input, label, select, textarea, a")) return;
     event.preventDefault();
     this._interaction?.();
 
     const pointerId = event.pointerId;
-    const startRect = this.panel.getBoundingClientRect();
     const start = {
       x: event.clientX,
       y: event.clientY,
-      left: startRect.left,
-      top: startRect.top,
-      width: startRect.width,
-      height: startRect.height,
+      left: this.geometry?.left ?? this.panel.offsetLeft,
+      top: this.geometry?.top ?? this.panel.offsetTop,
+      width: this.panel.offsetWidth,
+      height: this.panel.offsetHeight,
     };
     const previousCursor = document.body.style.cursor;
     const previousUserSelect = document.body.style.userSelect;
@@ -376,6 +520,7 @@ BH.dock = {
     const onMove = (moveEvent) => {
       if (moveEvent.pointerId !== pointerId) return;
       const bounds = this.getChatBounds();
+      if (!bounds) return;
       const margin = Math.min(BH_WINDOW_MARGIN, (bounds.right - bounds.left) / 4, (bounds.bottom - bounds.top) / 4);
       const deltaX = moveEvent.clientX - start.x;
       const deltaY = moveEvent.clientY - start.y;
@@ -468,7 +613,7 @@ BH.dock = {
     if (isEmpty) this.unviewed.clear();
 
     // Narrow viewports use the compact list; a wide one restores the choice.
-    const layout = window.innerWidth < 768 ? "list" : this.layout;
+    const layout = panel.getBoundingClientRect().width < 360 ? "list" : this.layout;
     setDollLayout(layout);
     panel.classList.toggle("bh-layout-compact", layout === "list");
 

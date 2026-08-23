@@ -145,6 +145,13 @@ assert.ok(
 assert.ok(manifest.permissions.includes("ui"), "a client-bearing package needs the ui permission");
 assert.match(beholderInterfaceSource, /--marinara-chat-chrome-accent/u, "Beholder must consume the chat chroma token");
 assert.match(beholderInterfaceSource, /bh-hud-icon/u, "the Beholder toolbar mark must be theme-colored");
+assert.match(
+  beholderInterfaceSource,
+  /<svg class="\$\{className\}"[^>]*stroke="currentColor"/u,
+  "Beholder launchers must use the theme-colored eye icon",
+);
+assert.doesNotMatch(beholderInterfaceSource, /BH_LOGO/u, "Beholder launchers must not restore the old PNG logo");
+assert.match(beholderInterfaceSource, /"toolbarLabel", "Beholder"/u, "the toolbar tooltip must simply say Beholder");
 assert.doesNotMatch(
   beholderInterfaceSource,
   /\.(?:bh-hud-toggle|bh-tracker-launch)[^}]*var\(--primary\)/su,
@@ -172,7 +179,7 @@ assert.match(
 );
 assert.match(
   beholderInterfaceSource,
-  /event\.preventDefault\(\);\s*this\._interaction\?\.\(\);[\s\S]*const startRect/u,
+  /event\.preventDefault\(\);\s*this\._interaction\?\.\(\);[\s\S]*const pointerId/u,
   "a new pointer interaction must clean up the previous one before capturing body styles",
 );
 assert.match(
@@ -187,13 +194,38 @@ assert.match(
 );
 assert.match(
   beholderInterfaceSource,
-  /_boundsObserver = new ResizeObserver\(\(\) => this\.syncGeometry\(\)\)/u,
+  /_boundsObserver = new ResizeObserver\(\(\) => \{[\s\S]*this\.syncGeometry\(\)/u,
   "the floating window must stay inside the chat when the surrounding layout changes",
 );
 assert.match(
   beholderInterfaceSource,
-  /height:calc\(100dvh - var\(--bh-mobile-top,0px\)\)/u,
-  "mobile Beholder must fill the available viewport below the app top bar",
+  /\.beholder-panel\{ inset:0 !important; width:100% !important; height:100% !important/u,
+  "mobile Beholder must fill its chat-area host",
+);
+assert.match(
+  beholderInterfaceSource,
+  /hostArea\.appendChild\(panel\)/u,
+  "floating Beholder must be mounted inside the live chat area rather than document.body",
+);
+assert.match(
+  beholderInterfaceSource,
+  /releaseHost\(element\)[\s\S]*this\.close\(\)/u,
+  "floating Beholder must close when its roleplay host leaves the chat area",
+);
+assert.match(
+  beholderInterfaceSource,
+  /window\.open\("", "_blank"\)/u,
+  "the Beholder header must offer a detached browser tab",
+);
+assert.match(
+  beholderInterfaceSource,
+  /--bh-window-accent: var\(--marinara-app-accent-static/u,
+  "the floating window frame and controls must follow the app accent",
+);
+assert.match(
+  beholderInterfaceSource,
+  /Math\.min\(width \/ BH_WINDOW_DEFAULT_WIDTH, height \/ BH_WINDOW_DEFAULT_HEIGHT\)/u,
+  "the floating window must scale its content from the available size",
 );
 assert.doesNotMatch(
   beholderInterfaceSource,

@@ -1,7 +1,22 @@
 export const MEMORY_NAG_STYLES = `
 .mn-shell {
   --mn-chroma: var(--marinara-chat-chrome-accent, var(--foreground));
-  color: var(--foreground);
+  --accent: var(--marinara-chat-chrome-highlight-bg);
+  --accent-foreground: var(--marinara-chat-chrome-highlight-text);
+  --background: var(--marinara-chat-chrome-panel-bg);
+  --border: var(--marinara-chat-chrome-panel-border);
+  --card: var(--marinara-chat-chrome-panel-bg);
+  --foreground: var(--marinara-chat-chrome-panel-text);
+  --input: var(--marinara-chat-chrome-input-border);
+  --muted: var(--marinara-chat-chrome-highlight-bg);
+  --muted-foreground: var(--marinara-chat-chrome-panel-muted);
+  --popover: var(--marinara-chat-chrome-panel-bg);
+  --popover-foreground: var(--marinara-chat-chrome-panel-text);
+  --primary: var(--marinara-chat-chrome-highlight-text);
+  --primary-foreground: var(--marinara-chat-chrome-panel-bg);
+  --ring: var(--marinara-chat-chrome-focus-ring);
+  --secondary: var(--marinara-chat-chrome-highlight-bg);
+  color: var(--marinara-chat-chrome-panel-text);
   font: inherit;
 }
 
@@ -228,21 +243,22 @@ export const MEMORY_NAG_STYLES = `
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1rem;
-  background: color-mix(in srgb, var(--background) 70%, transparent);
-  backdrop-filter: blur(5px);
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+  background: rgb(0 0 0 / 50%);
 }
 
 .mn-modal {
   display: flex;
-  width: min(58rem, 100%);
-  max-height: min(88vh, 52rem);
+  width: min(48rem, 100%);
+  max-height: min(85dvh, 52rem);
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid var(--marinara-chat-chrome-panel-border);
   border-radius: 0.75rem;
-  background: var(--background);
+  background: var(--marinara-chat-chrome-panel-bg);
+  color: var(--marinara-chat-chrome-panel-text);
   box-shadow: 0 24px 80px rgb(0 0 0 / 40%);
+  backdrop-filter: blur(12px);
 }
 
 .mn-progress-modal {
@@ -254,14 +270,35 @@ export const MEMORY_NAG_STYLES = `
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  border-bottom: 1px solid var(--border);
-  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--marinara-chat-chrome-panel-divider);
+  padding: 0.75rem 1.25rem;
+  color: var(--marinara-chat-chrome-panel-title);
+  font-size: 0.875rem;
 }
 
 .mn-modal-body {
   min-height: 0;
   overflow: auto;
   padding: 1rem;
+  scrollbar-color: var(--marinara-chat-chrome-panel-scrollbar) transparent;
+  scrollbar-width: thin;
+}
+
+.mn-modal-close {
+  width: 2rem;
+  min-width: 2rem;
+  height: 2rem;
+  min-height: 2rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  padding: 0.375rem;
+  color: var(--marinara-chat-chrome-panel-muted);
+}
+
+.mn-modal-close:hover {
+  background: var(--marinara-chat-chrome-highlight-bg-hover);
+  color: var(--marinara-chat-chrome-highlight-text);
 }
 
 .mn-progress {

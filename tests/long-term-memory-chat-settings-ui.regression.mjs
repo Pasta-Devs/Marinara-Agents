@@ -21,6 +21,9 @@ assert.equal((chatSettings.match(/\scompact\n/gu) ?? []).length, 4);
 assert.doesNotMatch(chatSettings, /space-y-2 px-2/u);
 
 assert.match(controls, /mari-chrome-field min-h-9 w-full !rounded-md px-3 py-2 text-xs/u);
+assert.match(controls, /compactInputStyle = \{ color: "var\(--foreground\)" \}/u);
+assert.match(controls, /style=\{compact \? compactInputStyle : undefined\}/u);
+assert.match(chatSettings, /style=\{compactInputStyle\}/u);
 assert.match(controls, /compact \? "h-7 w-7" : "h-11 w-11"/u);
 assert.match(controls, /compact \? compactInputClass : inputClass/u);
 assert.match(lastInjection, /mari-chat-option-field overflow-hidden !rounded-md/u);
