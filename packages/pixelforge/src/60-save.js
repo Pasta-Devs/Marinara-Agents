@@ -84,6 +84,13 @@ const LADDER = Object.freeze({
     flush: "proceed",
     anchorCache: true,
     toast: null,
+    // `toast` is what a REWIND CHECK says; `adoptToast` is what BOOT says, and
+    // they differ on exactly this row (plan §Q2a: "the route row always wins at
+    // adopt, and the player is told"). A row-6 difference found mid-session is
+    // latched in silence — nothing visibly changed. The same row at boot means
+    // the world the metadata just built is being replaced under them, which is
+    // the one time they need the sentence.
+    adoptToast: "The world rewound with the story.",
   },
   7: {
     name: "differs-anchored",
@@ -92,6 +99,7 @@ const LADDER = Object.freeze({
     flush: "block",
     anchorCache: true,
     toast: "The world rewound with the story.",
+    adoptToast: "The world rewound with the story.",
   },
   8: { name: "same", adopt: "none", rewind: "latch", flush: "proceed", anchorCache: true, toast: null },
   9: { name: "get-failed", adopt: "none", rewind: "none", flush: "fresh", anchorCache: false, toast: null },
@@ -223,7 +231,11 @@ PF.save = {
     // one branch at a time. serialize() takes an absent block and hands back the
     // default one, which is what makes the unconditional emission possible on
     // the synthetic cores 80-setup and the load-time assertion build.
-    snap.player = PF.player.serialize(sim.player);
+    // `dropCarry` is threaded DOWN into the block serializer as well: since the
+    // block keeps a newer build's unknown player-level keys too (58-player
+    // PLAYER_KEYS), a pre-flight that shed only the envelope's carry would leave
+    // an arbitrarily large foreign field inside `player` with no escape hatch.
+    snap.player = PF.player.serialize(sim.player, dropCarry);
     return snap;
   },
 
@@ -367,7 +379,7 @@ PF.save = {
       if (carriedExtra) core.sim._envelopeExtra = carriedExtra;
       const moved = PF.player.transplant(carriedPlayer, core.sim.world, sealed);
       core.sim.player = moved.player;
-      if (moved.severed) PF.quarantine.put(chatId, moved.severed.slot, moved.severed.entry);
+      if (moved.severed) this._park(chatId, moved.severed.slot, moved.severed.entry);
       this._lastSerialized = null;
       core.render?.clearZones?.();
       void PF.assets.load(core);
@@ -506,6 +518,24 @@ PF.save = {
     return sim;
   },
 
+  /** Every quarantine write goes through here, and the point of the wrapper is
+   *  the RETURN VALUE. `put` refuses — first-loss-wins on the one-shot slots, or
+   *  an entry too large for the bag's own ceiling — and every caller used to
+   *  discard that silently, which is how a second severance came to delete the
+   *  fields it had just stripped. A refusal is now either handled by the caller
+   *  or said out loud here, and never both ignored and unlogged. */
+  _park(chatId, slot, entry) {
+    if (PF.quarantine.put(chatId, slot, entry)) return true;
+    const occupied = PF.quarantine.peek(slot) !== null;
+    console.warn(
+      `[pixelforge] the ${slot} quarantine slot did not take this entry: ` +
+        (occupied
+          ? "it already holds an earlier loss of the same kind (first-loss-wins)"
+          : "the entry is larger than the bag's own ceiling"),
+    );
+    return false;
+  },
+
   /** The §Q5 rehydration, factored out so the ordering is one readable list
    *  rather than a tail on a 90-line function. Never throws: every branch has a
    *  defaults boot behind it. */
@@ -514,7 +544,7 @@ PF.save = {
     // 1. PARSE / MIGRATE.
     const parsed = PF.player.parse(saved && typeof saved === "object" ? saved.player : null);
     const player = parsed.player;
-    if (parsed.quarantine) PF.quarantine.put(chatId, parsed.quarantine.slot, parsed.quarantine.entry);
+    if (parsed.quarantine) this._park(chatId, parsed.quarantine.slot, parsed.quarantine.entry);
 
     // 1b. VERSION RE-ADOPTION. A block this build could not read last time is
     // readable now. It CONSUMES the slot — that is what makes a third boot a
@@ -530,7 +560,11 @@ PF.save = {
         // A stamp entry from a DIFFERENT lineage is not evidence about this one.
         const stamp = PF.quarantine.peek("stamp");
         if (stamp && stamp.fromV !== held.fromV) PF.quarantine.discard(chatId, "stamp");
-        PF.quarantine.put(chatId, "setAside", {
+        // setAside is a LIST, so a SECOND re-adoption on a later boot parks its
+        // displaced block beside the first instead of finding the slot full and
+        // dropping a live block on the floor. Nobody but the player resolves
+        // this slot, and two displacements are two things to offer them.
+        this._park(chatId, "setAside", {
           reason: "displaced",
           fromV: player.v,
           block: PF.player.serialize(player),
@@ -542,8 +576,16 @@ PF.save = {
     // 2. STAMPS / SEVERANCE, then the other direction: a stamp slot whose world
     // is the world we just built is a save coming home.
     const applied = PF.player.applyStamps(player, world, brief, briefExpected);
-    if (applied.severed) PF.quarantine.put(chatId, applied.severed.slot, applied.severed.entry);
     const notices = [...applied.notices];
+    if (applied.severed && !this._park(chatId, applied.severed.slot, applied.severed.entry)) {
+      // applyStamps has ALREADY stripped the live block by the time it hands the
+      // entry over, so a refusal here is a real loss — and the notice it wrote
+      // promises the opposite. The bag merges a second severance now, so this
+      // only fires when the entry will not fit at all; when it does fire, the
+      // player gets the true sentence instead of the comforting one.
+      notices.length = 0;
+      notices.push("What belonged to the world that changed could not be kept, and is gone.");
+    }
     if (applied.evaluated && !applied.severed) {
       const stamp = PF.quarantine.peek("stamp");
       if (stamp) {
@@ -617,8 +659,10 @@ PF.save = {
     // from, so it must not survive into a chat whose row it never looked at.
     this._lastCheck = null;
     this._lastCheckAt = 0;
+    this._lastOkCheckAt = 0;
     this._lastCheckedAnchor = null;
     this._anchorMoved = false;
+    this._row9Failures = 0;
     this._corruptToasted = false;
     this._corruptParked = false;
     // The in-memory quarantine bag is per-chat, exactly like the caches above:
@@ -685,8 +729,15 @@ PF.save = {
     // spending a backoff rung on it would take the session's saves down with
     // the network's bad minute.
     if (!get || get.failed) {
+      // Fresh means "we looked at THIS row recently and it was writable". An
+      // echoed anchor MOVE cancels that outright: the write landed somewhere
+      // nobody has looked at, so the freshness we hold is about a different row
+      // and spending it here is a blind overwrite at an unexamined anchor.
       const fresh =
-        typeof c.lastOkCheckAt === "number" && c.lastOkCheckAt > 0 && (c.now ?? 0) - c.lastOkCheckAt < CHECK_FRESH_MS;
+        c.anchorMoved !== true &&
+        typeof c.lastOkCheckAt === "number" &&
+        c.lastOkCheckAt > 0 &&
+        (c.now ?? 0) - c.lastOkCheckAt < CHECK_FRESH_MS;
       return decide(9, { fresh, error: get?.error ?? null });
     }
     const probe = get.probe || {};
@@ -769,13 +820,20 @@ PF.save = {
   },
 
   /** Bookkeeping every site shares: what the last completed check decided, when
-   *  the last SUCCESSFUL one was, and the anchor it read. Teardown's clean-gate
-   *  reads all three. */
+   *  the last ANSWERED one was, when the last one that found a WRITABLE row was,
+   *  and the anchor it read. The two clocks are not the same clock and conflating
+   *  them was a bug: a row-4 check answers (so it moves `_lastCheckAt`, which is
+   *  what the pre-check's skip window measures) but it found the row GONE, so it
+   *  must not move `_lastOkCheckAt` — the thing row 9's freshness means. With one
+   *  clock, an unresolved lost-row check made the very next teardown look fresh
+   *  and ship a full-snapshot overwrite on the strength of it. */
   _recordCheck(decided) {
     this._lastCheck = decided;
     if (decided.row !== 9) {
       this._lastCheckAt = Date.now();
+      if (decided.flush === "proceed") this._lastOkCheckAt = this._lastCheckAt;
       this._anchorMoved = false; // consumed by the check it forced
+      this._row9Failures = 0; // the route answered; its own ladder starts over
       if (decided.anchor) this._lastCheckedAnchor = decided.anchor;
     }
     return decided;
@@ -798,7 +856,7 @@ PF.save = {
         seqAtIssue,
         game: this._gameOrdinal(core),
         anchorMoved: this._anchorMoved,
-        lastOkCheckAt: this._lastCheckAt,
+        lastOkCheckAt: this._lastOkCheckAt,
         now: Date.now(),
       }),
     );
@@ -823,11 +881,21 @@ PF.save = {
 
   /** Apply a classification at a REWIND-shaped site (the turn-edge check and the
    *  flush pre-check both land here). `reread` marks the second pass row 4 asks
-   *  for. Returns true when it acted on the world. */
+   *  for. Returns { acted, settled }: `acted` is whether the world changed under
+   *  it, `settled` is the row the call actually ENDED on — which is not the row
+   *  it was handed when a row-4 re-read resolves to something else, and the
+   *  pre-check has to decide on the row that is really there. */
   async _applyRewind(core, decided, chatId, gen, seqAtIssue, reread) {
+    if (decided.row === 1) {
+      // A row-1 classification at ANY site means the next write repairs the row
+      // and destroys the only copy of its bytes. Park them wherever that is
+      // about to happen, not only at boot.
+      await this._noteCorruptRow(core, chatId, decided, false);
+      return { acted: false, settled: decided };
+    }
     if (decided.rewind === "latch") {
       this._serverSerialized = decided.serialized;
-      return false;
+      return { acted: false, settled: decided };
     }
     if (decided.row === 4) {
       if (!reread) {
@@ -835,15 +903,20 @@ PF.save = {
         // window sees no row and would otherwise rewind a perfectly live world
         // back to its baseline, toast and all.
         const again = await this._check(core, chatId, gen, seqAtIssue);
-        if (!again) return false;
+        if (!again) return { acted: false, settled: null };
         return this._applyRewind(core, again, chatId, gen, seqAtIssue, true);
       }
       this._serverSerialized = null;
       this._rebuild(core, null);
       core.hud?.toast(decided.toast);
+      // _rebuild primes _lastSerialized with the bytes it just built, so this
+      // markDirty would dedupe to nothing and the row the rewind just found
+      // MISSING would never be re-created. The force flag exists for exactly
+      // this: the next write goes up whatever the caches say.
+      this._forceWrite = true;
       this.markDirty(core);
       this._lastCheck = null; // acted on; it no longer gates teardown
-      return true;
+      return { acted: true, settled: decided };
     }
     if (decided.row === 7) {
       this._serverSerialized = decided.serialized;
@@ -851,12 +924,14 @@ PF.save = {
       core.hud?.toast(decided.toast);
       // The rebuilt snapshot need not serialize to the row's own bytes (a pre-S5
       // row rebuilds with a default player block on it), so the world we now
-      // show still owes the server a write.
+      // show still owes the server a write — and _rebuild just primed the cache
+      // with those very bytes, so it owes it through the force flag.
+      this._forceWrite = true;
       this.markDirty(core);
       this._lastCheck = null;
-      return true;
+      return { acted: true, settled: decided };
     }
-    return false;
+    return { acted: false, settled: decided };
   },
 
   adopt(core) {
@@ -901,11 +976,7 @@ PF.save = {
       // bounded excerpt of the damaged bytes BEFORE the repairing write goes
       // out. The row's own contents are recoverable by no other client-side
       // means, and the repair destroys them.
-      if (!this._corruptToasted) {
-        this._corruptToasted = true;
-        core.hud?.toast(decided.toast);
-      }
-      await this._parkCorruptExcerpt(core, chatId, decided);
+      await this._noteCorruptRow(core, chatId, decided, true);
       this._lastSerialized = null;
       this.markDirty(core);
       return;
@@ -914,9 +985,13 @@ PF.save = {
     if (decided.adopt === "rebuild") {
       // THE ROW WINS (plan §Q2a). No client-visible datum orders the two stores
       // across a timeline move, so the anchored row is authority and the
-      // metadata-booted world yields to it.
+      // metadata-booted world yields to it — and §Q2a's other half is that the
+      // player is TOLD, which shipped missing. The message is the LADDER's
+      // (`adoptToast`) rather than the site's, because row 6 says a different
+      // thing here than it says at a rewind check.
       this._serverSerialized = decided.serialized;
       this._rebuild(core, decided.state);
+      if (decided.adoptToast) core.hud?.toast(decided.adoptToast);
       return;
     }
     if (decided.anchorCache && decided.serialized !== null) this._serverSerialized = decided.serialized;
@@ -927,6 +1002,25 @@ PF.save = {
       this._lastSerialized = null; // force the write even if metadata matched
       this.markDirty(core);
     }
+  },
+
+  /** A row-1 row will be REPAIRED by the next write, and that write destroys the
+   *  only copy of the damaged bytes there is. So the park is hoisted here and
+   *  called from every site that sees the classification — boot adopt, the
+   *  turn-edge check, and the flush pre-check — instead of only the first of the
+   *  three. First-loss-wins on the excerpt, so three sightings cost one park.
+   *
+   *  `tell` is separate, and deliberately not every site: the turn edge does not
+   *  repair anything and nothing visible changed for the player there, so it
+   *  stays silent (pinned by harness case (ad)). Boot and the pre-check both
+   *  have the repairing write immediately behind them, and they say it once. */
+  async _noteCorruptRow(core, chatId, decided, tell) {
+    if (!decided || decided.row !== 1) return;
+    if (tell && !this._corruptToasted) {
+      this._corruptToasted = true;
+      core.hud?.toast(decided.toast);
+    }
+    await this._parkCorruptExcerpt(core, chatId, decided);
   },
 
   /** Park the raw text of a damaged row under its own metadata key, bounded.
@@ -1014,6 +1108,19 @@ PF.save = {
       this._stopReprobe();
       this._serverSerialized = null;
       this._lastSerialized = null;
+      // …and the LADDER state the pinned session accumulated goes with it. The
+      // pin was created by a row-9 boot probe, so _lastCheck is that row 9 with
+      // _lastOkCheckAt still at 0 — carried into routes mode it makes
+      // _teardownAllowed() refuse the very first pagehide after the promotion,
+      // on the strength of a check that decided the mode and nothing else. A
+      // freshly promoted session has never looked at its row, which is exactly
+      // the "never checked at all" case the gate treats as a proceed.
+      this._lastCheck = null;
+      this._lastCheckAt = 0;
+      this._lastOkCheckAt = 0;
+      this._lastCheckedAnchor = null;
+      this._anchorMoved = false;
+      this._row9Failures = 0;
       // …and a flush already parked in an await would put _lastSerialized
       // straight back when it lands, cancelling the promotion's first write
       // with nothing to show for it. The force flag outlives that: only the
@@ -1056,10 +1163,12 @@ PF.save = {
     try {
       const decided = await this._check(core, chatId, gen, seqAtIssue);
       if (!decided) return; // switched mid-probe, or the chat moved under it
-      // Row 9 is transient and the next turn edge retries; rows 1, 2 and 5 all
-      // resolve to "ignore" and touch nothing — a damaged row, a retired game's
-      // row and a row our own write overtook are none of them evidence that the
-      // timeline moved.
+      // Row 9 is transient and the next turn edge retries; rows 2 and 5 both
+      // resolve to "ignore" and touch nothing — a retired game's row and a row
+      // our own write overtook are neither of them evidence that the timeline
+      // moved. Row 1 also touches the world not at all, but it does park the
+      // damaged row's bytes: the next flush's PUT is the repair, and it is the
+      // last moment anything can read them.
       await this._applyRewind(core, decided, chatId, gen, seqAtIssue, false);
     } finally {
       // A stale completion must not clear the NEW chat's in-flight flag.
@@ -1132,7 +1241,20 @@ PF.save = {
    *  bytes the server already has, on save events the player generates anyway. */
   _snapshotWithoutCarry(sim, chatId) {
     const extra = sim && sim._envelopeExtra;
-    if (!extra || Object.keys(extra).length === 0) return null;
+    const envelopeCarry = extra && Object.keys(extra).length > 0;
+    // The block carries unknown keys of its own now, and either carry alone is
+    // reason enough to try the slim snapshot: a foreign field that only exists
+    // INSIDE `player` used to leave this returning null and the session
+    // degrading with a shed still available.
+    let blockCarry = false;
+    try {
+      const full = PF.player.serialize(sim?.player);
+      const slim = PF.player.serialize(sim?.player, true);
+      blockCarry = JSON.stringify(full) !== JSON.stringify(slim);
+    } catch {
+      blockCarry = false;
+    }
+    if (!envelopeCarry && !blockCarry) return null;
     const snap = this.snapshot({ sim, chatId }, true);
     if (!snap) return null;
     return { snap, serialized: JSON.stringify(snap) };
@@ -1219,9 +1341,29 @@ PF.save = {
         // second later. Rows 4 and 7 are the two that block; everything else
         // proceeds, including the damaged row (the write is the repair) and the
         // retired game's row (ours outranks it).
-        if (job.routeNeeded && !teardown) {
+        //
+        // `teardown` here is the LAST-DETACH flush (90-element:91) and nothing
+        // else — pagehide takes flushTeardown, which never reaches this
+        // function. The page is alive on a detach, so it gets the ordinary
+        // checked write its own comment already claims for it; skipping the
+        // check meant the one write most likely to be racing a swipe was the
+        // one write that never looked.
+        if (job.routeNeeded) {
           const gate = await this._precheck(core, job);
           if (gate === "block") return;
+          if (gate === "cache-only") {
+            // Row 9: the route did not answer. That forbids the PUT — a
+            // full-snapshot overwrite of a row we have not seen — and forbids
+            // nothing else. The write-through metadata cache is ours outright
+            // and is exactly what an old-engine or cold boot reads next, so
+            // abandoning the whole flush over an unanswered GET was three
+            // persistence paths stopped by one.
+            job = { ...job, routeNeeded: false };
+          }
+          // …and the derived clean-gate on top, for the detach path: the
+          // pre-check may have been skipped as fresh, in which case this is the
+          // last completed check's verdict rather than a new one.
+          if (teardown && !this._teardownAllowed()) return;
         }
         // Route row first (the authority), metadata second as write-through
         // boot cache + old-engine fallback. A metadata failure is non-fatal
@@ -1332,7 +1474,9 @@ PF.save = {
     this._rearm(core, teardown);
   },
 
-  /** The flush site's rung of the ladder. Returns "proceed" or "block".
+  /** The flush site's rung of the ladder. Returns "proceed", "block", or
+   *  "cache-only" — the last meaning "not the route row, but the write-through
+   *  metadata cache is still fine to take it".
    *
    *  The GET is SKIPPED while the last successful check is inside one debounce
    *  window: the pre-check exists so a PUT never lands on a row nobody looked
@@ -1363,20 +1507,58 @@ PF.save = {
       // but it is a reason not to overwrite a row we have not seen in a while.
       const fresh = decided.fresh === true;
       if (!fresh) {
-        this.markDirty(core);
-        return "block";
+        this._rearmRow9(core);
+        return "cache-only";
       }
       return "proceed";
     }
     if (decided.flush === "block") {
-      await this._applyRewind(core, decided, job.chatId, gen, seqAtIssue, false);
-      return "block";
+      const applied = await this._applyRewind(core, decided, job.chatId, gen, seqAtIssue, false);
+      // Decide on the row that is ACTUALLY there, not the one we were handed.
+      // Row 4's re-read exists because a GET can land inside the PUT route's
+      // delete-then-insert window; when it comes back row 8 the row is alive and
+      // byte-identical, the world is not stale, and blocking anyway dropped a
+      // whole debounce cycle with nothing re-armed to carry it. Only a row that
+      // still blocks after the re-read blocks the write.
+      const settled = applied.settled;
+      if (applied.acted || !settled) return "block";
+      if (settled.flush === "block") return "block";
+      if (settled.flush === "fresh") {
+        if (settled.fresh !== true) {
+          this._rearmRow9(core);
+          return "cache-only";
+        }
+        return "proceed";
+      }
+      await this._noteCorruptRow(core, job.chatId, settled, true);
+      return "proceed";
     }
+    await this._noteCorruptRow(core, job.chatId, decided, true);
     if (decided.anchorCache && decided.serialized !== null && this._serverSerialized !== null) {
       // Latch a row we agree with, so the next check has a current baseline.
       this._serverSerialized = decided.serialized;
     }
     return "proceed";
+  },
+
+  /** Row 9's OWN ladder. A GET route that will not answer is not a write that
+   *  failed, so it must not spend a rung of the write backoff — but the old cure
+   *  was a bare markDirty, which re-armed a flat 2.5 s poll for as long as the
+   *  outage lasted and put no ceiling on it at all. Same shape as _rearm, same
+   *  give-up point, same landing place: after the last rung the session falls
+   *  back to trigger-driven saves rather than polling a dead route forever. Any
+   *  answered check resets it (_recordCheck). */
+  _rearmRow9(core) {
+    this._row9Failures = (this._row9Failures ?? 0) + 1;
+    if (this._row9Failures > FLUSH_BACKOFF_GIVEUP) return;
+    if (this._timer) return; // a live timer already covers it, and sooner
+    const delay = FLUSH_BACKOFF_MS[Math.min(this._row9Failures - 1, FLUSH_BACKOFF_MS.length - 1)];
+    this._timerIsBackoff = true;
+    this._timer = setTimeout(() => {
+      this._timer = 0;
+      this._timerIsBackoff = false;
+      void this.flush(core, false);
+    }, delay);
   },
 
   /** THE PUT-ANCHOR ECHO (plan §Q2). The row lands at whatever the visible
@@ -1403,10 +1585,22 @@ PF.save = {
    *  checked at all is a PROCEED: that is a fresh chat, and its first write is
    *  the row's creation. */
   _teardownAllowed() {
+    // The clean-set is DERIVED FROM THE ROUTE LADDER, and metadata mode has no
+    // row in it. A boot probe that failed both picked the mode and left a row-9
+    // _lastCheck behind, and that row-9 with no successful check to measure
+    // against then refused every teardown write for the rest of the session —
+    // in a mode where the only store is a metadata key the PATCH owns outright
+    // and no anchor can move under.
+    if (this.mode !== "routes") return true;
     const last = this._lastCheck;
     if (!last) return true;
     if (last.flush === "block") return false;
-    if (last.flush === "fresh") return Date.now() - this._lastCheckAt < CHECK_FRESH_MS;
+    // Row 9. Measured against the last check that found the row WRITABLE, not
+    // the last one that merely answered: an unresolved row 4 answers, moves the
+    // answered-clock, and means the opposite of fresh. And an echoed anchor move
+    // cancels freshness outright, because whatever we last saw, we did not see
+    // it at the anchor this write would land on.
+    if (last.flush === "fresh") return !this._anchorMoved && Date.now() - this._lastOkCheckAt < CHECK_FRESH_MS;
     return true;
   },
 
@@ -1515,10 +1709,17 @@ PF.save = {
     // really does die, none of these handlers ever run, which is the point.
     const gen = this._gen ?? 0;
     const fresh = () => gen === (this._gen ?? 0);
-    const settle = (promise, what, onLanded) => {
+    // `unfenced` runs on ANY success, `onLanded` only while the generation the
+    // teardown was taken at is still current. The split is the same one
+    // _flushNow makes and states as an invariant at :1231-1236: per-chat caches
+    // are fenced, _writeSeq is not, because it is process-global and a write
+    // that completed on the wire superseded every row a GET could still be
+    // holding — whichever chat we happen to be on when it lands.
+    const settle = (promise, what, onLanded, unfenced) => {
       if (!promise || typeof promise.then !== "function") return;
       promise.then(
         (value) => {
+          if (unfenced) unfenced(value);
           if (fresh()) onLanded(value);
         },
         (err) => console.warn(`[pixelforge] teardown ${what} failed`, err),
@@ -1527,15 +1728,21 @@ PF.save = {
     // Both started before either is awaited.
     const put = routes ? PF.api.putExperienceState(chatId, snap, true) : null;
     const patch = routes && !pairFits ? null : PF.api.patchMetadata(chatId, { pixelforge: snap }, true);
-    settle(put, "route save", (echo) => {
-      _writeSeq += 1; // any GET issued before this point read a superseded row
-      // A pagehide is not always a death: if the page comes back, the anchor the
-      // teardown write actually landed on is what the next check has to reason
-      // against.
-      this._noteAnchorEcho(echo);
-      this._serverSerialized = serialized;
-      this._lastSerialized = serialized;
-    });
+    settle(
+      put,
+      "route save",
+      (echo) => {
+        // A pagehide is not always a death: if the page comes back, the anchor
+        // the teardown write actually landed on is what the next check has to
+        // reason against.
+        this._noteAnchorEcho(echo);
+        this._serverSerialized = serialized;
+        this._lastSerialized = serialized;
+      },
+      () => {
+        _writeSeq += 1; // any GET issued before this point read a superseded row
+      },
+    );
     settle(patch, "metadata save", () => {
       this._metaSerialized = serialized;
       // In metadata mode the PATCH is the authority, not a cache, so it owns

@@ -723,7 +723,7 @@ PF.world = (() => {
    *  build and only its comparison is persisted. */
   function mintStampOf(minted) {
     let text = `mint/v${MINT_V}`;
-    for (const member of minted) text += `|${member.name} ${member.kind} ${member.household}`;
+    for (const member of minted) text += `|${member.name}\u0000${member.kind}\u0000${member.household}`;
     return PF.hashStr(text);
   }
 
