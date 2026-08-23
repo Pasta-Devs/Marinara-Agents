@@ -4,6 +4,8 @@
 
 **Updated 2026-08-22.** A progress pass, not a re-cut: the 0.10 shipped-history row now records what has landed on `feat/pixelforge-room-zoning` (the street grid and the population mint, size-follows-program interiors, the hearth) and what remains; W3, L1, L3, E2, E6 and W5 carry entry-level notes where the work moved them; Open Questions gains two. The structure, the groups and the three rulings are untouched.
 
+**Updated 2026-08-24.** Three items added, all from a maintainer playtest of the 0.11 build: **S6** — the package's parallel setup dialog retires into Game Mode's own; **L6** — presence follows the narration, so the sprite goes where the story says it went; **W7** — venue variety, district naming and being able to *find* the inn. Nothing else moved: the groups, the rulings and the sequencing are as they were.
+
 **How this document is organized, and why.** Items are grouped by **which layer of the package they extend**, not by when anyone thought of them. Discovery order tells you when an idea arrived; a contributor deciding what to build next needs to know what a thing touches, what it depends on, and what it unlocks. The five groups mirror the package's real seams: **S** — substrate (channels and data everything else hangs off), **L** — the living settlement (the world moving without the player), **P** — the player's stake (ownership, progression, and the things the player does), **W** — the wider world (exploration and settlement variety), **E** — the cast (people as content). After the groups: sequencing, the will-not-build list, and open questions.
 
 ---
@@ -67,7 +69,7 @@ The gaps the roadmap exists to close, in order of how much they matter for *this
 
 ## S — Substrate (load-bearing)
 
-These five gate more of the roadmap than everything else combined. Marked **LOAD-BEARING** with what each gates.
+These five gate more of the roadmap than everything else combined. Marked **LOAD-BEARING** with what each gates. S6 is a sixth item in the group and deliberately *not* one of the five — it gates nothing; it lives here because it is the channel every other item's configuration arrives through.
 
 ### S1. The GM write-back channel — LOAD-BEARING
 
@@ -132,6 +134,12 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 
 **Depends on:** nothing technically; it is a decision, not a dependency. Sequence it **with or before its first consumer** — which under the suggested plan is S3 in 0.11. **Do not let the first consumer define the schema by accident.**
 
+### S6. The setup flow retires into Game Mode's own *(new — maintainer playtest, 2026-08-24)*
+
+**What:** Pixelforge should not carry a parallel setup. `80-setup.js` replaces the classic wizard body wholesale and has to emit the *entire* required `gameSetupConfig` — genre, setting, tone, difficulty, gmMode, party, plus the World-Maps and combat fields — because the host refuses a launch without them. So every question Game Mode already asks gets asked a second time, on a second form, against a second set of defaults that drift from the engine's. The direction is the other way round: **a toggle on the normal Game Mode setup** that says this chat is played as Pixelforge, plus **an inline seed field** on that same form — copy, paste, reroll, hand it to somebody else — and the package's own dialog goes away. What the package genuinely needs is three fields wide (theme, seed, generate-or-decline) and belongs beside the toggle.
+
+**Pillar:** none — this is the front door, not a gap in the game. **Secondary tag:** legibility. **Unlocks:** one obvious home for every future package setting instead of a second wizard that grows; a seed a player can share and get the same town back; and the end of the defaults drift, which is where the stale "Begin in Hearthvale" label over a sci-fi colony came from. **Depends on:** an engine-side seam — Game Mode's setup has to be able to host a package's own fields. Same class of conversation as S1's channel, and worth opening the same way: early, regardless of ship order. **Down payment shipped in 0.11:** the generate-or-decline toggle, the first of those three fields — unchecked boots the themed default world immediately, with no loading gate and no generation call ever made for that chat.
+
 ---
 
 ## L — The living settlement
@@ -167,6 +175,14 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 **What:** rate-limited, deterministic NPC-initiated contact: a bubble ("Alder waves you over"); answering opens dialogue with a prefix saying *they* initiated and why (persona + situation + disposition).
 
 **Pillar:** world agency. **Unlocks:** personas pay off without the player grinding every door; S1 gains a queueable "have X approach the player" op — the single most useful GM request available; recruits (E4) get their approach vector; quest-givers (P4) can flag you down about the job. **Depends on:** nothing hard; better with P2 and L1.
+
+### L6. Presence follows the narration *(new — maintainer playtest, 2026-08-24)*
+
+**What:** when the GM narrates the player into a place — and any named, present NPC along with them — the sim should go there. Today the story moves and the sprite does not: the narrator walks you into the cantina and you are still standing in the square, which reads as a world that is not listening. Two shapes, not exclusive: **teleport-on-narration**, the cheap one, landing the party at the named zone's spawn; and **cutscene presentation**, the honest one, where the existing beat machinery covers the move so the player watches a transition instead of being cut mid-step.
+
+**The beachhead exists and its limits are the item.** `50-spatial.js` already follows narrated drift — when the host commits a new party location, the package teleports to the zone bound to it. What it cannot do is the rest: the binding only covers zones the maps export registered, an interior the GM names in *prose* that the host never commits is invisible to it, and **NPCs never move at all** — a character the narrator puts in the room with you is still asleep in their own house, which is the half that breaks a scene fastest.
+
+**Pillar:** Consequence. **Secondary tags:** world-aliveness, world coherence. **Unlocks:** every scene the GM sets somewhere specific stops needing the player to walk there first; L5's hails get a place to happen; E4's follower has a mechanism to follow *with*. **Depends on:** nothing for the host-committed half beyond widening the bindings; the prose-only half is the GM→world direction and wants S1's channel — a `move:<npc>@<zone>` flag is the same vocabulary and the same validation problem. **Companion:** decide what a *contradicted* move does — the narrator puts you in the inn, you walk out, the next turn narrates you still there — because a teleport that fights the player is worse than one that never fires.
 
 ---
 
@@ -256,6 +272,14 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 **What:** two small things folded together. (i) **Reuse:** the sealed brief + seed pair already *is* the reusable asset; what's missing is a browse/replay surface — UI, not world-gen. Low urgency. (ii) **The in-game map:** auto-drawn from compiled zones (the data exists), fog-of-war revealing zones/POIs as visited — exploration made legible as visible progress.
 
 **Pillar:** the unknown (legibility). **Depends on:** nothing; becomes load-bearing at city scale (W3) and with expeditions (W2).
+
+### W7. Venue variety, and districts you can find your way around *(new — maintainer playtest, 2026-08-24)*
+
+**What:** a generated settlement reads as a grid of homes plus a farm. The vocabulary is already richer than what reaches the ground — `gathering`, `workshop`, `hall` and `sanctuary` are sealed place-kinds today — but a settlement only gets one if the model names it, and the repair layer's floor is a single wilds. Three parts. **Named venues surfaced more aggressively:** a floor per rank rather than only a ceiling, so a village whose brief named no places still has somewhere that is not somebody's house. **District naming:** W3's remaining half is a gravity well, and this is the other one — a ward is a name in the header before it is an anchor spread. **Discoverability:** a player standing in the street should be able to find the inn, by the map surface (W6), by a sign the second verb can read (S2), or by the travel list naming what a zone *is* and not only what it is called.
+
+**Pillar:** world variety. **Secondary tag:** legibility. **Relationship to W3 and W5, said plainly so nobody builds it twice:** W3 owns the district *machinery* (per-district `public` handles, district market days) and W5 owns *new* place-kinds with their schedule columns; W7 is the texture pass over both — floors and surfacing for the kinds that already exist, and names for the wards W3 carves. **Depends on:** nothing to start (the floor is a repair-layer change and a lot budget); W6 for the map half; S2 for the sign half.
+
+**The bug half is closed; this is the feature half.** 0.11 found the case where a settlement could seal with a keeper and *no gathering at all* — the §4.3 host synthesis ran against the model's draft cast, one pass before the quality floor topped a host up from stock, so a brief whose cast failed validation outright compiled fifteen zones of homes with no inn in them. The post-condition now runs against the sealed cast. That was a defect, and fixing it does not make a settlement varied; everything above still wants doing.
 
 ---
 

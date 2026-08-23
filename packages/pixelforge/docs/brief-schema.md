@@ -176,7 +176,11 @@ response is **never stored** (checkpoints capture by value — see #5110).
    `situation` degrades to empty instead (a cut hook is worse than none).
 3. **Zones.** Cap/dedupe places (folded-name collision → seed-derived suffix on the LABEL only);
    drop feature items with unknown tags whole; a `host` in the cast with no gathering place
-   synthesizes AT MOST ONE interior named from the host (the player can walk into the inn).
+   synthesizes AT MOST ONE interior named from the host, in the theme's own word for a common
+   room — `Mira's Cantina`, `Perrin's Inn` — so the player can see which door is the inn. The
+   synthesis is a **post-condition on the SEALED cast**, so it is asserted twice: here, against
+   the model's draft, early enough that a `home` can resolve at the interior it just created; and
+   again after the pass-6 floors, against the cast that actually sealed (below).
 4. **Cast.** Bounds 4-10 (over → keep `leader` + first-N by array order, hoisting a `leader`
    found past the cap into the kept set); `home` resolution per §1. There is NO cap on how many
    people share a household number — unrelated lodgers, sisters at a convent and recruits in a
@@ -260,6 +264,13 @@ response is **never stored** (checkpoints capture by value — see #5110).
    enforce ≥2 distinct households (split by seed), ≥2 zones (synthesize one wilds), ≥3 distinct
    tints (rotate by seed), and no feature tag on more than TWO kept slots (the surplus re-rolls
    by seed from the theme's placer list). Every top-up derives from `hash(seed, floorName)`.
+   **Then §4.3 again, last of all** (see pass 3): the cast floor tops up from a STOCK roster and
+   every roster leads with a `host`, so a brief whose cast failed validation outright sealed a
+   keeper with nowhere to keep — and the compiler builds the common room from the gathering PLACE,
+   never from a `host` in the cast, so that settlement compiled as houses with no inn in it. Same
+   room caps as pass 3 (`places` room for the rank, gathering cap 1) and the same ledger entry. It
+   runs *after* the wilds floor deliberately: "no named place at all" and "a keeper with nothing to
+   keep" are different lacks, and a settlement that has both gets both.
 
 **Global budget:** the sealed brief must serialize ≤8 KB; over-budget briefs truncate prose fields
 in reverse-leverage order (`persona`s → zone `flavor`s → `flavor`) before anything structural.
@@ -269,7 +280,11 @@ in reverse-leverage order (`persona`s → zone `flavor`s → `flavor`) before an
 *Amended from the sealed draft (which put generation in the wizard with a Skip button): the
 pre-launch chat is not experience-stamped, so the #5135 route 409s before launch, and after
 launch the host tears the setup UI down — there is no wizard window to block.* Generation runs
-**surface-side, after launch**: the wizard stamps `generate: true` into the experience config.
+**surface-side, after launch**: the wizard stamps the player's `generate` answer into the
+experience config. *The Skip button came back in 0.11 as a checkbox on the setup rather than a
+button in a window that no longer exists — unchecked writes `generate: false`, no gate arms, and
+the chat plays the themed default world immediately, which is also what every pre-0.4.0 save
+does.*
 *Amended again in 0.11 (maintainer ruling #7, plan §Q3b): it no longer runs behind a toast on a
 throwaway world the player is already walking in. A generate-configured chat whose brief is not
 sealed holds at a **loading gate** — the sim does not step, no mutator resolves, no save is

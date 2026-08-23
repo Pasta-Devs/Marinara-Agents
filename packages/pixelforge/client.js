@@ -1262,20 +1262,40 @@ PF.brief = (() => {
 
     // §4.3: a host with no gathering place synthesizes AT MOST ONE interior
     // named from the host — the player must be able to walk into the inn.
+    //
+    // Run TWICE, against two different casts, because §4.3 is a post-condition on
+    // the SEALED cast and this call can only see the model's draft. The raw cast
+    // is not the sealed one: pass 6's quality floor tops up from STOCK, and every
+    // stock roster leads with a `host`. So the brief that needs the synthesis most
+    // — one whose cast failed validation outright — was the one brief that never
+    // got it, and the compiler builds the common room from the gathering PLACE (a
+    // `host` in the cast alone binds to nothing). Measured on a live playtest: a
+    // colony compiled fifteen zones of "X's home" plus a farm, with a keeper who
+    // had nowhere to keep and a berth nobody could rent. This call stays where it
+    // is anyway, one pass ahead of the cast, so a model that named a host CAN
+    // still resolve a `home` at the interior it just earned.
+    const gatheringForHost = (people) => {
+      if (brief.places.some((p) => p.kind === "gathering")) return;
+      if (brief.places.length >= placeRoom) return;
+      const host = people.find((item) => foldEnum(item?.kind ?? item?.role, CAST_KINDS, null) === "host");
+      // The theme's own word for its common room. `${hostName}'s` alone reads as
+      // one more house on the row — it stood in a street of "Rook's home" and
+      // "Fen's home" and the player could not tell which door was the inn. Both
+      // default briefs already carry the idiom (the Amber Hearth INN, the Meridian
+      // CANTINA); the host's name is budgeted so `${name}'s ${noun}` still fits the
+      // 24 characters the schema asks a model for — "'s " is three of them.
+      const noun = GATHERING_NOUNS[theme] || GATHERING_NOUNS["cozy-village"];
+      const hostName = host ? capText(host.name, Math.max(6, 24 - 3 - noun.length)) : "";
+      if (!hostName) return;
+      brief.places.push({
+        kind: "gathering",
+        name: dedupeName(`${hostName}'s ${noun}`, "places-host"),
+        flavor: "",
+      });
+      repairs.push(`places: synthesized a gathering interior for host ${hostName}`);
+    };
     const rawCast = asArray(src.cast);
-    const hasGathering = brief.places.some((p) => p.kind === "gathering");
-    if (!hasGathering && brief.places.length < placeRoom) {
-      const host = rawCast.find((item) => foldEnum(item?.kind ?? item?.role, CAST_KINDS, null) === "host");
-      const hostName = host ? capText(host.name, 20) : "";
-      if (hostName) {
-        brief.places.push({
-          kind: "gathering",
-          name: dedupeName(`${hostName}'s`, "places-host"),
-          flavor: "",
-        });
-        repairs.push(`places: synthesized a gathering interior for host ${hostName}`);
-      }
-    }
+    gatheringForHost(rawCast);
 
     // Pass 4 — cast. Over the cap, the leader survives (§4.4): hoist the first
     // leader to the front before truncating by original order.
@@ -1391,6 +1411,12 @@ PF.brief = (() => {
       });
       repairs.push("places: floor top-up wilds zone");
     }
+    // §4.3 again, against the cast that actually SEALED — see gatheringForHost.
+    // Last of the floors on purpose: the wilds top-up answers "this settlement has
+    // no named place at all", which is a different lack, and running ahead of it
+    // would silently spend that floor and leave a colony with an inn and no
+    // outside. Both floors are cheap; a settlement that needs both gets both.
+    gatheringForHost(brief.cast);
 
     // Identity (§2): opaque ordinal ids assigned once, stored in the sealed brief.
     const ids = { zones: {}, cast: {}, features: {} };
@@ -1717,6 +1743,12 @@ PF.brief = (() => {
     ruin: "The Ruin",
     lookout: "The Lookout",
   };
+  // What each theme calls its common room, for the §4.3 host synthesis. Read off
+  // the default briefs, which name theirs in full: "The Amber Hearth Inn" and
+  // "The Meridian Cantina". PLACE_LABELS is the generic fallback for a place the
+  // model named nothing at all; this is the possessive a person's own house of
+  // hospitality takes.
+  const GATHERING_NOUNS = { "cozy-village": "Inn", "sci-fi-colony": "Cantina" };
   const PLACE_LABELS = {
     gathering: "The Hearth",
     workshop: "The Works",
@@ -6046,7 +6078,10 @@ PF.spatial = {
         if (target && core.sim && core.sim.zoneId !== zoneId) {
           core.sim.teleport(zoneId, target.spawn.x, target.spawn.y);
         }
-        core.hud?.toast(`Now at: ${this.locationName() ?? loc}`);
+        // Same class as a walked zone entry, so the same top surface: a narrated
+        // arrival is the one notice most likely to print while the player is
+        // mid-paragraph (70-hud `toast`).
+        core.hud?.toast(`Now at: ${this.locationName() ?? loc}`, "location");
       }
       this._lastLocationId = loc;
       core.hud?.refreshChips();
@@ -10984,6 +11019,18 @@ PF.Hud = class {
         "position:absolute;bottom:calc(156px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);" +
         `${S.chip}opacity:0;transition:opacity 0.25s;z-index:3;pointer-events:none;`,
     });
+    // LOCATION NOTICES RIDE THE TOP. Everything used to share the bottom surface
+    // above, which is where the host's narration panel is: crossing into a zone
+    // printed its name across the middle of the GM's sentence ("Tam's farm" over a
+    // line of NARRATION, playtest). Where you have just arrived belongs beside the
+    // chip that already says where you are, and it is the one toast class that
+    // fires while the player is reading rather than because they pressed
+    // something. Sits under the topbar so the two never stack.
+    this.locToastEl = PF.el("div", {
+      style:
+        "position:absolute;top:42px;left:50%;transform:translateX(-50%);" +
+        `${S.chip}opacity:0;transition:opacity 0.25s;z-index:3;pointer-events:none;`,
+    });
 
     // THE LOADING GATE's face (plan §Q3b). Full-surface and pointer-events:auto,
     // so nothing behind it is clickable while it holds — a chat whose world has
@@ -11014,10 +11061,20 @@ PF.Hud = class {
     this.root = PF.el(
       "div",
       { style: "position:absolute;inset:0;pointer-events:none;font-family:ui-monospace,Consolas,monospace;" },
-      [this.topbar, this.actions, this.dpad, this.travelMenu, this.captionEl, this.toastEl, this.gateEl],
+      [
+        this.topbar,
+        this.actions,
+        this.dpad,
+        this.travelMenu,
+        this.captionEl,
+        this.toastEl,
+        this.locToastEl,
+        this.gateEl,
+      ],
     );
     rootEl.appendChild(this.root);
     this._toastTimer = 0;
+    this._locToastTimer = 0;
     this._mode = null;
     this.refreshChips();
   }
@@ -11028,15 +11085,25 @@ PF.Hud = class {
 
   destroy() {
     clearTimeout(this._toastTimer);
+    clearTimeout(this._locToastTimer);
     this.root.remove();
   }
 
-  toast(msg) {
-    this.toastEl.textContent = msg;
-    this.toastEl.style.opacity = "1";
-    clearTimeout(this._toastTimer);
-    this._toastTimer = setTimeout(() => {
-      this.toastEl.style.opacity = "0";
+  /** `kind` picks the SURFACE, not the styling: "location" goes to the top strip
+   *  (see locToastEl), everything else keeps the bottom one. Two nodes and two
+   *  timers, so an arrival and a refusal can be on screen together instead of
+   *  overwriting each other — they answer different questions. An unknown kind
+   *  falls to the bottom, which is where every caller that names none already
+   *  wanted to be. */
+  toast(msg, kind) {
+    const atTop = kind === "location";
+    const node = atTop ? this.locToastEl : this.toastEl;
+    node.textContent = msg;
+    node.style.opacity = "1";
+    const timer = atTop ? "_locToastTimer" : "_toastTimer";
+    clearTimeout(this[timer]);
+    this[timer] = setTimeout(() => {
+      node.style.opacity = "0";
     }, 2600);
   }
 
@@ -11265,9 +11332,11 @@ PF.Hud = class {
 // isn't active the host falls back to standard mode and the surface runs
 // unbound — both are handled (verified trap #6).
 // World generation does NOT happen here (spec §5, amended): the wizard only
-// stamps `generate: true` into the experience config; the surface picks it up
-// after launch (PF.save.maybeGenerateBrief) so the whole 90s window runs
-// behind a playable world instead of a torn-down setup UI.
+// stamps the player's `generate` answer into the experience config; the surface
+// picks it up after launch (PF.save.maybeGenerateBrief) so the whole 90s window
+// runs behind a loading gate instead of a torn-down setup UI. Answering NO is a
+// supported outcome, not a failure — the chat plays the themed default world
+// immediately, with no gate and no generation call ever made for it.
 
 PF.mountSetup = (el, props) => {
   // The host delivers a FRESH props object on every render, and its onCancel
@@ -11361,6 +11430,21 @@ PF.mountSetup = (el, props) => {
     ["sfw", "SFW"],
     ["nsfw", "NSFW"],
   ]);
+  // DECLINING IS A CHOICE AGAIN. The wizard stamped `generate: true`
+  // unconditionally, which quietly retired the skip affordance: the themed-default
+  // immediate-play path — no loading gate, no starting purse, walk in and play —
+  // became unreachable for every new chat, even though the save path never stopped
+  // supporting it (`briefExpected` is exactly this flag, and the `{skipped:true}`
+  // marker is a second, post-hoc route it also still reads). Checked by default,
+  // because a generated world IS the package; unchecked is somebody who wants the
+  // village they already know, or does not want to spend the call.
+  const generateIn = PF.el("input", { type: "checkbox" });
+  generateIn.checked = true;
+  const generateRow = PF.el(
+    "label",
+    { style: "display:flex;gap:8px;align-items:center;font:12px/1.5 inherit;cursor:pointer;margin-top:10px;" },
+    [generateIn, PF.el("span", { text: "Generate a unique world with your GM connection (one call)" })],
+  );
   const connSel = select([["", "Loading connections…"]]);
   const partyBox = PF.el("div", {
     style: "display:flex;flex-direction:column;gap:4px;max-height:130px;overflow:auto;" + S.input,
@@ -11373,8 +11457,21 @@ PF.mountSetup = (el, props) => {
   const launchBtn = PF.el("button", {
     type: "button",
     style: `${S.btn}background:var(--primary,#2f6b4f);color:var(--primary-foreground,#fff);border:none;`,
-    text: "Begin in Hearthvale",
   });
+  // The button names the world you are about to walk into, so it answers to the
+  // name field and the theme rather than to a literal. It shipped as the constant
+  // "Begin in Hearthvale" and only the RETRY path below ever rewrote it, so a
+  // sci-fi colony called Meridian Base offered to begin in a cozy village that was
+  // not in the game. One function, called at every site that can change the answer.
+  const syncLaunchLabel = () => {
+    const preset = THEME_PRESETS[themeSel.value] || THEME_PRESETS["cozy-village"];
+    launchBtn.textContent = `Begin in ${nameIn.value.trim() || preset.name}`;
+  };
+  syncLaunchLabel();
+  nameIn.addEventListener("input", syncLaunchLabel);
+  // Registered AFTER the defaults-swap listener above, so it reads the name that
+  // listener may have just re-skinned rather than the one it replaced.
+  themeSel.addEventListener("change", syncLaunchLabel);
   const cancelBtn = PF.el("button", {
     type: "button",
     style: `${S.btn}background:transparent;color:inherit;`,
@@ -11395,6 +11492,7 @@ PF.mountSetup = (el, props) => {
       PF.el("div", { style: "flex:1;" }, [field("World seed", seedIn)]),
     ]),
     field("Setting", settingIn),
+    generateRow,
     PF.el("div", { style: S.row }, [
       PF.el("div", { style: "flex:1;" }, [field("Tone", toneSel)]),
       PF.el("div", { style: "flex:1;" }, [field("Difficulty", diffSel)]),
@@ -11481,7 +11579,7 @@ PF.mountSetup = (el, props) => {
       enableAgents: true,
       spatialMapInstructions: preset.spatial,
       combatStyle: "classic",
-      experienceConfig: { seed, theme: themeSel.value, generate: true },
+      experienceConfig: { seed, theme: themeSel.value, generate: generateIn.checked },
     };
     launchBtn.disabled = true;
     cancelBtn.disabled = true; // mirror the host's mid-launch freeze
@@ -11499,7 +11597,9 @@ PF.mountSetup = (el, props) => {
       // so there is nothing to show and nothing to seed, and determinism is
       // unaffected because simFromSaved re-derives the seed and theme from
       // `experienceConfig` (PF.save._configSeed/_configTheme) exactly as this
-      // snapshot did. `generate: true` above is the whole handoff.
+      // snapshot did. The `generate` flag above is the whole handoff — and when it
+      // is false there is nothing to hand off: no gate arms, no call is made, and
+      // the themed default world is what the player walks into.
     } catch (err) {
       errEl.textContent =
         err && err.message ? String(err.message) : "Launch failed — check the connection and try again.";
@@ -11507,7 +11607,7 @@ PF.mountSetup = (el, props) => {
       launchBtn.disabled = false;
       cancelBtn.disabled = false;
       cancelBtn.textContent = "Cancel";
-      launchBtn.textContent = `Begin in ${nameIn.value.trim() || preset.name}`;
+      syncLaunchLabel();
     }
   });
 };
@@ -11957,7 +12057,9 @@ PF.core = {
         }
         if (res.zoneChanged) {
           this.hud?.refreshChips();
-          this.hud?.toast(sim.zone().name);
+          // "location": the top strip, clear of the narration panel the bottom
+          // toast surface sits over (70-hud `toast`).
+          this.hud?.toast(sim.zone().name, "location");
           PF.save.markDirty(this);
         }
       }

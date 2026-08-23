@@ -113,6 +113,18 @@ PF.Hud = class {
         "position:absolute;bottom:calc(156px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);" +
         `${S.chip}opacity:0;transition:opacity 0.25s;z-index:3;pointer-events:none;`,
     });
+    // LOCATION NOTICES RIDE THE TOP. Everything used to share the bottom surface
+    // above, which is where the host's narration panel is: crossing into a zone
+    // printed its name across the middle of the GM's sentence ("Tam's farm" over a
+    // line of NARRATION, playtest). Where you have just arrived belongs beside the
+    // chip that already says where you are, and it is the one toast class that
+    // fires while the player is reading rather than because they pressed
+    // something. Sits under the topbar so the two never stack.
+    this.locToastEl = PF.el("div", {
+      style:
+        "position:absolute;top:42px;left:50%;transform:translateX(-50%);" +
+        `${S.chip}opacity:0;transition:opacity 0.25s;z-index:3;pointer-events:none;`,
+    });
 
     // THE LOADING GATE's face (plan §Q3b). Full-surface and pointer-events:auto,
     // so nothing behind it is clickable while it holds — a chat whose world has
@@ -143,10 +155,20 @@ PF.Hud = class {
     this.root = PF.el(
       "div",
       { style: "position:absolute;inset:0;pointer-events:none;font-family:ui-monospace,Consolas,monospace;" },
-      [this.topbar, this.actions, this.dpad, this.travelMenu, this.captionEl, this.toastEl, this.gateEl],
+      [
+        this.topbar,
+        this.actions,
+        this.dpad,
+        this.travelMenu,
+        this.captionEl,
+        this.toastEl,
+        this.locToastEl,
+        this.gateEl,
+      ],
     );
     rootEl.appendChild(this.root);
     this._toastTimer = 0;
+    this._locToastTimer = 0;
     this._mode = null;
     this.refreshChips();
   }
@@ -157,15 +179,25 @@ PF.Hud = class {
 
   destroy() {
     clearTimeout(this._toastTimer);
+    clearTimeout(this._locToastTimer);
     this.root.remove();
   }
 
-  toast(msg) {
-    this.toastEl.textContent = msg;
-    this.toastEl.style.opacity = "1";
-    clearTimeout(this._toastTimer);
-    this._toastTimer = setTimeout(() => {
-      this.toastEl.style.opacity = "0";
+  /** `kind` picks the SURFACE, not the styling: "location" goes to the top strip
+   *  (see locToastEl), everything else keeps the bottom one. Two nodes and two
+   *  timers, so an arrival and a refusal can be on screen together instead of
+   *  overwriting each other — they answer different questions. An unknown kind
+   *  falls to the bottom, which is where every caller that names none already
+   *  wanted to be. */
+  toast(msg, kind) {
+    const atTop = kind === "location";
+    const node = atTop ? this.locToastEl : this.toastEl;
+    node.textContent = msg;
+    node.style.opacity = "1";
+    const timer = atTop ? "_locToastTimer" : "_toastTimer";
+    clearTimeout(this[timer]);
+    this[timer] = setTimeout(() => {
+      node.style.opacity = "0";
     }, 2600);
   }
 

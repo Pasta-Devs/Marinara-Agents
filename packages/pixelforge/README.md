@@ -41,7 +41,10 @@ nothing is stored, so the chat is exactly as it was and the next visit tries aga
 true of EVERY failure — 0.11 revised the 0.4.0-era ladder, which still sealed a themed default on a
 deterministic 400/422; the retry screen says which kind of failure it was instead. Chats that
 never asked for generation — pre-0.4.0 saves, and any chat whose brief was explicitly declined —
-are untouched and play immediately on the themed default world, exactly as they did in 0.3.0. The
+are untouched and play immediately on the themed default world, exactly as they did in 0.3.0.
+**Declining is a checkbox in the setup** ("Generate a unique world with your GM connection"),
+checked by default; unchecking it means no loading gate, no generation call, and no starting
+purse — the themed village or colony, the moment the chat opens. The
 known cost: on an engine whose generation route is missing entirely, every attempt is a transient
 failure and the retry screen is the whole experience — the manifest's `engine.min` is what keeps
 that off a supported install.

@@ -316,20 +316,40 @@ PF.brief = (() => {
 
     // §4.3: a host with no gathering place synthesizes AT MOST ONE interior
     // named from the host — the player must be able to walk into the inn.
+    //
+    // Run TWICE, against two different casts, because §4.3 is a post-condition on
+    // the SEALED cast and this call can only see the model's draft. The raw cast
+    // is not the sealed one: pass 6's quality floor tops up from STOCK, and every
+    // stock roster leads with a `host`. So the brief that needs the synthesis most
+    // — one whose cast failed validation outright — was the one brief that never
+    // got it, and the compiler builds the common room from the gathering PLACE (a
+    // `host` in the cast alone binds to nothing). Measured on a live playtest: a
+    // colony compiled fifteen zones of "X's home" plus a farm, with a keeper who
+    // had nowhere to keep and a berth nobody could rent. This call stays where it
+    // is anyway, one pass ahead of the cast, so a model that named a host CAN
+    // still resolve a `home` at the interior it just earned.
+    const gatheringForHost = (people) => {
+      if (brief.places.some((p) => p.kind === "gathering")) return;
+      if (brief.places.length >= placeRoom) return;
+      const host = people.find((item) => foldEnum(item?.kind ?? item?.role, CAST_KINDS, null) === "host");
+      // The theme's own word for its common room. `${hostName}'s` alone reads as
+      // one more house on the row — it stood in a street of "Rook's home" and
+      // "Fen's home" and the player could not tell which door was the inn. Both
+      // default briefs already carry the idiom (the Amber Hearth INN, the Meridian
+      // CANTINA); the host's name is budgeted so `${name}'s ${noun}` still fits the
+      // 24 characters the schema asks a model for — "'s " is three of them.
+      const noun = GATHERING_NOUNS[theme] || GATHERING_NOUNS["cozy-village"];
+      const hostName = host ? capText(host.name, Math.max(6, 24 - 3 - noun.length)) : "";
+      if (!hostName) return;
+      brief.places.push({
+        kind: "gathering",
+        name: dedupeName(`${hostName}'s ${noun}`, "places-host"),
+        flavor: "",
+      });
+      repairs.push(`places: synthesized a gathering interior for host ${hostName}`);
+    };
     const rawCast = asArray(src.cast);
-    const hasGathering = brief.places.some((p) => p.kind === "gathering");
-    if (!hasGathering && brief.places.length < placeRoom) {
-      const host = rawCast.find((item) => foldEnum(item?.kind ?? item?.role, CAST_KINDS, null) === "host");
-      const hostName = host ? capText(host.name, 20) : "";
-      if (hostName) {
-        brief.places.push({
-          kind: "gathering",
-          name: dedupeName(`${hostName}'s`, "places-host"),
-          flavor: "",
-        });
-        repairs.push(`places: synthesized a gathering interior for host ${hostName}`);
-      }
-    }
+    gatheringForHost(rawCast);
 
     // Pass 4 — cast. Over the cap, the leader survives (§4.4): hoist the first
     // leader to the front before truncating by original order.
@@ -445,6 +465,12 @@ PF.brief = (() => {
       });
       repairs.push("places: floor top-up wilds zone");
     }
+    // §4.3 again, against the cast that actually SEALED — see gatheringForHost.
+    // Last of the floors on purpose: the wilds top-up answers "this settlement has
+    // no named place at all", which is a different lack, and running ahead of it
+    // would silently spend that floor and leave a colony with an inn and no
+    // outside. Both floors are cheap; a settlement that needs both gets both.
+    gatheringForHost(brief.cast);
 
     // Identity (§2): opaque ordinal ids assigned once, stored in the sealed brief.
     const ids = { zones: {}, cast: {}, features: {} };
@@ -771,6 +797,12 @@ PF.brief = (() => {
     ruin: "The Ruin",
     lookout: "The Lookout",
   };
+  // What each theme calls its common room, for the §4.3 host synthesis. Read off
+  // the default briefs, which name theirs in full: "The Amber Hearth Inn" and
+  // "The Meridian Cantina". PLACE_LABELS is the generic fallback for a place the
+  // model named nothing at all; this is the possessive a person's own house of
+  // hospitality takes.
+  const GATHERING_NOUNS = { "cozy-village": "Inn", "sci-fi-colony": "Cantina" };
   const PLACE_LABELS = {
     gathering: "The Hearth",
     workshop: "The Works",

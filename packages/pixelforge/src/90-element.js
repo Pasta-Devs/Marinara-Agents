@@ -442,7 +442,9 @@ PF.core = {
         }
         if (res.zoneChanged) {
           this.hud?.refreshChips();
-          this.hud?.toast(sim.zone().name);
+          // "location": the top strip, clear of the narration panel the bottom
+          // toast surface sits over (70-hud `toast`).
+          this.hud?.toast(sim.zone().name, "location");
           PF.save.markDirty(this);
         }
       }

@@ -9,7 +9,12 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // Mirror the real bundle: concatenate the modules into one scope (the prelude
-// declares `const PF` itself) and return PF. The DOM helpers stay unused.
+// declares `const PF` itself) and return PF. 70-hud and 80-setup ride along
+// because both hold a fact about the SURFACE that nothing else can answer for —
+// where a notice lands, and what the wizard writes into the experience config —
+// and neither touches the DOM until it is called (see the FakeNode shim near the
+// end of this file). 40-render and 90-element stay out: a canvas context and a
+// custom-element registration want a page, not a shim.
 const source = [
   "00-prelude.js",
   "10-art.js",
@@ -23,6 +28,8 @@ const source = [
   "58-player.js",
   "59-economy.js",
   "60-save.js",
+  "70-hud.js",
+  "80-setup.js",
 ]
   .map((file) => readFileSync(join(here, "src", file), "utf8"))
   .join("\n");
@@ -12331,6 +12338,252 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     "…and neither does a route that is not there",
   );
   loadedPF.save.reset();
+}
+
+// ── §4.3 IS A POST-CONDITION ON THE SEALED CAST, NOT ON THE MODEL'S DRAFT ─────
+// The host-gathering synthesis ran in the PLACES pass, against `asArray(src.cast)`
+// — the raw model cast, two passes before the cast quality floor tops one up from
+// stock. Every stock roster leads with a `host`, so the one brief that needs the
+// synthesis most — a cast that failed validation outright — was exactly the brief
+// that never got it: the floor handed the settlement a keeper and the places floor
+// handed it a wilds, and the sealed brief carried a host with nowhere to keep.
+//
+// That is not a cosmetic gap. The compiler builds the common room from the
+// gathering PLACE (a `host` in the cast alone binds to nothing — the hostless
+// fixture below pins that seam), so the live playtest compiled fifteen zones of
+// "X's home" plus a farm: no cantina, no lodging mark, no keeper, and the berth
+// the release ships was unreachable in a real generated world.
+{
+  const P = loadedPF.player;
+  const E = loadedPF.economy;
+  // A raw brief whose cast is entirely unusable: no entry survives capText, so the
+  // cast pass keeps nobody at all. This is the playtest's shape and its seed.
+  const rawBrief = { scale: "village", name: "Anchorage Nine", cast: [{ role: "colonist" }, { name: "  " }] };
+  const sealed = brief.validate(rawBrief, { theme: "sci-fi-colony", seed: 1980690972 });
+  const host = sealed.cast.find((member) => member.kind === "host");
+  assert.ok(host, "the cast floor topped a host up from stock");
+  const gatherings = sealed.places.filter((place) => place.kind === "gathering");
+  assert.equal(gatherings.length, 1, "and the sealed brief carries exactly one gathering for them to keep");
+  assert.ok(sealed.places.length <= brief.CAPS.places, "inside the room the rank has for places");
+  assert.ok(
+    sealed._repairs.some((entry) => entry.includes("synthesized a gathering interior")),
+    "the repair is on the ledger, not silent",
+  );
+  // NAMED LIKE AN INN, not like one more house on the row. `${hostName}'s` sat in
+  // a street of "Rook's home" and "Fen's home" and read as another door; both
+  // default briefs already carry the idiom (the Amber Hearth INN, the Meridian
+  // CANTINA), so the theme has the word.
+  assert.ok(gatherings[0].name.includes(host.name), "named from the host who keeps it");
+  assert.ok(gatherings[0].name.endsWith("Cantina"), "…in the colony's own word for a common room");
+  const cozy = brief.validate(rawBrief, { theme: "cozy-village", seed: 1980690972 });
+  assert.ok(
+    cozy.places.find((place) => place.kind === "gathering")?.name.endsWith("Inn"),
+    "…and the village's word in the village",
+  );
+
+  // THE WHOLE VERTICAL, through the compiler the playtest actually ran.
+  const w = world.build(1980690972, "sci-fi-colony", sealed);
+  const gatheringId = Object.entries(sealed._ids.zones).find(([, name]) => name === gatherings[0].name)?.[0];
+  assert.ok(gatheringId && w.zones[gatheringId], "the gathering compiled to a zone of its own");
+  assert.equal(w.zones[gatheringId].lodging, true, "which the compiler marks as lodging");
+  const keeper = Object.values(w.zones)
+    .flatMap((zone) => zone.npcs)
+    .find((npc) => npc.lodging === gatheringId);
+  assert.ok(keeper, "with somebody behind the counter");
+  assert.equal(keeper.name, host.name, "…the host the floor topped up");
+  const sim = new loadedPF.Sim(w);
+  const core = { chatId: "chat-anchorage", sim, hud: { toast() {}, refreshChips() {} } };
+  P.award(core, { money: 100 });
+  sim.zoneId = gatheringId;
+  sim.nearNpc = keeper;
+  const offer = E.berthOffer(core);
+  assert.equal(offer.available, true, "and a berth the player can actually take");
+  assert.equal(offer.zoneId, gatheringId, "at the gathering that used to be missing");
+}
+
+// ── A DOM the size of the two surfaces that need one ──────────────────────────
+// Not a browser: exactly what PF.el touches (createElement, style, text,
+// attributes, listeners, children) plus fire(), so a click can be driven. Enough
+// for 70-hud's layout and 80-setup's launch config, which is all this file asks.
+class FakeNode {
+  constructor(tag) {
+    this.tagName = String(tag).toUpperCase();
+    this.style = {};
+    this.children = [];
+    this.attrs = {};
+    this.listeners = {};
+    this.textContent = "";
+  }
+  setAttribute(name, value) {
+    this.attrs[name] = value;
+    // Real inputs reflect the value/type attributes onto the property, and the
+    // wizard reads `.value`; nothing else here needs reflecting.
+    if (name === "value" || name === "type") this[name] = value;
+  }
+  getAttribute(name) {
+    return Object.prototype.hasOwnProperty.call(this.attrs, name) ? this.attrs[name] : null;
+  }
+  addEventListener(type, fn) {
+    (this.listeners[type] ??= []).push(fn);
+  }
+  removeEventListener() {}
+  appendChild(node) {
+    this.children.push(node);
+    return node;
+  }
+  replaceChildren(...nodes) {
+    this.children = nodes;
+  }
+  remove() {}
+}
+globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+const walkNodes = (node, out = []) => {
+  out.push(node);
+  for (const child of node.children) walkNodes(child, out);
+  return out;
+};
+const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) => fn({ preventDefault() {} })));
+
+// ── A LOCATION NOTICE DOES NOT LAND ON THE NARRATION ──────────────────────────
+// Every toast shared one node pinned 156px off the bottom of the surface — which
+// is where the host's narration panel is. Crossing into a zone therefore printed
+// its name across the middle of the GM's sentence ("Tam's farm" over a line of
+// NARRATION, playtest screenshot). Where you have just arrived belongs at the top
+// beside the chip that already says where you are; the refusals and receipts keep
+// the bottom surface they had.
+{
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = () => 0; // the fade is a timer; nothing here waits for one
+  globalThis.clearTimeout = () => {};
+  try {
+    const hud = new loadedPF.Hud(new FakeNode("div"), { sim: null });
+    hud.toast("Tam's farm", "location");
+    hud.toast("There is no room to be had here.");
+    const shown = walkNodes(hud.root).filter((node) => node.style.opacity === "1");
+    assert.equal(shown.length, 2, "an arrival and a refusal are on two different surfaces at once");
+    const located = shown.find((node) => node.textContent === "Tam's farm");
+    const plain = shown.find((node) => node.textContent !== "Tam's farm");
+    assert.ok(located && plain, "…one each");
+    assert.ok(/;top:/.test(located.style.cssText), "the location notice is anchored to the TOP of the surface");
+    assert.ok(!/bottom:/.test(located.style.cssText), "…and not to the bottom, where the narration is");
+    assert.ok(/bottom:/.test(plain.style.cssText), "every other toast keeps the surface it had");
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+  }
+}
+
+// The other location-entry notice — a narrated drift the package follows — is the
+// same class of message and shared the same collision.
+{
+  const prevGetSpatial = loadedPF.api.getSpatial;
+  const state = { loc: "root" };
+  loadedPF.api.getSpatial = async () => ({
+    definition: { revision: 1 },
+    currentLocationId: state.loc,
+    breadcrumb: [{ name: state.loc }],
+    destinations: [],
+  });
+  const toasts = [];
+  const core = {
+    chatId: "chat-loc-toast",
+    sim: {
+      world: { zones: {}, bindings: { seeded: true }, startZone: "z1" },
+      zoneId: "z1",
+      mode: "walk",
+      zone: () => ({ name: "z1" }),
+    },
+    markDirty() {},
+    hud: { toast: (text, kind) => toasts.push([text, kind]), refreshChips() {} },
+  };
+  try {
+    loadedPF.spatial.reset();
+    await loadedPF.spatial.refresh(core); // seeds _lastLocationId
+    state.loc = "the-slag-bar";
+    await loadedPF.spatial.refresh(core);
+    const arrival = toasts.find(([text]) => text.startsWith("Now at:"));
+    assert.ok(arrival, "the drift is announced");
+    assert.equal(arrival[1], "location", "…as a location notice, so it lands on the top surface");
+  } finally {
+    loadedPF.api.getSpatial = prevGetSpatial;
+    loadedPF.spatial.reset();
+  }
+}
+
+// ── THE WIZARD'S OWN TWO FACTS ────────────────────────────────────────────────
+// (i) the launch label was the literal "Begin in Hearthvale", rewritten only on
+// the RETRY path, so a sci-fi colony called Meridian Base offered to begin in a
+// cozy village that was not in the game; (ii) `generate: true` was unconditional,
+// which retired the skip affordance — the themed-default immediate-play path (no
+// gate, no purse) became unreachable for every new chat, and the {skipped:true}
+// marker had readers and no writer.
+{
+  const realGetJson = loadedPF.api.getJson;
+  loadedPF.api.getJson = async (path) =>
+    path === "/connections" ? [{ id: "conn-1", name: "Main", isDefault: true }] : [];
+  const settle = async () => {
+    for (let i = 0; i < 16; i++) await Promise.resolve();
+  };
+  const mountWizard = async () => {
+    const el = new FakeNode("div");
+    const launches = [];
+    loadedPF.mountSetup(el, { onLaunch: async (config, name) => void launches.push({ config, name }) });
+    await settle(); // the connections/characters load is an async IIFE
+    const nodes = walkNodes(el);
+    const checkboxes = nodes.filter((node) => node.type === "checkbox");
+    assert.equal(checkboxes.length, 1, "with no characters to pick, the only checkbox is the generation toggle");
+    return {
+      launches,
+      nameIn: nodes.find((node) => node.tagName === "INPUT" && node.value === "Hearthvale"),
+      themeSel: nodes.find((node) => node.children.some((option) => option.attrs.value === "sci-fi-colony")),
+      launchBtn: nodes.find((node) => node.tagName === "BUTTON" && String(node.textContent).startsWith("Begin in")),
+      generateIn: checkboxes[0],
+    };
+  };
+  try {
+    const asked = await mountWizard();
+    assert.ok(asked.nameIn && asked.themeSel && asked.launchBtn, "the wizard mounted its name, theme and launch");
+    assert.equal(asked.launchBtn.textContent, "Begin in Hearthvale", "the label starts at the active preset's name");
+    asked.themeSel.value = "sci-fi-colony";
+    await fire(asked.themeSel, "change");
+    assert.equal(asked.launchBtn.textContent, "Begin in Meridian Base", "a theme change carries it");
+    asked.nameIn.value = "Anchorage Nine";
+    await fire(asked.nameIn, "input");
+    assert.equal(asked.launchBtn.textContent, "Begin in Anchorage Nine", "and the player's own name wins over both");
+
+    assert.equal(asked.generateIn.checked, true, "generation is offered checked — it is what the package is for");
+    await fire(asked.launchBtn, "click");
+    assert.equal(asked.launches.length, 1, "the launch went through");
+    assert.equal(asked.launches[0].name, "Anchorage Nine", "under the name on the button");
+    assert.equal(asked.launches[0].config.experienceConfig.generate, true, "asking for a generated world");
+
+    const declined = await mountWizard();
+    declined.generateIn.checked = false;
+    await fire(declined.launchBtn, "click");
+    assert.equal(declined.launches[0].config.experienceConfig.generate, false, "unchecked declines the call");
+    assert.ok(
+      Number.isInteger(declined.launches[0].config.experienceConfig.seed),
+      "…and still carries the seed and theme the themed default world compiles from",
+    );
+
+    // One layer down, with the config the wizard really wrote: the gate reads it,
+    // so a declined world is a chat that never waits for a call it did not make.
+    loadedPF.save.reset();
+    assert.equal(
+      loadedPF.save.armGate({ chatId: "chat-declined" }, { gameSetupConfig: declined.launches[0].config }),
+      false,
+      "no gate arms for a declined world",
+    );
+    assert.equal(
+      loadedPF.save.armGate({ chatId: "chat-asked" }, { gameSetupConfig: asked.launches[0].config }),
+      true,
+      "…and one does for a world that asked",
+    );
+  } finally {
+    loadedPF.api.getJson = realGetJson;
+    loadedPF.save.reset();
+  }
 }
 
 console.log("brief validator + compiler: all cases passed");
