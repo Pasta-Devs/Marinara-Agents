@@ -216,6 +216,11 @@ assert.doesNotMatch(
 );
 assert.match(memoryNagToolbarSource, /toolbarButtonClass/u, "Memory Nag must reuse the host toolbar button class");
 assert.match(memoryNagToolbarSource, /\}, 3000\);/u, "Memory Nag toolbar words must cycle at the slower interval");
+assert.match(
+  memoryNagToolbarSource,
+  /return words\.length > 0 \? words : splitWords\(empty\);/u,
+  "Memory Nag idle words must drop punctuation before cycling",
+);
 assert.match(memoryNagToolbarSource, /data-chat-floating-panel/u, "Memory Nag must portal a floating tracker panel");
 assert.doesNotMatch(
   memoryNagToolbarSource,

@@ -8,11 +8,9 @@ import { useMemoryNagTranslation } from "./localization";
 import type { CapabilityProps } from "./types";
 
 function recallWords(nags: string[], empty: string): string[] {
-  const words = nags
-    .join(" ")
-    .split(/[^\p{L}\p{N}'’-]+/u)
-    .filter((word) => word.length > 2);
-  return words.length > 0 ? words : empty.split(/\s+/);
+  const splitWords = (value: string) => value.split(/[^\p{L}\p{N}'’-]+/u).filter((word) => word.length > 2);
+  const words = splitWords(nags.join(" "));
+  return words.length > 0 ? words : splitWords(empty);
 }
 
 export function MemoryNagToolbar({ props }: { props: CapabilityProps }) {
