@@ -47,6 +47,26 @@ node "$PWD/../Marinara-Agents/tests/long-term-memory-feedback-clarity-ui.regress
 node "$PWD/../Marinara-Agents/tests/long-term-memory-chat-settings-ui.regression.mjs"
 ```
 
+The lifecycle fixture compiles Engine's `globals.css` with Engine's installed
+Vite and Tailwind plugin before launching Chromium. Use that fixture for visual
+review evidence; serving `globals.css` directly leaves Tailwind directives
+unprocessed and is not a valid visual pass.
+
+New standalone package browser fixtures should reuse
+`compileEngineVisualStyles()` from `engine-visual-styles.ts` and include their
+package client source glob. The helper fails if Tailwind directives remain in
+the served CSS, preventing raw-stylesheet screenshots from being accepted as
+visual evidence.
+
+Set `MARINARA_VISUAL_OUTPUT_DIR` to capture compiled-style mobile and desktop
+review queue screenshots while running the lifecycle fixture:
+
+```bash
+MARINARA_ENGINE_ROOT="$PWD" MARINARA_VISUAL_OUTPUT_DIR=/tmp/marinara-visuals \
+  pnpm --filter @marinara-engine/server exec tsx \
+  "$PWD/../Marinara-Agents/tests/long-term-memory-lifecycle.regression.ts"
+```
+
 ## Exact-artifact lifecycle regression
 
 `hierarchical-maps-lifecycle.regression.ts` installs an immutable prior Maps
