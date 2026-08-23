@@ -658,11 +658,14 @@ anchor unmoved, so the row comes back with `anchorMatched: true` and the anchor 
 world. The ordinal cures only the anchor-_moved_ degraded case. This is unchanged from pre-seam
 behaviour, and accepted.
 
-**Status.** #5406 and #5407 are FILED and, as of this writing, **not landed in the Engine** — its
-experience-state route reports `anchorMatched` but neither `writeOrdinal` nor `rawState`. Every
-reader above is written defensively and is dormant against today's server: the byte ladder decides,
-and row 1's legacy inference (below) stands in for `rawState`. Nothing has to change here when they
-land.
+**Status.** #5406 and #5407 are **merged to Engine `staging`** (#5407 via PR #5411, merge
+`ac353645`; #5406 via PR #5417, merge `d32ebe9dd`; #5405's save-management verbs via PR #5416,
+merge `d561f3400` — all 2026-08-22/23) but are **not yet in a tagged Engine release**. This
+package's `builtAgainst` is 2.4.3, which predates all three, so on a current install the route
+reports `anchorMatched` but neither `writeOrdinal` nor `rawState`, every reader above is dormant,
+the byte ladder decides, and row 1's legacy inference (below) stands in for `rawState`. Nothing
+has to change here when the next Engine release ships the fields — the readers go live off their
+presence alone.
 
 ### 5.3 The freshness clocks
 
@@ -990,6 +993,7 @@ Mirrored from the S5 plan's own table. These are decisions, not oversights.
 | prune is write-recency; pre-#5102 checkpoints restore nothing                                                                                                                                                                                                              | engine behaviour                              |
 | multi-tab last-write-wins                                                                                                                                                                                                                                                  | alpha                                         |
 
-Two of these name filed Engine FRs — **#5406** (authoritative write ordering) and **#5407**
-(`rawState` on parse failure). Both are filed and **neither has landed**; §5.2 and §5.4 describe the
-client readers that are already in place and dormant.
+Two of these name Engine FRs — **#5406** (authoritative write ordering) and **#5407** (`rawState`
+on parse failure). Both are **merged to Engine `staging`** but not yet in a tagged release, and
+this package's `builtAgainst` 2.4.3 predates them; §5.2 and §5.4 describe the client readers that
+are already in place and dormant until an Engine release carries the fields.
