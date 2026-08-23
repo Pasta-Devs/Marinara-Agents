@@ -10105,6 +10105,40 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
   assert.deepEqual(after.stamps, stamps, "and its stamps — the first loss is the anchor");
   assert.equal(after.fields.found.length, 3, "while the newcomer's fields still union in");
 
+  // …AND AN EXACT (d,t) TIE LEAVES THE HELD ROW STANDING. The rule is "the higher
+  // `d` wins, then more encounters, then the held row", and the held entry is the
+  // merge's anchor everywhere else — its stamps, its reason, its `at`, its home.
+  // It was not true of `rel`: the loop offered the INCOMING row first and
+  // replaced only on a strict improvement, so two rows tying on both ranks left
+  // the incoming one in the slot and the held row's remembered line was what went.
+  // Cleared with `discard` rather than `reset()` so the whole case stays ONE
+  // queued write on the shared chain — (ak) counts what the chain carries.
+  Q.discard("chat-merge", "stamp");
+  Q.put("chat-merge", "stamp", {
+    reason: "brief",
+    fromV: 1,
+    stamps,
+    fields: { rel: { z1: { Cass: { d: 2, t: 4, s: "She showed you the ford.", a: 3 } } } },
+  });
+  Q.put("chat-merge", "stamp", {
+    reason: "brief",
+    fromV: 1,
+    stamps,
+    fields: { rel: { z1: { Cass: { d: 2, t: 4, s: "A stranger with the same name." } } } },
+  });
+  const tied = Q.peek("stamp").fields.rel.z1.Cass;
+  assert.equal(tied.s, "She showed you the ford.", "an exact (d,t) tie leaves the HELD row standing");
+  assert.equal(tied.a, 3, "…whole, the way every other anchored field of the merge is kept");
+  // The tiebreak is only reached ON a tie: more encounters at the same tier is a
+  // rank, and a rank the held row does not get to override.
+  Q.put("chat-merge", "stamp", {
+    reason: "brief",
+    fromV: 1,
+    stamps,
+    fields: { rel: { z1: { Cass: { d: 2, t: 5, s: "One more meeting." } } } },
+  });
+  assert.equal(Q.peek("stamp").fields.rel.z1.Cass.t, 5, "more encounters at the same tier still takes the row");
+
   // setAside is the one HUMAN-resolved slot, so it is the one LIST.
   Q.reset();
   Q.put("chat-aside", "setAside", { reason: "displaced", fromV: 1, block: { tag: "first" } });

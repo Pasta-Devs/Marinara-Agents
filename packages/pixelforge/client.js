@@ -7539,8 +7539,9 @@ PF.player = {
    *  built something with — and a preference cannot be the only thing holding an
    *  invariant. Here the rows are ordered cheapest-loss-first (the ladder tier,
    *  then whether a remembered line hangs off it, then hostility — an enemy is
-   *  something built — then encounters, then the name for a tie that resolves
-   *  the same way twice) and the head of that order goes until the count fits.
+   *  something built — then encounters, then the COMPOSITE zone id and name for
+   *  a tie that resolves the same way twice) and the head of that order goes
+   *  until the count fits.
    *  A row the player built something with is still never the FIRST to go; it is
    *  just no longer exempt once nothing cheaper is left. */
   _evictToRowCap(p) {
@@ -7764,7 +7765,8 @@ const asideEntries = (value) => {
  *  stamps and its reason are what a returning world is matched against, and the
  *  first loss is the one that has been waiting longest for that match. Only the
  *  FIELDS merge, and each one merges the way its own shape means:
- *    rel        union per person, the higher-tier cell winning a collision
+ *    rel        union per person, the higher-tier cell winning a collision and
+ *               the HELD row standing on an exact (d,t) tie
  *    quests     concatenated and deduped by id
  *    found      union by the composite (p,e,d) key
  *    counters   union, the higher count winning
@@ -7775,10 +7777,16 @@ const mergeStampEntries = (held, incoming) => {
   const a = held.fields && typeof held.fields === "object" ? held.fields : {};
   const b = incoming.fields && typeof incoming.fields === "object" ? incoming.fields : {};
   const fields = { ...b, ...a };
-  // rel: {zone: {name: cell}}. Higher `d` wins, then more encounters, then held.
+  // rel: {zone: {name: cell}}. Higher `d` wins, then more encounters, then the
+  // HELD row — which is why the held side is offered FIRST and the incoming one
+  // has to beat it STRICTLY to displace it. The order used to be the other way
+  // round, so an exact (d,t) tie fell to the incoming row and took the held
+  // row's remembered line with it — against the one principle this merge keeps
+  // everywhere else, that the held entry is the anchor (its stamps, its reason,
+  // its `at`, its home).
   if (a.rel || b.rel) {
     const merged = {};
-    for (const source of [b.rel, a.rel]) {
+    for (const source of [a.rel, b.rel]) {
       for (const [zoneId, rows] of ownEntries(source)) {
         const target = merged[zoneId] ?? (merged[zoneId] = {});
         for (const [name, row] of ownEntries(rows)) {
@@ -8252,6 +8260,31 @@ PF.quarantine = {
   },
 };
 
+// Registry completeness, in 20-world's startup-assertion idiom and exactly the
+// pairing 60-save makes for ENVELOPE_KEYS one level up: PLAYER_KEYS and
+// serialize()'s literal have to agree in BOTH directions, and neither direction
+// fails loudly on its own.
+//   • a key emitted but NOT listed → the carry loop copies the restored value in
+//     ahead of everything as an unknown key, so our own field lands out of wire
+//     order and every dedupe in the save path drifts with it (§2.1);
+//   • a key listed but NOT emitted → the list makes the read skip it, so it
+//     never reaches the carry either, and the write silently deletes a newer
+//     build's field. That is the slice-1 bug, one level down.
+// Probed on a MAX-SHAPE block: `bought` is an optional seam and an empty one is
+// deliberately not emitted (§2.3), so a default block alone would not exercise
+// the second direction at all. Cheap enough to run at load.
+{
+  const probe = PF.player.serialize({ ...PF.player.defaultPlayer(), bought: { shop: { "lodging-key": 1 } } });
+  for (const key of Object.keys(probe)) {
+    if (!PLAYER_KEYS.has(key))
+      throw new Error(`pixelforge: the player block emits "${key}", which PLAYER_KEYS does not list`);
+  }
+  for (const key of PLAYER_KEYS) {
+    if (!(key in probe))
+      throw new Error(`pixelforge: PLAYER_KEYS lists "${key}", which the player block does not emit`);
+  }
+}
+
 // ===== 59-economy.js =====
 // ── Things and money (S3), and the first thing to spend money ON (P1) ─────────
 // The player block has held a pouch, a purse and a `home` field since S5 slice 3
@@ -8268,9 +8301,12 @@ PF.quarantine = {
 // room. Home ASSIGNMENT channels (a setup flag, P6 building) are enumerated in
 // the plan and deliberately not here.
 //
-// Everything below is CONTENT plus three verbs. It holds no state of its own:
-// what persists goes through the shipped mutators (award/grant/setHome/log/bump)
-// and lives in the player block, which is what makes it rewind-safe.
+// Everything below is CONTENT plus three game-facing entry points: berthOffer
+// describes and never charges, rentBerth and grantStartingPurse mutate. (The
+// rest — _skin, currency, money, describe, price — are the vocabulary those
+// three and the HUD read through.) It holds no state of its own: what persists
+// goes through the shipped mutators (award/grant/setHome/log/bump) and lives in
+// the player block, which is what makes it rewind-safe.
 
 // The closed item vocabulary. A pouch row is keyed `(t, k)` — type and quality —
 // and `t` has to mean the same thing in every theme or a save crossing a theme
@@ -8926,10 +8962,11 @@ PF.save = {
   },
 
   /** "This chat was configured to generate a world and has not sealed one yet."
-   *  ONE predicate with three consumers that used to be three copies of the same
-   *  expression: the interim world mark, the stamp-evaluability gate, and the
-   *  loading gate. Three copies of a predicate this load-bearing is how the gate
-   *  and the interim mark come to disagree about which chats are which. */
+   *  ONE predicate with FOUR consumers that used to be copies of the same
+   *  expression: the interim world mark, the stamp-evaluability gate, the
+   *  loading gate, and maybeGenerateBrief's nothing-to-generate branch. Separate
+   *  copies of a predicate this load-bearing is how the gate and the interim mark
+   *  come to disagree about which chats are which. */
   briefExpected(meta, chatId) {
     return !this._configBrief(meta, chatId) && meta?.pixelforgeBrief === undefined && this._configGenerate(meta);
   },

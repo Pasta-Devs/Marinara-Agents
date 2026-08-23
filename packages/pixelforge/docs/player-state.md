@@ -113,8 +113,11 @@ ledgerStubs 30, ledgerChars 200, found 80, skillLevel 20.
 Two eviction orders matter and are easy to conflate. The **row** cap prefers a STRANGER-tier row
 (`d === 0`, fewest encounters, no line, not hostile) — a row the player built something with is
 never the first to go, and an enemy is something built. That is a _preference_ and it can run out,
-so `_evictToRowCap` is the last resort behind it: cheapest-loss-first by (ladder tier, then whether
-a line hangs off it, then hostility, then encounters, then the name), and the head of that order
+and what happens then depends on the path. At the LIVE cap `bump()` **refuses** (the refuse row
+above) — there is no last resort there. The paths that put whole fields back by assignment
+(restoration and the transplant, the only two that reach `_enforceCaps`) cannot refuse, so they fall
+through to `_evictToRowCap`: cheapest-loss-first by (ladder tier, then whether a line hangs off it,
+then hostility, then encounters, then the composite zone id and name), and the head of that order
 goes until the count fits. The **line** cap is a different cap with a different victim: past thirty
 lines the oldest `s` goes and its row stays exactly where it was, ladder and encounter count intact.
 Recency is the serialized `a` mark, not insertion order — without it the ordering inverts after a
@@ -171,8 +174,11 @@ the field and the very next flush overwrites the row without it.
 Two rules follow, and both are enforced by assertions rather than by care:
 
 - **additions to `serialize()`'s literal MUST be added to `PLAYER_KEYS`** (58-player), exactly as
-  additions to `snapshot()`'s literal must be added to `ENVELOPE_KEYS` (60-save, which asserts both
-  directions at load and is re-driven against a real sim by the harness);
+  additions to `snapshot()`'s literal must be added to `ENVELOPE_KEYS` (60-save). Each list has its
+  own load-time assertion and each asserts BOTH directions: the envelope's off a synthetic sim (and
+  re-driven against a real one by the harness), the block's off a MAX-SHAPE block — `bought` is
+  optional and an empty one is deliberately not emitted (§2.3), so a default block would never
+  exercise the listed-but-not-emitted direction at all;
 - a key that is listed but only _sometimes_ emitted is worse than one missing from the list — the
   list makes the reader skip it on the way in, so it never reaches the carry either, and the write
   silently deletes a newer build's field. That is the slice-1 bug. `player` is therefore emitted
@@ -323,9 +329,12 @@ route's default — carrying a modern block still resolves by the block's own `v
   also what a legacy world stamps: the two are deliberately indistinguishable, because neither has a
   brief to change.
 - `mintStamp` — derived by the compiler, never saved as content. `mintStampOf` (20-world) hashes
-  `mint/v${MINT_V}` plus, per minted resident in mint order, `name\0kind\0household`. Tints and
-  wander flags are cosmetic and deliberately excluded: a change to them must not sever a save. The
-  stamp costs **zero save bytes** — it is recomputed on every build and only its comparison persists.
+  `mint/v${MINT_V}` and then, per minted resident in mint order, `|${name}\0${kind}\0${household}` —
+  the `|` prefixes every record and is part of the preimage, so two rosters cannot collide by having
+  their fields run together across a boundary. Tints and wander flags are cosmetic and deliberately
+  excluded: a change to them must not sever a save. What costs **zero save bytes is the ROSTER**, not
+  the stamp: the stamp is persisted with the other two (`world.mintStamp`, 58-player `serialize`) and
+  is exactly what makes the comparison possible without storing a single resident.
 
 `MINT_V` is bumped when a change would hand the SAME seed and the SAME brief a different roster: a
 new name book, a changed household-size distribution, a reordered kind table.
@@ -364,9 +373,10 @@ done here belonged to another world. It has been set aside."_
 **complement of the brief's named cast**, not membership of the new world's `minted` list, and the
 difference is the whole point: a resident the OLD mint produced and the new one does not is exactly
 the row that has to go, and she is in **neither** list. The `minted` list only stands in when there
-is no brief to name anybody — a legacy world, whose mint is empty and whose stamp moves only when
-`MINT_V` does. Severed with the rows: active quests whose giver (the part of `g` after the `|`) is
-minted. If the mint moved but nothing of the player's hung off it, the block is re-stamped and
+is nothing to name anybody with — no brief at all (a legacy world, whose mint is empty and whose
+stamp moves only when `MINT_V` does), or a brief whose `cast` is not an array, which is the same
+absence wearing a shape. Severed with the rows: active quests whose giver (the part of `g` after the
+`|`) is minted. If the mint moved but nothing of the player's hung off it, the block is re-stamped and
 **nothing** is quarantined — an empty entry would only cost a slot. Notice: _"Some of the people you
 knew here are not the people who live here now."_
 
@@ -414,7 +424,7 @@ The whole block is rehydrated **outside** the envelope's `saved.v` gate, exactly
 carry and for the same reason: a build that cannot read the envelope's version is the build most
 likely to be destroying data it does not understand.
 
-**The dangling repair is gated three ways** and is a **non-mutation** — it does not dirty the sim and
+**The dangling repair is gated four ways** and is a **non-mutation** — it does not dirty the sim and
 arms no write of its own; the next real save carries it. It refuses to act when the world is
 interim, when stamps were not evaluated, when the world names no NPCs at all, and — the interesting
 one — when **every** giver dangles, because that is a statement about the world rather than about
@@ -429,6 +439,11 @@ build's unknown keys) into the compiled world, parks every world-bound field in 
 the stamps it belonged to, re-stamps the block for the world that just arrived, and runs the same
 `_enforceCaps` + normalize re-entry restoration does.
 
+The coupled `flushedDay` crosses too, and it crosses **clamped**: the lines it gates are going to
+quarantine, so the transplant re-applies the same `min(flushedDay, minSeveredLineDay − 1)` guard
+(§1.1) on the way over. A gate carried across intact would sit above lines that are no longer there,
+and a restored line at or below it is one the flush would never tell.
+
 `bought` does **not** cross. For a _gated_ chat the block is a fresh default and the split moves
 nothing, which is the point: the safety net costs nothing once the gate has done its job. The path
 retires one release after the gate.
@@ -437,12 +452,12 @@ retires one release after the gate.
 
 ## 4. The quarantine bag
 
-`pixelforgeQuarantine`, its own top-level chat-metadata key. Written immediately at creation with a
-3-retry backoff; **the in-memory bag is the authority** and the key is where it is persisted. It gets
-its own `ensurePresent` branch because the two keys are written by different code paths on different
-cadences, and the save key being intact says nothing about whether the quarantine key survived the
-same whole-blob metadata write (~40 engine call sites still use the unqueued whole-blob
-`updateMetadata`).
+`pixelforgeQuarantine`, its own top-level chat-metadata key. Written immediately at creation, three
+attempts total with a 500 ms × attempt backoff (§4.4); **the in-memory bag is the authority** and the
+key is where it is persisted. It gets its own `ensurePresent` branch because the two keys are written
+by different code paths on different cadences, and the save key being intact says nothing about
+whether the quarantine key survived the same whole-blob metadata write (~40 engine call sites still
+use the unqueued whole-blob `updateMetadata`).
 
 ### 4.1 Four slots
 
@@ -450,8 +465,14 @@ same whole-blob metadata write (~40 engine call sites still use the unqueued who
 | ----------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------- |
 | `migration` | a block whose `v` will not read, or a migration step that throws           | a later build whose fixed step migrates it cleanly                                     | restoration, or explicit discard                                                              | one; **first loss wins**                    |
 | `stamp`     | world-identity mismatch at rehydration (§3.3), and the pre-gate transplant | stamp re-match on a later boot (§3.4)                                                  | restoration; explicit discard; invalidation by a version re-adoption with a differing `fromV` | one; **merges**                             |
-| `setAside`  | the live block displaced by a version re-adoption                          | **never by machine** — player-visible only                                             | explicit discard                                                                              | a **list**, bounded at 4, oldest shed first |
+| `setAside`  | the live block displaced by a version re-adoption                          | **never by machine** — HELD for a human to resolve                                     | explicit discard                                                                              | a **list**, bounded at 4, oldest shed first |
 | `version`   | a too-new block (`adoptable: true` at write)                               | re-adoption by a build whose `currentPlayerV()` has reached `fromV`; consumes the slot | the re-adoption itself                                                                        | one; **first loss wins**                    |
+
+"Never by machine" is the whole of `setAside`'s restore contract today: **0.11 ships no resolution
+surface**, so the slot is held, bounded and readable through `peek`/`consume`, and nothing in the
+package offers it to anybody yet. Holding it is still the point — two live blocks cannot both be the
+player's state, and only the player can say which one they meant — but the UI that asks them is a
+later slice, and until it lands the entry is inert rather than visible.
 
 There is no `corrupt` slot. A row whose stored text will not parse is unrecoverable client-side; the
 raw text is parked separately as _evidence_ (§5.4), not as a backup.
@@ -506,9 +527,11 @@ Two mechanisms, in this order:
 2. **the drop order at serialize time**, least-recoverable first:
    `setAside < stamp < migration < version`. `setAside` goes first because nothing else in the bag
    is waiting on a machine to hand it back. Ahead of the order, any single slot that no longer fits
-   even alone is dropped first whatever the order says (it can only have grown there through a stamp
-   merge); keeping it costs every other slot and buys nothing. `setAside` sheds its list oldest-first
-   before the slot itself goes. Every drop warns.
+   even alone is dropped first whatever the order says; keeping it costs every other slot and buys
+   nothing. Two things put one there: a stamp merge growing an entry past the ceiling, and a bag read
+   — `hydrate`'s `readBag` checks each slot's SHAPE and nothing else, so a key a hand-edit or a
+   foreign writer left oversized arrives straight off disk at whatever size it is. `setAside` sheds
+   its list oldest-first before the slot itself goes. Every drop warns.
 
 `_serialize()` mutates the bag rather than only the output: a slot that cannot be stored is not
 being held, and pretending otherwise would report a recovery that cannot happen.
@@ -549,6 +572,21 @@ Two structures hold that together:
   from what disk holds. `_bagSerialized` keeps meaning exactly what it always meant — **what we
   believe DISK holds** — which is why the comparison is against disk's bytes rather than against what
   was adopted.
+
+  **The map is bounded, and the bound is not a cap.** `UNSETTLED_MAX = 8` is the size past which
+  `_write` starts shedding, and the only record it will shed is one **disk is known to hold**:
+  `_settledRecord(exceptId)` is narrower than it sounds, because `_bagSerialized` records what we
+  believe disk holds for the LIVE chat and for no other chat at all — so "known to hold" is a
+  question that can only be asked about `_chatId`'s own record, and a record for any other chat is
+  never a candidate whatever its bytes say. What that leaves is one real case: a write asked for on a
+  different chat while the live chat's record is already stale, which is exactly the state `_writeNow`
+  leaves behind when it returns early on bytes that match the dedupe cache. When there is nothing
+  settled to shed, **the map carries the overflow rather than the loss** — every other entry in it is
+  by construction a write nobody managed to store, so evicting one silently re-opens the park loss the
+  map exists to close. This is the identical fork `_briefCache` answers identically (§6.5), and the
+  alignment is deliberate: both are per-session maps of small byte strings in which each entry is the
+  sole record of something a later visit needs, and the two code sites name each other. What the map
+  is really bounded by is how rare "quarantined something AND failed to store it" is per chat.
 
 `_writeNow` re-reads the bag on **every** attempt while the chat is still live: a retry that lands
 500 ms later must carry what the bag holds now, not the snapshot the first attempt froze — that
@@ -737,9 +775,10 @@ of the chat you arrived at.
 
 `armGate(core, meta)` is called once per chat switch and **before** `adopt()`, because adopt's row-3
 action is `first-write` and probing a gated chat would write the un-entered world up as if it were
-somebody's play. It arms only when `briefExpected(meta, chatId)` — one predicate with three consumers
-(the interim mark, the stamp-evaluability gate, and the gate itself), because three copies of a
-predicate this load-bearing is how they come to disagree about which chats are which.
+somebody's play. It arms only when `briefExpected(meta, chatId)` — one predicate with four consumers
+(the interim mark, the stamp-evaluability gate, the gate itself, and the nothing-to-generate branch
+§6.3 describes), because separate copies of a predicate this load-bearing is how they come to
+disagree about which chats are which.
 
 Never armed: legacy chats, non-generate chats (default worlds by design), and a chat whose generation
 was **declined** — its `{ skipped: true }` marker reads as "sealed enough".
@@ -787,8 +826,11 @@ maps `refused | unavailable | network | timeout | storage` to one sentence each,
 generic for an absent or unknown kind — a throw has no verdict to report, and a kind a newer ladder
 invents must not blank the panel. `"refused"` earns its own sentence: a deterministic 400/422 gives
 the same answer every time, and a player pressing a button that will never work deserves to be told.
-The strings live in `60-save.js`, not in the HUD, for the reason every other decision in that module
-does: the HUD needs a DOM and the harness has none.
+**The per-kind sentences** live in `60-save.js`, not in the HUD, for the reason every other decision
+in that module does: the HUD needs a DOM and the harness has none, so a string that has to be pinned
+lives where it can be. The chrome AROUND them is the HUD's own and is not pinnable: the retry
+screen's title ("The world didn't finish being written.") and the trailing paragraph after
+`gateReason` are hard-coded in `70-hud.js`.
 
 `retryGeneration(core)` is the only caller of the retry button; everything else re-arms by revisiting
 the chat.
@@ -796,18 +838,24 @@ the chat.
 ### 6.4 No failure seals a world
 
 **Only the two outcomes that produce a real brief seal one: success and salvage.** Every other
-outcome — transient (404 route-absent, 409, 429, 5xx, network error, budget timeout) _and_
-deterministic (400 contract, `provider_error`/parse-failure 422) — leaves the chat **unsealed**: the
-key stays absent, the gate shows a retry screen, and the next visit arms it again.
+outcome leaves the chat **unsealed**: the key stays absent, the gate shows a retry screen, and the
+next visit arms it again. The ladder splits those outcomes two ways, and only one side is a list.
+**Transient** is the enumerated set — 404 route-absent, 409, 429, any 5xx, a network error, the
+budget timeout — and it is complete as written. **Deterministic is the FALL-THROUGH**: everything
+that is not in that set lands in `"refused"`, which is the 400 contract failure and the
+`provider_error`/parse-failure 422 the branch was written for, but also a 401, a 403, and any status
+a future engine invents. That is deliberate — a status this build cannot place is one it should not
+promise to retry — but it means `"refused"` is a catch-all, not a second enumeration.
 
 This is a revision. The 0.4.0 ladder sealed the themed default world on a deterministic or paid
 failure, reasoning that a paid call per visit is worse than the default world. That decision predates
 the gate, which now holds play precisely so nobody invests in a world that is going to be discarded —
 so sealing a default is no longer "the world they were already walking in", it is a permanent
 decision made on the player's behalf in the one case they cannot undo. The `userContent` clamp
-(7,800 chars against the route's 8,000) also makes a reachable 400 a contract bug rather than a long
-setting. The cost is accepted by choice (§9): a generation failure blocks play behind retry instead
-of degrading into a sandbox.
+(cut at 7,800 chars against the route's 8,000 — the sent payload is 7,801, because the ellipsis is
+appended after the slice) also makes a reachable 400 a contract bug rather than a long setting. The
+cost is accepted by choice (§9): a generation failure blocks play behind retry instead of degrading
+into a sandbox.
 
 ### 6.5 Escape safety
 
@@ -827,7 +875,9 @@ Two caches keep the gate from re-generating a world that already exists.
   the metadata has been _observed_ to carry (`_briefSeenInMeta`, recorded by `_metaKnows`) are
   droppable; when none of them is, **the cache carries the overflow rather than the loss**. What it
   is really bounded by is how many chats one session can have sealed-but-not-yet-acknowledged at
-  once, which is a handful of a few KB each.
+  once, which is a handful of a few KB each. `PF.quarantine._unsettled` answers the identical fork
+  identically and for the identical reason (§4.4); the two code sites name each other, and a change
+  to either bound belongs in both.
 
 `reset()` clears the gate but deliberately clears neither `_generating` nor `_briefCache` (nor
 `_briefSeenInMeta`, which rides with the cache it describes): a generation in flight for the chat
@@ -851,9 +901,11 @@ standing in the identical default world hold the same money whichever door they 
 
 ## 7. The economy vocabulary
 
-Everything in `59-economy.js` is content plus three verbs. It holds **no state of its own**: what
-persists goes through the shipped mutators and lives in the player block, which is what makes it
-rewind-safe.
+Everything in `59-economy.js` is content plus three game-facing entry points — `berthOffer` describes
+and never charges, `rentBerth` and `grantStartingPurse` mutate. (The rest of the module — `_skin`,
+`currency`, `money`, `describe`, `price` — is the vocabulary those three and the HUD read through.)
+It holds **no state of its own**: what persists goes through the shipped mutators and lives in the
+player block, which is what makes it rewind-safe.
 
 ### 7.1 Items, skins, prices
 
@@ -868,15 +920,21 @@ what the world calls its money — is per theme.
 | `sci-fi-colony` | credit / credits, `◈` | berth chit    | 12    |
 
 `money(world, n)` renders `1 coin` / `12 coins` so a sci-fi colony never charges anybody "coins".
-`describe(world, item)` renders an UNKNOWN type as its own de-hyphenated tag rather than letting it
-vanish from the purse — a newer build's item, or one a GM channel grants later, still reads.
+`describe(world, item)` renders an UNKNOWN type as its own tag with hyphens AND underscores turned
+into spaces, still carrying the quality prefix — `{t:"warp_core",k:"fine"}` reads "fine warp core" —
+rather than letting it vanish from the purse, so a newer build's item, or one a GM channel grants
+later, still reads. A row with no usable `t` at all is the one case that renders as `""`.
 `price(world, what)` returns **`null`**, never a default number, when a thing is not for sale here: a
 caller that cannot find a price must refuse the sale, not invent one.
 
-Every table read is **own-property only**. `world.theme` and a pouch row's `t` come off untrusted save
-JSON, and a nullish-coalescing lookup never reaches its fallback for `"constructor"` — the prototype
-answers with something non-nullish and the call TypeErrors instead of quietly rendering in the default
-theme's words.
+Every table read **whose key can come off a save is own-property only**. `world.theme` and a pouch
+row's `t` are exactly that, and a nullish-coalescing lookup never reaches its fallback for
+`"constructor"` — the prototype answers with something non-nullish and the call TypeErrors instead of
+quietly rendering in the default theme's words. Two reads in the module are deliberately bare, and
+both are safe by where their key came from: the load-time completeness assertion below indexes
+`ITEM_SKINS`/`PRICES` by a theme id it got from this build's own `PF.art.themeIds()`, and
+`rentBerth`'s `world.zones[offer.zoneId]` uses a key `berthOffer` already `hasOwnProperty`-checked
+before it would hand back an available offer.
 
 A load-time completeness assertion (in the placers' idiom) requires **every shipped theme** to skin
 every item type, name its own money, and price a berth. The fallbacks above are there for a SAVE
@@ -947,18 +1005,25 @@ figures were inherited caution from a mobile-payload worry, and budget-driven ca
 settlements feel tiny. Sizes are **measured** — harness case (ah) prints them on every run — and
 asserted only against the walls that are real:
 
-| wall                           | value                                                                          | why it is real                                                                                                                             |
-| ------------------------------ | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Engine per-row cap             | 262,144 chars (`MAX_EXPERIENCE_STATE_CHARS`; mirrored as `MAX_SNAPSHOT_CHARS`) | the server 422s above it, and the client pre-flight exists only to keep that 422's retry loop unreachable                                  |
-| keepalive pair quota           | 57,000 bytes, **pagehide teardown path only**                                  | the Fetch standard caps TOTAL in-flight keepalive body bytes at 64 KiB per origin, and routes mode sends TWO bodies against that one quota |
-| quarantine bag tripwire        | 131,072 chars                                                                  | a pathological blob bloating chat metadata; never fires at realistic severance sizes                                                       |
-| generation `userContent` clamp | 8,000 chars (package clamps to 7,800)                                          | the Engine route's own schema — a different verb, unaffected by any of the above                                                           |
+| wall                           | value                                                                            | why it is real                                                                                                                             |
+| ------------------------------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Engine per-row cap             | 262,144 chars (`MAX_EXPERIENCE_STATE_CHARS`; mirrored as `MAX_SNAPSHOT_CHARS`)   | the server 422s above it, and the client pre-flight exists only to keep that 422's retry loop unreachable                                  |
+| keepalive pair quota           | 57,000 bytes, **pagehide teardown path only**                                    | the Fetch standard caps TOTAL in-flight keepalive body bytes at 64 KiB per origin, and routes mode sends TWO bodies against that one quota |
+| quarantine bag tripwire        | 131,072 chars                                                                    | a pathological blob bloating chat metadata; never fires at realistic severance sizes                                                       |
+| generation `userContent` clamp | 8,000 chars (package cuts at 7,800; the payload sent is 7,801 with the ellipsis) | the Engine route's own schema — a different verb, unaffected by any of the above                                                           |
 
 The two save walls bind **different paths** and that is the point: an ordinary flush is bounded by the
 server cap alone; the pair budget binds only the write a dying page fires. When the pair does not fit,
 the PUT goes **alone** — losing the write-through cache is a repairable inconvenience, losing both is
 the session. A saturated world is over the pair quota and under the row cap by a wide margin, which
 is exactly the documented behaviour rather than a failure.
+
+The gate itself is `2 × TextEncoder(serialized).length ≤ 57,000`, measured on the SNAPSHOT string and
+nothing else, so the number carries its own headroom rather than trying to be exact. What that
+headroom has to cover on top of the two snapshots: the two JSON wrappers (`{"state":…}` and
+`{"pixelforge":…}`, ~26 bytes together), plus 18 more body bytes for the `schemaVersion` column the
+PUT now carries (§2.7 — 24 at a seven-digit value), plus whatever else the page has in flight at
+unload. 57,000 against the standard's 65,536 leaves ~8.5 KB for all of it.
 
 Collection caps (§1.2) are gameplay and hygiene bounds chosen for feel — staleness eviction, dedupe,
 rollover — never for bytes. Size optimisation is explicitly deferred: if size ever becomes a felt
@@ -977,21 +1042,21 @@ the levers are the ones already pulled: small blocks, short keys, caps, and pros
 
 Mirrored from the S5 plan's own table. These are decisions, not oversights.
 
-| limitation                                                                                                                                                                                                                                                                 | status                                        |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| pre-S5 builds delete the block on first flush                                                                                                                                                                                                                              | accepted                                      |
-| metadata mode never rewinds; a checkpoint load does not restore there                                                                                                                                                                                                      | engine gap                                    |
-| probe-failed session: rewind off; pinned play lost at the next routes boot unless promoted                                                                                                                                                                                 | accepted **until Engine #5406 lands (filed)** |
-| #5406 seam residual: a degraded session that sent NO narration leaves the anchor unmoved (`anchorMatched: true`), so the route row still wins the boot comparison and that session's metadata-only writes are lost — the ordinal cures only the anchor-moved degraded case | accepted; unchanged from pre-seam behaviour   |
-| a lost flush after an accepted sleep, or a rewind across a sleep, can re-tell a day                                                                                                                                                                                        | **accepted (maintainer)**                     |
-| unslept days beyond three survive as stubs                                                                                                                                                                                                                                 | **accepted (maintainer)**                     |
-| corrupt row contents unrecoverable client-side                                                                                                                                                                                                                             | accepted **until Engine #5407 lands (filed)** |
-| a generation failure blocks play behind a retry screen — no sandbox world                                                                                                                                                                                                  | **by choice (maintainer)**                    |
-| the GET→PUT race is narrowed, not closed; a teardown after an undetected seam can still overwrite                                                                                                                                                                          | accepted                                      |
-| an intra-message swipe-compare rewinds offline actions                                                                                                                                                                                                                     | pair-anchoring by design                      |
-| a sealed brief lost while the tab was closed → an explicit player choice to regenerate                                                                                                                                                                                     | accepted                                      |
-| prune is write-recency; pre-#5102 checkpoints restore nothing                                                                                                                                                                                                              | engine behaviour                              |
-| multi-tab last-write-wins                                                                                                                                                                                                                                                  | alpha                                         |
+| limitation                                                                                                                                                                                                                                                                 | status                                                                         |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| pre-S5 builds delete the block on first flush                                                                                                                                                                                                                              | accepted                                                                       |
+| metadata mode never rewinds; a checkpoint load does not restore there                                                                                                                                                                                                      | engine gap                                                                     |
+| probe-failed session: rewind off; pinned play lost at the next routes boot unless promoted                                                                                                                                                                                 | accepted **until a tagged Engine release carries #5406** (merged to `staging`) |
+| #5406 seam residual: a degraded session that sent NO narration leaves the anchor unmoved (`anchorMatched: true`), so the route row still wins the boot comparison and that session's metadata-only writes are lost — the ordinal cures only the anchor-moved degraded case | accepted; unchanged from pre-seam behaviour                                    |
+| a lost flush after an accepted sleep, or a rewind across a sleep, can re-tell a day                                                                                                                                                                                        | **accepted (maintainer)**                                                      |
+| unslept days beyond three survive as stubs                                                                                                                                                                                                                                 | **accepted (maintainer)**                                                      |
+| corrupt row contents unrecoverable client-side                                                                                                                                                                                                                             | accepted **until a tagged Engine release carries #5407** (merged to `staging`) |
+| a generation failure blocks play behind a retry screen — no sandbox world                                                                                                                                                                                                  | **by choice (maintainer)**                                                     |
+| the GET→PUT race is narrowed, not closed; a teardown after an undetected seam can still overwrite                                                                                                                                                                          | accepted                                                                       |
+| an intra-message swipe-compare rewinds offline actions                                                                                                                                                                                                                     | pair-anchoring by design                                                       |
+| a sealed brief lost while the tab was closed → an explicit player choice to regenerate                                                                                                                                                                                     | accepted                                                                       |
+| prune is write-recency; pre-#5102 checkpoints restore nothing                                                                                                                                                                                                              | engine behaviour                                                               |
+| multi-tab last-write-wins                                                                                                                                                                                                                                                  | alpha                                                                          |
 
 Two of these name Engine FRs — **#5406** (authoritative write ordering) and **#5407** (`rawState`
 on parse failure). Both are **merged to Engine `staging`** but not yet in a tagged release, and

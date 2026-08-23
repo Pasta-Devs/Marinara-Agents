@@ -421,10 +421,11 @@ PF.save = {
   },
 
   /** "This chat was configured to generate a world and has not sealed one yet."
-   *  ONE predicate with three consumers that used to be three copies of the same
-   *  expression: the interim world mark, the stamp-evaluability gate, and the
-   *  loading gate. Three copies of a predicate this load-bearing is how the gate
-   *  and the interim mark come to disagree about which chats are which. */
+   *  ONE predicate with FOUR consumers that used to be copies of the same
+   *  expression: the interim world mark, the stamp-evaluability gate, the
+   *  loading gate, and maybeGenerateBrief's nothing-to-generate branch. Separate
+   *  copies of a predicate this load-bearing is how the gate and the interim mark
+   *  come to disagree about which chats are which. */
   briefExpected(meta, chatId) {
     return !this._configBrief(meta, chatId) && meta?.pixelforgeBrief === undefined && this._configGenerate(meta);
   },

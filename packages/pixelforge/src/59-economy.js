@@ -13,9 +13,12 @@
 // room. Home ASSIGNMENT channels (a setup flag, P6 building) are enumerated in
 // the plan and deliberately not here.
 //
-// Everything below is CONTENT plus three verbs. It holds no state of its own:
-// what persists goes through the shipped mutators (award/grant/setHome/log/bump)
-// and lives in the player block, which is what makes it rewind-safe.
+// Everything below is CONTENT plus three game-facing entry points: berthOffer
+// describes and never charges, rentBerth and grantStartingPurse mutate. (The
+// rest — _skin, currency, money, describe, price — are the vocabulary those
+// three and the HUD read through.) It holds no state of its own: what persists
+// goes through the shipped mutators (award/grant/setHome/log/bump) and lives in
+// the player block, which is what makes it rewind-safe.
 
 // The closed item vocabulary. A pouch row is keyed `(t, k)` — type and quality —
 // and `t` has to mean the same thing in every theme or a save crossing a theme
