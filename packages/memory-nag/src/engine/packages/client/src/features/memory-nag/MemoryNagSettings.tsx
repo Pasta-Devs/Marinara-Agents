@@ -195,7 +195,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
           </label>
           <button
             type="button"
-            className="mari-chrome-control mari-chrome-control--small mn-icon-button"
+            className="mari-chrome-control mari-chrome-control--small mari-agent-settings-action mari-agent-settings-action--icon mn-icon-button"
             disabled={saving || scanning || settings.vaultPrompt === MEMORY_NAG_DEFAULT_VAULT_PROMPT}
             onClick={() => updateSettings({ vaultPrompt: MEMORY_NAG_DEFAULT_VAULT_PROMPT })}
             title={t("memoryNag.settings.resetPrompt")}
@@ -246,7 +246,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
       <div className="mn-actions">
         <button
           type="button"
-          className="mari-chrome-control mari-chrome-control--primary mari-chrome-control--small"
+          className="mari-chrome-control mari-chrome-control--small mari-agent-settings-action mari-agent-settings-action--primary"
           disabled={saving || scanning}
           onClick={() => void saveSettings()}
         >
@@ -256,7 +256,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
         <button
           id="mn-memory-nag-create-button"
           type="button"
-          className="mari-chrome-control mari-chrome-control--small"
+          className="mari-chrome-control mari-chrome-control--small mari-agent-settings-action"
           disabled={saving || scanning}
           onClick={() => void scanChat()}
         >
@@ -265,7 +265,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
         </button>
         <button
           type="button"
-          className="mari-chrome-control mari-chrome-control--small"
+          className="mari-chrome-control mari-chrome-control--small mari-agent-settings-action"
           onClick={() => setVaultOpen(true)}
         >
           <Database className="mn-icon" aria-hidden="true" />
@@ -296,7 +296,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
                   {!scanning ? (
                     <button
                       type="button"
-                      className="mari-chrome-control mari-chrome-control--small mn-icon-button"
+                      className="mari-chrome-control mari-chrome-control--small mari-agent-settings-action mari-agent-settings-action--icon mn-icon-button"
                       onClick={() => setScanOpen(false)}
                       aria-label={t("memoryNag.settings.closeProgress")}
                     >
@@ -335,7 +335,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
                     {scanning ? (
                       <button
                         type="button"
-                        className="mari-chrome-control mari-chrome-control--small"
+                        className="mari-chrome-control mari-chrome-control--small mari-agent-settings-action"
                         onClick={stopScan}
                       >
                         <Square className="mn-icon" aria-hidden="true" />
@@ -345,14 +345,14 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
                       <>
                         <button
                           type="button"
-                          className="mari-chrome-control mari-chrome-control--small"
+                          className="mari-chrome-control mari-chrome-control--small mari-agent-settings-action"
                           onClick={() => setScanOpen(false)}
                         >
                           {t("memoryNag.settings.closeProgress")}
                         </button>
                         <button
                           type="button"
-                          className="mari-chrome-control mari-chrome-control--primary mari-chrome-control--small"
+                          className="mari-chrome-control mari-chrome-control--small mari-agent-settings-action mari-agent-settings-action--primary"
                           onClick={() => {
                             setScanOpen(false);
                             setVaultOpen(true);

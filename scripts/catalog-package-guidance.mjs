@@ -166,3 +166,10 @@ export function withPackageActivationGuidance(packageId, description) {
   if (!activation || normalized.endsWith(activation)) return normalized;
   return `${normalized} ${activation}`;
 }
+
+export function withoutPackageActivationGuidance(packageId, description) {
+  const normalized = String(description || "").trim();
+  const activation = OFFICIAL_PACKAGE_GUIDANCE[packageId]?.activation;
+  if (!activation || !normalized.endsWith(activation)) return normalized;
+  return normalized.slice(0, -activation.length).trim();
+}

@@ -15,7 +15,11 @@ import {
 import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
 import { INCOMPLETE_PACKAGE_IDS, STAGING_ONLY_PACKAGE_IDS } from "./catalog-incomplete.mjs";
 import { assertPackagePrivateImportBoundary } from "./package-engine-boundary.mjs";
-import { OFFICIAL_PACKAGE_GUIDANCE, withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
+import {
+  OFFICIAL_PACKAGE_GUIDANCE,
+  withPackageActivationGuidance,
+  withoutPackageActivationGuidance,
+} from "./catalog-package-guidance.mjs";
 import {
   assertPortableFilenameComponent,
   assertPortableRelativePath,
@@ -640,7 +644,13 @@ for (const entry of catalog.packages) {
     throw new Error(`Package ${manifest.id} does not define its matching agent id`);
   }
   const matchingDefinitions = agentDefinitions.filter((definition) => definition.id === manifest.id);
-  if (matchingDefinitions.some((definition) => definition.description !== manifest.description)) {
+  const activeAgentDescription = withoutPackageActivationGuidance(manifest.id, manifest.description);
+  if (
+    matchingDefinitions.some(
+      (definition) =>
+        definition.description !== manifest.description && definition.description !== activeAgentDescription,
+    )
+  ) {
     throw new Error(`Package ${manifest.id} agent description does not match its manifest description`);
   }
   for (const definition of agentDefinitions) {
