@@ -129,13 +129,38 @@ assert.equal(
 // ── Bundle contract ──────────────────────────────────────────────────────────
 const client = readFileSync(join(packageRoot, "client.js"), "utf8");
 const manifest = JSON.parse(readFileSync(join(packageRoot, "manifest.json"), "utf8"));
+const beholderInterfaceSource = ["style.css", "80-dock.js", "90-element.js"]
+  .map((name) => readFileSync(join(srcDir, name), "utf8"))
+  .join("\n");
 
 assert.equal(manifest.entrypoints.client, "client.js", "manifest must declare the client entrypoint");
 assert.ok(
-  manifest.contributions?.slots?.includes("conversation-toolbar"),
-  "manifest must contribute to the roleplay toolbar",
+  manifest.contributions?.slots?.includes("roleplay-tracker"),
+  "manifest must contribute to the left-side roleplay tracker toolbar",
 );
 assert.ok(manifest.permissions.includes("ui"), "a client-bearing package needs the ui permission");
+assert.match(beholderInterfaceSource, /--marinara-chat-chrome-accent/u, "Beholder must consume the chat chroma token");
+assert.match(beholderInterfaceSource, /bh-hud-icon/u, "the Beholder toolbar mark must be theme-colored");
+assert.match(
+  beholderInterfaceSource,
+  /\.bh-msg-hold\s*\{[^}]*var\(--bh-chroma\)/u,
+  "held-item activity must use the chat chroma instead of a fixed yellow",
+);
+assert.match(
+  beholderInterfaceSource,
+  /\.bh-part \.bh-body-fill\.bh-part-wound-1\s*\{[^}]*var\(--bh-chroma\)/u,
+  "minor wound highlights must use the chat chroma instead of a fixed yellow",
+);
+for (const legacyColor of [
+  "#ffeaa7",
+  "#c9a55a",
+  "#f3e3b8",
+  "rgba(201, 165, 90",
+  "rgba(255, 234, 167",
+  "rgb(227, 201, 105",
+]) {
+  assert.ok(!beholderInterfaceSource.includes(legacyColor), `Beholder UI still contains legacy gold: ${legacyColor}`);
+}
 
 assert.ok(
   client.includes("customElements.define(BH_TAG, BeholderElement)") &&

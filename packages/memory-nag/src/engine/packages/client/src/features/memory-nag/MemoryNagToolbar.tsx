@@ -1,4 +1,4 @@
-import { Brain } from "lucide-react";
+import { MessageSquareQuote } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { MemoryNagRecall } from "../../../../shared/src/features/agents/memory-nag/schema.js";
@@ -18,6 +18,7 @@ export function MemoryNagToolbar({ props }: { props: CapabilityProps }) {
   const { t } = useMemoryNagTranslation();
   const chatId = props.chatId ?? "";
   const enabled = props.chatMode === "roleplay" && Boolean(chatId);
+  const compact = props.mobileCompact === true;
   const [open, setOpen] = useState(false);
   const [wordIndex, setWordIndex] = useState(0);
   const vault = useQuery({
@@ -39,17 +40,17 @@ export function MemoryNagToolbar({ props }: { props: CapabilityProps }) {
     return () => window.clearInterval(timer);
   }, [nags.length, words]);
 
-  if (!enabled || props.mobileCompact) return null;
+  if (!enabled) return null;
   return (
     <div className="mn-shell mn-toolbar">
       <button
         type="button"
-        className="mari-chrome-control mari-chrome-control--small mn-toolbar-button"
+        className={`${props.toolbarButtonClass ?? "mari-chrome-control mari-chrome-control--small"} mn-toolbar-button${compact ? " mn-toolbar-button--compact" : ""}`}
         aria-expanded={open}
         aria-label={t("memoryNag.toolbar.label")}
         onClick={() => setOpen((value) => !value)}
       >
-        <Brain className="mn-icon" aria-hidden="true" />
+        <MessageSquareQuote className="mn-icon" aria-hidden="true" />
         <span className="mn-toolbar-word" aria-hidden="true">
           {words[wordIndex] ?? words[0]}
         </span>

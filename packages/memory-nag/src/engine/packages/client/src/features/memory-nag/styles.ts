@@ -264,7 +264,21 @@ export const MEMORY_NAG_STYLES = `
 }
 
 .mn-toolbar-button {
+  width: auto;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0.375rem 0.5rem;
+  gap: 0.375rem;
   color: var(--mn-chroma);
+}
+
+.mn-toolbar-button--compact {
+  width: 2rem;
+  padding: 0.25rem;
+}
+
+.mn-toolbar-button--compact .mn-toolbar-word {
+  display: none;
 }
 
 .mn-toolbar-word {
@@ -300,18 +314,53 @@ export const MEMORY_NAG_STYLES = `
 }
 
 .mn-tracker {
-  margin: 0.5rem;
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  background: var(--card);
-  padding: 0.65rem;
+  position: relative;
+  z-index: 10;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+  background: var(--tracker-panel-section-background, color-mix(in srgb, var(--card) 10%, transparent));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+
+.mn-tracker-header {
+  display: flex;
+  min-height: 1.75rem;
+  align-items: center;
+  gap: 0.25rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 42%, transparent);
+  padding: 0.125rem 0.25rem;
+}
+
+.mn-tracker-icon {
+  display: flex;
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--tracker-profile-icon, var(--mn-chroma));
+  opacity: 0.75;
+}
+
+.mn-tracker-title {
+  min-width: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--foreground) 62%, transparent);
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 0.75rem;
+  letter-spacing: 0.08em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .mn-tracker-value {
-  margin-top: 0.3rem;
-  color: var(--foreground);
-  font-size: 0.75rem;
-  line-height: 1.45;
+  min-height: 2.25rem;
+  padding: 0.5rem;
+  color: color-mix(in srgb, var(--foreground) 78%, transparent);
+  font-size: 0.6875rem;
+  line-height: 1.4;
 }
 
 .mn-icon {

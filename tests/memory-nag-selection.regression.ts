@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   emptyMemoryNagVault,
   MEMORY_NAG_DEFAULT_VAULT_PROMPT,
@@ -188,6 +189,30 @@ assert.equal(registeredRoutes.length, 8);
 assert.ok(
   registeredRoutes.every((route) => typeof route.options.preHandler === "function"),
   "every Memory Nag route must carry its Roleplay-only guard without relying on package-level Fastify hooks",
+);
+
+const memoryNagToolbarSource = readFileSync(
+  new URL(
+    "../packages/memory-nag/src/engine/packages/client/src/features/memory-nag/MemoryNagToolbar.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const memoryNagStyles = readFileSync(
+  new URL("../packages/memory-nag/src/engine/packages/client/src/features/memory-nag/styles.ts", import.meta.url),
+  "utf8",
+);
+assert.doesNotMatch(
+  memoryNagToolbarSource,
+  /!enabled\s*\|\|\s*props\.mobileCompact/u,
+  "compact Roleplay layouts must retain the Memory Nag toolbar control",
+);
+assert.match(memoryNagToolbarSource, /toolbarButtonClass/u, "Memory Nag must reuse the host toolbar button class");
+assert.match(memoryNagToolbarSource, /MessageSquareQuote/u, "Memory Nag must use its distinct quote icon");
+assert.match(
+  memoryNagStyles,
+  /--tracker-panel-section-background/u,
+  "Memory Nag must reuse the native Tracker Panel section surface",
 );
 
 console.info("Memory Nag regressions passed");
