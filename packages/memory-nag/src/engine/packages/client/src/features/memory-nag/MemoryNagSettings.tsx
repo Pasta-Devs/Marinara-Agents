@@ -1,4 +1,4 @@
-import { Database, LoaderCircle, Play, RotateCcw, Save, Square, X } from "lucide-react";
+import { BookOpen, Database, LoaderCircle, Maximize2, Play, RotateCcw, Save, Square, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -62,6 +62,8 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
   const [saving, setSaving] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
+  const [promptExpanded, setPromptExpanded] = useState(false);
+  const [promptMacrosOpen, setPromptMacrosOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [scanMessage, setScanMessage] = useState("");
   const [progress, setProgress] = useState<MemoryNagScanProgress | null>(null);
@@ -73,6 +75,16 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
       if (!scanning) setScanOpen(false);
     },
     "#mn-memory-nag-create-button",
+  );
+  const promptDialogRef = useModalDialog(
+    promptExpanded,
+    () => setPromptExpanded(false),
+    "#mn-memory-nag-expand-prompt",
+  );
+  const macrosDialogRef = useModalDialog(
+    promptMacrosOpen,
+    () => setPromptMacrosOpen(false),
+    "#mn-memory-nag-prompt-macros",
   );
   const vault = useQuery({
     enabled: Boolean(chatId),
@@ -195,7 +207,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
           </label>
           <button
             type="button"
-            className="mari-chrome-control mari-chrome-control--small mari-agent-settings-action mari-agent-settings-action--icon mn-icon-button"
+            className="mari-agent-settings-action mari-agent-settings-action--icon mn-icon-button"
             disabled={saving || scanning || settings.vaultPrompt === MEMORY_NAG_DEFAULT_VAULT_PROMPT}
             onClick={() => updateSettings({ vaultPrompt: MEMORY_NAG_DEFAULT_VAULT_PROMPT })}
             title={t("memoryNag.settings.resetPrompt")}
@@ -205,14 +217,38 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
           </button>
         </span>
         <small>{t("memoryNag.settings.vaultPromptHelp")}</small>
-        <textarea
-          id="mn-memory-nag-vault-prompt"
-          className="mari-chrome-field mn-field mn-textarea mn-prompt-textarea"
-          disabled={saving || scanning}
-          maxLength={MEMORY_NAG_VAULT_PROMPT_MAX_LENGTH}
-          value={settings.vaultPrompt}
-          onChange={(event) => updateSettings({ vaultPrompt: event.target.value })}
-        />
+        <div className="mn-prompt-field">
+          <textarea
+            id="mn-memory-nag-vault-prompt"
+            className="mari-chrome-field mn-field mn-textarea mn-prompt-textarea"
+            disabled={saving || scanning}
+            maxLength={MEMORY_NAG_VAULT_PROMPT_MAX_LENGTH}
+            value={settings.vaultPrompt}
+            onChange={(event) => updateSettings({ vaultPrompt: event.target.value })}
+          />
+          <div className="mn-prompt-tools">
+            <button
+              id="mn-memory-nag-expand-prompt"
+              type="button"
+              className="mari-agent-settings-action mari-agent-settings-action--icon mn-prompt-tool"
+              onClick={() => setPromptExpanded(true)}
+              title={t("memoryNag.settings.expandPrompt")}
+              aria-label={t("memoryNag.settings.expandPrompt")}
+            >
+              <Maximize2 className="mn-icon" aria-hidden="true" />
+            </button>
+            <button
+              id="mn-memory-nag-prompt-macros"
+              type="button"
+              className="mari-agent-settings-action mari-agent-settings-action--icon mn-prompt-tool"
+              onClick={() => setPromptMacrosOpen(true)}
+              title={t("memoryNag.settings.macroReference")}
+              aria-label={t("memoryNag.settings.macroReference")}
+            >
+              <BookOpen className="mn-icon" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
       </div>
       <div className="mn-number-grid">
         {NUMBER_FIELDS.map((field) => (
@@ -246,7 +282,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
       <div className="mn-actions">
         <button
           type="button"
-          className="mari-chrome-control mari-chrome-control--small mari-agent-settings-action mari-agent-settings-action--primary"
+          className="mari-agent-settings-action mari-agent-settings-action--primary"
           disabled={saving || scanning}
           onClick={() => void saveSettings()}
         >
@@ -256,23 +292,90 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
         <button
           id="mn-memory-nag-create-button"
           type="button"
-          className="mari-chrome-control mari-chrome-control--small mari-agent-settings-action"
+          className="mari-agent-settings-action"
           disabled={saving || scanning}
           onClick={() => void scanChat()}
         >
           <Play className="mn-icon" aria-hidden="true" />
           {t("memoryNag.settings.scan")}
         </button>
-        <button
-          type="button"
-          className="mari-chrome-control mari-chrome-control--small mari-agent-settings-action"
-          onClick={() => setVaultOpen(true)}
-        >
+        <button type="button" className="mari-agent-settings-action" onClick={() => setVaultOpen(true)}>
           <Database className="mn-icon" aria-hidden="true" />
           {t("memoryNag.settings.vault")}
         </button>
       </div>
       {vaultOpen ? <MemoryNagVaultModal props={props} onClose={() => setVaultOpen(false)} /> : null}
+      {promptExpanded
+        ? createPortal(
+            <div className="mn-overlay" role="presentation">
+              <section
+                ref={promptDialogRef}
+                className="mn-modal mn-prompt-modal mn-shell"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="mn-memory-nag-prompt-title"
+                tabIndex={-1}
+              >
+                <div className="mn-modal-head">
+                  <strong id="mn-memory-nag-prompt-title">{t("memoryNag.settings.vaultPrompt")}</strong>
+                  <button
+                    type="button"
+                    className="mari-agent-settings-action mari-agent-settings-action--icon"
+                    onClick={() => setPromptExpanded(false)}
+                    aria-label={t("memoryNag.settings.closePrompt")}
+                  >
+                    <X className="mn-icon" aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="mn-modal-body">
+                  <textarea
+                    className="mari-chrome-field mn-field mn-expanded-prompt"
+                    disabled={saving || scanning}
+                    maxLength={MEMORY_NAG_VAULT_PROMPT_MAX_LENGTH}
+                    value={settings.vaultPrompt}
+                    onChange={(event) => updateSettings({ vaultPrompt: event.target.value })}
+                  />
+                </div>
+              </section>
+            </div>,
+            document.body,
+          )
+        : null}
+      {promptMacrosOpen
+        ? createPortal(
+            <div className="mn-overlay" role="presentation">
+              <section
+                ref={macrosDialogRef}
+                className="mn-modal mn-macro-modal mn-shell"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="mn-memory-nag-macros-title"
+                tabIndex={-1}
+              >
+                <div className="mn-modal-head">
+                  <strong id="mn-memory-nag-macros-title">{t("memoryNag.settings.macroReference")}</strong>
+                  <button
+                    type="button"
+                    className="mari-agent-settings-action mari-agent-settings-action--icon"
+                    onClick={() => setPromptMacrosOpen(false)}
+                    aria-label={t("memoryNag.settings.closeMacros")}
+                  >
+                    <X className="mn-icon" aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="mn-modal-body mn-stack">
+                  <p className="mn-muted">{t("memoryNag.settings.macroReferenceHelp")}</p>
+                  <div className="mn-macro-list">
+                    {["{{user}}", "{{char}}", "{{characters}}", "{{input}}", "{{date}}", "{{time}}"].map((macro) => (
+                      <code key={macro}>{macro}</code>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            </div>,
+            document.body,
+          )
+        : null}
       {scanOpen
         ? createPortal(
             <div className="mn-overlay" role="presentation">
@@ -296,7 +399,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
                   {!scanning ? (
                     <button
                       type="button"
-                      className="mari-chrome-control mari-chrome-control--small mari-agent-settings-action mari-agent-settings-action--icon mn-icon-button"
+                      className="mari-agent-settings-action mari-agent-settings-action--icon mn-icon-button"
                       onClick={() => setScanOpen(false)}
                       aria-label={t("memoryNag.settings.closeProgress")}
                     >
@@ -333,26 +436,18 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
                   ) : null}
                   <div className="mn-actions mn-actions-end">
                     {scanning ? (
-                      <button
-                        type="button"
-                        className="mari-chrome-control mari-chrome-control--small mari-agent-settings-action"
-                        onClick={stopScan}
-                      >
+                      <button type="button" className="mari-agent-settings-action" onClick={stopScan}>
                         <Square className="mn-icon" aria-hidden="true" />
                         {t("memoryNag.settings.stop")}
                       </button>
                     ) : (
                       <>
-                        <button
-                          type="button"
-                          className="mari-chrome-control mari-chrome-control--small mari-agent-settings-action"
-                          onClick={() => setScanOpen(false)}
-                        >
+                        <button type="button" className="mari-agent-settings-action" onClick={() => setScanOpen(false)}>
                           {t("memoryNag.settings.closeProgress")}
                         </button>
                         <button
                           type="button"
-                          className="mari-chrome-control mari-chrome-control--small mari-agent-settings-action mari-agent-settings-action--primary"
+                          className="mari-agent-settings-action mari-agent-settings-action--primary"
                           onClick={() => {
                             setScanOpen(false);
                             setVaultOpen(true);

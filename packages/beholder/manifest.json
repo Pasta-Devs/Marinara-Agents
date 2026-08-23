@@ -23,13 +23,13 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "0cb1d88b09d7fe607331f005193152bb1bacc2fc8cdd68b18d4dab78c825834f",
-      "bytes": 10351
+      "sha256": "857de89a01ae6279fb423820571025922539fb053d857eac900c160f7e0e55b7",
+      "bytes": 10271
     },
     {
       "path": "client.js",
-      "sha256": "1edbabc120e1a13d4431a594a01950cc9b6e979c5c53be61e3717a875663b91c",
-      "bytes": 262743
+      "sha256": "9bc34d4f520b147d2f1f5e8e02b74d9374f6ce9a0ccd202fc39d699e7c13ddaa",
+      "bytes": 264778
     }
   ],
   "permissions": [

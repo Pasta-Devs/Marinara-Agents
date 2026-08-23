@@ -11,7 +11,7 @@
   "agents": {
     "knowledge-retrieval": {
       "name": "Knowledge Retrieval",
-      "description": "Scans specified lorebooks for information relevant to the current conversation, summarizes the key data, and injects it into the prompt — a lightweight RAG pipeline without vector databases. Add the Agent in Chat Settings → Agents → Writer Agents for Roleplay mode."
+      "description": "Scans specified lorebooks for information relevant to the current conversation, summarizes the key data, and injects it into the prompt — a lightweight RAG pipeline without vector databases."
     }
   }
 }
