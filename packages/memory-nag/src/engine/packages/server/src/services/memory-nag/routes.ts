@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { normalizeMemoryNagSettings } from "../../../../shared/src/features/agents/memory-nag/schema.js";
 import { loadMemoryNagParticipants } from "./participants.js";
 import { getMemoryNagRuntime } from "./package-runtime.js";
@@ -45,31 +45,33 @@ function memoryNotFound(): Error & { statusCode: number } {
   return Object.assign(new Error("Memory not found."), { statusCode: 404 });
 }
 
-export const memoryNagRoutes: FastifyPluginAsync = async (app) => {
-  app.addHook("preHandler", async (request) => {
-    const params = request.params as { chatId?: unknown };
-    const chatId = requiredId(params.chatId, "Chat ID");
-    const chat = await getMemoryNagRuntime().persistence.getChat(chatId);
-    if (!chat || chat.mode !== "roleplay") {
-      throw Object.assign(new Error("Memory Nag is available only in Roleplay chats."), { statusCode: 400 });
-    }
-  });
+async function requireRoleplayChat(request: FastifyRequest) {
+  const params = request.params as { chatId?: unknown };
+  const chatId = requiredId(params.chatId, "Chat ID");
+  const chat = await getMemoryNagRuntime().persistence.getChat(chatId);
+  if (!chat || chat.mode !== "roleplay") {
+    throw Object.assign(new Error("Memory Nag is available only in Roleplay chats."), { statusCode: 400 });
+  }
+}
 
-  app.get<{ Params: { chatId: string } }>("/vault/:chatId", async (request) => {
+const roleplayOnly = { preHandler: requireRoleplayChat };
+
+export const memoryNagRoutes: FastifyPluginAsync = async (app) => {
+  app.get<{ Params: { chatId: string } }>("/vault/:chatId", roleplayOnly, async (request) => {
     const chatId = requiredId(request.params.chatId, "Chat ID");
     return readMemoryNagVault(chatId);
   });
 
-  app.get<{ Params: { chatId: string } }>("/recall/:chatId", async (request) => {
+  app.get<{ Params: { chatId: string } }>("/recall/:chatId", roleplayOnly, async (request) => {
     const vault = await readMemoryNagVault(requiredId(request.params.chatId, "Chat ID"));
     return vault.lastRecall;
   });
 
-  app.get<{ Params: { chatId: string } }>("/participants/:chatId", async (request) => {
+  app.get<{ Params: { chatId: string } }>("/participants/:chatId", roleplayOnly, async (request) => {
     return loadMemoryNagParticipants(requiredId(request.params.chatId, "Chat ID"));
   });
 
-  app.patch<{ Params: { chatId: string }; Body: unknown }>("/settings/:chatId", async (request) => {
+  app.patch<{ Params: { chatId: string }; Body: unknown }>("/settings/:chatId", roleplayOnly, async (request) => {
     const chatId = requiredId(request.params.chatId, "Chat ID");
     return updateMemoryNagVault(chatId, (current) => ({
       ...current,
@@ -77,12 +79,13 @@ export const memoryNagRoutes: FastifyPluginAsync = async (app) => {
     }));
   });
 
-  app.post<{ Params: { chatId: string } }>("/scan/:chatId", async (request) => {
+  app.post<{ Params: { chatId: string } }>("/scan/:chatId", roleplayOnly, async (request) => {
     return scanMemoryNagBatch(requiredId(request.params.chatId, "Chat ID"));
   });
 
   app.post<{ Params: { chatId: string }; Body: { text?: unknown; characterIds?: unknown } }>(
     "/memories/:chatId",
+    roleplayOnly,
     async (request) => {
       const chatId = requiredId(request.params.chatId, "Chat ID");
       const body = requestBody(request.body);
@@ -114,7 +117,7 @@ export const memoryNagRoutes: FastifyPluginAsync = async (app) => {
   app.patch<{
     Params: { chatId: string; memoryId: string };
     Body: { text?: unknown; characterIds?: unknown; status?: unknown };
-  }>("/memories/:chatId/:memoryId", async (request) => {
+  }>("/memories/:chatId/:memoryId", roleplayOnly, async (request) => {
     const chatId = requiredId(request.params.chatId, "Chat ID");
     const memoryId = requiredId(request.params.memoryId, "Memory ID");
     const body = requestBody(request.body);
@@ -152,18 +155,22 @@ export const memoryNagRoutes: FastifyPluginAsync = async (app) => {
     });
   });
 
-  app.delete<{ Params: { chatId: string; memoryId: string } }>("/memories/:chatId/:memoryId", async (request) => {
-    const chatId = requiredId(request.params.chatId, "Chat ID");
-    const memoryId = requiredId(request.params.memoryId, "Memory ID");
-    const vault = await readMemoryNagVault(chatId);
-    if (!vault.memories.some((memory) => memory.id === memoryId)) throw memoryNotFound();
-    return updateMemoryNagVault(chatId, (current) => {
-      if (!current.memories.some((memory) => memory.id === memoryId)) throw memoryNotFound();
-      return {
-        ...current,
-        memories: current.memories.filter((memory) => memory.id !== memoryId),
-        lastRecall: current.lastRecall?.memoryIds.includes(memoryId) ? null : current.lastRecall,
-      };
-    });
-  });
+  app.delete<{ Params: { chatId: string; memoryId: string } }>(
+    "/memories/:chatId/:memoryId",
+    roleplayOnly,
+    async (request) => {
+      const chatId = requiredId(request.params.chatId, "Chat ID");
+      const memoryId = requiredId(request.params.memoryId, "Memory ID");
+      const vault = await readMemoryNagVault(chatId);
+      if (!vault.memories.some((memory) => memory.id === memoryId)) throw memoryNotFound();
+      return updateMemoryNagVault(chatId, (current) => {
+        if (!current.memories.some((memory) => memory.id === memoryId)) throw memoryNotFound();
+        return {
+          ...current,
+          memories: current.memories.filter((memory) => memory.id !== memoryId),
+          lastRecall: current.lastRecall?.memoryIds.includes(memoryId) ? null : current.lastRecall,
+        };
+      });
+    },
+  );
 };

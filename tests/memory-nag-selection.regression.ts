@@ -5,6 +5,7 @@ import {
 } from "../packages/memory-nag/src/engine/packages/shared/src/features/agents/memory-nag/schema.ts";
 import { shortlistMemoryNags } from "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/retrieval.ts";
 import { memoryNagScanStart } from "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/scanner.ts";
+import { memoryNagRoutes } from "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/routes.ts";
 import { selectMemoryNagRecall } from "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/selection.ts";
 import { reconcileMemoryNagRecall } from "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/vault.ts";
 
@@ -136,6 +137,25 @@ assert.equal(
     memories: [{ ...recalledMemory, characterIds: ["dottore"] }],
   }).lastRecall,
   null,
+);
+
+const registeredRoutes: Array<{ method: string; options: Record<string, unknown> }> = [];
+const routeCollector = Object.fromEntries(
+  ["delete", "get", "patch", "post", "put"].map((method) => [
+    method,
+    (_path: string, options: unknown, handler?: unknown) => {
+      registeredRoutes.push({
+        method,
+        options: typeof handler === "function" && options && typeof options === "object" ? options : {},
+      });
+    },
+  ]),
+);
+void memoryNagRoutes(routeCollector as never, {});
+assert.equal(registeredRoutes.length, 8);
+assert.ok(
+  registeredRoutes.every((route) => typeof route.options.preHandler === "function"),
+  "every Memory Nag route must carry its Roleplay-only guard without relying on package-level Fastify hooks",
 );
 
 console.info("Memory Nag regressions passed");
