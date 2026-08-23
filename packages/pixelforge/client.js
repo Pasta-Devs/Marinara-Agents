@@ -7224,6 +7224,12 @@ PF.player = {
   _live(core, gen) {
     if (!core || typeof core !== "object") return null;
     if (gen !== undefined && gen !== (PF.save?._gen ?? 0)) return null;
+    // THE LOADING GATE (plan §Q3b): a world nobody has entered has no player in
+    // it. Refused HERE rather than at nine call sites, which is what makes "no
+    // mutator is reachable while the gate holds" true of every verb at once —
+    // including the ones written after the gate. Each verb's documented refusal
+    // value is what a caller gets, so nothing has to learn a new failure shape.
+    if (PF.save?.gateHolds?.(core)) return null;
     const sim = core.sim;
     if (!sim) return null;
     if (!sim.player || typeof sim.player !== "object" || Array.isArray(sim.player)) sim.player = this.defaultPlayer();
@@ -8085,6 +8091,27 @@ const CORRUPT_EXCERPT_CHARS = 4_096;
 // a check taken inside the window the write was scheduled in has looked at it.
 const CHECK_FRESH_MS = 2500;
 
+// OUR top-level chat-metadata key. Named rather than spelled out at each site
+// because #5406 keys its write-ordinal mirror by it: the engine stamps
+// `metadata[ORDINAL_MIRROR_KEY][SAVE_META_KEY]` with the ordinal of the last write
+// that actually MOVED this cache, and that number is what orders the two stores.
+// A drifting literal here would silently read an ordinal for a key nobody writes.
+const SAVE_META_KEY = "pixelforge";
+const ORDINAL_MIRROR_KEY = "metadataWriteOrdinals";
+
+/** A USABLE write ordinal (#5406). The engine allocates positive safe integers and
+ *  reports `null` for rows written before the feature, so everything else — null,
+ *  absent, zero, a float, a string — is "unorderable" and every consumer below
+ *  falls back to the byte ladder. Deliberately the same validation the server's own
+ *  mirror reader applies: a client that accepted a value the server ignores would
+ *  order its writes against a number nothing else agrees with. */
+const ordinalOf = (value) => (typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : null);
+
+// Sealed briefs this session stored, by chat id (plan §Q3, "sealed-brief in-memory
+// cache on read and write sides"). Bounded: a brief is a few KB and a long session
+// can visit many chats, so the oldest entry goes rather than the map growing.
+const BRIEF_CACHE_MAX = 8;
+
 // The ladder's rows and what each one MEANS at each site (plan §Q2). A table
 // rather than a switch in three places: the whole finding behind slice 4 is that
 // the sites disagreed about rows nobody had written down.
@@ -8225,6 +8252,32 @@ PF.save = {
   /** The envelope-key registry, exposed so the completeness assertion below and
    *  the harness can check the list against what snapshot() actually emits. */
   _envelopeKeys: ENVELOPE_KEYS,
+  /** #5406: the ordinal the engine gave OUR last successful route write on this
+   *  chat, straight off the PUT echo. Per-chat, so reset() clears it. */
+  _putOrdinal: null,
+  /** THE LOADING GATE (plan §Q3b, maintainer ruling #7). null while the chat plays;
+   *  otherwise `{ chatId, state: "generating" | "failed", attempts }`.
+   *
+   *  A generate-configured chat does NOT enter play until its brief is sealed. The
+   *  ruling that produced this is worth restating where the flag lives, because the
+   *  alternative it replaced looked cheaper: a player must never invest in a world
+   *  that is going to be discarded, so there is no interim playable world any more
+   *  and a long loading screen is the accepted cost. While the gate holds, the sim
+   *  does not step, no mutator resolves, and nothing — debounce, chat-switch
+   *  capture, detach, pagehide — writes a save.
+   *
+   *  Chat-scoped by construction (reset() clears it) AND by the id it carries, so a
+   *  stale async completion cannot lift or fail the gate of the chat you arrived at. */
+  gate: null,
+  /** Chat ids with a generation call in flight. A SET, not a flag: leaving a chat
+   *  mid-generation must neither abandon that call (it still seals, and the cache
+   *  below carries it) nor block the chat you arrive at from starting its own. */
+  _generating: new Set(),
+  /** chatId → sealed brief, for the gate's escape-safety. A generation that lands
+   *  while the player is in ANOTHER chat cannot patch that chat's host.chatMeta, so
+   *  without this, coming back reads a meta that still looks unsealed and generates
+   *  the world a SECOND time — a wasted host call and a different world. */
+  _briefCache: new Map(),
 
   /** Reads core.sim and core.chatId and NOTHING else: 80-setup calls this with
    *  a synthetic two-key core, and reaching for core.host/hud/render there
@@ -8310,7 +8363,8 @@ PF.save = {
    *  would resurrect a slot a version re-adoption had just consumed, and the
    *  re-adoption would then run again on the same boot. */
   restore(meta, chatId) {
-    const saved = meta && typeof meta.pixelforge === "object" && meta.pixelforge !== null ? meta.pixelforge : null;
+    const saved =
+      meta && typeof meta[SAVE_META_KEY] === "object" && meta[SAVE_META_KEY] !== null ? meta[SAVE_META_KEY] : null;
     PF.quarantine.hydrate(meta, chatId);
     return this.simFromSaved(saved, meta, chatId);
   },
@@ -8320,7 +8374,7 @@ PF.save = {
    *  read-modify-write of the whole setup config). The nested config location
    *  remains readable for chats sealed before the key moved. Absent on
    *  pre-0.4.0 games → legacy layout. */
-  _configBrief(meta) {
+  _configBrief(meta, chatId) {
     const top =
       meta && typeof meta.pixelforgeBrief === "object" && meta.pixelforgeBrief !== null ? meta.pixelforgeBrief : null;
     if (top && Array.isArray(top.cast)) return top;
@@ -8338,7 +8392,29 @@ PF.save = {
     for (const candidate of [inner?.brief, outer?.brief]) {
       if (candidate && typeof candidate === "object" && Array.isArray(candidate.cast)) return candidate;
     }
-    return null;
+    // …and LAST, this session's own cache (see _briefCache). Only when the metadata
+    // carries nothing at all about a brief: anything the host actually delivered —
+    // a sealed brief or a `{skipped:true}` marker — is the newer truth and both
+    // return above, so the cache can never shadow the stored answer.
+    const cached = chatId ? this._briefCache.get(chatId) : null;
+    return cached && Array.isArray(cached.cast) ? cached : null;
+  },
+
+  /** Remember a brief we just sealed, newest last, bounded. */
+  _cacheBrief(chatId, sealed) {
+    if (!chatId || !sealed || !Array.isArray(sealed.cast)) return;
+    this._briefCache.delete(chatId);
+    this._briefCache.set(chatId, sealed);
+    while (this._briefCache.size > BRIEF_CACHE_MAX) this._briefCache.delete(this._briefCache.keys().next().value);
+  },
+
+  /** "This chat was configured to generate a world and has not sealed one yet."
+   *  ONE predicate with three consumers that used to be three copies of the same
+   *  expression: the interim world mark, the stamp-evaluability gate, and the
+   *  loading gate. Three copies of a predicate this load-bearing is how the gate
+   *  and the interim mark come to disagree about which chats are which. */
+  briefExpected(meta, chatId) {
+    return !this._configBrief(meta, chatId) && meta?.pixelforgeBrief === undefined && this._configGenerate(meta);
   },
 
   /** The wizard's opt-in for surface-side world generation (0.4.0 chats). */
@@ -8356,23 +8432,89 @@ PF.save = {
     return inner?.generate === true || outer?.generate === true;
   },
 
-  /** Surface-side world generation (spec §5, amended): fully NON-BLOCKING.
-   *  The chat boots on the themed legacy world immediately; the one #5135
-   *  call runs behind a toast, the sealed brief stores atomically under
-   *  pixelforgeBrief (3 retries), and the world rebuilds on arrival. Runs at
-   *  most once per chat: the stored key (sealed brief or a skipped marker) is
-   *  the one-shot guard, so old chats and completed chats never re-generate. */
+  /** Arm the loading gate for a chat whose brief is not sealed yet, and answer
+   *  whether it holds. Called ONCE per chat switch and BEFORE adopt(), because
+   *  adopt's row-3 branch is "first-write" — a probe of a gated chat would write
+   *  the un-entered world up as if it were somebody's play.
+   *
+   *  Legacy and non-generate chats (default worlds by design) never arm it and
+   *  play immediately; so does a chat whose generation was declined, whose
+   *  `{skipped:true}` marker briefExpected() reads as "sealed enough". */
+  armGate(core, meta) {
+    if (!core?.chatId || !this.briefExpected(meta, core.chatId)) {
+      this.gate = null;
+      return false;
+    }
+    this.gate = { chatId: core.chatId, state: "generating", attempts: 0 };
+    return true;
+  },
+
+  /** Does the gate hold for THIS core's chat? Every refusal below asks this and
+   *  not `gate !== null`: a gate armed for the chat we left must not silence the
+   *  chat we arrived at, and reset() is not the only ordering that can leave the
+   *  two out of step (an async completion can land between the two). */
+  gateHolds(core) {
+    return this.gate !== null && !!core && this.gate.chatId === core.chatId;
+  },
+
+  /** The brief sealed: play begins. adopt() runs HERE rather than at the chat
+   *  switch, because it is the first thing allowed to write. */
+  _liftGate(core) {
+    if (!this.gateHolds(core)) return;
+    this.gate = null;
+    core.hud?.update?.();
+    void this.adopt(core);
+  },
+
+  /** Generation did not seal. The chat stays UNSEALED — which is the whole
+   *  no-bricked-chat argument: nothing was written, so the next visit arms the
+   *  gate again and tries again on its own, and no default world was ever sealed
+   *  on a detail-heavy player's behalf. */
+  _failGate(core) {
+    if (!this.gateHolds(core)) return;
+    this.gate = { ...this.gate, state: "failed", attempts: this.gate.attempts + 1 };
+    core.hud?.update?.();
+  },
+
+  /** The retry the gate's failure state offers, and the only caller is that
+   *  button: everything else re-arms by revisiting the chat. */
+  retryGeneration(core) {
+    if (!this.gateHolds(core) || this.gate.state !== "failed") return false;
+    this.gate = { ...this.gate, state: "generating" };
+    core.hud?.update?.();
+    void this.maybeGenerateBrief(core);
+    return true;
+  },
+
+  /** Surface-side world generation (spec §5, amended by plan §Q3b): BLOCKING now,
+   *  behind the loading gate. The old contract booted the chat on a throwaway
+   *  themed world and generated behind a toast; the maintainer rejected that
+   *  outright (ruling #7) — a player must never invest in a world that is going to
+   *  be discarded. So the gate holds play, this runs the one #5135 call behind it
+   *  with the retry/salvage ladder 0.4.0 already shipped, the sealed brief stores
+   *  atomically under pixelforgeBrief (3 retries), the world compiles, and the gate
+   *  lifts. On failure the gate offers retry and the chat stays unsealed.
+   *
+   *  Runs at most once per chat AT A TIME, and the set is keyed by chat id rather
+   *  than being one flag: with a flag, leaving a chat mid-generation left the flag
+   *  up, and the chat you arrived at returned here immediately and sat behind a
+   *  gate with nothing running behind it. The stored key (sealed brief or a skipped
+   *  marker) remains the one-shot guard ACROSS visits, so completed chats and
+   *  pre-0.4.0 chats never re-generate. */
   async maybeGenerateBrief(core) {
-    if (!core.chatId || this._generating) return;
     const chatId = core.chatId;
+    if (!chatId || this._generating.has(chatId)) return;
     const meta =
       core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
-    if (meta.pixelforgeBrief !== undefined) return;
-    if (this._configBrief(meta)) return;
-    if (!this._configGenerate(meta)) return;
-    this._generating = true;
+    if (!this.briefExpected(meta, chatId)) {
+      // Nothing to generate. A gate armed against a metadata blob that has since
+      // caught up (or against this session's own cache) lifts here rather than
+      // waiting for a generation call that would find nothing to do.
+      this._liftGate(core);
+      return;
+    }
+    this._generating.add(chatId);
     try {
-      core.hud?.toast("Generating your world — keep exploring meanwhile…");
       const theme = this._configTheme(meta) ?? "cozy-village";
       let seed = this._configSeed(meta);
       if (seed === null) seed = PF.hashStr(String(chatId));
@@ -8387,10 +8529,12 @@ PF.save = {
         .join("\n");
       const sealed = await PF.brief.generate(chatId, { theme, seed, preferences });
       if (!sealed) {
-        // Transient failure (busy engine, network, timeout, route absent): do
-        // NOT seal — the key stays absent and the next visit tries again. The
-        // default world stays fully playable meanwhile.
-        core.hud?.toast("World generation couldn't run — it will retry next visit.");
+        // Transient failure (busy engine, network, timeout, route absent): do NOT
+        // seal — the key stays absent, this visit offers retry, and the next visit
+        // arms the gate again. There is deliberately no "play the default world"
+        // escape here: sealing a default world for a player who wrote three
+        // paragraphs of setting is the outcome ruling #7 exists to forbid.
+        if (chatId === core.chatId) this._failGate(core);
         return;
       }
       let stored = false;
@@ -8399,23 +8543,36 @@ PF.save = {
           await PF.api.patchMetadata(chatId, { pixelforgeBrief: sealed });
           stored = true;
         } catch (err) {
-          if (attempt === 2) console.warn("[pixelforge] brief storage failed; keeping the default world", err);
+          if (attempt === 2) console.warn("[pixelforge] brief storage failed; the chat stays unsealed", err);
           else await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
         }
       }
-      if (!stored || chatId !== core.chatId) return;
-      // Rebuild onto the generated world (the default one has only seconds of
-      // play on it). Fresh sim, fresh bindings; spatial re-seeds next turn.
-      // The envelope carry is NOT play state — it is a newer build's fields —
-      // so it transplants across the wholesale sim replacement rather than
-      // dying with the throwaway world (_rebuild gets it via simFromSaved).
+      if (!stored) {
+        if (chatId === core.chatId) this._failGate(core);
+        return;
+      }
+      // Cached BEFORE the chat fence below, and that ordering is the gate's
+      // escape-safety: a generation that lands while the player is in another chat
+      // returns here, and the cache is the only thing that will tell the next visit
+      // this world is already sealed rather than generating it a second time.
+      this._cacheBrief(chatId, sealed);
+      if (chatId !== core.chatId) return;
+      // Build the world the brief describes. Under the gate the sim standing here
+      // is a placeholder nobody walked in, so this is a plain replacement — but the
+      // envelope carry is NOT play state (it is a newer build's fields) and rides
+      // across regardless, exactly as it does through _rebuild.
       const carriedExtra = core.sim?._envelopeExtra;
-      // The player block crosses the same seam, and it crosses SPLIT (plan §Q5,
-      // the one-release compat shim for chats created before the loading gate).
-      // World-free fields — the purse, the skills, the board's completion counts
-      // — mean the same thing in the compiled world. Everything world-bound
-      // belonged to the throwaway one and goes to the stamp slot instead of
-      // being silently reinterpreted against people who do not exist here.
+      // The player block crosses the same seam, and it crosses SPLIT (plan §Q5).
+      // THE GATE MAKES THIS PATH A COMPAT SHIM, NOT THE NORMAL ONE, and it stays
+      // for two reasons the gate cannot cover: a chat CREATED BEFORE the gate
+      // shipped has a real interim save with real play in it, and a legacy save
+      // can arrive stamped for a world that never sealed. For those, world-free
+      // fields — the purse, the skills, the board's completion counts — mean the
+      // same thing in the compiled world, and everything world-bound belonged to
+      // the throwaway one and goes to the stamp slot instead of being silently
+      // reinterpreted against people who do not exist here. For a gated chat the
+      // block is a fresh default and the split moves nothing, which is the point:
+      // the safety net costs nothing when the gate has already done its job.
       const carriedPlayer = core.sim?.player;
       core.sim = new PF.Sim(PF.world.build(seed, theme, sealed));
       if (carriedExtra) core.sim._envelopeExtra = carriedExtra;
@@ -8425,11 +8582,16 @@ PF.save = {
       this._lastSerialized = null;
       core.render?.clearZones?.();
       void PF.assets.load(core);
+      // The gate lifts BEFORE the first dirty flag, and the order is load-bearing:
+      // markDirty refuses while the gate holds, so arming the save first would
+      // arm nothing and the freshly compiled world would wait for some unrelated
+      // later event to be written at all.
+      this._liftGate(core);
       core.hud?.refreshChips();
       core.hud?.toast("The world takes shape.");
       this.markDirty(core);
     } finally {
-      this._generating = false;
+      this._generating.delete(chatId);
     }
   },
 
@@ -8464,13 +8626,17 @@ PF.save = {
     // world; the brief lives ONLY in chat metadata (pixelforgeBrief, or the
     // legacy nested config spot), never in save rows.
     const theme = (saved && typeof saved.theme === "string" ? saved.theme : null) ?? this._configTheme(meta);
-    const brief = this._configBrief(meta);
+    const brief = this._configBrief(meta, chatId);
     const world = PF.world.build(seed, theme, brief);
-    // The pre-brief boot world of a generation-enabled chat is a throwaway
-    // that the sealed brief will replace — stamped so the World Maps export
-    // (§8) never registers its zones on the user's map. A sealed brief or a
-    // {skipped:true} marker makes the world final.
-    if (!brief && meta?.pixelforgeBrief === undefined && this._configGenerate(meta)) world.interim = true;
+    // The pre-brief world of a generation-enabled chat is a placeholder the sealed
+    // brief will replace — stamped so the World Maps export (§8) never registers
+    // its zones on the user's map. A sealed brief or a {skipped:true} marker makes
+    // the world final. The LOADING GATE (plan §Q3b) now keeps the player out of
+    // this world entirely, so on the normal path nothing is ever played here; the
+    // mark stays as the safety net it also always was — for chats created before
+    // the gate shipped (whose interim saves are real), and for the window between
+    // a brief sealing and the rebuild landing.
+    if (this.briefExpected(meta, chatId)) world.interim = true;
     // A save row is untrusted JSON and `world.zones` is a plain object, so a
     // bare `zones[id]` truthiness test reads straight through Object.prototype.
     // Two demonstrated outcomes: `zone: "constructor"` resolves to a FUNCTION,
@@ -8582,7 +8748,7 @@ PF.save = {
    *  rather than a tail on a 90-line function. Never throws: every branch has a
    *  defaults boot behind it. */
   _rehydratePlayer(saved, world, brief, meta, chatId, sim) {
-    const briefExpected = !brief && meta?.pixelforgeBrief === undefined && this._configGenerate(meta);
+    const briefExpected = this.briefExpected(meta, chatId);
     // 1. PARSE / MIGRATE.
     const parsed = PF.player.parse(saved && typeof saved === "object" ? saved.player : null);
     const player = parsed.player;
@@ -8666,7 +8832,7 @@ PF.save = {
     // the only thing this chat has written.
     PF.quarantine.ensurePresent(core, meta);
     if (!this._lastSerialized || !core.sim || !core.chatId) return;
-    if (meta && typeof meta === "object" && meta.pixelforge == null) {
+    if (meta && typeof meta === "object" && meta[SAVE_META_KEY] == null) {
       this._lastSerialized = null; // force the next flush to actually write
       this._metaSerialized = null; // the cache PATCH dedupes separately in routes mode
       this.markDirty(core);
@@ -8707,6 +8873,14 @@ PF.save = {
     this._row9Failures = 0;
     this._corruptToasted = false;
     this._corruptParked = false;
+    // #5406's own per-chat cache: the ordinal OUR last route write was given.
+    this._putOrdinal = null;
+    // The loading gate belongs to the chat it was armed for; the arriving chat
+    // arms its own (90-element _switchChat) once its metadata has been read.
+    // _generating and _briefCache are deliberately NOT cleared — a generation
+    // in flight for the chat we are leaving must still seal, and the brief it
+    // seals is what stops the next visit generating that world all over again.
+    this.gate = null;
     // The in-memory quarantine bag is per-chat, exactly like the caches above:
     // restore() hydrates the arriving chat's key into it a few lines later.
     PF.quarantine.reset();
@@ -8744,16 +8918,54 @@ PF.save = {
    *    anchorMoved       a PUT of ours echoed an anchor we had not checked
    *    lastOkCheckAt     epoch ms of the last SUCCESSFUL check (row 9 only)
    *    now               epoch ms
+   *    putOrdinal        #5406: the ordinal our last route write was given, or null
+   *    mirrorOrdinal     #5406: the ordinal of the last write that moved OUR
+   *                      metadata key, off the engine's mirror, or null
    *
    *  The result carries the row, the parsed state, and a PER-SITE action map —
    *  `adopt`, `rewind`, `flush` — because the same row means different things at
    *  different sites: row 6 is "the row wins" at adopt and "latch it, do not
    *  rebuild" at a rewind check.
    *
-   *  #5406 SEAM: when the engine's authoritative write ordinal lands, the
-   *  own-commit test at row 5 and the byte comparison at rows 6-8 collapse into
-   *  one comparison of ordinals, and _writeSeq stops being a proxy. Not consumed
-   *  yet — the contract is still moving in review. */
+   *  ── #5406, THE WRITE ORDINAL, CONSUMED ────────────────────────────────────
+   *  The engine now stamps every experience row and every metadata key from ONE
+   *  per-chat monotonic counter (GET and PUT both report `writeOrdinal`; the
+   *  metadata side is mirrored at `metadataWriteOrdinals[<key>]`). It is BETTER
+   *  EVIDENCE INSIDE THE ROWS BELOW and never a row of its own — the rows and
+   *  their per-site actions are exactly what they were — and it is read in two
+   *  places:
+   *
+   *   • ROW 5. The own-commit GATE is unchanged: "a PUT of ours completed while
+   *     this GET was in flight". `_writeSeq` cannot say WHICH row that PUT landed
+   *     on, so the suspicion was unfalsifiable and a perfectly current row was
+   *     discarded whenever a write happened to overlap the read. With both
+   *     ordinals present, a row at or past our own last PUT's ordinal already
+   *     CARRIES that write — there is nothing for it to predate — so the
+   *     classification falls through to the byte comparison instead.
+   *
+   *   • ROWS 6/7/8. The byte comparison still picks the row. The ordinal answers
+   *     the one question bytes cannot (plan §Q2a): when the row differs from a
+   *     baseline that is our own metadata-booted snapshot — row 6's precondition,
+   *     no anchor of ours — is the row AHEAD of that cache or BEHIND it? A row
+   *     strictly behind the mirror's entry for our key is provably older than the
+   *     world we are standing in, and adopting it would throw away a degraded
+   *     session's entire play. That is the §5 row #5406 was filed to close, and it
+   *     classifies ROW 5, whose meaning it already is: this row predates a write
+   *     of ours, so ignore it and let our write proceed over it.
+   *
+   *  THE ANCHOR OUTRANKS THE ORDINAL, and that half is load-bearing. The ordinal
+   *  orders the two STORES; only the anchor orders the TIMELINE. So the mirror
+   *  test fires only when the engine says the row is NOT the reader's own anchor's
+   *  save (`anchorMatched !== true`, i.e. the row came back as the namespace's
+   *  latest fallback and makes no claim about where the reader is). Without that
+   *  guard a swipe-back taken while the tab was closed would stop rewinding the
+   *  world — because a healthy flush ALWAYS leaves the mirror one ordinal ahead of
+   *  the row it paired with, the row being written first.
+   *
+   *  A TIE IS THE SAME WRITE, not a newer one, so both tests compare strictly.
+   *  Either side unorderable — a pre-#5406 engine, a row cloned from before the
+   *  feature, a mirror clobbered by a whole-blob metadata write — and every branch
+   *  falls back to exactly the byte ladder that shipped without it. */
   classify(get, ctx) {
     const c = ctx || {};
     const decide = (row, extra) => ({
@@ -8763,6 +8975,7 @@ PF.save = {
       serialized: null,
       rawState: null,
       anchor: null,
+      writeOrdinal: null,
       ...extra,
     });
 
@@ -8831,13 +9044,25 @@ PF.save = {
     }
 
     const serialized = JSON.stringify(state);
+    // #5406, read defensively at every hop — see ordinalOf and the docstring.
+    const rowOrdinal = ordinalOf(body.writeOrdinal);
+    const putOrdinal = ordinalOf(c.putOrdinal);
+    const mirrorOrdinal = ordinalOf(c.mirrorOrdinal);
 
     // ── 5. OWN-COMMIT SUSPECT ─────────────────────────────────────────────────
     // A PUT of ours completed while this GET was in flight, so the row it read
     // predates the one we just wrote. Adopting it would rewind the world onto a
     // state we superseded ourselves; the cure at a write site is to re-PUT.
+    //
+    // #5406 DISPROVES it where it can: a row whose ordinal is at or past the one
+    // our own last PUT was given already carries that write, so the overlap the
+    // gate detected was with a write this row has. The gate itself is unchanged —
+    // without an overlap the question is not asked at all, and asking it on the
+    // ordinal alone would turn every swipe-back onto an older row into a row 5
+    // and kill the rewind.
     if (typeof c.seqAtIssue === "number" && c.seqAtIssue !== _writeSeq) {
-      return decide(5, { anchor, state, serialized });
+      const carriesOurWrite = rowOrdinal !== null && putOrdinal !== null && rowOrdinal >= putOrdinal;
+      if (!carriesOurWrite) return decide(5, { anchor, state, serialized, writeOrdinal: rowOrdinal });
     }
 
     // ── 6 / 7 / 8. THE BYTE COMPARISON ────────────────────────────────────────
@@ -8857,8 +9082,27 @@ PF.save = {
       c.serverSerialized !== null && c.serverSerialized !== undefined
         ? c.serverSerialized
         : (c.localSerialized ?? null);
-    if (serialized !== baseline) return decide(anchored ? 7 : 6, { anchor, state, serialized });
-    return decide(8, { anchor, state, serialized });
+    if (serialized !== baseline) {
+      // #5406 — WHICH STORE IS LATER? Only where the baseline is our own
+      // metadata-booted snapshot (no anchor of ours), and only where the engine
+      // says this row is not the reader's own anchor's save. Both conditions
+      // matter: with an anchor of our own the row store is already this session's
+      // authority, and a row that IS the visible anchor's save is a timeline claim
+      // that outranks any ordinal. What is left is exactly the case the ordinal
+      // was filed for — a boot whose metadata cache was written by a session that
+      // never reached the row store — and there the row is the stale one.
+      if (
+        !anchored &&
+        body.anchorMatched !== true &&
+        rowOrdinal !== null &&
+        mirrorOrdinal !== null &&
+        rowOrdinal < mirrorOrdinal
+      ) {
+        return decide(5, { anchor, state, serialized, writeOrdinal: rowOrdinal, staleByOrdinal: true });
+      }
+      return decide(anchored ? 7 : 6, { anchor, state, serialized, writeOrdinal: rowOrdinal });
+    }
+    return decide(8, { anchor, state, serialized, writeOrdinal: rowOrdinal });
   },
 
   /** Bookkeeping every site shares: what the last completed check decided, when
@@ -8900,8 +9144,24 @@ PF.save = {
         anchorMoved: this._anchorMoved,
         lastOkCheckAt: this._lastOkCheckAt,
         now: Date.now(),
+        putOrdinal: this._putOrdinal,
+        mirrorOrdinal: this._mirrorOrdinal(core),
       }),
     );
+  },
+
+  /** #5406's mirror entry for OUR metadata key: the ordinal of the last write that
+   *  actually MOVED `pixelforge`. Read off the host's chatMeta, which can lag a
+   *  write of our own — and lagging only ever makes the number SMALLER, so the one
+   *  comparison it feeds errs toward the byte ladder rather than toward silence.
+   *  Every hop is checked: the key can be absent (pre-#5406 engine), a non-object
+   *  (a whole-blob metadata write clobbered it), or hold something that is not a
+   *  usable ordinal. */
+  _mirrorOrdinal(core) {
+    const meta = core && core.host && typeof core.host.chatMeta === "object" ? core.host.chatMeta : null;
+    const mirror = meta && meta[ORDINAL_MIRROR_KEY];
+    if (!mirror || typeof mirror !== "object" || Array.isArray(mirror)) return null;
+    return ordinalOf(Object.prototype.hasOwnProperty.call(mirror, SAVE_META_KEY) ? mirror[SAVE_META_KEY] : null);
   },
 
   _localSerialized(core) {
@@ -8984,6 +9244,10 @@ PF.save = {
 
   async _adoptNow(core) {
     if (!core.chatId || this.mode !== null) return;
+    // THE LOADING GATE holds the PROBE too, not just the write: row 3's adopt
+    // action is "first-write", so probing a gated chat would write the world
+    // nobody has entered up as if it were play. _liftGate is what calls adopt.
+    if (this.gateHolds(core)) return;
     const gen = this._gen ?? 0;
     const chatId = core.chatId;
     const seqAtIssue = _writeSeq;
@@ -9198,6 +9462,10 @@ PF.save = {
 
   async _checkRewindNow(core) {
     if (this.mode !== "routes" || !core.chatId || this._rewindCheckInFlight) return;
+    // Belt and braces behind the gate: a gated chat never reaches routes mode
+    // (adopt is held), but the turn edge fires on host props and the invariant
+    // "nothing touches the world while the gate holds" should not depend on that.
+    if (this.gateHolds(core)) return;
     this._rewindCheckInFlight = true;
     const gen = this._gen ?? 0;
     const chatId = core.chatId;
@@ -9231,6 +9499,10 @@ PF.save = {
   },
 
   markDirty(core) {
+    // THE LOADING GATE (plan §Q3b): a chat that has not entered play emits
+    // nothing. Refused HERE and not merely at the write, so a gated chat arms no
+    // timer either — a world nobody is playing should cost no wakeups.
+    if (this.gateHolds(core)) return;
     if (this._timer) return; // a live timer already covers it — a backoff rung included
     this._timerIsBackoff = false;
     this._timer = setTimeout(() => {
@@ -9247,6 +9519,11 @@ PF.save = {
    *  Throws whatever snapshot/stringify throws — every caller is inside a
    *  guard, and swallowing it here would hide a real serialization bug. */
   _pendingWrite(core) {
+    // THE LOADING GATE, at the one chokepoint every write path passes through:
+    // the debounce, the retry ladder, the chat-switch capture and the last-detach
+    // flush all resolve their payload here, so one refusal covers all four. The
+    // pagehide path builds its own snapshot and carries its own (flushTeardown).
+    if (this.gateHolds(core)) return null;
     const snap = this.snapshot(core);
     if (!snap || !core.chatId) return null;
     const serialized = JSON.stringify(snap);
@@ -9441,7 +9718,7 @@ PF.save = {
         let cacheError = null;
         if (job.metaNeeded) {
           try {
-            await PF.api.patchMetadata(job.chatId, { pixelforge: job.snap }, teardown);
+            await PF.api.patchMetadata(job.chatId, { [SAVE_META_KEY]: job.snap }, teardown);
             landed = true;
             if (fresh()) this._metaSerialized = job.serialized;
           } catch (err) {
@@ -9459,7 +9736,7 @@ PF.save = {
         }
         return;
       }
-      await PF.api.patchMetadata(job.chatId, { pixelforge: job.snap }, teardown);
+      await PF.api.patchMetadata(job.chatId, { [SAVE_META_KEY]: job.snap }, teardown);
       if (fresh()) {
         this._lastSerialized = job.serialized;
         this._metaSerialized = job.serialized;
@@ -9618,6 +9895,12 @@ PF.save = {
    *  as fresh (that freshness was about a different anchor), and a difference
    *  found there takes the rewind path instead of being latched in silence. */
   _noteAnchorEcho(echo) {
+    // #5406 rides the same echo, and it is recorded BEFORE the anchor guard: the
+    // ordinal is the only thing that can tell a row carrying our own last write
+    // from one that predates it, and a route that answered without an anchor
+    // still told us which ordinal our row was given.
+    const ordinal = ordinalOf(echo && typeof echo === "object" ? echo.writeOrdinal : null);
+    if (ordinal !== null) this._putOrdinal = ordinal;
     const anchor =
       echo && typeof echo === "object" && echo.anchor && typeof echo.anchor === "object" ? echo.anchor : null;
     if (!anchor) return;
@@ -9702,6 +9985,11 @@ PF.save = {
    *  alive there and a re-arm is still worth something. */
   flushTeardown(core) {
     if (!core || !core.chatId || !core.sim) return;
+    // THE LOADING GATE. This path does not go through _pendingWrite, so it needs
+    // its own refusal — and it is the path that would matter most: closing the tab
+    // while the world is still generating must not stamp the placeholder world
+    // into the row store on the way out.
+    if (this.gateHolds(core)) return;
     let snap = null;
     let serialized = "";
     try {
@@ -9778,7 +10066,7 @@ PF.save = {
     };
     // Both started before either is awaited.
     const put = routes ? PF.api.putExperienceState(chatId, snap, true) : null;
-    const patch = routes && !pairFits ? null : PF.api.patchMetadata(chatId, { pixelforge: snap }, true);
+    const patch = routes && !pairFits ? null : PF.api.patchMetadata(chatId, { [SAVE_META_KEY]: snap }, true);
     settle(
       put,
       "route save",
@@ -9943,10 +10231,36 @@ PF.Hud = class {
         `${S.chip}opacity:0;transition:opacity 0.25s;z-index:3;pointer-events:none;`,
     });
 
+    // THE LOADING GATE's face (plan §Q3b). Full-surface and pointer-events:auto,
+    // so nothing behind it is clickable while it holds — a chat whose world has
+    // not been generated yet has no world to talk about, no clock worth reading
+    // and nowhere to walk, and every other control is hidden under it. Announced
+    // to a screen reader, because the whole state is "wait, then something
+    // changes" and a silent one is a hung app.
+    this.gateTitle = PF.el("div", {
+      style: "font:700 14px/1.5 inherit;margin-bottom:6px;",
+    });
+    this.gateBody = PF.el("div", {
+      style: "font:12px/1.65 inherit;opacity:0.85;max-width:34ch;margin-bottom:12px;",
+    });
+    this.gateRetry = this._btn("Try again", () => PF.save.retryGeneration(this.core));
+    this.gateEl = PF.el(
+      "div",
+      {
+        style:
+          "position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;" +
+          "text-align:center;padding:24px;box-sizing:border-box;gap:0;pointer-events:auto;z-index:4;" +
+          "background:rgba(12,14,12,0.9);color:#f3efe2;",
+      },
+      [this.gateTitle, this.gateBody, this.gateRetry],
+    );
+    this.gateEl.setAttribute("role", "status");
+    this.gateEl.setAttribute("aria-live", "polite");
+
     this.root = PF.el(
       "div",
       { style: "position:absolute;inset:0;pointer-events:none;font-family:ui-monospace,Consolas,monospace;" },
-      [this.topbar, this.actions, this.dpad, this.travelMenu, this.captionEl, this.toastEl],
+      [this.topbar, this.actions, this.dpad, this.travelMenu, this.captionEl, this.toastEl, this.gateEl],
     );
     rootEl.appendChild(this.root);
     this._toastTimer = 0;
@@ -10056,10 +10370,23 @@ PF.Hud = class {
     if (!sim) return;
     const mode = sim.mode;
     const spatialAvail = PF.spatial.available;
-    if (mode !== this._mode || spatialAvail !== this._spatialAvail) {
+    // The gate's STATE, not merely whether it holds: "generating" and "failed" are
+    // two different screens, and folding them into a boolean would leave the retry
+    // button hidden behind a change the memo below never saw.
+    const gate = PF.save.gateHolds(this.core) ? PF.save.gate.state : null;
+    if (mode !== this._mode || spatialAvail !== this._spatialAvail || gate !== this._gate) {
       this._mode = mode;
       this._spatialAvail = spatialAvail;
-      const inWorld = mode === "walk";
+      this._gate = gate;
+      const inWorld = mode === "walk" && !gate;
+      this.gateEl.style.display = gate ? "flex" : "none";
+      this.gateRetry.style.display = gate === "failed" ? "" : "none";
+      this.gateTitle.textContent = gate === "failed" ? "The world didn't finish being written." : "Writing your world…";
+      this.gateBody.textContent =
+        gate === "failed"
+          ? "Nothing was lost and nothing was decided for you — this chat is exactly as you left it. Try again whenever you like."
+          : "One generation call is shaping the settlement, its people and the places in it. This can take a minute.";
+      this.topbar.style.display = gate ? "none" : "";
       // Replay: the host owns the whole screen. Combat: keep a minimal HUD —
       // the mode is inferred from the narrative gameActiveState, which can flip
       // without any combat UI mounting, so the player must NEVER be left with
@@ -10073,13 +10400,16 @@ PF.Hud = class {
       // In combat, Resume exists only for the NARRATIVE fallback signal (which
       // can flip without any combat UI). With the real Capability API 1.11
       // signal the combat UI owns the screen — no package controls at all.
-      const combatResumeApplies = mode === "combat" && !this.core._combatSignalIsReal;
-      this.resumeBtn.style.display = mode === "dialogue" || combatResumeApplies ? "" : "none";
+      const combatResumeApplies = mode === "combat" && !this.core._combatSignalIsReal && !gate;
+      this.resumeBtn.style.display = (mode === "dialogue" && !gate) || combatResumeApplies ? "" : "none";
       this.resumeBtn.textContent = combatResumeApplies ? "▶ Resume exploring" : "▶ Resume walking";
       this.travelMenu.style.display = "none";
       this.waitMenu.style.display = "none";
-      if (mode === "dialogue") this.toast("Type in the message box below — Resume to keep walking");
+      if (mode === "dialogue" && !gate) this.toast("Type in the message box below — Resume to keep walking");
     }
+    // Nothing below the gate means anything: there is no beat to caption, nobody
+    // to be standing next to, and the clock is not running.
+    if (gate) return;
     // Cutscene caption — writes DOM only when the beat starts or ends.
     const caption = sim.cutscene ? sim.cutscene.text : "";
     if (caption !== this._caption) {
@@ -10335,26 +10665,19 @@ PF.mountSetup = (el, props) => {
     cancelBtn.disabled = true; // mirror the host's mid-launch freeze
     launchBtn.textContent = "Setting up…";
     try {
-      const chatId = await el._pfProps.onLaunch(setupConfig, nameIn.value.trim() || preset.name, undefined, {
+      await el._pfProps.onLaunch(setupConfig, nameIn.value.trim() || preset.name, undefined, {
         gmConnectionId,
       });
-      if (typeof chatId === "string") {
-        // Seed the world state so the first surface load is deterministic. The
-        // default themed world only — generation runs surface-side after
-        // launch and rebuilds the world when the brief lands.
-        const world = PF.world.build(seed, themeSel.value);
-        const sim = new PF.Sim(world);
-        const snap = PF.save.snapshot({ sim, chatId });
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try {
-            await PF.api.patchMetadata(chatId, { pixelforge: snap }, false);
-            break;
-          } catch (err) {
-            if (attempt === 2) console.warn("[pixelforge] world seeding failed; restore will use the config seed", err);
-            else await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
-          }
-        }
-      }
+      // NO WORLD IS SEEDED HERE ANY MORE (plan §Q3b, maintainer ruling #7). The
+      // wizard used to write a default themed snapshot into chat metadata so the
+      // first surface load had something to show while generation ran behind a
+      // toast — and that snapshot WAS the throwaway world the ruling abolished:
+      // the first thing a brand-new chat stored was a save for a world nobody
+      // meant to keep. The surface now holds a loading gate until the brief seals,
+      // so there is nothing to show and nothing to seed, and determinism is
+      // unaffected because simFromSaved re-derives the seed and theme from
+      // `experienceConfig` (PF.save._configSeed/_configTheme) exactly as this
+      // snapshot did. `generate: true` above is the whole handoff.
     } catch (err) {
       errEl.textContent =
         err && err.message ? String(err.message) : "Launch failed — check the connection and try again.";
@@ -10537,9 +10860,17 @@ PF.core = {
     // the timeline-anchored server row to authority — rebuilding if it differs.
     this.sim = PF.save.restore(p.chatMeta ?? {}, p.chatId);
     this.host = p;
-    void PF.save.adopt(this);
-    // 0.4.0 chats without a sealed brief generate one here, non-blocking: the
-    // default world is playable immediately and rebuilds when the brief lands.
+    // THE LOADING GATE (plan §Q3b, maintainer ruling #7). A generate-configured
+    // chat whose brief is not sealed yet does not enter play: the surface shows a
+    // loading state, the sim does not step, no mutator resolves and no save is
+    // emitted, until the brief seals and the world compiles. Armed BEFORE adopt
+    // because adopt's row-3 branch is a write, and a chat that has not been
+    // entered must not have its placeholder world written up as somebody's play.
+    // Legacy and non-generate chats never arm it and play immediately.
+    if (!PF.save.armGate(this, p.chatMeta ?? {})) void PF.save.adopt(this);
+    // Generation runs behind the gate; on success it compiles the world, lifts the
+    // gate and calls adopt itself. On failure the gate offers retry and the chat
+    // stays unsealed, so the next visit arms it again.
     void PF.save.maybeGenerateBrief(this);
     // New chat, new world: drop every cached zone composite — the cache is
     // keyed by zone id alone, so a stale entry would show the previous game.
@@ -10593,7 +10924,10 @@ PF.core = {
     if (typeof fn !== "function" || !this.sim) return;
     try {
       fn({
-        providesPlayerInput: this.sim.mode === "walk",
+        // The gate takes the input claim with it: while it holds there is nothing
+        // to walk in, and leaving the claim up would strand the player with the
+        // classic turn chrome hidden behind a loading panel.
+        providesPlayerInput: this.sim.mode === "walk" && !PF.save.gateHolds(this),
         // Transient: asked only while a cutscene beat runs. The host restores
         // the player's own setting the moment we stop asking, and its own
         // safety rules still outrank us, so this can never trap a player.
@@ -10623,6 +10957,7 @@ PF.core = {
   interact() {
     const sim = this.sim;
     if (!sim || sim.mode !== "walk" || !sim.nearNpc) return;
+    if (PF.save.gateHolds(this)) return; // nobody to talk to in a world still being written
     if (!this.host?.sendMessage) return;
     if (this.host.isStreaming) {
       this.hud?.toast("The story is still being written…");
@@ -10688,6 +11023,7 @@ PF.core = {
     };
     this._keyDown = (ev) => {
       if (!this.sim || !this._mainEl) return;
+      if (PF.save.gateHolds(this)) return; // nothing to walk in yet
       const t = ev.target;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
       const k = ev.key.toLowerCase();
@@ -10759,6 +11095,15 @@ PF.core = {
       this._lastT = t;
       const sim = this.sim;
       if (!sim) return;
+      if (PF.save.gateHolds(this)) {
+        // THE LOADING GATE, ahead of every mode: no step, no clock, no draw. A sim
+        // that stepped behind the loading panel would age a world nobody is in,
+        // dirty itself against a save path that refuses to write, and burn the
+        // cutscene beat before the player ever saw the place.
+        this.render?.ctx.clearRect(0, 0, PF.VW, PF.VH);
+        this.hud?.update();
+        return;
+      }
       if (sim.mode === "replay") {
         // Replay owns the screen: clear so the host visuals show through.
         this.render?.ctx.clearRect(0, 0, PF.VW, PF.VH);

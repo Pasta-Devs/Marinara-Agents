@@ -29,9 +29,20 @@ brief is validated, repaired, and floored (`src/18-brief.js`, spec in `docs/brie
 then sealed into chat metadata; the compiled zones carry the prose the GM sees, metered so it
 never taxes more than one turn.
 
-Generation is an upgrade, never a gate: the chat boots the themed default world instantly and
-rebuilds in place when the brief lands. Any failure — timeout, truncation, provider error, or an
-engine without the route — lands on the themed default world, which plays exactly like 0.3.0.
+**Since 0.11.0 generation is a LOADING GATE, not a background upgrade** (maintainer ruling, S5
+§Q3b). Through 0.10 the chat booted a themed default world instantly and rebuilt in place when the
+brief landed — and the discarded world was real enough to play, so a player could put ten minutes
+into a place that was about to be thrown away. A chat configured to generate now shows a loading
+state until its brief is sealed and its world compiles: the sim does not step, no player-state
+mutator resolves, and no save is written until then.
+
+A generation failure is a **retry screen**, never a default world sealed on the player's behalf:
+nothing is stored, so the chat is exactly as it was and the next visit tries again. Chats that
+never asked for generation — pre-0.4.0 saves, and any chat whose brief was explicitly declined —
+are untouched and play immediately on the themed default world, exactly as they did in 0.3.0. The
+known cost: on an engine whose generation route is missing entirely, every attempt is a transient
+failure and the retry screen is the whole experience — the manifest's `engine.min` is what keeps
+that off a supported install.
 
 Run the validator/compiler regression harness with:
 

@@ -10782,4 +10782,525 @@ await withSavePath(async ({ behavior, makeCore }) => {
   );
 }
 
+// ═══ THE LOADING GATE (S5 slice 5) ═════════════════════════════════════════
+
+// The raw brief a stubbed #5135 call hands back. Deliberately the model's OWN
+// shape (pre-validate): brief.generate runs the shipped ladder over it, so these
+// cases exercise the real seal path rather than a hand-sealed object.
+const gateBriefData = {
+  scale: "village",
+  name: "Fallowmere",
+  prosperity: "modest",
+  backgroundPopulation: 40,
+  situation: "The bridge went in the spring flood and the ford is the only way across.",
+  cast: [
+    { name: "Perrin Quill", role: "innkeep", kind: "host", tint: "amber", home: "Fallowmere", household: 1 },
+    { name: "Wren Ash", role: "miller", kind: "maker", tint: "teal", home: "Fallowmere", household: 2 },
+  ],
+};
+/** Wrap a case that drives generation: stubs the ONE host call the ladder makes
+ *  and puts it back, and clears the two module-level caches the gate keeps so no
+ *  case inherits another's sealed brief or in-flight marker. */
+const withGeneration = async (run) => {
+  const realGenerate = loadedPF.api.postExperienceGeneration;
+  const responses = { post: async () => ({ status: 200, body: { ok: true, data: gateBriefData } }) };
+  let posts = 0;
+  loadedPF.api.postExperienceGeneration = (chatId, body, signal) => {
+    posts += 1;
+    return responses.post(chatId, body, signal);
+  };
+  loadedPF.save._briefCache.clear();
+  loadedPF.save._generating.clear();
+  try {
+    await run({ responses, postCount: () => posts });
+  } finally {
+    loadedPF.api.postExperienceGeneration = realGenerate;
+    loadedPF.save._briefCache.clear();
+    loadedPF.save._generating.clear();
+    loadedPF.save.gate = null;
+  }
+};
+
+// (ar) THE GATE HOLDS PLAY, AND HOLDS IT AT EVERY DOOR.
+// Maintainer ruling #7: a player must never invest in a world that is going to be
+// discarded, so a generate-configured chat whose brief is not sealed does not
+// enter play at all. "Does not enter play" has to mean every door at once — the
+// probe, the debounce, the chat-switch capture, the last-detach flush, pagehide,
+// and every mutator — because the throwaway world's whole failure mode was that
+// each of those looked individually harmless.
+await withSavePath(async ({ calls, armed, behavior, tick, makeCore }) => {
+  await withGeneration(async ({ responses, postCount }) => {
+    const P = loadedPF.player;
+    const meta = { gameSetupConfig: { experienceConfig: { generate: true, seed: 4242, theme: "cozy-village" } } };
+    const core = makeCore("chat-gate", 4242);
+    core.host.chatMeta = meta;
+    core.sim = loadedPF.save.restore(meta, "chat-gate");
+    assert.equal(core.sim.world.interim, true, "the placeholder world is still MARKED — the net under the gate");
+    assert.equal(loadedPF.save.armGate(core, meta), true, "a generate-configured chat with no sealed brief gates");
+    assert.equal(loadedPF.save.gateHolds(core), true, "and the gate holds for this chat");
+    assert.equal(loadedPF.save.gate.state, "generating", "starting in the state the loading panel renders");
+
+    // ── NOT ONE BYTE REACHES THE WIRE ──
+    calls.length = 0;
+    armed.length = 0;
+    core.sim.day += 1;
+    core.sim.dirty = true;
+    loadedPF.save.markDirty(core);
+    assert.equal(armed.length, 0, "markDirty arms no timer at all — a world nobody is in costs no wakeups");
+    assert.equal(loadedPF.save.captureFlush(core), null, "a chat switch captures nothing to write");
+    await loadedPF.save.flush(core, false);
+    await loadedPF.save.flush(core, true); // the last-detach flush
+    loadedPF.save.flushTeardown(core); // pagehide, which builds its own snapshot
+    await loadedPF.save.adopt(core);
+    await loadedPF.save.checkRewind(core);
+    await tick();
+    assert.deepEqual(calls, [], "nothing went out: not the probe, not the debounce, not the detach, not pagehide");
+    assert.equal(loadedPF.save.mode, null, "and the routes probe never ran, so no mode was even chosen");
+
+    // ── NO MUTATOR RESOLVES, EACH REFUSING IN ITS OWN DOCUMENTED SHAPE ──
+    const refusals = [
+      ["grant", P.grant(core, "apple", 2), 0],
+      ["take", P.take(core, "apple", 1), false],
+      ["award", P.award(core, { money: 10, xp: 5, verb: "fishing" }), null],
+      ["equip", P.equip(core, "fishing", "tool", { t: "rod", k: "fine" }), false],
+      ["bump", P.bump(core, "village", "Someone", { d: 2, s: "a line" }), null],
+      ["quest", P.quest(core, "accept", { id: "q1", g: "z1|Someone", verb: "fishing", target: "fish", n: 2 }), false],
+      ["log", P.log(core, "a thing happened", 3), false],
+      ["discover", P.discover(core, { p: "z2", e: 0, d: 0 }), false],
+      ["setHome", P.setHome(core, "inn"), false],
+    ];
+    for (const [verb, got, want] of refusals) {
+      assert.deepEqual(got, want, `${verb}() refuses behind the gate with its documented value`);
+    }
+    const untouched = P.get(core);
+    assert.deepEqual(untouched.pouch, { money: 0, items: [] }, "and the block is exactly as it booted");
+    assert.deepEqual(untouched.rel, {}, "no relationship rows");
+    assert.deepEqual(untouched.ledger.lines, [], "no ledger lines");
+    assert.equal(untouched.home, null, "and no home");
+
+    // ── THE BRIEF SEALS, AND ONLY THEN DOES ANYTHING HAPPEN ──
+    behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+    calls.length = 0;
+    armed.length = 0;
+    await loadedPF.save.maybeGenerateBrief(core);
+    await tick();
+    assert.equal(postCount(), 1, "exactly one host generation call");
+    assert.ok(
+      calls.find((c) => c.kind === "patch" && c.patch.pixelforgeBrief),
+      "the sealed brief is stored under its own key",
+    );
+    assert.equal(loadedPF.save.gate, null, "the gate lifts");
+    assert.equal(loadedPF.save.gateHolds(core), false, "…for this chat");
+    assert.equal(core.sim.world.brieved, true, "onto the world the brief describes");
+    assert.equal(core.sim.world.interim, undefined, "which is not a throwaway, so the mark is gone");
+    assert.equal(loadedPF.save.mode, "routes", "adopt ran on the way out of the gate, not before it");
+    assert.equal(P.grant(core, "apple", 2), 2, "and the mutators answer again");
+
+    // …and the first save of the chat's life is the compiled world, not the
+    // placeholder: the debounce the lift armed is the one that carries it.
+    const debounce = armed.find((t) => t.ms === 2500);
+    assert.ok(debounce, "the lift arms an ordinary debounce");
+    calls.length = 0;
+    debounce.fn();
+    await loadedPF.save._flushChain;
+    const wrote = calls.find((c) => c.kind === "put");
+    assert.ok(wrote, "which writes");
+    assert.equal(wrote.state.seed, core.sim.world.seed, "carrying the compiled world");
+
+    // ── A FAILED GENERATION IS A RETRY SCREEN, NEVER A SEALED DEFAULT ──
+    loadedPF.save.reset();
+    loadedPF.save._briefCache.clear();
+    const core2 = makeCore("chat-gate-fail", 909);
+    core2.host.chatMeta = { gameSetupConfig: { experienceConfig: { generate: true, seed: 909 } } };
+    core2.sim = loadedPF.save.restore(core2.host.chatMeta, "chat-gate-fail");
+    assert.equal(loadedPF.save.armGate(core2, core2.host.chatMeta), true, "gated");
+    calls.length = 0;
+    // 503 is the ladder's transient verdict: it returns null rather than sealing
+    // themed defaults, which is exactly the outcome the gate must not paper over.
+    responses.post = async () => ({ status: 503, body: null });
+    await loadedPF.save.maybeGenerateBrief(core2);
+    await tick();
+    assert.equal(loadedPF.save.gate.state, "failed", "the gate shows its failure state");
+    assert.equal(loadedPF.save.gate.attempts, 1, "counting the attempt");
+    assert.equal(
+      calls.filter((c) => c.kind === "patch").length,
+      0,
+      "and NOTHING was sealed — no default world decided on the player's behalf",
+    );
+    assert.equal(loadedPF.save.gateHolds(core2), true, "play is still held");
+    assert.equal(loadedPF.player.grant(core2, "apple", 1), 0, "…mutators included");
+    // …and because nothing was written, the chat is still exactly a chat waiting
+    // for a brief: the next visit arms the gate again and tries again on its own.
+    // That is the whole never-a-bricked-chat argument, and it is a property of the
+    // stored state rather than of anything this session remembers.
+    assert.equal(
+      loadedPF.save.briefExpected(core2.host.chatMeta, "chat-gate-fail"),
+      true,
+      "a failed generation leaves the chat in the state that re-arms the gate on the next visit",
+    );
+
+    // The retry is a real retry: same chat, same gate, one more host call.
+    responses.post = async () => ({ status: 200, body: { ok: true, data: gateBriefData } });
+    assert.equal(loadedPF.save.retryGeneration(core2), true, "the failure screen's button re-runs generation");
+    assert.equal(loadedPF.save.gate.state, "generating", "flipping the panel back synchronously");
+    for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
+    assert.equal(loadedPF.save.gate, null, "and the retry seals it");
+    assert.equal(postCount(), 3, "one call for the failure, one for the retry, on top of the first chat's");
+
+    // ── THE LIFT COMES BEFORE THE DIRTY FLAG, AND THIS IS WHERE THAT SHOWS ──
+    // markDirty refuses while the gate holds, so arming the save first would arm
+    // nothing. On the routes path adopt covers for it (its first-write branch
+    // dirties the world itself), which is exactly why that path cannot pin the
+    // ordering. An engine with no experience-state route picks metadata mode and
+    // returns without dirtying anything, so the trailing markDirty in
+    // maybeGenerateBrief is the only thing that will ever carry the compiled
+    // world to disk.
+    loadedPF.save.reset();
+    loadedPF.save._briefCache.clear();
+    const legacyEngine = makeCore("chat-gate-legacy", 5150);
+    legacyEngine.host.chatMeta = { gameSetupConfig: { experienceConfig: { generate: true, seed: 5150 } } };
+    legacyEngine.sim = loadedPF.save.restore(legacyEngine.host.chatMeta, "chat-gate-legacy");
+    assert.equal(loadedPF.save.armGate(legacyEngine, legacyEngine.host.chatMeta), true, "gated");
+    behavior.get = async () => ({ available: false, status: 404 }); // pre-#5102 engine
+    calls.length = 0;
+    armed.length = 0;
+    await loadedPF.save.maybeGenerateBrief(legacyEngine);
+    await tick();
+    assert.equal(loadedPF.save.gate, null, "the brief seals and the gate lifts");
+    assert.equal(loadedPF.save.mode, "metadata", "on an engine with no experience-state route");
+    const onlyDebounce = armed.find((t) => t.ms === 2500);
+    assert.ok(onlyDebounce, "and the lift's own debounce is armed — nothing else here would write this world");
+    calls.length = 0;
+    onlyDebounce.fn();
+    await loadedPF.save._flushChain;
+    assert.ok(
+      calls.find((c) => c.kind === "patch" && c.patch.pixelforge),
+      "which carries the compiled world to the metadata key",
+    );
+
+    // ── AND A CHAT THAT IS NOT WAITING FOR A BRIEF NEVER GATES ──
+    for (const [label, chatMeta] of [
+      ["a legacy chat with no config at all", {}],
+      ["a chat that never asked for generation", { gameSetupConfig: { experienceConfig: { seed: 5 } } }],
+      [
+        "a chat whose generation was declined",
+        { gameSetupConfig: { experienceConfig: { generate: true } }, pixelforgeBrief: { skipped: true } },
+      ],
+    ]) {
+      loadedPF.save.reset();
+      const plain = makeCore("chat-plain", 77);
+      plain.host.chatMeta = chatMeta;
+      assert.equal(loadedPF.save.armGate(plain, chatMeta), false, `${label} plays immediately`);
+    }
+  });
+});
+
+// (as) THE GATE IS ESCAPE-SAFE IN BOTH DIRECTIONS.
+// Leaving a chat while its world is being written is the ordinary thing to do
+// with a minute-long wait on screen, and it used to have two bad ends. With one
+// in-flight FLAG, the chat you arrived at found generation "already running",
+// returned immediately, and sat behind a gate with nothing behind it — a bricked
+// chat made by walking away from a different one. And a generation that landed
+// while you were elsewhere could not patch that chat's host metadata, so coming
+// back read a chat that still looked unsealed and generated the world a SECOND
+// time — a wasted host call and a different world than the one already stored.
+await withSavePath(async ({ tick, makeCore }) => {
+  await withGeneration(async ({ responses, postCount }) => {
+    // ONE core object for the whole dance, because the surface has exactly one
+    // (PF.core): a chat switch REASSIGNS chatId/sim/host on it rather than making
+    // a new one, and every fence under test is about that reassignment. Separate
+    // per-chat objects would let a stale completion "succeed" against an object
+    // nobody is looking at and prove nothing.
+    const core = makeCore("chat-away-a", 31);
+    const enter = (chatId, meta) => {
+      // What 90-element's _switchChat does, in the same order.
+      loadedPF.save.reset();
+      core.chatId = chatId;
+      core.sim = loadedPF.save.restore(meta, chatId);
+      core.host.chatMeta = meta;
+      return loadedPF.save.armGate(core, meta);
+    };
+    const metaA = { gameSetupConfig: { experienceConfig: { generate: true, seed: 31, theme: "cozy-village" } } };
+    const metaB = {};
+    let release;
+    const held = new Promise((resolve) => (release = resolve));
+    responses.post = async () => {
+      await held;
+      return { status: 200, body: { ok: true, data: gateBriefData } };
+    };
+
+    // Chat A gates and starts generating.
+    assert.equal(enter("chat-away-a", metaA), true, "A gates");
+    void loadedPF.save.maybeGenerateBrief(core);
+    await tick();
+    assert.equal(postCount(), 1, "and its one call is in flight");
+
+    // The player leaves for a chat that is not waiting for anything.
+    assert.equal(enter("chat-away-b", metaB), false, "B is a legacy chat and plays at once");
+    assert.equal(loadedPF.save.gate, null, "leaving cleared the gate with the rest of the per-chat state");
+    await loadedPF.save.maybeGenerateBrief(core);
+    assert.equal(postCount(), 1, "B starts no generation of its own — the in-flight set is keyed by chat");
+    assert.equal(loadedPF.save.gateHolds(core), false, "and A's in-flight call does not gate B");
+
+    // …and a chat that IS waiting for a brief gets its own call while A's is
+    // still in flight. This is where ONE in-flight flag bricked a chat by proxy:
+    // D gated, asked for generation, was told one was already running, and sat
+    // behind a loading panel with nothing at all behind it — a chat made
+    // unplayable by walking away from a different one.
+    const metaD = { gameSetupConfig: { experienceConfig: { generate: true, seed: 34, theme: "cozy-village" } } };
+    responses.post = async () => ({ status: 200, body: { ok: true, data: gateBriefData } });
+    assert.equal(enter("chat-away-d", metaD), true, "D gates");
+    await loadedPF.save.maybeGenerateBrief(core);
+    assert.equal(postCount(), 2, "and starts a call of its own, A's notwithstanding");
+    assert.equal(loadedPF.save.gate, null, "so D's gate lifts on D's own brief");
+    assert.equal(core.sim.world.brieved, true, "onto D's compiled world");
+
+    // Back to B, so the player is elsewhere when A finally lands.
+    assert.equal(enter("chat-away-b", metaB), false, "B still plays at once");
+
+    // A's generation lands while the player is in B: it seals, and it must not
+    // touch the world the player is actually standing in.
+    release();
+    for (let i = 0; i < 50 && !loadedPF.save._briefCache.has("chat-away-a"); i++) await tick();
+    assert.equal(loadedPF.save._briefCache.has("chat-away-a"), true, "A's brief is sealed and cached");
+    assert.equal(core.chatId, "chat-away-b", "the player is still in B");
+    assert.equal(core.sim.world.brieved, undefined, "and B's world is untouched by A's brief landing");
+
+    // Back to A. The host's chatMeta has NOT caught up — it is the same object it
+    // always was — so the session cache is the only thing that knows.
+    assert.equal(enter("chat-away-a", metaA), false, "coming back does not re-arm the gate");
+    assert.equal(core.sim.world.brieved, true, "because the world that was already sealed compiles");
+    assert.equal(core.sim.world.interim, undefined, "not a placeholder");
+    await loadedPF.save.maybeGenerateBrief(core);
+    assert.equal(postCount(), 2, "and the world is NOT generated a second time");
+
+    // The other direction: away and back while the call is STILL in flight. The
+    // gate re-arms, no second call starts, and the one in flight lifts it.
+    loadedPF.save._briefCache.clear();
+    loadedPF.save._generating.clear();
+    let release2;
+    const held2 = new Promise((resolve) => (release2 = resolve));
+    responses.post = async () => {
+      await held2;
+      return { status: 200, body: { ok: true, data: gateBriefData } };
+    };
+    const metaC = { gameSetupConfig: { experienceConfig: { generate: true, seed: 33, theme: "cozy-village" } } };
+    assert.equal(enter("chat-away-c", metaC), true, "C gates");
+    void loadedPF.save.maybeGenerateBrief(core);
+    await tick();
+    const startedWith = postCount();
+    enter("chat-away-b", metaB);
+    assert.equal(enter("chat-away-c", metaC), true, "coming back mid-generation gates again");
+    await loadedPF.save.maybeGenerateBrief(core);
+    assert.equal(postCount(), startedWith, "without starting a second call");
+    assert.equal(loadedPF.save.gate.state, "generating", "and the panel still says so");
+    release2();
+    for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
+    assert.equal(loadedPF.save.gate, null, "the call already in flight lifts the gate it came back to");
+    assert.equal(core.sim.world.brieved, true, "on the chat the player is actually looking at");
+  });
+});
+
+// (at) #5406: THE WRITE ORDINAL, CONSUMED — AND EVERY FALLBACK PINNED.
+// The engine now stamps experience rows and metadata keys from one per-chat
+// counter (GET/PUT report `writeOrdinal`; metadata is mirrored at
+// metadataWriteOrdinals[<key>]). It is better evidence INSIDE the rows that
+// already arbitrate freshness, never a row of its own — so this case is half
+// "the ordinal changes the verdict where it should" and half "and nowhere else".
+{
+  const ladder = (probe, ctx) =>
+    loadedPF.save.classify(
+      { failed: false, probe },
+      { serverSerialized: null, localSerialized: '{"mine":1}', game: 1, now: Date.now(), ...ctx },
+    );
+  const row = (state, body) => ({ available: true, status: 200, body: { exists: true, state, ...body } });
+  const differs = { v: 1, someone: "else" };
+
+  // ── ROW 5: THE ORDINAL DISPROVES AN OWN-COMMIT SUSPICION ──
+  // The gate is unchanged — a PUT of ours completed while this GET was in flight —
+  // but _writeSeq cannot say WHICH row that PUT landed on, so the suspicion was
+  // unfalsifiable and a current row was thrown away whenever a write overlapped a
+  // read. A row at or past our own PUT's ordinal already carries that write.
+  assert.equal(
+    ladder(row(differs, { writeOrdinal: 12 }), { seqAtIssue: -1, putOrdinal: 12 }).row,
+    6,
+    "a row carrying our own last write is not a suspect — tie is the same write",
+  );
+  assert.equal(
+    ladder(row(differs, { writeOrdinal: 13 }), { seqAtIssue: -1, putOrdinal: 12 }).row,
+    6,
+    "and neither is one past it",
+  );
+  assert.equal(
+    ladder(row(differs, { writeOrdinal: 11 }), { seqAtIssue: -1, putOrdinal: 12 }).row,
+    5,
+    "a row BEHIND our own last write still is",
+  );
+  for (const [label, probe, ctx] of [
+    ["a pre-#5406 engine sends no ordinal at all", row(differs), { seqAtIssue: -1, putOrdinal: 12 }],
+    [
+      "an engine that sends null for a legacy row",
+      row(differs, { writeOrdinal: null }),
+      { seqAtIssue: -1, putOrdinal: 12 },
+    ],
+    ["a row from before the feature, cloned", row(differs, { writeOrdinal: 0 }), { seqAtIssue: -1, putOrdinal: 12 }],
+    ["a value that is not an ordinal", row(differs, { writeOrdinal: "12" }), { seqAtIssue: -1, putOrdinal: 12 }],
+    ["and our own side missing", row(differs, { writeOrdinal: 12 }), { seqAtIssue: -1 }],
+  ]) {
+    assert.equal(ladder(probe, ctx).row, 5, `${label}: row 5 stands, byte-identically to before #5406`);
+  }
+
+  // ── ROWS 6/7/8: WHICH STORE IS LATER ──
+  // The case #5406 was filed for (plan §5): a session that degraded to metadata
+  // writes played on, the row store never saw any of it, and the next boot's
+  // "the row wins" threw the whole session away.
+  const stale = ladder(row(differs, { writeOrdinal: 40, anchorMatched: false }), { mirrorOrdinal: 57 });
+  assert.equal(stale.row, 5, "a row strictly behind our metadata key's ordinal is the older store");
+  assert.equal(stale.adopt, "ignore", "so boot does not rebuild onto it");
+  assert.equal(stale.anchorCache, false, "and it never becomes the anchor");
+  assert.equal(stale.flush, "proceed", "while our own newer world writes straight over it");
+  assert.equal(stale.writeOrdinal, 40, "the ordinal rides on the decision for the caller to read");
+
+  // THE ANCHOR OUTRANKS THE ORDINAL, and this is the assertion that says so. A
+  // healthy flush ALWAYS leaves the mirror one ahead of the row it paired with
+  // (the row is written first), so without this guard a swipe-back taken while
+  // the tab was closed would stop rewinding the world — every boot would read
+  // "metadata is newer" and refuse the row that IS the story's current point.
+  assert.equal(
+    ladder(row(differs, { writeOrdinal: 40, anchorMatched: true }), { mirrorOrdinal: 57 }).row,
+    6,
+    "a row that IS the visible anchor's own save is a timeline claim, and it still wins at adopt",
+  );
+  assert.equal(
+    ladder(row(differs, { writeOrdinal: 57, anchorMatched: false }), { mirrorOrdinal: 57 }).row,
+    6,
+    "a tie is the same write, not an older one",
+  );
+  assert.equal(
+    ladder(row(differs, { writeOrdinal: 90, anchorMatched: false }), { mirrorOrdinal: 57 }).row,
+    6,
+    "and a row AHEAD of the mirror is the newer store — which is what row 6 already does",
+  );
+  assert.equal(
+    ladder(row(differs, { writeOrdinal: 40, anchorMatched: false }), {
+      mirrorOrdinal: 57,
+      serverSerialized: '{"was":1}',
+    }).row,
+    7,
+    "with an anchor of our own the row store is already this session's authority — row 7 is untouched",
+  );
+  assert.equal(
+    ladder(row(differs, { writeOrdinal: 40, anchorMatched: false }), { mirrorOrdinal: 57, anchorMoved: true }).row,
+    7,
+    "…and so is the anchor-moved path that forces it",
+  );
+  assert.equal(
+    ladder(row({ mine: 1 }, { writeOrdinal: 40, anchorMatched: false }), { mirrorOrdinal: 57 }).row,
+    8,
+    "identical bytes are not a conflict to arbitrate, whatever the ordinals say",
+  );
+  for (const [label, body, ctx] of [
+    ["no ordinal on the row", { anchorMatched: false }, { mirrorOrdinal: 57 }],
+    ["no mirror (pre-#5406 metadata)", { writeOrdinal: 40, anchorMatched: false }, {}],
+    ["a mirror clobbered to a non-number", { writeOrdinal: 40, anchorMatched: false }, { mirrorOrdinal: "57" }],
+  ]) {
+    assert.equal(ladder(row(differs, body), ctx).row, 6, `${label}: the byte ladder decides, exactly as before`);
+  }
+
+  // THE MIRROR IS READ OFF THE HOST'S METADATA, defensively at every hop.
+  const mirrorOf = (chatMeta) => loadedPF.save._mirrorOrdinal({ host: { chatMeta } });
+  assert.equal(mirrorOf({ metadataWriteOrdinals: { pixelforge: 57 } }), 57, "our key's entry");
+  assert.equal(mirrorOf({ metadataWriteOrdinals: { gameMap: 57 } }), null, "somebody else's is not ours");
+  assert.equal(
+    mirrorOf({ metadataWriteOrdinals: { pixelforge: -1 } }),
+    null,
+    "and neither is a value the server would ignore",
+  );
+  for (const meta of [
+    {},
+    { metadataWriteOrdinals: null },
+    { metadataWriteOrdinals: [] },
+    { metadataWriteOrdinals: 4 },
+  ]) {
+    assert.equal(mirrorOf(meta), null, `a mirror shaped ${JSON.stringify(meta)} is simply unorderable`);
+  }
+  assert.equal(loadedPF.save._mirrorOrdinal(undefined), null, "…and so is no core at all");
+}
+
+// (at2) …DRIVEN: THE DEGRADED SESSION'S PLAY SURVIVES ITS NEXT BOOT.
+// The §5 row this closes, end to end through adopt(): a previous session pinned
+// to metadata mode wrote its play to the metadata key only, so the route row is
+// an older world. Before #5406 "the route row always wins at adopt" (§Q2a) had no
+// alternative and the session was lost with a toast.
+await withSavePath(async ({ behavior, makeCore }) => {
+  const core = makeCore("chat-degraded", 6161);
+  core.sim.day = 30; // the play the degraded session did
+  core.host.chatMeta = { metadataWriteOrdinals: { pixelforge: 57 } };
+  const oursBefore = core.sim.world;
+  // The row the last ROUTES-mode session left behind, two dozen ordinals ago, and
+  // returned as the namespace's latest fallback rather than the reader's anchor.
+  behavior.get = async () => ({
+    available: true,
+    status: 200,
+    body: {
+      exists: true,
+      state: { v: 1, seed: 6161, theme: "cozy-village", zone: "inn", day: 4, player: { v: 1, game: 1 } },
+      writeOrdinal: 33,
+      anchorMatched: false,
+    },
+  });
+  await loadedPF.save.adopt(core);
+  assert.equal(loadedPF.save.mode, "routes", "the route is there and this is a routes-mode boot");
+  assert.equal(core.sim.world, oursBefore, "but the older row does NOT replace the world we booted from metadata");
+  assert.equal(core.sim.day, 30, "the degraded session's play is still here");
+  assert.deepEqual(core.toasts, [], "and nothing announced a rewind that did not happen");
+  assert.equal(loadedPF.save._serverSerialized, null, "the stale row never became the anchor");
+  assert.equal(loadedPF.save._lastSerialized, null, "…and the next write is forced, so our world goes up over it");
+
+  // The SAME row at the reader's own anchor is the opposite verdict: that is a
+  // timeline claim, and §Q2a still hands it the world.
+  loadedPF.save.reset();
+  const swiped = makeCore("chat-degraded", 6161);
+  swiped.sim.day = 30;
+  swiped.host.chatMeta = { metadataWriteOrdinals: { pixelforge: 57 } };
+  behavior.get = async () => ({
+    available: true,
+    status: 200,
+    body: {
+      exists: true,
+      state: { v: 1, seed: 6161, theme: "cozy-village", zone: "inn", day: 4, player: { v: 1, game: 1 } },
+      writeOrdinal: 33,
+      anchorMatched: true,
+    },
+  });
+  await loadedPF.save.adopt(swiped);
+  assert.equal(swiped.sim.zoneId, "inn", "a swipe-back taken while the tab was closed still rewinds the world");
+  assert.deepEqual(swiped.toasts, ["The world rewound with the story."], "and still says so");
+});
+
+// (at3) THE PUT ECHO CARRIES THE ORDINAL, AND IT IS PER-CHAT.
+await withSavePath(async ({ behavior, makeCore }) => {
+  loadedPF.save.mode = "routes";
+  const core = makeCore("chat-putordinal", 7171);
+  behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+  behavior.put = async () => ({ ok: true, id: "row1", anchor: { messageId: "m1", swipeIndex: 0 }, writeOrdinal: 88 });
+  await loadedPF.save.flush(core, false);
+  assert.equal(loadedPF.save._putOrdinal, 88, "the PUT's own ordinal is recorded off the echo");
+
+  // An echo with no anchor in it still tells us the ordinal — the anchor guard
+  // used to return before anything else on the echo could be read.
+  behavior.put = async () => ({ ok: true, id: "row2", writeOrdinal: 89 });
+  core.sim.day += 1;
+  await loadedPF.save.flush(core, false);
+  assert.equal(loadedPF.save._putOrdinal, 89, "…even when the route answered without one");
+
+  behavior.put = async () => ({ ok: true, id: "row3" });
+  core.sim.day += 1;
+  await loadedPF.save.flush(core, false);
+  assert.equal(loadedPF.save._putOrdinal, 89, "and a pre-#5406 echo leaves the last known ordinal alone");
+
+  loadedPF.save.reset();
+  assert.equal(loadedPF.save._putOrdinal, null, "it is per-chat, so the switch clears it");
+});
+
 console.log("brief validator + compiler: all cases passed");

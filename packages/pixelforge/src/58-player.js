@@ -906,6 +906,12 @@ PF.player = {
   _live(core, gen) {
     if (!core || typeof core !== "object") return null;
     if (gen !== undefined && gen !== (PF.save?._gen ?? 0)) return null;
+    // THE LOADING GATE (plan §Q3b): a world nobody has entered has no player in
+    // it. Refused HERE rather than at nine call sites, which is what makes "no
+    // mutator is reachable while the gate holds" true of every verb at once —
+    // including the ones written after the gate. Each verb's documented refusal
+    // value is what a caller gets, so nothing has to learn a new failure shape.
+    if (PF.save?.gateHolds?.(core)) return null;
     const sim = core.sim;
     if (!sim) return null;
     if (!sim.player || typeof sim.player !== "object" || Array.isArray(sim.player)) sim.player = this.defaultPlayer();

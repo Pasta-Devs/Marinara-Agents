@@ -167,9 +167,17 @@ PF.core = {
     // the timeline-anchored server row to authority — rebuilding if it differs.
     this.sim = PF.save.restore(p.chatMeta ?? {}, p.chatId);
     this.host = p;
-    void PF.save.adopt(this);
-    // 0.4.0 chats without a sealed brief generate one here, non-blocking: the
-    // default world is playable immediately and rebuilds when the brief lands.
+    // THE LOADING GATE (plan §Q3b, maintainer ruling #7). A generate-configured
+    // chat whose brief is not sealed yet does not enter play: the surface shows a
+    // loading state, the sim does not step, no mutator resolves and no save is
+    // emitted, until the brief seals and the world compiles. Armed BEFORE adopt
+    // because adopt's row-3 branch is a write, and a chat that has not been
+    // entered must not have its placeholder world written up as somebody's play.
+    // Legacy and non-generate chats never arm it and play immediately.
+    if (!PF.save.armGate(this, p.chatMeta ?? {})) void PF.save.adopt(this);
+    // Generation runs behind the gate; on success it compiles the world, lifts the
+    // gate and calls adopt itself. On failure the gate offers retry and the chat
+    // stays unsealed, so the next visit arms it again.
     void PF.save.maybeGenerateBrief(this);
     // New chat, new world: drop every cached zone composite — the cache is
     // keyed by zone id alone, so a stale entry would show the previous game.
@@ -223,7 +231,10 @@ PF.core = {
     if (typeof fn !== "function" || !this.sim) return;
     try {
       fn({
-        providesPlayerInput: this.sim.mode === "walk",
+        // The gate takes the input claim with it: while it holds there is nothing
+        // to walk in, and leaving the claim up would strand the player with the
+        // classic turn chrome hidden behind a loading panel.
+        providesPlayerInput: this.sim.mode === "walk" && !PF.save.gateHolds(this),
         // Transient: asked only while a cutscene beat runs. The host restores
         // the player's own setting the moment we stop asking, and its own
         // safety rules still outrank us, so this can never trap a player.
@@ -253,6 +264,7 @@ PF.core = {
   interact() {
     const sim = this.sim;
     if (!sim || sim.mode !== "walk" || !sim.nearNpc) return;
+    if (PF.save.gateHolds(this)) return; // nobody to talk to in a world still being written
     if (!this.host?.sendMessage) return;
     if (this.host.isStreaming) {
       this.hud?.toast("The story is still being written…");
@@ -318,6 +330,7 @@ PF.core = {
     };
     this._keyDown = (ev) => {
       if (!this.sim || !this._mainEl) return;
+      if (PF.save.gateHolds(this)) return; // nothing to walk in yet
       const t = ev.target;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
       const k = ev.key.toLowerCase();
@@ -389,6 +402,15 @@ PF.core = {
       this._lastT = t;
       const sim = this.sim;
       if (!sim) return;
+      if (PF.save.gateHolds(this)) {
+        // THE LOADING GATE, ahead of every mode: no step, no clock, no draw. A sim
+        // that stepped behind the loading panel would age a world nobody is in,
+        // dirty itself against a save path that refuses to write, and burn the
+        // cutscene beat before the player ever saw the place.
+        this.render?.ctx.clearRect(0, 0, PF.VW, PF.VH);
+        this.hud?.update();
+        return;
+      }
       if (sim.mode === "replay") {
         // Replay owns the screen: clear so the host visuals show through.
         this.render?.ctx.clearRect(0, 0, PF.VW, PF.VH);

@@ -105,10 +105,36 @@ PF.Hud = class {
         `${S.chip}opacity:0;transition:opacity 0.25s;z-index:3;pointer-events:none;`,
     });
 
+    // THE LOADING GATE's face (plan §Q3b). Full-surface and pointer-events:auto,
+    // so nothing behind it is clickable while it holds — a chat whose world has
+    // not been generated yet has no world to talk about, no clock worth reading
+    // and nowhere to walk, and every other control is hidden under it. Announced
+    // to a screen reader, because the whole state is "wait, then something
+    // changes" and a silent one is a hung app.
+    this.gateTitle = PF.el("div", {
+      style: "font:700 14px/1.5 inherit;margin-bottom:6px;",
+    });
+    this.gateBody = PF.el("div", {
+      style: "font:12px/1.65 inherit;opacity:0.85;max-width:34ch;margin-bottom:12px;",
+    });
+    this.gateRetry = this._btn("Try again", () => PF.save.retryGeneration(this.core));
+    this.gateEl = PF.el(
+      "div",
+      {
+        style:
+          "position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;" +
+          "text-align:center;padding:24px;box-sizing:border-box;gap:0;pointer-events:auto;z-index:4;" +
+          "background:rgba(12,14,12,0.9);color:#f3efe2;",
+      },
+      [this.gateTitle, this.gateBody, this.gateRetry],
+    );
+    this.gateEl.setAttribute("role", "status");
+    this.gateEl.setAttribute("aria-live", "polite");
+
     this.root = PF.el(
       "div",
       { style: "position:absolute;inset:0;pointer-events:none;font-family:ui-monospace,Consolas,monospace;" },
-      [this.topbar, this.actions, this.dpad, this.travelMenu, this.captionEl, this.toastEl],
+      [this.topbar, this.actions, this.dpad, this.travelMenu, this.captionEl, this.toastEl, this.gateEl],
     );
     rootEl.appendChild(this.root);
     this._toastTimer = 0;
@@ -218,10 +244,23 @@ PF.Hud = class {
     if (!sim) return;
     const mode = sim.mode;
     const spatialAvail = PF.spatial.available;
-    if (mode !== this._mode || spatialAvail !== this._spatialAvail) {
+    // The gate's STATE, not merely whether it holds: "generating" and "failed" are
+    // two different screens, and folding them into a boolean would leave the retry
+    // button hidden behind a change the memo below never saw.
+    const gate = PF.save.gateHolds(this.core) ? PF.save.gate.state : null;
+    if (mode !== this._mode || spatialAvail !== this._spatialAvail || gate !== this._gate) {
       this._mode = mode;
       this._spatialAvail = spatialAvail;
-      const inWorld = mode === "walk";
+      this._gate = gate;
+      const inWorld = mode === "walk" && !gate;
+      this.gateEl.style.display = gate ? "flex" : "none";
+      this.gateRetry.style.display = gate === "failed" ? "" : "none";
+      this.gateTitle.textContent = gate === "failed" ? "The world didn't finish being written." : "Writing your world…";
+      this.gateBody.textContent =
+        gate === "failed"
+          ? "Nothing was lost and nothing was decided for you — this chat is exactly as you left it. Try again whenever you like."
+          : "One generation call is shaping the settlement, its people and the places in it. This can take a minute.";
+      this.topbar.style.display = gate ? "none" : "";
       // Replay: the host owns the whole screen. Combat: keep a minimal HUD —
       // the mode is inferred from the narrative gameActiveState, which can flip
       // without any combat UI mounting, so the player must NEVER be left with
@@ -235,13 +274,16 @@ PF.Hud = class {
       // In combat, Resume exists only for the NARRATIVE fallback signal (which
       // can flip without any combat UI). With the real Capability API 1.11
       // signal the combat UI owns the screen — no package controls at all.
-      const combatResumeApplies = mode === "combat" && !this.core._combatSignalIsReal;
-      this.resumeBtn.style.display = mode === "dialogue" || combatResumeApplies ? "" : "none";
+      const combatResumeApplies = mode === "combat" && !this.core._combatSignalIsReal && !gate;
+      this.resumeBtn.style.display = (mode === "dialogue" && !gate) || combatResumeApplies ? "" : "none";
       this.resumeBtn.textContent = combatResumeApplies ? "▶ Resume exploring" : "▶ Resume walking";
       this.travelMenu.style.display = "none";
       this.waitMenu.style.display = "none";
-      if (mode === "dialogue") this.toast("Type in the message box below — Resume to keep walking");
+      if (mode === "dialogue" && !gate) this.toast("Type in the message box below — Resume to keep walking");
     }
+    // Nothing below the gate means anything: there is no beat to caption, nobody
+    // to be standing next to, and the clock is not running.
+    if (gate) return;
     // Cutscene caption — writes DOM only when the beat starts or ends.
     const caption = sim.cutscene ? sim.cutscene.text : "";
     if (caption !== this._caption) {

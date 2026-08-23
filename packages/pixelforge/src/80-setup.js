@@ -228,26 +228,19 @@ PF.mountSetup = (el, props) => {
     cancelBtn.disabled = true; // mirror the host's mid-launch freeze
     launchBtn.textContent = "Setting up…";
     try {
-      const chatId = await el._pfProps.onLaunch(setupConfig, nameIn.value.trim() || preset.name, undefined, {
+      await el._pfProps.onLaunch(setupConfig, nameIn.value.trim() || preset.name, undefined, {
         gmConnectionId,
       });
-      if (typeof chatId === "string") {
-        // Seed the world state so the first surface load is deterministic. The
-        // default themed world only — generation runs surface-side after
-        // launch and rebuilds the world when the brief lands.
-        const world = PF.world.build(seed, themeSel.value);
-        const sim = new PF.Sim(world);
-        const snap = PF.save.snapshot({ sim, chatId });
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try {
-            await PF.api.patchMetadata(chatId, { pixelforge: snap }, false);
-            break;
-          } catch (err) {
-            if (attempt === 2) console.warn("[pixelforge] world seeding failed; restore will use the config seed", err);
-            else await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
-          }
-        }
-      }
+      // NO WORLD IS SEEDED HERE ANY MORE (plan §Q3b, maintainer ruling #7). The
+      // wizard used to write a default themed snapshot into chat metadata so the
+      // first surface load had something to show while generation ran behind a
+      // toast — and that snapshot WAS the throwaway world the ruling abolished:
+      // the first thing a brand-new chat stored was a save for a world nobody
+      // meant to keep. The surface now holds a loading gate until the brief seals,
+      // so there is nothing to show and nothing to seed, and determinism is
+      // unaffected because simFromSaved re-derives the seed and theme from
+      // `experienceConfig` (PF.save._configSeed/_configTheme) exactly as this
+      // snapshot did. `generate: true` above is the whole handoff.
     } catch (err) {
       errEl.textContent =
         err && err.message ? String(err.message) : "Launch failed — check the connection and try again.";
