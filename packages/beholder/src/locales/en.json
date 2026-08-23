@@ -1,11 +1,12 @@
 {
   "_meta": {
-    "description": "Client-side interface strings for the Beholder capability (toolbar toggle and docked panel). Bundled into client.js by scripts/build-beholder-package.mjs."
+    "description": "Client-side interface strings for the Beholder capability (toolbar toggle and floating panel). Bundled into client.js by scripts/build-beholder-package.mjs."
   },
   "toolbarLabel": "Beholder — physical state",
   "trackerPanelLabel": "Open Beholder",
   "dockTitle": "Beholder",
   "dockClose": "Close Beholder",
+  "resizeWindow": "Resize Beholder",
   "layerColor": "Color",
   "layerColorHint": "Color word annotation on chips",
   "layerDamage": "Damage",

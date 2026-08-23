@@ -103,9 +103,11 @@ export const MEMORY_NAG_STYLES = `
 }
 
 .mn-prompt-textarea {
-  min-height: 8.5rem;
-  padding-right: 2.5rem;
-  font-size: 0.72rem;
+  min-height: 3.25rem;
+  border-radius: 0.375rem;
+  padding: 0.5rem 2rem 0.5rem 0.625rem;
+  font-size: 0.75rem;
+  line-height: 1.625;
 }
 
 .mn-prompt-field {
@@ -114,17 +116,47 @@ export const MEMORY_NAG_STYLES = `
 
 .mn-prompt-tools {
   position: absolute;
-  top: 0.4rem;
-  right: 0.4rem;
+  top: 0.375rem;
+  right: 0.375rem;
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.125rem;
 }
 
 .mn-prompt-tool {
-  height: 1.5rem;
-  width: 1.5rem;
-  min-height: 1.5rem;
+  display: flex;
+  height: 1.25rem;
+  width: 1.25rem;
+  min-height: 1.25rem;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.25rem;
+  background: transparent;
+  padding: 0.25rem;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: color 150ms ease, background 150ms ease;
+}
+
+.mn-prompt-tool:not(:disabled):hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+.mn-prompt-tool:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.mn-prompt-tool:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.mn-prompt-tool .mn-icon {
+  width: 0.75rem;
+  height: 0.75rem;
 }
 
 .mn-prompt-modal {

@@ -11,8 +11,6 @@
 // scripts/build-beholder-package.mjs from src/*.css and bh-logo.png.
 
 const BH = {
-  /** Body class the host keys its chat reflow off; also our open/closed source of truth. */
-  DOCK_OPEN_CLASS: "bh-dock-open",
   PANEL_ID: "beholder_panel",
 };
 
