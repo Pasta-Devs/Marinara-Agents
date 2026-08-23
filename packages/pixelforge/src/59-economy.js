@@ -43,11 +43,11 @@ const PRICES = {
 };
 
 // What a new game starts with. It exists because a sink with no source is not a
-// feature: quest rewards (P4) are the real income and they are 0.12, so without
-// this the one transaction 0.11 ships would be unreachable in a shipped game and
-// only ever exercised by a test that minted its own money. Granted ONCE, at the
-// moment a world seals onto a block nothing has touched — see grantStartingPurse
-// for why that moment and not a default value.
+// feature: the real income is the quest layer (P4, roadmap 0.13), so without this
+// the one transaction 0.11 ships would be unreachable in a shipped game and only
+// ever exercised by a test that minted its own money. Granted ONCE, on the first
+// sealed world to come up on a block nothing has touched — see grantStartingPurse
+// for why that condition and not a default value.
 const STARTING_PURSE = 40;
 
 PF.economy = {
@@ -56,10 +56,17 @@ PF.economy = {
   STARTING_PURSE,
 
   /** The theme's skin table, falling back to the default theme rather than
-   *  throwing: a save can name a theme this build no longer ships. */
+   *  throwing: a save can name a theme this build no longer ships.
+   *
+   *  OWN-PROPERTY ONLY, exactly as price() reads its own table and simFromSaved
+   *  reads `world.zones`. `world.theme` comes off untrusted save JSON, and a
+   *  nullish-coalescing lookup never reaches its fallback for "constructor" or
+   *  "toString": the prototype answers with something non-nullish, and then every
+   *  economy call for that save TypeErrors on `.currency` instead of quietly
+   *  rendering in the default theme's words. */
   _skin(world) {
     const theme = typeof world?.theme === "string" ? world.theme : "cozy-village";
-    return ITEM_SKINS[theme] ?? ITEM_SKINS["cozy-village"];
+    return Object.prototype.hasOwnProperty.call(ITEM_SKINS, theme) ? ITEM_SKINS[theme] : ITEM_SKINS["cozy-village"];
   },
 
   /** What this world calls its money. */
@@ -82,7 +89,11 @@ PF.economy = {
   describe(world, item) {
     const t = typeof item === "string" ? item : typeof item?.t === "string" ? item.t : "";
     if (!t) return "";
-    const skin = this._skin(world).items[t];
+    // The items map takes an own-property read for the same reason the skin table
+    // does one line up: `t` is a pouch row's type off untrusted save JSON, and
+    // `items["constructor"]` resolves to a function whose `.name` is "Object".
+    const items = this._skin(world).items;
+    const skin = Object.prototype.hasOwnProperty.call(items, t) ? items[t] : null;
     const name = skin ? skin.name : t.replace(/[-_]/g, " ");
     const quality = typeof item === "object" && typeof item?.k === "string" ? item.k : "";
     return quality ? `${quality} ${name}` : name;
@@ -93,7 +104,11 @@ PF.economy = {
    *  must refuse the sale, not invent one. */
   price(world, what) {
     const theme = typeof world?.theme === "string" ? world.theme : "cozy-village";
-    const table = PRICES[theme] ?? PRICES["cozy-village"];
+    // Own-property BOTH ways. The inner read always was; the table read was not,
+    // and `PRICES["constructor"]` resolving to a function meant a save naming a
+    // prototype key priced nothing at all — every sale refused, with no way for
+    // the player to tell that from a world that simply sells no rooms.
+    const table = Object.prototype.hasOwnProperty.call(PRICES, theme) ? PRICES[theme] : PRICES["cozy-village"];
     const value = Object.prototype.hasOwnProperty.call(table, what) ? table[what] : null;
     return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
   },
@@ -161,26 +176,49 @@ PF.economy = {
     return { ok: true, reason: null, price: offer.price, zoneId: offer.zoneId };
   },
 
-  /** The starting purse, granted at the one moment that is unambiguously "this
-   *  world begins now": the brief has sealed and the block it seals onto has
-   *  nothing in it.
+  /** The starting purse, paid when a SEALED world comes up on a block nothing has
+   *  ever been written into. That is the condition, not a moment — and the
+   *  difference is the whole slice-6 correction. It used to be one instant (the
+   *  tail of the generation that sealed the brief), and every ordinary way of not
+   *  being there for that instant cost the purse permanently: leaving the chat
+   *  while generation ran, reloading between the seal and the lift, or a throw
+   *  that turned the lift into a retry screen. The predicate below is idempotent,
+   *  so the callers can simply ask on every path a sealed world arrives by
+   *  (60-save `_installSealedWorld` and `armGate`) and let it answer.
    *
    *  NOT a default on the block, and the reason is the wire: PF.player.serialize
    *  emits every field unconditionally, so a non-zero default money would move
    *  the bytes of every save in the wild and re-write every open chat on first
    *  load. NOT a rehydration step either — restore's repairs are deliberately
-   *  non-mutations. The seal is a one-shot by construction (the brief key is
-   *  written once and maybeGenerateBrief is guarded by it), and the emptiness
-   *  test is what keeps it from paying a player twice across the pre-gate interim
-   *  shim, where a block with real play in it crosses the same seam. */
+   *  non-mutations.
+   *
+   *  UNTOUCHED MEANS THE WHOLE BLOCK, not the purse. Four tests would do while
+   *  the grant was a one-shot instant; as a condition asked on every arrival it
+   *  has to tell a new game apart from a VETERAN who happens to be broke, and a
+   *  player who has spent down to nothing still carries their skills, the boards
+   *  they finished, the people they met, the places they found and the day
+   *  boundary they flushed. This is also what keeps the pre-gate interim shim from
+   *  being paid, which is the case the original four were written for: a block
+   *  with a real session in it crosses that seam holding exactly these fields. */
   grantStartingPurse(core) {
     const player = PF.player.get(core);
     if (!player) return false;
+    const empty = (value) => !Object.keys(value ?? {}).length;
     const untouched =
       (player.pouch?.money ?? 0) === 0 &&
       !(player.pouch?.items ?? []).length &&
       !(player.ledger?.lines ?? []).length &&
-      player.home === null;
+      player.home === null &&
+      empty(player.skills?.verbs) &&
+      empty(player.skills?.equipped) &&
+      empty(player.quests_done_board) &&
+      empty(player.rel) &&
+      empty(player.quests?.done_pack) &&
+      !(player.quests?.active ?? []).length &&
+      !(player.found?.zones ?? []).length &&
+      empty(player.bought) &&
+      (player.flushedDay ?? 0) === 0 &&
+      (player.game ?? 1) === 1;
     if (!untouched) return false;
     if (!PF.player.award(core, { money: STARTING_PURSE })) return false;
     PF.player.log(core, `Arrived with ${this.money(core.sim?.world, STARTING_PURSE)} to your name.`, core.sim?.day);

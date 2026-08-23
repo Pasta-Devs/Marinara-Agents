@@ -1548,6 +1548,17 @@ PF.quarantine = {
       }
       if (parked) {
         this._bag = readBag(parked);
+        // …AND ASK FOR THE WIRE AGAIN, which is the half the docstring above
+        // promised and nothing performed. Adopting the bytes restored the entry to
+        // MEMORY only: the write that never landed was still not re-tried, and a
+        // park could sit in this map for the rest of the session and die with the
+        // tab. "Re-trying on the next visit" is now a thing that happens on the
+        // next visit. Free when there is nothing owed — `_write` collapses onto
+        // anything already queued for this chat and `_writeNow` dedupes against
+        // `_bagSerialized`, which is why the comparison is against DISK's bytes
+        // rather than against what we adopted.
+        const adopted = this._serialize();
+        if (adopted !== this._bagSerialized) void this._write(chatId);
         return this._bag;
       }
     }
@@ -1732,7 +1743,47 @@ PF.quarantine = {
     // which a chat round trip can lose it (see _unsettled).
     this._unsettled.delete(id);
     this._unsettled.set(id, captured);
-    while (this._unsettled.size > UNSETTLED_MAX) this._unsettled.delete(this._unsettled.keys().next().value);
+    // THE LEAK GUARD MUST NOT BECOME THE LEAK. Every entry in this map is by
+    // construction a write that has NOT been shown to reach disk — queued, in
+    // flight, or failed out — so dropping the oldest one silently re-opens the
+    // park loss for that chat, which is the entire bug this map exists to close.
+    // The one droppable kind is an entry disk is known to hold: `_writeNow`
+    // returns early when the live chat's bytes already match `_bagSerialized`
+    // and leaves its record standing. Those go first; past them the eviction is a
+    // real loss, and a loss nobody is told about is the failure mode itself, so
+    // it names the chat and what was in it. The ceiling is a tripwire for a
+    // session that visited thousands of chats, not routine housekeeping.
+    while (this._unsettled.size > UNSETTLED_MAX) {
+      let victim = null;
+      for (const [key, bytes] of this._unsettled) {
+        if (key !== id && key === this._chatId && bytes === this._bagSerialized) {
+          victim = key;
+          break;
+        }
+      }
+      if (victim === null) {
+        for (const key of this._unsettled.keys()) {
+          if (key === id) continue;
+          victim = key;
+          break;
+        }
+        if (victim === null) break;
+        let slots = "unreadable";
+        try {
+          slots =
+            Object.keys(JSON.parse(this._unsettled.get(victim)))
+              .sort()
+              .join(", ") || "none";
+        } catch {
+          /* the warning is worth more than the detail */
+        }
+        console.warn(
+          `[pixelforge] over ${UNSETTLED_MAX} chats hold an unstored quarantine write; dropping chat ` +
+            `${victim}'s (slots: ${slots}) — what it was holding is no longer recoverable`,
+        );
+      }
+      this._unsettled.delete(victim);
+    }
     if (this._pending?.id === id) {
       // Already queued for this chat: refresh the holder the queued task will
       // read and let it carry the newest bytes. Two PATCHes of the same bytes

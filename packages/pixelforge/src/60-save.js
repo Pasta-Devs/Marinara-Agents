@@ -232,6 +232,11 @@ PF.save = {
    *  without this, coming back reads a meta that still looks unsealed and generates
    *  the world a SECOND time — a wasted host call and a different world. */
   _briefCache: new Map(),
+  /** The subset of `_briefCache` whose chat metadata has SINCE been observed to
+   *  carry the sealed brief itself. Those entries are the only ones the cache may
+   *  evict: past that point the metadata knows, and the cache is a convenience.
+   *  An entry that is NOT in here is the only witness there is (see _cacheBrief). */
+  _briefSeenInMeta: new Set(),
 
   /** Reads core.sim and core.chatId and NOTHING else: 80-setup calls this with
    *  a synthetic two-key core, and reaching for core.host/hud/render there
@@ -331,7 +336,7 @@ PF.save = {
   _configBrief(meta, chatId) {
     const top =
       meta && typeof meta.pixelforgeBrief === "object" && meta.pixelforgeBrief !== null ? meta.pixelforgeBrief : null;
-    if (top && Array.isArray(top.cast)) return top;
+    if (top && Array.isArray(top.cast)) return this._metaKnows(chatId, top);
     if (top) return null; // a {skipped:true} marker: generation declined, stay legacy
     const setup =
       meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
@@ -344,7 +349,8 @@ PF.save = {
         ? outer.experienceConfig
         : null;
     for (const candidate of [inner?.brief, outer?.brief]) {
-      if (candidate && typeof candidate === "object" && Array.isArray(candidate.cast)) return candidate;
+      if (candidate && typeof candidate === "object" && Array.isArray(candidate.cast))
+        return this._metaKnows(chatId, candidate);
     }
     // …and LAST, this session's own cache (see _briefCache). Only when the metadata
     // carries nothing at all about a brief: anything the host actually delivered —
@@ -354,12 +360,45 @@ PF.save = {
     return cached && Array.isArray(cached.cast) ? cached : null;
   },
 
-  /** Remember a brief we just sealed, newest last, bounded. */
+  /** The metadata was just read carrying this chat's sealed brief, so the cache
+   *  entry for it (if any) has stopped being the only witness. Recorded so the
+   *  eviction below has something safe to drop. Returns the brief, so the reader
+   *  above stays one expression. */
+  _metaKnows(chatId, brief) {
+    if (chatId && this._briefCache.has(chatId)) this._briefSeenInMeta.add(chatId);
+    return brief;
+  },
+
+  /** Remember a brief we just sealed, newest last, bounded.
+   *
+   *  EVICTION IS NOT FREE HERE, which is why this is not a plain drop-the-oldest.
+   *  Until the host's chatMeta comes back carrying the sealed key, this cache is
+   *  the ONLY thing that knows the chat is sealed — case (as): a generation that
+   *  lands while the player is in another chat cannot patch the metadata blob they
+   *  are holding, so the next visit reads a chat that still looks unsealed. Drop
+   *  that entry and the gate re-arms, a second host call runs, and the player gets
+   *  a DIFFERENT world than the one already stored. So only entries the metadata
+   *  has been observed to carry are droppable; when none of them is, the cache
+   *  carries the overflow rather than the loss. What it is really bounded by is
+   *  how many chats one session can have sealed-but-not-yet-acknowledged at once,
+   *  which is a handful of a few KB each. */
   _cacheBrief(chatId, sealed) {
     if (!chatId || !sealed || !Array.isArray(sealed.cast)) return;
     this._briefCache.delete(chatId);
+    this._briefSeenInMeta.delete(chatId);
     this._briefCache.set(chatId, sealed);
-    while (this._briefCache.size > BRIEF_CACHE_MAX) this._briefCache.delete(this._briefCache.keys().next().value);
+    while (this._briefCache.size > BRIEF_CACHE_MAX) {
+      let dropped = null;
+      for (const key of this._briefCache.keys()) {
+        if (this._briefSeenInMeta.has(key)) {
+          dropped = key;
+          break;
+        }
+      }
+      if (dropped === null) break;
+      this._briefCache.delete(dropped);
+      this._briefSeenInMeta.delete(dropped);
+    }
   },
 
   /** "This chat was configured to generate a world and has not sealed one yet."
@@ -397,6 +436,19 @@ PF.save = {
   armGate(core, meta) {
     if (!core?.chatId || !this.briefExpected(meta, core.chatId)) {
       this.gate = null;
+      // THE STARTING PURSE IS A PROPERTY OF STATE, NOT OF AN INSTANT (slice 6).
+      // It used to be paid at exactly ONE moment — the tail of the generation
+      // that sealed the brief — and every ordinary way of not being there for
+      // that moment cost it permanently: leaving the chat while generation ran
+      // (the seal lands with the player elsewhere and the chat fence returns
+      // before the grant), a reload between the seal and the lift, or a throw
+      // that turned the lift into a retry screen. Sealed worlds are also the only
+      // ones that get one, which is what keeps this off every legacy save in the
+      // wild: a default world is not a world beginning, it is the world that has
+      // always been there. grantStartingPurse is idempotent by its own predicate,
+      // so a chat that has already been paid is untouched by this second call.
+      if (core?.chatId && core.sim?.world && !core.sim.world.interim && this._configBrief(meta, core.chatId))
+        PF.economy.grantStartingPurse(core);
       return false;
     }
     this.gate = { chatId: core.chatId, state: "generating", attempts: 0 };
@@ -412,12 +464,77 @@ PF.save = {
   },
 
   /** The brief sealed: play begins. adopt() runs HERE rather than at the chat
-   *  switch, because it is the first thing allowed to write. */
+   *  switch, because it is the first thing allowed to write.
+   *
+   *  AND IT REFUSES TO LIFT ONTO AN INTERIM WORLD. The gate's whole promise is
+   *  that nobody plays a world that is going to be discarded, and the placeholder
+   *  is exactly that world: everything done in it stamps {briefHash:0, interim:1}
+   *  and is severed unrecoverably the moment the real world compiles. Every
+   *  caller's job is therefore to REBUILD first and lift second; this is the
+   *  assertion that keeps a future caller from quietly re-opening the hole. */
   _liftGate(core) {
     if (!this.gateHolds(core)) return;
+    if (core.sim?.world?.interim) {
+      console.warn("[pixelforge] refusing to start play in the placeholder world; the gate stays up");
+      return;
+    }
     this.gate = null;
     core.hud?.update?.();
     void this.adopt(core);
+  },
+
+  /** Everything that happens once a sealed brief is IN HAND: compile the world it
+   *  describes, carry across what crosses this seam, lift the gate, pay the purse.
+   *
+   *  Factored out of maybeGenerateBrief's success tail because it has a SECOND
+   *  caller, and the absence of that second caller was the bug. Every throw the
+   *  generation guard was written for lands AFTER the brief is stored and cached —
+   *  the compile, the transplant, the park are all downstream — so by the time the
+   *  player presses "Try again", briefExpected() is already false and the retry
+   *  takes the nothing-to-generate branch. That branch used to lift the gate bare,
+   *  which started play IN THE PLACEHOLDER: adopt's first-write wrote it up, and
+   *  everything played there was severed the next time the real world compiled.
+   *  A retry recompiles from the brief that is already sealed instead. */
+  _installSealedWorld(core, chatId, sealed, seed, theme) {
+    // Under the gate the sim standing here is a placeholder nobody walked in, so
+    // this is a plain replacement — but the envelope carry is NOT play state (it
+    // is a newer build's fields) and rides across regardless, exactly as it does
+    // through _rebuild.
+    const carriedExtra = core.sim?._envelopeExtra;
+    // The player block crosses the same seam, and it crosses SPLIT (plan §Q5).
+    // THE GATE MAKES THIS PATH A COMPAT SHIM, NOT THE NORMAL ONE, and it stays
+    // for two reasons the gate cannot cover: a chat CREATED BEFORE the gate
+    // shipped has a real interim save with real play in it, and a legacy save
+    // can arrive stamped for a world that never sealed. For those, world-free
+    // fields — the purse, the skills, the board's completion counts — mean the
+    // same thing in the compiled world, and everything world-bound belonged to
+    // the throwaway one and goes to the stamp slot instead of being silently
+    // reinterpreted against people who do not exist here. For a gated chat the
+    // block is a fresh default and the split moves nothing, which is the point:
+    // the safety net costs nothing when the gate has already done its job.
+    const carriedPlayer = core.sim?.player;
+    core.sim = new PF.Sim(PF.world.build(seed, theme, sealed));
+    if (carriedExtra) core.sim._envelopeExtra = carriedExtra;
+    const moved = PF.player.transplant(carriedPlayer, core.sim.world, sealed);
+    core.sim.player = moved.player;
+    if (moved.severed) this._park(chatId, moved.severed.slot, moved.severed.entry);
+    this._lastSerialized = null;
+    core.render?.clearZones?.();
+    void PF.assets.load(core);
+    // The gate lifts BEFORE the first dirty flag, and the order is load-bearing:
+    // markDirty refuses while the gate holds, so arming the save first would
+    // arm nothing and the freshly compiled world would wait for some unrelated
+    // later event to be written at all.
+    this._liftGate(core);
+    // S3's starting purse, at the one moment that is unambiguously "this world
+    // begins now" and after the lift, because it goes through the mutators the
+    // gate was refusing a line ago (PF.economy.grantStartingPurse says why this
+    // moment and not a default on the block). armGate pays the same debt on every
+    // boot path that never reaches here.
+    PF.economy.grantStartingPurse(core);
+    core.hud?.refreshChips();
+    core.hud?.toast("The world takes shape.");
+    this.markDirty(core);
   },
 
   /** Generation did not seal. The chat stays UNSEALED — which is the whole
@@ -464,6 +581,24 @@ PF.save = {
       // Nothing to generate. A gate armed against a metadata blob that has since
       // caught up (or against this session's own cache) lifts here rather than
       // waiting for a generation call that would find nothing to do.
+      //
+      // …but the world standing under that gate is the PLACEHOLDER, built when
+      // the brief was still expected, and lifting onto it is what turned a
+      // post-seal throw into a chat whose play was severed the next time the real
+      // world compiled. THIS IS ALSO THE RETRY PATH: every throw the guard below
+      // catches lands after the brief is stored and cached, so "Try again" always
+      // arrives here rather than at a second generation call. Recompile from the
+      // brief that is already sealed, then lift onto THAT. `_configBrief` is null
+      // only when the chat stopped expecting one for a reason other than a seal (a
+      // `{skipped:true}` marker landing mid-gate), and build() answers that with
+      // the themed default world the marker asked for.
+      if (this.gateHolds(core) && core.sim?.world?.interim) {
+        const theme = this._configTheme(meta) ?? "cozy-village";
+        let seed = this._configSeed(meta);
+        if (seed === null) seed = PF.hashStr(String(chatId));
+        this._installSealedWorld(core, chatId, this._configBrief(meta, chatId), seed, theme);
+        return;
+      }
       this._liftGate(core);
       return;
     }
@@ -511,44 +646,10 @@ PF.save = {
       // this world is already sealed rather than generating it a second time.
       this._cacheBrief(chatId, sealed);
       if (chatId !== core.chatId) return;
-      // Build the world the brief describes. Under the gate the sim standing here
-      // is a placeholder nobody walked in, so this is a plain replacement — but the
-      // envelope carry is NOT play state (it is a newer build's fields) and rides
-      // across regardless, exactly as it does through _rebuild.
-      const carriedExtra = core.sim?._envelopeExtra;
-      // The player block crosses the same seam, and it crosses SPLIT (plan §Q5).
-      // THE GATE MAKES THIS PATH A COMPAT SHIM, NOT THE NORMAL ONE, and it stays
-      // for two reasons the gate cannot cover: a chat CREATED BEFORE the gate
-      // shipped has a real interim save with real play in it, and a legacy save
-      // can arrive stamped for a world that never sealed. For those, world-free
-      // fields — the purse, the skills, the board's completion counts — mean the
-      // same thing in the compiled world, and everything world-bound belonged to
-      // the throwaway one and goes to the stamp slot instead of being silently
-      // reinterpreted against people who do not exist here. For a gated chat the
-      // block is a fresh default and the split moves nothing, which is the point:
-      // the safety net costs nothing when the gate has already done its job.
-      const carriedPlayer = core.sim?.player;
-      core.sim = new PF.Sim(PF.world.build(seed, theme, sealed));
-      if (carriedExtra) core.sim._envelopeExtra = carriedExtra;
-      const moved = PF.player.transplant(carriedPlayer, core.sim.world, sealed);
-      core.sim.player = moved.player;
-      if (moved.severed) this._park(chatId, moved.severed.slot, moved.severed.entry);
-      this._lastSerialized = null;
-      core.render?.clearZones?.();
-      void PF.assets.load(core);
-      // The gate lifts BEFORE the first dirty flag, and the order is load-bearing:
-      // markDirty refuses while the gate holds, so arming the save first would
-      // arm nothing and the freshly compiled world would wait for some unrelated
-      // later event to be written at all.
-      this._liftGate(core);
-      // S3's starting purse, at the one moment that is unambiguously "this world
-      // begins now" and after the lift, because it goes through the mutators the
-      // gate was refusing a line ago (PF.economy.grantStartingPurse says why this
-      // moment and not a default on the block).
-      PF.economy.grantStartingPurse(core);
-      core.hud?.refreshChips();
-      core.hud?.toast("The world takes shape.");
-      this.markDirty(core);
+      // Build the world the brief describes, lift onto it, pay the purse. Shared
+      // with the retry path above, which is how a throw out of any of it stays
+      // recoverable instead of stranding the player in the placeholder.
+      this._installSealedWorld(core, chatId, sealed, seed, theme);
     } catch (err) {
       // NEVER A SPINNER WITH NOTHING BEHIND IT. Every failure the generation
       // ladder KNOWS about is already a `null` seal handled above; this is the
@@ -850,6 +951,7 @@ PF.save = {
     // _generating and _briefCache are deliberately NOT cleared — a generation
     // in flight for the chat we are leaving must still seal, and the brief it
     // seals is what stops the next visit generating that world all over again.
+    // (_briefSeenInMeta rides with the cache it describes, for the same reason.)
     this.gate = null;
     // The in-memory quarantine bag is per-chat, exactly like the caches above:
     // restore() hydrates the arriving chat's key into it a few lines later.

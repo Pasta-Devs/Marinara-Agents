@@ -3143,7 +3143,6 @@ PF.world = (() => {
     // every compile, costing zero save fields. What the RENTAL persists is the
     // zone id, and only through PF.player.setHome, which refuses a minted `h{n}`.
     if (gatheringZoneId && zones[gatheringZoneId]) {
-      zones[gatheringZoneId].lodging = true;
       // WHO LETS THE ROOMS: the cast member the specials pass bound to the
       // gathering's building — the `host` kind, the innkeeper — and only if the
       // brief named nobody, whoever the brief homed there. Deliberately NOT the
@@ -3152,7 +3151,13 @@ PF.world = (() => {
       // here would leave every inn in the game with nobody behind the counter.
       const facade = buildings.find((b) => b.boundPlace === gatheringPlace);
       const host = facade?.owner ?? headOfBuilding.get(gatheringZoneId) ?? null;
+      // BOTH MARKS OR NEITHER. A brief can name a gathering and home nobody in it
+      // (no `host` kind, nobody in that building), and the zone mark used to go up
+      // unconditionally — a room the world calls lodging with nobody behind the
+      // counter, which is a promise the offer can never keep. The lodging fact is
+      // the KEEPER's, so the room is only lodging when somebody is letting it.
       if (host) {
+        zones[gatheringZoneId].lodging = true;
         for (const zone of Object.values(zones)) {
           for (const npc of zone.npcs) if (npc.name === host.name) npc.lodging = gatheringZoneId;
         }

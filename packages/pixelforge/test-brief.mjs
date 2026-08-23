@@ -10291,6 +10291,109 @@ await withSavePath(async ({ calls, behavior, tick }) => {
   Q._unsettled.clear();
 });
 
+// (ak3) …AND A WRITE THAT FAILED OUT IS ACTUALLY RE-TRIED ON THE NEXT VISIT.
+// `_unsettled` is documented as "deliberately NOT cleared when a write fails out:
+// an entry nobody managed to store is precisely the one worth re-trying on the
+// next visit". Adopting the bytes at hydrate restored them to MEMORY only, and
+// nothing asked for the wire again — so a park whose write failed sat in the map
+// for the rest of the session and died with the tab, which is the same loss the
+// map exists to prevent, one step later.
+await withSavePath(async ({ calls, armed, behavior, tick }) => {
+  const Q = loadedPF.quarantine;
+  const bagWrites = () => calls.filter((c) => c.kind === "patch" && "pixelforgeQuarantine" in c.patch);
+  await tick(); // drain the shared chain
+  Q.reset();
+  Q._unsettled.clear();
+  calls.length = 0;
+  armed.length = 0;
+  behavior.patch = async () => {
+    throw Object.assign(new Error("storage is down"), { status: 503 });
+  };
+  Q.hydrate({}, "chat-lost");
+  Q.put("chat-lost", "stamp", { reason: "brief", stamps: { seed: 7 }, fields: { home: "parked-and-unstored" } });
+  // Three attempts, two backoffs, all of them failing.
+  for (let i = 0; i < 4; i++) {
+    await tick();
+    const sleep = armed.find((t) => (t.ms === 500 || t.ms === 1000) && !t.fired);
+    if (!sleep) break;
+    sleep.fired = true;
+    sleep.fn();
+  }
+  await tick();
+  assert.ok(bagWrites().length >= 1, "the write did go out");
+  assert.equal(Q._unsettled.has("chat-lost"), true, "and failing out leaves the record standing, as documented");
+
+  // Away, and back — with storage working again. The metadata the host hands over
+  // is what actually reached disk, which is nothing.
+  behavior.patch = async () => {};
+  loadedPF.save.reset();
+  Q.hydrate({}, "chat-elsewhere");
+  loadedPF.save.reset();
+  calls.length = 0;
+  Q.hydrate({}, "chat-lost");
+  assert.ok(Q.peek("stamp"), "the return visit adopts the entry the write never stored");
+  await tick();
+  const relanded = bagWrites().filter((c) => c.patch.pixelforgeQuarantine?.stamp);
+  assert.equal(relanded.length, 1, "AND ASKS FOR THE WIRE AGAIN — the retry the docstring promised is a real retry");
+  assert.equal(relanded[0].chatId, "chat-lost", "for the chat that owed it");
+  assert.equal(
+    relanded[0].patch.pixelforgeQuarantine.stamp.fields.home,
+    "parked-and-unstored",
+    "carrying the bytes that were lost",
+  );
+  assert.equal(Q._unsettled.has("chat-lost"), false, "…and this time it settles");
+
+  // …and a revisit that owes disk NOTHING costs no write at all: the comparison
+  // is against what disk holds, so re-entering a chat is not a write of its own.
+  loadedPF.save.reset();
+  calls.length = 0;
+  Q.hydrate({ pixelforgeQuarantine: { stamp: { reason: "brief", stamps: { seed: 7 } } } }, "chat-lost");
+  await tick();
+  assert.equal(bagWrites().length, 0, "a chat whose bag disk already holds is re-entered silently");
+
+  // ── AND THE LEAK GUARD DOES NOT EAT THE THING IT GUARDS ──
+  // Every entry in this map is a write NOT known to have reached disk, so the old
+  // drop-the-oldest ceiling silently re-opened the park loss for whichever chat
+  // was furthest back. The one droppable kind is an entry disk is known to hold —
+  // `_writeNow` returns early when the live chat's bytes match the dedupe cache
+  // and leaves its record standing — and past that the eviction says what it cost.
+  Q.reset();
+  Q._unsettled.clear();
+  calls.length = 0;
+  Q._chatId = "chat-live";
+  Q._bag = { migration: { reason: "throw", block: { a: 1 } } };
+  Q._bagSerialized = JSON.stringify(Q._bag);
+  // Recorded LAST on purpose: under a plain drop-the-oldest ceiling this is the
+  // entry that survives and an unstored write is the one that goes, which is the
+  // whole inversion. Preference, not position, decides.
+  for (let i = 0; i < 7; i++) {
+    Q._unsettled.set(`chat-owed-${i}`, JSON.stringify({ stamp: { reason: "brief", n: i } }));
+  }
+  Q._unsettled.set("chat-live", Q._bagSerialized); // disk holds these; the record is stale
+  const warned = [];
+  const realWarn = console.warn;
+  console.warn = (...args) => warned.push(args.map(String).join(" "));
+  try {
+    Q._write("chat-ninth"); // nine entries against a ceiling of eight
+    assert.equal(Q._unsettled.has("chat-live"), false, "the entry disk is known to hold is the one that goes");
+    assert.deepEqual(warned, [], "…silently, because nothing was lost");
+    for (let i = 0; i < 7; i++) {
+      assert.ok(Q._unsettled.has(`chat-owed-${i}`), `and no unstored write was touched (chat-owed-${i})`);
+    }
+    Q._write("chat-tenth"); // now the ceiling can only be met by a real loss
+    assert.equal(Q._unsettled.has("chat-owed-0"), false, "past that the oldest unstored write does go");
+    assert.equal(warned.length, 1, "…but never silently");
+    assert.ok(warned[0].includes("chat-owed-0"), "the warning names the chat");
+    assert.ok(warned[0].includes("stamp"), "…and what it was holding");
+  } finally {
+    console.warn = realWarn;
+  }
+  await tick();
+  behavior.patch = async () => {};
+  Q.reset();
+  Q._unsettled.clear();
+});
+
 // (al) THE INTERIM WORLD LEAVES A MARK.
 // A chat created before the loading gate boots on a throwaway world. If it
 // flushes there, the block's stamps are all zero — which is also exactly what a
@@ -11075,6 +11178,97 @@ await withSavePath(async ({ calls, armed, behavior, tick, makeCore }) => {
     assert.equal(loadedPF.save.gate.state, "failed", "…showing retry, not a spinner with nothing behind it");
     assert.equal(loadedPF.save._generating.has("chat-gate-throw"), false, "and nothing is left marked in flight");
 
+    // ── AND THE BUTTON ON THAT SCREEN LANDS IN THE REAL WORLD ──
+    // The half this case used to stop one line short of, and the reason it
+    // mattered: every throw the guard above catches lands AFTER the brief is
+    // stored and cached, so by the time the player presses "Try again" the chat
+    // no longer expects a brief and the retry takes the nothing-to-generate
+    // branch. That branch lifted the gate BARE — onto the placeholder — so the
+    // retry started play in the throwaway world, adopt's first-write wrote it up
+    // stamped {briefHash:0, interim:1}, and everything played there was severed
+    // unrecoverably the next time the real world compiled. A world that is
+    // already sealed is recompiled from what was sealed.
+    assert.equal(loadedPF.save._briefCache.has("chat-gate-throw"), true, "the brief did seal before the throw");
+    assert.equal(
+      loadedPF.save.briefExpected(thrower.host.chatMeta, "chat-gate-throw"),
+      false,
+      "…so the retry finds nothing left to generate, which is the branch that used to lift bare",
+    );
+    assert.equal(thrower.sim.world.interim, true, "and the world under the gate is still the placeholder");
+    behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+    calls.length = 0;
+    armed.length = 0;
+    const postsBeforeRetry = postCount();
+    assert.equal(loadedPF.save.retryGeneration(thrower), true, "the failure screen's button runs");
+    for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
+    assert.equal(loadedPF.save.gate, null, "the gate lifts");
+    assert.equal(postCount(), postsBeforeRetry, "without paying for a second generation — the brief is already sealed");
+    assert.equal(thrower.sim.world.brieved, true, "onto the world the sealed brief describes");
+    assert.equal(thrower.sim.world.interim, undefined, "which is not the placeholder any more");
+    assert.equal(
+      P.get(thrower).pouch.money,
+      loadedPF.economy.STARTING_PURSE,
+      "and the purse the throw cost is paid on the way in",
+    );
+    const retryDebounce = armed.find((t) => t.ms === 2500);
+    assert.ok(retryDebounce, "the lift arms the ordinary debounce");
+    calls.length = 0;
+    retryDebounce.fn();
+    await loadedPF.save._flushChain;
+    const retryWrote = calls.find((c) => c.kind === "put");
+    assert.ok(retryWrote, "which writes");
+    assert.equal(retryWrote.state.seed, thrower.sim.world.seed, "carrying the COMPILED seed");
+    assert.equal(retryWrote.state.zone, thrower.sim.zoneId, "and the compiled world's zone, not the placeholder's");
+    assert.ok(
+      Object.prototype.hasOwnProperty.call(thrower.sim.world.zones, retryWrote.state.zone),
+      "…which is a zone of the world that actually exists now",
+    );
+    assert.equal(retryWrote.state.player.world.interim, undefined, "the row is not stamped interim");
+    assert.ok(retryWrote.state.player.world.briefHash, "and it carries the sealed brief's hash");
+
+    // ── AND THE LIFT ITSELF REFUSES THE PLACEHOLDER, WHOEVER ASKS ──
+    // Belt and braces under the branch above: the gate's promise is that nobody
+    // plays a world that is going to be discarded, so lifting onto an interim
+    // world is a bug wherever it comes from. Every caller's job is to rebuild
+    // first and lift second, and this is what stops a future one from quietly
+    // re-opening the hole.
+    {
+      const stuck = makeCore("chat-gate-interim", 5153);
+      stuck.host.chatMeta = { gameSetupConfig: { experienceConfig: { generate: true, seed: 5153 } } };
+      loadedPF.save.reset();
+      stuck.sim = loadedPF.save.restore(stuck.host.chatMeta, "chat-gate-interim");
+      assert.equal(stuck.sim.world.interim, true, "the placeholder is marked");
+      assert.equal(loadedPF.save.armGate(stuck, stuck.host.chatMeta), true, "gated");
+      loadedPF.save._liftGate(stuck);
+      assert.ok(loadedPF.save.gate, "_liftGate refuses to start play in the placeholder world");
+      assert.equal(loadedPF.save.gateHolds(stuck), true, "…and the gate is still holding every door");
+      loadedPF.save.reset();
+    }
+
+    // ── AND A THROW BEFORE THE SEAL IS STILL JUST A RETRY ──
+    // The other half of the same branch: nothing was stored, so "Try again" is a
+    // real second generation call and not a recompile of something that is not
+    // there. Pinned because the fix above put a rebuild in front of the bare lift.
+    loadedPF.save.reset();
+    loadedPF.save._briefCache.clear();
+    const early = makeCore("chat-gate-early", 5152);
+    early.host.chatMeta = { gameSetupConfig: { experienceConfig: { generate: true, seed: 5152 } } };
+    early.sim = loadedPF.save.restore(early.host.chatMeta, "chat-gate-early");
+    assert.equal(loadedPF.save.armGate(early, early.host.chatMeta), true, "gated");
+    responses.post = async () => {
+      throw new TypeError("the host route blew up");
+    };
+    await loadedPF.save.maybeGenerateBrief(early);
+    await tick();
+    assert.equal(loadedPF.save.gate.state, "failed", "a throw before the seal is a retry screen too");
+    assert.equal(loadedPF.save._briefCache.has("chat-gate-early"), false, "with nothing sealed");
+    const postsBeforeEarly = postCount();
+    responses.post = async () => ({ status: 200, body: { ok: true, data: gateBriefData } });
+    assert.equal(loadedPF.save.retryGeneration(early), true, "the button runs");
+    for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
+    assert.equal(postCount(), postsBeforeEarly + 1, "and THIS retry does pay for a generation, because none landed");
+    assert.equal(early.sim.world.brieved, true, "sealing the world it came back with");
+
     // ── AND A CHAT THAT IS NOT WAITING FOR A BRIEF NEVER GATES ──
     for (const [label, chatMeta] of [
       ["a legacy chat with no config at all", {}],
@@ -11170,6 +11364,57 @@ await withSavePath(async ({ tick, makeCore }) => {
     assert.equal(core.sim.world.interim, undefined, "not a placeholder");
     await loadedPF.save.maybeGenerateBrief(core);
     assert.equal(postCount(), 2, "and the world is NOT generated a second time");
+    // …AND THE WORLD BEGINS WITH A PURSE IN IT, which walking away used to cost
+    // permanently. The grant's only call site was the tail of the generation, and
+    // that tail returns at the chat fence a few lines above it — so a player who
+    // did the ordinary thing with a minute-long wait on screen came back to a
+    // sealed world, a working berth counter, and no money, forever. The grant is a
+    // property of the STATE now: a sealed, non-interim world arriving on a block
+    // nothing has been written into is paid whichever door it came through.
+    assert.equal(
+      loadedPF.player.get(core).pouch.money,
+      loadedPF.economy.STARTING_PURSE,
+      "leaving during generation and coming back does not cost the starting purse",
+    );
+    assert.equal(loadedPF.player.get(core).ledger.lines.length, 1, "…and it is said out loud, exactly once");
+    enter("chat-away-a", metaA);
+    assert.equal(
+      loadedPF.player.get(core).pouch.money,
+      loadedPF.economy.STARTING_PURSE,
+      "…and a third visit does not pay it again",
+    );
+
+    // A RELOAD BETWEEN THE SEAL AND THE LIFT IS THE SAME DEBT. The brief reached
+    // the metadata, the process died before the world compiled, and the chat comes
+    // back with no save row of its own — the gate refused every write, so there
+    // never was one. Nothing this session remembers is involved: the metadata is
+    // the whole story, which is what makes this the reload case rather than the
+    // cache case above.
+    loadedPF.save._briefCache.clear();
+    const metaReload = {
+      gameSetupConfig: { experienceConfig: { generate: true, seed: 31, theme: "cozy-village" } },
+      pixelforgeBrief: loadedPF.brief.validate(gateBriefData, { theme: "cozy-village", seed: 31 }),
+    };
+    assert.equal(enter("chat-reload", metaReload), false, "a sealed chat does not gate on reload");
+    assert.equal(core.sim.world.brieved, true, "it boots straight into the compiled world");
+    assert.equal(
+      loadedPF.player.get(core).pouch.money,
+      loadedPF.economy.STARTING_PURSE,
+      "and the purse the crash landed between is paid on arrival",
+    );
+
+    // …but NOT to a chat that has been played and spent down to nothing. The
+    // predicate is "a block nothing has been written into", not "an empty purse",
+    // and a veteran being handed a second starting purse every time they walked in
+    // broke is the failure the wider test exists to refuse.
+    const veteran = loadedPF.player.get(core);
+    veteran.pouch.money = 0;
+    veteran.ledger.lines = [];
+    veteran.found.zones = ["z2"];
+    enter("chat-reload", metaReload);
+    core.sim.player = veteran;
+    assert.equal(loadedPF.economy.grantStartingPurse(core), false, "a veteran who spent to zero is not a new game");
+    assert.equal(veteran.pouch.money, 0, "…and is not paid again");
 
     // The other direction: away and back while the call is STILL in flight. The
     // gate re-arms, no second call starts, and the one in flight lifts it.
@@ -11197,6 +11442,51 @@ await withSavePath(async ({ tick, makeCore }) => {
     assert.equal(core.sim.world.brieved, true, "on the chat the player is actually looking at");
   });
 });
+
+// (as2) THE SESSION BRIEF CACHE DOES NOT EVICT A CORRECTNESS GUARD.
+// The cache is load-bearing, not a speed-up: case (as) turns on "the session
+// cache is the only thing that knows" — a generation that lands while the player
+// is in another chat cannot patch the metadata blob they are holding. A plain
+// drop-the-oldest ceiling therefore evicts the ONLY witness that a chat is
+// sealed, and the next visit re-arms the gate, pays for a second host call, and
+// hands the player a different world than the one already stored. Only entries
+// the metadata has since been seen to carry are droppable.
+{
+  const S = loadedPF.save;
+  S.reset();
+  S._briefCache.clear();
+  S._briefSeenInMeta.clear();
+  const sealedFor = (seed) => brief.validate(gateBriefData, { theme: "cozy-village", seed });
+  const generateMeta = { gameSetupConfig: { experienceConfig: { generate: true, seed: 1 } } };
+  for (let i = 0; i < 12; i++) S._cacheBrief(`chat-cache-${i}`, sealedFor(i));
+  assert.equal(S._briefCache.size, 12, "twelve chats sealed with the metadata still catching up: nothing is dropped");
+  for (let i = 0; i < 12; i++) {
+    assert.ok(S._configBrief(generateMeta, `chat-cache-${i}`), `chat-cache-${i} is still known to be sealed`);
+    assert.equal(
+      S.briefExpected(generateMeta, `chat-cache-${i}`),
+      false,
+      `…so revisiting chat-cache-${i} does not re-arm the gate and generate its world twice`,
+    );
+  }
+
+  // …and once a chat's metadata comes back carrying the key, its cache entry has
+  // stopped being the only witness and is the first thing eviction takes.
+  const caughtUp = { ...generateMeta, pixelforgeBrief: sealedFor(3) };
+  assert.ok(S._configBrief(caughtUp, "chat-cache-3"), "the metadata now carries chat-cache-3's brief itself");
+  S._cacheBrief("chat-cache-new", sealedFor(99));
+  assert.equal(S._briefCache.has("chat-cache-3"), false, "so THAT is the entry the ceiling reclaims");
+  assert.equal(S._briefCache.size, 12, "…bringing the cache back under its bound");
+  for (let i = 0; i < 12; i++) {
+    if (i === 3) continue;
+    assert.ok(S._briefCache.has(`chat-cache-${i}`), `and no unacknowledged entry was touched (chat-cache-${i})`);
+  }
+  // A metadata blob that does NOT carry the key marks nothing, even for a chat
+  // the cache answers for — that is the whole distinction being drawn.
+  assert.equal(S._briefSeenInMeta.has("chat-cache-4"), false, "the cache answering is not the metadata knowing");
+  S._briefCache.clear();
+  S._briefSeenInMeta.clear();
+  S.reset();
+}
 
 // (at) #5406: THE WRITE ORDINAL, CONSUMED — AND EVERY FALLBACK PINNED.
 // The engine now stamps experience rows and metadata keys from one per-chat
@@ -11440,6 +11730,34 @@ await withSavePath(async ({ behavior, makeCore }) => {
   // for a live theme to ship unnamed (which is what the load assertion refuses).
   assert.equal(E.money({ theme: "retired-theme" }, 2), E.money(cozy, 2), "a dropped theme still renders");
   assert.equal(E.price(cozy, "a-thing-nobody-sells"), null, "and an unpriced thing is not for sale, not free");
+
+  // …AND A THEME NAME OFF THE PROTOTYPE IS A DROPPED THEME LIKE ANY OTHER.
+  // `theme` comes out of a save row, which is untrusted JSON: a plain
+  // `SKINS[theme] ?? fallback` never reaches its fallback for "constructor" or
+  // "toString" — the prototype answers with something non-nullish — and then
+  // every economy call for that save TypeErrors on `.currency`. Own-property
+  // only, exactly as price() and simFromSaved already read their own tables.
+  for (const hostile of ["constructor", "__proto__", "toString", "hasOwnProperty", "valueOf"]) {
+    const w = { theme: hostile };
+    assert.equal(E.money(w, 2), E.money(cozy, 2), `theme "${hostile}" renders as the fallback, not a crash`);
+    assert.equal(E.currency(w).one, E.currency(cozy).one, `…and names its money`);
+    assert.equal(E.price(w, "berth"), E.price(cozy, "berth"), `…and prices a berth`);
+    assert.equal(E.describe(w, { t: "lodging-key" }), E.describe(cozy, { t: "lodging-key" }), `…and names its key`);
+  }
+  // The item map inside the skin is the same read, one level down: a pouch row's
+  // type is save data too, and `items["constructor"]` is a function whose `.name`
+  // is "Object" — a key the player never had, rendered as one they did.
+  assert.equal(E.describe(cozy, { t: "constructor" }), "constructor", "an item type off the prototype reads as itself");
+  assert.equal(E.describe(cozy, { t: "toString" }), "toString", "…whatever it is called");
+  // A save can even carry a hostile theme through a real world build.
+  const hostileSim = new loadedPF.Sim(world.build(4242, "cozy-village"));
+  hostileSim.world.theme = "constructor";
+  const hostileCore = { chatId: "chat-proto-theme", sim: hostileSim, hud: { toast() {}, refreshChips() {} } };
+  assert.equal(
+    loadedPF.economy.berthOffer(hostileCore).reason,
+    "no-keeper",
+    "and the berth offer answers rather than throwing",
+  );
 }
 
 // (av) THE BERTH: S3'S FIRST MONEY SINK AND P1'S BED, IN ONE TRANSACTION.
@@ -11505,6 +11823,12 @@ await withSavePath(async ({ behavior, makeCore }) => {
   assert.equal(broke.reason, "cannot-afford", "and says why");
   assert.equal(broke.price, E.price(w, "berth"), "while still quoting the price");
   assert.equal(E.rentBerth(core).ok, false, "the rental refuses");
+  // THE OTHER HALF OF THAT CONTRACT, said out loud: award() FLOORS rather than
+  // refusing, which is precisely why the affordability check is the caller's job.
+  // A sink that skipped it would not fail — it would silently hand over the room
+  // and stop the purse at zero, which reads as a working feature.
+  assert.deepEqual(P.award(core, { money: -999 }), { money: 0, level: null }, "an overdraw floors at zero");
+  assert.equal(P.get(core).pouch.money, 0, "…and no further: money never goes negative");
   const nothing = P.get(core);
   assert.equal(nothing.pouch.money, 0, "taking nothing");
   assert.equal(nothing.home, null, "and giving nothing");
@@ -11555,6 +11879,71 @@ await withSavePath(async ({ behavior, makeCore }) => {
   assert.equal(E.rentBerth(lcore).ok, true, "the legacy inn lets a berth as well");
   assert.equal(P.get(lcore).home, "inn", "anchored at the inn zone");
   assert.ok(P.get(lcore).rel.village?.Mira, "and Mira remembers it, in the settlement's own zone");
+
+  // A LODGING ZONE ALWAYS HAS A KEEPER — both marks or neither. The compiler
+  // resolves the gathering's host from the building's owner, and that resolution
+  // can come back null (a brief with no `host` kind and nobody homed in that
+  // building). The zone mark used to go up regardless: a room the world calls
+  // lodging with nobody behind the counter, which is a promise the offer can
+  // never keep and a berth button that quotes a price nobody will take.
+  const lodgingWorlds = [
+    ["legacy", world.build(9001, "cozy-village")],
+    ["the compiled village", w],
+  ];
+  for (const theme of loadedPF.art.themeIds()) {
+    for (const seed of [1, 77, 8080, 424242]) {
+      lodgingWorlds.push([`${theme}/${seed}`, world.build(seed, theme, brief.defaults(theme, seed))]);
+    }
+  }
+  // The pointed one: a brief that SEALS a gathering and homes nobody in it — no
+  // `host` kind in the cast and nobody living at that address — so the owner
+  // resolution comes back null and there is genuinely nobody behind the counter.
+  const hostless = brief.validate(
+    {
+      scale: "village",
+      name: "Nowhere",
+      places: [{ kind: "gathering", name: "The Wet Boot", flavor: "" }],
+      cast: [
+        { name: "Ivo Reed", role: "miller", kind: "maker", tint: "teal", home: "Nowhere", household: 1 },
+        { name: "Sela Reed", role: "farmhand", kind: "grower", tint: "green", home: "Nowhere", household: 2 },
+        { name: "Bram", role: "carter", kind: "maker", tint: "amber", home: "Nowhere", household: 3 },
+        { name: "Odi", role: "child", kind: "child", tint: "rose", home: "Nowhere", household: 3 },
+      ],
+    },
+    { theme: "cozy-village", seed: 606 },
+  );
+  lodgingWorlds.push(["a brief that homes no host", world.build(606, "cozy-village", hostless)]);
+  for (const [label, lw] of lodgingWorlds) {
+    const keepers = [];
+    for (const zoneId of Object.keys(lw.zones)) {
+      for (const npc of lw.zones[zoneId].npcs) if (typeof npc.lodging === "string" && npc.lodging) keepers.push(npc);
+    }
+    for (const zoneId of Object.keys(lw.zones)) {
+      if (lw.zones[zoneId].lodging !== true) continue;
+      assert.ok(
+        keepers.some((npc) => npc.lodging === zoneId),
+        `${label}: a zone marked lodging has somebody letting it`,
+      );
+    }
+    for (const npc of keepers) {
+      assert.equal(lw.zones[npc.lodging]?.lodging, true, `${label}: a keeper's room is marked lodging`);
+    }
+  }
+  // …and a hostless world compiles a berth button that simply is not there,
+  // rather than a counter with nobody behind it.
+  const hostlessWorld = world.build(606, "cozy-village", hostless);
+  const hostlessSim = new loadedPF.Sim(hostlessWorld);
+  const hcore = { chatId: "chat-hostless", sim: hostlessSim, hud: { toast() {}, refreshChips() {} } };
+  P.award(hcore, { money: 100 });
+  for (const zoneId of Object.keys(hostlessWorld.zones)) {
+    for (const npc of hostlessWorld.zones[zoneId].npcs) {
+      hostlessSim.zoneId = zoneId;
+      hostlessSim.nearNpc = npc;
+      const offer = E.berthOffer(hcore);
+      assert.equal(offer.available, false, "nobody in a hostless world lets a room");
+      assert.equal(offer.price, null, "…so no price is ever quoted, which is what hides the button");
+    }
+  }
   loadedPF.save.reset();
 }
 
