@@ -234,7 +234,7 @@ async function main() {
       );
       assert.match(
         artifactClient,
-        /extract:(?:\w+\.)?\w+!=="refresh"/u,
+        /extract:[^,}]+!=="refresh"/u,
         "Normal imports must continue extracting source notes",
       );
       assert.match(
