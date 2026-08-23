@@ -399,7 +399,7 @@ const features = [
   },
   {
     id: "memory-nag",
-    version: "1.0.4",
+    version: "1.0.5",
     minEngineVersion: "2.4.4",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Memory Nag",
@@ -418,6 +418,8 @@ const features = [
     boundaryDisplayName: "Memory Nag",
     capabilityApi: { major: 1, minor: 14 },
     agent: {
+      description:
+        "Keeps a short per-chat vault of roleplay memories and recalls only the unresolved details that matter to the current turn.",
       phase: "post_processing",
       runtimeDisabled: false,
       execution: "pipeline",
@@ -1580,7 +1582,7 @@ for (const feature of selectedFeatures) {
   const agentDefinition = {
     id: feature.id,
     name: feature.name,
-    description,
+    description: feature.agent?.description ?? description,
     author: "Pasta Devs",
     phase: feature.agent?.phase ?? "pre_generation",
     enabledByDefault: false,
