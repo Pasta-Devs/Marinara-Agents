@@ -23,7 +23,9 @@ class MemoryNagErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error) {
-    const message = error.message || translateMemoryNag("memoryNag.error.interface");
+    const message =
+      error.message ||
+      translateMemoryNag(this.props.element.capabilityProps?.localization, "memoryNag.error.interface");
     this.props.element.capabilityRuntimeError = message;
     this.props.element.dispatchEvent(
       new CustomEvent("marinara-capability-runtime-error", { detail: { message }, bubbles: true }),
