@@ -399,7 +399,7 @@ const features = [
   },
   {
     id: "memory-nag",
-    version: "1.0.2",
+    version: "1.0.3",
     minEngineVersion: "2.4.4",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Memory Nag",
@@ -425,7 +425,7 @@ const features = [
       defaultSettings: {
         resultType: "memory_nag",
         contextSize: 5,
-        maxTokens: 512,
+        maxTokens: 4096,
         temperature: 0,
       },
       defaultPromptTemplate: [

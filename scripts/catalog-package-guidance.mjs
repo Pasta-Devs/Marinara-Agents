@@ -53,7 +53,8 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
   },
   "memory-nag": {
     modes: ["roleplay"],
-    activation: "Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
+    activation:
+      "Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode. Once active, configure it in its standalone Memory Nag section.",
   },
   "persona-stats": {
     modes: ["roleplay"],

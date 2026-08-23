@@ -26,6 +26,7 @@ export type CapabilityProps = {
   mobileCompact?: boolean;
   detached?: boolean;
   connections?: MemoryNagConnection[];
+  onDirtyChange?: (dirty: boolean) => void;
   confirmAction?: (options: {
     title: string;
     message: string;

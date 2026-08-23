@@ -16,7 +16,7 @@ type MemoryDraft = {
 const FOCUSABLE =
   'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-function useModalDialog(active: boolean, onClose: () => void, restoreSelector?: string, restoreFocus = true) {
+export function useModalDialog(active: boolean, onClose: () => void, restoreSelector?: string, restoreFocus = true) {
   const dialogRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;

@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { CapabilityMessageRecord } from "@marinara-engine/shared";
-import type {
-  MemoryNagMemory,
-  MemoryNagParticipant,
-  MemoryNagVault,
+import {
+  MEMORY_NAG_DEFAULT_VAULT_PROMPT,
+  type MemoryNagMemory,
+  type MemoryNagParticipant,
+  type MemoryNagVault,
 } from "../../../../shared/src/features/agents/memory-nag/schema.js";
 import { getMemoryNagRuntime } from "./package-runtime.js";
 import { loadMemoryNagParticipants } from "./participants.js";
@@ -11,6 +12,7 @@ import { shortlistMemoriesForScan } from "./retrieval.js";
 import { readMemoryNagVault, updateMemoryNagVault } from "./vault.js";
 
 const scanQueues = new Map<string, Promise<void>>();
+const MEMORY_NAG_SCAN_MAX_TOKENS = 4096;
 
 async function withScanLock<T>(chatId: string, task: () => Promise<T>): Promise<T> {
   const previous = scanQueues.get(chatId) ?? Promise.resolve();
@@ -102,11 +104,12 @@ function normalizeCreatedMemories(input: {
   return created;
 }
 
-function buildScanMessages(input: {
+export function buildMemoryNagScanMessages(input: {
   participants: MemoryNagParticipant[];
   transcript: string;
   existing: MemoryNagMemory[];
   perCharacter: number;
+  vaultPrompt: string;
 }) {
   const characterList = input.participants.map((participant) => `- ${participant.name}: ${participant.id}`).join("\n");
   const memories = input.existing.map((memory) => `- ${memory.id}: ${memory.text}`).join("\n") || "(none)";
@@ -114,12 +117,8 @@ function buildScanMessages(input: {
     {
       role: "system" as const,
       content: [
-        "Read this roleplay batch and save only details worth nagging a character about later.",
+        input.vaultPrompt.trim() || MEMORY_NAG_DEFAULT_VAULT_PROMPT,
         "The user message is JSON with the character list, active vault memories, and chat batch.",
-        "Keep each memory to one short sentence. Record promises, meaningful actions, relationship changes, mistakes, debts, injuries, and memorable admissions.",
-        "A memory may belong to more than one character. Do not create memories about the user unless the user explicitly asked a character to remember something.",
-        'You may preserve a short dialogue line verbatim when its exact wording matters, then add the speaker and rough context, for example: "I eat glue," Dottore admitted while drinking one night.',
-        "Resolve an existing memory only when this batch clearly settles it. Never invent character IDs.",
         `Create at most ${input.perCharacter} memories for any one character. Fewer or none is fine.`,
         'Return only JSON: {"memories":[{"text":"...","characterIds":["id"]}],"resolvedMemoryIds":["existing-id"]}',
       ].join("\n"),
@@ -185,13 +184,14 @@ async function scanMemoryNagBatchUnlocked(chatId: string): Promise<MemoryNagScan
     connectionId: scanConnectionId,
     chatConnectionId: chat.connectionId,
   });
-  const prompt = buildScanMessages({
+  const prompt = buildMemoryNagScanMessages({
     participants,
     transcript,
     existing: relevantExisting,
     perCharacter: vault.settings.memoriesPerCharacter,
+    vaultPrompt: vault.settings.vaultPrompt,
   });
-  const fitted = model.fitContext(prompt, { maxTokens: 2400 });
+  const fitted = model.fitContext(prompt, { maxTokens: MEMORY_NAG_SCAN_MAX_TOKENS });
   runtime.logger.debugOverride(
     runtime.isDebugAgentsEnabled(),
     "[memory-nag] Vault scan prompt for chat %s: %s",
@@ -199,7 +199,7 @@ async function scanMemoryNagBatchUnlocked(chatId: string): Promise<MemoryNagScan
     JSON.stringify(fitted.messages),
   );
   const completion = await model.chatComplete(fitted.messages, {
-    maxTokens: fitted.maxTokens ?? 2400,
+    maxTokens: fitted.maxTokens ?? MEMORY_NAG_SCAN_MAX_TOKENS,
     temperature: 0.2,
     reasoningEffort: "none",
     debugMode: runtime.isDebugAgentsEnabled(),
