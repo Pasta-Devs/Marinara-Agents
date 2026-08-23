@@ -21,6 +21,7 @@ const source = [
   "50-spatial.js",
   "55-maps-export.js",
   "58-player.js",
+  "59-economy.js",
   "60-save.js",
 ]
   .map((file) => readFileSync(join(here, "src", file), "utf8"))
@@ -10894,6 +10895,9 @@ await withSavePath(async ({ calls, armed, behavior, tick, makeCore }) => {
     assert.equal(core.sim.world.brieved, true, "onto the world the brief describes");
     assert.equal(core.sim.world.interim, undefined, "which is not a throwaway, so the mark is gone");
     assert.equal(loadedPF.save.mode, "routes", "adopt ran on the way out of the gate, not before it");
+    // S3's starting purse rides the same moment (slice 6): a sink with no source
+    // is not a feature, and the seal is the one unambiguous "this world begins".
+    assert.equal(P.get(core).pouch.money, loadedPF.economy.STARTING_PURSE, "and the world begins with a purse in it");
     assert.equal(P.grant(core, "apple", 2), 2, "and the mutators answer again");
 
     // …and the first save of the chat's life is the compiled world, not the
@@ -11302,5 +11306,196 @@ await withSavePath(async ({ behavior, makeCore }) => {
   loadedPF.save.reset();
   assert.equal(loadedPF.save._putOrdinal, null, "it is per-chat, so the switch clears it");
 });
+
+// ═══ THINGS, MONEY, AND A BED (S5 slice 6 — S3 live, P1's field used) ══════
+
+// (au) THE ITEM VOCABULARY IS COMPLETE, AND THE MONEY IS THEME-BEARING.
+// 59-economy asserts completeness at load in the placers' idiom. This drives the
+// same claim through the READERS, which is the half an assertion cannot make: a
+// table that satisfies the registry check but renders as its own raw tag, or
+// prices a colony in village coins, passes the assertion and fails here.
+{
+  const E = loadedPF.economy;
+  for (const theme of loadedPF.art.themeIds()) {
+    const w = { theme };
+    const currency = E.currency(w);
+    assert.ok(currency.one && currency.many, `${theme} names its money`);
+    assert.equal(E.money(w, 1), `1 ${currency.one}`, `${theme} counts one of it`);
+    assert.equal(E.money(w, 12), `12 ${currency.many}`, `${theme} counts twelve`);
+    assert.equal(typeof E.price(w, "berth"), "number", `${theme} prices a berth`);
+    for (const type of E.ITEM_TYPES) {
+      const name = E.describe(w, { t: type, k: "" });
+      assert.ok(name && name !== type, `${theme} has a NAME for "${type}", not the raw tag`);
+    }
+  }
+  // Theme-bearing, or the vocabulary is a lookup table with one entry in it —
+  // the same failure the maintainer named for name books ("Maud Thatch" in a
+  // sci-fi colony), one layer down.
+  const cozy = { theme: "cozy-village" };
+  const scifi = { theme: "sci-fi-colony" };
+  assert.notEqual(E.money(cozy, 5), E.money(scifi, 5), "a colony does not pay in a village's coins");
+  assert.notEqual(
+    E.describe(cozy, { t: "lodging-key" }),
+    E.describe(scifi, { t: "lodging-key" }),
+    "…nor carry a village's keys",
+  );
+  assert.equal(E.describe(cozy, { t: "lodging-key", k: "brass" }), "brass room key", "the quality tier reads with it");
+  assert.equal(E.describe(cozy, { t: "star-chart" }), "star chart", "a type this build does not know still reads");
+  assert.equal(E.describe(cozy, {}), "", "and a row with no type at all is nothing");
+  assert.equal(E.money(cozy, -5), E.money(cozy, 0), "a negative purse is not a thing to render");
+  // A save can name a theme this build dropped; that is a fallback, not a licence
+  // for a live theme to ship unnamed (which is what the load assertion refuses).
+  assert.equal(E.money({ theme: "retired-theme" }, 2), E.money(cozy, 2), "a dropped theme still renders");
+  assert.equal(E.price(cozy, "a-thing-nobody-sells"), null, "and an unpriced thing is not for sale, not free");
+}
+
+// (av) THE BERTH: S3'S FIRST MONEY SINK AND P1'S BED, IN ONE TRANSACTION.
+// The plan's chosen vertical (§2, Decisions #2): there is no automatic home, so
+// the player-driven path to a bed is renting a room — which is also the first
+// thing money has ever been for. Every effect goes through a shipped mutator, and
+// the interesting half of the contract is the REFUSALS: award() floors at zero
+// rather than refusing, so an unaffordable rental that still ran would silently
+// give away a room for nothing.
+{
+  const E = loadedPF.economy;
+  const P = loadedPF.player;
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Fallowmere",
+      prosperity: "modest",
+      backgroundPopulation: 40,
+      situation: "The bridge went in the spring flood and the ford is the only way across.",
+      cast: [
+        { name: "Perrin Quill", role: "innkeep", kind: "host", tint: "amber", home: "Fallowmere", household: 1 },
+        { name: "Wren Ash", role: "miller", kind: "maker", tint: "teal", home: "Fallowmere", household: 2 },
+      ],
+    },
+    { theme: "cozy-village", seed: 8080 },
+  );
+  const w = world.build(8080, "cozy-village", sealed);
+  const sim = new loadedPF.Sim(w);
+  const core = { chatId: "chat-berth", sim, hud: { toast() {}, refreshChips() {} } };
+
+  let keeper = null;
+  let keeperZone = null;
+  let bystander = null;
+  for (const zoneId of Object.keys(w.zones)) {
+    for (const npc of w.zones[zoneId].npcs) {
+      if (typeof npc.lodging === "string" && !keeper) {
+        keeper = npc;
+        keeperZone = zoneId;
+      } else if (!npc.lodging && !bystander) bystander = npc;
+    }
+  }
+  assert.ok(keeper, "the compiled world has somebody who lets rooms");
+  assert.equal(w.zones[keeper.lodging]?.lodging, true, "and the room they let is the settlement's gathering");
+  assert.ok(!/^h\d+$/.test(keeper.lodging), "whose id is a sealed anchor — setHome refuses a minted h{n} outright");
+  assert.ok(bystander, "…and somebody who does not");
+
+  // Proximity is 30-sim's own concern and pinned there; what the offer is ABOUT
+  // is "a lodging keeper within reach", and nearNpc IS that. Supplied, not walked.
+  const stand = (zoneId, npc) => {
+    sim.zoneId = zoneId;
+    sim.nearNpc = npc;
+  };
+
+  assert.equal(E.berthOffer(core).price, null, "nobody within reach quotes no price");
+  stand(keeperZone, bystander);
+  assert.equal(E.berthOffer(core).price, null, "and a villager who keeps no rooms lets none");
+
+  // THE KEEPER, AND AN EMPTY PURSE. The price is quoted anyway: a refusal the
+  // player cannot read is a control that just does not work.
+  stand(keeperZone, keeper);
+  const broke = E.berthOffer(core);
+  assert.equal(broke.available, false, "an empty purse cannot take the room");
+  assert.equal(broke.reason, "cannot-afford", "and says why");
+  assert.equal(broke.price, E.price(w, "berth"), "while still quoting the price");
+  assert.equal(E.rentBerth(core).ok, false, "the rental refuses");
+  const nothing = P.get(core);
+  assert.equal(nothing.pouch.money, 0, "taking nothing");
+  assert.equal(nothing.home, null, "and giving nothing");
+  assert.deepEqual(nothing.pouch.items, [], "no key");
+  assert.deepEqual(nothing.ledger.lines, [], "no line");
+  assert.deepEqual(nothing.rel, {}, "and nobody remembers a sale that did not happen");
+
+  // WITH MONEY: the whole vertical, one shipped verb per effect.
+  P.award(core, { money: 100 });
+  const offer = E.berthOffer(core);
+  assert.equal(offer.available, true, "the offer stands");
+  assert.equal(E.rentBerth(core).ok, true, "and it is taken");
+  const now = P.get(core);
+  assert.equal(now.pouch.money, 100 - offer.price, "the purse paid, exactly once");
+  assert.equal(now.home, keeper.lodging, "P1's field holds the room, by its sealed id");
+  assert.deepEqual(
+    now.pouch.items,
+    [{ t: "lodging-key", q: 1, k: "" }],
+    "the key is the receipt, and the pouch's first real row",
+  );
+  assert.equal(now.ledger.lines.length, 1, "one ledger line, for the day boundary P5 will summarise");
+  assert.ok(now.ledger.lines[0][1].includes(E.money(w, offer.price)), "…naming the price in this world's own money");
+  const rel = now.rel[w.startZone];
+  assert.ok(rel && rel[keeper.name], "and the keeper remembers — SETTLEMENT-scoped, per plan §2");
+  assert.equal(rel[keeper.name].t, 1, "one encounter");
+  assert.ok(rel[keeper.name].s, "with the line that says what it was");
+  assert.equal(Object.keys(now.rel).length, 1, "exactly one zone holds rel rows: the settlement, not the room");
+
+  // AND NOT TWICE. The same room sold again is not a second room.
+  const again = E.berthOffer(core);
+  assert.equal(again.available, false, "the room is already theirs");
+  assert.equal(again.reason, "already-yours", "and says so");
+  assert.equal(E.rentBerth(core).ok, false, "so it is not sold again");
+  assert.equal(P.get(core).pouch.money, 100 - offer.price, "and the purse is untouched by the refusal");
+
+  // Everything the rental wrote is a shipped field, so it round-trips byte-stably.
+  const wire = JSON.stringify(P.serialize(P.get(core)));
+  assert.equal(JSON.stringify(P.serialize(P.parse(JSON.parse(wire)).player)), wire, "the block round-trips unchanged");
+
+  // THE LEGACY WORLD LETS ROOMS TOO — the three-zone village has always had an
+  // inn and an innkeeper, and a pre-0.4.0 save is exactly the chat the loading
+  // gate never touches.
+  const legacy = new loadedPF.Sim(world.build(9001, "cozy-village"));
+  const lcore = { chatId: "chat-berth-legacy", sim: legacy, hud: { toast() {}, refreshChips() {} } };
+  legacy.zoneId = "inn";
+  legacy.nearNpc = legacy.world.zones.inn.npcs.find((npc) => npc.name === "Mira");
+  P.award(lcore, { money: 50 });
+  assert.equal(E.rentBerth(lcore).ok, true, "the legacy inn lets a berth as well");
+  assert.equal(P.get(lcore).home, "inn", "anchored at the inn zone");
+  assert.ok(P.get(lcore).rel.village?.Mira, "and Mira remembers it, in the settlement's own zone");
+  loadedPF.save.reset();
+}
+
+// (aw) THE STARTING PURSE IS ONE-SHOT, AND IT IS NOT A DEFAULT.
+// It cannot be a default on the block: serialize() emits every field
+// unconditionally, so a non-zero default would move the bytes of every save in
+// the wild and re-write every open chat on first load. It is granted at the seal
+// instead, and the emptiness test is what keeps the pre-gate interim shim — where
+// a block with a real session in it crosses the same seam — from being paid.
+{
+  const E = loadedPF.economy;
+  const P = loadedPF.player;
+  const sim = new loadedPF.Sim(world.build(4321, "cozy-village"));
+  const core = { chatId: "chat-purse", sim, hud: { toast() {}, refreshChips() {} } };
+  assert.equal(P.get(core).pouch.money, 0, "a block still boots with an empty purse — the frozen wire literal says so");
+  assert.equal(E.grantStartingPurse(core), true, "a world sealing onto an untouched block pays it out");
+  assert.equal(P.get(core).pouch.money, E.STARTING_PURSE, "…in full");
+  assert.equal(P.get(core).ledger.lines.length, 1, "with a line saying so");
+  assert.equal(E.grantStartingPurse(core), false, "and never again on the same block");
+  assert.equal(P.get(core).pouch.money, E.STARTING_PURSE, "so the purse cannot double");
+
+  for (const [label, seed, play] of [
+    ["a pouch with something already in it", 4322, (c) => P.grant(c, "apple", 1)],
+    ["a purse with something already in it", 4323, (c) => P.award(c, { money: 3 })],
+    ["a ledger with a day in it", 4324, (c) => P.log(c, "something happened", 1)],
+    ["a player who already has a home", 4325, (c) => P.setHome(c, "inn")],
+  ]) {
+    const played = new loadedPF.Sim(world.build(seed, "cozy-village"));
+    const pcore = { chatId: `chat-purse-${seed}`, sim: played, hud: { toast() {}, refreshChips() {} } };
+    play(pcore);
+    assert.equal(E.grantStartingPurse(pcore), false, `${label} is not a new game`);
+    assert.ok(P.get(pcore).pouch.money < E.STARTING_PURSE, "…and is not paid");
+  }
+  loadedPF.save.reset();
+}
 
 console.log("brief validator + compiler: all cases passed");

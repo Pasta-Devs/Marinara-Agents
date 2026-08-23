@@ -50,6 +50,28 @@ Run the validator/compiler regression harness with:
 node packages/pixelforge/test-brief.mjs
 ```
 
+## Things, money and a bed (0.11.0)
+
+0.11 gives the player a namespaced, versioned block of their own inside the save — a pouch and a
+purse, skills and equipped tools, a relationship ledger, quest state, a day ledger, discovery
+state, and a home anchor. It carries its own version and migrates on read, and a field a newer
+build added survives a round trip through an older one rather than being deleted by its next save.
+Everything else in the world stays a pure function of `(seed, theme, brief, clock)`, which is what
+keeps a rebuild byte-identical and a timeline rewind safe.
+
+What is *live* in 0.11 is deliberately small: the purse, the pouch, and one transaction.
+**There is no automatic home** — a modern setting probably houses its protagonist and a wandering
+adventurer probably does not, and only your setup and your GM know which — so the player-driven
+path to a bed is **renting a berth at the settlement's inn**. Stand next to whoever keeps it and
+the price is on the button; it costs money, hands you a key, notes the day in your ledger, and the
+keeper remembers you. Renting the same room twice is refused, and so is renting one you cannot
+afford. A new world starts you with a small purse so the first thing money is for is reachable;
+quest rewards are the real income and arrive with the quest layer.
+
+Item names and the currency are **theme-bearing** — a sci-fi colony pays in credits and issues
+berth chits, not coins and room keys — and a theme that ships without naming them fails a
+startup assertion rather than rendering raw tags at a player.
+
 ## Art
 
 Two tiers, resolved at runtime with graceful degradation:

@@ -541,6 +541,11 @@ PF.save = {
       // arm nothing and the freshly compiled world would wait for some unrelated
       // later event to be written at all.
       this._liftGate(core);
+      // S3's starting purse, at the one moment that is unambiguously "this world
+      // begins now" and after the lift, because it goes through the mutators the
+      // gate was refusing a line ago (PF.economy.grantStartingPurse says why this
+      // moment and not a default on the block).
+      PF.economy.grantStartingPurse(core);
       core.hud?.refreshChips();
       core.hud?.toast("The world takes shape.");
       this.markDirty(core);

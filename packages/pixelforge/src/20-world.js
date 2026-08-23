@@ -555,7 +555,13 @@ PF.world = (() => {
       x: 5,
       y: 4,
       wander: { x0: 2, y0: 4, x1: 8, y1: 9 },
+      // The legacy world's lodging, marked the same way the compiler marks the
+      // gathering (see compile()). The legacy layout has no schedules, so the
+      // keeper is named here rather than derived: it is the same three-zone
+      // village it has always been and Mira has always kept the inn.
+      lodging: "inn",
     });
+    n.lodging = true;
     f.npcs.push({
       id: "fen",
       name: "Fen",
@@ -3123,6 +3129,35 @@ PF.world = (() => {
         },
       });
     });
+
+    // ── LODGING (S3/P1): who rents a bed, and where ──────────────────────────
+    // The settlement's gathering is the one building that OFFERS beds rather than
+    // keeping them for its own people (interiorRoom carves `beds` and `homeBeds`
+    // from different bands), so it is the one place a player with no home of their
+    // own can rent a berth. Marked here rather than resolved at the call site
+    // because "which zone is the inn" is a fact about the compile, and the keeper
+    // is stamped on the NPC so the offer follows the PERSON: an innkeeper standing
+    // in the square at noon can still let you a room.
+    //
+    // Runtime-only, exactly like the schedule handles beside it — re-derived on
+    // every compile, costing zero save fields. What the RENTAL persists is the
+    // zone id, and only through PF.player.setHome, which refuses a minted `h{n}`.
+    if (gatheringZoneId && zones[gatheringZoneId]) {
+      zones[gatheringZoneId].lodging = true;
+      // WHO LETS THE ROOMS: the cast member the specials pass bound to the
+      // gathering's building — the `host` kind, the innkeeper — and only if the
+      // brief named nobody, whoever the brief homed there. Deliberately NOT the
+      // `_sched.keeper` tier: that tier is PLACE_BOUND_SPECIALS, which is the
+      // sanctuary alone, so a gathering's owner never carries it and reading it
+      // here would leave every inn in the game with nobody behind the counter.
+      const facade = buildings.find((b) => b.boundPlace === gatheringPlace);
+      const host = facade?.owner ?? headOfBuilding.get(gatheringZoneId) ?? null;
+      if (host) {
+        for (const zone of Object.values(zones)) {
+          for (const npc of zone.npcs) if (npc.name === host.name) npc.lodging = gatheringZoneId;
+        }
+      }
+    }
 
     return {
       seed,

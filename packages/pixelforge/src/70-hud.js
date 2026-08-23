@@ -33,13 +33,22 @@ PF.Hud = class {
     this.captionEl.setAttribute("aria-hidden", "true");
     this.locChip = PF.el("span", { style: S.chip, text: "…" });
     this.clockChip = PF.el("span", { style: S.chip, text: "" });
+    // The purse (S3). Hidden until there is something in it: a legacy world with
+    // no economy in it should not carry a permanent "0 coins" telling the player
+    // about a system they are not playing.
+    this.purseChip = PF.el("span", { style: `${S.chip}display:none;`, text: "" });
     this.topbar = PF.el(
       "div",
       { style: "position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:2;" },
-      [this.locChip, this.clockChip],
+      [this.locChip, this.clockChip, this.purseChip],
     );
 
     this.talkBtn = this._btn("Talk (E)", () => core.interact());
+    // S3's one live transaction (P1's bed). Shown only when a lodging keeper is
+    // within reach, and shown REFUSING rather than hidden when the offer stands
+    // but the purse is short — a button that vanishes teaches the player nothing
+    // about why.
+    this.berthBtn = this._btn("Rent a berth", () => this.rentBerth());
     this.travelBtn = this._btn("Travel", () => this.toggleTravel());
     this.waitBtn = this._btn("⏩ Wait…", () => this.toggleWait());
     this.keyboardBtn = this._btn("Keyboard", () => core.setMode("dialogue"));
@@ -54,7 +63,7 @@ PF.Hud = class {
         style:
           "position:absolute;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px;align-items:flex-end;z-index:2;",
       },
-      [this.talkBtn, this.travelBtn, this.waitMenu, this.waitBtn, this.keyboardBtn, this.resumeBtn],
+      [this.talkBtn, this.berthBtn, this.travelBtn, this.waitMenu, this.waitBtn, this.keyboardBtn, this.resumeBtn],
     );
 
     // Touch D-pad. touch-action:none so the browser doesn't claim the gesture
@@ -217,6 +226,23 @@ PF.Hud = class {
     this.travelMenu.style.display = "flex";
   }
 
+  /** Take the berth the button is offering. The offer is re-read inside
+   *  rentBerth, so what the button was rendering a frame ago cannot overcharge
+   *  anybody; this only turns the verb's refusal reasons into sentences. */
+  rentBerth() {
+    const world = this.core.sim?.world;
+    const result = PF.economy.rentBerth(this.core);
+    if (result.ok) {
+      this.toast(`A berth is yours — ${PF.economy.money(world, result.price)} the night.`);
+      this.refreshChips();
+      return;
+    }
+    if (result.reason === "already-yours") this.toast("You already keep a berth here.");
+    else if (result.reason === "cannot-afford")
+      this.toast(`Not enough on you — a berth is ${PF.economy.money(world, result.price)}.`);
+    else this.toast("There is no room to be had here.");
+  }
+
   refreshChips() {
     const sim = this.core.sim;
     if (!sim) return;
@@ -236,6 +262,17 @@ PF.Hud = class {
         : null;
     this.locChip.textContent = bound && bound !== zoneName ? `${zoneName} — ${bound}` : zoneName;
     this.clockChip.textContent = sim.clockLabel();
+    // The purse. Money and the pouch's row count, in this theme's own words —
+    // and nothing at all until one of them exists, so a legacy world carries no
+    // chip about an economy it does not have.
+    const pouch = PF.player.get(this.core)?.pouch;
+    const money = pouch?.money ?? 0;
+    const carried = (pouch?.items ?? []).reduce((n, item) => n + Math.max(0, item?.q ?? 0), 0);
+    const { glyph } = PF.economy.currency(sim.world);
+    this.purseChip.style.display = money || carried ? "" : "none";
+    this.purseChip.textContent = carried
+      ? `${glyph} ${PF.economy.money(sim.world, money)} · ${carried} carried`
+      : `${glyph} ${PF.economy.money(sim.world, money)}`;
   }
 
   /** Cheap per-frame sync — writes DOM only on change. */
@@ -268,6 +305,12 @@ PF.Hud = class {
       this.root.style.display = mode === "replay" ? "none" : "";
       this.dpad.style.display = inWorld ? "" : "none";
       this.talkBtn.style.display = inWorld ? "" : "none";
+      // The berth button is proximity-driven as well as mode-driven, so leaving
+      // walk mode hides it here and the walk block below decides when it is back.
+      if (!inWorld) {
+        this.berthBtn.style.display = "none";
+        this._berth = null;
+      }
       this.travelBtn.style.display = inWorld && spatialAvail ? "" : "none";
       this.waitBtn.style.display = inWorld ? "" : "none";
       this.keyboardBtn.style.display = inWorld ? "" : "none";
@@ -298,6 +341,28 @@ PF.Hud = class {
         this._canTalk = canTalk;
         this.talkBtn.style.opacity = canTalk ? "1" : "0.45";
         this.talkBtn.textContent = canTalk ? `Talk to ${sim.nearNpc.name} (E)` : "Talk (E)";
+      }
+      // The berth offer, on the same cadence as Talk and memoised the same way:
+      // both answer to who is within reach, and both would otherwise write DOM
+      // sixty times a second. `already-yours` and `cannot-afford` still SHOW the
+      // button — dimmed and saying why — because a control that disappears when
+      // the purse runs short teaches the player nothing about the price.
+      const offer = PF.economy.berthOffer(this.core);
+      // A price is only ever quoted when a real keeper with a real room is within
+      // reach — every other refusal comes back with a null price — so this one
+      // test covers "is there anything to show at all".
+      const shown = offer.price !== null;
+      const berthKey = shown ? `${offer.reason ?? "ok"}:${offer.price}` : "";
+      if (berthKey !== this._berth) {
+        this._berth = berthKey;
+        this.berthBtn.style.display = shown ? "" : "none";
+        if (shown) {
+          this.berthBtn.style.opacity = offer.available ? "1" : "0.45";
+          this.berthBtn.textContent =
+            offer.reason === "already-yours"
+              ? "Your berth"
+              : `Rent a berth (${PF.economy.money(sim.world, offer.price)})`;
+        }
       }
       const clock = sim.clockLabel();
       if (clock !== this._clock) {

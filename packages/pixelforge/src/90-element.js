@@ -271,6 +271,11 @@ PF.core = {
       return;
     }
     const npc = sim.nearNpc;
+    // The generation this turn belongs to. The .then() below runs after an await,
+    // so a chat switch can land under it — and every mutator RE-RESOLVES core.sim,
+    // which means an unfenced bump would credit the arriving chat's block with the
+    // departing chat's conversation.
+    const gen = PF.save._gen ?? 0;
     this.setMode("dialogue");
     this.hud?.toast(`Talking to ${npc.name}`);
     void Promise.resolve(
@@ -282,6 +287,14 @@ PF.core = {
           this.hud?.toast("The story isn't accepting turns right now.");
         } else {
           sim.commitIntro();
+          // P2's ledger goes live on the cheapest honest signal there is: the
+          // encounter count moves when the host ACCEPTS the turn, exactly where
+          // the one-shot intro flags burn, and for the same reason — a refused
+          // or failed send is not a conversation. SETTLEMENT-scoped (plan §2:
+          // rel keys are per settlement), so one person is one row wherever in
+          // the world you happen to meet them. Surfacing the disposition in the
+          // turn header is P2's own item and deliberately not here.
+          PF.player.bump(this, sim.world.startZone, npc.name, { t: 1 }, gen);
         }
       })
       .catch((err) => {
