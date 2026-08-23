@@ -238,8 +238,9 @@ for (const localeFile of memoryNagUiLocaleFiles) {
   if (catalog._meta?.locale !== locale) {
     throw new Error(`Memory Nag ${locale} UI localization metadata must match its filename`);
   }
-  if (!new Set(["ltr", "rtl"]).has(catalog._meta?.direction)) {
-    throw new Error(`Memory Nag ${locale} UI localization direction must be ltr or rtl`);
+  const expectedDirection = locale === "ar" ? "rtl" : "ltr";
+  if (catalog._meta?.direction !== expectedDirection) {
+    throw new Error(`Memory Nag ${locale} UI localization direction must be ${expectedDirection}`);
   }
   const keys = Object.keys(catalog).filter((key) => key !== "_meta");
   if (JSON.stringify(keys) !== JSON.stringify(memoryNagEnglishKeys)) {
