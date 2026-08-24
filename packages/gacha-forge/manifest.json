@@ -6,12 +6,12 @@
   },
   "builtAgainst": {
     "engineVersion": "2.4.4",
-    "engineCommit": "50e52028ac0ab4e64ce12e5f629510cb27dffa92"
+    "engineCommit": "0790c4780ccd266c8460d7da927662d0869bbe62"
   },
   "id": "gacha-forge",
   "name": "Gacha Forge",
-  "version": "1.1.0",
-  "description": "A configurable gacha game mode. Forge a world from your lorebooks, pull on banners, collect the cast the model writes for you, then take them into battle: build a formation, farm materials and level them up. Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge.",
+  "version": "1.2.0",
+  "description": "A configurable gacha game mode. Forge a world from your lorebooks, pull on banners, collect the cast the model writes for you, then take them into battle: play story chapters told by a visual-novel narrator, build a formation, farm materials and level them up. Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge.",
   "engine": {
     "min": "2.4.4",
     "maxExclusive": "4.0.0"
@@ -46,13 +46,13 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "3bed9fd3b3ef0538e3f707e83d2653f35aa97b8021b7303bb0124019c679bfe5",
-      "bytes": 739
+      "sha256": "d046249647468eb198b15c1e2b40477b083dab191caac2b255ac744951c89454",
+      "bytes": 792
     },
     {
       "path": "client.js",
-      "sha256": "9606611d46597ee9ea4fe40e34d290bcaa9a1205b9aa4a90ca3e9e4c29aeb7e0",
-      "bytes": 495258
+      "sha256": "a1c83220e02ad86824d95ef8f39992731b19a9c7fd2c60557d6137f783b45f99",
+      "bytes": 597767
     },
     {
       "path": "gacha-forge-icon.png",
@@ -61,8 +61,8 @@
     },
     {
       "path": "server.mjs",
-      "sha256": "cbde9569cb9a7b4f42bf1b8d33ab47fc78f6b6ded721b0239268a2e8e3f66273",
-      "bytes": 178626
+      "sha256": "52955748ce40c8e0d7cd117ff1c2cec945ce7878966dd0d1eeaf9b23599d4c96",
+      "bytes": 203189
     }
   ]
 }

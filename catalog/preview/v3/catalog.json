@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-16T16:09:06.456Z",
+  "packages": [
+    {
+      "manifest": {
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
+          "minor": 9
+        },
+        "builtAgainst": {
+          "engineVersion": "2.4.4",
+          "engineCommit": "0790c4780ccd266c8460d7da927662d0869bbe62"
+        },
+        "id": "gacha-forge",
+        "name": "Gacha Forge",
+        "version": "1.2.0",
+        "description": "A configurable gacha game mode. Forge a world from your lorebooks, pull on banners, collect the cast the model writes for you, then take them into battle: play story chapters told by a visual-novel narrator, build a formation, farm materials and level them up. Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge.",
+        "engine": {
+          "min": "2.4.4",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "client": "client.js",
+          "server": "server.mjs"
+        },
+        "contributions": {
+          "slots": [
+            "home-browser-tab"
+          ],
+          "homeBrowserTab": {
+            "label": "Gacha Forge",
+            "ariaLabel": "Open Gacha Forge",
+            "iconPaths": [
+              "gacha-forge-icon.png"
+            ]
+          }
+        },
+        "permissions": [
+          "network",
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true,
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "d046249647468eb198b15c1e2b40477b083dab191caac2b255ac744951c89454",
+            "bytes": 792
+          },
+          {
+            "path": "client.js",
+            "sha256": "a1c83220e02ad86824d95ef8f39992731b19a9c7fd2c60557d6137f783b45f99",
+            "bytes": 597767
+          },
+          {
+            "path": "gacha-forge-icon.png",
+            "sha256": "1352f478b6b7ae2e9eeb127b6e7b31183e0a2a8ca892999c2f0404aafbdbead4",
+            "bytes": 5352
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "52955748ce40c8e0d7cd117ff1c2cec945ce7878966dd0d1eeaf9b23599d4c96",
+            "bytes": 203189
+          }
+        ]
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/gacha-forge.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.2.0.zip",
+        "sha256": "50353e95d538515b51727c613ab212ed0682e294f761f625bfabce5cacccf3c4",
+        "bytes": 809411
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/gacha-forge/README.md"
+    }
+  ]
+}
