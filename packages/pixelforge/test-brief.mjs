@@ -9331,7 +9331,15 @@ await withSavePath(async ({ armed, makeCore }) => {
   // quest and nothing brings it back. Now that the band is a surface a player
   // re-reads rather than one sentence in a wrap-up, the outcome clause is the
   // difference between a notice and an explanation (plan §2.5, M3).
-  assert.ok(/let it go/.test(out.notices[0]), `…and it says the task was let go (${out.notices[0]})`);
+  // Pinned to the WHOLE sentence, exactly as its sibling in (z2) below is: a
+  // substring match holds while the clause around it is rewritten into
+  // something that no longer says the task is gone for good, which is the half
+  // of the copy the review was actually about.
+  assert.deepEqual(
+    out.notices,
+    ["A task you had taken on has no one left to hand it back to, so you have let it go."],
+    "…and it says, in full, that the task was let go",
+  );
 
   const all = P.defaultPlayer();
   all.quests.active = [
