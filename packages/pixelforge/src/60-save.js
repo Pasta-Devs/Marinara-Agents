@@ -841,10 +841,24 @@ PF.save = {
       // chat reopened at midnight would show a town going about its morning.
       sim.resolveSchedules();
       if (saved.intro && typeof saved.intro === "object") {
+        // A CLOSED LITERAL, and that is the fact this line exists to answer.
+        // Every subkey not named here is stripped on every restore AND on every
+        // `_rebuild`, and the envelope carry cannot cover for it: `_envelopeExtra`
+        // holds unknown TOP-LEVEL keys, so a known key's unknown SUBKEY rides
+        // nothing at all. Adding a field under `intro` therefore means adding it
+        // HERE, in the same change, or it is write-only state.
         sim.intro = {
           world: saved.intro.world === true,
           zones: saved.intro.zones && typeof saved.intro.zones === "object" ? { ...saved.intro.zones } : {},
           npcs: saved.intro.npcs && typeof saved.intro.npcs === "object" ? { ...saved.intro.npcs } : {},
+          // THE DURABLE HALF OF THE TWO-FIELD FLUSH (plan §2.5): the last day a
+          // completed sleep made owed. It lives under `intro` because that key is
+          // already in the envelope and a wrap-up marker is not worth an
+          // ENVELOPE_KEYS entry of its own — and the whole design is void without
+          // this line, since a marker that does not survive a reload can never
+          // outlive the session that staged it. Read through the resolver: it
+          // comes off save JSON and it is about to be compared against `sim.day`.
+          ledgerOwed: PF.player.resolvedDay(saved.intro.ledgerOwed),
         };
       }
       if (saved.bindings && typeof saved.bindings === "object") {

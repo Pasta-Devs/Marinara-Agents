@@ -1046,6 +1046,21 @@ PF.player = {
     return posInt(stack.q, 0) > 0 ? 1 : 0;
   },
 
+  /** A DAY ORDINAL off untrusted state: a whole number at or above zero, and
+   *  zero for everything else. Small, and it exists because three files needed
+   *  the same read and a near-copy in each of them is how two of them come to
+   *  disagree — the restore that carries `intro.ledgerOwed` across a reload
+   *  (60-save), the sleep that stages it, and the wrap-up that composes against
+   *  it and the day gate (30-sim). Zero is the safe answer everywhere: it owes
+   *  nothing, tells nothing, and cannot lift a gate.
+   *
+   *  Beside the resolvers because it is one of them — a saved number is evidence
+   *  and not a value, and a `ledgerOwed` of "12", -3 or 1e9 has to come back as
+   *  a day this build can reason about rather than as a fact it inherited. */
+  resolvedDay(value) {
+    return posInt(value, 0);
+  },
+
   /** A verb's level, clamped to the ladder the block can actually hold. `row` is
    *  a `skills.verbs` entry or a bare number, and either one comes off save JSON
    *  where `l` can be 0, 9,000, or the string "12". The floor is 1 rather than 0

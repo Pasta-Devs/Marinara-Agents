@@ -7891,6 +7891,63 @@ const cellarBrief = (prosperity) => ({
   );
 }
 
+// ── THE STAGED WRAP-UP DAY SURVIVES THE ROUND TRIP (0.12 slice 4) ──────────
+// The durable half of the two-field flush. `intro.ledgerOwed` is written by a
+// completed sleep and read by the compose that tells those days — and between
+// the two there is always at least one reload, or one `_rebuild`, which is the
+// same code path. The intro parse is a CLOSED literal: a subkey it does not name
+// is stripped on every restore, and the envelope carry cannot stand in for it
+// because that carry holds unknown TOP-LEVEL keys only. Without the one line in
+// simFromSaved that reads this field it is write-only state and the whole design
+// is a marker that never outlives the session that staged it.
+//
+// DECLARED BYTE MOVEMENT, and it is why this is a case rather than an assertion:
+// a save that HAS an intro block now round-trips carrying `"ledgerOwed":0`,
+// which is one extra write per open chat on first load. A save with no intro at
+// all — the frozen literal above, and every fresh sim — is untouched, because
+// snapshot() falls back to the three-key literal for a sim that never composed.
+{
+  const sim = new loadedPF.Sim(world.build(6120, "cozy-village"));
+  sim.intro = { world: true, zones: {}, npcs: {} };
+  sim.intro.ledgerOwed = 4; // what a completed sleep stages
+  const snap = JSON.parse(JSON.stringify(loadedPF.save.snapshot({ sim, chatId: "chat-owed" })));
+  assert.equal(snap.intro.ledgerOwed, 4, "snapshot emits `intro` wholesale, so the staged day is already on the wire");
+  const back = loadedPF.save.simFromSaved(snap, {}, "chat-owed");
+  assert.equal(back.intro.ledgerOwed, 4, "…and the restore CARRIES it — the parse literal names it");
+  assert.equal(back.intro.world, true, "with the one-shot flags it sits beside");
+
+  // A SAVED NUMBER IS EVIDENCE, NEVER A VALUE. This one is about to be compared
+  // against `sim.day` and used to lift a gate, so it comes back through the
+  // resolver: anything that is not a whole day at or above zero owes nothing.
+  for (const hostile of ["4", 3.5, -1, NaN, null, { day: 4 }]) {
+    const row = { ...snap, intro: { ...snap.intro, ledgerOwed: hostile } };
+    assert.equal(
+      loadedPF.save.simFromSaved(row, {}, "chat-owed-hostile").intro.ledgerOwed,
+      0,
+      `a ledgerOwed of ${JSON.stringify(hostile)} owes nothing`,
+    );
+  }
+
+  // THE MOVEMENT, PINNED IN BOTH DIRECTIONS. A pre-0.12 row carrying an intro
+  // gains the field at zero (declared); a row carrying no intro at all gains
+  // nothing, which is what keeps the frozen literal above frozen.
+  const pre = { v: 1, seed: 6120, theme: "cozy-village", intro: { world: true, zones: {}, npcs: {} } };
+  const lifted = loadedPF.save.simFromSaved(pre, {}, "chat-owed-pre");
+  assert.equal(lifted.intro.ledgerOwed, 0, "a 0.11 row's intro reads back owing nothing");
+  assert.equal(
+    JSON.stringify(loadedPF.save.snapshot({ sim: lifted, chatId: "chat-owed-pre" }).intro),
+    '{"world":true,"zones":{},"npcs":{},"ledgerOwed":0}',
+    "…and re-serializes carrying it — one extra write per open chat, declared",
+  );
+  const bare = loadedPF.save.simFromSaved({ v: 1, seed: 6120, theme: "cozy-village" }, {}, "chat-owed-bare");
+  assert.equal(
+    JSON.stringify(loadedPF.save.snapshot({ sim: bare, chatId: "chat-owed-bare" }).intro),
+    '{"world":false,"zones":{},"npcs":{}}',
+    "while a row with no intro at all still serializes to the bytes the frozen literal pins",
+  );
+  loadedPF.save.reset();
+}
+
 // ── ENVELOPE_KEYS AND snapshot() CANNOT DRIFT APART (S5 slice 1) ───────────
 // The registry is load-bearing in BOTH directions and neither one fails loudly:
 //   • emitted but not listed → simFromSaved reads our own key back as "foreign"
