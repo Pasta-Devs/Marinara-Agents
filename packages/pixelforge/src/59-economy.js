@@ -166,6 +166,10 @@ const ITEM_SKINS = {
       "catch-rare": ["scarred", "moon-pale", "grandfather"],
       "catch-prize": ["storied", "long-hunted", "river-king's"],
     },
+    // The refusals a player is meant to ACT on, in this theme's words. `{role}`
+    // is filled from the keeper's COMPILED role and never hardcoded: a sci-fi
+    // colony has no innkeeper, and only the brief knows what it does have.
+    hints: { noRod: "You need a rod — the {role} sells one." },
   },
   "sci-fi-colony": {
     currency: { one: "credit", many: "credits", glyph: "◈" },
@@ -205,6 +209,7 @@ const ITEM_SKINS = {
       "catch-rare": ["unlogged", "pressure-marked", "off-manifest"],
       "catch-prize": ["record", "founder-stock", "hand-listed"],
     },
+    hints: { noRod: "You need an angling rig — the {role} stocks one." },
   },
 };
 
@@ -728,6 +733,290 @@ PF.economy = {
     return { ok: true, reason: null, price: offer.price, tier: offer.tier, bait };
   },
 
+  // ── Fishing (plan §2.1) ────────────────────────────────────────────────────
+  // WHY THE VERB LIVES IN THIS FILE. It is the same shape as rentBerth: content
+  // (the tables, TUNING, the words) plus an OFFER that describes and a VERB that
+  // mutates, holding no state of its own and putting everything durable through
+  // a shipped mutator. 58-player is the state BLOCK and deliberately ships no
+  // verbs; 30-sim loads before both and could not see either. So it goes beside
+  // the other transaction, and the file header names it.
+  //
+  // A CAST IS ONE WINDOW. `castWindow = floor(clockMin / castMinutes)`, and the
+  // window's identity — its day and its index — is read BEFORE the clock moves,
+  // so the roll belongs to the slice of time it was spent in.
+  //
+  // SYNCHRONOUS AND ATOMIC. Advance, roll, grant, award, accumulate, in one pass:
+  // no await, no cutscene, nothing that can be interleaved with a chat switch
+  // half-way through a cast. The GM hears about none of it here — outcomes reach
+  // the prompt only through the sleep-recap flush (Ruling 1, M10).
+  //
+  // REFUSAL VALUES, each distinct, all of them read before a single minute is
+  // spent:
+  //   gate-held      — a world nobody has entered has no water in it yet.
+  //   wrong-mode     — walk only, like every other clock mover.
+  //   not-near-water — no registry row under the player's hand, or one whose tag
+  //                    is not a kind that holds water.
+  //   no-rod         — REACHABLE and deliberately so (M8's amendment): the
+  //                    button stays visible for a rodless player and answers with
+  //                    a themed hint pointing at the keeper who sells one, which
+  //                    is what makes the mechanic discoverable instead of
+  //                    invisible.
+  //   pouch-full     — at the row cap only MERGES can land, so a session would
+  //                    spend real hours to be told nothing new. Refused up front
+  //                    rather than half-working. (Conservative on purpose: a
+  //                    merge would still succeed. The mid-loop refusal below is
+  //                    the other end of the same cap and does not refuse the
+  //                    session.)
+  //   unknown-target — a CALLER error and not a player-facing one; the menu can
+  //                    only produce the four daypart words or none at all.
+
+  /** The bait stack a session would slot: the first live bait row in the pouch.
+   *  The mod slot is a per-session SELECTION and not a standing preference, so
+   *  there is nothing stored to consult and this is the whole of the choice. */
+  _baitRow(player) {
+    for (const row of player?.pouch?.items ?? []) {
+      if (row?.t === BAIT_TYPE && (row.q ?? 0) > 0) return row;
+    }
+    return null;
+  },
+
+  /** Anybody in this world who lets rooms, near or not. The no-rod hint points at
+   *  the vendor, and the vendor is worth naming even when the player is standing
+   *  at a pond three zones away from them. */
+  _anyKeeper(sim) {
+    const near = this._keeper(sim);
+    if (near) return near;
+    for (const zoneId of Object.keys(sim?.world?.zones ?? {})) {
+      for (const npc of sim.world.zones[zoneId].npcs ?? []) {
+        if (typeof npc?.lodging === "string" && npc.lodging) return npc;
+      }
+    }
+    return null;
+  },
+
+  /** "You need a rod — the innkeeper sells one." THEMED, and interpolating the
+   *  keeper's COMPILED role rather than a hardcoded word, because a sci-fi colony
+   *  has no innkeeper and the brief is what decides what it does have (the Talk
+   *  sender's `npc.role` idiom, 90-element). A world with nobody letting rooms
+   *  drops the clause rather than inventing a vendor. */
+  rodHint(core) {
+    const sim = core?.sim;
+    const template = this._skin(sim?.world).hints.noRod;
+    const role = this._anyKeeper(sim)?.role;
+    if (typeof role !== "string" || !role) return template.replace(/ — .*$/, ".");
+    return template.replace("{role}", role);
+  },
+
+  /** Is there water to fish where the player is standing, what would a session
+   *  spend, and what is stopping it? Describes only — no clock moves, nothing is
+   *  taken — so the HUD can call it every frame.
+   *
+   *  Returns { available, reason, spot, tag, bait, hint }. `spot` is the render
+   *  test the button gates on, exactly as `price !== null` is the berth's: a
+   *  refusal that still names a spot is one the player should SEE, because it is
+   *  a refusal about them rather than about the place. */
+  fishOffer(core) {
+    const sim = core?.sim;
+    const no = (reason) => ({ available: false, reason, spot: null, tag: null, bait: null, hint: "" });
+    if (PF.save?.gateHolds?.(core)) return no("gate-held");
+    if (!sim || sim.mode !== "walk") return no("wrong-mode");
+    const spot = sim.nearFeature;
+    if (!spot || !SPOT_TAGS.includes(spot.tag)) return no("not-near-water");
+    const player = PF.player.get(core);
+    if (!player) return no("no-player");
+    const at = { available: true, reason: null, spot, tag: spot.tag, bait: this._baitRow(player), hint: "" };
+    if (this.rodTier(player) === null) return { ...at, available: false, reason: "no-rod", hint: this.rodHint(core) };
+    if ((player.pouch?.items ?? []).length >= PF.player.CAPS.items)
+      return { ...at, available: false, reason: "pouch-full" };
+    return at;
+  },
+
+  /** Slot the session's bait, or clear the slot. The verb's own per-session act
+   *  (plan §2.4): there is no standing preference and no extra UI, so this is
+   *  where the slot and the pouch are reconciled — a slot pointing at a stack
+   *  that is gone is cleared, and a live stack with no slot is taken up.
+   *
+   *  ONLY EVER BAIT INTO THE MOD SLOT. equip() validates by item type and not by
+   *  slot, so the scoping is this call site's job exactly as it is the auto-equip
+   *  helper's. */
+  _slotBait(core, gen) {
+    const player = PF.player.get(core);
+    if (!player) return null;
+    const slot = player.skills?.equipped?.fishing?.mod;
+    if (Array.isArray(slot) && slot[0] === BAIT_TYPE) {
+      const held = player.pouch.items.find((row) => row.t === BAIT_TYPE && row.k === slot[1]);
+      if (held && (held.q ?? 0) > 0) return held;
+    }
+    const row = this._baitRow(player);
+    if (!row) {
+      if (slot) PF.player.equip(core, "fishing", "mod", null, gen);
+      return null;
+    }
+    PF.player.equip(core, "fishing", "mod", { t: BAIT_TYPE, k: row.k }, gen);
+    return row;
+  },
+
+  /** Draw one entry: weight × this daypart's multiplier, over the entries the
+   *  player's level has opened up. Null when the level has opened nothing, which
+   *  a shipped table never does (every one of them holds a level-1 entry) and a
+   *  hostile one might. */
+  _draw(rnd, table, level, part) {
+    let total = 0;
+    for (const entry of table) {
+      if (level < entry.minLevel) continue;
+      total += entry.weight * (entry.daypart?.[part] ?? 1);
+    }
+    if (!(total > 0)) return null;
+    let roll = rnd() * total;
+    for (const entry of table) {
+      if (level < entry.minLevel) continue;
+      roll -= entry.weight * (entry.daypart?.[part] ?? 1);
+      if (roll < 0) return entry;
+    }
+    return null;
+  },
+
+  /** One batched ledger line for one DAY of a session (plan §2.1). Written at
+   *  the midnight wrap for the day that just ended, and again at the end for the
+   *  day the session finished in — so a post-midnight fisher's pre-midnight catch
+   *  is filed under the day it happened and the 00:30 sleep can flush it.
+   *
+   *  GATE-SAFE by construction: `log()` refuses a day the flush already covers,
+   *  and mid-session `flushedDay ≤ D−1` always — telling day D would need
+   *  `ledgerOwed ≥ D`, which needs a completed sleep after D's midnight, which
+   *  cannot have happened while the player is still standing at the water. */
+  _logDay(core, world, spot, tally, day, gen) {
+    if (!tally.windows) return false;
+    const counts = new Map();
+    for (const entry of tally.caught) {
+      const key = `${this.entryType(entry)}:${entry.variant}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    const casts = `${tally.windows} cast${tally.windows === 1 ? "" : "s"}`;
+    if (!counts.size) return PF.player.log(core, `Fished ${spot.name} — ${casts}, nothing biting.`, day, gen);
+    const named = [...counts].map(([key, n]) => {
+      const [t, k] = key.split(":");
+      const name = this.describe(world, { t, k });
+      return n > 1 ? `${name} ×${n}` : name;
+    });
+    return PF.player.log(core, `Fished ${spot.name} — ${casts}: ${named.join(", ")}.`, day, gen);
+  },
+
+  /** Fish. `target` is null for one cast, or a daypart word for a session that
+   *  loops windows until the clock reaches that daypart's start (overshooting by
+   *  at most one window, because a cast is a whole window and not a fraction).
+   *
+   *  DETERMINISM. Each window seeds its own stream from
+   *  `hash(seed, day, castWindow, spotId, level, toolTier, modTier)` — every one
+   *  of them RESOLVED (58-player's resolvers), never a raw string off the save,
+   *  so two clients that disagree about what "legendary" means still pull the
+   *  same fish out of the same water on the same minute. A failed window is a
+   *  fixed point escaped only by spending different time, which IS the
+   *  anti-save-scum property and is stated rather than discovered.
+   *
+   *  BAIT PRESENCE IS READ BEFORE IT IS SPENT. The window a bait was consumed on
+   *  rolls BAITED; the slot-clear that follows the last one affects the NEXT
+   *  window, which then re-keys the hash at tier 0 and goes on fishing at the
+   *  lower rate. Exhaustion is a continuation, never a stop.
+   *
+   *  MID-LOOP GRANT REFUSAL. grant() refuses only a NEW `(t,k)` row at the pouch
+   *  cap — merges never refuse — so a session can meet the cap on a variant it
+   *  has not caught before. That window's grant AND its award are skipped and it
+   *  logs nothing; the loop continues, because the cap bounds species DIVERSITY
+   *  and not the session.
+   *
+   *  Returns { ok, reason, hint, windows, caught, leveled, days }. */
+  fish(core, target, gen) {
+    const opening = this.fishOffer(core);
+    if (!opening.available)
+      return { ok: false, reason: opening.reason, hint: opening.hint, windows: 0, caught: [], leveled: 0, days: [] };
+    const sim = core.sim;
+    const world = sim.world;
+    const spot = opening.spot;
+    const table = this.catchTable(world, spot.tag) ?? [];
+    const W = TUNING.castMinutes;
+    const modMult = [1, TUNING.baitMult];
+
+    let windows = 1;
+    if (target != null) {
+      const at = Object.prototype.hasOwnProperty.call(PF.DAYPART_STARTS, target)
+        ? PF.DAYPART_STARTS[target]
+        : undefined;
+      if (at === undefined)
+        return { ok: false, reason: "unknown-target", hint: "", windows: 0, caught: [], leveled: 0, days: [] };
+      // The NEXT occurrence, exactly as waitUntil reads the same table: asking to
+      // fish until dusk from inside dusk is asking for a day of it.
+      const delta = at > sim.clockMin ? at - sim.clockMin : at + 24 * 60 - sim.clockMin;
+      windows = Math.max(1, Math.ceil(delta / W));
+    }
+
+    this._slotBait(core, gen);
+    const caught = [];
+    const days = [];
+    let leveled = 0;
+    let spent = 0;
+    let tally = { windows: 0, caught: [] };
+
+    for (let i = 0; i < windows; i++) {
+      const live = PF.player.get(core);
+      if (!live) break; // a chat switch landed under us; the mutators would refuse anyway
+      const slots = live.skills?.equipped?.fishing ?? null;
+      const modSlot = Array.isArray(slots?.mod) ? slots.mod : null;
+      const stack = modSlot ? live.pouch.items.find((row) => row.t === modSlot[0] && row.k === modSlot[1]) : null;
+      // READ BEFORE TAKE. This is the window the bait is being spent on.
+      const modTier = PF.player.resolvedModTier(modSlot, stack);
+      const toolTier = PF.player.resolvedToolTier(Array.isArray(slots?.tool) ? slots.tool[1] : "");
+      const level = PF.player.resolvedLevel(live.skills?.verbs?.fishing);
+      const day = sim.day;
+      const castWindow = Math.floor(sim.clockMin / W);
+      const part = sim.daypart();
+
+      sim.advanceMinutes(W);
+      spent += W;
+      tally.windows += 1;
+      // THE WRAP: file the day that just ended before anything from the new one
+      // can land in it. The accumulator starts over on the far side of midnight.
+      if (sim.day !== day) {
+        if (this._logDay(core, world, spot, tally, day, gen)) days.push(day);
+        tally = { windows: 0, caught: [] };
+      }
+      // THE WRAP: file the day that just ended before anything from the new one
+      // can land in it. The accumulator starts over on the far side of midnight.
+      if (modTier === 1) {
+        PF.player.take(core, { t: modSlot[0], k: modSlot[1] }, 1, gen);
+        if (!live.pouch.items.some((row) => row.t === modSlot[0] && row.k === modSlot[1]))
+          PF.player.equip(core, "fishing", "mod", null, gen);
+      }
+
+      const rnd = PF.rng(PF.hashStr(`${world.seed}:${day}:${castWindow}:${spot.id}:${level}:${toolTier}:${modTier}`));
+      const base = Math.min(TUNING.baseCeil, TUNING.baseAt1 + TUNING.basePerLevel * (level - 1));
+      // Unclamped on purpose: the roll is `rnd() < p` and rnd() never reaches 1,
+      // so a p at or over 1 simply always lands — which is what the top of a
+      // fully-equipped ladder is supposed to feel like, and is unreachable in
+      // 0.12 anyway (fine and masterwork are not sold).
+      const p = base * TUNING.toolMult[toolTier] * modMult[modTier];
+      if (rnd() >= p) continue;
+      const entry = this._draw(rnd, table, level, part);
+      if (!entry) continue;
+      const type = this.entryType(entry);
+      // The PRIOR level, read before the award, because award() returns the new
+      // one and carries no "leveled" flag of its own.
+      const before = PF.player.resolvedLevel(live.skills?.verbs?.fishing);
+      if (!PF.player.grant(core, { t: type, k: entry.variant }, 1, gen)) continue;
+      const paid = PF.player.award(core, { xp: TUNING.catchXp[type] ?? 0, verb: "fishing" }, gen);
+      if (paid?.level > before) leveled = paid.level;
+      tally.caught.push(entry);
+      caught.push({ t: type, k: entry.variant });
+    }
+
+    if (tally.windows && this._logDay(core, world, spot, tally, sim.day, gen)) days.push(sim.day);
+    // EVERY PATH THAT MOVED THE CLOCK, refusals-after-advance included (the Wait
+    // precedent, 70-hud): the mutators self-dirty, but a session of failed casts
+    // runs no mutator at all and would otherwise lose its hours on reload.
+    if (spent) core.markDirty?.();
+    return { ok: true, reason: null, hint: "", windows: spent / W, caught, leveled, days };
+  },
+
   /** The starting purse, paid when a SEALED world comes up on a block nothing has
    *  ever been written into. That is the condition, not a moment — and the
    *  difference is the whole slice-6 correction. It used to be one instant (the
@@ -807,6 +1096,12 @@ PF.economy = {
     for (const variant of shippedVariants) {
       if (!skin.variants?.[variant]) throw new Error(`pixelforge: theme "${theme}" has no name for "${variant}"`);
     }
+    // THE REFUSAL A PLAYER IS MEANT TO ACT ON. A theme without it answers a
+    // pressed button with an empty toast, which reads as a broken control rather
+    // than as a mechanic with a vendor behind it — and the `{role}` slot is what
+    // keeps it out of hardcoding an innkeeper into a colony.
+    if (!skin.hints?.noRod?.includes("{role}"))
+      throw new Error(`pixelforge: theme "${theme}" has no no-rod hint naming a vendor`);
     // THE 2×2, both halves. A theme with no table for a spot kind is water the
     // player can stand at and the verb cannot answer for; an EMPTY table is the
     // same hole with a shape, and it would divide by a zero weight rather than

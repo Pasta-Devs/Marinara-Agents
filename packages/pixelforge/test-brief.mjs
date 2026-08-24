@@ -13896,6 +13896,433 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
   }
 }
 
+// ═══ THE FISHING VERB (0.12 slice 3's headline) ═════════════════════════════
+// A cast is one window of clock, spent atomically: advance, roll, grant, award,
+// accumulate. What the cases below pin is the part a playtest cannot see — that
+// the roll is a function of RESOLVED state and nothing else, that bait is read
+// before it is spent, that a session crossing midnight files each day under its
+// own day, and that a session which caught nothing still costs the hours it
+// spent.
+{
+  const E = loadedPF.economy;
+  const P = loadedPF.player;
+  const W = E.TUNING.castMinutes;
+
+  /** Put the player at the bank of a registry row: a standable tile with a water
+   *  tile of that row's rect next to it. The two-sided nearFeature test is
+   *  30-sim's and pinned there; this only has to land on a tile that satisfies it. */
+  const standAt = (sim, zoneId, row) => {
+    const z = sim.world.zones[zoneId];
+    for (let y = row.rect.y - 1; y <= row.rect.y + row.rect.h; y++) {
+      for (let x = row.rect.x - 1; x <= row.rect.x + row.rect.w; x++) {
+        if (x < 0 || y < 0 || x >= z.w || y >= z.h) continue;
+        if (z.ground[y * z.w + x] === "water" || z.solid[y * z.w + x]) continue;
+        sim.teleport(zoneId, x, y);
+        sim.step(0, {});
+        if (sim.nearFeature?.id === row.id) return true;
+      }
+    }
+    return false;
+  };
+
+  /** A player standing at the legacy pond with whatever kit the case asks for.
+   *  The legacy world because it is the smallest one that carries a registry row,
+   *  a keeper and a fixed layout — nothing here is about the compiler. */
+  let chats = 0;
+  const angler = ({ clockMin = 9 * 60, day = 3, level = 1, tier = "crude", bait = 0, seed = 7, xp = 0 } = {}) => {
+    const w = world.build(seed, "cozy-village", null);
+    const sim = new loadedPF.Sim(w);
+    sim.clockMin = clockMin;
+    sim.day = day;
+    sim.resolveSchedules();
+    let dirty = 0;
+    const core = {
+      chatId: `chat-fish-${++chats}`,
+      sim,
+      hud: { toast() {}, refreshChips() {} },
+      markDirty() {
+        dirty++;
+      },
+    };
+    assert.ok(standAt(sim, "village", w.zones.village.features[0]), "the fixture stands at the pond");
+    if (tier) {
+      P.grant(core, { t: "rod", k: tier }, 1);
+      P.equip(core, "fishing", "tool", { t: "rod", k: tier });
+    }
+    if (level > 1) P.award(core, { xp: 5 * level * (level - 1), verb: "fishing" });
+    if (xp) P.award(core, { xp, verb: "fishing" });
+    if (bait) P.grant(core, { t: "bait", k: "worms" }, bait);
+    return { w, sim, core, dirty: () => dirty };
+  };
+  const yieldList = (out) => out.caught.map((row) => `${row.t}:${row.k}`);
+  const yields = (out) => yieldList(out).join("|");
+  /** Total xp the block holds, from the ladder it climbed: Σ 10l for l < level, plus the remainder. */
+  const totalXp = (row) => (row ? 5 * row.l * (row.l - 1) + row.x : 0);
+
+  try {
+    // ── DETERMINISM: SAME STATE, SAME FISH ────────────────────────────────────
+    // The whole anti-save-scum property. A failed window is a fixed point escaped
+    // only by spending different time — reload it, replay it, and it is the same
+    // window with the same answer.
+    {
+      const a = angler({ level: 6 });
+      const b = angler({ level: 6 });
+      const first = E.fish(a.core, "dusk");
+      const second = E.fish(b.core, "dusk");
+      assert.ok(first.caught.length, `the session caught something to compare (${first.caught.length})`);
+      assert.equal(yields(second), yields(first), "two clients, one state — the same fish in the same order");
+      assert.equal(second.windows, first.windows, "…over the same number of windows");
+      // …AND THE STATE IS REALLY AN INPUT: move one resolved number and the
+      // stream re-keys.
+      assert.notEqual(
+        yields(E.fish(angler({ level: 6, day: 4 }).core, "dusk")),
+        yields(first),
+        "a different day is a different stream",
+      );
+      assert.notEqual(
+        yields(E.fish(angler({ level: 6, seed: 909 }).core, "dusk")),
+        yields(first),
+        "…and so is a different world",
+      );
+      assert.notEqual(yields(E.fish(angler({ level: 9 }).core, "dusk")), yields(first), "…and a level climbed since");
+
+      // THE WINDOW IS THE UNIT, and not the minute. `castWindow` is
+      // floor(clockMin / W), so a cast at nine and a cast at seven minutes past
+      // fall in the same window and ARE the same cast — which is the property
+      // that makes a reload land on the answer it landed on before.
+      const onTheHour = E.fish(angler({ level: 6, clockMin: 9 * 60 }).core, null);
+      const sevenPast = E.fish(angler({ level: 6, clockMin: 9 * 60 + 7 }).core, null);
+      assert.equal(yields(sevenPast), yields(onTheHour), "a minute inside a window is that window");
+
+      // AND TWO SESSIONS LINE UP WINDOW FOR WINDOW: starting one window later
+      // gives exactly the same stream minus that window's yield, because every
+      // window seeds itself and none of them carries state into the next.
+      let live = null;
+      for (let minute = 0; minute < 17 * 60 && !live; minute += W) {
+        const out = E.fish(angler({ level: 6, clockMin: minute }).core, null);
+        if (out.caught.length) live = minute;
+      }
+      assert.ok(live !== null, "some window before dusk yields something");
+      const whole = yieldList(E.fish(angler({ level: 6, clockMin: live }).core, "dusk"));
+      const tail = yieldList(E.fish(angler({ level: 6, clockMin: live + W }).core, "dusk"));
+      assert.ok(whole.length > tail.length, `the skipped window really did yield (${whole.length} vs ${tail.length})`);
+      assert.deepEqual(
+        whole.slice(whole.length - tail.length),
+        tail,
+        "…and the rest of the session is untouched by it",
+      );
+    }
+
+    // ── A HOSTILE ROD RESOLVES, AND BOTH CLIENTS PULL THE SAME FISH ───────────
+    // The seam the resolvers exist for. A save carrying `{t:"rod", k:"legendary"}`
+    // — a newer build's rung, or a hand-edited row — reads as CRUDE at the hash,
+    // so a client that has never heard of "legendary" rolls exactly the same
+    // window as one that has.
+    {
+      const hostile = angler({ level: 6, tier: null });
+      const block = P.get(hostile.core);
+      block.pouch.items.push({ t: "rod", q: 1, k: "legendary" });
+      block.skills.equipped.fishing = { tool: ["rod", "legendary"] };
+      const crude = angler({ level: 6, tier: "crude" });
+      assert.equal(
+        yields(E.fish(hostile.core, "dusk")),
+        yields(E.fish(crude.core, "dusk")),
+        "a rung nobody can name is crude at the hash, not a different stream",
+      );
+      // …and the tier is a real input, so a REAL upgrade does move it.
+      assert.notEqual(
+        yields(E.fish(angler({ level: 6, tier: "decent" }).core, "dusk")),
+        yields(E.fish(angler({ level: 6, tier: "crude" }).core, "dusk")),
+        "a decent rod fishes a different stream from a crude one",
+      );
+    }
+
+    // ── BAIT IS READ BEFORE IT IS SPENT ──────────────────────────────────────
+    // The flip point, pinned exactly rather than statistically. PRESENCE, not
+    // count: one bait and two bait roll the first window identically. And the
+    // window a bait is SPENT on rolls baited — the slot-clear that follows the
+    // last one lands on the window after, which then re-keys at tier 0 and reads
+    // exactly like a session that never had any.
+    // A TWO-WINDOW SESSION, so the flip lands inside one call: 06:30 is exactly
+    // two casts short of morning, and the bait selection happens once at the
+    // start of a session rather than once per window.
+    {
+      const fixture = { clockMin: 6 * 60 + 30, day: 3, level: 6, seed: 313 };
+      const first = (bait) => yieldList(E.fish(angler({ ...fixture, bait }).core, null));
+      const session = (bait) => E.fish(angler({ ...fixture, bait }).core, "day");
+      const second = (bait) => yieldList(session(bait)).slice(first(bait).length);
+      assert.equal(session(0).windows, 2, "the fixture really is two windows long");
+
+      assert.deepEqual(first(1), first(2), "one bait and two bait roll the same first window — PRESENCE, not count");
+      assert.notDeepEqual(first(1), first(0), "…and a baited window is not a baitless one: the tier is a hash input");
+      assert.deepEqual(
+        second(1),
+        second(0),
+        "the window AFTER the last bait re-keys at tier 0 — identical to never having had any",
+      );
+      assert.notDeepEqual(second(2), second(0), "…while a stack with one left still rolls the window it is spent on");
+      // Non-vacuous on every arm: each of those windows actually yielded.
+      for (const [what, got] of [
+        ["baitless first", first(0)],
+        ["baited first", first(1)],
+        ["baitless second", second(0)],
+        ["baited second", second(2)],
+      ])
+        assert.equal(
+          got.length,
+          1,
+          `${what} window yielded, so the comparison is about the fish and not about silence`,
+        );
+
+      // THE RECONCILIATION the slot-clear is: the stack is spent and the slot is
+      // not left pointing at a row that is gone. And it is NOT re-armed mid
+      // session even when the session fishes up more bait — the selection is a
+      // per-session act, so what it found is the next session's to spend.
+      const single = angler({ ...fixture, bait: 1 }).core;
+      const run = E.fish(single, "day");
+      const spent = P.get(single);
+      assert.equal(spent.skills.equipped.fishing.mod, undefined, "the spent slot is cleared, not left dangling");
+      assert.ok(
+        run.caught.some((row) => row.t === E.BAIT_TYPE),
+        "this session fished more bait up — which is the point: fishing is bait's own finder",
+      );
+      assert.equal(
+        spent.pouch.items.find((row) => row.t === E.BAIT_TYPE).q,
+        1,
+        "…one spent and one found, and the found one waits for the next session rather than re-arming this one",
+      );
+      // A SLOT POINTING AT A STACK THAT IS GONE is repaired by the verb, because
+      // the verb is the only thing that ever fills it.
+      const stale = angler({ level: 6, bait: 3 });
+      P.get(stale.core).skills.equipped.fishing = { tool: ["rod", "crude"], mod: ["bait", "chum"] };
+      E.fish(stale.core, null);
+      assert.deepEqual(
+        P.get(stale.core).skills.equipped.fishing.mod,
+        ["bait", "worms"],
+        "a slot pointing at a stack the pouch does not hold is re-pointed at one it does",
+      );
+    }
+
+    // ── A SESSION THAT CROSSES MIDNIGHT FILES EACH DAY UNDER ITS OWN DAY ──────
+    // The maintainer's ruled scenario made literal: the 00:30 sleeper flushes
+    // LAST NIGHT's catch. That only works if the pre-midnight half of the session
+    // was filed under the day it happened, so the accumulator flushes AT the wrap
+    // and starts again on the far side.
+    {
+      const night = angler({ clockMin: 23 * 60 + 45, day: 5, level: 6 });
+      const out = E.fish(night.core, "dawn");
+      assert.equal(night.sim.day, 6, "the session ran into the next day");
+      assert.ok(night.sim.clockMin < 24 * 60, "…with the clock inside it");
+      assert.deepEqual(out.days, [5, 6], "and it filed one line per day it spanned, in order");
+      const lines = P.get(night.core).ledger.lines;
+      assert.equal(lines.filter((line) => line[0] === 5).length, 1, "ONE batched line for the night before");
+      assert.equal(lines.filter((line) => line[0] === 6).length, 1, "…and one for the morning after");
+      assert.ok(
+        lines.every((line) => /Fished/.test(line[1])),
+        "both of them say where",
+      );
+      // NON-VACUOUS: the wrap really did split a session that would otherwise be
+      // one line — only one window fell on day 5.
+      assert.ok(/\b1 cast\b/.test(lines.find((line) => line[0] === 5)[1]), "day 5 got the single window it was owed");
+    }
+
+    // ── THE DAY-D LINE PASSES log()'s GATE, AND THE GATE IS REAL ──────────────
+    // log() refuses a day the flush already covers. Mid-session `flushedDay` is
+    // at most D−1 — telling day D would need a completed sleep after D's
+    // midnight, which cannot have happened while the player is still at the
+    // water — so the wrap's day-D line always lands. Both halves pinned: at D−1
+    // it lands, and at D it would not, which is what makes the proof matter.
+    {
+      const safe = angler({ clockMin: 23 * 60 + 45, day: 5, level: 6 });
+      P.get(safe.core).flushedDay = 4;
+      assert.deepEqual(
+        E.fish(safe.core, "dawn").days,
+        [5, 6],
+        "flushedDay D−1 is the worst a session can meet, and it passes",
+      );
+
+      const gated = angler({ clockMin: 23 * 60 + 45, day: 5, level: 6 });
+      P.get(gated.core).flushedDay = 5;
+      assert.deepEqual(
+        E.fish(gated.core, "dawn").days,
+        [6],
+        "…and a day the gate covers is refused, so the gate is not decorative",
+      );
+    }
+
+    // ── A CAST THAT CAUGHT NOTHING STILL COSTS THE HOURS ──────────────────────
+    // The Wait precedent (70-hud): a clock mover that does not flag the save
+    // loses its time on reload. Staged at its sharpest — the ledger line is
+    // refused by the gate as well, so NO mutator runs at all and the verb's own
+    // markDirty is the only thing standing between the player and losing it.
+    {
+      let barren = null;
+      for (let minute = 0; minute < 24 * 60 && !barren; minute += W) {
+        const at = angler({ clockMin: minute, day: 3, level: 1 });
+        P.get(at.core).flushedDay = 3; // the line will be refused too
+        const before = at.sim.clockMin;
+        const out = E.fish(at.core, null);
+        if (out.caught.length) continue;
+        barren = { at, out, before };
+      }
+      assert.ok(barren, "a window somewhere in the day catches nothing — which is most of them at level 1");
+      assert.equal(barren.at.sim.clockMin, barren.before + W, "the window was spent");
+      assert.deepEqual(barren.out.days, [], "no ledger line survived the gate");
+      assert.deepEqual(
+        P.get(barren.at.core).pouch.items.filter((row) => row.t !== "rod"),
+        [],
+        "no row was minted",
+      );
+      assert.ok(barren.at.dirty() >= 1, "and the save was flagged anyway — refusals-after-advance included");
+    }
+
+    // ── XP GOES THROUGH ONE TABLE, KEYED ON `role ?? bait` ────────────────────
+    // A bait-first session must mint a skill row: a player who has plainly been
+    // fishing and whose sheet shows no fishing skill is the failure this closes.
+    {
+      const at = angler({ level: 1 });
+      const out = E.fish(at.core, "dusk");
+      const owed = out.caught.reduce((sum, row) => sum + E.TUNING.catchXp[row.t], 0);
+      assert.ok(owed > 0, `the session earned something (${owed})`);
+      assert.equal(totalXp(P.get(at.core).skills.verbs.fishing), owed, "the block holds exactly what the table owed");
+      assert.ok(
+        out.caught.some((row) => row.t === E.BAIT_TYPE),
+        "…and bait was part of it, paying through the same table",
+      );
+      // THE LEVEL-UP READ: award() carries no leveled flag, so the verb reads the
+      // PRIOR level itself. Staged one xp under the first threshold.
+      const edge = angler({ level: 1, xp: 9 });
+      assert.equal(P.get(edge.core).skills.verbs.fishing.x, 9, "one xp under leaving level 1");
+      const climbed = E.fish(edge.core, "dusk");
+      assert.equal(
+        climbed.leveled,
+        P.get(edge.core).skills.verbs.fishing.l,
+        "the session reports the level it reached",
+      );
+      assert.ok(climbed.leveled > 1, "…which is above where it started");
+      const flat = E.fish(angler({ level: 1 }).core, null);
+      assert.equal(flat.leveled, 0, "and a session that crossed nothing reports nothing");
+    }
+
+    // ── A MID-LOOP GRANT REFUSAL SKIPS THE GRANT AND THE AWARD, AND GOES ON ───
+    // grant() refuses only a NEW (t,k) row at the cap; merges never refuse. So a
+    // session can meet the cap on a variant it has not caught before, and what
+    // must NOT happen is xp for a fish that never entered the bag. Staged one row
+    // short of the cap at level 1, where the pond opens exactly two variants: the
+    // first to land takes the last row and the other can never be recorded.
+    {
+      const at = angler({ level: 1 });
+      const cap = P.CAPS.items;
+      const held = P.get(at.core).pouch.items.length;
+      for (let i = 0; i < cap - held - 1; i++) P.grant(at.core, { t: "catch-common", k: `filler-${i}` }, 1);
+      assert.equal(P.get(at.core).pouch.items.length, cap - 1, "one row of headroom");
+      const out = E.fish(at.core, "dawn");
+      assert.equal(out.ok, true, "the session runs to its target rather than stopping at the cap");
+      assert.ok(out.windows > 40, `…all ${out.windows} windows of it`);
+      const landed = new Set(out.caught.map((row) => `${row.t}:${row.k}`));
+      assert.equal(landed.size, 1, `exactly one variant could be recorded (${[...landed]})`);
+      assert.equal(P.get(at.core).pouch.items.length, cap, "the pouch is at the cap and stayed there");
+      // THE HALF THAT MATTERS: no xp was paid for a fish the pouch refused.
+      const owed = out.caught.reduce((sum, row) => sum + E.TUNING.catchXp[row.t], 0);
+      assert.equal(
+        totalXp(P.get(at.core).skills.verbs.fishing),
+        owed,
+        "the award was skipped with the grant, not after it",
+      );
+      // …and the ledger line names only what was actually landed.
+      const line = P.get(at.core).ledger.lines.find((row) => row[0] === P.get(at.core).ledger.lines[0][0])[1];
+      assert.ok(line.includes("Fished"), "a line was still written for the hours spent");
+    }
+
+    // ── "FISH UNTIL X" IS WHOLE WINDOWS TOWARD A DAYPART ──────────────────────
+    {
+      const at = angler({ clockMin: 9 * 60, day: 2, level: 4 });
+      const out = E.fish(at.core, "dusk");
+      assert.equal(out.windows, (18 * 60 - 9 * 60) / W, "nine hours of dusk-ward casting is thirty-six windows");
+      assert.equal(at.sim.clockMin, 18 * 60, "landing exactly on the boundary when the clock divides");
+      assert.equal(at.sim.day, 2, "…without touching the day");
+      // FROM INSIDE THE DAYPART IT IS ASKED FOR, "until dusk" means the NEXT one —
+      // the same reading waitUntil gives the same table.
+      const inside = angler({ clockMin: 19 * 60, day: 2, level: 4 });
+      E.fish(inside.core, "dusk");
+      assert.equal(inside.sim.day, 3, "asking for dusk from inside dusk is asking for a day of it");
+      // ONE CAST is one window, and the menu's other entry.
+      const single = angler({ clockMin: 9 * 60, level: 4 });
+      assert.equal(E.fish(single.core, null).windows, 1, "a single cast is one window");
+      assert.equal(single.sim.clockMin, 9 * 60 + W, "…and W minutes of clock");
+    }
+
+    // ── THE REFUSALS, EACH DISTINCT, AND NONE OF THEM SPENDS A MINUTE ─────────
+    {
+      const at = angler({ level: 4 });
+      const clock = at.sim.clockMin;
+      const refuse = (what) => {
+        const out = E.fish(at.core, null);
+        assert.equal(out.ok, false, `${what}: refused`);
+        assert.equal(at.sim.clockMin, clock, `${what}: and the clock did not move for it`);
+        return out;
+      };
+
+      at.sim.mode = "dialogue";
+      assert.equal(refuse("mid-conversation").reason, "wrong-mode", "walk only, like every other clock mover");
+      at.sim.mode = "walk";
+
+      at.sim.teleport("village", 21, 17); // the spawn, nowhere near water
+      at.sim.step(0, {});
+      assert.equal(refuse("dry land").reason, "not-near-water", "no spot, no session");
+      assert.ok(standAt(at.sim, "village", at.w.zones.village.features[0]), "…back to the bank");
+
+      loadedPF.save.gate = { chatId: at.core.chatId, state: "generating" };
+      assert.equal(refuse("under the gate").reason, "gate-held", "a world nobody has entered has no water in it yet");
+      loadedPF.save.gate = null;
+
+      assert.equal(E.fish(at.core, "elevenses").reason, "unknown-target", "a daypart the clock does not have");
+      assert.equal(at.sim.clockMin, clock, "…and that costs nothing either");
+
+      // POUCH-FULL, which is the cap refusing the session rather than a window.
+      const held = P.get(at.core).pouch.items.length;
+      for (let i = 0; i < P.CAPS.items - held; i++) P.grant(at.core, { t: "catch-common", k: `stuff-${i}` }, 1);
+      assert.equal(
+        refuse("a full bag").reason,
+        "pouch-full",
+        "at the row cap only merges could land, so the session is refused",
+      );
+    }
+
+    // ── NO ROD: THE REFUSAL THAT POINTS AT A VENDOR ──────────────────────────
+    // M8's amendment made this reachable on purpose. The button stays visible for
+    // a rodless player standing at water, and pressing it says who sells one —
+    // which is what turns an invisible mechanic into a discoverable one.
+    {
+      const bare = angler({ tier: null });
+      const offer = E.fishOffer(bare.core);
+      assert.equal(offer.available, false, "no rod, no session");
+      assert.equal(offer.reason, "no-rod", "…said in its own words");
+      assert.ok(offer.spot, "but the offer still names the spot, which is what keeps the button on screen");
+      assert.ok(/innkeeper/.test(offer.hint), `and the hint names the keeper's compiled role (${offer.hint})`);
+      const out = E.fish(bare.core, "dusk");
+      assert.equal(out.reason, "no-rod", "the verb refuses with the same reason");
+      assert.equal(out.hint, offer.hint, "…and carries the hint the button would show");
+      assert.equal(bare.sim.clockMin, 9 * 60, "no hours were spent looking for a rod nobody has");
+
+      // THEMED, and interpolated rather than hardcoded: a colony has no
+      // innkeeper, and only the brief knows what it does have.
+      const colony = new loadedPF.Sim(world.build(4242, "sci-fi-colony", brief.defaults("sci-fi-colony", 4242)));
+      const colonyCore = { chatId: "chat-fish-hint", sim: colony, hud: { toast() {}, refreshChips() {} } };
+      const hint = E.rodHint(colonyCore);
+      assert.ok(/rig/.test(hint), `the colony's own words for the thing (${hint})`);
+      assert.ok(!/innkeeper/.test(hint), "…and not a valley's word for the person");
+      assert.ok(
+        /keeper|quartermaster|steward|lead|marshal|scout/.test(hint),
+        `naming whoever the brief made (${hint})`,
+      );
+      assert.notEqual(hint, E.rodHint(bare.core), "the two themes do not say the same sentence");
+    }
+  } finally {
+    loadedPF.save.reset(); // the mutators self-dirty, and a dirty block arms a timer
+  }
+}
+
 // ── A DOM the size of the two surfaces that need one ──────────────────────────
 // Not a browser: exactly what PF.el touches (createElement, style, text,
 // attributes, listeners, children) plus fire(), so a click can be driven. Enough

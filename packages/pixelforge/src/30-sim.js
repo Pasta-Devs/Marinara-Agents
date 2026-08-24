@@ -3,6 +3,13 @@
 // package-local clock. Modes gate everything: "walk" is the only mode that
 // consumes input; "dialogue" hands the keyboard back to the host narration
 // input; "combat"/"replay" freeze the world under the host's own UI.
+// When each daypart BEGINS, in package-local minutes — the same four thresholds
+// daypart() reads from the other side. One table rather than a literal per
+// caller: waitUntil jumps to one of these, the fishing verb's "until dusk" loops
+// windows toward one, and a copy that drifted would be a rest action and a
+// session disagreeing about when the evening starts.
+PF.DAYPART_STARTS = { dawn: 5 * 60, day: 7 * 60, dusk: 18 * 60, night: 21 * 60 };
+
 PF.Sim = class {
   constructor(world) {
     this.world = world;
@@ -232,8 +239,10 @@ PF.Sim = class {
    *  until dusk" rest action). A JUMP, not an advance: NPCs re-place in one
    *  shot. Walk mode only, so it can never collide with the dialogue freeze. */
   waitUntil(target) {
-    const starts = { dawn: 5 * 60, day: 7 * 60, dusk: 18 * 60, night: 21 * 60 };
-    const at = starts[target];
+    // Own-property, now that the table is shared and reachable from more than one
+    // button: `starts["constructor"]` answered with a FUNCTION, which is not
+    // undefined, and the guard below would have waved it through onto clockMin.
+    const at = Object.prototype.hasOwnProperty.call(PF.DAYPART_STARTS, target) ? PF.DAYPART_STARTS[target] : undefined;
     if (at === undefined || this.mode !== "walk") return false;
     if (at <= this.clockMin) this.day++;
     this.clockMin = at;
