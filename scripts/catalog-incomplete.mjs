@@ -38,7 +38,7 @@
 // into the normal lanes for a local build, so an unfiltered catalog can be
 // served to a development Engine through its MARINARA_AGENT_CATALOG_URL
 // override. Never commit a catalog generated that way — validation rejects it.
-export const INCOMPLETE_PACKAGE_IDS = new Set(["pixelforge"]);
+export const INCOMPLETE_PACKAGE_IDS = new Set(["pixelforge", "quartermaster"]);
 
 export const STAGING_ONLY_PACKAGE_IDS = new Set([]);
 
