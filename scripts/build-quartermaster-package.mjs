@@ -137,7 +137,11 @@ const manifest = {
   // chat-read: the sheet needs to know which chat it's showing.
   // ui: the roleplay-tracker/tracker-panel client contribution.
   permissions: ["chat-read", "routes", "storage", "ui"],
-  restartRequired: false,
+  // The routes permission forces this: getCapabilityPackageInstallIssue in the
+  // Engine's package-manager.service.ts rejects install for any package that
+  // declares "routes" but restartRequired: false — privileged routes only
+  // activate on (re)start, confirmed live when install failed without this.
+  restartRequired: true,
 };
 
 await writeFile(join(packageRoot, "client.js"), clientBuffer);

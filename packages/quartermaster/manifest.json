@@ -53,5 +53,5 @@
     "storage",
     "ui"
   ],
-  "restartRequired": false
+  "restartRequired": true
 }
