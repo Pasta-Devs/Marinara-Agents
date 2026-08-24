@@ -1,4 +1,4 @@
-import { Brain, Check, ChevronLeft, Maximize2, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
+import { Check, ChevronLeft, Maximize2, MessageSquareQuote, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -246,17 +246,17 @@ function MemoryEditor({
 
   if (!expanded) return <section className="mn-panel">{editor}</section>;
   return createPortal(
-    <div className="mn-overlay" role="presentation" onClick={() => setExpanded(false)}>
+    <div className="mn-overlay mari-modal" role="presentation" onClick={() => setExpanded(false)}>
       <section
         ref={expandedDialogRef}
-        className="mn-modal mn-shell"
+        className="mn-modal mn-shell mari-modal-panel marinara-chat-popover"
         role="dialog"
         aria-modal="true"
         aria-label={t("memoryNag.vault.expandedTitle")}
         tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="mn-modal-head">
+        <div className="mn-modal-head marinara-chat-popover__header">
           <strong>{t("memoryNag.vault.expandedTitle")}</strong>
           <button
             type="button"
@@ -267,7 +267,7 @@ function MemoryEditor({
             {t("memoryNag.vault.collapse")}
           </button>
         </div>
-        <div className="mn-modal-body">{editor}</div>
+        <div className="mn-modal-body marinara-chat-popover__scroll">{editor}</div>
       </section>
     </div>,
     document.body,
@@ -355,20 +355,19 @@ export function MemoryNagVaultModal({ props, onClose }: { props: CapabilityProps
   };
 
   return createPortal(
-    <div className="mn-overlay" role="presentation" onClick={onClose}>
+    <div className="mn-overlay mari-modal" role="presentation">
       <section
         ref={vaultDialogRef}
-        className="mn-modal mn-shell"
+        className="mn-modal mn-shell mari-modal-panel marinara-chat-popover"
         role={editorExpanded ? undefined : "dialog"}
         aria-modal={editorExpanded ? undefined : true}
         aria-hidden={editorExpanded || undefined}
         aria-label={editorExpanded ? undefined : t("memoryNag.vault.title")}
         tabIndex={editorExpanded ? undefined : -1}
-        onClick={(event) => event.stopPropagation()}
       >
-        <div className="mn-modal-head">
-          <div className="mn-row">
-            <Brain className="mn-icon" aria-hidden="true" />
+        <div className="mn-modal-head marinara-chat-popover__header">
+          <div className="mn-row mn-modal-title marinara-chat-popover__title">
+            <MessageSquareQuote className="mn-icon" aria-hidden="true" />
             <strong>{t("memoryNag.vault.title")}</strong>
           </div>
           <button
@@ -380,7 +379,7 @@ export function MemoryNagVaultModal({ props, onClose }: { props: CapabilityProps
             <X className="mn-icon" aria-hidden="true" />
           </button>
         </div>
-        <div className="mn-modal-body mn-stack">
+        <div className="mn-modal-body mn-stack marinara-chat-popover__scroll">
           <div className="mn-row mn-between">
             <div className="mn-tabs" role="tablist">
               {(["active", "resolved"] as const).map((tab) => (

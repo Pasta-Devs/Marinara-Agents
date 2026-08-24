@@ -244,10 +244,18 @@ export const MEMORY_NAG_STYLES = `
   align-items: center;
   justify-content: center;
   padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
-  background: rgb(0 0 0 / 50%);
+}
+
+.mn-overlay::before {
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 55%);
+  backdrop-filter: blur(2px);
+  content: "";
 }
 
 .mn-modal {
+  position: relative;
   display: flex;
   width: min(48rem, 100%);
   max-height: min(85dvh, 52rem);
@@ -257,7 +265,7 @@ export const MEMORY_NAG_STYLES = `
   border-radius: 0.75rem;
   background: var(--marinara-chat-chrome-panel-bg);
   color: var(--marinara-chat-chrome-panel-text);
-  box-shadow: 0 24px 80px rgb(0 0 0 / 40%);
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 40%);
   backdrop-filter: blur(12px);
 }
 
@@ -271,29 +279,44 @@ export const MEMORY_NAG_STYLES = `
   justify-content: space-between;
   gap: 0.75rem;
   border-bottom: 1px solid var(--marinara-chat-chrome-panel-divider);
-  padding: 0.75rem 1.25rem;
+  padding: 0.625rem 0.75rem;
   color: var(--marinara-chat-chrome-panel-title);
-  font-size: 0.875rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1rem;
+}
+
+.mn-modal-title {
+  min-width: 0;
+  color: var(--marinara-chat-chrome-panel-title);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1rem;
 }
 
 .mn-modal-body {
   min-height: 0;
   overflow: auto;
-  padding: 1rem;
+  padding: 1rem 1.25rem;
   scrollbar-color: var(--marinara-chat-chrome-panel-scrollbar) transparent;
   scrollbar-width: thin;
 }
 
 .mn-modal-close {
-  width: 2rem;
-  min-width: 2rem;
-  height: 2rem;
-  min-height: 2rem;
+  width: 1.75rem;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  min-height: 1.75rem;
   border: 0;
   border-radius: 0.5rem;
   background: transparent;
   padding: 0.375rem;
   color: var(--marinara-chat-chrome-panel-muted);
+}
+
+.mn-modal-close .mn-icon {
+  width: 1rem;
+  height: 1rem;
 }
 
 .mn-modal-close:hover {
@@ -410,6 +433,12 @@ export const MEMORY_NAG_STYLES = `
   text-align: center;
   text-overflow: clip;
   white-space: nowrap;
+}
+
+.mn-toolbar-initial-icon {
+  width: 0.75rem;
+  height: 0.75rem;
+  flex: none;
 }
 
 .mn-popover {

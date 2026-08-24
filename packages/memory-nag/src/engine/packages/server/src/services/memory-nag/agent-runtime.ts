@@ -105,21 +105,11 @@ export const memoryNagAgentRuntime = {
           ...current,
           lastRecall: data.nags_needed
             ? { memoryIds: data.memoryIds, nags: data.nags, createdAt: new Date().toISOString() }
-            : null,
+            : { memoryIds: [], nags: [], createdAt: new Date().toISOString() },
         }));
       } catch (error) {
         getMemoryNagRuntime().logger.warn(
           "[memory-nag] Recall state failed to save for chat %s: %s",
-          context.chatId,
-          error instanceof Error ? error.message : String(error),
-        );
-      }
-    } else if (prepared) {
-      try {
-        await updateMemoryNagVault(context.chatId, (current) => ({ ...current, lastRecall: null }));
-      } catch (error) {
-        getMemoryNagRuntime().logger.warn(
-          "[memory-nag] Recall state failed to clear for chat %s: %s",
           context.chatId,
           error instanceof Error ? error.message : String(error),
         );

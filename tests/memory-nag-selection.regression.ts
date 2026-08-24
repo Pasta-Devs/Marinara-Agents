@@ -11,6 +11,8 @@ import {
   buildMemoryNagScanMessages,
   memoryNagScanStart,
 } from "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/scanner.ts";
+import { memoryNagAgentRuntime } from "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/agent-runtime.ts";
+import { configureMemoryNagRuntime } from "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/package-runtime.ts";
 import { memoryNagRoutes } from "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/routes.ts";
 import { selectMemoryNagRecall } from "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/selection.ts";
 import { reconcileMemoryNagRecall } from "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/vault.ts";
@@ -74,6 +76,16 @@ assert.deepEqual(selectMemoryNagRecall({ nags_needed: true, nags: [{ id: "injury
 assert.deepEqual(selectMemoryNagRecall({ nags_needed: true, nags: ["remember the promise"] }, candidates, 3), {
   nags_needed: false,
 });
+
+const emptyRecall = { memoryIds: [], nags: [], createdAt: "2026-08-24T12:00:00.000Z" };
+assert.deepEqual(
+  reconcileMemoryNagRecall(emptyMemoryNagVault("chat-empty"), {
+    ...emptyMemoryNagVault("chat-empty"),
+    lastRecall: emptyRecall,
+  }).lastRecall,
+  emptyRecall,
+  "a successful empty recall must remain distinct from a tracker that has never run",
+);
 
 const shortlisted = shortlistMemoryNags({
   memories: [
@@ -164,6 +176,63 @@ assert.equal(
   }).lastRecall,
   null,
 );
+
+async function assertFailedRecallPreservesCompletedRecall(): Promise<void> {
+  let storedVaultDocument: Record<string, unknown> | null = {
+    id: "memory-nag-failed-recall",
+    revision: 1,
+    data: recalledVault,
+  };
+  function storedLastRecall(): unknown {
+    assert.ok(storedVaultDocument);
+    return (storedVaultDocument.data as { lastRecall: unknown }).lastRecall;
+  }
+  const releaseRuntime = configureMemoryNagRuntime({
+    persistence: {
+      documents: {
+        getById: async () => storedVaultDocument,
+        create: async (document: Record<string, unknown>) => {
+          storedVaultDocument = { ...document, revision: 1 };
+        },
+        update: async (document: Record<string, unknown>) => {
+          storedVaultDocument = { ...storedVaultDocument, ...document, revision: 2 };
+          return storedVaultDocument;
+        },
+      },
+      listMessages: async () => [],
+    },
+    logger: { warn: () => undefined },
+  } as never);
+  const recallContext = { chatId: "failed-recall", chatMode: "roleplay" } as never;
+  const preparedRecall = {
+    participants: [],
+    currentCharacterIds: [],
+    candidates: [{ id: recalledMemory.id, text: recalledMemory.text, characterIds: recalledMemory.characterIds }],
+    maximumNags: 1,
+  };
+  try {
+    await memoryNagAgentRuntime.finalizeResult({
+      agent: {} as never,
+      context: recallContext,
+      preparedContext: preparedRecall,
+      result: { success: true, data: { nags_needed: true, memoryIds: [recalledMemory.id] } } as never,
+    });
+    const completedRecall = structuredClone(storedLastRecall());
+    await memoryNagAgentRuntime.finalizeResult({
+      agent: {} as never,
+      context: recallContext,
+      preparedContext: preparedRecall,
+      result: { success: false, error: "provider failed" } as never,
+    });
+    assert.deepEqual(
+      storedLastRecall(),
+      completedRecall,
+      "a failed recall must preserve the last completed recall timestamp and nag data",
+    );
+  } finally {
+    releaseRuntime();
+  }
+}
 assert.equal(
   reconcileMemoryNagRecall(recalledVault, {
     ...recalledVault,
@@ -209,6 +278,17 @@ const memoryNagTrackerSource = readFileSync(
   ),
   "utf8",
 );
+const memoryNagRuntimeSource = readFileSync(
+  new URL(
+    "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/agent-runtime.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const memoryNagVaultSource = readFileSync(
+  new URL("../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/vault.ts", import.meta.url),
+  "utf8",
+);
 assert.doesNotMatch(
   memoryNagToolbarSource,
   /!enabled\s*\|\|\s*props\.mobileCompact/u,
@@ -218,12 +298,12 @@ assert.match(memoryNagToolbarSource, /toolbarButtonClass/u, "Memory Nag must reu
 assert.match(memoryNagToolbarSource, /\}, 3000\);/u, "Memory Nag toolbar words must cycle at the slower interval");
 assert.match(
   memoryNagToolbarSource,
-  /return words\.length > 0 \? words : splitWords\(empty\);/u,
-  "Memory Nag idle words must drop punctuation before cycling",
+  /return words\.length > 0 \? words : splitWords\(empty, 1\);/u,
+  "Memory Nag idle words must keep the full localized phrase, including short words",
 );
 assert.match(
   memoryNagToolbarSource,
-  /word\.length > 2 && \/\[\\p\{L\}\\p\{N\}\]\/u\.test\(word\)/u,
+  /word\.length >= minimumLength && \/\[\\p\{L\}\\p\{N\}\]\/u\.test\(word\)/u,
   "Memory Nag toolbar words must contain a letter or number",
 );
 assert.match(
@@ -232,10 +312,20 @@ assert.match(
   "Memory Nag toolbar words must preserve Unicode combining marks",
 );
 assert.match(memoryNagToolbarSource, /data-chat-floating-panel/u, "Memory Nag must portal a floating tracker panel");
-assert.doesNotMatch(
+assert.match(
   memoryNagToolbarSource,
-  /<MessageSquareQuote className="mn-icon"/u,
-  "the fixed-size toolbar button must contain only its cycling word",
+  /hasCompletedRecall \? \([\s\S]*mn-toolbar-word[\s\S]*<MessageSquareQuote className="mn-toolbar-initial-icon"/u,
+  "Memory Nag must show its dialogue icon until the tracker completes its first successful recall",
+);
+assert.match(
+  memoryNagRuntimeSource,
+  /: \{ memoryIds: \[\], nags: \[\], createdAt: new Date\(\)\.toISOString\(\) \}/u,
+  "a successful no-nag result must persist an empty recall record",
+);
+assert.match(
+  memoryNagVaultSource,
+  /if \(nags\.length === 0 && !createdAt\) return null;/u,
+  "persisted empty recall records must survive vault normalization only when they are timestamped",
 );
 assert.doesNotMatch(
   memoryNagStyles,
@@ -256,4 +346,10 @@ assert.match(
 );
 assert.doesNotMatch(memoryNagStyles, /--mn-chroma:[^;]*--primary/u, "Memory Nag must not fall back to primary pink");
 
-console.info("Memory Nag regressions passed");
+void assertFailedRecallPreservesCompletedRecall().then(
+  () => console.info("Memory Nag regressions passed"),
+  (error: unknown) => {
+    console.error(error);
+    process.exitCode = 1;
+  },
+);
