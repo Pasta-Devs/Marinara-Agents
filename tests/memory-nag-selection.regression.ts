@@ -263,6 +263,11 @@ assert.match(
   /: \{ memoryIds: \[\], nags: \[\], createdAt: new Date\(\)\.toISOString\(\) \}/u,
   "a successful no-nag result must persist an empty recall record",
 );
+assert.doesNotMatch(
+  memoryNagRuntimeSource,
+  /else if \(prepared\)[\s\S]*lastRecall: null/u,
+  "a failed recall must preserve the last completed recall marker",
+);
 assert.match(
   memoryNagVaultSource,
   /if \(nags\.length === 0 && !createdAt\) return null;/u,
