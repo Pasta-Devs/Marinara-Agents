@@ -183,10 +183,16 @@ const sortedMap = (pairs) => {
  *  the caps below are stated in graphemes and so is the ONE consumer that has to
  *  agree with them from another file: the wrap-up tell measures whole ledger days
  *  against `TUNING.ledgerTellChars` (30-sim `_composeLedger`), and that budget is
- *  floor-asserted at load against `ledgerPerDay × ledgerChars`. Measure the tell
- *  in code points while the cap counts graphemes and one emoji in a zone name is
- *  enough to make a maximum-shape day fail to fit — which is the permanent flush
- *  stall the floor assertion exists to prevent. One measure, both sides. */
+ *  floor-asserted at load against `ledgerPerDay × ledgerChars`.
+ *
+ *  Measure the tell in code points while the caps count graphemes and the floor
+ *  assertion stops being a promise about the same quantity: one family emoji in a
+ *  zone name is seven code points wide, so a day the caps call legal can be four
+ *  times its own measured size and the budget drops it. What that costs is
+ *  OVER-EAGER TRUNCATION rather than a stall — the oldest owed day always rides,
+ *  fitting or not, so the flush still advances one day at a time — but a
+ *  multi-day tell would be cut short every turn on a save whose prose is not
+ *  ASCII, which is a real player writing real names. One measure, both sides. */
 const graphemes = (text) => {
   const s = str(text);
   try {

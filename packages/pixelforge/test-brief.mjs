@@ -15346,6 +15346,17 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
       assert.equal(P.flush(today.core, 6), false, "a throughDay AT the live day is refused, marker or no marker");
       assert.equal(P.flush(today.core, 5), true, "…while the day before it is exactly what the tell is for");
       assert.equal(today.player.flushedDay, 5, "and THAT one moves the gate");
+
+      // …AND ALL THREE ARE READ THROUGH THE RESOLVER, which a raw read passes for
+      // free on every ASCII-clean fixture above. `intro` is nested inside the
+      // envelope and `simFromSaved` resolves it on the way in, so the belt only
+      // matters on a sim built some other way (a rebuild from a hand-made row, a
+      // newer build's field) — but a string is exactly where the two readings
+      // diverge: `4 > "4"` is FALSE, so a raw read lets a marker that owes nothing
+      // license a burn, while `resolvedDay("4")` is 0 and refuses it.
+      const hostile = staged({ owed: "4", day: 6 });
+      assert.equal(P.flush(hostile.core, 4), false, 'a ledgerOwed of "4" owes nothing, so it licenses nothing');
+      assert.equal(hostile.player.flushedDay, 0, "…and the gate does not move");
     }
 
     // ── …AND WHAT IT DOES WHEN IT ACCEPTS ─────────────────────────────────────
@@ -15687,6 +15698,64 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
       const over = staged({ gate: 2, owed: 3, day: 5, lines: huge });
       assert.ok(over.sim.composePrefix(null).includes("Day 3:"), "an oversized day is told rather than stalling");
       assert.equal(over.sim._pendingIntro.ledger.throughDay, 3, "…and the gate can still move past it");
+    }
+
+    // ── …AND IT IS MEASURED IN GRAPHEMES, WHICH ASCII CANNOT SHOW ─────────────
+    // Every ledger fixture above is ASCII, where a grapheme, a code point and a
+    // UTF-16 unit are the same thing — so swapping `PF.player.graphemes(text)` for
+    // `Array.from(text)` in the tell's budget survives every one of them. The caps
+    // are stated in graphemes and the floor assertion multiplies two of them, so a
+    // measure that disagrees makes the floor a promise about a different quantity
+    // and truncates legal days for content the player is allowed to write: a zone
+    // name with one family emoji in it is seven code points wide.
+    //
+    // The family cluster is the sharpest instrument for it — four astral code
+    // points and three joiners, ONE grapheme, and no shorter way to be seven times
+    // the size of what you look like.
+    {
+      const family = "\u{1F468}‍\u{1F469}‍\u{1F467}‍\u{1F466}";
+      assert.equal(P.graphemes(family).length, 1, "one cluster");
+      assert.equal(Array.from(family).length, 7, "…seven code points, which is the whole of the risk");
+
+      // (a) THE DISCRIMINATING PAIR. A short day, then an astral day whose
+      // GRAPHEME cost leaves the budget room to spare and whose code-point cost
+      // is four times over it. Measured right, the tell reaches day 4; measured in
+      // code points, day 4 is dropped and the burn stops a day short — the same
+      // over-eager truncation an emoji in a zone name would cause on a real save.
+      const budget = loadedPF.economy.TUNING.ledgerTellChars;
+      const astral = family.repeat(P.CAPS.ledgerChars);
+      const wideDay = 10;
+      assert.ok(
+        12 + wideDay * P.CAPS.ledgerChars <= budget && 12 + wideDay * P.CAPS.ledgerChars * 7 > budget,
+        "the fixture fits in graphemes and does not fit in code points, which is the whole case",
+      );
+      const pair = staged({ gate: 2, owed: 4, day: 6, lines: [[3, "A quiet day."]] });
+      for (let i = 0; i < wideDay; i++)
+        assert.equal(P.log(pair.core, astral, 4), true, "a legal astral line is logged");
+      const part = pair.sim.composePrefix(null);
+      assert.ok(part.includes("Day 3:") && part.includes("Day 4:"), `both days are told (${part.length} chars)`);
+      assert.equal(pair.sim._pendingIntro.ledger.throughDay, 4, "…so the burn reaches the astral day");
+
+      // (b) THE MAX-SHAPE ASTRAL DAY, which is the floor assertion's own promise
+      // spent on the widest content the caps permit: fifteen lines of two hundred
+      // CLUSTERS is exactly `ledgerPerDay × ledgerChars`, and 21,000 code points.
+      // Written through log(), so `clip` is measured here too — a code-point clip
+      // would cut each line at 28 clusters and through the middle of the 29th.
+      const max = staged({ gate: 2, owed: 3, day: 5 });
+      for (let i = 0; i < P.CAPS.ledgerPerDay; i++) assert.equal(P.log(max.core, astral, 3), true, "…and kept whole");
+      assert.equal(
+        P.graphemes(max.player.ledger.lines[0][1]).length,
+        P.CAPS.ledgerChars,
+        "clip counts clusters: a line at the cap loses nothing",
+      );
+      const whole = max.sim.composePrefix(null);
+      assert.ok(whole.includes("Day 3:"), "a maximum-shape astral day is told");
+      assert.equal(
+        whole.split(family).length - 1,
+        P.CAPS.ledgerPerDay * P.CAPS.ledgerChars,
+        "…every cluster of every line of it",
+      );
+      assert.equal(max.sim._pendingIntro.ledger.throughDay, 3, "and the burn covers it");
     }
 
     // ── THE COMPACTION RE-TELL: A TOLD DAY THAT BECAME A STUB ─────────────────
