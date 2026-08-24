@@ -9,9 +9,7 @@ import type { CapabilityProps } from "./types";
 
 function recallWords(nags: string[], empty: string): string[] {
   const splitWords = (value: string, minimumLength: number) =>
-    value
-      .split(/[^\p{L}\p{N}\p{M}'’-]+/u)
-      .filter((word) => word.length >= minimumLength && /[\p{L}\p{N}]/u.test(word));
+    value.split(/[^\p{L}\p{N}\p{M}'’-]+/u).filter((word) => word.length >= minimumLength && /[\p{L}\p{N}]/u.test(word));
   const words = splitWords(nags.join(" "), 3);
   return words.length > 0 ? words : splitWords(empty, 1);
 }

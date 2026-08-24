@@ -227,10 +227,7 @@ const memoryNagRuntimeSource = readFileSync(
   "utf8",
 );
 const memoryNagVaultSource = readFileSync(
-  new URL(
-    "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/vault.ts",
-    import.meta.url,
-  ),
+  new URL("../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/vault.ts", import.meta.url),
   "utf8",
 );
 assert.doesNotMatch(
