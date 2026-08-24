@@ -15848,8 +15848,55 @@ class FakeNode {
     this.children = nodes;
   }
   remove() {}
+  // ── THE NAMED SHIM EXTENSION (plan §6) ─────────────────────────────────────
+  // Three additions, all of them for ONE guard: `_hostOwnsKeyboard`
+  // (90-element), which is what stands between the `C` hotkey and a player
+  // typing into the host's message box. Without them the sheet's guard lanes
+  // migrate silently to browser-only, which is where a guard goes to stop being
+  // watched.
+  //
+  // (i) A node can have a SIZE. The guard measures a modal before believing in
+  // it, because the toast container is a permanently-mounted zero-size panel and
+  // the first live playtest showed a broad test misfiring on it. `_rect` is what
+  // a case stages; nothing in the package reads it.
+  getBoundingClientRect() {
+    const rect = this._rect ?? {};
+    return { width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, ...rect };
+  }
+  // (ii) …and a node can be asked whether the focused element is INSIDE it,
+  // which is the difference between the player typing into a host input and the
+  // player having just clicked one of our own buttons.
+  contains(node) {
+    if (!node) return false;
+    if (node === this) return true;
+    return this.children.some((child) => (child.contains ? child.contains(node) : false));
+  }
 }
-globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+/** The staged-list matcher: exactly the `[attr="value"]` form the one shipped
+ *  selector uses, and no more. A staged node that carries `role` but not
+ *  `aria-modal` is correctly NOT found, which is the half a "return everything
+ *  staged" shim would quietly get wrong. */
+const stagedMatches = (node, selector) => {
+  const parts = String(selector).match(/\[[^\]]+\]/g) ?? [];
+  if (!parts.length) return false;
+  return parts.every((part) => {
+    const pair = part.match(/^\[([^=\]]+)="([^"]*)"\]$/);
+    return !!pair && node.getAttribute(pair[1]) === pair[2];
+  });
+};
+// (iii) The document-level half: focus is a document fact rather than a node
+// one, so `activeElement` is settable, and `querySelectorAll` reads a staged
+// list a case puts in front of the guard.
+globalThis.document = {
+  createElement: (tag) => new FakeNode(tag),
+  body: new FakeNode("body"),
+  documentElement: new FakeNode("html"),
+  activeElement: null,
+  _staged: [],
+  querySelectorAll(selector) {
+    return this._staged.filter((node) => stagedMatches(node, selector));
+  },
+};
 const walkNodes = (node, out = []) => {
   out.push(node);
   for (const child of node.children) walkNodes(child, out);
@@ -16181,12 +16228,501 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     sim.nearNpc = null;
     assert.ok(!census().includes("Sleep"), "a room that is not yours has no bed in it for you");
     assert.equal(hud.sleepMenu.style.display, "none", "…and the menu it left open is closed");
+
+    // (9) SLICE 5's PHASE: the two panels arrive and the STACK DOES NOT MOVE.
+    // Their openers are topbar chips beside the loc/clock/purse, not buttons in
+    // the action column — the column is the thumb zone and it stays the verbs'.
+    // The stack census above is the assertion that this is true; these are the
+    // assertions that say WHERE they went instead.
+    const openers = { Journal: hud.journalChip, Sheet: hud.sheetChip };
+    for (const [name, chip] of Object.entries(openers)) {
+      assert.ok(!hud.actions.children.includes(chip), `the ${name} opener is not in the action stack`);
+      assert.ok(hud.topbar.children.includes(chip), `…it is a chip in the topbar`);
+      // GLYPH-WIDTH DISCIPLINE (plan §2.8). The topbar has no width machinery —
+      // centred flex, nowrap chips, unbounded location prose, no overflow
+      // handling — so an opener that grew a word would be the thing that finally
+      // wrapped it, and the location toast is pinned 42px under a SINGLE row.
+      assert.equal(chip.tagName, "BUTTON", `the ${name} opener is a button, not a span: it has to be pressable`);
+      assert.ok(chip.getAttribute("aria-label"), `…and it says what it is, because a glyph is not a label`);
+      assert.equal([...String(chip.textContent)].length, 1, `…and it is ONE glyph wide (${chip.textContent})`);
+      assert.ok(/white-space:nowrap/.test(chip.style.cssText), `…which nothing is allowed to break onto a second line`);
+    }
+    assert.ok(!/flex-wrap/.test(hud.topbar.style.cssText), "and the bar itself never wraps");
+    assert.ok(/top:42px/.test(hud.locToastEl.style.cssText), "…which is what the location toast is pinned under");
+
+    // AND THEY HAVE THEIR OWN DISPLAY TOGGLE, which is the whole reason they are
+    // not free-riding on the topbar: the gate hides the bar, but DIALOGUE MODE
+    // does not, and a journal opener over a conversation opens a panel the
+    // player cannot walk out of.
+    sim.mode = "walk";
+    hud.update();
+    assert.equal(hud.journalChip.style.display, "", "walking, the openers are up");
+    sim.mode = "dialogue";
+    hud.update();
+    assert.equal(hud.topbar.style.display, "", "the topbar STAYS UP mid-conversation");
+    assert.equal(hud.journalChip.style.display, "none", "…and the openers do not, which is what the toggle is for");
+    assert.equal(hud.sheetChip.style.display, "none", "…both of them");
+    sim.mode = "walk";
+    hud.update();
   } finally {
     globalThis.setTimeout = realSetTimeout;
     globalThis.clearTimeout = realClearTimeout;
     loadedPF.save.gate = null;
     loadedPF.save.reset();
     loadedPF.spatial.reset();
+  }
+}
+
+// ═══ THE TWO PANELS (0.12 slice 5) ══════════════════════════════════════════
+// The journal and the character sheet, over the real Hud on the DOM shim. Two
+// surfaces with two different memos, and the memo is the whole engineering: a
+// panel that rebuilt every frame would write DOM sixty times a second, and one
+// that built at open would go stale the moment anything under it moved.
+{
+  const P = loadedPF.player;
+  const E = loadedPF.economy;
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = () => 0;
+  globalThis.clearTimeout = () => {};
+  // The asset loader is touched by two paths below (`_rebuild` and
+  // `onMainProps` both call load(), and a core with no packageId puts it in
+  // "failed" for the session), so its state is restored rather than left where
+  // these cases dropped it.
+  const assetsWas = {
+    status: loadedPF.assets.status,
+    noPackage: loadedPF.assets._noPackage,
+    failedAt: loadedPF.assets._failedAt,
+    requestedTheme: loadedPF.assets._requestedTheme,
+  };
+  loadedPF.save.reset();
+  loadedPF.spatial.reset();
+  let mounts = 0;
+  const mount = () => {
+    const w = world.build(7, "cozy-village", null);
+    const sim = new loadedPF.Sim(w);
+    const core = {
+      chatId: `chat-panels-${++mounts}`,
+      sim,
+      host: { chatMeta: {} },
+      interact() {},
+      setMode() {},
+      resume() {},
+      markDirty() {},
+    };
+    core.hud = new loadedPF.Hud(new FakeNode("div"), core);
+    return { w, sim, core, hud: core.hud, player: P.get(core) };
+  };
+  /** Every sentence a panel actually put on screen, in the order it drew them. */
+  const textOf = (node) =>
+    walkNodes(node)
+      .map((child) => String(child.textContent))
+      .filter(Boolean);
+  try {
+    // ── THE JOURNAL IS ONE LIST, AND THE BAND IS NOT IN IT ────────────────────
+    // Days newest first, lines inside a day in the order they were logged, and
+    // the notice band OUTSIDE the grouping entirely — it reads a different array
+    // and its rows answer to a told flag rather than to a day.
+    {
+      const at = mount();
+      const hud = at.hud;
+      assert.equal(hud.journalChip.style.display, "none", "the opener boots HIDDEN, before anything has decided");
+      assert.equal(hud.journalEl.style.display, "none", "…and the panel behind it is not up either");
+
+      at.player.ledger.lines.push(
+        [2, "Walked to the mill."],
+        [4, "Day 4: 12 things happened.", 12],
+        [2, "Slept badly."],
+        [5, "Fished the pond — 3 casts: carp x1."],
+      );
+      P.notice(at.player, "Something was set aside.", 3);
+      P.notice(at.player, "Something came back.", 5);
+      at.player.ledger.notices[0][2] = 1; // the older one has already been told
+
+      hud.update();
+      assert.equal(hud.journalChip.style.display, "", "walking, the opener is on screen");
+      hud.toggleJournal();
+      assert.equal(hud.journalEl.style.display, "flex", "and pressing it opens the panel");
+
+      const shown = textOf(hud.journalBody);
+      const where = (text) => shown.indexOf(text);
+      // NEWEST DAY FIRST, from each line's OWN day and not from the array order
+      // (day 2's lines were pushed first and last).
+      assert.ok(where("Day 5") >= 0 && where("Day 4") >= 0 && where("Day 2") >= 0, `three days grouped (${shown})`);
+      assert.ok(where("Day 5") < where("Day 4"), "day 5 is above day 4");
+      assert.ok(where("Day 4") < where("Day 2"), "…and day 4 above day 2");
+      assert.ok(where("Walked to the mill.") < where("Slept badly."), "inside a day, the order it was logged in");
+      // A STUB RENDERS AS ITS STUB TEXT — the sentence the ledger holds is the
+      // sentence the GM was given, and the panel does not tell a different story.
+      assert.ok(where("Day 4: 12 things happened.") > where("Day 4"), "the stub renders as its own text, in its day");
+
+      // THE BAND, and the structural claim about it: it reads `notices[]`, so
+      // neither sentence in it is anywhere in `lines[]`.
+      assert.ok(
+        at.player.ledger.lines.every((line) => !/Something (was set aside|came back)/.test(line[1])),
+        "the band's sentences are in NO ledger line — this is a second array, not a filtered one",
+      );
+      assert.ok(where("Day 5 — Something came back.") >= 0, "an UNTOLD notice is in the band");
+      assert.ok(where("Day 3 — Something was set aside.") >= 0, "…and so is a TOLD one: the band is history");
+      assert.ok(where("Day 5 — Something came back.") < where("Day 5"), "the band sits OUTSIDE the day grouping");
+      assert.equal(where("Day 3"), -1, "…and a notice's own day mints no day group of its own");
+    }
+
+    // ── THE JOURNAL'S MEMO: TWO ARRAYS AND TWO LENGTHS ────────────────────────
+    {
+      const at = mount();
+      const hud = at.hud;
+      at.player.ledger.lines.push([3, "Bought a rod."]);
+      hud.update();
+      hud.toggleJournal();
+      const drawn = hud.journalBody.children[0];
+      hud.update();
+      assert.equal(hud.journalBody.children[0], drawn, "an idle frame writes no DOM at all");
+
+      // A REPLACEMENT. log() appends and then `_compactLedger` rebuilds the whole
+      // array, so the identity half of the memo is what catches an ordinary line.
+      const wasLines = at.player.ledger.lines;
+      assert.equal(P.log(at.core, "Fished the pond.", 3), true, "a line is logged");
+      assert.notEqual(at.player.ledger.lines, wasLines, "…and compaction handed back a NEW array");
+      hud.update();
+      assert.notEqual(hud.journalBody.children[0], drawn, "so the panel rebuilt");
+      assert.ok(textOf(hud.journalBody).includes("Fished the pond."), "…with the new line in it");
+
+      // AN APPEND THAT KEPT ITS ARRAY. notice() pushes onto the band and hands
+      // the same array back while it is under the cap, so the LENGTH half of the
+      // memo is the only thing that can see this one. (The FIRST notice mints the
+      // band — a block with nothing to explain carries no `notices` key at all —
+      // so the identity-preserving case is the second.)
+      P.notice(at.player, "Something was set aside.", 2);
+      hud.update();
+      const rebuilt = hud.journalBody.children[0];
+      const wasBand = at.player.ledger.notices;
+      P.notice(at.player, "A third thing happened to the world.", 6);
+      assert.equal(at.player.ledger.notices, wasBand, "the append kept the array it pushed onto");
+      hud.update();
+      assert.notEqual(hud.journalBody.children[0], rebuilt, "the length moved, so the panel rebuilt anyway");
+      assert.ok(
+        textOf(hud.journalBody).includes("Day 6 — A third thing happened to the world."),
+        "…and the band has it",
+      );
+
+      // AND A REBUILD UNDER THE PANEL — a rewind, a swipe, a checkpoint load —
+      // replaces `core.sim` wholesale, which replaces both arrays with rows read
+      // back off the wire. The panel is looking at the OLD block until it is not.
+      const holding = hud.journalBody.children[0];
+      const row = JSON.parse(JSON.stringify(loadedPF.save.snapshot(at.core)));
+      loadedPF.save._rebuild(at.core, row);
+      assert.notEqual(at.core.sim, at.sim, "the rebuild really did replace the sim under the panel");
+      assert.notEqual(P.get(at.core).ledger.lines, wasLines, "…and the arrays with it");
+      hud.update();
+      assert.notEqual(hud.journalBody.children[0], holding, "so the panel is drawn from the block that is live now");
+    }
+
+    // ── THE SHEET IS A LIVE VALUE KEY, NOT A SNAPSHOT ─────────────────────────
+    // The player block carries no identity signal — every mutator mutates in
+    // place — so the sheet watches VALUES. Each case below is one value that has
+    // to be in the key, tested on its own, because a single "it re-renders" case
+    // passes with most of the key deleted.
+    {
+      const at = mount();
+      const hud = at.hud;
+      hud.update();
+      hud.toggleSheet();
+      assert.equal(hud.sheetEl.style.display, "flex", "the sheet opens");
+      assert.ok(textOf(hud.sheetStats).includes("Nothing practised yet"), "…on a player who has done nothing yet");
+
+      const idle = hud.sheetStats.children[0];
+      hud.update();
+      assert.equal(hud.sheetStats.children[0], idle, "an idle frame writes no DOM");
+
+      // XP PAID WHILE THE SHEET IS OPEN.
+      P.award(at.core, { xp: 4, verb: "fishing" });
+      hud.update();
+      assert.notEqual(hud.sheetStats.children[0], idle, "an award under an open sheet re-renders it");
+      const skills = textOf(hud.sheetStats);
+      assert.ok(skills.includes("Fishing"), "the skill is named in this theme's own word for it");
+      assert.ok(
+        skills.includes(`Level 1 — ${P.xpPerLevel(1) - 4} xp to go`),
+        `…with the level and what is left of it (${skills})`,
+      );
+
+      // A BARE HOSTILE FLIP: `d` does not move, `t` does not move, and the sheet
+      // still has to say so. The rung counts alone would miss it entirely.
+      P.bump(at.core, "village", "Rook", { t: 1 });
+      hud.update();
+      const known = hud.sheetStats.children[0];
+      assert.ok(!textOf(hud.sheetStats).includes("Hostile"), "one acquaintance, nobody hostile");
+      P.bump(at.core, "village", "Rook", { h: 1, t: 0 });
+      assert.equal(P.get(at.core).rel.village.Rook.d, 0, "the ladder did not move");
+      hud.update();
+      assert.notEqual(hud.sheetStats.children[0], known, "the hostile flag re-rendered the sheet on its own");
+      assert.ok(textOf(hud.sheetStats).includes("Hostile"), "…and the sheet flags them");
+
+      // EQUIPMENT, by the pair's VALUES: the equip writes a fresh array, the
+      // unequip `delete`s the slot, and both have to move the key. The rod is
+      // granted and DRAWN first, on its own frame — otherwise the bag's count
+      // moving would carry the equip's re-render and this case would pass with
+      // the equipped pairs missing from the key entirely.
+      P.grant(at.core, { t: "rod", k: "crude" }, 1);
+      hud.update();
+      const bare = hud.sheetStats.children[0];
+      P.equip(at.core, "fishing", "tool", { t: "rod", k: "crude" });
+      hud.update();
+      assert.notEqual(hud.sheetStats.children[0], bare, "equipping re-renders");
+      assert.ok(
+        textOf(hud.sheetStats).includes(E.describe(at.w, { t: "rod", k: "crude" })),
+        "…naming the rod the way every other surface names it",
+      );
+      assert.ok(textOf(hud.sheetStats).includes("Fishing rod"), "…under this theme's word for the slot");
+      const held = hud.sheetStats.children[0];
+      P.equip(at.core, "fishing", "tool", null);
+      hud.update();
+      assert.notEqual(hud.sheetStats.children[0], held, "and unequipping re-renders too — the `delete` path");
+      assert.ok(textOf(hud.sheetStats).includes("Nothing to hand"), "…back to an empty rack");
+
+      // THE PURSE AND WHAT IS CARRIED, both of which the key claims to project.
+      const poor = hud.sheetStats.children[0];
+      P.award(at.core, { money: 40 });
+      hud.update();
+      assert.notEqual(hud.sheetStats.children[0], poor, "money moving re-renders");
+      assert.ok(textOf(hud.sheetStats).includes(E.money(at.w, 40)), "…in this world's own money");
+      const light = hud.sheetStats.children[0];
+      P.grant(at.core, { t: "catch-common", k: "carp" }, 2);
+      hud.update();
+      assert.notEqual(hud.sheetStats.children[0], light, "and so does the count in the bag");
+      assert.ok(textOf(hud.sheetStats).includes("3 things"), "…which is the rod plus the two carp");
+
+      // A CAPPED SKILL READS "MAX". award() zeroes `x` at the ceiling, so the
+      // ordinary arithmetic would draw a bar that is empty and full at once.
+      at.player.skills.verbs.fishing = { l: P.CAPS.skillLevel, x: 0 };
+      hud.update();
+      assert.ok(
+        textOf(hud.sheetStats).includes(`Level ${P.CAPS.skillLevel} — MAX`),
+        `a capped skill reads MAX (${textOf(hud.sheetStats)})`,
+      );
+
+      // THE PORTRAIT, and the pre-ready window the plan accepts: Tier-0 art is
+      // drawn now and `assets.status` sits in the key, so the frame the authored
+      // sheets arrive is the frame the portrait upgrades.
+      const tier0 = hud.sheetArt.children[0];
+      assert.equal(tier0.tagName, "CANVAS", "the portrait is a canvas, drawn rather than described");
+      assert.ok(/image-rendering:pixelated/.test(tier0.style.cssText), "…as pixel art rather than a smeared one");
+      assert.ok(/width:72px;height:96px/.test(tier0.style.cssText), "…integer-scaled: a 12×16 frame at 6×");
+      assert.ok(textOf(hud.sheetArt).includes("Traveler"), "and the themed generic label is under it");
+      loadedPF.assets.status = "ready";
+      hud.update();
+      assert.notEqual(hud.sheetArt.children[0], tier0, "the authored art arriving redraws the portrait");
+      loadedPF.assets.status = assetsWas.status;
+    }
+
+    // ── THE WORD BOOK THE SHEET READS ─────────────────────────────────────────
+    // Skills, slots and the player's own label are per THEME, like every other
+    // name in the package. An unknown verb still renders rather than showing the
+    // block's raw key.
+    {
+      assert.equal(E.playerLabel({ theme: "cozy-village" }), "Traveler", "a valley has travellers in it");
+      assert.equal(E.playerLabel({ theme: "sci-fi-colony" }), "Drifter", "…and a colony has drifters");
+      assert.equal(E.verbSkin({ theme: "cozy-village" }, "fishing").name, "Fishing");
+      assert.equal(
+        E.verbSkin({ theme: "sci-fi-colony" }, "fishing").name,
+        "Angling",
+        "the same verb, this world's word",
+      );
+      assert.equal(E.verbSkin({ theme: "sci-fi-colony" }, "fishing").tool, "rig", "…and its slots with it");
+      assert.equal(
+        E.verbSkin({ theme: "cozy-village" }, "flying-a-kite").name,
+        "flying a kite",
+        "a verb no theme names still renders, slug-derived — a newer build's row is a display fact, not a hole",
+      );
+      // …and the PANEL reads it rather than hardcoding the valley's words. Only
+      // the word book is being exercised here, on a world whose theme was moved
+      // under it.
+      const at = mount();
+      at.sim.world.theme = "sci-fi-colony";
+      at.player.skills.verbs.fishing = { l: 2, x: 0 };
+      at.hud.update();
+      at.hud.toggleSheet();
+      assert.ok(textOf(at.hud.sheetArt).includes("Drifter"), "the colony's sheet says Drifter");
+      assert.ok(textOf(at.hud.sheetStats).includes("Angling"), "…over the colony's word for the skill");
+    }
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    loadedPF.assets.status = assetsWas.status;
+    loadedPF.assets._noPackage = assetsWas.noPackage;
+    loadedPF.assets._failedAt = assetsWas.failedAt;
+    loadedPF.assets._requestedTheme = assetsWas.requestedTheme;
+    loadedPF.save.reset();
+    loadedPF.spatial.reset();
+  }
+}
+
+// ═══ THE PANELS' TWO KEYS, AND WHAT MAY NOT REACH THEM ══════════════════════
+// The `C` hotkey and Escape live in the keydown handler BELOW its walk-mode
+// bail (90-element), which is what makes every guard above that line theirs for
+// free: the loading gate, focus inside a host control, a visible host modal.
+// Pinned one guard at a time, because a single "the key is inert" case passes
+// with three of them deleted.
+//
+// Drivable at all only because of the named shim extension further up: a
+// settable `document.activeElement`, a staged `querySelectorAll`, and nodes that
+// can have a size. Without those three this whole block is browser-only.
+{
+  const core = loadedPF.core;
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  const realWindow = globalThis.window;
+  globalThis.setTimeout = () => 0;
+  globalThis.clearTimeout = () => {};
+  globalThis.window = { addEventListener() {}, removeEventListener() {} };
+  const assetsWas = {
+    status: loadedPF.assets.status,
+    noPackage: loadedPF.assets._noPackage,
+    failedAt: loadedPF.assets._failedAt,
+  };
+  loadedPF.save.reset();
+  try {
+    const w = world.build(7, "cozy-village", null);
+    const sim = new loadedPF.Sim(w);
+    core.chatId = "chat-panel-keys";
+    core.sim = sim;
+    core.host = { chatId: "chat-panel-keys", chatMeta: {} };
+    core._narrationDoneWas = true;
+    core._talkConfirm = null;
+    // The Hud mounts INTO the element the core calls its own, which is what
+    // makes "focus is inside our own surface" a real question below.
+    const mountEl = new FakeNode("div");
+    core._mainEl = mountEl;
+    const hud = new loadedPF.Hud(mountEl, core);
+    core.hud = hud;
+    core._keysBound = false;
+    core._bindKeys();
+    const press = (key, target) => core._keyDown({ key, target: target ?? null, preventDefault() {} });
+    hud.update();
+
+    // ── THE ORDINARY PRESS: `c` toggles, and Escape closes what is open ───────
+    press("c");
+    assert.equal(hud._sheet, true, "`c` opens the sheet");
+    assert.equal(hud.sheetEl.style.display, "flex", "…and puts it on screen");
+    press("c");
+    assert.equal(hud._sheet, false, "…and `c` again closes it: it toggles");
+    press("c");
+    assert.equal(hud._sheet, true, "open again");
+    press("escape");
+    assert.equal(hud._sheet, false, "Escape closes it");
+    assert.equal(hud.closePanels(), false, "…and with nothing open, Escape closes nothing and says so");
+
+    // AND OUR OWN PANELS ARE NOT MODAL DIALOGS, which is a trap and not a
+    // detail: `_hostOwnsKeyboard` believes any visible
+    // `[role="dialog"][aria-modal="true"]`, so a panel that marked itself one
+    // would make the very keys that close it inert the moment it opened.
+    for (const panel of [hud.sheetEl, hud.journalEl]) {
+      assert.equal(panel.getAttribute("aria-modal"), null, "a panel of ours is not an aria-modal dialog");
+      assert.equal(panel.getAttribute("role"), null, "…and claims no dialog role either");
+    }
+
+    // ── (1) THE LOADING GATE ──────────────────────────────────────────────────
+    loadedPF.save.gate = { chatId: core.chatId, state: "generating" };
+    press("c");
+    assert.equal(hud._sheet, false, "a world still being written has nobody to be a sheet about");
+    loadedPF.save.gate = null;
+
+    // ── (2) FOCUS INSIDE A HOST CONTROL ───────────────────────────────────────
+    const hostInput = new FakeNode("input");
+    document.activeElement = hostInput;
+    press("c");
+    assert.equal(hud._sheet, false, "a player typing into the host's own box is not pressing our hotkey");
+    // …and focus inside OUR surface is not the host owning anything. This is the
+    // half a broader guard gets wrong: the player has just clicked our own chip.
+    document.activeElement = hud.sheetChip;
+    press("c");
+    assert.equal(hud._sheet, true, "focus on our own chip is still our keyboard");
+    press("escape");
+    document.activeElement = null;
+
+    // ── (3) A VISIBLE HOST MODAL ──────────────────────────────────────────────
+    const modal = new FakeNode("div");
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal._rect = { width: 320, height: 200 };
+    document._staged = [modal];
+    press("c");
+    assert.equal(hud._sheet, false, "the setup wizard is open over us; `c` belongs to it");
+    // …and the MEASUREMENT is load-bearing, not the selector: the toast
+    // container is a permanently-mounted zero-size panel, and a guard that
+    // believed every match would make the hotkey dead for the whole session.
+    modal._rect = { width: 0, height: 0 };
+    press("c");
+    assert.equal(hud._sheet, true, "a modal with no size on screen is not a modal in the way");
+    press("escape");
+    // …and a staged node that is a dialog but NOT aria-modal is not a match at
+    // all, which is the selector's own half.
+    const bare = new FakeNode("div");
+    bare.setAttribute("role", "dialog");
+    bare._rect = { width: 320, height: 200 };
+    document._staged = [bare];
+    press("c");
+    assert.equal(hud._sheet, true, "a non-modal dialog does not take the keyboard");
+    press("escape");
+    document._staged = [];
+
+    // ── (4) THE WRONG MODE ────────────────────────────────────────────────────
+    sim.mode = "dialogue";
+    press("c");
+    assert.equal(hud._sheet, false, "there is no sheet to open mid-conversation");
+    sim.mode = "walk";
+    hud.update();
+
+    // ── CLOSE-ON-MODE-CHANGE, DRIVEN BY THE PROPS ─────────────────────────────
+    // Replay and combat arrive through onMainProps, not through anything the
+    // player pressed — so the sheet has to close under a mode change nobody in
+    // this package asked for. CLOSED and not hidden: a hidden one resurfaces
+    // drawn against whoever the player was before.
+    press("c");
+    assert.equal(hud._sheet, true, "the sheet is open when the host takes the screen");
+    const drawn = hud.sheetStats.children[0];
+    core.onMainProps({ chatId: core.chatId, replayActive: true, chatMeta: {} });
+    assert.equal(sim.mode, "replay", "the props moved the mode");
+    assert.equal(hud._sheet, false, "…and the sheet CLOSED");
+    assert.equal(hud.sheetEl.style.display, "none", "…off the screen with it");
+    assert.equal(hud._sheetKey, null, "…and its memo went too, so nothing stale can be resurfaced");
+    core.onMainProps({ chatId: core.chatId, replayActive: false, chatMeta: {} });
+    assert.equal(sim.mode, "walk", "the screen comes back");
+    press("c");
+    assert.notEqual(hud.sheetStats.children[0], drawn, "and reopening REBUILDS rather than resurfacing");
+
+    // THE JOURNAL ONLY HIDES, which is the deliberate difference: it is a list of
+    // what is written down, with no live descriptor to go stale, and a passing
+    // combat state should not throw the player's place in it away.
+    hud.closePanels();
+    hud.toggleJournal();
+    const listed = hud.journalBody.children[0];
+    assert.equal(hud._journal, true, "the journal is open");
+    core.onMainProps({ chatId: core.chatId, replayActive: true, chatMeta: {} });
+    assert.equal(hud._journal, true, "…and stays open through a replay");
+    assert.equal(hud.journalEl.style.display, "none", "…while being off the screen for it");
+    core.onMainProps({ chatId: core.chatId, replayActive: false, chatMeta: {} });
+    assert.equal(hud.journalEl.style.display, "flex", "and walking again brings it straight back");
+    assert.equal(hud.journalBody.children[0], listed, "…the same list, not a rebuilt one");
+    hud.closePanels();
+  } finally {
+    core._unbindKeys();
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    if (realWindow === undefined) delete globalThis.window;
+    else globalThis.window = realWindow;
+    document.activeElement = null;
+    document._staged = [];
+    loadedPF.assets.status = assetsWas.status;
+    loadedPF.assets._noPackage = assetsWas.noPackage;
+    loadedPF.assets._failedAt = assetsWas.failedAt;
+    loadedPF.save.gate = null;
+    core.chatId = null;
+    core.sim = null;
+    core.hud = null;
+    core.host = null;
+    core._mainEl = null;
+    loadedPF.save.reset();
   }
 }
 
