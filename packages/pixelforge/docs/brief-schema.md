@@ -270,7 +270,10 @@ response is **never stored** (checkpoints capture by value — see #5110).
    never from a `host` in the cast, so that settlement compiled as houses with no inn in it. Same
    room caps as pass 3 (`places` room for the rank, gathering cap 1) and the same ledger entry. It
    runs *after* the wilds floor deliberately: "no named place at all" and "a keeper with nothing to
-   keep" are different lacks, and a settlement that has both gets both.
+   keep" are different lacks, and a settlement whose cast was topped up gets both floors. (The
+   pass-3 synthesis is the one path that still stands the wilds floor down: a model host with zero
+   surviving places seals `[gathering]` and no wilds — deliberate, since that model *did* name a
+   place through its host, and the wilds floor answers namelessness, not a missing outdoors.)
 
 **Global budget:** the sealed brief must serialize ≤8 KB; over-budget briefs truncate prose fields
 in reverse-leverage order (`persona`s → zone `flavor`s → `flavor`) before anything structural.

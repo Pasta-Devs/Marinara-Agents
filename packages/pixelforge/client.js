@@ -1415,7 +1415,11 @@ PF.brief = (() => {
     // Last of the floors on purpose: the wilds top-up answers "this settlement has
     // no named place at all", which is a different lack, and running ahead of it
     // would silently spend that floor and leave a colony with an inn and no
-    // outside. Both floors are cheap; a settlement that needs both gets both.
+    // outside. So a TOP-UPPED host gets both floors. (The pass-3 call is the one
+    // path that still spends the wilds floor: a model host with zero surviving
+    // places seals [gathering] and no wilds — deliberate, because that model DID
+    // name a place through its host, and the floor answers namelessness, not a
+    // missing outdoors.)
     gatheringForHost(brief.cast);
 
     // Identity (§2): opaque ordinal ids assigned once, stored in the sealed brief.
