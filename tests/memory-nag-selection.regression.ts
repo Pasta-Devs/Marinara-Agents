@@ -75,6 +75,16 @@ assert.deepEqual(selectMemoryNagRecall({ nags_needed: true, nags: ["remember the
   nags_needed: false,
 });
 
+const emptyRecall = { memoryIds: [], nags: [], createdAt: "2026-08-24T12:00:00.000Z" };
+assert.deepEqual(
+  reconcileMemoryNagRecall(emptyMemoryNagVault("chat-empty"), {
+    ...emptyMemoryNagVault("chat-empty"),
+    lastRecall: emptyRecall,
+  }).lastRecall,
+  emptyRecall,
+  "a successful empty recall must remain distinct from a tracker that has never run",
+);
+
 const shortlisted = shortlistMemoryNags({
   memories: [
     {
@@ -209,6 +219,20 @@ const memoryNagTrackerSource = readFileSync(
   ),
   "utf8",
 );
+const memoryNagRuntimeSource = readFileSync(
+  new URL(
+    "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/agent-runtime.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const memoryNagVaultSource = readFileSync(
+  new URL(
+    "../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/vault.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
 assert.doesNotMatch(
   memoryNagToolbarSource,
   /!enabled\s*\|\|\s*props\.mobileCompact/u,
@@ -218,12 +242,12 @@ assert.match(memoryNagToolbarSource, /toolbarButtonClass/u, "Memory Nag must reu
 assert.match(memoryNagToolbarSource, /\}, 3000\);/u, "Memory Nag toolbar words must cycle at the slower interval");
 assert.match(
   memoryNagToolbarSource,
-  /return words\.length > 0 \? words : splitWords\(empty\);/u,
-  "Memory Nag idle words must drop punctuation before cycling",
+  /return words\.length > 0 \? words : splitWords\(empty, 1\);/u,
+  "Memory Nag idle words must keep the full localized phrase, including short words",
 );
 assert.match(
   memoryNagToolbarSource,
-  /word\.length > 2 && \/\[\\p\{L\}\\p\{N\}\]\/u\.test\(word\)/u,
+  /word\.length >= minimumLength && \/\[\\p\{L\}\\p\{N\}\]\/u\.test\(word\)/u,
   "Memory Nag toolbar words must contain a letter or number",
 );
 assert.match(
@@ -232,10 +256,20 @@ assert.match(
   "Memory Nag toolbar words must preserve Unicode combining marks",
 );
 assert.match(memoryNagToolbarSource, /data-chat-floating-panel/u, "Memory Nag must portal a floating tracker panel");
-assert.doesNotMatch(
+assert.match(
   memoryNagToolbarSource,
-  /<MessageSquareQuote className="mn-icon"/u,
-  "the fixed-size toolbar button must contain only its cycling word",
+  /hasCompletedRecall \? \([\s\S]*mn-toolbar-word[\s\S]*<MessageSquareQuote className="mn-toolbar-initial-icon"/u,
+  "Memory Nag must show its dialogue icon until the tracker completes its first successful recall",
+);
+assert.match(
+  memoryNagRuntimeSource,
+  /: \{ memoryIds: \[\], nags: \[\], createdAt: new Date\(\)\.toISOString\(\) \}/u,
+  "a successful no-nag result must persist an empty recall record",
+);
+assert.match(
+  memoryNagVaultSource,
+  /if \(nags\.length === 0 && !createdAt\) return null;/u,
+  "persisted empty recall records must survive vault normalization only when they are timestamped",
 );
 assert.doesNotMatch(
   memoryNagStyles,

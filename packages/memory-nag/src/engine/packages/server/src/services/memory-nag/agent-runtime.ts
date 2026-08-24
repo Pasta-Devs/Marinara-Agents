@@ -105,7 +105,7 @@ export const memoryNagAgentRuntime = {
           ...current,
           lastRecall: data.nags_needed
             ? { memoryIds: data.memoryIds, nags: data.nags, createdAt: new Date().toISOString() }
-            : null,
+            : { memoryIds: [], nags: [], createdAt: new Date().toISOString() },
         }));
       } catch (error) {
         getMemoryNagRuntime().logger.warn(
