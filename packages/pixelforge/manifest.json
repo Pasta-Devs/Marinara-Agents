@@ -52,8 +52,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "77efc4e472c85c0cf106e4963ab880644cf81134dc4548a842592c9a1b51b524",
-      "bytes": 616939
+      "sha256": "d9b6569a6733585573998dcb125065d198cb9de3786c3bc0d96398238455190f",
+      "bytes": 625130
     },
     {
       "path": "tiles.png",

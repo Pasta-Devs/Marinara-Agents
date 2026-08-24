@@ -6701,17 +6701,25 @@ const cellarBrief = (prosperity) => ({
   }
 }
 
-// ── A WORKPLACE AND A WORK POST LIVE IN DIFFERENT ID SPACES ────────────────
+// ── A WORKPLACE AND A STATION ARE DIFFERENT FACTS ──────────────────────────
 // `workplace` resolves against the BRIEF's declared zones, so it always names a
-// `z*`. A work post (the strip behind a shop counter) belongs to a building the
-// COMPILER minted, which is `s*` or `h*` and has no brief name to be named by.
-// The two can never meet, which is why the cast loop has no counter branch —
-// review flagged the lookup that used to sit there as unreachable, and it was.
+// `z*`. WORK_POSTS — the strip behind a shop counter — is keyed by `special` on a
+// building the COMPILER minted, which is `s*` or `h*` and has no brief name to be
+// named by. Those two can never meet, and that half of the claim is unchanged.
 //
-// Pinned because the removal RELIES on it: if a future change ever gives a
-// brief-declared place a compiler work post, or lets a workplace name a minted
-// building, this fails and whoever did it learns that the box a named worker
-// stands in needs revisiting.
+// What changed in 0.11 is that a brief-declared room CAN carry a station now: the
+// furnisher of a gathering records its serving row and a sanctuary's records its
+// chancel, and the places pass hands it to that building's OWNER so an innkeeper
+// homed at the settlement root stops standing on their own doorstep. So the cast
+// loop's missing counter branch no longer rests on "a lookup here could never
+// match" — it rests on the station belonging to whoever RUNS the room. A
+// workplace is the one binding that puts SEVERAL people in one building, and a
+// station is a single row: they would stack on it, or be pushed straight back off
+// it by the occupancy scan.
+//
+// Pinned because the removal RELIES on that: if a future change ever sends a
+// named worker to a station, this fails and whoever did it learns that the box a
+// named worker stands in needs revisiting.
 {
   const sealed = brief.validate(
     {
@@ -6727,6 +6735,9 @@ const cellarBrief = (prosperity) => ({
         { name: "B", role: "innkeep", kind: "host", tint: "amber", home: "The Kettle", household: 2 },
         { name: "C", role: "hand", kind: "folk", tint: "green", home: "Probe", workplace: "The Yards", household: 3 },
         { name: "D", role: "trader", kind: "merchant", tint: "violet", home: "Probe", household: 4 },
+        // Named INTO the room that has a station, which is what makes the claim
+        // below something other than vacuous.
+        { name: "E", role: "potboy", kind: "folk", tint: "teal", home: "Probe", workplace: "The Kettle", household: 5 },
       ],
     },
     ctx,
@@ -6737,22 +6748,31 @@ const cellarBrief = (prosperity) => ({
   for (const id of briefZoneIds) {
     assert.ok(/^z\d+$/.test(id), `a brief-declared zone id is always z*, got ${id}`);
   }
-  // No compiled zone that a workplace could name carries a work post.
-  for (const id of briefZoneIds) {
-    const zone = w.zones[id];
-    if (!zone) continue;
-    assert.ok(!zone.workPost, `${id} is nameable as a workplace, so it must not carry a work post`);
-  }
-  // And the named worker really is inside the zone they were assigned.
   const at = (name) => {
     for (const id in w.zones) if (w.zones[id].npcs.some((n) => n.name === name)) return id;
     return null;
   };
+  const npcNamed = (name) =>
+    Object.values(w.zones)
+      .flatMap((zone) => zone.npcs)
+      .find((npc) => npc.name === name);
+  // THE ROOM WITH A STATION IN IT, and a worker the brief named into it.
+  const kettleId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Kettle")[0];
+  const kettle = w.zones[kettleId];
+  assert.ok(kettle?.post, "the gathering's furnisher recorded a station of its own");
+  const workerBox = npcNamed("E")._sched.post.wander;
+  assert.notDeepEqual(workerBox, kettle.post, "a named worker is not sent to the keeper's station");
+  assert.ok(
+    workerBox.x0 < kettle.post.x0 && workerBox.y1 > kettle.post.y1,
+    `a named worker gets the room's middle, strictly bigger than the station (${JSON.stringify(workerBox)})`,
+  );
+  // And the named workers really are inside the zones they were assigned.
   const yardsId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Yards")[0];
   const sim = new loadedPF.Sim(w);
   sim.clockMin = 12 * 60;
   sim.resolveSchedules();
   assert.equal(at("C"), yardsId, "a named worker is in the workshop at midday");
+  assert.equal(at("E"), kettleId, "…and the one named into the inn is in the inn");
 }
 
 // ── OPEN SPANS ARE RECORDED, NOT MERELY UNPAINTED (0.10) ───────────────────
@@ -12545,6 +12565,200 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     true,
     "…and the zone mark does not go up without one — both marks or neither, structurally",
   );
+}
+
+// ── AN OWNER HOMED AT THE SETTLEMENT ROOT STANDS AT THEIR OWN STATION (0.11) ──
+// `home` naming the SETTLEMENT is the ordinary shape and not a corner case: the
+// STOCK_CAST top-up roster carries no `home` of its own — so every quality-floor
+// cast homes its innkeeper at the root (the second playtest's own shape; the
+// DEFAULT briefs are fine, homing their hosts at the inn by name) — and it is
+// also what a model writes when it is not thinking about buildings. That innkeeper stood on
+// the door apron of the inn they run, from waking to sleeping, with the lit
+// common room and the counter behind them.
+//
+// The promotion that sends an owner inside gates on `owned.interior?.post`, and
+// `interior` was only ever set by the COMPILER-MINTED building loop — where the
+// station comes from WORK_POSTS, a table whose one entry is `shop`. A facade the
+// PLACES pass built (every gathering, every sanctuary) never carried the handle
+// at all, so the gate could not fire however the schedule was written. And the
+// schedule was never the problem: `host:resident` is already post/post/post/home
+// and the runtime handle is built FROM the promotion's result, so the one site
+// fixes the spawn and the whole day at once.
+//
+// The SANCTUARY had the identical gap for the identical reason, and its keeper
+// tier (`*:resident:keeper`) holds them at `post` from dawn to dusk — so an elder
+// homed at the settlement kept the church STEP for the whole of daylight.
+{
+  const E = loadedPF.economy;
+  const P = loadedPF.player;
+  /** Every tile of a station is standable, and the fitting it serves stands
+   *  between it and the way in — which is what makes it the BACK of the counter
+   *  rather than the front of it. Asserted against the tiles the furnisher
+   *  actually painted, so the claim survives the furniture being moved. */
+  const checkStation = (zone, fitting, label) => {
+    const post = zone.post;
+    assert.ok(post, `${label}: the furnisher recorded a station`);
+    for (let y = post.y0; y <= post.y1; y++) {
+      for (let x = post.x0; x <= post.x1; x++) {
+        assert.ok(loadedPF.schedule.standable(zone, x, y), `${label}: the station tile ${x},${y} is standable`);
+        assert.equal(zone.object[zone.w * (y + 1) + x], fitting, `${label}: the ${fitting} stands south of ${x},${y}`);
+      }
+    }
+    assert.ok(post.y1 < zone.spawn.y, `${label}: the ${fitting} stands between the station and the door`);
+    return post;
+  };
+
+  const innBrief = (home) => ({
+    scale: "village",
+    name: "Fernmoor",
+    prosperity: "modest",
+    places: [{ kind: "gathering", name: "The Amber Hearth", flavor: "Low beams and a tall fire." }],
+    cast: [
+      { name: "Mira", role: "innkeep", kind: "host", tint: "amber", home, household: 1 },
+      // A second body in the room to be nearer to, placed by NAME so the inn
+      // gains an occupant without gaining a RESIDENT — a resident grows living
+      // quarters, which moves `floor0` and makes this a different building.
+      {
+        name: "Tam",
+        role: "potboy",
+        kind: "folk",
+        tint: "teal",
+        home: "Fernmoor",
+        workplace: "The Amber Hearth",
+        household: 2,
+      },
+    ],
+  });
+
+  // (a) THE REPORTED SHAPE: the keeper of the inn, homed at the town.
+  const sealed = brief.validate(innBrief("Fernmoor"), { theme: "cozy-village", seed: 8080 });
+  const w = world.build(8080, "cozy-village", sealed);
+  checkWorld(w, sealed, "root-homed host");
+  const gid = Object.entries(sealed._ids.zones).find(([, name]) => name === "The Amber Hearth")?.[0];
+  assert.ok(gid && w.zones[gid], "the declared gathering compiled to a room");
+  const room = w.zones[gid];
+
+  // IN the room — compiled into `zone.npcs`, which is what the room path reads
+  // and what the daypart splice moves — and not merely pointed at it.
+  const mira = room.npcs.find((npc) => npc.name === "Mira");
+  assert.ok(mira, `the innkeeper stands IN ${gid} rather than on its doorstep`);
+  assert.equal(mira._sched.post.zoneId, gid, "and her day handle names that room");
+
+  // …AT THE SERVING ROW, which is the row behind the counter.
+  const innPost = checkStation(room, "counter", "the inn");
+  assert.deepEqual(mira._sched.post.wander, innPost, "her day box IS the station, not the room's middle");
+  assert.ok(
+    mira.x >= innPost.x0 && mira.x <= innPost.x1 && mira.y >= innPost.y0 && mira.y <= innPost.y1,
+    `and she is compiled onto it (${mira.x},${mira.y} in ${JSON.stringify(innPost)})`,
+  );
+
+  // NO REHOUSING. Days at the station, nights in her own bed: the night handle is
+  // still the dwelling her household claimed, and it is a MINTED `h*` zone rather
+  // than the inn. Where somebody works must never move where they sleep.
+  assert.ok(mira._sched.home, "she still has a bed to go to");
+  assert.notEqual(mira._sched.home.zoneId, gid, "the station did not rehouse her into the inn");
+  assert.match(mira._sched.home.zoneId, /^h\d+$/, "her bed is in her household's own dwelling");
+  {
+    const dwelling = w.zones[mira._sched.home.zoneId];
+    const bed = mira._sched.home.wander;
+    assert.equal(bed.x0, bed.x1, "a night handle is one tile — a bed, not a box");
+    assert.ok(
+      ["bed", "bunk"].includes(dwelling.object[dwelling.w * bed.y0 + bed.x0]),
+      "…and there is a bed painted on it",
+    );
+  }
+
+  // (d) THE OFFER FOLLOWS HER INTO THE ROOM. The room path reads `zone.npcs`, so
+  //     until she was compiled into the inn the lodging mark was up on a room the
+  //     keeper was never standing in — a player inside the inn with the innkeeper
+  //     out on the step got the offer only by walking back out to her.
+  assert.equal(room.lodging, true, "the room carries the lodging mark");
+  const bystander = room.npcs.find((npc) => npc.name === "Tam");
+  assert.ok(bystander, "with somebody else in the room to be nearer to");
+  {
+    const sim = new loadedPF.Sim(w);
+    const core = { chatId: "chat-berth-root-host", sim, hud: { toast() {}, refreshChips() {} } };
+    P.award(core, { money: 100 });
+    sim.zoneId = gid;
+    sim.nearNpc = bystander;
+    const offer = E.berthOffer(core);
+    assert.equal(offer.available, true, "standing in the inn is an offer even with a bystander nearer");
+    assert.equal(offer.keeper?.name, "Mira", "…answered by the keeper who is behind the counter");
+    assert.equal(offer.zoneId, gid, "…for the room she keeps");
+  }
+
+  // AND SHE HOLDS IT THROUGH THE DAY. `host:resident` is post/post/post/home, and
+  // `post` is now the station, so the three daylight dayparts put her behind her
+  // own counter and only night takes her home.
+  {
+    const sim = new loadedPF.Sim(w);
+    const inRoom = () => w.zones[gid].npcs.some((npc) => npc.name === "Mira");
+    for (const [minutes, part] of [
+      [6 * 60, "dawn"],
+      [12 * 60, "day"],
+      [19 * 60, "dusk"],
+    ]) {
+      sim.clockMin = minutes;
+      sim.resolveSchedules();
+      assert.ok(inRoom(), `at ${part} the innkeeper is behind her own counter`);
+    }
+    sim.clockMin = 2 * 60;
+    sim.resolveSchedules();
+    assert.ok(!inRoom(), "and at night she is in her own bed, not among the tables");
+  }
+
+  // (b) THE SHAPE THAT ALREADY WORKED IS UNTOUCHED. A keeper the brief homes AT
+  //     the place was never on the apron — the root-home branch is the only one
+  //     that was — so she still gets the room's walkable middle, which is a box
+  //     strictly bigger than the station in both directions.
+  {
+    const homed = brief.validate(innBrief("The Amber Hearth"), { theme: "cozy-village", seed: 8080 });
+    const hw = world.build(8080, "cozy-village", homed);
+    checkWorld(hw, homed, "host homed at the inn");
+    const hid = Object.entries(homed._ids.zones).find(([, name]) => name === "The Amber Hearth")?.[0];
+    const hroom = hw.zones[hid];
+    const npc = hroom.npcs.find((entry) => entry.name === "Mira");
+    assert.ok(npc, "a host homed at the inn is still compiled into it");
+    assert.equal(npc._sched.post.zoneId, hid, "and her day handle is still that room");
+    const station = checkStation(hroom, "counter", "the inn she lives in");
+    const box = npc._sched.post.wander;
+    assert.ok(
+      box.x0 < station.x0 && box.y1 > station.y1,
+      `she keeps the room's middle, not the station (${JSON.stringify(box)} vs ${JSON.stringify(station)})`,
+    );
+    assert.equal(npc._sched.home?.zoneId, hid, "and her bed is still in the quarters the building grew");
+  }
+
+  // (c) THE SANCTUARY, SAME GAP AND SAME FIX. Its station is the chancel: the
+  //     walkable row behind the altar, at the head of the aisle. The altar row
+  //     itself is solid end to end (altar plus both candle plinths), so the row
+  //     above it is the only place a keeper can actually stand.
+  {
+    const sealedChurch = brief.validate(
+      {
+        scale: "village",
+        name: "Fernmoor",
+        prosperity: "modest",
+        places: [{ kind: "sanctuary", name: "St Aldwin's", flavor: "A cold stone nave." }],
+        cast: [
+          { name: "Wen", role: "prior", kind: "elder", tint: "violet", home: "Fernmoor", household: 1 },
+          { name: "Halla", role: "farmer", kind: "grower", tint: "green", home: "Fernmoor", household: 2 },
+        ],
+      },
+      { theme: "cozy-village", seed: 8080 },
+    );
+    const cw = world.build(8080, "cozy-village", sealedChurch);
+    checkWorld(cw, sealedChurch, "root-homed keeper");
+    const sid = Object.entries(sealedChurch._ids.zones).find(([, name]) => name === "St Aldwin's")?.[0];
+    assert.ok(sid && cw.zones[sid], "the declared sanctuary compiled to a room");
+    const nave = cw.zones[sid];
+    const wen = nave.npcs.find((npc) => npc.name === "Wen");
+    assert.ok(wen, `the keeper stands IN ${sid} rather than on the church step`);
+    assert.equal(wen._sched.keeper, true, "carrying the keeper tier that holds them there all day");
+    const chancel = checkStation(nave, "altar", "the sanctuary");
+    assert.deepEqual(wen._sched.post.wander, chancel, "and their day box is the chancel");
+    assert.match(wen._sched.home?.zoneId ?? "", /^h\d+$/, "while their bed stays at the dwelling they were housed in");
+  }
 }
 
 // ── THE CLASSIFIER CARRIES IT AND DECIDES NOTHING WITH IT ─────────────────────

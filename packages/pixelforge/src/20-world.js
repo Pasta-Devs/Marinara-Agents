@@ -1173,6 +1173,20 @@ PF.world = (() => {
       // Nothing solid on `floor` itself: it is the row the rooms above open onto.
       fillRect(z, 5, floor + 2, 4, 3, "ground", "rug", false);
       fillRect(z, 3, floor + 1, 5, 1, "object", "counter", true);
+      // THE SERVING ROW — recorded, not merely left clear, exactly like the
+      // dwelling's hearth: whoever KEEPS this room has to be sent to a spot
+      // inside it, and the only thing that knows where the counter ended up is
+      // the furnisher that painted it. The keeper's side is the row ABOVE the
+      // counter run: the door is in the south wall and the rug and the tables
+      // are south of the counter, so north of it is the side a patron does not
+      // walk onto. Same arithmetic as a shop's work post (WORK_POSTS) — the
+      // counter's own span, one row back from it — because it is the same fact.
+      //
+      // Walkable by contract: `floor` is the row the guest rooms open onto (see
+      // above), and nothing in this furnisher or the sleeping layout may lay a
+      // solid tile on it. Runtime-only like `hearth`: re-baked on every compile,
+      // never serialized, zero save fields.
+      z.post = { x0: 3, y0: floor, x1: 7, y1: floor };
       put(z, w - 6, floor + 2, "object", "table", true);
       put(z, w - 4, floor + 4, "object", "table", true);
       z.lights.push({ x: 4, y: floor + 1 }, { x: w - 6, y: floor + 2 });
@@ -1203,6 +1217,20 @@ PF.world = (() => {
         put(z, candleX, floor + 1, "object", "wallStone", true);
         z.lights.push({ x: candleX, y: floor + 1 });
       }
+      // THE CHANCEL, recorded for the same reason the inn records its serving
+      // row: a keeper the brief homed at the settlement root needs somewhere
+      // inside their own building to stand, and only the furnisher knows where
+      // the altar went. The row BEHIND the altar, spanning it — the head of the
+      // aisle the player walks up, facing back down it.
+      //
+      // Not the altar row itself, and not the aisle: `altar` and both candle
+      // plinths are solid, so a station laid across them would hold no standable
+      // tile at all and the placer's ring scan would walk the keeper off it. The
+      // row above is clear — nothing here paints on `floor`, the benches start at
+      // `floor + 4` — and it is reached around either end of the altar run, which
+      // is why standing there does not strand anybody. Runtime-only, like the
+      // hearth and the inn's counter.
+      z.post = { x0: aisleX - 2, y0: floor, x1: aisleX + 2, y1: floor };
       for (let row = floor + 4; row < h - 2; row += 2) {
         fillRect(z, 3, row, aisleX - 3, 1, "object", "counter", true);
         fillRect(z, aisleX + 1, row, aisleX - 3, 1, "object", "counter", true);
@@ -1727,10 +1755,19 @@ PF.world = (() => {
     });
   }
 
-  /** Where a live-work owner WORKS inside their own building, keyed by special.
-   *  Only a shop has a station to be manned — the row between the stock and the
-   *  counter — so it is the only entry: a farmer works the land and comes back
-   *  in, and everyone else keeps the door apron they have always used. */
+  /** Where a live-work owner WORKS inside a building the COMPILER minted, keyed
+   *  by special. Only a shop has a station to be manned — the row between the
+   *  stock and the counter — so it is the only entry: a farmer works the land and
+   *  comes back in.
+   *
+   *  ONE OF TWO WAYS a station reaches an owner, and the split is by who built
+   *  the room. A minted building has no brief place behind it, so its station is
+   *  looked up here by `special`. A building the brief NAMED is furnished by
+   *  FURNISH, and its furnisher records its own station on the zone (`z.post` —
+   *  the inn's serving row, the sanctuary's chancel) for the places pass to hand
+   *  to the same `interior` handle. Both ends feed the one gate in the cast loop,
+   *  and a kind with a station on neither path keeps the door apron it has always
+   *  used. */
   const WORK_POSTS = {
     shop: (w, h) => ({ x0: 3, y0: h - 4, x1: w - 5, y1: h - 4 }),
   };
@@ -2565,6 +2602,24 @@ PF.world = (() => {
       });
       zone.flavor = place.flavor;
       zones[id] = zone;
+      // WHERE THE OWNER OF THIS ROOM WORKS. A place-bound facade never goes
+      // through the minted-building loop below (it has no `special` and no
+      // `households`), so its `interior` handle was never set at all — and the
+      // cast loop's promotion gates on `owned.interior?.post`. An innkeeper the
+      // brief homed at the SETTLEMENT rather than at the inn therefore stood on
+      // the door apron of the building they run for the whole of daylight, with
+      // the lit common room and the counter behind them; a sanctuary's keeper did
+      // the same on the church step, and the keeper schedule tier holds them
+      // there dawn to dusk. Both default briefs home their host at the root, so
+      // this was every default world.
+      //
+      // The station comes off the ZONE because the furnisher is what knows it.
+      // Same handle shape the minted loop builds, so the promotion needs no
+      // second branch — and kinds whose furnisher laid no station leave `post`
+      // undefined, which the promotion's optional chain reads as "keep the door
+      // apron": a hall or a workshop has no counter to be manned and gains
+      // nothing by pretending to.
+      facade.interior = { zoneId: id, post: zone.post };
       // A floor is a zone like any other from here on — it is only ever reached
       // through its stairs, and it carries its own mapExport = false.
       for (const floor of zone.floors) zones[floor.id] = floor;
@@ -2962,11 +3017,18 @@ PF.world = (() => {
         const ownBed = bedFor.get(member);
         if (zone === v && owned) {
           if (owned.owner === member && owned.interior?.post && zones[owned.interior.zoneId]) {
-            // A shopkeeper works INSIDE the shop now that there is a shop to be
-            // inside. An owner loitering on the apron with a stocked room behind
-            // them is the same "nobody is where they are scheduled to be" gap the
-            // dwellings had. Scoped to the OWNER: the shop is their household's
-            // home too now, and a smith's child does not man the counter.
+            // AN OWNER WORKS INSIDE THE BUILDING THEY RUN, now that there is a
+            // room to be inside it: the shopkeeper between their stock and their
+            // counter, the innkeeper on the serving row, the keeper at the
+            // chancel. An owner loitering on the apron with a stocked or a lit
+            // room behind them is the same "nobody is where they are scheduled to
+            // be" gap the dwellings had. Scoped to the OWNER: a live-work
+            // building is their household's home too, and a smith's child does
+            // not man the counter.
+            //
+            // The station itself comes from whoever built the room — WORK_POSTS
+            // for a minted building, the furnisher's own `z.post` for one the
+            // brief named — and this gate cares only that there is one.
             zone = zones[owned.interior.zoneId];
             wander = owned.interior.post;
           } else {
@@ -3083,13 +3145,23 @@ PF.world = (() => {
         // already gets, so a named worker stands where the owner would rather
         // than in some third place invented for them.
         //
-        // There is deliberately no "behind the counter" branch. A workplace can
-        // only ever name a zone the BRIEF declared (`workplace` resolves against
-        // brief._ids.zones, so always `z*`), and a work post belongs to a
-        // COMPILER-MINTED building (`s*`/`h*`, keyed by `special` in WORK_POSTS).
-        // The two id spaces are disjoint by construction — see the harness case
-        // that pins it — so a counter lookup here could never match, and one was
-        // removed rather than left reading as though it might.
+        // There is deliberately no "behind the counter" branch, and the reason is
+        // no longer that a lookup could not match. WORK_POSTS is still out of
+        // reach from here: a workplace can only ever name a zone the BRIEF
+        // declared (`workplace` resolves against brief._ids.zones, so always
+        // `z*`), and that table is keyed by `special` on a COMPILER-MINTED
+        // building (`s*`/`h*`). Those two id spaces are disjoint by construction
+        // — see the harness case that pins it.
+        //
+        // What is new is that a brief-declared room CAN now carry a station: the
+        // places pass hands an inn's serving row and a sanctuary's chancel to
+        // that building's OWNER (see `facade.interior`). It stays the owner's.
+        // `workplace` is the one binding that puts SEVERAL people in one building
+        // — an acolyte, a market's fourth seller, a shop assistant — and a
+        // station is a single row five tiles long, so sending them all to it
+        // would stack them or have the occupancy scan push them straight back
+        // off. The room's walkable middle is the honest box for anybody the brief
+        // merely rostered here, and the same box the owner would get.
         wander = workZone === v ? plazaBox() : fullZoneBox(workZone);
         // Always dispersed: a workplace is a SHARED box by definition — it exists
         // precisely for the cases with more than one person in it — and two sprites
