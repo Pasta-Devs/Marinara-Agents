@@ -955,7 +955,13 @@ PF.save = {
       // only fires when the entry will not fit at all; when it does fire, the
       // player gets the true sentence instead of the comforting one.
       notices.length = 0;
-      notices.push("What belonged to the world that changed could not be kept, and is gone.");
+      // THE SAME EVENT AS THE SENTENCE IT REPLACES, with the other outcome — so
+      // it takes that sentence's own subject. applyStamps says "what you had
+      // done here"; this one used to say "what belonged to the world that
+      // changed", which is true, abstract, and reads like a different incident
+      // when the two sit a scroll apart in the band (plan §2.5, M3's
+      // writer-site kind copy).
+      notices.push("What you had done in the world that changed could not be kept, and is gone.");
     }
     if (applied.evaluated && !applied.severed) {
       const stamp = PF.quarantine.peek("stamp");

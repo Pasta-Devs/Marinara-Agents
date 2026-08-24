@@ -770,7 +770,13 @@ PF.player = {
       return { dropped: [], notices };
     }
     player.quests.active = active.filter((q) => known.has(giverName(q.g)));
-    notices.push("A task you had taken on has no one left to hand it back to.");
+    // A LOSS, and the sentence has to say so. The rows above are PARKED — set
+    // aside, recoverable, and their copy says as much — while this quest is
+    // dropped and nothing brings it back. "No one left to hand it back to" is
+    // true and stops one clause short of the outcome, which is the difference
+    // between a notice and an explanation now that the band is re-readable
+    // (plan §2.5, M3's writer-site kind copy).
+    notices.push("A task you had taken on has no one left to hand it back to, so you have let it go.");
     return { dropped: dangling, notices };
   },
 

@@ -9326,6 +9326,12 @@ await withSavePath(async ({ armed, makeCore }) => {
     "leaving the quest whose giver is standing there",
   );
   assert.equal(out.notices.length, 1, "with a notice for the ledger");
+  // …AND THE NOTICE SAYS WHAT KIND OF THING THIS WAS. The severance notices are
+  // about rows that were PARKED and can come home; a dangling giver is a dropped
+  // quest and nothing brings it back. Now that the band is a surface a player
+  // re-reads rather than one sentence in a wrap-up, the outcome clause is the
+  // difference between a notice and an explanation (plan §2.5, M3).
+  assert.ok(/let it go/.test(out.notices[0]), `…and it says the task was let go (${out.notices[0]})`);
 
   const all = P.defaultPlayer();
   all.quests.active = [
@@ -9483,7 +9489,7 @@ await withSavePath(async ({ armed, makeCore }) => {
   );
   assert.deepEqual(
     texts(refused),
-    ["What belonged to the world that changed could not be kept, and is gone."],
+    ["What you had done in the world that changed could not be kept, and is gone."],
     "a severance the bag would not take says the TRUE sentence, and only that one",
   );
   assert.equal(band(refused)[0][0], 9, "…on the day it happened");
@@ -15782,7 +15788,7 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
   };
   try {
     P.get(core).ledger.lines.push([4, "Fished the millpond — 12 casts: carp x2."]);
-    P.notice(P.get(core), "A task you had taken on has no one left to hand it back to.", 4);
+    P.notice(P.get(core), "A task you had taken on has no one left to hand it back to, so you have let it go.", 4);
     loadedPF.spatial.reset();
     await loadedPF.spatial.refresh(core);
     await loadedPF.spatial.travel(core, { id: "bar", name: "The Bar" });
@@ -15802,7 +15808,7 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     core.chatId = "chat-travel-refused";
     core.host.sendMessage = async () => false;
     P.get(core).ledger.lines.push([4, "Fished the millpond — 12 casts: carp x2."]);
-    P.notice(P.get(core), "A task you had taken on has no one left to hand it back to.", 4);
+    P.notice(P.get(core), "A task you had taken on has no one left to hand it back to, so you have let it go.", 4);
     loadedPF.spatial.pending = null;
     await loadedPF.spatial.travel(core, { id: "bar", name: "The Bar" });
     assert.equal(P.get(core).flushedDay, 0, "a refused turn is not a telling");
