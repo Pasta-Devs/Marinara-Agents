@@ -3,6 +3,8 @@
 // compiler invariants, injection metering, and spatial-binding regressions
 // through the spec's degenerate cases (docs/brief-schema.md §4-5, §7).
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,7 +17,10 @@ const here = dirname(fileURLToPath(import.meta.url));
 // and neither touches the DOM until it is called (see the FakeNode shim near the
 // end of this file). 40-render and 90-element stay out: a canvas context and a
 // custom-element registration want a page, not a shim.
-const source = [
+// Named rather than spelled inline because the cross-process determinism case
+// hands this same list to a second interpreter, which loads the package exactly
+// the way this one does.
+const MODULES = [
   "00-prelude.js",
   "10-art.js",
   "15-assets.js",
@@ -30,9 +35,8 @@ const source = [
   "60-save.js",
   "70-hud.js",
   "80-setup.js",
-]
-  .map((file) => readFileSync(join(here, "src", file), "utf8"))
-  .join("\n");
+];
+const source = MODULES.map((file) => readFileSync(join(here, "src", file), "utf8")).join("\n");
 const loadedPF = new Function(`"use strict";\n${source}\nreturn PF;`)();
 // refresh() fire-and-forgets the maps export; without a stub every earlier
 // spatial case would hit undefined fetch and warn. 404 = "route absent" is the
@@ -13095,6 +13099,21 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     let inside = 0;
     for (let y = 1; y < 23; y++) for (let x = 20; x < 22; x++) if (wilds.ground[y * wilds.w + x] === "water") inside++;
     assert.equal(inside, 40, `the rect holds the stream (${inside} water tiles, the ford's four laid over it)`);
+    // AND THE FOUR LAID OVER IT ARE THE BRIDGE (0.12 slice 3b). The ford was
+    // hand-laid `path` and the ruling migrated it: a road carried over water is
+    // one picture now, whether the road is a compiled pool's carriageway or a
+    // crossing the brief asked for by name. Non-solid as it always was — the
+    // count above is what proves the ford did not become water, and this is what
+    // proves it did not stay a paved road through a stream.
+    for (const [fx, fy] of [
+      [20, 12],
+      [21, 12],
+      [20, 13],
+      [21, 13],
+    ]) {
+      assert.equal(wilds.ground[fy * wilds.w + fx], "bridge", `the ford at (${fx},${fy}) is decked, not paved`);
+      assert.ok(!wilds.solid[fy * wilds.w + fx], `…and (${fx},${fy}) is still walked across`);
+    }
   }
 
   // ── THE LEGACY WORLD'S TWO RESERVED ROWS ────────────────────────────────────
@@ -13154,8 +13173,14 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     // west neighbour (21,12) is INSIDE the stream rect and is the path the ford
     // laid, and no neighbour of it is water. A rect-only test would call this
     // fishing; the two-sided test calls it a road.
+    //
+    // RE-BASELINED, 0.12 slice 3b: that tile read "path" until the bridge ruling
+    // migrated the hand-laid ford onto the new tile (one visual system for every
+    // road that crosses water). The ASSERTION is unchanged and is still the one
+    // worth making — the tile inside the rect is not water — only the word for
+    // what the ford is laid with has moved.
     const forest = w.zones.forest;
-    assert.equal(forest.ground[12 * forest.w + 21], "path", "the ford's tile is inside the rect and is not water");
+    assert.equal(forest.ground[12 * forest.w + 21], "bridge", "the ford's tile is inside the rect and is not water");
     sim.teleport("forest", 22, 12);
     sim.step(0, {});
     assert.equal(sim.nearFeature, null, "a rect tile that is not water is not a spot");
@@ -13163,6 +13188,211 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     sim.teleport("forest", 22, 10); // beside the stream proper, north of the ford
     sim.step(0, {});
     assert.equal(sim.nearFeature?.id, "legacy:stream", "…while the bank two tiles north of it is");
+  }
+
+  // ── THE ROAD MAY CROSS THE WATER NOW (0.12 slice 3b, the bridge ruling) ─────
+  // Slice-1's verify found that a wilds `water-feature` can never place: the
+  // anchor scan offers rows 8..11 and nothing else, an 8x5 rect starting on any
+  // of them reaches the road band at y12..13, and the scan refuses every rect
+  // that touches the road. A brief that asked for a pool in the wood therefore
+  // got silence, on every seed. The maintainer's ruling is that the road wins
+  // the tiles it is already standing on and the water takes the rest: road ∩
+  // pool becomes BRIDGE — walkable, drawn over the water — and the placement is
+  // permitted.
+  //
+  // Measured as a DIFFERENCE against the same wood with no features in it,
+  // because there is no other way to know which tiles the road had.
+  {
+    const pool = { tag: "water-feature", name: "The Pool" };
+    const town = [{ tag: "shrine", name: "The Shrine" }];
+    const sealed = seal(town, [{ ...wildsPlace, features: [...wildsPlace.features, pool] }], "village", "modest", 313);
+    const control = seal(town, [{ ...wildsPlace, features: [] }], "village", "modest", 313);
+    const w = world.build(313, "cozy-village", sealed);
+    const zone = w.zones[`z${sealed.places.findIndex((place) => place.kind === "wilds") + 2}`];
+    const bare = world.build(313, "cozy-village", control).zones[zone.id];
+    const row = zone.features.find((feature) => feature.tag === "water-feature");
+    assert.ok(row, "the wilds pool PLACES — before the ruling it never did, on any seed");
+    assert.equal(sealed._ids.features[row.id], "The Pool", "…through the normal path, under its own brief ordinal");
+    // NO NEW ROW CLASS. The bridge is placement TREATMENT of a water feature and
+    // not a feature of its own, so the register reads exactly as it would have if
+    // the pool had found dry ground: three rows, three brief ordinals, in the
+    // order the two writing sites run in.
+    assert.deepEqual(
+      zone.features.map((feature) => `${feature.tag}:${feature.name}`),
+      ["water-crossing:The Ford", "landmark-stone:The Marker", "water-feature:The Pool"],
+      "and mints no registry row of its own",
+    );
+
+    const groundAt = (z, x, y) => z.ground[y * z.w + x];
+    let water = 0;
+    let planked = 0;
+    for (let y = row.rect.y; y < row.rect.y + row.rect.h; y++) {
+      for (let x = row.rect.x; x < row.rect.x + row.rect.w; x++) {
+        const now = groundAt(zone, x, y);
+        const was = groundAt(bare, x, y);
+        if (now === "water") {
+          water++;
+          assert.notEqual(was, "path", `(${x},${y}): water was painted straight over the road`);
+          assert.ok(zone.solid[y * zone.w + x], `(${x},${y}): open water has to stay impassable`);
+        } else if (now === "bridge") {
+          planked++;
+          assert.equal(was, "path", `(${x},${y}): a bridge over ground that was never a road`);
+          assert.ok(!zone.solid[y * zone.w + x], `(${x},${y}): a solid bridge is a road that does not cross`);
+        }
+      }
+    }
+    // The pool is WHOLE — the placer's own 6x4 — whichever of the two tiles each
+    // square ended up as. A pond that lost tiles instead of decking them would
+    // show here as a total under 24, which is the millpond instrument's trick.
+    assert.equal(water + planked, 24, `the pool is whole (${water} water + ${planked} bridge)`);
+    assert.ok(planked > 0, "and the ruling's whole case is in it: part of the pool IS the road");
+    // NOTHING SOLID IS LEFT STANDING IN THE CARRIAGEWAY. Tested over the whole
+    // rect rather than over the water alone, because the pool paints an OBJECT
+    // too — its companion WELL, which is solid and has no bridge story at all.
+    // This is not hypothetical and it is why the relaxation had to be a second
+    // pass: write it as a widened first pass instead and the pool anchors a row
+    // lower, which stands the well at (15,12) in the middle of the road. No code
+    // guards the well, deliberately — with the strict pass running first the
+    // anchor that would put it there is refused before the road ever comes off
+    // the table, and a guard nothing can turn red is worse than none.
+    for (let y = row.rect.y; y < row.rect.y + row.rect.h; y++) {
+      for (let x = row.rect.x; x < row.rect.x + row.rect.w; x++) {
+        if (groundAt(bare, x, y) !== "path") continue;
+        assert.ok(!zone.solid[y * zone.w + x], `(${x},${y}): the road is blocked where it used to run`);
+      }
+    }
+
+    // END TO END, flood-filled rather than inferred: from the tile the portal
+    // delivers the player onto, across the decked pool, and on across the ford to
+    // the east approach. sealPockets closes anything it cannot reach, so a bridge
+    // that failed to carry the road would show up as a SEALED far side rather
+    // than as a hole — which is why the far tile is asserted reachable and not
+    // merely non-solid.
+    const reachable = (z, from, to) => {
+      const seen = new Set([from.y * z.w + from.x]);
+      const queue = [from];
+      while (queue.length) {
+        const { x, y } = queue.pop();
+        if (x === to.x && y === to.y) return true;
+        for (const [dx, dy] of [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ]) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= z.w || ny >= z.h) continue;
+          const at = ny * z.w + nx;
+          if (seen.has(at) || z.solid[at]) continue;
+          seen.add(at);
+          queue.push({ x: nx, y: ny });
+        }
+      }
+      return false;
+    };
+    assert.ok(reachable(zone, { x: 2, y: 12 }, { x: 24, y: 12 }), "the road still crosses the wood, pool and all");
+
+    // FISHING FROM THE BRIDGE, which the ruling gets for nothing: the shipped
+    // two-sided test asks whether a NEIGHBOUR is water inside a rect and has no
+    // opinion about what the player is standing on. A plank over the pool is a
+    // jetty by construction.
+    let deck = null;
+    for (let y = row.rect.y; y < row.rect.y + row.rect.h && !deck; y++)
+      for (let x = row.rect.x; x < row.rect.x + row.rect.w && !deck; x++)
+        if (groundAt(zone, x, y) === "bridge") deck = { x, y };
+    assert.ok(deck, "there is a plank to stand on");
+    try {
+      const sim = new loadedPF.Sim(w);
+      sim.teleport(zone.id, deck.x, deck.y);
+      sim.step(0, {});
+      assert.equal(sim.nearFeature?.id, row.id, "standing ON the bridge is standing at the pool");
+      const core = { chatId: "chat-bridge-cast", sim, hud: { toast() {}, refreshChips() {} }, markDirty() {} };
+      loadedPF.player.grant(core, { t: "rod", k: "crude" }, 1);
+      const offer = loadedPF.economy.fishOffer(core);
+      assert.equal(offer.available, true, "…and the water is on offer from up there");
+      assert.equal(offer.spot.id, row.id, "…naming the pool the plank is laid across");
+
+      // AND IT IS WALKABLE, driven through the real Sim rather than read off the
+      // solidity map: the feet box spans more than the tile underfoot, so a
+      // bridge one tile wide with water either side has to be tested by walking.
+      const before = sim.x;
+      for (let i = 0; i < 30; i++) sim.step(1 / 60, { left: true });
+      assert.ok(Math.abs(sim.x - before) > 1, "the player walks the bridge instead of standing on the water");
+    } finally {
+      loadedPF.save.reset(); // the mutators self-dirty, and a dirty block arms a timer
+    }
+  }
+
+  // ── A POOL THAT ALREADY FITTED DOES NOT MOVE (0.12 slice 3b) ────────────────
+  // The relaxation is a SECOND pass, and this is what that buys: the strict scan
+  // runs first and unchanged, so a wood whose road hangs off the other edge —
+  // the west-hung wilds, where the approach runs x16..34 — still finds the dry
+  // anchor it always found, lays no plank, and compiles the tiles it always did.
+  // A relaxation written as a widened first pass would have moved every one of
+  // them, which is the version of this change that would have been wrong.
+  {
+    const pool = { tag: "water-feature", name: "The Pool" };
+    const wood = { ...wildsPlace, features: [...wildsPlace.features, pool] };
+    const sealed = seal([], [wood, { ...wood, name: "The Far Wood" }], "village", "modest", 313);
+    const w = world.build(313, "cozy-village", sealed);
+    const west = w.zones[`z${sealed.places.map((place) => place.kind).lastIndexOf("wilds") + 2}`];
+    const row = west.features.find((feature) => feature.tag === "water-feature");
+    assert.ok(row, "the west-hung wood places its pool too");
+    let water = 0;
+    let planked = 0;
+    for (let y = row.rect.y; y < row.rect.y + row.rect.h; y++)
+      for (let x = row.rect.x; x < row.rect.x + row.rect.w; x++) {
+        if (west.ground[y * west.w + x] === "water") water++;
+        if (west.ground[y * west.w + x] === "bridge") planked++;
+      }
+    assert.equal(water, 24, "…whole, on dry ground, the way the strict scan already placed it");
+    assert.equal(planked, 0, "…and with no plank in it, because no road was ever in the way");
+  }
+
+  // ── DETERMINISM ACROSS PROCESSES, BRIDGE AND ALL (0.12 slice 3b) ────────────
+  // The registry lane above proves two builds inside ONE process agree. That is
+  // the weaker half: the bridge substitution reads the ground a previous pass
+  // painted, so it is the first placement decision in the compiler that depends
+  // on state rather than on arithmetic, and "same answer in a fresh interpreter"
+  // is the property a player actually relies on — they compile this world again
+  // tomorrow, in a browser that has just started.
+  {
+    const pool = { tag: "water-feature", name: "The Pool" };
+    const sealed = seal([], [{ ...wildsPlace, features: [...wildsPlace.features, pool] }], "village", "modest", 313);
+    const digest = (w) =>
+      createHash("sha256")
+        .update(
+          JSON.stringify(
+            Object.values(w.zones).map((zone) => [zone.id, zone.ground, zone.object, [...zone.solid], zone.features]),
+          ),
+        )
+        .digest("hex");
+    const mine = digest(world.build(313, "cozy-village", sealed));
+    // The child re-READS the modules rather than being handed them: a Windows
+    // command line is measured in tens of kilobytes and the package is measured
+    // in hundreds, so passing the source would have made this case fail for a
+    // reason that has nothing to do with the compiler.
+    const child = spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `import { createHash } from "node:crypto";
+         import { readFileSync } from "node:fs";
+         import { join } from "node:path";
+         const here = ${JSON.stringify(here)};
+         const src = ${JSON.stringify(MODULES)}.map((f) => readFileSync(join(here, "src", f), "utf8")).join("\\n");
+         const PF = new Function('"use strict";\\n' + src + "\\nreturn PF;")();
+         const w = PF.world.build(313, "cozy-village", ${JSON.stringify(sealed)});
+         process.stdout.write(createHash("sha256").update(JSON.stringify(
+           Object.values(w.zones).map((zone) => [zone.id, zone.ground, zone.object, [...zone.solid], zone.features]),
+         )).digest("hex"));`,
+      ],
+      { encoding: "utf8" },
+    );
+    assert.equal(child.status, 0, `the second interpreter compiled it too (${child.stderr})`);
+    assert.equal(child.stdout, mine, "a fresh process compiles the same tiles, the same solidity and the same rows");
   }
 
   // ── DERIVED: NOT ONE BYTE OF THE REGISTRY REACHES THE WIRE ──────────────────

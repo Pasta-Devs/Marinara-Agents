@@ -68,6 +68,39 @@ PF.world = (() => {
     for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) put(z, x, y, layer, tileId, solid);
   };
 
+  // THE GROUND A ROAD IS LAID WITH. Two ids and not one, because a `struggling`
+  // settlement scuffs 18% of its road to `dirt` before a single building goes up
+  // and a scuffed road is no less a road for it. Deliberately NOT `stone`:
+  // paving is also a building's footprint, a workyard, a clearing and a ward
+  // square, and a plank decked across one of those is a bridge in the middle of
+  // a yard.
+  const ROAD_GROUND = new Set(["path", "dirt"]);
+
+  /** Lay water, decking a BRIDGE over whatever road is already standing in it.
+   *
+   *  The 0.12 ruling, and the whole of it: where a road meets water the road
+   *  wins the tiles it is on and the water takes the rest. A bridge is walkable
+   *  and drawn over the water, so the crossing survives and the pool is still a
+   *  pool — which is what let the water-feature placer stop refusing every
+   *  anchor in the wilds that touched the road band (see the wilds loop).
+   *
+   *  Reads the ground a previous pass painted, so it is order-dependent by
+   *  design: roads are laid before features everywhere this is called, and a
+   *  caller that watered first and paved after would get plain water. Throw-free
+   *  — the read is bounds-guarded, and it has to be for a reason beyond caution:
+   *  `idx` wraps an x past the east edge into the NEXT ROW, so an unguarded read
+   *  would test a tile on the wrong side of the map. This runs inside build()'s
+   *  silent-degrade try/catch, where a throw ships as a legacy world. */
+  const waterFill = (z, x0, y0, w, h) => {
+    for (let y = y0; y < y0 + h; y++) {
+      for (let x = x0; x < x0 + w; x++) {
+        const inside = x >= 0 && y >= 0 && x < z.w && y < z.h;
+        const road = inside && ROAD_GROUND.has(z.ground[idx(z, x, y)]);
+        put(z, x, y, "ground", road ? "bridge" : "water", !road);
+      }
+    }
+  };
+
   /** A simple gabled building: stone footprint, plaster walls, roof overhead, one door.
    *
    *  `options.facade` (0 = every existing call site) leaves the top N body rows
@@ -304,7 +337,7 @@ PF.world = (() => {
 
   const PLACERS = {
     "water-feature"(z, x, y) {
-      fillRect(z, x, y, 6, 4, "ground", "water", true);
+      waterFill(z, x, y, 6, 4);
       put(z, x + 6, y + 1, "object", "well", true);
     },
     "crop-plots"(z, x, y) {
@@ -382,7 +415,12 @@ PF.world = (() => {
     },
     "water-crossing"(z, x, y) {
       // Placed by the wilds builder across its stream; here x,y is the ford column.
-      fillRect(z, x, y, 2, 2, "ground", "path", false);
+      // MIGRATED ONTO THE BRIDGE TILE (0.12). A hand-laid ford and a decked pool
+      // are the same idea — a road carried over water — and the only thing that
+      // made them different was shipping two pictures of it. Still non-solid,
+      // still four tiles, still inside the stream's rect: the crossing's geometry
+      // is untouched and only the word for what it is laid with has moved.
+      fillRect(z, x, y, 2, 2, "ground", "bridge", false);
     },
     "dense-growth"(z, x, y) {
       for (let dy = 0; dy < 4; dy++)
@@ -570,10 +608,14 @@ PF.world = (() => {
     borderTrees(f);
     fillRect(f, 1, 12, 19, 2, "ground", "path"); // west approach
     fillRect(f, 20, 1, 2, 22, "ground", "water", true); // the stream
-    fillRect(f, 20, 12, 2, 2, "ground", "path", false); // the ford
+    // The ford, MIGRATED onto the bridge tile with the compiler's (0.12): the
+    // legacy wood and a brief-built one now cross their water by the same
+    // picture, which is the whole of the sub-decision. Non-solid as it always
+    // was — the geometry has not moved, only the tile it is laid with.
+    fillRect(f, 20, 12, 2, 2, "ground", "bridge", false); // the ford
     // The stream's rect is the stream's own literal, and the ford's four tiles
-    // sit INSIDE it as path. That is deliberate and not a defect in the shape: a
-    // rect says where a feature stands, and the consumer's test — the neighbour
+    // sit INSIDE it as bridge. That is deliberate and not a defect in the shape:
+    // a rect says where a feature stands, and the consumer's test — the neighbour
     // tile IS water and lies in a rect — is what keeps the road out of the water.
     f.features.push({
       id: "legacy:stream",
@@ -2797,11 +2839,13 @@ PF.world = (() => {
       // zero pixels. Reloading does not help: the save falls back to `zone.spawn`,
       // which is the other fence tile. 24 of 48 wilds zones on staging, so this
       // ships today and is not something this branch introduced.
-      const wildsReserved = [
-        east ? { x: 1, y: wMidY, w: 19, h: 2 } : { x: zone.w - 20, y: wMidY, w: 19, h: 2 },
-        { x: 1, y: wMidY, w: 4, h: 2 },
-        { x: zone.w - 5, y: wMidY, w: 4, h: 2 },
-      ];
+      // The APPROACH ROAD is held separately from the rest of the reservation
+      // because it is the one rect the bridge ruling can negotiate away (below).
+      // The other two are the tiles the portal delivers the player onto and the
+      // spawn beside them, and no ruling makes those negotiable: a pool that
+      // swallowed an arrival tile would be a decked-over doorstep at best.
+      const wildsRoad = east ? { x: 1, y: wMidY, w: 19, h: 2 } : { x: zone.w - 20, y: wMidY, w: 19, h: 2 };
+      const wildsReserved = [wildsRoad, { x: 1, y: wMidY, w: 4, h: 2 }, { x: zone.w - 5, y: wMidY, w: 4, h: 2 }];
       if (tags.has("water-crossing")) {
         wildsReserved.push({ x: 20, y: 1, w: 2, h: 22 }, { x: 20, y: wMidY, w: 6, h: 2 });
       }
@@ -2814,12 +2858,28 @@ PF.world = (() => {
         // is stepped over, and a feature with nowhere safe is dropped — the same
         // policy the settlement states as "a plainer settlement, never a sealed
         // one", which reads here as a plainer wood.
-        for (let attempt = 0; attempt < 8; attempt++) {
+        //
+        // …EXCEPT THAT WATER COULD NEVER FIT, which is what the bridge ruling
+        // answers. The scan offers rows 8..11 and nothing else, an 8x5 rect
+        // starting on any of them reaches the road band at y12..13, and the road
+        // was reserved outright — so a wilds `water-feature` was refused on every
+        // seed and the brief's pool simply never existed. Under the ruling the
+        // road is decked rather than blocked, so it stops being a reason to
+        // refuse the anchor.
+        //
+        // A SECOND PASS, not a widened first one, and that distinction is the
+        // whole of the byte-stability story: the strict eight run first and
+        // unchanged, so a pool that already found dry ground still finds the same
+        // ground. Only after they are spent does the road come off the table, and
+        // only for water — every other tag keeps its eight attempts exactly.
+        const attempts = feature.tag === "water-feature" ? 16 : 8;
+        for (let attempt = 0; attempt < attempts; attempt++) {
           const ax = anchorX;
           const ay = 8 + (((ax / 3) | 0) % 4);
           anchorX = Math.max(6, (anchorX + 9) % (zone.w - 10));
           if (ax < 1 || ay < 1 || ax + size.w > zone.w - 1 || ay + size.h > zone.h - 1) continue;
-          if (wildsReserved.some((r) => intersects({ x: ax, y: ay, ...size }, r))) continue;
+          const busy = attempt < 8 ? wildsReserved : wildsReserved.filter((rect) => rect !== wildsRoad);
+          if (busy.some((r) => intersects({ x: ax, y: ay, ...size }, r))) continue;
           PLACERS[feature.tag]?.(zone, ax, ay);
           recordFeature(zone, feature, { x: ax, y: ay, ...size });
           break;
