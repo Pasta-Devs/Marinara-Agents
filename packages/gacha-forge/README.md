@@ -19,5 +19,6 @@ Rebuild the artifact and catalog entry from the repository root:
 ```bash
 node scripts/build-gacha-forge-package.mjs
 node scripts/test-catalog-lanes.mjs
+node scripts/validate-package-locales.mjs
 node scripts/validate-catalog.mjs
 ```

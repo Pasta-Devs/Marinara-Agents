@@ -864,11 +864,10 @@ var rt=`
     <h3 data-rot-title>Landscape only</h3>
     <p data-rot-note>This game plays in a 16:9 landscape frame.</p>
     <button type="button" data-go-landscape>Play in landscape</button>
-  </div>`;function ft(e,t){let a=pe(t&&t.style),o=t&&t.entering?" data-enter":t&&t.swapping?" data-swap":"";return`
-<div class="gf-arena" data-style="${a}">
+  </div>`;function ft(e,t){let r=pe(t&&t.style),a=t&&t.entering?" data-enter":t&&t.swapping?" data-swap":"";return`
+<div class="gf-arena" data-style="${r}">
   ${Nr}
   <aside class="gf-gutter">
-    
     <div class="gf-gutter-title">News</div>
     <div class="gf-news"><span class="k">Update</span><span class="t">More soon</span><span class="d">&mdash;</span></div>
     <div class="gf-side-hint">side rail &middot; later</div>
@@ -877,7 +876,7 @@ var rt=`
   <div class="gf-stage">
     ${t&&t.bar?"":`<button class="gf-fs-exit" type="button" title="Fullscreen" aria-label="Toggle fullscreen">${Ar}</button>`}
     ${t&&t.bar||""}
-    <div class="gf-view"${o}>${e}</div>
+    <div class="gf-view"${a}>${e}</div>
   </div>
 
   <aside class="gf-gutter">
@@ -1927,13 +1926,13 @@ select.ob-control {
        the size a 1275 one gets, which is what left it looking small and empty.
      cqh requires container-type: size on THIS element. topbar.js declares its ramp on
        .gf-bar, whose container is inline-size only, so it keeps the width term alone. */
-  
-  
-  
-  
-  
-  
-  
+
+
+
+
+
+
+
   --sp-1: calc(var(--f) * 0.5);
   --sp-2: calc(var(--f) * 1.0);
   --sp-3: calc(var(--f) * 1.6);
@@ -2182,13 +2181,13 @@ select.ob-control {
        the size a 1275 one gets, which is what left it looking small and empty.
      cqh requires container-type: size on THIS element. topbar.js declares its ramp on
        .gf-bar, whose container is inline-size only, so it keeps the width term alone. */
-  
-  
-  
-  
-  
-  
-  
+
+
+
+
+
+
+
   --sp-1: calc(var(--f) * 0.5);
   --sp-2: calc(var(--f) * 1.0);
   --sp-3: calc(var(--f) * 1.6);
@@ -2466,12 +2465,12 @@ select.ob-control {
   position: absolute; inset: 0; overflow: hidden;
   font-family: var(--body);
   color: var(--text);
-  
-  
-  
-  
-  
-  
+
+
+
+
+
+
   --sp-1: calc(var(--f) * 0.5);
   --sp-2: calc(var(--f) * 1.0);
   --sp-3: calc(var(--f) * 1.6);
@@ -2688,9 +2687,9 @@ select.ob-control {
        the size a 1275 one gets, which is what left it looking small and empty.
      cqh requires container-type: size on THIS element. topbar.js declares its ramp on
        .gf-bar, whose container is inline-size only, so it keeps the width term alone. */
-  
-    
-    
+
+
+
   --sp-1: calc(var(--f) * 0.5); --sp-2: calc(var(--f) * 1.0); --sp-3: calc(var(--f) * 1.6); --sp-4: calc(var(--f) * 2.4);
 }
 
