@@ -30,7 +30,8 @@ const currentPlayerV = () => PLAYER_MIGRATIONS.length + 1;
 //   EVICT (the cap makes room and the call succeeds) — relLines evicts the
 //     oldest line and leaves its row standing; boardDone / packDone evict the
 //     least-earned counter; ledgerDays / ledgerPerDay / ledgerStubs compact the
-//     buffer; found evicts the oldest discovery.
+//     buffer; found evicts the oldest discovery; `notices` evicts the oldest
+//     TOLD row, and an untold one only when every row is untold.
 //   TRUNCATE (the value is cut, the call succeeds) — lineChars, ledgerChars,
 //     skillLevel (the level stops climbing and xp is zeroed at the ceiling).
 //   REFUSE (the call does nothing and says so, which is the part the old header
@@ -62,6 +63,12 @@ const CAPS = {
   ledgerPerDay: 15,
   ledgerStubs: 30, // elided days, one stub line each
   ledgerChars: 200,
+  // The notice band's own rows (plan §2.5). Notices are explanations for
+  // something that already happened to the save — a severance, a loss, a
+  // restore — and a block carrying a dozen unread ones has bigger news than the
+  // thirteenth. Small on purpose, and it evicts TOLD rows first: an untold
+  // notice is one nobody has been given yet, so it is the last thing to lose.
+  notices: 12,
   found: 80,
   skillLevel: 20,
 };
@@ -172,19 +179,49 @@ const sortedMap = (pairs) => {
   return out;
 };
 
+/** The grapheme units of a string, best-effort. Exported (see PF.player), because
+ *  the caps below are stated in graphemes and so is the ONE consumer that has to
+ *  agree with them from another file: the wrap-up tell measures whole ledger days
+ *  against `TUNING.ledgerTellChars` (30-sim `_composeLedger`), and that budget is
+ *  floor-asserted at load against `ledgerPerDay × ledgerChars`. Measure the tell
+ *  in code points while the cap counts graphemes and one emoji in a zone name is
+ *  enough to make a maximum-shape day fail to fit — which is the permanent flush
+ *  stall the floor assertion exists to prevent. One measure, both sides. */
+const graphemes = (text) => {
+  const s = str(text);
+  try {
+    return globalThis.Intl?.Segmenter
+      ? Array.from(new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(s), (part) => part.segment)
+      : Array.from(s);
+  } catch {
+    return Array.from(s);
+  }
+};
+
 /** Grapheme-aware truncation: an `s` line is player-visible prose and a cut
  *  through a surrogate pair or a combining mark renders as a broken glyph. */
 const clip = (text, max) => {
   const s = str(text).replace(/\s+/g, " ").trim();
-  let units;
-  try {
-    units = globalThis.Intl?.Segmenter
-      ? Array.from(new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(s), (part) => part.segment)
-      : Array.from(s);
-  } catch {
-    units = Array.from(s);
-  }
+  const units = graphemes(s);
   return units.length <= max ? s : units.slice(0, max).join("");
+};
+
+/** The notice band's cap, applied wherever the array is normalized — the writer
+ *  below, `_enforceCaps`, and serialize() — so the wire, a restored block and a
+ *  live one cannot disagree about which twelve survived.
+ *
+ *  TOLD-OLDEST FIRST. A told notice has already reached the GM through the flush
+ *  and is only still here so the panel can show it; an untold one is a sentence
+ *  nobody has been given. When every row is untold the OLDEST goes, because a cap
+ *  that cannot bite is not a cap. */
+const evictNotices = (rows) => {
+  if (!Array.isArray(rows) || rows.length <= CAPS.notices) return Array.isArray(rows) ? rows : [];
+  const out = rows.slice();
+  while (out.length > CAPS.notices) {
+    const told = out.findIndex((row) => Array.isArray(row) && row[2]);
+    out.splice(told >= 0 ? told : 0, 1);
+  }
+  return out;
 };
 
 PF.player = {
@@ -193,6 +230,7 @@ PF.player = {
   TOOL_TYPES,
   MIGRATIONS: PLAYER_MIGRATIONS,
   xpPerLevel,
+  graphemes,
   /** The schema version THIS build writes. Derived — see PLAYER_MIGRATIONS. */
   currentV: currentPlayerV,
 
@@ -379,6 +417,26 @@ PF.player = {
           return out;
         }),
     };
+    // THE NOTICE BAND, which is a subtree and not a line class (plan §2.5,
+    // round-5 BLOCKER-1). A notice explains something that happened TO the save
+    // rather than something the player did in the world, so it is not part of
+    // the day transcript and does not belong in a day group: rows are
+    // `[day, text]` untold and `[day, text, 1]` told, and the TOLD FLAG is what
+    // the wrap-up tell reads instead of the day gate the lines answer to.
+    //
+    // EMITTED ONLY WHEN NON-EMPTY, which is `bought`'s precedent one level up:
+    // every save in the wild would otherwise gain four bytes of empty array for
+    // a band it has nothing to put in.
+    const notices = evictNotices(
+      (Array.isArray(p.ledger?.notices) ? p.ledger.notices : [])
+        .filter((row) => Array.isArray(row) && row.length >= 2)
+        .map((row) => {
+          const out = [posInt(row[0], 0), clip(row[1], CAPS.ledgerChars)];
+          if (row[2]) out.push(1);
+          return out;
+        }),
+    );
+    if (notices.length) out.ledger.notices = notices;
     out.found = {
       zones: (Array.isArray(p.found?.zones) ? p.found.zones : [])
         .filter((z) => z && typeof z === "object" && str(z.p))
@@ -554,6 +612,10 @@ PF.player = {
       player.home = null;
       player.bought = null;
       const lines = player.ledger.lines;
+      // The BAND goes with the transcript, and that is the status quo rather than
+      // a new loss: a notice used to BE a line, so a brief severance has always
+      // taken the pending ones with it. What survives the window is the notice
+      // this severance is about to write, which 60-save appends after the strip.
       player.ledger = { lines: [] };
       // COUPLED, and only when lines were ACTUALLY severed (plan §0): an empty
       // buffer must leave the gate exactly where it was, or a save with nothing
@@ -874,6 +936,10 @@ PF.player = {
         .map((row) => row.zone);
     }
     if (p.ledger && Array.isArray(p.ledger.lines)) this._compactLedger(p);
+    // The band answers to its own cap, and a restore is exactly the path that can
+    // arrive over it: the entry's rows and the live block's rows are concatenated
+    // by nothing that counts them.
+    if (p.ledger && Array.isArray(p.ledger.notices)) p.ledger.notices = evictNotices(p.ledger.notices);
     return p;
   },
 
@@ -1350,6 +1416,29 @@ PF.player = {
     p.ledger.lines.push([at, line]);
     this._compactLedger(p);
     this._touch(core);
+    return true;
+  },
+
+  /** Append a notice to the band. Takes the BLOCK and not the core, which is the
+   *  one thing about it that breaks the shape of every mutator above: its only
+   *  caller is 60-save's rehydration, which runs before there is a live sim to
+   *  dirty and is deliberately a NON-MUTATION (the next real save carries it),
+   *  and which is also the one moment `_live`'s loading gate would refuse.
+   *
+   *  THE DAY IS THE DAY IT HAPPENED. The band is told-flagged rather than
+   *  day-gated, so nothing here has to lift a notice above the flush gate to keep
+   *  it tellable — which is what the old lines back-door had to do, and what put
+   *  a day header from the FUTURE into the wrap-up (plan §2.5).
+   *
+   *  Returns true when a row was appended, false for text that clips to nothing. */
+  notice(player, text, day) {
+    if (!player || typeof player !== "object") return false;
+    const line = clip(text, CAPS.ledgerChars);
+    if (!line) return false;
+    if (!player.ledger || typeof player.ledger !== "object") player.ledger = { lines: [] };
+    const rows = Array.isArray(player.ledger.notices) ? player.ledger.notices : [];
+    rows.push([posInt(day, 0), line]);
+    player.ledger.notices = evictNotices(rows);
     return true;
   },
 

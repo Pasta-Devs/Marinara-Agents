@@ -9290,12 +9290,259 @@ await withSavePath(async ({ armed, makeCore }) => {
     "the repair runs through the restore path too",
   );
   assert.equal(sim.dirty, false, "and does not dirty the sim — a repair is not a mutation");
-  // …and the notice is on the LIVE ledger, appended after the severance step.
+  // …and the notice is on the LIVE ledger's BAND, appended after the severance
+  // step. Not a line: a notice explains something that happened to the save, and
+  // the band is where the panel reads it and where the told flag lives (0.12).
   assert.ok(
-    sim.player.ledger.lines.some(([, text]) => /no one left/.test(text)),
-    "the notice reached the ledger",
+    (sim.player.ledger.notices ?? []).some(([, text]) => /no one left/.test(text)),
+    "the notice reached the band",
+  );
+  assert.equal(
+    sim.player.ledger.lines.filter(([, text]) => /no one left/.test(text)).length,
+    0,
+    "…and not the day transcript, which is what the day groups render",
   );
   loadedPF.save.reset();
+}
+
+// (z2) A NOTICE IS NOT A LEDGER LINE (0.12 slice 4).
+// FIVE writers explain a loss to the player — the two severances, the
+// dangling-quest repair, a park refusal and a restore — and every one of them
+// used to push its sentence onto `ledger.lines`, where the flush's DAY GATE
+// could bury it. The old sink lifted the day to `max(sim.day, flushedDay + 1)`
+// to stop that happening, so a save whose gate had run ahead of its clock
+// printed a day header FROM THE FUTURE into its own wrap-up. The band is its own
+// subtree now and answers to a told flag rather than to the day gate, so the
+// shift is deleted and the day a notice carries is the day it happened.
+{
+  const P = loadedPF.player;
+  const Q = loadedPF.quarantine;
+  const sealed = brief.defaults("cozy-village", 2201);
+  const w = world.build(2201, "cozy-village", sealed);
+  const meta = { pixelforgeBrief: sealed };
+  const here = P.stampsFor(w, sealed);
+  const minted = w.zones[w.startZone].npcs.find((npc) => !sealed.cast.some((member) => member.name === npc.name));
+  assert.ok(minted, "the fixture world minted somebody the brief never named");
+
+  const band = (sim) => sim.player.ledger.notices ?? [];
+  const texts = (sim) => band(sim).map(([, text]) => text);
+  const block = (stamps, extra = {}) => {
+    const p = P.defaultPlayer();
+    p.world = { ...stamps };
+    // A HIGH GATE OVER AN EMPTY BUFFER, which is the shape the day-shift hack was
+    // written for and the one it got wrong: with no lines to sever, nothing
+    // clamps `flushedDay` back down, so the gate stays ten days ahead of the
+    // clock and the old sink filed its notice on day 21 of a day-9 save.
+    p.flushedDay = 20;
+    Object.assign(p, extra);
+    return P.serialize(p);
+  };
+  const restore = (player, chatId) =>
+    loadedPF.save.simFromSaved({ v: 1, seed: 2201, theme: "cozy-village", day: 9, player }, meta, chatId);
+
+  // (1) THE BRIEF SEVERANCE. Its notice is the one thing that survives the window
+  // it is explaining, which is why the sink runs after the strip.
+  Q.reset();
+  const brieved = restore(
+    block({ seed: 1, briefHash: 2, mintStamp: 3 }, { rel: { village: { Nobody: { d: 2, t: 3 } } } }),
+    "chat-band-brief",
+  );
+  // THE HACK IS GONE, asserted before anything about the band: with the old sink
+  // restored this save's explanation lands on day 21, twelve days after the last
+  // day the player has lived, and the wrap-up renders a header from the future.
+  assert.deepEqual(
+    brieved.player.ledger.lines.filter(([day]) => day > brieved.day),
+    [],
+    "nothing is filed on a day the clock has not reached",
+  );
+  assert.equal(texts(brieved).length, 1, "the brief severance wrote one notice");
+  assert.ok(/belonged to another world/.test(texts(brieved)[0]), `…the one it means (${texts(brieved)[0]})`);
+  assert.equal(band(brieved)[0][0], 9, "AT THE DAY IT HAPPENED — not lifted past a gate sitting at 20");
+  assert.deepEqual(brieved.player.ledger.lines, [], "and the day transcript is left empty, not seeded with a notice");
+  assert.equal(band(brieved)[0].length, 2, "the row boots UNTOLD: two elements, no flag");
+
+  // (2) THE MINT SEVERANCE, the other half of the same writer.
+  Q.reset();
+  const minters = restore(
+    block({ ...here, mintStamp: here.mintStamp ^ 0xff }, { rel: { village: { [minted.name]: { d: 2, t: 3 } } } }),
+    "chat-band-mint",
+  );
+  assert.ok(
+    texts(minters).some((text) => /not the people who live here now/.test(text)),
+    `the mint severance's notice is in the band too (${texts(minters)})`,
+  );
+  assert.equal(band(minters)[0][0], 9, "…on the day it happened");
+
+  // (3) THE DANGLING-QUEST REPAIR, whose notice is about a loss the world caused
+  // rather than one the stamps did.
+  Q.reset();
+  const lost = restore(
+    block(here, {
+      quests: {
+        done_pack: {},
+        active: [
+          {
+            id: "q-real",
+            g: `z1|${sealed.cast[0].name}`,
+            verb: "gather",
+            target: "herb",
+            n: 1,
+            have: 0,
+            r: {},
+            day: 1,
+          },
+          { id: "q-ghost", g: "z1|Nobody At All", verb: "gather", target: "herb", n: 1, have: 0, r: {}, day: 1 },
+        ],
+      },
+    }),
+    "chat-band-quest",
+  );
+  assert.ok(/no one left to hand it back/.test(texts(lost)[0]), `the repair's notice is in the band (${texts(lost)})`);
+  assert.equal(band(lost)[0][0], 9, "…on the day it happened");
+
+  // (4) THE PARK REFUSAL, which is the writer that has to CONTRADICT the one
+  // above it: applyStamps has already stripped the block by the time the entry is
+  // offered to the bag, so a refusal means the comforting sentence is a lie.
+  Q.reset();
+  assert.equal(
+    Q.put("chat-band-refuse", "stamp", {
+      reason: "brief",
+      fromV: 1,
+      stamps: { seed: 1, briefHash: 2, mintStamp: 3 },
+      // Sized so the SLOT is legal and the merge is not: the bag unions a second
+      // severance into the first, and this one leaves it no room to union into.
+      fields: { rel: { z: { Huge: { d: 0, t: 0, s: "x".repeat(130_880) } } } },
+    }),
+    true,
+    "the bag is holding an earlier severance that fills it to the brim",
+  );
+  const refused = restore(
+    block({ seed: 1, briefHash: 2, mintStamp: 3 }, { rel: { village: { Nobody: { d: 2, t: 3 } } } }),
+    "chat-band-refuse",
+  );
+  assert.deepEqual(
+    texts(refused),
+    ["What belonged to the world that changed could not be kept, and is gone."],
+    "a severance the bag would not take says the TRUE sentence, and only that one",
+  );
+  assert.equal(band(refused)[0][0], 9, "…on the day it happened");
+
+  // (5) THE RESTORE, the one notice that is good news.
+  Q.reset();
+  assert.equal(
+    Q.put("chat-band-home", "stamp", {
+      reason: "brief",
+      fromV: 1,
+      stamps: { ...here },
+      fields: { ledgerLines: [[4, "Something from before the window."]], flushedDay: 3 },
+    }),
+    true,
+    "a stamp slot whose stamps are this world's own is a save coming home",
+  );
+  const homed = restore(block(here), "chat-band-home");
+  assert.ok(/is back/.test(texts(homed)[0]), `the restore's notice is in the band (${texts(homed)})`);
+  assert.equal(band(homed)[0][0], 9, "…on the day it happened");
+  assert.ok(
+    homed.player.ledger.lines.some(([day]) => day === 4),
+    "…and the lines it brought home are lines, not notices",
+  );
+  Q.reset();
+  loadedPF.save.reset();
+
+  // ── THE CAP EVICTS THE TOLD ONES FIRST ───────────────────────────────────────
+  // An untold notice is a sentence nobody has been given yet; a told one is only
+  // still here so the panel can show it. So the band spends the told rows first
+  // and only eats an untold one when there is nothing else left to eat.
+  {
+    const p = P.defaultPlayer();
+    for (let i = 0; i < P.CAPS.notices; i++) P.notice(p, `notice ${i}`, i + 1);
+    assert.equal(p.ledger.notices.length, P.CAPS.notices, "the band fills to its cap");
+    // THE OLDEST ROWS ARE UNTOLD AND THE TOLD ONES ARE NEWER, which is the whole
+    // fixture: evict by age alone and rows 0 and 1 go, and the player is never
+    // given two sentences that were still waiting for them.
+    p.ledger.notices[3][2] = 1;
+    p.ledger.notices[7][2] = 1;
+    P.notice(p, "the thirteenth", 99);
+    assert.equal(p.ledger.notices.length, P.CAPS.notices, "…and stays there");
+    assert.ok(!p.ledger.notices.some(([, text]) => text === "notice 3"), "the OLDEST TOLD row is what went");
+    assert.ok(
+      p.ledger.notices.some(([, text]) => text === "notice 0"),
+      "…and not the older UNTOLD one in front of it",
+    );
+    assert.ok(
+      p.ledger.notices.some(([, text]) => text === "notice 7"),
+      "…nor the newer told one behind it, which is still one told row too many to spend",
+    );
+    assert.ok(
+      p.ledger.notices.some(([, text]) => text === "the thirteenth"),
+      "the newcomer is in",
+    );
+
+    // …AND AN ALL-UNTOLD BAND STILL EVICTS, because a cap that cannot bite is not
+    // a cap. The oldest goes, which is the only order left to it.
+    const fresh = P.defaultPlayer();
+    for (let i = 0; i < P.CAPS.notices + 3; i++) P.notice(fresh, `untold ${i}`, i + 1);
+    assert.equal(fresh.ledger.notices.length, P.CAPS.notices, "the cap holds against nothing but untold rows");
+    assert.deepEqual(
+      [fresh.ledger.notices[0][1], fresh.ledger.notices.at(-1)[1]],
+      ["untold 3", `untold ${P.CAPS.notices + 2}`],
+      "…by dropping the three oldest",
+    );
+  }
+
+  // ── THE WIRE: EMITTED ONLY WHEN THERE IS SOMETHING TO EMIT ───────────────────
+  // The `bought` precedent, one level down. A band nobody has written into must
+  // cost a save nothing at all, or every row in the wild gains an empty array on
+  // its first load — undeclared byte drift on a wire other builds read.
+  {
+    const empty = P.serialize(P.defaultPlayer());
+    assert.deepEqual(empty.ledger, { lines: [] }, "an unwritten band emits NOTHING, not an empty array");
+    assert.equal(
+      JSON.stringify(P.serialize(P.parse(JSON.parse(JSON.stringify(empty))).player).ledger),
+      '{"lines":[]}',
+      "…and a legacy block round-trips to the same bytes it arrived as",
+    );
+
+    const written = P.defaultPlayer();
+    P.notice(written, "  a notice   with loose  spacing ", 4);
+    P.notice(written, "y".repeat(P.CAPS.ledgerChars + 40), 5);
+    written.ledger.notices[1][2] = 1;
+    const wire = JSON.parse(JSON.stringify(P.serialize(written)));
+    assert.deepEqual(
+      wire.ledger.notices[0],
+      [4, "a notice with loose spacing"],
+      "a written band rides the wire, clipped the way every other line is",
+    );
+    assert.equal(wire.ledger.notices[1].length, 3, "…and the TOLD flag is the optional third element");
+    assert.equal(wire.ledger.notices[1][1].length, P.CAPS.ledgerChars, "…with the text held to the ledger's own cap");
+
+    // TOLERANT ON THE WAY BACK IN, exactly as the lines beside it are: a row that
+    // is not a row is dropped, and a `notices` that is not an array is no band.
+    const hostile = P.parse({
+      ...wire,
+      ledger: { lines: [], notices: [[3, "kept"], "not a row", [], [7, "told", 9], { day: 1 }] },
+    }).player;
+    assert.deepEqual(
+      hostile.ledger.notices,
+      [
+        [3, "kept"],
+        [7, "told", 1],
+      ],
+      "the shapes that are rows survive and the flag normalizes to 1",
+    );
+    assert.equal(P.parse({ ...wire, ledger: { lines: [], notices: "band" } }).player.ledger.notices, undefined);
+
+    // …AND THE 0.11 STRIP, WHICH IS A DOCUMENTED LOSS AND NOT A BUG (plan §5). A
+    // 0.11 client rebuilds `ledger` as `{lines}` and knows nothing about a band,
+    // so a visit from one takes the pending notices with it, permanently. Pinned
+    // as the shape of that loss: rebuild the ledger without the band and the
+    // notices are gone, while everything else about the block round-trips.
+    const visited = JSON.parse(JSON.stringify(wire));
+    visited.ledger = { lines: wire.ledger.lines };
+    const after = P.parse(visited).player;
+    assert.equal(after.ledger.notices, undefined, "a 0.11 visit strips the band — informational strings, no self-heal");
+    assert.equal(after.flushedDay, wire.flushedDay, "…while the day gate, which is not in the band, comes back");
+  }
 }
 
 // (aa) THE BRIEF-ARRIVAL TRANSPLANT SPLITS THE BLOCK, IT DOES NOT CARRY IT.

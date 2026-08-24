@@ -960,12 +960,18 @@ PF.save = {
     const repaired = PF.player.repairQuests(player, world, applied.evaluated);
     notices.push(...repaired.notices);
 
-    // 4. NOTICES, appended to the LIVE ledger — after the severance that emptied
-    // it, so the one thing that survives the window is the explanation for it.
-    // Never at or below the gate: a line the gate covers is one the flush will
-    // skip, and a notice nobody is ever told is worse than no notice at all.
-    const noticeDay = Math.max(sim.day, player.flushedDay + 1);
-    for (const text of notices) player.ledger.lines.push([noticeDay, text]);
+    // 4. NOTICES, appended to the band's own array — after the severance that
+    // emptied the ledger, so the one thing that survives the window is the
+    // explanation for it.
+    //
+    // AT THE DAY IT HAPPENED, which took a format change to be able to say
+    // (plan §2.5). These used to be ledger LINES, and a line at or below the
+    // flush gate is one the wrap-up skips — so the day was shifted up to
+    // `max(sim.day, flushedDay + 1)` to keep the notice tellable, which printed
+    // a day header from the FUTURE into the tell whenever the gate had run
+    // ahead of the clock. The band is told-flagged instead of day-gated, so the
+    // shift is deleted along with the back-door it existed for.
+    for (const text of notices) PF.player.notice(player, text, sim.day);
     return player;
   },
 
