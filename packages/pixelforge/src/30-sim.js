@@ -251,6 +251,29 @@ PF.Sim = class {
     return true;
   }
 
+  /** Stage what the clock has finished (plan §2.5, M2's ruled variant): every day
+   *  BEFORE the one being lived is owed to the wrap-up. Called by the sleep verb
+   *  after its advance, and by nothing else — waking hours pass without anybody
+   *  sitting down to look back over them, which is the whole conceit.
+   *
+   *  THE RULED VARIANT IS THE SIMPLE ONE: `max(ledgerOwed, day - 1)`, read AFTER
+   *  the clock moved, with no crossing detection and no captured day-before. So a
+   *  sleep of any length at any hour owes every elapsed day, and the post-midnight
+   *  fisher who beds at 00:30 flushes last night's catch — the session filed its
+   *  pre-midnight half under the day it happened, this owes that day, and the
+   *  hours since midnight belong to the day still underway.
+   *
+   *  `max` because sleeps ACCUMULATE and the marker only ever climbs: a rewind
+   *  can take the clock backwards, and a marker that followed it down would
+   *  quietly un-owe days the player was already promised. The invariant
+   *  `ledgerOwed < sim.day` holds by construction — `waitUntil` cannot complete
+   *  without moving the clock — and the burn's own guard re-checks it anyway. */
+  stageLedgerOwed() {
+    this.intro ??= { world: false, zones: {}, npcs: {} };
+    this.intro.ledgerOwed = Math.max(PF.player.resolvedDay(this.intro.ledgerOwed), this.day - 1);
+    return this.intro.ledgerOwed;
+  }
+
   /** Advance the clock by exactly `n` minutes. The fishing cast's mover, where
    *  waitUntil is the rest action's, and the difference is what each one is FOR:
    *  a rest is over when it reaches a time of day, while a cast SPENDS a fixed

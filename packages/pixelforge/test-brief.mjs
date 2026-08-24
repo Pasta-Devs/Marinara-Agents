@@ -15569,6 +15569,184 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
   }
 }
 
+// ═══ SLEEP, AND WHAT IT LEAVES BEHIND (0.12 slice 4) ════════════════════════
+// The verb sends nothing. It moves the clock and writes one number — the last day
+// that has fully elapsed — and the next turn the player sends for their own
+// reasons carries the wrap-up. The ruled staging variant is the simple one: ANY
+// completed sleep owes EVERY elapsed day, read after the advance, with no
+// crossing detection and no captured day-before.
+{
+  const P = loadedPF.player;
+  const E = loadedPF.economy;
+  let chats = 0;
+  const sleeper = ({ day = 4, clockMin = 21 * 60, home = "inn", zone = "inn" } = {}) => {
+    const w = world.build(7, "cozy-village", null);
+    const sim = new loadedPF.Sim(w);
+    sim.clockMin = clockMin;
+    sim.day = day;
+    sim.resolveSchedules();
+    const sent = [];
+    let dirty = 0;
+    const core = {
+      chatId: `chat-sleep-${++chats}`,
+      sim,
+      host: { chatMeta: {}, sendMessage: async (text) => (sent.push(text), true) },
+      hud: { toast() {}, refreshChips() {} },
+      markDirty() {
+        dirty++;
+      },
+    };
+    sim.teleport(zone, 3, 3);
+    sim.step(0, {});
+    if (home) P.setHome(core, home);
+    return { w, sim, core, sent, dirty: () => dirty };
+  };
+  const owedOf = (sim) => sim.intro?.ledgerOwed;
+
+  try {
+    // ── A COMPLETED SLEEP OWES EVERY DAY THAT IS OVER ─────────────────────────
+    {
+      const at = sleeper({ day: 4, clockMin: 21 * 60 });
+      const out = E.sleep(at.core, "dawn");
+      assert.equal(out.ok, true, "a bed and a daypart is a night's sleep");
+      assert.equal(at.sim.day, 5, "the target was behind the clock, so the day rolled");
+      assert.equal(at.sim.clockMin, loadedPF.DAYPART_STARTS.dawn, "…and landed on the daypart asked for");
+      assert.equal(owedOf(at.sim), 4, "and the day that ended is owed to the wrap-up");
+      assert.equal(out.owed, 4, "…which the verb says out loud");
+      assert.deepEqual(at.sent, [], "SENDS NOTHING — no turn, no narration, no await");
+      assert.ok(at.dirty() >= 1, "and flags the save, because a marker nobody wrote down is no marker");
+    }
+
+    // ── THE RULED CASE: A SLEEP THAT CROSSES NOTHING STILL STAGES ─────────────
+    // 00:30, four hours after a session ran through midnight. The clock does not
+    // move a day and the sleep does not cross one, and yesterday is still over —
+    // which is the whole of why the ruling is `day - 1` and not a crossing test.
+    {
+      const at = sleeper({ day: 6, clockMin: 30 });
+      assert.equal(E.sleep(at.core, "dawn").ok, true, "a half-hour lie-down is a completed sleep");
+      assert.equal(at.sim.day, 6, "the day did not move");
+      assert.equal(at.sim.clockMin, loadedPF.DAYPART_STARTS.dawn, "…the clock did");
+      assert.equal(owedOf(at.sim), 5, "and day 5 is owed — the ruled variant, with no crossing to detect");
+    }
+
+    // ── THE MARKER ONLY EVER CLIMBS ──────────────────────────────────────────
+    // Sleeps accumulate, and a rewind can take the clock backwards under a marker
+    // that was already promised. `max` is what stops a later sleep un-owing days.
+    {
+      const at = sleeper({ day: 4, clockMin: 21 * 60 });
+      at.sim.intro = { world: false, zones: {}, npcs: {}, ledgerOwed: 9 };
+      E.sleep(at.core, "dawn");
+      assert.equal(owedOf(at.sim), 9, "a smaller day never lowers the marker");
+      at.sim.day = 12;
+      E.sleep(at.core, "night");
+      assert.equal(owedOf(at.sim), 11, "…and a larger one raises it");
+    }
+
+    // ── WAIT NEVER STAGES, WHICH IS THE OTHER HALF OF THE RULE ───────────────
+    // A rest in the open is not a wrap-up. The homeless player is an accepted
+    // never-flush class (§5), and this is the line that makes it true.
+    {
+      const at = sleeper({ day: 4, clockMin: 21 * 60, home: null, zone: "village" });
+      assert.equal(at.sim.waitUntil("dawn"), true, "the bedless player can still wait the night out");
+      assert.equal(at.sim.day, 5, "…and the clock runs exactly as far");
+      assert.equal(owedOf(at.sim), undefined, "but nothing is owed, because nobody sat down and looked back");
+      const refused = E.sleep(at.core, "dawn");
+      assert.deepEqual(
+        [refused.ok, refused.reason],
+        [false, "no-bed"],
+        "and pressing Sleep without a bed refuses with its own value",
+      );
+      assert.equal(owedOf(at.sim), undefined, "…still staging nothing");
+    }
+
+    // ── THE BED IS A ROOM YOU HOLD, and the refusals around it ────────────────
+    {
+      const away = sleeper({ home: "inn", zone: "village" });
+      assert.equal(E.sleepOffer(away.core).reason, "no-bed", "a berth you are not standing in is not a bed");
+
+      const talking = sleeper();
+      talking.sim.mode = "dialogue";
+      const mid = E.sleep(talking.core, "dawn");
+      assert.deepEqual([mid.ok, mid.reason], [false, "wrong-mode"], "you cannot sleep through a conversation");
+      assert.equal(E.sleepOffer(talking.core).bed, true, "…and the button still says there is a bed here");
+
+      const streaming = sleeper();
+      streaming.core.host.isStreaming = true;
+      const busy = E.sleep(streaming.core, "dawn");
+      assert.deepEqual([busy.ok, busy.reason], [false, "streaming"], "nor through narration nobody has read yet");
+
+      const gated = sleeper();
+      loadedPF.save.gate = { chatId: gated.core.chatId, state: "generating" };
+      const held = E.sleep(gated.core, "dawn");
+      assert.deepEqual([held.ok, held.reason], [false, "gate-held"], "nor in a world still being written");
+      loadedPF.save.gate = null;
+
+      // …AND A TARGET THAT IS NOT A DAYPART. Driven through the inherited names
+      // too: `PF.DAYPART_STARTS["constructor"]` is a FUNCTION on a bare read, and
+      // waitUntil's own-property guard is what stops it becoming a clock.
+      const odd = sleeper();
+      for (const target of ["elevenses", "constructor", "toString", "__proto__", ""]) {
+        const out = E.sleep(odd.core, target);
+        assert.deepEqual([out.ok, out.reason], [false, "unknown-target"], `"${target}" is not a time of day`);
+      }
+      assert.equal(odd.sim.clockMin, 21 * 60, "…and not one minute was spent on any of them");
+      assert.equal(owedOf(odd.sim), undefined, "…nor anything staged");
+    }
+
+    // ── THE ARC'S HEADLINE, END TO END ────────────────────────────────────────
+    // The maintainer's ruled scenario, played out: fish through midnight, walk
+    // back to the room, bed down at 00:30, and the NEXT accepted turn tells the
+    // GM about the night before — INCLUDING the fish landed in the window that
+    // crossed. Every part of that is a separate mechanism (the per-day session
+    // split, the `day - 1` staging, the compose window, the burn), and this is
+    // the only case that asks whether they add up to the sentence the ruling
+    // promised.
+    {
+      const at = sleeper({ day: 5, clockMin: 23 * 60 + 45, home: "inn", zone: "village" });
+      at.sim.teleport("village", 32, 23);
+      at.sim.step(0, {});
+      assert.equal(
+        at.sim.nearFeature?.id,
+        "legacy:pond",
+        "the player is at the pond bank, a quarter hour before midnight",
+      );
+      P.grant(at.core, { t: "rod", k: "crude" }, 1);
+      P.equip(at.core, "fishing", "tool", { t: "rod", k: "crude" });
+      P.award(at.core, { xp: 5 * 4 * 3, verb: "fishing" }); // level 4, so the window yields
+
+      const crossing = E.fish(at.core, null);
+      assert.equal(at.sim.day, 6, "the cast crossed midnight");
+      assert.deepEqual(crossing.days, [5], "…and filed itself under the day it BEGAN in");
+      assert.equal(crossing.caught.length, 1, "…having landed something");
+      const fish = E.describe(at.w, crossing.caught[0]);
+      E.fish(at.core, null);
+      E.fish(at.core, null);
+      assert.equal(at.sim.clockMin, 30, "two more casts put the clock at 00:30");
+
+      // …the walk back to the room, and the bed.
+      at.sim.teleport("inn", 3, 3);
+      at.sim.step(0, {});
+      assert.equal(E.sleep(at.core, "dawn").ok, true, "and the 00:30 sleeper sleeps");
+      assert.equal(at.sim.day, 6, "the sleep crossed no midnight of its own");
+      assert.equal(owedOf(at.sim), 5, "…and day 5 is what it owes");
+
+      // THE NEXT TURN THE PLAYER SENDS FOR THEIR OWN REASONS.
+      const prefix = at.sim.composePrefix(null);
+      const part = prefix.slice(prefix.indexOf("[Wrap-up"));
+      assert.ok(part.includes("Day 5: Fished"), `the wrap-up tells day 5 (${part})`);
+      assert.ok(part.includes(fish), `…INCLUDING the fish the crossing window landed (${fish})`);
+      assert.ok(!part.includes("Day 6"), "and says nothing about the day the player is still living");
+      assert.equal(at.sim._pendingIntro.ledger.throughDay, 5, "the burn this turn would take reaches day 5");
+      assert.equal(P.flush(at.core, at.sim._pendingIntro.ledger.throughDay), true, "…and is a legal one");
+      assert.equal(P.get(at.core).flushedDay, 5, "so the night is told exactly once");
+      assert.equal(at.sim.composePrefix(null), at.sim.header(), "and the turn after it has nothing to add");
+    }
+  } finally {
+    loadedPF.save.gate = null;
+    loadedPF.save.reset();
+  }
+}
+
 // ── THE TRAVEL SENDER CAPTURES ITS OWN TURN (0.12 slice 4) ───────────────────
 // The burn hangs off an await, and there are two wrong ways to reach it that
 // both look right. Re-reading `sim._pendingIntro` after the send finds the null
@@ -15819,9 +15997,10 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
 // §2.3's honest recount. The old "these are mutually rare" premise is STRUCK:
 // Talk is up for the whole of walk mode, keepers wander with no zone
 // restriction, and an inn beside a pond puts Talk, Wait, Keyboard, Travel, Fish,
-// Berth and Buy-Rod on screen at once by construction. Seven for slice 3 — Sleep
-// arrives in slice 4 and the count goes to eight, which is exactly why this is
-// pinned: adding a button means recounting here, deliberately.
+// Berth and Buy-Rod on screen at once by construction. Seven for slice 3; slice
+// 4 adds Sleep and the worst case is EIGHT, which is exactly why this is pinned:
+// adding a button means recounting here, deliberately, and the recount is what
+// the last change to this stack actually failed on.
 //
 // A DISPLAY-STATE pin over the real Hud on the shim, and not a layout one. The
 // shim has no layout engine and this case makes no claim about pixels.
@@ -15858,6 +16037,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       "Buy-Rod": hud.buyRodBtn,
       Travel: hud.travelBtn,
       Fish: hud.fishBtn,
+      Sleep: hud.sleepBtn,
       Wait: hud.waitBtn,
       Keyboard: hud.keyboardBtn,
       Resume: hud.resumeBtn,
@@ -15877,7 +16057,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     // BEFORE THE FIRST UPDATE, which is a claim only this line makes: a
     // display-gated button that ships visible is on screen for every frame
     // before update() runs, and for the whole of a mount that never reaches one.
-    for (const name of ["Berth", "Buy-Rod", "Fish"])
+    for (const name of ["Berth", "Buy-Rod", "Fish", "Sleep"])
       assert.equal(stack[name].style.display, "none", `${name} boots HIDDEN, before anything has decided`);
 
     const census = () => {
@@ -15921,24 +16101,44 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     sim.nearNpc = keeper;
     assert.deepEqual(census(), ["Berth", "Buy-Rod", "Keyboard", "Talk", "Travel", "Wait"], "the keeper adds two");
 
-    // (6) THE WORST CASE: standing at the water with the keeper beside you, which
-    // an inn built by a pond makes ordinary rather than exotic.
+    // (6) STANDING AT THE WATER with the keeper beside you, which an inn built by
+    // a pond makes ordinary rather than exotic. Seven, and no bed in sight.
     standAtPond();
     sim.nearNpc = keeper;
     assert.deepEqual(
       census(),
       ["Berth", "Buy-Rod", "Fish", "Keyboard", "Talk", "Travel", "Wait"],
-      "the full slice-3 stack is SEVEN — recount this when slice 4 adds Sleep",
+      "seven, and Sleep is not among them — the player has nowhere to sleep",
     );
     assert.equal(hud.fishBtn.style.opacity, "0.45", "…and Fish is offered dimmed to a rodless player, not hidden");
     assert.ok(hud.fishBtn.textContent.includes(w.zones.village.features[0].name), "…naming the water it is about");
 
-    // (7) THE LADDER TOPS OUT AND ITS BUTTON GOES, which is the one stated
+    // (7) THE WORST CASE, WHICH IS EIGHT. The bed is the eighth, and it takes a
+    // berth held in the zone the player is standing in — staged here rather than
+    // walked to, because what the census is about is what the STACK does when all
+    // eight co-occur, not which brief produces a bedroom with a pond at the door.
+    P.setHome(core, "village");
+    assert.deepEqual(
+      census(),
+      ["Berth", "Buy-Rod", "Fish", "Keyboard", "Sleep", "Talk", "Travel", "Wait"],
+      "the full slice-4 stack is EIGHT — recount this when slice 5 adds anything",
+    );
+    assert.equal(hud.sleepBtn.style.opacity, "1", "…and the bed is offered, not dimmed");
+    // …AND IT IS THE BED THAT SHOWS IT, not the room: step out of the zone the
+    // berth is in and the button goes with it.
+    sim.teleport("inn", 3, 3);
+    sim.step(0, {});
+    assert.ok(!census().includes("Sleep"), "a bed you are not standing in offers nothing");
+    standAtPond();
+    sim.nearNpc = keeper;
+    assert.ok(census().includes("Sleep"), "and back in the zone it is back");
+
+    // (8) THE LADDER TOPS OUT AND ITS BUTTON GOES, which is the one stated
     // divergence from the berth's never-vanish rule.
     P.grant(core, { t: "rod", k: "decent" }, 1);
     assert.deepEqual(
       census(),
-      ["Berth", "Fish", "Keyboard", "Talk", "Travel", "Wait"],
+      ["Berth", "Fish", "Keyboard", "Sleep", "Talk", "Travel", "Wait"],
       "a decent rod is the end of that ladder, so the button leaves the stack",
     );
     assert.equal(hud.fishBtn.style.opacity, "1", "…while Fish stops being dimmed, having a rod behind it now");
@@ -15960,11 +16160,27 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       hud.fishMenu.children.some((node) => /No bait/.test(node.textContent)),
       "…with a bait line saying what the session would spend",
     );
+    // …and the bed's menu opens the same way, with the Wait menu's own four.
+    hud.toggleSleep();
+    assert.equal(hud.sleepMenu.style.display, "flex", "the bed's menu opens where the bed is");
+    assert.equal(
+      hud.sleepMenu.children.filter((node) => /^Sleep until /.test(node.textContent)).length,
+      4,
+      "…offering the same four dayparts the Wait menu does",
+    );
     sim.teleport("village", 21, 17);
     sim.step(0, {});
     sim.nearNpc = null;
-    assert.deepEqual(census(), ["Keyboard", "Talk", "Travel", "Wait"], "walking away puts the stack back to four");
-    assert.equal(hud.fishMenu.style.display, "none", "…and closes the menu it left open");
+    // FIVE, not four: the bed is a ROOM and not a spot, so walking off the bank
+    // and away from the keeper leaves it exactly where it was.
+    assert.deepEqual(census(), ["Keyboard", "Sleep", "Talk", "Travel", "Wait"], "walking away puts the stack to five");
+    assert.equal(hud.fishMenu.style.display, "none", "…and closes the menu the water left open");
+    // LEAVING THE ROOM is what takes the bed, and the menu goes with it.
+    sim.teleport("inn", 3, 3);
+    sim.step(0, {});
+    sim.nearNpc = null;
+    assert.ok(!census().includes("Sleep"), "a room that is not yours has no bed in it for you");
+    assert.equal(hud.sleepMenu.style.display, "none", "…and the menu it left open is closed");
   } finally {
     globalThis.setTimeout = realSetTimeout;
     globalThis.clearTimeout = realClearTimeout;

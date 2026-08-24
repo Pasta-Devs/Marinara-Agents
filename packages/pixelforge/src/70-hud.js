@@ -75,6 +75,16 @@ PF.Hud = class {
       style:
         "display:none;flex-direction:column;gap:6px;align-items:flex-end;max-height:40vh;overflow:auto;pointer-events:auto;",
     });
+    // P5's bed, beside the other clock mover because that is what it is — a Wait
+    // you can only do where you have a bed, and the only one that leaves a
+    // wrap-up behind. Boot hidden and offer-gated per frame, like the berth that
+    // sells the bed in the first place.
+    this.sleepBtn = this._btn("🛏 Sleep…", () => this.toggleSleep());
+    this.sleepBtn.style.display = "none";
+    this.sleepMenu = PF.el("div", {
+      style:
+        "display:none;flex-direction:column;gap:6px;align-items:flex-end;max-height:40vh;overflow:auto;pointer-events:auto;",
+    });
     this.waitBtn = this._btn("⏩ Wait…", () => this.toggleWait());
     this.keyboardBtn = this._btn("Keyboard", () => core.setMode("dialogue"));
     this.resumeBtn = this._btn("▶ Resume walking", () => core.resume());
@@ -95,6 +105,8 @@ PF.Hud = class {
         this.travelBtn,
         this.fishMenu,
         this.fishBtn,
+        this.sleepMenu,
+        this.sleepBtn,
         this.waitMenu,
         this.waitBtn,
         this.keyboardBtn,
@@ -270,6 +282,64 @@ PF.Hud = class {
       );
     }
     this.waitMenu.style.display = "flex";
+  }
+
+  /** The bed's menu, mirroring the Wait menu one method up — the same four
+   *  dayparts, because a sleep is a rest that happens to be somewhere. It SENDS
+   *  NOTHING: the hours pass, the wrap-up is staged, and the next turn the player
+   *  sends for their own reasons carries it (plan §2.6). */
+  toggleSleep() {
+    const open = this.sleepMenu.style.display !== "flex";
+    if (!open) {
+      this.sleepMenu.style.display = "none";
+      return;
+    }
+    const offer = PF.economy.sleepOffer(this.core);
+    if (!offer.available) {
+      // Answered where it was pressed, rather than behind a menu whose every
+      // entry then refuses — the fishing verb's own idiom.
+      this.sleepMenu.style.display = "none";
+      this.toast(this.sleepRefusal(offer.reason));
+      return;
+    }
+    this.sleepMenu.replaceChildren();
+    for (const [part, label] of [
+      ["dawn", "Sleep until dawn"],
+      ["day", "Sleep until morning"],
+      ["dusk", "Sleep until dusk"],
+      ["night", "Sleep until night"],
+    ]) {
+      this.sleepMenu.appendChild(
+        this._btn(label, () => {
+          this.sleepMenu.style.display = "none";
+          this.sleep(part);
+        }),
+      );
+    }
+    this.sleepMenu.style.display = "flex";
+  }
+
+  /** The bed's refusals, turned into sentences. `no-bed` is absent on purpose:
+   *  the button is not on screen where there is no bed, so a line for it would be
+   *  copy nobody can reach. */
+  sleepRefusal(reason) {
+    if (reason === "wrong-mode") return "Not while you're talking — resume walking first";
+    if (reason === "streaming") return "The story is still being written…";
+    if (reason === "gate-held") return "Not yet — your world is still being written.";
+    return "You can't sleep just now.";
+  }
+
+  /** Spend the night (or the morning). `sleep` moves the clock, stages the
+   *  wrap-up and flags the save itself, so this only says what happened — and
+   *  re-reads the chips, because the clock is one of them. */
+  sleep(target) {
+    const result = PF.economy.sleep(this.core, target);
+    if (!result.ok) {
+      this.toast(this.sleepRefusal(result.reason));
+      return;
+    }
+    this.refreshChips();
+    this.toast(`You sleep — ${this.core.sim.clockLabel()}`);
   }
 
   /** The session menu, mirroring the Wait menu one method up: a single cast, or
@@ -509,6 +579,8 @@ PF.Hud = class {
         this._rod = null;
         this.fishBtn.style.display = "none";
         this._fish = null;
+        this.sleepBtn.style.display = "none";
+        this._sleep = null;
       }
       this.travelBtn.style.display = inWorld && spatialAvail ? "" : "none";
       this.waitBtn.style.display = inWorld ? "" : "none";
@@ -522,6 +594,7 @@ PF.Hud = class {
       this.travelMenu.style.display = "none";
       this.waitMenu.style.display = "none";
       this.fishMenu.style.display = "none";
+      this.sleepMenu.style.display = "none";
       if (mode === "dialogue" && !gate) this.toast("Type in the message box below — Resume to keep walking");
     }
     // Nothing below the gate means anything: there is no beat to caption, nobody
@@ -612,6 +685,17 @@ PF.Hud = class {
           // casts for water nobody is standing at is a list that refuses.
           this.fishMenu.style.display = "none";
         }
+      }
+      // The bed, on the same cadence: `bed` is the render test, the reason rides
+      // the key so a refusal re-labels nothing but re-dims correctly, and walking
+      // out of the room takes the menu with the button.
+      const bed = PF.economy.sleepOffer(this.core);
+      const sleepKey = bed.bed ? `${bed.reason ?? "ok"}` : "";
+      if (sleepKey !== this._sleep) {
+        this._sleep = sleepKey;
+        this.sleepBtn.style.display = bed.bed ? "" : "none";
+        if (bed.bed) this.sleepBtn.style.opacity = bed.available ? "1" : "0.45";
+        else this.sleepMenu.style.display = "none";
       }
       const clock = sim.clockLabel();
       if (clock !== this._clock) {

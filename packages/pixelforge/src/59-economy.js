@@ -597,6 +597,71 @@ PF.economy = {
     return { ok: true, reason: null, price: offer.price, zoneId: offer.zoneId };
   },
 
+  // ── Sleep (what the berth is FOR) ──────────────────────────────────────────
+
+  /** Is there a bed where the player is standing? Describes only, so the HUD can
+   *  call it every frame. Returns { available, reason, bed, zoneId }.
+   *
+   *  BED-GATED ON THE HOME ANCHOR, which is the same fact rentBerth wrote: the
+   *  anchor IS the lodging zone the player holds a berth in (`setHome(zoneId)`),
+   *  so "in your home zone" and "in a lodging zone you have paid for" are one
+   *  test and not two. A homeless player has nowhere to sleep — the §5
+   *  never-flush class, accepted and stated — and a minted `{minted:true}` anchor
+   *  names no zone to stand in, so it is not one either.
+   *
+   *  `bed` is the render test the button gates on, exactly as `spot` is the fish
+   *  button's and `price !== null` is the berth's: a refusal that still says
+   *  there is a bed here is about the MOMENT (mid-conversation, mid-stream) and
+   *  belongs on screen saying so; one that says there is no bed is about the
+   *  place, and there is nothing to show. */
+  sleepOffer(core) {
+    const sim = core?.sim;
+    const no = (reason) => ({ available: false, reason, bed: false, zoneId: null });
+    if (!sim) return no("no-sim");
+    if (PF.save?.gateHolds?.(core)) return no("gate-held");
+    const player = PF.player.get(core);
+    if (!player) return no("no-player");
+    const home = typeof player.home === "string" ? player.home : "";
+    if (!home || home !== sim.zoneId) return no("no-bed");
+    const offer = { available: true, reason: null, bed: true, zoneId: home };
+    // Walk only, like every other clock mover: sleeping through a conversation
+    // would move the person being talked to.
+    if (sim.mode !== "walk") return { ...offer, available: false, reason: "wrong-mode" };
+    // …and never under a turn that is still being written. Sleep sends nothing,
+    // so this is not about the pipeline: it is that the hours would pass under
+    // narration the player has not read yet (the Talk verb's own rule).
+    if (core.host?.isStreaming) return { ...offer, available: false, reason: "streaming" };
+    return offer;
+  },
+
+  /** Sleep until the next occurrence of a daypart, and stage what that finished.
+   *
+   *  SENDS NOTHING, which is the whole shape of it: no turn, no narration, no
+   *  await. What it leaves behind is `intro.ledgerOwed`, and the next turn the
+   *  player sends for their OWN reasons carries the wrap-up (plan §2.6, ruling 1).
+   *  That is why there is no `!PF.spatial.pending` guard here: sleeping under an
+   *  in-flight send is safe, because staging only ever RAISES the marker and the
+   *  in-flight burn's guard reads live and still passes for its smaller day.
+   *
+   *  The mover is `waitUntil` — the rest action's jump, which pre-rolls the day
+   *  when the target is behind the clock and re-places everybody on arrival — and
+   *  not `advanceMinutes`, which takes minutes rather than a time of day.
+   *
+   *  Staging reads the clock AFTER the advance and takes the max (30-sim
+   *  `stageLedgerOwed`). Returns { ok, reason, day, clockMin, owed }. */
+  sleep(core, target) {
+    const offer = this.sleepOffer(core);
+    if (!offer.available) return { ok: false, reason: offer.reason, day: 0, clockMin: 0, owed: 0 };
+    const sim = core.sim;
+    if (!sim.waitUntil(target))
+      return { ok: false, reason: "unknown-target", day: sim.day, clockMin: sim.clockMin, owed: 0 };
+    const owed = sim.stageLedgerOwed();
+    // The Wait precedent (70-hud): a clock mover that does not flag the save
+    // loses its hours on reload, and this one also has a marker to lose.
+    core.markDirty?.();
+    return { ok: true, reason: null, day: sim.day, clockMin: sim.clockMin, owed };
+  },
+
   // ── The rod (the keeper's second trade) ────────────────────────────────────
 
   /** The rung the player has already climbed: the MAX over pouch rows typed
