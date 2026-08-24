@@ -16794,6 +16794,39 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       loadedPF.assets.status = assetsWas.status;
     }
 
+    // ── AND THE THEME, WHICH IS FOUR OF THE SHEET'S ROWS AT ONCE ──────────────
+    // The skill names, `describe()`'s prose, the money heading and the label
+    // under the portrait all come out of the WORLD's word book, so a `_rebuild`
+    // landing a different theme under an open sheet has moved what the sheet
+    // draws without touching one player field. `assets.status` usually carries
+    // this along — the loader is theme-aware and `_rebuild` calls it — but a
+    // PARKED loader (no packageId, or inside the 30-second failed backoff)
+    // returns before it can move `status`, and then the theme term is the only
+    // thing left in the key that can see it.
+    {
+      const at = mount();
+      loadedPF.assets._noPackage = true;
+      loadedPF.assets.status = "failed";
+      at.player.skills.verbs.fishing = { l: 2, x: 0 };
+      at.hud.update();
+      at.hud.toggleSheet();
+      assert.ok(textOf(at.hud.sheetArt).includes("Traveler"), "the valley's sheet is open");
+      assert.ok(textOf(at.hud.sheetStats).includes("Coin"), "…with the valley's heading over the purse");
+      const valley = at.hud.sheetStats.children[0];
+      const row = JSON.parse(JSON.stringify(loadedPF.save.snapshot(at.core)));
+      row.theme = "sci-fi-colony";
+      loadedPF.save._rebuild(at.core, row);
+      assert.equal(at.core.sim.world.theme, "sci-fi-colony", "the rebuild landed the other theme");
+      assert.equal(loadedPF.assets.status, "failed", "…and the parked loader never moved `status` on the way");
+      at.hud.update();
+      assert.notEqual(at.hud.sheetStats.children[0], valley, "the sheet re-rendered on the theme alone");
+      assert.ok(textOf(at.hud.sheetArt).includes("Drifter"), "…saying who is standing there in this world's word");
+      assert.ok(textOf(at.hud.sheetStats).includes("Angling"), "…over this world's word for the skill");
+      assert.ok(textOf(at.hud.sheetStats).includes("Credit"), "…and this world's word for its money");
+      loadedPF.assets._noPackage = assetsWas.noPackage;
+      loadedPF.assets.status = assetsWas.status;
+    }
+
     // ── THE WORD BOOK THE SHEET READS ─────────────────────────────────────────
     // Skills, slots and the player's own label are per THEME, like every other
     // name in the package. An unknown verb still renders rather than showing the

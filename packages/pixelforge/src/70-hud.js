@@ -768,6 +768,7 @@ PF.Hud = class {
    *  the key in the same change, or the new half never re-renders. */
   _sheetValueKey() {
     const player = PF.player.get(this.core);
+    const world = this.core.sim?.world;
     const byKey = (a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
     const verbs = Object.entries(player?.skills?.verbs ?? {})
       .sort(byKey)
@@ -792,6 +793,13 @@ PF.Hud = class {
       gear,
       tiers.join("/"),
       hostile,
+      // FOUR ROWS AT ONCE: the skill names, `describe()`'s prose, the money
+      // heading and the label under the portrait all come out of the WORLD's
+      // word book, so a rebuild that lands a different theme has moved what the
+      // sheet draws without moving one player field. The loader usually carries
+      // it (a theme change moves `assets.status` below), but a PARKED loader —
+      // no packageId, or inside the failed backoff — never moves at all.
+      world?.theme ?? "",
       // The portrait's own input: the pre-ready Tier-0 window is accepted, and
       // this is what upgrades it the frame the authored sheets arrive.
       PF.assets?.status ?? "",
