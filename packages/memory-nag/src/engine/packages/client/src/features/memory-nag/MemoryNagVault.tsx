@@ -246,7 +246,12 @@ function MemoryEditor({
 
   if (!expanded) return <section className="mn-panel">{editor}</section>;
   return createPortal(
-    <div className="mn-overlay mari-modal" role="presentation" onClick={() => setExpanded(false)}>
+    <div
+      className="mn-overlay mari-modal"
+      role="presentation"
+      data-chat-floating-panel
+      onClick={() => setExpanded(false)}
+    >
       <section
         ref={expandedDialogRef}
         className="mn-modal mn-shell mari-modal-panel marinara-chat-popover"
@@ -355,7 +360,7 @@ export function MemoryNagVaultModal({ props, onClose }: { props: CapabilityProps
   };
 
   return createPortal(
-    <div className="mn-overlay mari-modal" role="presentation">
+    <div className="mn-overlay mari-modal" role="presentation" data-chat-floating-panel>
       <section
         ref={vaultDialogRef}
         className="mn-modal mn-shell mari-modal-panel marinara-chat-popover"

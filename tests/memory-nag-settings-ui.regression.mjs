@@ -56,5 +56,20 @@ assert.doesNotMatch(
   /className="mn-overlay mari-modal" role="presentation" onClick=\{onClose\}/u,
   "Memory Nag Vault must close only from an explicit close action",
 );
+assert.match(
+  vault,
+  /className="mn-overlay mari-modal" role="presentation" data-chat-floating-panel/u,
+  "Vault interactions must be exempt from Chat Settings outside-click dismissal",
+);
+assert.equal(
+  (vault.match(/data-chat-floating-panel/gu) ?? []).length,
+  2,
+  "the Vault and its expanded editor must both stay inside Chat Settings' floating-panel boundary",
+);
+assert.doesNotMatch(
+  vault,
+  /className="mn-overlay mari-modal" role="presentation" data-chat-floating-panel onClick=\{onClose\}/u,
+  "the Vault backdrop must not replace its explicit close control",
+);
 
 process.stdout.write("Memory Nag settings UI contract passed\n");

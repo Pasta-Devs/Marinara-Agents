@@ -132,7 +132,7 @@ class BeholderElement extends HTMLElement {
       button = document.createElement("button");
       button.type = "button";
       button.className = "bh-tracker-launch";
-      button.innerHTML = `<span class="bh-tracker-launch__logo" aria-hidden="true">${bhEyeIcon("bh-tracker-launch__icon")}</span><span class="bh-tracker-launch__title">Beholder</span><span class="bh-tracker-launch__arrow" aria-hidden="true">›</span>`;
+      button.innerHTML = `<span class="bh-tracker-launch__arrow" aria-hidden="true">›</span><span class="bh-tracker-launch__logo" aria-hidden="true">${bhEyeIcon("bh-tracker-launch__icon")}</span><span class="bh-tracker-launch__title">Beholder</span>`;
       button.addEventListener("click", () => BH.dock.toggle());
       this.replaceChildren(button);
       this._button = button;
