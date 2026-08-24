@@ -980,8 +980,9 @@ PF.economy = {
         if (this._logDay(core, world, spot, tally, day, gen)) days.push(day);
         tally = { windows: 0, caught: [] };
       }
-      // THE WRAP: file the day that just ended before anything from the new one
-      // can land in it. The accumulator starts over on the far side of midnight.
+      // THE BAIT IS SPENT for the window that was read as holding it, and the
+      // slot follows the stack out rather than being left pointing at a row the
+      // pouch no longer has.
       if (modTier === 1) {
         PF.player.take(core, { t: modSlot[0], k: modSlot[1] }, 1, gen);
         if (!live.pouch.items.some((row) => row.t === modSlot[0] && row.k === modSlot[1]))
