@@ -11709,8 +11709,9 @@ PF.core = {
   _lastT: 0,
   _acc: 0,
   _narrationDoneWas: true,
-  // The person the Talk button is currently asking to skip unread story for, or
-  // null. See interact() — it is one press of state and nothing persists it.
+  // The person the Talk button is currently asking to skip unread story for AND
+  // the GM turn it is asking about, or null. See interact() — it is one press of
+  // state and nothing persists it.
   _talkConfirm: null,
   _keysBound: false,
   _resizeObs: null,
@@ -11892,6 +11893,14 @@ PF.core = {
       this._resumeMode = prev; // don't collapse dialogue into walk on exit (review finding)
     }
     this.sim.mode = mode;
+    // A pending skip-confirm does not survive the mode changing under it. The
+    // question is asked in walk mode standing next to somebody, and every way out
+    // of that frame — the Keyboard button handing the turn to the host, a cutscene
+    // beat, combat, the send path itself — is the player doing something else with
+    // the narration than the question was about. Cheapest honest rule: switching
+    // modes drops it, so coming back to walk asks again. (Named as a clear
+    // condition by the fix that introduced the confirm; this is where it is true.)
+    this._talkConfirm = null;
     // Replay returns out of the frame loop before sim.step(), so the sim's own
     // walk-only guard can never fire for it — the one function that changes mode
     // drops the beat instead, and the declaration below is honest immediately.
@@ -11978,11 +11987,21 @@ PF.core = {
    *
    *  ALSO where the question goes stale, so the button and the verb can never
    *  disagree about what a press means: the narration finishing, walking away,
-   *  and walking to somebody else all drop it. Read every frame by the HUD. */
+   *  and walking to somebody else all drop it. Read every frame by the HUD.
+   *
+   *  THE TURN IS PART OF THE QUESTION, not just the person. `narrationDone` is
+   *  per-turn and goes false again for every new GM turn, so "still pending" is
+   *  not the same fact from one turn to the next: the player can arm the confirm
+   *  against turn A, type into the host's own message box instead of pressing
+   *  again, and have turn B arrive unread — and a confirm that only remembered
+   *  the NPC would let ONE press spend B on the permission they gave for A. The
+   *  permission was for the narration they had decided to skip; a different one
+   *  is asked about in its own right. */
   talkConfirmArmed() {
     if (!this._talkConfirm) return false;
     const npc = this.sim?.nearNpc;
-    if (!this._storyPending() || !npc || npc.id !== this._talkConfirm.id) {
+    const turn = this.host?.latestAssistant?.id ?? null;
+    if (!this._storyPending() || !npc || npc.id !== this._talkConfirm.id || turn !== this._talkConfirm.turn) {
       this._talkConfirm = null;
       return false;
     }
@@ -12017,7 +12036,10 @@ PF.core = {
     // package-side "skip" could only ever mean sending anyway and calling it
     // skipping. The dialogue model that would make this moot is a roadmap item.
     if (this._storyPending() && !this.talkConfirmArmed()) {
-      this._talkConfirm = { id: npc.id };
+      // Keyed on the TURN as well as the person: _storyPending() has already
+      // established there is a latest assistant turn, and the permission the
+      // second press gives is permission to spend THAT one.
+      this._talkConfirm = { id: npc.id, turn: this.host?.latestAssistant?.id ?? null };
       this.hud?.toast("Story still to read — press again to skip ahead and talk.");
       this.hud?.update();
       return;

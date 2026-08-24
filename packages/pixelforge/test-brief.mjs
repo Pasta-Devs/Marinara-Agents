@@ -12472,6 +12472,81 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
   loadedPF.save.reset();
 }
 
+// ── AND THE PAIRING IS THE COMPILER'S, NOT THE FIXTURES' ──────────────────────
+// Everything above reads worlds the compiler actually produces, and on every one
+// of them the keeper stamp lands — so those cases hold whether the zone mark
+// WAITS for the stamp or is merely written beside it, and reverting 20-world's
+// `stamped` block leaves them green. The structural claim is the one the offer
+// depends on: 59-economy's room path finds a keeper THROUGH the zone mark, so a
+// mark raised without a stamp is exactly the counter with nobody behind it.
+//
+// A stamp that misses is unreachable through a brief — every validated roster
+// entry is placed as an NPC under its own name — so the only honest way to
+// exercise the branch is to force it. The rewrite goes on the HOST RESOLUTION
+// rather than on the stamp loop: resolving a host and stamping one are the two
+// different facts the block is about, the resolution line is the same on either
+// side of the fix, and forcing a resolved host nobody carries the name of asks
+// the compiler the question directly.
+{
+  const HOST_LINE = "const host = facade?.owner ?? headOfBuilding.get(gatheringZoneId) ?? null;";
+  const FORCED_MISS =
+    "const host = ((resolved) => (resolved ? { ...resolved, name: `${resolved.name}\\u0000` } : null))(" +
+    "facade?.owner ?? headOfBuilding.get(gatheringZoneId) ?? null);";
+  const parts = [
+    "00-prelude.js",
+    "10-art.js",
+    "15-assets.js",
+    "18-brief.js",
+    "20-world.js",
+    "25-schedule.js",
+    "30-sim.js",
+    "50-spatial.js",
+    "55-maps-export.js",
+    "58-player.js",
+    "59-economy.js",
+    "60-save.js",
+  ].map((file) => {
+    const text = readFileSync(join(here, "src", file), "utf8");
+    if (file !== "20-world.js") return text;
+    const forced = text.replace(HOST_LINE, FORCED_MISS);
+    assert.notEqual(forced, text, "the forced-miss rewrite still names 20-world's host resolution");
+    return forced;
+  });
+  const forcedPF = new Function(`"use strict";\n${parts.join("\n")}\nreturn PF;`)();
+  forcedPF.assets._noPackage = true;
+  forcedPF.api.postSpatialLocations = async () => ({ ok: false, status: 404, body: null });
+  forcedPF.api.patchMetadata = async () => {};
+  const sealed = forcedPF.brief.validate(
+    {
+      scale: "village",
+      name: "Hearthvale",
+      prosperity: "modest",
+      backgroundPopulation: 40,
+      situation: "Pumpkins keep going missing from the fair field.",
+      places: [{ kind: "gathering", name: "The Amber Hearth", flavor: "A honey-lit inn." }],
+      cast: [
+        { name: "Mira", role: "Innkeeper", kind: "host", tint: "amber", home: "The Amber Hearth", household: 1 },
+        { name: "Rook", role: "Guard Captain", kind: "guard", tint: "blue", home: "The Amber Hearth", household: 1 },
+        { name: "Tam", role: "Farmer", kind: "grower", tint: "green", home: "Hearthvale", household: 2 },
+      ],
+    },
+    { theme: "cozy-village", seed: 2095930824 },
+  );
+  const fw = forcedPF.world.build(2095930824, "cozy-village", sealed);
+  const fgid = Object.entries(sealed._ids.zones).find(([, name]) => name === "The Amber Hearth")?.[0];
+  assert.ok(fgid && fw.zones[fgid], "the forced world still compiles the gathering it was told about");
+  assert.equal(
+    Object.values(fw.zones).some((zone) => (zone.npcs ?? []).some((npc) => npc.lodging)),
+    false,
+    "a host resolved under a name nobody carries stamps no keeper anywhere",
+  );
+  assert.notEqual(
+    fw.zones[fgid].lodging,
+    true,
+    "…and the zone mark does not go up without one — both marks or neither, structurally",
+  );
+}
+
 // ── THE CLASSIFIER CARRIES IT AND DECIDES NOTHING WITH IT ─────────────────────
 {
   const decided = (schemaVersion) =>
@@ -12683,6 +12758,20 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     const core = { chatId: "chat-berth-hud", sim, interact() {}, setMode() {}, resume() {}, markDirty() {} };
     core.hud = new loadedPF.Hud(new FakeNode("div"), core);
     const hud = core.hud;
+
+    // WHAT IT LOOKS LIKE BEFORE THE FIRST UPDATE, read here and nowhere else.
+    // The constructor does not call update() — every assertion below reaches its
+    // display through one, so all of them pass whether the button boots hidden or
+    // boots visible, and the boot state is a claim only this line makes. It is not
+    // cosmetic: a display-gated button that ships visible is on screen for every
+    // frame before the first update, and for the whole of a mount that never
+    // reaches one (no sim yet), quoting a room in a world that has not compiled.
+    assert.equal(hud.berthBtn.style.display, "none", "the berth button boots HIDDEN, before anything has decided");
+    assert.ok(
+      !hud.talkBtn.style.display,
+      "…and Talk beside it is not display-gated at all — it is up for the whole of walk mode and only dims",
+    );
+
     loadedPF.player.award(core, { money: 100 });
 
     // WHERE IT LIVES: beside Talk in the one action stack, not behind anything.
@@ -12853,6 +12942,44 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     host.narrationDone = true;
     hud.update();
     assert.equal(hud.talkBtn.textContent, `Talk to ${villagers[1].name} (E)`, "and it goes back on its own");
+
+    // THE TURN IS HALF THE QUESTION, NOT JUST THE PERSON (round-2 review).
+    // `narrationDone` is PER-TURN and goes false again for every new GM turn, so
+    // "there is still story to read" is not the same fact from one turn to the
+    // next. The player can arm the confirm, type into the host's own message box
+    // instead of pressing again, and have a NEW turn land unread — and a confirm
+    // that remembered only the NPC would let ONE press spend the new narration on
+    // the permission they gave for the old one, which is the exact loss the
+    // confirm exists to prevent.
+    sent.length = 0;
+    core._talkConfirm = null;
+    host.narrationDone = false;
+    host.latestAssistant = { id: "m3" };
+    talkTo(villagers[1]);
+    await settle();
+    assert.equal(core.talkConfirmArmed(), true, "armed against the turn that was on screen when it was asked");
+    host.latestAssistant = { id: "m4" }; // a new GM turn, unread in its own right
+    host.narrationDone = false;
+    assert.equal(core.talkConfirmArmed(), false, "…and not against the turn that replaced it");
+    talkTo(villagers[1]);
+    await settle();
+    assert.deepEqual(sent, [], "one press does not spend the new narration on the old permission");
+    assert.equal(core.talkConfirmArmed(), true, "…that press being the question again, asked about this turn");
+
+    // AND A MODE CHANGE DROPS IT. The question is asked in walk mode standing
+    // next to somebody, and every way out of that frame — the Keyboard button
+    // handing the turn back to the host, a cutscene beat, combat — is the player
+    // doing something other than what the question was about. Named as a clear
+    // condition when the confirm shipped; pinned here.
+    sent.length = 0;
+    assert.equal(core.talkConfirmArmed(), true, "armed before the mode changes under it");
+    core.setMode("dialogue"); // the Keyboard button
+    core.setMode("walk"); // Resume walking
+    sim.nearNpc = villagers[1];
+    assert.equal(core.talkConfirmArmed(), false, "the question does not survive the mode changing under it");
+    talkTo(villagers[1]);
+    await settle();
+    assert.deepEqual(sent, [], "…so walking back into it asks again rather than sending");
   } finally {
     globalThis.setTimeout = realSetTimeout;
     globalThis.clearTimeout = realClearTimeout;
