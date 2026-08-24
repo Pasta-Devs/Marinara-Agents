@@ -19,6 +19,10 @@ PF.Sim = class {
     this._clockAcc = 0;
     this.nearNpc = null;
     this.nearPortal = null;
+    // The named feature the player is standing at, or null (see step()). Derived
+    // per frame from the zone's own register (20-world makeZone.features), which
+    // is itself derived — nothing here is ever saved.
+    this.nearFeature = null;
     this._npcTimers = new Map();
     this._rnd = PF.rng((world.seed ^ 0x9e3779b9) >>> 0);
     this.dirty = false; // save-worthy change happened
@@ -124,6 +128,39 @@ PF.Sim = class {
         if (d < best) {
           best = d;
           this.nearNpc = npc;
+        }
+      }
+      // THE NAMED FEATURE UNDER THE PLAYER'S HAND, the third proximity read
+      // beside the two above and recomputed on the same terms: every walking
+      // frame, off the feet tile, null the moment they step away.
+      //
+      // The test is deliberately TWO-SIDED — a neighbour tile IS water AND that
+      // tile lies inside a registry rect. Neither half is the rule on its own.
+      // Water alone would make any puddle a feature and could not say which one;
+      // a rect alone would count tiles the feature never watered, and rects hold
+      // those by design (the wilds ford lays path straight across its stream,
+      // and a compiled pool's well stands inside the anchor rect beside it).
+      //
+      // Four neighbours, not eight: standing corner-on to a pond is standing
+      // near the bank, not at it. Skipped whole on a zone with no register,
+      // which is most of them.
+      this.nearFeature = null;
+      if (z.features.length) {
+        for (const [nx, ny] of [
+          [tx, ty - 1],
+          [tx, ty + 1],
+          [tx - 1, ty],
+          [tx + 1, ty],
+        ]) {
+          if (nx < 0 || ny < 0 || nx >= z.w || ny >= z.h) continue;
+          if (z.ground[ny * z.w + nx] !== "water") continue;
+          const row = z.features.find(
+            (f) => nx >= f.rect.x && nx < f.rect.x + f.rect.w && ny >= f.rect.y && ny < f.rect.y + f.rect.h,
+          );
+          if (row) {
+            this.nearFeature = row;
+            break;
+          }
         }
       }
     }

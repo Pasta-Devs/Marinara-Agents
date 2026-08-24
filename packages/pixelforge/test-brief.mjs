@@ -13054,6 +13054,41 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     );
   }
 
+  // ── nearFeature: WATER **AND** A RECT, NEITHER ALONE ────────────────────────
+  // The step loop's third proximity read, beside nearNpc and nearPortal. A rect
+  // may legitimately hold tiles the feature never watered — the ford is path
+  // straight across the stream rect, and a compiled pool's well stands inside
+  // the anchor rect beside it — so "inside a rect" cannot be the test. Standing
+  // at the bank is.
+  {
+    const w = world.build(7, "cozy-village", null);
+    const sim = new loadedPF.Sim(w);
+
+    sim.teleport("village", 32, 23); // grass, one step west of the pond's west bank
+    sim.step(0, {});
+    assert.ok(sim.nearFeature, "standing at the bank finds the pond");
+    assert.equal(sim.nearFeature.id, "legacy:pond", "…by name and id, not just 'some water'");
+    assert.equal(sim.nearFeature.name, w.zones.village.features[0].name, "the registry row itself, not a copy");
+
+    sim.teleport("village", 21, 17); // the spawn, mid-village: nowhere near water
+    sim.step(0, {});
+    assert.equal(sim.nearFeature, null, "and steps away from it again");
+
+    // THE FORD, AND THE WELL BY THE SAME TEST. (22,12) is the east approach: its
+    // west neighbour (21,12) is INSIDE the stream rect and is the path the ford
+    // laid, and no neighbour of it is water. A rect-only test would call this
+    // fishing; the two-sided test calls it a road.
+    const forest = w.zones.forest;
+    assert.equal(forest.ground[12 * forest.w + 21], "path", "the ford's tile is inside the rect and is not water");
+    sim.teleport("forest", 22, 12);
+    sim.step(0, {});
+    assert.equal(sim.nearFeature, null, "a rect tile that is not water is not a spot");
+
+    sim.teleport("forest", 22, 10); // beside the stream proper, north of the ford
+    sim.step(0, {});
+    assert.equal(sim.nearFeature?.id, "legacy:stream", "…while the bank two tiles north of it is");
+  }
+
   // ── DERIVED: NOT ONE BYTE OF THE REGISTRY REACHES THE WIRE ──────────────────
   // The whole design rests on this. A world is rebuilt from (seed, theme, brief)
   // on every load, so the registry is recomputed and never stored — and if it
