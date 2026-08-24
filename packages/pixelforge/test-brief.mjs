@@ -11984,7 +11984,11 @@ await withSavePath(async ({ behavior, makeCore }) => {
   };
 
   assert.equal(E.berthOffer(core).price, null, "nobody within reach quotes no price");
-  stand(keeperZone, bystander);
+  // OUTSIDE the room, deliberately. Standing IN it is an offer whoever you happen
+  // to be nearest to — the room path, pinned in case (ay) — so the fact this line
+  // is about (a villager is not a keeper) has to be asked where the room is not
+  // also answering.
+  stand(w.startZone, bystander);
   assert.equal(E.berthOffer(core).price, null, "and a villager who keeps no rooms lets none");
 
   // THE KEEPER, AND AN EMPTY PURSE. The price is quoted anyway: a refusal the
@@ -12308,6 +12312,166 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
   }
 }
 
+// (ay) THE BERTH IS OFFERED BY THE ROOM AS WELL AS BY THE PERSON.
+// Second live playtest: the maintainer stood INSIDE The Amber Hearth with Mira a
+// few tiles off and had no berth button anywhere — Talk, Wait and Keyboard and
+// nothing else. Nothing was wrong with the compile, and the assertions below
+// re-state that against the playtest's own shape: the gathering carried its
+// lodging mark and the host carried the keeper mark that pairs with it.
+//
+// The offer keyed on `sim.nearNpc` ALONE, and nearNpc is the single NEAREST NPC
+// within 26px — a tile and a half. So the room could be the settlement's only
+// inn, the keeper could be standing in it, and the button was still hidden
+// because the player was closer to the guard by the door. Every berth case
+// written before this one SUPPLIED nearNpc, which is exactly why none of them
+// could see it.
+//
+// The offer still follows the PERSON — an innkeeper standing in the square at
+// noon can let you a room, and that is the whole reason the mark is on the NPC.
+// It now also follows the ROOM: standing in a zone the compiler marked lodging,
+// with somebody in that zone who lets it, is an offer. Nobody in the room is
+// still nobody: an empty inn quotes no price.
+{
+  const E = loadedPF.economy;
+  const P = loadedPF.player;
+  // The playtest's shape: a DECLARED gathering, a `host` who is homed in it, and
+  // a second cast member under the same roof to stand between them.
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Hearthvale",
+      prosperity: "modest",
+      backgroundPopulation: 40,
+      situation: "Pumpkins keep going missing from the fair field.",
+      places: [{ kind: "gathering", name: "The Amber Hearth", flavor: "A honey-lit inn." }],
+      cast: [
+        { name: "Mira", role: "Innkeeper", kind: "host", tint: "amber", home: "The Amber Hearth", household: 1 },
+        { name: "Rook", role: "Guard Captain", kind: "guard", tint: "blue", home: "The Amber Hearth", household: 1 },
+        { name: "Tam", role: "Farmer", kind: "grower", tint: "green", home: "Hearthvale", household: 2 },
+      ],
+    },
+    { theme: "cozy-village", seed: 2095930824 },
+  );
+  const w = world.build(2095930824, "cozy-village", sealed);
+  const gid = Object.entries(sealed._ids.zones).find(([, name]) => name === "The Amber Hearth")?.[0];
+  assert.ok(gid && w.zones[gid], "the declared gathering compiled to a room");
+  assert.equal(w.zones[gid].lodging, true, "which carries the lodging mark");
+  const keeper = w.zones[gid].npcs.find((npc) => npc.lodging === gid);
+  assert.ok(keeper, "and the host is standing in it, carrying the mark that pairs with it");
+  assert.equal(keeper.name, "Mira", "…the host the brief named");
+  const roommate = w.zones[gid].npcs.find((npc) => !npc.lodging);
+  assert.ok(roommate, "with somebody else in the room to be nearer to");
+
+  const sim = new loadedPF.Sim(w);
+  const core = { chatId: "chat-berth-room", sim, hud: { toast() {}, refreshChips() {} } };
+  P.award(core, { money: 100 });
+  const stand = (zoneId, npc) => {
+    sim.zoneId = zoneId;
+    sim.nearNpc = npc ?? null;
+    return E.berthOffer(core);
+  };
+
+  // THE PLAYTEST, EXACTLY: in the room, nobody within arm's reach.
+  const alone = stand(gid, null);
+  assert.equal(alone.available, true, "standing in the inn is an offer even with nobody within reach");
+  assert.equal(alone.zoneId, gid, "…of that room");
+  assert.equal(alone.keeper?.name, "Mira", "…from the keeper who is in it");
+  assert.equal(alone.price, E.price(w, "berth"), "…at the price the button quotes");
+
+  // AND WITH THE GUARD BY THE DOOR WINNING nearNpc. This is the reported frame.
+  const crowded = stand(gid, roommate);
+  assert.equal(crowded.available, true, "being nearer to a bystander does not close the inn");
+  assert.equal(crowded.keeper?.name, "Mira", "…the keeper still answers for the room");
+
+  // THE PERSON PATH IS UNTOUCHED: the keeper out in the square still lets a room.
+  const square = stand(w.startZone, keeper);
+  assert.equal(square.available, true, "an innkeeper in the square at noon can still let you a room");
+  assert.equal(square.zoneId, gid, "…the room being the one they keep, not the one you are in");
+
+  // AND THE SQUARE ITSELF IS NOT AN INN.
+  assert.equal(
+    stand(w.startZone, null).price,
+    null,
+    "standing outside quotes no price, which is what hides the button",
+  );
+  assert.equal(stand(w.startZone, roommate).price, null, "and a villager who keeps no rooms lets none");
+
+  // AN EMPTY ROOM IS NOBODY. This is the state resolveSchedules leaves when a
+  // daypart moves the keeper out (it splices NPCs between `zone.npcs` arrays),
+  // so it is a real frame and not a hypothetical one.
+  const room = w.zones[gid];
+  const held = room.npcs.splice(room.npcs.indexOf(keeper), 1)[0];
+  assert.equal(stand(gid, null).price, null, "an inn with nobody behind the counter quotes no price");
+  assert.equal(stand(gid, null).reason, "no-keeper", "…and says so");
+  room.npcs.push(held);
+
+  // THE REFUSALS REACH THE ROOM PATH TOO — a control that vanishes when the
+  // purse runs short teaches the player nothing about the price.
+  P.award(core, { money: -100 });
+  const broke = stand(gid, null);
+  assert.equal(broke.available, false, "an empty purse still cannot take the room");
+  assert.equal(broke.reason, "cannot-afford", "and says why");
+  assert.equal(broke.price, E.price(w, "berth"), "while still quoting the price, so the button stays on screen");
+  P.award(core, { money: 100 });
+  assert.equal(E.rentBerth(core).ok, true, "the room is taken from inside the room");
+  assert.equal(P.get(core).home, gid, "anchored at the gathering's sealed id");
+  const owned = stand(gid, null);
+  assert.equal(owned.available, false, "and the same room is not sold twice");
+  assert.equal(owned.reason, "already-yours", "…it is simply yours");
+  assert.equal(owned.price, E.price(w, "berth"), "…still on screen, saying so");
+
+  // BOTH MARKS OR NEITHER, AND THE HOSTLESS FIXTURE STILL REFUSES.
+  // The room path can only ever find a keeper through the zone mark, so a brief
+  // that seals a gathering and homes nobody in it must still compile no mark at
+  // all — otherwise the new path is the very "counter with nobody behind it"
+  // the old one was fixed for.
+  const hostless = brief.validate(
+    {
+      scale: "village",
+      name: "Nowhere",
+      places: [{ kind: "gathering", name: "The Wet Boot", flavor: "" }],
+      cast: [
+        { name: "Ivo Reed", role: "miller", kind: "maker", tint: "teal", home: "Nowhere", household: 1 },
+        { name: "Sela Reed", role: "farmhand", kind: "grower", tint: "green", home: "Nowhere", household: 2 },
+        { name: "Bram", role: "carter", kind: "maker", tint: "amber", home: "Nowhere", household: 3 },
+        { name: "Odi", role: "child", kind: "child", tint: "rose", home: "Nowhere", household: 3 },
+      ],
+    },
+    { theme: "cozy-village", seed: 606 },
+  );
+  const hw = world.build(606, "cozy-village", hostless);
+  const hsim = new loadedPF.Sim(hw);
+  const hcore = { chatId: "chat-berth-room-hostless", sim: hsim, hud: { toast() {}, refreshChips() {} } };
+  P.award(hcore, { money: 100 });
+  for (const zoneId of Object.keys(hw.zones)) {
+    assert.notEqual(hw.zones[zoneId].lodging, true, `hostless: ${zoneId} is not marked lodging`);
+    hsim.zoneId = zoneId;
+    hsim.nearNpc = null;
+    assert.equal(E.berthOffer(hcore).price, null, `hostless: standing in ${zoneId} quotes no price`);
+  }
+
+  // The invariant itself, said structurally rather than incidentally: the zone
+  // mark is only ever up because a placed NPC took the keeper's mark for it.
+  for (const [label, lw] of [
+    ["the playtest village", w],
+    ["a brief that homes no host", hw],
+    ["legacy", world.build(9001, "cozy-village")],
+  ]) {
+    const marks = Object.values(lw.zones)
+      .flatMap((zone) => zone.npcs)
+      .filter((npc) => typeof npc.lodging === "string" && npc.lodging)
+      .map((npc) => npc.lodging);
+    for (const [zoneId, zone] of Object.entries(lw.zones)) {
+      if (zone.lodging !== true) continue;
+      assert.ok(marks.includes(zoneId), `${label}: ${zoneId} is marked lodging and somebody is letting it`);
+    }
+    for (const zoneId of marks) {
+      assert.equal(lw.zones[zoneId]?.lodging, true, `${label}: a keeper's room is marked lodging`);
+    }
+  }
+  loadedPF.save.reset();
+}
+
 // ── THE CLASSIFIER CARRIES IT AND DECIDES NOTHING WITH IT ─────────────────────
 {
   const decided = (schemaVersion) =>
@@ -12471,6 +12635,98 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   } finally {
     globalThis.setTimeout = realSetTimeout;
     globalThis.clearTimeout = realClearTimeout;
+  }
+}
+
+// ── THE BERTH BUTTON IS ON SCREEN WHENEVER THE ROOM IS OFFERING ONE ───────────
+// The offer's own contract is pinned in case (ay); this is the half the
+// maintainer actually looks at. Second playtest: standing inside The Amber
+// Hearth, the action stack held Talk, Wait and Keyboard and nothing else.
+//
+// The button is a plain child of that stack — there is no collapse chevron on
+// this surface and nothing to surface it out of — so what gated it was the offer
+// underneath, and `offer.price !== null` is the whole render test. Pinned here
+// through the real Hud over the DOM shim so the two halves cannot drift: an
+// offer nobody renders is the same bug as no offer at all.
+{
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = () => 0; // the fade is a timer; nothing here waits for one
+  globalThis.clearTimeout = () => {};
+  loadedPF.save.reset();
+  loadedPF.spatial.reset();
+  try {
+    const sealed = brief.validate(
+      {
+        scale: "village",
+        name: "Hearthvale",
+        prosperity: "modest",
+        backgroundPopulation: 40,
+        situation: "Pumpkins keep going missing from the fair field.",
+        places: [{ kind: "gathering", name: "The Amber Hearth", flavor: "A honey-lit inn." }],
+        cast: [
+          { name: "Mira", role: "Innkeeper", kind: "host", tint: "amber", home: "The Amber Hearth", household: 1 },
+          { name: "Rook", role: "Guard Captain", kind: "guard", tint: "blue", home: "The Amber Hearth", household: 1 },
+          { name: "Tam", role: "Farmer", kind: "grower", tint: "green", home: "Hearthvale", household: 2 },
+        ],
+      },
+      { theme: "cozy-village", seed: 2095930824 },
+    );
+    const w = world.build(2095930824, "cozy-village", sealed);
+    const gid = Object.entries(sealed._ids.zones).find(([, name]) => name === "The Amber Hearth")?.[0];
+    const room = w.zones[gid];
+    const keeper = room.npcs.find((npc) => npc.lodging === gid);
+    const roommate = room.npcs.find((npc) => !npc.lodging);
+    assert.ok(keeper && roommate, "the room has a keeper in it and somebody else besides");
+
+    const sim = new loadedPF.Sim(w);
+    const core = { chatId: "chat-berth-hud", sim, interact() {}, setMode() {}, resume() {}, markDirty() {} };
+    core.hud = new loadedPF.Hud(new FakeNode("div"), core);
+    const hud = core.hud;
+    loadedPF.player.award(core, { money: 100 });
+
+    // WHERE IT LIVES: beside Talk in the one action stack, not behind anything.
+    assert.ok(hud.actions.children.includes(hud.berthBtn), "the berth button is a direct child of the action stack");
+    assert.ok(hud.actions.children.includes(hud.talkBtn), "…the same stack Talk is in");
+
+    const showing = () => {
+      hud.update();
+      return hud.berthBtn.style.display;
+    };
+    sim.zoneId = w.startZone;
+    sim.nearNpc = null;
+    assert.equal(showing(), "none", "out in the square with nobody about, there is nothing to render");
+
+    // THE REPORTED FRAME: inside the inn, nearest to the guard by the door.
+    sim.zoneId = gid;
+    sim.nearNpc = roommate;
+    assert.equal(showing(), "", "standing in the inn puts the button on screen");
+    assert.ok(
+      hud.berthBtn.textContent.includes(loadedPF.economy.money(w, loadedPF.economy.price(w, "berth"))),
+      "…quoting the price in this world's own money",
+    );
+    assert.equal(hud.berthBtn.style.opacity, "1", "…and offered, not refused");
+
+    // AND THE REFUSALS RENDER RATHER THAN VANISH.
+    loadedPF.player.award(core, { money: -100 });
+    assert.equal(showing(), "", "a short purse does not hide the price");
+    assert.equal(hud.berthBtn.style.opacity, "0.45", "…it dims it");
+    loadedPF.player.award(core, { money: 100 });
+    hud.update();
+    loadedPF.economy.rentBerth(core);
+    assert.equal(showing(), "", "and the room you already keep stays on screen");
+    assert.equal(hud.berthBtn.textContent, "Your berth", "…saying it is yours");
+
+    // AN EMPTY ROOM RENDERS NOTHING, which is what keeps the button honest.
+    const held = room.npcs.splice(room.npcs.indexOf(keeper), 1)[0];
+    sim.nearNpc = null;
+    assert.equal(showing(), "none", "an inn with nobody behind the counter offers no button");
+    room.npcs.push(held);
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    loadedPF.save.reset();
+    loadedPF.spatial.reset();
   }
 }
 

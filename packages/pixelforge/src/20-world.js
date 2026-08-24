@@ -3156,11 +3156,25 @@ PF.world = (() => {
       // unconditionally — a room the world calls lodging with nobody behind the
       // counter, which is a promise the offer can never keep. The lodging fact is
       // the KEEPER's, so the room is only lodging when somebody is letting it.
+      //
+      // The zone mark waits for the keeper's rather than being paired with it by
+      // inspection. Resolving a host is not the same fact as STAMPING one: the
+      // resolution hands back a roster entry and the stamp goes on by NAME, and
+      // "every roster entry is placed as an NPC under its own name" is true of
+      // this compiler and is not something this block can see. Now the offer's
+      // room path reads the zone mark to find a keeper (59-economy
+      // `_keeperInRoom`), the gap between the two would be exactly the counter
+      // with nobody behind it, so the mark is a CONSEQUENCE of the stamp landing.
       if (host) {
-        zones[gatheringZoneId].lodging = true;
+        let stamped = false;
         for (const zone of Object.values(zones)) {
-          for (const npc of zone.npcs) if (npc.name === host.name) npc.lodging = gatheringZoneId;
+          for (const npc of zone.npcs) {
+            if (npc.name !== host.name) continue;
+            npc.lodging = gatheringZoneId;
+            stamped = true;
+          }
         }
+        if (stamped) zones[gatheringZoneId].lodging = true;
       }
     }
 

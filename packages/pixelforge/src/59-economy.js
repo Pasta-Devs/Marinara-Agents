@@ -118,20 +118,56 @@ PF.economy = {
 
   // ── The berth (S3's money sink, P1's bed) ──────────────────────────────────
 
+  /** The keeper standing in the room the player is in, or null.
+   *
+   *  The offer's SECOND path, and the one the second live playtest was missing.
+   *  `sim.nearNpc` is the single NEAREST NPC within 26px — a tile and a half — so
+   *  keying the whole offer on it meant the room could be the settlement's only
+   *  inn, the keeper could be standing in it, and the button was still hidden
+   *  because the player was closer to the guard by the door. The maintainer stood
+   *  inside The Amber Hearth with Mira a few tiles off and had Talk, Wait and
+   *  Keyboard and nothing else.
+   *
+   *  ONLY EVER THROUGH THE ZONE MARK, which is what keeps this honest: the
+   *  compiler puts that mark up only when somebody took the keeper's mark that
+   *  pairs with it (20-world, both-marks-or-neither), so a hostless gathering has
+   *  no mark and this path can never find one. And the keeper has to actually BE
+   *  here — `zone.npcs` is where 30-sim's schedules splice people, so an inn the
+   *  daypart emptied is an empty inn and quotes nothing.
+   *
+   *  Own-property, like every other read in this file: `sim.zoneId` comes off
+   *  untrusted save JSON and `zones["constructor"]` is not a room. */
+  _keeperInRoom(sim) {
+    const zoneId = sim?.zoneId;
+    const zones = sim?.world?.zones;
+    if (typeof zoneId !== "string" || !zones || !Object.prototype.hasOwnProperty.call(zones, zoneId)) return null;
+    const zone = zones[zoneId];
+    if (zone?.lodging !== true) return null;
+    for (const npc of zone.npcs ?? []) if (npc?.lodging === zoneId) return npc;
+    return null;
+  },
+
   /** Is there a berth on offer where the player is standing, and what would it
    *  cost? Describes only — it never charges anything, so the HUD can call it
    *  every frame and a caller can render the refusal instead of hiding the
    *  button. Returns { available, reason, keeper, zoneId, price, home }.
    *
-   *  The offer follows the PERSON, not the room: `npc.lodging` is stamped on the
-   *  keeper of the settlement's gathering (20-world), so an innkeeper standing in
-   *  the square at noon can still let you a room, which is what a keeper is. */
+   *  The offer follows the PERSON: `npc.lodging` is stamped on the keeper of the
+   *  settlement's gathering (20-world), so an innkeeper standing in the square at
+   *  noon can still let you a room, which is what a keeper is.
+   *
+   *  …and it follows the ROOM as well (see _keeperInRoom). Being inside the inn
+   *  is the other half of the same fact, and it is the half a player actually
+   *  discovers: you walk in, and the room is offering. Reach first, so a keeper
+   *  you are standing next to always answers for their own room even when you are
+   *  both inside somebody else's. */
   berthOffer(core) {
     const sim = core?.sim;
-    const npc = sim?.nearNpc;
     const world = sim?.world;
     const no = (reason) => ({ available: false, reason, keeper: null, zoneId: null, price: null, home: null });
-    if (!sim || !npc || typeof npc.lodging !== "string" || !npc.lodging) return no("no-keeper");
+    const inReach = sim?.nearNpc;
+    const npc = typeof inReach?.lodging === "string" && inReach.lodging ? inReach : this._keeperInRoom(sim);
+    if (!sim || !npc) return no("no-keeper");
     if (!world?.zones || !Object.prototype.hasOwnProperty.call(world.zones, npc.lodging)) return no("no-lodging");
     const price = this.price(world, "berth");
     if (price === null) return no("not-for-sale");

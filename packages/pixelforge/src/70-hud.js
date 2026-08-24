@@ -44,11 +44,19 @@ PF.Hud = class {
     );
 
     this.talkBtn = this._btn("Talk (E)", () => core.interact());
-    // S3's one live transaction (P1's bed). Shown only when a lodging keeper is
-    // within reach, and shown REFUSING rather than hidden when the offer stands
-    // but the purse is short — a button that vanishes teaches the player nothing
-    // about why.
+    // S3's one live transaction (P1's bed). Shown whenever there is a berth to be
+    // had where the player is standing — a keeper within reach, or the room they
+    // keep with them in it (59-economy berthOffer) — and shown REFUSING rather
+    // than hidden when the offer stands but the purse is short, because a button
+    // that vanishes teaches the player nothing about why.
+    //
+    // Booted HIDDEN, unlike Talk beside it. Talk is up for the whole of walk mode
+    // and only dims; this one is display-gated, and update() is what decides. A
+    // button that ships visible is on screen for every frame before the first
+    // update — and for the whole of a mount that never reaches one (no sim yet),
+    // quoting a room in a world that has not compiled.
     this.berthBtn = this._btn("Rent a berth", () => this.rentBerth());
+    this.berthBtn.style.display = "none";
     this.travelBtn = this._btn("Travel", () => this.toggleTravel());
     this.waitBtn = this._btn("⏩ Wait…", () => this.toggleWait());
     this.keyboardBtn = this._btn("Keyboard", () => core.setMode("dialogue"));
