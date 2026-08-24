@@ -714,7 +714,18 @@ PF.player = {
           fields.questsDonePack && typeof fields.questsDonePack === "object" ? fields.questsDonePack : {};
       if (Array.isArray(fields.found)) player.found = { zones: fields.found };
       if (fields.home !== undefined) player.home = fields.home;
-      if (Array.isArray(fields.ledgerLines)) player.ledger = { lines: fields.ledgerLines };
+      if (Array.isArray(fields.ledgerLines)) {
+        // THE BAND IS NOT THE TRANSCRIPT, and a whole-object reassignment is how
+        // that gets forgotten. `ledgerLines` is the only thing the entry parked —
+        // the band was never quarantined and never could be, because it rode in
+        // on the LIVE block's own disk state and its rows are sentences nobody has
+        // been told yet. Reassigning `ledger` wholesale takes them with it, while
+        // the mint branch above (which touches the ledger not at all) keeps them,
+        // and two branches of one restore cannot disagree about that.
+        const band = Array.isArray(player.ledger?.notices) ? player.ledger.notices : null;
+        player.ledger = { lines: fields.ledgerLines };
+        if (band && band.length) player.ledger.notices = band;
+      }
       if (fields.flushedDay !== undefined) player.flushedDay = posInt(fields.flushedDay, player.flushedDay);
       // `bought` was severed with the rest of the world-bound set, so it comes
       // home with them.

@@ -9513,6 +9513,47 @@ await withSavePath(async ({ armed, makeCore }) => {
     homed.player.ledger.lines.some(([day]) => day === 4),
     "…and the lines it brought home are lines, not notices",
   );
+
+  // …AND THE BAND THE LIVE BLOCK ARRIVED WITH IS STILL THERE. The restore brings
+  // the parked LINES home by reassigning `player.ledger` whole, and the band is
+  // not a line and was never parked: it rode in on the block's own disk state,
+  // carrying sentences nobody has been told yet. A whole-object reassignment
+  // forgets that and takes them with it — and the mint branch beside it, which
+  // touches the ledger not at all, keeps them. Two branches of one restore cannot
+  // disagree about whether a pending notice survives coming home.
+  Q.reset();
+  assert.equal(
+    Q.put("chat-band-carry", "stamp", {
+      reason: "brief",
+      fromV: 1,
+      stamps: { ...here },
+      fields: { ledgerLines: [[4, "Something from before the window."]], flushedDay: 3 },
+    }),
+    true,
+    "the same slot, and this time the live block has a band of its own",
+  );
+  const carried = restore(
+    block(here, { ledger: { lines: [], notices: [[8, "Something nobody has been told yet."]] } }),
+    "chat-band-carry",
+  );
+  assert.ok(
+    texts(carried).includes("Something nobody has been told yet."),
+    `the untold notice survived the restore (${texts(carried)})`,
+  );
+  assert.equal(
+    band(carried).find(([, text]) => text === "Something nobody has been told yet.")[2],
+    undefined,
+    "…and is STILL UNTOLD, because coming home is not being told",
+  );
+  assert.ok(
+    texts(carried).some((text) => /is back/.test(text)),
+    "…beside the restore's own notice, which appends after it as it always did",
+  );
+  assert.ok(
+    carried.player.ledger.lines.some(([day]) => day === 4),
+    "…and the parked lines still came home",
+  );
+
   Q.reset();
   loadedPF.save.reset();
 
