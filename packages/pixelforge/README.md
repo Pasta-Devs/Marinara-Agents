@@ -98,20 +98,22 @@ rod, and any keeper anywhere will sell you the same next rod later, so you can i
 thing forever if fishing is not why you are here.
 
 **Sleep, and a recap of the day.** With a bed — the berth you rent at the inn — you can sleep until
-any time of day. Sleeping costs no GM turn at all: it moves the clock, and the next message you
-send for your own reasons quietly carries a summary of the days that finished while the narrator
-was not looking. So the GM finds out you spent Tuesday at the millpond without you having to type
-it, and without a turn spent per cast.
+dawn, morning, dusk or night. Sleeping costs no GM turn at all: it moves the clock, and the next
+message you send for your own reasons quietly carries a summary of the days that finished while the
+narrator was not looking. So the GM finds out you spent Tuesday at the millpond without you having
+to type it, and without a turn spent per cast.
 
-**Two new panels, on chips beside the clock.** The **journal** (📖) is your day ledger, grouped by
+**Two new panels, on chips beside the purse.** The **journal** (📖) is your day ledger, grouped by
 day with the newest first, plus a band for the things that happened to the *save* rather than in a
 day. The **character sheet** (👤, or the `C` key) is your skills and what they are worth, what you
 have equipped, your purse, and how the settlement feels about you — drawn live, so a level earned
-while it is open shows up on the next frame.
+while it is open shows up as soon as it happens.
 
-**Bridges.** Where a road runs through water, it is now planked over instead of the water being
-moved out of the way — so streams and ponds turn up in places they never could before, and a
-walkway over a pool is a perfectly good place to stand and fish from.
+**Bridges.** Where a road runs through water, it is now planked over instead of the pond being
+dropped for getting in the road's way — which is what lets the **wilds** have one at all: the pool
+is wide enough that it always reached the road band the compiler holds in reserve, so a pond a brief
+asked for out in the wood simply never existed. A walkway over a pool is also a perfectly good place
+to stand and fish from.
 
 ## Art
 

@@ -339,16 +339,20 @@ fallback chain is for third-party extension, not for shipping silent per-theme f
 | ruin           | roofless broken walls  | breached hull section    |
 | lookout        | raised stone pad       | observation platform     |
 
-**Water and roads (0.12).** The two water tags no longer refuse an anchor that overlaps a road.
-Where a road runs through a water rect the road tiles are laid as **bridge** — a walkable
+**Water and roads (0.12).** Exactly one placement relaxed: a **wilds `water-feature`**, which runs
+a second pass of eight anchor attempts with the approach road off the reservation once the strict
+eight are spent. A settlement anchor overlapping an artery is still refused outright for every tag
+including this one, and `water-crossing` scans no anchors at all — the builder paints it at a fixed
+spot. Where a road runs through a water rect the road tiles are laid as **bridge** — a walkable
 treatment drawn over the water — and the water takes the rest (`20-world.js` `waterFill`). The
 crossing's hand-painted ford is the same idea and migrated onto the same tile, so the "ford" and
 "bridge" in the table above are now one visual system rather than two. It is a placement
 treatment and **not a taggable feature**: no new row in this vocabulary, no new `_ids` ordinal,
 and a settlement pond that decks a plaza with planks is a blessed outcome rather than a case to
-guard against. What it bought is a `water-feature` in the wilds at all — the 8×5 anchor could
-never clear the reserved road band, so before this the wilds pond a brief asked for simply never
-existed.
+guard against — the plaza's `path` decks, while a `thriving` settlement's paved central 4×4 is
+`stone`, deliberately outside `ROAD_GROUND`, and waters over instead. What it bought is a
+`water-feature` in the wilds at all — the 8×5 anchor could never clear the reserved road band, so
+before this the wilds pond a brief asked for simply never existed.
 
 ## 7. Injection discipline (metering the prose)
 
@@ -417,7 +421,7 @@ The schema seals fields before their consumers exist, so shipped briefs never ne
 when a consumer lands — the schema is the contract, not the renderer. The pattern has paid out
 three times now: `prosperity` drives dress (path material, fence quality, night-light density,
 ground-fill bias), `backgroundPopulation` leans the minted population within its rank's band
-(0.10, §1), and **feature `name` labels went live in 0.12** — a brief that named a pond four
+(0.10, §1), and **feature `name` labels went live in 0.12** — a brief that named a pond eight
 releases ago says that name on a player's screen today, with no regeneration and no schema change.
 
 How the name arrives, since it is the pattern working exactly as designed. The compiler's
