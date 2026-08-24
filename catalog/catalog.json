@@ -120,7 +120,7 @@
         "schemaVersion": 1,
         "id": "beholder",
         "name": "Beholder",
-        "version": "1.3.5",
+        "version": "1.3.4",
         "description": "Tracks each roleplay character's clothing by body slot, held items, wounds, missing parts, bare slots, and species, then keeps that physical state available to the next response, and shows it on a paper doll you can open from the roleplay toolbar. Pick the prompt template for your model: one prompt for a SOTA model (GPT-5.5+, Opus 4.8+, Kimi K3+), or five passes for the local Beholder model (GetBeholder/Beholder-GGUF) — free, offline, and private. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.4.4",
@@ -147,8 +147,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "c4f0d1a67d2f2029f9157108a593562201173784f9d229de0127db15a46da272",
-            "bytes": 263463
+            "sha256": "85341ac924244d1dea44d773644a827816b300ea9c1c28104397fa3a154ba30a",
+            "bytes": 261544
           }
         ],
         "permissions": [
@@ -163,9 +163,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/beholder.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/beholder-1.3.5.zip",
-        "sha256": "0eee6375d2de597427d3e2e7edf032fe9e0cd8907508fd7eb5c223b6b9911bf6",
-        "bytes": 275409
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/beholder-1.3.4.zip",
+        "sha256": "cb195ee742994a8f3e270aec0a15daf3374db00a13933330bd02b2662e709cb4",
+        "bytes": 273490
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#beholder"
     },
@@ -1094,7 +1094,7 @@
         },
         "id": "memory-nag",
         "name": "Memory Nag",
-        "version": "1.0.11",
+        "version": "1.0.12",
         "description": "Keeps a short per-chat vault of roleplay memories and recalls only the unresolved details that matter to the current turn. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode. Once active, configure it in its standalone Memory Nag section.",
         "engine": {
           "min": "2.4.4",
@@ -1123,13 +1123,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "17e4988d470aec0d143499bac84b8ef68ad887482077d2d2cb114d08c720af4f",
-            "bytes": 21239
+            "sha256": "4d8b4b560e285abafbdc519be72e7887e2305fa766d0a3f04b5026ecc4fded9b",
+            "bytes": 21157
           },
           {
             "path": "client.js",
-            "sha256": "97d18dcbb187af00f02a8cc4dd35785f6a52c63a79d88ef47ffaad38e75ad331",
-            "bytes": 363022
+            "sha256": "0142dc382f43503cef376aa89e91378e1c3f3c20d64e0578875bd78c8b629457",
+            "bytes": 363169
           }
         ],
         "permissions": [
@@ -1145,9 +1145,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/memory-nag.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/memory-nag-1.0.11.zip",
-        "sha256": "c8911f462608b0f7cd4d87bbd9424c17cb4df78063ed584628e879952b6ecfcb",
-        "bytes": 387325
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/memory-nag-1.0.12.zip",
+        "sha256": "d2de19fa8eafa34e2fa41b47f4ffa3e83df83303f61b4158a81bb487b3f85d1b",
+        "bytes": 387390
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#memory-nag"
     },

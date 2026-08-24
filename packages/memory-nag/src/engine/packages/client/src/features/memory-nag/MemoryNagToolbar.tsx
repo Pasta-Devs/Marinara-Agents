@@ -8,10 +8,10 @@ import { useMemoryNagTranslation } from "./localization";
 import type { CapabilityProps } from "./types";
 
 function recallWords(nags: string[], empty: string): string[] {
-  const splitWords = (value: string) =>
-    value.split(/[^\p{L}\p{N}\p{M}'’-]+/u).filter((word) => word.length > 2 && /[\p{L}\p{N}]/u.test(word));
-  const words = splitWords(nags.join(" "));
-  return words.length > 0 ? words : splitWords(empty);
+  const splitWords = (value: string, minimumLength: number) =>
+    value.split(/[^\p{L}\p{N}\p{M}'’-]+/u).filter((word) => word.length >= minimumLength && /[\p{L}\p{N}]/u.test(word));
+  const words = splitWords(nags.join(" "), 3);
+  return words.length > 0 ? words : splitWords(empty, 1);
 }
 
 export function MemoryNagToolbar({ props }: { props: CapabilityProps }) {
@@ -29,10 +29,12 @@ export function MemoryNagToolbar({ props }: { props: CapabilityProps }) {
     queryFn: () => memoryNagRequest<MemoryNagRecall | null>(`/recall/${encodeURIComponent(chatId)}`),
     refetchInterval: 2500,
   });
+  const hasCompletedRecall = vault.data !== undefined && vault.data !== null;
   const nags = useMemo(() => vault.data?.nags ?? [], [vault.data?.nags]);
   const words = useMemo(() => recallWords(nags, t("memoryNag.toolbar.emptyWord")), [nags, t]);
 
   useEffect(() => {
+    if (!hasCompletedRecall || words.length === 0) return;
     setWordIndex(nags.length > 0 ? Math.floor(Math.random() * words.length) : 0);
     const timer = window.setInterval(() => {
       setWordIndex((current) =>
@@ -40,7 +42,7 @@ export function MemoryNagToolbar({ props }: { props: CapabilityProps }) {
       );
     }, 3000);
     return () => window.clearInterval(timer);
-  }, [nags.length, words]);
+  }, [hasCompletedRecall, nags.length, words]);
 
   const computePosition = useCallback(() => {
     const anchor = buttonRef.current?.getBoundingClientRect();
@@ -104,9 +106,13 @@ export function MemoryNagToolbar({ props }: { props: CapabilityProps }) {
         aria-label={t("memoryNag.toolbar.label")}
         onClick={() => setOpen((value) => !value)}
       >
-        <span className="mn-toolbar-word" aria-hidden="true">
-          {words[wordIndex] ?? words[0]}
-        </span>
+        {hasCompletedRecall ? (
+          <span className="mn-toolbar-word" aria-hidden="true">
+            {words[wordIndex] ?? words[0]}
+          </span>
+        ) : (
+          <MessageSquareQuote className="mn-toolbar-initial-icon" aria-hidden="true" />
+        )}
       </button>
       {open
         ? createPortal(

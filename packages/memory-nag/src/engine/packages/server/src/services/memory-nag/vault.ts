@@ -54,11 +54,13 @@ function normalizeRecall(value: unknown): MemoryNagRecall | null {
   const memoryIds = Array.isArray(source.memoryIds)
     ? source.memoryIds.filter((id): id is string => typeof id === "string")
     : [];
-  if (nags.length === 0 || memoryIds.length === 0) return null;
+  if (nags.length !== memoryIds.length) return null;
+  const createdAt = typeof source.createdAt === "string" && source.createdAt.trim() ? source.createdAt : null;
+  if (nags.length === 0 && !createdAt) return null;
   return {
     nags,
     memoryIds,
-    createdAt: typeof source.createdAt === "string" ? source.createdAt : new Date().toISOString(),
+    createdAt: createdAt ?? new Date().toISOString(),
   };
 }
 
