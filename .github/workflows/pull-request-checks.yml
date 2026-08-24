@@ -40,6 +40,9 @@ jobs:
       - name: Test Memory Nag recall selection
         run: npx tsx tests/memory-nag-selection.regression.ts
 
+      - name: Test Beholder client bundle contract
+        run: npx tsx tests/beholder-client-contract.regression.ts
+
       - name: Test catalog lane routing and build provenance
         run: node scripts/test-catalog-lanes.mjs
 

@@ -29,15 +29,55 @@ brief is validated, repaired, and floored (`src/18-brief.js`, spec in `docs/brie
 then sealed into chat metadata; the compiled zones carry the prose the GM sees, metered so it
 never taxes more than one turn.
 
-Generation is an upgrade, never a gate: the chat boots the themed default world instantly and
-rebuilds in place when the brief lands. Any failure — timeout, truncation, provider error, or an
-engine without the route — lands on the themed default world, which plays exactly like 0.3.0.
+**Since 0.11.0 generation is a LOADING GATE, not a background upgrade** (maintainer ruling, S5
+§Q3b). Through 0.10 the chat booted a themed default world instantly and rebuilt in place when the
+brief landed — and the discarded world was real enough to play, so a player could put ten minutes
+into a place that was about to be thrown away. A chat configured to generate now shows a loading
+state until its brief is sealed and its world compiles: the sim does not step, no player-state
+mutator resolves, and no save is written until then.
+
+A generation failure is a **retry screen**, never a default world sealed on the player's behalf:
+nothing is stored, so the chat is exactly as it was and the next visit tries again. That is now
+true of EVERY failure — 0.11 revised the 0.4.0-era ladder, which still sealed a themed default on a
+deterministic 400/422; the retry screen says which kind of failure it was instead. Chats that
+never asked for generation — pre-0.4.0 saves, and any chat whose brief was explicitly declined —
+are untouched and play immediately on the themed default world, exactly as they did in 0.3.0.
+**Declining is a checkbox in the setup** ("Generate a unique world with your GM connection"),
+checked by default; unchecking it means no loading gate, no generation call, and no starting
+purse — the themed village or colony, the moment the chat opens. The
+known cost: on an engine whose generation route is missing entirely, every attempt is a transient
+failure and the retry screen is the whole experience — the manifest's `engine.min` is what keeps
+that off a supported install.
 
 Run the validator/compiler regression harness with:
 
 ```sh
 node packages/pixelforge/test-brief.mjs
 ```
+
+## Things, money and a bed (0.11.0)
+
+0.11 gives the player a namespaced, versioned block of their own inside the save — a pouch and a
+purse, skills and equipped tools, a relationship ledger, quest state, a day ledger, discovery
+state, and a home anchor. It carries its own version and migrates on read, and a field a newer
+build added survives a round trip through an older one rather than being deleted by its next save.
+Everything else in the world stays a pure function of `(seed, theme, brief, clock)`, which is what
+keeps a rebuild byte-identical and a timeline rewind safe. The wire contract, the three field
+classes, the quarantine slots, the save-row decision ladder and the loading gate are specified in
+`docs/player-state.md`.
+
+What is *live* in 0.11 is deliberately small: the purse, the pouch, and one transaction.
+**There is no automatic home** — a modern setting probably houses its protagonist and a wandering
+adventurer probably does not, and only your setup and your GM know which — so the player-driven
+path to a bed is **renting a berth at the settlement's inn**. Stand next to whoever keeps it and
+the price is on the button; it costs money, hands you a key, notes the day in your ledger, and the
+keeper remembers you. Renting the same room twice is refused, and so is renting one you cannot
+afford. A new world starts you with a small purse so the first thing money is for is reachable;
+quest rewards are the real income and arrive with the quest layer.
+
+Item names and the currency are **theme-bearing** — a sci-fi colony pays in credits and issues
+berth chits, not coins and room keys — and a theme that ships without naming them fails a
+startup assertion rather than rendering raw tags at a player.
 
 ## Art
 
@@ -61,6 +101,7 @@ Two tiers, resolved at runtime with graceful degradation:
 packages/pixelforge/
 ├── src/                  # plain-JS modules, concatenated in filename order into client.js
 ├── docs/brief-schema.md  # the World Brief schema v1 spec (sealed; amendments inline)
+├── docs/player-state.md  # the S5 player block: wire contract, stamps, quarantine, ladder, gate
 ├── test-brief.mjs        # standalone validator/compiler/spatial regression harness
 ├── build/
 │   ├── build-art.mjs     # deterministic Tier-1 art generator (writes build/assets/, untracked)

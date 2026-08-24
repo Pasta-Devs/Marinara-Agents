@@ -6,9 +6,11 @@
 // isn't active the host falls back to standard mode and the surface runs
 // unbound — both are handled (verified trap #6).
 // World generation does NOT happen here (spec §5, amended): the wizard only
-// stamps `generate: true` into the experience config; the surface picks it up
-// after launch (PF.save.maybeGenerateBrief) so the whole 90s window runs
-// behind a playable world instead of a torn-down setup UI.
+// stamps the player's `generate` answer into the experience config; the surface
+// picks it up after launch (PF.save.maybeGenerateBrief) so the whole 90s window
+// runs behind a loading gate instead of a torn-down setup UI. Answering NO is a
+// supported outcome, not a failure — the chat plays the themed default world
+// immediately, with no gate and no generation call ever made for it.
 
 PF.mountSetup = (el, props) => {
   // The host delivers a FRESH props object on every render, and its onCancel
@@ -102,6 +104,21 @@ PF.mountSetup = (el, props) => {
     ["sfw", "SFW"],
     ["nsfw", "NSFW"],
   ]);
+  // DECLINING IS A CHOICE AGAIN. The wizard stamped `generate: true`
+  // unconditionally, which quietly retired the skip affordance: the themed-default
+  // immediate-play path — no loading gate, no starting purse, walk in and play —
+  // became unreachable for every new chat, even though the save path never stopped
+  // supporting it (`briefExpected` is exactly this flag, and the `{skipped:true}`
+  // marker is a second, post-hoc route it also still reads). Checked by default,
+  // because a generated world IS the package; unchecked is somebody who wants the
+  // village they already know, or does not want to spend the call.
+  const generateIn = PF.el("input", { type: "checkbox" });
+  generateIn.checked = true;
+  const generateRow = PF.el(
+    "label",
+    { style: "display:flex;gap:8px;align-items:center;font:12px/1.5 inherit;cursor:pointer;margin-top:10px;" },
+    [generateIn, PF.el("span", { text: "Generate a unique world with your GM connection (one call)" })],
+  );
   const connSel = select([["", "Loading connections…"]]);
   const partyBox = PF.el("div", {
     style: "display:flex;flex-direction:column;gap:4px;max-height:130px;overflow:auto;" + S.input,
@@ -114,8 +131,21 @@ PF.mountSetup = (el, props) => {
   const launchBtn = PF.el("button", {
     type: "button",
     style: `${S.btn}background:var(--primary,#2f6b4f);color:var(--primary-foreground,#fff);border:none;`,
-    text: "Begin in Hearthvale",
   });
+  // The button names the world you are about to walk into, so it answers to the
+  // name field and the theme rather than to a literal. It shipped as the constant
+  // "Begin in Hearthvale" and only the RETRY path below ever rewrote it, so a
+  // sci-fi colony called Meridian Base offered to begin in a cozy village that was
+  // not in the game. One function, called at every site that can change the answer.
+  const syncLaunchLabel = () => {
+    const preset = THEME_PRESETS[themeSel.value] || THEME_PRESETS["cozy-village"];
+    launchBtn.textContent = `Begin in ${nameIn.value.trim() || preset.name}`;
+  };
+  syncLaunchLabel();
+  nameIn.addEventListener("input", syncLaunchLabel);
+  // Registered AFTER the defaults-swap listener above, so it reads the name that
+  // listener may have just re-skinned rather than the one it replaced.
+  themeSel.addEventListener("change", syncLaunchLabel);
   const cancelBtn = PF.el("button", {
     type: "button",
     style: `${S.btn}background:transparent;color:inherit;`,
@@ -136,6 +166,7 @@ PF.mountSetup = (el, props) => {
       PF.el("div", { style: "flex:1;" }, [field("World seed", seedIn)]),
     ]),
     field("Setting", settingIn),
+    generateRow,
     PF.el("div", { style: S.row }, [
       PF.el("div", { style: "flex:1;" }, [field("Tone", toneSel)]),
       PF.el("div", { style: "flex:1;" }, [field("Difficulty", diffSel)]),
@@ -222,40 +253,34 @@ PF.mountSetup = (el, props) => {
       enableAgents: true,
       spatialMapInstructions: preset.spatial,
       combatStyle: "classic",
-      experienceConfig: { seed, theme: themeSel.value, generate: true },
+      experienceConfig: { seed, theme: themeSel.value, generate: generateIn.checked },
     };
     launchBtn.disabled = true;
     cancelBtn.disabled = true; // mirror the host's mid-launch freeze
     launchBtn.textContent = "Setting up…";
     try {
-      const chatId = await el._pfProps.onLaunch(setupConfig, nameIn.value.trim() || preset.name, undefined, {
+      await el._pfProps.onLaunch(setupConfig, nameIn.value.trim() || preset.name, undefined, {
         gmConnectionId,
       });
-      if (typeof chatId === "string") {
-        // Seed the world state so the first surface load is deterministic. The
-        // default themed world only — generation runs surface-side after
-        // launch and rebuilds the world when the brief lands.
-        const world = PF.world.build(seed, themeSel.value);
-        const sim = new PF.Sim(world);
-        const snap = PF.save.snapshot({ sim, chatId });
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try {
-            await PF.api.patchMetadata(chatId, { pixelforge: snap }, false);
-            break;
-          } catch (err) {
-            if (attempt === 2) console.warn("[pixelforge] world seeding failed; restore will use the config seed", err);
-            else await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
-          }
-        }
-      }
+      // NO WORLD IS SEEDED HERE ANY MORE (plan §Q3b, maintainer ruling #7). The
+      // wizard used to write a default themed snapshot into chat metadata so the
+      // first surface load had something to show while generation ran behind a
+      // toast — and that snapshot WAS the throwaway world the ruling abolished:
+      // the first thing a brand-new chat stored was a save for a world nobody
+      // meant to keep. The surface now holds a loading gate until the brief seals,
+      // so there is nothing to show and nothing to seed, and determinism is
+      // unaffected because simFromSaved re-derives the seed and theme from
+      // `experienceConfig` (PF.save._configSeed/_configTheme) exactly as this
+      // snapshot did. The `generate` flag above is the whole handoff — and when it
+      // is false there is nothing to hand off: no gate arms, no call is made, and
+      // the themed default world is what the player walks into.
     } catch (err) {
       errEl.textContent =
         err && err.message ? String(err.message) : "Launch failed — check the connection and try again.";
       errEl.style.display = "block";
       launchBtn.disabled = false;
       cancelBtn.disabled = false;
-      cancelBtn.textContent = "Cancel";
-      launchBtn.textContent = `Begin in ${nameIn.value.trim() || preset.name}`;
+      syncLaunchLabel();
     }
   });
 };

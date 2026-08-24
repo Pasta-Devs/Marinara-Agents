@@ -120,7 +120,7 @@
         "schemaVersion": 1,
         "id": "beholder",
         "name": "Beholder",
-        "version": "1.3.4",
+        "version": "1.3.6",
         "description": "Tracks each roleplay character's clothing by body slot, held items, wounds, missing parts, bare slots, and species, then keeps that physical state available to the next response, and shows it on a paper doll you can open from the roleplay toolbar. Pick the prompt template for your model: one prompt for a SOTA model (GPT-5.5+, Opus 4.8+, Kimi K3+), or five passes for the local Beholder model (GetBeholder/Beholder-GGUF) — free, offline, and private. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
         "engine": {
           "min": "2.4.4",
@@ -147,8 +147,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "85341ac924244d1dea44d773644a827816b300ea9c1c28104397fa3a154ba30a",
-            "bytes": 261544
+            "sha256": "710ce38158e9621fcd3a234606c26111a1133afa9a1e7f1b907c4c921677d8ad",
+            "bytes": 263789
           }
         ],
         "permissions": [
@@ -163,9 +163,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/beholder.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/beholder-1.3.4.zip",
-        "sha256": "cb195ee742994a8f3e270aec0a15daf3374db00a13933330bd02b2662e709cb4",
-        "bytes": 273490
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/beholder-1.3.6.zip",
+        "sha256": "1f434c890bb8c35097bc4c1587f06a0a22daae45cbcf2d5922999f633f5202d5",
+        "bytes": 275735
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Engine/blob/staging/docs/agents/built-in-agents.md#beholder"
     },
@@ -638,6 +638,84 @@
     },
     {
       "manifest": {
+        "schemaVersion": 2,
+        "capabilityApi": {
+          "major": 1,
+          "minor": 9
+        },
+        "builtAgainst": {
+          "engineVersion": "2.4.4",
+          "engineCommit": "50e52028ac0ab4e64ce12e5f629510cb27dffa92"
+        },
+        "id": "gacha-forge",
+        "name": "Gacha Forge",
+        "version": "1.1.0",
+        "description": "A configurable gacha game mode. Forge a world from your lorebooks, pull on banners, collect the cast the model writes for you, then take them into battle: build a formation, farm materials and level them up. Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge.",
+        "engine": {
+          "min": "2.4.4",
+          "maxExclusive": "4.0.0"
+        },
+        "kind": [
+          "agent"
+        ],
+        "entrypoints": {
+          "agents": "agents.json",
+          "client": "client.js",
+          "server": "server.mjs"
+        },
+        "contributions": {
+          "slots": [
+            "home-browser-tab"
+          ],
+          "homeBrowserTab": {
+            "label": "Gacha Forge",
+            "ariaLabel": "Open Gacha Forge",
+            "iconPaths": [
+              "gacha-forge-icon.png"
+            ]
+          }
+        },
+        "permissions": [
+          "network",
+          "routes",
+          "storage",
+          "ui"
+        ],
+        "restartRequired": true,
+        "files": [
+          {
+            "path": "agents.json",
+            "sha256": "3bed9fd3b3ef0538e3f707e83d2653f35aa97b8021b7303bb0124019c679bfe5",
+            "bytes": 739
+          },
+          {
+            "path": "client.js",
+            "sha256": "9606611d46597ee9ea4fe40e34d290bcaa9a1205b9aa4a90ca3e9e4c29aeb7e0",
+            "bytes": 495258
+          },
+          {
+            "path": "gacha-forge-icon.png",
+            "sha256": "1352f478b6b7ae2e9eeb127b6e7b31183e0a2a8ca892999c2f0404aafbdbead4",
+            "bytes": 5352
+          },
+          {
+            "path": "server.mjs",
+            "sha256": "cbde9569cb9a7b4f42bf1b8d33ab47fc78f6b6ded721b0239268a2e8e3f66273",
+            "bytes": 178626
+          }
+        ]
+      },
+      "category": "misc",
+      "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/gacha-forge.png",
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/gacha-forge-1.1.0.zip",
+        "sha256": "3dafe1e5f5cb37314040bbd3e29eca9e4461884cd6e29b32b056ffe3900edf77",
+        "bytes": 682233
+      },
+      "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents/blob/main/packages/gacha-forge/README.md"
+    },
+    {
+      "manifest": {
         "schemaVersion": 1,
         "id": "haptic",
         "name": "Haptic Feedback",
@@ -1016,7 +1094,7 @@
         },
         "id": "memory-nag",
         "name": "Memory Nag",
-        "version": "1.0.10",
+        "version": "1.0.14",
         "description": "Keeps a short per-chat vault of roleplay memories and recalls only the unresolved details that matter to the current turn. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode. Once active, configure it in its standalone Memory Nag section.",
         "engine": {
           "min": "2.4.4",
@@ -1045,13 +1123,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "17e4988d470aec0d143499bac84b8ef68ad887482077d2d2cb114d08c720af4f",
-            "bytes": 21239
+            "sha256": "4d8b4b560e285abafbdc519be72e7887e2305fa766d0a3f04b5026ecc4fded9b",
+            "bytes": 21157
           },
           {
             "path": "client.js",
-            "sha256": "dee943e8eedddb103cd4356cb851a6c6dfa53a1063b5872375e7dc9b88c222ca",
-            "bytes": 362972
+            "sha256": "802d3531eb12201316da53e6d095467a7881e7be41c6dbc2147f8928a920580d",
+            "bytes": 371062
           }
         ],
         "permissions": [
@@ -1067,9 +1145,9 @@
       "category": "tracker",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/memory-nag.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/memory-nag-1.0.10.zip",
-        "sha256": "f4aa945ce7579382cee562874ca9456f88f3dff72197129b72d05970f2e1c19c",
-        "bytes": 387275
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/memory-nag-1.0.14.zip",
+        "sha256": "d54f3ff35a82e61a455916b774e14e693ab80d3c2af95746d8d6283e0abb2785",
+        "bytes": 395283
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#memory-nag"
     },

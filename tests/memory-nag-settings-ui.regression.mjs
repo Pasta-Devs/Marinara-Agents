@@ -39,14 +39,37 @@ assert.match(
 );
 assert.match(
   styles,
-  /\.mn-modal \{[\s\S]*width: min\(48rem, 100%\);[\s\S]*background: var\(--marinara-chat-chrome-panel-bg\);/u,
+  /\.mn-modal \{[\s\S]*width: min\(48rem, 100%\);[\s\S]*background: var\(--marinara-chat-chrome-panel-bg\);[\s\S]*box-shadow: 0 25px 50px -12px/u,
   "Memory Nag Vault must match the standard Assembled Prompt window width and surface",
 );
 assert.match(
   vault,
-  /<Brain className="mn-icon"[\s\S]*className="mari-chrome-control mari-chrome-control--small mn-modal-close"/u,
-  "Memory Nag Vault header must retain the standard close control",
+  /<MessageSquareQuote className="mn-icon"[\s\S]*className="mari-chrome-control mari-chrome-control--small mn-modal-close"/u,
+  "Memory Nag Vault header must use its dialogue icon and retain the standard close control",
 );
-assert.match(vault, /className="mn-overlay" role="presentation" onClick=\{onClose\}/u);
+assert.match(vault, /className="mn-overlay mari-modal" role="presentation"/u);
+assert.match(vault, /mari-modal-panel marinara-chat-popover/u);
+assert.match(vault, /marinara-chat-popover__header/u);
+assert.match(vault, /marinara-chat-popover__scroll/u);
+assert.doesNotMatch(
+  vault,
+  /className="mn-overlay mari-modal" role="presentation" onClick=\{onClose\}/u,
+  "Memory Nag Vault must close only from an explicit close action",
+);
+assert.match(
+  vault,
+  /className="mn-overlay mari-modal" role="presentation" data-chat-floating-panel/u,
+  "Vault interactions must be exempt from Chat Settings outside-click dismissal",
+);
+assert.equal(
+  (vault.match(/data-chat-floating-panel/gu) ?? []).length,
+  2,
+  "the Vault and its expanded editor must both stay inside Chat Settings' floating-panel boundary",
+);
+assert.doesNotMatch(
+  vault,
+  /className="mn-overlay mari-modal" role="presentation" data-chat-floating-panel onClick=\{onClose\}/u,
+  "the Vault backdrop must not replace its explicit close control",
+);
 
 process.stdout.write("Memory Nag settings UI contract passed\n");

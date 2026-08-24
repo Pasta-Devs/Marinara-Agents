@@ -555,7 +555,13 @@ PF.world = (() => {
       x: 5,
       y: 4,
       wander: { x0: 2, y0: 4, x1: 8, y1: 9 },
+      // The legacy world's lodging, marked the same way the compiler marks the
+      // gathering (see compile()). The legacy layout has no schedules, so the
+      // keeper is named here rather than derived: it is the same three-zone
+      // village it has always been and Mira has always kept the inn.
+      lodging: "inn",
     });
+    n.lodging = true;
     f.npcs.push({
       id: "fen",
       name: "Fen",
@@ -576,6 +582,12 @@ PF.world = (() => {
       startZone: "village",
       // The exterior binds to the campaign's starting World Maps location once known.
       bindings: {}, // spatialLocationId → zoneId
+      // The legacy world mints nobody — its three neighbours are written out by
+      // hand above. The stamp is still emitted (never absent, so the S5 read
+      // never has to distinguish "no stamp" from "stamp zero") and moves only
+      // when MINT_V does.
+      minted: [],
+      mintStamp: mintStampOf([]),
     };
   }
 
@@ -704,6 +716,22 @@ PF.world = (() => {
     healer: ["herbalist"],
     scholar: ["copyist"],
   };
+  // The mint's own version, folded into every mintStamp. Bump it when a change
+  // here would hand the SAME seed and the SAME brief a different roster — a new
+  // name book, a changed household size distribution, a reordered kind table.
+  // The player block's world stamp (S5 §Q3a) is what turns that into a visible
+  // severance instead of a silent one: relationship rows keyed by "Maud Thatch"
+  // mean nothing once "Maud Thatch" is a different person or nobody at all.
+  const MINT_V = 1;
+  /** Stamp the residents the COMPILER minted, in mint order. Names + kinds +
+   *  households only: tints and wander flags are cosmetic and a change to them
+   *  must not sever a save. Zero save bytes — the stamp is derived on every
+   *  build and only its comparison is persisted. */
+  function mintStampOf(minted) {
+    let text = `mint/v${MINT_V}`;
+    for (const member of minted) text += `|${member.name}\u0000${member.kind}\u0000${member.household}`;
+    return PF.hashStr(text);
+  }
 
   const SPECIAL_BUILDING_KINDS = {
     leader: "hall",
@@ -1145,6 +1173,20 @@ PF.world = (() => {
       // Nothing solid on `floor` itself: it is the row the rooms above open onto.
       fillRect(z, 5, floor + 2, 4, 3, "ground", "rug", false);
       fillRect(z, 3, floor + 1, 5, 1, "object", "counter", true);
+      // THE SERVING ROW — recorded, not merely left clear, exactly like the
+      // dwelling's hearth: whoever KEEPS this room has to be sent to a spot
+      // inside it, and the only thing that knows where the counter ended up is
+      // the furnisher that painted it. The keeper's side is the row ABOVE the
+      // counter run: the door is in the south wall and the rug and the tables
+      // are south of the counter, so north of it is the side a patron does not
+      // walk onto. Same arithmetic as a shop's work post (WORK_POSTS) — the
+      // counter's own span, one row back from it — because it is the same fact.
+      //
+      // Walkable by contract: `floor` is the row the guest rooms open onto (see
+      // above), and nothing in this furnisher or the sleeping layout may lay a
+      // solid tile on it. Runtime-only like `hearth`: re-baked on every compile,
+      // never serialized, zero save fields.
+      z.post = { x0: 3, y0: floor, x1: 7, y1: floor };
       put(z, w - 6, floor + 2, "object", "table", true);
       put(z, w - 4, floor + 4, "object", "table", true);
       z.lights.push({ x: 4, y: floor + 1 }, { x: w - 6, y: floor + 2 });
@@ -1175,6 +1217,20 @@ PF.world = (() => {
         put(z, candleX, floor + 1, "object", "wallStone", true);
         z.lights.push({ x: candleX, y: floor + 1 });
       }
+      // THE CHANCEL, recorded for the same reason the inn records its serving
+      // row: a keeper the brief homed at the settlement root needs somewhere
+      // inside their own building to stand, and only the furnisher knows where
+      // the altar went. The row BEHIND the altar, spanning it — the head of the
+      // aisle the player walks up, facing back down it.
+      //
+      // Not the altar row itself, and not the aisle: `altar` and both candle
+      // plinths are solid, so a station laid across them would hold no standable
+      // tile at all and the placer's ring scan would walk the keeper off it. The
+      // row above is clear — nothing here paints on `floor`, the benches start at
+      // `floor + 4` — and it is reached around either end of the altar run, which
+      // is why standing there does not strand anybody. Runtime-only, like the
+      // hearth and the inn's counter.
+      z.post = { x0: aisleX - 2, y0: floor, x1: aisleX + 2, y1: floor };
       for (let row = floor + 4; row < h - 2; row += 2) {
         fillRect(z, 3, row, aisleX - 3, 1, "object", "counter", true);
         fillRect(z, aisleX + 1, row, aisleX - 3, 1, "object", "counter", true);
@@ -1699,10 +1755,19 @@ PF.world = (() => {
     });
   }
 
-  /** Where a live-work owner WORKS inside their own building, keyed by special.
-   *  Only a shop has a station to be manned — the row between the stock and the
-   *  counter — so it is the only entry: a farmer works the land and comes back
-   *  in, and everyone else keeps the door apron they have always used. */
+  /** Where a live-work owner WORKS inside a building the COMPILER minted, keyed
+   *  by special. Only a shop has a station to be manned — the row between the
+   *  stock and the counter — so it is the only entry: a farmer works the land and
+   *  comes back in.
+   *
+   *  ONE OF TWO WAYS a station reaches an owner, and the split is by who built
+   *  the room. A minted building has no brief place behind it, so its station is
+   *  looked up here by `special`. A building the brief NAMED is furnished by
+   *  FURNISH, and its furnisher records its own station on the zone (`z.post` —
+   *  the inn's serving row, the sanctuary's chancel) for the places pass to hand
+   *  to the same `interior` handle. Both ends feed the one gate in the cast loop,
+   *  and a kind with a station on neither path keeps the door apron it has always
+   *  used. */
   const WORK_POSTS = {
     shop: (w, h) => ({ x0: 3, y0: h - 4, x1: w - 5, y1: h - 4 }),
   };
@@ -2537,6 +2602,24 @@ PF.world = (() => {
       });
       zone.flavor = place.flavor;
       zones[id] = zone;
+      // WHERE THE OWNER OF THIS ROOM WORKS. A place-bound facade never goes
+      // through the minted-building loop below (it has no `special` and no
+      // `households`), so its `interior` handle was never set at all — and the
+      // cast loop's promotion gates on `owned.interior?.post`. An innkeeper the
+      // brief homed at the SETTLEMENT rather than at the inn therefore stood on
+      // the door apron of the building they run for the whole of daylight, with
+      // the lit common room and the counter behind them; a sanctuary's keeper did
+      // the same on the church step, and the keeper schedule tier holds them
+      // there dawn to dusk. Both default briefs home their host at the root, so
+      // this was every default world.
+      //
+      // The station comes off the ZONE because the furnisher is what knows it.
+      // Same handle shape the minted loop builds, so the promotion needs no
+      // second branch — and kinds whose furnisher laid no station leave `post`
+      // undefined, which the promotion's optional chain reads as "keep the door
+      // apron": a hall or a workshop has no counter to be manned and gains
+      // nothing by pretending to.
+      facade.interior = { zoneId: id, post: zone.post };
       // A floor is a zone like any other from here on — it is only ever reached
       // through its stairs, and it carries its own mapExport = false.
       for (const floor of zone.floors) zones[floor.id] = floor;
@@ -2934,11 +3017,18 @@ PF.world = (() => {
         const ownBed = bedFor.get(member);
         if (zone === v && owned) {
           if (owned.owner === member && owned.interior?.post && zones[owned.interior.zoneId]) {
-            // A shopkeeper works INSIDE the shop now that there is a shop to be
-            // inside. An owner loitering on the apron with a stocked room behind
-            // them is the same "nobody is where they are scheduled to be" gap the
-            // dwellings had. Scoped to the OWNER: the shop is their household's
-            // home too now, and a smith's child does not man the counter.
+            // AN OWNER WORKS INSIDE THE BUILDING THEY RUN, now that there is a
+            // room to be inside it: the shopkeeper between their stock and their
+            // counter, the innkeeper on the serving row, the keeper at the
+            // chancel. An owner loitering on the apron with a stocked or a lit
+            // room behind them is the same "nobody is where they are scheduled to
+            // be" gap the dwellings had. Scoped to the OWNER: a live-work
+            // building is their household's home too, and a smith's child does
+            // not man the counter.
+            //
+            // The station itself comes from whoever built the room — WORK_POSTS
+            // for a minted building, the furnisher's own `z.post` for one the
+            // brief named — and this gate cares only that there is one.
             zone = zones[owned.interior.zoneId];
             wander = owned.interior.post;
           } else {
@@ -3055,13 +3145,23 @@ PF.world = (() => {
         // already gets, so a named worker stands where the owner would rather
         // than in some third place invented for them.
         //
-        // There is deliberately no "behind the counter" branch. A workplace can
-        // only ever name a zone the BRIEF declared (`workplace` resolves against
-        // brief._ids.zones, so always `z*`), and a work post belongs to a
-        // COMPILER-MINTED building (`s*`/`h*`, keyed by `special` in WORK_POSTS).
-        // The two id spaces are disjoint by construction — see the harness case
-        // that pins it — so a counter lookup here could never match, and one was
-        // removed rather than left reading as though it might.
+        // There is deliberately no "behind the counter" branch, and the reason is
+        // no longer that a lookup could not match. WORK_POSTS is still out of
+        // reach from here: a workplace can only ever name a zone the BRIEF
+        // declared (`workplace` resolves against brief._ids.zones, so always
+        // `z*`), and that table is keyed by `special` on a COMPILER-MINTED
+        // building (`s*`/`h*`). Those two id spaces are disjoint by construction
+        // — see the harness case that pins it.
+        //
+        // What is new is that a brief-declared room CAN now carry a station: the
+        // places pass hands an inn's serving row and a sanctuary's chancel to
+        // that building's OWNER (see `facade.interior`). It stays the owner's.
+        // `workplace` is the one binding that puts SEVERAL people in one building
+        // — an acolyte, a market's fourth seller, a shop assistant — and a
+        // station is a single row five tiles long, so sending them all to it
+        // would stack them or have the occupancy scan push them straight back
+        // off. The room's walkable middle is the honest box for anybody the brief
+        // merely rostered here, and the same box the owner would get.
         wander = workZone === v ? plazaBox() : fullZoneBox(workZone);
         // Always dispersed: a workplace is a SHARED box by definition — it exists
         // precisely for the cases with more than one person in it — and two sprites
@@ -3102,6 +3202,54 @@ PF.world = (() => {
       });
     });
 
+    // ── LODGING (S3/P1): who rents a bed, and where ──────────────────────────
+    // The settlement's gathering is the one building that OFFERS beds rather than
+    // keeping them for its own people (interiorRoom carves `beds` and `homeBeds`
+    // from different bands), so it is the one place a player with no home of their
+    // own can rent a berth. Marked here rather than resolved at the call site
+    // because "which zone is the inn" is a fact about the compile, and the keeper
+    // is stamped on the NPC so the offer follows the PERSON: an innkeeper standing
+    // in the square at noon can still let you a room.
+    //
+    // Runtime-only, exactly like the schedule handles beside it — re-derived on
+    // every compile, costing zero save fields. What the RENTAL persists is the
+    // zone id, and only through PF.player.setHome, which refuses a minted `h{n}`.
+    if (gatheringZoneId && zones[gatheringZoneId]) {
+      // WHO LETS THE ROOMS: the cast member the specials pass bound to the
+      // gathering's building — the `host` kind, the innkeeper — and only if the
+      // brief named nobody, whoever the brief homed there. Deliberately NOT the
+      // `_sched.keeper` tier: that tier is PLACE_BOUND_SPECIALS, which is the
+      // sanctuary alone, so a gathering's owner never carries it and reading it
+      // here would leave every inn in the game with nobody behind the counter.
+      const facade = buildings.find((b) => b.boundPlace === gatheringPlace);
+      const host = facade?.owner ?? headOfBuilding.get(gatheringZoneId) ?? null;
+      // BOTH MARKS OR NEITHER. A brief can name a gathering and home nobody in it
+      // (no `host` kind, nobody in that building), and the zone mark used to go up
+      // unconditionally — a room the world calls lodging with nobody behind the
+      // counter, which is a promise the offer can never keep. The lodging fact is
+      // the KEEPER's, so the room is only lodging when somebody is letting it.
+      //
+      // The zone mark waits for the keeper's rather than being paired with it by
+      // inspection. Resolving a host is not the same fact as STAMPING one: the
+      // resolution hands back a roster entry and the stamp goes on by NAME, and
+      // "every roster entry is placed as an NPC under its own name" is true of
+      // this compiler and is not something this block can see. Now the offer's
+      // room path reads the zone mark to find a keeper (59-economy
+      // `_keeperInRoom`), the gap between the two would be exactly the counter
+      // with nobody behind it, so the mark is a CONSEQUENCE of the stamp landing.
+      if (host) {
+        let stamped = false;
+        for (const zone of Object.values(zones)) {
+          for (const npc of zone.npcs) {
+            if (npc.name !== host.name) continue;
+            npc.lodging = gatheringZoneId;
+            stamped = true;
+          }
+        }
+        if (stamped) zones[gatheringZoneId].lodging = true;
+      }
+    }
+
     return {
       seed,
       theme: activeTheme,
@@ -3110,6 +3258,13 @@ PF.world = (() => {
       zones,
       startZone: "z1",
       bindings: {},
+      // Derived, never saved (S5 §Q3a). `minted` names the residents the brief
+      // did NOT. The severance itself keys off the complement of the brief's
+      // cast rather than this list — a resident the OLD mint produced is in
+      // neither — but the list is what a brief-less world falls back to, and it
+      // is the honest way to say who the compiler invented.
+      minted: minted.map((member) => member.name),
+      mintStamp: mintStampOf(minted),
     };
   }
 

@@ -25,6 +25,10 @@ export type CapabilityProps = {
   chatMode?: "conversation" | "roleplay" | "game" | null;
   mobileCompact?: boolean;
   toolbarButtonClass?: string;
+  onRerunTracker?: () => void;
+  trackerRetryBusy?: boolean;
+  lockMode?: boolean;
+  onToggleLockMode?: () => void;
   detached?: boolean;
   connections?: MemoryNagConnection[];
   onDirtyChange?: (dirty: boolean) => void;

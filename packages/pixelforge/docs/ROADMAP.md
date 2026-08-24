@@ -4,6 +4,10 @@
 
 **Updated 2026-08-22.** A progress pass, not a re-cut: the 0.10 shipped-history row now records what has landed on `feat/pixelforge-room-zoning` (the street grid and the population mint, size-follows-program interiors, the hearth) and what remains; W3, L1, L3, E2, E6 and W5 carry entry-level notes where the work moved them; Open Questions gains two. The structure, the groups and the three rulings are untouched.
 
+**Updated 2026-08-24.** Three items added, all from a maintainer playtest of the 0.11 build: **S6** — the package's parallel setup dialog retires into Game Mode's own; **L6** — presence follows the narration, so the sprite goes where the story says it went; **W7** — venue variety, district naming and being able to *find* the inn. Nothing else moved: the groups, the rulings and the sequencing are as they were.
+
+**Updated 2026-08-24, second playtest.** Three more items and one amendment, all from the same day's second session: **S7** — the engine generates HUD widgets this surface never draws, and one of them is a second purse; **P7** — the GM narrates transactions that no ledger ever sees; **E7** — generic NPC dialogue comes off the narration channel and becomes an `Ask` tree. **L6 is amended** with the maintainer's refined ruling on when the GM may move the player at all, which turns location into the pacing mechanism rather than a thing the narrator routes around. S7, P7 and E7 all describe the same seam from three sides — the engine and the package each running half a game — so read them together.
+
 **How this document is organized, and why.** Items are grouped by **which layer of the package they extend**, not by when anyone thought of them. Discovery order tells you when an idea arrived; a contributor deciding what to build next needs to know what a thing touches, what it depends on, and what it unlocks. The five groups mirror the package's real seams: **S** — substrate (channels and data everything else hangs off), **L** — the living settlement (the world moving without the player), **P** — the player's stake (ownership, progression, and the things the player does), **W** — the wider world (exploration and settlement variety), **E** — the cast (people as content). After the groups: sequencing, the will-not-build list, and open questions.
 
 ---
@@ -67,7 +71,7 @@ The gaps the roadmap exists to close, in order of how much they matter for *this
 
 ## S — Substrate (load-bearing)
 
-These five gate more of the roadmap than everything else combined. Marked **LOAD-BEARING** with what each gates.
+These five gate more of the roadmap than everything else combined. Marked **LOAD-BEARING** with what each gates. **S6 and S7 are deliberately *not* among the five** — neither gates anything. They live here because both are about the seam between the package and its host rather than about the game: S6 is the channel every other item's configuration arrives through, and S7 is a channel the host is already using that this surface has never answered.
 
 ### S1. The GM write-back channel — LOAD-BEARING
 
@@ -132,6 +136,30 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 
 **Depends on:** nothing technically; it is a decision, not a dependency. Sequence it **with or before its first consumer** — which under the suggested plan is S3 in 0.11. **Do not let the first consumer define the schema by accident.**
 
+### S6. The setup flow retires into Game Mode's own *(new — maintainer playtest, 2026-08-24)*
+
+**What:** Pixelforge should not carry a parallel setup. `80-setup.js` replaces the classic wizard body wholesale and has to emit the *entire* required `gameSetupConfig` — genre, setting, tone, difficulty, gmMode, party, plus the World-Maps and combat fields — because the host refuses a launch without them. So every question Game Mode already asks gets asked a second time, on a second form, against a second set of defaults that drift from the engine's. The direction is the other way round: **a toggle on the normal Game Mode setup** that says this chat is played as Pixelforge, plus **an inline seed field** on that same form — copy, paste, reroll, hand it to somebody else — and the package's own dialog goes away. What the package genuinely needs is three fields wide (theme, seed, generate-or-decline) and belongs beside the toggle.
+
+**Pillar:** none — this is the front door, not a gap in the game. **Secondary tag:** legibility. **Unlocks:** one obvious home for every future package setting instead of a second wizard that grows; a seed a player can share and get the same town back; and the end of the defaults drift, which is where the stale "Begin in Hearthvale" label over a sci-fi colony came from. **Depends on:** an engine-side seam — Game Mode's setup has to be able to host a package's own fields. Same class of conversation as S1's channel, and worth opening the same way: early, regardless of ship order. **Down payment shipped in 0.11:** the generate-or-decline toggle, the first of those three fields — unchecked boots the themed default world immediately, with no loading gate and no generation call ever made for that chat.
+
+### S7. The engine's HUD widgets — integrate or suppress *(new — maintainer playtest 2, 2026-08-24)*
+
+**What:** Game Mode's setup generates starting HUD widgets — stat blocks, gauges, counters, lists — writes them to `gameWidgetState` at chat creation, keeps feeding them to the GM's prompt, and lets the GM mutate them mid-turn with `[widget:]` tags. The engine's own HUD draws them on rails either side of the screen. Pixelforge does not draw them either, and they are not on the surface props — a package that wanted them would read `chatMeta.gameWidgetState` itself.
+
+**The RAILS are gated; the SETUP SURFACE is not, and that is the half the maintainer actually met.** Read in `packages/client/src/components/game/GameSurface.tsx` on Engine `staging`. All three sites that draw widgets *during play* carry `!experienceOwnsGame` — the desktop rails, the mobile widget tray, the compact choice-stage rail — which is the right default and is why nothing appears on screen beside the package's own HUD. But `GameWidgetSessionPrepModal` is gated on nothing but its own `open` state at every one of its three mounts. The `mode="initial"` one — the dialog titled **"Review Starting Widgets"** — sits inside the pre-game branch, whose entry condition carries no `experienceOwnsGame` term and which `return`s before *both* experience mounts, so an experience-owned game never reaches the code that would have suppressed it; `handleStartGameRequest` opens it on `normalizedWidgets.length > 0` alone. The two `mode="next"` mounts — one inside that same branch, one at the top level of the main return — are ungated the same way, on `sessionStatus === "concluded" && hudWidgets.length > 0`.
+
+**Which is what explains the playtest.** The maintainer did not find these widgets by reading metadata: they clicked through "Review Starting Widgets" on the way into the game and approved a set of widgets that nothing on this surface will ever draw. The rails being correctly gated is exactly what makes that modal misleading — the one place the widgets are ever shown to the player is the one place that cannot tell them the widgets are about to disappear.
+
+**So a whole setup step runs, persists, is approved by hand, and then draws nothing.** From the maintainer's own chat — generated at creation, shown once in that modal and never drawn since: a `counter` labelled **"Coppers"**, a `stat_block` labelled **"Village Bonds"** holding a number per named NPC, an **"Energy"** gauge, and a **"Curiosities"** list. Two of those four are not decoration — they are *this roadmap's items already implemented by the other half of the machine*. Coppers is a second purse beside S3's. Village Bonds is a second relationship ledger beside P2's. The GM has been playing a game with them the whole time, because they are in its prompt.
+
+**Pillar:** none — it is a seam, not a gap. **Secondary tag:** legibility. **This is a maintainer decision, and the options do not compose.** In rough order of cost:
+
+- **Suppress at setup.** The package's setup step declines widget generation, so the chat never carries any and the GM is never told about a currency the world does not have. Cheapest, most honest, and the one that costs a feature: a player who *wants* a gauge for something Pixelforge has no opinion about loses it.
+- **Render them, honestly, as the engine's.** The package draws `chatMeta.gameWidgetState` in its own chrome — a panel, a collapsed drawer — visibly separate from the purse and the clock. No mapping, no reconciliation, two systems on one screen and the player can see which is which. Costs the least design and the most screen.
+- **Map the money-like ones onto package state.** Superficially the best and structurally the worst: it makes two writers for one number. The GM moves the widget through `[widget:]`, the berth button moves the purse through `award()`, and every rewind, swipe and branch has to agree about which one won. **Do not pick this without answering P7 first** — a mapping is a bridge, and P7 is the bridge.
+
+**Depends on:** nothing to suppress — and suppressing is the only one of the three that also closes the prep modal, since a chat carrying no widgets never opens it. Rendering wants no engine change (the metadata is already on the props) but leaves the modal promising rails that never arrive, so it wants an engine-side gate on those three mounts as a companion. Mapping wants P7's decision and probably S1's channel. **Companion:** whichever is chosen, say it in the package README, because the surface currently makes a promise about "your own HUD" that the setup step contradicts to the player's face on the way in.
+
 ---
 
 ## L — The living settlement
@@ -167,6 +195,20 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 **What:** rate-limited, deterministic NPC-initiated contact: a bubble ("Alder waves you over"); answering opens dialogue with a prefix saying *they* initiated and why (persona + situation + disposition).
 
 **Pillar:** world agency. **Unlocks:** personas pay off without the player grinding every door; S1 gains a queueable "have X approach the player" op — the single most useful GM request available; recruits (E4) get their approach vector; quest-givers (P4) can flag you down about the job. **Depends on:** nothing hard; better with P2 and L1.
+
+### L6. Presence follows the narration *(new — maintainer playtest, 2026-08-24)*
+
+**What:** when the GM narrates the player into a place — and any named, present NPC along with them — the sim should go there. Today the story moves and the sprite does not: the narrator walks you into the cantina and you are still standing in the square, which reads as a world that is not listening. Two shapes, not exclusive: **teleport-on-narration**, the cheap one, landing the party at the named zone's spawn; and **cutscene presentation**, the honest one, where the existing beat machinery covers the move so the player watches a transition instead of being cut mid-step.
+
+**The beachhead exists and its limits are the item.** `50-spatial.js` already follows narrated drift — when the host commits a new party location, the package teleports to the zone bound to it. What it cannot do is the rest: the binding only covers zones the maps export registered, an interior the GM names in *prose* that the host never commits is invisible to it, and **NPCs never move at all** — a character the narrator puts in the room with you is still asleep in their own house, which is the half that breaks a scene fastest.
+
+**Pillar:** Consequence. **Secondary tags:** world-aliveness, world coherence. **Unlocks:** every scene the GM sets somewhere specific stops needing the player to walk there first; L5's hails get a place to happen; E4's follower has a mechanism to follow *with*. **Depends on:** nothing for the host-committed half beyond widening the bindings; the prose-only half is the GM→world direction and wants S1's channel — a `move:<npc>@<zone>` flag is the same vocabulary and the same validation problem. **Companion:** decide what a *contradicted* move does — the narrator puts you in the inn, you walk out, the next turn narrates you still there — because a teleport that fights the player is worse than one that never fires.
+
+**AMENDED — maintainer ruling, playtest 2, 2026-08-24. The item above asked how to move the player; the ruling is mostly that the GM should not.** Teleporting the PLAYER is **sparing** and reserved for the two cases where refusing to move them is the absurd answer: **forced travel** (arrested and marched to a cell, carried off) and **time-skips** (boarding a train and arriving). Both of those are the story taking the player somewhere against or beyond their own step, and **both must advance the world clock accordingly** — a journey that costs no hours is a cut, not a journey, and the package owns a clock precisely so it can be spent.
+
+**Otherwise the player WALKS, and that is a feature and not a shortfall.** Location-gating is the pacing mechanism: the narration and the questline continue when the player reaches the place, finds the person, or carries the thing. That is also the standing answer to "no lulls, nothing ever blocks progression" — the gap between turns is not dead air, it is the walk, and a world where the narrator delivers you to every scene has no reason for the map to exist. **What this changes about the item above:** teleport-on-narration stops being the cheap default and becomes the narrow case; the honest cutscene presentation is what the narrow case gets. **NPC presence is untouched by the ruling** — a character the narrator puts in the room is still the half that breaks a scene fastest, and moving *them* is not moving the player.
+
+**Adjacent, same session, and not settled: the clock runs while the GM writes.** Real seconds pass during generation and the package's clock converts them, so a slow turn ages the town by the length of the wait — the sim advancing on wall-clock time while the player is doing nothing but reading. The rule the module already keeps is the precedent: `30-sim.js` freezes the clock in dialogue because "a conversation should never burn the afternoon." Generation is the same argument with a different name. Evaluate pausing the sim clock while a turn is being written — the package already receives `isStreaming`, so the signal costs nothing; what wants deciding is whether NPC wander pauses with it (it does not in dialogue, deliberately: the world stays alive while you read) and what a paused clock does to `_clockAcc` across a chat switch.
 
 ---
 
@@ -215,6 +257,21 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 
 **Pillar:** ownership; Progression. **Companions:** (i) **the player home first** (P1) — motivation before infrastructure; (ii) **visible construction states** — scaffolding-for-N-days via an S1-style flag overlay; instant completion wastes the clock system; (iii) **source resources from `surround`** — woods→timber, rocky→stone, water→fish, barren→salvage — giving a sealed 0.4 field its first mechanical consumer, the §9 pattern working as designed; (iv) upgrades are **choices between compiled variants**, never tile placement (see Will Not Build). **Depends on:** S3; S1 for construction states; P3 for gathering.
 
+### P7. The GM–ledger bridge — narrated transactions that move nothing *(new — maintainer playtest 2, 2026-08-24)*
+
+**What:** the GM narrates the economy freely and none of it reaches the package. From the maintainer's own session: the narration had them hand over coins for a room and granted them a **"Brass Room Key"** in the engine's inventory; the engine's Coppers counter went down by two. Pixelforge's purse was still 40, its pouch still empty, and `player.home` still null — the ledger's only line was the one the starting purse wrote. The player paid for a room they do not have, in money they never had, and got a key the package cannot open a door with.
+
+**Three parallel economies, and the package has no writer on any of the other two.** Money: the engine's `Coppers` widget beside S3's purse. Items: the engine's `gameInventory` beside the pouch — which is doubly pointed, because the package's own item vocabulary calls a `lodging-key` a **"room key"** in this very theme, so the two systems independently invented the same object and neither can see the other's. Rapport: the engine's `Village Bonds` stat block beside P2's `rel`. See S7: those widgets are the same finding from the other side.
+
+**Until this is bridged, the mechanical verbs are the only real economy** — as of 0.11 that is the berth button and nothing else. Say it that way rather than pretending otherwise: what the GM says about money is flavour, and what the button does is the game.
+
+**Two directions, and they are not alternatives so much as a cheap one and a right one.**
+
+- **Constrain by prompt contract** — the GM is told, in the injected header or the system prompt, that it narrates around the package's ledger and never moves it: no prices, no handovers, no granted objects. Cheap, immediate, and only as reliable as any prompt instruction, which is to say it will hold most turns and fail on the interesting one.
+- **Give the GM real verbs** — `rentBerth`, `grant`, `take`, `award` exposed as GM-visible actions or tools, so "you hand over the coins" IS `award({ money: -12 })` and the receipt the player sees is the purse changing. This is S1's channel wearing an economy hat: the same untrusted-model-output validation problem, the same bounded vocabulary discipline, and the same hard external dependency. Note it inherits S5's rewind contract for free — every one of those verbs is already a shipped mutator that writes into the route-anchored snapshot, so a rewound turn rewinds the purchase, which is exactly what a narrated purchase should do.
+
+**Pillar:** Consequence; Things. **Unlocks:** the GM can finally pay a quest out (P4's rewards stop being prose), P2's disposition gets its precise bumps, and the "you already keep a berth here" refusal stops being the only sentence in the game that knows whether you paid. **Depends on:** S1's channel for the real version; nothing for the prompt contract. **Companion:** whichever way it goes, S7's decision has to agree with it — a widget the GM decrements and a purse the package decrements cannot both be the money.
+
 ---
 
 ## W — The wider world
@@ -256,6 +313,14 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 **What:** two small things folded together. (i) **Reuse:** the sealed brief + seed pair already *is* the reusable asset; what's missing is a browse/replay surface — UI, not world-gen. Low urgency. (ii) **The in-game map:** auto-drawn from compiled zones (the data exists), fog-of-war revealing zones/POIs as visited — exploration made legible as visible progress.
 
 **Pillar:** the unknown (legibility). **Depends on:** nothing; becomes load-bearing at city scale (W3) and with expeditions (W2).
+
+### W7. Venue variety, and districts you can find your way around *(new — maintainer playtest, 2026-08-24)*
+
+**What:** a generated settlement reads as a grid of homes plus a farm. The vocabulary is already richer than what reaches the ground — `gathering`, `workshop`, `hall` and `sanctuary` are sealed place-kinds today — but a settlement only gets one if the model names it, and the repair layer's floor is a single wilds. Three parts. **Named venues surfaced more aggressively:** a floor per rank rather than only a ceiling, so a village whose brief named no places still has somewhere that is not somebody's house. **District naming:** W3's remaining half is a gravity well, and this is the other one — a ward is a name in the header before it is an anchor spread. **Discoverability:** a player standing in the street should be able to find the inn, by the map surface (W6), by a sign the second verb can read (S2), or by the travel list naming what a zone *is* and not only what it is called.
+
+**Pillar:** world variety. **Secondary tag:** legibility. **Relationship to W3 and W5, said plainly so nobody builds it twice:** W3 owns the district *machinery* (per-district `public` handles, district market days) and W5 owns *new* place-kinds with their schedule columns; W7 is the texture pass over both — floors and surfacing for the kinds that already exist, and names for the wards W3 carves. **Depends on:** nothing to start (the floor is a repair-layer change and a lot budget); W6 for the map half; S2 for the sign half.
+
+**The bug half is closed; this is the feature half.** 0.11 found the case where a settlement could seal with a keeper and *no gathering at all* — the §4.3 host synthesis ran against the model's draft cast, one pass before the quality floor topped a host up from stock, so a brief whose cast failed validation outright compiled fifteen zones of homes with no inn in them. The post-condition now runs against the sealed cast. That was a defect, and fixing it does not make a settlement varied; everything above still wants doing.
 
 ---
 
@@ -299,6 +364,20 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 
 **Pillar:** world coherence; substrate for social play. **Companion:** **disclosure** — if the graph exists only for bed placement it is the most expensive furniture algorithm ever written. The same data injects one line when relevant ("Maren is Alder's wife"), shapes E1's canned dialogue, and shares its shape with P2 so player-relations and NPC-relations are one system with two edge types. **Depends on:** E3's schema-v2 window (one migration); 0.10's bedroom machinery.
 
+### E7. The `Ask` tree — generic dialogue comes off the narration channel *(new — maintainer design, playtest 2, 2026-08-24)*
+
+**What:** the maintainer's design, recorded as given. Generic NPC dialogue should be **mostly separate from Narration**. Pressing E on somebody opens an **`Ask` tree** — name, occupation, where they are from, what they make, local rumors, what they think of the place — answered package-side and costing no GM turn. It converges with the GM in exactly two cases: when the NPC is **questline-relevant**, and when the **player writes their own** action or line, which is a special choice that cues the GM to answer *as that NPC*.
+
+**Why this is a channel item and not more content.** Today the E key has one behaviour: it spends a GM turn on "I walk up to X and greet them", and the entire town shares it. The only other place a named character speaks is the GM's own dialogue and its overhead bubbles — the SIDE-tagged lines the narrator writes and the surface floats over sprites — so every register from "what's your name" to "will you help me break into the mill" arrives down one pipe, at one price, at one length. That is what makes a hundred and twenty minted residents unaskable (Open Question 11) and it is why walking past somebody is more informative than talking to them.
+
+**Pillar:** Call economy — this is the biggest single item under that pillar, because it takes the most-pressed key in the game off the LLM. **Secondary tags:** world-aliveness, RP frame variety.
+
+**Relationship to E1, said plainly so nobody builds it twice.** E1 owns the *content* — the state-indexed pool, the two registers, the escalation seam, generated once at creation. E7 owns the *shape*: a tree with named branches the player chooses, rather than a line the package emits at a keypress. They want each other — a tree with nothing in it is a menu of silences, and a pool with no tree is the flat pool E1 already warns reads as canned in five presses — and E1's **escalation seam is exactly E7's convergence point**: "press E again on the line that gestures at the `situation`" and "a special choice that cues the GM to answer as this NPC" are the same door described from two sides. Build the seam once.
+
+**Unlocks:** Open Question 11 gets an answer that scales (a minted resident has a name, kind, household, schedule and bed — which is four `Ask` branches without a single generated word); P2's disposition gets somewhere to *show* (branches that open with rapport, L4's doors in conversation form); L5's hails get a shape to arrive in; E4's recruitment gets a place to be offered. **Depends on:** nothing hard to start — the smallest honest first cut is name/occupation/home answered from the compiled NPC record. Richer with E1's pack, P2's registers, and E3's `agenda`. **Companion, and it is the whole risk:** the tree must never become the *only* channel. The reason to talk to somebody in this game is that a narrator is listening; an `Ask` menu that swallows the door to the GM would trade the game's best feature for its cheapest one. The convergence cases are load-bearing, not garnish.
+
+**Down payment shipped in 0.11, and it is a stopgap:** Talk now asks before it spends unread narration ("Skip story & talk?"), because a greeting was silently ending the turn the player was still reading. That is a guard on the single pipe, not a second pipe. E7 is what makes it unnecessary.
+
 ---
 
 ## Sequencing
@@ -310,13 +389,15 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 3. **S3 pouch + S4 skills/tools** — gate actions' yields, quest rewards, keys, gifts, the economy loop.
 4. **S5 player state block** — gates everything that has to survive a reload: S3, S4, P2, P4, P5, W2. Not a dependency so much as a decision that must be made *before* the first thing that needs it, or it gets made badly four times.
 
+**Updated 2026-08-24, sequencing note.** One maintainer call recorded in the release suggestions, no new items: the quest log (Ruling 1) rides **0.13 with P4** — not a 0.11.x — and 0.12's P5 ledger buffer gains a readable **journal panel** so the log arrives as a tab of a surface that is already full. Reasoning in the 0.12/0.13 bullets.
+
 **The independent cheap track: L2 weather/calendar** — gates nothing, gated by nothing, pure function of the saved clock, zero save fields, immediate felt difference. The dessert; don't let it displace the substrate, don't let it wait a year either.
 
 **Suggested next three releases** (a suggestion, not a commitment):
 
 - **0.11** — **S5** + S2 + S3 + L2 + **P1**: the save block first, then the second verb, things, weather, and a bed; the world becomes touchable. S5 leads because S3 is the first thing that has to persist, and a schema retrofitted around an existing pouch is a migration nobody wanted to write. P1 is not optional here — P5 in 0.12 has no trigger without a bed to sleep in, so slipping it silently strands the release after.
-- **0.12** — S4 + P3 (fishing first, per the ruling's specified model) + P5's ledger buffer: the first full action stack.
-- **0.13** — P4 quests + E1 offline content pack (one generation batch) + the quest board: the lean-play mode complete.
+- **0.12** — S4 + P3 (fishing first, per the ruling's specified model) + P5's ledger buffer, **surfaced as a readable journal panel** *(maintainer sequencing call, 2026-08-24)*: the buffer already accumulates in the 0.11 state block, and 0.12 is the release that starts filling it with entries worth reading — catches, money earned, weather, day events — so the panel is never an empty pane on day one. The first full action stack, now with its own record.
+- **0.13** — P4 quests + E1 offline content pack (one generation batch) + the quest board: the lean-play mode complete. **The quest log ships here as a tab (or filter) of 0.12's journal panel**, not as a new surface — quests land in a pane that has already earned its place. Deliberately NOT earlier: a quest log before P4 renders an empty list (nothing populates `quests.active` until the templates exist, and nothing verifies an objective until P3/S4 give the package things to count) — the same decoration-before-behavior rule that deferred room purposes in 0.8. And it stays the *mechanical* log per Ruling 1's surviving design rule: quest state binds tiles and tables, never the GM's prose — capturing GM-narrated questlines is S1/P7 territory and its own future conversation.
 - **S1 lands whenever the engine channel does** — slot its first consumers (shelter, boarded door) into whichever release that is.
 
 ---
@@ -349,6 +430,9 @@ Flagged so a future session doesn't rediscover them the hard way.
 10. **The offline content pack's budget.** E1 + P4 generate at creation in one call; the sealed brief has an 8 KB budget with truncation order. The pack is bigger than the brief — separate sealed blob with its own budget and its own salvage rules, presumably. Decide before writing the generation guidance.
 11. **What a minted resident is at the E key** *(raised by 0.10's population mint)*. The sealed cast is now a minority: a city runs ~120 souls and most are minted with an empty persona. A minted resident has a name, kind, household, schedule and bed — everything but something to say. Do they ride the sealed cast's persona machinery, wait for E1's canned pool, hold for E2's field promotion, or a ladder of all three? Decide before E1's content pack is generated: its index needs to know whether it is writing for ten people or a hundred and twenty.
 12. **Ties for the minted majority** *(raised by 0.10, lands on E6)*. The `ties` vocabulary is LLM-authored over the sealed cast, and the mint now creates most households — deterministically, at compile, where no LLM is present. Algorithmic ties for minted households (two adults sharing a surname and a roof are probably a couple), or no double beds outside the cast? Fold the answer into the one schema-v2 window (question 3) so beds are derived once.
+13. **Widgets: integrate or suppress** *(S7 — a maintainer decision, not an open design)*. Suppress at setup, render them honestly as the engine's, or map the money-like ones onto package state. The three do not compose and the third is the one that quietly creates two writers for one number. **Pairs with 14** — decide them together or the answers contradict.
+14. **Narrated transactions: prompt contract, or real verbs** *(P7)*. Tell the GM to narrate around the ledger and never move it, or hand it `rentBerth`/`grant`/`take`/`award` as actions it can actually call. The first is available today and holds most turns; the second is S1's channel wearing an economy hat and inherits the rewind contract for free. Until one of them lands, the mechanical verbs are the only real economy and the roadmap should keep saying so.
+15. **Does the sim clock pause while the GM writes?** *(raised by playtest 2, lands on L6's amendment)*. Real seconds pass during generation and the package converts them, so a slow turn ages the town by the length of the wait. `30-sim.js` already freezes the clock in dialogue for the same reason — a conversation must not burn the afternoon — and `isStreaming` is already on the props, so the signal is free. What wants deciding is whether NPC wander pauses with it (in dialogue it deliberately does not: the world stays alive while you read) and what a paused clock does to `_clockAcc` across a chat switch.
 
 ---
 

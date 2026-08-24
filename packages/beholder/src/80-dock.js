@@ -22,6 +22,7 @@ const BH_HOST_CSS = `
   border-color:var(--bh-window-accent) !important; border-radius:.75rem !important; transform:none !important; z-index:50; }
 .beholder-panel.bh-detached{ position:fixed !important; inset:0 !important; width:100vw !important; height:100dvh !important; border-radius:0 !important; }
 .beholder-panel.bh-collapsed{ display:none !important; }
+.beholder-panel-body{ min-height:0; overflow:hidden; }
 .beholder-panel .beholder-close{ display:none !important; }
 .beholder-panel .beholder-resize-handle{ display:block !important; left:auto; right:.25rem; bottom:.25rem; transform:none;
   width:1.5rem; height:1.5rem; border:0; border-radius:.25rem; background:transparent; color:var(--bh-window-accent);
@@ -38,24 +39,30 @@ const BH_HOST_CSS = `
 .beholder-panel-controls :is(.bh-dock-popout,.bh-dock-close):focus-visible{ outline:2px solid var(--bh-window-accent); outline-offset:1px; }
 .beholder-panel.bh-detached .bh-dock-popout,.beholder-panel.bh-detached .beholder-resize-handle{ display:none !important; }
 @media (max-width:767px){
-  .beholder-panel{ inset:0 !important; width:100% !important; height:100% !important; max-height:none !important; border-radius:0 !important; }
+  .rpg-chat-area.bh-beholder-open{ z-index:70; }
+  .beholder-panel{ inset:0 !important; width:100% !important; height:100% !important; max-height:none !important; border-radius:0 !important; z-index:80; }
   .beholder-panel-header{ cursor:default; touch-action:auto; }
   .beholder-panel .beholder-resize-handle{ display:none !important; }
-  .beholder-panel-body{ padding-bottom:max(var(--bh-space-4),env(safe-area-inset-bottom)); }
+  .beholder-panel-body{ overflow-y:auto; padding-bottom:max(var(--bh-space-4),env(safe-area-inset-bottom)); }
+  .beholder-panel.bh-mobile-layout .bh-doll-grid{ display:grid; }
+  .beholder-panel.bh-mobile-layout .bh-digest{ display:none; }
 }
 .bh-hud-toggle{ cursor:pointer; }
-.bh-hud-icon{ display:block;width:16px;height:16px;color:var(--marinara-app-accent-static,var(--primary)); }
+.bh-hud-icon{ display:block;width:.875rem;height:.875rem;color:var(--marinara-app-accent-solid,var(--primary)); }
 .bh-tracker-launch{display:flex;width:100%;min-height:1.75rem;align-items:center;gap:.25rem;
   border:0;border-bottom:1px solid var(--border);background:var(--tracker-panel-section-background,transparent);
   padding:.125rem .25rem;color:var(--foreground);cursor:pointer;font:inherit;text-align:left;}
 .bh-tracker-launch:hover{background:color-mix(in srgb,var(--accent) 18%,transparent);}
 .bh-tracker-launch.bh-active{background:color-mix(in srgb,var(--marinara-chat-chrome-accent,var(--foreground)) 14%,transparent);}
 .bh-tracker-launch:focus-visible{outline:2px solid var(--marinara-chat-chrome-accent,var(--foreground));outline-offset:-2px;}
-.bh-tracker-launch__logo{display:flex;width:1rem;height:1rem;align-items:center;justify-content:center;color:var(--marinara-chat-chrome-accent,var(--foreground));}
-.bh-tracker-launch__icon{display:block;width:.75rem;height:.75rem;}
+.bh-tracker-launch__logo{display:flex;width:.875rem;height:.875rem;align-items:center;justify-content:center;color:var(--tracker-profile-icon,var(--muted-foreground));opacity:.75;}
+.bh-tracker-launch__icon{display:block;width:.6875rem;height:.6875rem;}
 .bh-tracker-launch__title{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   font-size:.625rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:color-mix(in srgb,var(--foreground) 62%,transparent);}
-.bh-tracker-launch__arrow{color:var(--muted-foreground);font-size:.875rem;opacity:.7;}
+.bh-tracker-launch__arrow{display:flex;width:.75rem;height:.875rem;align-items:center;justify-content:center;color:var(--tracker-profile-icon,var(--muted-foreground));font-size:.875rem;opacity:.6;transform:rotate(0deg);transition:transform 150ms ease;}
+.bh-tracker-launch.bh-active .bh-tracker-launch__arrow{transform:rotate(90deg);}
+.beholder-panel:not(.bh-mobile-layout):not(.bh-layout-compact) .bh-doll-grid{display:grid;}
+.beholder-panel:not(.bh-mobile-layout):not(.bh-layout-compact) .bh-digest{display:none;}
 `;
 
 const BH_LAYER_KEYS = ["color", "damage", "wounds"];
@@ -68,7 +75,7 @@ const BH_WINDOW_MIN_WIDTH = 280;
 const BH_WINDOW_MIN_HEIGHT = 260;
 const BH_WINDOW_DEFAULT_WIDTH = 500;
 const BH_WINDOW_DEFAULT_HEIGHT = 620;
-const BH_WINDOW_MIN_SCALE = 0.72;
+const BH_WINDOW_MIN_SCALE = 0.24;
 const BH_WINDOW_MAX_SCALE = 1.35;
 const BH_THEME_VARIABLES = [
   "--background",
@@ -82,6 +89,7 @@ const BH_THEME_VARIABLES = [
   "--muted-foreground",
   "--popover",
   "--font-sans",
+  "--marinara-app-accent-solid",
   "--marinara-app-accent-static",
   "--marinara-chat-chrome-accent",
 ];
@@ -315,6 +323,7 @@ BH.dock = {
     }
     this.syncGeometry();
     panel.classList.remove("bh-collapsed");
+    this.syncHostLayer();
     BH.syncToggles();
     void this.refresh();
   },
@@ -327,7 +336,12 @@ BH.dock = {
       return;
     }
     if (this.panel) this.panel.classList.add("bh-collapsed");
+    this.syncHostLayer();
     BH.syncToggles();
+  },
+
+  syncHostLayer() {
+    this.findChatArea()?.classList.toggle("bh-beholder-open", this.isOpen() && !this.isDetached());
   },
 
   isMobile() {
@@ -346,13 +360,31 @@ BH.dock = {
   },
 
   applyScale(width, height) {
-    if (!this.panel) return;
+    if (!this.panel) return 1;
     const scale = clampWindowValue(
       Math.min(width / BH_WINDOW_DEFAULT_WIDTH, height / BH_WINDOW_DEFAULT_HEIGHT),
       BH_WINDOW_MIN_SCALE,
       BH_WINDOW_MAX_SCALE,
     );
     this.panel.style.setProperty("--bh-ui-scale", scale.toFixed(3));
+    return scale;
+  },
+
+  fitDesktopContent() {
+    const panel = this.panel;
+    if (!panel || (!this.isDetached() && this.isMobile())) return;
+    const body = panel.querySelector(".beholder-panel-body");
+    if (!body) return;
+    const rect = panel.getBoundingClientRect();
+    let scale = this.applyScale(rect.width, rect.height);
+    for (let pass = 0; pass < 2; pass += 1) {
+      const widthRatio = body.clientWidth / Math.max(body.scrollWidth, 1);
+      const heightRatio = body.clientHeight / Math.max(body.scrollHeight, 1);
+      const fit = Math.min(1, widthRatio, heightRatio);
+      if (fit >= 0.995) break;
+      scale = clampWindowValue(scale * fit, BH_WINDOW_MIN_SCALE, BH_WINDOW_MAX_SCALE);
+      panel.style.setProperty("--bh-ui-scale", scale.toFixed(3));
+    }
   },
 
   applyGeometry(geometry) {
@@ -374,13 +406,16 @@ BH.dock = {
       return;
     }
     if (this.isDetached()) {
+      panel.classList.remove("bh-mobile-layout");
       this.applyScale(bounds.right, bounds.bottom);
       return;
     }
     if (this.isMobile()) {
+      panel.classList.add("bh-mobile-layout");
       this.applyScale(bounds.right, bounds.bottom);
       return;
     }
+    panel.classList.remove("bh-mobile-layout");
 
     const availableWidth = Math.max(1, bounds.right - bounds.left);
     const availableHeight = Math.max(1, bounds.bottom - bounds.top);
@@ -444,6 +479,7 @@ BH.dock = {
     panel.classList.add("bh-detached");
     popupDocument.body.appendChild(panel);
     this.detachedWindow = popup;
+    this.syncHostLayer();
     this._detachedResize = () => {
       this.syncGeometry();
       this.render();
@@ -467,6 +503,7 @@ BH.dock = {
     if (hostArea) {
       hostArea.appendChild(panel);
       panel.classList.add("bh-collapsed");
+      this.syncHostLayer();
       this.syncGeometry();
     } else {
       panel.remove();
@@ -612,10 +649,12 @@ BH.dock = {
     panel.setAttribute("data-empty", isEmpty ? "true" : "false");
     if (isEmpty) this.unviewed.clear();
 
-    // Narrow viewports use the compact list; a wide one restores the choice.
-    const layout = panel.getBoundingClientRect().width < 360 ? "list" : this.layout;
+    // The full-screen mobile window keeps the paper doll visible and scales it
+    // to the viewport. Resizable desktop windows retain the selected layout.
+    const layout = !this.isDetached() && this.isMobile() ? "paired" : this.layout;
     setDollLayout(layout);
     panel.classList.toggle("bh-layout-compact", layout === "list");
+    panel.classList.toggle("bh-mobile-layout", !this.isDetached() && this.isMobile());
 
     // The active character's updates are viewed by definition.
     const unviewedForRender = new Set(this.unviewed);
@@ -625,5 +664,6 @@ BH.dock = {
     this.activeName = rendered.activeName;
     if (this.activeName) this.unviewed.delete(this.activeName);
     body.innerHTML = rendered.html || "";
+    this.fitDesktopContent();
   },
 };
