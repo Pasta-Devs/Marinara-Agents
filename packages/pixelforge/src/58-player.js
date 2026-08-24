@@ -612,10 +612,17 @@ PF.player = {
       player.home = null;
       player.bought = null;
       const lines = player.ledger.lines;
-      // The BAND goes with the transcript, and that is the status quo rather than
-      // a new loss: a notice used to BE a line, so a brief severance has always
-      // taken the pending ones with it. What survives the window is the notice
-      // this severance is about to write, which 60-save appends after the strip.
+      // THE BAND GOES WITH THE TRANSCRIPT, AND IT IS A REAL LOSS — accepted, and
+      // stated rather than dressed up as the status quo (plan §5). A notice used
+      // to BE a ledger line, so a brief severance always took the pending ones;
+      // but a severed line was PARKED in the quarantine entry above and came home
+      // with the rest of the world-bound set, and the band is not parked and
+      // cannot be. So the format change that made a notice re-readable also made
+      // this loss permanent: what a brief severance drops here, nothing restores.
+      // What survives the window is the notice this severance is about to write,
+      // which 60-save appends after the strip. (`intro.ledgerOwed` is not touched
+      // and correctly is not: it is world-unbound, and the days it owes are days
+      // the player lived whatever world they lived them in.)
       player.ledger = { lines: [] };
       // COUPLED, and only when lines were ACTUALLY severed (plan §0): an empty
       // buffer must leave the gate exactly where it was, or a save with nothing
@@ -953,9 +960,17 @@ PF.player = {
         .map((row) => row.zone);
     }
     if (p.ledger && Array.isArray(p.ledger.lines)) this._compactLedger(p);
-    // The band answers to its own cap, and a restore is exactly the path that can
-    // arrive over it: the entry's rows and the live block's rows are concatenated
-    // by nothing that counts them.
+    // The band answers to its own cap here too — BELT ONLY, and the reason is
+    // worth writing down because the line looks like it is catching something.
+    // Nothing can arrive over the cap: no quarantine entry carries notices (a
+    // severance parks `ledgerLines` and the band is not parked at all — see
+    // applyStamps), so there is no second band anywhere to concatenate a first
+    // one with, and every path that can put a row in one — `notice()`,
+    // `serialize()`, and `parse()` through it — has already run `evictNotices`.
+    // It stays because the cap is applied wherever the array is normalized and
+    // this is one of those places, and because the day an entry DOES bring a band
+    // home is the day this line is the only thing standing between two capped
+    // bands and one that is twice the cap.
     if (p.ledger && Array.isArray(p.ledger.notices)) p.ledger.notices = evictNotices(p.ledger.notices);
     return p;
   },
