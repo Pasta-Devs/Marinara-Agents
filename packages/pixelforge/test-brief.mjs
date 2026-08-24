@@ -12887,6 +12887,204 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
   assert.equal(offer.zoneId, gatheringId, "at the gathering that used to be missing");
 }
 
+// (az) THE FEATURE REGISTRY: WHERE A NAMED FEATURE ACTUALLY STANDS (0.12 slice 1).
+// A brief names its features and the compiler paints them, and until now nothing
+// wrote down WHERE. The tiles were the only record, and a tile cannot say which
+// feature it belongs to or what the brief called it. `zone.features[]` is that
+// record — {id, tag, name, rect} — written by the three sites that paint one:
+// the compiler's placement loops, the wilds builder's `water-crossing` branch
+// (which paints the stream itself, because the feature loop skips that tag), and
+// buildLegacy's fixed literals.
+//
+// Three properties are load-bearing and each has its own case below: the ids are
+// the BRIEF's ordinals and do not shuffle when a feature finds no room, the
+// wilds stream gets a row at all, and the whole list is DERIVED — a world is
+// rebuilt from (seed, theme, brief) on every load, so the registry must cost
+// exactly zero save bytes.
+{
+  const cast = [
+    { name: "Ivy", role: "warden", kind: "leader", tint: "blue", home: "Greenwood", household: 1 },
+    { name: "Bett", role: "innkeep", kind: "host", tint: "amber", home: "Greenwood", household: 2 },
+  ];
+  const seal = (features, places, scale, prosperity, seed) =>
+    brief.validate(
+      { scale, prosperity, name: "Greenwood", surround: "woods", features, places, cast },
+      { theme: "cozy-village", seed },
+    );
+  const wildsPlace = {
+    kind: "wilds",
+    name: "The Wood",
+    features: [
+      { tag: "water-crossing", name: "The Ford" },
+      { tag: "landmark-stone", name: "The Marker" },
+    ],
+  };
+  const registryOf = (w) =>
+    Object.fromEntries(Object.keys(w.zones).map((zoneId) => [zoneId, w.zones[zoneId].features]));
+
+  // ── DETERMINISM: the same seed and the same brief record the same rows ──────
+  // The registry is rebuilt on every load, so a row that drifted between two
+  // builds of one world would be a spot the player could stand at yesterday and
+  // not today. Ids, tags, names and rects, all of it, across every zone.
+  {
+    const sealed = seal(
+      [
+        { tag: "water-feature", name: "The Millpond" },
+        { tag: "crop-plots", name: "The Rows" },
+      ],
+      [wildsPlace],
+      "village",
+      "modest",
+      606,
+    );
+    const built = world.build(606, "cozy-village", sealed);
+    // EVERY zone carries the list, not only the ones that hold something: an
+    // absent array and an empty one read the same at a call site right up until
+    // the one that does not guard, and the consumer reads it every walking frame.
+    for (const zoneId of Object.keys(built.zones))
+      assert.ok(Array.isArray(built.zones[zoneId].features), `${zoneId}: the zone carries a feature registry`);
+    const first = registryOf(built);
+    const second = registryOf(world.build(606, "cozy-village", sealed));
+    assert.deepEqual(second, first, "same seed + same brief, same registry — rows do not drift between builds");
+    const rows = Object.values(first).flat();
+    assert.ok(rows.length >= 3, `and the sweep saw real rows (${rows.length})`);
+    for (const row of rows) {
+      assert.ok(/^f\d+$/.test(row.id), `${row.name}: a compiled row carries a brief ordinal, not "${row.id}"`);
+      assert.ok(loadedPF.brief.FEATURE_TAGS.includes(row.tag), `${row.name}: tagged from the closed vocabulary`);
+      assert.ok(
+        Number.isInteger(row.rect.x) && Number.isInteger(row.rect.y) && row.rect.w > 0 && row.rect.h > 0,
+        `${row.name}: a real rect`,
+      );
+    }
+    // …and the ids the compiler wrote are the ids the SEAL minted, not a
+    // parallel numbering that happens to agree today.
+    for (const row of rows) assert.equal(sealed._ids.features[row.id], row.name, `${row.id} is the sealed ordinal`);
+  }
+
+  // ── AN UNPLACEABLE FEATURE STILL SPENDS ITS ORDINAL ─────────────────────────
+  // An outpost is 560 tiles and its lots take most of them, so a fenced 8x5 crop
+  // plot declared second has genuinely nowhere to stand and is dropped ("a
+  // plainer settlement, never a sealed one"). What must NOT happen is the
+  // features after it sliding down a number: the sealed brief already promised
+  // `f3` to the wilds ford, and a registry that renumbered on a full map would
+  // be unquotable across two worlds built from one brief.
+  {
+    const sealed = seal(
+      [
+        { tag: "landmark-stone", name: "The Stone" },
+        { tag: "crop-plots", name: "The Rows" },
+      ],
+      [wildsPlace],
+      "outpost",
+      "struggling",
+      909,
+    );
+    assert.deepEqual(
+      sealed._ids.features,
+      { f1: "The Stone", f2: "The Rows", f3: "The Ford", f4: "The Marker" },
+      "the seal minted four ordinals, settlement first then the place's",
+    );
+    const w = world.build(909, "cozy-village", sealed);
+    const wildsId = `z${sealed.places.findIndex((place) => place.kind === "wilds") + 2}`;
+    assert.deepEqual(
+      w.zones.z1.features.map((row) => `${row.id}:${row.name}`),
+      ["f1:The Stone"],
+      "the outpost placed the stone and dropped the rows",
+    );
+    assert.deepEqual(
+      w.zones[wildsId].features.map((row) => `${row.id}:${row.name}`),
+      ["f3:The Ford", "f4:The Marker"],
+      "and the dropped feature still SPENT f2 — the ford is f3, not f2",
+    );
+    const again = world.build(909, "cozy-village", sealed);
+    assert.deepEqual(again.zones[wildsId].features, w.zones[wildsId].features, "stable across builds");
+  }
+
+  // ── THE WILDS STREAM IS A SPOT, NOT DEAD WATER ──────────────────────────────
+  // The wilds builder paints its stream itself (20-world's `water-crossing`
+  // branch) and the feature loop below it skips the tag outright, so the branch
+  // is the only site that can owe the crossing a row. Without it a brief-built
+  // stream would be water nothing knows the name of, while a legacy one fishes.
+  {
+    const sealed = seal([{ tag: "shrine", name: "The Shrine" }], [wildsPlace], "village", "modest", 313);
+    const w = world.build(313, "cozy-village", sealed);
+    const wildsId = `z${sealed.places.findIndex((place) => place.kind === "wilds") + 2}`;
+    const stream = w.zones[wildsId].features.find((row) => row.tag === "water-crossing");
+    assert.ok(stream, "the wilds crossing is on the register");
+    assert.equal(stream.name, "The Ford", "under the name the brief gave it");
+    assert.equal(sealed._ids.features[stream.id], "The Ford", "and its own brief ordinal");
+    assert.deepEqual(stream.rect, { x: 20, y: 1, w: 2, h: 22 }, "covering the stream the branch actually painted");
+    // Non-vacuous: that rect is where the water is.
+    const wilds = w.zones[wildsId];
+    let inside = 0;
+    for (let y = 1; y < 23; y++) for (let x = 20; x < 22; x++) if (wilds.ground[y * wilds.w + x] === "water") inside++;
+    assert.equal(inside, 40, `the rect holds the stream (${inside} water tiles, the ford's four laid over it)`);
+  }
+
+  // ── THE LEGACY WORLD'S TWO RESERVED ROWS ────────────────────────────────────
+  // buildLegacy has no brief to mint ids from, so its water carries fixed
+  // reserved ids at the literals — and TAGS, because the consumer resolves its
+  // table by (theme, tag) and a legacy spot has to resolve like any other.
+  for (const theme of ["cozy-village", "sci-fi-colony"]) {
+    const w = world.build(77, theme, null);
+    const rows = Object.values(w.zones).flatMap((zone) => zone.features);
+    assert.equal(rows.length, 2, `${theme}: the legacy layout reserves exactly two water features`);
+    const pond = w.zones.village.features;
+    const stream = w.zones.forest.features;
+    assert.equal(pond.length, 1, `${theme}: the village keeps its pond`);
+    assert.equal(stream.length, 1, `${theme}: the wood keeps its stream`);
+    assert.equal(pond[0].id, "legacy:pond", `${theme}: at a reserved id`);
+    assert.equal(pond[0].tag, "water-feature", `${theme}: tagged so the table resolves`);
+    assert.deepEqual(pond[0].rect, { x: 33, y: 21, w: 7, h: 5 }, `${theme}: at the literal it is painted from`);
+    assert.equal(stream[0].id, "legacy:stream", `${theme}: at a reserved id`);
+    assert.equal(stream[0].tag, "water-crossing", `${theme}: tagged so the table resolves`);
+    assert.deepEqual(stream[0].rect, { x: 20, y: 1, w: 2, h: 22 }, `${theme}: at the literal it is painted from`);
+    // Themed, and from the theme's OWN vocabulary for that tag — the names its
+    // default brief already uses, so legacy and compiled worlds agree.
+    assert.ok(pond[0].name && stream[0].name, `${theme}: both named`);
+    assert.notEqual(pond[0].name, "water-feature", `${theme}: a name, not the tag`);
+  }
+  {
+    const fantasy = world.build(77, "cozy-village", null);
+    const scifi = world.build(77, "sci-fi-colony", null);
+    assert.notEqual(
+      fantasy.zones.village.features[0].name,
+      scifi.zones.village.features[0].name,
+      "and the two themes do not call it the same thing",
+    );
+  }
+
+  // ── DERIVED: NOT ONE BYTE OF THE REGISTRY REACHES THE WIRE ──────────────────
+  // The whole design rests on this. A world is rebuilt from (seed, theme, brief)
+  // on every load, so the registry is recomputed and never stored — and if it
+  // ever leaked into the envelope it would become a format to migrate, on a
+  // route that is additive by policy.
+  {
+    const sealed = seal([{ tag: "water-feature", name: "The Millpond" }], [wildsPlace], "village", "modest", 606);
+    const w = world.build(606, "cozy-village", sealed);
+    assert.ok(
+      Object.values(w.zones).some((zone) => zone.features.length),
+      "the world under test actually carries a registry",
+    );
+    const sim = new loadedPF.Sim(w);
+    const snap = loadedPF.save.snapshot({ chatId: "chat-registry", sim, hud: { toast() {}, refreshChips() {} } });
+    const seen = [];
+    (function walk(node, path) {
+      if (!node || typeof node !== "object") return;
+      for (const key of Object.keys(node)) {
+        if (key === "features") seen.push(`${path}.${key}`);
+        walk(node[key], `${path}.${key}`);
+      }
+    })(snap, "snap");
+    assert.deepEqual(seen, [], `the envelope carries no features key anywhere (${seen.join(", ")})`);
+    assert.deepEqual(
+      [...loadedPF.save._envelopeKeys].sort(),
+      ["bindings", "chatId", "clockMin", "day", "facing", "intro", "player", "seed", "theme", "v", "x", "y", "zone"],
+      "and ENVELOPE_KEYS is exactly what it was — the registry asked for no room",
+    );
+  }
+}
+
 // ── A DOM the size of the two surfaces that need one ──────────────────────────
 // Not a browser: exactly what PF.el touches (createElement, style, text,
 // attributes, listeners, children) plus fire(), so a click can be driven. Enough

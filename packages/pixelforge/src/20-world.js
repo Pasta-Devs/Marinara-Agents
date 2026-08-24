@@ -40,6 +40,22 @@ PF.world = (() => {
       // gate has to ship with the zone type, never a release later.
       mapExport: true,
       lights: [], // {x, y} warm glow points at night
+      // NAMED FEATURES STANDING IN THIS ZONE: {id, tag, name, rect}. The tiles
+      // were the only record a feature had, and a tile cannot say which feature
+      // it belongs to or what the brief called it — so a consumer asking "what
+      // is the player standing beside" had nothing to read. Written by the three
+      // sites that paint one: the compiler's placement loops, the wilds
+      // builder's `water-crossing` branch (which paints its own stream, so the
+      // feature loop skips that tag), and buildLegacy's fixed literals.
+      //
+      // DERIVED, and that is the whole contract: a world is rebuilt from
+      // (seed, theme, brief) on every load, so this list is recomputed and never
+      // stored. It appears in no snapshot() key and in no ENVELOPE_KEYS entry,
+      // and putting it in either would turn a recomputable list into a save
+      // format to migrate. Every zone carries the array, empty or not — an
+      // absent one and an empty one read alike right up to the call site that
+      // does not guard, and the consumer reads it every walking frame.
+      features: [],
     };
   }
   const idx = (z, x, y) => y * z.w + x;
@@ -405,9 +421,25 @@ PF.world = (() => {
   }
 
   // Per-theme display names for the LEGACY fixed layout (pre-brief saves).
+  // `pond` and `stream` name the two water features the fixed layout reserves
+  // rows for. Both are the name that theme's OWN default brief gives the tag
+  // (18-brief DEFAULT_BRIEFS), so a legacy world and a compiled one call the
+  // same thing by the same word rather than inventing a second vocabulary.
   const ZONE_NAMES = {
-    "cozy-village": { village: "Hearthvale", inn: "The Amber Hearth Inn", forest: "The Whisperwood" },
-    "sci-fi-colony": { village: "Meridian Base", inn: "The Meridian Cantina", forest: "The Mast Field" },
+    "cozy-village": {
+      village: "Hearthvale",
+      inn: "The Amber Hearth Inn",
+      forest: "The Whisperwood",
+      pond: "The Village Pond",
+      stream: "The Stepping Stones",
+    },
+    "sci-fi-colony": {
+      village: "Meridian Base",
+      inn: "The Meridian Cantina",
+      forest: "The Mast Field",
+      pond: "The Coolant Pool",
+      stream: "The Conduit Bridge",
+    },
   };
 
   function build(seed, theme, sealedBrief) {
@@ -448,6 +480,13 @@ PF.world = (() => {
     put(v, 21, 14, "object", "well", true);
     // pond
     fillRect(v, 33, 21, 7, 5, "ground", "water", true);
+    // The legacy layout has no brief behind it and so no ordinals to mint from,
+    // which is why its two water features carry FIXED reserved ids instead. They
+    // are TAGGED from the same closed vocabulary a brief uses (18-brief
+    // FEATURE_TAGS) because the consumer resolves per (theme, tag): an untagged
+    // legacy spot would be water that no table can answer for. Rect = the
+    // literal directly above, so the two move together or not at all.
+    v.features.push({ id: "legacy:pond", tag: "water-feature", name: names.pond, rect: { x: 33, y: 21, w: 7, h: 5 } });
     // crops with fence
     fillRect(v, 4, 20, 8, 5, "ground", "crop", false);
     for (let x = 3; x <= 12; x++) {
@@ -495,6 +534,16 @@ PF.world = (() => {
     fillRect(f, 1, 12, 19, 2, "ground", "path"); // west approach
     fillRect(f, 20, 1, 2, 22, "ground", "water", true); // the stream
     fillRect(f, 20, 12, 2, 2, "ground", "path", false); // the ford
+    // The stream's rect is the stream's own literal, and the ford's four tiles
+    // sit INSIDE it as path. That is deliberate and not a defect in the shape: a
+    // rect says where a feature stands, and the consumer's test — the neighbour
+    // tile IS water and lies in a rect — is what keeps the road out of the water.
+    f.features.push({
+      id: "legacy:stream",
+      tag: "water-crossing",
+      name: names.stream,
+      rect: { x: 20, y: 1, w: 2, h: 22 },
+    });
     fillRect(f, 22, 12, 4, 2, "ground", "path"); // east approach
     fillRect(f, 26, 9, 6, 5, "ground", "stone"); // the clearing
     put(f, 28, 11, "object", "wallStone", true); // the standing stone
@@ -1783,6 +1832,38 @@ PF.world = (() => {
     const zoneIdForPlace = (place) => `z${brief.places.indexOf(place) + 2}`;
     const zoneIdByName = new Map(Object.entries(brief._ids.zones).map(([id, name]) => [name, id]));
 
+    // ── Feature ids: the BRIEF's ordinals, tracked apart from placement ────────
+    // `_ids.features` is minted once at seal (18-brief), walking the settlement's
+    // own features first and then each place's IN BRIEF ORDER. Mirrored here by
+    // POSITION rather than looked up by name, because two features may
+    // legitimately share one and a name lookup would collapse them.
+    //
+    // The discipline that matters: an ordinal belongs to the feature the BRIEF
+    // wrote, not to the one the map found room for. A feature the placer skips
+    // ("a plainer settlement, never a sealed one") still SPENDS its ordinal, so
+    // every feature after it keeps the id the sealed brief already promised.
+    // Ids that shuffled whenever a village happened to be full would make the
+    // registry unquotable across two builds of the same world.
+    const featureIds = new Map();
+    {
+      let ordinal = 1;
+      for (const feature of brief.features) featureIds.set(feature, `f${ordinal++}`);
+      for (const place of brief.places)
+        for (const feature of place.features ?? []) featureIds.set(feature, `f${ordinal++}`);
+    }
+    /** Put a PLACED feature on the register of the zone that holds it.
+     *
+     *  `rect` is the extent the placement pass reserved — the placer's true
+     *  footprint plus the one-tile margin FEATURE_RECTS carries — and is
+     *  deliberately NOT carved down to the tiles the placer watered. A rect may
+     *  hold tiles the feature never painted water on (a `water-feature`'s well
+     *  stands at x+6; the wilds ford lays path straight across its stream), and
+     *  the consumer's own two-sided test is what excludes them. The exclusion
+     *  lives in the test, not in the shape. */
+    const recordFeature = (zone, feature, rect) => {
+      zone.features.push({ id: featureIds.get(feature), tag: feature.tag, name: feature.name, rect });
+    };
+
     // ── The settlement exterior (z1) ──
     const v = makeZone("z1", brief.name, scale.w, scale.h, "grass");
     v.mapKind = "settlement";
@@ -2395,6 +2476,10 @@ PF.world = (() => {
       if (!anchor) continue; // genuinely nowhere left: a plainer settlement, never a sealed one
       PLACERS[feature.tag]?.(v, anchor.x, anchor.y);
       claimed.push({ x: anchor.x, y: anchor.y, ...size });
+      // The register gets its own rect object rather than the one `claimed`
+      // holds: the two lists have different lifetimes and aliasing them would
+      // make a future edit to either quietly reach into the other.
+      recordFeature(v, feature, { x: anchor.x, y: anchor.y, ...size });
     }
     const doorRects = buildings.map((b) => ({ x: b.door.doorX, y: b.door.doorY }));
     const stallReserved = stalls.flatMap((s) => [
@@ -2651,6 +2736,14 @@ PF.world = (() => {
         fillRect(zone, 20, 1, 2, 22, "ground", "water", true);
         PLACERS["water-crossing"](zone, 20, wMidY);
         fillRect(zone, 22, wMidY, 4, 2, "ground", "path");
+        // THE SITE THAT OWES THE CROSSING ITS ROW. The stream is painted HERE,
+        // by the builder, and the feature loop below skips `water-crossing`
+        // outright — the placer's whole job on that tag is the 2x2 ford. So no
+        // placement loop ever sees this feature, and without this line a
+        // brief-built stream would be water nothing knows the name of while a
+        // legacy one fishes. Rect = the stream literal three lines up.
+        const crossing = place.features.find((feature) => feature.tag === "water-crossing");
+        recordFeature(zone, crossing, { x: 20, y: 1, w: 2, h: 22 });
       }
       // GROUND THE WILDS CANNOT GIVE AWAY. A feature here used to be dropped at a
       // hard-coded anchor with no test of anything — not the road it had just
@@ -2691,6 +2784,7 @@ PF.world = (() => {
           if (ax < 1 || ay < 1 || ax + size.w > zone.w - 1 || ay + size.h > zone.h - 1) continue;
           if (wildsReserved.some((r) => intersects({ x: ax, y: ay, ...size }, r))) continue;
           PLACERS[feature.tag]?.(zone, ax, ay);
+          recordFeature(zone, feature, { x: ax, y: ay, ...size });
           break;
         }
       }
