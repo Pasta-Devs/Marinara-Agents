@@ -320,7 +320,15 @@ PF.Hud = class {
 
   /** The verb's refusal values, turned into sentences. `no-rod` is absent on
    *  purpose: it carries its own themed hint naming the keeper who sells one, and
-   *  a generic line here would throw that away. */
+   *  a generic line here would throw that away.
+   *
+   *  `unknown-target` and `no-player` are absent on purpose too, for the opposite
+   *  reason: neither is a refusal about the PLAYER. One is a caller handing the
+   *  verb a daypart word that does not exist and the other is a sim with no
+   *  player block on it, so both take the fall-through rather than copy written
+   *  about a state nobody can be in — which is exactly why that fall-through has
+   *  to be a real sentence. Both callers toast `hint || fishRefusal(reason)`, and
+   *  an empty line there is a pressed button that does nothing at all. */
   fishRefusal(reason) {
     if (reason === "wrong-mode") return "Not while you're talking — resume walking first";
     if (reason === "not-near-water") return "There is no water to fish here.";

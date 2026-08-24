@@ -710,7 +710,11 @@ PF.economy = {
    *  Returns { ok, reason, price, tier, bait }. */
   buyRod(core, gen) {
     const offer = this.rodOffer(core);
-    if (!offer.available) return { ok: false, reason: offer.reason, price: offer.price, tier: offer.tier };
+    // ONE SHAPE ON EVERY RETURN, `bait` included: this branch and the refusal
+    // after award() below are the same verb refusing the same purchase, and a
+    // caller asking what came with the rod should not get `undefined` from one
+    // of them and `null` from the other.
+    if (!offer.available) return { ok: false, reason: offer.reason, price: offer.price, tier: offer.tier, bait: null };
     const sim = core.sim;
     const world = sim.world;
     const paid = PF.player.award(core, { money: -offer.price }, gen);
@@ -769,6 +773,14 @@ PF.economy = {
   //                    session.)
   //   unknown-target — a CALLER error and not a player-facing one; the menu can
   //                    only produce the four daypart words or none at all.
+  //   no-player      — the same class, and listed rather than folded into one of
+  //                    the five above: there is no player block on this sim at
+  //                    all, which Sim's constructor and every restore path make
+  //                    unreachable in play. Like unknown-target it is answered by
+  //                    the HUD's GENERIC line (70-hud fishRefusal) instead of
+  //                    copy of its own, because a control that spoke its own
+  //                    sentence here would be writing player-facing words about a
+  //                    state no player can be in.
 
   /** The bait stack a session would slot: the first live bait row in the pouch.
    *  The mod slot is a per-session SELECTION and not a standing preference, so
@@ -1141,6 +1153,17 @@ PF.economy = {
           throw new Error(`pixelforge: ${theme}/${tag} has an entry with the role "${entry.role}"`);
         if (!entry.variant || typeof entry.variant !== "string")
           throw new Error(`pixelforge: ${theme}/${tag} has an entry with no variant slug`);
+        // …AND NOT THE LEDGER'S OWN SEPARATOR IN IT. _logDay counts a session's
+        // yields in a Map keyed `${type}:${variant}` and splits that key apart
+        // again to name them, so a slug carrying a colon is truncated at it: a
+        // "sea:bass" is rendered as "sea" and the wrap-up tells the player about
+        // a thing that does not exist. Closed here rather than by escaping the
+        // key, because a slug with punctuation in it is content nobody needs and
+        // an encoding that never has to survive one is a line shorter.
+        if (entry.variant.includes(":"))
+          throw new Error(
+            `pixelforge: ${theme}/${tag}'s "${entry.variant}" has a ":" in its slug, which is the ledger's own separator`,
+          );
         if (!(typeof entry.weight === "number" && entry.weight > 0))
           throw new Error(`pixelforge: ${theme}/${tag}'s "${entry.variant}" has no positive weight`);
         // A minLevel above the ceiling is an entry NOBODY can ever draw: the draw

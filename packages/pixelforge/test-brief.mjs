@@ -13555,6 +13555,24 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     /theme "cozy-village" ships no bait entry for a first rod to come with/,
     "a theme whose water yields no bait fails the build",
   );
+  // A SLUG WITH THE LEDGER'S OWN SEPARATOR IN IT. _logDay counts a session's
+  // yields in a Map keyed `${type}:${variant}` and splits that key apart again to
+  // name them, so a variant carrying a ":" is TRUNCATED at it — a "sea:bass"
+  // renders as "sea", and the wrap-up tells the player about a thing that does
+  // not exist. Closed at boot rather than by escaping the key, because a slug
+  // with punctuation in it is content nobody needs and the encoding is one line
+  // shorter for never having to survive one.
+  // Renamed in its table AND in both themes' word lists, so the variant-skin
+  // assertion above is satisfied and the slug check is what is left to fail.
+  assert.throws(
+    bootAll([
+      ["59-economy.js", `variant: "mirror-pike"`, `variant: "mirror:pike"`],
+      ["59-economy.js", `"mirror-pike": "mirror pike"`, `"mirror:pike": "mirror pike"`],
+      ["59-economy.js", `"mirror-pike": "mirror pike"`, `"mirror:pike": "mirror pike"`],
+    ]),
+    /cozy-village\/water-feature's "mirror:pike" has a ":" in its slug, which is the ledger's own separator/,
+    "a variant slug carrying the ledger key's separator fails the build",
+  );
 }
 
 // ═══ SLICE 3: WHAT THE WATER GIVES UP, AND WHAT IT IS CALLED ════════════════
@@ -13778,6 +13796,11 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
       const bought = E.buyRod(core);
       assert.equal(bought.ok, true, "the sale goes through");
       assert.equal(bought.tier, "crude", "…of the rung that was quoted");
+      assert.deepEqual(
+        Object.keys(bought).sort(),
+        ["bait", "ok", "price", "reason", "tier"],
+        "and the sale's shape is the one every other return of this verb carries",
+      );
       const after = P.get(core);
       assert.equal(after.pouch.money, 200 - first.price, "the purse paid, exactly once");
       assert.ok(
@@ -13861,7 +13884,19 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
       assert.equal(stuffed.reason, "pouch-full", "…saying which cap bit");
       assert.equal(stuffed.price, E.price(w, E.rodPriceKey("crude")), "…while still quoting the price");
       const before = P.get(core).pouch.money;
-      assert.equal(E.buyRod(core).ok, false, "and the verb refuses with it");
+      const refused = E.buyRod(core);
+      assert.equal(refused.ok, false, "and the verb refuses with it");
+      // ONE SHAPE ON EVERY RETURN. The refusal after `award()` says `bait: null`
+      // and this one, refusing earlier for the same purchase, used to omit the
+      // key entirely — two ways of saying "nothing came with it" from one verb,
+      // and a caller reading `bait` gets `undefined` from one branch and `null`
+      // from the other for no reason it could ever discover.
+      assert.deepEqual(
+        Object.keys(refused).sort(),
+        ["bait", "ok", "price", "reason", "tier"],
+        `a refused purchase carries the verb's whole shape (${Object.keys(refused).sort()})`,
+      );
+      assert.equal(refused.bait, null, "…with nothing thrown in, said in the same word the other refusal uses");
       assert.equal(P.get(core).pouch.money, before, "NOTHING was charged — no half-purchase to roll back");
       assert.equal(P.get(core).pouch.items.length, cap - 1, "…and no row was minted either");
 
@@ -14375,6 +14410,37 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
         `naming whoever the brief made (${hint})`,
       );
       assert.notEqual(hint, E.rodHint(bare.core), "the two themes do not say the same sentence");
+    }
+
+    // ── THE SEVENTH VALUE: NO PLAYER BLOCK ON THE SIM AT ALL ─────────────────
+    // Not player-facing and not reachable in play — Sim's constructor
+    // default-initialises the block and every restore path overwrites it — but it
+    // is a value the offer really can return, so it belongs in the verb's
+    // documented list beside `unknown-target` rather than sitting under it as an
+    // undocumented seventh. Folded into that same caller-class bracket: both are
+    // answered by the HUD's GENERIC sentence, because a control that spoke its
+    // own copy about a lifecycle condition would be writing player-facing words
+    // about a state no player can be in.
+    {
+      const at = angler({ level: 4 });
+      at.sim.player = null;
+      const offer = E.fishOffer(at.core);
+      assert.equal(offer.available, false, "no block, no session");
+      assert.equal(offer.reason, "no-player", "…in its own word, not folded into a refusal about the player");
+      assert.equal(offer.spot, null, "…and naming no spot, which is what keeps the button off the screen for it");
+      const out = E.fish(at.core, null);
+      assert.equal(out.reason, "no-player", "the verb refuses with the same value");
+      assert.equal(out.hint, "", "…carrying no hint of its own");
+      assert.equal(at.sim.clockMin, 9 * 60, "…before a minute is spent");
+      // AND WHAT IT REACHES THE PLAYER AS. Both callers toast
+      // `hint || fishRefusal(reason)`, so the generic line this falls to has to be
+      // a real sentence or a pressed button does nothing at all. Read off the
+      // prototype because fishRefusal touches no instance state and the DOM shim
+      // this file builds a real Hud over is declared further down.
+      const line = (reason) => loadedPF.Hud.prototype.fishRefusal(reason);
+      assert.ok(line("no-player").length > 0, "the generic line is a line");
+      assert.equal(line("no-player"), line("unknown-target"), "…and it is the one the other caller-class value gets");
+      assert.notEqual(line("no-player"), line("not-near-water"), "…while a player-facing refusal keeps its own words");
     }
   } finally {
     loadedPF.save.reset(); // the mutators self-dirty, and a dirty block arms a timer
