@@ -364,15 +364,30 @@ PF.core = {
     const gen = PF.save._gen ?? 0;
     this.setMode("dialogue");
     this.hud?.toast(`Talking to ${npc.name}`);
-    void Promise.resolve(
-      this.host.sendMessage(`${sim.composePrefix(npc)} I walk up to ${npc.name} the ${npc.role} and greet them.`),
-    )
+    const text = `${sim.composePrefix(npc)} I walk up to ${npc.name} the ${npc.role} and greet them.`;
+    // THE COMPOSED TURN'S OWN PENDING, captured HERE and closure-local. Two
+    // readings of this would be wrong and both are easy: re-reading
+    // `sim._pendingIntro` after the await finds the null commitIntro left behind
+    // and burns nothing FOREVER (the wrap-up would then be re-told on every turn
+    // for the rest of the save), and re-reading it before the burn finds whatever
+    // a sender that interleaved with this one composed instead. The object
+    // reference survives the wholesale null, so the turn that was sent is the
+    // turn that gets burned.
+    const pend = sim._pendingIntro;
+    void Promise.resolve(this.host.sendMessage(text))
       .then((ok) => {
         if (ok === false) {
           this.setMode("walk");
           this.hud?.toast("The story isn't accepting turns right now.");
         } else {
           sim.commitIntro();
+          // THE WRAP-UP BURN, on the same accepted-turn signal the one-shot flags
+          // burn on and for the same reason: a refused or failed send is not a
+          // telling. The mutator guards itself against the sim having moved under
+          // the await, and a refusal is SWALLOWED — no toast, no retry. The tell
+          // stays in history un-burned and the next compose says it again, which
+          // is a §5 lost-flush and not something to interrupt anybody about.
+          if (pend?.ledger) PF.player.flush(this, pend.ledger.throughDay, gen);
           // P2's ledger goes live on the cheapest honest signal there is: the
           // encounter count moves when the host ACCEPTS the turn, exactly where
           // the one-shot intro flags burn, and for the same reason — a refused

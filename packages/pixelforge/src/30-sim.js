@@ -516,8 +516,86 @@ PF.Sim = class {
       parts.push(`[${npc.name}: ${npc.persona}]`);
       pending.npc = npc.id;
     }
+    // THE WRAP-UP TELL, LAST IN THE JOIN — which puts it after the persona part
+    // and before the sender's own action text, where the plan asks for it (§2.6).
+    // It is also the ONLY part of any turn a fishing word can reach the GM
+    // through (M10 as amended): the verb narrates nothing, files ledger lines,
+    // and those lines are told here or not at all.
+    const ledger = this._composeLedger();
+    if (ledger) parts.push(ledger.text);
+    // The ephemeral half of the flush, handed to the sender rather than stored:
+    // which day the tell reached, and which notice ROWS rode with it. Compose
+    // stays pure — nothing here burns, and a refused or failed send must lose
+    // nothing, exactly as the one-shot flags above it must not.
+    pending.ledger = ledger ? { throughDay: ledger.throughDay, notices: ledger.notices } : null;
     this._pendingIntro = pending;
     return parts.join(" ");
+  }
+
+  /** The wrap-up tell: the days a completed sleep made owed and has not told, and
+   *  every notice still untold. Composed from the two live fields every time and
+   *  persisted NOWHERE — there is no stored "what we said last time", so a re-tell
+   *  after a lost burn simply reads the same live selection again and says the
+   *  same thing (plan §2.5). Returns null when there is nothing owed and nothing
+   *  untold, else { text, throughDay, notices }.
+   *
+   *  LINES: `flushedDay < day ≤ intro.ledgerOwed`, stubs included — an elided day
+   *  that says "12 things happened" is still the truest account of it there is.
+   *  NOTICES: every untold row, whatever day it carries. The band answers to its
+   *  flag rather than to the gate, which is the whole reason it left the lines.
+   *
+   *  WHOLE DAYS, OLDEST FIRST, AND THE NEWEST DROPPED. The budget is
+   *  `TUNING.ledgerTellChars`, measured in graphemes over the line TEXTS — not
+   *  over this function's own framing, because the budget is floor-asserted at
+   *  load against one maximum-shape day (`ledgerPerDay × ledgerChars`) and a
+   *  measure that counted the word "Day" would put a legal day over the floor and
+   *  stall the flush forever. Days are rendered oldest-first so the story arrives
+   *  in order, and the burn advances only through the last day rendered WHOLE, so
+   *  a truncated tell leaves `ledgerOwed` standing and the next turn continues
+   *  from where this one stopped.
+   *
+   *  …AND THE OLDEST DAY ALWAYS RIDES, over budget or not. A day this build can
+   *  WRITE cannot exceed the budget (that is what the floor assertion buys), but
+   *  a hostile save can carry fifty lines on one day, and "tell nothing, advance
+   *  nothing, forever" is a worse answer than one oversized part. */
+  _composeLedger() {
+    const player = this.player;
+    if (!player || typeof player !== "object") return null;
+    const owed = PF.player.resolvedDay(this.intro?.ledgerOwed);
+    const gate = PF.player.resolvedDay(player.flushedDay);
+    const lines = (Array.isArray(player.ledger?.lines) ? player.ledger.lines : []).filter((line) => {
+      if (!Array.isArray(line) || line.length < 2) return false;
+      const day = PF.player.resolvedDay(line[0]);
+      return day > gate && day <= owed;
+    });
+    const budget = PF.economy?.TUNING?.ledgerTellChars ?? 0;
+    const rendered = [];
+    let spent = 0;
+    let through = gate;
+    for (const day of [...new Set(lines.map((line) => PF.player.resolvedDay(line[0])))].sort((a, b) => a - b)) {
+      const texts = lines
+        .filter((line) => PF.player.resolvedDay(line[0]) === day)
+        .map((line) => (typeof line[1] === "string" ? line[1] : ""));
+      const cost = texts.reduce((sum, text) => sum + PF.player.graphemes(text).length, 0);
+      if (rendered.length && spent + cost > budget) break;
+      rendered.push(`Day ${day}: ${texts.join(" ")}`);
+      spent += cost;
+      through = day;
+    }
+    const untold = (Array.isArray(player.ledger?.notices) ? player.ledger.notices : []).filter(
+      (row) => Array.isArray(row) && row.length >= 2 && !row[2],
+    );
+    if (!rendered.length && !untold.length) return null;
+    const sentences = [...rendered];
+    // ONE framing sentence for the whole band, and it frames them as things that
+    // happened TO the world rather than in the player's days — which is what they
+    // are, and what the writer-site copy each of them carries will say in more
+    // detail as the band grows an actor to name (M3, roadmap).
+    if (untold.length) {
+      const said = untold.map((row) => (typeof row[1] === "string" ? row[1] : "")).join(" ");
+      sentences.push(`Also, about the world itself rather than the days in it: ${said}`);
+    }
+    return { text: `[Wrap-up — ${sentences.join(" ")}]`, throughDay: through, notices: untold };
   }
 
   /** Burn the one-shot flags for the last composed prefix (accepted turn). */

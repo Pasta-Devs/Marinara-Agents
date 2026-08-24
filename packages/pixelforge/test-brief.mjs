@@ -1164,6 +1164,10 @@ const wayrestCast = [
   // Borrow the real methods off the shipped Sim prototype.
   sim.header = loadedPF.Sim.prototype.header.bind(sim);
   sim.composePrefix = loadedPF.Sim.prototype.composePrefix.bind(sim);
+  // …including the one compose calls for itself. This stand-in has no player
+  // block on it, which is exactly the shape `_composeLedger` answers null to, so
+  // the metering below still measures the prose parts and nothing else.
+  sim._composeLedger = loadedPF.Sim.prototype._composeLedger.bind(sim);
   sim.commitIntro = loadedPF.Sim.prototype.commitIntro.bind(sim);
   const npcVex = Object.values(w.zones)
     .flatMap((z) => z.npcs)
@@ -15374,9 +15378,261 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
       // anything moved, so the sim that composed keeps its untold band as well.
       assert.equal(at.player.ledger.notices[0][2], undefined, "the sim that composed keeps its band untold");
     }
+
+    // ── WHAT THE TELL SELECTS, AND WHERE IT SITS IN THE TURN ──────────────────
+    {
+      const at = staged({
+        gate: 2,
+        owed: 5,
+        day: 7,
+        lines: [
+          [2, "Told already, on the day the gate covers."],
+          [3, "Day 3: 12 things happened.", 12],
+          [4, "Fished the millpond — 12 casts: carp x2."],
+          [4, "Took a berth at The Amber Hearth for 12 coins."],
+          [6, "Not owed yet — past the marker, and the player is still living it."],
+        ],
+        notices: [[3, "Some of what you had done here belonged to another world."]],
+      });
+      const prefix = at.sim.composePrefix(null);
+      const part = prefix.slice(prefix.indexOf("[Wrap-up"));
+      assert.ok(prefix.includes("[Wrap-up — "), "the tell rides the prefix as a part of its own");
+      assert.ok(prefix.startsWith("[World:"), "…and the header still comes first");
+      assert.ok(prefix.endsWith(part) && part.endsWith("]"), "the tell is LAST in the join — after the prose parts");
+
+      // THE WINDOW IS `flushedDay < day ≤ ledgerOwed`, both ends live.
+      assert.ok(!part.includes("Told already"), "a day at or below the gate has already been told");
+      assert.ok(!part.includes("Not owed yet"), "…and a day past the marker is not this turn's to tell");
+      assert.ok(part.includes("Day 3: 12 things happened."), "a STUB rides the tell — an elided day still happened");
+      assert.ok(part.includes("Day 4: Fished the millpond"), "and the days between are told whole");
+      assert.ok(part.includes("Took a berth"), "…every line of them, in the order they were logged");
+      assert.ok(part.indexOf("Day 3") < part.indexOf("Day 4"), "oldest day first, so the story arrives in order");
+      assert.ok(
+        /Also, about the world itself rather than the days in it: Some of what you had done/.test(part),
+        `and the untold band rides with ONE framing sentence (${part})`,
+      );
+
+      // COMPOSE IS PURE. Nothing is burned until the host says yes — a refused
+      // send must lose neither the days nor the notices.
+      assert.equal(at.player.flushedDay, 2, "compose moved no gate");
+      assert.equal(at.player.ledger.notices[0][2], undefined, "…and told no notice");
+      assert.equal(at.sim.dirty, false, "…and dirtied nothing");
+
+      // WHAT IT HANDS THE SENDER: the day it reached, and the notice ROWS it
+      // composed — the rows themselves, so the burn marks what was told.
+      const pend = at.sim._pendingIntro;
+      assert.equal(pend.ledger.throughDay, 4, "the pending carries the last day rendered whole");
+      assert.deepEqual(pend.ledger.notices, [at.player.ledger.notices[0]], "…and the band rows it composed");
+
+      // A RE-TELL IS NOT A REPLAY. Nothing stored the first throughDay, so a
+      // second compose over unmoved fields simply selects the same days again.
+      assert.equal(at.sim.composePrefix(null), prefix, "a recompose with nothing staged says the same thing");
+
+      // …AND THE BURN CLOSES IT.
+      assert.equal(P.flush(at.core, pend.ledger.throughDay), true, "the accepted turn burns");
+      assert.equal(at.player.flushedDay, 4, "the gate rose to the day that was told");
+      assert.equal(at.player.ledger.notices[0][2], 1, "the band it told is told");
+      assert.equal(at.sim.composePrefix(null), at.sim.header(), "and the next turn has nothing left to say");
+    }
+
+    // ── M10: NOTHING ELSE IN A TURN KNOWS FISHING HAPPENED ────────────────────
+    // The verb narrates nothing and takes no receipt turn. Its lines reach the GM
+    // through the wrap-up or not at all, so a prefix composed before the sleep
+    // that makes them owed carries no fishing word anywhere in it.
+    {
+      const quiet = staged({ owed: 0, day: 4, lines: [[3, "Fished the millpond — 12 casts: carp x2."]] });
+      assert.equal(quiet.sim.composePrefix(null), quiet.sim.header(), "nothing owed, nothing said");
+      quiet.sim.intro.ledgerOwed = 3; // what a sleep stages
+      const after = quiet.sim.composePrefix(null);
+      assert.ok(after.includes("Fished the millpond"), "…and after the sleep it is in the tell");
+      assert.equal(
+        after.indexOf("Fished"),
+        after.indexOf("[Wrap-up") + after.slice(after.indexOf("[Wrap-up")).indexOf("Fished"),
+        "…inside the wrap-up part, which is the only part that carries it",
+      );
+    }
+
+    // ── TRUNCATION DROPS THE NEWEST DAYS, AND THE BURN FOLLOWS IT ─────────────
+    // Whole days or none. The tell renders oldest-first until the next day would
+    // put it over `ledgerTellChars`, then stops — and the burn advances only
+    // through the last day rendered WHOLE, so `ledgerOwed` survives a partial
+    // tell and the next accepted turn picks up exactly where this one stopped.
+    {
+      const budget = loadedPF.economy.TUNING.ledgerTellChars;
+      const wide = "w".repeat(P.CAPS.ledgerChars);
+      // Sized off the shipped budget rather than written down: enough lines that
+      // TWO days fit and three cannot, so the drop is the budget's decision and
+      // not the fixture's.
+      const perDay = Math.floor(budget / 2 / P.CAPS.ledgerChars);
+      const dayCost = perDay * P.CAPS.ledgerChars;
+      assert.ok(2 * dayCost <= budget && 3 * dayCost > budget, `the fixture straddles the budget (${dayCost} each)`);
+      const lines = [];
+      for (const day of [3, 4, 5]) for (let i = 0; i < perDay; i++) lines.push([day, wide]);
+      const at = staged({ gate: 2, owed: 5, day: 9, lines });
+      const first = at.sim.composePrefix(null);
+      assert.ok(first.includes("Day 3:"), "the oldest owed day is told");
+      assert.ok(first.includes("Day 4:"), "…and the next one, because it still fits");
+      assert.ok(!first.includes("Day 5:"), "…and the NEWEST day is what the budget drops");
+      assert.equal(at.sim._pendingIntro.ledger.throughDay, 4, "so the burn covers only what was rendered whole");
+      assert.equal(P.flush(at.core, 4), true, "…and it is a legal burn");
+      assert.equal(at.player.flushedDay, 4, "the gate stops at the last whole day");
+      assert.equal(
+        P.get(at.core).ledger.lines.some(([day]) => day === 5),
+        true,
+        "day 5 is still in the buffer",
+      );
+      assert.equal(at.sim.intro.ledgerOwed, 5, "…and still owed: a partial tell does not spend the marker");
+      const second = at.sim.composePrefix(null);
+      assert.ok(second.includes("Day 5:") && !second.includes("Day 4:"), "the next turn continues from day 5");
+      assert.equal(at.sim._pendingIntro.ledger.throughDay, 5, "…and would burn through it");
+    }
+
+    // ── A MAXIMUM-SHAPE DAY RENDERS WHOLE, which is what the floor buys ───────
+    // `ledgerTellChars` is asserted at load against `ledgerPerDay × ledgerChars`
+    // (59-economy), and this is the case that spends it: the biggest day the
+    // caps allow — fifteen lines of two hundred graphemes — has to render, or the
+    // burn advances through nothing and the flush stalls for the rest of the save.
+    {
+      const lines = [];
+      for (let i = 0; i < P.CAPS.ledgerPerDay; i++) lines.push([3, "m".repeat(P.CAPS.ledgerChars)]);
+      const at = staged({ gate: 2, owed: 3, day: 5, lines });
+      const part = at.sim.composePrefix(null);
+      assert.ok(part.includes("Day 3:"), "a maximum-shape day is told");
+      assert.equal(
+        (part.match(new RegExp("m".repeat(P.CAPS.ledgerChars), "g")) ?? []).length,
+        P.CAPS.ledgerPerDay,
+        "…every line of it, whole",
+      );
+      assert.equal(at.sim._pendingIntro.ledger.throughDay, 3, "and the burn covers it");
+
+      // …AND A DAY NOTHING CAN FIT STILL RIDES. A day this build can write cannot
+      // exceed the budget, but a hostile save can carry fifty lines on one, and
+      // "tell nothing and advance nothing, forever" is the worse answer.
+      const huge = [];
+      for (let i = 0; i < 50; i++) huge.push([3, "h".repeat(P.CAPS.ledgerChars)]);
+      const over = staged({ gate: 2, owed: 3, day: 5, lines: huge });
+      assert.ok(over.sim.composePrefix(null).includes("Day 3:"), "an oversized day is told rather than stalling");
+      assert.equal(over.sim._pendingIntro.ledger.throughDay, 3, "…and the gate can still move past it");
+    }
+
+    // ── THE COMPACTION RE-TELL: A TOLD DAY THAT BECAME A STUB ─────────────────
+    // A lost burn (§5) leaves the tell in history and the gate where it was, so
+    // the next compose says it again — and by then the buffer may have compacted
+    // the very days it is re-telling. The re-tell renders the STUB, which is
+    // bounded and content-preserving rather than a hole.
+    {
+      const at = staged({
+        gate: 0,
+        owed: 5,
+        day: 6,
+        lines: [
+          [1, "The first day."],
+          [2, "The second."],
+          [3, "The third."],
+          [4, "The fourth."],
+          [5, "The fifth."],
+        ],
+      });
+      const first = at.sim.composePrefix(null);
+      assert.ok(first.includes("The first day.") && first.includes("The fifth."), "the tell covers days 1 to 5");
+      // The send was accepted and the burn was lost — nothing is called here,
+      // which IS the lost flush. Then the day moves on and the buffer compacts.
+      assert.equal(P.log(at.core, "Something on day 6.", 6), true, "a later line compacts the buffer");
+      const again = at.sim.composePrefix(null);
+      assert.ok(!again.includes("The first day."), "day 1 is no longer a line");
+      assert.ok(/Day 1: 1 thing happened\./.test(again), `…it is a stub, and the re-tell renders it (${again})`);
+      assert.ok(again.includes("The fifth."), "…while the days still held in full are still told in full");
+      assert.equal(at.sim._pendingIntro.ledger.throughDay, 5, "and the re-tell still reaches the same day");
+    }
+
+    // ── TWO SENDERS, ONE WRAP-UP: BOTH ACCEPTED, THE SECOND BURN A NO-OP ──────
+    // Travel composes and awaits; Talk slips into the window and composes the
+    // same tell; the host accepts both, so the GM hears it twice in one history
+    // (§5, accepted). What must NOT happen is the second burn doing anything.
+    {
+      const at = staged({ gate: 1, owed: 4, day: 6, lines: [[3, "The day they both told."]] });
+      const travel = at.sim.composePrefix(null);
+      const pendTravel = at.sim._pendingIntro;
+      const talk = at.sim.composePrefix(null);
+      const pendTalk = at.sim._pendingIntro;
+      assert.equal(talk, travel, "the second compose selects the same days over the same live fields");
+      assert.notEqual(pendTalk, pendTravel, "…on its own pending object");
+      assert.equal(pendTalk.ledger.throughDay, pendTravel.ledger.throughDay, "…reaching the same day");
+      assert.equal(P.flush(at.core, pendTravel.ledger.throughDay), true, "the first burn goes through");
+      assert.equal(at.player.flushedDay, 3, "…and moves the gate");
+      assert.equal(P.flush(at.core, pendTalk.ledger.throughDay), true, "the second is accepted rather than refused");
+      assert.equal(at.player.flushedDay, 3, "…and changes nothing, which is what `max` is for");
+    }
   } finally {
     loadedPF.save.gate = null;
     loadedPF.save.reset(); // the mutators self-dirty, and a dirty block arms a timer
+  }
+}
+
+// ── THE TRAVEL SENDER CAPTURES ITS OWN TURN (0.12 slice 4) ───────────────────
+// The burn hangs off an await, and there are two wrong ways to reach it that
+// both look right. Re-reading `sim._pendingIntro` after the send finds the null
+// `commitIntro` just wrote and burns NOTHING — for the rest of the save, so the
+// wrap-up is re-told on every single turn. Reading the stash fresh finds whatever
+// a sender that interleaved composed instead. The reference is captured before
+// the await and survives the wholesale null, which is the only version that burns
+// the turn that was actually sent.
+//
+// Driven through the real PF.spatial.travel, because that is where the capture
+// lives. The Talk sender is the same shape in 90-element, which this harness
+// cannot load (it wants a custom-element registry and a page).
+{
+  const P = loadedPF.player;
+  const prevGetSpatial = loadedPF.api.getSpatial;
+  loadedPF.api.getSpatial = async () => ({
+    definition: { revision: 3 },
+    currentLocationId: "root",
+    breadcrumb: [{ name: "root" }],
+    destinations: [{ id: "bar", name: "The Bar" }],
+  });
+  const sent = [];
+  const w = world.build(77, "cozy-village", null);
+  const sim = new loadedPF.Sim(w);
+  sim.day = 6;
+  sim.intro = { world: false, zones: {}, npcs: {}, ledgerOwed: 5 };
+  const core = {
+    chatId: "chat-travel-burn",
+    sim,
+    host: { packageId: "pixelforge", chatMeta: {}, sendMessage: async (text) => (sent.push(text), true) },
+    hud: { toast() {}, refreshChips() {} },
+    markDirty() {},
+  };
+  try {
+    P.get(core).ledger.lines.push([4, "Fished the millpond — 12 casts: carp x2."]);
+    P.notice(P.get(core), "A task you had taken on has no one left to hand it back to.", 4);
+    loadedPF.spatial.reset();
+    await loadedPF.spatial.refresh(core);
+    await loadedPF.spatial.travel(core, { id: "bar", name: "The Bar" });
+    assert.equal(sent.length, 1, "the journey sent its turn");
+    assert.ok(sent[0].includes("[Wrap-up — Day 4: Fished the millpond"), `…carrying the wrap-up (${sent[0]})`);
+    assert.ok(sent[0].endsWith("We travel to The Bar."), "…before the player's own action text, at the end");
+    assert.equal(P.get(core).flushedDay, 4, "and the ACCEPTED turn burned it");
+    assert.equal(P.get(core).ledger.notices[0][2], 1, "…band and all");
+    assert.equal(sim._pendingIntro, null, "commitIntro nulled the stash, which is why the capture is closure-local");
+
+    // AND A REFUSED TURN BURNS NOTHING. Same journey, same tell, `false` back
+    // from the host: the days stay owed and the notice stays untold.
+    const refused = new loadedPF.Sim(w);
+    refused.day = 6;
+    refused.intro = { world: false, zones: {}, npcs: {}, ledgerOwed: 5 };
+    core.sim = refused;
+    core.chatId = "chat-travel-refused";
+    core.host.sendMessage = async () => false;
+    P.get(core).ledger.lines.push([4, "Fished the millpond — 12 casts: carp x2."]);
+    P.notice(P.get(core), "A task you had taken on has no one left to hand it back to.", 4);
+    loadedPF.spatial.pending = null;
+    await loadedPF.spatial.travel(core, { id: "bar", name: "The Bar" });
+    assert.equal(P.get(core).flushedDay, 0, "a refused turn is not a telling");
+    assert.equal(P.get(core).ledger.notices[0][2], undefined, "…and its band is still owed to somebody");
+  } finally {
+    loadedPF.api.getSpatial = prevGetSpatial;
+    loadedPF.spatial.reset();
+    loadedPF.save.reset();
   }
 }
 

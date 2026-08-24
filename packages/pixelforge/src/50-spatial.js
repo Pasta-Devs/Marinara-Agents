@@ -175,11 +175,26 @@ PF.spatial = {
     // then leave the NEW chat's state alone (same guard refresh() uses).
     const gen = this._gen;
     const chatId = core.chatId;
+    // A THIRD CAPTURE, and it is a DIFFERENT counter from the two above. Those
+    // are spatial's own generation and the chat id, which fence this journey's
+    // post-await branches; the player mutators fence on PF.save._gen, which moves
+    // on a chat switch and is what stops this turn's wrap-up burn landing on the
+    // arriving chat's block. Read pre-await, like everything else here.
+    const saveGen = PF.save._gen ?? 0;
     try {
       const text = `${core.sim.composePrefix(null)} We travel to ${dest.name}.`;
+      // The composed turn's own pending, closure-local — never re-read after the
+      // await, where commitIntro's wholesale null waits (see 90-element interact
+      // for the two ways this goes wrong).
+      const pend = core.sim._pendingIntro;
       const ok = await core.host.sendMessage(text, undefined, transition);
       if (gen !== this._gen || core.chatId !== chatId) return;
-      if (ok !== false) core.sim?.commitIntro?.();
+      if (ok !== false) {
+        core.sim?.commitIntro?.();
+        // The burn, on the accepted turn. Guarded inside the mutator and its
+        // refusal deliberately swallowed (plan §2.6).
+        if (pend?.ledger) PF.player.flush(core, pend.ledger.throughDay, saveGen);
+      }
       // Both post-await branches act only on THIS journey's pending entry: a
       // 1.12 reject event may already have cleared it mid-await (a second,
       // contradictory toast would follow), and the player may already have
