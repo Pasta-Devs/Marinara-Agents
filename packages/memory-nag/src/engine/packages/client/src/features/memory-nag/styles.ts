@@ -457,6 +457,7 @@ export const MEMORY_NAG_STYLES = `
   width: 0.75rem;
   height: 0.75rem;
   flex: none;
+  color: var(--marinara-chat-chrome-button-text-active, var(--mn-chroma));
 }
 
 .mn-popover {
@@ -478,6 +479,11 @@ export const MEMORY_NAG_STYLES = `
 }
 
 .mn-popover-header {
+  display: flex;
+  min-height: 2rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   border-bottom: 1px solid var(--marinara-chat-chrome-panel-divider, var(--border));
   padding: 0.625rem 0.75rem;
 }
@@ -497,7 +503,53 @@ export const MEMORY_NAG_STYLES = `
   width: 0.625rem;
   height: 0.625rem;
   flex: none;
-  color: var(--marinara-chat-chrome-accent, var(--muted-foreground));
+  color: var(--marinara-chat-chrome-button-text-active, var(--mn-chroma));
+}
+
+.mn-popover-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.mn-popover-action {
+  display: inline-flex;
+  width: 1.5rem;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  min-height: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 0.25rem;
+  background: transparent;
+  padding: 0;
+  color: var(--marinara-chat-chrome-panel-muted, var(--muted-foreground));
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.mn-popover-action:hover,
+.mn-popover-action--active {
+  border-color: var(--marinara-chat-chrome-button-border, var(--border));
+  background: var(--marinara-chat-chrome-highlight-bg, var(--accent));
+  color: var(--marinara-chat-chrome-button-text-active, var(--foreground));
+}
+
+.mn-popover-action:focus-visible {
+  outline: 1px solid var(--marinara-chat-chrome-focus-ring, var(--ring));
+  outline-offset: 1px;
+}
+
+.mn-popover-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.mn-popover-action-icon {
+  width: 0.6875rem;
+  height: 0.6875rem;
 }
 
 .mn-popover-body {
@@ -535,7 +587,7 @@ export const MEMORY_NAG_STYLES = `
   z-index: 10;
   overflow: hidden;
   border-bottom: 1px solid var(--border);
-  background: var(--tracker-panel-section-background, color-mix(in srgb, var(--card) 10%, transparent));
+  background: var(--tracker-panel-section-background, color-mix(in srgb, var(--card) 5%, transparent));
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--foreground) 5%, transparent);
 }
 
@@ -656,10 +708,11 @@ export const MEMORY_NAG_STYLES = `
   padding: 0.25rem;
   color: color-mix(in srgb, var(--foreground) 35%, transparent);
   font-size: 0.6875rem;
-  line-height: 1rem;
+  line-height: 0.875rem;
 }
 
 .mn-tracker--mobile-compact {
+  border-bottom: 0;
   background: transparent;
   box-shadow: none;
 }
@@ -680,7 +733,7 @@ export const MEMORY_NAG_STYLES = `
 }
 
 .mn-tracker--mobile-compact .mn-tracker-icon {
-  color: var(--marinara-chat-chrome-accent, var(--primary));
+  color: var(--marinara-chat-chrome-button-text-active, var(--mn-chroma));
   opacity: 1;
 }
 
