@@ -192,8 +192,11 @@ PF.spatial = {
       if (ok !== false) {
         core.sim?.commitIntro?.();
         // The burn, on the accepted turn. Guarded inside the mutator and its
-        // refusal deliberately swallowed (plan §2.6).
-        if (pend?.ledger) PF.player.flush(core, pend.ledger.throughDay, saveGen);
+        // refusal deliberately swallowed (plan §2.6). The captured pending hands
+        // back BOTH halves of what was told — the day and the notice ROWS — so
+        // the burn marks the band this turn carried and not whatever a rebuild
+        // has written into the live one since (plan §2.5).
+        if (pend?.ledger) PF.player.flush(core, pend.ledger.throughDay, pend.ledger.notices, saveGen);
       }
       // Both post-await branches act only on THIS journey's pending entry: a
       // 1.12 reject event may already have cleared it mid-await (a second,

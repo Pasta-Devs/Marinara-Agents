@@ -387,7 +387,10 @@ PF.core = {
           // the await, and a refusal is SWALLOWED — no toast, no retry. The tell
           // stays in history un-burned and the next compose says it again, which
           // is a §5 lost-flush and not something to interrupt anybody about.
-          if (pend?.ledger) PF.player.flush(this, pend.ledger.throughDay, gen);
+          // The pending carries the notice ROWS as well as the day, so the burn
+          // marks the band THIS turn told rather than the live one, which a
+          // rebuild can have appended to under the await (plan §2.5).
+          if (pend?.ledger) PF.player.flush(this, pend.ledger.throughDay, pend.ledger.notices, gen);
           // P2's ledger goes live on the cheapest honest signal there is: the
           // encounter count moves when the host ACCEPTS the turn, exactly where
           // the one-shot intro flags burn, and for the same reason — a refused

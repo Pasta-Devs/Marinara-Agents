@@ -1480,13 +1480,25 @@ PF.player = {
    *  swipe, a checkpoint load), so a send resolving over a rewound sim passes the
    *  fence and would otherwise write a future gate onto the rewound block.
    *
-   *  THE NOTICES ARE THE LIVE BLOCK'S UNTOLD ROWS, which is exactly the set the
-   *  compose captured: the tell takes ALL of them — the band answers to the told
-   *  flag and not to any day selection — so "untold at burn time" and "composed"
-   *  are the same rows. And they are the same rows OF THE SAME BLOCK, because the
-   *  guard above has already established that this is the sim the compose ran
-   *  against; a rebuild-swapped one refuses before it reaches here, and its fresh
-   *  notices are left untold, which is correct — nobody has been told them.
+   *  `notices` IS THE ROWS THE COMPOSE CAPTURED — `pending.ledger.notices`,
+   *  handed back through the sender's closure-local pending — and not the live
+   *  band read again here. The guard is NOT enough to make those two the same
+   *  set, and that is the whole reason for the parameter. The guard reads three
+   *  numbers, and three of the five notice writers move none of them: the
+   *  dangling-quest repair, the mint severance and a restore landing on a gate
+   *  already where it was all append to the band while leaving `flushedDay`,
+   *  `ledgerOwed` and `day` untouched. Every one of them runs inside
+   *  `_rehydratePlayer` ← `simFromSaved` ← `_rebuild`, which is UNFENCED on the
+   *  same chat — so a rebuild landing mid-send hands the burn a live band with a
+   *  row NOBODY COMPOSED in it, and a re-read would mark it told. The band
+   *  answers to that flag and to nothing else, so a told row nobody was told is a
+   *  sentence destroyed in silence: no gate to re-open, no day to re-select.
+   *
+   *  Marking the CAPTURED rows is safe in the same interleaving for the opposite
+   *  reason: under a rebuild they are orphans of the sim that was replaced, and
+   *  writing a flag onto an object nothing reads any more is a no-op. The fresh
+   *  notice stays untold and rides the next compose, which is the only turn that
+   *  can honestly carry it.
    *
    *  Returns true when it wrote and false for every refusal — the fence, the
    *  loading gate, a day that is not a day, and each of the three inequalities.
@@ -1494,7 +1506,7 @@ PF.player = {
    *  an accepted send leaves the tell in history un-burned and the next compose
    *  re-tells it, which is a §5 lost-flush cause and not something to interrupt
    *  the player about. The value is for the tests. */
-  flush(core, throughDay, gen) {
+  flush(core, throughDay, notices, gen) {
     const p = this._live(core, gen);
     if (!p) return false;
     const sim = core.sim;
@@ -1509,7 +1521,7 @@ PF.player = {
     // …and never the day underway, whatever the marker says.
     if (throughDay >= this.resolvedDay(sim.day)) return false;
     p.flushedDay = Math.max(gate, throughDay);
-    for (const row of Array.isArray(p.ledger?.notices) ? p.ledger.notices : []) {
+    for (const row of Array.isArray(notices) ? notices : []) {
       if (Array.isArray(row) && row.length >= 2 && !row[2]) row[2] = 1;
     }
     this._touch(core);

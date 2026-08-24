@@ -15310,7 +15310,13 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     // ── …AND WHAT IT DOES WHEN IT ACCEPTS ─────────────────────────────────────
     {
       const at = staged({ gate: 2, owed: 5, day: 6, notices: [[3, "Something was set aside."]] });
-      assert.equal(P.flush(at.core, 5), true, "the ordinary case: gate < throughDay ≤ owed < day");
+      // The third argument is the rows the COMPOSE captured, which for an all-untold
+      // band is the band itself — what `_composeLedger` hands the sender (below).
+      assert.equal(
+        P.flush(at.core, 5, at.player.ledger.notices),
+        true,
+        "the ordinary case: gate < throughDay ≤ owed < day",
+      );
       assert.equal(at.player.flushedDay, 5, "the gate rises to the day that was told");
       assert.deepEqual(at.player.ledger.notices[0], [3, "Something was set aside.", 1], "…and the band is marked told");
       assert.equal(at.sim.dirty, true, "…and the save is flagged, because the mutator does that for its callers");
@@ -15319,16 +15325,28 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
       // A SECOND BURN AT THE SAME DAY IS A NO-OP THAT STILL PASSES. Two senders
       // can compose the same wrap-up and both be accepted (§5), so the second
       // burn has to be harmless rather than refused — `max` is what makes it so.
-      assert.equal(P.flush(at.core, 5), true, "an equal throughDay is accepted");
+      assert.equal(P.flush(at.core, 5, at.player.ledger.notices), true, "an equal throughDay is accepted");
       assert.equal(at.player.flushedDay, 5, "…and changes nothing");
 
       // THE FLOOR CASE: nothing owed, nothing told, and a notice waiting. The
       // band answers to its flag and not to a day, so a save that has never slept
       // still tells its notices — and the burn that marks them raises no gate.
       const bandOnly = staged({ owed: 0, gate: 0, day: 1, notices: [[1, "A task has no one to hand it back to."]] });
-      assert.equal(P.flush(bandOnly.core, 0), true, "throughDay 0 against owed 0 is a legal burn");
+      assert.equal(
+        P.flush(bandOnly.core, 0, bandOnly.player.ledger.notices),
+        true,
+        "throughDay 0 against owed 0 is a legal burn",
+      );
       assert.equal(bandOnly.player.flushedDay, 0, "the gate stays where it was");
       assert.equal(bandOnly.player.ledger.notices[0][2], 1, "…and the notice is told");
+
+      // …AND A BURN WITH NO ROWS TELLS NO ROWS. A tell that carried only days
+      // marks only days: the band is not swept up by a turn that never mentioned
+      // it, which is the property the rebuild cases below turn on.
+      const daysOnly = staged({ gate: 2, owed: 5, day: 6, notices: [[3, "Nobody composed this one."]] });
+      assert.equal(P.flush(daysOnly.core, 5, []), true, "a burn carrying no notice rows is still a burn");
+      assert.equal(daysOnly.player.flushedDay, 5, "…and still moves the gate");
+      assert.equal(daysOnly.player.ledger.notices[0][2], undefined, "…while the band it never told stays untold");
     }
 
     // ── A DAY THAT IS NOT A DAY IS NOT A BURN ─────────────────────────────────
@@ -15343,7 +15361,7 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     // ── THE FENCE AND THE GATE, which every mutator answers to ────────────────
     {
       const at = staged({ owed: 5, day: 6 });
-      assert.equal(P.flush(at.core, 5, (loadedPF.save._gen ?? 0) + 1), false, "a stale generation is refused");
+      assert.equal(P.flush(at.core, 5, null, (loadedPF.save._gen ?? 0) + 1), false, "a stale generation is refused");
       assert.equal(at.player.flushedDay, 0, "…and writes nothing");
       loadedPF.save.gate = { chatId: at.core.chatId, state: "generating" };
       assert.equal(P.flush(at.core, 5), false, "and so is a chat whose world is still being written");
@@ -15369,7 +15387,11 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
       loadedPF.save._rebuild(at.core, before);
       assert.notEqual(at.core.sim, at.sim, "the rebuild really did replace the sim under the send");
       assert.equal(at.core.sim.intro.ledgerOwed, 0, "…with one that owes nothing");
-      assert.equal(P.flush(at.core, composed), false, "so the burn is REFUSED, on the live sim's own numbers");
+      assert.equal(
+        P.flush(at.core, composed, at.player.ledger.notices),
+        false,
+        "so the burn is REFUSED, on the live sim's own numbers",
+      );
       assert.equal(P.get(at.core).flushedDay, 0, "the rewound block keeps its gate");
       // AND ITS BAND IS ITS OWN. The rebuilt block carries the same SENTENCE —
       // it came off the same row — in a different row object, which is exactly
@@ -15383,6 +15405,111 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
       // AND THE OLD BLOCK IS NOT WRITTEN INTO EITHER: the refusal happened before
       // anything moved, so the sim that composed keeps its untold band as well.
       assert.equal(at.player.ledger.notices[0][2], undefined, "the sim that composed keeps its band untold");
+    }
+
+    // ── THE REBUILD THE GUARD HAS NO REASON TO REFUSE ─────────────────────────
+    // The case above is the LOUD rebuild — a rewind, which un-stages the marker
+    // and is refused on the numbers. It is not the only rebuild there is. Three
+    // of the five notice writers (the dangling-quest repair, the mint severance,
+    // and a restore landing on a gate already where it was) leave `flushedDay`,
+    // `ledgerOwed` and `sim.day` exactly as they found them, so a send resolving
+    // over one of THOSE rebuilds meets a guard with nothing to object to. What it
+    // also meets is a notice NOBODY COMPOSED: written after the tell went out and
+    // owed to the next one.
+    //
+    // Which is the whole reason the burn marks the rows the COMPOSE captured
+    // rather than whatever is in the live band when it lands. The band answers to
+    // the told flag and to nothing else — no gate, no day — so a row marked told
+    // that nobody was told is a sentence destroyed in silence.
+    {
+      loadedPF.quarantine.reset();
+      const at = staged({
+        gate: 2,
+        owed: 5,
+        day: 7,
+        lines: [
+          [3, "The third."],
+          [4, "The fourth."],
+        ],
+      });
+      // A quest whose giver is standing in this world and one whose giver is not.
+      // Both, because EVERY giver dangling is a statement about the world rather
+      // than about the quests, and the repair declines that one (case z).
+      P.get(at.core).quests.active = [
+        { id: "q-real", g: "village|Tam", verb: "gather", target: "herb", n: 1, have: 0, r: {}, day: 1 },
+        { id: "q-ghost", g: "village|Nobody At All", verb: "gather", target: "herb", n: 1, have: 0, r: {}, day: 1 },
+      ];
+      at.sim.composePrefix(null);
+      const pend = at.sim._pendingIntro;
+      assert.deepEqual(
+        pend.ledger.notices,
+        [],
+        "the turn went out with an empty band — days to tell, and nothing else",
+      );
+      assert.equal(pend.ledger.throughDay, 4, "…reaching day 4");
+
+      // THE REBUILD, through the real machinery: the row this chat would have
+      // saved, rebuilt under the send exactly as _applyRewind and _adoptNow do it.
+      const row = JSON.parse(JSON.stringify(loadedPF.save.snapshot(at.core)));
+      loadedPF.save._rebuild(at.core, row);
+      const live = P.get(at.core);
+      assert.notEqual(at.core.sim, at.sim, "the rebuild replaced the sim under the send");
+      assert.deepEqual(
+        [live.flushedDay, at.core.sim.intro.ledgerOwed, at.core.sim.day],
+        [2, 5, 7],
+        "…and left every number the guard reads exactly where it found them",
+      );
+      const fresh = (live.ledger.notices ?? []).filter(([, text]) => /no one left to hand it back/.test(text));
+      assert.equal(fresh.length, 1, "the rebuild's own repair wrote a notice no compose has ever seen");
+      assert.equal(fresh[0][2], undefined, "…untold, because it is younger than the tell still in flight");
+
+      // AND THE BURN LANDS, because there is nothing here for the guard to catch.
+      assert.equal(
+        P.flush(at.core, pend.ledger.throughDay, pend.ledger.notices),
+        true,
+        "so the burn is ACCEPTED, on the live sim's numbers",
+      );
+      assert.equal(live.flushedDay, 4, "…raising the gate, which is what it was for");
+      assert.equal(fresh[0][2], undefined, "but the fresh notice is STILL UNTOLD — the burn marks what was composed");
+      const after = at.core.sim.composePrefix(null);
+      assert.ok(/no one left to hand it back/.test(after), `…so the NEXT turn is the one that carries it (${after})`);
+    }
+
+    // ── THE ROW ONLY THE SECOND COMPOSE CARRIED ───────────────────────────────
+    // No rebuild in this one, and the same rule decides it. Travel composes over
+    // an empty band and awaits; a notice is written under it; Talk composes and
+    // CARRIES that notice; then Travel's turn comes back accepted and burns. The
+    // row Travel never told is not Travel's to mark — and if it marks it, a Talk
+    // the host then refuses leaves a sentence that reached nobody flagged as
+    // delivered, which nothing in the band can undo.
+    {
+      const at = staged({ gate: 1, owed: 4, day: 6, lines: [[3, "The day they both told."]] });
+      at.sim.composePrefix(null);
+      const pendTravel = at.sim._pendingIntro;
+      assert.deepEqual(pendTravel.ledger.notices, [], "Travel composed over an empty band");
+
+      P.notice(at.player, "A task you had taken on has no one left to hand it back to, so you have let it go.", 4);
+      const talk = at.sim.composePrefix(null);
+      const pendTalk = at.sim._pendingIntro;
+      assert.ok(
+        /no one left to hand it back/.test(talk),
+        `…and Talk, composing after it, carries the notice (${talk})`,
+      );
+      assert.deepEqual(pendTalk.ledger.notices, [at.player.ledger.notices[0]], "…as the row itself");
+
+      assert.equal(
+        P.flush(at.core, pendTravel.ledger.throughDay, pendTravel.ledger.notices),
+        true,
+        "Travel's accepted turn burns",
+      );
+      assert.equal(at.player.flushedDay, 3, "…its own days");
+      assert.equal(at.player.ledger.notices[0][2], undefined, "…and NOT the row only Talk composed");
+      assert.equal(
+        P.flush(at.core, pendTalk.ledger.throughDay, pendTalk.ledger.notices),
+        true,
+        "then Talk's turn burns",
+      );
+      assert.equal(at.player.ledger.notices[0][2], 1, "…and THAT is what tells the notice it carried");
     }
 
     // ── WHAT THE TELL SELECTS, AND WHERE IT SITS IN THE TURN ──────────────────
@@ -15435,7 +15562,7 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
       assert.equal(at.sim.composePrefix(null), prefix, "a recompose with nothing staged says the same thing");
 
       // …AND THE BURN CLOSES IT.
-      assert.equal(P.flush(at.core, pend.ledger.throughDay), true, "the accepted turn burns");
+      assert.equal(P.flush(at.core, pend.ledger.throughDay, pend.ledger.notices), true, "the accepted turn burns");
       assert.equal(at.player.flushedDay, 4, "the gate rose to the day that was told");
       assert.equal(at.player.ledger.notices[0][2], 1, "the band it told is told");
       assert.equal(at.sim.composePrefix(null), at.sim.header(), "and the next turn has nothing left to say");
@@ -15564,9 +15691,17 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
       assert.equal(talk, travel, "the second compose selects the same days over the same live fields");
       assert.notEqual(pendTalk, pendTravel, "…on its own pending object");
       assert.equal(pendTalk.ledger.throughDay, pendTravel.ledger.throughDay, "…reaching the same day");
-      assert.equal(P.flush(at.core, pendTravel.ledger.throughDay), true, "the first burn goes through");
+      assert.equal(
+        P.flush(at.core, pendTravel.ledger.throughDay, pendTravel.ledger.notices),
+        true,
+        "the first burn goes through",
+      );
       assert.equal(at.player.flushedDay, 3, "…and moves the gate");
-      assert.equal(P.flush(at.core, pendTalk.ledger.throughDay), true, "the second is accepted rather than refused");
+      assert.equal(
+        P.flush(at.core, pendTalk.ledger.throughDay, pendTalk.ledger.notices),
+        true,
+        "the second is accepted rather than refused",
+      );
       assert.equal(at.player.flushedDay, 3, "…and changes nothing, which is what `max` is for");
     }
   } finally {
@@ -15743,7 +15878,11 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
       assert.ok(part.includes(fish), `…INCLUDING the fish the crossing window landed (${fish})`);
       assert.ok(!part.includes("Day 6"), "and says nothing about the day the player is still living");
       assert.equal(at.sim._pendingIntro.ledger.throughDay, 5, "the burn this turn would take reaches day 5");
-      assert.equal(P.flush(at.core, at.sim._pendingIntro.ledger.throughDay), true, "…and is a legal one");
+      assert.equal(
+        P.flush(at.core, at.sim._pendingIntro.ledger.throughDay, at.sim._pendingIntro.ledger.notices),
+        true,
+        "…and is a legal one",
+      );
       assert.equal(P.get(at.core).flushedDay, 5, "so the night is told exactly once");
       assert.equal(at.sim.composePrefix(null), at.sim.header(), "and the turn after it has nothing to add");
     }
