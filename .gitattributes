@@ -1,0 +1,54 @@
+# Line endings are part of this repository's build contract, not a preference.
+#
+# Package builders raw-concatenate `src/*.js` into `client.js`, and each
+# manifest records the exact `bytes` and `sha256` of every declared file. A
+# working copy smudged to CRLF therefore inflates every built payload and
+# poisons the manifest hashes: pixelforge 0.11.0 shipped a manifest, artifact
+# zip, and source blob that disagreed by 3,280 bytes because one source file
+# sat CRLF at build time (caught in #544). The same smudge makes
+# validate-catalog.mjs and validate-package-locales.mjs fail on packages a
+# contributor never touched.
+#
+# Git for Windows writes `core.autocrlf=true` into the SYSTEM gitconfig, so a
+# fresh clone is already smudged before anyone can configure a repo-local
+# setting. These rules travel with the tree and win over that default.
+
+# Everything git detects as text checks out LF on every platform.
+* text=auto eol=lf
+
+# Binary payloads are pinned explicitly instead of relying on git's NUL-byte
+# heuristic. The heuristic only inspects the head of a file, and an archive or
+# image that slips through it and gets EOL-converted is silent, unrecoverable
+# corruption — a cost far above the price of listing the extensions.
+#
+# `git check-attr` reports `eol: lf` on these paths too, inherited from the `*`
+# line above. It is inert: `binary` unsets `text`, and git only runs EOL
+# conversion on paths whose `text` attribute is set or auto-detected.
+
+# Committed package artifacts.
+*.zip binary
+
+# Catalog artwork, tilesheets, and sprites. `.png` is the only image format in
+# the tree today; the rest are the formats validate-catalog.mjs already accepts
+# for package assets and Home browser-tab icons, pinned before one lands.
+*.gif  binary
+*.ico  binary
+*.jpeg binary
+*.jpg  binary
+*.png  binary
+*.webp binary
+
+# Fonts, audio, and documents. Not present today — listed so that adding one is
+# not also a corruption bug.
+*.mp3   binary
+*.ogg   binary
+*.otf   binary
+*.pdf   binary
+*.ttf   binary
+*.wav   binary
+*.woff  binary
+*.woff2 binary
+
+# No Windows-native scripts (.bat, .cmd, .ps1) exist in this tree, so nothing
+# is pinned to CRLF. Add `eol=crlf` alongside the first one that lands —
+# cmd.exe and PowerShell expect CRLF in scripts they execute.
