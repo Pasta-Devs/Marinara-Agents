@@ -389,10 +389,21 @@ PF.Hud = class {
     }
     if (this._mode === "walk") {
       const canTalk = !!sim.nearNpc;
-      if (canTalk !== this._canTalk) {
-        this._canTalk = canTalk;
+      // The Talk button is ALSO where a skip is confirmed (90-element `interact`):
+      // while the latest GM turn still holds narration the player has not been
+      // shown, the first press asks instead of sending. It has to be part of the
+      // memo key or the question would be asked and never drawn — the old key was
+      // the bare `canTalk` boolean, which does not move when only the label does.
+      const asking = canTalk && this.core.talkConfirmArmed?.() === true;
+      const talkKey = canTalk ? `${asking ? "skip" : "talk"}:${sim.nearNpc.name}` : "";
+      if (talkKey !== this._talkKey) {
+        this._talkKey = talkKey;
         this.talkBtn.style.opacity = canTalk ? "1" : "0.45";
-        this.talkBtn.textContent = canTalk ? `Talk to ${sim.nearNpc.name} (E)` : "Talk (E)";
+        this.talkBtn.textContent = asking
+          ? "Skip story & talk?"
+          : canTalk
+            ? `Talk to ${sim.nearNpc.name} (E)`
+            : "Talk (E)";
       }
       // The berth offer, on the same cadence as Talk and memoised the same way:
       // both answer to who is within reach, and both would otherwise write DOM

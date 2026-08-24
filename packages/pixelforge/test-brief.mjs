@@ -12730,6 +12730,141 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   }
 }
 
+// ── TALK NEVER SILENTLY SPENDS NARRATION THE PLAYER HAS NOT READ ──────────────
+// Second live playtest: the maintainer wandered off mid-narration, pressed E on
+// Rook, and lost everything from the arrival narration onward. The turn Talk
+// sends ENDS the one being presented, so the segments they had not reached
+// simply never appeared — they survived only in Logs — and nothing ever asked
+// them whether to skip.
+//
+// Walking is not blocked and never should be. What is gated is the TURN: while
+// the latest GM turn still holds unshown narration, the first press turns the
+// button into the question and sends nothing.
+{
+  // 90-element is a DOM module the bundle at the top of this file leaves out;
+  // case 14m already evaluates it on its own against the two globals it touches
+  // at load, so `loadedPF.core` is here by the time this runs. Nothing below
+  // drives the custom element or the raf loop.
+  const core = loadedPF.core;
+  assert.ok(core && typeof core.interact === "function", "the core is loaded, with its interaction on it");
+
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = () => 0;
+  globalThis.clearTimeout = () => {};
+  loadedPF.save.reset();
+  try {
+    const w = world.build(9001, "cozy-village");
+    const sim = new loadedPF.Sim(w);
+    const sent = [];
+    const toasts = [];
+    core.chatId = "chat-talk-skip";
+    core.sim = sim;
+    core.hud = { toast: (text) => toasts.push(text), refreshChips() {}, update() {} };
+    const host = {
+      chatId: "chat-talk-skip",
+      isStreaming: false,
+      sendMessage: (text) => {
+        sent.push(text);
+        return true;
+      },
+      narrationDone: false,
+      latestAssistant: { id: "m1" },
+    };
+    core.host = host;
+    const villagers = w.zones.village.npcs;
+    const talkTo = (npc) => {
+      sim.mode = "walk";
+      sim.nearNpc = npc;
+      core.interact();
+    };
+    const settle = async () => {
+      for (let i = 0; i < 8; i++) await Promise.resolve();
+    };
+
+    // THE REPORTED PRESS: story still to read, so it asks.
+    talkTo(villagers[0]);
+    await settle();
+    assert.deepEqual(sent, [], "the first press sends nothing while there is narration to read");
+    assert.equal(core.talkConfirmArmed(), true, "…it arms the question on the button instead");
+    assert.ok(
+      toasts.some((text) => /press again/i.test(text)),
+      "…and says so out loud",
+    );
+    assert.equal(sim.mode, "walk", "…and does not hand the keyboard away either");
+
+    // AND THE SECOND PRESS IS THE AFFIRMATIVE ONE.
+    talkTo(villagers[0]);
+    await settle();
+    assert.equal(sent.length, 1, "the second press sends, exactly once");
+    assert.ok(sent[0].includes(villagers[0].name), "…to the person standing there");
+    assert.equal(core.talkConfirmArmed(), false, "and the question is spent with it");
+    assert.equal(sim.mode, "dialogue", "…the turn having been taken");
+
+    // NO REGRESSION FOR THE ORDINARY PRESS: nothing unread, one press, one turn.
+    sent.length = 0;
+    host.narrationDone = true;
+    talkTo(villagers[0]);
+    await settle();
+    assert.equal(sent.length, 1, "with the narration read, Talk still sends on the first press");
+
+    // AND A CHAT WITH NO GM TURN IN IT HAS NO STORY TO LOSE. `narrationDone` is
+    // false there too — the host has no message to compare its marker against —
+    // so without the second half of the test every greeting in a fresh chat
+    // would need two presses.
+    sent.length = 0;
+    host.narrationDone = false;
+    host.latestAssistant = null;
+    talkTo(villagers[0]);
+    await settle();
+    assert.equal(sent.length, 1, "an empty chat skips nothing, so it asks nothing");
+
+    // THE QUESTION IS PER-PERSON, and it goes stale rather than carrying.
+    sent.length = 0;
+    host.latestAssistant = { id: "m2" };
+    talkTo(villagers[0]);
+    await settle();
+    assert.equal(core.talkConfirmArmed(), true, "armed for the person you are standing at");
+    sim.nearNpc = villagers[1];
+    assert.equal(core.talkConfirmArmed(), false, "…and not for the next person you walk up to");
+    talkTo(villagers[1]);
+    await settle();
+    assert.deepEqual(sent, [], "who is asked in their own right");
+
+    // NARRATION FINISHING DROPS IT WITHOUT A PRESS: the question was only ever
+    // about story that was still pending.
+    assert.equal(core.talkConfirmArmed(), true, "the question stands while the narration does");
+    host.narrationDone = true;
+    assert.equal(core.talkConfirmArmed(), false, "…and is gone the moment there is nothing left to read");
+
+    // WHAT THE MAINTAINER ACTUALLY SEES: the button carries the question.
+    host.narrationDone = false;
+    const hud = new loadedPF.Hud(new FakeNode("div"), core);
+    core.hud = hud;
+    sim.mode = "walk";
+    sim.nearNpc = villagers[1];
+    core._talkConfirm = null;
+    hud.update();
+    assert.equal(hud.talkBtn.textContent, `Talk to ${villagers[1].name} (E)`, "unarmed, it is the ordinary Talk");
+    core.interact();
+    await settle();
+    hud.update();
+    assert.equal(hud.talkBtn.textContent, "Skip story & talk?", "armed, the button IS the confirm");
+    host.narrationDone = true;
+    hud.update();
+    assert.equal(hud.talkBtn.textContent, `Talk to ${villagers[1].name} (E)`, "and it goes back on its own");
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    core.chatId = null;
+    core.sim = null;
+    core.hud = null;
+    core.host = null;
+    core._talkConfirm = null;
+    loadedPF.save.reset();
+  }
+}
+
 // The other location-entry notice — a narrated drift the package follows — is the
 // same class of message and shared the same collision.
 {

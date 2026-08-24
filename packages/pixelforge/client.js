@@ -11349,10 +11349,21 @@ PF.Hud = class {
     }
     if (this._mode === "walk") {
       const canTalk = !!sim.nearNpc;
-      if (canTalk !== this._canTalk) {
-        this._canTalk = canTalk;
+      // The Talk button is ALSO where a skip is confirmed (90-element `interact`):
+      // while the latest GM turn still holds narration the player has not been
+      // shown, the first press asks instead of sending. It has to be part of the
+      // memo key or the question would be asked and never drawn — the old key was
+      // the bare `canTalk` boolean, which does not move when only the label does.
+      const asking = canTalk && this.core.talkConfirmArmed?.() === true;
+      const talkKey = canTalk ? `${asking ? "skip" : "talk"}:${sim.nearNpc.name}` : "";
+      if (talkKey !== this._talkKey) {
+        this._talkKey = talkKey;
         this.talkBtn.style.opacity = canTalk ? "1" : "0.45";
-        this.talkBtn.textContent = canTalk ? `Talk to ${sim.nearNpc.name} (E)` : "Talk (E)";
+        this.talkBtn.textContent = asking
+          ? "Skip story & talk?"
+          : canTalk
+            ? `Talk to ${sim.nearNpc.name} (E)`
+            : "Talk (E)";
       }
       // The berth offer, on the same cadence as Talk and memoised the same way:
       // both answer to who is within reach, and both would otherwise write DOM
@@ -11698,6 +11709,9 @@ PF.core = {
   _lastT: 0,
   _acc: 0,
   _narrationDoneWas: true,
+  // The person the Talk button is currently asking to skip unread story for, or
+  // null. See interact() — it is one press of state and nothing persists it.
+  _talkConfirm: null,
   _keysBound: false,
   _resizeObs: null,
   _resumeMode: "walk", // mode to restore when combat/replay ends
@@ -11861,6 +11875,11 @@ PF.core = {
     this.render?.clearZones();
     this._resumeMode = "walk";
     this._combatOverride = false;
+    // A pending skip-confirm belongs to the chat that armed it: the NPC it names
+    // is an id in the OLD world, and the arriving chat's narration is its own
+    // question. (talkConfirmArmed drops it on its own too — this is the seam
+    // where "the same id in a different world" could otherwise match.)
+    this._talkConfirm = null;
     this._lastPosSave = 0;
     this.hud?.refreshChips();
     void PF.spatial.refresh(this);
@@ -11938,6 +11957,38 @@ PF.core = {
   },
 
   // ── interaction ─────────────────────────────────────────────────────────────
+
+  /** Does the latest GM turn still hold narration the player has not been shown?
+   *
+   *  `narrationDone` is the host's per-turn presentation flag: it goes true when
+   *  the player reaches the last segment of the latest assistant message, and it
+   *  is the ONLY narration-presentation signal on the surface props — there is no
+   *  segment count, no cursor, and no way to advance the presentation from here.
+   *  So this is a question the package can ask and not one it can answer.
+   *
+   *  `latestAssistant` is the second half and not a belt-and-braces check: with
+   *  no assistant turn on the chat at all the host has no message to compare its
+   *  done-marker against, so `narrationDone` is false for a chat that has no
+   *  story in it yet — and a greeting in an empty chat skips nothing. */
+  _storyPending() {
+    return this.host?.narrationDone === false && !!this.host?.latestAssistant;
+  },
+
+  /** Is the Talk button asking to skip unread story right now?
+   *
+   *  ALSO where the question goes stale, so the button and the verb can never
+   *  disagree about what a press means: the narration finishing, walking away,
+   *  and walking to somebody else all drop it. Read every frame by the HUD. */
+  talkConfirmArmed() {
+    if (!this._talkConfirm) return false;
+    const npc = this.sim?.nearNpc;
+    if (!this._storyPending() || !npc || npc.id !== this._talkConfirm.id) {
+      this._talkConfirm = null;
+      return false;
+    }
+    return true;
+  },
+
   interact() {
     const sim = this.sim;
     if (!sim || sim.mode !== "walk" || !sim.nearNpc) return;
@@ -11948,6 +11999,30 @@ PF.core = {
       return;
     }
     const npc = sim.nearNpc;
+    // UNREAD STORY IS NOT SOMETHING A GREETING GETS TO SPEND (playtest 2).
+    // The maintainer wandered off mid-narration, pressed E on the nearest NPC,
+    // and lost everything from the arrival narration onward: the turn this sends
+    // ends the one being presented, so the segments they had not reached simply
+    // never appeared — survived only in Logs — and they never said to skip them.
+    //
+    // WALKING IS NOT BLOCKED and never should be; the world staying live under
+    // the narration is the point of it. What is gated is the TURN, and the
+    // smallest honest gate is an affirmative press: the first one turns the
+    // button into the question and sends nothing, the second sends. The keyboard
+    // path is the same button, so `e` asks once too.
+    //
+    // A CONFIRM AND NOT A FAST-FORWARD, deliberately. Fast-forwarding is the
+    // better affordance and the package cannot do it: presentation is advanced by
+    // host-private state (there is no such call on the surface props), so a
+    // package-side "skip" could only ever mean sending anyway and calling it
+    // skipping. The dialogue model that would make this moot is a roadmap item.
+    if (this._storyPending() && !this.talkConfirmArmed()) {
+      this._talkConfirm = { id: npc.id };
+      this.hud?.toast("Story still to read — press again to skip ahead and talk.");
+      this.hud?.update();
+      return;
+    }
+    this._talkConfirm = null;
     // The generation this turn belongs to. The .then() below runs after an await,
     // so a chat switch can land under it — and every mutator RE-RESOLVES core.sim,
     // which means an unfenced bump would credit the arriving chat's block with the
