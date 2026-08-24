@@ -492,8 +492,8 @@ PF.world = (() => {
   //
   // Keyed by NAME because the name is the join: buildLegacy stands up Mira, Tam,
   // Rook and Fen, and every theme's DEFAULT_BRIEFS cast names the same four. The
-  // pairing is asserted below with the name book's own assertion, from the same
-  // source of truth, for the same reason.
+  // assertion below holds this book to the brief exactly as it holds the name
+  // book, from the same source of truth and for the same reason.
   const LEGACY_ROLES = {
     "cozy-village": { Mira: "innkeeper", Tam: "farmer", Rook: "guard", Fen: "forager" },
     "sci-fi-colony": {
@@ -503,17 +503,18 @@ PF.world = (() => {
       Fen: "salvage scout",
     },
   };
-  // THE NAME BOOK ABOVE IS A DUPLICATE, AND THIS IS WHAT KEEPS IT ONE. Every
-  // string in it is also written in that theme's own DEFAULT_BRIEFS entry
+  // BOTH BOOKS ABOVE ARE DUPLICATES, AND THIS IS WHAT KEEPS THEM ONE. Every
+  // string in them is also written in that theme's own DEFAULT_BRIEFS entry
   // (18-brief) — the comment says the two agree and nothing made it true. They
-  // are two tables in two files that get edited months apart, which is how a
-  // player ends up standing at The Village Pond in a legacy save and somewhere
-  // else in the compiled world beside it.
+  // are tables in two files that get edited months apart, which is how a player
+  // ends up standing at The Village Pond in a legacy save and somewhere else in
+  // the compiled world beside it.
   //
-  // The whole book, not only the water: the settlement, the inn and the wood are
-  // the same duplication and fail the same way. Read through `defaults()` rather
-  // than off the literal, because a repair pass that quietly renamed something on
-  // its way through validate() is exactly the drift worth catching.
+  // The whole book, not only the water: the settlement, the inn, the wood and
+  // the four residents' trades are the same duplication and fail the same way.
+  // Read through `defaults()` rather than off the literal, because a repair pass
+  // that quietly renamed something on its way through validate() is exactly the
+  // drift worth catching.
   //
   // ASSERTED AT LOAD, deliberately not inside build(): that function degrades any
   // compile throw to the legacy world (see its try/catch), so an invariant raised
@@ -642,10 +643,10 @@ PF.world = (() => {
     borderTrees(f);
     fillRect(f, 1, 12, 19, 2, "ground", "path"); // west approach
     fillRect(f, 20, 1, 2, 22, "ground", "water", true); // the stream
-    // The ford, MIGRATED onto the bridge tile with the compiler's (0.12): the
-    // legacy wood and a brief-built one now cross their water by the same
-    // picture, which is the whole of the sub-decision. Non-solid as it always
-    // was — the geometry has not moved, only the tile it is laid with.
+    // The ford, MIGRATED onto the bridge tile alongside the compiled crossing's
+    // (0.12): the legacy wood and a brief-built one now cross their water by the
+    // same picture, which is the whole of the sub-decision. Non-solid as it
+    // always was — the geometry has not moved, only the tile it is laid with.
     fillRect(f, 20, 12, 2, 2, "ground", "bridge", false); // the ford
     // The stream's rect is the stream's own literal, and the ford's four tiles
     // sit INSIDE it as bridge. That is deliberate and not a defect in the shape:
