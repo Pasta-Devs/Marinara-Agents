@@ -6,10 +6,20 @@
 PF.Hud = class {
   constructor(rootEl, core) {
     this.core = core;
+    const chip =
+      "pointer-events:auto;background:rgba(20,24,20,0.82);color:#f3efe2;border:1px solid rgba(243,239,226,0.25);" +
+      "border-radius:6px;padding:3px 9px;font:600 11px/1.5 ui-monospace,Consolas,monospace;white-space:nowrap;";
     const S = {
-      chip:
-        "pointer-events:auto;background:rgba(20,24,20,0.82);color:#f3efe2;border:1px solid rgba(243,239,226,0.25);" +
-        "border-radius:6px;padding:3px 9px;font:600 11px/1.5 ui-monospace,Consolas,monospace;white-space:nowrap;",
+      chip,
+      // THE PANEL OPENERS' clothes (plan §2.8). The topbar has NO width machinery
+      // — centred flex, nowrap chips, unbounded location prose, no overflow
+      // handling — so the openers are GLYPH-WIDTH by construction: one emoji plus
+      // an aria-label, never a word that grows with a translation. That IS the
+      // width argument, and it is what keeps the bar to the single row the
+      // location toast is pinned 42px under. They are BUTTONS rather than the
+      // spans beside them, because a control has to be pressable and focusable;
+      // `pointer-events:auto` is already on the chip they wear.
+      chipBtn: `${chip}cursor:pointer;padding:3px 8px;`,
       btn:
         "pointer-events:auto;background:rgba(20,24,20,0.88);color:#f3efe2;border:1px solid rgba(243,239,226,0.35);" +
         "border-radius:8px;padding:9px 13px;font:700 12px/1 ui-monospace,Consolas,monospace;cursor:pointer;min-height:40px;",
@@ -37,10 +47,16 @@ PF.Hud = class {
     // no economy in it should not carry a permanent "0 coins" telling the player
     // about a system they are not playing.
     this.purseChip = PF.el("span", { style: `${S.chip}display:none;`, text: "" });
+    // THE TWO PANEL OPENERS (plan §2.8), beside the chips that already say where
+    // you are rather than in the action column — the thumb zone belongs to the
+    // verbs. Boot HIDDEN on the berth button's discipline: the gate hides the
+    // whole topbar for free, but the topbar STAYS UP in dialogue mode, so
+    // `!inWorld` hiding is a toggle these two have to own (see update()).
+    this.journalChip = this._chip("📖", "open the journal", () => this.toggleJournal());
     this.topbar = PF.el(
       "div",
       { style: "position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:2;" },
-      [this.locChip, this.clockChip, this.purseChip],
+      [this.locChip, this.clockChip, this.purseChip, this.journalChip],
     );
 
     this.talkBtn = this._btn("Talk (E)", () => core.interact());
@@ -200,6 +216,42 @@ PF.Hud = class {
     this.gateEl.setAttribute("role", "status");
     this.gateEl.setAttribute("aria-live", "polite");
 
+    // ── The panel scaffolding (plan §2.5) ───────────────────────────────────
+    // Full-surface, on the gate's own shape one block up, and a child of
+    // `this.root` — which is its WHOLE teardown story. The gate is
+    // the precedent: it is built here, appended to the root below, and
+    // `destroy()`'s `this.root.remove()` takes it away with everything else. A
+    // panel with a teardown of its own would be a second thing to forget.
+    //
+    // Under the gate in z as well as in the list: a world still being written
+    // has no journal in it to read.
+    //
+    // AND IT IS NOT AN `aria-modal` DIALOG, deliberately. `_hostOwnsKeyboard`
+    // (90-element) treats any visible `[role="dialog"][aria-modal="true"]` as the
+    // host owning the keyboard — so marking our own panel one would make the very
+    // keys that close it inert the moment it opened.
+    const panelStyle =
+      "position:absolute;inset:0;flex-direction:column;gap:8px;pointer-events:auto;z-index:3;" +
+      "padding:12px;box-sizing:border-box;background:rgba(12,14,12,0.94);color:#f3efe2;" +
+      "font:12px/1.6 ui-monospace,Consolas,monospace;";
+    const panelHead = "display:flex;align-items:center;justify-content:space-between;gap:8px;flex:0 0 auto;";
+    const panelTitle = "font:700 13px/1.5 inherit;";
+    this.journalBody = PF.el("div", {
+      style: "flex:1 1 auto;overflow:auto;display:flex;flex-direction:column;gap:10px;",
+    });
+    this.journalEl = PF.el("div", { style: panelStyle, "aria-label": "journal" }, [
+      PF.el("div", { style: panelHead }, [
+        PF.el("div", { style: panelTitle, text: "Journal" }),
+        this._btn("✕ Close", () => this.closeJournal()),
+      ]),
+      this.journalBody,
+    ]);
+    // It boots DOWN as a PROPERTY rather than inside the style string: the
+    // toggle and update() write this same property, and a boot state expressed
+    // only in `cssText` is one nothing can read back (the berth button's own
+    // discipline).
+    this.journalEl.style.display = "none";
+
     this.root = PF.el(
       "div",
       { style: "position:absolute;inset:0;pointer-events:none;font-family:ui-monospace,Consolas,monospace;" },
@@ -211,6 +263,7 @@ PF.Hud = class {
         this.captionEl,
         this.toastEl,
         this.locToastEl,
+        this.journalEl,
         this.gateEl,
       ],
     );
@@ -218,11 +271,26 @@ PF.Hud = class {
     this._toastTimer = 0;
     this._locToastTimer = 0;
     this._mode = null;
+    // The panels' open flags and their memos. Both memos are CLEARED rather than
+    // compared against a sentinel when a panel opens, so opening always paints.
+    this._journal = false;
+    this._journalMemo = null;
     this.refreshChips();
   }
 
   _btn(text, onclick) {
     return PF.el("button", { type: "button", style: this.S.btn, text, onclick });
+  }
+
+  /** A glyph-width topbar opener: a button wearing the chip's styling, boot
+   *  hidden, and carrying the words the glyph does not say. */
+  _chip(glyph, label, onclick) {
+    const node = PF.el("button", { type: "button", "aria-label": label, style: this.S.chipBtn, text: glyph, onclick });
+    // Hidden as a PROPERTY rather than inside the style string, exactly as the
+    // berth button beside it is: update() writes this same property, and a
+    // boot state expressed only in `cssText` is one nothing can read back.
+    node.style.display = "none";
+    return node;
   }
 
   destroy() {
@@ -496,6 +564,118 @@ PF.Hud = class {
     else this.toast("There is no room to be had here.");
   }
 
+  // ── The journal panel (plan §2.5) ──────────────────────────────────────────
+  // A list that changes when the arrays under it change, so its memo IS those
+  // arrays. It writes no DOM at rest, and none at all until somebody opens it.
+
+  /** Is the surface in a state where a panel may be open at all? The opener
+   *  answers to this: the chip is hidden outside walk mode and under the gate,
+   *  but a click can still land on a frame-old one. */
+  _panelsAllowed() {
+    return this.core.sim?.mode === "walk" && !PF.save.gateHolds(this.core);
+  }
+
+  /** Close whatever panel is open. Returns true when something closed, which is
+   *  what will tell a key branch whether the press meant anything here. */
+  closePanels() {
+    const open = this._journal;
+    this.closeJournal();
+    return open;
+  }
+
+  toggleJournal() {
+    if (!this._panelsAllowed()) return;
+    if (this._journal) {
+      this.closeJournal();
+      return;
+    }
+    this._journal = true;
+    this._journalMemo = null;
+    this._journalSync();
+    this.journalEl.style.display = "flex";
+  }
+
+  closeJournal() {
+    this._journal = false;
+    this._journalMemo = null;
+    this.journalEl.style.display = "none";
+  }
+
+  /** The journal's memo: the two ARRAYS and their two lengths (plan §2.5). The
+   *  identities catch a wholesale replacement — `_compactLedger` rebuilds
+   *  `ledger.lines` on every append, and a restore assigns a fresh band — and
+   *  the lengths catch an append that kept the array it pushed onto, which is
+   *  exactly what `notice()` does while the band is under its cap.
+   *
+   *  What it deliberately does NOT track is the told flag: the band shows told
+   *  and untold rows alike, so a burn changes nothing the panel draws. */
+  _journalSync() {
+    const player = PF.player.get(this.core);
+    const lines = Array.isArray(player?.ledger?.lines) ? player.ledger.lines : null;
+    const notices = Array.isArray(player?.ledger?.notices) ? player.ledger.notices : null;
+    const memo = this._journalMemo;
+    if (
+      memo &&
+      memo.lines === lines &&
+      memo.notices === notices &&
+      memo.lineCount === (lines?.length ?? 0) &&
+      memo.noticeCount === (notices?.length ?? 0)
+    )
+      return;
+    this._journalMemo = { lines, notices, lineCount: lines?.length ?? 0, noticeCount: notices?.length ?? 0 };
+    this._renderJournal(lines ?? [], notices ?? []);
+  }
+
+  /** ONE LIST, day-grouped from each line's own day, newest day first — and the
+   *  NOTICE BAND outside the grouping entirely, because it reads a DIFFERENT
+   *  array (plan §2.5). A notice explains something that happened to the SAVE
+   *  rather than something the player did in a day, so it has no day group to
+   *  belong to; the band is history and shows told and untold rows alike.
+   *
+   *  Lines inside a day keep the order they were logged in, which is the order
+   *  the wrap-up tells them in. A STUB renders as its stub text and nothing else
+   *  — the sentence the ledger holds ("Day 4: 12 things happened.") is the same
+   *  sentence the GM was given, and rewriting it here would be the panel telling
+   *  a different story from the tell. */
+  _renderJournal(lines, notices) {
+    const body = this.journalBody;
+    body.replaceChildren();
+    const dim = "opacity:0.7;";
+    if (notices.length) {
+      // The band's framing echoes the tell's own framing sentence (30-sim
+      // `_composeLedger`) so the player reads here the words they were told
+      // there — and it is written to receive an ACTOR when the autonomous-change
+      // mechanism arrives and a notice can say who did it (M3, roadmap).
+      const band = PF.el("div", {
+        style:
+          "display:flex;flex-direction:column;gap:2px;padding-left:8px;border-left:2px solid rgba(243,239,226,0.35);",
+      });
+      band.appendChild(
+        PF.el("div", { style: `font:700 12px/1.6 inherit;${dim}`, text: "About the world itself, not the days in it" }),
+      );
+      // Newest first, the one ordering rule this panel has.
+      for (const row of notices.slice().reverse()) {
+        const said = typeof row?.[1] === "string" ? row[1] : "";
+        band.appendChild(PF.el("div", { text: `Day ${PF.player.resolvedDay(row?.[0])} — ${said}` }));
+      }
+      body.appendChild(band);
+    }
+    const days = [...new Set(lines.map((line) => PF.player.resolvedDay(line?.[0])))].sort((a, b) => b - a);
+    for (const day of days) {
+      const group = PF.el("div", { style: "display:flex;flex-direction:column;gap:2px;" }, [
+        PF.el("div", { style: `font:700 12px/1.6 inherit;${dim}`, text: `Day ${day}` }),
+      ]);
+      for (const line of lines) {
+        if (PF.player.resolvedDay(line?.[0]) !== day) continue;
+        const stub = PF.player.resolvedDay(line?.[2]) > 0;
+        group.appendChild(PF.el("div", { style: stub ? dim : "", text: typeof line?.[1] === "string" ? line[1] : "" }));
+      }
+      body.appendChild(group);
+    }
+    if (!days.length && !notices.length)
+      body.appendChild(PF.el("div", { style: dim, text: "Nothing written down yet." }));
+  }
+
   refreshChips() {
     const sim = this.core.sim;
     if (!sim) return;
@@ -582,6 +762,15 @@ PF.Hud = class {
         this.sleepBtn.style.display = "none";
         this._sleep = null;
       }
+      // THE PANEL OPENER, on the berth button's cadence and for a reason of its
+      // own: the gate hides the whole topbar, but the topbar STAYS UP in
+      // dialogue mode, so `!inWorld` hiding is a toggle the chip has to own.
+      this.journalChip.style.display = inWorld ? "" : "none";
+      // …AND THE PANEL. It only HIDES: it is a list of what is written down,
+      // with no live descriptor to go stale, and losing a place in it to a
+      // passing combat state would be its own small rudeness.
+      if (!inWorld) this.journalEl.style.display = "none";
+      else if (this._journal) this.journalEl.style.display = "flex";
       this.travelBtn.style.display = inWorld && spatialAvail ? "" : "none";
       this.waitBtn.style.display = inWorld ? "" : "none";
       this.keyboardBtn.style.display = inWorld ? "" : "none";
@@ -702,6 +891,10 @@ PF.Hud = class {
         this._clock = clock;
         this.refreshChips();
       }
+      // THE OPEN PANEL, on its own memo: it runs only while the journal is up
+      // and writes DOM only on a change, beside an update() already running
+      // berthOffer's zone scan.
+      if (this._journal) this._journalSync();
     }
   }
 };
