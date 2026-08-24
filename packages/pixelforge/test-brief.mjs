@@ -7170,13 +7170,20 @@ const cellarBrief = (prosperity) => ({
 // geometry, occupancy and schedule, and none of them look at whether a tile can
 // be SEEN. In the browser it would have been a solid square of bare floor in the
 // corner of every house in the world.
+//
+// THE GROUND LAYER JOINS THE SWEEP (0.12 slice 3b). It was left out because the
+// ground vocabulary had not grown since the themes landed, and the omission is
+// exactly the hole `bridge` would have fallen through: an unknown ground id does
+// not render as nothing, it renders as GRASS (10-art's tile() falls back to the
+// grass painter for an unknown id), so a bridge with no painter would have been
+// a lawn laid across a pond and every assertion in this file would have passed.
 {
   const drawable = new Set(loadedPF.art.painterNames());
   assert.ok(drawable.size > 10, `the art module reported its painters (${drawable.size})`);
   const missing = new Map();
   const look = (w, label) => {
     for (const zone of Object.values(w.zones)) {
-      for (const layer of ["object", "overhead"]) {
+      for (const layer of ["ground", "object", "overhead"]) {
         for (const tile of zone[layer]) {
           if (!tile || drawable.has(tile)) continue;
           if (!missing.has(tile)) missing.set(tile, `${label} ${zone.id}`);
@@ -7224,6 +7231,29 @@ const cellarBrief = (prosperity) => ({
     missing.size,
     0,
     `every placed tile can be drawn (${[...missing].map(([tile, where]) => `${tile} in ${where}`).join(", ")})`,
+  );
+}
+
+// ── THE BRIDGE IS DRAWN IN BOTH TIERS (0.12 slice 3b) ──────────────────────
+// The bridge ruling adds the first new GROUND id since the themes landed, and a
+// ground id has two art homes: 10-art's runtime painters (Tier-0) and the
+// build-time generator that bakes the shipped atlas (Tier-1). Missing Tier-1 art
+// is a soft failure by design — every draw resolves Tier1 ?? Tier0 — but missing
+// Tier-0 art is a bridge rendered as a lawn, so both are pinned.
+{
+  assert.ok(new Set(loadedPF.art.painterNames()).has("bridge"), "Tier-0 can paint a bridge");
+  // The Tier-1 generator writes PNGs to disk and cannot be run inside this
+  // process, so its painter table is read as SOURCE. That is enough to catch the
+  // failure that matters: a tile added to one tier and forgotten in the other.
+  const generator = readFileSync(join(here, "build", "build-art.mjs"), "utf8");
+  assert.ok(/\n {2}bridge\(g, rnd\) \{/.test(generator), "…and so can the Tier-1 generator");
+  // APPENDED, NEVER INSERTED — the generator's own rule, and the reason it is
+  // worth asserting rather than trusting: that table's key order IS the atlas
+  // index map, so a tile slotted in beside `water` where it reads nicely would
+  // silently shift every index under it and repaint the whole shipped world.
+  assert.ok(
+    generator.indexOf("\n  bridge(g, rnd) {") > generator.indexOf("\n  bell(g) {"),
+    "…with the new id on the END of the table, where the atlas index map can take it",
   );
 }
 

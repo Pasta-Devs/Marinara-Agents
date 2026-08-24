@@ -341,6 +341,20 @@ const PAINTERS = {
     g.rect(3, 12, 10, 1, PAL.pathEdge);
     g.rect(7, 13, 2, 2, PAL.stoneDark);
   },
+  // Where the road crosses the water: the water is painted FIRST and decked
+  // over, because that is what the tile is. The one-pixel margin of open water
+  // on all four sides is the seam that makes a run of them read as a boardwalk,
+  // and is why the tile needs no orientation — the compiler cannot tell a placer
+  // which way a crossing runs. No themed override: the colony palette turns
+  // planking into deck plating on the same silhouette.
+  bridge(g, rnd) {
+    PAINTERS.water(g, rnd);
+    g.rect(1, 1, T - 2, T - 2, PAL.beam);
+    g.rect(2, 2, T - 4, T - 4, PAL.path1);
+    g.rect(2, 2, T - 4, 1, PAL.pathFleck);
+    for (let plank = 4; plank < T - 3; plank += 4) { g.rect(2, plank, T - 4, 1, PAL.pathEdge); g.rect(2, plank + 1, T - 4, 1, PAL.path2); }
+    g.rect(2, T - 3, T - 4, 1, PAL.pathEdge);
+  },
 };
 
 // ── Actors: 4 rows (down, up, left, right) × 4 walk frames, 12×16 ────────────
