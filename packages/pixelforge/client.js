@@ -7914,7 +7914,12 @@ const mergeStampEntries = (held, incoming) => {
     const merged = {};
     for (const source of [a.rel, b.rel]) {
       for (const [zoneId, rows] of ownEntries(source)) {
-        const target = merged[zoneId] ?? (merged[zoneId] = {});
+        // Through _bucket, not `merged[zoneId] ?? …`: a zone named "constructor"
+        // or "toString" resolves to the INHERITED member on a bare read, and a
+        // truthy one is adopted as the bucket — so the rows land on the builtin
+        // and the merged map never grows an own key for that zone.
+        const target = PF.player._bucket(merged, zoneId);
+        if (!target) continue;
         for (const [name, row] of ownEntries(rows)) {
           const standing = Object.prototype.hasOwnProperty.call(target, name) ? target[name] : undefined;
           if (
@@ -7948,10 +7953,14 @@ const mergeStampEntries = (held, incoming) => {
     for (const source of [b[key], a[key]]) {
       for (const [outer, value] of ownEntries(source)) {
         if (value && typeof value === "object" && !Array.isArray(value)) {
-          const target = merged[outer] ?? (merged[outer] = {});
+          // Same inherited-name refusal as the rel merge above.
+          const target = PF.player._bucket(merged, outer);
+          if (!target) continue;
           for (const [inner, n] of ownEntries(value)) target[inner] = Math.max(posInt(target[inner], 0), posInt(n, 0));
         } else {
-          merged[outer] = Math.max(posInt(merged[outer], 0), posInt(value, 0));
+          // The scalar side reads OWN-only for the same reason; an inherited
+          // member is not a count this merge has already seen.
+          merged[outer] = Math.max(posInt(PF.player._ownRead(merged, outer), 0), posInt(value, 0));
         }
       }
     }
@@ -11751,7 +11760,6 @@ PF.mountSetup = (el, props) => {
       errEl.style.display = "block";
       launchBtn.disabled = false;
       cancelBtn.disabled = false;
-      cancelBtn.textContent = "Cancel";
       syncLaunchLabel();
     }
   });

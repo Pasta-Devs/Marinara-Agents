@@ -10166,6 +10166,39 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
   });
   assert.equal(Q.peek("stamp").fields.rel.z1.Cass.t, 5, "more encounters at the same tier still takes the row");
 
+  // A ZONE NAMED FOR SOMETHING ON Object.prototype. The merge read `merged[zoneId]`
+  // bare, so "constructor" resolved to the INHERITED function, came back truthy, and
+  // was adopted as the bucket: that zone's rows were written onto `Object` itself and
+  // the merged map never grew an own key to hand back. `ownEntries` already refuses
+  // "__proto__", so the inherited NAMES are the half that was left — and a zone id is
+  // whatever the generated brief called a place.
+  Q.discard("chat-merge", "stamp");
+  Q.put("chat-merge", "stamp", {
+    reason: "brief",
+    fromV: 1,
+    stamps,
+    fields: { rel: { constructor: { Dov: { d: 1, t: 1 } } } },
+  });
+  Q.put("chat-merge", "stamp", {
+    reason: "brief",
+    fromV: 1,
+    stamps,
+    fields: { rel: { constructor: { Dov: { d: 4, t: 2 } }, toString: { Eda: { d: 1, t: 1 } } } },
+  });
+  const shadowed = Q.peek("stamp").fields.rel;
+  assert.deepEqual(
+    Object.keys(shadowed).sort(),
+    ["constructor", "toString"],
+    "a zone named for an inherited member is an OWN key of the merged map",
+  );
+  assert.equal(shadowed.constructor.Dov.d, 4, "…and its rows merge by the rule every other zone gets");
+  assert.equal(shadowed.toString.Eda.d, 1, "…including a zone only the second severance knew");
+  assert.ok(
+    !Object.prototype.hasOwnProperty.call(Object, "Dov") &&
+      !Object.prototype.hasOwnProperty.call(Object.prototype.toString, "Eda"),
+    "and nothing was written onto the builtin the bare read would have handed back",
+  );
+
   // setAside is the one HUMAN-resolved slot, so it is the one LIST.
   Q.reset();
   Q.put("chat-aside", "setAside", { reason: "displaced", fromV: 1, block: { tag: "first" } });

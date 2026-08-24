@@ -948,9 +948,12 @@ calendar and arrive with it; a table lookup replaces the constant and the verbs 
 `berthOffer(core)` **describes only** — it never charges anything, so the HUD can call it every frame
 and a caller can render the refusal instead of hiding the button. It returns
 `{ available, reason, keeper, zoneId, price, home }` with `reason` one of `no-keeper`, `no-lodging`,
-`not-for-sale`, `no-player`, `already-yours`, `cannot-afford`. **The offer follows the PERSON, not the
-room**: `npc.lodging` is stamped on the keeper of the settlement's gathering, so an innkeeper standing
-in the square at noon can still let you a room, which is what a keeper is. Renting the same berth
+`not-for-sale`, `no-player`, `already-yours`, `cannot-afford`. **The offer follows the PERSON _and_ the
+ROOM**, in that order. Reach is tried first: `npc.lodging` is stamped on the keeper of the settlement's
+gathering, so an innkeeper standing in the square at noon can still let you a room, which is what a
+keeper is. Failing that, `_keeperInRoom` resolves the keeper from the zone's own `lodging` mark, so
+walking into the inn offers the berth even when somebody else is the nearer body — which is how a
+player who never brushes past the keeper finds the room at all. Renting the same berth
 twice is refused rather than sold again — that is not a second room, it is the same room and a
 lighter purse.
 

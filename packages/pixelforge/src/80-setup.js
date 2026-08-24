@@ -280,7 +280,6 @@ PF.mountSetup = (el, props) => {
       errEl.style.display = "block";
       launchBtn.disabled = false;
       cancelBtn.disabled = false;
-      cancelBtn.textContent = "Cancel";
       syncLaunchLabel();
     }
   });
