@@ -441,6 +441,43 @@ PF.world = (() => {
       stream: "The Conduit Bridge",
     },
   };
+  // THE NAME BOOK ABOVE IS A DUPLICATE, AND THIS IS WHAT KEEPS IT ONE. Every
+  // string in it is also written in that theme's own DEFAULT_BRIEFS entry
+  // (18-brief) — the comment says the two agree and nothing made it true. They
+  // are two tables in two files that get edited months apart, which is how a
+  // player ends up standing at The Village Pond in a legacy save and somewhere
+  // else in the compiled world beside it.
+  //
+  // The whole book, not only the water: the settlement, the inn and the wood are
+  // the same duplication and fail the same way. Read through `defaults()` rather
+  // than off the literal, because a repair pass that quietly renamed something on
+  // its way through validate() is exactly the drift worth catching.
+  //
+  // ASSERTED AT LOAD, deliberately not inside build(): that function degrades any
+  // compile throw to the legacy world (see its try/catch), so an invariant raised
+  // in there would be swallowed and would ship as a silently misnamed world
+  // instead of a failed build.
+  {
+    const named = (features, tag) => (features ?? []).find((feature) => feature.tag === tag)?.name;
+    for (const [theme, names] of Object.entries(ZONE_NAMES)) {
+      const fallback = PF.brief?.defaults?.(theme, 1);
+      if (!fallback) continue;
+      const wilds = fallback.places.find((place) => place.kind === "wilds");
+      const owed = {
+        village: fallback.name,
+        inn: fallback.places.find((place) => place.kind === "gathering")?.name,
+        forest: wilds?.name,
+        pond: named(fallback.features, "water-feature"),
+        stream: named(wilds?.features, "water-crossing"),
+      };
+      for (const [key, name] of Object.entries(owed)) {
+        if (names[key] !== name)
+          throw new Error(
+            `pixelforge: the legacy layout calls ${theme}'s ${key} "${names[key]}", its default brief calls it "${name}"`,
+          );
+      }
+    }
+  }
 
   function build(seed, theme, sealedBrief) {
     // Tight gate + containment: only a fully-sealed brief compiles, and a

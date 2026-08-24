@@ -13120,6 +13120,83 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
   }
 }
 
+// ── THE LEGACY NAME BOOK AND THE DEFAULT BRIEF ARE ONE VOCABULARY ────────────
+// slice-1 verify F2. 20-world's ZONE_NAMES and 18-brief's DEFAULT_BRIEFS write
+// the same five strings per theme, and until now a COMMENT was the only thing
+// holding them together — two tables in two files, edited months apart. Driven
+// from both ends: the shipped tables really do agree where a player can see it,
+// and a rewrite of EITHER file fails the build rather than shipping a legacy
+// world that calls the pond something the compiled one does not.
+{
+  // Positive half, through the readers: what buildLegacy actually names its two
+  // water features is what the theme's default brief names the same two tags.
+  for (const theme of ["cozy-village", "sci-fi-colony"]) {
+    const legacy = world.build(77, theme, null);
+    const fallback = brief.defaults(theme, 1);
+    const wilds = fallback.places.find((place) => place.kind === "wilds");
+    assert.equal(
+      legacy.zones.village.features[0].name,
+      fallback.features.find((feature) => feature.tag === "water-feature").name,
+      `${theme}: the legacy pond is named out of the same book the brief uses`,
+    );
+    assert.equal(
+      legacy.zones.forest.features[0].name,
+      wilds.features.find((feature) => feature.tag === "water-crossing").name,
+      `${theme}: …and so is the legacy stream`,
+    );
+    assert.equal(legacy.zones.village.name, fallback.name, `${theme}: …and the settlement itself`);
+    assert.equal(
+      legacy.zones.inn.name,
+      fallback.places.find((place) => place.kind === "gathering").name,
+      `${theme}: …and the inn`,
+    );
+    assert.equal(legacy.zones.forest.name, wilds.name, `${theme}: …and the wood`);
+  }
+
+  // Negative half: the assertion fails the build from either side of the
+  // duplication. 20-world loads 18-brief's table at boot, so both files are in
+  // the same forced stack and either one can be the thing that moved.
+  const parts = ["00-prelude.js", "10-art.js", "15-assets.js", "18-brief.js", "20-world.js"];
+  const bootWorld = (file, from, to) => {
+    const source = parts
+      .map((name) => {
+        const text = readFileSync(join(here, "src", name), "utf8");
+        if (name !== file) return text;
+        const patched = text.replace(from, to);
+        assert.notEqual(patched, text, `the rewrite still names ${name}'s "${from}"`);
+        return patched;
+      })
+      .join("\n");
+    return () => new Function(`"use strict";\n${source}\nreturn PF;`)();
+  };
+  const plainWorld = () =>
+    new Function(
+      `"use strict";\n${parts.map((name) => readFileSync(join(here, "src", name), "utf8")).join("\n")}\nreturn PF;`,
+    )();
+  assert.ok(plainWorld().world, "the stack under test boots on its own — every throw below is a rewrite talking");
+  assert.throws(
+    bootWorld("20-world.js", `pond: "The Village Pond"`, `pond: "The Millpond"`),
+    /the legacy layout calls cozy-village's pond "The Millpond", its default brief calls it "The Village Pond"/,
+    "renaming the legacy pond and not the brief fails the build",
+  );
+  assert.throws(
+    bootWorld(
+      "18-brief.js",
+      `{ tag: "water-crossing", name: "The Stepping Stones" }`,
+      `{ tag: "water-crossing", name: "The Ford" }`,
+    ),
+    /the legacy layout calls cozy-village's stream "The Stepping Stones", its default brief calls it "The Ford"/,
+    "…and renaming the brief and not the legacy layout fails it from the other side",
+  );
+  // THE WHOLE BOOK, not only the water. The settlement, the inn and the wood are
+  // the same duplication and drift the same way.
+  assert.throws(
+    bootWorld("20-world.js", `inn: "The Meridian Cantina"`, `inn: "The Cantina"`),
+    /the legacy layout calls sci-fi-colony's inn "The Cantina", its default brief calls it "The Meridian Cantina"/,
+    "the gathering place is in the book too",
+  );
+}
+
 // ── THE CAST WINDOW'S CLOCK MOVER CROSSES MIDNIGHT ───────────────────────────
 // `advanceMinutes` is the fishing verb's mover and it is the only one in the sim
 // that can be more than a minute out of date about the day. The walking loop
