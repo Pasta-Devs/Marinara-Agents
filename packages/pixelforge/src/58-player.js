@@ -1457,6 +1457,59 @@ PF.player = {
     return true;
   },
 
+  /** THE WRAP-UP BURN (plan §2.5), and the other half of the two-field flush.
+   *  The compose selected `flushedDay < day ≤ intro.ledgerOwed` and the host has
+   *  ACCEPTED the turn carrying it; this is what makes that telling permanent —
+   *  the day gate rises to `throughDay`, and every notice that rode the same tell
+   *  is marked told.
+   *
+   *  IT GUARDS ITSELF, which is the one thing about it that is not ordinary. The
+   *  invariant is `flushedDay ≤ ledgerOwed < sim.day` and this is the only writer
+   *  that can break it, so it refuses unless
+   *      flushedDay ≤ throughDay ≤ intro.ledgerOwed  and  throughDay < sim.day
+   *  with all three read from the LIVE sim at write time and not from whatever
+   *  the sender was looking at when it composed. That is what closes the seam the
+   *  generation fence cannot see: `_gen` moves only on a chat switch, while
+   *  `_rebuild` replaces `core.sim` wholesale WITHOUT touching it (a rewind, a
+   *  swipe, a checkpoint load), so a send resolving over a rewound sim passes the
+   *  fence and would otherwise write a future gate onto the rewound block.
+   *
+   *  THE NOTICES ARE THE LIVE BLOCK'S UNTOLD ROWS, which is exactly the set the
+   *  compose captured: the tell takes ALL of them — the band answers to the told
+   *  flag and not to any day selection — so "untold at burn time" and "composed"
+   *  are the same rows. And they are the same rows OF THE SAME BLOCK, because the
+   *  guard above has already established that this is the sim the compose ran
+   *  against; a rebuild-swapped one refuses before it reaches here, and its fresh
+   *  notices are left untold, which is correct — nobody has been told them.
+   *
+   *  Returns true when it wrote and false for every refusal — the fence, the
+   *  loading gate, a day that is not a day, and each of the three inequalities.
+   *  The senders SWALLOW the refusal (no toast, no retry): a guard refusal after
+   *  an accepted send leaves the tell in history un-burned and the next compose
+   *  re-tells it, which is a §5 lost-flush cause and not something to interrupt
+   *  the player about. The value is for the tests. */
+  flush(core, throughDay, gen) {
+    const p = this._live(core, gen);
+    if (!p) return false;
+    const sim = core.sim;
+    if (!isFiniteInt(throughDay) || throughDay < 0) return false;
+    const gate = posInt(p.flushedDay, 0);
+    // Backwards: a tell composed against an older gate, resolving after a newer
+    // one already rose. Nothing to do, and lowering the gate would re-tell.
+    if (throughDay < gate) return false;
+    // Past what any sleep has made owed: the days beyond it are days the player
+    // has not finished living, or a rewound sim that never staged them.
+    if (throughDay > this.resolvedDay(sim.intro?.ledgerOwed)) return false;
+    // …and never the day underway, whatever the marker says.
+    if (throughDay >= this.resolvedDay(sim.day)) return false;
+    p.flushedDay = Math.max(gate, throughDay);
+    for (const row of Array.isArray(p.ledger?.notices) ? p.ledger.notices : []) {
+      if (Array.isArray(row) && row.length >= 2 && !row[2]) row[2] = 1;
+    }
+    this._touch(core);
+    return true;
+  },
+
   /** Three days in full, one stub per elided day beyond them (plan §4). The
    *  stub is what keeps an unslept week from silently vanishing. */
   _compactLedger(p) {

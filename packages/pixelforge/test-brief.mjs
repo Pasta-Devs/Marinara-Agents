@@ -15190,6 +15190,149 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
   }
 }
 
+// ═══ THE WRAP-UP FLUSH (0.12 slice 4) ═══════════════════════════════════════
+// Two fields and one burn. `intro.ledgerOwed` is durable and says which days a
+// sleep has finished; `player.flushedDay` is durable and says which of them have
+// been told; the tell itself is composed fresh every time and stored nowhere. The
+// cases below are the state machine between them — the guard that refuses each
+// way it can be asked to break the invariant, and the interleavings where the sim
+// under a resolving send is not the sim that composed the turn.
+{
+  const P = loadedPF.player;
+  let chats = 0;
+  /** A player standing in a world with a staged wrap-up. `owed` is what a sleep
+   *  left behind, `gate` is how much of it has already been told. */
+  const staged = ({ day = 6, owed = 5, gate = 0, lines = [], notices = [] } = {}) => {
+    const w = world.build(11, "cozy-village", null);
+    const sim = new loadedPF.Sim(w);
+    sim.day = day;
+    sim.intro = { world: false, zones: {}, npcs: {}, ledgerOwed: owed };
+    const core = {
+      chatId: `chat-flush-${++chats}`,
+      sim,
+      host: { chatMeta: {} },
+      hud: { toast() {}, refreshChips() {} },
+      markDirty() {},
+    };
+    const p = P.get(core);
+    p.flushedDay = gate;
+    for (const [at, text] of lines) p.ledger.lines.push([at, text]);
+    for (const [at, text] of notices) P.notice(p, text, at);
+    assert.equal(sim.dirty, false, "the fixture is staged without dirtying anything");
+    return { w, sim, core, player: p };
+  };
+
+  try {
+    // ── THE GUARD REFUSES EACH INEQUALITY, SEPARATELY ─────────────────────────
+    // Three tests, and each one is the only thing standing between a real
+    // interleaving and a gate written where it does not belong. Pinned one at a
+    // time, because a single "it refuses" case passes with two of them deleted.
+    {
+      // BACKWARDS. A tell composed against an older gate, resolving after a
+      // newer one already rose: lowering the gate would re-tell days already told.
+      const back = staged({ gate: 4 });
+      assert.equal(P.flush(back.core, 3), false, "a throughDay BELOW the gate is refused");
+      assert.equal(back.player.flushedDay, 4, "…and the gate does not move");
+
+      // PAST WHAT ANY SLEEP MADE OWED. Days beyond the marker are days the player
+      // has not finished living, or days a rewound sim never staged.
+      const ahead = staged({ owed: 5, day: 9 });
+      assert.equal(P.flush(ahead.core, 6), false, "a throughDay ABOVE ledgerOwed is refused");
+      assert.equal(ahead.player.flushedDay, 0, "…and the gate does not move");
+
+      // AND NEVER THE DAY UNDERWAY, whatever the marker says. `ledgerOwed` is
+      // durable and `sim.day` is not, so a rewind can leave a marker standing over
+      // a clock that has gone backwards — and telling the day being lived means
+      // telling half of it and then never telling the rest.
+      const today = staged({ owed: 7, day: 6 });
+      assert.equal(P.flush(today.core, 6), false, "a throughDay AT the live day is refused, marker or no marker");
+      assert.equal(P.flush(today.core, 5), true, "…while the day before it is exactly what the tell is for");
+      assert.equal(today.player.flushedDay, 5, "and THAT one moves the gate");
+    }
+
+    // ── …AND WHAT IT DOES WHEN IT ACCEPTS ─────────────────────────────────────
+    {
+      const at = staged({ gate: 2, owed: 5, day: 6, notices: [[3, "Something was set aside."]] });
+      assert.equal(P.flush(at.core, 5), true, "the ordinary case: gate < throughDay ≤ owed < day");
+      assert.equal(at.player.flushedDay, 5, "the gate rises to the day that was told");
+      assert.deepEqual(at.player.ledger.notices[0], [3, "Something was set aside.", 1], "…and the band is marked told");
+      assert.equal(at.sim.dirty, true, "…and the save is flagged, because the mutator does that for its callers");
+      assert.equal(loadedPF.player.get(at.core).ledger.notices[0][2], 1, "the flag is on the live block, not a copy");
+
+      // A SECOND BURN AT THE SAME DAY IS A NO-OP THAT STILL PASSES. Two senders
+      // can compose the same wrap-up and both be accepted (§5), so the second
+      // burn has to be harmless rather than refused — `max` is what makes it so.
+      assert.equal(P.flush(at.core, 5), true, "an equal throughDay is accepted");
+      assert.equal(at.player.flushedDay, 5, "…and changes nothing");
+
+      // THE FLOOR CASE: nothing owed, nothing told, and a notice waiting. The
+      // band answers to its flag and not to a day, so a save that has never slept
+      // still tells its notices — and the burn that marks them raises no gate.
+      const bandOnly = staged({ owed: 0, gate: 0, day: 1, notices: [[1, "A task has no one to hand it back to."]] });
+      assert.equal(P.flush(bandOnly.core, 0), true, "throughDay 0 against owed 0 is a legal burn");
+      assert.equal(bandOnly.player.flushedDay, 0, "the gate stays where it was");
+      assert.equal(bandOnly.player.ledger.notices[0][2], 1, "…and the notice is told");
+    }
+
+    // ── A DAY THAT IS NOT A DAY IS NOT A BURN ─────────────────────────────────
+    {
+      const at = staged({ owed: 5, day: 6 });
+      for (const junk of ["5", 4.5, -1, NaN, null, undefined]) {
+        assert.equal(P.flush(at.core, junk), false, `a throughDay of ${JSON.stringify(junk)} is refused`);
+      }
+      assert.equal(at.player.flushedDay, 0, "and none of them moved the gate");
+    }
+
+    // ── THE FENCE AND THE GATE, which every mutator answers to ────────────────
+    {
+      const at = staged({ owed: 5, day: 6 });
+      assert.equal(P.flush(at.core, 5, (loadedPF.save._gen ?? 0) + 1), false, "a stale generation is refused");
+      assert.equal(at.player.flushedDay, 0, "…and writes nothing");
+      loadedPF.save.gate = { chatId: at.core.chatId, state: "generating" };
+      assert.equal(P.flush(at.core, 5), false, "and so is a chat whose world is still being written");
+      loadedPF.save.gate = null;
+      assert.equal(at.player.flushedDay, 0, "…still writing nothing");
+      assert.equal(P.flush(at.core, 5), true, "with both lifted, the same call goes through");
+    }
+
+    // ── THE SAME-CHAT REBUILD, which is the seam the fence CANNOT see ─────────
+    // `_gen` moves on a chat switch only. `_rebuild` replaces `core.sim` wholesale
+    // without touching it — a rewind, a swipe, a checkpoint load — so a send that
+    // composed before one and resolves after it passes the fence with a
+    // `throughDay` belonging to a sim that no longer exists. The guard reads the
+    // LIVE sim, so the rewound block refuses it and keeps its own gate.
+    {
+      const at = staged({ owed: 5, day: 6, notices: [[4, "Something was set aside."]] });
+      // The row the rewind lands on: this chat, one sleep ago. It has no staged
+      // day in it, because the sleep that staged one has been rewound away.
+      const before = JSON.parse(JSON.stringify(loadedPF.save.snapshot(at.core)));
+      before.intro = { world: false, zones: {}, npcs: {} };
+      before.day = 6;
+      const composed = 5; // what the sender captured, against the sim above
+      loadedPF.save._rebuild(at.core, before);
+      assert.notEqual(at.core.sim, at.sim, "the rebuild really did replace the sim under the send");
+      assert.equal(at.core.sim.intro.ledgerOwed, 0, "…with one that owes nothing");
+      assert.equal(P.flush(at.core, composed), false, "so the burn is REFUSED, on the live sim's own numbers");
+      assert.equal(P.get(at.core).flushedDay, 0, "the rewound block keeps its gate");
+      // AND ITS BAND IS ITS OWN. The rebuilt block carries the same SENTENCE —
+      // it came off the same row — in a different row object, which is exactly
+      // why the burn must not reach it: marking that copy told would swallow a
+      // notice nobody has been given, on the strength of a tell composed against
+      // a sim that no longer exists.
+      const rebuilt = P.get(at.core).ledger.notices ?? [];
+      assert.equal(rebuilt.length, 1, "the rebuilt block carries its own copy of the band");
+      assert.notEqual(rebuilt[0], at.player.ledger.notices[0], "…a different row, rebuilt from the row's own bytes");
+      assert.equal(rebuilt[0][2], undefined, "and the refused burn left it untold");
+      // AND THE OLD BLOCK IS NOT WRITTEN INTO EITHER: the refusal happened before
+      // anything moved, so the sim that composed keeps its untold band as well.
+      assert.equal(at.player.ledger.notices[0][2], undefined, "the sim that composed keeps its band untold");
+    }
+  } finally {
+    loadedPF.save.gate = null;
+    loadedPF.save.reset(); // the mutators self-dirty, and a dirty block arms a timer
+  }
+}
+
 // ── A DOM the size of the two surfaces that need one ──────────────────────────
 // Not a browser: exactly what PF.el touches (createElement, style, text,
 // attributes, listeners, children) plus fire(), so a click can be driven. Enough
