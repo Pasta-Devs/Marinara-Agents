@@ -147,6 +147,16 @@ assert.match(beholderInterfaceSource, /--marinara-chat-chrome-accent/u, "Beholde
 assert.match(beholderInterfaceSource, /bh-hud-icon/u, "the Beholder toolbar mark must be theme-colored");
 assert.match(
   beholderInterfaceSource,
+  /\.bh-hud-icon\{[^}]*--marinara-app-accent-solid/u,
+  "the Beholder toolbar mark must follow the animated app accent",
+);
+assert.match(
+  beholderInterfaceSource,
+  /\$\{hostClass\} mari-accent-animated bh-hud-toggle/u,
+  "the Beholder toolbar control must opt into the host accent transition",
+);
+assert.match(
+  beholderInterfaceSource,
   /<svg class="\$\{className\}"[^>]*stroke="currentColor"/u,
   "Beholder launchers must use the theme-colored eye icon",
 );
@@ -161,6 +171,11 @@ assert.match(
   beholderInterfaceSource,
   /\.bh-tracker-launch\.bh-active\{[^}]*--marinara-chat-chrome-accent/u,
   "the Tracker Panel launcher must visibly reflect its active state",
+);
+assert.match(
+  beholderInterfaceSource,
+  /\.bh-tracker-launch\.bh-active \.bh-tracker-launch__arrow\{transform:rotate\(90deg\);\}/u,
+  "the Tracker Panel arrow must point down while the Beholder window is open",
 );
 assert.match(
   beholderInterfaceSource,
@@ -234,8 +249,13 @@ assert.match(
 );
 assert.match(
   beholderInterfaceSource,
-  /const layout = !this\.isDetached\(\) && this\.isMobile\(\) \? "list" : this\.layout/u,
-  "desktop resizing must preserve the selected paper-doll layout",
+  /const layout = !this\.isDetached\(\) && this\.isMobile\(\) \? "paired" : this\.layout/u,
+  "mobile Beholder must keep the paper doll while desktop preserves the selected layout",
+);
+assert.match(
+  beholderInterfaceSource,
+  /\.beholder-panel\.bh-mobile-layout \.bh-doll-grid\{ display:grid; \}[\s\S]*\.beholder-panel\.bh-mobile-layout \.bh-digest\{ display:none; \}/u,
+  "the full-screen mobile window must not let narrow-container rules hide the paper doll",
 );
 assert.match(
   beholderInterfaceSource,

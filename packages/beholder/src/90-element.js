@@ -119,7 +119,7 @@ class BeholderElement extends HTMLElement {
       this._button = button;
     }
     const hostClass = typeof props.toolbarButtonClass === "string" ? props.toolbarButtonClass : "";
-    button.className = `${hostClass} bh-hud-toggle`.trim();
+    button.className = `${hostClass} mari-accent-animated bh-hud-toggle`.trim();
     const label = BH.localize(props, "toolbarLabel", "Beholder");
     button.title = label;
     button.setAttribute("aria-label", label);
