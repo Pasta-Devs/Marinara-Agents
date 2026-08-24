@@ -1,4 +1,4 @@
-import { MessageSquareQuote } from "lucide-react";
+import { Lock, MessageSquareQuote, RefreshCw, Unlock } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -131,6 +131,39 @@ export function MemoryNagToolbar({ props }: { props: CapabilityProps }) {
                   <MessageSquareQuote className="mn-popover-title-icon" aria-hidden="true" />
                   {t("memoryNag.toolbar.label")}
                 </strong>
+                <div className="mn-popover-actions">
+                  {props.onRerunTracker ? (
+                    <button
+                      type="button"
+                      className="mn-popover-action"
+                      disabled={props.trackerRetryBusy}
+                      title={t("memoryNag.toolbar.regenerate")}
+                      aria-label={t("memoryNag.toolbar.regenerate")}
+                      onClick={props.onRerunTracker}
+                    >
+                      <RefreshCw
+                        className={`mn-popover-action-icon${props.trackerRetryBusy ? " mn-spin" : ""}`}
+                        aria-hidden="true"
+                      />
+                    </button>
+                  ) : null}
+                  {props.onToggleLockMode ? (
+                    <button
+                      type="button"
+                      className={`mn-popover-action${props.lockMode ? " mn-popover-action--active" : ""}`}
+                      title={t(props.lockMode ? "memoryNag.toolbar.unlock" : "memoryNag.toolbar.lock")}
+                      aria-label={t(props.lockMode ? "memoryNag.toolbar.unlock" : "memoryNag.toolbar.lock")}
+                      aria-pressed={props.lockMode === true}
+                      onClick={props.onToggleLockMode}
+                    >
+                      {props.lockMode ? (
+                        <Lock className="mn-popover-action-icon" aria-hidden="true" />
+                      ) : (
+                        <Unlock className="mn-popover-action-icon" aria-hidden="true" />
+                      )}
+                    </button>
+                  ) : null}
+                </div>
               </div>
               <div className="mn-popover-body">
                 {nags.length > 0 ? (

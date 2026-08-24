@@ -321,6 +321,16 @@ assert.match(
 assert.match(memoryNagToolbarSource, /data-chat-floating-panel/u, "Memory Nag must portal a floating tracker panel");
 assert.match(
   memoryNagToolbarSource,
+  /props\.onRerunTracker[\s\S]*props\.onToggleLockMode/u,
+  "Memory Nag's HUD popover must expose the host regenerate and tracker-lock actions",
+);
+assert.match(
+  memoryNagToolbarSource,
+  /disabled=\{props\.trackerRetryBusy\}[\s\S]*aria-pressed=\{props\.lockMode === true\}/u,
+  "Memory Nag controls must report their busy and active states",
+);
+assert.match(
+  memoryNagToolbarSource,
   /hasCompletedRecall \? \([\s\S]*mn-toolbar-word[\s\S]*<MessageSquareQuote className="mn-toolbar-initial-icon"/u,
   "Memory Nag must show its dialogue icon until the tracker completes its first successful recall",
 );
@@ -344,6 +354,11 @@ assert.match(
   /--tracker-panel-section-background/u,
   "Memory Nag must reuse the native Tracker Panel section surface",
 );
+assert.match(
+  memoryNagStyles,
+  /--tracker-panel-section-background, color-mix\(in srgb, var\(--card\) 5%, transparent\)/u,
+  "Memory Nag must use the same default section tint as the host Tracker Panel",
+);
 assert.match(memoryNagTrackerSource, /setCollapsed/u, "Memory Nag Tracker Panel section must be collapsible");
 assert.match(memoryNagTrackerSource, /mn-tracker-veil/u, "Memory Nag must reuse the Tracker Panel readability veil");
 assert.match(
@@ -358,8 +373,13 @@ assert.match(
 );
 assert.match(
   memoryNagStyles,
-  /\.mn-tracker--mobile-compact \.mn-tracker-icon\s*\{[^}]*--marinara-chat-chrome-accent/su,
+  /\.mn-tracker--mobile-compact \.mn-tracker-icon\s*\{[^}]*--marinara-chat-chrome-button-text-active/su,
   "the combined mobile Memory Nag icon must use the configured chat accent",
+);
+assert.match(
+  memoryNagStyles,
+  /\.mn-tracker--mobile-compact\s*\{[^}]*border-bottom: 0;[^}]*background: transparent;/su,
+  "the fixed-open mobile Memory Nag section must let the combined host panel own its divider and surface",
 );
 assert.match(
   memoryNagStyles,
