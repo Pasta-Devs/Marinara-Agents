@@ -13652,6 +13652,53 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
       }
     assert.equal(water, 24, "…whole, on dry ground, the way the strict scan already placed it");
     assert.equal(planked, 0, "…and with no plank in it, because no road was ever in the way");
+    // AND AT THE SAME ANCHOR, which is the property this case is NAMED after and
+    // was the one thing it did not check (verify-3c F1). Counting water and
+    // planks says the pool is whole and dry — and a MOVED pool says exactly that
+    // too: written as a widened first pass instead of a second one, this pool
+    // relocates to (9,11) and still lands 24 water tiles with no plank in them,
+    // so the case stayed green against the mutant it exists to catch.
+    assert.deepEqual(row.rect, { x: 6, y: 10, w: 8, h: 5 }, "…on the anchor the strict scan has always given it");
+  }
+
+  // ── …AND WHAT DOES MOVE IS DECLARED (0.12 slice 3b) ─────────────────────────
+  // A confined sub-class of the ruling's own movement, recorded rather than left
+  // to be discovered (verify-3c F2). Anchors come off a cursor SHARED by every
+  // feature in a place's list, so a water feature that spends extra attempts
+  // before it settles hands the next feature a different cursor — and the
+  // features that move are the ones declared AFTER a pool, in a wood that now
+  // has a pool to declare.
+  //
+  // Measured across the shape: no zone moved without also gaining a pool, and no
+  // row was dropped. That is what makes it confined rather than drift, and it is
+  // part of "the wilds pond now places" rather than a second change hiding
+  // inside it. Pinned so the next thing that moves this stone has to re-pin it
+  // deliberately.
+  {
+    const pool = { tag: "water-feature", name: "The Pool" };
+    const first = { ...wildsPlace, features: [pool, ...wildsPlace.features] };
+    const sealed = seal([], [first], "village", "modest", 313);
+    const control = seal([], [{ ...wildsPlace }], "village", "modest", 313);
+    const zoneId = `z${sealed.places.findIndex((place) => place.kind === "wilds") + 2}`;
+    const rect = (w, tag) => w.zones[zoneId].features.find((row) => row.tag === tag)?.rect;
+    const withPool = world.build(313, "cozy-village", sealed);
+    const without = world.build(313, "cozy-village", control);
+    assert.ok(rect(withPool, "water-feature"), "the pool declared FIRST places, as the ruling intends");
+    assert.deepEqual(
+      rect(without, "landmark-stone"),
+      { x: 26, y: 8, w: 3, h: 3 },
+      "without a pool in front of it the marker stands where it always has",
+    );
+    assert.deepEqual(
+      rect(withPool, "landmark-stone"),
+      { x: 17, y: 9, w: 3, h: 3 },
+      "and with one in front of it it moves ONE place along the shared cursor — declared, not drift",
+    );
+    assert.equal(
+      withPool.zones[zoneId].features.length,
+      without.zones[zoneId].features.length + 1,
+      "…and nothing was dropped to make room for it",
+    );
   }
 
   // ── DETERMINISM ACROSS PROCESSES, BRIDGE AND ALL (0.12 slice 3b) ────────────
