@@ -116,6 +116,15 @@ export async function assertEveryPackageManifestIntegrity({ repoRoot, catalogued
   const checked = [];
   const withoutArtifact = [];
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    // `readdir` describes the entry itself, not its target, so a symlinked
+    // package directory reports isDirectory() === false and the skip below
+    // would drop it from the sweep without a word — the same silent-gap
+    // failure this sweep exists to close. Reject rather than follow: a package
+    // is a real directory in this tree, and following the link would make
+    // coverage depend on core.symlinks, which Git for Windows sets to false.
+    if (entry.isSymbolicLink()) {
+      throw new Error(`packages/${entry.name} is a symbolic link; packages must be real directories`);
+    }
     if (!entry.isDirectory()) continue;
     assertPortableFilenameComponent(entry.name, "Package directory");
     const packageRoot = await resolveContainedPortablePath(
