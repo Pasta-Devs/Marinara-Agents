@@ -57,7 +57,24 @@ PF.Hud = class {
     // quoting a room in a world that has not compiled.
     this.berthBtn = this._btn("Rent a berth", () => this.rentBerth());
     this.berthBtn.style.display = "none";
+    // The keeper's SECOND trade (M8's amendment: no rod is ever free). Same
+    // discipline as the berth beside it — boot hidden, offer-gated per frame,
+    // dimmed rather than hidden when the purse is short — with one deliberate
+    // divergence: it VANISHES once the ladder is topped out, because rod
+    // ownership is global and permanent and a forever-dimmed chip is dead chrome.
+    this.buyRodBtn = this._btn("Buy a rod", () => this.buyRod());
+    this.buyRodBtn.style.display = "none";
     this.travelBtn = this._btn("Travel", () => this.toggleTravel());
+    // 0.12's headline verb, on the same gating as the berth: shown whenever the
+    // player is standing at a registry spot that holds water — INCLUDING when
+    // they have no rod, because the refusal is what points them at the vendor and
+    // a button that hides itself teaches nobody the mechanic exists.
+    this.fishBtn = this._btn("🎣 Fish…", () => this.toggleFish());
+    this.fishBtn.style.display = "none";
+    this.fishMenu = PF.el("div", {
+      style:
+        "display:none;flex-direction:column;gap:6px;align-items:flex-end;max-height:40vh;overflow:auto;pointer-events:auto;",
+    });
     this.waitBtn = this._btn("⏩ Wait…", () => this.toggleWait());
     this.keyboardBtn = this._btn("Keyboard", () => core.setMode("dialogue"));
     this.resumeBtn = this._btn("▶ Resume walking", () => core.resume());
@@ -71,7 +88,18 @@ PF.Hud = class {
         style:
           "position:absolute;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px;align-items:flex-end;z-index:2;",
       },
-      [this.talkBtn, this.berthBtn, this.travelBtn, this.waitMenu, this.waitBtn, this.keyboardBtn, this.resumeBtn],
+      [
+        this.talkBtn,
+        this.berthBtn,
+        this.buyRodBtn,
+        this.travelBtn,
+        this.fishMenu,
+        this.fishBtn,
+        this.waitMenu,
+        this.waitBtn,
+        this.keyboardBtn,
+        this.resumeBtn,
+      ],
     );
 
     // Touch D-pad. touch-action:none so the browser doesn't claim the gesture
@@ -244,6 +272,113 @@ PF.Hud = class {
     this.waitMenu.style.display = "flex";
   }
 
+  /** The session menu, mirroring the Wait menu one method up: a single cast, or
+   *  a session that runs until one of the four dayparts. The BAIT LINE at the top
+   *  is not a control — it is what the session is about to spend, shown before it
+   *  spends it, because the slotting is automatic and the player would otherwise
+   *  watch a stack drain without ever having been told it was in play. */
+  toggleFish() {
+    const open = this.fishMenu.style.display !== "flex";
+    if (!open) {
+      this.fishMenu.style.display = "none";
+      return;
+    }
+    const offer = PF.economy.fishOffer(this.core);
+    if (!offer.available) {
+      // A refusal is answered where it is pressed, not behind a menu that then
+      // refuses every entry in it.
+      this.fishMenu.style.display = "none";
+      this.toast(offer.hint || this.fishRefusal(offer.reason));
+      return;
+    }
+    this.fishMenu.replaceChildren();
+    const world = this.core.sim.world;
+    this.fishMenu.appendChild(
+      PF.el("span", {
+        style: this.S.chip,
+        text: offer.bait
+          ? `Bait: ${offer.bait.q} × ${PF.economy.describe(world, offer.bait)}`
+          : "No bait — casting bare",
+      }),
+    );
+    for (const [target, label] of [
+      [null, "Cast once"],
+      ["dawn", "Fish until dawn"],
+      ["day", "Fish until morning"],
+      ["dusk", "Fish until dusk"],
+      ["night", "Fish until night"],
+    ]) {
+      this.fishMenu.appendChild(
+        this._btn(label, () => {
+          this.fishMenu.style.display = "none";
+          this.fish(target);
+        }),
+      );
+    }
+    this.fishMenu.style.display = "flex";
+  }
+
+  /** The verb's refusal values, turned into sentences. `no-rod` is absent on
+   *  purpose: it carries its own themed hint naming the keeper who sells one, and
+   *  a generic line here would throw that away. */
+  fishRefusal(reason) {
+    if (reason === "wrong-mode") return "Not while you're talking — resume walking first";
+    if (reason === "not-near-water") return "There is no water to fish here.";
+    if (reason === "pouch-full") return "Your bag is full — there is nowhere to put a catch.";
+    if (reason === "gate-held") return "Not yet — your world is still being written.";
+    return "You can't fish just now.";
+  }
+
+  /** Spend the session. `fish` moves the clock and flags the save itself, so this
+   *  only turns what came back into a sentence — and re-reads the chips, because
+   *  the purse chip counts what is in the bag. */
+  fish(target) {
+    const result = PF.economy.fish(this.core, target);
+    if (!result.ok) {
+      this.toast(result.hint || this.fishRefusal(result.reason));
+      return;
+    }
+    const world = this.core.sim.world;
+    const clock = this.core.sim.clockLabel();
+    this.refreshChips();
+    if (result.leveled) {
+      this.toast(`Fishing is level ${result.leveled} now — ${clock}`);
+      return;
+    }
+    if (!result.caught.length) {
+      this.toast(`Nothing biting — ${clock}`);
+      return;
+    }
+    const last = PF.economy.describe(world, result.caught[result.caught.length - 1]);
+    this.toast(
+      result.caught.length === 1
+        ? `You land a ${last} — ${clock}`
+        : `${result.caught.length} landed, the last a ${last} — ${clock}`,
+    );
+  }
+
+  /** Take the rod the button is offering. The offer is re-read inside buyRod, so
+   *  a frame-old button cannot overcharge anybody; this turns the refusals into
+   *  sentences, exactly as rentBerth's caller does. */
+  buyRod() {
+    const world = this.core.sim?.world;
+    const result = PF.economy.buyRod(this.core);
+    if (result.ok) {
+      const named = PF.economy.describe(world, { t: "rod", k: result.tier });
+      this.toast(
+        result.bait
+          ? `A ${named} is yours, line and tackle included — ${PF.economy.money(world, result.price)}.`
+          : `A ${named} is yours — ${PF.economy.money(world, result.price)}.`,
+      );
+      this.refreshChips();
+      return;
+    }
+    if (result.reason === "cannot-afford")
+      this.toast(`Not enough on you — that rod is ${PF.economy.money(world, result.price)}.`);
+    else if (result.reason === "pouch-full") this.toast("Your bag is too full to carry it.");
+    else this.toast("There is no rod to be had here.");
+  }
+
   toggleTravel() {
     const open = this.travelMenu.style.display !== "flex";
     if (!open) {
@@ -362,6 +497,10 @@ PF.Hud = class {
       if (!inWorld) {
         this.berthBtn.style.display = "none";
         this._berth = null;
+        this.buyRodBtn.style.display = "none";
+        this._rod = null;
+        this.fishBtn.style.display = "none";
+        this._fish = null;
       }
       this.travelBtn.style.display = inWorld && spatialAvail ? "" : "none";
       this.waitBtn.style.display = inWorld ? "" : "none";
@@ -374,6 +513,7 @@ PF.Hud = class {
       this.resumeBtn.textContent = combatResumeApplies ? "▶ Resume exploring" : "▶ Resume walking";
       this.travelMenu.style.display = "none";
       this.waitMenu.style.display = "none";
+      this.fishMenu.style.display = "none";
       if (mode === "dialogue" && !gate) this.toast("Type in the message box below — Resume to keep walking");
     }
     // Nothing below the gate means anything: there is no beat to caption, nobody
@@ -425,6 +565,44 @@ PF.Hud = class {
             offer.reason === "already-yours"
               ? "Your berth"
               : `Rent a berth (${PF.economy.money(sim.world, offer.price)})`;
+        }
+      }
+      // The rod ladder, on the berth's cadence and memoised the same way. The
+      // key carries the TIER as well as the reason, so the button re-labels when
+      // the ladder moves up a rung under it.
+      const rod = PF.economy.rodOffer(this.core);
+      // A price is quoted only when a real keeper is within reach and there is a
+      // rung left to sell, so — exactly as with the berth — one test covers "is
+      // there anything to show at all". This is also where the button VANISHES at
+      // the top of the ladder: no rung, no price, no button.
+      const rodShown = rod.price !== null;
+      const rodKey = rodShown ? `${rod.reason ?? "ok"}:${rod.tier}:${rod.price}` : "";
+      if (rodKey !== this._rod) {
+        this._rod = rodKey;
+        this.buyRodBtn.style.display = rodShown ? "" : "none";
+        if (rodShown) {
+          this.buyRodBtn.style.opacity = rod.available ? "1" : "0.45";
+          const named = PF.economy.describe(sim.world, { t: "rod", k: rod.tier });
+          this.buyRodBtn.textContent = `Buy a ${named} (${PF.economy.money(sim.world, rod.price)})`;
+        }
+      }
+      // The spot. `offer.spot` is the render test here — a refusal that still
+      // names a spot is one about the PLAYER (no rod, full bag) and belongs on
+      // screen saying so; one that names none is about the place, and there is
+      // nothing to say. The bait count rides the memo key so the menu's line is
+      // never a stack ago.
+      const water = PF.economy.fishOffer(this.core);
+      const fishKey = water.spot ? `${water.reason ?? "ok"}:${water.spot.id}:${water.bait?.q ?? 0}` : "";
+      if (fishKey !== this._fish) {
+        this._fish = fishKey;
+        this.fishBtn.style.display = water.spot ? "" : "none";
+        if (water.spot) {
+          this.fishBtn.style.opacity = water.available ? "1" : "0.45";
+          this.fishBtn.textContent = `🎣 Fish ${water.spot.name}`;
+        } else {
+          // Walking away from the bank closes the menu with the button: a list of
+          // casts for water nobody is standing at is a list that refuses.
+          this.fishMenu.style.display = "none";
         }
       }
       const clock = sim.clockLabel();

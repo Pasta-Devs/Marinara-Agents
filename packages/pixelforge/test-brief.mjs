@@ -14502,6 +14502,165 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   }
 }
 
+// ── THE ACTION STACK'S CENSUS, COUNTED RATHER THAN ASSUMED ───────────────────
+// §2.3's honest recount. The old "these are mutually rare" premise is STRUCK:
+// Talk is up for the whole of walk mode, keepers wander with no zone
+// restriction, and an inn beside a pond puts Talk, Wait, Keyboard, Travel, Fish,
+// Berth and Buy-Rod on screen at once by construction. Seven for slice 3 — Sleep
+// arrives in slice 4 and the count goes to eight, which is exactly why this is
+// pinned: adding a button means recounting here, deliberately.
+//
+// A DISPLAY-STATE pin over the real Hud on the shim, and not a layout one. The
+// shim has no layout engine and this case makes no claim about pixels.
+{
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = () => 0;
+  globalThis.clearTimeout = () => {};
+  loadedPF.save.reset();
+  loadedPF.spatial.reset();
+  try {
+    const P = loadedPF.player;
+    const w = world.build(7, "cozy-village", null);
+    const sim = new loadedPF.Sim(w);
+    const core = {
+      chatId: "chat-census",
+      sim,
+      interact() {},
+      setMode() {},
+      resume() {},
+      markDirty() {},
+    };
+    core.hud = new loadedPF.Hud(new FakeNode("div"), core);
+    const hud = core.hud;
+    const keeper = w.zones.inn.npcs.find((npc) => npc.lodging === "inn");
+    assert.ok(keeper, "the fixture has somebody who lets rooms");
+
+    // THE ENUMERATION. Named, so a failure says WHICH button appeared, and
+    // cross-checked against the stack's real children so a button added without
+    // touching this list fails here rather than passing unnoticed.
+    const stack = {
+      Talk: hud.talkBtn,
+      Berth: hud.berthBtn,
+      "Buy-Rod": hud.buyRodBtn,
+      Travel: hud.travelBtn,
+      Fish: hud.fishBtn,
+      Wait: hud.waitBtn,
+      Keyboard: hud.keyboardBtn,
+      Resume: hud.resumeBtn,
+    };
+    const buttons = hud.actions.children.filter((node) => node.tagName === "BUTTON");
+    assert.equal(
+      buttons.length,
+      Object.keys(stack).length,
+      `the census covers every button in the stack (${buttons.length})`,
+    );
+    for (const node of buttons)
+      assert.ok(
+        Object.values(stack).includes(node),
+        `every button in the stack is named in the census (${node.textContent})`,
+      );
+
+    // BEFORE THE FIRST UPDATE, which is a claim only this line makes: a
+    // display-gated button that ships visible is on screen for every frame
+    // before update() runs, and for the whole of a mount that never reaches one.
+    for (const name of ["Berth", "Buy-Rod", "Fish"])
+      assert.equal(stack[name].style.display, "none", `${name} boots HIDDEN, before anything has decided`);
+
+    const census = () => {
+      hud.update();
+      return Object.entries(stack)
+        .filter(([, node]) => node.style.display !== "none")
+        .map(([name]) => name)
+        .sort();
+    };
+    const standAtPond = () => {
+      sim.teleport("village", 32, 23);
+      sim.step(0, {});
+      assert.equal(sim.nearFeature?.id, "legacy:pond", "the fixture stands at the pond bank");
+    };
+
+    P.award(core, { money: 100 });
+
+    // (1) UNDER THE GATE: nothing at all, including the topbar.
+    loadedPF.save.gate = { chatId: core.chatId, state: "generating" };
+    assert.deepEqual(census(), [], "a world nobody has entered offers no actions");
+    assert.equal(hud.topbar.style.display, "none", "…and no chips either");
+    loadedPF.save.gate = null;
+
+    // (2) MID-CONVERSATION: the one guaranteed way back out, and nothing else.
+    sim.mode = "dialogue";
+    assert.deepEqual(census(), ["Resume"], "dialogue keeps exactly the exit");
+    sim.mode = "walk";
+
+    // (3) WALKING, NOWHERE IN PARTICULAR: the three that are never proximity-gated.
+    sim.teleport("village", 21, 17);
+    sim.step(0, {});
+    sim.nearNpc = null;
+    loadedPF.spatial.available = false;
+    assert.deepEqual(census(), ["Keyboard", "Talk", "Wait"], "mid-square with nobody about: three");
+
+    // (4) …WITH SOMEWHERE TO TRAVEL TO.
+    loadedPF.spatial.available = true;
+    assert.deepEqual(census(), ["Keyboard", "Talk", "Travel", "Wait"], "a known destination adds one");
+
+    // (5) …AND A KEEPER WITHIN REACH, who sells two different things.
+    sim.nearNpc = keeper;
+    assert.deepEqual(census(), ["Berth", "Buy-Rod", "Keyboard", "Talk", "Travel", "Wait"], "the keeper adds two");
+
+    // (6) THE WORST CASE: standing at the water with the keeper beside you, which
+    // an inn built by a pond makes ordinary rather than exotic.
+    standAtPond();
+    sim.nearNpc = keeper;
+    assert.deepEqual(
+      census(),
+      ["Berth", "Buy-Rod", "Fish", "Keyboard", "Talk", "Travel", "Wait"],
+      "the full slice-3 stack is SEVEN — recount this when slice 4 adds Sleep",
+    );
+    assert.equal(hud.fishBtn.style.opacity, "0.45", "…and Fish is offered dimmed to a rodless player, not hidden");
+    assert.ok(hud.fishBtn.textContent.includes(w.zones.village.features[0].name), "…naming the water it is about");
+
+    // (7) THE LADDER TOPS OUT AND ITS BUTTON GOES, which is the one stated
+    // divergence from the berth's never-vanish rule.
+    P.grant(core, { t: "rod", k: "decent" }, 1);
+    assert.deepEqual(
+      census(),
+      ["Berth", "Fish", "Keyboard", "Talk", "Travel", "Wait"],
+      "a decent rod is the end of that ladder, so the button leaves the stack",
+    );
+    assert.equal(hud.fishBtn.style.opacity, "1", "…while Fish stops being dimmed, having a rod behind it now");
+
+    // AND WALKING AWAY TAKES THE PROXIMITY ONES WITH IT — including any menu
+    // left standing open over water nobody is at.
+    hud.toggleFish();
+    assert.equal(hud.fishMenu.style.display, "flex", "the session menu opens at the bank");
+    assert.ok(
+      hud.fishMenu.children.some((node) => node.textContent === "Cast once"),
+      "…offering a single cast",
+    );
+    assert.equal(
+      hud.fishMenu.children.filter((node) => /^Fish until /.test(node.textContent)).length,
+      4,
+      "…and a session for each of the four dayparts, mirroring the Wait menu",
+    );
+    assert.ok(
+      hud.fishMenu.children.some((node) => /No bait/.test(node.textContent)),
+      "…with a bait line saying what the session would spend",
+    );
+    sim.teleport("village", 21, 17);
+    sim.step(0, {});
+    sim.nearNpc = null;
+    assert.deepEqual(census(), ["Keyboard", "Talk", "Travel", "Wait"], "walking away puts the stack back to four");
+    assert.equal(hud.fishMenu.style.display, "none", "…and closes the menu it left open");
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    loadedPF.save.gate = null;
+    loadedPF.save.reset();
+    loadedPF.spatial.reset();
+  }
+}
+
 // ── TALK NEVER SILENTLY SPENDS NARRATION THE PLAYER HAS NOT READ ──────────────
 // Second live playtest: the maintainer wandered off mid-narration, pressed E on
 // Rook, and lost everything from the arrival narration onward. The turn Talk
