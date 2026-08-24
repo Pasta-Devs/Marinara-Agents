@@ -479,6 +479,30 @@ PF.world = (() => {
       stream: "The Conduit Bridge",
     },
   };
+  // …AND WHAT THE FOUR OF THEM DO. The same duplication one table along, and it
+  // was the one nobody themed: the four legacy residents' roles were hardcoded
+  // in buildLegacy — "innkeeper", "farmer", "village guard", "forager" — right
+  // beside the themed name book above, so a sci-fi colony stood a farmer and a
+  // village guard in it.
+  //
+  // Invisible while a role was only a token's label, and player-facing the
+  // moment the no-rod refusal started interpolating `npc.role` (59-economy's
+  // rodHint): a legacy colony told the player "You need an angling rig — the
+  // innkeeper stocks one", pointing at an inn that does not exist in that world.
+  //
+  // Keyed by NAME because the name is the join: buildLegacy stands up Mira, Tam,
+  // Rook and Fen, and every theme's DEFAULT_BRIEFS cast names the same four. The
+  // pairing is asserted below with the name book's own assertion, from the same
+  // source of truth, for the same reason.
+  const LEGACY_ROLES = {
+    "cozy-village": { Mira: "innkeeper", Tam: "farmer", Rook: "guard", Fen: "forager" },
+    "sci-fi-colony": {
+      Mira: "cantina keeper",
+      Tam: "hydroponics lead",
+      Rook: "pad marshal",
+      Fen: "salvage scout",
+    },
+  };
   // THE NAME BOOK ABOVE IS A DUPLICATE, AND THIS IS WHAT KEEPS IT ONE. Every
   // string in it is also written in that theme's own DEFAULT_BRIEFS entry
   // (18-brief) — the comment says the two agree and nothing made it true. They
@@ -514,6 +538,15 @@ PF.world = (() => {
             `pixelforge: the legacy layout calls ${theme}'s ${key} "${names[key]}", its default brief calls it "${name}"`,
           );
       }
+      // The role book, held to the same standard from the same source. Read off
+      // the cast BY NAME, which is the join the two tables share.
+      for (const [who, role] of Object.entries(LEGACY_ROLES[theme] ?? {})) {
+        const owedRole = fallback.cast.find((member) => member.name === who)?.role;
+        if (role !== owedRole)
+          throw new Error(
+            `pixelforge: the legacy layout makes ${theme}'s ${who} a "${role}", its default brief makes them a "${owedRole}"`,
+          );
+      }
     }
   }
 
@@ -542,6 +575,7 @@ PF.world = (() => {
   function buildLegacy(seed, theme) {
     const activeTheme = PF.art.setTheme ? PF.art.setTheme(theme) : "cozy-village";
     const names = ZONE_NAMES[activeTheme] || ZONE_NAMES["cozy-village"];
+    const roles = LEGACY_ROLES[activeTheme] || LEGACY_ROLES["cozy-village"];
     const rnd = PF.rng(seed);
 
     // ── The settlement exterior ──
@@ -664,11 +698,11 @@ PF.world = (() => {
 
     // NPCs — LLM characters in the story; sprites here are just their world tokens.
     v.npcs.push(
-      { id: "tam", name: "Tam", role: "farmer", hue: 96, x: 8, y: 22, wander: { x0: 4, y0: 20, x1: 11, y1: 24 } },
+      { id: "tam", name: "Tam", role: roles.Tam, hue: 96, x: 8, y: 22, wander: { x0: 4, y0: 20, x1: 11, y1: 24 } },
       {
         id: "rook",
         name: "Rook",
-        role: "village guard",
+        role: roles.Rook,
         hue: 210,
         x: 21,
         y: 10,
@@ -678,7 +712,7 @@ PF.world = (() => {
     n.npcs.push({
       id: "mira",
       name: "Mira",
-      role: "innkeeper",
+      role: roles.Mira,
       hue: 8,
       x: 5,
       y: 4,
@@ -693,7 +727,7 @@ PF.world = (() => {
     f.npcs.push({
       id: "fen",
       name: "Fen",
-      role: "forager",
+      role: roles.Fen,
       hue: 140,
       x: 29,
       y: 12,

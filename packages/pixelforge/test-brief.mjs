@@ -13501,6 +13501,58 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     /the legacy layout calls sci-fi-colony's inn "The Cantina", its default brief calls it "The Meridian Cantina"/,
     "the gathering place is in the book too",
   );
+
+  // ── AND THE SAME DUPLICATION ONE TABLE ALONG: THE FOUR RESIDENTS' ROLES ─────
+  // buildLegacy hardcoded "innkeeper", "farmer", "village guard" and "forager"
+  // theme-blind, right beside a ZONE_NAMES that has been themed since 0.4.0. It
+  // was invisible while a role was only ever a token's label; slice 3's no-rod
+  // refusal made it player-facing, because that sentence interpolates npc.role —
+  // so a legacy sci-fi colony was telling the player "You need an angling rig —
+  // the innkeeper stocks one", in a world with no inn anywhere in it.
+  //
+  // Same bug class as the names above and pinned the same way, in both
+  // directions. The four names are the anchor: buildLegacy stands up Mira, Tam,
+  // Rook and Fen, and so does every theme's default brief.
+  for (const theme of ["cozy-village", "sci-fi-colony"]) {
+    const legacy = world.build(77, theme, null);
+    const fallback = brief.defaults(theme, 1);
+    const residents = Object.values(legacy.zones).flatMap((zone) => zone.npcs);
+    assert.equal(residents.length, 4, `${theme}: the legacy layout stands its four people up`);
+    for (const npc of residents) {
+      const member = fallback.cast.find((cast) => cast.name === npc.name);
+      assert.ok(member, `${theme}: ${npc.name} is in the default brief's cast as well`);
+      assert.equal(npc.role, member.role, `${theme}: the legacy ${npc.name} does the job the brief gives them`);
+    }
+  }
+
+  // AND WHAT IT REACHES THE PLAYER AS, which is the whole reason this is worth a
+  // table rather than a comment. Driven through the shipped refusal on a LEGACY
+  // colony — the world the compiled-world case further down could not see.
+  {
+    const colony = new loadedPF.Sim(world.build(77, "sci-fi-colony", null));
+    const hint = loadedPF.economy.rodHint({ chatId: "chat-legacy-role", sim: colony, hud: { toast() {} } });
+    assert.ok(!/innkeeper/.test(hint), `a legacy colony has no innkeeper to send anyone to (${hint})`);
+    assert.ok(/cantina keeper/.test(hint), `…it has the person its own brief names (${hint})`);
+  }
+
+  assert.throws(
+    bootWorld("20-world.js", `Mira: "cantina keeper"`, `Mira: "barkeep"`),
+    /the legacy layout makes sci-fi-colony's Mira a "barkeep", its default brief makes them a "cantina keeper"/,
+    "rewriting the legacy role and not the brief fails the build",
+  );
+  // The brief-side rewrite has to name the DEFAULT_BRIEFS entry and not the
+  // STOCK_CAST row above it, which writes the same four roles a second time and
+  // would swallow a single-line rewrite: the assertion reads defaults(), so a
+  // patch that missed it would report "no exception" and mean nothing.
+  assert.throws(
+    bootWorld(
+      "18-brief.js",
+      `name: "Rook",\n          role: "pad marshal",`,
+      `name: "Rook",\n          role: "landing marshal",`,
+    ),
+    /the legacy layout makes sci-fi-colony's Rook a "pad marshal", its default brief makes them a "landing marshal"/,
+    "…and rewriting the brief and not the legacy layout fails it from the other side",
+  );
 }
 
 // ── THE CAST WINDOW'S CLOCK MOVER CROSSES MIDNIGHT ───────────────────────────
