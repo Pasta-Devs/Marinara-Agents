@@ -389,13 +389,15 @@ The window matters at both ends. World-derived ids — a discovered sub-zone, a 
 3. **S3 pouch + S4 skills/tools** — gate actions' yields, quest rewards, keys, gifts, the economy loop.
 4. **S5 player state block** — gates everything that has to survive a reload: S3, S4, P2, P4, P5, W2. Not a dependency so much as a decision that must be made *before* the first thing that needs it, or it gets made badly four times.
 
+**Updated 2026-08-24, sequencing note.** One maintainer call recorded in the release suggestions, no new items: the quest log (Ruling 1) rides **0.13 with P4** — not a 0.11.x — and 0.12's P5 ledger buffer gains a readable **journal panel** so the log arrives as a tab of a surface that is already full. Reasoning in the 0.12/0.13 bullets.
+
 **The independent cheap track: L2 weather/calendar** — gates nothing, gated by nothing, pure function of the saved clock, zero save fields, immediate felt difference. The dessert; don't let it displace the substrate, don't let it wait a year either.
 
 **Suggested next three releases** (a suggestion, not a commitment):
 
 - **0.11** — **S5** + S2 + S3 + L2 + **P1**: the save block first, then the second verb, things, weather, and a bed; the world becomes touchable. S5 leads because S3 is the first thing that has to persist, and a schema retrofitted around an existing pouch is a migration nobody wanted to write. P1 is not optional here — P5 in 0.12 has no trigger without a bed to sleep in, so slipping it silently strands the release after.
-- **0.12** — S4 + P3 (fishing first, per the ruling's specified model) + P5's ledger buffer: the first full action stack.
-- **0.13** — P4 quests + E1 offline content pack (one generation batch) + the quest board: the lean-play mode complete.
+- **0.12** — S4 + P3 (fishing first, per the ruling's specified model) + P5's ledger buffer, **surfaced as a readable journal panel** *(maintainer sequencing call, 2026-08-24)*: the buffer already accumulates in the 0.11 state block, and 0.12 is the release that starts filling it with entries worth reading — catches, money earned, weather, day events — so the panel is never an empty pane on day one. The first full action stack, now with its own record.
+- **0.13** — P4 quests + E1 offline content pack (one generation batch) + the quest board: the lean-play mode complete. **The quest log ships here as a tab (or filter) of 0.12's journal panel**, not as a new surface — quests land in a pane that has already earned its place. Deliberately NOT earlier: a quest log before P4 renders an empty list (nothing populates `quests.active` until the templates exist, and nothing verifies an objective until P3/S4 give the package things to count) — the same decoration-before-behavior rule that deferred room purposes in 0.8. And it stays the *mechanical* log per Ruling 1's surviving design rule: quest state binds tiles and tables, never the GM's prose — capturing GM-narrated questlines is S1/P7 territory and its own future conversation.
 - **S1 lands whenever the engine channel does** — slot its first consumers (shelter, boarded door) into whichever release that is.
 
 ---
