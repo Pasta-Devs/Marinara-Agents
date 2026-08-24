@@ -876,17 +876,24 @@ PF.economy = {
     return null;
   },
 
-  /** One batched ledger line for one DAY of a session (plan §2.1). Written at
-   *  the midnight wrap for the day that just ended, and again at the end for the
-   *  day the session finished in — so a post-midnight fisher's pre-midnight catch
-   *  is filed under the day it happened and the 00:30 sleep can flush it.
+  /** One batched ledger line for one DAY of a session (plan §2.1). Written for
+   *  the day that just ended once the window that ended it has fully resolved,
+   *  and again after the loop for the day the session's last cast began in — so a
+   *  post-midnight fisher's pre-midnight catch is filed under the day it happened
+   *  and the 00:30 sleep can flush it.
+   *
+   *  THE ACCUMULATOR CARRIES ITS OWN DAY and this reads it rather than taking one
+   *  from the caller. A tally is a day's tally: filing it under a day somebody
+   *  else worked out is how the crossing window's cast came to be recorded on one
+   *  day and the fish it landed on the next.
    *
    *  GATE-SAFE by construction: `log()` refuses a day the flush already covers,
    *  and mid-session `flushedDay ≤ D−1` always — telling day D would need
    *  `ledgerOwed ≥ D`, which needs a completed sleep after D's midnight, which
    *  cannot have happened while the player is still standing at the water. */
-  _logDay(core, world, spot, tally, day, gen) {
+  _logDay(core, world, spot, tally, gen) {
     if (!tally.windows) return false;
+    const day = tally.day;
     const counts = new Map();
     for (const entry of tally.caught) {
       const key = `${this.entryType(entry)}:${entry.variant}`;
@@ -955,9 +962,23 @@ PF.economy = {
     const days = [];
     let leveled = 0;
     let spent = 0;
-    let tally = { windows: 0, caught: [] };
+    // THE ACCUMULATOR KNOWS WHICH DAY IT IS, and that is the whole of the
+    // ordering: it belongs to the day the casts in it BEGAN, which stops being
+    // `sim.day` the moment one of them crosses midnight.
+    let tally = { day: sim.day, windows: 0, caught: [] };
 
     for (let i = 0; i < windows; i++) {
+      // THE WRAP, FILED AT THE TOP OF THE WINDOW AFTER IT. The previous window
+      // crossed midnight, so its day is over and everything that window resolved
+      // — its cast AND its fish — is already in the accumulator. Filed here and
+      // not between an advance and the roll that follows it: a flush taken inside
+      // a window files that window's cast under the day it began and its catch
+      // under the day after, and a session of ONE such window loses the catch
+      // line altogether.
+      if (tally.windows && sim.day !== tally.day) {
+        if (this._logDay(core, world, spot, tally, gen)) days.push(tally.day);
+        tally = { day: sim.day, windows: 0, caught: [] };
+      }
       const live = PF.player.get(core);
       if (!live) break; // a chat switch landed under us; the mutators would refuse anyway
       const slots = live.skills?.equipped?.fishing ?? null;
@@ -974,12 +995,6 @@ PF.economy = {
       sim.advanceMinutes(W);
       spent += W;
       tally.windows += 1;
-      // THE WRAP: file the day that just ended before anything from the new one
-      // can land in it. The accumulator starts over on the far side of midnight.
-      if (sim.day !== day) {
-        if (this._logDay(core, world, spot, tally, day, gen)) days.push(day);
-        tally = { windows: 0, caught: [] };
-      }
       // THE BAIT IS SPENT for the window that was read as holding it, and the
       // slot follows the stack out rather than being left pointing at a row the
       // pouch no longer has.
@@ -1010,7 +1025,10 @@ PF.economy = {
       caught.push({ t: type, k: entry.variant });
     }
 
-    if (tally.windows && this._logDay(core, world, spot, tally, sim.day, gen)) days.push(sim.day);
+    // THE LAST DAY THE SESSION TOUCHED, which is the day its last cast began in
+    // and not necessarily the one the clock is showing: a session whose final
+    // window crossed midnight files that window under the day before.
+    if (tally.windows && this._logDay(core, world, spot, tally, gen)) days.push(tally.day);
     // EVERY PATH THAT MOVED THE CLOCK, refusals-after-advance included (the Wait
     // precedent, 70-hud): the mutators self-dirty, but a session of failed casts
     // runs no mutator at all and would otherwise lose its hours on reload.

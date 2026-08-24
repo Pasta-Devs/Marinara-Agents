@@ -14106,24 +14106,66 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     // ── A SESSION THAT CROSSES MIDNIGHT FILES EACH DAY UNDER ITS OWN DAY ──────
     // The maintainer's ruled scenario made literal: the 00:30 sleeper flushes
     // LAST NIGHT's catch. That only works if the pre-midnight half of the session
-    // was filed under the day it happened, so the accumulator flushes AT the wrap
-    // and starts again on the far side.
+    // was filed under the day it happened — the CAST and the FISH BOTH, which is
+    // the half a "one line per day" count cannot see. The crossing window belongs
+    // whole to the day its cast began in, and its day is filed once that window
+    // has fully resolved rather than half-way through it.
     {
-      const night = angler({ clockMin: 23 * 60 + 45, day: 5, level: 6 });
+      // A fixture whose CROSSING window yields, so both lines have contents worth
+      // reading. WHAT it yields is asked of a single cast over the same state —
+      // the same window, seeded identically — rather than written down here.
+      const solo = angler({ clockMin: 23 * 60 + 45, day: 5, level: 4 });
+      const crossing = E.fish(solo.core, null);
+      assert.equal(crossing.caught.length, 1, "the fixture's crossing window is one that catches");
+      const fish = E.describe(solo.w, crossing.caught[0]);
+
+      const night = angler({ clockMin: 23 * 60 + 45, day: 5, level: 4 });
       const out = E.fish(night.core, "dawn");
       assert.equal(night.sim.day, 6, "the session ran into the next day");
       assert.ok(night.sim.clockMin < 24 * 60, "…with the clock inside it");
       assert.deepEqual(out.days, [5, 6], "and it filed one line per day it spanned, in order");
       const lines = P.get(night.core).ledger.lines;
-      assert.equal(lines.filter((line) => line[0] === 5).length, 1, "ONE batched line for the night before");
-      assert.equal(lines.filter((line) => line[0] === 6).length, 1, "…and one for the morning after");
-      assert.ok(
-        lines.every((line) => /Fished/.test(line[1])),
-        "both of them say where",
-      );
+      const dayLine = (day) => {
+        const found = lines.filter((line) => line[0] === day);
+        assert.equal(found.length, 1, `ONE batched line for day ${day}`);
+        return found[0][1];
+      };
+      const before = dayLine(5);
+      const after = dayLine(6);
+      assert.ok(/Fished/.test(before) && /Fished/.test(after), "both of them say where");
       // NON-VACUOUS: the wrap really did split a session that would otherwise be
-      // one line — only one window fell on day 5.
-      assert.ok(/\b1 cast\b/.test(lines.find((line) => line[0] === 5)[1]), "day 5 got the single window it was owed");
+      // one line — only one window fell on day 5, and the other twenty did not.
+      assert.ok(/\b1 cast\b/.test(before), `day 5 got the single window it was owed (${before})`);
+      assert.ok(/\b20 casts\b/.test(after), `…and day 6 got the rest (${after})`);
+      // AND THE FISH WENT WITH THE CAST THAT SPENT THE HOURS. The crossing
+      // window's catch is filed under the day the cast BEGAN, and it is not on
+      // day 6's line — which is where a flush taken between that window's advance
+      // and its roll puts it, leaving day 5 reporting an empty hour.
+      assert.ok(before.includes(fish), `day 5's line names what the crossing window caught (${before})`);
+      assert.ok(!after.includes(fish), `…and day 6's line does not claim it (${after})`);
+      assert.ok(!/nothing biting/.test(after), `day 6 caught plenty of its own (${after})`);
+    }
+
+    // ── …AND A SINGLE CAST THAT CROSSES MIDNIGHT KEEPS ITS CATCH ──────────────
+    // The sharpest shape of the same ordering, because it is the one where a
+    // mis-placed flush loses the line outright rather than mis-filing it: one
+    // window, and the wrap it crosses is the last thing the session does. The
+    // pouch and the xp were never in doubt — what the ledger said was "1 cast,
+    // nothing biting" about a cast that landed a fish, which is a record that
+    // actively lies about the hour the player spent.
+    {
+      const at = angler({ clockMin: 23 * 60 + 45, day: 4, level: 1 });
+      const out = E.fish(at.core, null);
+      assert.equal(out.windows, 1, "one window");
+      assert.equal(at.sim.day, 5, "…which crossed midnight");
+      assert.equal(out.caught.length, 1, "…and caught something");
+      const fish = E.describe(at.w, out.caught[0]);
+      assert.deepEqual(out.days, [4], "the line is filed under the day the cast BEGAN, not the one it ended in");
+      const lines = P.get(at.core).ledger.lines;
+      assert.equal(lines.length, 1, "one line, and no orphan on the far side of midnight");
+      assert.equal(lines[0][0], 4, "…on day 4");
+      assert.ok(lines[0][1].includes(fish), `and it RECORDS the catch (${lines[0][1]})`);
+      assert.ok(!/nothing biting/.test(lines[0][1]), "…rather than reporting an empty hour to the wrap-up");
     }
 
     // ── THE DAY-D LINE PASSES log()'s GATE, AND THE GATE IS REAL ──────────────
