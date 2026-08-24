@@ -12,8 +12,16 @@ author** (what state exists, what the mutators enforce, and what a consumer may 
 describes the code as built. Where a claim is load-bearing the file and symbol are named, so a
 change that invalidates a sentence here is a change that has to walk past the sentence.
 
-Companion documents: `brief-schema.md` (the world brief, which the block's stamps hash) and
-`ROADMAP.md` (why S5 leads 0.11 and what it gates).
+**0.12 is the first release to write into the block rather than only to define it**, and this
+document grew with it: skills and equipped tools now hold real rows, the pouch holds catches, the
+day ledger holds lines somebody wrote and a **notice band** beside them, and there is a verb
+surface (§7) and a wrap-up lifecycle (§8) that did not exist a release ago. One 0.12 field lives
+deliberately **outside** the block — `sim.intro.ledgerOwed`, the durable half of the flush — and
+§8.1 says why a field about the player's days is not in the player's block.
+
+Companion documents: `brief-schema.md` (the world brief, which the block's stamps hash — and,
+since 0.12, the feature register the fishing verb aims at) and `ROADMAP.md` (why S5 led 0.11, what
+it gates, and what 0.12's rulings put on the list).
 
 ---
 
@@ -25,10 +33,14 @@ Companion documents: `brief-schema.md` (the world brief, which the block's stamp
 | the quarantine store                                                | `src/58-player.js` (`PF.quarantine`)        |
 | the envelope, the two stores, the decision ladder, the loading gate | `src/60-save.js` (`PF.save`)                |
 | item vocabulary, prices, the berth, the starting purse              | `src/59-economy.js` (`PF.economy`)          |
+| the verbs and their tables: fishing, the rod ladder, sleep          | `src/59-economy.js` (same module — §7)      |
 | the mint stamp the block compares against                           | `src/20-world.js` (`mintStampOf`, `MINT_V`) |
+| the feature register the fishing verb aims at                       | `src/20-world.js` (`recordFeature`)         |
 | the block's default-init on a fresh sim                             | `src/30-sim.js` (`new PF.Sim`)              |
+| the clock movers, the wrap-up marker, the tell                      | `src/30-sim.js` (`advanceMinutes`, `stageLedgerOwed`, `_composeLedger`) |
+| the journal panel and the character sheet                           | `src/70-hud.js` (`PF.Hud`)                  |
 | the transport                                                       | `src/00-prelude.js` (`PF.api`)              |
-| every claim below, driven                                           | `test-brief.mjs` cases (q)–(ax)             |
+| every claim below, driven                                           | `test-brief.mjs` cases (q)–(az)             |
 
 The block is one key inside the save envelope, not a store of its own. The envelope goes to **two**
 places on every flush in routes mode: the timeline-anchored route row
@@ -49,10 +61,10 @@ player: {
   flushedDay: 0,                 // coupled to ledger.lines
 
   // ── world-free ────────────────────────────────────────────────────────────
-  pouch: { money: 0, items: [ { t: "rod", q: 1, k: "fine" } ] },
+  pouch: { money: 0, items: [ { t: "rod", q: 1, k: "crude" }, { t: "catch-common", q: 4, k: "carp" } ] },
   skills: {
     verbs: { fishing: { l: 1, x: 0 } },
-    equipped: { fishing: { tool: ["rod", "fine"], mod: ["bait", "decent"] } },
+    equipped: { fishing: { tool: ["rod", "crude"], mod: ["bait", "worms"] } },
   },
   quests_done_board: { "b:deliver-herb": 3 },
 
@@ -63,7 +75,10 @@ player: {
     active: [ { id, g: "z1|Alder Vance", verb, target, n, have, r: { money, xp }, day } ],
   },
   bought: null,                  // optional shop-depletion seam; absent until something is in it
-  ledger: { lines: [ [37, "Fished at the Millpond until dusk."], [12, "Day 12: 4 things happened.", 4] ] },
+  ledger: {
+    lines: [ [37, "Fished the Millpond — 6 casts: carp ×2."], [12, "Day 12: 4 things happened.", 4] ],
+    notices: [ [9, "…is back.", 1], [11, "…set aside."] ],   // 0.12: the BAND; emitted only when non-empty
+  },
   found: { zones: [ { p: "z4", e: 0, d: 3, day: 12, seen: true } ] },
   home: null,                    // a sealed anchor ("z3") or { minted: true } — never a bare h{n}
 }
@@ -72,6 +87,15 @@ player: {
 Short keys everywhere, no uuids, no derived values cached, no names stored except `rel` keys and
 the `s` lines. `defaultPlayer()` (58-player) is the literal above with everything empty; its key
 order **is** the wire order and the serializer reproduces it exactly.
+
+**Two subtrees are the whole of 0.12's schema delta, and neither is a new top-level key.**
+`skills.verbs` and `skills.equipped` were shipped empty in 0.11 and now carry rows (§7.4);
+`ledger.notices` is new (§8.3). **One 0.12 field is deliberately NOT here:**
+`sim.intro.ledgerOwed` — the last day a completed sleep made owed — lives under the envelope's
+existing `intro` key rather than in the block, and §8.1 gives the reasoning and the one cost it
+carries. Nothing else moved: no key was renamed, no key was dropped, and the pinned wire literal
+(§2.4) did not move for either of the two subtrees, because both are empty on a block that has
+never used them.
 
 ### 1.1 Field classes
 
@@ -82,8 +106,23 @@ one will be silently treated as world-free by the first and dropped by the secon
 | class           | fields                                                                                | what it means                                 | who acts on it                                            |
 | --------------- | ------------------------------------------------------------------------------------- | --------------------------------------------- | --------------------------------------------------------- |
 | **world-free**  | `pouch`, `skills`, `quests_done_board`, `game`, and a newer build's unknown keys      | means the same thing in any world             | crosses every seam untouched                              |
-| **world-bound** | `rel`, `quests.active`, `quests.done_pack`, `found`, `home`, `ledger.lines`, `bought` | meaningless once the world changed under it   | quarantined whole on a brief change; never carried across |
+| **world-bound** | `rel`, `quests.active`, `quests.done_pack`, `found`, `home`, `ledger.lines`, `ledger.notices`, `bought` | meaningless once the world changed under it   | quarantined whole on a brief change; never carried across |
 | **coupled**     | `flushedDay`                                                                          | only interpretable against the lines it gates | quarantined _with_ the lines, and clamped when they go    |
+
+**`ledger.notices` is the one world-bound field that is DROPPED rather than parked, and that
+became true with the format.** Every other world-bound field goes into the `stamp` entry a brief
+severance writes, so it comes home if the world does (§3.4). The band does not: `applyStamps`
+replaces `player.ledger` wholesale and puts no `notices` in the entry, so a brief severance loses
+whatever the band was still holding, permanently. It is a real regression against the shape that
+preceded it — a notice used to BE a ledger line, and a severed line was parked with the rest — and
+it is accepted rather than dressed up: the band's rows are short informational strings about
+events the player has usually already been told about, the one that matters most is the notice the
+severance is *about to write* (which 60-save appends after the strip, so it survives), and making
+the band restorable would mean parking a field whose whole purpose is to explain the parking.
+Recorded in §10.
+
+Note what is **not** touched by a severance: `intro.ledgerOwed` (§8.1). It is world-unbound and
+correctly so — the days it owes are days the player lived, whatever world they lived them in.
 
 `bought` is **world-bound**, and the reason is worth stating because its shape suggests otherwise:
 it counts what a NAMED shop's stock has lost, and both the shop and its stock table are compiled
@@ -97,20 +136,28 @@ below the gate would never be told (`log()` refuses any day the gate covers).
 
 ### 1.2 What the caps do, per cap
 
-The caps are **gameplay and hygiene bounds, not a size budget** (maintainer ruling; see §8). They do
+The caps are **gameplay and hygiene bounds, not a size budget** (maintainer ruling; see §9). They do
 not all behave the same way, and a consumer has to know which calls can come back empty:
 
 | behaviour                                          | caps                                                                                                                                                                                 | what the caller sees         |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- |
-| **evict** (the cap makes room, the call succeeds)  | `relLines` (evicts the oldest _line_, the row stands), `boardDone`/`packDone` (evict the least-earned counter), `ledgerDays`/`ledgerPerDay`/`ledgerStubs`, `found` (oldest by `day`) | success                      |
+| **evict** (the cap makes room, the call succeeds)  | `relLines` (evicts the oldest _line_, the row stands), `boardDone`/`packDone` (evict the least-earned counter), `ledgerDays`/`ledgerPerDay`/`ledgerStubs`, `notices` (told-oldest first), `found` (oldest by `day`) | success                      |
 | **truncate** (the value is cut, the call succeeds) | `lineChars`, `ledgerChars`, `skillLevel` (the level stops climbing and xp is zeroed at the ceiling)                                                                                  | success                      |
 | **refuse** (the call does nothing and says so)     | `items` (`grant()` → `0` on a new `(t,k)` row), `activeQuests` (`quest("accept")` → `false`), `relRows` (`bump()` → `null` when there is no stranger-tier row left to evict)         | the documented refusal value |
 
 Current values (`CAPS`, 58-player): items 60, relRows 150, relLines 30, lineChars 80,
 activeQuests 10, boardDone 40, packDone 40, bought 30, ledgerDays 3, ledgerPerDay 15,
-ledgerStubs 30, ledgerChars 200, found 80, skillLevel 20.
+ledgerStubs 30, ledgerChars 200, **notices 12**, found 80, skillLevel 20.
 
-Two eviction orders matter and are easy to conflate. The **row** cap prefers a STRANGER-tier row
+**A third eviction order joined the two below in 0.12, and it is the only one keyed on a flag
+rather than on age.** `notices` prefers a **told** row and takes the oldest of those; it evicts an
+untold row only when every row in the band is untold (`evictNotices`, 58-player). The reasoning is
+the band's whole contract: a told notice is one the player has already been given at a wrap-up and
+can only lose from the panel, while an untold one is a sentence nobody has heard yet, so it is the
+last thing to go. Twelve is small on purpose — a block carrying a dozen unread explanations of
+what has happened to it has bigger news than the thirteenth.
+
+Two further eviction orders matter and are easy to conflate. The **row** cap prefers a STRANGER-tier row
 (`d === 0`, fewest encounters, no line, not hostile) — a row the player built something with is
 never the first to go, and an enemy is something built. That is a _preference_ and it can run out,
 and what happens then depends on the path. At the LIVE cap `bump()` **refuses** (the refuse row
@@ -154,6 +201,12 @@ Within each field:
 - `found.zones` sorted by the composite `p|e|d`;
 - **`ledger.lines` is chronological and never sorted.** The buffer is a transcript and its order is
   its meaning; a JSON round-trip preserves array order, so it is stable without being sorted.
+  **`ledger.notices` is the same, for a sharper version of the same reason** — the band is a
+  sequence of events about the save, and after a rewind a restore's notice honestly carries a day
+  BELOW the severance notice it is the sequel to. Sorting it by day would print the world coming
+  back above the sentence saying it went. `notices` is emitted **after** `lines` and only when
+  non-empty (§2.3), so `ledger` is `{lines}` on every block that has never had anything explained
+  to it.
 
 `sortedMap` is deterministic rather than literally sorted for an integer-like key, because JS
 enumerates those first whatever the insertion order. Determinism is the property the dedupe needs;
@@ -202,6 +255,17 @@ to one written before the feature existed:
 | `rel[z][name].a`              | alongside an `s`, and only when the recency mark is non-zero         | a parent build wrote `s` lines with no mark at all; a flat `"a":0` on each would move bytes this change never declared                     |
 | `bought`                      | something has been bought                                            | an empty object every save is four bytes of nothing                                                                                        |
 | a ledger line's third element | the line is a STUB, carrying the count it stands for                 | plain lines stay two-element                                                                                                               |
+| `ledger.notices`              | something has been explained to the player                           | `bought`'s precedent one level down: every save in the wild would otherwise gain an empty array for a band it has nothing to put in        |
+| a notice row's third element  | the notice has been TOLD at a wrap-up                                | untold rows stay two-element, and untold is the state most rows spend the least time in                                                    |
+
+A notice row is `[day, text]` untold and `[day, text, 1]` told. **The told flag is what the
+wrap-up reads, in place of the day gate the lines answer to** — which is the whole reason the band
+left `lines` (§8.3) — and it is also the one thing the journal panel deliberately does not draw:
+the band shows told and untold rows alike, so a burn changes nothing on screen. A row whose text
+clips to nothing is dropped at serialize time rather than stored: `notice()` already refuses empty
+text, so no row this build writes arrives blank, but a hostile save carrying `[3, "   "]` would
+otherwise cost bytes, a slot against the cap, and a blank line in the panel no writer could
+account for.
 
 The stub count is not cosmetic: re-compacting an already-stubbed day sums the _counts_, not the
 lines, which is what stops an elided day that held twelve things becoming "1 thing happened." on the
@@ -218,7 +282,7 @@ chat gets one spurious rewind toast.
 The literal has been updated **once, deliberately**: S5 slice 3 added the `player` block and nothing
 else moved. That change is sanctioned because the alternative is worse — a pre-S5 save gains the
 default block on its first write, costing one re-write per open chat, and a pre-S5 _build_ reading
-that row deletes the block anyway (§9). Emitting the block conditionally to avoid the churn is the
+that row deletes the block anyway (§10). Emitting the block conditionally to avoid the churn is the
 slice-1 failure with a fresh coat.
 
 Note the all-zero `world` stamps in the literal: a sim built by the CONSTRUCTOR has never been
@@ -413,12 +477,27 @@ restore: the point of the window is that everything in it belonged to the wrong 
 3. **stamps / severance**, then the reverse direction — a `stamp` slot whose world is the world just
    built is restored and consumed;
 4. **gated dangling-quest repair**;
-5. **notices**, appended to the LIVE ledger.
+5. **notices**, appended to the LIVE ledger's **band** (`ledger.notices`).
 
 A repair run before severance would drop quests the severance was about to quarantine intact; a
-notice appended before severance would be severed along with the lines it is explaining. Notices
-land at `max(sim.day, flushedDay + 1)` — a line at or below the gate is one the flush will skip, and
-a notice nobody is ever told is worse than no notice.
+notice appended before severance would be severed along with the lines it is explaining.
+
+**Notices land at the day they happened, and that took the 0.12 format change to be able to say.**
+They used to be ledger LINES, and a line at or below the flush gate is one the wrap-up skips — so
+the day was shifted up to `max(sim.day, flushedDay + 1)` to keep the notice tellable, which put a
+day header from the FUTURE into a wrap-up. The band answers to a **told flag** instead of to the
+gate (§2.3, §8.3), so nothing has to lift a notice above anything: `sim.day` at write, full stop.
+The old lines back-door and its day-shift are deleted, not deprecated.
+
+There are **five notice writers**, and 0.12's copy review scoped itself to exactly those five
+strings (maintainer amendment M3): the two severance sentences and the mint one (58-player
+`applyStamps`), the dangling-quest loss (`repairQuests`), and the park-refusal and restore
+sentences (60-save `_rehydratePlayer`). Each names **its kind's relationship to the player** —
+a save coming home reads differently from a world that changed underneath somebody — because the
+band is now a surface a player re-reads rather than one sentence in a wrap-up they saw once.
+Naming an ACTOR (who changed the world) is beyond kind and is not possible in 0.12: no actor data
+exists. The band's framing sentence is written to receive one when the roadmap's autonomous-change
+mechanism arrives (ROADMAP L7).
 
 The whole block is rehydrated **outside** the envelope's `saved.v` gate, exactly like the envelope
 carry and for the same reason: a build that cannot read the envelope's version is the build most
@@ -691,7 +770,7 @@ without it. `ordinalOf` accepts only a positive safe integer, deliberately the s
 server's own mirror reader applies: a client that accepted a value the server ignores would order its
 writes against a number nothing else agrees with.
 
-**The residual the seam does not close** (§9): a degraded session that sent NO narration leaves the
+**The residual the seam does not close** (§10): a degraded session that sent NO narration leaves the
 anchor unmoved, so the row comes back with `anchorMatched: true` and the anchor guard hands it the
 world. The ordinal cures only the anchor-_moved_ degraded case. This is unchanged from pre-seam
 behaviour, and accepted.
@@ -742,7 +821,7 @@ the two that say the timeline moved and our snapshot is the stale one. Three fur
 The teardown path itself (`flushTeardown`) does not queue behind `_flushChain` — an ordinary flush
 sitting mid-await would swallow the last write of the session — and cannot afford a GET of its own,
 so it spends the last check's verdict instead. It fires both keepalive requests without awaiting
-between them, and sizes the pair against the keepalive quota (§8).
+between them, and sizes the pair against the keepalive quota (§9).
 
 **The damaged row's text.** A row-1 classification at ANY site means the next write repairs the row
 and destroys the only copy of its bytes, so the park is hoisted out of boot and called from every
@@ -854,7 +933,7 @@ so sealing a default is no longer "the world they were already walking in", it i
 decision made on the player's behalf in the one case they cannot undo. The `userContent` clamp
 (cut at 7,800 chars against the route's 8,000 — the sent payload is 7,801, because the ellipsis is
 appended after the slice) also makes a reachable 400 a contract bug rather than a long setting. The
-cost is accepted by choice (§9): a generation failure blocks play behind retry instead of degrading
+cost is accepted by choice (§10): a generation failure blocks play behind retry instead of degrading
 into a sandbox.
 
 ### 6.5 Escape safety
@@ -899,31 +978,68 @@ standing in the identical default world hold the same money whichever door they 
 
 ---
 
-## 7. The economy vocabulary
+## 7. The economy vocabulary and the verbs
 
-Everything in `59-economy.js` is content plus three game-facing entry points — `berthOffer` describes
-and never charges, `rentBerth` and `grantStartingPurse` mutate. (The rest of the module — `_skin`,
-`currency`, `money`, `describe`, `price` — is the vocabulary those three and the HUD read through.)
-It holds **no state of its own**: what persists goes through the shipped mutators and lives in the
-player block, which is what makes it rewind-safe.
+Everything in `59-economy.js` is content plus a set of game-facing entry points, and **every one of
+them comes in a pair**: an OFFER that describes and never charges — so the HUD can call it on every
+frame and render a refusal instead of hiding a control — and a VERB that mutates. 0.11 shipped one
+such pair (`berthOffer` / `rentBerth`) plus `grantStartingPurse`; 0.12 added three more
+(`fishOffer` / `fish`, `rodOffer` / `buyRod`, `sleepOffer` / `sleep`). The rest of the module —
+`_skin`, `currency`, `money`, `describe`, `price`, `verbSkin`, `playerLabel`, `catchTable` — is the
+vocabulary those pairs and the HUD read through.
+
+**The module holds no state of its own**, which is unchanged and is what makes the whole surface
+rewind-safe: everything durable goes through a shipped mutator (`award`, `grant`, `take`, `equip`,
+`setHome`, `log`, `bump`, `flush`) and lands in the player block, which rides the route-anchored
+snapshot. A verb that kept a counter would be a second writer nobody rewinds.
+
+**Why the verbs live here rather than in 58-player.** 58-player is the state BLOCK and deliberately
+ships no verbs; 30-sim loads before both and can see neither. A verb is content plus an offer plus
+a sequence of mutator calls, which is precisely the shape `rentBerth` already had — so fishing went
+beside it rather than inventing a fourth home.
 
 ### 7.1 Items, skins, prices
 
-A pouch row is keyed `(t, k)` — type and quality. **`t` has to mean the same thing in every theme**
-or a save crossing a theme change would be renaming the player's belongings, so the TYPES are shared
-(`ITEM_TYPES`, currently `["lodging-key"]`) and only the **skin** — the display name, the glyph, and
+A pouch row is keyed `(t, k)` — type and **either** quality or variant. **`t` has to mean the same
+thing in every theme** or a save crossing a theme change would be renaming the player's belongings,
+so the TYPES are shared (`ITEM_TYPES`) and only the **skin** — the display name, the glyph, and
 what the world calls its money — is per theme.
 
-| theme           | currency              | `lodging-key` | berth |
-| --------------- | --------------------- | ------------- | ----- |
-| `cozy-village`  | coin / coins, `◍`     | room key      | 12    |
-| `sci-fi-colony` | credit / credits, `◈` | berth chit    | 12    |
+`ITEM_TYPES` is `["lodging-key", "rod", "bait", "catch-common", "catch-uncommon", "catch-rare",
+"catch-prize"]`. **The `k` field carries two different vocabularies and they must not share one
+validator.** For a TOOL — the named set `PF.player.TOOL_TYPES`, currently just `rod` — `k` is a
+rung on the frozen `QUALITY` ladder and `grant()`/`equip()` refuse anything off it. For everything
+else `k` is a **semantic slug**: a catch's variant (`carp`, `culture-kelp`), a bait's kind
+(`worms`, `chum`). A slug is not a worse `"crude"`, so the grading rule is scoped by type and every
+other row's `k` is left free. Row identity is `(t, k)`, so a kelp never merges into a carp.
+
+| theme           | currency              | `lodging-key` | `rod`       | `bait`     | berth | rod: crude / decent |
+| --------------- | --------------------- | ------------- | ----------- | ---------- | ----- | ------------------- |
+| `cozy-village`  | coin / coins, `◍`     | room key      | fishing rod | hook bait  | 12    | 6 / 40              |
+| `sci-fi-colony` | credit / credits, `◈` | berth chit    | angling rig | lure stock | 12    | 24 / 40             |
+
+The four catch roles are skinned too (`catch` / `good catch` / `rare catch` / `prize catch` in the
+valley; `haul` / `good haul` / `rare haul` / `record haul` in the colony), but a catch row in
+ordinary play never renders through its role: the variant name wins, a variant no theme knows falls
+to its own slug with hyphens and underscores turned into spaces, and the role skin appears only for
+a row carrying **no `k` at all**.
 
 `money(world, n)` renders `1 coin` / `12 coins` so a sci-fi colony never charges anybody "coins".
-`describe(world, item)` renders an UNKNOWN type as its own tag with hyphens AND underscores turned
-into spaces, still carrying the quality prefix — `{t:"warp_core",k:"fine"}` reads "fine warp core" —
-rather than letting it vanish from the purse, so a newer build's item, or one a GM channel grants
-later, still reads. A row with no usable `t` at all is the one case that renders as `""`.
+`describe(world, item)` has **two mechanisms, split by type**: a TOOL renders as `${quality} ${name}`
+("crude rod"), while a catch or bait row keys its name on the VARIANT (`carp` → "carp"), because
+the tool spelling would otherwise render "worms bait". Over both sits a seeded display override
+keyed `(seed, t, k)` uniformly, with the skin name as its fallback — so a world can call its carp
+something of its own and every surface that renders through `describe` agrees. An UNKNOWN type
+still renders as its own tag with hyphens AND underscores turned into spaces, carrying the quality
+prefix — `{t:"warp_core",k:"fine"}` reads "fine warp core" — and an unknown VARIANT renders
+slug-derived by the same rule, so a newer build's row is a display fact rather than a hole. A row
+with no usable `t` at all is the one case that renders as `""`.
+
+**A verb has a skin too** (`verbSkin`), because a slot label is a name like any other: fantasy
+fishing equips a `rod` and a `bait`, the colony's *angling* equips a `rig` and a `lure`. So does
+the player (`playerLabel`) — "Traveler" in the valley, "Drifter" in the colony — which the
+character sheet captions its portrait with, because the package has no player name and the host
+props expose none (§8.5).
 `price(world, what)` returns **`null`**, never a default number, when a thing is not for sale here: a
 caller that cannot find a price must refuse the sale, not invent one.
 
@@ -938,7 +1054,38 @@ before it would hand back an available offer.
 
 A load-time completeness assertion (in the placers' idiom) requires **every shipped theme** to skin
 every item type, name its own money, and price a berth. The fallbacks above are there for a SAVE
-naming a theme this build dropped, not as a licence to ship a live theme unnamed.
+naming a theme this build dropped, not as a licence to ship a live theme unnamed. **0.12 widened
+it considerably, and the widening is the shape of the whole surface**, so it is worth reading as a
+list of what a new theme owes:
+
+- **every price key any verb can quote** — the berth and **each rung of the rod ladder** — because
+  `price()` answers `null` for "not for sale here" and a rod the build means to sell and forgot to
+  price is indistinguishable, at play, from one it deliberately does not stock. **Key existence
+  only:** nothing couples a price to the purse or to the berth (maintainer override — income
+  arrives in later releases and berth-sleeping is optional), so the build insists a quotable rung
+  is quotable and never that it is cheap;
+- **the player's own word** (`playerLabel`) and **every skill verb with both slot words**, because
+  the character sheet renders them and nothing else does — a theme missing either shows a blank
+  caption under the portrait, or the raw block key where the skill's name goes;
+- **the no-rod hint, and that it contains its `{role}` slot**, which is what keeps the sentence
+  from hardcoding an innkeeper into a colony (§7.6);
+- **the full 2×2 of catch tables** — both spot kinds, non-empty, since an empty table is the same
+  hole with a shape and would divide by a zero weight rather than refuse — plus per-entry checks
+  that a role is a role, a variant has a slug with no `:` in it (the ledger's own separator), a
+  weight is positive, a `minLevel` is inside `1..CAPS.skillLevel` (above it is content no save can
+  reach), and every daypart column is one of the four real dayparts;
+- **a name for every variant ANY shipped table mentions, in every theme** — the union, not each
+  theme's own list, because the pouch is world-free and a carp caught in a valley is still in the
+  bag when the same chat's next world is a colony;
+- **at least one bait entry per theme**, since the first rod purchase throws in a starter stack of
+  the theme's first bait slug and a theme with none would sell a rod and hand over an empty tin.
+
+Three more assertions sit outside the per-theme loop, on the tuning table itself: `catchXp` names
+every yield type (a missing one is a yield that awards nothing, silently, and the likeliest missing
+one is `bait` — the first thing a new player catches); `toolMult` is exactly as long as `QUALITY`
+(two lists in two files indexed by the same resolved number, and a short one hands `undefined` to
+the curve — NaN chance, on the best rod in the game); and `ledgerTellChars` is at or above one
+maximum-shape ledger day, which §8.4 explains.
 
 The fixed price lists are a first step. The plan's weekly deterministic stock tables need L2's
 calendar and arrive with it; a table lookup replaces the constant and the verbs do not move.
@@ -953,9 +1100,11 @@ ROOM**, in that order. Reach is tried first: `npc.lodging` is stamped on the kee
 gathering, so an innkeeper standing in the square at noon can still let you a room, which is what a
 keeper is. Failing that, `_keeperInRoom` resolves the keeper from the zone's own `lodging` mark, so
 walking into the inn offers the berth even when somebody else is the nearer body — which is how a
-player who never brushes past the keeper finds the room at all. Renting the same berth
-twice is refused rather than sold again — that is not a second room, it is the same room and a
-lighter purse.
+player who never brushes past the keeper finds the room at all. **Both paths were extracted into one
+shared `_keeper(sim)` helper in 0.12**, when the same person gained a second trade (§7.7): two
+offers standing beside the same body must not be able to drift about who that body is. Renting the
+same berth twice is refused rather than sold again — that is not a second room, it is the same room
+and a lighter purse.
 
 `rentBerth(core, gen)` runs every effect through a SHIPPED mutator, in an order that cannot
 half-charge anybody:
@@ -999,9 +1148,405 @@ exactly these fields.
 It is **not** a default on the block (§2.4) and **not** a rehydration step — restore's repairs are
 deliberately non-mutations.
 
+### 7.4 Skills, tools, and resolve-at-read
+
+`skills.verbs[verb] = {l, x}` — a level and the experience toward leaving it. `xpPerLevel(l)` is
+`10 × l`, so with `CAPS.skillLevel` at 20 the ladder costs Σ 10·l for l = 1…19 = **1,900 xp** end
+to end, and nothing in the tuning table can move that. A capped skill stops climbing and has its
+`x` zeroed, which is why every surface that renders a level has to special-case the ceiling rather
+than draw a bar that is permanently empty and permanently full at once.
+
+`skills.equipped[verb] = {tool: [t, k], mod: [t, k]}` — a pair per slot, by value. **`equip()`
+validates by item TYPE and not by slot**: it refuses a graded row whose `k` is off the `QUALITY`
+ladder and is otherwise perfectly willing to put bait in a `tool` slot, so **the call sites own the
+scoping** (`_autoEquipTool` refuses any type `QUALITY` does not grade; `_slotBait` only ever puts
+bait into `mod`). That is stated because it is the kind of invariant a future caller breaks by
+accident.
+
+**Everything read off the block for a decision goes through a resolver**, and this is the load-bearing
+idea rather than a defensive habit:
+
+| resolver             | answers                                                                    | for a value it does not understand |
+| -------------------- | -------------------------------------------------------------------------- | ---------------------------------- |
+| `resolvedToolTier(k)` | the `QUALITY` index of a graded tool                                       | 0 — crude, never a bonus, never a throw |
+| `resolvedModTier(slot, stack)` | **presence**: 1 iff the slot holds a pair AND the pouch still has a live stack behind that exact pair | 0                                  |
+| `resolvedLevel(row)` | a verb's level clamped to `1…CAPS.skillLevel`                              | 1 — a player who has never fished still rolls, at the bottom |
+| `resolvedDay(value)` | a day ordinal ≥ 0                                                          | 0 — owes nothing, tells nothing, lifts no gate |
+
+They are **pure** — they take values, not the core — so the hash and the display can resolve the
+same row without either reaching for state the other cannot see. **The mod resolver reads presence
+rather than grade, and that is a fix rather than a shortcut:** bait `k` are semantic slugs and are
+never `QUALITY` members, so an index resolver would map a slotted bait and an empty slot to the
+same 0 and make the modifier inert. Graded modifiers are later-release content and arrive as a
+second tier here, never as a `QUALITY` read.
+
+**What resolve-at-read buys is determinism across builds.** The fishing roll is seeded from
+resolved NUMBERS, so two clients that disagree about what `"legendary"` means still pull the same
+fish out of the same water on the same minute; a hostile `k` clamps to crude and the world stays
+consistent instead of forking.
+
+Dormant by design in 0.12: `fine` and `masterwork` are priced nowhere, so tool multipliers 3 and 4
+are live numbers with no content behind them, and the mod tier has exactly two rungs.
+
+### 7.5 The feature register — what a verb aims at
+
+A verb needs a target, and 0.12's is a **per-zone register** the compiler fills:
+`zone.features[] = {id, tag, name, rect}`.
+
+**It is DERIVED and never serialized.** It is not in `snapshot()` and not in `ENVELOPE_KEYS`; it is
+recomputed from `(seed, theme, brief)` on every compile, exactly like the zones it describes. So it
+costs zero save bytes, it cannot drift, and the guard it needs is the determinism lane in the
+harness rather than a migration. (It is deliberately **not** added to the World Maps export either
+— see `brief-schema.md` §8 for why.)
+
+**Four recording sites, and the fourth is required rather than creep.** The brief compiler's
+placement loop records what it places, with ids that are **brief ordinals** tracked independently of
+placement — a feature that could not be placed still consumes its ordinal, so ids do not shuffle
+when a settlement is too tight to seat everything. The settlement and the wilds non-crossing loops
+are that same code in two places. The third is the **wilds `water-crossing` branch**, which
+registers the stream rect under that feature's ordinal because the placer paints only the ford and
+never sees the feature — without it, a brief-built stream would be visible dead water while a
+legacy stream fished. The fourth is `buildLegacy`, whose two water features carry **fixed reserved
+ids** (`legacy:pond`, `legacy:stream`) with tags from the same closed brief vocabulary, because a
+legacy world has no brief to mint ordinals from and the catch tables resolve per `(theme, tag)`.
+
+**A rect may hold non-water tiles, and the exclusion lives in the TEST rather than in the rect.**
+The proximity check is "a 4-neighbour tile is `water` **and** inside a register rect" — both halves,
+neither sufficient alone. Water alone would make any puddle a feature and could not say which one;
+a rect alone would count tiles the feature never watered, and rects hold those by design (the ford
+lays path straight across its stream, and a compiled pool's companion well stands inside the anchor
+rect beside it). Four neighbours and not eight: standing corner-on to a pond is standing near the
+bank, not at it.
+
+**The bridge, and why it is here.** Where a road runs through a water rect the road tiles are laid
+as **bridge** — walkable, drawn over the water — and the water takes the rest (`waterFill`,
+20-world). That is a placement TREATMENT of the water feature and **not a feature of its own**: no
+new tag, no new ordinal, nothing added to the brief vocabulary. Two consequences worth stating.
+It is what let the water-feature placer stop refusing every wilds anchor that touched the road
+band, which is why a brief's wilds pond exists at all now. And standing ON a bridge tile beside
+water passes the neighbour test unchanged, so **fishing from a bridge works with no extra code** —
+emergent rather than special-cased. A settlement pond that decks a plaza with planks is a blessed
+outcome (maintainer, 2026-08-24), not a case to guard against.
+
+### 7.6 Fishing
+
+`fishOffer(core)` describes; `fish(core, target, gen)` spends. `target` is `null` for one cast, or
+one of the four daypart words for a session that loops until the clock reaches it.
+
+**A cast is one WINDOW of clock, spent whole.** `castWindow = floor(clockMin / TUNING.castMinutes)`,
+and the window's identity — its day and its index — is read BEFORE the clock moves, so a roll
+belongs to the slice of time it was spent in. The mover is `sim.advanceMinutes(n)`, which is the
+counterpart to `waitUntil`: a rest is over when it reaches a time of day, a cast spends a fixed
+window and lands wherever that leaves the clock. **It wraps midnight**, and it has to — "fish until
+dawn" is on the menu — so the wrap is a loop rather than a test, and `resolveSchedules()` then runs
+unconditionally because a jump of any size can cross a daypart.
+
+**The roll.** Each window seeds its own stream from
+`hash(seed, day, castWindow, spotId, level, toolTier, modTier)`, every one of those resolved (§7.4).
+`p = base(level) × toolMult[toolTier] × modMult[modTier]`, with everything in `TUNING`. A failed
+window is therefore a **fixed point escaped only by spending different time** — which IS the
+anti-save-scum property, and is stated rather than discovered.
+
+**The tables** are per `(theme, spot-kind)` where spot-kind is the register row's `tag` — a 2×2 set,
+asserted complete. An entry is `{role?, variant, weight, minLevel, daypart?}`. The **role** is the
+shared type and the **variant** is the pouch row's `k`. An entry with **no role IS a bait entry** —
+one field, read one way — because bait is a real water yield and fishing is its own supplier. XP
+keys on `role ?? "bait"` through the one `TUNING.catchXp` table, so **every** success awards through
+the same authority; without that, a session that caught bait first would mint no skill row at all on
+a player who has plainly been fishing.
+
+**Bait presence is read BEFORE it is spent.** The window a bait was consumed on rolls baited; the
+slot-clear that follows the last one affects the NEXT window, which re-keys the hash at tier 0 and
+goes on fishing at the lower rate. **Exhaustion is a continuation, never a stop.** The mod slot is a
+per-session SELECTION and not a standing preference: the verb slots the first live bait stack at
+session start, spends one per window, clears the slot when the stack empties, and stores no
+preference anywhere.
+
+**Refusal values, each distinct, all read before a single minute is spent:** `gate-held`,
+`wrong-mode` (walk only, like every clock mover), `not-near-water`, `no-rod`, `pouch-full`, plus two
+that are caller errors rather than player-facing states (`unknown-target`, `no-player`) and are
+answered by the HUD's generic line rather than copy about a state nobody can be in. **`no-rod` is
+reachable on purpose** — see §7.7.
+
+**Two cap interactions, and they are opposite ends of the same cap.** Up front, a pouch already at
+`CAPS.items` refuses the session: only merges could land, so it would spend real hours to tell the
+player nothing new. Mid-loop, `grant()` refuses only a **NEW** `(t, k)` row — merges never refuse —
+so a session can meet the cap on a variant it has not caught before; that window's grant AND its
+award are skipped, it logs nothing, and the loop continues. The cap bounds species DIVERSITY, not
+quantity, and not the session.
+
+**The receipt is a ledger line, not a turn**, and it is written **one per DAY the session spans**.
+The accumulator carries its own day and `_logDay` reads it rather than taking one from the caller —
+so a session that crosses midnight files its pre-midnight casts and their fish under the day they
+happened, and the next sleep can flush that day. Filing a crossing between an advance and the roll
+after it is what once recorded a cast on one day and the fish it landed on the next.
+
+Finally: **every path that moved the clock marks the save dirty**, refusals-after-advance included.
+The mutators self-dirty, but a session of failed casts runs no mutator at all and would otherwise
+lose its hours on reload.
+
+### 7.7 The rod ladder, and the keeper who is also the outfitter
+
+**No rod is ever free** (maintainer amendment, 2026-08-24). Every rod is purchased, and the berth
+keeper is who sells it — the same person, resolved through **one shared helper** (`_keeper`) that
+`berthOffer` and `rodOffer` both call, so two offers standing beside the same person cannot drift
+about who that person is. Reach is tried first (`npc.lodging`, so an innkeeper standing in the
+square at noon can still trade), then the room's own `lodging` mark.
+
+**One button, one ladder.** `rodTier(player)` is the max over pouch rows typed `rod` of
+`resolvedToolTier(k)`, or **null** when there is no rod row at all — and null is a different answer
+from 0, which is what makes the no-rod refusal an absence rather than a tier. Derived, pouch-only,
+nothing written: auto-equip guarantees an equipped rod has a pouch row behind it, and the pouch is
+world-free while rods are unremovable in 0.12, so **a severance can never resurrect a rung already
+climbed**. The offer quotes the next rung the player lacks: none → `crude`, crude → `decent`,
+decent-or-better → **the button vanishes**. That last part is a stated divergence from the berth
+button's never-vanish rule — a berth is a thing you can want again tomorrow, rod ownership is
+global and permanent, and a forever-dimmed chip saying "you already have one" is dead chrome.
+Cannot-afford takes the berth's idiom instead: shown, dimmed, still quoting the price.
+
+**Acquisition is per theme, because fishing means different things in different worlds.** Fantasy
+fishing is common, so the entry rod is cheap — half a night's berth. A colony fishes as a niche
+hobby, so its keeper quotes the same entry rod at four times the price. **The premium is an
+INTERIM**: when the roadmap's device/online-shopping mechanic lands (ROADMAP P11), sci-fi rod
+acquisition moves there and comes off the keeper. Nothing asserts the ratio; it lives in a comment
+beside the price table, so a retune has to keep that prose honest by hand.
+
+`buyRod` is `rentBerth`'s shape for `rentBerth`'s reason — every effect through a shipped mutator,
+in an order that cannot half-charge anybody: re-read the offer (the HUD's copy is a frame old) →
+`award({money: -price})`, the only step that can refuse, with nothing after it having run →
+`grant` the rod, **plus a starter bait stack on the first purchase** ("line and tackle included"),
+at the theme's own first bait slug so it merges with what gets fished up rather than orphaning a
+second row → auto-equip, scoped to tools → `log()` → `bump()`. **Nothing is written to `bought`**:
+that map is world-bound shop DEPLETION and 0.12 ships no shop stock, exactly as `rentBerth` writes
+none.
+
+The offer pre-checks **affordability and pouch headroom with the right arity** — a crude purchase is
+TWO new rows unless the player somehow already holds bait, a decent one is one — and that pre-check
+is precisely what makes the no-rollback shape sound, because `grant()` must never be allowed to
+refuse after `award()` has charged.
+
+**Never forced.** It is a proximity button and nothing else: no modal, no quest gate, and nothing
+anywhere in the package depends on rod ownership. Skipping the first settlement's offer costs
+nothing, because the ladder is a stateless derived read — any keeper anywhere sells the same next
+rung later. And a rodless player at water still sees the Fish button and gets a **themed hint
+naming the vendor**, interpolating the keeper's compiled `role` rather than a hardcoded word,
+because a colony has no innkeeper and the brief decides what it does have. A world with nobody
+letting rooms drops the clause rather than inventing a vendor.
+
+### 7.8 Sleep
+
+`sleepOffer(core)` describes; `sleep(core, target)` spends. "Sleep until \<time of day\>" over the
+same four dayparts the Wait menu offers, any hour.
+
+**Bed-gated on the home anchor**, which is the same fact `rentBerth` wrote: the anchor IS the
+lodging zone the player holds a berth in, so "in your home zone" and "in a lodging zone you have
+paid for" are **one test and not two**. A homeless player has nowhere to sleep (a §10 never-flush
+class, accepted), and a minted `{minted: true}` anchor names no zone to stand in, so it is not one
+either. Walk-mode only, and refused while the host is streaming — not because of the pipeline, but
+because the hours would pass under narration the player has not read yet.
+
+**It sends nothing**, which is the whole shape of it: no turn, no narration, no await. The mover is
+`waitUntil` (the rest action's jump), and what it leaves behind is a marker — see §8.
+
+Every refusal is the **nothing-happened** shape that `fish` uses beside it: `reason` carries which
+refusal it was and every number carries zero, because nothing moved. The reasons are distinct on
+purpose and the numbers must not be, or a caller reading `day` would learn the kind of refusal by
+accident and read a live clock off a call that spent no minutes.
+
 ---
 
-## 8. Sizes: measured, not budgeted
+## 8. The wrap-up: staging, the flush, the band, the panels
+
+0.11 shipped a ledger buffer nothing filled and nobody read. 0.12 fills it, tells it, and shows it,
+and the machinery is a **two-field flush** — one durable field and one ephemeral one — plus a
+serialized notice band and two panels.
+
+### 8.1 The durable half: `intro.ledgerOwed`
+
+**It is not in the player block, and that is deliberate.** `sim.intro.ledgerOwed` is one integer
+under the envelope's existing `intro` key: the last day a completed sleep made *owed* to the
+wrap-up. A wrap-up marker is not worth an `ENVELOPE_KEYS` entry of its own, and `intro` is already
+in the envelope and already about "what the GM has and has not been told".
+
+**The load path had to be edited to carry it, and without that line the design is void.** The
+`simFromSaved` intro parse is a CLOSED literal — any subkey not named there is stripped on every
+restore and every rebuild — so the field gains an explicit
+`ledgerOwed: PF.player.resolvedDay(saved.intro.ledgerOwed)` beside `world`/`zones`/`npcs`. A marker
+that does not survive a reload can never outlive the session that staged it. Read through the
+resolver because it comes off save JSON and is about to be compared against `sim.day`. **Adding any
+field under `intro` means adding it there, in the same change, or it is write-only state.**
+
+**Staging: on ANY completed sleep, `ledgerOwed = max(ledgerOwed, sim.day − 1)`, read AFTER the
+advance** (`stageLedgerOwed`, 30-sim; the maintainer's ruled variant). No crossing detection, no
+captured day-before. So a sleep of any length at any hour owes every elapsed day — which is what
+makes the post-midnight fisher who beds at 00:30 flush last night's catch *literally*: the session
+filed its pre-midnight half under the day it happened (§7.6), this owes that day, and the hours
+since midnight belong to the day still underway. `max` because sleeps accumulate and the marker only
+climbs: a rewind can take the clock backwards and a marker that followed it down would quietly
+un-owe days the player was already promised. Waking hours stage nothing — nobody sits down to look
+back over them — so **Wait never stages**, which is one of the two never-flush classes in §10.
+
+`ledgerOwed` is **world-unbound** and a severance does not touch it: the days it owes are days the
+player lived, whatever world they lived them in. That is also what makes the restore-re-tell row in
+§10 work.
+
+### 8.2 The invariant, and the guard that enforces it on itself
+
+**`flushedDay ≤ ledgerOwed < sim.day`.**
+
+`PF.player.flush(core, throughDay, notices, gen)` is the one writer that could break it, so it
+**refuses unless all three hold**, each read from the LIVE sim at write time rather than from
+whatever the sender was looking at when it composed:
+
+1. `throughDay ≥ flushedDay` — a tell composed against an older gate, resolving after a newer one
+   already rose, has nothing to do, and lowering the gate would re-tell;
+2. `throughDay ≤ intro.ledgerOwed` — beyond it are days the player has not finished living, or a
+   rewound sim that never staged them;
+3. `throughDay < sim.day` — never the day underway, whatever the marker says.
+
+**This closes a seam the generation fence cannot see.** `PF.save._gen` moves only on a chat switch,
+while `_rebuild` replaces `core.sim` wholesale WITHOUT touching it — a rewind, a swipe, a checkpoint
+load. So a send resolving over a rewound sim passes the fence and would otherwise write a future
+gate onto the rewound block. The guard reads live, so it refuses instead.
+
+**The senders swallow the refusal**: no toast, no retry. A guard refusal after an accepted send
+leaves the tell in history un-burned and the next compose re-tells it, which is a §10 lost-flush
+cause and not something to interrupt the player about. The boolean return is for the tests.
+
+### 8.3 The ephemeral half, sender capture, and the band's told flag
+
+`composePrefix` sets `pending.ledger = {throughDay, notices}` alongside the one-shot flags and
+**stays pure** — nothing burns at compose time, so a refused or failed send loses nothing.
+
+**The sender's capture is closure-local, and both ways of getting it wrong are real bugs that were
+had.** Immediately after composing, the sender takes `const pend = sim._pendingIntro`; on the
+accepted branch it runs `PF.player.flush(core, pend.ledger.throughDay, pend.ledger.notices, gen)`.
+Never a post-commit re-read — `commitIntro` nulls the field wholesale, so a re-read finds null
+forever. Never a fresh read of the stash — that is the wrong compose after an interleaving. Travel
+additionally captures `PF.save._gen` **pre-await**, because its existing captures are spatial's own
+generation and chat id, which are a different fence from the one the player mutators answer to.
+
+**Why the notice ROWS are a parameter and not a live re-read.** The guard reads three numbers, and
+**three of the five notice writers move none of them** — the dangling-quest repair, a mint
+severance, and a restore landing on a gate already where it was all append to the band while leaving
+`flushedDay`, `ledgerOwed` and `day` untouched. All three run inside `_rehydratePlayer` ←
+`simFromSaved` ← `_rebuild`, which is unfenced on the same chat. So a rebuild landing mid-send hands
+the burn a live band with a row **nobody composed** in it, and a re-read would mark it told. The
+band answers to that flag and to nothing else, so a told row nobody was told is a sentence destroyed
+in silence: no gate to re-open, no day to re-select. Marking the CAPTURED rows is safe in the same
+interleaving for the opposite reason — under a rebuild they are orphans of a replaced sim, and
+writing a flag onto an object nothing reads any more is a no-op. The fresh notice stays untold and
+rides the next compose, which is the only turn that can honestly carry it.
+
+**The band's contract, in one line: lines answer to the day gate, notices answer to their told
+flag.** A notice explains something that happened TO the save rather than something the player did
+in a day, so it has no day group to belong to and nothing has to lift it above a gate to keep it
+tellable (§3.5).
+
+### 8.4 What the tell renders, and what a re-tell is
+
+`_composeLedger` (30-sim) selects lines by `flushedDay < day ≤ intro.ledgerOwed`, **stubs
+included** — an elided day that says "12 things happened" is still the truest account of it there
+is — and every **untold** notice whatever day it carries. Returns null when there is nothing owed
+and nothing untold, so an ordinary turn costs nothing.
+
+**Whole days, oldest first, and the NEWEST dropped.** The budget is `TUNING.ledgerTellChars`,
+measured in graphemes over the line TEXTS and deliberately not over the framing, because the budget
+is floor-asserted against one maximum-shape day (`ledgerPerDay × ledgerChars` = 3,000) and a measure
+that counted the word "Day" would put a legal day over the floor and stall the flush forever. Days
+render oldest-first so the story arrives in order, and **the burn advances only through the last day
+rendered WHOLE**, so a truncated tell leaves `ledgerOwed` standing and the next turn continues from
+where this one stopped. The oldest day always rides, over budget or not: a day this build can WRITE
+cannot exceed the budget, but a hostile save can carry fifty lines on one day, and "tell nothing,
+advance nothing, forever" is a worse answer than one oversized part.
+
+**A re-tell is not a stored replay.** Nothing persists what the first tell said; a recompose reads
+the same LIVE-field selection again. With no intervening staging it renders the same days — byte
+identical is claimed for the no-compaction, no-staging case only, since compaction may since have
+stubbed a told day and the re-tell then renders the stub (bounded, content-preserving). An
+intervening staging WIDENS the window, which is a fresh tell carrying the lost one rather than a
+divergence.
+
+**Position in the prompt:** last in the compose join — after the persona part, before the sender's
+own action text. It is also **the only part of any turn a fishing word can reach the GM through**
+(maintainer amendment): the verb narrates nothing and files ledger lines, and those lines are told
+here or not at all. Note the honest scope of that claim: it is about **package-authored**
+vocabulary. A brief a player wrote fishing into is theirs, and out of package control.
+
+**Concurrent senders can tell the same wrap-up twice** in one history — Travel composes and awaits,
+Talk slips into the window and composes the same tell, both accepted. Harmless: both selected over
+stable live fields, both produce equal `throughDay`s, both pass the guard's `≤`, and the second burn
+is a no-op.
+
+### 8.5 The two panels
+
+Both open from **topbar chips** beside the location, clock and purse — not from the action column,
+which stays the thumb zone. The chips need their own `!inWorld` toggle even though the loading gate
+hides the whole topbar for free, because the topbar deliberately STAYS UP in dialogue mode. Neither
+panel has a teardown of its own: both are children of the HUD root and go when `destroy()` removes
+it, which is the gate panel's precedent — a panel with its own teardown is a second thing to
+forget. And **neither is marked an `aria-modal` dialog**, deliberately: the key handler treats any
+visible `[role="dialog"][aria-modal="true"]` as the host owning the keyboard, so a panel that
+marked itself one would make the very keys that close it inert the moment it opened.
+
+**The journal** is one list, day-grouped from each line's own day, newest day first, with the
+**notice band outside the grouping entirely** because it reads a different array. Its memo is the
+two arrays and their two lengths: the identities catch a wholesale replacement (compaction rebuilds
+`lines` on every append; a restore assigns a fresh band) and the lengths catch an append that kept
+its array, which is exactly what `notice()` does while the band is under its cap. It deliberately
+does not track the told flag — the band shows told and untold rows alike, so a burn changes nothing
+it draws.
+
+**The character sheet** is the compact primary view of the player, and it has two properties worth
+naming.
+
+_It renders from a **descriptor**, not from DOM._ `[{section, rows: [{label, value, kind, detail?,
+source?}]}]`. 0.12's sections are Skills (each verb's themed name, level, and xp-to-next — a capped
+skill reads "MAX"), Equipment (each equipped pair through `describe`), the purse under a heading
+named for what this world calls its money, and Standing as an **aggregate** — how many people sit on
+each rung of the disposition ladder across every zone, with hostiles counted separately because a
+flag is not a rung. `detail` and `source` ship in the shape and **empty**: they are the seam the
+extended journal surface fills when perks and boons land, and a shape grown later is a shape every
+consumer has to be re-taught. Swapping the function that builds the descriptor is what a ruleset
+would be (ROADMAP P8).
+
+_It is a **live value key**, not a snapshot._ The player block carries no identity signal — every
+mutator mutates IN PLACE — so a built-at-open sheet would go stale the moment a Talk bumped somebody
+or a cast paid xp. Instead, per frame while open, the sheet computes a cheap key over money, carried
+count, each verb's level and xp, the equipped pairs BY VALUE (covering the fresh-pair equip and the
+`delete` unequip alike), the standing tiers, the hostile count, **the world's theme**, and
+`PF.assets.status` — and re-renders only when the key changes. **THE INVARIANT: the key is the
+projection of precisely what the sheet renders.** Widening the sheet widens the key in the same
+change, or the new half never re-renders. The theme is in the key for exactly that reason: four of
+the rows come out of the world's word book, and a `_rebuild` that lands a different theme moves all
+four while every player field sits still — and the asset loader that would otherwise carry that
+re-render is parked whenever the host names no package or the last load failed inside its backoff.
+
+The portrait is the player's own walk sprite drawn onto a frame-sized offscreen canvas and
+integer-scaled with `image-rendering: pixelated`, at the world draw's own fallback hue so the
+Tier-0 portrait is the same person the map shows. The pre-ready Tier-0 window is accepted:
+`assets.status` sits in the key, so the portrait upgrades the frame the authored art arrives.
+Beneath it is a **themed generic label** — "Traveler", "Drifter" — because the package has no player
+name and the host props expose none; engine persona name + avatar exposure is an enumerated Engine
+FR (ROADMAP P8).
+
+Both panels are read-only and call no mutator, so neither needs a refusal vocabulary. **They part
+company on what a mode change does to them, and the asymmetry is the design.** The sheet **CLOSES**
+— state cleared, not hidden — on any transition out of walk mode, because `e`, a cutscene beat and
+the props-driven replay/combat modes can all fire under an open one, and a sheet that merely hid
+would resurface drawn against whoever the player was before it. The journal only **hides**: it is a
+list of what is written down, it has no live descriptor to go stale, and losing a scroll position
+to a passing combat state would be its own small rudeness.
+
+Both are also reachable from the keyboard — `c` toggles the sheet and Escape closes whichever panel
+is open — and both key branches sit **below** the keydown handler's walk-mode bail, which is what
+makes every guard above that line theirs for free: the loading gate, focus inside a host control, a
+visible host modal, and walk mode. A branch placed up beside the dialogue-Escape handler would skip
+all four.
+
+---
+
+## 9. Sizes: measured, not budgeted
 
 **There is no design budget** (maintainer ruling). The earlier hard "24 KB snapshot / 24 KB bag"
 figures were inherited caution from a mobile-payload worry, and budget-driven caps are what make
@@ -1032,6 +1577,28 @@ Collection caps (§1.2) are gameplay and hygiene bounds chosen for feel — stal
 rollover — never for bytes. Size optimisation is explicitly deferred: if size ever becomes a felt
 problem, that is a later measurement phase, not a reason to shrink the world to fit a number.
 
+### 9.1 What 0.12 added to the wire, measured
+
+The first release to write into the block is also the first chance to check the "measured, not
+budgeted" claim against something that actually grew:
+
+| what                        | shape                                                                   | measured                                                                                                              |
+| --------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `skills.verbs.fishing`      | `{l, x}`, one entry per verb the player has practised                   | two small integers; one verb ships                                                                                     |
+| `skills.equipped.fishing`   | `{tool: [t, k], mod: [t, k]}`, pairs by value                            | two short string pairs at most, and the `mod` slot is empty whenever a session is not running                          |
+| pouch rows for the new types | `{t, q, k}` per `(t, k)` — one row per rod tier, one per bait kind, one per catch variant | worst case **22 rows against `CAPS.items` 60**: 19 distinct `(role, variant)` pairs across BOTH shipped theme table sets (the pouch is world-free, so a chat that changed theme can hold rows from both), plus two rod tiers and the lodging key |
+| `intro.ledgerOwed`          | one integer, inside the envelope's existing `intro` key (§8.1)           | no new envelope key, and absent from the block entirely                                                                |
+| `ledger.notices`            | `[day, text]` / `[day, text, 1]`, emitted only when non-empty            | ≤ `CAPS.notices` 12 rows × `CAPS.ledgerChars` 200 chars = **2,400 chars of text at absolute maximum**, and 0 bytes on a block that has never had anything explained to it |
+
+**No `bought` row is listed, and its absence is the point:** the rod purchase writes nothing there,
+because `bought` counts what a named shop's stock has lost and 0.12 ships no shop stock — the berth
+precedent exactly (§7.7).
+
+`TUNING.ledgerTellChars` is not a save size at all; it is a metering bound on one prompt part, in
+the same class as `ledgerChars`, and it is floor-asserted at load (§7.1, §8.4) rather than capped
+from above. Everything above is far under both real walls, which is what the table is for: it says
+the growth was measured, not that a number was defended.
+
 **On write amplification**, since it will come up: "rewrite only changed chunks" is not
 package-controllable. Each anchor row is a _full_ snapshot by design — that completeness is what makes
 rewind work — and the engine's file-backed store re-serializes the chat's whole `game_engine_state`
@@ -1041,7 +1608,7 @@ the levers are the ones already pulled: small blocks, short keys, caps, and pros
 
 ---
 
-## 9. Accepted limitations
+## 10. Accepted limitations
 
 Mirrored from the S5 plan's own table. These are decisions, not oversights.
 
@@ -1061,7 +1628,40 @@ Mirrored from the S5 plan's own table. These are decisions, not oversights.
 | prune is write-recency; pre-#5102 checkpoints restore nothing                                                                                                                                                                                                              | engine behaviour                                                               |
 | multi-tab last-write-wins                                                                                                                                                                                                                                                  | alpha                                                                          |
 
-Two of these name Engine FRs — **#5406** (authoritative write ordering) and **#5407** (`rawState`
-on parse failure). Both are **merged to Engine `staging`** but not yet in a tagged release, and
-this package's `builtAgainst` 2.4.3 predates them; §5.2 and §5.4 describe the client readers that
-are already in place and dormant until an Engine release carries the fields.
+Added by 0.12, and every one of them is a decision the design round took on the record:
+
+| limitation (0.12)                                                                                                                                                                                                                                          | status                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- |
+| **two never-flush classes**: the player who never rents a bed, and the player who only ever Waits. Neither ever stages a day, so the ledger accumulates and is never told. The first flush after many buffered days tells stubs for the elided ones          | **accepted**; the roadmap's sleep-deprivation debuff (P10) is the fix |
+| **routes mode**: a rewound turn un-catches the fish, and a same-window replay re-catches identically. **metadata mode**: the ledger does not rewind, so a rewind across a sleep loses that wrap-up and the journal becomes a permanent record that can diverge from the story | mode-qualified; inherited from the store, not new |
+| a **guard refusal after an ACCEPTED send** (rebuild-class interleavings only) leaves the tell in history un-burned and the next compose re-tells it. The sender swallows it: no toast, no retry                                                              | **by design** (§8.2)                            |
+| **concurrent senders** can tell the same wrap-up twice in one history — equal `throughDay`s both pass the guard and the second burn is a no-op                                                                                                              | accepted (§8.4)                                 |
+| a **0.11 client visit drops `intro.ledgerOwed`** — but the next completed 0.12 sleep re-stages every still-retained day, so the loss is a **DELAY**, permanent only for lines that age out of `ledgerDays` first or for a player who never sleeps again      | accepted; all other 0.12 state round-trips 0.11 losslessly |
+| a **0.11 client visit STRIPS `ledger.notices`** — its serialize rebuilds `ledger = {lines}` — and pending notices are lost permanently. Unlike `ledgerOwed` there is **no self-heal**                                                                        | accepted; informational strings, small blast radius |
+| a **brief severance drops the band's pending notices permanently**. Pre-0.12 notice LINES were parked in quarantine and restorable; the band is not parked and cannot be (§1.1)                                                                             | accepted; the format change bought re-readability and cost this |
+| **pre-0.12 notice lines already in saves stay unmarked forever** and render inside the day groups rather than in the band                                                                                                                                   | one-time historical residue                     |
+| a world sealed **without water** offers no fishing at all — reachable, since the only seal floor is the wilds landmark-stone. `surround: "water"` is prose and density only and paints no water                                                             | accepted; the berth's precedent — no verb has a floor |
+| **`fine` and `masterwork` rods are unobtainable** in 0.12 and mod grading is presence-only, so two tool multipliers and the graded-mod tier are dormant content                                                                                             | by scope                                        |
+| **no rod is ever free**; a rodless player at water sees the button and gets a vendor-pointing refusal. Sci-fi's keeper premium is an **INTERIM** until the device/online-shopping mechanic takes that acquisition                                            | **maintainer ruling (amended)**                 |
+| the purchase is never forced and skippable indefinitely — but 0.12 ships **no income mechanic**, so a player who spends the whole starting purse before buying is priced out of fishing until income lands. No affordability coupling is asserted anywhere    | **maintainer override**; refusable, never broken |
+| **sci-fi fishing is real fishing** with flavoured variants beside real fish; the well is not a fishing spot                                                                                                                                                 | **maintainer ruling**                           |
+| the character sheet's portrait may render **Tier-0 art for a frame-class window** before assets are ready (self-heals through the value key), and beneath it is a themed generic label until the engine exposes a persona name and avatar                    | accepted; one enumerated Engine FR              |
+| the fishing **trigger UX** and the **journal panel's shape** are ruled *provisionally* — conclusive at the 0.12 playtest                                                                                                                                    | named playtest-checklist items                  |
+
+Two of these name **filed** Engine FRs — **#5406** (authoritative write ordering) and **#5407**
+(`rawState` on parse failure). Both are **merged to Engine `staging`** but not yet in a tagged
+release, and this package's `builtAgainst` 2.4.3 predates them; §5.2 and §5.4 describe the client
+readers that are already in place and dormant until an Engine release carries the fields.
+
+**Two further Engine asks are enumerated but not filed**, both from 0.12's panels and neither
+blocking anything:
+
+- **persona name and avatar exposure.** The chat has a persona with a name and an image; the
+  package's props carry neither, so the character sheet draws the walk sprite and captions it
+  with a themed generic label (§8.5). A package that could read them would put the player's own
+  face on their own sheet.
+- **a package slot in the inventory panel.** The engine draws its own inventory and the package
+  draws its own pouch, and they are different bags. A slot an experience could render into would
+  at least put the two in one place for the player — the cheapest honest version of that
+  reconciliation, and one that does not require settling the wider narrated-transactions question
+  first (ROADMAP P7).
