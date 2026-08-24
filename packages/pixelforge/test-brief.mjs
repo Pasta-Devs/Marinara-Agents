@@ -13120,6 +13120,76 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
   }
 }
 
+// ── THE CAST WINDOW'S CLOCK MOVER CROSSES MIDNIGHT ───────────────────────────
+// `advanceMinutes` is the fishing verb's mover and it is the only one in the sim
+// that can be more than a minute out of date about the day. The walking loop
+// ticks one minute at a time and can never overshoot; a cast window is fifteen
+// at once, and "fish until dawn" from a night spot is a session that is SUPPOSED
+// to cross into tomorrow. Without the wrap the clock reads 24:05 on day one, the
+// daypart word falls off the end of its own table, and the ledger files the
+// morning's catch under the night before it.
+{
+  const w = world.build(4242, "cozy-village");
+  const sim = new loadedPF.Sim(w);
+
+  sim.clockMin = 10 * 60;
+  sim.day = 3;
+  assert.equal(sim.advanceMinutes(15), 15, "an ordinary window reports the minutes it spent");
+  assert.equal(sim.clockMin, 10 * 60 + 15, "…and spends exactly those");
+  assert.equal(sim.day, 3, "inside one day, the day does not move");
+
+  // THE WRAP. 23:50 plus a fifteen-minute window is 00:05 tomorrow.
+  sim.clockMin = 23 * 60 + 50;
+  sim.day = 3;
+  sim.advanceMinutes(15);
+  assert.equal(sim.day, 4, "a window that crosses midnight moves the day");
+  assert.ok(sim.clockMin < 24 * 60, `…and the clock came back inside the day (${sim.clockMin})`);
+  assert.equal(sim.clockMin, 5, "…at five past midnight, not twenty-four-oh-five");
+  assert.equal(sim.daypart(), "night", "…which the daypart table can still answer for");
+
+  // A LOOP AND NOT A TEST: a jump longer than a day wraps as many times as it
+  // takes. Nothing on the verb's menu does this today, and a single `if` that
+  // silently left the clock at 26:00 would be waiting for the first thing that
+  // did.
+  sim.clockMin = 12 * 60;
+  sim.day = 1;
+  sim.advanceMinutes(3 * 24 * 60 + 30);
+  assert.equal(sim.day, 4, "three days and a half-hour is three days on");
+  assert.equal(sim.clockMin, 12 * 60 + 30, "…and half an hour past noon");
+
+  // SCHEDULES RESOLVE UNCONDITIONALLY, which is what the wrap is FOR: a night
+  // cast that lands after dawn must find the world's people where dawn puts
+  // them, not where midnight left them. A COMPILED world, because the legacy
+  // cast carries no schedules at all and would prove this vacuously.
+  {
+    const fresh = new loadedPF.Sim(world.build(4242, "cozy-village", brief.defaults("cozy-village", 4242)));
+    fresh.clockMin = 23 * 60 + 55;
+    fresh.day = 1;
+    fresh.resolveSchedules();
+    const census = () =>
+      Object.entries(fresh.world.zones)
+        .flatMap(([id, zone]) => zone.npcs.map((npc) => `${npc.id}@${id}:${Math.round(npc.x)},${Math.round(npc.y)}`))
+        .sort();
+    const asleep = census();
+    assert.ok(asleep.length > 4, `the compiled world has a cast to re-place (${asleep.length})`);
+    fresh.advanceMinutes(7 * 60); // 06:55 the next morning: night → dawn
+    assert.equal(fresh.day, 2, "the jump crossed the day");
+    assert.equal(fresh._daypart, "dawn", "…and the sim knows which daypart it landed in");
+    assert.notDeepEqual(census(), asleep, "…because the cast re-placed everybody for it");
+  }
+
+  // AND A NON-COUNT MOVES NOTHING. The verb passes TUNING.castMinutes, but the
+  // mover is public and a caller that hands it nonsense must not leave the clock
+  // at NaN — every daypart read and every save byte downstream is a number.
+  sim.clockMin = 60;
+  sim.day = 2;
+  for (const bad of [0, -15, 1.5, "15", undefined, null, NaN, Infinity]) {
+    assert.equal(sim.advanceMinutes(bad), 0, `${String(bad)} is not a count of minutes`);
+    assert.equal(sim.clockMin, 60, "…and the clock did not move for it");
+    assert.equal(sim.day, 2, "…nor the day");
+  }
+}
+
 // ═══ S4 ACTIVATION: THE LADDER, THE RESOLVERS, THE TUNING TABLE (0.12 s2) ════
 // Constants and pure reads, so the cases are constants and pure reads too: no
 // world, no save path, no clock. What they pin is the ground the fishing verb

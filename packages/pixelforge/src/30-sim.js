@@ -242,6 +242,47 @@ PF.Sim = class {
     return true;
   }
 
+  /** Advance the clock by exactly `n` minutes. The fishing cast's mover, where
+   *  waitUntil is the rest action's, and the difference is what each one is FOR:
+   *  a rest is over when it reaches a time of day, while a cast SPENDS a fixed
+   *  window and lands wherever that leaves the clock. So this one takes minutes
+   *  and not a daypart.
+   *
+   *  IT WRAPS MIDNIGHT, and it has to. A cast window is a multi-minute jump, so
+   *  a session that starts at 23:50 crosses into the next day — a DESIGNED path,
+   *  since "fish until dawn" is on the verb's own menu. The walking loop above
+   *  can never be more than one day out because it ticks a minute at a time;
+   *  this can, so the wrap is a loop rather than a test.
+   *
+   *  `resolveSchedules()` then runs UNCONDITIONALLY, unlike the walking loop's
+   *  boundary test. A jump of any size can cross a daypart, and asking whether
+   *  it did costs the same as re-placing everybody in a world where nothing
+   *  moved — which is what waitUntil already concluded one method down.
+   *
+   *  NOT MODE-GATED, and waitUntil is: the guard belongs where the refusal is
+   *  legible. Wait is a button whose only refusal is the mode, so its mover says
+   *  no; fishing has five refusals of its own (59-economy `fish`), `wrong-mode`
+   *  among them, and a second silent gate here would turn one of them into a
+   *  no-op nobody could tell from a cast that caught nothing.
+   *
+   *  `_clockAcc` is deliberately left alone. waitUntil clears it because it
+   *  JUMPS to a target and a leftover fraction would tick that target's minute
+   *  early; an advance lays whole minutes on top of a fraction the player has
+   *  genuinely already walked, and clearing it would quietly lose it.
+   *
+   *  Returns the minutes advanced — 0 for anything that is not a positive whole
+   *  count, so a caller can tell a clock that moved from one that did not. */
+  advanceMinutes(n) {
+    if (!Number.isInteger(n) || n <= 0) return 0;
+    this.clockMin += n;
+    while (this.clockMin >= 24 * 60) {
+      this.clockMin -= 24 * 60;
+      this.day++;
+    }
+    this.resolveSchedules();
+    return n;
+  }
+
   /** Re-place every scheduled NPC for the current daypart. Idempotent, O(cast),
    *  and fires only on a boundary crossing (~4x/day) plus once per rebuild. */
   resolveSchedules() {
