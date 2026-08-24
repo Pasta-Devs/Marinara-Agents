@@ -8091,7 +8091,7 @@ PF.quarantine = {
     // owes disk the difference.
     const held = chatId ? this._unsettled.get(chatId) : null;
     if (held) {
-      let parked = null;
+      let parked;
       try {
         parked = JSON.parse(held);
       } catch {
@@ -10471,7 +10471,7 @@ PF.save = {
     // reason enough to try the slim snapshot: a foreign field that only exists
     // INSIDE `player` used to leave this returning null and the session
     // degrading with a shed still available.
-    let blockCarry = false;
+    let blockCarry;
     try {
       const full = PF.player.serialize(sim?.player);
       const slim = PF.player.serialize(sim?.player, true);
@@ -10896,7 +10896,7 @@ PF.save = {
     // while the world is still generating must not stamp the placeholder world
     // into the row store on the way out.
     if (this.gateHolds(core)) return;
-    let snap = null;
+    let snap;
     let serialized = "";
     try {
       snap = this.snapshot(core);

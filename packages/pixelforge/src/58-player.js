@@ -1559,7 +1559,7 @@ PF.quarantine = {
     // owes disk the difference.
     const held = chatId ? this._unsettled.get(chatId) : null;
     if (held) {
-      let parked = null;
+      let parked;
       try {
         parked = JSON.parse(held);
       } catch {
