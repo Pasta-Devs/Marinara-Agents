@@ -1,4 +1,4 @@
-// Beholder 1.3.5 — Marinara Engine roleplay-toolbar capability (single-file client bundle)
+// Beholder 1.3.6 — Marinara Engine roleplay-toolbar capability (single-file client bundle)
 // Built from packages/beholder/src (7 modules) by scripts/build-beholder-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -1909,9 +1909,11 @@ const BH_HOST_CSS = `
   .beholder-panel-header{ cursor:default; touch-action:auto; }
   .beholder-panel .beholder-resize-handle{ display:none !important; }
   .beholder-panel-body{ overflow-y:auto; padding-bottom:max(var(--bh-space-4),env(safe-area-inset-bottom)); }
+  .beholder-panel.bh-mobile-layout .bh-doll-grid{ display:grid; }
+  .beholder-panel.bh-mobile-layout .bh-digest{ display:none; }
 }
 .bh-hud-toggle{ cursor:pointer; }
-.bh-hud-icon{ display:block;width:.875rem;height:.875rem;color:var(--marinara-app-accent-static,var(--primary)); }
+.bh-hud-icon{ display:block;width:.875rem;height:.875rem;color:var(--marinara-app-accent-solid,var(--primary)); }
 .bh-tracker-launch{display:flex;width:100%;min-height:1.75rem;align-items:center;gap:.25rem;
   border:0;border-bottom:1px solid var(--border);background:var(--tracker-panel-section-background,transparent);
   padding:.125rem .25rem;color:var(--foreground);cursor:pointer;font:inherit;text-align:left;}
@@ -1922,7 +1924,8 @@ const BH_HOST_CSS = `
 .bh-tracker-launch__icon{display:block;width:.6875rem;height:.6875rem;}
 .bh-tracker-launch__title{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   font-size:.625rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:color-mix(in srgb,var(--foreground) 62%,transparent);}
-.bh-tracker-launch__arrow{display:flex;width:.75rem;height:.875rem;align-items:center;justify-content:center;color:var(--tracker-profile-icon,var(--muted-foreground));font-size:.875rem;opacity:.6;}
+.bh-tracker-launch__arrow{display:flex;width:.75rem;height:.875rem;align-items:center;justify-content:center;color:var(--tracker-profile-icon,var(--muted-foreground));font-size:.875rem;opacity:.6;transform:rotate(0deg);transition:transform 150ms ease;}
+.bh-tracker-launch.bh-active .bh-tracker-launch__arrow{transform:rotate(90deg);}
 .beholder-panel:not(.bh-mobile-layout):not(.bh-layout-compact) .bh-doll-grid{display:grid;}
 .beholder-panel:not(.bh-mobile-layout):not(.bh-layout-compact) .bh-digest{display:none;}
 `;
@@ -1951,6 +1954,7 @@ const BH_THEME_VARIABLES = [
   "--muted-foreground",
   "--popover",
   "--font-sans",
+  "--marinara-app-accent-solid",
   "--marinara-app-accent-static",
   "--marinara-chat-chrome-accent",
 ];
@@ -2510,9 +2514,9 @@ BH.dock = {
     panel.setAttribute("data-empty", isEmpty ? "true" : "false");
     if (isEmpty) this.unviewed.clear();
 
-    // Mobile uses the compact digest. Resizable desktop windows keep the
-    // selected paper-doll layout and scale it to the available body instead.
-    const layout = !this.isDetached() && this.isMobile() ? "list" : this.layout;
+    // The full-screen mobile window keeps the paper doll visible and scales it
+    // to the viewport. Resizable desktop windows retain the selected layout.
+    const layout = !this.isDetached() && this.isMobile() ? "paired" : this.layout;
     setDollLayout(layout);
     panel.classList.toggle("bh-layout-compact", layout === "list");
     panel.classList.toggle("bh-mobile-layout", !this.isDetached() && this.isMobile());
@@ -2651,7 +2655,7 @@ class BeholderElement extends HTMLElement {
       this._button = button;
     }
     const hostClass = typeof props.toolbarButtonClass === "string" ? props.toolbarButtonClass : "";
-    button.className = `${hostClass} bh-hud-toggle`.trim();
+    button.className = `${hostClass} mari-accent-animated bh-hud-toggle`.trim();
     const label = BH.localize(props, "toolbarLabel", "Beholder");
     button.title = label;
     button.setAttribute("aria-label", label);

@@ -289,6 +289,13 @@ const memoryNagVaultSource = readFileSync(
   new URL("../packages/memory-nag/src/engine/packages/server/src/services/memory-nag/vault.ts", import.meta.url),
   "utf8",
 );
+const memoryNagVaultUiSource = readFileSync(
+  new URL(
+    "../packages/memory-nag/src/engine/packages/client/src/features/memory-nag/MemoryNagVault.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
 assert.doesNotMatch(
   memoryNagToolbarSource,
   /!enabled\s*\|\|\s*props\.mobileCompact/u,
@@ -340,9 +347,34 @@ assert.match(
 assert.match(memoryNagTrackerSource, /setCollapsed/u, "Memory Nag Tracker Panel section must be collapsible");
 assert.match(memoryNagTrackerSource, /mn-tracker-veil/u, "Memory Nag must reuse the Tracker Panel readability veil");
 assert.match(
+  memoryNagTrackerSource,
+  /const mobileCompact = props\.mobileCompact === true/u,
+  "Memory Nag must recognize the host's combined mobile tracker presentation",
+);
+assert.match(
+  memoryNagTrackerSource,
+  /mobileCompact \|\| !collapsed/u,
+  "the combined mobile Memory Nag section must remain expanded",
+);
+assert.match(
+  memoryNagStyles,
+  /\.mn-tracker--mobile-compact \.mn-tracker-icon\s*\{[^}]*--marinara-chat-chrome-accent/su,
+  "the combined mobile Memory Nag icon must use the configured chat accent",
+);
+assert.match(
   memoryNagStyles,
   /--tracker-profile-icon, var\(--muted-foreground\)/u,
   "Memory Nag section icons must inherit the neutral Tracker Panel header color",
+);
+assert.match(
+  memoryNagVaultUiSource,
+  /mn-prompt-field[\s\S]*mn-vault-textarea[\s\S]*mn-prompt-tools/u,
+  "the Vault memory editor must reuse the package's freeform field and embedded tools",
+);
+assert.doesNotMatch(
+  memoryNagVaultUiSource,
+  /className="mn-actions" aria-label=\{t\("memoryNag\.vault\.macros"\)\}/u,
+  "the Vault must not render its macro actions beneath the freeform field",
 );
 assert.doesNotMatch(memoryNagStyles, /--mn-chroma:[^;]*--primary/u, "Memory Nag must not fall back to primary pink");
 
