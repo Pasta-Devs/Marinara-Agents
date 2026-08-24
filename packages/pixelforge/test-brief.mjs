@@ -11947,7 +11947,13 @@ await withSavePath(async ({ behavior, makeCore }) => {
     E.describe(scifi, { t: "lodging-key" }),
     "…nor carry a village's keys",
   );
-  assert.equal(E.describe(cozy, { t: "lodging-key", k: "brass" }), "brass room key", "the quality tier reads with it");
+  // `k` PREFIXES ON A TOOL AND NOWHERE ELSE, which is the 0.12 narrowing of a
+  // rule that used to be general. It was written when `k` meant "quality" for
+  // every row in the game; slice 2 scoped grading to TOOL_TYPES and slice 3
+  // made the other vocabulary real, so a lodging key's `k` is a slug nobody has
+  // claimed and prefixing it would read the same way "worms bait" does.
+  assert.equal(E.describe(cozy, { t: "rod", k: "crude" }), "crude fishing rod", "a tool's tier reads in front of it");
+  assert.equal(E.describe(cozy, { t: "lodging-key", k: "brass" }), "room key", "…and a non-tool's `k` does not");
   assert.equal(E.describe(cozy, { t: "star-chart" }), "star chart", "a type this build does not know still reads");
   assert.equal(E.describe(cozy, {}), "", "and a row with no type at all is nothing");
   assert.equal(E.money(cozy, -5), E.money(cozy, 0), "a negative purse is not a thing to render");
@@ -13457,6 +13463,222 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     /TUNING\.toolMult has 4 multipliers for 5 quality tiers/,
     "…and a rung added to the ladder fails it from the other side",
   );
+
+  // (e) THE CATCH TABLES AND THE WORDS FOR WHAT THEY YIELD (0.12 slice 3). Same
+  // idiom, and one of these needs two rewrites at once — a theme's bait lives in
+  // two tables, so killing it takes both.
+  const bootAll = (edits) => {
+    const source = stack
+      .map((name) => {
+        let text = readFileSync(join(here, "src", name), "utf8");
+        for (const [file, from, to] of edits) {
+          if (file !== name) continue;
+          const patched = text.replace(from, to);
+          assert.notEqual(patched, text, `the rewrite still names ${name}'s "${from}"`);
+          text = patched;
+        }
+        return text;
+      })
+      .join("\n");
+    return () => new Function(`"use strict";\n${source}\nreturn PF;`)();
+  };
+
+  // EVERY VARIANT, IN EVERY THEME. The pouch is world-free, so a fish caught in a
+  // valley is still in the bag when the chat's next world is a colony — and a row
+  // with no word there would fall to the slug fallback that exists for a HOSTILE
+  // save, not for content this build ships.
+  assert.throws(
+    boot("59-economy.js", `"culture-kelp": "strange kelp"`, `"culture-kelp-x": "strange kelp"`),
+    /theme "cozy-village" has no name for "culture-kelp"/,
+    "a variant one theme fishes and the other cannot name fails the build",
+  );
+  // …AND THE 2×2 ITSELF, from the vocabulary side: a spot kind with no table is
+  // water the player can stand at and the verb cannot answer for.
+  assert.throws(
+    boot(
+      "59-economy.js",
+      `const SPOT_TAGS = ["water-feature", "water-crossing"]`,
+      `const SPOT_TAGS = ["water-feature", "water-crossing", "dense-growth"]`,
+    ),
+    /theme "cozy-village" has no catch table for "dense-growth"/,
+    "a spot kind the vocabulary names and no table answers for fails the build",
+  );
+  // A ROLE HAS TO BE A ROLE. A typo mints a pouch row of a type nothing skins,
+  // nothing prices and the xp table cannot pay for — and it looks exactly like
+  // the deliberate roleless entry that means bait.
+  assert.throws(
+    boot("59-economy.js", `role: "catch-prize", variant: "old-tench"`, `role: "catch-prizes", variant: "old-tench"`),
+    /cozy-village\/water-feature has an entry with the role "catch-prizes"/,
+    "a misspelled role fails the build rather than shipping as bait",
+  );
+  // AN ENTRY NOBODY CAN EVER DRAW. The draw is a level test and the level stops
+  // at the ceiling, so a minLevel above it is written content no save can reach.
+  assert.throws(
+    boot(
+      "59-economy.js",
+      `variant: "old-tench", weight: 2, minLevel: 12`,
+      `variant: "old-tench", weight: 2, minLevel: 21`,
+    ),
+    /cozy-village\/water-feature's "old-tench" needs level 21, outside 1\.\.20/,
+    "an entry gated above the skill ceiling fails the build",
+  );
+  // A DAYPART COLUMN THAT NEVER APPLIES, which is the failure that looks most
+  // like a tuned one: a plausible word, silently multiplying nothing forever.
+  assert.throws(
+    boot("59-economy.js", `daypart: { dawn: 2, day: 0.5 }`, `daypart: { evening: 2, day: 0.5 }`),
+    /cozy-village\/water-feature's "old-tench" is tuned for a daypart "evening"/,
+    "a daypart the clock does not have fails the build",
+  );
+  // AND A THEME WITH NO BAIT IN ITS WATER would sell a rod and hand over an empty
+  // tin: the crude purchase's starter stack takes its slug from exactly here.
+  assert.throws(
+    bootAll([
+      ["59-economy.js", `{ variant: "worms", weight: 24`, `{ role: "catch-common", variant: "worms", weight: 24`],
+      ["59-economy.js", `{ variant: "grubs", weight: 22`, `{ role: "catch-common", variant: "grubs", weight: 22`],
+    ]),
+    /theme "cozy-village" ships no bait entry for a first rod to come with/,
+    "a theme whose water yields no bait fails the build",
+  );
+}
+
+// ═══ SLICE 3: WHAT THE WATER GIVES UP, AND WHAT IT IS CALLED ════════════════
+// The tables and the vocabulary, driven through the READERS — which is the half
+// a load assertion cannot make. A table that satisfies every completeness check
+// and still renders a carp as "catch-common" passes the boot block and fails
+// here.
+{
+  const E = loadedPF.economy;
+
+  // ── THE 2×2 IS REAL, AND EVERY TABLE SPANS THE LADDER ───────────────────────
+  // (theme × spot kind). Still water and running water fish differently in any
+  // theme, which is the whole reason the key has two halves.
+  for (const theme of loadedPF.art.themeIds()) {
+    const w = { theme };
+    for (const tag of E.SPOT_TAGS) {
+      const table = E.catchTable(w, tag);
+      assert.ok(Array.isArray(table) && table.length, `${theme}/${tag} answers with a table`);
+      const types = new Set(table.map((entry) => E.entryType(entry)));
+      assert.ok(types.has(E.BAIT_TYPE), `${theme}/${tag} yields bait — fishing is bait's own finder`);
+      for (const role of E.CATCH_ROLES) assert.ok(types.has(role), `${theme}/${tag} reaches ${role}`);
+      // A LEVEL-1 PLAYER CAN DRAW SOMETHING. Every entry is gated by minLevel, so
+      // a table whose cheapest rung sat at level 3 would be water that answers
+      // nothing at all to the player who has just bought their first rod.
+      assert.ok(
+        table.some((entry) => entry.minLevel === 1),
+        `${theme}/${tag} has something in it for a player on their first day`,
+      );
+      // The prize rung is the top of the same table, not a second one.
+      const prize = table.find((entry) => entry.role === "catch-prize");
+      assert.ok(prize.minLevel > 1 && prize.weight < 5, `${theme}/${tag}'s prize is late and rare (${prize.variant})`);
+    }
+  }
+  assert.equal(E.catchTable({ theme: "cozy-village" }, "crop-plots"), null, "a tag that holds no water has no table");
+  assert.equal(E.catchTable({ theme: "cozy-village" }, "constructor"), null, "…and neither does one off the prototype");
+  assert.deepEqual(
+    E.catchTable({ theme: "retired-theme" }, "water-feature"),
+    E.catchTable({ theme: "cozy-village" }, "water-feature"),
+    "a save naming a theme this build dropped still fishes, in the fallback theme's water",
+  );
+
+  // ── SCI-FI FISHES FOR REAL FISH (M6 RULED) ──────────────────────────────────
+  // The ruling is content, so it is pinned as content: the colony's tables carry
+  // fish the valley's tables carry too, flavored variants of its own, AND yields
+  // that are not fish at all. All three, or the theme is a re-skin.
+  {
+    const variantsOf = (theme) =>
+      new Set(E.SPOT_TAGS.flatMap((tag) => E.catchTable({ theme }, tag).map((entry) => entry.variant)));
+    const cozy = variantsOf("cozy-village");
+    const scifi = variantsOf("sci-fi-colony");
+    const shared = [...scifi].filter((variant) => cozy.has(variant));
+    assert.ok(shared.length >= 2, `the colony fishes for real fish the valley knows too (${shared.join(", ")})`);
+    assert.ok(shared.includes("carp"), "…carp among them: a stocked pool is stocked with something");
+    for (const flavored of ["vat-strain", "pressure-eel"])
+      assert.ok(scifi.has(flavored) && !cozy.has(flavored), `${flavored} is the colony's own`);
+    for (const notAFish of ["culture-kelp", "filter-salvage"])
+      assert.ok(scifi.has(notAFish), `${notAFish} is a legitimate entry, not a consolation prize`);
+  }
+
+  // ── describe(): THE NAME KEYS ON THE VARIANT ────────────────────────────────
+  // A pouch row is `{t: role, k: variant}` and the ROLE is not what the thing is
+  // called. Without this the player's bag reads "catch-common ×3".
+  {
+    const cozy = { theme: "cozy-village", seed: 0 };
+    const scifi = { theme: "sci-fi-colony", seed: 0 };
+    const plain = (world, item) => {
+      const named = E.describe(world, item);
+      const flourish = E._flourish(world, item.t, item.k ?? "");
+      return flourish ? named.slice(flourish.length + 1) : named;
+    };
+    assert.equal(plain(cozy, { t: "catch-common", k: "carp" }), "carp", "a catch reads as its variant");
+    assert.equal(plain(cozy, { t: "catch-rare", k: "mirror-pike" }), "mirror pike", "…whatever rung it sits on");
+    assert.equal(plain(cozy, { t: "bait", k: "worms" }), "worms", "and bait does too — never 'worms bait'");
+    assert.ok(
+      !E.describe(cozy, { t: "bait", k: "worms" }).includes("hook bait"),
+      "…the type's own word stays out of it",
+    );
+    // THEME-BEARING, one level down from the type names: the same row reads in
+    // the words of whatever world the chat is in now, because the pouch crosses
+    // world changes and the row does not get renamed under the player.
+    assert.notEqual(
+      plain(cozy, { t: "catch-common", k: "culture-kelp" }),
+      plain(scifi, { t: "catch-common", k: "culture-kelp" }),
+      "the colony's kelp is called something else in a valley",
+    );
+    assert.equal(plain(scifi, { t: "catch-common", k: "carp" }), "carp", "…while a carp is a carp in either");
+
+    // AN UNKNOWN VARIANT RENDERS SLUG-DERIVED — a hostile save row, or a newer
+    // build's table — matching describe()'s unknown-TYPE philosophy exactly.
+    // Cosmetic, never a throw, and never a row that vanishes out of the bag.
+    assert.equal(
+      plain(cozy, { t: "catch-rare", k: "moon_carp-two" }),
+      "moon carp two",
+      "an unknown variant still reads",
+    );
+    assert.equal(plain(cozy, { t: "catch-rare", k: "constructor" }), "constructor", "…including one off the prototype");
+    assert.equal(
+      E.describe(cozy, { t: "catch-common", k: "" }),
+      E.describe(cozy, { t: "catch-common" }),
+      "and a catch row carrying no variant falls back to its type's own word",
+    );
+  }
+
+  // ── THE FLOURISH IS A DISPLAY OVERRIDE, KEYED (seed, t, k) ──────────────────
+  // Pouch rows MERGE — one carp row holding nine carp — so a per-catch epithet
+  // has nothing to live on. Per world per variant is the shape the data can
+  // carry: this valley's carp are the muddy ones, the next world's are not.
+  {
+    const one = { theme: "cozy-village", seed: 4242 };
+    const same = { theme: "cozy-village", seed: 4242 };
+    const other = { theme: "cozy-village", seed: 99 };
+    const carp = { t: "catch-common", k: "carp" };
+    assert.equal(E.describe(one, carp), E.describe(same, carp), "one world, one epithet, every time it is read");
+    assert.notEqual(E.describe(one, carp), E.describe(one, { t: "catch-common", k: "minnow" }), "…per variant");
+    const seeds = new Set(
+      [4242, 99, 7, 13, 2095930824].map((seed) => E.describe({ theme: "cozy-village", seed }, carp)),
+    );
+    assert.ok(seeds.size > 1, `and different worlds do not all fish the same carp (${[...seeds].join(" / ")})`);
+    assert.notEqual(E._flourish(other, "catch-prize", "old-tench"), "", "the prize rung has a pool of its own");
+    // SKIN-NAME FALLBACK: a type with no pool reads plainly. Rods and bait ship
+    // none, so nothing in the shop window has a mood.
+    for (const type of ["rod", "bait", "lodging-key"])
+      assert.equal(E._flourish(one, type, "crude"), "", `${type} has no pool and reads plainly`);
+    assert.equal(E.describe(one, { t: "rod", k: "crude" }), "crude fishing rod", "…which is what a rod reads as");
+    // A world with no seed at all (the wizard's throwaway, a bare `{theme}`)
+    // still renders rather than keying off undefined.
+    assert.ok(E.describe({ theme: "cozy-village" }, carp).endsWith("carp"), "a seedless world still names its fish");
+  }
+
+  // ── THE STARTER STACK MERGES WITH WHAT THE PLAYER THEN FISHES UP ────────────
+  // Its slug is the theme's FIRST bait variant, scanned in SPOT_TAGS order, so
+  // the tin the rod came with and the tin filled out of the pond are one row.
+  for (const theme of loadedPF.art.themeIds()) {
+    const slug = E.starterBait({ theme });
+    const firstTable = E.catchTable({ theme }, E.SPOT_TAGS[0]);
+    const firstBait = firstTable.find((entry) => E.entryType(entry) === E.BAIT_TYPE);
+    assert.equal(slug, firstBait.variant, `${theme}'s starter bait is the first bait its own water yields`);
+    assert.ok(E.describe({ theme }, { t: E.BAIT_TYPE, k: slug }), `${theme} names it`);
+  }
+  assert.equal(E.starterBait({ theme: "cozy-village" }), "worms", "which in a valley is worms");
 }
 
 // ── A DOM the size of the two surfaces that need one ──────────────────────────

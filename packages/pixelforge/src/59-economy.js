@@ -20,19 +20,190 @@
 // goes through the shipped mutators (award/grant/setHome/log/bump) and lives in
 // the player block, which is what makes it rewind-safe.
 
+// The catch table's TYPE vocabulary — the fixed shared roles a table entry can
+// be, and the one non-catch yield water gives up. A table row carries a role and
+// a VARIANT slug ("carp", "kelp", "vat-strain"), and the role is the half that
+// means the same thing in every theme, which is why the xp table below is keyed
+// by it.
+const CATCH_ROLES = ["catch-common", "catch-uncommon", "catch-rare", "catch-prize"];
+// Bait is a real water yield and not a catch (fishing is bait's own finder), so
+// it sits outside the roles and still earns through the same table: the award
+// keys on `role ?? BAIT_TYPE`, which is what stops a bait-first session from
+// minting no skill row at all on a player who has plainly been fishing. A table
+// entry with no `role` IS a bait entry — one field, read one way.
+const BAIT_TYPE = "bait";
+// The types whose `k` is a VARIANT SLUG rather than a tier or nothing. describe()
+// keys their display name on `k`; PF.player.TOOL_TYPES is the other half of the
+// same split and keys on the type's own name with `k` as an adjective in front.
+const VARIANT_TYPES = new Set([...CATCH_ROLES, BAIT_TYPE]);
+
 // The closed item vocabulary. A pouch row is keyed `(t, k)` — type and quality —
 // and `t` has to mean the same thing in every theme or a save crossing a theme
 // change would be renaming the player's belongings. So the TYPES are shared and
 // only the SKIN (what it is called, and the glyph the purse shows) is per theme.
-const ITEM_TYPES = ["lodging-key"];
+const ITEM_TYPES = ["lodging-key", "rod", BAIT_TYPE, ...CATCH_ROLES];
+
+// The four daypart words, which is the axis a catch table's multipliers are keyed
+// on. They mirror PF.Sim.daypart()'s own four and are written here because the sim
+// exports no list; the boot assertion below refuses a table entry keyed on
+// anything else, which is what stops a plausible-looking "evening" column from
+// shipping as a multiplier that never applies.
+const DAYPARTS = ["dawn", "day", "dusk", "night"];
+
+// The two feature tags that hold fishable water — the closed brief vocabulary's
+// own words (18-brief FEATURE_TAGS), and the second half of a catch table's key.
+// A spot's kind is where it stands in the world's shape, not what it is called:
+// still water and running water fish differently in any theme, so the table set
+// is (theme × kind) and both halves are asserted complete at boot.
+const SPOT_TAGS = ["water-feature", "water-crossing"];
+
+// ── What comes out of the water (plan §2.2) ──────────────────────────────────
+// One table per (theme, spot kind). An ENTRY is `{role, variant, weight,
+// minLevel, daypart}`:
+//   • `role`   — the shared TYPE, one of CATCH_ROLES. ABSENT means bait, which is
+//                a yield in its own right and the only one that is also an input.
+//   • `variant`— the entry's slug, and the pouch row's `k`. Row identity is
+//                `(role, variant)`, so kelp never merges into carp and a stack of
+//                one thing is a stack of one thing.
+//   • `weight` — relative share of the successful casts this table answers for.
+//   • `minLevel` — the level the entry becomes REACHABLE at; below it the entry
+//                is not in the draw at all, which is what makes the ladder feel
+//                like it opens water up rather than merely raising a percentage.
+//   • `daypart`— per-daypart multipliers over `weight`, absent meaning 1. This is
+//                0.12's ONLY live modifier (weather is L2, M9) and it is where a
+//                night spot stops being the same spot as a noon one.
+// NO PER-ENTRY XP: TUNING.catchXp is the single authority, keyed by TYPE, so a
+// rebalance happens in one place and cannot half-happen.
+//
+// SCI-FI IS NOT FISH-FREE (M6 RULED). A colony that stocks a coolant pool eats
+// carp out of it; what the theme adds is flavored variants beside the real fish
+// and non-fish yields — kelp cultures, filter salvage — that are legitimate
+// entries and not consolation prizes.
+const CATCH_TABLES = {
+  "cozy-village": {
+    "water-feature": [
+      { variant: "worms", weight: 24, minLevel: 1, daypart: { dawn: 1.2, night: 0.7 } },
+      { role: "catch-common", variant: "carp", weight: 34, minLevel: 1, daypart: { night: 0.7 } },
+      { role: "catch-uncommon", variant: "bream", weight: 18, minLevel: 3, daypart: { dusk: 1.3 } },
+      { role: "catch-rare", variant: "mirror-pike", weight: 6, minLevel: 7, daypart: { day: 0.6, night: 1.6 } },
+      { role: "catch-prize", variant: "old-tench", weight: 2, minLevel: 12, daypart: { dawn: 2, day: 0.5 } },
+    ],
+    "water-crossing": [
+      { variant: "grubs", weight: 22, minLevel: 1 },
+      { role: "catch-common", variant: "minnow", weight: 32, minLevel: 1 },
+      { role: "catch-uncommon", variant: "trout", weight: 17, minLevel: 4, daypart: { dawn: 1.4, dusk: 1.3 } },
+      { role: "catch-rare", variant: "silver-eel", weight: 6, minLevel: 8, daypart: { day: 0.5, night: 1.8 } },
+      { role: "catch-prize", variant: "crown-salmon", weight: 2, minLevel: 13, daypart: { dawn: 1.6 } },
+    ],
+  },
+  "sci-fi-colony": {
+    "water-feature": [
+      { variant: "chum", weight: 24, minLevel: 1 },
+      { role: "catch-common", variant: "carp", weight: 28, minLevel: 1, daypart: { night: 0.7 } },
+      { role: "catch-common", variant: "culture-kelp", weight: 14, minLevel: 1 },
+      { role: "catch-uncommon", variant: "vat-strain", weight: 16, minLevel: 3, daypart: { dusk: 1.3 } },
+      { role: "catch-rare", variant: "pressure-eel", weight: 6, minLevel: 7, daypart: { night: 1.6 } },
+      { role: "catch-prize", variant: "heritage-koi", weight: 2, minLevel: 12, daypart: { dawn: 1.8, day: 0.5 } },
+    ],
+    "water-crossing": [
+      { variant: "larvae", weight: 22, minLevel: 1 },
+      { role: "catch-common", variant: "minnow", weight: 30, minLevel: 1 },
+      { role: "catch-uncommon", variant: "filter-salvage", weight: 12, minLevel: 2 },
+      { role: "catch-uncommon", variant: "trout", weight: 16, minLevel: 4, daypart: { dawn: 1.4 } },
+      { role: "catch-rare", variant: "deepline-eel", weight: 6, minLevel: 8, daypart: { night: 1.8 } },
+      { role: "catch-prize", variant: "ice-run-char", weight: 2, minLevel: 13, daypart: { dawn: 1.6 } },
+    ],
+  },
+};
+
 const ITEM_SKINS = {
   "cozy-village": {
     currency: { one: "coin", many: "coins", glyph: "◍" },
-    items: { "lodging-key": { name: "room key", glyph: "🔑" } },
+    items: {
+      "lodging-key": { name: "room key", glyph: "🔑" },
+      rod: { name: "fishing rod", glyph: "🎣" },
+      [BAIT_TYPE]: { name: "hook bait", glyph: "🪱" },
+      "catch-common": { name: "catch", glyph: "🐟" },
+      "catch-uncommon": { name: "good catch", glyph: "🐟" },
+      "catch-rare": { name: "rare catch", glyph: "🐠" },
+      "catch-prize": { name: "prize catch", glyph: "🏆" },
+    },
+    // EVERY VARIANT ANY SHIPPED TABLE NAMES, in every theme — asserted at boot.
+    // The pouch is world-free, so a carp caught in a valley is still in the bag
+    // when the same chat's next world is a colony, and the row has to have a word
+    // there too. Which is also why the shared ones read the same in both maps: a
+    // carp is a carp in any world, and the entries that earn their keep are the
+    // ones a theme only ever sees in a traveller's pouch — this map's rendering
+    // of the colony's kelp and vat stock, and the colony's of a mirror pike.
+    variants: {
+      worms: "worms",
+      grubs: "grubs",
+      chum: "chum",
+      larvae: "wrigglers",
+      carp: "carp",
+      bream: "bream",
+      minnow: "minnow",
+      trout: "trout",
+      "mirror-pike": "mirror pike",
+      "silver-eel": "silver eel",
+      "old-tench": "old tench",
+      "crown-salmon": "crown salmon",
+      "culture-kelp": "strange kelp",
+      "vat-strain": "pale fish",
+      "pressure-eel": "deep eel",
+      "heritage-koi": "painted carp",
+      "filter-salvage": "odd scrap",
+      "deepline-eel": "black eel",
+      "ice-run-char": "ice char",
+    },
+    // The seeded flourish's word pools, keyed by the row's TYPE. A pool is a
+    // DISPLAY override and nothing else — no row, no byte and no roll depends on
+    // it — so a theme that ships none simply reads its plain names.
+    flourishes: {
+      "catch-common": ["plump", "muddy", "silver-sided"],
+      "catch-uncommon": ["bright-finned", "deep-water", "speckled"],
+      "catch-rare": ["scarred", "moon-pale", "grandfather"],
+      "catch-prize": ["storied", "long-hunted", "river-king's"],
+    },
   },
   "sci-fi-colony": {
     currency: { one: "credit", many: "credits", glyph: "◈" },
-    items: { "lodging-key": { name: "berth chit", glyph: "🔑" } },
+    items: {
+      "lodging-key": { name: "berth chit", glyph: "🔑" },
+      rod: { name: "angling rig", glyph: "🎣" },
+      [BAIT_TYPE]: { name: "lure stock", glyph: "🪱" },
+      "catch-common": { name: "haul", glyph: "🐟" },
+      "catch-uncommon": { name: "good haul", glyph: "🐟" },
+      "catch-rare": { name: "rare haul", glyph: "🐠" },
+      "catch-prize": { name: "record haul", glyph: "🏆" },
+    },
+    variants: {
+      worms: "worms",
+      grubs: "grubs",
+      chum: "chum",
+      larvae: "tank larvae",
+      carp: "carp",
+      bream: "bream",
+      minnow: "minnow",
+      trout: "trout",
+      "mirror-pike": "mirror pike",
+      "silver-eel": "silver eel",
+      "old-tench": "old tench",
+      "crown-salmon": "crown salmon",
+      "culture-kelp": "culture kelp",
+      "vat-strain": "vat strain",
+      "pressure-eel": "pressure eel",
+      "heritage-koi": "heritage koi",
+      "filter-salvage": "filter salvage",
+      "deepline-eel": "deepline eel",
+      "ice-run-char": "ice-run char",
+    },
+    flourishes: {
+      "catch-common": ["tank-bred", "pale", "filter-fed"],
+      "catch-uncommon": ["odd-scaled", "cold-run", "gene-drifted"],
+      "catch-rare": ["unlogged", "pressure-marked", "off-manifest"],
+      "catch-prize": ["record", "founder-stock", "hand-listed"],
+    },
   },
 };
 
@@ -82,19 +253,12 @@ const PRICES = {
 // for why that condition and not a default value.
 const STARTING_PURSE = 40;
 
-// The catch table's TYPE vocabulary — the fixed shared roles a table entry can
-// be, and the one non-catch yield water gives up. A table row carries a role and
-// a VARIANT slug ("carp", "kelp", "vat-strain"), and the role is the half that
-// means the same thing in every theme, which is why the xp table below is keyed
-// by it. The item types and their skins arrive with the tables themselves; what
-// is needed here is the key set, so the xp table can be asserted complete
-// against something rather than against a comment.
-const CATCH_ROLES = ["catch-common", "catch-uncommon", "catch-rare", "catch-prize"];
-// Bait is a real water yield and not a catch (fishing is bait's own finder), so
-// it sits outside the roles and still earns through the same table: the award
-// keys on `role ?? BAIT_TYPE`, which is what stops a bait-first session from
-// minting no skill row at all on a player who has plainly been fishing.
-const BAIT_TYPE = "bait";
+// "Line and tackle included" — the stack of bait that rides the FIRST rod
+// purchase. Its slug is the theme's own first bait variant (see starterBait), so
+// it merges with the bait the player then fishes up rather than orphaning a
+// second row beside it. A purchase quantity and not a fishing number, which is
+// why it sits beside the starting purse and not in TUNING.
+const STARTER_BAIT = 8;
 
 // ── Fishing's tuning table (plan §2.2, §2.4) ─────────────────────────────────
 // Exported and retunable, and it is the ONLY place a number the fishing verb
@@ -108,9 +272,11 @@ const BAIT_TYPE = "bait";
 // Σ 10l for l = 1…19 = 1,900 xp and nothing below can move it. The target is
 // that a player who fishes as their day's work gets there in a few dozen of
 // those days. At `castMinutes` 15 a ten-hour day is 40 windows; mid-curve
-// (decent rod, baited, halfway up the ladder) lands p ≈ 0.55, so ≈ 22 of them
-// yield; a common-heavy table pays ≈ 1.8 xp a yield. Call it 40 xp a day, and
-// the cap is ≈ 48 days of nothing but fishing.
+// (decent rod, BAITLESS, halfway up the ladder) lands p = 0.48 × 1.15 ≈ 0.55, so
+// ≈ 22 of them yield; a common-heavy table pays ≈ 1.8 xp a yield. Call it 40 xp
+// a day, and the cap is ≈ 48 days of nothing but fishing. A day fished BAITED
+// throughout is the same chain times `baitMult`: p ≈ 0.69, ≈ 50 xp, ≈ 38 days —
+// which is the honest range, since no real session stays on one side of it.
 //
 // THE CATCH TABLE MOVES THAT AS MUCH AS THIS OBJECT DOES, and the BAIT SHARE is
 // the sharpest lever in it: bait pays `catchXp[BAIT_TYPE]`, the floor, and it
@@ -169,9 +335,13 @@ PF.economy = {
   ITEM_TYPES,
   PRICES,
   STARTING_PURSE,
+  STARTER_BAIT,
   ROD_TIERS,
   CATCH_ROLES,
   BAIT_TYPE,
+  CATCH_TABLES,
+  SPOT_TAGS,
+  DAYPARTS,
   TUNING,
   rodPriceKey,
 
@@ -205,18 +375,90 @@ PF.economy = {
   /** A pouch row's display name. An UNKNOWN type still renders — a newer build's
    *  item, or one a GM channel grants later, reads as its own tag rather than
    *  vanishing from the purse. The completeness assertion below is what keeps
-   *  every type this build can actually produce out of that fallback. */
+   *  every type this build can actually produce out of that fallback.
+   *
+   *  `k` IS TWO VOCABULARIES AND THIS IS WHERE THAT SHOWS (plan §2.2). On a
+   *  TOOL it is a tier and reads as an adjective — "crude rod". On a catch or a
+   *  bait it is a VARIANT SLUG and it is the name: the type is "catch-common"
+   *  and the thing in the bag is a carp, so the lookup keys on `k` and the
+   *  type's own word is only the fallback for a row that carries none. The old
+   *  path put the two together and would have rendered "worms bait", which is
+   *  why it is now scoped rather than general — and why a row whose type is
+   *  neither takes no prefix at all, `k` there being a slug nobody has claimed. */
   describe(world, item) {
     const t = typeof item === "string" ? item : typeof item?.t === "string" ? item.t : "";
     if (!t) return "";
+    const skin = this._skin(world);
     // The items map takes an own-property read for the same reason the skin table
     // does one line up: `t` is a pouch row's type off untrusted save JSON, and
     // `items["constructor"]` resolves to a function whose `.name` is "Object".
-    const items = this._skin(world).items;
-    const skin = Object.prototype.hasOwnProperty.call(items, t) ? items[t] : null;
-    const name = skin ? skin.name : t.replace(/[-_]/g, " ");
-    const quality = typeof item === "object" && typeof item?.k === "string" ? item.k : "";
-    return quality ? `${quality} ${name}` : name;
+    const typeSkin = Object.prototype.hasOwnProperty.call(skin.items, t) ? skin.items[t] : null;
+    const typeName = typeSkin ? typeSkin.name : t.replace(/[-_]/g, " ");
+    const k = typeof item === "object" && typeof item?.k === "string" ? item.k : "";
+    let base = typeName;
+    if (PF.player.TOOL_TYPES.has(t)) base = k ? `${k} ${typeName}` : typeName;
+    else if (VARIANT_TYPES.has(t) && k) {
+      // A VARIANT NO SKIN KNOWS still renders, slug-derived, exactly as an
+      // unknown TYPE does one line up — a hostile save row or a newer build's
+      // table is a display problem and never a throw.
+      base = Object.prototype.hasOwnProperty.call(skin.variants, k) ? skin.variants[k] : k.replace(/[-_]/g, " ");
+    }
+    const flourish = this._flourish(world, t, k);
+    return flourish ? `${flourish} ${base}` : base;
+  },
+
+  /** The seeded display override, keyed `(seed, t, k)` uniformly (plan §2.2).
+   *
+   *  Keyed on the WORLD's seed and not on the moment, because pouch rows MERGE:
+   *  there is one carp row holding nine carp, so a per-catch epithet would have
+   *  nothing to live on. Per world per variant is the shape the data can carry —
+   *  this valley's carp are the muddy ones and the next world's are not — and it
+   *  is computable wherever describe() runs, so the purse chip, the ledger and
+   *  the sheet all say the same thing without anybody storing it.
+   *
+   *  Returns "" when the theme ships no pool for that type, which is the
+   *  skin-name fallback: rods, bait and keys read plainly, and a pool added later
+   *  is a content change and not a mechanism one. */
+  _flourish(world, t, k) {
+    const pools = this._skin(world).flourishes;
+    if (!Object.prototype.hasOwnProperty.call(pools, t)) return "";
+    const pool = pools[t];
+    if (!Array.isArray(pool) || !pool.length) return "";
+    const seed = Number.isFinite(world?.seed) ? world.seed >>> 0 : 0;
+    return pool[PF.hashStr(`${seed}:${t}:${k}`) % pool.length];
+  },
+
+  /** The catch table for a world's theme and a spot's tag, or null when the tag
+   *  is not one that holds water. Own-property both ways: `world.theme` and a
+   *  registry row's `tag` are both strings this file did not write. */
+  catchTable(world, tag) {
+    const theme = typeof world?.theme === "string" ? world.theme : "cozy-village";
+    const byTheme = Object.prototype.hasOwnProperty.call(CATCH_TABLES, theme)
+      ? CATCH_TABLES[theme]
+      : CATCH_TABLES["cozy-village"];
+    if (typeof tag !== "string" || !Object.prototype.hasOwnProperty.call(byTheme, tag)) return null;
+    return byTheme[tag];
+  },
+
+  /** A table entry's pouch TYPE. `role ?? BAIT_TYPE` in one place, so the xp
+   *  award, the row identity and the ledger line cannot disagree about what a
+   *  roleless entry is. */
+  entryType(entry) {
+    return typeof entry?.role === "string" && entry.role ? entry.role : BAIT_TYPE;
+  },
+
+  /** The bait variant a theme's first rod purchase throws in. THE THEME'S FIRST
+   *  bait entry, scanned in SPOT_TAGS order — so the starter stack merges with
+   *  the bait the player then fishes out of that same water instead of sitting
+   *  beside it as a second row of a thing they already have. Null for a theme
+   *  whose tables carry no bait at all, which the boot assertion refuses. */
+  starterBait(world) {
+    for (const tag of SPOT_TAGS) {
+      for (const entry of this.catchTable(world, tag) ?? []) {
+        if (this.entryType(entry) === BAIT_TYPE) return entry.variant;
+      }
+    }
+    return null;
   },
 
   /** The price of a named thing in this world, or null when it is not for sale
@@ -390,6 +632,16 @@ PF.economy = {
 // a sci-fi colony charging "coins" is exactly the out-of-place-"Maud Thatch"
 // failure the maintainer called out for name books.
 {
+  // EVERY VARIANT ANY SHIPPED TABLE NAMES, gathered across ALL themes before any
+  // one theme is checked. The pouch is world-free: a carp caught in a valley is
+  // still in the bag when the same chat's next world is a colony, and a row with
+  // no word there would fall to the slug fallback that exists for a HOSTILE save,
+  // not for content this build ships. So the demand is on the union, not on each
+  // theme's own list.
+  const shippedVariants = new Set();
+  for (const byTag of Object.values(CATCH_TABLES))
+    for (const table of Object.values(byTag)) for (const entry of table) shippedVariants.add(entry.variant);
+
   for (const theme of PF.art?.themeIds?.() ?? []) {
     const skin = ITEM_SKINS[theme];
     if (!skin) throw new Error(`pixelforge: theme "${theme}" ships no item vocabulary`);
@@ -398,6 +650,53 @@ PF.economy = {
     for (const type of ITEM_TYPES) {
       if (!skin.items?.[type]?.name) throw new Error(`pixelforge: theme "${theme}" has no name for item "${type}"`);
     }
+    for (const variant of shippedVariants) {
+      if (!skin.variants?.[variant]) throw new Error(`pixelforge: theme "${theme}" has no name for "${variant}"`);
+    }
+    // THE 2×2, both halves. A theme with no table for a spot kind is water the
+    // player can stand at and the verb cannot answer for; an EMPTY table is the
+    // same hole with a shape, and it would divide by a zero weight rather than
+    // refuse. The wilds `water-feature` never places today (slice-1 verify F1)
+    // and its tables are still required — settlements and the legacy world reach
+    // that kind, and the drop is a placement fact, not a vocabulary one.
+    const byTag = CATCH_TABLES[theme];
+    if (!byTag) throw new Error(`pixelforge: theme "${theme}" ships no catch tables`);
+    for (const tag of SPOT_TAGS) {
+      const table = byTag[tag];
+      if (!Array.isArray(table) || !table.length)
+        throw new Error(`pixelforge: theme "${theme}" has no catch table for "${tag}"`);
+      for (const entry of table) {
+        // A role has to be a ROLE. A typo mints a pouch row of a type nothing
+        // skins, nothing prices and the xp table cannot pay for — and it would
+        // look exactly like the deliberate roleless entry that means bait.
+        if (entry.role !== undefined && !CATCH_ROLES.includes(entry.role))
+          throw new Error(`pixelforge: ${theme}/${tag} has an entry with the role "${entry.role}"`);
+        if (!entry.variant || typeof entry.variant !== "string")
+          throw new Error(`pixelforge: ${theme}/${tag} has an entry with no variant slug`);
+        if (!(typeof entry.weight === "number" && entry.weight > 0))
+          throw new Error(`pixelforge: ${theme}/${tag}'s "${entry.variant}" has no positive weight`);
+        // A minLevel above the ceiling is an entry NOBODY can ever draw: the draw
+        // is a level test and the level stops climbing at the cap, so the row is
+        // written content that no save can reach.
+        if (!Number.isInteger(entry.minLevel) || entry.minLevel < 1 || entry.minLevel > PF.player.CAPS.skillLevel)
+          throw new Error(
+            `pixelforge: ${theme}/${tag}'s "${entry.variant}" needs level ${entry.minLevel}, outside 1..${PF.player.CAPS.skillLevel}`,
+          );
+        for (const [part, mult] of Object.entries(entry.daypart ?? {})) {
+          // A plausible word that is not one of the four is a column that never
+          // applies — silently, forever, and looking exactly like a tuned one.
+          if (!DAYPARTS.includes(part))
+            throw new Error(`pixelforge: ${theme}/${tag}'s "${entry.variant}" is tuned for a daypart "${part}"`);
+          if (!(typeof mult === "number" && Number.isFinite(mult) && mult >= 0))
+            throw new Error(`pixelforge: ${theme}/${tag}'s "${entry.variant}" has a ${part} multiplier of ${mult}`);
+        }
+      }
+    }
+    // …AND A BAIT ENTRY SOMEWHERE IN THE THEME, because the crude rod's purchase
+    // throws in a starter stack whose slug is exactly this (see starterBait). A
+    // theme with none would sell a rod and hand over an empty tin.
+    if (!PF.economy.starterBait({ theme }))
+      throw new Error(`pixelforge: theme "${theme}" ships no bait entry for a first rod to come with`);
     if (typeof PRICES[theme]?.berth !== "number")
       throw new Error(`pixelforge: theme "${theme}" has no price for a berth`);
     // EVERY RUNG THE LADDER CAN QUOTE, in every theme. A missing rod price would
