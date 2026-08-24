@@ -3,7 +3,7 @@
 // compiler invariants, injection metering, and spatial-binding regressions
 // through the spec's degenerate cases (docs/brief-schema.md §4-5, §7).
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -11053,7 +11053,8 @@ await withSavePath(async ({ behavior, makeCore }) => {
   );
 });
 
-// (aq) THE MINT STAMP CARRIES NO RAW CONTROL BYTES.
+// (aq) THE MINT STAMP CARRIES NO RAW CONTROL BYTES — AND NEITHER DOES ANY OTHER
+// MODULE.
 // mintStampOf built its hash input with two literal U+0000 bytes in the source.
 // The stamp is what every save's severance verdict turns on, so any tool that
 // normalizes control characters on the way through the repo — an editor, a
@@ -11082,11 +11083,26 @@ await withSavePath(async ({ behavior, makeCore }) => {
     "a generated mint stamps the same",
   );
   assert.equal(world.build(9001, "cozy-village").mintStamp, 2_496_143_703, "and a legacy one does too");
-  const source = readFileSync(join(here, "src", "20-world.js"), "utf8");
+  // THE WHOLE PACKAGE, and not the file the incident happened in. A guard that
+  // reads 20-world alone pins the one module where this has already been found
+  // and fixed, and watches nothing: a raw byte is a property of the SOURCE TREE —
+  // any editor, patch round-trip or copy-through-a-form can leave one in any file
+  // — and the corruption this slice actually hit landed in 59-economy, outside
+  // the guard's one file. Read in name order so the failure is stable, and every
+  // module names itself if it is the one carrying the byte.
+  const modules = readdirSync(join(here, "src"))
+    .filter((name) => name.endsWith(".js"))
+    .sort();
   assert.ok(
-    !source.includes(String.fromCharCode(0)),
-    "and the source no longer carries a raw control byte for anything to normalize",
+    modules.includes("20-world.js") && modules.includes("59-economy.js"),
+    `the sweep really did read the src directory (${modules.length} modules)`,
   );
+  for (const name of modules) {
+    assert.ok(
+      !readFileSync(join(here, "src", name), "utf8").includes(String.fromCharCode(0)),
+      `src/${name} carries no raw control byte for anything to normalize`,
+    );
+  }
 }
 
 // ═══ THE LOADING GATE (S5 slice 5) ═════════════════════════════════════════
