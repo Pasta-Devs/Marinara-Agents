@@ -1,12 +1,12 @@
 # The World Brief — schema v1 (sealed spec)
 
-**Architecture:** the LLM decides *what exists*, the algorithm decides *where every tile goes.*
+**Architecture:** the LLM decides _what exists_, the algorithm decides _where every tile goes._
 One structured call at game creation (engine #5135, route
 `POST /api/game/:chatId/experience-generation`) turns the wizard's preferences into a compact
 **brief**; a deterministic compiler builds the tile world from `compile(brief, seed)` forever
 after. This document is the contract between them.
 
-Synthesized from a three-draft adversarial panel (minimal-enum ×  repair-first base, judged by a
+Synthesized from a three-draft adversarial panel (minimal-enum × repair-first base, judged by a
 cost skeptic and the compiler author). Design rule inherited from the product discussion: **the form
 does the teaching** — the model fills vocabularies and bounded lists; free text exists only where a
 named consumer in shipped code reads it, and no field the model writes can become geometry except
@@ -269,10 +269,10 @@ response is **never stored** (checkpoints capture by value — see #5110).
    keeper with nowhere to keep — and the compiler builds the common room from the gathering PLACE,
    never from a `host` in the cast, so that settlement compiled as houses with no inn in it. Same
    room caps as pass 3 (`places` room for the rank, gathering cap 1) and the same ledger entry. It
-   runs *after* the wilds floor deliberately: "no named place at all" and "a keeper with nothing to
+   runs _after_ the wilds floor deliberately: "no named place at all" and "a keeper with nothing to
    keep" are different lacks, and a settlement whose cast was topped up gets both floors. (The
    pass-3 synthesis is the one path that still stands the wilds floor down: a model host with zero
-   surviving places seals `[gathering]` and no wilds — deliberate, since that model *did* name a
+   surviving places seals `[gathering]` and no wilds — deliberate, since that model _did_ name a
    place through its host, and the wilds floor answers namelessness, not a missing outdoors.)
 
 **Global budget:** the sealed brief must serialize ≤8 KB; over-budget briefs truncate prose fields
@@ -280,38 +280,38 @@ in reverse-leverage order (`persona`s → zone `flavor`s → `flavor`) before an
 
 ## 5. Latency & failure budget (generation BLOCKS behind a loading gate — amended twice)
 
-*Amended from the sealed draft (which put generation in the wizard with a Skip button): the
+_Amended from the sealed draft (which put generation in the wizard with a Skip button): the
 pre-launch chat is not experience-stamped, so the #5135 route 409s before launch, and after
-launch the host tears the setup UI down — there is no wizard window to block.* Generation runs
+launch the host tears the setup UI down — there is no wizard window to block._ Generation runs
 **surface-side, after launch**: the wizard stamps the player's `generate` answer into the
-experience config. *The Skip button came back in 0.11 as a checkbox on the setup rather than a
+experience config. _The Skip button came back in 0.11 as a checkbox on the setup rather than a
 button in a window that no longer exists — unchecked writes `generate: false`, no gate arms, and
 the chat plays the themed default world immediately, which is also what every pre-0.4.0 save
-does.*
-*Amended again in 0.11 (maintainer ruling #7, plan §Q3b): it no longer runs behind a toast on a
+does._
+_Amended again in 0.11 (maintainer ruling #7, plan §Q3b): it no longer runs behind a toast on a
 throwaway world the player is already walking in. A generate-configured chat whose brief is not
 sealed holds at a **loading gate** — the sim does not step, no mutator resolves, no save is
-written — because a world that is going to be discarded must never be one anybody invested in.*
+written — because a world that is going to be discarded must never be one anybody invested in._
 Package-side call budget: 90 s abort; `userContent` clamps to 7,800 chars (the route 400s
 past 8,000 — a hard contract). On a 409 `chat_busy` (server-documented transient, Retry-After 15)
 → wait it out **once** inside the budget. On the route's `truncated: true` 422 → **one** plain
-re-roll retry — *amended: the draft said "retry at maxTokens: 4096", but the route treats
+re-roll retry — _amended: the draft said "retry at maxTokens: 4096", but the route treats
 `maxTokens` as min()-only ("never a raise"), so a numeric override could only shrink the budget;
-the retry's value is length variance* — then **salvage** from the LONGEST `raw` seen across both
+the retry's value is length variance_ — then **salvage** from the LONGEST `raw` seen across both
 attempts (transport pass rules: balanced span, complete array elements) and let the floors top up
 the rest. **NO FAILURE SEALS A WORLD** — only the two outcomes that produce a real brief do:
 success and salvage. Every other outcome, transient (404 route-absent, 409, 429, 5xx, network
-error, budget timeout) *and deterministic* (400 contract, `provider_error`/parse-failure 422),
+error, budget timeout) _and deterministic_ (400 contract, `provider_error`/parse-failure 422),
 leaves the chat **unsealed**: the key stays absent, the gate shows a retry screen, and the next
 visit arms it again.
-*Revised in 0.11 (maintainer ruling #7, plan §Q3b). The 0.4.0 ladder sealed themed defaults on a
+_Revised in 0.11 (maintainer ruling #7, plan §Q3b). The 0.4.0 ladder sealed themed defaults on a
 deterministic/paid failure, on the reasoning that a paid call per visit is worse than the default
 world. That decision predates the loading gate, which now holds play precisely so that nobody
 invests in a world that is going to be discarded — so sealing a default is no longer "the world
 they were already walking in", it is a permanent decision made on their behalf in the one case they
 cannot undo. The `userContent` clamp above also makes a reachable 400 a contract bug rather than a
 long setting. The ladder reports the failure KIND instead (`unavailable` | `refused` | `network` |
-`timeout`), and the retry screen says which.*
+`timeout`), and the retry screen says which._
 The sealed result stores **atomically** under the top-level `pixelforgeBrief` metadata key
 (shallow-merge PATCH, 3 retries — never a read-modify-write of the whole setup config), and the
 world rebuilds in place when it lands; the stored key doubles as the one-shot guard, so a chat
@@ -326,18 +326,18 @@ tag ships placers with zero schema/prompt change), but **every tag in the shippe
 have a placer for EVERY shipped theme, enforced by a startup assertion over the registry** — the
 fallback chain is for third-party extension, not for shipping silent per-theme feature loss.
 
-| tag             | cozy-village            | sci-fi-colony              |
-| --------------- | ----------------------- | -------------------------- |
-| water-feature   | pond + well             | coolant pool + recycler    |
-| crop-plots      | fenced crops            | hydroponics trays          |
-| market-stalls   | table/awning row        | vendor kiosk row           |
-| workyard        | fenced stone yard       | cargo pad + crates         |
-| landmark-stone  | standing stone + light  | monument mast + beacon     |
-| shrine          | stone pad + fence       | memorial alcove            |
-| water-crossing  | stream + ford           | coolant channel + bridge   |
-| dense-growth    | heavy trees             | mast/antenna field         |
-| ruin            | roofless broken walls   | breached hull section      |
-| lookout         | raised stone pad        | observation platform       |
+| tag            | cozy-village           | sci-fi-colony            |
+| -------------- | ---------------------- | ------------------------ |
+| water-feature  | pond + well            | coolant pool + recycler  |
+| crop-plots     | fenced crops           | hydroponics trays        |
+| market-stalls  | table/awning row       | vendor kiosk row         |
+| workyard       | fenced stone yard      | cargo pad + crates       |
+| landmark-stone | standing stone + light | monument mast + beacon   |
+| shrine         | stone pad + fence      | memorial alcove          |
+| water-crossing | stream + ford          | coolant channel + bridge |
+| dense-growth   | heavy trees            | mast/antenna field       |
+| ruin           | roofless broken walls  | breached hull section    |
+| lookout        | raised stone pad       | observation platform     |
 
 ## 7. Injection discipline (metering the prose)
 
@@ -345,18 +345,18 @@ Written here because it is what keeps the brief from taxing every turn forever: 
 `role` ride the per-turn header **always**; `situation` injects **once, on the first outbound
 turn**; a zone's `flavor` injects **once on first entry**; an NPC's `persona` injects **once per
 NPC** (first interaction). The one-shot flags **persist in saves** and burn only when the host
-*accepts* the turn (a refused send never loses the prose), so a reload never re-taxes the
+_accepts_ the turn (a refused send never loses the prose), so a reload never re-taxes the
 context. Nothing else from the brief ever enters GM context — the durable channel is **chat
 history**: each injection lands once inside a committed turn and stays in the transcript the GM
 re-reads every generation.
 
 ## 8. World Maps export (shipped in 0.5.0)
 
-*History: the sealed draft made World Maps the durable channel via an export "at first compile";
+_History: the sealed draft made World Maps the durable channel via an export "at first compile";
 that was deferred because no runtime location write API existed, and the durable channel became
 chat history (§7 — unchanged). World Maps 1.4.0 shipped the write path
 (`POST /api/chats/:chatId/spatial-context/locations`, Marinara-Engine#5144), so the export now
-runs.*
+runs._
 
 Once the exterior binds to its starting location (the §50-spatial seed binding), every other
 compiled zone registers as a **child of that bound location**: interiors as `kind: "building"`,
@@ -402,7 +402,7 @@ signage/inspect text — roadmap S2) and the root's population phrase (§8).
 
 ## 10. Guidance note on theme mismatch
 
-The shipped guidance states verbatim: *the theme is authoritative; dress the player's setting text
-to fit it.* A player typing "cyberpunk megacity" under `cozy-village` gets a cozy village wearing
+The shipped guidance states verbatim: _the theme is authoritative; dress the player's setting text
+to fit it._ A player typing "cyberpunk megacity" under `cozy-village` gets a cozy village wearing
 cyberpunk names — coherent tiles, themed prose — never a schema error. (A wizard-side nudge when
 the free text is far from the chosen theme is a 0.4.x follow-up.)
