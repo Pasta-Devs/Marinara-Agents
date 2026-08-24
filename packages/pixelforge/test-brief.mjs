@@ -2989,6 +2989,30 @@ const wayrestCast = [
   assert.equal(sim.clockMin, 5 * 60, "landing on dawn");
 }
 
+// 14g. …AND THE TABLE IT READS IS READ AS AN OWN PROPERTY.
+// PF.DAYPART_STARTS moved out of waitUntil's body when the fishing verb wanted
+// the same four thresholds, and a shared table is a table more than one caller
+// can be handed a hostile word for. `starts["constructor"]` answers with a
+// FUNCTION, which is not undefined: a bare read waves it past an
+// `=== undefined` guard, `clockMin` is assigned a function, and every clock read
+// downstream — the chip, the daypart, the darkness pass, the save byte — goes to
+// NaN on a sim that is otherwise perfectly healthy.
+{
+  const sim = new loadedPF.Sim(world.build(5150, "cozy-village", brief.defaults("cozy-village", 5150)));
+  sim.mode = "walk";
+  sim.clockMin = 10 * 60;
+  sim.day = 3;
+  for (const key of ["constructor", "toString", "valueOf", "hasOwnProperty", "__proto__"]) {
+    assert.equal(sim.waitUntil(key), false, `"${key}" is not a daypart, whatever the prototype answers with`);
+    assert.equal(sim.clockMin, 10 * 60, `…and the clock did not move for "${key}"`);
+    assert.equal(sim.day, 3, `…nor the day`);
+  }
+  assert.equal(typeof sim.clockMin, "number", "the clock is still a number and not a function");
+  assert.equal(sim.clockLabel(), "Day 3 · 10:00", "…and still renders as a time rather than NaN:NaN");
+  assert.equal(sim.waitUntil("dusk"), true, "while a word the table really holds still works");
+  assert.equal(sim.clockMin, 18 * 60, "…and lands where it always did");
+}
+
 // The 0.8.0 rooms fixture, shared by 14d and cases 51-53: a settlement with a
 // leader's hall, a smith (a shop), a two-person household (two beds under one
 // roof), an inn, and a transient who takes a bed in it.
@@ -13287,6 +13311,35 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     assert.equal(sim.clockMin, 60, "…and the clock did not move for it");
     assert.equal(sim.day, 2, "…nor the day");
   }
+
+  // THE FRACTION UNDER THE CLOCK IS LEFT ALONE, which is the stated deviation
+  // between this mover and waitUntil one method up. waitUntil CLEARS `_clockAcc`
+  // because it jumps to a target, and a leftover fraction would tick that
+  // target's own minute early. An advance lays whole minutes on top of a
+  // fraction the player has genuinely already walked off, so clearing it would
+  // quietly lose those seconds: a cast taken mid-stride would reset the walking
+  // cadence, and the minute the player was most of the way through would start
+  // over. Observable, and observed rather than asserted about the field alone —
+  // the fraction still buys the minute it was owed on the very next step.
+  {
+    const walker = new loadedPF.Sim(w);
+    walker.mode = "walk";
+    walker.clockMin = 60;
+    walker.day = 2;
+    const perMinute = loadedPF.CLOCK_SECONDS_PER_GAME_MINUTE;
+    const walked = perMinute * 0.9; // nine tenths of a game minute already on foot
+    walker._clockAcc = walked;
+    walker.advanceMinutes(15);
+    assert.equal(walker._clockAcc, walked, "a cast spends whole minutes and does not touch the fraction under them");
+    assert.equal(walker.clockMin, 75, "…while spending every one of the whole ones");
+    walker.step(perMinute * 0.2, {}); // two tenths more: over the line, with a cast in between
+    assert.equal(walker.clockMin, 76, "the walked fraction still buys the minute it was owed");
+    // …AND waitUntil IS THE OTHER SIDE OF THE DEVIATION, so the difference is a
+    // decision rather than a thing one of them forgot.
+    walker._clockAcc = walked;
+    walker.waitUntil("dusk");
+    assert.equal(walker._clockAcc, 0, "a JUMP does clear it, because it lands on a target rather than past one");
+  }
 }
 
 // ═══ S4 ACTIVATION: THE LADDER, THE RESOLVERS, THE TUNING TABLE (0.12 s2) ════
@@ -13941,6 +13994,28 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
       P.grant(core, { t: "rod", k: "crude" }, 1);
       assert.equal(E._autoEquipTool(core, "fishing", "rod"), true, "a tool does");
       assert.deepEqual(P.get(core).skills.equipped.fishing, { tool: ["rod", "crude"] }, "…in the tool slot, alone");
+    }
+
+    // ── …AND THE ROW FILTER INSIDE THE SCAN, WHICH THE TYPE GUARD DOES NOT ────
+    // The scan skips any row whose `k` is not a rung, and that is a SECOND guard
+    // doing a second job. A hostile `{t:"rod", k:"legendary"}` resolves to tier 0
+    // — the same rung a crude rod resolves to — so a scan without the filter
+    // finds it first, keeps it (nothing later ranks strictly ABOVE tier 0), and
+    // hands equip() a `k` the mutator refuses: the verb ends up with no rod bound
+    // at all while a perfectly good crude one sits in the bag beside it. The
+    // ladder case further up cannot see this, because the rod it buys there is
+    // DECENT and outranks the clamped row on the way past.
+    {
+      const core = fresh("chat-autoequip-hostile");
+      P.get(core).pouch.items.push({ t: "rod", q: 1, k: "legendary" }); // FIRST in scan order
+      P.grant(core, { t: "rod", k: "crude" }, 1);
+      assert.equal(P.equip(core, "fishing", "tool", { t: "rod", k: "legendary" }), false, "equip() refuses that rung");
+      assert.equal(E._autoEquipTool(core, "fishing", "rod"), true, "…so the scan has to have skipped it");
+      assert.deepEqual(
+        P.get(core).skills.equipped.fishing.tool,
+        ["rod", "crude"],
+        "…and bound the real rod behind it, rather than nothing at all",
+      );
     }
   } finally {
     loadedPF.save.reset(); // the mutators self-dirty, and a dirty block arms a timer
