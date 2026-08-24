@@ -68,6 +68,17 @@ PF.offscreen = (w, h) => {
   return c;
 };
 
+/** An HTTP failure that carries its status. The save path classifies write
+ *  failures by it — transient (network, no status, 5xx) backs off and retries,
+ *  413/422 is terminal and degrades the session, 409 means the chat lost its
+ *  Experience stamp and routes mode has to fall back — and a status parsed back
+ *  out of the message string would be a trap the first time a message changes. */
+PF.httpError = (label, status) => {
+  const err = new Error(`${label} → ${status}`);
+  err.status = status;
+  return err;
+};
+
 // ── REST helpers (same-origin /api, cookie auth rides along) ─────────────────
 PF.api = {
   async getJson(path) {
@@ -85,27 +96,57 @@ PF.api = {
       body: JSON.stringify(patch),
       keepalive,
     });
-    if (!res.ok) throw new Error(`PATCH metadata → ${res.status}`);
+    if (!res.ok) throw PF.httpError("PATCH metadata", res.status);
   },
   /** Host-owned per-timeline save slot (engine #5102). 404 = route absent (older
    *  engine), 409 = chat not stamped for an Experience — both are mode signals,
-   *  not errors, so this never throws on them. */
+   *  not errors, so this never throws on them. Everything else rejects through
+   *  PF.httpError: adopt() has to tell a 5xx blip (worth re-probing every minute)
+   *  from a 401/403 the route MEANT (re-asking is noise), and it can only do that
+   *  off a status on the object. */
   async getExperienceState(chatId) {
     const res = await fetch(`/api/game/${encodeURIComponent(chatId)}/experience-state`, {
       headers: { Accept: "application/json" },
     });
     if (res.status === 404 || res.status === 409) return { available: false, status: res.status };
-    if (!res.ok) throw new Error(`GET experience-state → ${res.status}`);
+    if (!res.ok) throw PF.httpError("GET experience-state", res.status);
     return { available: true, status: res.status, body: await res.json() };
   },
-  async putExperienceState(chatId, state, keepalive = false) {
+  /** Returns the route's own `{ ok, id, anchor }` echo when it parses. The
+   *  ANCHOR is the point: the row lands at whatever the visible anchor is when
+   *  the write is served, which is not necessarily the one the last GET read —
+   *  a turn can finish in between. The ladder compares the two and takes the
+   *  rewind path next round when they differ (plan §Q2, the PUT-anchor echo).
+   *  A body that will not parse is not an error: the write still landed.
+   *
+   *  `schemaVersion` is the row's OUT-OF-BAND wire era (S5 slice 8). The route
+   *  has always taken it and defaulted it to 1, and the package sent none, so
+   *  every row it has written so far claims era 1 whatever is inside it. Omitted
+   *  when the caller names none, so a call that does not care sends exactly the
+   *  bytes it always did — and omitted when the value is one the route's own
+   *  schema (int 1..1,000,000) would 400 on, because a column nothing reads for
+   *  correctness must never be able to take the save down with it. */
+  async putExperienceState(chatId, state, keepalive = false, schemaVersion) {
+    const body = { state };
+    if (
+      typeof schemaVersion === "number" &&
+      Number.isSafeInteger(schemaVersion) &&
+      schemaVersion >= 1 &&
+      schemaVersion <= 1_000_000
+    )
+      body.schemaVersion = schemaVersion;
     const res = await fetch(`/api/game/${encodeURIComponent(chatId)}/experience-state`, {
       method: "PUT",
       headers: { "Content-Type": "application/json", "x-marinara-csrf": "1" },
-      body: JSON.stringify({ state }),
+      body: JSON.stringify(body),
       keepalive,
     });
-    if (!res.ok) throw new Error(`PUT experience-state → ${res.status}`);
+    if (!res.ok) throw PF.httpError("PUT experience-state", res.status);
+    try {
+      return await res.json();
+    } catch {
+      return null;
+    }
   },
   /** One host-run structured generation call (engine #5135). Returns
    *  {status, body} without throwing on the route's documented 4xx ladder —

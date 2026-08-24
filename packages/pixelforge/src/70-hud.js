@@ -33,13 +33,30 @@ PF.Hud = class {
     this.captionEl.setAttribute("aria-hidden", "true");
     this.locChip = PF.el("span", { style: S.chip, text: "…" });
     this.clockChip = PF.el("span", { style: S.chip, text: "" });
+    // The purse (S3). Hidden until there is something in it: a legacy world with
+    // no economy in it should not carry a permanent "0 coins" telling the player
+    // about a system they are not playing.
+    this.purseChip = PF.el("span", { style: `${S.chip}display:none;`, text: "" });
     this.topbar = PF.el(
       "div",
       { style: "position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:2;" },
-      [this.locChip, this.clockChip],
+      [this.locChip, this.clockChip, this.purseChip],
     );
 
     this.talkBtn = this._btn("Talk (E)", () => core.interact());
+    // S3's one live transaction (P1's bed). Shown whenever there is a berth to be
+    // had where the player is standing — a keeper within reach, or the room they
+    // keep with them in it (59-economy berthOffer) — and shown REFUSING rather
+    // than hidden when the offer stands but the purse is short, because a button
+    // that vanishes teaches the player nothing about why.
+    //
+    // Booted HIDDEN, unlike Talk beside it. Talk is up for the whole of walk mode
+    // and only dims; this one is display-gated, and update() is what decides. A
+    // button that ships visible is on screen for every frame before the first
+    // update — and for the whole of a mount that never reaches one (no sim yet),
+    // quoting a room in a world that has not compiled.
+    this.berthBtn = this._btn("Rent a berth", () => this.rentBerth());
+    this.berthBtn.style.display = "none";
     this.travelBtn = this._btn("Travel", () => this.toggleTravel());
     this.waitBtn = this._btn("⏩ Wait…", () => this.toggleWait());
     this.keyboardBtn = this._btn("Keyboard", () => core.setMode("dialogue"));
@@ -54,7 +71,7 @@ PF.Hud = class {
         style:
           "position:absolute;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px;align-items:flex-end;z-index:2;",
       },
-      [this.talkBtn, this.travelBtn, this.waitMenu, this.waitBtn, this.keyboardBtn, this.resumeBtn],
+      [this.talkBtn, this.berthBtn, this.travelBtn, this.waitMenu, this.waitBtn, this.keyboardBtn, this.resumeBtn],
     );
 
     // Touch D-pad. touch-action:none so the browser doesn't claim the gesture
@@ -104,14 +121,62 @@ PF.Hud = class {
         "position:absolute;bottom:calc(156px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);" +
         `${S.chip}opacity:0;transition:opacity 0.25s;z-index:3;pointer-events:none;`,
     });
+    // LOCATION NOTICES RIDE THE TOP. Everything used to share the bottom surface
+    // above, which is where the host's narration panel is: crossing into a zone
+    // printed its name across the middle of the GM's sentence ("Tam's farm" over a
+    // line of NARRATION, playtest). Where you have just arrived belongs beside the
+    // chip that already says where you are, and it is the one toast class that
+    // fires while the player is reading rather than because they pressed
+    // something. Sits under the topbar so the two never stack.
+    this.locToastEl = PF.el("div", {
+      style:
+        "position:absolute;top:42px;left:50%;transform:translateX(-50%);" +
+        `${S.chip}opacity:0;transition:opacity 0.25s;z-index:3;pointer-events:none;`,
+    });
+
+    // THE LOADING GATE's face (plan §Q3b). Full-surface and pointer-events:auto,
+    // so nothing behind it is clickable while it holds — a chat whose world has
+    // not been generated yet has no world to talk about, no clock worth reading
+    // and nowhere to walk, and every other control is hidden under it. Announced
+    // to a screen reader, because the whole state is "wait, then something
+    // changes" and a silent one is a hung app.
+    this.gateTitle = PF.el("div", {
+      style: "font:700 14px/1.5 inherit;margin-bottom:6px;",
+    });
+    this.gateBody = PF.el("div", {
+      style: "font:12px/1.65 inherit;opacity:0.85;max-width:34ch;margin-bottom:12px;",
+    });
+    this.gateRetry = this._btn("Try again", () => PF.save.retryGeneration(this.core));
+    this.gateEl = PF.el(
+      "div",
+      {
+        style:
+          "position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;" +
+          "text-align:center;padding:24px;box-sizing:border-box;gap:0;pointer-events:auto;z-index:4;" +
+          "background:rgba(12,14,12,0.9);color:#f3efe2;",
+      },
+      [this.gateTitle, this.gateBody, this.gateRetry],
+    );
+    this.gateEl.setAttribute("role", "status");
+    this.gateEl.setAttribute("aria-live", "polite");
 
     this.root = PF.el(
       "div",
       { style: "position:absolute;inset:0;pointer-events:none;font-family:ui-monospace,Consolas,monospace;" },
-      [this.topbar, this.actions, this.dpad, this.travelMenu, this.captionEl, this.toastEl],
+      [
+        this.topbar,
+        this.actions,
+        this.dpad,
+        this.travelMenu,
+        this.captionEl,
+        this.toastEl,
+        this.locToastEl,
+        this.gateEl,
+      ],
     );
     rootEl.appendChild(this.root);
     this._toastTimer = 0;
+    this._locToastTimer = 0;
     this._mode = null;
     this.refreshChips();
   }
@@ -122,15 +187,25 @@ PF.Hud = class {
 
   destroy() {
     clearTimeout(this._toastTimer);
+    clearTimeout(this._locToastTimer);
     this.root.remove();
   }
 
-  toast(msg) {
-    this.toastEl.textContent = msg;
-    this.toastEl.style.opacity = "1";
-    clearTimeout(this._toastTimer);
-    this._toastTimer = setTimeout(() => {
-      this.toastEl.style.opacity = "0";
+  /** `kind` picks the SURFACE, not the styling: "location" goes to the top strip
+   *  (see locToastEl), everything else keeps the bottom one. Two nodes and two
+   *  timers, so an arrival and a refusal can be on screen together instead of
+   *  overwriting each other — they answer different questions. An unknown kind
+   *  falls to the bottom, which is where every caller that names none already
+   *  wanted to be. */
+  toast(msg, kind) {
+    const atTop = kind === "location";
+    const node = atTop ? this.locToastEl : this.toastEl;
+    node.textContent = msg;
+    node.style.opacity = "1";
+    const timer = atTop ? "_locToastTimer" : "_toastTimer";
+    clearTimeout(this[timer]);
+    this[timer] = setTimeout(() => {
+      node.style.opacity = "0";
     }, 2600);
   }
 
@@ -191,6 +266,23 @@ PF.Hud = class {
     this.travelMenu.style.display = "flex";
   }
 
+  /** Take the berth the button is offering. The offer is re-read inside
+   *  rentBerth, so what the button was rendering a frame ago cannot overcharge
+   *  anybody; this only turns the verb's refusal reasons into sentences. */
+  rentBerth() {
+    const world = this.core.sim?.world;
+    const result = PF.economy.rentBerth(this.core);
+    if (result.ok) {
+      this.toast(`A berth is yours — ${PF.economy.money(world, result.price)} the night.`);
+      this.refreshChips();
+      return;
+    }
+    if (result.reason === "already-yours") this.toast("You already keep a berth here.");
+    else if (result.reason === "cannot-afford")
+      this.toast(`Not enough on you — a berth is ${PF.economy.money(world, result.price)}.`);
+    else this.toast("There is no room to be had here.");
+  }
+
   refreshChips() {
     const sim = this.core.sim;
     if (!sim) return;
@@ -210,6 +302,17 @@ PF.Hud = class {
         : null;
     this.locChip.textContent = bound && bound !== zoneName ? `${zoneName} — ${bound}` : zoneName;
     this.clockChip.textContent = sim.clockLabel();
+    // The purse. Money and the pouch's row count, in this theme's own words —
+    // and nothing at all until one of them exists, so a legacy world carries no
+    // chip about an economy it does not have.
+    const pouch = PF.player.get(this.core)?.pouch;
+    const money = pouch?.money ?? 0;
+    const carried = (pouch?.items ?? []).reduce((n, item) => n + Math.max(0, item?.q ?? 0), 0);
+    const { glyph } = PF.economy.currency(sim.world);
+    this.purseChip.style.display = money || carried ? "" : "none";
+    this.purseChip.textContent = carried
+      ? `${glyph} ${PF.economy.money(sim.world, money)} · ${carried} carried`
+      : `${glyph} ${PF.economy.money(sim.world, money)}`;
   }
 
   /** Cheap per-frame sync — writes DOM only on change. */
@@ -218,10 +321,35 @@ PF.Hud = class {
     if (!sim) return;
     const mode = sim.mode;
     const spatialAvail = PF.spatial.available;
-    if (mode !== this._mode || spatialAvail !== this._spatialAvail) {
+    // The gate's STATE, not merely whether it holds: "generating" and "failed" are
+    // two different screens, and folding them into a boolean would leave the retry
+    // button hidden behind a change the memo below never saw.
+    const gate = PF.save.gateHolds(this.core) ? PF.save.gate.state : null;
+    // WHY it failed is part of the screen, not only THAT it failed. The ladder
+    // refuses to seal a default world on any failure now (18-brief `generate`),
+    // deterministic ones included — which is right, and which also means a
+    // player can be looking at a retry button that will keep giving the same
+    // answer. It has to be in the memo key or the sentence never changes.
+    const gateWhy = gate === "failed" ? (PF.save.gate.failure ?? null) : null;
+    if (
+      mode !== this._mode ||
+      spatialAvail !== this._spatialAvail ||
+      gate !== this._gate ||
+      gateWhy !== this._gateWhy
+    ) {
       this._mode = mode;
       this._spatialAvail = spatialAvail;
-      const inWorld = mode === "walk";
+      this._gate = gate;
+      this._gateWhy = gateWhy;
+      const inWorld = mode === "walk" && !gate;
+      this.gateEl.style.display = gate ? "flex" : "none";
+      this.gateRetry.style.display = gate === "failed" ? "" : "none";
+      this.gateTitle.textContent = gate === "failed" ? "The world didn't finish being written." : "Writing your world…";
+      this.gateBody.textContent =
+        gate === "failed"
+          ? `${PF.save.gateReason(gateWhy)} Nothing was lost and nothing was decided for you — this chat is exactly as you left it. Try again whenever you like.`
+          : "One generation call is shaping the settlement, its people and the places in it. This can take a minute.";
+      this.topbar.style.display = gate ? "none" : "";
       // Replay: the host owns the whole screen. Combat: keep a minimal HUD —
       // the mode is inferred from the narrative gameActiveState, which can flip
       // without any combat UI mounting, so the player must NEVER be left with
@@ -229,19 +357,28 @@ PF.Hud = class {
       this.root.style.display = mode === "replay" ? "none" : "";
       this.dpad.style.display = inWorld ? "" : "none";
       this.talkBtn.style.display = inWorld ? "" : "none";
+      // The berth button is proximity-driven as well as mode-driven, so leaving
+      // walk mode hides it here and the walk block below decides when it is back.
+      if (!inWorld) {
+        this.berthBtn.style.display = "none";
+        this._berth = null;
+      }
       this.travelBtn.style.display = inWorld && spatialAvail ? "" : "none";
       this.waitBtn.style.display = inWorld ? "" : "none";
       this.keyboardBtn.style.display = inWorld ? "" : "none";
       // In combat, Resume exists only for the NARRATIVE fallback signal (which
       // can flip without any combat UI). With the real Capability API 1.11
       // signal the combat UI owns the screen — no package controls at all.
-      const combatResumeApplies = mode === "combat" && !this.core._combatSignalIsReal;
-      this.resumeBtn.style.display = mode === "dialogue" || combatResumeApplies ? "" : "none";
+      const combatResumeApplies = mode === "combat" && !this.core._combatSignalIsReal && !gate;
+      this.resumeBtn.style.display = (mode === "dialogue" && !gate) || combatResumeApplies ? "" : "none";
       this.resumeBtn.textContent = combatResumeApplies ? "▶ Resume exploring" : "▶ Resume walking";
       this.travelMenu.style.display = "none";
       this.waitMenu.style.display = "none";
-      if (mode === "dialogue") this.toast("Type in the message box below — Resume to keep walking");
+      if (mode === "dialogue" && !gate) this.toast("Type in the message box below — Resume to keep walking");
     }
+    // Nothing below the gate means anything: there is no beat to caption, nobody
+    // to be standing next to, and the clock is not running.
+    if (gate) return;
     // Cutscene caption — writes DOM only when the beat starts or ends.
     const caption = sim.cutscene ? sim.cutscene.text : "";
     if (caption !== this._caption) {
@@ -252,10 +389,43 @@ PF.Hud = class {
     }
     if (this._mode === "walk") {
       const canTalk = !!sim.nearNpc;
-      if (canTalk !== this._canTalk) {
-        this._canTalk = canTalk;
+      // The Talk button is ALSO where a skip is confirmed (90-element `interact`):
+      // while the latest GM turn still holds narration the player has not been
+      // shown, the first press asks instead of sending. It has to be part of the
+      // memo key or the question would be asked and never drawn — the old key was
+      // the bare `canTalk` boolean, which does not move when only the label does.
+      const asking = canTalk && this.core.talkConfirmArmed?.() === true;
+      const talkKey = canTalk ? `${asking ? "skip" : "talk"}:${sim.nearNpc.name}` : "";
+      if (talkKey !== this._talkKey) {
+        this._talkKey = talkKey;
         this.talkBtn.style.opacity = canTalk ? "1" : "0.45";
-        this.talkBtn.textContent = canTalk ? `Talk to ${sim.nearNpc.name} (E)` : "Talk (E)";
+        this.talkBtn.textContent = asking
+          ? "Skip story & talk?"
+          : canTalk
+            ? `Talk to ${sim.nearNpc.name} (E)`
+            : "Talk (E)";
+      }
+      // The berth offer, on the same cadence as Talk and memoised the same way:
+      // both answer to who is within reach, and both would otherwise write DOM
+      // sixty times a second. `already-yours` and `cannot-afford` still SHOW the
+      // button — dimmed and saying why — because a control that disappears when
+      // the purse runs short teaches the player nothing about the price.
+      const offer = PF.economy.berthOffer(this.core);
+      // A price is only ever quoted when a real keeper with a real room is within
+      // reach — every other refusal comes back with a null price — so this one
+      // test covers "is there anything to show at all".
+      const shown = offer.price !== null;
+      const berthKey = shown ? `${offer.reason ?? "ok"}:${offer.price}` : "";
+      if (berthKey !== this._berth) {
+        this._berth = berthKey;
+        this.berthBtn.style.display = shown ? "" : "none";
+        if (shown) {
+          this.berthBtn.style.opacity = offer.available ? "1" : "0.45";
+          this.berthBtn.textContent =
+            offer.reason === "already-yours"
+              ? "Your berth"
+              : `Rent a berth (${PF.economy.money(sim.world, offer.price)})`;
+        }
       }
       const clock = sim.clockLabel();
       if (clock !== this._clock) {

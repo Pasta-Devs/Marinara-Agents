@@ -316,20 +316,40 @@ PF.brief = (() => {
 
     // §4.3: a host with no gathering place synthesizes AT MOST ONE interior
     // named from the host — the player must be able to walk into the inn.
+    //
+    // Run TWICE, against two different casts, because §4.3 is a post-condition on
+    // the SEALED cast and this call can only see the model's draft. The raw cast
+    // is not the sealed one: pass 6's quality floor tops up from STOCK, and every
+    // stock roster leads with a `host`. So the brief that needs the synthesis most
+    // — one whose cast failed validation outright — was the one brief that never
+    // got it, and the compiler builds the common room from the gathering PLACE (a
+    // `host` in the cast alone binds to nothing). Measured on a live playtest: a
+    // colony compiled fifteen zones of "X's home" plus a farm, with a keeper who
+    // had nowhere to keep and a berth nobody could rent. This call stays where it
+    // is anyway, one pass ahead of the cast, so a model that named a host CAN
+    // still resolve a `home` at the interior it just earned.
+    const gatheringForHost = (people) => {
+      if (brief.places.some((p) => p.kind === "gathering")) return;
+      if (brief.places.length >= placeRoom) return;
+      const host = people.find((item) => foldEnum(item?.kind ?? item?.role, CAST_KINDS, null) === "host");
+      // The theme's own word for its common room. `${hostName}'s` alone reads as
+      // one more house on the row — it stood in a street of "Rook's home" and
+      // "Fen's home" and the player could not tell which door was the inn. Both
+      // default briefs already carry the idiom (the Amber Hearth INN, the Meridian
+      // CANTINA); the host's name is budgeted so `${name}'s ${noun}` still fits the
+      // 24 characters the schema asks a model for — "'s " is three of them.
+      const noun = GATHERING_NOUNS[theme] || GATHERING_NOUNS["cozy-village"];
+      const hostName = host ? capText(host.name, Math.max(6, 24 - 3 - noun.length)) : "";
+      if (!hostName) return;
+      brief.places.push({
+        kind: "gathering",
+        name: dedupeName(`${hostName}'s ${noun}`, "places-host"),
+        flavor: "",
+      });
+      repairs.push(`places: synthesized a gathering interior for host ${hostName}`);
+    };
     const rawCast = asArray(src.cast);
-    const hasGathering = brief.places.some((p) => p.kind === "gathering");
-    if (!hasGathering && brief.places.length < placeRoom) {
-      const host = rawCast.find((item) => foldEnum(item?.kind ?? item?.role, CAST_KINDS, null) === "host");
-      const hostName = host ? capText(host.name, 20) : "";
-      if (hostName) {
-        brief.places.push({
-          kind: "gathering",
-          name: dedupeName(`${hostName}'s`, "places-host"),
-          flavor: "",
-        });
-        repairs.push(`places: synthesized a gathering interior for host ${hostName}`);
-      }
-    }
+    gatheringForHost(rawCast);
 
     // Pass 4 — cast. Over the cap, the leader survives (§4.4): hoist the first
     // leader to the front before truncating by original order.
@@ -445,6 +465,16 @@ PF.brief = (() => {
       });
       repairs.push("places: floor top-up wilds zone");
     }
+    // §4.3 again, against the cast that actually SEALED — see gatheringForHost.
+    // Last of the floors on purpose: the wilds top-up answers "this settlement has
+    // no named place at all", which is a different lack, and running ahead of it
+    // would silently spend that floor and leave a colony with an inn and no
+    // outside. So a TOP-UPPED host gets both floors. (The pass-3 call is the one
+    // path that still spends the wilds floor: a model host with zero surviving
+    // places seals [gathering] and no wilds — deliberate, because that model DID
+    // name a place through its host, and the floor answers namelessness, not a
+    // missing outdoors.)
+    gatheringForHost(brief.cast);
 
     // Identity (§2): opaque ordinal ids assigned once, stored in the sealed brief.
     const ids = { zones: {}, cast: {}, features: {} };
@@ -476,7 +506,11 @@ PF.brief = (() => {
     return brief;
   }
 
-  // ── defaults(): the themed fallback brief (skip / failure — never a gate) ───
+  // ── defaults(): the themed brief a world compiles to when nobody wrote one ──
+  // NOT a failure path any more (see generate()'s design revision): no failure
+  // seals anything. What it remains is the schema's own worked example per theme —
+  // the fixture the compiler's invariants are driven through, and the answer for
+  // any future caller that needs a brief without a generation call behind it.
   function defaults(theme, seed) {
     return validate(DEFAULT_BRIEFS[theme] || DEFAULT_BRIEFS["cozy-village"], { theme, seed });
   }
@@ -557,14 +591,33 @@ PF.brief = (() => {
    *  chat_busy; one plain re-roll on truncation (the route's maxTokens is
    *  min()-only — "never a raise" — so a numeric override could only shrink
    *  the budget); salvage of the LONGEST truncated raw seen across attempts.
-   *  Returns a SEALED brief only for outcomes worth sealing: success, salvage,
-   *  or a deterministic/paid failure (400 contract, 422 provider/parse) →
-   *  themed defaults. Transient outcomes — 404 route-absent, 409, 429, 5xx,
-   *  network error, budget timeout — return NULL so the caller leaves the
-   *  chat unsealed and the next boot simply tries again. */
+   *
+   *  Returns a SEALED brief for the two outcomes that produce a REAL one —
+   *  success and salvage — and NULL for every failure, so the caller leaves the
+   *  chat unsealed and the next visit simply tries again.
+   *
+   *  DESIGN REVISION (this release, maintainer ruling #7 / plan §Q3b). The 0.4.0
+   *  ladder sealed THEMED DEFAULTS on a deterministic/paid failure — 400 contract,
+   *  422 provider/parse — on the reasoning that a paid call per visit is worse
+   *  than the default world. That decision predates the loading gate and does not
+   *  survive it: back then a default world was what the player was already walking
+   *  in, so sealing it changed nothing they could see. Now the gate holds play
+   *  precisely so that nobody invests in a world that is going to be discarded,
+   *  and the README states the contract plainly — "a generation failure is a retry
+   *  screen; nothing is stored". Sealing defaults on a 400 makes that sentence
+   *  false in the one case a player cannot undo: the key is written, the chat is
+   *  permanently a themed default, and the three paragraphs of setting they wrote
+   *  are gone with no way back. The paid-call worry is also nearly hypothetical
+   *  now — capPreferences clamps to 7,800 against the route's 8,000 cap, so the
+   *  reachable 400 is a contract bug rather than a long setting.
+   *
+   *  `onFailure(kind)` reports WHY, once, so the retry screen can say something
+   *  truer than "something went wrong" — a deterministic refusal and a busy engine
+   *  want different sentences from the player. Kinds: "unavailable" (404/409/429/
+   *  5xx), "refused" (400/422 with nothing salvageable), "network", "timeout". */
   async function generate(
     chatId,
-    { theme, seed, preferences, onProgress, budgetMs = 90_000, busyWaitMs = Math.min(15_000, budgetMs / 6) },
+    { theme, seed, preferences, onProgress, onFailure, budgetMs = 90_000, busyWaitMs = Math.min(15_000, budgetMs / 6) },
   ) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), budgetMs);
@@ -605,24 +658,34 @@ PF.brief = (() => {
       }
       if (response.status === 404 || response.status === 409 || response.status === 429 || response.status >= 500) {
         console.warn("[pixelforge] world generation unavailable (transient); retrying next visit", response.status);
+        onFailure?.("unavailable");
         return null;
       }
+      // 400 (contract) and 422 (provider/parse, nothing salvageable). Deterministic
+      // — trying again probably gets the same answer — but STILL a retry screen and
+      // still nothing stored, because the alternative is deciding a themed default
+      // world on the player's behalf and writing it down where they cannot undo it.
       console.warn(
-        "[pixelforge] world generation failed; sealing the themed default",
+        "[pixelforge] world generation was refused; the chat stays unsealed",
         response.status,
         response.body?.error ?? null,
       );
+      onFailure?.("refused");
+      return null;
     } catch (err) {
       // Network trouble and the budget timeout are both transient — leave the
       // chat unsealed rather than freezing the default world in forever.
-      if (!controller.signal.aborted)
+      if (!controller.signal.aborted) {
         console.warn("[pixelforge] world generation failed (network); retrying next visit", err);
-      else console.warn("[pixelforge] world generation timed out; retrying next visit");
+        onFailure?.("network");
+      } else {
+        console.warn("[pixelforge] world generation timed out; retrying next visit");
+        onFailure?.("timeout");
+      }
       return null;
     } finally {
       clearTimeout(timer);
     }
-    return defaults(theme, seed);
   }
 
   // ── guidance(): the exact text that ships in the one call ───────────────────
@@ -738,6 +801,12 @@ PF.brief = (() => {
     ruin: "The Ruin",
     lookout: "The Lookout",
   };
+  // What each theme calls its common room, for the §4.3 host synthesis. Read off
+  // the default briefs, which name theirs in full: "The Amber Hearth Inn" and
+  // "The Meridian Cantina". PLACE_LABELS is the generic fallback for a place the
+  // model named nothing at all; this is the possessive a person's own house of
+  // hospitality takes.
+  const GATHERING_NOUNS = { "cozy-village": "Inn", "sci-fi-colony": "Cantina" };
   const PLACE_LABELS = {
     gathering: "The Hearth",
     workshop: "The Works",

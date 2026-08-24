@@ -9,7 +9,12 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // Mirror the real bundle: concatenate the modules into one scope (the prelude
-// declares `const PF` itself) and return PF. The DOM helpers stay unused.
+// declares `const PF` itself) and return PF. 70-hud and 80-setup ride along
+// because both hold a fact about the SURFACE that nothing else can answer for —
+// where a notice lands, and what the wizard writes into the experience config —
+// and neither touches the DOM until it is called (see the FakeNode shim near the
+// end of this file). 40-render and 90-element stay out: a canvas context and a
+// custom-element registration want a page, not a shim.
 const source = [
   "00-prelude.js",
   "10-art.js",
@@ -20,7 +25,11 @@ const source = [
   "30-sim.js",
   "50-spatial.js",
   "55-maps-export.js",
+  "58-player.js",
+  "59-economy.js",
   "60-save.js",
+  "70-hud.js",
+  "80-setup.js",
 ]
   .map((file) => readFileSync(join(here, "src", file), "utf8"))
   .join("\n");
@@ -29,6 +38,12 @@ const loadedPF = new Function(`"use strict";\n${source}\nreturn PF;`)();
 // spatial case would hit undefined fetch and warn. 404 = "route absent" is the
 // quiet-skip mode, exactly right as a default. Export cases override it.
 loadedPF.api.postSpatialLocations = async () => ({ ok: false, status: 404, body: null });
+// Same reasoning for the metadata PATCH: from slice 3 on, restoring a save can
+// write the quarantine key, and every case that does not care about that would
+// otherwise fire a real fetch at a relative URL and warn. The cases that DO care
+// override it (see withSavePath, and the quarantine cases at the end).
+const realPatchMetadata = loadedPF.api.patchMetadata;
+loadedPF.api.patchMetadata = async () => {};
 const { brief, world } = loadedPF;
 const ctx = { theme: "cozy-village", seed: 424242 };
 
@@ -1355,9 +1370,21 @@ const wayrestCast = [
   loadedPF.spatial.reset();
 }
 
-// 22-25. The §5 failure ladder (amended): transients leave the chat UNSEALED,
-// truncation re-rolls plainly and salvages the longest raw across attempts,
-// and only deterministic/paid failures seal the themed default.
+// 22-25. The §5 failure ladder (REVISED THIS RELEASE): NO failure seals a world.
+// Truncation still re-rolls plainly and salvages the longest raw across attempts,
+// because that path yields a REAL brief — but every outcome that does not is a
+// retry screen with nothing stored, deterministic 400/422 included.
+//
+// THE REVISION, and why the pin below moved. The 0.4.0 ladder sealed themed
+// defaults on a deterministic/paid failure, reasoning that a paid call per visit
+// is worse than the default world. That predates the loading gate: back then the
+// player was already walking in a default world, so sealing it changed nothing
+// they could see. Now the gate holds play precisely so nobody invests in a world
+// that will be discarded, and the README states the contract — "a generation
+// failure is a retry screen; nothing is stored". Sealing on a 400 made that false
+// in the one case a player cannot undo. capPreferences clamping to 7,800 against
+// the route's 8,000 cap also makes a reachable 400 a contract bug rather than a
+// long setting, so the paid-call worry is close to hypothetical now.
 {
   loadedPF.api = loadedPF.api ?? {};
   const prevPost = loadedPF.api.postExperienceGeneration;
@@ -1394,12 +1421,33 @@ const wayrestCast = [
     "salvage recorded in _repairs",
   );
 
-  // 24. Deterministic provider failure → sealed themed default (a paid call
-  // per visit would be worse than the default world).
-  stub([{ status: 422, body: { code: "provider_error", truncated: false } }]);
-  const sealedDefault = await brief.generate("c", { theme: "sci-fi-colony", seed: 2, preferences: "" });
-  assert.ok(sealedDefault && Array.isArray(sealedDefault.cast), "provider_error seals a full brief");
-  assert.equal(sealedDefault.theme, "sci-fi-colony", "the sealed default keeps the theme");
+  // 24. Deterministic failure → NULL, unsealed, a retry screen. REVISED: this
+  // pinned "provider_error seals a full brief" through 0.4.0 and 0.10, and the
+  // revision is deliberate (see the header above). A deterministic verdict is
+  // still a verdict the player is TOLD about, so the kind is reported once.
+  for (const [label, response, kind] of [
+    ["a 422 provider error", { status: 422, body: { code: "provider_error", truncated: false } }, "refused"],
+    ["a 400 contract failure", { status: 400, body: { code: "user_content_too_long" } }, "refused"],
+    ["a 429", { status: 429, body: null }, "unavailable"],
+    ["a 503", { status: 503, body: null }, "unavailable"],
+  ]) {
+    stub([response]);
+    const kinds = [];
+    const outcome = await brief.generate("c", {
+      theme: "sci-fi-colony",
+      seed: 2,
+      preferences: "",
+      onFailure: (k) => kinds.push(k),
+    });
+    assert.equal(outcome, null, `${label} seals NOTHING — no default world decided on the player's behalf`);
+    assert.deepEqual(kinds, [kind], `${label} reports its kind exactly once, so the retry screen can say why`);
+  }
+  // Truncation salvage is untouched by the revision, and this is the line that
+  // says why: that path produces a REAL brief out of what the model actually
+  // wrote, which is nothing like sealing a default nobody asked for.
+  stub([{ status: 422, body: { truncated: true, raw: '{"scale":"village","name":"Halfway","cast":[]}' } }]);
+  const stillSalvages = await brief.generate("c", { theme: "cozy-village", seed: 2, preferences: "" });
+  assert.equal(stillSalvages?.name, "Halfway", "a truncated response is still salvaged and still seals");
 
   // 25. 409 chat_busy waits out Retry-After once inside the budget, then
   // succeeds; oversized preferences clamp under the route's 8,000-char cap.
@@ -6653,17 +6701,25 @@ const cellarBrief = (prosperity) => ({
   }
 }
 
-// ── A WORKPLACE AND A WORK POST LIVE IN DIFFERENT ID SPACES ────────────────
+// ── A WORKPLACE AND A STATION ARE DIFFERENT FACTS ──────────────────────────
 // `workplace` resolves against the BRIEF's declared zones, so it always names a
-// `z*`. A work post (the strip behind a shop counter) belongs to a building the
-// COMPILER minted, which is `s*` or `h*` and has no brief name to be named by.
-// The two can never meet, which is why the cast loop has no counter branch —
-// review flagged the lookup that used to sit there as unreachable, and it was.
+// `z*`. WORK_POSTS — the strip behind a shop counter — is keyed by `special` on a
+// building the COMPILER minted, which is `s*` or `h*` and has no brief name to be
+// named by. Those two can never meet, and that half of the claim is unchanged.
 //
-// Pinned because the removal RELIES on it: if a future change ever gives a
-// brief-declared place a compiler work post, or lets a workplace name a minted
-// building, this fails and whoever did it learns that the box a named worker
-// stands in needs revisiting.
+// What changed in 0.11 is that a brief-declared room CAN carry a station now: the
+// furnisher of a gathering records its serving row and a sanctuary's records its
+// chancel, and the places pass hands it to that building's OWNER so an innkeeper
+// homed at the settlement root stops standing on their own doorstep. So the cast
+// loop's missing counter branch no longer rests on "a lookup here could never
+// match" — it rests on the station belonging to whoever RUNS the room. A
+// workplace is the one binding that puts SEVERAL people in one building, and a
+// station is a single row: they would stack on it, or be pushed straight back off
+// it by the occupancy scan.
+//
+// Pinned because the removal RELIES on that: if a future change ever sends a
+// named worker to a station, this fails and whoever did it learns that the box a
+// named worker stands in needs revisiting.
 {
   const sealed = brief.validate(
     {
@@ -6679,6 +6735,9 @@ const cellarBrief = (prosperity) => ({
         { name: "B", role: "innkeep", kind: "host", tint: "amber", home: "The Kettle", household: 2 },
         { name: "C", role: "hand", kind: "folk", tint: "green", home: "Probe", workplace: "The Yards", household: 3 },
         { name: "D", role: "trader", kind: "merchant", tint: "violet", home: "Probe", household: 4 },
+        // Named INTO the room that has a station, which is what makes the claim
+        // below something other than vacuous.
+        { name: "E", role: "potboy", kind: "folk", tint: "teal", home: "Probe", workplace: "The Kettle", household: 5 },
       ],
     },
     ctx,
@@ -6689,22 +6748,31 @@ const cellarBrief = (prosperity) => ({
   for (const id of briefZoneIds) {
     assert.ok(/^z\d+$/.test(id), `a brief-declared zone id is always z*, got ${id}`);
   }
-  // No compiled zone that a workplace could name carries a work post.
-  for (const id of briefZoneIds) {
-    const zone = w.zones[id];
-    if (!zone) continue;
-    assert.ok(!zone.workPost, `${id} is nameable as a workplace, so it must not carry a work post`);
-  }
-  // And the named worker really is inside the zone they were assigned.
   const at = (name) => {
     for (const id in w.zones) if (w.zones[id].npcs.some((n) => n.name === name)) return id;
     return null;
   };
+  const npcNamed = (name) =>
+    Object.values(w.zones)
+      .flatMap((zone) => zone.npcs)
+      .find((npc) => npc.name === name);
+  // THE ROOM WITH A STATION IN IT, and a worker the brief named into it.
+  const kettleId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Kettle")[0];
+  const kettle = w.zones[kettleId];
+  assert.ok(kettle?.post, "the gathering's furnisher recorded a station of its own");
+  const workerBox = npcNamed("E")._sched.post.wander;
+  assert.notDeepEqual(workerBox, kettle.post, "a named worker is not sent to the keeper's station");
+  assert.ok(
+    workerBox.x0 < kettle.post.x0 && workerBox.y1 > kettle.post.y1,
+    `a named worker gets the room's middle, strictly bigger than the station (${JSON.stringify(workerBox)})`,
+  );
+  // And the named workers really are inside the zones they were assigned.
   const yardsId = Object.entries(sealed._ids.zones).find(([, n]) => n === "The Yards")[0];
   const sim = new loadedPF.Sim(w);
   sim.clockMin = 12 * 60;
   sim.resolveSchedules();
   assert.equal(at("C"), yardsId, "a named worker is in the workshop at midday");
+  assert.equal(at("E"), kettleId, "…and the one named into the inn is in the inn");
 }
 
 // ── OPEN SPANS ARE RECORDED, NOT MERELY UNPAINTED (0.10) ───────────────────
@@ -7596,6 +7664,5691 @@ const cellarBrief = (prosperity) => ({
   // Non-vacuous: the instrument was actually present most of the time, so the
   // skip-if-dropped branch is not quietly swallowing the whole case.
   assert.ok(ponds >= 24, `and the pond was built in most of them (${ponds} of ${checked})`);
+}
+
+// ── A FORWARD-VERSION SAVE IS READ, NOT HALF-APPLIED (S5 slice 1) ──────────
+// `saved.v === 1` was a STRICT equality gate, and seed/theme resolve ABOVE it.
+// A save written by a newer build therefore produced the right world with a
+// reset player — start-zone spawn, 08:00, day 1, no intro flags, no World Maps
+// bindings — and the very next flush overwrote that newer row with a `v:1`
+// blob carrying none of the newer build's fields. Round-tripping one chat
+// through an older client was silently, permanently data-destructive.
+//
+// Two halves and both are load-bearing: the gate becomes a FLOOR (`v >= 1`,
+// every field inside keeping the type check it already had), and the top-level
+// keys this build does not recognize are parked on the sim and re-emitted by
+// snapshot() so no flush of ours can strip them.
+//
+// The blob is built with JSON.parse rather than a literal, because that is what
+// a real row is — and because it is the only way to get a `"__proto__"` key,
+// which JSON.parse hands over as an own property and a naive copy loop would
+// assign straight onto Object.prototype.
+{
+  const sealed = brief.defaults("cozy-village", 1107);
+  const w = world.build(1107, "cozy-village", sealed);
+  const meta = { pixelforgeBrief: sealed };
+  // A resolvable zone that is NOT the start zone: restoring it proves the gate
+  // ran, rather than proving the Sim constructor's own default.
+  const otherZone = Object.keys(w.zones).find((id) => id !== w.startZone);
+  assert.ok(otherZone, "the compiled world has a second zone to restore into");
+  const z = w.zones[otherZone];
+  const savedX = Math.round((z.spawn.x + 0.5) * loadedPF.TILE);
+  const savedY = Math.round((z.spawn.y + 0.5) * loadedPF.TILE);
+  const body = JSON.stringify({
+    v: 7, // a build seven envelope versions ahead of this one
+    chatId: "chat-forward",
+    seed: 1107,
+    theme: "cozy-village",
+    zone: otherZone,
+    x: savedX,
+    y: savedY,
+    facing: 3,
+    clockMin: 21 * 60 + 7,
+    day: 12,
+    bindings: { "pf.1.kept": w.startZone, "pf.2.dead": "zNoSuchZone" },
+    intro: { world: true, zones: { [w.startZone]: true }, npcs: { n1: true } },
+    // Three unknown keys, deliberately out of alphabetical order. `mmMiddle`
+    // stood in as `player` until slice 3 made `player` one of OURS — the carry
+    // is about keys this build does not know, and a key it now owns cannot test
+    // that. The object shape is kept: a carried key is retained by value, and a
+    // scalar would not prove it.
+    zzTop: "kept verbatim",
+    mmMiddle: { v: 1, pouch: { money: 7 } },
+    aaFirst: [1, 2, 3],
+    // …and the real `player`, at a version SEVEN builds ahead. It is a known
+    // key, so it never reaches the carry; the block-level version gate refuses
+    // it and quarantines it instead (asserted in the S5 slice-3 cases).
+    player: { v: 7, pouch: { money: 99 } },
+  });
+  const row = JSON.parse(`{"__proto__":{"polluted":true},${body.slice(1)}`);
+  assert.equal(row.zzTop, "kept verbatim", "the fixture really carries its unknown keys");
+
+  const sim = loadedPF.save.simFromSaved(row, meta, "chat-forward");
+  assert.equal(sim.zoneId, otherZone, "a v:7 save still restores its zone");
+  assert.equal(
+    sim.x,
+    loadedPF.clamp(savedX, loadedPF.TILE, (z.w - 1) * loadedPF.TILE),
+    "and its x, through the same clamp v:1 gets",
+  );
+  assert.equal(sim.y, loadedPF.clamp(savedY, loadedPF.TILE, (z.h - 1) * loadedPF.TILE), "and its y");
+  assert.equal(sim.facing, 3, "and its facing");
+  assert.equal(sim.clockMin, 21 * 60 + 7, "and its clock — not 08:00");
+  assert.equal(sim.day, 12, "and its day — not day 1");
+  assert.equal(sim.intro.world, true, "and the one-shot world intro stays burned");
+  assert.equal(sim.intro.zones[w.startZone], true, "and the zone flags survive");
+  assert.equal(sim.world.bindings["pf.1.kept"], w.startZone, "and a live World Maps binding is re-hung");
+  assert.equal(sim.world.bindings["pf.2.dead"], undefined, "while one naming a dead zone is still dropped");
+
+  // The unknown keys landed on the sim, and only the unknown ones.
+  assert.ok(sim._envelopeExtra, "the restore parked the unrecognized keys on the sim");
+  assert.deepEqual(
+    Object.keys(sim._envelopeExtra).sort(),
+    ["aaFirst", "mmMiddle", "zzTop"],
+    "exactly the unrecognized top-level keys are retained",
+  );
+  assert.equal(sim._envelopeExtra.mmMiddle.pouch.money, 7, "retained by value, not by name");
+  assert.equal(sim._envelopeExtra.player, undefined, "and `player` is not among them — this build owns that key now");
+  // The real shape of the "__proto__" hazard. A naive `extra[key] = saved[key]`
+  // does NOT reach Object.prototype — it hits the __proto__ setter and repoints
+  // the CARRY's prototype at the attacker's object, which then rides back out
+  // through snapshot()'s own key loop. So the honest instrument is the carry's
+  // prototype, not a probe of a fresh {} (that one cannot fail either way).
+  assert.equal(
+    Object.getPrototypeOf(sim._envelopeExtra),
+    Object.prototype,
+    "the carry is still an ordinary object — a __proto__ key never repointed it",
+  );
+
+  // snapshot() re-emits them FIRST, in a fixed order, with our own keys written
+  // over the top — and it does it off a synthetic two-key core. Sorted is the
+  // implementation; DETERMINISM is the property under test, because the dedupe,
+  // the adopt compare and the rewind compare are all string equality.
+  const snap = loadedPF.save.snapshot({ sim, chatId: "chat-forward" });
+  assert.deepEqual(
+    Object.keys(snap).slice(0, 3),
+    ["aaFirst", "mmMiddle", "zzTop"],
+    "the carried keys are emitted first and sorted, whatever order they arrived in",
+  );
+  assert.equal(snap.v, 1, "this build still stamps its own envelope version");
+  assert.equal(snap.zone, otherZone, "and the known keys are ours, not the row's");
+  assert.deepEqual(snap.mmMiddle, { v: 1, pouch: { money: 7 } }, "the newer build's block survives the flush");
+  assert.equal(snap.player.v, 1, "while `player` is written at THIS build's block version");
+  assert.equal(snap.player.pouch.money, 0, "booting the default block — the too-new one was quarantined, not read");
+
+  // The whole point: it round-trips. Feed the flushed blob back in and nothing
+  // has been shaved off.
+  const again = loadedPF.save.simFromSaved(JSON.parse(JSON.stringify(snap)), meta, "chat-forward");
+  assert.deepEqual(again._envelopeExtra, sim._envelopeExtra, "a second pass through the save path keeps them all");
+
+  // A genuinely unreadable row still restores nothing but the world: the gate
+  // is a floor, not an "anything goes".
+  const junk = loadedPF.save.simFromSaved({ v: "1", seed: 1107, theme: "cozy-village", zone: otherZone }, meta, "c");
+  assert.equal(junk.zoneId, w.startZone, "a non-numeric v is still refused");
+
+  // The too-new `player` block above went somewhere: the quarantine bag, whose
+  // write is a real PATCH. Drained here rather than left leaking into the next
+  // case's bag (it is a module singleton, per-chat by reset()).
+  loadedPF.save.reset();
+}
+
+// ── THE WIRE FORMAT IS PINNED TO A LITERAL (S5 slice 1) ────────────────────
+// Every dedupe in the save path is string equality over JSON.stringify: the
+// flush's _lastSerialized/_metaSerialized, adopt's comparison against the
+// server row, and checkRewind's. So the exact bytes of a snapshot are an
+// interface, and "the same function called twice agrees with itself" is not a
+// test of it — it cannot fail, whatever the function does. This is the version
+// that can: a fresh LEGACY sim, no carry, against a string built once by hand.
+//
+// When this fails, read the diff before touching it. A key reordered, renamed
+// or dropped here means every save in the wild re-writes on first load and
+// every open chat gets one spurious "The world rewound with the story."
+//
+// UPDATED ONCE, DELIBERATELY, BY S5 SLICE 3. The literal gained the `player`
+// block and nothing else moved. This is the one sanctioned byte change, and the
+// reason it is sanctioned is that the alternative is worse: a pre-S5 save gains
+// the default block on its first write, which costs one re-write per open chat
+// — and a pre-S5 BUILD reading that row would delete the block anyway, which is
+// the documented §5 limitation, not a new one. Emitting it conditionally to
+// avoid the churn is the slice-1 failure (see the registry case below).
+//
+// Note the all-zero `world` stamps: a sim built by the CONSTRUCTOR has never
+// been rehydrated, and stamps are evaluated at rehydration only (plan §Q3a).
+// simFromSaved fills them on the first restore, which costs one further write
+// on a chat's second boot and never severs anything (an unstamped block has
+// nothing to disagree with).
+{
+  const frozen =
+    '{"v":1,"chatId":"chat-frozen","seed":9001,"theme":"cozy-village","zone":"village",' +
+    '"x":344,"y":280,"facing":0,"clockMin":480,"day":1,"bindings":{},' +
+    '"intro":{"world":false,"zones":{},"npcs":{}},' +
+    '"player":{"v":1,"game":1,"world":{"seed":0,"briefHash":0,"mintStamp":0},"flushedDay":0,' +
+    '"pouch":{"money":0,"items":[]},"skills":{"verbs":{},"equipped":{}},"quests_done_board":{},' +
+    '"rel":{},"quests":{"done_pack":{},"active":[]},"ledger":{"lines":[]},"found":{"zones":[]},' +
+    '"home":null}}';
+  const legacy = new loadedPF.Sim(world.build(9001, "cozy-village"));
+  assert.equal(
+    JSON.stringify(loadedPF.save.snapshot({ sim: legacy, chatId: "chat-frozen" })),
+    frozen,
+    "the legacy envelope serializes to exactly the bytes every deployed save compares against",
+  );
+}
+
+// ── ENVELOPE_KEYS AND snapshot() CANNOT DRIFT APART (S5 slice 1) ───────────
+// The registry is load-bearing in BOTH directions and neither one fails loudly:
+//   • emitted but not listed → simFromSaved reads our own key back as "foreign"
+//     and parks a stale copy of it on the carry;
+//   • listed but not emitted → the read skips it and the write omits it, so a
+//     newer build's field is deleted on the way through. That is the slice-1
+//     bug, rebuilt one branch at a time — which is exactly how it will come
+//     back when slice 3 adds `player` behind an `if`.
+// 60-save asserts this at load (20-world's placer idiom); this drives it
+// against a real sim as well, so the synthetic probe there cannot go stale.
+{
+  const keys = loadedPF.save._envelopeKeys;
+  assert.ok(keys && typeof keys.has === "function", "the registry is reachable from outside the module");
+  const sim = new loadedPF.Sim(world.build(515, "sci-fi-colony"));
+  sim._envelopeExtra = { fromTheFuture: 1 };
+  const snap = loadedPF.save.snapshot({ sim, chatId: "chat-registry" });
+  const emitted = Object.keys(snap).filter((key) => key !== "fromTheFuture");
+  for (const key of emitted) {
+    assert.ok(keys.has(key), `snapshot emits "${key}" — ENVELOPE_KEYS has to list it or the read treats it as foreign`);
+  }
+  for (const key of keys) {
+    assert.ok(
+      emitted.includes(key),
+      `ENVELOPE_KEYS lists "${key}" — snapshot has to emit it UNCONDITIONALLY or the write deletes a newer build's field`,
+    );
+  }
+  assert.equal(emitted.length, keys.size, "and the two lists are the same size, so neither check is vacuous");
+}
+
+// ── A HOSTILE ROW BOOTS INSTEAD OF BRICKING (S5 slice 1) ───────────────────
+// A save row is untrusted JSON and `world.zones` is a plain object, so the old
+// `!!world.zones[saved.zone]` truthiness test read straight through
+// Object.prototype. Two measured outcomes, both from one row:
+//   • zone "constructor" resolves to a FUNCTION, is accepted as a real zone,
+//     and the first read of z.w throws inside the mount;
+//   • a binding naming "constructor" writes spatialLocationId onto the global
+//     Object — a page-wide mutation from a chat's metadata.
+{
+  const before = "spatialLocationId" in Object;
+  assert.equal(before, false, "the fixture starts from an unpolluted global");
+  const w = world.build(1234, "cozy-village");
+  const row = JSON.parse(
+    `{"__proto__":{"polluted":true},"v":1,"seed":1234,"theme":"cozy-village","zone":"constructor",` +
+      `"x":99,"y":99,"bindings":{"pf.evil":"constructor","pf.also":"toString","pf.real":"${w.startZone}"}}`,
+  );
+  const sim = loadedPF.save.simFromSaved(row, {}, "chat-hostile");
+  assert.equal(sim.zoneId, w.startZone, "a prototype key is not a zone — the restore falls back to the start zone");
+  assert.equal(sim.x, (sim.zone().spawn.x + 0.5) * loadedPF.TILE, "and lands the player on the spawn tile");
+  assert.equal("spatialLocationId" in Object, false, "and nothing from a chat's metadata was written onto Object");
+  assert.equal(sim.world.bindings["pf.evil"], undefined, "the hostile binding is dropped");
+  assert.equal(sim.world.bindings["pf.also"], undefined, "and so is every other inherited name");
+  assert.equal(sim.world.bindings["pf.real"], w.startZone, "while an honest binding in the same object still hangs");
+  assert.equal(Object.getPrototypeOf(sim._envelopeExtra), Object.prototype, "the carry's prototype is untouched too");
+  // The mount reads the zone immediately; this is the crash, reduced.
+  assert.equal(typeof sim.zone().w, "number", "and the resolved zone is a real zone, not Object");
+}
+
+// ── SNAPSHOT() STILL SURVIVES A TWO-KEY CORE (S5 slice 1) ──────────────────
+// 80-setup seeds a brand-new chat by calling PF.save.snapshot({ sim, chatId })
+// — literally two keys, no host, no hud, no render — inside the wizard's launch
+// handler, whose catch renders as a generic "Launch failed". Anything the
+// snapshot grows that reaches past core.sim/core.chatId breaks chat creation
+// itself, and it breaks it in the one place the player cannot work around.
+// Pinned as its own case because the envelope carry made snapshot() read a
+// second thing off the sim, and every later slice adds more.
+{
+  const w = world.build(4242, "cozy-village");
+  const wizardSim = new loadedPF.Sim(w); // exactly what 80-setup builds
+  const seeded = loadedPF.save.snapshot({ sim: wizardSim, chatId: "chat-wizard" });
+  assert.equal(seeded.chatId, "chat-wizard", "the wizard's seed snapshot still builds");
+  assert.equal(seeded.v, 1, "with the envelope version");
+  assert.equal(seeded.zone, w.startZone, "and the start-zone world it just compiled");
+  assert.deepEqual(wizardSim._envelopeExtra, {}, "a fresh sim carries an EMPTY carry, never undefined");
+
+  // And a restored sim's carry rides the same two-key call — this is the path
+  // the seeding snapshot and the flush snapshot share.
+  const carried = loadedPF.save.simFromSaved({ v: 1, seed: 4242, theme: "cozy-village", mystery: 9 }, {}, "chat-2key");
+  const snap = loadedPF.save.snapshot({ sim: carried, chatId: "chat-2key" });
+  assert.equal(snap.mystery, 9, "an unknown key round-trips through the synthetic core too");
+}
+
+// ── THE CARRY SURVIVES THE WHOLESALE SIM REPLACEMENT (S5 slice 1) ──────────
+// maybeGenerateBrief throws the whole sim away when the generated brief lands
+// ("Fresh sim, fresh bindings", 60-save) and carries nothing over. That is fine
+// for play state on a throwaway world; it is NOT fine for a newer build's
+// envelope keys, which are not play state at all and would be erased by the
+// markDirty at the end of that very function. _rebuild gets the carry back for
+// free through simFromSaved; this seam has to transplant it by hand.
+{
+  const savedAssets = { status: loadedPF.assets.status, noPackage: loadedPF.assets._noPackage };
+  const realGenerate = brief.generate;
+  const realPatch = loadedPF.api.patchMetadata;
+  const patched = [];
+  loadedPF.api.patchMetadata = async (chatId, patch) => void patched.push({ chatId, patch });
+  brief.generate = async () => brief.defaults("cozy-village", 2211);
+  try {
+    const meta = { gameSetupConfig: { experienceConfig: { seed: 2211, theme: "cozy-village", generate: true } } };
+    const core = { chatId: "chat-generate", host: { chatMeta: meta }, sim: null };
+    core.sim = loadedPF.save.simFromSaved(
+      { v: 1, seed: 2211, theme: "cozy-village", ministry: { of: "silly walks" } },
+      meta,
+      core.chatId,
+    );
+    const before = core.sim;
+    assert.deepEqual(before._envelopeExtra, { ministry: { of: "silly walks" } }, "the interim sim holds the carry");
+
+    await loadedPF.save.maybeGenerateBrief(core);
+
+    assert.notEqual(core.sim, before, "the generated brief did replace the sim wholesale");
+    assert.ok(core.sim.world.brieved, "and the new world is the compiled one");
+    assert.deepEqual(
+      core.sim._envelopeExtra,
+      { ministry: { of: "silly walks" } },
+      "and the newer build's keys came across with it",
+    );
+    assert.equal(
+      loadedPF.save.snapshot(core).ministry.of,
+      "silly walks",
+      "so the markDirty at the end of generation cannot flush them away",
+    );
+  } finally {
+    brief.generate = realGenerate;
+    loadedPF.api.patchMetadata = realPatch;
+    loadedPF.save.reset(); // maybeGenerateBrief arms the 2.5s debounce
+    loadedPF.assets.status = savedAssets.status;
+    loadedPF.assets._noPackage = savedAssets.noPackage;
+  }
+}
+
+// ── THE SAVE PATH UNDER FAILURE (S5 slice 2) ───────────────────────────────
+// Shared fixture for the flush-machinery cases. PF.save is a module singleton
+// with a mode, two dedupe caches, a debounce timer and a retry counter on it,
+// so every case runs inside a scope that stubs the four things it touches —
+// the three PF.api writes/reads, and the timers — and puts all of them back.
+//
+// Timers are stubbed to RECORD rather than fire: the point of a backoff ladder
+// is the delay it asks for, and waiting 60 real seconds to read it back would
+// be a worse test as well as a slower one.
+const withSavePath = async (run) => {
+  const realApi = {
+    put: loadedPF.api.putExperienceState,
+    patch: loadedPF.api.patchMetadata,
+    get: loadedPF.api.getExperienceState,
+  };
+  const realTimers = {
+    setTimeout: globalThis.setTimeout,
+    clearTimeout: globalThis.clearTimeout,
+    setInterval: globalThis.setInterval,
+    clearInterval: globalThis.clearInterval,
+  };
+  const calls = [];
+  const armed = [];
+  const behavior = {
+    put: async () => {},
+    patch: async () => {},
+    get: async () => ({ available: false, status: 404 }),
+  };
+  loadedPF.api.putExperienceState = (chatId, state, keepalive, schemaVersion) => {
+    calls.push({ kind: "put", chatId, state, keepalive, schemaVersion });
+    return behavior.put(chatId, state, keepalive, schemaVersion);
+  };
+  loadedPF.api.patchMetadata = (chatId, patch, keepalive) => {
+    calls.push({ kind: "patch", chatId, patch, keepalive });
+    return behavior.patch(chatId, patch, keepalive);
+  };
+  loadedPF.api.getExperienceState = (chatId) => {
+    calls.push({ kind: "get", chatId });
+    return behavior.get(chatId);
+  };
+  let timerId = 1;
+  globalThis.setTimeout = (fn, ms) => {
+    armed.push({ ms, fn });
+    return timerId++;
+  };
+  globalThis.clearTimeout = () => {};
+  globalThis.setInterval = (fn, ms) => {
+    armed.push({ ms, fn, interval: true });
+    return timerId++;
+  };
+  globalThis.clearInterval = () => {};
+  // Let a parked async flush actually reach its await before we look at it.
+  const tick = async () => {
+    for (let i = 0; i < 12; i++) await Promise.resolve();
+  };
+  const makeCore = (chatId, seed) => {
+    const toasts = [];
+    return {
+      chatId,
+      sim: new loadedPF.Sim(world.build(seed, "cozy-village")),
+      host: { chatMeta: {} },
+      hud: { toast: (t) => toasts.push(t), refreshChips() {} },
+      toasts,
+    };
+  };
+  loadedPF.save.reset();
+  try {
+    await run({ calls, armed, behavior, tick, makeCore });
+  } finally {
+    loadedPF.save.reset();
+    loadedPF.api.putExperienceState = realApi.put;
+    loadedPF.api.patchMetadata = realApi.patch;
+    loadedPF.api.getExperienceState = realApi.get;
+    Object.assign(globalThis, realTimers);
+  }
+};
+
+// (d) ONE BAD FLUSH MUST NOT KILL THE CHAIN.
+// flush() chained with `.then(task)` and _flushNow took its snapshot OUTSIDE
+// the try. A snapshot or a stringify that threw therefore rejected the chain
+// link — and `.then(task)` with no rejection handler SKIPS every task queued
+// behind a rejected link and stays rejected forever. One throw silenced saving
+// for the rest of the session, from a code fault that has nothing to do with
+// the network. `.then(task, task)` plus the snapshot inside the try.
+await withSavePath(async ({ calls, makeCore }) => {
+  assert.equal(typeof loadedPF.save.captureFlush, "function", "the flush machinery exposes a synchronous capture");
+  loadedPF.save.mode = "metadata";
+  const core = makeCore("chat-throw", 606);
+  const realSnapshot = loadedPF.save.snapshot;
+  let armThrow = true;
+  loadedPF.save.snapshot = function snapshot(c) {
+    if (armThrow) {
+      armThrow = false;
+      throw new TypeError("Converting circular structure to JSON");
+    }
+    return realSnapshot.call(this, c);
+  };
+  try {
+    let rejected = false;
+    await loadedPF.save.flush(core, false).catch(() => {
+      rejected = true;
+    });
+    assert.equal(calls.length, 0, "the throwing flush wrote nothing");
+
+    await loadedPF.save.flush(core, false).catch(() => {});
+    assert.deepEqual(
+      calls.map((c) => c.kind),
+      ["patch"],
+      "the NEXT flush still runs — one bad flush costs one flush",
+    );
+    assert.equal(rejected, false, "and the throw was caught inside the flush, never handed to the chain");
+  } finally {
+    loadedPF.save.snapshot = realSnapshot;
+  }
+});
+
+// The classifier needs a status to classify with. PF.api threw a bare Error
+// whose only record of the status was the text inside its message — parsing a
+// status back out of a message string is a trap the first time a message
+// changes, so the status now rides the error object.
+{
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: false, status: 413 });
+  try {
+    await assert.rejects(
+      () => loadedPF.api.putExperienceState("chat-status", { v: 1 }, false),
+      (err) => err.status === 413 && err.message === "PUT experience-state → 413",
+      "a rejected PUT carries its status, and keeps the message it always had",
+    );
+    await assert.rejects(
+      // The REAL helper, not the harness-wide no-op stub: this case is about
+      // what PF.api itself does with a non-OK response.
+      () => realPatchMetadata("chat-status", { pixelforge: {} }, false),
+      (err) => err.status === 413 && err.message === "PATCH metadata → 413",
+      "and so does a rejected metadata PATCH",
+    );
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+
+// (e) A FAILED WRITE IS CLASSIFIED, NOT SHRUGGED AT.
+// The whole failure policy was one console.warn and the hope that some
+// UNRELATED future dirty event (a turn edge, a zone change, 30s of walking)
+// would retry. In a quiet moment there is no such event and the write is
+// simply lost. Three classes now: terminal, transient, and "this chat is no
+// longer an Experience".
+await withSavePath(async ({ calls, armed, behavior, makeCore }) => {
+  // Built here rather than through PF.httpError so this case tests the
+  // CLASSIFIER, not the helper the block above already pins.
+  const httpError = (status) => Object.assign(new Error(`PUT experience-state → ${status}`), { status });
+  // TERMINAL — a payload refused at this size is refused at this size again,
+  // so retrying is a loop. Stop, degrade, and say so exactly once.
+  loadedPF.save.mode = "routes";
+  const core = makeCore("chat-too-big", 707);
+  behavior.put = async () => {
+    throw httpError(422);
+  };
+  await loadedPF.save.flush(core, false);
+  assert.equal(loadedPF.save.degraded, true, "a 422 degrades the session");
+  assert.equal(armed.length, 0, "and re-arms nothing");
+  assert.equal(core.toasts.length, 1, "and tells the player");
+  await loadedPF.save.flush(core, false);
+  assert.equal(core.toasts.length, 1, "once — not once per flush");
+  assert.equal(loadedPF.save.degraded, true, "and it stays degraded while the condition holds");
+
+  // TRANSIENT — a network error has no status at all. Walk the ladder, then
+  // stop and fall back to today's trigger-driven behavior.
+  loadedPF.save.reset();
+  armed.length = 0;
+  loadedPF.save.mode = "routes";
+  let networkDown = true;
+  behavior.put = async () => {
+    if (networkDown) throw new TypeError("NetworkError when attempting to fetch resource");
+  };
+  // Driven the way the real ladder is driven: each rung FIRES and the flush it
+  // starts is the next attempt. Calling flush() nine times in a row instead
+  // would measure nine triggers against one clock, which is the thing the
+  // shared timer exists to prevent (see _timerIsBackoff).
+  await loadedPF.save.flush(core, false);
+  for (let i = 0; i < 8; i++) {
+    armed[armed.length - 1].fn();
+    await loadedPF.save._flushChain;
+  }
+  assert.deepEqual(
+    armed.map((a) => a.ms),
+    [2500, 5000, 10_000, 30_000, 60_000, 60_000, 60_000, 60_000],
+    "the backoff ladder walks and gives up after eight",
+  );
+
+  networkDown = false;
+  loadedPF.save._timer = 0; // the last rung never armed; nothing is pending
+  await loadedPF.save.flush(core, false);
+  assert.equal(loadedPF.save._flushFailures, 0, "a landed write clears the counter");
+  armed.length = 0;
+  core.sim.day += 1;
+  networkDown = true;
+  await loadedPF.save.flush(core, false);
+  assert.deepEqual(
+    armed.map((a) => a.ms),
+    [2500],
+    "so the next outage starts at the bottom rung, not where the last one stopped",
+  );
+
+  // 409 — the chat lost its Experience stamp AFTER adopt() committed to routes
+  // mode. putExperienceState has no 409 handling today, so every later PUT
+  // would fail this way forever with no fallback and no retry.
+  loadedPF.save.reset();
+  calls.length = 0;
+  loadedPF.save.mode = "routes";
+  loadedPF.save._serverSerialized = "{}";
+  behavior.put = async () => {
+    throw httpError(409);
+  };
+  core.sim.day += 1;
+  await loadedPF.save.flush(core, false);
+  assert.equal(loadedPF.save.mode, "metadata", "a 409 after adoption falls back instead of failing forever");
+  assert.equal(loadedPF.save._serverSerialized, null, "dropping a route authority it no longer has");
+  assert.equal(loadedPF.save._probePinned, true, "and pinning, so the re-probe can promote it back");
+});
+
+// (f) THE MUTATION IN THE DEBOUNCE WINDOW SURVIVES A CHAT SWITCH.
+// _switchChat fired `flush(this, false)` and then, on the very next lines,
+// reset() the dedupe caches and reassigned chatId and sim. The chained flush
+// snapshots when the chain gets round to it — so it wrote the NEW chat's world
+// under the NEW chat's id, and whatever the player did in the last 2.5s of the
+// old chat was never written anywhere. Capture synchronously, and fence every
+// post-await assignment on the generation the capture was taken at.
+await withSavePath(async ({ calls, armed, makeCore }) => {
+  loadedPF.save.mode = "metadata";
+  const core = makeCore("chat-old", 11);
+  await loadedPF.save.flush(core, false); // the chat has been played and saved
+  const settledDay = core.sim.day;
+  calls.length = 0;
+
+  // A mutation lands inside the debounce window, and the player switches chats.
+  core.sim.day = settledDay + 3;
+  loadedPF.save.markDirty(core);
+  assert.equal(armed.length, 1, "the 2.5s debounce is armed and has NOT fired");
+
+  // 90-element._switchChat, in its exact order.
+  const pending = loadedPF.save.captureFlush(core);
+  loadedPF.save.reset();
+  if (pending) void loadedPF.save.flush(core, false, pending);
+  core.chatId = "chat-new";
+  core.sim = new loadedPF.Sim(world.build(77, "cozy-village"));
+  await loadedPF.save._flushChain;
+
+  const written = calls.filter((c) => c.kind === "patch");
+  assert.equal(written.length, 1, "the pending write went out");
+  assert.equal(written[0].chatId, "chat-old", "addressed to the chat we LEFT");
+  assert.equal(written[0].patch.pixelforge.day, settledDay + 3, "carrying the mutation from the debounce window");
+  assert.equal(loadedPF.save._lastSerialized, null, "and it touched none of the NEW chat's dedupe caches");
+  assert.equal(loadedPF.save._metaSerialized, null, "either of them");
+});
+
+// (g) THE LAST WRITE OF THE SESSION DOES NOT QUEUE BEHIND ANYTHING.
+// pagehide went through the same _flushChain as everything else, so an ordinary
+// flush parked mid-await swallowed it: the chained teardown ran after the page
+// was already gone. It also awaited the route PUT before even dispatching the
+// metadata PATCH, which spends the unload window on the first of two requests.
+// Out of band, synchronous snapshot, both keepalive requests in flight at once.
+await withSavePath(async ({ calls, behavior, tick, makeCore }) => {
+  assert.equal(typeof loadedPF.save.flushTeardown, "function", "teardown has its own path");
+  loadedPF.save.mode = "routes";
+  const core = makeCore("chat-exit", 99);
+
+  // Clean: a world with nothing new in it does not spend the session's last
+  // two requests saying so.
+  loadedPF.save._lastSerialized = JSON.stringify(loadedPF.save.snapshot(core));
+  loadedPF.save.flushTeardown(core);
+  assert.equal(calls.length, 0, "a clean world writes nothing at teardown");
+
+  // Dirty: both go out, and flushTeardown is synchronous — so the fact that
+  // both are recorded by the time it returns IS the concurrency proof. Every
+  // request is parked until the case releases it, so nothing can settle early
+  // and make the ordering look concurrent when it was sequential.
+  const parked = [];
+  const park = () => new Promise((resolve) => parked.push(resolve));
+  behavior.put = park;
+  behavior.patch = park;
+  core.sim.day += 1;
+  loadedPF.save.flushTeardown(core);
+  assert.deepEqual(
+    calls.map((c) => c.kind),
+    ["put", "patch"],
+    "route row and metadata cache are both in flight before either resolves",
+  );
+  assert.equal(calls[0].keepalive, true, "the PUT rides keepalive");
+  assert.equal(calls[1].keepalive, true, "and so does the PATCH");
+  calls.length = 0;
+
+  // And it does not queue behind an ordinary flush that is parked mid-await.
+  behavior.put = async () => {};
+  core.sim.day += 1;
+  void loadedPF.save.flush(core, false);
+  await tick();
+  assert.deepEqual(
+    calls.map((c) => c.kind),
+    // The leading GET is slice 4's check-then-write pre-check: an ordinary
+    // routes-mode flush looks at the row before overwriting it. Teardown never
+    // does — it has no window to spend on one — which is the whole reason its
+    // clean-gate DERIVES from the last check instead of taking its own.
+    ["get", "put", "patch"],
+    "the ordinary flush is genuinely parked inside its metadata await",
+  );
+  calls.length = 0;
+  core.sim.day += 1;
+  loadedPF.save.flushTeardown(core);
+  assert.deepEqual(
+    calls.map((c) => c.kind),
+    ["put", "patch"],
+    "the teardown pair goes out anyway — the chain does not get to swallow it",
+  );
+  for (const release of parked) release();
+  await loadedPF.save._flushChain.catch(() => {});
+});
+
+// (h) A PROBE THAT FAILED IS RE-PROBED; A PROBE THAT ANSWERED IS NOT.
+// adopt() short-circuits on `mode !== null` and only reset() clears it, so a
+// transient 500 or a network blip during boot cost the player timeline rewind
+// for the ENTIRE session — swipes, branches and checkpoint loads silently stop
+// moving the world — with nothing but a console.warn to show for it. A 404/409
+// is a different animal: it is the route honestly saying it is not here, and
+// re-asking every minute would be noise.
+await withSavePath(async ({ behavior, tick, makeCore }) => {
+  const core = makeCore("chat-pinned", 33);
+  behavior.get = async () => {
+    throw new TypeError("NetworkError when attempting to fetch resource");
+  };
+  await loadedPF.save.adopt(core);
+  assert.equal(loadedPF.save.mode, "metadata", "a probe that THREW degrades to metadata, as before");
+  assert.equal(loadedPF.save._probePinned, true, "but pins — a failure is not an answer");
+
+  behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+  core.sim.day += 1;
+  await loadedPF.save.flush(core, false);
+  await tick();
+  assert.equal(loadedPF.save.mode, "routes", "and the first metadata write that LANDS earns the promotion");
+  assert.equal(loadedPF.save._probePinned, false, "which clears the pin");
+  assert.equal(loadedPF.save._lastSerialized, null, "promoting with FIRST-WRITE semantics");
+  assert.equal(loadedPF.save._serverSerialized, null, "never the rewind path — there is no row of ours to compare");
+
+  loadedPF.save.reset();
+  behavior.get = async () => ({ available: false, status: 404 });
+  await loadedPF.save.adopt(makeCore("chat-old-engine", 34));
+  assert.equal(loadedPF.save.mode, "metadata", "an older engine still lands in metadata mode");
+  assert.equal(loadedPF.save._probePinned, false, "and is never pinned — that answer is not going to change");
+});
+
+// (i) A FOREIGN BLOCK TOO BIG TO SEND MUST NOT COST US OUR OWN SAVE.
+// Slice 1 made the envelope carry a newer build's top-level keys. Slice 2 put a
+// pre-flight in front of every write. Together they hand a newer build a switch
+// that turns THIS build's persistence off: park an over-the-wall block on the
+// row once and every later flush trips the pre-flight and degrades the session,
+// with the player's own zone, clock and intro flags never reaching the server
+// again. Our own state outranks a block we cannot read — and dropping the carry
+// is what every build before slice 1 did, so it is a return to the old contract
+// rather than new loss. The fixtures are sized past MAX_SNAPSHOT_CHARS, which
+// now mirrors the route's own 262,144-char ceiling.
+await withSavePath(async ({ calls, behavior, makeCore }) => {
+  loadedPF.save.mode = "routes";
+  const core = makeCore("chat-fat-carry", 808);
+  core.sim._envelopeExtra = { fromTheFuture: "x".repeat(300_000) };
+  await loadedPF.save.flush(core, false);
+  const put = calls.find((c) => c.kind === "put");
+  assert.ok(put, "the write still goes out");
+  assert.equal(put.state.fromTheFuture, undefined, "without the block that does not fit");
+  assert.equal(put.state.zone, core.sim.zoneId, "and carrying this world's own state, which is what is being played");
+  assert.equal(loadedPF.save.degraded, false, "the session is NOT degraded");
+  assert.deepEqual(core.toasts, [], "and the player is told nothing — nothing of theirs was lost");
+
+  calls.length = 0;
+  core.sim.day += 1;
+  await loadedPF.save.flush(core, false);
+  const next = calls.find((c) => c.kind === "put");
+  assert.ok(next, "a later mutation writes too — persistence is not bricked");
+  assert.equal(next.state.day, core.sim.day, "with the new value on it");
+
+  // …AND THE PRE-FLIGHT ONLY REFUSES WHAT THE SERVER WOULD. It sat at 32,768 —
+  // inherited caution, not a real wall — so a perfectly savable world anywhere
+  // between 33 KB and the route's own 262,144-char cap was refused locally and
+  // the session degraded permanently for it. Nothing is dropped in that band any
+  // more: the whole snapshot, foreign carry included, goes up.
+  loadedPF.save.reset();
+  loadedPF.save.mode = "routes";
+  calls.length = 0;
+  const midband = makeCore("chat-midband", 809);
+  midband.sim._envelopeExtra = { fromTheFuture: "m".repeat(100_000) };
+  await loadedPF.save.flush(midband, false);
+  const sent = calls.find((c) => c.kind === "put");
+  assert.ok(sent, "a 100 KB snapshot writes");
+  const sentChars = JSON.stringify(sent.state).length;
+  assert.ok(sentChars > 32_768 && sentChars < 262_144, `and it really is in the band (${sentChars} chars)`);
+  assert.equal(sent.state.fromTheFuture?.length, 100_000, "with the newer build's block intact — nothing was shed");
+  assert.equal(loadedPF.save.degraded, false, "and the session is not degraded");
+  assert.deepEqual(midband.toasts, [], "nor is the player told a world this size cannot be saved");
+
+  // A world whose OWN save is over the wall is the case the degrade exists for,
+  // and it still degrades. The two conditions must not be confused: one loses a
+  // newer build's data, the other loses the player's.
+  loadedPF.save.reset();
+  loadedPF.save.mode = "routes";
+  calls.length = 0;
+  core.sim._envelopeExtra = {};
+  core.sim.intro = { world: true, zones: { huge: "y".repeat(300_000) }, npcs: {} };
+  await loadedPF.save.flush(core, false);
+  assert.equal(calls.length, 0, "an oversized world of our own writes nothing");
+  assert.equal(loadedPF.save.degraded, true, "and degrades");
+  assert.equal(core.toasts.length, 1, "and says so once");
+});
+
+// (j) PAGEHIDE IS NOT ALWAYS A DEATH.
+// flushTeardown updated no bookkeeping at all — the comment said a bfcache
+// restore "is better off re-writing than trusting a write it never saw finish",
+// but the caches were left holding the PRE-teardown bytes, which is not
+// "re-write", it is "believe the server holds something it does not". The very
+// next checkRewind then reads the row the teardown just wrote, finds it
+// different from _serverSerialized, and rewinds the restored session onto our
+// own write — toast and all. The handlers only run if the page survived.
+await withSavePath(async ({ calls, behavior, tick, makeCore }) => {
+  loadedPF.save.mode = "routes";
+  const core = makeCore("chat-bfcache", 4242);
+  await loadedPF.save.flush(core, false); // the session has a row, caches agree
+  calls.length = 0;
+
+  core.sim.day += 1; // the last thing the player did before the tab was hidden
+  loadedPF.save.flushTeardown(core);
+  await tick();
+  const wrote = calls.find((c) => c.kind === "put");
+  assert.ok(wrote, "the teardown wrote the route row");
+  const after = JSON.stringify(wrote.state);
+  assert.equal(loadedPF.save._serverSerialized, after, "and the client now knows what the server holds");
+  assert.equal(loadedPF.save._lastSerialized, after, "the route dedupe is current");
+  assert.equal(loadedPF.save._metaSerialized, after, "and so is the cache dedupe");
+
+  // The consequence, which is the actual finding: the page came back.
+  const simBefore = core.sim;
+  calls.length = 0;
+  behavior.get = async () => ({ available: true, status: 200, body: { exists: true, state: wrote.state } });
+  await loadedPF.save.checkRewind(core);
+  assert.equal(core.sim, simBefore, "a restored page is not rebuilt onto its own last write");
+  assert.deepEqual(core.toasts, [], "and the player is not told the world rewound");
+
+  // The keepalive quota is shared by the PAIR: 64 KiB per origin for every
+  // in-flight body together, and routes mode sends two. Losing the cache PATCH
+  // is repairable on the next load; losing both is the session.
+  loadedPF.save.reset();
+  loadedPF.save.mode = "routes";
+  calls.length = 0;
+  const fat = makeCore("chat-fat-exit", 4243);
+  fat.sim._envelopeExtra = { fromTheFuture: "z".repeat(30_000) };
+  const fatBytes = new TextEncoder().encode(JSON.stringify(loadedPF.save.snapshot(fat))).length;
+  assert.ok(fatBytes < 262_144, "the fixture is under the single-request pre-flight (the server's own cap)");
+  assert.ok(2 * fatBytes > 57_000, "and over the keepalive pair quota — which is the whole point of the fixture");
+  loadedPF.save.flushTeardown(fat);
+  assert.deepEqual(
+    calls.map((c) => c.kind),
+    ["put"],
+    "over the keepalive pair quota the authority goes alone instead of both being dropped",
+  );
+});
+
+// (k) THE CAPTURED CHAT-SWITCH WRITE IS NOT INVISIBLE.
+// Two seams, one cause: a write taken at the old chat's generation is stale for
+// every per-chat cache on this object and STILL happened on the wire.
+await withSavePath(async ({ calls, behavior, tick, makeCore }) => {
+  // (k1) _writeSeq is process-global, so the bump belongs OUTSIDE the fence.
+  // Driven through _flushNow directly on purpose: the flush chain is what keeps
+  // these two apart today, and the sequence has to be right independently of it
+  // — flushTeardown bumps it from off the chain entirely.
+  loadedPF.save.mode = "routes";
+  const core = makeCore("chat-seq", 21);
+  const capture = loadedPF.save.captureFlush(core);
+  assert.ok(capture, "there is a pending write to capture");
+  loadedPF.save.reset(); // the chat switch: the capture is stale from here on
+  loadedPF.save.mode = "routes";
+  loadedPF.save._serverSerialized = '{"anchor":1}';
+
+  let releaseGet;
+  behavior.get = () => new Promise((resolve) => (releaseGet = resolve));
+  const rewind = loadedPF.save.checkRewind(core);
+  await tick();
+  assert.ok(releaseGet, "the rewind check has a GET in flight");
+
+  let releasePut;
+  behavior.put = () => new Promise((resolve) => (releasePut = resolve));
+  const stale = loadedPF.save._flushNow(core, false, capture);
+  // The PUT is one microtask further out than it used to be: slice 4's flush
+  // pre-check is awaited ahead of it even when — as here, for a stale
+  // chat-switch capture — it declines to issue a GET at all.
+  await tick();
+  assert.ok(releasePut, "the stale capture's PUT is in flight, and no probe was issued for it");
+  assert.equal(
+    calls.filter((c) => c.kind === "get").length,
+    1,
+    "the only GET in flight is the rewind check's — a capture from a chat we left does not pre-check",
+  );
+  releasePut();
+  await stale;
+
+  releaseGet({ available: true, status: 200, body: { exists: true, state: { v: 1, moved: true } } });
+  await rewind;
+  assert.deepEqual(core.toasts, [], "a GET our own PUT overtook is discarded, not adopted as an external move");
+  assert.equal(loadedPF.save._serverSerialized, '{"anchor":1}', "and it never becomes the anchor");
+
+  // (k2) adopt() rides the chain, like checkRewind. Off it, the new chat's
+  // probe can latch a row while the leaving chat's captured write is still in
+  // the air — and on a return visit that row is the one about to be replaced.
+  loadedPF.save.reset();
+  loadedPF.save.mode = "routes";
+  calls.length = 0;
+  behavior.get = async () => ({ available: false, status: 404 });
+  const core2 = makeCore("chat-adopt", 44);
+  const capture2 = loadedPF.save.captureFlush(core2);
+  loadedPF.save.reset();
+  behavior.put = () => new Promise((resolve) => (releasePut = resolve));
+  void loadedPF.save.flush(core2, false, capture2);
+  const adopting = loadedPF.save.adopt(core2);
+  await tick();
+  assert.deepEqual(
+    calls.map((c) => c.kind),
+    ["put"],
+    "the probe is not issued while the captured write is in flight",
+  );
+  releasePut();
+  await adopting;
+  assert.deepEqual(
+    calls.map((c) => c.kind),
+    ["put", "patch", "get"],
+    "it runs only once that write — route row and write-through cache — has landed",
+  );
+});
+
+// (l) A PROBE REJECTION FROM THE CHAT YOU LEFT.
+// adopt()'s success path was fenced on the captured generation and chat id; its
+// CATCH was not. So a probe that finally rejects after a chat switch sets
+// mode = "metadata" and pins — and because adopt() short-circuits on
+// mode !== null, the chat the player is actually on never gets a probe of its
+// own. One stale rejection costs the new chat timeline rewind for the session.
+await withSavePath(async ({ behavior, tick, makeCore }) => {
+  const core = makeCore("chat-a", 55);
+  let rejectProbe;
+  behavior.get = () => new Promise((resolve, reject) => (rejectProbe = reject));
+  void loadedPF.save.adopt(core);
+  await tick();
+  assert.ok(rejectProbe, "the first chat's probe is in flight");
+
+  loadedPF.save.reset();
+  core.chatId = "chat-b";
+  core.sim = new loadedPF.Sim(world.build(56, "cozy-village"));
+  behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+  const adoptingB = loadedPF.save.adopt(core);
+
+  rejectProbe(new TypeError("NetworkError when attempting to fetch resource"));
+  await adoptingB;
+  await tick();
+  assert.equal(loadedPF.save.mode, "routes", "the chat we are ON keeps the mode its own probe earned");
+  assert.equal(loadedPF.save._probePinned, false, "and a rejection addressed to the chat we left pins nothing");
+});
+
+// (m) A HALF-LANDED FLUSH IS NOT A LANDED FLUSH.
+// In routes mode the write-through cache PATCH had its own catch: a console
+// warning and a bare markDirty. Two consequences, both silent. _onWriteLanded
+// still ran, so the failure counter reset on every round — and markDirty
+// re-armed a flat 2.5s. A broken metadata route therefore got retried every 2.5
+// seconds for the whole session instead of walking the ladder that exists for
+// exactly this.
+await withSavePath(async ({ armed, behavior, makeCore }) => {
+  loadedPF.save.mode = "routes";
+  const core = makeCore("chat-cache", 66);
+  behavior.patch = async () => {
+    throw new TypeError("NetworkError when attempting to fetch resource");
+  };
+  await loadedPF.save.flush(core, false);
+  assert.equal(loadedPF.save._flushFailures, 1, "the route row landed and the cache did not — that is a failure");
+  assert.deepEqual(
+    armed.map((a) => a.ms),
+    [2500],
+    "and it takes the ladder's bottom rung",
+  );
+  for (let i = 0; i < 3; i++) {
+    armed[armed.length - 1].fn();
+    await loadedPF.save._flushChain;
+  }
+  assert.deepEqual(
+    armed.map((a) => a.ms),
+    [2500, 5000, 10_000, 30_000],
+    "and the ladder WALKS — it is not reset to 2.5s by the route row landing every round",
+  );
+
+  behavior.patch = async () => {};
+  core.sim.day += 1;
+  await loadedPF.save.flush(core, false);
+  assert.equal(loadedPF.save._flushFailures, 0, "a flush where BOTH writes land still clears the counter");
+
+  // A 409 from the metadata route is the metadata route talking. Dropping the
+  // experience-state authority on it would be a non sequitur.
+  loadedPF.save.reset();
+  loadedPF.save.mode = "routes";
+  armed.length = 0;
+  behavior.patch = async () => {
+    throw Object.assign(new Error("PATCH metadata → 409"), { status: 409 });
+  };
+  core.sim.day += 1;
+  await loadedPF.save.flush(core, false);
+  assert.equal(loadedPF.save.mode, "routes", "a cache 409 does not fall back to metadata mode");
+  assert.equal(loadedPF.save._probePinned, false, "and does not pin for re-probe");
+  assert.deepEqual(
+    armed.map((a) => a.ms),
+    [2500],
+    "it takes the ladder like any other cache failure",
+  );
+});
+
+// (n) A BACKOFF RUNG IS NOT CANCELLABLE.
+// The ladder shares markDirty's timer so a busy player cannot reset it — but
+// the sharing only worked in one direction. _flushNow cleared the timer at the
+// top whatever it was for, so any flush from another trigger deleted the
+// pending rung; and a TEARDOWN flush, which never re-arms, deleted it outright.
+// The ladder has to measure elapsed time, not requested time.
+await withSavePath(async ({ armed, behavior, makeCore }) => {
+  loadedPF.save.mode = "metadata";
+  const core = makeCore("chat-ladder", 77);
+  behavior.patch = async () => {
+    throw new TypeError("NetworkError when attempting to fetch resource");
+  };
+  await loadedPF.save.flush(core, false);
+  for (let i = 0; i < 4; i++) {
+    armed[armed.length - 1].fn();
+    await loadedPF.save._flushChain;
+  }
+  assert.deepEqual(
+    armed.map((a) => a.ms),
+    [2500, 5000, 10_000, 30_000, 60_000],
+    "the session has climbed to the 60s rung",
+  );
+  const pending = loadedPF.save._timer;
+  assert.notEqual(pending, 0, "with that rung actually armed");
+
+  loadedPF.save.markDirty(core);
+  loadedPF.save.markDirty(core);
+  assert.equal(loadedPF.save._timer, pending, "a busy player cannot reset a live rung to 2.5s");
+  assert.equal(armed.length, 5, "and arms nothing of their own");
+
+  await loadedPF.save.flush(core, true);
+  assert.equal(loadedPF.save._timer, pending, "and a teardown flush — which never re-arms — must not delete it");
+  assert.equal(loadedPF.save._timerIsBackoff, true, "the timer is still a rung, not a debounce");
+});
+
+// (o) A PROBE FAILURE THE ROUTE MEANT IS NOT A BLIP.
+// The pin exists for a transport failure or a server having a bad minute. A 401
+// or a 403 will say the same thing in sixty seconds, and in six hundred: pinning
+// on it buys a background request every minute for the life of the tab and
+// changes nothing. And even a genuine blip gets a bounded number of asks, on the
+// same discipline the write ladder already has.
+{
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: false, status: 503 });
+  try {
+    await assert.rejects(
+      () => loadedPF.api.getExperienceState("chat-probe"),
+      (err) => err.status === 503 && err.message === "GET experience-state → 503",
+      "a rejected probe carries its status, and keeps the message it always had",
+    );
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+await withSavePath(async ({ armed, behavior, tick, makeCore }) => {
+  const httpError = (status) => Object.assign(new Error(`GET experience-state → ${status}`), { status });
+  for (const status of [401, 403]) {
+    loadedPF.save.reset();
+    behavior.get = async () => {
+      throw httpError(status);
+    };
+    await loadedPF.save.adopt(makeCore(`chat-${status}`, 88));
+    assert.equal(loadedPF.save.mode, "metadata", `a ${status} still degrades to metadata mode`);
+    assert.equal(loadedPF.save._probePinned, false, `but a ${status} is an answer, not a blip — it never pins`);
+  }
+
+  loadedPF.save.reset();
+  armed.length = 0;
+  behavior.get = async () => {
+    throw httpError(503);
+  };
+  await loadedPF.save.adopt(makeCore("chat-503", 89));
+  assert.equal(
+    loadedPF.save._probePinned,
+    true,
+    "a 5xx is the server having a bad minute, and that is worth re-asking",
+  );
+  const interval = armed.find((a) => a.interval);
+  assert.ok(interval, "on an interval");
+  assert.equal(interval.ms, 60_000, "at ~60s");
+
+  let fired = 0;
+  while (loadedPF.save._reprobeTimer && fired < 20) {
+    interval.fn();
+    await tick();
+    fired++;
+  }
+  assert.equal(fired, 8, "which gives up after eight failed rungs rather than asking for the life of the tab");
+  assert.equal(loadedPF.save._reprobeTimer, 0, "the interval is cleared");
+  assert.equal(
+    loadedPF.save._probePinned,
+    true,
+    "the pin itself stays — a metadata write that lands later still earns its one-shot attempt",
+  );
+});
+
+// (p) THE PROMOTION'S FIRST WRITE IS NOT CANCELLABLE EITHER.
+// _reprobe promotes a pinned session with FIRST-WRITE semantics, and the whole
+// mechanism was `_lastSerialized = null`. A flush already parked inside its
+// PATCH when the promotion happens lands afterwards and assigns that cache
+// straight back — so the next flush dedupes to nothing and the promotion's
+// first route write never happens. The session sits in "routes" mode with no
+// row of its own until something else changes the world.
+await withSavePath(async ({ calls, behavior, tick, makeCore }) => {
+  const core = makeCore("chat-promote", 91);
+  behavior.get = async () => {
+    throw new TypeError("NetworkError when attempting to fetch resource");
+  };
+  await loadedPF.save.adopt(core);
+  assert.equal(loadedPF.save._probePinned, true, "the session is pinned to metadata mode");
+
+  let releasePatch;
+  behavior.patch = () => new Promise((resolve) => (releasePatch = resolve));
+  core.sim.day += 1;
+  const parked = loadedPF.save.flush(core, false);
+  await tick();
+  assert.ok(releasePatch, "an ordinary metadata flush is parked inside its PATCH");
+
+  behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+  await loadedPF.save._reprobe(core);
+  assert.equal(loadedPF.save.mode, "routes", "the re-probe promotes the session");
+  assert.equal(loadedPF.save._lastSerialized, null, "forcing the first write up");
+
+  releasePatch();
+  await parked;
+  assert.notEqual(loadedPF.save._lastSerialized, null, "and the late flush does put the dedupe cache back");
+
+  calls.length = 0;
+  behavior.patch = async () => {};
+  await loadedPF.save.flush(core, false);
+  assert.ok(
+    calls.some((c) => c.kind === "put"),
+    "the promotion's first route write happens anyway — a flush that landed after it cannot un-force it",
+  );
+  assert.equal(loadedPF.save._forceWrite, false, "and the force is spent by the write that consumed it");
+});
+
+// ═══ THE PLAYER STATE BLOCK (S5 slice 3) ═══════════════════════════════════
+
+// (q) THE BLOCK'S BYTES ARE AN INTERFACE, AND THEY DO NOT DEPEND ON PLAY ORDER.
+// Every dedupe in the save path is string equality over JSON.stringify, and the
+// player block is now most of the snapshot. Two players who did the same things
+// in a different order hold the same state — so if the serializer leaked
+// insertion order, one of them would re-write their row on every load and take a
+// spurious "The world rewound with the story." with it.
+await withSavePath(async ({ makeCore }) => {
+  const P = loadedPF.player;
+  const play = (core, order) => {
+    for (const step of order) step(core);
+    return JSON.stringify(P.serialize(core.sim.player));
+  };
+  const steps = [
+    (c) => P.grant(c, { t: "rod", k: "fine" }, 2),
+    (c) => P.grant(c, "apple", 3),
+    (c) => P.grant(c, { t: "bait", k: "decent" }, 1),
+    (c) => P.award(c, { money: 40, xp: 8, verb: "fishing" }),
+    (c) => P.equip(c, "fishing", "tool", { t: "rod", k: "fine" }),
+    (c) => P.bump(c, "village", "Alder Vance", { d: 2, s: "Sided with him over the survey." }),
+    (c) => P.bump(c, "village", "Maud Thatch", { d: 1, h: true }),
+    (c) => P.discover(c, { p: "z4", e: 0, d: 3, day: 12 }),
+    (c) => P.discover(c, { p: "z2", e: 1, d: 0, day: 9 }),
+    (c) => P.setHome(c, "z3"),
+  ];
+  const forwards = play(makeCore("chat-bytes-a", 4242), steps);
+  const backwards = play(makeCore("chat-bytes-b", 4242), [...steps].reverse());
+  assert.equal(forwards, backwards, "the same state serializes to the same bytes whatever order it was played in");
+
+  // …and it survives the wire. parse() normalizes through the same serializer,
+  // which is what makes "shape-validated" and "byte-stable" one property.
+  const again = JSON.stringify(P.serialize(P.parse(JSON.parse(forwards)).player));
+  assert.equal(again, forwards, "and a round trip through parse() changes not one byte");
+
+  // The whole envelope round-trips too, which is the thing the flush compares.
+  // The FIRST pass through simFromSaved is allowed to move: a block built by the
+  // Sim constructor has never been rehydrated, and stamps are evaluated at
+  // rehydration only (plan §Q3a), so that pass fills them in. Every pass after
+  // it is byte-identical, which is what keeps a reopened chat from re-writing
+  // its row and toasting a rewind that did not happen.
+  const core = makeCore("chat-bytes-c", 4242);
+  for (const step of steps) step(core);
+  const first = loadedPF.save.simFromSaved(
+    JSON.parse(JSON.stringify(loadedPF.save.snapshot(core))),
+    {},
+    "chat-bytes-c",
+  );
+  const settled = JSON.stringify(loadedPF.save.snapshot({ sim: first, chatId: "chat-bytes-c" }));
+  assert.ok(settled.includes('"seed":4242'), "the first rehydration is what stamps the block for its world");
+  const second = loadedPF.save.simFromSaved(JSON.parse(settled), {}, "chat-bytes-c");
+  assert.equal(
+    JSON.stringify(loadedPF.save.snapshot({ sim: second, chatId: "chat-bytes-c" })),
+    settled,
+    "and from there the envelope round-trips byte-for-byte through simFromSaved",
+  );
+});
+
+// (r) `player` IS EMITTED UNCONDITIONALLY, LIKE EVERY OTHER LISTED KEY.
+// The registry case above proves the two lists agree; this proves the emission
+// has no branch on it. A sim with no block at all — which is what every
+// synthetic core in this package is one refactor away from being — still emits
+// the default, because the alternative is the slice-1 bug with a fresh coat.
+{
+  const sim = new loadedPF.Sim(world.build(11, "cozy-village"));
+  assert.ok(sim.player, "the Sim constructor default-inits the block");
+  delete sim.player;
+  const snap = loadedPF.save.snapshot({ sim, chatId: "chat-noplayer" });
+  assert.ok(snap.player, "and snapshot emits one even when the sim has none");
+  assert.equal(snap.player.v, loadedPF.player.currentV(), "at this build's block version");
+  assert.ok(loadedPF.save._envelopeKeys.has("player"), "and the registry lists it");
+}
+
+// (s) A MIGRATION THAT THROWS QUARANTINES ITS INPUT AND BOOTS A WRITABLE BLOCK.
+// The failure mode this exists for is a shipped migration with a bug in it: the
+// step runs against every save in the wild exactly once, and the ones it throws
+// on are gone unless something catches them. What is quarantined is the step's
+// INPUT, not its half-migrated output — the input is what a fixed step will be
+// run against.
+await withSavePath(async ({ calls, tick, makeCore }) => {
+  const P = loadedPF.player;
+  const before = P.MIGRATIONS.length;
+  P.MIGRATIONS.push(() => {
+    throw new TypeError("the v1 to v2 step is broken");
+  });
+  try {
+    const core = makeCore("chat-mig", 505);
+    const row = { v: 1, seed: 505, theme: "cozy-village", player: { v: 1, pouch: { money: 77, items: [] } } };
+    core.sim = loadedPF.save.restore({ pixelforge: row }, "chat-mig");
+    assert.equal(core.sim.player.pouch.money, 0, "the throwing step boots defaults, not a half-migrated block");
+    assert.equal(core.sim.player.v, P.currentV(), "at this build's version");
+    const slot = loadedPF.quarantine.peek("migration");
+    assert.ok(slot, "and the block is quarantined");
+    assert.equal(slot.reason, "throw", "in the migration slot, marked as a throw");
+    assert.equal(slot.fromV, 1, "with the version it was written at");
+    assert.equal(slot.block.pouch.money, 77, "and the step's INPUT, verbatim");
+    assert.ok(/broken/.test(slot.message), "carrying what the step said on the way out");
+    await tick();
+    assert.ok(
+      calls.some((c) => c.kind === "patch" && c.patch.pixelforgeQuarantine),
+      "written immediately to its own metadata key",
+    );
+    // SECTIONS WRITABLE. A defaults boot that could not be mutated would be a
+    // read-only session nobody told the player about.
+    assert.equal(P.grant(core, "apple", 1), 1, "and the defaults boot is a fully writable block");
+    assert.equal(core.sim.dirty, true, "which dirties the sim like any other mutation");
+  } finally {
+    P.MIGRATIONS.length = before;
+  }
+});
+
+// (t) A TOO-NEW BLOCK IS RE-ADOPTED EXACTLY ONCE, AND BOOT C CHANGES NOTHING.
+// Three boots. A: this build cannot read a v7 block, so it is quarantined
+// verbatim and never overwritten. B: a later build can, so it takes it back —
+// CONSUMING the slot and parking the block it displaces in setAside, which no
+// machine ever restores. C: there is nothing left to adopt, and the absence of a
+// slot is what makes that true rather than a flag somebody has to remember.
+await withSavePath(async ({ calls, tick, makeCore }) => {
+  const P = loadedPF.player;
+  const before = P.MIGRATIONS.length;
+  try {
+    // ── BOOT A ────────────────────────────────────────────────────────────────
+    const core = makeCore("chat-toonew", 321);
+    const tooNew = { v: 7, game: 1, pouch: { money: 99, items: [] }, somethingNew: true };
+    const row = { v: 1, seed: 321, theme: "cozy-village", player: tooNew };
+    core.sim = loadedPF.save.restore({ pixelforge: row }, "chat-toonew");
+    assert.equal(core.sim.player.pouch.money, 0, "a too-new block is never parsed — defaults boot");
+    const parked = loadedPF.quarantine.peek("version");
+    assert.ok(parked, "it is quarantined instead");
+    assert.equal(parked.adoptable, true, "marked adoptable AT CREATION — that mark is what a later build looks for");
+    assert.equal(parked.fromV, 7, "with the version that wrote it");
+    assert.deepEqual(parked.block, tooNew, "verbatim, including the field this build has no idea about");
+    assert.equal(loadedPF.quarantine.peek("setAside"), null, "and nothing was displaced yet");
+    await tick();
+    const wrote = calls.filter((c) => c.kind === "patch" && c.patch.pixelforgeQuarantine);
+    assert.equal(wrote.length, 1, "written immediately");
+    assert.equal(wrote[0].patch.pixelforge, undefined, "to its OWN key — never the snapshot, never the route row");
+    // …and then this build plays on and flushes, which OVERWRITES the row with
+    // its own defaults block. That is the documented §5 limitation and it is
+    // exactly why the quarantine exists: after this write, the bag is the only
+    // copy of the v7 block left anywhere.
+    const metaAfterA = {
+      pixelforge: loadedPF.save.snapshot({ sim: core.sim, chatId: "chat-toonew" }),
+      pixelforgeQuarantine: JSON.parse(JSON.stringify(loadedPF.quarantine._bag)),
+    };
+    assert.equal(
+      metaAfterA.pixelforge.player.pouch.money,
+      0,
+      "the row now holds this build's defaults, not the v7 block",
+    );
+
+    // ── BOOT B: a later build, six identity steps ahead ───────────────────────
+    for (let i = 0; i < 6; i++) P.MIGRATIONS.push((block) => block);
+    assert.equal(P.currentV(), 7, "the later build reads v7 natively");
+    loadedPF.save.reset();
+    calls.length = 0;
+    const simB = loadedPF.save.restore(metaAfterA, "chat-toonew");
+    assert.equal(simB.player.pouch.money, 99, "the quarantined block is RE-ADOPTED");
+    assert.equal(loadedPF.quarantine.peek("version"), null, "and the adoption CONSUMES the slot");
+    const aside = loadedPF.quarantine.peek("setAside");
+    assert.ok(aside, "the live block it displaced is parked instead of dropped");
+    assert.equal(aside.block.pouch.money, 0, "which is the defaults block this boot started from");
+    await tick();
+    const metaAfterB = {
+      pixelforge: loadedPF.save.snapshot({ sim: simB, chatId: "chat-toonew" }),
+      pixelforgeQuarantine: JSON.parse(JSON.stringify(loadedPF.quarantine._bag)),
+    };
+    assert.equal(metaAfterB.pixelforgeQuarantine.version, undefined, "and the stored bag no longer holds it");
+
+    // ── BOOT C ────────────────────────────────────────────────────────────────
+    loadedPF.save.reset();
+    calls.length = 0;
+    const simC = loadedPF.save.restore(metaAfterB, "chat-toonew");
+    assert.equal(simC.player.pouch.money, 99, "boot C keeps the adopted block");
+    assert.deepEqual(
+      loadedPF.quarantine.slots(),
+      ["setAside"],
+      "and changes nothing: no second adoption, no second displacement",
+    );
+    assert.equal(
+      JSON.stringify(loadedPF.save.snapshot({ sim: simC, chatId: "chat-toonew" })),
+      JSON.stringify(metaAfterB.pixelforge),
+      "the world it boots is byte-identical to boot B's",
+    );
+  } finally {
+    P.MIGRATIONS.length = before;
+  }
+});
+
+// (u) THE BAG'S SLOTS ARE INDEPENDENT, AND ITS OVERFLOW HAS AN ORDER.
+// First-loss-wins is per SLOT: the first thing a slot lost is the one furthest
+// from being recoverable any other way, and a full slot must not silence a loss
+// of a different kind. Overflow drops in a fixed order, setAside first.
+await withSavePath(async ({ tick }) => {
+  const Q = loadedPF.quarantine;
+  Q.reset();
+  assert.equal(Q.put("chat-slots", "migration", { reason: "throw", block: { first: true } }), true);
+  assert.equal(
+    Q.put("chat-slots", "migration", { reason: "throw", block: { second: true } }),
+    false,
+    "a second loss of the same kind does not displace the first",
+  );
+  assert.equal(Q.peek("migration").block.first, true, "the first one is what is held");
+  assert.equal(
+    Q.put("chat-slots", "version", { adoptable: true, fromV: 9, block: {} }),
+    true,
+    "and a full migration slot does not silence a version loss — the slots are independent",
+  );
+  assert.deepEqual(Q.slots(), ["migration", "version"]);
+  await tick();
+
+  // OVERFLOW. Sized OFF THE CEILING rather than at a literal, so the tripwire's
+  // value can move without re-tuning the case: four entries at 28% of the bag
+  // overflow it by about one entry, so exactly one goes — and which one is the
+  // whole test.
+  Q.reset();
+  const fat = (tag) => ({ reason: tag, block: { blob: "x".repeat(Math.floor(Q.MAX_CHARS * 0.28)) } });
+  for (const slot of ["version", "migration", "stamp", "setAside"]) Q.put("chat-fat", slot, fat(slot));
+  assert.equal(Q.peek("setAside"), null, "an overflowing bag drops the setAside entry first");
+  assert.deepEqual(
+    Q.slots(),
+    ["migration", "stamp", "version"],
+    "and keeps the three that a machine can still restore",
+  );
+  assert.ok(JSON.stringify(Q._bag).length <= Q.MAX_CHARS, "under its own ceiling, which is not the snapshot's");
+  await tick(); // let this group's queued bag writes land before the next reset
+
+  // Push harder and the order continues: stamp is next, then migration.
+  Q.reset();
+  const fatter = (tag) => ({ reason: tag, block: { blob: "y".repeat(Math.floor(Q.MAX_CHARS * 0.55)) } });
+  for (const slot of ["version", "migration", "stamp", "setAside"]) Q.put("chat-fatter", slot, fatter(slot));
+  assert.deepEqual(Q.slots(), ["version"], "least-recoverable first, all the way down to the adoptable block");
+  await tick();
+  Q.reset();
+});
+
+// (v) A DROPPED QUARANTINE KEY IS RE-ASSERTED ON THE NEXT PROPS DELIVERY.
+// ~40 engine call sites still use the unqueued whole-blob updateMetadata, any of
+// which can erase a package key between turns. The save key already had a
+// self-heal; the quarantine key needs its OWN, because the two are written by
+// different paths and neither one's survival says anything about the other's.
+await withSavePath(async ({ calls, tick, makeCore }) => {
+  const Q = loadedPF.quarantine;
+  const core = makeCore("chat-dropped", 606);
+  Q.reset();
+  Q.put(core.chatId, "stamp", { reason: "brief", stamps: { seed: 1, briefHash: 2, mintStamp: 3 }, fields: {} });
+  await tick();
+  calls.length = 0;
+
+  // A props delivery whose metadata has lost the key.
+  loadedPF.save.ensurePresent(core, { pixelforge: { v: 1 } });
+  await tick();
+  const repair = calls.filter((c) => c.kind === "patch" && c.patch.pixelforgeQuarantine);
+  assert.equal(repair.length, 1, "the bag is re-asserted from memory");
+  assert.equal(repair[0].patch.pixelforgeQuarantine.stamp.reason, "brief", "with what it was holding");
+
+  // …and a delivery that still HAS the key does not re-write it.
+  calls.length = 0;
+  loadedPF.save.ensurePresent(core, { pixelforge: { v: 1 }, pixelforgeQuarantine: { stamp: {} } });
+  await tick();
+  assert.equal(calls.length, 0, "an intact key costs nothing");
+  Q.reset();
+});
+
+// (w) SEVERANCE AND THE COUPLED GATE.
+// `flushedDay` is only interpretable against the lines it gates, so it moves
+// WITH them and only when they actually move. Two cases, and they are opposites:
+// nothing severed must leave the gate untouched, and a severance that spans an
+// unflushed day must pull the gate back far enough that nothing comes home below
+// it — a restored line at or under the gate is one the flush will never tell.
+{
+  const P = loadedPF.player;
+  const briefA = brief.defaults("cozy-village", 900);
+  const briefB = brief.defaults("sci-fi-colony", 900);
+  const wA = world.build(900, "cozy-village", briefA);
+  const wB = world.build(900, "sci-fi-colony", briefB);
+
+  // ── An EMPTY line buffer leaves the gate exactly where it was ─────────────
+  {
+    const p = P.defaultPlayer();
+    p.world = P.stampsFor(wA, briefA);
+    p.flushedDay = 8;
+    p.rel = { z1: { "Alder Vance": { d: 2, t: 3 } } };
+    const out = P.applyStamps(p, wB, briefB, false);
+    assert.ok(out.severed, "a changed brief severs");
+    assert.equal(p.flushedDay, 8, "a stamp severance with an empty line buffer leaves the gate unchanged");
+    assert.deepEqual(p.rel, {}, "while the world-bound rows do go");
+  }
+
+  // ── A severance ACROSS AN UNFLUSHED DAY, and the way home ─────────────────
+  {
+    const p = P.defaultPlayer();
+    p.world = P.stampsFor(wA, briefA);
+    // The gate has run ahead of the buffer — a flush that was accepted and then
+    // lost (§5, accepted). Days 6 and 7 are still sitting there unflushed.
+    p.flushedDay = 8;
+    p.ledger.lines = [
+      [6, "Walked the north field."],
+      [7, "Sat with Alder while he lied about the survey."],
+    ];
+    p.rel = { z1: { "Alder Vance": { d: 2, t: 3 } } };
+    const out = P.applyStamps(p, wB, briefB, false);
+    assert.ok(out.severed, "the changed brief severs");
+    assert.equal(p.flushedDay, 5, "the gate is clamped to minSeveredLineDay - 1, not left at 8");
+    assert.deepEqual(p.ledger.lines, [], "and the buffer went with it");
+    assert.equal(out.severed.entry.fields.flushedDayWas, 8, "the entry records where the gate had got to");
+
+    // The world comes back. Restoration DISCARDS whatever was written during the
+    // window and re-applies the guard.
+    p.ledger.lines = [[9, "Something that happened in the other world."]];
+    p.flushedDay = 12;
+    const restored = P.restoreStamped(p, out.severed.entry, wA, briefA);
+    assert.ok(restored, "matching stamps restore");
+    assert.equal(restored.ledger.lines.length, 2, "the severed lines are back");
+    assert.ok(
+      !restored.ledger.lines.some(([day]) => day === 9),
+      "and the line written during the window is discarded — it belonged to the other world",
+    );
+    const lowest = Math.min(...restored.ledger.lines.map(([day]) => day));
+    assert.ok(
+      lowest > restored.flushedDay,
+      `a stamp severance across an unflushed day leaves no line below the gate after restoration (${lowest} > ${restored.flushedDay})`,
+    );
+    assert.deepEqual(restored.rel.z1["Alder Vance"], { d: 2, t: 3 }, "and the relationship row came home too");
+
+    // The guard is RE-APPLIED on the way in, not trusted from the entry. An
+    // entry that carries no gate of its own — an older bag, a mint-reason
+    // severance, anything hand-edited — still comes home with every line above
+    // the gate, because the invariant belongs to the restore and not to the
+    // thing being restored.
+    const gateless = { ...out.severed.entry, fields: { ...out.severed.entry.fields, flushedDay: undefined } };
+    const late = P.defaultPlayer();
+    late.flushedDay = 12;
+    const homed = P.restoreStamped(late, gateless, wA, briefA);
+    assert.ok(homed, "a gateless entry still restores");
+    assert.ok(
+      Math.min(...homed.ledger.lines.map(([day]) => day)) > homed.flushedDay,
+      "and the guard pulls the gate back under the lines rather than leaving them untellable",
+    );
+
+    // A stamp entry from a DIFFERENT world does not restore.
+    const wrong = P.restoreStamped(P.defaultPlayer(), out.severed.entry, wB, briefB);
+    assert.equal(wrong, false, "a stamp slot only restores into the world it was severed from");
+  }
+
+  // ── MINT-ONLY: the brief is the same, so the named cast is the same people ─
+  {
+    const p = P.defaultPlayer();
+    p.world = P.stampsFor(wA, briefA);
+    const namedPerson = briefA.cast[0].name;
+    const mintedPerson = wA.minted[0];
+    assert.ok(mintedPerson && mintedPerson !== namedPerson, "the fixture has both a named and a minted resident");
+    p.rel = { z1: { [namedPerson]: { d: 3, t: 9 }, [mintedPerson]: { d: 1, t: 2 } } };
+    p.quests.active = [
+      { id: "q-named", g: `z1|${namedPerson}`, verb: "gather", target: "herb", n: 1, have: 0, r: {}, day: 3 },
+      { id: "q-minted", g: `z1|${mintedPerson}`, verb: "gather", target: "herb", n: 1, have: 0, r: {}, day: 3 },
+    ];
+    p.ledger.lines = [[4, "A line that is NOT severed by a mint change."]];
+    p.flushedDay = 2;
+    // Same brief, a mint that moved: MINT_V bumped, or the name book changed.
+    const remint = { ...wA, mintStamp: (wA.mintStamp ^ 0x5eed) >>> 0 };
+    const out = P.applyStamps(p, remint, briefA, false);
+    assert.ok(out.severed, "a moved mint severs");
+    assert.equal(out.severed.entry.reason, "mint", "as a mint severance, not a brief one");
+    assert.ok(p.rel.z1 && p.rel.z1[namedPerson], "the person the BRIEF named keeps their row");
+    assert.equal(p.rel.z1[mintedPerson], undefined, "the minted one does not");
+    assert.deepEqual(
+      p.quests.active.map((q) => q.id),
+      ["q-named"],
+      "and only the minted GIVER's quest goes",
+    );
+    assert.equal(p.ledger.lines.length, 1, "the ledger is untouched by a mint change");
+    assert.equal(p.flushedDay, 2, "and so is the gate — no lines were severed");
+  }
+}
+
+// (x) AN `s` LINE PAST THE CAP EVICTS THE OLDEST LINE, NEVER THE ROW.
+// Two caps bite on `rel` and they bite differently. Losing the row to make room
+// for a sentence would trade a relationship for a quote.
+await withSavePath(async ({ makeCore }) => {
+  const P = loadedPF.player;
+  const core = makeCore("chat-lines", 707);
+  for (let i = 0; i < P.CAPS.relLines + 1; i++) {
+    P.bump(core, "village", `Person ${i}`, { d: 1, s: `Line number ${i}.` });
+  }
+  const rows = core.sim.player.rel.village;
+  assert.equal(Object.keys(rows).length, P.CAPS.relLines + 1, "every row is still there");
+  assert.equal(rows["Person 0"].s, undefined, "the OLDEST line is the one that went");
+  assert.deepEqual({ d: rows["Person 0"].d, t: rows["Person 0"].t }, { d: 1, t: 1 }, "and its row kept its ladder");
+  assert.equal(
+    Object.values(rows).filter((row) => row.s).length,
+    P.CAPS.relLines,
+    "exactly the cap's worth of lines are held",
+  );
+  assert.ok(rows[`Person ${P.CAPS.relLines}`].s, "including the newest");
+
+  // Graphemes, not code units: a cut through a surrogate pair renders broken.
+  P.bump(core, "village", "Person 0", { s: "🧵".repeat(200) });
+  assert.equal(Array.from(rows["Person 0"].s).length, P.CAPS.lineChars, "an over-long line is clipped by grapheme");
+});
+
+// (y) THE MUTATORS RE-RESOLVE, FENCE, AND DIRTY THEMSELVES.
+// Three properties, one case, because all three failures look the same from the
+// outside: state that quietly went to the wrong place. Consumers land in slice
+// 6; the contract they will be written against is pinned here.
+await withSavePath(async ({ armed, makeCore }) => {
+  const P = loadedPF.player;
+  const core = makeCore("chat-mutate", 808);
+  core.sim.dirty = false;
+  armed.length = 0;
+
+  assert.equal(P.grant(core, "apple", 2), 2, "grant returns the new quantity");
+  assert.equal(core.sim.dirty, true, "and dirties the sim itself — a consumer cannot forget to");
+  assert.deepEqual(
+    armed.map((a) => a.ms),
+    [2500],
+    "and arms the debounce itself, which is what self-dirtying means",
+  );
+
+  // FENCED. A mutator that lands after a chat switch belongs to the chat it was
+  // written for, and there is no way to tell from `core` alone — both ids moved
+  // together. The generation captured when the work STARTED is the only witness.
+  const staleGen = loadedPF.save._gen ?? 0;
+  loadedPF.save.reset();
+  assert.equal(P.grant(core, "apple", 5, staleGen), 0, "a mutation fenced at a generation we have left is a no-op");
+  assert.equal(P.take(core, "apple", 1, staleGen), false, "and so is every other one");
+  assert.equal(core.sim.player.pouch.items.find((i) => i.t === "apple").q, 2, "the block is untouched");
+
+  // RE-RESOLVED. A mutator that captured core.sim would write into the world the
+  // player left behind.
+  const previous = core.sim;
+  core.sim = new loadedPF.Sim(world.build(809, "cozy-village"));
+  P.grant(core, "pear", 1);
+  assert.equal(
+    core.sim.player.pouch.items.some((i) => i.t === "pear"),
+    true,
+    "the pear landed in the CURRENT sim",
+  );
+  assert.equal(
+    previous.player.pouch.items.some((i) => i.t === "pear"),
+    false,
+    "and not in the previous one",
+  );
+
+  // All-or-nothing take: a partial one would leave a consumer believing it paid.
+  assert.equal(P.take(core, "pear", 2), false, "a take it cannot cover fails whole");
+  assert.equal(core.sim.player.pouch.items.find((i) => i.t === "pear").q, 1, "and takes nothing");
+  assert.equal(P.take(core, "pear", 1), true, "one it can cover succeeds");
+  assert.equal(
+    core.sim.player.pouch.items.some((i) => i.t === "pear"),
+    false,
+    "and empties the row out",
+  );
+
+  // The ledger gate: a line the flush has already told is not told again.
+  core.sim.player.flushedDay = 5;
+  assert.equal(P.log(core, "Already told.", 5), false, "a line at or below the gate is refused");
+  assert.equal(P.log(core, "Not yet told.", 6), true, "one above it is not");
+
+  // `home` is a sealed anchor or a derived marker, never a bare h{n}: those move
+  // with the mint and would silently rehome the player on the next world change.
+  assert.equal(P.setHome(core, "h4"), false, "a minted building id is refused as a home");
+  assert.equal(P.setHome(core, "z3"), true, "a sealed anchor is not");
+  assert.deepEqual(core.sim.player.home, "z3");
+});
+
+// (z) THE DANGLING-QUEST REPAIR IS GATED, AND IT IS NOT A MUTATION.
+// Three ways to be wrong here look identical from inside the repair: a world
+// that has not been compiled yet, a world whose identity was never checked, and
+// a world that is simply the wrong one. Only the last is a statement about the
+// quests, and "every giver is missing" is how it announces itself.
+{
+  const P = loadedPF.player;
+  const sealed = brief.defaults("cozy-village", 1001);
+  const w = world.build(1001, "cozy-village", sealed);
+  const real = sealed.cast[0].name;
+  const make = () => {
+    const p = P.defaultPlayer();
+    p.quests.active = [
+      { id: "q-real", g: `z1|${real}`, verb: "gather", target: "herb", n: 1, have: 0, r: {}, day: 1 },
+      { id: "q-ghost", g: "z1|Nobody At All", verb: "gather", target: "herb", n: 1, have: 0, r: {}, day: 1 },
+    ];
+    return p;
+  };
+  const one = make();
+  const out = P.repairQuests(one, w, true);
+  assert.equal(out.dropped.length, 1, "a dangling giver among live ones is dropped");
+  assert.deepEqual(
+    one.quests.active.map((q) => q.id),
+    ["q-real"],
+    "leaving the quest whose giver is standing there",
+  );
+  assert.equal(out.notices.length, 1, "with a notice for the ledger");
+
+  const all = P.defaultPlayer();
+  all.quests.active = [
+    { id: "q-a", g: "z1|Nobody", verb: "gather", target: "x", n: 1, have: 0, r: {}, day: 1 },
+    { id: "q-b", g: "z1|Nobody Else", verb: "gather", target: "x", n: 1, have: 0, r: {}, day: 1 },
+  ];
+  assert.equal(P.repairQuests(all, w, true).dropped.length, 0, "EVERY giver dangling is a statement about the world");
+  assert.equal(all.quests.active.length, 2, "so the quests are left exactly alone");
+
+  assert.equal(P.repairQuests(make(), w, false).dropped.length, 0, "unevaluated stamps defer the repair");
+  assert.equal(P.repairQuests(make(), { ...w, interim: true }, true).dropped.length, 0, "and so does an interim world");
+
+  // A NON-MUTATION: the repair is a read-side correction, not something the
+  // player did. The next real save carries it; nothing is armed for it.
+  const sim = loadedPF.save.simFromSaved(
+    { v: 1, seed: 1001, theme: "cozy-village", player: { v: 1, quests: { active: make().quests.active } } },
+    { pixelforgeBrief: sealed },
+    "chat-repair",
+  );
+  assert.deepEqual(
+    sim.player.quests.active.map((q) => q.id),
+    ["q-real"],
+    "the repair runs through the restore path too",
+  );
+  assert.equal(sim.dirty, false, "and does not dirty the sim — a repair is not a mutation");
+  // …and the notice is on the LIVE ledger, appended after the severance step.
+  assert.ok(
+    sim.player.ledger.lines.some(([, text]) => /no one left/.test(text)),
+    "the notice reached the ledger",
+  );
+  loadedPF.save.reset();
+}
+
+// (aa) THE BRIEF-ARRIVAL TRANSPLANT SPLITS THE BLOCK, IT DOES NOT CARRY IT.
+// A chat created before the loading gate boots on a throwaway world and rebuilds
+// when the generated brief seals (one release of backward compatibility). The
+// purse crosses; the people do not. Reinterpreting "Maud Thatch owes you a
+// favour" against a world where Maud Thatch does not exist is the bug this seam
+// would otherwise ship.
+await withSavePath(async ({ makeCore }) => {
+  const P = loadedPF.player;
+  const realGenerate = brief.generate;
+  const savedAssets = { status: loadedPF.assets.status, noPackage: loadedPF.assets._noPackage };
+  brief.generate = async () => brief.defaults("cozy-village", 3311);
+  try {
+    const meta = { gameSetupConfig: { experienceConfig: { seed: 3311, theme: "cozy-village", generate: true } } };
+    const core = makeCore("chat-transplant", 3311);
+    core.host.chatMeta = meta;
+    core.sim = loadedPF.save.simFromSaved(null, meta, core.chatId);
+    assert.equal(core.sim.world.interim, true, "the fixture really is a pre-brief throwaway world");
+    P.grant(core, { t: "rod", k: "fine" }, 1);
+    P.award(core, { money: 25, xp: 4, verb: "fishing" });
+    P.bump(core, "village", "Somebody From The Throwaway", { d: 2, t: 4 });
+    P.log(core, "Something that happened before the world existed.", 1);
+    P.setHome(core, "village");
+
+    await loadedPF.save.maybeGenerateBrief(core);
+
+    assert.ok(core.sim.world.brieved, "the generated world replaced the throwaway one");
+    assert.equal(core.sim.player.pouch.money, 25, "the purse crossed — it means the same thing in any world");
+    assert.equal(core.sim.player.skills.verbs.fishing.x, 4, "and so did the skill");
+    assert.ok(
+      core.sim.player.pouch.items.some((i) => i.t === "rod"),
+      "and the rod",
+    );
+    assert.deepEqual(core.sim.player.rel, {}, "the relationship did NOT — that person does not live here");
+    assert.deepEqual(core.sim.player.ledger.lines, [], "nor the ledger line");
+    assert.equal(core.sim.player.home, null, "nor the home anchor");
+    const parked = loadedPF.quarantine.peek("stamp");
+    assert.ok(parked, "all of which is in the stamp slot rather than deleted");
+    assert.ok(parked.fields.rel.village["Somebody From The Throwaway"], "verbatim");
+    assert.deepEqual(
+      core.sim.player.world,
+      P.stampsFor(core.sim.world, brief.defaults("cozy-village", 3311)),
+      "and the block is re-stamped for the world that actually arrived",
+    );
+  } finally {
+    brief.generate = realGenerate;
+    loadedPF.assets.status = savedAssets.status;
+    loadedPF.assets._noPackage = savedAssets.noPackage;
+  }
+});
+
+// ═══ THE DECISION LADDER (S5 slice 4) ══════════════════════════════════════
+
+// (ab) EVERY ROW, MOCKED, WITH THE ACTION EACH SITE TAKES ON IT.
+// One implementation and three consumers means the table below IS the contract:
+// a row whose meaning drifts at one site and not another is exactly the class of
+// bug slice 4 exists to close.
+{
+  // `seqAtIssue: undefined` means "no own-commit question was asked" — _writeSeq
+  // is module-private and the classifier reads it directly, so the row-5 case
+  // below passes a sequence that cannot possibly be the current one instead.
+  const ladder = (probe, ctx) =>
+    loadedPF.save.classify(
+      probe === null ? { failed: true, error: new TypeError("NetworkError") } : { failed: false, probe },
+      { serverSerialized: null, localSerialized: '{"mine":1}', game: 1, now: Date.now(), ...ctx },
+    );
+  const ok = (state, extra) => ({ available: true, status: 200, body: { exists: true, state, ...extra } });
+
+  const rows = [
+    ["route absent", ladder({ available: false, status: 404 }), 0, { adopt: "metadata", flush: "proceed" }],
+    [
+      "engine says unparseable",
+      ladder(ok(null, { rawState: '{"zone":"vil' })),
+      1,
+      { rewind: "ignore", flush: "proceed" },
+    ],
+    ["older engine, inferred", ladder(ok(null)), 1, { rewind: "ignore", flush: "proceed" }],
+    ["not even an object", ladder(ok("a string")), 1, { rewind: "ignore", flush: "proceed" }],
+    ["a retired game's row", ladder(ok({ v: 1, player: { game: 2 } })), 2, { rewind: "ignore", flush: "proceed" }],
+    ["a pre-S5 row after New game", ladder(ok({ v: 1, zone: "village" }), { game: 3 }), 2, { flush: "proceed" }],
+    [
+      "no row, none expected",
+      ladder({ available: true, body: { exists: false } }),
+      3,
+      { adopt: "first-write", flush: "proceed" },
+    ],
+    [
+      "no row, but we held one",
+      ladder({ available: true, body: { exists: false } }, { serverSerialized: '{"was":1}' }),
+      4,
+      { rewind: "reread", flush: "block" },
+    ],
+    [
+      "our own PUT overtook the GET",
+      ladder(ok({ v: 1, moved: true }), { seqAtIssue: -1 }),
+      5,
+      { rewind: "ignore", flush: "proceed" },
+    ],
+    [
+      "a row, and no anchor of ours",
+      ladder(ok({ v: 1, other: true })),
+      6,
+      { adopt: "rebuild", rewind: "latch", flush: "proceed" },
+    ],
+    [
+      "the row moved under our anchor",
+      ladder(ok({ v: 1, other: true }), { serverSerialized: '{"was":1}' }),
+      7,
+      { rewind: "rewind", flush: "block" },
+    ],
+    ["byte-identical to ours", ladder(ok({ mine: 1 })), 8, { adopt: "none", rewind: "latch", flush: "proceed" }],
+    ["the probe did not answer", ladder(null), 9, { rewind: "none", flush: "fresh" }],
+  ];
+  for (const [label, got, row, actions] of rows) {
+    assert.equal(got.row, row, `${label} is row ${row}, not ${got.row}`);
+    for (const [site, action] of Object.entries(actions)) {
+      assert.equal(got[site], action, `${label}: at the ${site} site it means "${action}", not "${got[site]}"`);
+    }
+  }
+  // The two rows that must never become "what the server holds": overwriting
+  // either is the plan, and latching one would make the next honest difference
+  // read as a rewind.
+  assert.equal(rows[1][1].anchorCache, false, "a damaged row never becomes the anchor");
+  assert.equal(rows[4][1].anchorCache, false, "and neither does a retired game's row");
+
+  // The ordinal predicate is TOTAL. Every one of these reads as game 1, which is
+  // what every row written before S5 is.
+  for (const player of [undefined, null, {}, { game: null }, { game: "2" }, { game: NaN }]) {
+    const got = ladder(ok({ v: 1, player }));
+    assert.notEqual(got.row, 2, `a row whose player is ${JSON.stringify(player)} is not foreign to game 1`);
+  }
+  // Row 9's freshness is a window, not a flag.
+  assert.equal(ladder(null, { lastOkCheckAt: Date.now() }).fresh, true, "a check from a moment ago is fresh");
+  assert.equal(ladder(null, { lastOkCheckAt: Date.now() - 60_000 }).fresh, false, "one from a minute ago is not");
+  assert.equal(ladder(null, { lastOkCheckAt: 0 }).fresh, false, "and never having checked is not fresh either");
+}
+
+// (ac) A FOREIGN-ORDINAL ROW AT THE TURN EDGE DOES NOT REBUILD.
+// "New game" retires the old world but deletes nothing (plan §8 #5) — the rows
+// stay, inert, until the player exports or deletes them. Inert has to mean inert
+// at the turn edge too, or the first swipe after a New game hands the player
+// their old world back with a toast telling them the story rewound.
+await withSavePath(async ({ behavior, makeCore }) => {
+  loadedPF.save.mode = "routes";
+  const core = makeCore("chat-newgame", 909);
+  core.sim.player.game = 2; // the player started a new game
+  await loadedPF.save.flush(core, false); // establish an anchor of our own
+  const anchored = loadedPF.save._serverSerialized;
+  const worldBefore = core.sim.world;
+  core.toasts.length = 0;
+
+  // The row at this anchor belongs to game 1 — a whole world, saved before the
+  // New game, sitting at an anchor that survived.
+  const oldGame = { v: 1, seed: 1, theme: "cozy-village", zone: "forest", day: 40, player: { v: 1, game: 1 } };
+  behavior.get = async () => ({ available: true, status: 200, body: { exists: true, state: oldGame } });
+  await loadedPF.save.checkRewind(core);
+  assert.equal(core.sim.world, worldBefore, "a foreign-ordinal row at the turn edge does not rebuild");
+  assert.deepEqual(core.toasts, [], "and says nothing");
+  assert.equal(loadedPF.save._serverSerialized, anchored, "and never becomes the anchor");
+
+  // A PRE-S5 row is the same case with the ordinal missing entirely, which is
+  // the one that actually ships: every row written before this slice looks
+  // exactly like this.
+  const preS5 = { v: 1, seed: 1, theme: "cozy-village", zone: "inn", day: 12 };
+  behavior.get = async () => ({ available: true, status: 200, body: { exists: true, state: preS5 } });
+  await loadedPF.save.checkRewind(core);
+  assert.equal(core.sim.world, worldBefore, "a pre-S5 row at a surviving anchor does not rebuild after New game");
+  assert.deepEqual(core.toasts, [], "silently");
+
+  // …and the flush writes straight over it, because ours is the live game.
+  behavior.get = async () => ({ available: true, status: 200, body: { exists: true, state: preS5 } });
+  loadedPF.save._lastCheckAt = 0; // force the pre-check to actually run
+  core.sim.day += 1;
+  await loadedPF.save.flush(core, false);
+  assert.equal(loadedPF.save._lastSerialized, JSON.stringify(loadedPF.save.snapshot(core)), "the PUT proceeded");
+});
+
+// (ad) AN UNPARSEABLE ROW AT THE TURN EDGE DOES NOT REBUILD, AND THE WRITE IS
+// THE REPAIR. Engine #5407 hands the damaged text back on the failure path only,
+// so the key's PRESENCE is the signal. Rebuilding from `state: null` would drop
+// the player into a baseline world; the row is simply overwritten instead, and
+// the bytes are parked first because nothing client-side can read them back.
+await withSavePath(async ({ calls, behavior, tick, makeCore }) => {
+  loadedPF.save.mode = "routes";
+  const core = makeCore("chat-corrupt", 1010);
+  await loadedPF.save.flush(core, false);
+  const anchored = loadedPF.save._serverSerialized;
+  const worldBefore = core.sim.world;
+  core.toasts.length = 0;
+
+  behavior.get = async () => ({
+    available: true,
+    status: 200,
+    body: { exists: true, state: null, rawState: '{"zone":"village","x":5', rawStateTruncated: false },
+  });
+  await loadedPF.save.checkRewind(core);
+  assert.equal(core.sim.world, worldBefore, "an unparseable row at the turn edge does not rebuild");
+  assert.deepEqual(core.toasts, [], "and the turn edge says nothing about it");
+  assert.equal(loadedPF.save._serverSerialized, anchored, "it never becomes the anchor either");
+
+  // At ADOPT it is a different job: boot from metadata, tell the player once,
+  // and park the evidence before the repairing write destroys it.
+  loadedPF.save.reset();
+  calls.length = 0;
+  const fresh = makeCore("chat-corrupt-boot", 1011);
+  fresh.host.chatMeta = {};
+  behavior.get = async () => ({
+    available: true,
+    status: 200,
+    body: { exists: true, state: null, rawState: "x".repeat(9_000), rawStateTruncated: true },
+  });
+  await loadedPF.save.adopt(fresh);
+  await tick();
+  assert.equal(loadedPF.save.mode, "routes", "the route is fine — the row is not");
+  assert.equal(fresh.toasts.length, 1, "the player is told once");
+  const parked = calls.find((c) => c.kind === "patch" && c.patch.pixelforgeCorruptExcerpt);
+  assert.ok(parked, "the damaged text is parked under its own key");
+  assert.equal(parked.patch.pixelforgeCorruptExcerpt.text.length, 4_096, "bounded — evidence, not a backup");
+  assert.equal(parked.patch.pixelforgeCorruptExcerpt.truncated, true, "and flagged when it did not all fit");
+  assert.equal(loadedPF.save._serverSerialized, null, "the damaged row is not the anchor");
+  assert.equal(loadedPF.save._lastSerialized, null, "and the next write is forced — the write IS the repair");
+
+  // A later healthy adopt takes the key away again.
+  loadedPF.save.reset();
+  calls.length = 0;
+  const healed = makeCore("chat-corrupt-boot", 1011);
+  healed.host.chatMeta = { pixelforgeCorruptExcerpt: { at: "then", text: "x" } };
+  behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+  await loadedPF.save.adopt(healed);
+  await tick();
+  const cleared = calls.find((c) => c.kind === "patch" && "pixelforgeCorruptExcerpt" in c.patch);
+  assert.ok(cleared, "the next healthy adopt clears it");
+  assert.equal(cleared.patch.pixelforgeCorruptExcerpt, null, "(nulled — the metadata PATCH has no delete convention)");
+});
+
+// (ae) THE FIRST FLUSH OF A FRESH CHAT CREATES A ROW.
+// The pre-check is a gate in front of every routes-mode write, and the very
+// first write of a chat is the one that has nothing to compare against. Row 3
+// exists so that case proceeds rather than being blocked by its own novelty.
+await withSavePath(async ({ calls, behavior, makeCore }) => {
+  loadedPF.save.mode = "routes";
+  const core = makeCore("chat-firstwrite", 1212);
+  behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+  await loadedPF.save.flush(core, false);
+  assert.deepEqual(
+    calls.map((c) => c.kind),
+    ["get", "put", "patch"],
+    "the pre-check looks, finds nothing, and the write creates the row",
+  );
+  assert.equal(loadedPF.save._lastCheck.row, 3, "on row 3 — no row, and none expected");
+  assert.equal(calls[1].state.zone, core.sim.zoneId, "carrying this world");
+
+  // …and the SECOND write inside one debounce window does not re-check. The
+  // pre-check exists so a PUT never lands on a row nobody looked at; a check
+  // taken a moment ago looked at it.
+  calls.length = 0;
+  behavior.get = async () => ({
+    available: true,
+    status: 200,
+    body: { exists: true, state: JSON.parse(loadedPF.save._lastSerialized) },
+  });
+  core.sim.day += 1;
+  await loadedPF.save.flush(core, false);
+  assert.deepEqual(
+    calls.map((c) => c.kind),
+    ["put", "patch"],
+    "a fresh check is spent rather than re-taken",
+  );
+
+  // Once it goes stale, the check happens again.
+  calls.length = 0;
+  loadedPF.save._lastCheckAt = Date.now() - 60_000;
+  core.sim.day += 1;
+  await loadedPF.save.flush(core, false);
+  assert.deepEqual(
+    calls.map((c) => c.kind),
+    ["get", "put", "patch"],
+    "a stale one is re-taken",
+  );
+});
+
+// (af) THE TWO ROWS THAT BLOCK A WRITE, AND THE ONE THAT BLOCKS A TEARDOWN.
+// A blocking row is not a write failure: the server is fine, the timeline moved.
+// So it must not spend a backoff rung, and the rewind it triggers is what re-arms.
+await withSavePath(async ({ armed, calls, behavior, makeCore }) => {
+  loadedPF.save.mode = "routes";
+  const core = makeCore("chat-block", 1313);
+  await loadedPF.save.flush(core, false);
+  core.toasts.length = 0;
+  calls.length = 0;
+  armed.length = 0;
+
+  // ROW 7 — the row under our anchor moved. The write is refused and the world
+  // is rebuilt onto the row instead.
+  const moved = { v: 1, seed: 1313, theme: "cozy-village", zone: "inn", day: 30, player: { v: 1, game: 1 } };
+  behavior.get = async () => ({ available: true, status: 200, body: { exists: true, state: moved } });
+  loadedPF.save._lastCheckAt = 0;
+  core.sim.day += 1;
+  await loadedPF.save.flush(core, false);
+  assert.equal(calls.filter((c) => c.kind === "put").length, 0, "row 7 blocks the write");
+  assert.equal(core.sim.zoneId, "inn", "and rewinds the world onto the row");
+  assert.deepEqual(core.toasts, ["The world rewound with the story."], "with the one toast that says so");
+  assert.equal(loadedPF.save._flushFailures, 0, "a blocked write is not a failed write — no rung is spent");
+
+  // ROW 4 — the row is gone. ONE re-read first: a GET landing inside the PUT
+  // route's delete-then-insert window sees no row and would rewind a live world.
+  loadedPF.save.reset();
+  loadedPF.save.mode = "routes";
+  const core2 = makeCore("chat-lost", 1414);
+  await loadedPF.save.flush(core2, false);
+  core2.toasts.length = 0;
+  calls.length = 0;
+  let gets = 0;
+  behavior.get = async () => {
+    gets += 1;
+    // The first read misses; the second finds the row exactly where it was.
+    return gets === 1
+      ? { available: true, status: 200, body: { exists: false } }
+      : { available: true, status: 200, body: { exists: true, state: JSON.parse(loadedPF.save._serverSerialized) } };
+  };
+  await loadedPF.save.checkRewind(core2);
+  assert.equal(gets, 2, "row 4 re-reads once before believing the row is gone");
+  assert.deepEqual(core2.toasts, [], "and a row that was only briefly invisible rewinds nothing");
+
+  gets = 0;
+  behavior.get = async () => {
+    gets += 1;
+    return { available: true, status: 200, body: { exists: false } };
+  };
+  await loadedPF.save.checkRewind(core2);
+  assert.equal(gets, 2, "a genuinely missing row costs the same two reads");
+  assert.deepEqual(core2.toasts, ["The world rewound with the story."], "and then rewinds to the baseline");
+  assert.equal(loadedPF.save._serverSerialized, null, "dropping the anchor it no longer has");
+
+  // THE TEARDOWN GATE, derived. Teardown takes no GET of its own — the page is
+  // going away — so it spends the last completed check's verdict.
+  loadedPF.save.reset();
+  loadedPF.save.mode = "routes";
+  const core3 = makeCore("chat-teardown-gate", 1515);
+  assert.equal(loadedPF.save._teardownAllowed(), true, "never having checked is a proceed — that is a fresh chat");
+  for (const row of [4, 7]) {
+    loadedPF.save._lastCheck = { row, flush: "block" };
+    assert.equal(loadedPF.save._teardownAllowed(), false, `row ${row} blocks the teardown write`);
+  }
+  for (const row of [1, 2, 3, 5, 6, 8]) {
+    loadedPF.save._lastCheck = { row, flush: "proceed" };
+    assert.equal(loadedPF.save._teardownAllowed(), true, `row ${row} does not`);
+  }
+  // Row 9 under its freshness condition, driven for real: a probe that threw.
+  behavior.get = async () => {
+    throw new TypeError("NetworkError when attempting to fetch resource");
+  };
+  await loadedPF.save.checkRewind(core3);
+  assert.equal(loadedPF.save._lastCheck.row, 9, "the failed probe is the last completed check");
+  loadedPF.save._lastOkCheckAt = Date.now() - 60_000;
+  assert.equal(loadedPF.save._teardownAllowed(), false, "row 9 blocks once its last successful check has gone stale");
+  loadedPF.save._lastOkCheckAt = Date.now();
+  assert.equal(loadedPF.save._teardownAllowed(), true, "and proceeds while it is still fresh");
+
+  // …and the two clocks are NOT one clock (slice-4 fix). A row-4 check ANSWERS,
+  // so it moves the answered-clock the pre-check's skip window measures — but it
+  // found the row GONE, which is the opposite of "we looked and it was fine".
+  // Sharing one field let an unresolved lost-row check make the very next
+  // teardown look fresh and ship a full-snapshot overwrite on the strength of it.
+  loadedPF.save._lastOkCheckAt = 0;
+  loadedPF.save._recordCheck({ row: 4, flush: "block", anchor: null });
+  assert.ok(loadedPF.save._lastCheckAt > 0, "a row-4 check answered, so the answered-clock moves");
+  assert.equal(loadedPF.save._lastOkCheckAt, 0, "but it found no row, so the last-OK clock does not");
+  loadedPF.save._lastCheck = { row: 9, flush: "fresh" };
+  assert.equal(
+    loadedPF.save._teardownAllowed(),
+    false,
+    "so a row 9 behind an unresolved row 4 is not fresh, however recently the row 4 answered",
+  );
+  // An echoed anchor MOVE cancels freshness outright: whatever we last saw, we
+  // did not see it at the anchor this write would land on.
+  loadedPF.save._lastOkCheckAt = Date.now();
+  loadedPF.save._anchorMoved = true;
+  assert.equal(loadedPF.save._teardownAllowed(), false, "and a moved anchor is not fresh at any age");
+  loadedPF.save._anchorMoved = false;
+
+  // METADATA MODE HAS NO ROW IN THE CLEAN-SET. The gate is derived from the
+  // ROUTE ladder; a boot probe that failed picks metadata mode AND leaves its
+  // row 9 behind, and reading that row 9 as a verdict about a metadata key the
+  // PATCH owns outright refused every teardown write for the rest of the session.
+  loadedPF.save.mode = "metadata";
+  loadedPF.save._lastCheck = { row: 9, flush: "fresh" };
+  loadedPF.save._lastOkCheckAt = 0;
+  assert.equal(loadedPF.save._teardownAllowed(), true, "a metadata-mode teardown is not gated on a route row");
+  loadedPF.save._lastCheck = { row: 7, flush: "block" };
+  assert.equal(loadedPF.save._teardownAllowed(), true, "not even by a row that blocks in routes mode");
+  loadedPF.save.mode = "routes";
+
+  calls.length = 0;
+  loadedPF.save._lastCheck = { row: 7, flush: "block" };
+  core3.sim.day += 1;
+  loadedPF.save.flushTeardown(core3);
+  assert.equal(calls.length, 0, "so a teardown after a blocking check writes nothing at all");
+});
+
+// (ag) THE PUT-ANCHOR ECHO. The row lands at whatever the visible anchor is when
+// the write is SERVED, and a turn can finish between the check and the write.
+// Two consequences: the next flush may not spend the stale check, and a
+// difference found at the anchor we never looked at is a rewind, not a latch.
+await withSavePath(async ({ calls, behavior, makeCore }) => {
+  loadedPF.save.mode = "routes";
+  const core = makeCore("chat-echo", 1616);
+  behavior.get = async () => ({
+    available: true,
+    status: 200,
+    body: { exists: false, anchor: { messageId: "m1", swipeIndex: 0 } },
+  });
+  behavior.put = async () => ({ ok: true, id: "row1", anchor: { messageId: "m1", swipeIndex: 0 } });
+  await loadedPF.save.flush(core, false);
+  assert.equal(loadedPF.save._anchorMoved, false, "a write that landed where we looked moves nothing");
+
+  // The turn finished mid-write.
+  calls.length = 0;
+  behavior.put = async () => ({ ok: true, id: "row2", anchor: { messageId: "m2", swipeIndex: 0 } });
+  core.sim.day += 1;
+  await loadedPF.save.flush(core, false);
+  assert.equal(loadedPF.save._anchorMoved, true, "an echo from an anchor we never checked is recorded");
+
+  // …so the very next flush re-checks even though the last check is seconds old.
+  calls.length = 0;
+  behavior.put = async () => ({ ok: true, id: "row2", anchor: { messageId: "m2", swipeIndex: 0 } });
+  behavior.get = async () => ({
+    available: true,
+    status: 200,
+    body: {
+      exists: true,
+      state: JSON.parse(loadedPF.save._serverSerialized),
+      anchor: { messageId: "m2", swipeIndex: 0 },
+    },
+  });
+  core.sim.day += 1;
+  await loadedPF.save.flush(core, false);
+  assert.deepEqual(
+    calls.map((c) => c.kind),
+    ["get", "put", "patch"],
+    "the freshness of a check taken at a different anchor is not spent",
+  );
+  assert.equal(loadedPF.save._anchorMoved, false, "and the flag is consumed by the check it forced");
+
+  // And with no anchor of our own, a moved echo still routes a difference down
+  // the rewind path rather than latching it in silence.
+  const decided = loadedPF.save.classify(
+    { failed: false, probe: { available: true, body: { exists: true, state: { v: 1, someone: "else" } } } },
+    { serverSerialized: null, localSerialized: '{"mine":1}', game: 1, anchorMoved: true },
+  );
+  assert.equal(decided.row, 7, "a difference at an anchor we never checked is row 7, not row 6");
+  assert.equal(decided.rewind, "rewind", "which is the rewind path");
+});
+
+// ── S5 SLICE 3-4 GATE FIXES ──────────────────────────────────────────────────
+
+// (ah) THE MAX SHAPE, MEASURED — what a fully-played world actually weighs, and
+// whether it clears the walls that really exist. There is no size budget any
+// more (maintainer ruling, round 2: the 24 KB figure was inherited caution and
+// what it bought was tiny settlements), so this case asserts against the two
+// REAL walls and nothing else:
+//
+//   · MAX_SNAPSHOT_CHARS — 262,144, mirroring the Engine row cap the server
+//     422s above. This binds EVERY write, and tripping it degrades the session
+//     for good, so the margin here is the one that matters.
+//   · The keepalive pair quota — 57,000 bytes for the PAIR, and it binds the
+//     pagehide TEARDOWN path only. Reported here, not asserted as a general
+//     bound: an ordinary flush is not subject to it, and case (j) is where the
+//     teardown path's own behaviour over that quota is pinned. A saturated world
+//     is OVER it (the printed numbers say by how much), which is not a failure:
+//     flushTeardown's documented answer is to send the route PUT alone and let
+//     the write-through cache repair on the next load. Losing the cache PATCH at
+//     pagehide is repairable; losing both is the session.
+//
+// The measurement itself stays, because a cap that moves should say by how much
+// and in which direction. Saturation is driven through the SHIPPED MUTATORS
+// only: a hand-built object could satisfy this while the real code path could
+// not reach the same shape.
+{
+  const P = loadedPF.player;
+  const CAPS = P.CAPS;
+  const wide = (prefix, n, width) => (prefix + n).padEnd(width, "x").slice(0, width);
+  // Field widths are the ones the shipped code actually produces: the brief
+  // validator caps a cast name at 24 (18-brief capText), zone and place anchors
+  // are <= 4 chars ("z12", "h4b"), and the board's own comment names its quest
+  // ids ("b1.d37.2").
+  const saturate = (scale) => {
+    const cast = [];
+    for (let i = 0; i < 24; i++) {
+      cast.push({
+        name: wide("Cast", i, 24),
+        role: "trader",
+        kind: i % 5 === 0 ? "merchant" : "folk",
+        tint: "amber",
+        home: "Greatmarket",
+        household: 1 + (i % 9),
+      });
+    }
+    const sealed = brief.validate(
+      {
+        scale,
+        name: "Greatmarket",
+        prosperity: "thriving",
+        backgroundPopulation: 400,
+        situation: "The harbour tax has not been collected in three seasons and everyone knows whose fault it is.",
+        cast,
+      },
+      { theme: "cozy-village", seed: 987654 },
+    );
+    const w = world.build(987654, "cozy-village", sealed);
+    const sim = new loadedPF.Sim(w);
+    const core = { chatId: "chat-maxshape", sim, hud: { toast() {}, refreshChips() {} } };
+    const zoneIds = Object.keys(w.zones);
+    for (let i = 0; i < CAPS.items + 5; i++) P.grant(core, { t: wide("item.", i, 16), k: wide("tier", i, 8) }, 99);
+    P.award(core, { money: 999_999 });
+    for (const verb of ["fishing", "foraging", "mining", "crafting", "cooking", "trading", "mending", "hauling"]) {
+      P.award(core, { xp: 100_000, verb });
+      P.equip(core, verb, "tool", { t: wide("tool.", verb, 16), k: wide("tier", 1, 8) });
+      P.equip(core, verb, "mod", { t: wide("mod.", verb, 16), k: wide("tier", 2, 8) });
+    }
+    let placed = 0;
+    for (let i = 0; placed < CAPS.relRows + 10 && i < 4000; i++) {
+      const patch = { d: i % 4, t: 40 + (i % 7) };
+      if (placed < CAPS.relLines + 6) patch.s = "x".repeat(CAPS.lineChars + 20);
+      if (i % 11 === 0) patch.h = true;
+      if (P.bump(core, zoneIds[i % zoneIds.length], wide("Cast", i, 24), patch)) placed += 1;
+    }
+    for (let i = 0; i < CAPS.boardDone + 6; i++) {
+      const id = wide("b1.d", i, 12);
+      P.quest(core, "accept", {
+        id,
+        g: `z1|${wide("Cast", i, 24)}`,
+        verb: "hauling",
+        target: wide("item.", i, 16),
+        n: 3,
+      });
+      P.quest(core, "complete", { id, template: id });
+    }
+    for (let i = 0; i < CAPS.packDone + 6; i++) {
+      const id = `p:${wide("pack.", i, 18)}`;
+      P.quest(core, "accept", {
+        id,
+        g: `z1|${wide("Cast", i, 24)}`,
+        verb: "mending",
+        target: wide("item.", i, 16),
+        n: 3,
+      });
+      P.quest(core, "complete", { id, template: id });
+    }
+    for (let i = 0; i < CAPS.activeQuests + 4; i++) {
+      P.quest(core, "accept", {
+        id: wide("b3.a", i, 12),
+        g: `z2|${wide("Cast", i, 24)}`,
+        verb: "foraging",
+        target: wide("item.", i, 16),
+        n: 9,
+        r: { money: 250, xp: 120 },
+        day: 40 + i,
+      });
+    }
+    // `bought` has no mutator yet — it is the optional stock-table seam — so it
+    // is filled directly and then normalized by the same serializer.
+    sim.player.bought = {};
+    for (let i = 0; i < CAPS.bought; i++) {
+      const shop = wide("s", i % 6, 4);
+      (sim.player.bought[shop] ??= {})[wide("item.", i, 16)] = 9;
+    }
+    for (let day = 1; day <= CAPS.ledgerStubs; day++) {
+      for (let i = 0; i < 4; i++) P.log(core, "y".repeat(CAPS.ledgerChars + 40), day);
+    }
+    for (let day = CAPS.ledgerStubs + 1; day <= CAPS.ledgerStubs + CAPS.ledgerDays; day++) {
+      for (let i = 0; i < CAPS.ledgerPerDay + 3; i++) P.log(core, "y".repeat(CAPS.ledgerChars + 40), day);
+    }
+    for (let i = 0; i < CAPS.found + 8; i++) P.discover(core, { p: wide("z", i, 4), e: i % 3, d: i % 5, day: 10 + i });
+    P.setHome(core, zoneIds[3] ?? "z3");
+    // …and the ENVELOPE at its realistic worst too: every zone bound (the maps
+    // export binds every planned zone) and every one-shot intro flag burned.
+    sim.intro = { world: true, zones: {}, npcs: {} };
+    for (const zoneId of zoneIds) {
+      sim.intro.zones[zoneId] = true;
+      w.bindings[`pf.${zoneId}.anchor`] = zoneId;
+      for (const npc of w.zones[zoneId].npcs ?? []) sim.intro.npcs[npc.name] = true;
+    }
+    sim.zoneId = zoneIds[0];
+    sim.day = 999;
+    sim.clockMin = 1_339;
+    const block = JSON.stringify(P.serialize(sim.player));
+    const snap = JSON.stringify(loadedPF.save.snapshot(core));
+    return { block, snap, zones: zoneIds.length, parsed: JSON.parse(block) };
+  };
+
+  const town = saturate("town");
+  // SATURATION IS THE PRECONDITION. A shape measured against a block that never
+  // reached its caps measures nothing.
+  const at = town.parsed;
+  assert.equal(at.pouch.items.length, CAPS.items, "the pouch is at its cap");
+  assert.equal(
+    Object.values(at.rel).reduce((n, rows) => n + Object.keys(rows).length, 0),
+    CAPS.relRows,
+    "the relationship ledger is at its row cap",
+  );
+  assert.equal(
+    Object.values(at.rel).reduce((n, rows) => n + Object.values(rows).filter((c) => c.s).length, 0),
+    CAPS.relLines,
+    "and at its line cap",
+  );
+  assert.equal(Object.keys(at.quests_done_board).length, CAPS.boardDone, "the board's counters are at their cap");
+  assert.equal(Object.keys(at.quests.done_pack).length, CAPS.packDone, "and the pack's");
+  assert.equal(at.quests.active.length, CAPS.activeQuests, "the active list is full");
+  assert.equal(at.found.zones.length, CAPS.found, "discovery is at its cap");
+  assert.equal(
+    at.ledger.lines.length,
+    CAPS.ledgerDays * CAPS.ledgerPerDay + CAPS.ledgerStubs,
+    "and the ledger holds its full days plus its full run of stubs",
+  );
+
+  // …AT THE PLAN'S OWN NUMBERS, PINNED. Every assertion above reads CAPS, so it
+  // would go on passing against caps shrunk to anything at all — and they were
+  // shrunk once, to fit a size budget that has since been abolished (maintainer
+  // ruling, round 2), which is what made settlements feel tiny. Pinned so a
+  // size-motivated retune has to be an explicit decision rather than a quiet
+  // one. These are gameplay bounds; the walls below are the size question.
+  assert.deepEqual(
+    {
+      items: CAPS.items,
+      relRows: CAPS.relRows,
+      relLines: CAPS.relLines,
+      lineChars: CAPS.lineChars,
+      boardDone: CAPS.boardDone,
+      packDone: CAPS.packDone,
+      bought: CAPS.bought,
+      ledgerPerDay: CAPS.ledgerPerDay,
+      ledgerStubs: CAPS.ledgerStubs,
+      ledgerChars: CAPS.ledgerChars,
+      found: CAPS.found,
+    },
+    {
+      items: 60,
+      relRows: 150,
+      relLines: 30,
+      lineChars: 80,
+      boardDone: 40,
+      packDone: 40,
+      bought: 30,
+      ledgerPerDay: 15,
+      ledgerStubs: 30,
+      ledgerChars: 200,
+      found: 80,
+    },
+    "the caps are the plan's own numbers, and a saturated block really reaches every one of them",
+  );
+
+  // THE ONE WALL EVERY WRITE IS SUBJECT TO. MAX_SNAPSHOT_CHARS mirrors the
+  // Engine's per-row cap: past it the route 422s, the pre-flight refuses, and
+  // the session degrades permanently. Asserted on the largest world the
+  // compiler builds at all — a city compiles ~118 zones and ~147 residents, so
+  // its ENVELOPE alone is ~7.5 KB before the player block exists.
+  const SERVER_ROW_CAP = 262_144;
+  const city = saturate("city");
+  assert.ok(city.zones > 100, `the city fixture really is city-sized (${city.zones} zones)`);
+  for (const [label, shape] of [
+    ["town", town],
+    ["city", city],
+  ]) {
+    assert.ok(
+      shape.snap.length <= SERVER_ROW_CAP,
+      `a saturated ${label} snapshot is ${shape.snap.length} chars, past the server's own row cap — saving would degrade permanently`,
+    );
+    // …with CLEAR margin, not merely under it. A saturated world sitting at 90%
+    // of the wall would be one feature away from the permanent degrade, and the
+    // point of measuring is to see that coming.
+    assert.ok(
+      shape.snap.length <= SERVER_ROW_CAP / 2,
+      `a saturated ${label} snapshot is ${shape.snap.length} chars — over half the server row cap, which is too close to the wall`,
+    );
+  }
+
+  // THE QUARANTINE TRIPWIRE IS NOT A WALL EITHER, and the max shape is how you
+  // tell. Its ceiling exists to stop a pathological blob bloating the chat's
+  // metadata, not to be an allowance the bag is squeezed into — so a REAL
+  // severance of a fully-played world has to fit with every other slot beside it
+  // and room to spare. At 24,576 it did not: a saturated block alone is bigger
+  // than that, and the one thing the bag exists to hold was the first thing it
+  // dropped.
+  const Q = loadedPF.quarantine;
+  Q.reset();
+  Q.put("chat-maxshape", "stamp", {
+    reason: "mint",
+    stamps: { seed: 1, briefHash: 2, mintStamp: 3 },
+    fields: { rel: at.rel, questsActive: at.quests.active, ledgerLines: at.ledger.lines },
+  });
+  Q.put("chat-maxshape", "setAside", { reason: "displaced", fromV: 9, block: at });
+  Q.put("chat-maxshape", "migration", { reason: "throw", block: at });
+  assert.deepEqual(
+    Q.slots(),
+    ["migration", "setAside", "stamp"],
+    "a severance of a fully-played world, a displaced copy of it and a failed migration all fit the bag at once",
+  );
+  const bagChars = JSON.stringify(Q._bag).length;
+  assert.ok(bagChars < Q.MAX_CHARS, `…with room left over (${bagChars} of ${Q.MAX_CHARS} chars used)`);
+  Q.reset();
+
+  // The measured numbers, recorded rather than merely bounded: when a cap moves,
+  // this is the line that says by how much and in which direction. The keepalive
+  // pair is reported alongside because it binds the TEARDOWN path only — case
+  // (j) is where that path's behaviour over the quota is pinned.
+  const pairBytes = (shape) => 2 * new TextEncoder().encode(shape.snap).length;
+  loadedPF.save.reset();
+  console.log(
+    `  max shape — town: block ${town.block.length}, snapshot ${town.snap.length} ` +
+      `· city: block ${city.block.length}, snapshot ${city.snap.length} ` +
+      `(262,144 server row cap, ${SERVER_ROW_CAP - city.snap.length} spare) ` +
+      `· teardown pair (pagehide only): town ${pairBytes(town)}, city ${pairBytes(city)} bytes vs the 57,000 keepalive quota`,
+  );
+}
+
+// (ah2) …AND THE CAPS HOLD ON THE PATHS THAT DO NOT GO THROUGH A MUTATOR.
+// Case (ah) saturates through the shipped mutators, and that is exactly why it
+// missed this: restoration and the transplant put whole fields back BY
+// ASSIGNMENT, so the only thing between a quarantine entry and a block at twice
+// the row cap is _enforceCaps. It held by evicting STRANGER rows — and once a
+// hostile row stopped counting as a stranger, a hostile-on-hostile restore left
+// the pass with nothing it was willing to take and the cap simply did not hold.
+// A cap a restore can walk through is not a cap.
+{
+  const P = loadedPF.player;
+  const CAPS = P.CAPS;
+  const rowsIn = (rel) => Object.values(rel).reduce((n, rows) => n + Object.keys(rows).length, 0);
+
+  const live = P.defaultPlayer();
+  live.rel = { zLive: {} };
+  for (let i = 0; i < CAPS.relRows; i++) live.rel.zLive[`Live_person_number_${i}`] = { d: 0, t: 1, h: 1 };
+  const parked = { zParked: {} };
+  for (let i = 0; i < CAPS.relRows; i++) parked.zParked[`Parked_person_num_${i}`] = { d: 0, t: 1, h: 1 };
+  const stamps = P.stampsFor(null, null);
+  const restored = P.restoreStamped(live, { reason: "mint", stamps, fields: { rel: parked } }, null, null);
+  assert.equal(
+    rowsIn(restored.rel),
+    CAPS.relRows,
+    `a hostile-on-hostile restore left ${rowsIn(restored.rel)} rel rows against a cap of ${CAPS.relRows}`,
+  );
+
+  // …and the eviction still spends the cheapest rows first. The cap holding
+  // unconditionally must not mean it holds ARBITRARILY: a row the player built
+  // something with is never the first to go, it is only no longer exempt.
+  const mixed = P.defaultPlayer();
+  mixed.rel = { z: {} };
+  mixed.rel.z.stranger_a = { d: 0, t: 1 };
+  mixed.rel.z.stranger_b = { d: 0, t: 2 };
+  mixed.rel.z.close_friend = { d: 3, t: 90 };
+  mixed.rel.z.remembered = { d: 0, t: 5, s: "said a thing", a: 4 };
+  for (let i = 0; i < CAPS.relRows; i++) {
+    mixed.rel.z[`hostile_${String(i).padStart(3, "0")}`] = { d: 0, t: 10 + i, h: 1 };
+  }
+  P._enforceCaps(mixed, 0);
+  const left = Object.keys(mixed.rel.z);
+  assert.equal(left.length, CAPS.relRows, "the count lands exactly on the cap");
+  assert.ok(!left.includes("stranger_a") && !left.includes("stranger_b"), "both pure strangers went first");
+  assert.ok(left.includes("close_friend"), "the row at the top of the ladder survived");
+  assert.ok(left.includes("remembered"), "so did the row with a remembered line");
+  assert.ok(!left.includes("hostile_000") && !left.includes("hostile_001"), "the two least-encountered hostiles went");
+  assert.ok(left.includes(`hostile_${String(CAPS.relRows - 1).padStart(3, "0")}`), "the most-encountered one stayed");
+}
+
+// (ai) THE PLAYER BLOCK KEEPS A NEWER BUILD'S KEYS TOO.
+// The envelope has had unknown-key retention since slice 1; the block did not,
+// and serialize() rebuilds `out` from a fixed key list, so a field a newer build
+// added at the SAME player.v was dropped on read and deleted by the next flush.
+// The block's version gate does not cover it: the gate only fires when `v`
+// moves, and bumping `v` for one additive field costs every older build a
+// defaults boot until re-adoption. ROADMAP §S5 promises both mechanisms for the
+// block by name ("unknown keys preserved rather than dropped so a downgrade does
+// not silently destroy data a newer build wrote"), and plan §Q1 says
+// "unknown-key retention both levels".
+{
+  const P = loadedPF.player;
+  const fromNewer = {
+    ...P.serialize(P.defaultPlayer()),
+    pouch: { money: 12, items: [] },
+    reputation: 42,
+    pets: [{ n: "cat" }],
+  };
+  const parsed = P.parse(JSON.parse(JSON.stringify(fromNewer)));
+  assert.equal(parsed.source, "saved", "the block is readable — same v, one extra field");
+  assert.equal(parsed.player.pouch.money, 12, "so this is a real parse, not a defaults boot");
+  assert.equal(parsed.player.reputation, 42, "and the newer build's field is retained, not deleted");
+  assert.deepEqual(parsed.player.pets, [{ n: "cat" }], "by value, like the envelope's carry");
+
+  const wire = JSON.stringify(P.serialize(parsed.player));
+  assert.ok(wire.startsWith('{"pets":'), "re-emitted FIRST and sorted, so the bytes cannot drift with the source");
+  assert.equal(JSON.stringify(P.serialize(P.parse(JSON.parse(wire)).player)), wire, "and a round trip changes nothing");
+
+  const sim = new loadedPF.Sim(world.build(11, "cozy-village"));
+  sim.player = parsed.player;
+  const snap = loadedPF.save.snapshot({ sim, chatId: "chat-blockcarry" });
+  assert.equal(snap.player.reputation, 42, "it survives the flush the older build makes");
+
+  // dropCarry is the pre-flight's escape hatch and it has to REACH the block:
+  // a foreign field living only inside `player` is otherwise unshakeable.
+  const slim = loadedPF.save.snapshot({ sim, chatId: "chat-blockcarry" }, true);
+  assert.equal(slim.player.reputation, undefined, "the slim snapshot sheds the block's carry too");
+  assert.equal(slim.player.pouch.money, 12, "while this world's own state stays");
+  const shed = loadedPF.save._snapshotWithoutCarry(sim, "chat-blockcarry");
+  assert.ok(shed, "and _snapshotWithoutCarry offers the shed even with no ENVELOPE carry at all");
+
+  // …and a block with nothing foreign in it gains no bytes for the mechanism.
+  assert.equal(
+    JSON.stringify(P.serialize(P.defaultPlayer())),
+    JSON.stringify(P.serialize(P.defaultPlayer(), true)),
+    "no carry, no bytes",
+  );
+}
+
+// (aj) THE STAMP SLOT MERGES, setAside IS A LIST, AND OVERFLOW REFUSES WHAT IT
+// CANNOT HOLD. The stamp slot was one-shot like the others, and that was a
+// data-loss bug with a lie on top: applyStamps STRIPS the live block before
+// offering the entry, so a second severance found the slot full, was told
+// `false`, and deleted everything it had just stripped — while still telling the
+// player it had been set aside.
+{
+  const Q = loadedPF.quarantine;
+  Q.reset();
+  const stamps = { seed: 1, briefHash: 2, mintStamp: 3 };
+  assert.equal(
+    Q.put("chat-merge", "stamp", {
+      reason: "brief",
+      fromV: 1,
+      stamps,
+      fields: {
+        rel: { z1: { Ann: { d: 1, t: 2 } } },
+        questsActive: [{ id: "q1", have: 1 }],
+        ledgerLines: [[1, "one"]],
+        found: [{ p: "z1", e: 0, d: 0, day: 1 }],
+        home: "z3",
+      },
+    }),
+    true,
+  );
+  assert.equal(
+    Q.put("chat-merge", "stamp", {
+      reason: "brief",
+      fromV: 1,
+      stamps,
+      fields: {
+        rel: { z1: { Ann: { d: 3, t: 9 }, Bo: { d: 0, t: 1 } } },
+        questsActive: [
+          { id: "q1", have: 5 },
+          { id: "q2", have: 0 },
+        ],
+        ledgerLines: [[2, "two"]],
+        found: [{ p: "z2", e: 0, d: 0, day: 2 }],
+        home: "z9",
+      },
+    }),
+    true,
+    "a SECOND severance is taken, not refused — first-loss-wins here was deletion",
+  );
+  const held = Q.peek("stamp");
+  assert.equal(held.fields.rel.z1.Ann.d, 3, "a person both severances knew keeps the higher-tier cell");
+  assert.ok(held.fields.rel.z1.Bo, "and a person only the second knew is kept as well");
+  assert.deepEqual(
+    held.fields.questsActive.map((q) => q.id).sort(),
+    ["q1", "q2"],
+    "quests concatenate and dedupe by id",
+  );
+  assert.equal(held.fields.questsActive.find((q) => q.id === "q1").have, 5, "keeping the one that got further");
+  assert.deepEqual(
+    held.fields.ledgerLines,
+    [
+      [1, "one"],
+      [2, "two"],
+    ],
+    "ledger lines concatenate in order",
+  );
+  assert.equal(held.fields.found.length, 2, "discoveries union by their composite key");
+  assert.equal(held.fields.home, "z3", "and the HELD home stands — two homes are not a home");
+
+  // A severance of a DIFFERENT kind still unions its fields, but the FIRST loss
+  // stays the anchor: its stamps are what a returning world is matched against.
+  assert.equal(
+    Q.put("chat-merge", "stamp", {
+      reason: "mint",
+      fromV: 1,
+      stamps: { seed: 9, briefHash: 9, mintStamp: 9 },
+      fields: { found: [{ p: "z7", e: 0, d: 0, day: 7 }] },
+    }),
+    true,
+  );
+  const after = Q.peek("stamp");
+  assert.equal(after.reason, "brief", "the older entry's reason survives");
+  assert.deepEqual(after.stamps, stamps, "and its stamps — the first loss is the anchor");
+  assert.equal(after.fields.found.length, 3, "while the newcomer's fields still union in");
+
+  // …AND AN EXACT (d,t) TIE LEAVES THE HELD ROW STANDING. The rule is "the higher
+  // `d` wins, then more encounters, then the held row", and the held entry is the
+  // merge's anchor everywhere else — its stamps, its reason, its `at`, its home.
+  // It was not true of `rel`: the loop offered the INCOMING row first and
+  // replaced only on a strict improvement, so two rows tying on both ranks left
+  // the incoming one in the slot and the held row's remembered line was what went.
+  // Cleared with `discard` rather than `reset()` so the whole case stays ONE
+  // queued write on the shared chain — (ak) counts what the chain carries.
+  Q.discard("chat-merge", "stamp");
+  Q.put("chat-merge", "stamp", {
+    reason: "brief",
+    fromV: 1,
+    stamps,
+    fields: { rel: { z1: { Cass: { d: 2, t: 4, s: "She showed you the ford.", a: 3 } } } },
+  });
+  Q.put("chat-merge", "stamp", {
+    reason: "brief",
+    fromV: 1,
+    stamps,
+    fields: { rel: { z1: { Cass: { d: 2, t: 4, s: "A stranger with the same name." } } } },
+  });
+  const tied = Q.peek("stamp").fields.rel.z1.Cass;
+  assert.equal(tied.s, "She showed you the ford.", "an exact (d,t) tie leaves the HELD row standing");
+  assert.equal(tied.a, 3, "…whole, the way every other anchored field of the merge is kept");
+  // The tiebreak is only reached ON a tie: more encounters at the same tier is a
+  // rank, and a rank the held row does not get to override.
+  Q.put("chat-merge", "stamp", {
+    reason: "brief",
+    fromV: 1,
+    stamps,
+    fields: { rel: { z1: { Cass: { d: 2, t: 5, s: "One more meeting." } } } },
+  });
+  assert.equal(Q.peek("stamp").fields.rel.z1.Cass.t, 5, "more encounters at the same tier still takes the row");
+
+  // A ZONE NAMED FOR SOMETHING ON Object.prototype. The merge read `merged[zoneId]`
+  // bare, so "constructor" resolved to the INHERITED function, came back truthy, and
+  // was adopted as the bucket: that zone's rows were written onto `Object` itself and
+  // the merged map never grew an own key to hand back. `ownEntries` already refuses
+  // "__proto__", so the inherited NAMES are the half that was left — and a zone id is
+  // whatever the generated brief called a place.
+  Q.discard("chat-merge", "stamp");
+  Q.put("chat-merge", "stamp", {
+    reason: "brief",
+    fromV: 1,
+    stamps,
+    fields: { rel: { constructor: { Dov: { d: 1, t: 1 } } } },
+  });
+  Q.put("chat-merge", "stamp", {
+    reason: "brief",
+    fromV: 1,
+    stamps,
+    fields: { rel: { constructor: { Dov: { d: 4, t: 2 } }, toString: { Eda: { d: 1, t: 1 } } } },
+  });
+  const shadowed = Q.peek("stamp").fields.rel;
+  assert.deepEqual(
+    Object.keys(shadowed).sort(),
+    ["constructor", "toString"],
+    "a zone named for an inherited member is an OWN key of the merged map",
+  );
+  assert.equal(shadowed.constructor.Dov.d, 4, "…and its rows merge by the rule every other zone gets");
+  assert.equal(shadowed.toString.Eda.d, 1, "…including a zone only the second severance knew");
+  assert.ok(
+    !Object.prototype.hasOwnProperty.call(Object, "Dov") &&
+      !Object.prototype.hasOwnProperty.call(Object.prototype.toString, "Eda"),
+    "and nothing was written onto the builtin the bare read would have handed back",
+  );
+
+  // setAside is the one HUMAN-resolved slot, so it is the one LIST.
+  Q.reset();
+  Q.put("chat-aside", "setAside", { reason: "displaced", fromV: 1, block: { tag: "first" } });
+  Q.put("chat-aside", "setAside", { reason: "displaced", fromV: 2, block: { tag: "second" } });
+  assert.equal(Q.peekAll("setAside").length, 2, "a second displaced live block is a second thing to offer the player");
+  assert.equal(Q.peek("setAside").block.tag, "first", "peek() hands back the oldest, which is what one caller means");
+  // Read on a DIFFERENT chat, because this line is about hydrate's tolerance for
+  // the pre-list wire SHAPE and nothing else. Reading it on the chat two parks
+  // are still queued for asks a second question — whether a disk read outranks an
+  // unsettled write of our own — and the answer to that one is (ak2)'s: it does
+  // not, and it must not, or a park is lost to a chat round trip.
+  Q.hydrate({ pixelforgeQuarantine: { setAside: { reason: "displaced", block: { tag: "legacy" } } } }, "chat-legacy");
+  assert.equal(Q.peekAll("setAside").length, 1, "a key written before the list shape reads as its one entry");
+  assert.equal(Q.peek("setAside").block.tag, "legacy", "…verbatim");
+
+  // AND `consume` IS `peek` THAT ALSO TAKES. It was not: for the one slot that
+  // is a list it handed back the LIST WRAPPER while peek handed back an entry,
+  // so the two readers of the one human-resolved slot disagreed about what they
+  // were returning. Slice 6's resolution UI is the first live caller and would
+  // have found it the hard way.
+  Q.reset();
+  Q.put("chat-consume", "setAside", { reason: "displaced", fromV: 1, block: { tag: "first" } });
+  Q.put("chat-consume", "setAside", { reason: "displaced", fromV: 2, block: { tag: "second" } });
+  const took = Q.consume("chat-consume", "setAside");
+  assert.equal(took.block.tag, "first", "consume() returns the same entry peek() would have");
+  assert.equal(Q.peekAll("setAside").length, 1, "…and takes only that one, leaving the rest held");
+  assert.equal(Q.peek("setAside").block.tag, "second", "the next caller gets the next one");
+  const rest = Q.consumeAll("chat-consume", "setAside");
+  assert.deepEqual(
+    rest.map((e) => e.block.tag),
+    ["second"],
+    "consumeAll() is the bulk verb, and it mirrors peekAll()",
+  );
+  assert.deepEqual(Q.slots(), [], "an emptied list takes its slot with it");
+  assert.equal(Q.consume("chat-consume", "setAside"), null, "consuming an empty slot is null, not an empty wrapper");
+  Q.put("chat-consume", "migration", { reason: "throw", block: { tag: "single" } });
+  assert.deepEqual(
+    Q.consumeAll("chat-consume", "migration").map((e) => e.block.tag),
+    ["single"],
+    "…and a single-entry slot consumes all as a one-element list",
+  );
+
+  // OVERFLOW: an entry that cannot be held even on its own is refused OUTRIGHT.
+  // The old loop worked down the drop order, spent every other slot making room
+  // it could never use, and dropped the oversized entry too — while `put` had
+  // already returned true.
+  Q.reset();
+  Q.put("chat-fit", "migration", { reason: "throw", block: { blob: "m".repeat(5_000) } });
+  Q.put("chat-fit", "version", { adoptable: true, fromV: 9, block: { blob: "v".repeat(5_000) } });
+  const before = Q.slots();
+  assert.equal(
+    Q.put("chat-fit", "stamp", { reason: "brief", stamps: {}, fields: { blob: "x".repeat(Q.MAX_CHARS + 5_000) } }),
+    false,
+    "an entry larger than the whole bag is refused",
+  );
+  assert.deepEqual(Q.slots(), before, "and refusing it costs the slots that could still be held nothing");
+  Q.reset();
+}
+
+// (ak) THE BAG HAS ONE WRITER.
+// Every bag write was `void this._write(...)` with its own retry loop, and the
+// version re-adoption fires three in one synchronous stretch. Nothing ordered
+// them, and `_write` froze its payload at entry — so a retried write could land
+// LAST carrying a snapshot of the bag from before a consume() and resurrect the
+// slot the consume had just cleared.
+await withSavePath(async ({ calls, armed, behavior, tick }) => {
+  const Q = loadedPF.quarantine;
+  const bagWrites = () => calls.filter((c) => c.kind === "patch" && "pixelforgeQuarantine" in c.patch);
+  // Drain whatever the previous case left on the shared chain before counting:
+  // it is a module singleton and the chain deliberately outlives reset().
+  await tick();
+
+  Q.reset();
+  calls.length = 0;
+  Q.put("chat-chain", "migration", { reason: "throw", block: { a: 1 } });
+  Q.put("chat-chain", "version", { adoptable: true, fromV: 9, block: { b: 2 } });
+  Q.consume("chat-chain", "version");
+  await tick();
+  assert.equal(bagWrites().length, 1, "three bag mutations in one tick collapse to ONE write");
+  assert.deepEqual(
+    Object.keys(bagWrites()[0].patch.pixelforgeQuarantine),
+    ["migration"],
+    "and that write carries the LAST bag state, not the first",
+  );
+
+  // THE RETRY. It must re-read the bag, not replay the snapshot it was queued
+  // with — that is the exact path by which an invalidated slot came back.
+  Q.reset();
+  calls.length = 0;
+  armed.length = 0;
+  let attempts = 0;
+  behavior.patch = async () => {
+    attempts += 1;
+    if (attempts === 1) throw Object.assign(new Error("bad minute"), { status: 503 });
+  };
+  Q.put("chat-retry", "stamp", { reason: "brief", stamps: { seed: 1 }, fields: { rel: {} } });
+  await tick();
+  assert.equal(attempts, 1, "the first attempt went out and failed");
+  Q.consume("chat-retry", "stamp"); // the slot is invalidated while the retry sleeps
+  const sleep = armed.find((t) => t.ms === 500);
+  assert.ok(sleep, "…and the retry is parked on its backoff");
+  sleep.fn();
+  await tick();
+  const wrote = bagWrites();
+  assert.equal(wrote[0].patch.pixelforgeQuarantine.stamp.reason, "brief", "the first attempt carried the entry");
+  assert.ok(wrote.length > 1, "and the retry went out behind it");
+  assert.ok(
+    wrote.slice(1).every((c) => c.patch.pixelforgeQuarantine === null),
+    "…carrying the bag AS IT STANDS — no write after the consume resurrects the slot it cleared",
+  );
+  Q.reset();
+
+  // THE CHAT SWITCH, which is where the single writer's own bookkeeping bit it.
+  // The queued task read its payload out of a FIELD at run time, and reset()
+  // has to clear that field or the departing chat's task writes the arriving
+  // chat's bytes. So the task ran, found null, and _writeNow's empty-text guard
+  // dropped it: the severance parked at the very moment of leaving a chat never
+  // reached that chat's disk. The payload is bound to the task now.
+  calls.length = 0;
+  behavior.patch = async () => {};
+  await tick();
+  let release;
+  const gate = new Promise((resolve) => (release = resolve));
+  let inFlight = 0;
+  behavior.patch = async () => {
+    inFlight += 1;
+    if (inFlight === 1) await gate;
+  };
+  Q.reset();
+  Q.hydrate({}, "chat-leaving");
+  Q.put("chat-leaving", "migration", { reason: "throw", block: { a: 1 } });
+  await tick(); // write #1 is parked inside patchMetadata
+  Q.put("chat-leaving", "stamp", { reason: "mint", stamps: { seed: 1 }, fields: { home: "parked-on-the-way-out" } });
+  // …and NOW the chat switches, with that second write still queued behind #1.
+  Q.reset();
+  Q.hydrate({}, "chat-arriving");
+  release();
+  await tick();
+  const landed = bagWrites();
+  assert.ok(
+    landed.every((c) => c.chatId === "chat-leaving"),
+    "the departing chat's queued write is the only thing on the wire",
+  );
+  const parked = landed.filter((c) => c.patch.pixelforgeQuarantine?.stamp);
+  assert.equal(parked.length, 1, "the park queued at the moment of leaving REACHED THE WIRE");
+  assert.equal(
+    parked[0].patch.pixelforgeQuarantine.stamp.fields.home,
+    "parked-on-the-way-out",
+    "…carrying the bytes it was asked for, not the arriving chat's",
+  );
+  assert.deepEqual(
+    landed.map((c) => Object.keys(c.patch.pixelforgeQuarantine ?? {}).sort()),
+    [["migration"], ["migration", "stamp"]],
+    "and both writes landed for that chat, in the order they were asked for",
+  );
+  behavior.patch = async () => {};
+  Q.reset();
+});
+
+// (ak2) …AND A PARK SURVIVES A ROUND TRIP THROUGH ANOTHER CHAT.
+// The holder fixed the ONE-WAY trip: leave a chat and its queued write still
+// carries that chat's bytes. It does not fix the ROUND trip, and the round trip
+// is the one a player actually makes. Park something on A, glance at B, come back
+// to A before the chain has drained: hydrate() rebuilds A's bag from DISK — which
+// does not have the park, because the write never landed — and sets the dedupe
+// cache to those same bytes. The queued task then wakes, finds itself "live" on
+// A, re-serializes the disk bag it now sees, matches the cache, and drops the
+// write. The park is gone from disk AND from memory, on the one path most likely
+// to have produced a park in the first place.
+await withSavePath(async ({ calls, behavior, tick }) => {
+  const Q = loadedPF.quarantine;
+  const bagWrites = () => calls.filter((c) => c.kind === "patch" && "pixelforgeQuarantine" in c.patch);
+  await tick(); // drain whatever the previous case left on the shared chain
+  Q.reset();
+  Q._unsettled.clear();
+  calls.length = 0;
+  let release;
+  const gate = new Promise((resolve) => (release = resolve));
+  let inFlight = 0;
+  behavior.patch = async () => {
+    inFlight += 1;
+    if (inFlight === 1) await gate;
+  };
+
+  Q.hydrate({}, "chat-round-a");
+  Q.put("chat-round-a", "migration", { reason: "throw", block: { a: 1 } });
+  await tick(); // write #1 is parked inside patchMetadata
+  Q.put("chat-round-a", "stamp", { reason: "mint", stamps: { seed: 1 }, fields: { home: "parked-then-left" } });
+
+  // Away…
+  loadedPF.save.reset();
+  Q.hydrate({}, "chat-round-b");
+  assert.deepEqual(Q.slots(), [], "B's bag is B's");
+
+  // …and BACK, before the chain has drained. The metadata the host hands over is
+  // what actually reached disk, which is write #1 and nothing more.
+  loadedPF.save.reset();
+  Q.hydrate({ pixelforgeQuarantine: { migration: { reason: "throw", block: { a: 1 } } } }, "chat-round-a");
+  assert.deepEqual(
+    Q.slots(),
+    ["migration", "stamp"],
+    "coming back does not demote the bag to whatever disk managed to store",
+  );
+  assert.ok(Q.peek("stamp"), "the park is still held in memory, which is where the authority lives");
+
+  release();
+  await tick();
+  const withStamp = bagWrites().filter((c) => c.patch.pixelforgeQuarantine?.stamp);
+  assert.equal(withStamp.length, 1, "and the write carrying it REACHED THE WIRE");
+  assert.equal(withStamp[0].chatId, "chat-round-a", "for the chat it belongs to");
+  assert.equal(withStamp[0].patch.pixelforgeQuarantine.stamp.fields.home, "parked-then-left", "carrying its own bytes");
+  assert.deepEqual(Q.slots(), ["migration", "stamp"], "and the bag still holds both afterwards");
+  assert.equal(Q._unsettled.has("chat-round-a"), false, "…while the record of the unsettled write settles, not leaks");
+
+  behavior.patch = async () => {};
+  Q.reset();
+  Q._unsettled.clear();
+});
+
+// (ak3) …AND A WRITE THAT FAILED OUT IS ACTUALLY RE-TRIED ON THE NEXT VISIT.
+// `_unsettled` is documented as "deliberately NOT cleared when a write fails out:
+// an entry nobody managed to store is precisely the one worth re-trying on the
+// next visit". Adopting the bytes at hydrate restored them to MEMORY only, and
+// nothing asked for the wire again — so a park whose write failed sat in the map
+// for the rest of the session and died with the tab, which is the same loss the
+// map exists to prevent, one step later.
+await withSavePath(async ({ calls, armed, behavior, tick }) => {
+  const Q = loadedPF.quarantine;
+  const bagWrites = () => calls.filter((c) => c.kind === "patch" && "pixelforgeQuarantine" in c.patch);
+  await tick(); // drain the shared chain
+  Q.reset();
+  Q._unsettled.clear();
+  calls.length = 0;
+  armed.length = 0;
+  behavior.patch = async () => {
+    throw Object.assign(new Error("storage is down"), { status: 503 });
+  };
+  Q.hydrate({}, "chat-lost");
+  Q.put("chat-lost", "stamp", { reason: "brief", stamps: { seed: 7 }, fields: { home: "parked-and-unstored" } });
+  // Three attempts, two backoffs, all of them failing.
+  for (let i = 0; i < 4; i++) {
+    await tick();
+    const sleep = armed.find((t) => (t.ms === 500 || t.ms === 1000) && !t.fired);
+    if (!sleep) break;
+    sleep.fired = true;
+    sleep.fn();
+  }
+  await tick();
+  assert.ok(bagWrites().length >= 1, "the write did go out");
+  assert.equal(Q._unsettled.has("chat-lost"), true, "and failing out leaves the record standing, as documented");
+
+  // Away, and back — with storage working again. The metadata the host hands over
+  // is what actually reached disk, which is nothing.
+  behavior.patch = async () => {};
+  loadedPF.save.reset();
+  Q.hydrate({}, "chat-elsewhere");
+  loadedPF.save.reset();
+  calls.length = 0;
+  Q.hydrate({}, "chat-lost");
+  assert.ok(Q.peek("stamp"), "the return visit adopts the entry the write never stored");
+  await tick();
+  const relanded = bagWrites().filter((c) => c.patch.pixelforgeQuarantine?.stamp);
+  assert.equal(relanded.length, 1, "AND ASKS FOR THE WIRE AGAIN — the retry the docstring promised is a real retry");
+  assert.equal(relanded[0].chatId, "chat-lost", "for the chat that owed it");
+  assert.equal(
+    relanded[0].patch.pixelforgeQuarantine.stamp.fields.home,
+    "parked-and-unstored",
+    "carrying the bytes that were lost",
+  );
+  assert.equal(Q._unsettled.has("chat-lost"), false, "…and this time it settles");
+
+  // …and a revisit that owes disk NOTHING costs no write at all: the comparison
+  // is against what disk holds, so re-entering a chat is not a write of its own.
+  loadedPF.save.reset();
+  calls.length = 0;
+  Q.hydrate({ pixelforgeQuarantine: { stamp: { reason: "brief", stamps: { seed: 7 } } } }, "chat-lost");
+  await tick();
+  assert.equal(bagWrites().length, 0, "a chat whose bag disk already holds is re-entered silently");
+
+  // ── AND THE LEAK GUARD DOES NOT EAT THE THING IT GUARDS ──
+  // Every entry in this map is a write NOT known to have reached disk, so the old
+  // drop-the-oldest ceiling silently re-opened the park loss for whichever chat
+  // was furthest back. The one droppable kind is an entry disk is known to hold —
+  // `_writeNow` returns early when the live chat's bytes match the dedupe cache
+  // and leaves its record standing — and past THAT the map carries the overflow
+  // rather than the loss.
+  //
+  // DELIBERATELY THE SAME TRADE PF.save._cacheBrief MAKES (O-2). Two caches
+  // written in the same commit chose opposite policies at the same fork: the
+  // brief cache refuses to evict an entry that is still the only witness, while
+  // this one force-evicted and warned. They are the same shape of thing — a
+  // per-session map of small byte strings, each entry the sole record of
+  // something a later visit needs — so they now answer the fork the same way. A
+  // ceiling that can only be met by throwing away the thing the map exists to
+  // hold is not a ceiling worth meeting.
+  Q.reset();
+  Q._unsettled.clear();
+  calls.length = 0;
+  Q._chatId = "chat-live";
+  Q._bag = { migration: { reason: "throw", block: { a: 1 } } };
+  Q._bagSerialized = JSON.stringify(Q._bag);
+  // Recorded LAST on purpose: under a plain drop-the-oldest ceiling this is the
+  // entry that survives and an unstored write is the one that goes, which is the
+  // whole inversion. Preference, not position, decides.
+  for (let i = 0; i < 7; i++) {
+    Q._unsettled.set(`chat-owed-${i}`, JSON.stringify({ stamp: { reason: "brief", n: i } }));
+  }
+  Q._unsettled.set("chat-live", Q._bagSerialized); // disk holds these; the record is stale
+  const warned = [];
+  const realWarn = console.warn;
+  console.warn = (...args) => warned.push(args.map(String).join(" "));
+  try {
+    Q._write("chat-ninth"); // nine entries against a ceiling of eight
+    assert.equal(Q._unsettled.has("chat-live"), false, "the entry disk is known to hold is the one that goes");
+    assert.deepEqual(warned, [], "…silently, because nothing was lost");
+    for (let i = 0; i < 7; i++) {
+      assert.ok(Q._unsettled.has(`chat-owed-${i}`), `and no unstored write was touched (chat-owed-${i})`);
+    }
+    Q._write("chat-tenth"); // now the ceiling could only be met by a real loss
+    assert.equal(Q._unsettled.size, 9, "so it is not met — the map carries the overflow instead");
+    for (let i = 0; i < 7; i++) {
+      assert.ok(Q._unsettled.has(`chat-owed-${i}`), `and still no unstored write went (chat-owed-${i})`);
+    }
+    assert.deepEqual(warned, [], "…with nothing to announce, because nothing was lost");
+  } finally {
+    console.warn = realWarn;
+  }
+  await tick();
+  behavior.patch = async () => {};
+  Q.reset();
+  Q._unsettled.clear();
+});
+
+// (al) THE INTERIM WORLD LEAVES A MARK.
+// A chat created before the loading gate boots on a throwaway world. If it
+// flushes there, the block's stamps are all zero — which is also exactly what a
+// pre-S5 save looks like, and the pre-S5 branch adopts WHOLESALE. So a player
+// who closed the tab before the brief sealed came back to a compiled world that
+// had inherited relationships with people who never existed in it.
+await withSavePath(async ({ tick }) => {
+  const P = loadedPF.player;
+  const meta = { gameSetupConfig: { experienceConfig: { generate: true, seed: 777, theme: "cozy-village" } } };
+  const sim = loadedPF.save.simFromSaved(null, meta, "chat-interim");
+  assert.equal(sim.world.interim, true, "a generation-enabled chat with no sealed brief boots a throwaway");
+  const core = { chatId: "chat-interim", sim, hud: { toast() {}, refreshChips() {} } };
+  P.grant(core, "apple", 2);
+  P.bump(core, sim.zoneId, "Someone Who Never Was", { d: 2, t: 4 });
+  const row = JSON.parse(JSON.stringify(loadedPF.save.snapshot(core)));
+  assert.equal(row.player.world.interim, 1, "and a save flushed while standing in it says so on the wire");
+  assert.equal(row.player.world.seed, sim.world.seed >>> 0, "carrying the throwaway's seed, and no other stamp");
+
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Sealedbrook",
+      backgroundPopulation: 20,
+      situation: "The mill wheel has not turned since the spring flood.",
+      cast: [{ name: "Wren Ash", role: "miller", kind: "maker", tint: "amber", home: "Sealedbrook", household: 1 }],
+    },
+    { theme: "cozy-village", seed: 777 },
+  );
+  loadedPF.save.reset();
+  const sim2 = loadedPF.save.simFromSaved(row, { ...meta, pixelforgeBrief: sealed }, "chat-interim");
+  assert.equal(sim2.player.pouch.items.length, 1, "the world-FREE half crosses into the compiled world");
+  assert.deepEqual(sim2.player.rel, {}, "the world-BOUND half does not — it belonged to a world that never was");
+  const parked = loadedPF.quarantine.peek("stamp");
+  assert.ok(parked, "it is quarantined instead of adopted wholesale");
+  assert.ok(parked.fields.rel[Object.keys(parked.fields.rel)[0]], "with the rows it stripped");
+  assert.equal(sim2.player.world.interim, undefined, "and the mark clears once the block has a real world");
+  assert.equal(sim2.player.world.briefHash, P.briefHashOf(sealed), "which it is now stamped for");
+  await tick();
+  loadedPF.save.reset();
+});
+
+// (am) RESTORATION RE-ENTERS THROUGH THE INVARIANTS, AND `bought` IS WORLD-BOUND.
+// Restoration and the transplant are the two paths that put whole fields back by
+// ASSIGNMENT, without a mutator. Every cap and every dedupe the mutators enforce
+// has to be re-run there or the block lands at twice the row cap with two copies
+// of one quest id in it.
+{
+  const P = loadedPF.player;
+  const w = world.build(2024, "cozy-village");
+  const core = { chatId: "chat-restore", sim: new loadedPF.Sim(w), hud: { toast() {}, refreshChips() {} } };
+  const stamps = P.stampsFor(w, null);
+  for (let i = 0; i < P.CAPS.relRows; i++) P.bump(core, "village", `Live ${i}`, { d: 2, t: 3 });
+  P.quest(core, "accept", { id: "q1", g: "z1|Someone", verb: "fishing", target: "fish", n: 5 });
+  P.quest(core, "progress", { id: "q1", by: 4 });
+  const parkedRel = { village: {} };
+  for (let i = 0; i < P.CAPS.relRows; i++) parkedRel.village[`Parked ${i}`] = { d: 0, t: 1 };
+  const parkedQuests = [{ id: "q1", g: "z1|Someone", verb: "fishing", target: "fish", n: 5, have: 1, day: 1 }];
+  for (let i = 0; i < P.CAPS.activeQuests + 5; i++) {
+    parkedQuests.push({ id: `p${i}`, g: "z1|Someone", verb: "fishing", target: "fish", n: 5, have: 2, day: 1 });
+  }
+  const restored = P.restoreStamped(
+    core.sim.player,
+    { reason: "mint", fromV: 1, stamps, fields: { rel: parkedRel, questsActive: parkedQuests } },
+    w,
+    null,
+  );
+  assert.ok(restored, "the stamps match, so this is a save coming home");
+  const rows = Object.values(restored.rel).reduce((n, r) => n + Object.keys(r).length, 0);
+  assert.ok(rows <= P.CAPS.relRows, `the restored block honours the row cap (${rows} rows)`);
+  assert.equal(restored.quests.active.filter((q) => q.id === "q1").length, 1, "one row per quest id");
+  assert.equal(restored.quests.active.find((q) => q.id === "q1").have, 4, "and the LIVE row wins — it is being played");
+  assert.ok(restored.quests.active.length <= P.CAPS.activeQuests, "the active cap holds after the merge");
+
+  // `bought` counts what a NAMED shop's stock has lost, and both the shop and
+  // its stock table are compiled from the brief (plan §2 puts it under the
+  // world-bound banner). Carried across a brief change it depletes a stranger's
+  // shelves; the code treated it as world-free everywhere.
+  const player = P.defaultPlayer();
+  player.world = { seed: 5, briefHash: 0, mintStamp: 222 };
+  player.bought = { shop1: { rope: 2 } };
+  player.rel = { z1: { Ann: { d: 1, t: 1 } } };
+  const applied = P.applyStamps(player, { seed: 6, mintStamp: 222, zones: {} }, null, false);
+  assert.ok(applied.severed, "a moved seed is a brief change");
+  assert.equal(player.bought, null, "`bought` is severed with the rest of the world-bound set");
+  assert.deepEqual(applied.severed.entry.fields.bought, { shop1: { rope: 2 } }, "and parked, not dropped");
+  const home = P.restoreStamped(player, applied.severed.entry, { seed: 5, mintStamp: 222, zones: {} }, null);
+  assert.deepEqual(home.bought, { shop1: { rope: 2 } }, "and it comes home with them");
+
+  const source = P.defaultPlayer();
+  source.bought = { shop1: { rope: 2 } };
+  const moved = P.transplant(source, { seed: 7, mintStamp: 8, zones: {} }, null);
+  assert.equal(moved.player.bought, null, "the brief-arrival transplant does not carry it across either");
+  assert.deepEqual(
+    moved.severed.entry.fields.bought,
+    { shop1: { rope: 2 } },
+    "it goes to the stamp slot with the rest",
+  );
+}
+
+// (an) THE MUTATORS' SMALL HONESTIES.
+// Six findings that all rhyme: a call that mutates and then refuses, an "oldest"
+// that is really "alphabetically first", a guard three siblings have and one
+// does not, and a stub that forgets what it stood for.
+await withSavePath(async ({ makeCore }) => {
+  const P = loadedPF.player;
+
+  // VALIDATE BEFORE ALLOCATING. Both of these used to leave litter in the saved
+  // block behind a call that reported doing nothing.
+  const core = makeCore("chat-honest", 3131);
+  assert.equal(P.equip(core, "fishing", "tool", { k: "fine" }), false, "an item with no type is refused");
+  assert.equal(core.sim.player.skills.equipped.fishing, undefined, "and leaves no empty bucket behind");
+  assert.equal(core.sim.dirty, false, "and does not dirty the sim over a mutation that did not happen");
+
+  const capped = makeCore("chat-relcap", 3232);
+  for (let i = 0; i < P.CAPS.relRows; i++) P.bump(capped, "village", `Built ${i}`, { d: 2, t: 2 });
+  assert.equal(P.bump(capped, "elsewhere", "One Too Many", { d: 1 }), null, "the row cap refuses when nothing can go");
+  assert.equal(capped.sim.player.rel.elsewhere, undefined, "…without minting the zone bucket on the way out");
+
+  // AN ENEMY IS SOMETHING BUILT. `d === 0` was the whole stranger test, so the
+  // one person the player made hostile was evictable and silently forgiven.
+  const hostile = makeCore("chat-hostile", 3333);
+  P.bump(hostile, "village", "Sworn Enemy", { d: 0, t: 1, h: true });
+  for (let i = 0; i < P.CAPS.relRows - 1; i++) P.bump(hostile, "village", `Stranger ${i}`, { d: 0, t: 9 });
+  P.bump(hostile, "village", "The Newcomer", { d: 0, t: 1 });
+  assert.ok(hostile.sim.player.rel.village["Sworn Enemy"], "the hostile row survives the cap's eviction");
+
+  // PROTOTYPE GUARDS AT EVERY MAP-WRITE SITE, not three of the four. A
+  // "__proto__" key assigned onto a plain object repoints its PROTOTYPE.
+  const hostileKeys = makeCore("chat-proto", 3434);
+  const p = hostileKeys.sim.player;
+  assert.equal(P.bump(hostileKeys, "__proto__", "Ann", { d: 1 }), null, "bump refuses a __proto__ ZONE");
+  assert.equal(Object.getPrototypeOf(p.rel), Object.prototype, "…and p.rel is still an ordinary object");
+  assert.equal(P.equip(hostileKeys, "__proto__", "tool", { t: "rod" }), false, "equip refuses a __proto__ verb");
+  assert.equal(Object.getPrototypeOf(p.skills.equipped), Object.prototype, "…and equipped is untouched");
+  P.award(hostileKeys, { xp: 50, verb: "__proto__" });
+  assert.equal(Object.getPrototypeOf(p.skills.verbs), Object.prototype, "…and award does not repoint verbs either");
+  assert.equal(p.skills.verbs.__proto__ === Object.prototype, true, "nothing was written at that key at all");
+  // …and the READ hazard, which is the other half: `map.constructor` is a
+  // function, so a bare read hands back a bucket that was never there.
+  P.award(hostileKeys, { xp: 50, verb: "constructor" });
+  assert.equal(typeof P.serialize(p).skills.verbs.constructor, "object", "a verb named `constructor` is a real row");
+
+  // THE HEADER'S OWN CLAIM, PINNED. It said every cap was "an EVICTION, never a
+  // refusal"; three of them refuse, and a consumer in slice 6 that believed the
+  // header would read a 0 or a false as success.
+  const refusing = makeCore("chat-refusals", 3838);
+  for (let i = 0; i < P.CAPS.items; i++) P.grant(refusing, { t: `item${i}`, k: "" }, 1);
+  assert.equal(P.grant(refusing, { t: "one too many", k: "" }, 1), 0, "`items` REFUSES a new pouch row at the cap");
+  assert.equal(P.grant(refusing, { t: "item0", k: "" }, 1), 2, "…while a row already in the pouch still merges");
+  for (let i = 0; i < P.CAPS.activeQuests; i++) {
+    P.quest(refusing, "accept", { id: `q${i}`, g: "z1|Giver", verb: "fishing", target: "fish", n: 1 });
+  }
+  assert.equal(
+    P.quest(refusing, "accept", { id: "qX", g: "z1|Giver", verb: "fishing", target: "fish", n: 1 }),
+    false,
+    "`activeQuests` REFUSES a new quest at the cap",
+  );
+
+  // A STUB REMEMBERS WHAT IT STOOD FOR. Re-compaction ran on every append, and
+  // an already-stubbed day counted its one stub LINE — so an elided day that
+  // held twelve things announced "1 thing happened." the next time anything
+  // was logged.
+  const ledger = makeCore("chat-ledger", 3535);
+  const busy = P.CAPS.ledgerPerDay; // a day at its own per-day cap, then elided
+  for (let i = 0; i < busy; i++) P.log(ledger, `thing ${i}`, 1);
+  for (let day = 2; day <= 2 + P.CAPS.ledgerDays; day++) P.log(ledger, "later", day);
+  const stub = ledger.sim.player.ledger.lines.find((line) => line[0] === 1);
+  assert.ok(stub, "day 1 was elided to a stub");
+  assert.ok(new RegExp(`${busy} things`).test(stub[1]), `the stub keeps its count (${stub[1]})`);
+  P.log(ledger, "one more", 2 + P.CAPS.ledgerDays);
+  const again = ledger.sim.player.ledger.lines.find((line) => line[0] === 1);
+  assert.ok(new RegExp(`${busy} things`).test(again[1]), `and re-stubbing is idempotent (${again[1]})`);
+  assert.equal(
+    JSON.parse(JSON.stringify(P.serialize(ledger.sim.player))).ledger.lines.find((l) => l[0] === 1).length,
+    3,
+    "the count rides the wire as an optional third element",
+  );
+
+  // "OLDEST" MEANS OLDEST, ACROSS A RELOAD. serialize() re-orders both of these
+  // collections, so array order and key order stop meaning insertion order the
+  // moment anything is saved and loaded.
+  const found = makeCore("chat-found", 3636);
+  P.discover(found, { p: "aaa", e: 0, d: 0, day: 90 }); // sorts FIRST, newest by day
+  for (let i = 1; i < P.CAPS.found; i++) P.discover(found, { p: `z${i}`, e: 0, d: 0, day: i });
+  const reloaded = P.parse(JSON.parse(JSON.stringify(P.serialize(found.sim.player)))).player;
+  found.sim.player = reloaded;
+  assert.equal(reloaded.found.zones[0].p, "aaa", "after a reload the array is in (p,e,d) order, not insertion order");
+  P.discover(found, { p: "new", e: 0, d: 0, day: 99 });
+  assert.ok(
+    found.sim.player.found.zones.some((z) => z.p === "aaa"),
+    "so the cap must evict by DAY — the newest discovery is not the oldest one",
+  );
+  assert.ok(!found.sim.player.found.zones.some((z) => z.p === "z1"), "…and the genuinely oldest is what goes");
+
+  // THE `s`-LINE RECENCY MARKER SURVIVES THE WIRE. It lived on `_sAt`, which
+  // serialize() dropped, so after a reload every held line sorted equal and the
+  // eviction fell back to whatever order the rebuild happened to produce.
+  const lines = makeCore("chat-lines", 3737);
+  P.bump(lines, "village", "Aaa First", { d: 1, s: "the oldest line there is" });
+  for (let i = 1; i < P.CAPS.relLines; i++) P.bump(lines, "village", `Zzz ${i}`, { d: 1, s: `line ${i}` });
+  const back = P.parse(JSON.parse(JSON.stringify(P.serialize(lines.sim.player)))).player;
+  assert.equal(back.rel.village["Aaa First"].a, 1, "the mark is on the wire, and it is the lowest");
+  lines.sim.player = back;
+  P.bump(lines, "village", "Newest Person", { d: 1, s: "the newest line there is" });
+  assert.equal(
+    lines.sim.player.rel.village["Aaa First"].s,
+    undefined,
+    "so the OLDEST line is what the cap evicts, across a reload",
+  );
+  assert.equal(lines.sim.player.rel.village["Newest Person"].s, "the newest line there is", "and the newest stays");
+  assert.ok(lines.sim.player.rel.village["Aaa First"], "with its row, its ladder and its count intact");
+
+  // …AND IT COSTS A BLOCK THAT PREDATES IT NOTHING. A build before the mark
+  // wrote s-lines with no `a` at all, so emitting one unconditionally put
+  // `"a":0` on every such row the first time this build re-serialized it —
+  // undeclared byte drift on a wire other builds read. Absent means 0 on the way
+  // in, so nothing is emitted on the way out.
+  const legacy = {
+    v: P.serialize(P.defaultPlayer()).v,
+    game: 1,
+    rel: { z1: { Alder: { d: 2, t: 3, s: "said a thing" } } },
+  };
+  const reEmitted = P.serialize(P.parse(legacy).player);
+  assert.deepEqual(
+    reEmitted.rel.z1.Alder,
+    { d: 2, t: 3, s: "said a thing" },
+    "a parent-written s-line re-serializes without gaining a recency key",
+  );
+  assert.equal(
+    JSON.stringify(P.serialize(P.parse(JSON.parse(JSON.stringify(reEmitted))).player)),
+    JSON.stringify(reEmitted),
+    "and a second round trip is byte-stable",
+  );
+  // The ordering still works on those rows, because absent reads back as the
+  // oldest possible mark — which is what an unmarked line is.
+  const unmarked = P.parse(legacy).player;
+  unmarked.rel.z1.Brint = { d: 1, t: 1, s: "a newer line", a: 5 };
+  P._evictLines(unmarked);
+  for (let i = 0; i < P.CAPS.relLines; i++) unmarked.rel.z1[`Filler ${i}`] = { d: 1, t: 1, s: `f${i}`, a: 10 + i };
+  P._evictLines(unmarked);
+  assert.equal(unmarked.rel.z1.Alder.s, undefined, "the unmarked line evicts first, as the oldest");
+  assert.ok(unmarked.rel.z1.Alder, "…and its row stays, exactly as a marked row's would");
+});
+
+// (ao) THE LADDER'S REMAINING SITES.
+// Five separate findings, all of them about a site that reads the ladder and
+// then does something the ladder did not say.
+await withSavePath(async ({ calls, armed, behavior, tick, makeCore }) => {
+  // ROW 4's RE-READ DECIDES. The re-read exists because a GET can land inside
+  // the PUT route's delete-then-insert window; when it comes back row 8 the row
+  // is alive and byte-identical and the world is not stale — but the pre-check
+  // blocked anyway and armed nothing, so a whole debounce cycle went nowhere.
+  loadedPF.save.mode = "routes";
+  const core = makeCore("chat-reread", 4141);
+  await loadedPF.save.flush(core, false);
+  const anchored = loadedPF.save._serverSerialized;
+  calls.length = 0;
+  loadedPF.save._lastCheckAt = 0;
+  loadedPF.save._lastOkCheckAt = 0;
+  let gets = 0;
+  behavior.get = async () => {
+    gets += 1;
+    return gets === 1
+      ? { available: true, status: 200, body: { exists: false } }
+      : { available: true, status: 200, body: { exists: true, state: JSON.parse(anchored) } };
+  };
+  core.sim.day += 1;
+  await loadedPF.save.flush(core, false);
+  assert.equal(gets, 2, "the pre-check's row 4 re-reads once");
+  assert.equal(calls.filter((c) => c.kind === "put").length, 1, "and a row that is alive and unchanged is not a block");
+  assert.deepEqual(core.toasts, [], "nothing rewound, so nothing is announced");
+
+  // A REWIND STILL OWES THE SERVER A WRITE. _rebuild primes _lastSerialized with
+  // the bytes it just built, so the markDirty that follows a rewind deduped to
+  // nothing — and on row 4, whose whole finding is that the row is GONE, that
+  // meant the row was never re-created.
+  loadedPF.save.reset();
+  loadedPF.save.mode = "routes";
+  const lost = makeCore("chat-forced", 4242);
+  await loadedPF.save.flush(lost, false);
+  calls.length = 0;
+  behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+  await loadedPF.save.checkRewind(lost);
+  assert.deepEqual(lost.toasts, ["The world rewound with the story."], "the row is gone and the world rewound");
+  assert.equal(loadedPF.save._forceWrite, true, "so the next write is FORCED past the cache the rebuild just primed");
+  assert.ok(loadedPF.save._pendingWrite(lost), "…and there really is a write pending");
+
+  // ROW 9 BLOCKS THE ROUTE PUT, NOT THE WHOLE FLUSH. A GET route that will not
+  // answer forbids overwriting a row we have not seen; it says nothing about the
+  // write-through metadata cache, which is ours outright and is what a cold boot
+  // reads. Stopping all three persistence paths on one unanswered GET was the
+  // finding; re-arming a flat unbounded 2.5 s poll to retry it was the other half.
+  loadedPF.save.reset();
+  loadedPF.save.mode = "routes";
+  const dark = makeCore("chat-row9", 4343);
+  calls.length = 0;
+  armed.length = 0;
+  behavior.get = async () => {
+    throw Object.assign(new TypeError("NetworkError"), { status: 0 });
+  };
+  await loadedPF.save.flush(dark, false);
+  assert.equal(calls.filter((c) => c.kind === "put").length, 0, "the route PUT is skipped — we have not seen the row");
+  assert.equal(calls.filter((c) => c.kind === "patch").length, 1, "but the write-through cache still takes it");
+  assert.equal(loadedPF.save._flushFailures, 0, "an unanswered GET is not a failed write and spends no write rung");
+  assert.deepEqual(
+    armed.map((t) => t.ms),
+    [2500],
+    "it re-arms on a ladder of its OWN",
+  );
+  armed.length = 0;
+  for (let i = 0; i < 12; i++) {
+    // Let each flush see a clear timer, the way an elapsed rung would.
+    loadedPF.save._timer = 0;
+    loadedPF.save._timerIsBackoff = false;
+    dark.sim.day += 1;
+    await loadedPF.save.flush(dark, false);
+  }
+  assert.deepEqual(
+    armed.map((t) => t.ms),
+    [5000, 10_000, 30_000, 60_000, 60_000, 60_000, 60_000],
+    "which climbs and then STOPS, degrading to trigger-driven saves like the write ladder",
+  );
+
+  // THE LAST-DETACH FLUSH IS A CHECKED FLUSH. Its own comment says so — "the
+  // page is still alive here, so this keeps the ordinary checked flush" — and it
+  // was the one write that skipped the pre-check entirely, which made the write
+  // most likely to be racing a swipe the one write that never looked.
+  loadedPF.save.reset();
+  loadedPF.save.mode = "routes";
+  const detach = makeCore("chat-detach", 4444);
+  behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+  behavior.put = async () => ({ ok: true, id: "r1" });
+  await loadedPF.save.flush(detach, false);
+  assert.ok(loadedPF.save._serverSerialized, "the first write anchored the row");
+  calls.length = 0;
+  // The pre-check's freshness window has lapsed, so this flush owes a real GET.
+  loadedPF.save._lastCheckAt = 0;
+  loadedPF.save._lastOkCheckAt = 0;
+  const elsewhere = { v: 1, seed: 4444, theme: "cozy-village", zone: "inn", day: 30, player: { v: 1, game: 1 } };
+  behavior.get = async () => ({ available: true, status: 200, body: { exists: true, state: elsewhere } });
+  detach.sim.day += 1;
+  await loadedPF.save.flush(detach, true); // 90-element's last-detach call
+  assert.equal(calls.filter((c) => c.kind === "get").length, 1, "the detach flush checks the row first");
+  assert.equal(calls.filter((c) => c.kind === "put").length, 0, "and row 7 blocks it, exactly as it blocks any other");
+
+  // …AND A CHECKED DETACH DURING A GET OUTAGE STILL WRITES THE CACHE. Row 9
+  // withdraws the PUT — a full-snapshot overwrite of a row nobody has seen — and
+  // withdraws nothing else. But the clean-gate sat AFTER that downgrade and row 9
+  // sets _lastCheck unconditionally, so the gate then re-blocked on the very row
+  // that had just been handled and killed the metadata PATCH as well: a detach
+  // during an outage wrote NOTHING. The gate protects the ROUTE row, and by that
+  // point there is no route write left to protect.
+  loadedPF.save.reset();
+  loadedPF.save.mode = "routes";
+  const outage = makeCore("chat-detach-outage", 4445);
+  behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+  await loadedPF.save.flush(outage, false);
+  calls.length = 0;
+  loadedPF.save._lastCheckAt = 0;
+  loadedPF.save._lastOkCheckAt = 0;
+  behavior.get = async () => {
+    throw Object.assign(new TypeError("NetworkError"), { status: 0 });
+  };
+  outage.sim.day += 1;
+  await loadedPF.save.flush(outage, true); // 90-element's last-detach call again
+  assert.deepEqual(
+    calls.map((c) => c.kind),
+    ["get", "patch"],
+    "the unanswered GET drops the PUT and the write-through cache still lands",
+  );
+  assert.equal(calls[1].patch.pixelforge.day, outage.sim.day, "carrying the day the player detached on");
+
+  // A PROMOTED SESSION HAS NEVER LOOKED AT ITS ROW. The pin is created BY a
+  // row-9 boot probe, and the promotion used to carry that row 9 — with no
+  // successful check behind it — straight into routes mode, where the clean-gate
+  // read it as a verdict and declined the first pagehide after the promotion.
+  loadedPF.save.reset();
+  const pinned = makeCore("chat-promoted", 4848);
+  behavior.get = async () => {
+    throw Object.assign(new TypeError("NetworkError"), { status: 0 });
+  };
+  await loadedPF.save.adopt(pinned);
+  assert.equal(loadedPF.save.mode, "metadata", "a transport failure at boot pins metadata mode");
+  assert.equal(loadedPF.save._lastCheck.row, 9, "…on the strength of a row 9 and nothing else");
+  behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+  await loadedPF.save._reprobe(pinned);
+  assert.equal(loadedPF.save.mode, "routes", "and the re-probe promotes it when the route comes back");
+  assert.equal(loadedPF.save._lastCheck, null, "the pin's row 9 does not cross into routes mode with it");
+  assert.equal(loadedPF.save._teardownAllowed(), true, "so the first pagehide after the promotion is not declined");
+
+  // THE TEARDOWN PUT'S SEQUENCE BUMP IS PROCESS-GLOBAL. _flushNow states the
+  // invariant and bumps OUTSIDE its generation fence, with a paragraph saying
+  // why: _writeSeq is process-wide, and a write that completed on the wire
+  // superseded every row a GET could still be holding, whichever chat we are on
+  // when it lands. flushTeardown bumped INSIDE the fence, so a chat switch
+  // between the pagehide and the response left a stale GET adoptable as
+  // authority — which is a rewind onto a row we ourselves replaced.
+  loadedPF.save.reset();
+  loadedPF.save.mode = "routes";
+  const going = makeCore("chat-writeseq", 4545);
+  // _writeSeq has no accessor, so it is read the way the ladder reads it: row 5
+  // is "a PUT of ours completed while this GET was in flight", and it fires for
+  // exactly the values that are not the current one.
+  const currentSeq = () => {
+    for (let n = 0; n < 500; n++) {
+      const decided = loadedPF.save.classify(
+        { failed: false, probe: { available: true, body: { exists: true, state: { v: 1 } } } },
+        { serverSerialized: '{"v":1}', localSerialized: '{"v":1}', seqAtIssue: n, game: 1 },
+      );
+      if (decided.row !== 5) return n;
+    }
+    return -1;
+  };
+  const before = currentSeq();
+  assert.ok(before >= 0, "the sequence is readable through the ladder");
+  let release = null;
+  behavior.put = () => new Promise((resolve) => (release = () => resolve({ ok: true, id: "r1" })));
+  behavior.patch = async () => {};
+  going.sim.day += 1;
+  loadedPF.save.flushTeardown(going);
+  loadedPF.save.reset(); // the chat switched while the keepalive PUT was in flight
+  assert.ok(release, "the teardown PUT is on the wire");
+  release();
+  await tick();
+  assert.equal(
+    currentSeq(),
+    before + 1,
+    "a teardown write that lands after a chat switch still supersedes every GET issued before it",
+  );
+});
+
+// (ao2) THE DAMAGED ROW'S BYTES ARE PARKED WHEREVER THE REPAIR IS COMING.
+// Engine #5407 hands the raw stored text back on the failure path only, and the
+// write that repairs the row destroys it. Three sites see a row-1
+// classification and every one of them is followed by that write, but only boot
+// parked the evidence — so a chat that had already booted healthy and met the
+// damage at a turn edge repaired it with nothing kept.
+await withSavePath(async ({ calls, behavior, tick, makeCore }) => {
+  loadedPF.save.mode = "routes";
+  const core = makeCore("chat-park-turnedge", 4646);
+  await loadedPF.save.flush(core, false);
+  calls.length = 0;
+  core.toasts.length = 0;
+  behavior.get = async () => ({
+    available: true,
+    status: 200,
+    body: { exists: true, state: null, rawState: '{"zone":"village","x":5', rawStateTruncated: false },
+  });
+  await loadedPF.save.checkRewind(core);
+  await tick();
+  const parked = calls.find((c) => c.kind === "patch" && c.patch.pixelforgeCorruptExcerpt);
+  assert.ok(parked, "a row-1 classification at the TURN EDGE parks the bytes too");
+  assert.equal(parked.patch.pixelforgeCorruptExcerpt.text, '{"zone":"village","x":5', "verbatim, bounded");
+  assert.deepEqual(core.toasts, [], "…and stays silent there: nothing visibly changed and nothing is repaired yet");
+
+  // …and the pre-check, which is the site with the repairing PUT immediately
+  // behind it, both parks and says so — once.
+  loadedPF.save.reset();
+  loadedPF.save.mode = "routes";
+  const flushing = makeCore("chat-park-precheck", 4747);
+  behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+  await loadedPF.save.flush(flushing, false);
+  loadedPF.save._lastCheckAt = 0; // the freshness window has lapsed, so the next flush re-checks
+  loadedPF.save._lastOkCheckAt = 0;
+  calls.length = 0;
+  flushing.toasts.length = 0;
+  behavior.get = async () => ({
+    available: true,
+    status: 200,
+    body: { exists: true, state: null, rawState: "z".repeat(120), rawStateTruncated: false },
+  });
+  flushing.sim.day += 1;
+  await loadedPF.save.flush(flushing, false);
+  await tick();
+  assert.ok(
+    calls.find((c) => c.kind === "patch" && c.patch.pixelforgeCorruptExcerpt),
+    "the pre-check parks before letting its PUT repair the row",
+  );
+  assert.equal(calls.filter((c) => c.kind === "put").length, 1, "and the PUT still goes — the write IS the repair");
+  assert.deepEqual(flushing.toasts, ["This world's saved row was damaged. It is being written fresh."], "told once");
+  flushing.sim.day += 1;
+  flushing.toasts.length = 0;
+  await loadedPF.save.flush(flushing, false);
+  assert.deepEqual(flushing.toasts, [], "…once per chat, not once per flush");
+});
+
+// (ap) §Q2a's OTHER HALF: THE ROW WINS AT ADOPT, AND THE PLAYER IS TOLD.
+// The rule shipped with the rebuild and without the sentence. Row 6's LADDER
+// toast is null because a rewind CHECK latches it in silence — nothing visibly
+// changed mid-session. At boot the world the metadata just built is replaced
+// under them, which is the one time they need to know, so the message is a row
+// of the ladder rather than a string at the site.
+await withSavePath(async ({ behavior, makeCore }) => {
+  for (const [row, serverState] of [
+    [6, { v: 1, seed: 5151, theme: "cozy-village", zone: "inn", day: 21, player: { v: 1, game: 1 } }],
+    [7, { v: 1, seed: 5151, theme: "cozy-village", zone: "forest", day: 22, player: { v: 1, game: 1 } }],
+  ]) {
+    loadedPF.save.reset();
+    const core = makeCore("chat-adopt-toast", 5151);
+    behavior.get = async () => ({ available: true, status: 200, body: { exists: true, state: serverState } });
+    if (row === 7) loadedPF.save._anchorMoved = true; // an echo from an anchor nobody checked
+    await loadedPF.save.adopt(core);
+    assert.equal(loadedPF.save.mode, "routes", `row ${row} is a routes-mode adopt`);
+    assert.deepEqual(core.toasts, ["The world rewound with the story."], `row ${row} tells the player at ADOPT`);
+    assert.equal(core.sim.zoneId, serverState.zone, "…and the row is what they are standing in");
+  }
+  // …while the rewind CHECK keeps row 6 silent, which is the difference the
+  // ladder now carries explicitly.
+  const atRewind = loadedPF.save.classify(
+    { failed: false, probe: { available: true, body: { exists: true, state: { v: 1, a: 1 } } } },
+    { serverSerialized: null, localSerialized: '{"v":1}', game: 1 },
+  );
+  assert.equal(atRewind.row, 6, "the same difference with no anchor of our own is row 6");
+  assert.equal(atRewind.toast, null, "whose REWIND-site toast is still null — a latch is not an announcement");
+  assert.equal(
+    atRewind.adoptToast,
+    "The world rewound with the story.",
+    "while its ADOPT-site message is the one above",
+  );
+});
+
+// (aq) THE MINT STAMP CARRIES NO RAW CONTROL BYTES.
+// mintStampOf built its hash input with two literal U+0000 bytes in the source.
+// The stamp is what every save's severance verdict turns on, so any tool that
+// normalizes control characters on the way through the repo — an editor, a
+// patch round-trip, a copy through a form — would change every stamp and sever
+// every save in the wild. An escaped U+0000 hashes identically and cannot be
+// normalized
+{
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Mossbrook",
+      backgroundPopulation: 30,
+      situation: "The north field is sinking.",
+      cast: [
+        { name: "Alder Vance", role: "mayor", kind: "leader", tint: "blue", home: "Mossbrook", household: 1 },
+        { name: "Perrin Quill", role: "innkeep", kind: "host", tint: "amber", home: "Mossbrook", household: 2 },
+        { name: "Old Sera", role: "weaver", kind: "elder", tint: "rose", home: "Mossbrook", household: 3 },
+      ],
+    },
+    { theme: "cozy-village", seed: 424242 },
+  );
+  // Pinned to the values the RAW-byte version produced, measured at 3511a153.
+  assert.equal(
+    world.build(424242, "cozy-village", sealed).mintStamp,
+    3_114_775_167,
+    "a generated mint stamps the same",
+  );
+  assert.equal(world.build(9001, "cozy-village").mintStamp, 2_496_143_703, "and a legacy one does too");
+  const source = readFileSync(join(here, "src", "20-world.js"), "utf8");
+  assert.ok(
+    !source.includes(String.fromCharCode(0)),
+    "and the source no longer carries a raw control byte for anything to normalize",
+  );
+}
+
+// ═══ THE LOADING GATE (S5 slice 5) ═════════════════════════════════════════
+
+// The raw brief a stubbed #5135 call hands back. Deliberately the model's OWN
+// shape (pre-validate): brief.generate runs the shipped ladder over it, so these
+// cases exercise the real seal path rather than a hand-sealed object.
+const gateBriefData = {
+  scale: "village",
+  name: "Fallowmere",
+  prosperity: "modest",
+  backgroundPopulation: 40,
+  situation: "The bridge went in the spring flood and the ford is the only way across.",
+  cast: [
+    { name: "Perrin Quill", role: "innkeep", kind: "host", tint: "amber", home: "Fallowmere", household: 1 },
+    { name: "Wren Ash", role: "miller", kind: "maker", tint: "teal", home: "Fallowmere", household: 2 },
+  ],
+};
+/** Wrap a case that drives generation: stubs the ONE host call the ladder makes
+ *  and puts it back, and clears the two module-level caches the gate keeps so no
+ *  case inherits another's sealed brief or in-flight marker. */
+const withGeneration = async (run) => {
+  const realGenerate = loadedPF.api.postExperienceGeneration;
+  const responses = { post: async () => ({ status: 200, body: { ok: true, data: gateBriefData } }) };
+  let posts = 0;
+  loadedPF.api.postExperienceGeneration = (chatId, body, signal) => {
+    posts += 1;
+    return responses.post(chatId, body, signal);
+  };
+  loadedPF.save._briefCache.clear();
+  loadedPF.save._generating.clear();
+  try {
+    await run({ responses, postCount: () => posts });
+  } finally {
+    loadedPF.api.postExperienceGeneration = realGenerate;
+    loadedPF.save._briefCache.clear();
+    loadedPF.save._generating.clear();
+    loadedPF.save.gate = null;
+  }
+};
+
+// (ar) THE GATE HOLDS PLAY, AND HOLDS IT AT EVERY DOOR.
+// Maintainer ruling #7: a player must never invest in a world that is going to be
+// discarded, so a generate-configured chat whose brief is not sealed does not
+// enter play at all. "Does not enter play" has to mean every door at once — the
+// probe, the debounce, the chat-switch capture, the last-detach flush, pagehide,
+// and every mutator — because the throwaway world's whole failure mode was that
+// each of those looked individually harmless.
+await withSavePath(async ({ calls, armed, behavior, tick, makeCore }) => {
+  await withGeneration(async ({ responses, postCount }) => {
+    const P = loadedPF.player;
+    const meta = { gameSetupConfig: { experienceConfig: { generate: true, seed: 4242, theme: "cozy-village" } } };
+    const core = makeCore("chat-gate", 4242);
+    core.host.chatMeta = meta;
+    core.sim = loadedPF.save.restore(meta, "chat-gate");
+    assert.equal(core.sim.world.interim, true, "the placeholder world is still MARKED — the net under the gate");
+    assert.equal(loadedPF.save.armGate(core, meta), true, "a generate-configured chat with no sealed brief gates");
+    assert.equal(loadedPF.save.gateHolds(core), true, "and the gate holds for this chat");
+    assert.equal(loadedPF.save.gate.state, "generating", "starting in the state the loading panel renders");
+
+    // ── NOT ONE BYTE REACHES THE WIRE ──
+    calls.length = 0;
+    armed.length = 0;
+    core.sim.day += 1;
+    core.sim.dirty = true;
+    loadedPF.save.markDirty(core);
+    assert.equal(armed.length, 0, "markDirty arms no timer at all — a world nobody is in costs no wakeups");
+    assert.equal(loadedPF.save.captureFlush(core), null, "a chat switch captures nothing to write");
+    await loadedPF.save.flush(core, false);
+    await loadedPF.save.flush(core, true); // the last-detach flush
+    loadedPF.save.flushTeardown(core); // pagehide, which builds its own snapshot
+    await loadedPF.save.adopt(core);
+    await loadedPF.save.checkRewind(core);
+    await tick();
+    assert.deepEqual(calls, [], "nothing went out: not the probe, not the debounce, not the detach, not pagehide");
+    assert.equal(loadedPF.save.mode, null, "and the routes probe never ran, so no mode was even chosen");
+
+    // ── NO MUTATOR RESOLVES, EACH REFUSING IN ITS OWN DOCUMENTED SHAPE ──
+    const refusals = [
+      ["grant", P.grant(core, "apple", 2), 0],
+      ["take", P.take(core, "apple", 1), false],
+      ["award", P.award(core, { money: 10, xp: 5, verb: "fishing" }), null],
+      ["equip", P.equip(core, "fishing", "tool", { t: "rod", k: "fine" }), false],
+      ["bump", P.bump(core, "village", "Someone", { d: 2, s: "a line" }), null],
+      ["quest", P.quest(core, "accept", { id: "q1", g: "z1|Someone", verb: "fishing", target: "fish", n: 2 }), false],
+      ["log", P.log(core, "a thing happened", 3), false],
+      ["discover", P.discover(core, { p: "z2", e: 0, d: 0 }), false],
+      ["setHome", P.setHome(core, "inn"), false],
+    ];
+    for (const [verb, got, want] of refusals) {
+      assert.deepEqual(got, want, `${verb}() refuses behind the gate with its documented value`);
+    }
+    const untouched = P.get(core);
+    assert.deepEqual(untouched.pouch, { money: 0, items: [] }, "and the block is exactly as it booted");
+    assert.deepEqual(untouched.rel, {}, "no relationship rows");
+    assert.deepEqual(untouched.ledger.lines, [], "no ledger lines");
+    assert.equal(untouched.home, null, "and no home");
+
+    // ── THE BRIEF SEALS, AND ONLY THEN DOES ANYTHING HAPPEN ──
+    behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+    calls.length = 0;
+    armed.length = 0;
+    await loadedPF.save.maybeGenerateBrief(core);
+    await tick();
+    assert.equal(postCount(), 1, "exactly one host generation call");
+    assert.ok(
+      calls.find((c) => c.kind === "patch" && c.patch.pixelforgeBrief),
+      "the sealed brief is stored under its own key",
+    );
+    assert.equal(loadedPF.save.gate, null, "the gate lifts");
+    assert.equal(loadedPF.save.gateHolds(core), false, "…for this chat");
+    assert.equal(core.sim.world.brieved, true, "onto the world the brief describes");
+    assert.equal(core.sim.world.interim, undefined, "which is not a throwaway, so the mark is gone");
+    assert.equal(loadedPF.save.mode, "routes", "adopt ran on the way out of the gate, not before it");
+    // S3's starting purse rides the same moment (slice 6): a sink with no source
+    // is not a feature, and the seal is the one unambiguous "this world begins".
+    assert.equal(P.get(core).pouch.money, loadedPF.economy.STARTING_PURSE, "and the world begins with a purse in it");
+    assert.equal(P.grant(core, "apple", 2), 2, "and the mutators answer again");
+
+    // …and the first save of the chat's life is the compiled world, not the
+    // placeholder: the debounce the lift armed is the one that carries it.
+    const debounce = armed.find((t) => t.ms === 2500);
+    assert.ok(debounce, "the lift arms an ordinary debounce");
+    calls.length = 0;
+    debounce.fn();
+    await loadedPF.save._flushChain;
+    const wrote = calls.find((c) => c.kind === "put");
+    assert.ok(wrote, "which writes");
+    assert.equal(wrote.state.seed, core.sim.world.seed, "carrying the compiled world");
+
+    // ── A FAILED GENERATION IS A RETRY SCREEN, NEVER A SEALED DEFAULT ──
+    loadedPF.save.reset();
+    loadedPF.save._briefCache.clear();
+    const core2 = makeCore("chat-gate-fail", 909);
+    core2.host.chatMeta = { gameSetupConfig: { experienceConfig: { generate: true, seed: 909 } } };
+    core2.sim = loadedPF.save.restore(core2.host.chatMeta, "chat-gate-fail");
+    assert.equal(loadedPF.save.armGate(core2, core2.host.chatMeta), true, "gated");
+    calls.length = 0;
+    // 503 is the ladder's transient verdict: null, nothing stored. The block below
+    // does the deterministic one, which since 0.11 answers the same way.
+    responses.post = async () => ({ status: 503, body: null });
+    await loadedPF.save.maybeGenerateBrief(core2);
+    await tick();
+    assert.equal(loadedPF.save.gate.state, "failed", "the gate shows its failure state");
+    assert.equal(loadedPF.save.gate.attempts, 1, "counting the attempt");
+    assert.equal(
+      calls.filter((c) => c.kind === "patch").length,
+      0,
+      "and NOTHING was sealed — no default world decided on the player's behalf",
+    );
+    assert.equal(loadedPF.save.gateHolds(core2), true, "play is still held");
+    assert.equal(loadedPF.player.grant(core2, "apple", 1), 0, "…mutators included");
+    // …and because nothing was written, the chat is still exactly a chat waiting
+    // for a brief: the next visit arms the gate again and tries again on its own.
+    // That is the whole never-a-bricked-chat argument, and it is a property of the
+    // stored state rather than of anything this session remembers.
+    assert.equal(
+      loadedPF.save.briefExpected(core2.host.chatMeta, "chat-gate-fail"),
+      true,
+      "a failed generation leaves the chat in the state that re-arms the gate on the next visit",
+    );
+    assert.equal(loadedPF.save.gate.failure, "unavailable", "and the panel knows WHY, not only that it failed");
+
+    // The retry is a real retry: same chat, same gate, one more host call.
+    responses.post = async () => ({ status: 200, body: { ok: true, data: gateBriefData } });
+    assert.equal(loadedPF.save.retryGeneration(core2), true, "the failure screen's button re-runs generation");
+    assert.equal(loadedPF.save.gate.state, "generating", "flipping the panel back synchronously");
+    for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
+    assert.equal(loadedPF.save.gate, null, "and the retry seals it");
+    assert.equal(postCount(), 3, "one call for the failure, one for the retry, on top of the first chat's");
+
+    // ── AND A DETERMINISTIC FAILURE IS THE SAME SCREEN (DESIGN REVISION) ──
+    // The 0.4.0 ladder sealed a themed default on a 400/422, reasoning that a paid
+    // call per visit is worse than the default world. That predates the gate: back
+    // then the default world was what the player was already walking in, so sealing
+    // it changed nothing they could see. Now it would write down a world nobody
+    // asked for, permanently, in the one case a player cannot undo — while the
+    // README promises "a generation failure is a retry screen; nothing is stored".
+    // Revised: no failure seals anything. The gate carries the KIND instead, so a
+    // deterministic refusal is not a mystery button that never works.
+    {
+      loadedPF.save.reset();
+      loadedPF.save._briefCache.clear();
+      const refused = makeCore("chat-gate-400", 400);
+      refused.host.chatMeta = { gameSetupConfig: { experienceConfig: { generate: true, seed: 400 } } };
+      refused.sim = loadedPF.save.restore(refused.host.chatMeta, "chat-gate-400");
+      assert.equal(loadedPF.save.armGate(refused, refused.host.chatMeta), true, "gated");
+      calls.length = 0;
+      responses.post = async () => ({ status: 400, body: { code: "user_content_too_long" } });
+      await loadedPF.save.maybeGenerateBrief(refused);
+      await tick();
+      assert.equal(loadedPF.save.gate.state, "failed", "a 400 is a retry screen");
+      assert.equal(loadedPF.save.gate.failure, "refused", "…that says the request was turned down, not delayed");
+      assert.equal(
+        calls.filter((c) => c.kind === "patch").length,
+        0,
+        "and NOTHING is sealed — no themed default written down where the player cannot undo it",
+      );
+      assert.equal(
+        loadedPF.save.briefExpected(refused.host.chatMeta, "chat-gate-400"),
+        true,
+        "the chat is still exactly a chat waiting for a brief",
+      );
+      assert.equal(refused.sim.world.brieved, undefined, "and the world under the gate is still the placeholder");
+      // The sentences are pinned HERE and not in 70-hud, which the harness cannot
+      // load: a string the player reads with nothing asserting it is a string that
+      // drifts. "refused" earns its own, because trying again really may not help.
+      assert.notEqual(
+        loadedPF.save.gateReason("refused"),
+        loadedPF.save.gateReason("unavailable"),
+        "a refusal and a busy engine do not read the same",
+      );
+      for (const kind of ["refused", "unavailable", "network", "timeout", "storage", null, "a-kind-from-the-future"]) {
+        const text = loadedPF.save.gateReason(kind);
+        assert.ok(text && text.trim().endsWith("."), `${kind} has a whole sentence, not a blank panel`);
+      }
+      // The retry clears the verdict: the panel must not still be explaining the
+      // last failure while a new call is in flight behind it.
+      responses.post = async () => ({ status: 200, body: { ok: true, data: gateBriefData } });
+      assert.equal(loadedPF.save.retryGeneration(refused), true, "the button runs");
+      assert.equal(loadedPF.save.gate.state, "generating", "flipping the panel back synchronously");
+      assert.equal(loadedPF.save.gate.failure, null, "…and clearing the verdict, so it stops explaining a dead one");
+      for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
+      assert.equal(loadedPF.save.gate, null, "and a refusal is not permanent — the retry seals a real world");
+      assert.equal(refused.sim.world.brieved, true, "…which compiles");
+      loadedPF.save.reset();
+      loadedPF.save._briefCache.clear();
+    }
+
+    // ── THE LIFT COMES BEFORE THE DIRTY FLAG, AND THIS IS WHERE THAT SHOWS ──
+    // markDirty refuses while the gate holds, so arming the save first would arm
+    // nothing. On the routes path adopt covers for it (its first-write branch
+    // dirties the world itself), which is exactly why that path cannot pin the
+    // ordering. An engine with no experience-state route picks metadata mode and
+    // returns without dirtying anything, so the trailing markDirty in
+    // maybeGenerateBrief is the only thing that will ever carry the compiled
+    // world to disk.
+    loadedPF.save.reset();
+    loadedPF.save._briefCache.clear();
+    const legacyEngine = makeCore("chat-gate-legacy", 5150);
+    legacyEngine.host.chatMeta = { gameSetupConfig: { experienceConfig: { generate: true, seed: 5150 } } };
+    legacyEngine.sim = loadedPF.save.restore(legacyEngine.host.chatMeta, "chat-gate-legacy");
+    assert.equal(loadedPF.save.armGate(legacyEngine, legacyEngine.host.chatMeta), true, "gated");
+    behavior.get = async () => ({ available: false, status: 404 }); // pre-#5102 engine
+    calls.length = 0;
+    armed.length = 0;
+    await loadedPF.save.maybeGenerateBrief(legacyEngine);
+    await tick();
+    assert.equal(loadedPF.save.gate, null, "the brief seals and the gate lifts");
+    assert.equal(loadedPF.save.mode, "metadata", "on an engine with no experience-state route");
+    const onlyDebounce = armed.find((t) => t.ms === 2500);
+    assert.ok(onlyDebounce, "and the lift's own debounce is armed — nothing else here would write this world");
+    calls.length = 0;
+    onlyDebounce.fn();
+    await loadedPF.save._flushChain;
+    assert.ok(
+      calls.find((c) => c.kind === "patch" && c.patch.pixelforge),
+      "which carries the compiled world to the metadata key",
+    );
+
+    // ── AND A THROW IS A RETRY SCREEN TOO, NOT A SPINNER FOREVER ──
+    // Every failure the generation ladder KNOWS about comes back as a null seal
+    // and is handled above. This is the one it does not: a throw out of the
+    // compile, the transplant or the park, after the gate is already armed. Left
+    // to escape it takes the `finally` on the way out, clears the in-flight
+    // marker, and leaves the panel reading "writing your world…" with no call
+    // behind it and no button to press — a bricked chat by another route.
+    loadedPF.save.reset();
+    loadedPF.save._briefCache.clear();
+    const thrower = makeCore("chat-gate-throw", 5151);
+    thrower.host.chatMeta = { gameSetupConfig: { experienceConfig: { generate: true, seed: 5151 } } };
+    thrower.sim = loadedPF.save.restore(thrower.host.chatMeta, "chat-gate-throw");
+    assert.equal(loadedPF.save.armGate(thrower, thrower.host.chatMeta), true, "gated");
+    // The throw is planted where a real one would land: the rebuild.
+    const realSim = loadedPF.Sim;
+    loadedPF.Sim = function Exploding() {
+      throw new TypeError("the compiled world would not build");
+    };
+    try {
+      await loadedPF.save.maybeGenerateBrief(thrower);
+      await tick();
+    } finally {
+      loadedPF.Sim = realSim;
+    }
+    assert.ok(loadedPF.save.gate, "the gate is still there rather than half-lifted");
+    assert.equal(loadedPF.save.gate.state, "failed", "…showing retry, not a spinner with nothing behind it");
+    assert.equal(loadedPF.save._generating.has("chat-gate-throw"), false, "and nothing is left marked in flight");
+
+    // ── AND THE BUTTON ON THAT SCREEN LANDS IN THE REAL WORLD ──
+    // The half this case used to stop one line short of, and the reason it
+    // mattered: every throw the guard above catches lands AFTER the brief is
+    // stored and cached, so by the time the player presses "Try again" the chat
+    // no longer expects a brief and the retry takes the nothing-to-generate
+    // branch. That branch lifted the gate BARE — onto the placeholder — so the
+    // retry started play in the throwaway world, adopt's first-write wrote it up
+    // stamped {briefHash:0, interim:1}, and everything played there was severed
+    // unrecoverably the next time the real world compiled. A world that is
+    // already sealed is recompiled from what was sealed.
+    assert.equal(loadedPF.save._briefCache.has("chat-gate-throw"), true, "the brief did seal before the throw");
+    assert.equal(
+      loadedPF.save.briefExpected(thrower.host.chatMeta, "chat-gate-throw"),
+      false,
+      "…so the retry finds nothing left to generate, which is the branch that used to lift bare",
+    );
+    assert.equal(thrower.sim.world.interim, true, "and the world under the gate is still the placeholder");
+    behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+    calls.length = 0;
+    armed.length = 0;
+    const postsBeforeRetry = postCount();
+    assert.equal(loadedPF.save.retryGeneration(thrower), true, "the failure screen's button runs");
+    for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
+    assert.equal(loadedPF.save.gate, null, "the gate lifts");
+    assert.equal(postCount(), postsBeforeRetry, "without paying for a second generation — the brief is already sealed");
+    assert.equal(thrower.sim.world.brieved, true, "onto the world the sealed brief describes");
+    assert.equal(thrower.sim.world.interim, undefined, "which is not the placeholder any more");
+    assert.equal(
+      P.get(thrower).pouch.money,
+      loadedPF.economy.STARTING_PURSE,
+      "and the purse the throw cost is paid on the way in",
+    );
+    const retryDebounce = armed.find((t) => t.ms === 2500);
+    assert.ok(retryDebounce, "the lift arms the ordinary debounce");
+    calls.length = 0;
+    retryDebounce.fn();
+    await loadedPF.save._flushChain;
+    const retryWrote = calls.find((c) => c.kind === "put");
+    assert.ok(retryWrote, "which writes");
+    assert.equal(retryWrote.state.seed, thrower.sim.world.seed, "carrying the COMPILED seed");
+    assert.equal(retryWrote.state.zone, thrower.sim.zoneId, "and the compiled world's zone, not the placeholder's");
+    assert.ok(
+      Object.prototype.hasOwnProperty.call(thrower.sim.world.zones, retryWrote.state.zone),
+      "…which is a zone of the world that actually exists now",
+    );
+    assert.equal(retryWrote.state.player.world.interim, undefined, "the row is not stamped interim");
+    assert.ok(retryWrote.state.player.world.briefHash, "and it carries the sealed brief's hash");
+
+    // ── AND THE LIFT ITSELF REFUSES THE PLACEHOLDER, WHOEVER ASKS ──
+    // Belt and braces under the branch above: the gate's promise is that nobody
+    // plays a world that is going to be discarded, so lifting onto an interim
+    // world is a bug wherever it comes from. Every caller's job is to rebuild
+    // first and lift second, and this is what stops a future one from quietly
+    // re-opening the hole.
+    {
+      const stuck = makeCore("chat-gate-interim", 5153);
+      stuck.host.chatMeta = { gameSetupConfig: { experienceConfig: { generate: true, seed: 5153 } } };
+      loadedPF.save.reset();
+      stuck.sim = loadedPF.save.restore(stuck.host.chatMeta, "chat-gate-interim");
+      assert.equal(stuck.sim.world.interim, true, "the placeholder is marked");
+      assert.equal(loadedPF.save.armGate(stuck, stuck.host.chatMeta), true, "gated");
+      loadedPF.save._liftGate(stuck);
+      assert.ok(loadedPF.save.gate, "_liftGate refuses to start play in the placeholder world");
+      assert.equal(loadedPF.save.gateHolds(stuck), true, "…and the gate is still holding every door");
+      loadedPF.save.reset();
+    }
+
+    // ── AND A SKIPPED MARKER LANDING MID-GATE LIFTS WITHOUT A PURSE ──
+    // The marker path shares the install tail with the sealed path, and the tail
+    // pays the starting purse — but a default world is not a world beginning, it
+    // is the world that has always been there. armGate already pays a declined
+    // chat nothing at boot; the mid-gate route must agree, or two chats standing
+    // in the IDENTICAL themed default hold different money depending on nothing
+    // but which door they came through.
+    {
+      loadedPF.save.reset();
+      loadedPF.save._briefCache.clear();
+      const declined = makeCore("chat-gate-declined", 5154);
+      declined.host.chatMeta = { gameSetupConfig: { experienceConfig: { generate: true, seed: 5154 } } };
+      declined.sim = loadedPF.save.restore(declined.host.chatMeta, "chat-gate-declined");
+      assert.equal(loadedPF.save.armGate(declined, declined.host.chatMeta), true, "gated");
+      declined.host.chatMeta.pixelforgeBrief = { skipped: true };
+      await loadedPF.save.maybeGenerateBrief(declined);
+      for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
+      assert.equal(loadedPF.save.gate, null, "the marker lifts the gate");
+      assert.equal(declined.sim.world.interim, undefined, "onto the themed default, not the placeholder");
+      assert.equal(declined.sim.world.brieved, undefined, "which no brief describes");
+      assert.equal(
+        P.get(declined).pouch.money,
+        0,
+        "and a marker-lifted default world holds no purse — sealed worlds only",
+      );
+      loadedPF.save.reset();
+    }
+
+    // ── AND A THROW BEFORE THE SEAL IS STILL JUST A RETRY ──
+    // The other half of the same branch: nothing was stored, so "Try again" is a
+    // real second generation call and not a recompile of something that is not
+    // there. Pinned because the fix above put a rebuild in front of the bare lift.
+    loadedPF.save.reset();
+    loadedPF.save._briefCache.clear();
+    const early = makeCore("chat-gate-early", 5152);
+    early.host.chatMeta = { gameSetupConfig: { experienceConfig: { generate: true, seed: 5152 } } };
+    early.sim = loadedPF.save.restore(early.host.chatMeta, "chat-gate-early");
+    assert.equal(loadedPF.save.armGate(early, early.host.chatMeta), true, "gated");
+    responses.post = async () => {
+      throw new TypeError("the host route blew up");
+    };
+    await loadedPF.save.maybeGenerateBrief(early);
+    await tick();
+    assert.equal(loadedPF.save.gate.state, "failed", "a throw before the seal is a retry screen too");
+    assert.equal(loadedPF.save._briefCache.has("chat-gate-early"), false, "with nothing sealed");
+    const postsBeforeEarly = postCount();
+    responses.post = async () => ({ status: 200, body: { ok: true, data: gateBriefData } });
+    assert.equal(loadedPF.save.retryGeneration(early), true, "the button runs");
+    for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
+    assert.equal(postCount(), postsBeforeEarly + 1, "and THIS retry does pay for a generation, because none landed");
+    assert.equal(early.sim.world.brieved, true, "sealing the world it came back with");
+
+    // ── AND A CHAT THAT IS NOT WAITING FOR A BRIEF NEVER GATES ──
+    for (const [label, chatMeta] of [
+      ["a legacy chat with no config at all", {}],
+      ["a chat that never asked for generation", { gameSetupConfig: { experienceConfig: { seed: 5 } } }],
+      [
+        "a chat whose generation was declined",
+        { gameSetupConfig: { experienceConfig: { generate: true } }, pixelforgeBrief: { skipped: true } },
+      ],
+    ]) {
+      loadedPF.save.reset();
+      const plain = makeCore("chat-plain", 77);
+      plain.host.chatMeta = chatMeta;
+      assert.equal(loadedPF.save.armGate(plain, chatMeta), false, `${label} plays immediately`);
+    }
+  });
+});
+
+// (as) THE GATE IS ESCAPE-SAFE IN BOTH DIRECTIONS.
+// Leaving a chat while its world is being written is the ordinary thing to do
+// with a minute-long wait on screen, and it used to have two bad ends. With one
+// in-flight FLAG, the chat you arrived at found generation "already running",
+// returned immediately, and sat behind a gate with nothing behind it — a bricked
+// chat made by walking away from a different one. And a generation that landed
+// while you were elsewhere could not patch that chat's host metadata, so coming
+// back read a chat that still looked unsealed and generated the world a SECOND
+// time — a wasted host call and a different world than the one already stored.
+await withSavePath(async ({ tick, makeCore }) => {
+  await withGeneration(async ({ responses, postCount }) => {
+    // ONE core object for the whole dance, because the surface has exactly one
+    // (PF.core): a chat switch REASSIGNS chatId/sim/host on it rather than making
+    // a new one, and every fence under test is about that reassignment. Separate
+    // per-chat objects would let a stale completion "succeed" against an object
+    // nobody is looking at and prove nothing.
+    const core = makeCore("chat-away-a", 31);
+    const enter = (chatId, meta) => {
+      // What 90-element's _switchChat does, in the same order.
+      loadedPF.save.reset();
+      core.chatId = chatId;
+      core.sim = loadedPF.save.restore(meta, chatId);
+      core.host.chatMeta = meta;
+      return loadedPF.save.armGate(core, meta);
+    };
+    const metaA = { gameSetupConfig: { experienceConfig: { generate: true, seed: 31, theme: "cozy-village" } } };
+    const metaB = {};
+    let release;
+    const held = new Promise((resolve) => (release = resolve));
+    responses.post = async () => {
+      await held;
+      return { status: 200, body: { ok: true, data: gateBriefData } };
+    };
+
+    // Chat A gates and starts generating.
+    assert.equal(enter("chat-away-a", metaA), true, "A gates");
+    void loadedPF.save.maybeGenerateBrief(core);
+    await tick();
+    assert.equal(postCount(), 1, "and its one call is in flight");
+
+    // The player leaves for a chat that is not waiting for anything.
+    assert.equal(enter("chat-away-b", metaB), false, "B is a legacy chat and plays at once");
+    assert.equal(loadedPF.save.gate, null, "leaving cleared the gate with the rest of the per-chat state");
+    await loadedPF.save.maybeGenerateBrief(core);
+    assert.equal(postCount(), 1, "B starts no generation of its own — the in-flight set is keyed by chat");
+    assert.equal(loadedPF.save.gateHolds(core), false, "and A's in-flight call does not gate B");
+
+    // …and a chat that IS waiting for a brief gets its own call while A's is
+    // still in flight. This is where ONE in-flight flag bricked a chat by proxy:
+    // D gated, asked for generation, was told one was already running, and sat
+    // behind a loading panel with nothing at all behind it — a chat made
+    // unplayable by walking away from a different one.
+    const metaD = { gameSetupConfig: { experienceConfig: { generate: true, seed: 34, theme: "cozy-village" } } };
+    responses.post = async () => ({ status: 200, body: { ok: true, data: gateBriefData } });
+    assert.equal(enter("chat-away-d", metaD), true, "D gates");
+    await loadedPF.save.maybeGenerateBrief(core);
+    assert.equal(postCount(), 2, "and starts a call of its own, A's notwithstanding");
+    assert.equal(loadedPF.save.gate, null, "so D's gate lifts on D's own brief");
+    assert.equal(core.sim.world.brieved, true, "onto D's compiled world");
+
+    // Back to B, so the player is elsewhere when A finally lands.
+    assert.equal(enter("chat-away-b", metaB), false, "B still plays at once");
+
+    // A's generation lands while the player is in B: it seals, and it must not
+    // touch the world the player is actually standing in.
+    release();
+    for (let i = 0; i < 50 && !loadedPF.save._briefCache.has("chat-away-a"); i++) await tick();
+    assert.equal(loadedPF.save._briefCache.has("chat-away-a"), true, "A's brief is sealed and cached");
+    assert.equal(core.chatId, "chat-away-b", "the player is still in B");
+    assert.equal(core.sim.world.brieved, undefined, "and B's world is untouched by A's brief landing");
+
+    // Back to A. The host's chatMeta has NOT caught up — it is the same object it
+    // always was — so the session cache is the only thing that knows.
+    assert.equal(enter("chat-away-a", metaA), false, "coming back does not re-arm the gate");
+    assert.equal(core.sim.world.brieved, true, "because the world that was already sealed compiles");
+    assert.equal(core.sim.world.interim, undefined, "not a placeholder");
+    await loadedPF.save.maybeGenerateBrief(core);
+    assert.equal(postCount(), 2, "and the world is NOT generated a second time");
+    // …AND THE WORLD BEGINS WITH A PURSE IN IT, which walking away used to cost
+    // permanently. The grant's only call site was the tail of the generation, and
+    // that tail returns at the chat fence a few lines above it — so a player who
+    // did the ordinary thing with a minute-long wait on screen came back to a
+    // sealed world, a working berth counter, and no money, forever. The grant is a
+    // property of the STATE now: a sealed, non-interim world arriving on a block
+    // nothing has been written into is paid whichever door it came through.
+    assert.equal(
+      loadedPF.player.get(core).pouch.money,
+      loadedPF.economy.STARTING_PURSE,
+      "leaving during generation and coming back does not cost the starting purse",
+    );
+    assert.equal(loadedPF.player.get(core).ledger.lines.length, 1, "…and it is said out loud, exactly once");
+    enter("chat-away-a", metaA);
+    assert.equal(
+      loadedPF.player.get(core).pouch.money,
+      loadedPF.economy.STARTING_PURSE,
+      "…and a third visit does not pay it again",
+    );
+
+    // A RELOAD BETWEEN THE SEAL AND THE LIFT IS THE SAME DEBT. The brief reached
+    // the metadata, the process died before the world compiled, and the chat comes
+    // back with no save row of its own — the gate refused every write, so there
+    // never was one. Nothing this session remembers is involved: the metadata is
+    // the whole story, which is what makes this the reload case rather than the
+    // cache case above.
+    loadedPF.save._briefCache.clear();
+    const metaReload = {
+      gameSetupConfig: { experienceConfig: { generate: true, seed: 31, theme: "cozy-village" } },
+      pixelforgeBrief: loadedPF.brief.validate(gateBriefData, { theme: "cozy-village", seed: 31 }),
+    };
+    assert.equal(enter("chat-reload", metaReload), false, "a sealed chat does not gate on reload");
+    assert.equal(core.sim.world.brieved, true, "it boots straight into the compiled world");
+    assert.equal(
+      loadedPF.player.get(core).pouch.money,
+      loadedPF.economy.STARTING_PURSE,
+      "and the purse the crash landed between is paid on arrival",
+    );
+
+    // …but NOT to a chat that has been played and spent down to nothing. The
+    // predicate is "a block nothing has been written into", not "an empty purse",
+    // and a veteran being handed a second starting purse every time they walked in
+    // broke is the failure the wider test exists to refuse.
+    const veteran = loadedPF.player.get(core);
+    veteran.pouch.money = 0;
+    veteran.ledger.lines = [];
+    veteran.found.zones = ["z2"];
+    enter("chat-reload", metaReload);
+    core.sim.player = veteran;
+    assert.equal(loadedPF.economy.grantStartingPurse(core), false, "a veteran who spent to zero is not a new game");
+    assert.equal(veteran.pouch.money, 0, "…and is not paid again");
+
+    // The other direction: away and back while the call is STILL in flight. The
+    // gate re-arms, no second call starts, and the one in flight lifts it.
+    loadedPF.save._briefCache.clear();
+    loadedPF.save._generating.clear();
+    let release2;
+    const held2 = new Promise((resolve) => (release2 = resolve));
+    responses.post = async () => {
+      await held2;
+      return { status: 200, body: { ok: true, data: gateBriefData } };
+    };
+    const metaC = { gameSetupConfig: { experienceConfig: { generate: true, seed: 33, theme: "cozy-village" } } };
+    assert.equal(enter("chat-away-c", metaC), true, "C gates");
+    void loadedPF.save.maybeGenerateBrief(core);
+    await tick();
+    const startedWith = postCount();
+    enter("chat-away-b", metaB);
+    assert.equal(enter("chat-away-c", metaC), true, "coming back mid-generation gates again");
+    await loadedPF.save.maybeGenerateBrief(core);
+    assert.equal(postCount(), startedWith, "without starting a second call");
+    assert.equal(loadedPF.save.gate.state, "generating", "and the panel still says so");
+    release2();
+    for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
+    assert.equal(loadedPF.save.gate, null, "the call already in flight lifts the gate it came back to");
+    assert.equal(core.sim.world.brieved, true, "on the chat the player is actually looking at");
+  });
+});
+
+// (as2) THE SESSION BRIEF CACHE DOES NOT EVICT A CORRECTNESS GUARD.
+// The cache is load-bearing, not a speed-up: case (as) turns on "the session
+// cache is the only thing that knows" — a generation that lands while the player
+// is in another chat cannot patch the metadata blob they are holding. A plain
+// drop-the-oldest ceiling therefore evicts the ONLY witness that a chat is
+// sealed, and the next visit re-arms the gate, pays for a second host call, and
+// hands the player a different world than the one already stored. Only entries
+// the metadata has since been seen to carry are droppable.
+{
+  const S = loadedPF.save;
+  S.reset();
+  S._briefCache.clear();
+  S._briefSeenInMeta.clear();
+  const sealedFor = (seed) => brief.validate(gateBriefData, { theme: "cozy-village", seed });
+  const generateMeta = { gameSetupConfig: { experienceConfig: { generate: true, seed: 1 } } };
+  for (let i = 0; i < 12; i++) S._cacheBrief(`chat-cache-${i}`, sealedFor(i));
+  assert.equal(S._briefCache.size, 12, "twelve chats sealed with the metadata still catching up: nothing is dropped");
+  for (let i = 0; i < 12; i++) {
+    assert.ok(S._configBrief(generateMeta, `chat-cache-${i}`), `chat-cache-${i} is still known to be sealed`);
+    assert.equal(
+      S.briefExpected(generateMeta, `chat-cache-${i}`),
+      false,
+      `…so revisiting chat-cache-${i} does not re-arm the gate and generate its world twice`,
+    );
+  }
+
+  // …and once a chat's metadata comes back carrying the key, its cache entry has
+  // stopped being the only witness and is the first thing eviction takes.
+  const caughtUp = { ...generateMeta, pixelforgeBrief: sealedFor(3) };
+  assert.ok(S._configBrief(caughtUp, "chat-cache-3"), "the metadata now carries chat-cache-3's brief itself");
+  S._cacheBrief("chat-cache-new", sealedFor(99));
+  assert.equal(S._briefCache.has("chat-cache-3"), false, "so THAT is the entry the ceiling reclaims");
+  assert.equal(S._briefCache.size, 12, "…bringing the cache back under its bound");
+  for (let i = 0; i < 12; i++) {
+    if (i === 3) continue;
+    assert.ok(S._briefCache.has(`chat-cache-${i}`), `and no unacknowledged entry was touched (chat-cache-${i})`);
+  }
+  // A metadata blob that does NOT carry the key marks nothing, even for a chat
+  // the cache answers for — that is the whole distinction being drawn.
+  assert.equal(S._briefSeenInMeta.has("chat-cache-4"), false, "the cache answering is not the metadata knowing");
+  S._briefCache.clear();
+  S._briefSeenInMeta.clear();
+  S.reset();
+}
+
+// (at) #5406: THE WRITE ORDINAL, CONSUMED — AND EVERY FALLBACK PINNED.
+// The engine now stamps experience rows and metadata keys from one per-chat
+// counter (GET/PUT report `writeOrdinal`; metadata is mirrored at
+// metadataWriteOrdinals[<key>]). It is better evidence INSIDE the rows that
+// already arbitrate freshness, never a row of its own — so this case is half
+// "the ordinal changes the verdict where it should" and half "and nowhere else".
+{
+  const ladder = (probe, ctx) =>
+    loadedPF.save.classify(
+      { failed: false, probe },
+      { serverSerialized: null, localSerialized: '{"mine":1}', game: 1, now: Date.now(), ...ctx },
+    );
+  const row = (state, body) => ({ available: true, status: 200, body: { exists: true, state, ...body } });
+  const differs = { v: 1, someone: "else" };
+
+  // ── ROW 5: THE ORDINAL DISPROVES AN OWN-COMMIT SUSPICION ──
+  // The gate is unchanged — a PUT of ours completed while this GET was in flight —
+  // but _writeSeq cannot say WHICH row that PUT landed on, so the suspicion was
+  // unfalsifiable and a current row was thrown away whenever a write overlapped a
+  // read. A row at or past our own PUT's ordinal already carries that write.
+  assert.equal(
+    ladder(row(differs, { writeOrdinal: 12 }), { seqAtIssue: -1, putOrdinal: 12 }).row,
+    6,
+    "a row carrying our own last write is not a suspect — tie is the same write",
+  );
+  assert.equal(
+    ladder(row(differs, { writeOrdinal: 13 }), { seqAtIssue: -1, putOrdinal: 12 }).row,
+    6,
+    "and neither is one past it",
+  );
+  assert.equal(
+    ladder(row(differs, { writeOrdinal: 11 }), { seqAtIssue: -1, putOrdinal: 12 }).row,
+    5,
+    "a row BEHIND our own last write still is",
+  );
+  for (const [label, probe, ctx] of [
+    ["a pre-#5406 engine sends no ordinal at all", row(differs), { seqAtIssue: -1, putOrdinal: 12 }],
+    [
+      "an engine that sends null for a legacy row",
+      row(differs, { writeOrdinal: null }),
+      { seqAtIssue: -1, putOrdinal: 12 },
+    ],
+    ["a row from before the feature, cloned", row(differs, { writeOrdinal: 0 }), { seqAtIssue: -1, putOrdinal: 12 }],
+    ["a value that is not an ordinal", row(differs, { writeOrdinal: "12" }), { seqAtIssue: -1, putOrdinal: 12 }],
+    ["and our own side missing", row(differs, { writeOrdinal: 12 }), { seqAtIssue: -1 }],
+  ]) {
+    assert.equal(ladder(probe, ctx).row, 5, `${label}: row 5 stands, byte-identically to before #5406`);
+  }
+
+  // ── ROWS 6/7/8: WHICH STORE IS LATER ──
+  // The case #5406 was filed for (plan §5): a session that degraded to metadata
+  // writes played on, the row store never saw any of it, and the next boot's
+  // "the row wins" threw the whole session away.
+  const stale = ladder(row(differs, { writeOrdinal: 40, anchorMatched: false }), { mirrorOrdinal: 57 });
+  assert.equal(stale.row, 5, "a row strictly behind our metadata key's ordinal is the older store");
+  assert.equal(stale.adopt, "ignore", "so boot does not rebuild onto it");
+  assert.equal(stale.anchorCache, false, "and it never becomes the anchor");
+  assert.equal(stale.flush, "proceed", "while our own newer world writes straight over it");
+  assert.equal(stale.writeOrdinal, 40, "the ordinal rides on the decision for the caller to read");
+
+  // THE ANCHOR OUTRANKS THE ORDINAL, and this is the assertion that says so. A
+  // healthy flush ALWAYS leaves the mirror one ahead of the row it paired with
+  // (the row is written first), so without this guard a swipe-back taken while
+  // the tab was closed would stop rewinding the world — every boot would read
+  // "metadata is newer" and refuse the row that IS the story's current point.
+  assert.equal(
+    ladder(row(differs, { writeOrdinal: 40, anchorMatched: true }), { mirrorOrdinal: 57 }).row,
+    6,
+    "a row that IS the visible anchor's own save is a timeline claim, and it still wins at adopt",
+  );
+  assert.equal(
+    ladder(row(differs, { writeOrdinal: 57, anchorMatched: false }), { mirrorOrdinal: 57 }).row,
+    6,
+    "a tie is the same write, not an older one",
+  );
+  assert.equal(
+    ladder(row(differs, { writeOrdinal: 90, anchorMatched: false }), { mirrorOrdinal: 57 }).row,
+    6,
+    "and a row AHEAD of the mirror is the newer store — which is what row 6 already does",
+  );
+  assert.equal(
+    ladder(row(differs, { writeOrdinal: 40, anchorMatched: false }), {
+      mirrorOrdinal: 57,
+      serverSerialized: '{"was":1}',
+    }).row,
+    7,
+    "with an anchor of our own the row store is already this session's authority — row 7 is untouched",
+  );
+  assert.equal(
+    ladder(row(differs, { writeOrdinal: 40, anchorMatched: false }), { mirrorOrdinal: 57, anchorMoved: true }).row,
+    7,
+    "…and so is the anchor-moved path that forces it",
+  );
+  assert.equal(
+    ladder(row({ mine: 1 }, { writeOrdinal: 40, anchorMatched: false }), { mirrorOrdinal: 57 }).row,
+    8,
+    "identical bytes are not a conflict to arbitrate, whatever the ordinals say",
+  );
+  for (const [label, body, ctx] of [
+    ["no ordinal on the row", { anchorMatched: false }, { mirrorOrdinal: 57 }],
+    ["no mirror (pre-#5406 metadata)", { writeOrdinal: 40, anchorMatched: false }, {}],
+    ["a mirror clobbered to a non-number", { writeOrdinal: 40, anchorMatched: false }, { mirrorOrdinal: "57" }],
+  ]) {
+    assert.equal(ladder(row(differs, body), ctx).row, 6, `${label}: the byte ladder decides, exactly as before`);
+  }
+
+  // THE MIRROR IS READ OFF THE HOST'S METADATA, defensively at every hop.
+  const mirrorOf = (chatMeta) => loadedPF.save._mirrorOrdinal({ host: { chatMeta } });
+  assert.equal(mirrorOf({ metadataWriteOrdinals: { pixelforge: 57 } }), 57, "our key's entry");
+  assert.equal(mirrorOf({ metadataWriteOrdinals: { gameMap: 57 } }), null, "somebody else's is not ours");
+  assert.equal(
+    mirrorOf({ metadataWriteOrdinals: { pixelforge: -1 } }),
+    null,
+    "and neither is a value the server would ignore",
+  );
+  for (const meta of [
+    {},
+    { metadataWriteOrdinals: null },
+    { metadataWriteOrdinals: [] },
+    { metadataWriteOrdinals: 4 },
+  ]) {
+    assert.equal(mirrorOf(meta), null, `a mirror shaped ${JSON.stringify(meta)} is simply unorderable`);
+  }
+  assert.equal(loadedPF.save._mirrorOrdinal(undefined), null, "…and so is no core at all");
+}
+
+// (at2) …DRIVEN: THE DEGRADED SESSION'S PLAY SURVIVES ITS NEXT BOOT.
+// The §5 row this closes, end to end through adopt(): a previous session pinned
+// to metadata mode wrote its play to the metadata key only, so the route row is
+// an older world. Before #5406 "the route row always wins at adopt" (§Q2a) had no
+// alternative and the session was lost with a toast.
+await withSavePath(async ({ behavior, makeCore }) => {
+  const core = makeCore("chat-degraded", 6161);
+  core.sim.day = 30; // the play the degraded session did
+  core.host.chatMeta = { metadataWriteOrdinals: { pixelforge: 57 } };
+  const oursBefore = core.sim.world;
+  // The row the last ROUTES-mode session left behind, two dozen ordinals ago, and
+  // returned as the namespace's latest fallback rather than the reader's anchor.
+  behavior.get = async () => ({
+    available: true,
+    status: 200,
+    body: {
+      exists: true,
+      state: { v: 1, seed: 6161, theme: "cozy-village", zone: "inn", day: 4, player: { v: 1, game: 1 } },
+      writeOrdinal: 33,
+      anchorMatched: false,
+    },
+  });
+  await loadedPF.save.adopt(core);
+  assert.equal(loadedPF.save.mode, "routes", "the route is there and this is a routes-mode boot");
+  assert.equal(core.sim.world, oursBefore, "but the older row does NOT replace the world we booted from metadata");
+  assert.equal(core.sim.day, 30, "the degraded session's play is still here");
+  assert.deepEqual(core.toasts, [], "and nothing announced a rewind that did not happen");
+  assert.equal(loadedPF.save._serverSerialized, null, "the stale row never became the anchor");
+  assert.equal(loadedPF.save._lastSerialized, null, "…and the next write is forced, so our world goes up over it");
+
+  // The SAME row at the reader's own anchor is the opposite verdict: that is a
+  // timeline claim, and §Q2a still hands it the world.
+  loadedPF.save.reset();
+  const swiped = makeCore("chat-degraded", 6161);
+  swiped.sim.day = 30;
+  swiped.host.chatMeta = { metadataWriteOrdinals: { pixelforge: 57 } };
+  behavior.get = async () => ({
+    available: true,
+    status: 200,
+    body: {
+      exists: true,
+      state: { v: 1, seed: 6161, theme: "cozy-village", zone: "inn", day: 4, player: { v: 1, game: 1 } },
+      writeOrdinal: 33,
+      anchorMatched: true,
+    },
+  });
+  await loadedPF.save.adopt(swiped);
+  assert.equal(swiped.sim.zoneId, "inn", "a swipe-back taken while the tab was closed still rewinds the world");
+  assert.deepEqual(swiped.toasts, ["The world rewound with the story."], "and still says so");
+});
+
+// (at3) THE PUT ECHO CARRIES THE ORDINAL, AND IT IS PER-CHAT.
+await withSavePath(async ({ behavior, makeCore }) => {
+  loadedPF.save.mode = "routes";
+  const core = makeCore("chat-putordinal", 7171);
+  behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+  behavior.put = async () => ({ ok: true, id: "row1", anchor: { messageId: "m1", swipeIndex: 0 }, writeOrdinal: 88 });
+  await loadedPF.save.flush(core, false);
+  assert.equal(loadedPF.save._putOrdinal, 88, "the PUT's own ordinal is recorded off the echo");
+
+  // An echo with no anchor in it still tells us the ordinal — the anchor guard
+  // used to return before anything else on the echo could be read.
+  behavior.put = async () => ({ ok: true, id: "row2", writeOrdinal: 89 });
+  core.sim.day += 1;
+  await loadedPF.save.flush(core, false);
+  assert.equal(loadedPF.save._putOrdinal, 89, "…even when the route answered without one");
+
+  behavior.put = async () => ({ ok: true, id: "row3" });
+  core.sim.day += 1;
+  await loadedPF.save.flush(core, false);
+  assert.equal(loadedPF.save._putOrdinal, 89, "and a pre-#5406 echo leaves the last known ordinal alone");
+
+  loadedPF.save.reset();
+  assert.equal(loadedPF.save._putOrdinal, null, "it is per-chat, so the switch clears it");
+});
+
+// ═══ THINGS, MONEY, AND A BED (S5 slice 6 — S3 live, P1's field used) ══════
+
+// (au) THE ITEM VOCABULARY IS COMPLETE, AND THE MONEY IS THEME-BEARING.
+// 59-economy asserts completeness at load in the placers' idiom. This drives the
+// same claim through the READERS, which is the half an assertion cannot make: a
+// table that satisfies the registry check but renders as its own raw tag, or
+// prices a colony in village coins, passes the assertion and fails here.
+{
+  const E = loadedPF.economy;
+  for (const theme of loadedPF.art.themeIds()) {
+    const w = { theme };
+    const currency = E.currency(w);
+    assert.ok(currency.one && currency.many, `${theme} names its money`);
+    assert.equal(E.money(w, 1), `1 ${currency.one}`, `${theme} counts one of it`);
+    assert.equal(E.money(w, 12), `12 ${currency.many}`, `${theme} counts twelve`);
+    assert.equal(typeof E.price(w, "berth"), "number", `${theme} prices a berth`);
+    for (const type of E.ITEM_TYPES) {
+      const name = E.describe(w, { t: type, k: "" });
+      assert.ok(name && name !== type, `${theme} has a NAME for "${type}", not the raw tag`);
+    }
+  }
+  // Theme-bearing, or the vocabulary is a lookup table with one entry in it —
+  // the same failure the maintainer named for name books ("Maud Thatch" in a
+  // sci-fi colony), one layer down.
+  const cozy = { theme: "cozy-village" };
+  const scifi = { theme: "sci-fi-colony" };
+  assert.notEqual(E.money(cozy, 5), E.money(scifi, 5), "a colony does not pay in a village's coins");
+  assert.notEqual(
+    E.describe(cozy, { t: "lodging-key" }),
+    E.describe(scifi, { t: "lodging-key" }),
+    "…nor carry a village's keys",
+  );
+  assert.equal(E.describe(cozy, { t: "lodging-key", k: "brass" }), "brass room key", "the quality tier reads with it");
+  assert.equal(E.describe(cozy, { t: "star-chart" }), "star chart", "a type this build does not know still reads");
+  assert.equal(E.describe(cozy, {}), "", "and a row with no type at all is nothing");
+  assert.equal(E.money(cozy, -5), E.money(cozy, 0), "a negative purse is not a thing to render");
+  // A save can name a theme this build dropped; that is a fallback, not a licence
+  // for a live theme to ship unnamed (which is what the load assertion refuses).
+  assert.equal(E.money({ theme: "retired-theme" }, 2), E.money(cozy, 2), "a dropped theme still renders");
+  assert.equal(E.price(cozy, "a-thing-nobody-sells"), null, "and an unpriced thing is not for sale, not free");
+
+  // …AND A THEME NAME OFF THE PROTOTYPE IS A DROPPED THEME LIKE ANY OTHER.
+  // `theme` comes out of a save row, which is untrusted JSON: a plain
+  // `SKINS[theme] ?? fallback` never reaches its fallback for "constructor" or
+  // "toString" — the prototype answers with something non-nullish — and then
+  // every economy call for that save TypeErrors on `.currency`. Own-property
+  // only, exactly as price() and simFromSaved already read their own tables.
+  for (const hostile of ["constructor", "__proto__", "toString", "hasOwnProperty", "valueOf"]) {
+    const w = { theme: hostile };
+    assert.equal(E.money(w, 2), E.money(cozy, 2), `theme "${hostile}" renders as the fallback, not a crash`);
+    assert.equal(E.currency(w).one, E.currency(cozy).one, `…and names its money`);
+    assert.equal(E.price(w, "berth"), E.price(cozy, "berth"), `…and prices a berth`);
+    assert.equal(E.describe(w, { t: "lodging-key" }), E.describe(cozy, { t: "lodging-key" }), `…and names its key`);
+  }
+  // The item map inside the skin is the same read, one level down: a pouch row's
+  // type is save data too, and `items["constructor"]` is a function whose `.name`
+  // is "Object" — a key the player never had, rendered as one they did.
+  assert.equal(E.describe(cozy, { t: "constructor" }), "constructor", "an item type off the prototype reads as itself");
+  assert.equal(E.describe(cozy, { t: "toString" }), "toString", "…whatever it is called");
+  // A save can even carry a hostile theme through a real world build.
+  const hostileSim = new loadedPF.Sim(world.build(4242, "cozy-village"));
+  hostileSim.world.theme = "constructor";
+  const hostileCore = { chatId: "chat-proto-theme", sim: hostileSim, hud: { toast() {}, refreshChips() {} } };
+  assert.equal(
+    loadedPF.economy.berthOffer(hostileCore).reason,
+    "no-keeper",
+    "and the berth offer answers rather than throwing",
+  );
+}
+
+// (av) THE BERTH: S3'S FIRST MONEY SINK AND P1'S BED, IN ONE TRANSACTION.
+// The plan's chosen vertical (§2, Decisions #2): there is no automatic home, so
+// the player-driven path to a bed is renting a room — which is also the first
+// thing money has ever been for. Every effect goes through a shipped mutator, and
+// the interesting half of the contract is the REFUSALS: award() floors at zero
+// rather than refusing, so an unaffordable rental that still ran would silently
+// give away a room for nothing.
+{
+  const E = loadedPF.economy;
+  const P = loadedPF.player;
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Fallowmere",
+      prosperity: "modest",
+      backgroundPopulation: 40,
+      situation: "The bridge went in the spring flood and the ford is the only way across.",
+      cast: [
+        { name: "Perrin Quill", role: "innkeep", kind: "host", tint: "amber", home: "Fallowmere", household: 1 },
+        { name: "Wren Ash", role: "miller", kind: "maker", tint: "teal", home: "Fallowmere", household: 2 },
+      ],
+    },
+    { theme: "cozy-village", seed: 8080 },
+  );
+  const w = world.build(8080, "cozy-village", sealed);
+  const sim = new loadedPF.Sim(w);
+  const core = { chatId: "chat-berth", sim, hud: { toast() {}, refreshChips() {} } };
+
+  let keeper = null;
+  let keeperZone = null;
+  let bystander = null;
+  for (const zoneId of Object.keys(w.zones)) {
+    for (const npc of w.zones[zoneId].npcs) {
+      if (typeof npc.lodging === "string" && !keeper) {
+        keeper = npc;
+        keeperZone = zoneId;
+      } else if (!npc.lodging && !bystander) bystander = npc;
+    }
+  }
+  assert.ok(keeper, "the compiled world has somebody who lets rooms");
+  assert.equal(w.zones[keeper.lodging]?.lodging, true, "and the room they let is the settlement's gathering");
+  assert.ok(!/^h\d+$/.test(keeper.lodging), "whose id is a sealed anchor — setHome refuses a minted h{n} outright");
+  assert.ok(bystander, "…and somebody who does not");
+
+  // Proximity is 30-sim's own concern and pinned there; what the offer is ABOUT
+  // is "a lodging keeper within reach", and nearNpc IS that. Supplied, not walked.
+  const stand = (zoneId, npc) => {
+    sim.zoneId = zoneId;
+    sim.nearNpc = npc;
+  };
+
+  assert.equal(E.berthOffer(core).price, null, "nobody within reach quotes no price");
+  // OUTSIDE the room, deliberately. Standing IN it is an offer whoever you happen
+  // to be nearest to — the room path, pinned in case (ay) — so the fact this line
+  // is about (a villager is not a keeper) has to be asked where the room is not
+  // also answering.
+  stand(w.startZone, bystander);
+  assert.equal(E.berthOffer(core).price, null, "and a villager who keeps no rooms lets none");
+
+  // THE KEEPER, AND AN EMPTY PURSE. The price is quoted anyway: a refusal the
+  // player cannot read is a control that just does not work.
+  stand(keeperZone, keeper);
+  const broke = E.berthOffer(core);
+  assert.equal(broke.available, false, "an empty purse cannot take the room");
+  assert.equal(broke.reason, "cannot-afford", "and says why");
+  assert.equal(broke.price, E.price(w, "berth"), "while still quoting the price");
+  assert.equal(E.rentBerth(core).ok, false, "the rental refuses");
+  // THE OTHER HALF OF THAT CONTRACT, said out loud: award() FLOORS rather than
+  // refusing, which is precisely why the affordability check is the caller's job.
+  // A sink that skipped it would not fail — it would silently hand over the room
+  // and stop the purse at zero, which reads as a working feature.
+  assert.deepEqual(P.award(core, { money: -999 }), { money: 0, level: null }, "an overdraw floors at zero");
+  assert.equal(P.get(core).pouch.money, 0, "…and no further: money never goes negative");
+  const nothing = P.get(core);
+  assert.equal(nothing.pouch.money, 0, "taking nothing");
+  assert.equal(nothing.home, null, "and giving nothing");
+  assert.deepEqual(nothing.pouch.items, [], "no key");
+  assert.deepEqual(nothing.ledger.lines, [], "no line");
+  assert.deepEqual(nothing.rel, {}, "and nobody remembers a sale that did not happen");
+
+  // WITH MONEY: the whole vertical, one shipped verb per effect.
+  P.award(core, { money: 100 });
+  const offer = E.berthOffer(core);
+  assert.equal(offer.available, true, "the offer stands");
+  assert.equal(E.rentBerth(core).ok, true, "and it is taken");
+  const now = P.get(core);
+  assert.equal(now.pouch.money, 100 - offer.price, "the purse paid, exactly once");
+  assert.equal(now.home, keeper.lodging, "P1's field holds the room, by its sealed id");
+  assert.deepEqual(
+    now.pouch.items,
+    [{ t: "lodging-key", q: 1, k: "" }],
+    "the key is the receipt, and the pouch's first real row",
+  );
+  assert.equal(now.ledger.lines.length, 1, "one ledger line, for the day boundary P5 will summarise");
+  assert.ok(now.ledger.lines[0][1].includes(E.money(w, offer.price)), "…naming the price in this world's own money");
+  const rel = now.rel[w.startZone];
+  assert.ok(rel && rel[keeper.name], "and the keeper remembers — SETTLEMENT-scoped, per plan §2");
+  assert.equal(rel[keeper.name].t, 1, "one encounter");
+  assert.ok(rel[keeper.name].s, "with the line that says what it was");
+  assert.equal(Object.keys(now.rel).length, 1, "exactly one zone holds rel rows: the settlement, not the room");
+
+  // AND NOT TWICE. The same room sold again is not a second room.
+  const again = E.berthOffer(core);
+  assert.equal(again.available, false, "the room is already theirs");
+  assert.equal(again.reason, "already-yours", "and says so");
+  assert.equal(E.rentBerth(core).ok, false, "so it is not sold again");
+  assert.equal(P.get(core).pouch.money, 100 - offer.price, "and the purse is untouched by the refusal");
+
+  // Everything the rental wrote is a shipped field, so it round-trips byte-stably.
+  const wire = JSON.stringify(P.serialize(P.get(core)));
+  assert.equal(JSON.stringify(P.serialize(P.parse(JSON.parse(wire)).player)), wire, "the block round-trips unchanged");
+
+  // THE LEGACY WORLD LETS ROOMS TOO — the three-zone village has always had an
+  // inn and an innkeeper, and a pre-0.4.0 save is exactly the chat the loading
+  // gate never touches.
+  const legacy = new loadedPF.Sim(world.build(9001, "cozy-village"));
+  const lcore = { chatId: "chat-berth-legacy", sim: legacy, hud: { toast() {}, refreshChips() {} } };
+  legacy.zoneId = "inn";
+  legacy.nearNpc = legacy.world.zones.inn.npcs.find((npc) => npc.name === "Mira");
+  P.award(lcore, { money: 50 });
+  assert.equal(E.rentBerth(lcore).ok, true, "the legacy inn lets a berth as well");
+  assert.equal(P.get(lcore).home, "inn", "anchored at the inn zone");
+  assert.ok(P.get(lcore).rel.village?.Mira, "and Mira remembers it, in the settlement's own zone");
+
+  // A LODGING ZONE ALWAYS HAS A KEEPER — both marks or neither. The compiler
+  // resolves the gathering's host from the building's owner, and that resolution
+  // can come back null (a brief with no `host` kind and nobody homed in that
+  // building). The zone mark used to go up regardless: a room the world calls
+  // lodging with nobody behind the counter, which is a promise the offer can
+  // never keep and a berth button that quotes a price nobody will take.
+  const lodgingWorlds = [
+    ["legacy", world.build(9001, "cozy-village")],
+    ["the compiled village", w],
+  ];
+  for (const theme of loadedPF.art.themeIds()) {
+    for (const seed of [1, 77, 8080, 424242]) {
+      lodgingWorlds.push([`${theme}/${seed}`, world.build(seed, theme, brief.defaults(theme, seed))]);
+    }
+  }
+  // The pointed one: a brief that SEALS a gathering and homes nobody in it — no
+  // `host` kind in the cast and nobody living at that address — so the owner
+  // resolution comes back null and there is genuinely nobody behind the counter.
+  const hostless = brief.validate(
+    {
+      scale: "village",
+      name: "Nowhere",
+      places: [{ kind: "gathering", name: "The Wet Boot", flavor: "" }],
+      cast: [
+        { name: "Ivo Reed", role: "miller", kind: "maker", tint: "teal", home: "Nowhere", household: 1 },
+        { name: "Sela Reed", role: "farmhand", kind: "grower", tint: "green", home: "Nowhere", household: 2 },
+        { name: "Bram", role: "carter", kind: "maker", tint: "amber", home: "Nowhere", household: 3 },
+        { name: "Odi", role: "child", kind: "child", tint: "rose", home: "Nowhere", household: 3 },
+      ],
+    },
+    { theme: "cozy-village", seed: 606 },
+  );
+  lodgingWorlds.push(["a brief that homes no host", world.build(606, "cozy-village", hostless)]);
+  for (const [label, lw] of lodgingWorlds) {
+    const keepers = [];
+    for (const zoneId of Object.keys(lw.zones)) {
+      for (const npc of lw.zones[zoneId].npcs) if (typeof npc.lodging === "string" && npc.lodging) keepers.push(npc);
+    }
+    for (const zoneId of Object.keys(lw.zones)) {
+      if (lw.zones[zoneId].lodging !== true) continue;
+      assert.ok(
+        keepers.some((npc) => npc.lodging === zoneId),
+        `${label}: a zone marked lodging has somebody letting it`,
+      );
+    }
+    for (const npc of keepers) {
+      assert.equal(lw.zones[npc.lodging]?.lodging, true, `${label}: a keeper's room is marked lodging`);
+    }
+  }
+  // …and a hostless world compiles a berth button that simply is not there,
+  // rather than a counter with nobody behind it.
+  const hostlessWorld = world.build(606, "cozy-village", hostless);
+  const hostlessSim = new loadedPF.Sim(hostlessWorld);
+  const hcore = { chatId: "chat-hostless", sim: hostlessSim, hud: { toast() {}, refreshChips() {} } };
+  P.award(hcore, { money: 100 });
+  for (const zoneId of Object.keys(hostlessWorld.zones)) {
+    for (const npc of hostlessWorld.zones[zoneId].npcs) {
+      hostlessSim.zoneId = zoneId;
+      hostlessSim.nearNpc = npc;
+      const offer = E.berthOffer(hcore);
+      assert.equal(offer.available, false, "nobody in a hostless world lets a room");
+      assert.equal(offer.price, null, "…so no price is ever quoted, which is what hides the button");
+    }
+  }
+  loadedPF.save.reset();
+}
+
+// (aw) THE STARTING PURSE IS ONE-SHOT, AND IT IS NOT A DEFAULT.
+// It cannot be a default on the block: serialize() emits every field
+// unconditionally, so a non-zero default would move the bytes of every save in
+// the wild and re-write every open chat on first load. It is granted at the seal
+// instead, and the emptiness test is what keeps the pre-gate interim shim — where
+// a block with a real session in it crosses the same seam — from being paid.
+{
+  const E = loadedPF.economy;
+  const P = loadedPF.player;
+  const sim = new loadedPF.Sim(world.build(4321, "cozy-village"));
+  const core = { chatId: "chat-purse", sim, hud: { toast() {}, refreshChips() {} } };
+  assert.equal(P.get(core).pouch.money, 0, "a block still boots with an empty purse — the frozen wire literal says so");
+  assert.equal(E.grantStartingPurse(core), true, "a world sealing onto an untouched block pays it out");
+  assert.equal(P.get(core).pouch.money, E.STARTING_PURSE, "…in full");
+  assert.equal(P.get(core).ledger.lines.length, 1, "with a line saying so");
+  assert.equal(E.grantStartingPurse(core), false, "and never again on the same block");
+  assert.equal(P.get(core).pouch.money, E.STARTING_PURSE, "so the purse cannot double");
+
+  for (const [label, seed, play] of [
+    ["a pouch with something already in it", 4322, (c) => P.grant(c, "apple", 1)],
+    ["a purse with something already in it", 4323, (c) => P.award(c, { money: 3 })],
+    ["a ledger with a day in it", 4324, (c) => P.log(c, "something happened", 1)],
+    ["a player who already has a home", 4325, (c) => P.setHome(c, "inn")],
+  ]) {
+    const played = new loadedPF.Sim(world.build(seed, "cozy-village"));
+    const pcore = { chatId: `chat-purse-${seed}`, sim: played, hud: { toast() {}, refreshChips() {} } };
+    play(pcore);
+    assert.equal(E.grantStartingPurse(pcore), false, `${label} is not a new game`);
+    assert.ok(P.get(pcore).pouch.money < E.STARTING_PURSE, "…and is not paid");
+  }
+  loadedPF.save.reset();
+}
+
+// (ax) THE ROW SAYS WHICH WIRE ERA IT IS, OUT OF BAND (S5 slice 8).
+// #5102's PUT has always accepted a `schemaVersion` (int 1..1,000,000, default 1)
+// and this package sent none, so every row it has ever written claims era 1
+// whatever is inside it. The column exists so a future build — or a tool reading
+// an export — can tell a row's wire era WITHOUT parsing the state, and that only
+// works if somebody fills it in.
+//
+// It is a MIRROR and never the authority, which is the other half of every
+// assertion here. The block's own `player.v` travels with the bytes it describes;
+// the column travels with the ROW, and a row can be cloned to another anchor,
+// hand-edited, or written by something that never paired the two. So: the PUT
+// carries the current version, the state string does not move, and the read still
+// resolves by `v`.
+{
+  // ── THE WIRE ITSELF ──────────────────────────────────────────────────────────
+  // The harness stubs PF.api everywhere else, so this is the one place the actual
+  // request body can be read back.
+  const realFetch = globalThis.fetch;
+  const bodies = [];
+  globalThis.fetch = async (url, init) => {
+    bodies.push(JSON.parse(init.body));
+    return { ok: true, status: 200, json: async () => ({ ok: true }) };
+  };
+  try {
+    await loadedPF.api.putExperienceState("chat-sv", { v: 1, player: { v: 3 } }, false, 3);
+    assert.deepEqual(
+      bodies.at(-1),
+      { state: { v: 1, player: { v: 3 } }, schemaVersion: 3 },
+      "the PUT names the row's era beside the state",
+    );
+    await loadedPF.api.putExperienceState("chat-sv", { v: 1 }, false);
+    assert.deepEqual(
+      bodies.at(-1),
+      { state: { v: 1 } },
+      "…and a caller that names none sends exactly the bytes it always did",
+    );
+    // A DIAGNOSTIC FIELD MUST NEVER BE ABLE TO KILL THE WRITE. The route's schema
+    // 400s on anything outside its own bounds, so a value it would refuse is
+    // dropped here and the row takes the route's default instead of the save
+    // failing over a column nothing reads for correctness.
+    for (const bad of [0, -1, 1.5, "2", null, NaN, 1_000_001, Number.MAX_SAFE_INTEGER + 2]) {
+      await loadedPF.api.putExperienceState("chat-sv", { v: 1 }, false, bad);
+      assert.deepEqual(bodies.at(-1), { state: { v: 1 } }, `a schemaVersion of ${String(bad)} is omitted, not sent`);
+    }
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+
+// ── BOTH WRITE PATHS CARRY IT, AND NEITHER MOVES THE STATE ────────────────────
+await withSavePath(async ({ calls, behavior, makeCore }) => {
+  loadedPF.save.mode = "routes";
+  const core = makeCore("chat-sv-flush", 8181);
+  behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+  await loadedPF.save.flush(core, false);
+  const put = calls.find((c) => c.kind === "put");
+  assert.ok(put, "the ordinary flush wrote the row");
+  assert.equal(put.schemaVersion, loadedPF.player.currentV(), "carrying this build's block version");
+  // THE STATE STRING IS UNTOUCHED. The row's bytes are the interface every dedupe
+  // compares; this is a sibling FIELD on the PUT body, not a field in the state.
+  assert.equal(
+    JSON.stringify(put.state),
+    JSON.stringify(loadedPF.save.snapshot(core)),
+    "…and the state it sent is the snapshot, byte for byte",
+  );
+  assert.equal("schemaVersion" in put.state, false, "the era rides the ROW, never the block's own bytes");
+
+  // The pagehide pair builds its own snapshot and would have been the one path to
+  // forget.
+  core.sim.day += 1;
+  calls.length = 0;
+  loadedPF.save.flushTeardown(core);
+  const tearPut = calls.find((c) => c.kind === "put");
+  assert.ok(tearPut && tearPut.keepalive === true, "the teardown PUT went out on the keepalive path");
+  assert.equal(tearPut.schemaVersion, loadedPF.player.currentV(), "…with the same era on it");
+});
+
+// ── THE COLUMN CORROBORATES; `v` DECIDES ──────────────────────────────────────
+// One migration step in the table, so "the current era" and "era 1" are different
+// numbers and the two can actually disagree.
+{
+  const P = loadedPF.player;
+  const before = P.MIGRATIONS.length;
+  // A step with a visible effect and no new key, so "did the ladder run?" is a
+  // readable question and the carry is not involved in the answer.
+  P.MIGRATIONS.push((block) => ({ ...block, flushedDay: 99 }));
+  try {
+    assert.equal(P.currentV(), 2, "with one step in the table this build writes v2");
+
+    // A LEGACY ROW: the column says era 1 — the route's default, which is what
+    // every row written before this slice claims — while the block inside says v2.
+    await withSavePath(async ({ behavior, makeCore }) => {
+      const core = makeCore("chat-sv-legacy", 8282);
+      behavior.get = async () => ({
+        available: true,
+        status: 200,
+        body: {
+          exists: true,
+          schemaVersion: 1,
+          state: {
+            v: 1,
+            seed: 8282,
+            theme: "cozy-village",
+            player: { v: 2, game: 1, pouch: { money: 7, items: [] } },
+          },
+        },
+      });
+      const warned = [];
+      const realWarn = globalThis.console.warn;
+      globalThis.console.warn = (...args) => warned.push(args.map(String).join(" "));
+      try {
+        await loadedPF.save.adopt(core);
+      } finally {
+        globalThis.console.warn = realWarn;
+      }
+      assert.equal(core.sim.player.v, 2, "the BLOCK's own v decided the read, not the row's column");
+      assert.equal(core.sim.player.pouch.money, 7, "so the block came through whole");
+      assert.equal(core.sim.player.flushedDay, 0, "and the v1→v2 step did not run over a block already at v2");
+      assert.equal(
+        warned.filter((w) => w.includes("schemaVersion")).length,
+        1,
+        "the disagreement is worth saying, once, and it says which side wins",
+      );
+      assert.equal(loadedPF.quarantine.peek("migration"), null, "nothing was quarantined over a column");
+    });
+
+    // …AND THE OTHER DIRECTION: a column claiming an era this build has never
+    // written, over a block that honestly declares v1. The in-band ladder migrates
+    // it; the too-new gate reads `v` and never the column, so nothing is parked.
+    await withSavePath(async ({ behavior, makeCore }) => {
+      const core = makeCore("chat-sv-ahead", 8383);
+      behavior.get = async () => ({
+        available: true,
+        status: 200,
+        body: {
+          exists: true,
+          schemaVersion: 5,
+          state: {
+            v: 1,
+            seed: 8383,
+            theme: "cozy-village",
+            player: { v: 1, game: 1, pouch: { money: 3, items: [] } },
+          },
+        },
+      });
+      await loadedPF.save.adopt(core);
+      assert.equal(core.sim.player.v, 2, "a v1 block is migrated to this build's version");
+      assert.equal(core.sim.player.flushedDay, 99, "…by the step the in-band ladder ran");
+      assert.equal(core.sim.player.pouch.money, 3, "carrying what it held");
+      assert.equal(loadedPF.quarantine.peek("version"), null, "and a column ahead of us is not a too-new BLOCK");
+    });
+  } finally {
+    P.MIGRATIONS.length = before;
+  }
+}
+
+// (ay) THE BERTH IS OFFERED BY THE ROOM AS WELL AS BY THE PERSON.
+// Second live playtest: the maintainer stood INSIDE The Amber Hearth with Mira a
+// few tiles off and had no berth button anywhere — Talk, Wait and Keyboard and
+// nothing else. Nothing was wrong with the compile, and the assertions below
+// re-state that against the playtest's own shape: the gathering carried its
+// lodging mark and the host carried the keeper mark that pairs with it.
+//
+// The offer keyed on `sim.nearNpc` ALONE, and nearNpc is the single NEAREST NPC
+// within 26px — a tile and a half. So the room could be the settlement's only
+// inn, the keeper could be standing in it, and the button was still hidden
+// because the player was closer to the guard by the door. Every berth case
+// written before this one SUPPLIED nearNpc, which is exactly why none of them
+// could see it.
+//
+// The offer still follows the PERSON — an innkeeper standing in the square at
+// noon can let you a room, and that is the whole reason the mark is on the NPC.
+// It now also follows the ROOM: standing in a zone the compiler marked lodging,
+// with somebody in that zone who lets it, is an offer. Nobody in the room is
+// still nobody: an empty inn quotes no price.
+{
+  const E = loadedPF.economy;
+  const P = loadedPF.player;
+  // The playtest's shape: a DECLARED gathering, a `host` who is homed in it, and
+  // a second cast member under the same roof to stand between them.
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Hearthvale",
+      prosperity: "modest",
+      backgroundPopulation: 40,
+      situation: "Pumpkins keep going missing from the fair field.",
+      places: [{ kind: "gathering", name: "The Amber Hearth", flavor: "A honey-lit inn." }],
+      cast: [
+        { name: "Mira", role: "Innkeeper", kind: "host", tint: "amber", home: "The Amber Hearth", household: 1 },
+        { name: "Rook", role: "Guard Captain", kind: "guard", tint: "blue", home: "The Amber Hearth", household: 1 },
+        { name: "Tam", role: "Farmer", kind: "grower", tint: "green", home: "Hearthvale", household: 2 },
+      ],
+    },
+    { theme: "cozy-village", seed: 2095930824 },
+  );
+  const w = world.build(2095930824, "cozy-village", sealed);
+  const gid = Object.entries(sealed._ids.zones).find(([, name]) => name === "The Amber Hearth")?.[0];
+  assert.ok(gid && w.zones[gid], "the declared gathering compiled to a room");
+  assert.equal(w.zones[gid].lodging, true, "which carries the lodging mark");
+  const keeper = w.zones[gid].npcs.find((npc) => npc.lodging === gid);
+  assert.ok(keeper, "and the host is standing in it, carrying the mark that pairs with it");
+  assert.equal(keeper.name, "Mira", "…the host the brief named");
+  const roommate = w.zones[gid].npcs.find((npc) => !npc.lodging);
+  assert.ok(roommate, "with somebody else in the room to be nearer to");
+
+  const sim = new loadedPF.Sim(w);
+  const core = { chatId: "chat-berth-room", sim, hud: { toast() {}, refreshChips() {} } };
+  P.award(core, { money: 100 });
+  const stand = (zoneId, npc) => {
+    sim.zoneId = zoneId;
+    sim.nearNpc = npc ?? null;
+    return E.berthOffer(core);
+  };
+
+  // THE PLAYTEST, EXACTLY: in the room, nobody within arm's reach.
+  const alone = stand(gid, null);
+  assert.equal(alone.available, true, "standing in the inn is an offer even with nobody within reach");
+  assert.equal(alone.zoneId, gid, "…of that room");
+  assert.equal(alone.keeper?.name, "Mira", "…from the keeper who is in it");
+  assert.equal(alone.price, E.price(w, "berth"), "…at the price the button quotes");
+
+  // AND WITH THE GUARD BY THE DOOR WINNING nearNpc. This is the reported frame.
+  const crowded = stand(gid, roommate);
+  assert.equal(crowded.available, true, "being nearer to a bystander does not close the inn");
+  assert.equal(crowded.keeper?.name, "Mira", "…the keeper still answers for the room");
+
+  // THE PERSON PATH IS UNTOUCHED: the keeper out in the square still lets a room.
+  const square = stand(w.startZone, keeper);
+  assert.equal(square.available, true, "an innkeeper in the square at noon can still let you a room");
+  assert.equal(square.zoneId, gid, "…the room being the one they keep, not the one you are in");
+
+  // AND THE SQUARE ITSELF IS NOT AN INN.
+  assert.equal(
+    stand(w.startZone, null).price,
+    null,
+    "standing outside quotes no price, which is what hides the button",
+  );
+  assert.equal(stand(w.startZone, roommate).price, null, "and a villager who keeps no rooms lets none");
+
+  // AN EMPTY ROOM IS NOBODY. This is the state resolveSchedules leaves when a
+  // daypart moves the keeper out (it splices NPCs between `zone.npcs` arrays),
+  // so it is a real frame and not a hypothetical one.
+  const room = w.zones[gid];
+  const held = room.npcs.splice(room.npcs.indexOf(keeper), 1)[0];
+  assert.equal(stand(gid, null).price, null, "an inn with nobody behind the counter quotes no price");
+  assert.equal(stand(gid, null).reason, "no-keeper", "…and says so");
+  room.npcs.push(held);
+
+  // THE REFUSALS REACH THE ROOM PATH TOO — a control that vanishes when the
+  // purse runs short teaches the player nothing about the price.
+  P.award(core, { money: -100 });
+  const broke = stand(gid, null);
+  assert.equal(broke.available, false, "an empty purse still cannot take the room");
+  assert.equal(broke.reason, "cannot-afford", "and says why");
+  assert.equal(broke.price, E.price(w, "berth"), "while still quoting the price, so the button stays on screen");
+  P.award(core, { money: 100 });
+  assert.equal(E.rentBerth(core).ok, true, "the room is taken from inside the room");
+  assert.equal(P.get(core).home, gid, "anchored at the gathering's sealed id");
+  const owned = stand(gid, null);
+  assert.equal(owned.available, false, "and the same room is not sold twice");
+  assert.equal(owned.reason, "already-yours", "…it is simply yours");
+  assert.equal(owned.price, E.price(w, "berth"), "…still on screen, saying so");
+
+  // BOTH MARKS OR NEITHER, AND THE HOSTLESS FIXTURE STILL REFUSES.
+  // The room path can only ever find a keeper through the zone mark, so a brief
+  // that seals a gathering and homes nobody in it must still compile no mark at
+  // all — otherwise the new path is the very "counter with nobody behind it"
+  // the old one was fixed for.
+  const hostless = brief.validate(
+    {
+      scale: "village",
+      name: "Nowhere",
+      places: [{ kind: "gathering", name: "The Wet Boot", flavor: "" }],
+      cast: [
+        { name: "Ivo Reed", role: "miller", kind: "maker", tint: "teal", home: "Nowhere", household: 1 },
+        { name: "Sela Reed", role: "farmhand", kind: "grower", tint: "green", home: "Nowhere", household: 2 },
+        { name: "Bram", role: "carter", kind: "maker", tint: "amber", home: "Nowhere", household: 3 },
+        { name: "Odi", role: "child", kind: "child", tint: "rose", home: "Nowhere", household: 3 },
+      ],
+    },
+    { theme: "cozy-village", seed: 606 },
+  );
+  const hw = world.build(606, "cozy-village", hostless);
+  const hsim = new loadedPF.Sim(hw);
+  const hcore = { chatId: "chat-berth-room-hostless", sim: hsim, hud: { toast() {}, refreshChips() {} } };
+  P.award(hcore, { money: 100 });
+  for (const zoneId of Object.keys(hw.zones)) {
+    assert.notEqual(hw.zones[zoneId].lodging, true, `hostless: ${zoneId} is not marked lodging`);
+    hsim.zoneId = zoneId;
+    hsim.nearNpc = null;
+    assert.equal(E.berthOffer(hcore).price, null, `hostless: standing in ${zoneId} quotes no price`);
+  }
+
+  // The invariant itself, said structurally rather than incidentally: the zone
+  // mark is only ever up because a placed NPC took the keeper's mark for it.
+  for (const [label, lw] of [
+    ["the playtest village", w],
+    ["a brief that homes no host", hw],
+    ["legacy", world.build(9001, "cozy-village")],
+  ]) {
+    const marks = Object.values(lw.zones)
+      .flatMap((zone) => zone.npcs)
+      .filter((npc) => typeof npc.lodging === "string" && npc.lodging)
+      .map((npc) => npc.lodging);
+    for (const [zoneId, zone] of Object.entries(lw.zones)) {
+      if (zone.lodging !== true) continue;
+      assert.ok(marks.includes(zoneId), `${label}: ${zoneId} is marked lodging and somebody is letting it`);
+    }
+    for (const zoneId of marks) {
+      assert.equal(lw.zones[zoneId]?.lodging, true, `${label}: a keeper's room is marked lodging`);
+    }
+  }
+  loadedPF.save.reset();
+}
+
+// ── AND THE PAIRING IS THE COMPILER'S, NOT THE FIXTURES' ──────────────────────
+// Everything above reads worlds the compiler actually produces, and on every one
+// of them the keeper stamp lands — so those cases hold whether the zone mark
+// WAITS for the stamp or is merely written beside it, and reverting 20-world's
+// `stamped` block leaves them green. The structural claim is the one the offer
+// depends on: 59-economy's room path finds a keeper THROUGH the zone mark, so a
+// mark raised without a stamp is exactly the counter with nobody behind it.
+//
+// A stamp that misses is unreachable through a brief — every validated roster
+// entry is placed as an NPC under its own name — so the only honest way to
+// exercise the branch is to force it. The rewrite goes on the HOST RESOLUTION
+// rather than on the stamp loop: resolving a host and stamping one are the two
+// different facts the block is about, the resolution line is the same on either
+// side of the fix, and forcing a resolved host nobody carries the name of asks
+// the compiler the question directly.
+{
+  const HOST_LINE = "const host = facade?.owner ?? headOfBuilding.get(gatheringZoneId) ?? null;";
+  const FORCED_MISS =
+    "const host = ((resolved) => (resolved ? { ...resolved, name: `${resolved.name}\\u0000` } : null))(" +
+    "facade?.owner ?? headOfBuilding.get(gatheringZoneId) ?? null);";
+  const parts = [
+    "00-prelude.js",
+    "10-art.js",
+    "15-assets.js",
+    "18-brief.js",
+    "20-world.js",
+    "25-schedule.js",
+    "30-sim.js",
+    "50-spatial.js",
+    "55-maps-export.js",
+    "58-player.js",
+    "59-economy.js",
+    "60-save.js",
+  ].map((file) => {
+    const text = readFileSync(join(here, "src", file), "utf8");
+    if (file !== "20-world.js") return text;
+    const forced = text.replace(HOST_LINE, FORCED_MISS);
+    assert.notEqual(forced, text, "the forced-miss rewrite still names 20-world's host resolution");
+    return forced;
+  });
+  const forcedPF = new Function(`"use strict";\n${parts.join("\n")}\nreturn PF;`)();
+  forcedPF.assets._noPackage = true;
+  forcedPF.api.postSpatialLocations = async () => ({ ok: false, status: 404, body: null });
+  forcedPF.api.patchMetadata = async () => {};
+  const sealed = forcedPF.brief.validate(
+    {
+      scale: "village",
+      name: "Hearthvale",
+      prosperity: "modest",
+      backgroundPopulation: 40,
+      situation: "Pumpkins keep going missing from the fair field.",
+      places: [{ kind: "gathering", name: "The Amber Hearth", flavor: "A honey-lit inn." }],
+      cast: [
+        { name: "Mira", role: "Innkeeper", kind: "host", tint: "amber", home: "The Amber Hearth", household: 1 },
+        { name: "Rook", role: "Guard Captain", kind: "guard", tint: "blue", home: "The Amber Hearth", household: 1 },
+        { name: "Tam", role: "Farmer", kind: "grower", tint: "green", home: "Hearthvale", household: 2 },
+      ],
+    },
+    { theme: "cozy-village", seed: 2095930824 },
+  );
+  const fw = forcedPF.world.build(2095930824, "cozy-village", sealed);
+  const fgid = Object.entries(sealed._ids.zones).find(([, name]) => name === "The Amber Hearth")?.[0];
+  assert.ok(fgid && fw.zones[fgid], "the forced world still compiles the gathering it was told about");
+  assert.equal(
+    Object.values(fw.zones).some((zone) => (zone.npcs ?? []).some((npc) => npc.lodging)),
+    false,
+    "a host resolved under a name nobody carries stamps no keeper anywhere",
+  );
+  assert.notEqual(
+    fw.zones[fgid].lodging,
+    true,
+    "…and the zone mark does not go up without one — both marks or neither, structurally",
+  );
+}
+
+// ── AN OWNER HOMED AT THE SETTLEMENT ROOT STANDS AT THEIR OWN STATION (0.11) ──
+// `home` naming the SETTLEMENT is the ordinary shape and not a corner case: the
+// STOCK_CAST top-up roster carries no `home` of its own — so every quality-floor
+// cast homes its innkeeper at the root (the second playtest's own shape; the
+// DEFAULT briefs are fine, homing their hosts at the inn by name) — and it is
+// also what a model writes when it is not thinking about buildings. That innkeeper stood on
+// the door apron of the inn they run, from waking to sleeping, with the lit
+// common room and the counter behind them.
+//
+// The promotion that sends an owner inside gates on `owned.interior?.post`, and
+// `interior` was only ever set by the COMPILER-MINTED building loop — where the
+// station comes from WORK_POSTS, a table whose one entry is `shop`. A facade the
+// PLACES pass built (every gathering, every sanctuary) never carried the handle
+// at all, so the gate could not fire however the schedule was written. And the
+// schedule was never the problem: `host:resident` is already post/post/post/home
+// and the runtime handle is built FROM the promotion's result, so the one site
+// fixes the spawn and the whole day at once.
+//
+// The SANCTUARY had the identical gap for the identical reason, and its keeper
+// tier (`*:resident:keeper`) holds them at `post` from dawn to dusk — so an elder
+// homed at the settlement kept the church STEP for the whole of daylight.
+{
+  const E = loadedPF.economy;
+  const P = loadedPF.player;
+  /** Every tile of a station is standable, and the fitting it serves stands
+   *  between it and the way in — which is what makes it the BACK of the counter
+   *  rather than the front of it. Asserted against the tiles the furnisher
+   *  actually painted, so the claim survives the furniture being moved. */
+  const checkStation = (zone, fitting, label) => {
+    const post = zone.post;
+    assert.ok(post, `${label}: the furnisher recorded a station`);
+    for (let y = post.y0; y <= post.y1; y++) {
+      for (let x = post.x0; x <= post.x1; x++) {
+        assert.ok(loadedPF.schedule.standable(zone, x, y), `${label}: the station tile ${x},${y} is standable`);
+        assert.equal(zone.object[zone.w * (y + 1) + x], fitting, `${label}: the ${fitting} stands south of ${x},${y}`);
+      }
+    }
+    assert.ok(post.y1 < zone.spawn.y, `${label}: the ${fitting} stands between the station and the door`);
+    return post;
+  };
+
+  const innBrief = (home) => ({
+    scale: "village",
+    name: "Fernmoor",
+    prosperity: "modest",
+    places: [{ kind: "gathering", name: "The Amber Hearth", flavor: "Low beams and a tall fire." }],
+    cast: [
+      { name: "Mira", role: "innkeep", kind: "host", tint: "amber", home, household: 1 },
+      // A second body in the room to be nearer to, placed by NAME so the inn
+      // gains an occupant without gaining a RESIDENT — a resident grows living
+      // quarters, which moves `floor0` and makes this a different building.
+      {
+        name: "Tam",
+        role: "potboy",
+        kind: "folk",
+        tint: "teal",
+        home: "Fernmoor",
+        workplace: "The Amber Hearth",
+        household: 2,
+      },
+    ],
+  });
+
+  // (a) THE REPORTED SHAPE: the keeper of the inn, homed at the town.
+  const sealed = brief.validate(innBrief("Fernmoor"), { theme: "cozy-village", seed: 8080 });
+  const w = world.build(8080, "cozy-village", sealed);
+  checkWorld(w, sealed, "root-homed host");
+  const gid = Object.entries(sealed._ids.zones).find(([, name]) => name === "The Amber Hearth")?.[0];
+  assert.ok(gid && w.zones[gid], "the declared gathering compiled to a room");
+  const room = w.zones[gid];
+
+  // IN the room — compiled into `zone.npcs`, which is what the room path reads
+  // and what the daypart splice moves — and not merely pointed at it.
+  const mira = room.npcs.find((npc) => npc.name === "Mira");
+  assert.ok(mira, `the innkeeper stands IN ${gid} rather than on its doorstep`);
+  assert.equal(mira._sched.post.zoneId, gid, "and her day handle names that room");
+
+  // …AT THE SERVING ROW, which is the row behind the counter.
+  const innPost = checkStation(room, "counter", "the inn");
+  assert.deepEqual(mira._sched.post.wander, innPost, "her day box IS the station, not the room's middle");
+  assert.ok(
+    mira.x >= innPost.x0 && mira.x <= innPost.x1 && mira.y >= innPost.y0 && mira.y <= innPost.y1,
+    `and she is compiled onto it (${mira.x},${mira.y} in ${JSON.stringify(innPost)})`,
+  );
+
+  // NO REHOUSING. Days at the station, nights in her own bed: the night handle is
+  // still the dwelling her household claimed, and it is a MINTED `h*` zone rather
+  // than the inn. Where somebody works must never move where they sleep.
+  assert.ok(mira._sched.home, "she still has a bed to go to");
+  assert.notEqual(mira._sched.home.zoneId, gid, "the station did not rehouse her into the inn");
+  assert.match(mira._sched.home.zoneId, /^h\d+$/, "her bed is in her household's own dwelling");
+  {
+    const dwelling = w.zones[mira._sched.home.zoneId];
+    const bed = mira._sched.home.wander;
+    assert.equal(bed.x0, bed.x1, "a night handle is one tile — a bed, not a box");
+    assert.ok(
+      ["bed", "bunk"].includes(dwelling.object[dwelling.w * bed.y0 + bed.x0]),
+      "…and there is a bed painted on it",
+    );
+  }
+
+  // (d) THE OFFER FOLLOWS HER INTO THE ROOM. The room path reads `zone.npcs`, so
+  //     until she was compiled into the inn the lodging mark was up on a room the
+  //     keeper was never standing in — a player inside the inn with the innkeeper
+  //     out on the step got the offer only by walking back out to her.
+  assert.equal(room.lodging, true, "the room carries the lodging mark");
+  const bystander = room.npcs.find((npc) => npc.name === "Tam");
+  assert.ok(bystander, "with somebody else in the room to be nearer to");
+  {
+    const sim = new loadedPF.Sim(w);
+    const core = { chatId: "chat-berth-root-host", sim, hud: { toast() {}, refreshChips() {} } };
+    P.award(core, { money: 100 });
+    sim.zoneId = gid;
+    sim.nearNpc = bystander;
+    const offer = E.berthOffer(core);
+    assert.equal(offer.available, true, "standing in the inn is an offer even with a bystander nearer");
+    assert.equal(offer.keeper?.name, "Mira", "…answered by the keeper who is behind the counter");
+    assert.equal(offer.zoneId, gid, "…for the room she keeps");
+  }
+
+  // AND SHE HOLDS IT THROUGH THE DAY. `host:resident` is post/post/post/home, and
+  // `post` is now the station, so the three daylight dayparts put her behind her
+  // own counter and only night takes her home.
+  {
+    const sim = new loadedPF.Sim(w);
+    const inRoom = () => w.zones[gid].npcs.some((npc) => npc.name === "Mira");
+    for (const [minutes, part] of [
+      [6 * 60, "dawn"],
+      [12 * 60, "day"],
+      [19 * 60, "dusk"],
+    ]) {
+      sim.clockMin = minutes;
+      sim.resolveSchedules();
+      assert.ok(inRoom(), `at ${part} the innkeeper is behind her own counter`);
+    }
+    sim.clockMin = 2 * 60;
+    sim.resolveSchedules();
+    assert.ok(!inRoom(), "and at night she is in her own bed, not among the tables");
+  }
+
+  // (b) THE SHAPE THAT ALREADY WORKED IS UNTOUCHED. A keeper the brief homes AT
+  //     the place was never on the apron — the root-home branch is the only one
+  //     that was — so she still gets the room's walkable middle, which is a box
+  //     strictly bigger than the station in both directions.
+  {
+    const homed = brief.validate(innBrief("The Amber Hearth"), { theme: "cozy-village", seed: 8080 });
+    const hw = world.build(8080, "cozy-village", homed);
+    checkWorld(hw, homed, "host homed at the inn");
+    const hid = Object.entries(homed._ids.zones).find(([, name]) => name === "The Amber Hearth")?.[0];
+    const hroom = hw.zones[hid];
+    const npc = hroom.npcs.find((entry) => entry.name === "Mira");
+    assert.ok(npc, "a host homed at the inn is still compiled into it");
+    assert.equal(npc._sched.post.zoneId, hid, "and her day handle is still that room");
+    const station = checkStation(hroom, "counter", "the inn she lives in");
+    const box = npc._sched.post.wander;
+    assert.ok(
+      box.x0 < station.x0 && box.y1 > station.y1,
+      `she keeps the room's middle, not the station (${JSON.stringify(box)} vs ${JSON.stringify(station)})`,
+    );
+    assert.equal(npc._sched.home?.zoneId, hid, "and her bed is still in the quarters the building grew");
+  }
+
+  // (c) THE SANCTUARY, SAME GAP AND SAME FIX. Its station is the chancel: the
+  //     walkable row behind the altar, at the head of the aisle. The altar row
+  //     itself is solid end to end (altar plus both candle plinths), so the row
+  //     above it is the only place a keeper can actually stand.
+  {
+    const sealedChurch = brief.validate(
+      {
+        scale: "village",
+        name: "Fernmoor",
+        prosperity: "modest",
+        places: [{ kind: "sanctuary", name: "St Aldwin's", flavor: "A cold stone nave." }],
+        cast: [
+          { name: "Wen", role: "prior", kind: "elder", tint: "violet", home: "Fernmoor", household: 1 },
+          { name: "Halla", role: "farmer", kind: "grower", tint: "green", home: "Fernmoor", household: 2 },
+        ],
+      },
+      { theme: "cozy-village", seed: 8080 },
+    );
+    const cw = world.build(8080, "cozy-village", sealedChurch);
+    checkWorld(cw, sealedChurch, "root-homed keeper");
+    const sid = Object.entries(sealedChurch._ids.zones).find(([, name]) => name === "St Aldwin's")?.[0];
+    assert.ok(sid && cw.zones[sid], "the declared sanctuary compiled to a room");
+    const nave = cw.zones[sid];
+    const wen = nave.npcs.find((npc) => npc.name === "Wen");
+    assert.ok(wen, `the keeper stands IN ${sid} rather than on the church step`);
+    assert.equal(wen._sched.keeper, true, "carrying the keeper tier that holds them there all day");
+    const chancel = checkStation(nave, "altar", "the sanctuary");
+    assert.deepEqual(wen._sched.post.wander, chancel, "and their day box is the chancel");
+    assert.match(wen._sched.home?.zoneId ?? "", /^h\d+$/, "while their bed stays at the dwelling they were housed in");
+  }
+}
+
+// ── THE CLASSIFIER CARRIES IT AND DECIDES NOTHING WITH IT ─────────────────────
+{
+  const decided = (schemaVersion) =>
+    loadedPF.save.classify(
+      {
+        failed: false,
+        probe: {
+          available: true,
+          status: 200,
+          body: { exists: true, schemaVersion, state: { v: 1, player: { v: 1, game: 1 } } },
+        },
+      },
+      { serverSerialized: null, localSerialized: '{"mine":1}', game: 1, now: Date.now() },
+    );
+  assert.equal(decided(1).rowSchemaVersion, 1, "the decision carries the row's era for a caller to read");
+  assert.equal(decided(9).row, decided(1).row, "…and no value of it moves the verdict");
+  for (const bad of [undefined, null, 0, -3, 2.5, "1", 1_000_001]) {
+    assert.equal(decided(bad).rowSchemaVersion, null, `an unusable column (${String(bad)}) simply says nothing`);
+  }
+  assert.equal(
+    loadedPF.save.classify({ failed: true, error: null }, {}).rowSchemaVersion,
+    null,
+    "a probe that did not answer has no row to describe",
+  );
+  assert.equal(
+    loadedPF.save.classify({ failed: false, probe: { available: false, status: 404 } }, {}).rowSchemaVersion,
+    null,
+    "…and neither does a route that is not there",
+  );
+  loadedPF.save.reset();
+}
+
+// ── §4.3 IS A POST-CONDITION ON THE SEALED CAST, NOT ON THE MODEL'S DRAFT ─────
+// The host-gathering synthesis ran in the PLACES pass, against `asArray(src.cast)`
+// — the raw model cast, two passes before the cast quality floor tops one up from
+// stock. Every stock roster leads with a `host`, so the one brief that needs the
+// synthesis most — a cast that failed validation outright — was exactly the brief
+// that never got it: the floor handed the settlement a keeper and the places floor
+// handed it a wilds, and the sealed brief carried a host with nowhere to keep.
+//
+// That is not a cosmetic gap. The compiler builds the common room from the
+// gathering PLACE (a `host` in the cast alone binds to nothing — the hostless
+// fixture below pins that seam), so the live playtest compiled fifteen zones of
+// "X's home" plus a farm: no cantina, no lodging mark, no keeper, and the berth
+// the release ships was unreachable in a real generated world.
+{
+  const P = loadedPF.player;
+  const E = loadedPF.economy;
+  // A raw brief whose cast is entirely unusable: no entry survives capText, so the
+  // cast pass keeps nobody at all. This is the playtest's shape and its seed.
+  const rawBrief = { scale: "village", name: "Anchorage Nine", cast: [{ role: "colonist" }, { name: "  " }] };
+  const sealed = brief.validate(rawBrief, { theme: "sci-fi-colony", seed: 1980690972 });
+  const host = sealed.cast.find((member) => member.kind === "host");
+  assert.ok(host, "the cast floor topped a host up from stock");
+  const gatherings = sealed.places.filter((place) => place.kind === "gathering");
+  assert.equal(gatherings.length, 1, "and the sealed brief carries exactly one gathering for them to keep");
+  assert.ok(sealed.places.length <= brief.CAPS.places, "inside the room the rank has for places");
+  assert.ok(
+    sealed._repairs.some((entry) => entry.includes("synthesized a gathering interior")),
+    "the repair is on the ledger, not silent",
+  );
+  // NAMED LIKE AN INN, not like one more house on the row. `${hostName}'s` sat in
+  // a street of "Rook's home" and "Fen's home" and read as another door; both
+  // default briefs already carry the idiom (the Amber Hearth INN, the Meridian
+  // CANTINA), so the theme has the word.
+  assert.ok(gatherings[0].name.includes(host.name), "named from the host who keeps it");
+  assert.ok(gatherings[0].name.endsWith("Cantina"), "…in the colony's own word for a common room");
+  const cozy = brief.validate(rawBrief, { theme: "cozy-village", seed: 1980690972 });
+  assert.ok(
+    cozy.places.find((place) => place.kind === "gathering")?.name.endsWith("Inn"),
+    "…and the village's word in the village",
+  );
+
+  // THE WHOLE VERTICAL, through the compiler the playtest actually ran.
+  const w = world.build(1980690972, "sci-fi-colony", sealed);
+  const gatheringId = Object.entries(sealed._ids.zones).find(([, name]) => name === gatherings[0].name)?.[0];
+  assert.ok(gatheringId && w.zones[gatheringId], "the gathering compiled to a zone of its own");
+  assert.equal(w.zones[gatheringId].lodging, true, "which the compiler marks as lodging");
+  const keeper = Object.values(w.zones)
+    .flatMap((zone) => zone.npcs)
+    .find((npc) => npc.lodging === gatheringId);
+  assert.ok(keeper, "with somebody behind the counter");
+  assert.equal(keeper.name, host.name, "…the host the floor topped up");
+  const sim = new loadedPF.Sim(w);
+  const core = { chatId: "chat-anchorage", sim, hud: { toast() {}, refreshChips() {} } };
+  P.award(core, { money: 100 });
+  sim.zoneId = gatheringId;
+  sim.nearNpc = keeper;
+  const offer = E.berthOffer(core);
+  assert.equal(offer.available, true, "and a berth the player can actually take");
+  assert.equal(offer.zoneId, gatheringId, "at the gathering that used to be missing");
+}
+
+// ── A DOM the size of the two surfaces that need one ──────────────────────────
+// Not a browser: exactly what PF.el touches (createElement, style, text,
+// attributes, listeners, children) plus fire(), so a click can be driven. Enough
+// for 70-hud's layout and 80-setup's launch config, which is all this file asks.
+class FakeNode {
+  constructor(tag) {
+    this.tagName = String(tag).toUpperCase();
+    this.style = {};
+    this.children = [];
+    this.attrs = {};
+    this.listeners = {};
+    this.textContent = "";
+  }
+  setAttribute(name, value) {
+    this.attrs[name] = value;
+    // Real inputs reflect the value/type attributes onto the property, and the
+    // wizard reads `.value`; nothing else here needs reflecting.
+    if (name === "value" || name === "type") this[name] = value;
+  }
+  getAttribute(name) {
+    return Object.prototype.hasOwnProperty.call(this.attrs, name) ? this.attrs[name] : null;
+  }
+  addEventListener(type, fn) {
+    (this.listeners[type] ??= []).push(fn);
+  }
+  removeEventListener() {}
+  appendChild(node) {
+    this.children.push(node);
+    return node;
+  }
+  replaceChildren(...nodes) {
+    this.children = nodes;
+  }
+  remove() {}
+}
+globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+const walkNodes = (node, out = []) => {
+  out.push(node);
+  for (const child of node.children) walkNodes(child, out);
+  return out;
+};
+const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) => fn({ preventDefault() {} })));
+
+// ── A LOCATION NOTICE DOES NOT LAND ON THE NARRATION ──────────────────────────
+// Every toast shared one node pinned 156px off the bottom of the surface — which
+// is where the host's narration panel is. Crossing into a zone therefore printed
+// its name across the middle of the GM's sentence ("Tam's farm" over a line of
+// NARRATION, playtest screenshot). Where you have just arrived belongs at the top
+// beside the chip that already says where you are; the refusals and receipts keep
+// the bottom surface they had.
+{
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = () => 0; // the fade is a timer; nothing here waits for one
+  globalThis.clearTimeout = () => {};
+  try {
+    const hud = new loadedPF.Hud(new FakeNode("div"), { sim: null });
+    hud.toast("Tam's farm", "location");
+    hud.toast("There is no room to be had here.");
+    const shown = walkNodes(hud.root).filter((node) => node.style.opacity === "1");
+    assert.equal(shown.length, 2, "an arrival and a refusal are on two different surfaces at once");
+    const located = shown.find((node) => node.textContent === "Tam's farm");
+    const plain = shown.find((node) => node.textContent !== "Tam's farm");
+    assert.ok(located && plain, "…one each");
+    assert.ok(/;top:/.test(located.style.cssText), "the location notice is anchored to the TOP of the surface");
+    assert.ok(!/bottom:/.test(located.style.cssText), "…and not to the bottom, where the narration is");
+    assert.ok(/bottom:/.test(plain.style.cssText), "every other toast keeps the surface it had");
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+  }
+}
+
+// ── THE BERTH BUTTON IS ON SCREEN WHENEVER THE ROOM IS OFFERING ONE ───────────
+// The offer's own contract is pinned in case (ay); this is the half the
+// maintainer actually looks at. Second playtest: standing inside The Amber
+// Hearth, the action stack held Talk, Wait and Keyboard and nothing else.
+//
+// The button is a plain child of that stack — there is no collapse chevron on
+// this surface and nothing to surface it out of — so what gated it was the offer
+// underneath, and `offer.price !== null` is the whole render test. Pinned here
+// through the real Hud over the DOM shim so the two halves cannot drift: an
+// offer nobody renders is the same bug as no offer at all.
+{
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = () => 0; // the fade is a timer; nothing here waits for one
+  globalThis.clearTimeout = () => {};
+  loadedPF.save.reset();
+  loadedPF.spatial.reset();
+  try {
+    const sealed = brief.validate(
+      {
+        scale: "village",
+        name: "Hearthvale",
+        prosperity: "modest",
+        backgroundPopulation: 40,
+        situation: "Pumpkins keep going missing from the fair field.",
+        places: [{ kind: "gathering", name: "The Amber Hearth", flavor: "A honey-lit inn." }],
+        cast: [
+          { name: "Mira", role: "Innkeeper", kind: "host", tint: "amber", home: "The Amber Hearth", household: 1 },
+          { name: "Rook", role: "Guard Captain", kind: "guard", tint: "blue", home: "The Amber Hearth", household: 1 },
+          { name: "Tam", role: "Farmer", kind: "grower", tint: "green", home: "Hearthvale", household: 2 },
+        ],
+      },
+      { theme: "cozy-village", seed: 2095930824 },
+    );
+    const w = world.build(2095930824, "cozy-village", sealed);
+    const gid = Object.entries(sealed._ids.zones).find(([, name]) => name === "The Amber Hearth")?.[0];
+    const room = w.zones[gid];
+    const keeper = room.npcs.find((npc) => npc.lodging === gid);
+    const roommate = room.npcs.find((npc) => !npc.lodging);
+    assert.ok(keeper && roommate, "the room has a keeper in it and somebody else besides");
+
+    const sim = new loadedPF.Sim(w);
+    const core = { chatId: "chat-berth-hud", sim, interact() {}, setMode() {}, resume() {}, markDirty() {} };
+    core.hud = new loadedPF.Hud(new FakeNode("div"), core);
+    const hud = core.hud;
+
+    // WHAT IT LOOKS LIKE BEFORE THE FIRST UPDATE, read here and nowhere else.
+    // The constructor does not call update() — every assertion below reaches its
+    // display through one, so all of them pass whether the button boots hidden or
+    // boots visible, and the boot state is a claim only this line makes. It is not
+    // cosmetic: a display-gated button that ships visible is on screen for every
+    // frame before the first update, and for the whole of a mount that never
+    // reaches one (no sim yet), quoting a room in a world that has not compiled.
+    assert.equal(hud.berthBtn.style.display, "none", "the berth button boots HIDDEN, before anything has decided");
+    assert.ok(
+      !hud.talkBtn.style.display,
+      "…and Talk beside it is not display-gated at all — it is up for the whole of walk mode and only dims",
+    );
+
+    loadedPF.player.award(core, { money: 100 });
+
+    // WHERE IT LIVES: beside Talk in the one action stack, not behind anything.
+    assert.ok(hud.actions.children.includes(hud.berthBtn), "the berth button is a direct child of the action stack");
+    assert.ok(hud.actions.children.includes(hud.talkBtn), "…the same stack Talk is in");
+
+    const showing = () => {
+      hud.update();
+      return hud.berthBtn.style.display;
+    };
+    sim.zoneId = w.startZone;
+    sim.nearNpc = null;
+    assert.equal(showing(), "none", "out in the square with nobody about, there is nothing to render");
+
+    // THE REPORTED FRAME: inside the inn, nearest to the guard by the door.
+    sim.zoneId = gid;
+    sim.nearNpc = roommate;
+    assert.equal(showing(), "", "standing in the inn puts the button on screen");
+    assert.ok(
+      hud.berthBtn.textContent.includes(loadedPF.economy.money(w, loadedPF.economy.price(w, "berth"))),
+      "…quoting the price in this world's own money",
+    );
+    assert.equal(hud.berthBtn.style.opacity, "1", "…and offered, not refused");
+
+    // AND THE REFUSALS RENDER RATHER THAN VANISH.
+    loadedPF.player.award(core, { money: -100 });
+    assert.equal(showing(), "", "a short purse does not hide the price");
+    assert.equal(hud.berthBtn.style.opacity, "0.45", "…it dims it");
+    loadedPF.player.award(core, { money: 100 });
+    hud.update();
+    loadedPF.economy.rentBerth(core);
+    assert.equal(showing(), "", "and the room you already keep stays on screen");
+    assert.equal(hud.berthBtn.textContent, "Your berth", "…saying it is yours");
+
+    // AN EMPTY ROOM RENDERS NOTHING, which is what keeps the button honest.
+    const held = room.npcs.splice(room.npcs.indexOf(keeper), 1)[0];
+    sim.nearNpc = null;
+    assert.equal(showing(), "none", "an inn with nobody behind the counter offers no button");
+    room.npcs.push(held);
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    loadedPF.save.reset();
+    loadedPF.spatial.reset();
+  }
+}
+
+// ── TALK NEVER SILENTLY SPENDS NARRATION THE PLAYER HAS NOT READ ──────────────
+// Second live playtest: the maintainer wandered off mid-narration, pressed E on
+// Rook, and lost everything from the arrival narration onward. The turn Talk
+// sends ENDS the one being presented, so the segments they had not reached
+// simply never appeared — they survived only in Logs — and nothing ever asked
+// them whether to skip.
+//
+// Walking is not blocked and never should be. What is gated is the TURN: while
+// the latest GM turn still holds unshown narration, the first press turns the
+// button into the question and sends nothing.
+{
+  // 90-element is a DOM module the bundle at the top of this file leaves out;
+  // case 14m already evaluates it on its own against the two globals it touches
+  // at load, so `loadedPF.core` is here by the time this runs. Nothing below
+  // drives the custom element or the raf loop.
+  const core = loadedPF.core;
+  assert.ok(core && typeof core.interact === "function", "the core is loaded, with its interaction on it");
+
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = () => 0;
+  globalThis.clearTimeout = () => {};
+  loadedPF.save.reset();
+  try {
+    const w = world.build(9001, "cozy-village");
+    const sim = new loadedPF.Sim(w);
+    const sent = [];
+    const toasts = [];
+    core.chatId = "chat-talk-skip";
+    core.sim = sim;
+    core.hud = { toast: (text) => toasts.push(text), refreshChips() {}, update() {} };
+    const host = {
+      chatId: "chat-talk-skip",
+      isStreaming: false,
+      sendMessage: (text) => {
+        sent.push(text);
+        return true;
+      },
+      narrationDone: false,
+      latestAssistant: { id: "m1" },
+    };
+    core.host = host;
+    const villagers = w.zones.village.npcs;
+    const talkTo = (npc) => {
+      sim.mode = "walk";
+      sim.nearNpc = npc;
+      core.interact();
+    };
+    const settle = async () => {
+      for (let i = 0; i < 8; i++) await Promise.resolve();
+    };
+
+    // THE REPORTED PRESS: story still to read, so it asks.
+    talkTo(villagers[0]);
+    await settle();
+    assert.deepEqual(sent, [], "the first press sends nothing while there is narration to read");
+    assert.equal(core.talkConfirmArmed(), true, "…it arms the question on the button instead");
+    assert.ok(
+      toasts.some((text) => /press again/i.test(text)),
+      "…and says so out loud",
+    );
+    assert.equal(sim.mode, "walk", "…and does not hand the keyboard away either");
+
+    // AND THE SECOND PRESS IS THE AFFIRMATIVE ONE.
+    talkTo(villagers[0]);
+    await settle();
+    assert.equal(sent.length, 1, "the second press sends, exactly once");
+    assert.ok(sent[0].includes(villagers[0].name), "…to the person standing there");
+    assert.equal(core.talkConfirmArmed(), false, "and the question is spent with it");
+    assert.equal(sim.mode, "dialogue", "…the turn having been taken");
+
+    // NO REGRESSION FOR THE ORDINARY PRESS: nothing unread, one press, one turn.
+    sent.length = 0;
+    host.narrationDone = true;
+    talkTo(villagers[0]);
+    await settle();
+    assert.equal(sent.length, 1, "with the narration read, Talk still sends on the first press");
+
+    // AND A CHAT WITH NO GM TURN IN IT HAS NO STORY TO LOSE. `narrationDone` is
+    // false there too — the host has no message to compare its marker against —
+    // so without the second half of the test every greeting in a fresh chat
+    // would need two presses.
+    sent.length = 0;
+    host.narrationDone = false;
+    host.latestAssistant = null;
+    talkTo(villagers[0]);
+    await settle();
+    assert.equal(sent.length, 1, "an empty chat skips nothing, so it asks nothing");
+
+    // THE QUESTION IS PER-PERSON, and it goes stale rather than carrying.
+    sent.length = 0;
+    host.latestAssistant = { id: "m2" };
+    talkTo(villagers[0]);
+    await settle();
+    assert.equal(core.talkConfirmArmed(), true, "armed for the person you are standing at");
+    sim.nearNpc = villagers[1];
+    assert.equal(core.talkConfirmArmed(), false, "…and not for the next person you walk up to");
+    talkTo(villagers[1]);
+    await settle();
+    assert.deepEqual(sent, [], "who is asked in their own right");
+
+    // NARRATION FINISHING DROPS IT WITHOUT A PRESS: the question was only ever
+    // about story that was still pending.
+    assert.equal(core.talkConfirmArmed(), true, "the question stands while the narration does");
+    host.narrationDone = true;
+    assert.equal(core.talkConfirmArmed(), false, "…and is gone the moment there is nothing left to read");
+
+    // WHAT THE MAINTAINER ACTUALLY SEES: the button carries the question.
+    host.narrationDone = false;
+    const hud = new loadedPF.Hud(new FakeNode("div"), core);
+    core.hud = hud;
+    sim.mode = "walk";
+    sim.nearNpc = villagers[1];
+    core._talkConfirm = null;
+    hud.update();
+    assert.equal(hud.talkBtn.textContent, `Talk to ${villagers[1].name} (E)`, "unarmed, it is the ordinary Talk");
+    core.interact();
+    await settle();
+    hud.update();
+    assert.equal(hud.talkBtn.textContent, "Skip story & talk?", "armed, the button IS the confirm");
+    host.narrationDone = true;
+    hud.update();
+    assert.equal(hud.talkBtn.textContent, `Talk to ${villagers[1].name} (E)`, "and it goes back on its own");
+
+    // THE TURN IS HALF THE QUESTION, NOT JUST THE PERSON (round-2 review).
+    // `narrationDone` is PER-TURN and goes false again for every new GM turn, so
+    // "there is still story to read" is not the same fact from one turn to the
+    // next. The player can arm the confirm, type into the host's own message box
+    // instead of pressing again, and have a NEW turn land unread — and a confirm
+    // that remembered only the NPC would let ONE press spend the new narration on
+    // the permission they gave for the old one, which is the exact loss the
+    // confirm exists to prevent.
+    sent.length = 0;
+    core._talkConfirm = null;
+    host.narrationDone = false;
+    host.latestAssistant = { id: "m3" };
+    talkTo(villagers[1]);
+    await settle();
+    assert.equal(core.talkConfirmArmed(), true, "armed against the turn that was on screen when it was asked");
+    host.latestAssistant = { id: "m4" }; // a new GM turn, unread in its own right
+    host.narrationDone = false;
+    assert.equal(core.talkConfirmArmed(), false, "…and not against the turn that replaced it");
+    talkTo(villagers[1]);
+    await settle();
+    assert.deepEqual(sent, [], "one press does not spend the new narration on the old permission");
+    assert.equal(core.talkConfirmArmed(), true, "…that press being the question again, asked about this turn");
+
+    // AND A MODE CHANGE DROPS IT. The question is asked in walk mode standing
+    // next to somebody, and every way out of that frame — the Keyboard button
+    // handing the turn back to the host, a cutscene beat, combat — is the player
+    // doing something other than what the question was about. Named as a clear
+    // condition when the confirm shipped; pinned here.
+    sent.length = 0;
+    assert.equal(core.talkConfirmArmed(), true, "armed before the mode changes under it");
+    core.setMode("dialogue"); // the Keyboard button
+    core.setMode("walk"); // Resume walking
+    sim.nearNpc = villagers[1];
+    assert.equal(core.talkConfirmArmed(), false, "the question does not survive the mode changing under it");
+    talkTo(villagers[1]);
+    await settle();
+    assert.deepEqual(sent, [], "…so walking back into it asks again rather than sending");
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    core.chatId = null;
+    core.sim = null;
+    core.hud = null;
+    core.host = null;
+    core._talkConfirm = null;
+    loadedPF.save.reset();
+  }
+}
+
+// The other location-entry notice — a narrated drift the package follows — is the
+// same class of message and shared the same collision.
+{
+  const prevGetSpatial = loadedPF.api.getSpatial;
+  const state = { loc: "root" };
+  loadedPF.api.getSpatial = async () => ({
+    definition: { revision: 1 },
+    currentLocationId: state.loc,
+    breadcrumb: [{ name: state.loc }],
+    destinations: [],
+  });
+  const toasts = [];
+  const core = {
+    chatId: "chat-loc-toast",
+    sim: {
+      world: { zones: {}, bindings: { seeded: true }, startZone: "z1" },
+      zoneId: "z1",
+      mode: "walk",
+      zone: () => ({ name: "z1" }),
+    },
+    markDirty() {},
+    hud: { toast: (text, kind) => toasts.push([text, kind]), refreshChips() {} },
+  };
+  try {
+    loadedPF.spatial.reset();
+    await loadedPF.spatial.refresh(core); // seeds _lastLocationId
+    state.loc = "the-slag-bar";
+    await loadedPF.spatial.refresh(core);
+    const arrival = toasts.find(([text]) => text.startsWith("Now at:"));
+    assert.ok(arrival, "the drift is announced");
+    assert.equal(arrival[1], "location", "…as a location notice, so it lands on the top surface");
+  } finally {
+    loadedPF.api.getSpatial = prevGetSpatial;
+    loadedPF.spatial.reset();
+  }
+}
+
+// ── THE WIZARD'S OWN TWO FACTS ────────────────────────────────────────────────
+// (i) the launch label was the literal "Begin in Hearthvale", rewritten only on
+// the RETRY path, so a sci-fi colony called Meridian Base offered to begin in a
+// cozy village that was not in the game; (ii) `generate: true` was unconditional,
+// which retired the skip affordance — the themed-default immediate-play path (no
+// gate, no purse) became unreachable for every new chat, and the {skipped:true}
+// marker had readers and no writer.
+{
+  const realGetJson = loadedPF.api.getJson;
+  loadedPF.api.getJson = async (path) =>
+    path === "/connections" ? [{ id: "conn-1", name: "Main", isDefault: true }] : [];
+  const settle = async () => {
+    for (let i = 0; i < 16; i++) await Promise.resolve();
+  };
+  const mountWizard = async () => {
+    const el = new FakeNode("div");
+    const launches = [];
+    loadedPF.mountSetup(el, { onLaunch: async (config, name) => void launches.push({ config, name }) });
+    await settle(); // the connections/characters load is an async IIFE
+    const nodes = walkNodes(el);
+    const checkboxes = nodes.filter((node) => node.type === "checkbox");
+    assert.equal(checkboxes.length, 1, "with no characters to pick, the only checkbox is the generation toggle");
+    return {
+      launches,
+      nameIn: nodes.find((node) => node.tagName === "INPUT" && node.value === "Hearthvale"),
+      themeSel: nodes.find((node) => node.children.some((option) => option.attrs.value === "sci-fi-colony")),
+      launchBtn: nodes.find((node) => node.tagName === "BUTTON" && String(node.textContent).startsWith("Begin in")),
+      generateIn: checkboxes[0],
+    };
+  };
+  try {
+    const asked = await mountWizard();
+    assert.ok(asked.nameIn && asked.themeSel && asked.launchBtn, "the wizard mounted its name, theme and launch");
+    assert.equal(asked.launchBtn.textContent, "Begin in Hearthvale", "the label starts at the active preset's name");
+    asked.themeSel.value = "sci-fi-colony";
+    await fire(asked.themeSel, "change");
+    assert.equal(asked.launchBtn.textContent, "Begin in Meridian Base", "a theme change carries it");
+    asked.nameIn.value = "Anchorage Nine";
+    await fire(asked.nameIn, "input");
+    assert.equal(asked.launchBtn.textContent, "Begin in Anchorage Nine", "and the player's own name wins over both");
+
+    assert.equal(asked.generateIn.checked, true, "generation is offered checked — it is what the package is for");
+    await fire(asked.launchBtn, "click");
+    assert.equal(asked.launches.length, 1, "the launch went through");
+    assert.equal(asked.launches[0].name, "Anchorage Nine", "under the name on the button");
+    assert.equal(asked.launches[0].config.experienceConfig.generate, true, "asking for a generated world");
+
+    const declined = await mountWizard();
+    declined.generateIn.checked = false;
+    await fire(declined.launchBtn, "click");
+    assert.equal(declined.launches[0].config.experienceConfig.generate, false, "unchecked declines the call");
+    assert.ok(
+      Number.isInteger(declined.launches[0].config.experienceConfig.seed),
+      "…and still carries the seed and theme the themed default world compiles from",
+    );
+
+    // One layer down, with the config the wizard really wrote: the gate reads it,
+    // so a declined world is a chat that never waits for a call it did not make.
+    loadedPF.save.reset();
+    assert.equal(
+      loadedPF.save.armGate({ chatId: "chat-declined" }, { gameSetupConfig: declined.launches[0].config }),
+      false,
+      "no gate arms for a declined world",
+    );
+    assert.equal(
+      loadedPF.save.armGate({ chatId: "chat-asked" }, { gameSetupConfig: asked.launches[0].config }),
+      true,
+      "…and one does for a world that asked",
+    );
+  } finally {
+    loadedPF.api.getJson = realGetJson;
+    loadedPF.save.reset();
+  }
 }
 
 console.log("brief validator + compiler: all cases passed");
