@@ -227,6 +227,26 @@ assert.match(
   /Math\.min\(width \/ BH_WINDOW_DEFAULT_WIDTH, height \/ BH_WINDOW_DEFAULT_HEIGHT\)/u,
   "the floating window must scale its content from the available size",
 );
+assert.match(
+  beholderInterfaceSource,
+  /fitDesktopContent\(\)[\s\S]*body\.clientHeight[\s\S]*body\.scrollHeight/u,
+  "desktop Beholder must shrink overflowing content to the available body height",
+);
+assert.match(
+  beholderInterfaceSource,
+  /const layout = !this\.isDetached\(\) && this\.isMobile\(\) \? "list" : this\.layout/u,
+  "desktop resizing must preserve the selected paper-doll layout",
+);
+assert.match(
+  beholderInterfaceSource,
+  /\.rpg-chat-area\.bh-beholder-open\{ z-index:70; \}[\s\S]*\.beholder-panel\{[^}]*z-index:80/u,
+  "mobile Beholder must stack above Echo Chamber and Tracker Panel",
+);
+assert.match(
+  beholderInterfaceSource,
+  /bh-tracker-launch__arrow[^<]*<\/span><span class="bh-tracker-launch__logo"/u,
+  "the Tracker Panel launcher must place its disclosure arrow before the eye",
+);
 assert.doesNotMatch(
   beholderInterfaceSource,
   /body\.bh-dock-open/u,

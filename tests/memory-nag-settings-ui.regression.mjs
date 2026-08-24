@@ -47,6 +47,20 @@ assert.match(
   /<Brain className="mn-icon"[\s\S]*className="mari-chrome-control mari-chrome-control--small mn-modal-close"/u,
   "Memory Nag Vault header must retain the standard close control",
 );
-assert.match(vault, /className="mn-overlay" role="presentation" onClick=\{onClose\}/u);
+assert.match(
+  vault,
+  /className="mn-overlay" role="presentation" data-chat-floating-panel/u,
+  "Vault interactions must be exempt from Chat Settings outside-click dismissal",
+);
+assert.equal(
+  (vault.match(/data-chat-floating-panel/gu) ?? []).length,
+  2,
+  "the Vault and its expanded editor must both stay inside Chat Settings' floating-panel boundary",
+);
+assert.doesNotMatch(
+  vault,
+  /className="mn-overlay" role="presentation" onClick=\{onClose\}/u,
+  "the Vault backdrop must not replace its explicit close control",
+);
 
 process.stdout.write("Memory Nag settings UI contract passed\n");

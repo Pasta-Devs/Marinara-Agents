@@ -2260,8 +2260,8 @@
        because `.bh-col { display: contents }` below dissolves the columns, so the SLOT
        CARDS are the direct grid items; a bare `1fr` would size to the widest card's
        min-content and push the right column over the panel edge. */
-    grid-template-columns: minmax(0, 1fr) minmax(132px, 148px) minmax(0, 1fr);
-    gap: 4px 6px;
+    grid-template-columns: minmax(0, 1fr) minmax(calc(132px * var(--bh-ui-scale, 1)), calc(148px * var(--bh-ui-scale, 1))) minmax(0, 1fr);
+    gap: calc(4px * var(--bh-ui-scale, 1)) calc(6px * var(--bh-ui-scale, 1));
     align-items: stretch;
 }
 .bh-doll-grid.bh-paired .bh-col { display: contents; }
