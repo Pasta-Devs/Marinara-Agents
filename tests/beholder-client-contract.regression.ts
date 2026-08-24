@@ -14,7 +14,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
 const packageRoot = join(repoRoot, "packages/beholder");
@@ -305,9 +305,34 @@ const remoteReference = client.match(/https?:\/\/(?!localhost)[^"'`\s)]+/g) ?? [
 const allowedRemote = remoteReference.filter((url) => !url.startsWith("https://huggingface.co/GetBeholder"));
 assert.deepEqual(allowedRemote, [], `client bundle must not reference remote hosts: ${allowedRemote.join(", ")}`);
 
+// Reconstruct the deterministic bundle so a stale generated client cannot pass
+// merely because it still contains every module marker.
+const clientModules = readdirSync(srcDir)
+  .filter((file) => file.endsWith(".js"))
+  .sort();
+const clientLocales: Record<string, Record<string, string>> = {};
+for (const name of readdirSync(join(srcDir, "locales"))
+  .filter((file) => file.endsWith(".json"))
+  .sort()) {
+  const catalog = JSON.parse(readFileSync(join(srcDir, "locales", name), "utf8"));
+  clientLocales[basename(name, ".json").toLowerCase()] = Object.fromEntries(
+    Object.entries(catalog).filter(([key, value]) => key !== "_meta" && typeof value === "string"),
+  );
+}
+const freshClient =
+  `// Beholder ${manifest.version} — Marinara Engine roleplay-toolbar capability (single-file client bundle)\n` +
+  `// Built from packages/beholder/src (${clientModules.length} modules) by scripts/build-beholder-package.mjs. Do not edit; edit src/ and rebuild.\n` +
+  `(() => {\n"use strict";\n` +
+  `const BH_STYLE_CSS = ${JSON.stringify(readFileSync(join(srcDir, "style.css"), "utf8"))};\n` +
+  `const BH_FA_CSS = ${JSON.stringify(readFileSync(join(srcDir, "fa-embed.css"), "utf8"))};\n` +
+  `const BH_LOCALES = ${JSON.stringify(clientLocales)};\n\n` +
+  `${clientModules.map((name) => `// ===== ${name} =====\n${readFileSync(join(srcDir, name), "utf8")}`).join("\n")}\n` +
+  `})();\n`;
+assert.equal(client, freshClient, "client.js is stale relative to Beholder source — rebuild the package");
+
 // Every source module must be in the bundle, so a new module cannot be silently
 // left out of a build.
-for (const name of readdirSync(srcDir).filter((file) => file.endsWith(".js"))) {
+for (const name of clientModules) {
   assert.ok(client.includes(`// ===== ${name} =====`), `client bundle is missing ${name} — rebuild the package`);
 }
 
