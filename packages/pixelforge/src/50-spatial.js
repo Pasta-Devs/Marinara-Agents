@@ -103,7 +103,10 @@ PF.spatial = {
         if (target && core.sim && core.sim.zoneId !== zoneId) {
           core.sim.teleport(zoneId, target.spawn.x, target.spawn.y);
         }
-        core.hud?.toast(`Now at: ${this.locationName() ?? loc}`);
+        // Same class as a walked zone entry, so the same top surface: a narrated
+        // arrival is the one notice most likely to print while the player is
+        // mid-paragraph (70-hud `toast`).
+        core.hud?.toast(`Now at: ${this.locationName() ?? loc}`, "location");
       }
       this._lastLocationId = loc;
       core.hud?.refreshChips();
