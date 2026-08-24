@@ -459,6 +459,21 @@ PF.core = {
       } else if (k === "e") {
         // "e" only — Enter belongs to host buttons/menus (review finding)
         this.interact();
+      } else if (k === "c") {
+        // THE CHARACTER SHEET, and it is HERE rather than up beside the
+        // dialogue-Escape branch on purpose (plan §2.8): everything above this
+        // line is a guard the sheet needs — the loading gate, focus inside a
+        // host control, a visible host modal, and walk mode — and a branch at
+        // :451's level would skip every one of them.
+        this.hud?.toggleSheet();
+      } else if (k === "escape") {
+        // …and Escape closes whichever panel is open. It cannot race the
+        // dialogue-Escape branch above: that one returns, and a panel cannot be
+        // open in dialogue mode at all, because leaving walk closes the sheet
+        // and hides the journal (70-hud update()). No preventDefault, exactly as
+        // the branch above and `e` beside it decline it — the host's own Escape
+        // handling is not ours to cancel.
+        this.hud?.closePanels();
       }
     };
     // keyup ALWAYS clears, whatever the target or open panels — otherwise a

@@ -44,6 +44,12 @@ const VARIANT_TYPES = new Set([...CATCH_ROLES, BAIT_TYPE]);
 // only the SKIN (what it is called, and the glyph the purse shows) is per theme.
 const ITEM_TYPES = ["lodging-key", "rod", BAIT_TYPE, ...CATCH_ROLES];
 
+// The skill verbs this build ships a row for. A `skills.verbs` key is world-FREE
+// and means the same thing everywhere, exactly as an item type does — so the
+// verb is shared and only the SKIN is per theme, and the boot assertion below
+// demands every theme name each of these and the two slots it equips.
+const SKILL_VERBS = ["fishing"];
+
 // The four daypart words, which is the axis a catch table's multipliers are keyed
 // on. They mirror PF.Sim.daypart()'s own four and are written here because the sim
 // exports no list; the boot assertion below refuses a table entry keyed on
@@ -170,6 +176,15 @@ const ITEM_SKINS = {
     // is filled from the keeper's COMPILED role and never hardcoded: a sci-fi
     // colony has no innkeeper, and only the brief knows what it does have.
     hints: { noRod: "You need a rod — the {role} sells one." },
+    // WHAT THIS WORLD CALLS THE PERSON PLAYING IT. The package has no player
+    // name and the host props expose none, so the character sheet says what KIND
+    // of person is standing there rather than inventing a name for them (plan
+    // §2.8). An engine persona name + avatar is an enumerated Engine FR.
+    player: "Traveler",
+    // A VERB'S OWN WORD BOOK: what the skill is called here, and what its two
+    // equipment slots hold. The slot names are the closed `tool`/`mod` pair the
+    // block stores; a player should never be shown either of those words.
+    verbs: { fishing: { name: "Fishing", tool: "rod", mod: "bait" } },
   },
   "sci-fi-colony": {
     currency: { one: "credit", many: "credits", glyph: "◈" },
@@ -210,6 +225,8 @@ const ITEM_SKINS = {
       "catch-prize": ["record", "founder-stock", "hand-listed"],
     },
     hints: { noRod: "You need an angling rig — the {role} stocks one." },
+    player: "Drifter",
+    verbs: { fishing: { name: "Angling", tool: "rig", mod: "lure" } },
   },
 };
 
@@ -345,6 +362,7 @@ PF.economy = {
   ROD_TIERS,
   CATCH_ROLES,
   BAIT_TYPE,
+  SKILL_VERBS,
   CATCH_TABLES,
   SPOT_TAGS,
   DAYPARTS,
@@ -368,6 +386,25 @@ PF.economy = {
   /** What this world calls its money. */
   currency(world) {
     return this._skin(world).currency;
+  },
+
+  /** What this world calls the person playing it — the character sheet's themed
+   *  generic label (plan §2.8), standing in until the engine exposes a persona
+   *  name and avatar. */
+  playerLabel(world) {
+    return this._skin(world).player;
+  },
+
+  /** A verb's word book: its display name and the words for its two equipment
+   *  slots. An UNKNOWN verb still renders, slug-derived, exactly as describe()'s
+   *  unknown type does one method down — a save can carry a skill row written by
+   *  a newer build, and the sheet showing it as "flying" is a display fact
+   *  rather than a hole. */
+  verbSkin(world, verb) {
+    const name = typeof verb === "string" ? verb : "";
+    const book = this._skin(world).verbs;
+    if (Object.prototype.hasOwnProperty.call(book, name)) return book[name];
+    return { name: name.replace(/[-_]/g, " "), tool: "tool", mod: "modifier" };
   },
 
   /** `12 coins`, `1 coin`. The purse chip and every price string go through this
@@ -1198,6 +1235,16 @@ PF.economy = {
     // keeps it out of hardcoding an innkeeper into a colony.
     if (!skin.hints?.noRod?.includes("{role}"))
       throw new Error(`pixelforge: theme "${theme}" has no no-rod hint naming a vendor`);
+    // THE PERSON AND THEIR VERBS, which the character sheet renders and nothing
+    // else does. A theme missing either would show an empty label under the
+    // portrait, or the raw block key ("fishing") where the skill's name goes —
+    // the same silently-unnamed failure the item vocabulary is asserted against.
+    if (!skin.player) throw new Error(`pixelforge: theme "${theme}" has no word for the person playing it`);
+    for (const verb of SKILL_VERBS) {
+      const book = skin.verbs?.[verb];
+      if (!book?.name || !book.tool || !book.mod)
+        throw new Error(`pixelforge: theme "${theme}" does not name the "${verb}" skill and both of its slots`);
+    }
     // THE 2×2, both halves. A theme with no table for a spot kind is water the
     // player can stand at and the verb cannot answer for; an EMPTY table is the
     // same hole with a shape, and it would divide by a zero weight rather than

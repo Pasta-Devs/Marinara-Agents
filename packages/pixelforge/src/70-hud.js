@@ -53,10 +53,11 @@ PF.Hud = class {
     // whole topbar for free, but the topbar STAYS UP in dialogue mode, so
     // `!inWorld` hiding is a toggle these two have to own (see update()).
     this.journalChip = this._chip("📖", "open the journal", () => this.toggleJournal());
+    this.sheetChip = this._chip("👤", "open the character sheet", () => this.toggleSheet());
     this.topbar = PF.el(
       "div",
       { style: "position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:2;" },
-      [this.locChip, this.clockChip, this.purseChip, this.journalChip],
+      [this.locChip, this.clockChip, this.purseChip, this.journalChip, this.sheetChip],
     );
 
     this.talkBtn = this._btn("Talk (E)", () => core.interact());
@@ -216,17 +217,17 @@ PF.Hud = class {
     this.gateEl.setAttribute("role", "status");
     this.gateEl.setAttribute("aria-live", "polite");
 
-    // ── The panel scaffolding (plan §2.5) ───────────────────────────────────
-    // Full-surface, on the gate's own shape one block up, and a child of
-    // `this.root` — which is its WHOLE teardown story. The gate is
+    // ── The two panels (plan §2.5, §2.8) ────────────────────────────────────
+    // Both are full-surface, on the gate's own shape one block up, and both are
+    // children of `this.root` — which is their WHOLE teardown story. The gate is
     // the precedent: it is built here, appended to the root below, and
     // `destroy()`'s `this.root.remove()` takes it away with everything else. A
     // panel with a teardown of its own would be a second thing to forget.
     //
-    // Under the gate in z as well as in the list: a world still being written
-    // has no journal in it to read.
+    // Under the gate in z as well as in the list: a world still being written has
+    // no journal to read and nobody to be a sheet about.
     //
-    // AND IT IS NOT AN `aria-modal` DIALOG, deliberately. `_hostOwnsKeyboard`
+    // AND NEITHER IS AN `aria-modal` DIALOG, deliberately. `_hostOwnsKeyboard`
     // (90-element) treats any visible `[role="dialog"][aria-modal="true"]` as the
     // host owning the keyboard — so marking our own panel one would make the very
     // keys that close it inert the moment it opened.
@@ -246,11 +247,27 @@ PF.Hud = class {
       ]),
       this.journalBody,
     ]);
-    // It boots DOWN as a PROPERTY rather than inside the style string: the
-    // toggle and update() write this same property, and a boot state expressed
+    // The sheet's two columns: the sprite on the left with the themed generic
+    // label under it, the sections on the right (plan §2.8).
+    this.sheetArt = PF.el("div", {
+      style: "flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:6px;",
+    });
+    this.sheetStats = PF.el("div", {
+      style: "flex:1 1 auto;overflow:auto;display:flex;flex-direction:column;gap:2px;",
+    });
+    this.sheetEl = PF.el("div", { style: panelStyle, "aria-label": "character sheet" }, [
+      PF.el("div", { style: panelHead }, [
+        PF.el("div", { style: panelTitle, text: "Character" }),
+        this._btn("✕ Close", () => this.closeSheet()),
+      ]),
+      PF.el("div", { style: "flex:1 1 auto;display:flex;gap:14px;overflow:hidden;" }, [this.sheetArt, this.sheetStats]),
+    ]);
+    // Both boot DOWN, as a property rather than inside the style string: the
+    // toggles and update() write this same property, and a boot state expressed
     // only in `cssText` is one nothing can read back (the berth button's own
     // discipline).
     this.journalEl.style.display = "none";
+    this.sheetEl.style.display = "none";
 
     this.root = PF.el(
       "div",
@@ -264,6 +281,7 @@ PF.Hud = class {
         this.toastEl,
         this.locToastEl,
         this.journalEl,
+        this.sheetEl,
         this.gateEl,
       ],
     );
@@ -275,6 +293,8 @@ PF.Hud = class {
     // compared against a sentinel when a panel opens, so opening always paints.
     this._journal = false;
     this._journalMemo = null;
+    this._sheet = false;
+    this._sheetKey = null;
     this.refreshChips();
   }
 
@@ -564,22 +584,27 @@ PF.Hud = class {
     else this.toast("There is no room to be had here.");
   }
 
-  // ── The journal panel (plan §2.5) ──────────────────────────────────────────
-  // A list that changes when the arrays under it change, so its memo IS those
-  // arrays. It writes no DOM at rest, and none at all until somebody opens it.
+  // ── The panels (plan §2.5, §2.8) ───────────────────────────────────────────
+  // Two surfaces, one rule each. The JOURNAL is a list that changes when the
+  // arrays under it change, so its memo is the arrays themselves. The SHEET is a
+  // portrait of live state that no array identity tracks — every player mutator
+  // mutates IN PLACE — so its memo is a VALUE key, on the purse chip's idiom
+  // further down. Neither writes DOM at rest.
 
-  /** Is the surface in a state where a panel may be open at all? The opener
-   *  answers to this: the chip is hidden outside walk mode and under the gate,
-   *  but a click can still land on a frame-old one. */
+  /** Is the surface in a state where a panel may be open at all? Both openers
+   *  answer to this: the chips are hidden outside walk mode and under the gate,
+   *  and the key branches (90-element) inherit the same guards, but a click can
+   *  still land on a frame-old chip. */
   _panelsAllowed() {
     return this.core.sim?.mode === "walk" && !PF.save.gateHolds(this.core);
   }
 
   /** Close whatever panel is open. Returns true when something closed, which is
-   *  what will tell a key branch whether the press meant anything here. */
+   *  what tells the Escape branch whether the key meant anything here. */
   closePanels() {
-    const open = this._journal;
+    const open = this._journal || this._sheet;
     this.closeJournal();
+    this.closeSheet();
     return open;
   }
 
@@ -589,6 +614,9 @@ PF.Hud = class {
       this.closeJournal();
       return;
     }
+    // One surface at a time: both are full-screen, so a second one opening over
+    // the first would be a panel nobody can see under a panel nobody closed.
+    this.closeSheet();
     this._journal = true;
     this._journalMemo = null;
     this._journalSync();
@@ -674,6 +702,228 @@ PF.Hud = class {
     }
     if (!days.length && !notices.length)
       body.appendChild(PF.el("div", { style: dim, text: "Nothing written down yet." }));
+  }
+
+  toggleSheet() {
+    if (!this._panelsAllowed()) return;
+    if (this._sheet) {
+      this.closeSheet();
+      return;
+    }
+    this.closeJournal();
+    this._sheet = true;
+    this._sheetKey = this._sheetValueKey();
+    this._renderSheet();
+    this.sheetEl.style.display = "flex";
+  }
+
+  /** CLOSED, not hidden (plan §2.8). A hidden sheet resurfacing after a mode
+   *  change is the stale path — it comes back drawn against whoever the player
+   *  was before the combat or the replay — so the flag and the memo both go and
+   *  the next open rebuilds from scratch. */
+  closeSheet() {
+    this._sheet = false;
+    this._sheetKey = null;
+    this.sheetEl.style.display = "none";
+  }
+
+  /** A whole number off untrusted block state. The sheet renders save JSON, so
+   *  an `x` can be "12", -3 or a NaN; ONE reader for the key and the render,
+   *  which is what makes "the key is the projection of what the sheet draws"
+   *  true rather than nearly true. */
+  _num(value) {
+    const n = Math.trunc(Number(value));
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+
+  _carried(pouch) {
+    return (Array.isArray(pouch?.items) ? pouch.items : []).reduce((n, item) => n + this._num(item?.q), 0);
+  }
+
+  /** Standing as the sheet shows it: how many people sit on each rung of the
+   *  disposition ladder across every zone, and how many are hostile. The
+   *  hostile flag is COUNTED SEPARATELY because it is a flag and not a rung —
+   *  and because an `h` flipping with `d` unmoved has to move the key. */
+  _standing(player) {
+    const tiers = [0, 0, 0, 0];
+    let hostile = 0;
+    for (const [, rows] of Object.entries(player?.rel ?? {})) {
+      for (const [, row] of Object.entries(rows ?? {})) {
+        if (!row || typeof row !== "object") continue;
+        tiers[PF.clamp(this._num(row.d), 0, 3)] += 1;
+        if (row.h) hostile += 1;
+      }
+    }
+    return { tiers, hostile };
+  }
+
+  /** THE LIVE VALUE KEY (plan §2.8), on the purse chip's idiom: cheap enough to
+   *  compute every frame the sheet is open, and it moves exactly when something
+   *  the sheet draws moves. The player block carries no identity signal to watch
+   *  — every mutator mutates in place — so a built-at-open sheet would go stale
+   *  the moment a Talk bumped somebody or a cast paid xp.
+   *
+   *  THE INVARIANT: this key is the projection of PRECISELY what the sheet
+   *  renders. Widening the sheet — per-NPC rows, names, a new section — widens
+   *  the key in the same change, or the new half never re-renders. */
+  _sheetValueKey() {
+    const player = PF.player.get(this.core);
+    const byKey = (a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+    const verbs = Object.entries(player?.skills?.verbs ?? {})
+      .sort(byKey)
+      .map(([verb, row]) => `${verb}:${PF.player.resolvedLevel(row)}:${this._num(row?.x)}`)
+      .join(",");
+    // The pairs BY VALUE, which covers the fresh-pair equip and the `delete`
+    // unequip alike: a slot that lost its pair renders as an empty half.
+    const gear = Object.entries(player?.skills?.equipped ?? {})
+      .sort(byKey)
+      .map(
+        ([verb, slots]) =>
+          `${verb}:${["tool", "mod"]
+            .map((slot) => (Array.isArray(slots?.[slot]) ? `${slots[slot][0]}/${slots[slot][1]}` : ""))
+            .join("+")}`,
+      )
+      .join(",");
+    const { tiers, hostile } = this._standing(player);
+    return [
+      this._num(player?.pouch?.money),
+      this._carried(player?.pouch),
+      verbs,
+      gear,
+      tiers.join("/"),
+      hostile,
+      // The portrait's own input: the pre-ready Tier-0 window is accepted, and
+      // this is what upgrades it the frame the authored sheets arrive.
+      PF.assets?.status ?? "",
+    ].join("|");
+  }
+
+  /** The sheet as DATA (plan §2.8): `[{section, rows: [{label, value, kind,
+   *  detail?, source?}]}]`. `detail` and `source` ship in the shape and empty —
+   *  they are the seam the extended journal fills when perks, boons and
+   *  enchanted equipment land, and a shape grown later is a shape every consumer
+   *  has to be re-taught. */
+  _sheetDescriptor() {
+    const world = this.core.sim?.world;
+    const player = PF.player.get(this.core);
+    const byKey = (a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+    const out = [];
+
+    const skills = Object.entries(player?.skills?.verbs ?? {})
+      .sort(byKey)
+      .map(([verb, row]) => {
+        const level = PF.player.resolvedLevel(row);
+        // A CAPPED SKILL READS "MAX", never "0 xp to go": award() zeroes `x` at
+        // the ceiling, so the ordinary arithmetic would draw a bar that is
+        // permanently empty and permanently full at once (plan §2.8).
+        const value =
+          level >= PF.player.CAPS.skillLevel
+            ? `Level ${level} — MAX`
+            : `Level ${level} — ${Math.max(0, PF.player.xpPerLevel(level) - this._num(row?.x))} xp to go`;
+        return { label: PF.economy.verbSkin(world, verb).name, value, kind: "skill" };
+      });
+    out.push({
+      section: "Skills",
+      rows: skills.length ? skills : [{ label: "Nothing practised yet", value: "", kind: "skill" }],
+    });
+
+    const gear = [];
+    for (const [verb, slots] of Object.entries(player?.skills?.equipped ?? {}).sort(byKey)) {
+      const skin = PF.economy.verbSkin(world, verb);
+      for (const slot of ["tool", "mod"]) {
+        const pair = slots?.[slot];
+        if (!Array.isArray(pair) || typeof pair[0] !== "string" || !pair[0]) continue;
+        gear.push({
+          label: `${skin.name} ${skin[slot]}`,
+          value: PF.economy.describe(world, { t: pair[0], k: typeof pair[1] === "string" ? pair[1] : "" }),
+          kind: "equipment",
+        });
+      }
+    }
+    out.push({
+      section: "Equipment",
+      rows: gear.length ? gear : [{ label: "Nothing to hand", value: "", kind: "equipment" }],
+    });
+
+    const carried = this._carried(player?.pouch);
+    const { one } = PF.economy.currency(world);
+    out.push({
+      // Named for what this world calls its money, so a colony's sheet carries no
+      // "Coin" heading over a purse full of credits.
+      section: `${one.charAt(0).toUpperCase()}${one.slice(1)}`,
+      rows: [
+        { label: "Purse", value: PF.economy.money(world, this._num(player?.pouch?.money)), kind: "money" },
+        { label: "Carried", value: `${carried} ${carried === 1 ? "thing" : "things"}`, kind: "count" },
+      ],
+    });
+
+    // THE AGGREGATE, not a roll-call: how many people stand on each rung, across
+    // every zone. Per-NPC rows belong to the extended surface the journal becomes
+    // (plan §2.8). The rung words are theme-BLIND on purpose — a stranger is a
+    // stranger in any world, and the ladder is the same four steps everywhere.
+    const { tiers, hostile } = this._standing(player);
+    const standing = ["Strangers", "Acquainted", "Friendly", "Close"].map((label, rung) => ({
+      label,
+      value: String(tiers[rung]),
+      kind: "standing",
+    }));
+    if (hostile) standing.push({ label: "Hostile", value: String(hostile), kind: "standing" });
+    out.push({ section: "Standing", rows: standing });
+    return out;
+  }
+
+  /** The portrait: the player's own walk sprite, facing the reader, drawn onto a
+   *  frame-sized offscreen canvas and integer-scaled up with
+   *  `image-rendering: pixelated` — which is what the underlay does with the
+   *  world canvas (90-element `attachUnderlay`), and the only way pixel art
+   *  survives being made bigger.
+   *
+   *  Hue 158 is the world draw's own fallback constant for the player
+   *  (40-render), so the Tier-0 portrait is the same person the map shows. A
+   *  refused 2d context draws nothing and is not a reason to fail: the sheet is
+   *  a panel of text with a picture on it. */
+  _portrait() {
+    const sprites = PF.assets?.status === "ready" ? PF.assets.sprites : null;
+    const fw = this._num(sprites?.frameWidth) || 12;
+    const fh = this._num(sprites?.frameHeight) || 16;
+    const canvas = PF.offscreen(fw, fh);
+    const pctx = canvas.getContext?.("2d");
+    if (pctx) {
+      pctx.imageSmoothingEnabled = false;
+      PF.art.drawActor(pctx, "player", 158, 0, 0, false, 0, 0);
+    }
+    const scale = 6;
+    canvas.style.cssText =
+      `width:${fw * scale}px;height:${fh * scale}px;` +
+      "image-rendering:pixelated;image-rendering:crisp-edges;display:block;";
+    return canvas;
+  }
+
+  _renderSheet() {
+    const world = this.core.sim?.world;
+    // THE THEMED GENERIC LABEL. The package has no player name and the host props
+    // expose none, so the sheet says what KIND of person is standing there rather
+    // than inventing one (plan §2.8; engine persona name + avatar is an
+    // enumerated Engine FR).
+    this.sheetArt.replaceChildren(
+      this._portrait(),
+      PF.el("div", { style: "font:700 12px/1.5 inherit;", text: PF.economy.playerLabel(world) }),
+    );
+    const stats = this.sheetStats;
+    stats.replaceChildren();
+    for (const { section, rows } of this._sheetDescriptor()) {
+      stats.appendChild(
+        PF.el("div", { style: "font:700 12px/1.6 inherit;opacity:0.7;margin-top:6px;", text: section }),
+      );
+      for (const row of rows) {
+        stats.appendChild(
+          PF.el("div", { style: "display:flex;justify-content:space-between;gap:12px;" }, [
+            PF.el("span", { style: "opacity:0.8;", text: row.label }),
+            PF.el("span", { text: row.value }),
+          ]),
+        );
+      }
+    }
   }
 
   refreshChips() {
@@ -762,15 +1012,23 @@ PF.Hud = class {
         this.sleepBtn.style.display = "none";
         this._sleep = null;
       }
-      // THE PANEL OPENER, on the berth button's cadence and for a reason of its
-      // own: the gate hides the whole topbar, but the topbar STAYS UP in
-      // dialogue mode, so `!inWorld` hiding is a toggle the chip has to own.
+      // THE PANEL OPENERS, on the berth button's cadence and for a reason of
+      // their own: the gate hides the whole topbar, but the topbar STAYS UP in
+      // dialogue mode, so `!inWorld` hiding is a toggle these two have to own.
       this.journalChip.style.display = inWorld ? "" : "none";
-      // …AND THE PANEL. It only HIDES: it is a list of what is written down,
-      // with no live descriptor to go stale, and losing a place in it to a
-      // passing combat state would be its own small rudeness.
-      if (!inWorld) this.journalEl.style.display = "none";
-      else if (this._journal) this.journalEl.style.display = "flex";
+      this.sheetChip.style.display = inWorld ? "" : "none";
+      // …AND THE PANELS THEMSELVES. The sheet CLOSES (plan §2.8): `e`, a cutscene
+      // beat, and the props-driven replay/combat modes can all fire under an open
+      // one, and a sheet that merely hid would resurface drawn against whoever
+      // the player was before. The journal only hides — it is a list of what is
+      // written down, with no live descriptor to go stale, and losing a scroll
+      // position to a passing combat state would be its own small rudeness.
+      if (!inWorld) {
+        this.closeSheet();
+        this.journalEl.style.display = "none";
+      } else if (this._journal) {
+        this.journalEl.style.display = "flex";
+      }
       this.travelBtn.style.display = inWorld && spatialAvail ? "" : "none";
       this.waitBtn.style.display = inWorld ? "" : "none";
       this.keyboardBtn.style.display = inWorld ? "" : "none";
@@ -891,10 +1149,18 @@ PF.Hud = class {
         this._clock = clock;
         this.refreshChips();
       }
-      // THE OPEN PANEL, on its own memo: it runs only while the journal is up
-      // and writes DOM only on a change, beside an update() already running
-      // berthOffer's zone scan.
+      // THE OPEN PANELS, each on its own memo. Both run only while their panel is
+      // up, and both write DOM only on a change — a journal nobody has opened
+      // costs nothing, and an open sheet at rest costs one string compare beside
+      // an update() already running berthOffer's zone scan.
       if (this._journal) this._journalSync();
+      if (this._sheet) {
+        const key = this._sheetValueKey();
+        if (key !== this._sheetKey) {
+          this._sheetKey = key;
+          this._renderSheet();
+        }
+      }
     }
   }
 };
