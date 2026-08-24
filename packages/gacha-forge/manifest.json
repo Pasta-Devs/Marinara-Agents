@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 2,
+  "capabilityApi": {
+    "major": 1,
+    "minor": 9
+  },
+  "builtAgainst": {
+    "engineVersion": "2.4.4",
+    "engineCommit": "ddc712b7b7a6bf6d6d92cef6f03e94bb04865f4e"
+  },
+  "id": "gacha-forge",
+  "name": "Gacha Forge",
+  "version": "1.0.0",
+  "description": "A configurable gacha game mode. Forge a world from your lorebooks, pull on banners and collect the cast the model writes for you. Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge.",
+  "engine": {
+    "min": "2.4.4",
+    "maxExclusive": "4.0.0"
+  },
+  "kind": [
+    "agent"
+  ],
+  "entrypoints": {
+    "agents": "agents.json",
+    "client": "client.js",
+    "server": "server.mjs"
+  },
+  "contributions": {
+    "slots": [
+      "home-browser-tab"
+    ],
+    "homeBrowserTab": {
+      "label": "Gacha Forge",
+      "ariaLabel": "Open Gacha Forge",
+      "iconPaths": [
+        "gacha-forge-icon.png"
+      ]
+    }
+  },
+  "permissions": [
+    "network",
+    "routes",
+    "storage",
+    "ui"
+  ],
+  "restartRequired": true,
+  "files": [
+    {
+      "path": "agents.json",
+      "sha256": "69bae31647bf751e5b19cef33cb609d0cd4cadb095ba30b57c148963cf89ad9a",
+      "bytes": 661
+    },
+    {
+      "path": "client.js",
+      "sha256": "11f1e17f7e6cab83acc880fd91d8a16aaa4e0f055b6c4458b28bb18aebdae134",
+      "bytes": 320072
+    },
+    {
+      "path": "gacha-forge-icon.png",
+      "sha256": "1352f478b6b7ae2e9eeb127b6e7b31183e0a2a8ca892999c2f0404aafbdbead4",
+      "bytes": 5352
+    },
+    {
+      "path": "server.mjs",
+      "sha256": "c3a8d765e93862956ee5f7704357d9dd3ebe3a42ebd5cc14a774af429c9818d8",
+      "bytes": 141302
+    }
+  ]
+}
