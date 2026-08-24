@@ -13120,12 +13120,12 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
   }
 }
 
-// ═══ S4 ACTIVATION: THE QUALITY LADDER AND ITS RESOLVERS (0.12 slice 2) ═════
+// ═══ S4 ACTIVATION: THE LADDER, THE RESOLVERS, THE TUNING TABLE (0.12 s2) ════
 // Constants and pure reads, so the cases are constants and pure reads too: no
 // world, no save path, no clock. What they pin is the ground the fishing verb
 // gets built on — that a saved string can never leave the range its resolver
 // promises, that the quality ladder grades TOOLS and leaves every other `k`
-// alone.
+// alone, and that the load-time assertions actually fail a build.
 
 // ── THE RESOLVERS: A SAVED STRING IS EVIDENCE, NEVER A VALUE ─────────────────
 {
@@ -13218,6 +13218,98 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
   } finally {
     loadedPF.save.reset(); // the mutators self-dirty, and a dirty block arms a timer
   }
+}
+
+// ── THE LOAD-TIME ASSERTIONS ACTUALLY FAIL THE BUILD ─────────────────────────
+// An assertion nobody has watched fail is a comment with a throw in it. Each
+// case rewrites ONE invariant in the source and re-loads the stack the economy's
+// boot block needs, which is the forced-load idiom this file already uses on
+// 20-world's host resolution — and each rewrite is asserted to have LANDED, so a
+// case cannot pass green because the line it meant to break moved.
+{
+  const stack = ["00-prelude.js", "10-art.js", "58-player.js", "59-economy.js"];
+  const boot = (file, from, to) => {
+    const source = stack
+      .map((name) => {
+        const text = readFileSync(join(here, "src", name), "utf8");
+        if (name !== file) return text;
+        const patched = text.replace(from, to);
+        assert.notEqual(patched, text, `the rewrite still names ${file}'s "${from}"`);
+        return patched;
+      })
+      .join("\n");
+    return () => new Function(`"use strict";\n${source}\nreturn PF;`)();
+  };
+  const plain = () =>
+    new Function(
+      `"use strict";\n${stack.map((name) => readFileSync(join(here, "src", name), "utf8")).join("\n")}\nreturn PF;`,
+    )();
+  assert.ok(plain().economy.TUNING, "the stack under test boots on its own — every throw below is a rewrite talking");
+
+  // (a) EVERY (theme, tier) THE LADDER CAN QUOTE HAS A PRICE. A missing one
+  // reaches the player as the keeper refusing the sale, which is what a world
+  // that deliberately stocks nothing looks like too. KEY EXISTENCE ONLY: nothing
+  // couples these numbers to the purse or the berth (maintainer override).
+  assert.throws(
+    boot("59-economy.js", `, "rod:decent": 40`, ``),
+    /theme "cozy-village" has no price for a decent rod/,
+    "a rung the ladder quotes and the table does not price fails the build",
+  );
+  assert.throws(
+    boot("59-economy.js", `const ROD_TIERS = ["crude", "decent"]`, `const ROD_TIERS = ["crude", "legendary"]`),
+    /the rod ladder quotes "legendary", which is not a quality tier/,
+    "…and so does a rung that is not on the ladder at all",
+  );
+  for (const theme of loadedPF.art.themeIds()) {
+    for (const tier of loadedPF.economy.ROD_TIERS) {
+      assert.equal(
+        typeof loadedPF.economy.price({ theme }, loadedPF.economy.rodPriceKey(tier)),
+        "number",
+        `${theme} quotes a ${tier} rod through the shipped price reader`,
+      );
+    }
+  }
+
+  // (b) THE TELL'S FLOOR. Under one maximum-shape day the tell renders zero
+  // whole days, the burn advances through nothing, and the flush stalls for the
+  // rest of the save.
+  const maxShapeDay = loadedPF.player.CAPS.ledgerPerDay * loadedPF.player.CAPS.ledgerChars;
+  assert.equal(maxShapeDay, 3000, "one max-shape ledger day is 15 lines of 200 graphemes");
+  assert.ok(loadedPF.economy.TUNING.ledgerTellChars >= maxShapeDay, "and the shipped budget clears it");
+  assert.throws(
+    boot("59-economy.js", "ledgerTellChars: 3000", "ledgerTellChars: 2999"),
+    /TUNING\.ledgerTellChars \(2999\) is under one max-shape ledger day \(3000\)/,
+    "one grapheme under the floor fails the build",
+  );
+
+  // (c) THE XP TABLE IS THE SINGLE AUTHORITY, so a type missing from it is a
+  // yield that awards nothing — and the likeliest one to go missing is `bait`,
+  // which is the yield a fresh player meets first.
+  assert.throws(
+    boot("59-economy.js", `[BAIT_TYPE]: 1`, `_notbait: 1`),
+    /TUNING\.catchXp has no xp for "bait"/,
+    "bait pays through the same table or the build stops",
+  );
+  assert.throws(
+    boot("59-economy.js", `"catch-rare": 5`, `"catch-rarely": 5`),
+    /TUNING\.catchXp has no xp for "catch-rare"/,
+    "…and so does every one of the four roles",
+  );
+
+  // (d) THE LADDER AND ITS MULTIPLIERS ARE TWO LISTS IN TWO FILES indexed by one
+  // resolved number. Pinned from BOTH ends: a short multiplier list hands the
+  // curve `undefined` on the best rod in the game, and a lengthened ladder does
+  // the same thing without either file being edited.
+  assert.throws(
+    boot("59-economy.js", "toolMult: [1, 1.15, 1.3, 1.45]", "toolMult: [1, 1.15, 1.3]"),
+    /TUNING\.toolMult has 3 multipliers for 4 quality tiers/,
+    "a multiplier short of the ladder fails the build",
+  );
+  assert.throws(
+    boot("58-player.js", `"fine", "masterwork"]`, `"fine", "masterwork", "mythic"]`),
+    /TUNING\.toolMult has 4 multipliers for 5 quality tiers/,
+    "…and a rung added to the ladder fails it from the other side",
+  );
 }
 
 // ── A DOM the size of the two surfaces that need one ──────────────────────────

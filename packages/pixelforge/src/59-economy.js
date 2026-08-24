@@ -36,13 +36,42 @@ const ITEM_SKINS = {
   },
 };
 
+// The rungs the rod ladder can quote (plan §2.4). 0.12 sells two: a rodless
+// player is offered `crude`, a crude owner is offered `decent`, and a
+// decent-or-better owner is offered nothing at all. The upper QUALITY tiers are
+// content for a later release and are deliberately absent — the boot assertion
+// at the foot of this file demands a price row for every rung this list names,
+// in every theme, so adding one here is what makes the build insist on pricing
+// it rather than letting a keeper refuse the sale at play as "not for sale".
+const ROD_TIERS = ["crude", "decent"];
+
+/** The price key a rod tier is quoted under. One helper rather than two format
+ *  strings in two files, so the assertion and the offer cannot drift apart. */
+const rodPriceKey = (tier) => `rod:${tier}`;
+
 // Fixed price lists, per theme (plan §2: "0.11 can ship fixed price lists first").
 // The weekly deterministic stock tables the plan describes need L2's calendar and
 // arrive with it; nothing here blocks that and nothing here has to be unpicked for
 // it — a table lookup replaces the constant and the verbs do not move.
+//
+// THE ROD ROWS ARE PER (THEME, TIER) BECAUSE ACQUISITION IS PER THEME, which is
+// the whole of the maintainer's amended ruling: no rod is ever free, and what
+// differs between worlds is what buying one COSTS you. Fantasy fishing is a
+// common thing to do, so its entry rod is cheap — half a night's berth, which is
+// "easily obtainable" made concrete. A sci-fi colony fishes as a niche hobby, so
+// its keeper quotes the same entry rod at FOUR TIMES the fantasy price (24
+// against 6 — the stated multiple), standing in until the hobby-store and
+// online-shopping mechanic lands and takes sci-fi rod acquisition off the keeper
+// entirely. The premium sits on the ENTRY rung because acquisition is what the
+// ruling is about; `decent` is a deliberate upgrade in either world and is
+// priced the same in both.
+//
+// Every number here is retunable DATA and nothing asserts a relationship between
+// them — see TUNING's price-interplay note for what a tuner should watch while
+// moving them.
 const PRICES = {
-  "cozy-village": { berth: 12 },
-  "sci-fi-colony": { berth: 12 },
+  "cozy-village": { berth: 12, "rod:crude": 6, "rod:decent": 40 },
+  "sci-fi-colony": { berth: 12, "rod:crude": 24, "rod:decent": 40 },
 };
 
 // What a new game starts with. It exists because a sink with no source is not a
@@ -53,10 +82,98 @@ const PRICES = {
 // for why that condition and not a default value.
 const STARTING_PURSE = 40;
 
+// The catch table's TYPE vocabulary — the fixed shared roles a table entry can
+// be, and the one non-catch yield water gives up. A table row carries a role and
+// a VARIANT slug ("carp", "kelp", "vat-strain"), and the role is the half that
+// means the same thing in every theme, which is why the xp table below is keyed
+// by it. The item types and their skins arrive with the tables themselves; what
+// is needed here is the key set, so the xp table can be asserted complete
+// against something rather than against a comment.
+const CATCH_ROLES = ["catch-common", "catch-uncommon", "catch-rare", "catch-prize"];
+// Bait is a real water yield and not a catch (fishing is bait's own finder), so
+// it sits outside the roles and still earns through the same table: the award
+// keys on `role ?? BAIT_TYPE`, which is what stops a bait-first session from
+// minting no skill row at all on a player who has plainly been fishing.
+const BAIT_TYPE = "bait";
+
+// ── Fishing's tuning table (plan §2.2, §2.4) ─────────────────────────────────
+// Exported and retunable, and it is the ONLY place a number the fishing verb
+// uses is written: a tuner changes how fishing plays by editing this object and
+// touching nothing else. Every field carries its own comment because "no
+// unstated numbers" is the rule the plan set for this table specifically.
+//
+// PACING, stated so a retune can be checked against an intent instead of a
+// feeling. The FIXED side is the ladder: leaving level `l` costs 10l xp
+// (PF.player.xpPerLevel) against a ceiling of CAPS.skillLevel 20, so the cap is
+// Σ 10l for l = 1…19 = 1,900 xp and nothing below can move it. The target is
+// that a player who fishes as their day's work gets there in a few dozen of
+// those days. At `castMinutes` 15 a ten-hour day is 40 windows; mid-curve
+// (decent rod, baited, halfway up the ladder) lands p ≈ 0.55, so ≈ 22 of them
+// yield; a common-heavy table pays ≈ 1.8 xp a yield. Call it 40 xp a day, and
+// the cap is ≈ 48 days of nothing but fishing.
+//
+// THE CATCH TABLE MOVES THAT AS MUCH AS THIS OBJECT DOES, and the BAIT SHARE is
+// the sharpest lever in it: bait pays `catchXp[BAIT_TYPE]`, the floor, and it
+// also refills the stack the bait multiplier rides on — so a high bait weight is
+// a self-sustaining, slow-earning table, and a low one drains toward baitless
+// casting at the lower multiplier. Recompose the table and the arithmetic above
+// has to be redone.
+//
+// PRICE INTERPLAY — A NOTE FOR TUNERS, NOT AN INVARIANT (maintainer override,
+// 2026-08-24). Nothing in this build asserts that a starting purse can afford a
+// rod, a berth, or both, and that is deliberate: 0.12 ships no income mechanic,
+// nobody is required to sleep in a rented berth, and income arrives in later
+// releases. The rod-against-berth fork is a PLAYER's choice and the build
+// declines to have an opinion about it. What a tuner should know while moving
+// numbers: STARTING_PURSE 40 against a 12-coin berth and the 6-coin fantasy
+// entry rod leaves room for both several times over, while the 24-credit sci-fi
+// rod turns the same purse into a real decision — and a player who spends the
+// purse down before buying is priced out of fishing until income lands, which is
+// an accepted limitation and not a bug.
+const TUNING = {
+  // THE SUCCESS CURVE, one family for every cast:
+  //     p = base(level) * toolMult[toolTier] * modMult[modTier]
+  // where base(level) = min(baseCeil, baseAt1 + basePerLevel * (level - 1)) and
+  // every tier is a RESOLVED index (PF.player.resolvedToolTier /
+  // resolvedModTier), never a string off the save.
+  baseAt1: 0.3, // chance at level 1 with a crude rod and no bait: a third of casts
+  basePerLevel: 0.02, // added per level climbed, so level 20 sits at 0.68
+  baseCeil: 0.8, // the curve's own ceiling, so no retune of the two above can promise every cast
+  // One multiplier per QUALITY rung, in ladder order — crude is 1.0 because a
+  // rod is the price of ENTRY and not a bonus, and the two upper rungs are live
+  // numbers waiting on the content that sells them. Its length is asserted
+  // against QUALITY's at boot: a ladder and a multiplier list that can disagree
+  // is a silently mis-tiered curve.
+  toolMult: [1, 1.15, 1.3, 1.45],
+  // The modifier list is `[1, baitMult]` and only the second entry is tunable:
+  // tier 0 is a BAITLESS cast, which is the baseline by definition rather than a
+  // number anybody chose. Presence-based, so this is what bait is worth — not
+  // what a grade of bait is worth (graded mods are L2 content).
+  baitMult: 1.25,
+  castMinutes: 15, // one cast = one window = this many minutes of clock, and 1440 divides by it
+  // XP per successful window, keyed by the yield's TYPE — the four roles and
+  // bait — and this table is the single xp authority: table entries carry no xp
+  // of their own, so a rebalance happens in one place. Asserted complete at boot.
+  catchXp: { "catch-common": 1, "catch-uncommon": 2, "catch-rare": 5, "catch-prize": 10, [BAIT_TYPE]: 1 },
+  // The wrap-up tell's size budget, in graphemes. It renders WHOLE DAYS or none,
+  // so this is floor-asserted at boot against one maximum-shape day
+  // (CAPS.ledgerPerDay × CAPS.ledgerChars = 3,000) — under that floor the tell
+  // renders zero days, the burn advances through nothing, and the flush stalls
+  // forever. It is set AT the floor on purpose: one max-shape day is guaranteed
+  // to render, an ordinary day is a small fraction of it so several fit, and a
+  // prompt part is not a place to spend more than it has to.
+  ledgerTellChars: 3000,
+};
+
 PF.economy = {
   ITEM_TYPES,
   PRICES,
   STARTING_PURSE,
+  ROD_TIERS,
+  CATCH_ROLES,
+  BAIT_TYPE,
+  TUNING,
+  rodPriceKey,
 
   /** The theme's skin table, falling back to the default theme rather than
    *  throwing: a save can name a theme this build no longer ships.
@@ -283,5 +400,46 @@ PF.economy = {
     }
     if (typeof PRICES[theme]?.berth !== "number")
       throw new Error(`pixelforge: theme "${theme}" has no price for a berth`);
+    // EVERY RUNG THE LADDER CAN QUOTE, in every theme. A missing rod price would
+    // otherwise reach the player as the keeper refusing the sale — price()
+    // answers null for "not for sale here", and a rod the build means to sell
+    // and forgot to price is indistinguishable from one it deliberately does
+    // not stock. KEY EXISTENCE ONLY: no assertion couples these numbers to the
+    // purse or to the berth (maintainer override, 2026-08-24 — income arrives
+    // in later releases and berth-sleeping is optional), so what the build
+    // insists on is that a quotable rung is quotable, never that it is cheap.
+    for (const tier of ROD_TIERS) {
+      // …and a rung has to be a rung. A tier that is not on the QUALITY ladder
+      // resolves to crude at every read, so the ladder would quote a rod nobody
+      // can be recorded as owning and would keep quoting it forever.
+      if (!PF.player.QUALITY.includes(tier))
+        throw new Error(`pixelforge: the rod ladder quotes "${tier}", which is not a quality tier`);
+      if (typeof PRICES[theme]?.[rodPriceKey(tier)] !== "number")
+        throw new Error(`pixelforge: theme "${theme}" has no price for a ${tier} rod`);
+    }
   }
+  // THE TELL'S FLOOR. The wrap-up tell renders whole days or none, so a budget
+  // under one maximum-shape day renders zero days — the burn then advances
+  // through nothing, `ledgerOwed` never falls, and every sleep for the rest of
+  // the save tells the player the same nothing. Asserted here rather than
+  // discovered there.
+  const maxShapeDay = PF.player.CAPS.ledgerPerDay * PF.player.CAPS.ledgerChars;
+  if (!(TUNING.ledgerTellChars >= maxShapeDay))
+    throw new Error(
+      `pixelforge: TUNING.ledgerTellChars (${TUNING.ledgerTellChars}) is under one max-shape ledger day (${maxShapeDay})`,
+    );
+  // The xp table is the single authority, so a type missing from it is a yield
+  // that awards nothing — a silent hole rather than a loud one, and the one it
+  // would most likely be is `bait`, which is the yield a fresh player meets
+  // first.
+  for (const type of [...CATCH_ROLES, BAIT_TYPE]) {
+    if (typeof TUNING.catchXp[type] !== "number") throw new Error(`pixelforge: TUNING.catchXp has no xp for "${type}"`);
+  }
+  // The ladder and its multipliers, pinned to the same length. They are two
+  // lists in two files indexed by the same resolved number, and a short one
+  // hands `undefined` to the curve — NaN chance, on the best rod in the game.
+  if (TUNING.toolMult.length !== PF.player.QUALITY.length)
+    throw new Error(
+      `pixelforge: TUNING.toolMult has ${TUNING.toolMult.length} multipliers for ${PF.player.QUALITY.length} quality tiers`,
+    );
 }
