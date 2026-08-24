@@ -685,13 +685,20 @@ PF.economy = {
    *  not `advanceMinutes`, which takes minutes rather than a time of day.
    *
    *  Staging reads the clock AFTER the advance and takes the max (30-sim
-   *  `stageLedgerOwed`). Returns { ok, reason, day, clockMin, owed }. */
+   *  `stageLedgerOwed`). Returns { ok, reason, day, clockMin, owed }.
+   *
+   *  EVERY REFUSAL IS THE SAME SHAPE, and it is the NOTHING-HAPPENED one that
+   *  `fish()` uses beside it: `reason` carries which refusal it was and the
+   *  numbers carry zero, because nothing moved. The reasons are distinct on
+   *  purpose; the numbers must not be, or a caller reading `day` learns the KIND
+   *  of refusal by accident and reads a live clock off a call that spent no
+   *  minutes. */
   sleep(core, target) {
+    const no = (reason) => ({ ok: false, reason, day: 0, clockMin: 0, owed: 0 });
     const offer = this.sleepOffer(core);
-    if (!offer.available) return { ok: false, reason: offer.reason, day: 0, clockMin: 0, owed: 0 };
+    if (!offer.available) return no(offer.reason);
     const sim = core.sim;
-    if (!sim.waitUntil(target))
-      return { ok: false, reason: "unknown-target", day: sim.day, clockMin: sim.clockMin, owed: 0 };
+    if (!sim.waitUntil(target)) return no("unknown-target");
     const owed = sim.stageLedgerOwed();
     // The Wait precedent (70-hud): a clock mover that does not flag the save
     // loses its hours on reload, and this one also has a marker to lose.

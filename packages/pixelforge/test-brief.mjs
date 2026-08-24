@@ -9626,9 +9626,18 @@ await withSavePath(async ({ armed, makeCore }) => {
 
     // TOLERANT ON THE WAY BACK IN, exactly as the lines beside it are: a row that
     // is not a row is dropped, and a `notices` that is not an array is no band.
+    //
+    // …AND A ROW WITH NOTHING TO SAY IS NOT A ROW EITHER. `notice()` refuses text
+    // that clips to nothing, so nothing this build writes can be one; a hostile
+    // save can carry `[3, "   "]` or a number where the sentence goes, and both
+    // used to survive as `[3, ""]` — a band row costing bytes on the wire and a
+    // blank line in the panel that no writer could ever explain.
     const hostile = P.parse({
       ...wire,
-      ledger: { lines: [], notices: [[3, "kept"], "not a row", [], [7, "told", 9], { day: 1 }] },
+      ledger: {
+        lines: [],
+        notices: [[3, "kept"], "not a row", [], [7, "told", 9], { day: 1 }, [5, "   "], [6, 42], [8, "", 1]],
+      },
     }).player;
     assert.deepEqual(
       hostile.ledger.notices,
@@ -9636,9 +9645,14 @@ await withSavePath(async ({ armed, makeCore }) => {
         [3, "kept"],
         [7, "told", 1],
       ],
-      "the shapes that are rows survive and the flag normalizes to 1",
+      "the shapes that are rows survive, the flag normalizes to 1, and the empty ones are dropped",
     );
     assert.equal(P.parse({ ...wire, ledger: { lines: [], notices: "band" } }).player.ledger.notices, undefined);
+    assert.equal(
+      P.serialize({ ...P.defaultPlayer(), ledger: { lines: [], notices: [[3, " \t "]] } }).ledger.notices,
+      undefined,
+      "…and a band that is nothing but empty rows emits no band at all",
+    );
 
     // …AND THE 0.11 STRIP, WHICH IS A DOCUMENTED LOSS AND NOT A BUG (plan §5). A
     // 0.11 client rebuilds `ledger` as `{lines}` and knows nothing about a band,
@@ -15942,6 +15956,16 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
       }
       assert.equal(odd.sim.clockMin, 21 * 60, "…and not one minute was spent on any of them");
       assert.equal(owedOf(odd.sim), undefined, "…nor anything staged");
+
+      // …AND EVERY REFUSAL HAS THE SAME SHAPE, which is `fish()`'s beside it: a
+      // refusal is the NOTHING-HAPPENED shape, all the way down. The reasons are
+      // distinct on purpose and the numbers must not be, or a caller reading
+      // `result.day` learns which KIND of refusal it got by accident — and reads a
+      // live clock off a call that moved nothing.
+      const nothing = { ok: false, day: 0, clockMin: 0, owed: 0 };
+      assert.deepEqual(E.sleep(odd.core, "elevenses"), { ...nothing, reason: "unknown-target" }, "a bad target");
+      assert.deepEqual(E.sleep(away.core, "dawn"), { ...nothing, reason: "no-bed" }, "…and a refused offer");
+      assert.deepEqual(E.sleep(talking.core, "dawn"), { ...nothing, reason: "wrong-mode" }, "…and a wrong moment");
     }
 
     // ── THE ARC'S HEADLINE, END TO END ────────────────────────────────────────

@@ -440,7 +440,15 @@ PF.player = {
           const out = [posInt(row[0], 0), clip(row[1], CAPS.ledgerChars)];
           if (row[2]) out.push(1);
           return out;
-        }),
+        })
+        // A ROW WITH NOTHING TO SAY IS NOT A ROW. `notice()` already refuses text
+        // that clips to nothing, so no row this build writes reaches here empty;
+        // a hostile save carrying `[3, "   "]` or a number where the sentence goes
+        // used to survive as `[3, ""]` — bytes on the wire, a slot against the
+        // cap, and a blank line in the panel no writer could account for. Dropped
+        // at the one place the wire is built, which is where `lines`' own
+        // shape-filter lives.
+        .filter((row) => row[1]),
     );
     if (notices.length) out.ledger.notices = notices;
     out.found = {
