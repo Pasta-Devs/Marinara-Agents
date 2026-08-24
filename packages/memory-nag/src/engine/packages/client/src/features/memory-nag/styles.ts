@@ -117,6 +117,10 @@ export const MEMORY_NAG_STYLES = `
   line-height: 1.45;
 }
 
+.mn-vault-textarea {
+  padding-right: 2rem;
+}
+
 .mn-prompt-textarea {
   min-height: 3.25rem;
   border-radius: 0.375rem;
@@ -172,6 +176,20 @@ export const MEMORY_NAG_STYLES = `
 .mn-prompt-tool .mn-icon {
   width: 0.75rem;
   height: 0.75rem;
+}
+
+.mn-vault-macro-menu {
+  position: absolute;
+  z-index: 1;
+  top: 1.75rem;
+  right: 0.375rem;
+  display: flex;
+  gap: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background: var(--popover);
+  padding: 0.25rem;
+  box-shadow: 0 0.5rem 1.25rem rgb(0 0 0 / 0.2);
 }
 
 .mn-prompt-modal {
@@ -639,6 +657,36 @@ export const MEMORY_NAG_STYLES = `
   color: color-mix(in srgb, var(--foreground) 35%, transparent);
   font-size: 0.6875rem;
   line-height: 1rem;
+}
+
+.mn-tracker--mobile-compact {
+  background: transparent;
+  box-shadow: none;
+}
+
+.mn-tracker--mobile-compact .mn-tracker-header {
+  min-height: 0;
+  border-bottom: 0;
+  padding: 0.5rem 0.75rem 0.25rem;
+}
+
+.mn-tracker--mobile-compact .mn-tracker-toggle--static {
+  align-self: auto;
+  cursor: default;
+}
+
+.mn-tracker--mobile-compact .mn-tracker-toggle--static:hover {
+  background: transparent;
+}
+
+.mn-tracker--mobile-compact .mn-tracker-icon {
+  color: var(--marinara-chat-chrome-accent, var(--primary));
+  opacity: 1;
+}
+
+.mn-tracker--mobile-compact .mn-tracker-value {
+  min-height: 0;
+  padding: 0.25rem 0.75rem 0.5rem;
 }
 
 .mn-icon {

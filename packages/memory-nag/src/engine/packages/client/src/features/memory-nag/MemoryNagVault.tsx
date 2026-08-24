@@ -1,4 +1,15 @@
-import { Check, ChevronLeft, Maximize2, MessageSquareQuote, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
+import {
+  BookOpen,
+  Check,
+  ChevronLeft,
+  Maximize2,
+  MessageSquareQuote,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -96,6 +107,7 @@ function MemoryEditor({
     characterIds: memory?.characterIds ?? [],
   });
   const [expanded, setExpanded] = useState(false);
+  const [macrosOpen, setMacrosOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -153,46 +165,62 @@ function MemoryEditor({
           <X className="mn-icon" aria-hidden="true" />
         </button>
       </div>
-      <label className="mn-label">
+      <div className="mn-label">
         <span>{t("memoryNag.vault.memory")}</span>
-        <textarea
-          ref={textareaRef}
-          className="mari-chrome-field mn-field mn-textarea"
-          value={draft.text}
-          maxLength={500}
-          placeholder={t("memoryNag.vault.memoryPlaceholder")}
-          onChange={(event) => setDraft((current) => ({ ...current, text: event.target.value }))}
-        />
-      </label>
-      <div className="mn-row mn-between">
-        <div className="mn-actions" aria-label={t("memoryNag.vault.macros")}>
-          <span className="mn-muted">{t("memoryNag.vault.macros")}</span>
-          <button
-            type="button"
-            className="mari-chrome-control mari-chrome-control--small"
-            onClick={() => insertMacro("{{char}}")}
-          >
-            {"{{char}}"}
-          </button>
-          <button
-            type="button"
-            className="mari-chrome-control mari-chrome-control--small"
-            onClick={() => insertMacro("{{user}}")}
-          >
-            {"{{user}}"}
-          </button>
+        <div className="mn-prompt-field">
+          <textarea
+            ref={textareaRef}
+            className="mari-chrome-field mn-field mn-textarea mn-vault-textarea"
+            value={draft.text}
+            maxLength={500}
+            placeholder={t("memoryNag.vault.memoryPlaceholder")}
+            onChange={(event) => setDraft((current) => ({ ...current, text: event.target.value }))}
+          />
+          <div className="mn-prompt-tools">
+            {!expanded ? (
+              <button
+                id="mn-memory-nag-expand-button"
+                type="button"
+                className="mn-prompt-tool"
+                onClick={() => {
+                  setMacrosOpen(false);
+                  setExpanded(true);
+                }}
+                title={t("memoryNag.vault.expand")}
+                aria-label={t("memoryNag.vault.expand")}
+              >
+                <Maximize2 className="mn-icon" aria-hidden="true" />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="mn-prompt-tool"
+              onClick={() => setMacrosOpen((open) => !open)}
+              title={t("memoryNag.vault.macros")}
+              aria-label={t("memoryNag.vault.macros")}
+              aria-expanded={macrosOpen}
+            >
+              <BookOpen className="mn-icon" aria-hidden="true" />
+            </button>
+          </div>
+          {macrosOpen ? (
+            <div className="mn-vault-macro-menu" aria-label={t("memoryNag.vault.macros")}>
+              {["{{char}}", "{{user}}"].map((macro) => (
+                <button
+                  key={macro}
+                  type="button"
+                  className="mari-chrome-control mari-chrome-control--small"
+                  onClick={() => {
+                    insertMacro(macro);
+                    setMacrosOpen(false);
+                  }}
+                >
+                  {macro}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
-        {!expanded ? (
-          <button
-            id="mn-memory-nag-expand-button"
-            type="button"
-            className="mari-chrome-control mari-chrome-control--small"
-            onClick={() => setExpanded(true)}
-          >
-            <Maximize2 className="mn-icon" aria-hidden="true" />
-            {t("memoryNag.vault.expand")}
-          </button>
-        ) : null}
       </div>
       <fieldset className="mn-stack">
         <legend className="mn-muted">{t("memoryNag.vault.characters")}</legend>
