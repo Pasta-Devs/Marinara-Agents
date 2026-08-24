@@ -599,8 +599,13 @@ PF.Hud = class {
     return this.core.sim?.mode === "walk" && !PF.save.gateHolds(this.core);
   }
 
-  /** Close whatever panel is open. Returns true when something closed, which is
-   *  what tells the Escape branch whether the key meant anything here. */
+  /** Close whatever panel is open, and say whether anything was open to close.
+   *
+   *  The Escape branch (90-element) DISCARDS that answer on purpose: it declines
+   *  `preventDefault` either way, because the host's own Escape handling is not
+   *  ours to cancel, so "the key meant something here" is not a question it has
+   *  to ask. The return is the honest answer for a caller that does — today that
+   *  is the harness, which pins it. */
   closePanels() {
     const open = this._journal || this._sheet;
     this.closeJournal();
@@ -681,7 +686,13 @@ PF.Hud = class {
       band.appendChild(
         PF.el("div", { style: `font:700 12px/1.6 inherit;${dim}`, text: "About the world itself, not the days in it" }),
       );
-      // Newest first, the one ordering rule this panel has.
+      // NEWEST FIRST — and newest here means most recently WRITTEN, not the
+      // highest day. The two agree everywhere except after a rewind, where a
+      // restore's notice carries a day BELOW the severance notice it is the
+      // sequel to, and sorting by day would print the world coming back above
+      // the sentence saying it went. These rows are events about the save and
+      // the day on them is a stamp, not the order they happened in; the day
+      // groups below sort, because a line really does belong to its day.
       for (const row of notices.slice().reverse()) {
         const said = typeof row?.[1] === "string" ? row[1] : "";
         band.appendChild(PF.el("div", { text: `Day ${PF.player.resolvedDay(row?.[0])} — ${said}` }));
