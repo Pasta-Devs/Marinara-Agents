@@ -13120,6 +13120,106 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
   }
 }
 
+// ═══ S4 ACTIVATION: THE QUALITY LADDER AND ITS RESOLVERS (0.12 slice 2) ═════
+// Constants and pure reads, so the cases are constants and pure reads too: no
+// world, no save path, no clock. What they pin is the ground the fishing verb
+// gets built on — that a saved string can never leave the range its resolver
+// promises, that the quality ladder grades TOOLS and leaves every other `k`
+// alone.
+
+// ── THE RESOLVERS: A SAVED STRING IS EVIDENCE, NEVER A VALUE ─────────────────
+{
+  const P = loadedPF.player;
+
+  assert.deepEqual(
+    [...P.QUALITY],
+    ["crude", "decent", "fine", "masterwork"],
+    "the ladder is ordered worst to best — the index IS the tier",
+  );
+  assert.ok(Object.isFrozen(P.QUALITY), "…and frozen: every save in the wild was written against those positions");
+  assert.deepEqual(
+    P.QUALITY.map((k) => P.resolvedToolTier(k)),
+    [0, 1, 2, 3],
+    "each rung resolves to its own place on it",
+  );
+  assert.equal(P.resolvedToolTier("legendary"), 0, "a tier no ladder names is CRUDE — not a throw, and not a bonus");
+  assert.equal(P.resolvedToolTier(""), 0, "so is a row carrying no quality at all");
+  assert.equal(P.resolvedToolTier(undefined), 0, "…and so is no field");
+  assert.equal(P.resolvedToolTier(2), 0, "a number is not a rung: the ladder is read by NAME");
+  assert.equal(P.resolvedToolTier("Crude"), 0, "and the names are exact — a near miss is a miss");
+
+  // PRESENCE, WHICH IS THE WHOLE REASON THIS IS A SECOND RESOLVER. Bait `k` are
+  // semantic slugs, so an index read maps a slotted bait and an EMPTY slot onto
+  // the same 0 and the modifier is inert either way. The first pair of lines is
+  // that seam, stated rather than described.
+  const slot = ["bait", "worms"];
+  const stocked = { t: "bait", q: 3, k: "worms" };
+  assert.equal(P.resolvedToolTier("worms"), P.resolvedToolTier(""), "an index read cannot tell bait from no bait…");
+  assert.equal(P.resolvedModTier(slot, stocked), 1, "…while presence can: slotted, and stocked behind it");
+  assert.equal(P.resolvedModTier(null, stocked), 0, "an empty slot is no modifier, stack or no stack");
+  assert.equal(P.resolvedModTier(slot, { t: "bait", q: 0, k: "worms" }), 0, "a spent stack backs nothing");
+  assert.equal(P.resolvedModTier(slot, undefined), 0, "and neither does a row the pouch no longer holds");
+  assert.equal(P.resolvedModTier(slot, { t: "bait", q: 9, k: "grubs" }), 0, "nor a full stack of something ELSE");
+  assert.equal(P.resolvedModTier(slot, 2), 1, "a bare count is enough for a caller that already has one");
+  assert.equal(P.resolvedModTier(slot, 0), 0, "…and the same count at zero is the same refusal");
+  assert.equal(P.resolvedModTier(["", ""], 5), 0, "a pair with no type is not a pair");
+
+  assert.equal(P.resolvedLevel({ l: 7, x: 3 }), 7, "an ordinary skill row reads as itself");
+  assert.equal(P.resolvedLevel({ l: 0 }), 1, "the floor is 1 — a verb nobody has used still rolls, at the bottom");
+  assert.equal(P.resolvedLevel({ l: 9000 }), P.CAPS.skillLevel, "and the ceiling is the ladder the block can hold");
+  assert.equal(P.resolvedLevel({ l: -4 }), 1, "a negative level is not a level");
+  assert.equal(P.resolvedLevel({ l: "12" }), 1, "…and neither is a string one");
+  assert.equal(P.resolvedLevel(undefined), 1, "a verb with no row at all is level 1");
+  assert.equal(P.resolvedLevel(11), 11, "a bare number is taken, for a caller that already read the row");
+}
+
+// ── THE LADDER GRADES TOOLS, AND LEAVES EVERY OTHER `k` ALONE ────────────────
+// One field, two vocabularies. `k` is a QUALITY rung on a tool and a semantic
+// SLUG on everything else — a catch's variant, a bait's kind — so the validator
+// has to be scoped by type or "kelp" becomes a badly-spelled "crude".
+{
+  const P = loadedPF.player;
+  const core = { chatId: "chat-quality", sim: { player: P.defaultPlayer(), dirty: false } };
+  try {
+    assert.equal(P.grant(core, { t: "rod", k: "legendary" }, 1), 0, "a graded row off the ladder is refused outright");
+    assert.deepEqual(core.sim.player.pouch.items, [], "…and nothing was minted on the way to refusing it");
+    assert.equal(P.grant(core, { t: "rod", k: "" }, 1), 0, "an ungraded rod is the same refusal — a tool has a tier");
+    assert.equal(P.grant(core, { t: "rod", k: "decent" }, 1), 1, "and a rung is taken");
+
+    assert.equal(P.grant(core, { t: "catch-common", k: "kelp" }, 2), 2, "a variant slug is a variant, not a bad tier");
+    assert.equal(P.grant(core, { t: "bait", k: "worms" }, 5), 5, "…and bait keeps its own kind for the same reason");
+    assert.equal(P.grant(core, "lodging-key", 1), 1, "the one shipped keyless row is untouched by any of this");
+
+    // equip() applies the same rule at the same point — before it allocates.
+    assert.equal(
+      P.equip(core, "fishing", "tool", { t: "rod", k: "legendary" }),
+      false,
+      "a slot cannot point at a row the pouch would refuse to hold",
+    );
+    assert.equal(core.sim.player.skills.equipped.fishing, undefined, "…and the refusal left no verb bucket behind");
+    assert.equal(P.equip(core, "fishing", "tool", { t: "rod", k: "decent" }), true, "a graded pair equips");
+    assert.equal(P.equip(core, "fishing", "mod", { t: "bait", k: "worms" }), true, "an ungraded one equips freely");
+
+    // …which closes the loop: what equip() wrote is what the resolvers read.
+    const equipped = core.sim.player.skills.equipped.fishing;
+    assert.equal(P.resolvedToolTier(equipped.tool[1]), 1, "the equipped rod resolves to its own rung");
+    const stack = core.sim.player.pouch.items.find((it) => it.t === "bait" && it.k === "worms");
+    assert.equal(P.resolvedModTier(equipped.mod, stack), 1, "and the slotted bait resolves to a present modifier");
+
+    // THE WIRE IS NOT VALIDATED, ON PURPOSE. The rule belongs to the mutators:
+    // a save already carrying a rod nobody can mint any more must round-trip
+    // untouched and resolve to the floor, not vanish out of the player's pouch.
+    const hostile = P.serialize({
+      ...P.defaultPlayer(),
+      pouch: { money: 0, items: [{ t: "rod", q: 1, k: "legendary" }] },
+    });
+    assert.equal(hostile.pouch.items[0].k, "legendary", "a hostile quality survives serialization exactly as written");
+    assert.equal(P.resolvedToolTier(hostile.pouch.items[0].k), 0, "…and is read as crude every time it is read");
+  } finally {
+    loadedPF.save.reset(); // the mutators self-dirty, and a dirty block arms a timer
+  }
+}
+
 // ── A DOM the size of the two surfaces that need one ──────────────────────────
 // Not a browser: exactly what PF.el touches (createElement, style, text,
 // attributes, listeners, children) plus fire(), so a click can be driven. Enough

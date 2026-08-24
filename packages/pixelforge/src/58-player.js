@@ -70,6 +70,27 @@ const CAPS = {
 // mutator: experience needed to leave level `l`.
 const xpPerLevel = (l) => 10 * Math.max(1, l);
 
+// The quality axis of a pouch row's `(t, k)` key, worst to best. It is a LADDER
+// and not a label set: the INDEX is the tier every multiplier reads, so the
+// order is load-bearing and an insertion in the middle would re-tier every save
+// in the wild. Frozen for that reason — a retune belongs in the multipliers the
+// index feeds, never in the ladder itself.
+//
+// IT GRADES TOOLS ONLY, and the rest of the field is not junk it is being
+// lenient about. Every other `k` in the pouch is a SEMANTIC SLUG — a catch row's
+// variant ("carp", "kelp"), a bait's kind — and a slug is not a worse "crude":
+// the two vocabularies share one field and must not share one validator. So the
+// grading rule is scoped by TYPE. TOOL_TYPES is the named set that says which
+// rows are graded; grant() and equip() refuse a graded row whose `k` is off the
+// ladder and leave every other row's `k` free.
+//
+// `rod` is 0.12's only tool, and it is named HERE while its item vocabulary and
+// its skins land with the verb that uses it: what the pouch needs at this layer
+// is the grading rule, which is a property of the key and belongs beside the
+// caps the mutators enforce.
+const QUALITY = Object.freeze(["crude", "decent", "fine", "masterwork"]);
+const TOOL_TYPES = new Set(["rod"]);
+
 // The quarantine bag's own ceiling, independent of the snapshot's (plan §4).
 // It lives in its own metadata key, so it competes with nothing — which is why
 // this is a TRIPWIRE against a pathological blob bloating the chat's metadata
@@ -168,6 +189,8 @@ const clip = (text, max) => {
 
 PF.player = {
   CAPS,
+  QUALITY,
+  TOOL_TYPES,
   MIGRATIONS: PLAYER_MIGRATIONS,
   xpPerLevel,
   /** The schema version THIS build writes. Derived — see PLAYER_MIGRATIONS. */
@@ -910,6 +933,63 @@ PF.player = {
     return fresh;
   },
 
+  // ── Resolve-at-read (plan §2.1) ────────────────────────────────────────────
+  // A SAVED STRING IS EVIDENCE, NEVER A VALUE. Each of these takes what the
+  // block happens to hold and answers with a number inside a stated range, so a
+  // row written by a hostile hand, an older build or a newer one can move the
+  // answer but can never leave the range. That is what makes them safe as
+  // determinism inputs: the fishing roll is seeded from the RESOLVED numbers, so
+  // two clients that disagree about what "legendary" means still roll the same
+  // fish out of the same water on the same minute.
+  //
+  // Pure, and deliberately so — they take values rather than the core, so the
+  // hash and the display can resolve the same row without either one reaching
+  // for live state the other cannot see.
+
+  /** A graded tool's tier: its place on the QUALITY ladder, with everything the
+   *  ladder does not name clamping to 0. A `k` that is off the ladder — a newer
+   *  build's "legendary", a bait slug, an empty string, a number — is CRUDE.
+   *  Never a throw, and never a bonus. */
+  resolvedToolTier(k) {
+    const at = QUALITY.indexOf(typeof k === "string" ? k : "");
+    return at < 0 ? 0 : at;
+  },
+
+  /** A modifier's tier, and it reads PRESENCE rather than grade. Bait `k` are
+   *  semantic slugs, so an index resolver would map a slotted bait and an EMPTY
+   *  slot to the same 0 and make the modifier inert — which is the whole reason
+   *  this one does not read QUALITY at all. 1 iff the slot holds a pair AND the
+   *  pouch still has a stack behind it; 0 for everything else.
+   *
+   *  `stack` is the pouch row the caller looked that pair up by, or a bare
+   *  count for a caller that already has one. A ROW IS CHECKED TO BE THE RIGHT
+   *  ROW: "backed by" is the claim being made, and a stack of something else
+   *  backs nothing.
+   *
+   *  What it does NOT check is the pair's TYPE. The mod slot is filled by the
+   *  verb's own per-session act and by nothing else, so a pair in it is a pair
+   *  the verb put there; a hostile save that slots something odd and carries a
+   *  real stack for it has spent a real stack, which is the thing the multiplier
+   *  is paid for. Graded modifiers are L2 content (§5) and arrive as a second
+   *  tier here, never as a QUALITY read. */
+  resolvedModTier(slot, stack) {
+    if (!Array.isArray(slot) || !str(slot[0])) return 0;
+    if (typeof stack === "number") return isFiniteInt(stack) && stack > 0 ? 1 : 0;
+    if (!stack || typeof stack !== "object") return 0;
+    if (str(stack.t) !== str(slot[0]) || str(stack.k) !== str(slot[1])) return 0;
+    return posInt(stack.q, 0) > 0 ? 1 : 0;
+  },
+
+  /** A verb's level, clamped to the ladder the block can actually hold. `row` is
+   *  a `skills.verbs` entry or a bare number, and either one comes off save JSON
+   *  where `l` can be 0, 9,000, or the string "12". The floor is 1 rather than 0
+   *  because level 1 is where a verb starts: a player who has never fished still
+   *  rolls, they just roll at the bottom of the curve. */
+  resolvedLevel(row) {
+    const l = typeof row === "number" ? row : row?.l;
+    return PF.clamp(posInt(l, 1), 1, CAPS.skillLevel);
+  },
+
   // ── Mutation API (plan §3) ─────────────────────────────────────────────────
   // Every mutator RE-RESOLVES core.sim (never a captured sim — a chat switch
   // reassigns it under any caller holding one), is generation-FENCED on the
@@ -954,6 +1034,12 @@ PF.player = {
     if (!p) return 0;
     const { t, k } = this._itemKey(item);
     if (!t) return 0;
+    // A GRADED type's `k` has to be a rung. Refused rather than coerced down to
+    // "crude": coercion would still mint the row, the pouch would carry a
+    // quality nothing can name, and every resolver from then on would read a
+    // lie as a floor. An UNGRADED type keeps its free `k` — that field is where
+    // a catch row keeps its variant, and a variant is not a bad tier.
+    if (TOOL_TYPES.has(t) && !QUALITY.includes(k)) return 0;
     const n = Math.max(1, posInt(qty, 1));
     let row = p.pouch.items.find((it) => it.t === t && str(it.k) === k);
     if (!row) {
@@ -1027,6 +1113,11 @@ PF.player = {
     if (item != null) {
       const { t, k } = this._itemKey(item);
       if (!t) return false;
+      // The same grading rule grant() applies, for the same reason and at the
+      // same point — before anything is allocated. A slot is a pointer at a
+      // pouch row, so a pair the pouch would refuse to hold is a pair nothing
+      // can be pointing at.
+      if (TOOL_TYPES.has(t) && !QUALITY.includes(k)) return false;
       pair = [t, k];
     }
     const slots = this._bucket(p.skills.equipped, name);
