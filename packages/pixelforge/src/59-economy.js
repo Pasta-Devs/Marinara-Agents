@@ -13,10 +13,11 @@
 // room. Home ASSIGNMENT channels (a setup flag, P6 building) are enumerated in
 // the plan and deliberately not here.
 //
-// Everything below is CONTENT plus three game-facing entry points: berthOffer
-// describes and never charges, rentBerth and grantStartingPurse mutate. (The
-// rest — _skin, currency, money, describe, price — are the vocabulary those
-// three and the HUD read through.) It holds no state of its own: what persists
+// Everything below is CONTENT plus the game-facing entry points: the OFFERS
+// (berthOffer, rodOffer) describe and never charge, so the HUD can call them
+// every frame; the VERBS (rentBerth, buyRod, grantStartingPurse) mutate. The
+// rest — _skin, currency, money, describe, price, the catch tables — is the
+// vocabulary those read through. It holds no state of its own: what persists
 // goes through the shipped mutators (award/grant/setHome/log/bump) and lives in
 // the player block, which is what makes it rewind-safe.
 
@@ -506,6 +507,24 @@ PF.economy = {
     return null;
   },
 
+  /** THE KEEPER, whichever way you found them: reach first, then the room. Both
+   *  halves of the rule, in one place, because the keeper now sells two things.
+   *
+   *  Reach first, so a keeper you are standing next to always answers for their
+   *  own room even when you are both inside somebody else's; the room second,
+   *  because being inside the inn is the other half of the same fact and it is
+   *  the half a player actually discovers (see _keeperInRoom for the playtest
+   *  that found it).
+   *
+   *  EXTRACTED RATHER THAN COPIED (plan §2.4). The berth and the rod are quoted
+   *  by the same person and their resolutions must not drift: a second copy of
+   *  this line would be a build where the innkeeper lets you a room from across
+   *  the counter and refuses to sell you a rod from the same spot. */
+  _keeper(sim) {
+    const inReach = sim?.nearNpc;
+    return typeof inReach?.lodging === "string" && inReach.lodging ? inReach : this._keeperInRoom(sim);
+  },
+
   /** Is there a berth on offer where the player is standing, and what would it
    *  cost? Describes only — it never charges anything, so the HUD can call it
    *  every frame and a caller can render the refusal instead of hiding the
@@ -524,8 +543,7 @@ PF.economy = {
     const sim = core?.sim;
     const world = sim?.world;
     const no = (reason) => ({ available: false, reason, keeper: null, zoneId: null, price: null, home: null });
-    const inReach = sim?.nearNpc;
-    const npc = typeof inReach?.lodging === "string" && inReach.lodging ? inReach : this._keeperInRoom(sim);
+    const npc = this._keeper(sim);
     if (!sim || !npc) return no("no-keeper");
     if (!world?.zones || !Object.prototype.hasOwnProperty.call(world.zones, npc.lodging)) return no("no-lodging");
     const price = this.price(world, "berth");
@@ -572,6 +590,142 @@ PF.economy = {
     PF.player.log(core, `Took a berth at ${place} for ${this.money(world, offer.price)}.`, sim.day, gen);
     PF.player.bump(core, world.startZone, offer.keeper.name, { t: 1, s: `Let you a berth at ${place}.` }, gen);
     return { ok: true, reason: null, price: offer.price, zoneId: offer.zoneId };
+  },
+
+  // ── The rod (the keeper's second trade) ────────────────────────────────────
+
+  /** The rung the player has already climbed: the MAX over pouch rows typed
+   *  `rod` of `resolvedToolTier(k)`, or null when there is no rod row at all.
+   *
+   *  POUCH-ONLY, and derived — nothing anywhere writes a "rods bought" field
+   *  (plan §2.4). Auto-equip guarantees an equipped rod has a pouch row behind
+   *  it, and the pouch is world-free while rods are unremovable in 0.12, so a
+   *  severance can never resurrect a rung already climbed.
+   *
+   *  Through the resolver and not `indexOf`: a hostile `k` ("legendary") clamps
+   *  to 0 and the ladder goes on quoting `decent`, which is benign and is what
+   *  the whole resolve-at-read discipline is for. NULL is a different answer from
+   *  0 — no rod at all against a crude one — and the no-rod refusal is exactly
+   *  that absence. */
+  rodTier(player) {
+    let best = null;
+    for (const row of player?.pouch?.items ?? []) {
+      if (row?.t !== "rod") continue;
+      const tier = PF.player.resolvedToolTier(row.k);
+      if (best === null || tier > best) best = tier;
+    }
+    return best;
+  },
+
+  /** What the keeper would sell you next, and what it costs. Describes only, so
+   *  the HUD can call it every frame. Returns { available, reason, keeper, tier,
+   *  price }.
+   *
+   *  ONE BUTTON, ONE LADDER: the offer quotes the next rung the player LACKS —
+   *  no rod quotes `crude`, a crude owner quotes `decent`, and a decent-or-better
+   *  owner is quoted nothing and the button VANISHES. That last part is a stated
+   *  divergence from the berth button's never-vanish rule: a berth is a thing you
+   *  can want again tomorrow, while rod ownership is global and permanent, and a
+   *  forever-dimmed chip saying "you already have one" is dead chrome.
+   *
+   *  Cannot-afford is the berth's own idiom instead — shown, dimmed, still
+   *  quoting the price, because a control that disappears when the purse runs
+   *  short teaches the player nothing about what to save for.
+   *
+   *  POUCH HEADROOM IS CHECKED HERE, with the arity the purchase actually needs:
+   *  a crude rod arrives with a starter bait stack, so it is TWO new rows unless
+   *  the player somehow already holds bait, and a decent rod is one. This
+   *  pre-check is what makes buyRod's no-rollback shape sound — grant() cannot be
+   *  allowed to refuse after award() has already charged. */
+  rodOffer(core) {
+    const sim = core?.sim;
+    const world = sim?.world;
+    const no = (reason) => ({ available: false, reason, keeper: null, tier: null, price: null });
+    const npc = this._keeper(sim);
+    if (!sim || !npc) return no("no-keeper");
+    const player = PF.player.get(core);
+    if (!player) return no("no-player");
+    const owned = this.rodTier(player);
+    const tier = owned === null ? ROD_TIERS[0] : ROD_TIERS[owned + 1];
+    if (!tier) return no("top-of-ladder");
+    const price = this.price(world, rodPriceKey(tier));
+    if (price === null) return no("not-for-sale");
+    const offer = { available: true, reason: null, keeper: npc, tier, price };
+    const items = player.pouch?.items ?? [];
+    const rows = owned === null ? (items.some((row) => row?.t === BAIT_TYPE) ? 1 : 2) : 1;
+    if (items.length + rows > PF.player.CAPS.items) return { ...offer, available: false, reason: "pouch-full" };
+    if ((player.pouch?.money ?? 0) < price) return { ...offer, available: false, reason: "cannot-afford" };
+    return offer;
+  },
+
+  /** Bind the best tool of a type to a verb after an acquisition (plan §2.4).
+   *  Best = the highest QUALITY index the pouch holds. Bait NEVER auto-equips —
+   *  the mod slot is the fishing verb's own per-session act, not a standing
+   *  preference — and a catch never equips at all.
+   *
+   *  THE SCOPING IS ENFORCED HERE AND NOT BY THE MUTATOR. equip() validates by
+   *  item TYPE and not by slot: it refuses a graded row whose `k` is off the
+   *  ladder and is otherwise perfectly willing to put bait in a `tool` slot. So
+   *  the call site is what keeps tools in tool slots, and this one refuses
+   *  outright any type QUALITY does not grade rather than trusting a check that
+   *  is not being made. A pouch holding only an ungradable rod equips nothing and
+   *  fishes at the floor, which is the same answer from either end. */
+  _autoEquipTool(core, verb, type, gen) {
+    if (!PF.player.TOOL_TYPES.has(type)) return false;
+    const player = PF.player.get(core);
+    let best = null;
+    for (const row of player?.pouch?.items ?? []) {
+      if (row?.t !== type || !PF.player.QUALITY.includes(row.k)) continue;
+      if (best === null || PF.player.resolvedToolTier(row.k) > PF.player.resolvedToolTier(best)) best = row.k;
+    }
+    if (best === null) return false;
+    return PF.player.equip(core, verb, "tool", { t: type, k: best }, gen);
+  },
+
+  /** Buy the rod the button is offering. rentBerth's shape, for rentBerth's
+   *  reason — every effect goes through a shipped mutator in an order that cannot
+   *  half-charge anybody:
+   *    1. re-read the offer (the HUD's copy is a frame old);
+   *    2. `award({ money: -price })` — the purse pays, and it is the ONLY thing
+   *       that can refuse after the pre-checks, with nothing after it having run;
+   *    3. `grant` the rod, plus the starter bait stack on the FIRST purchase
+   *       ("line and tackle included"), at the theme's own first bait slug so it
+   *       merges with what the player then fishes up;
+   *    4. auto-equip, scoped to tools;
+   *    5. `log()` — the day-ledger line the wrap-up will tell;
+   *    6. `bump()` — the keeper remembers, settlement-scoped like every other.
+   *  Nothing is written to `bought`: that map is world-bound shop DEPLETION and
+   *  0.12 ships no shop stock, exactly as rentBerth writes none.
+   *
+   *  NEVER FORCED. This is a proximity button and nothing else — no modal, no
+   *  quest gate, and nothing in the package depends on rod ownership. Skipping
+   *  the first settlement's offer costs nothing: the ladder is a stateless
+   *  derived read, so any keeper anywhere sells the same next rung later.
+   *
+   *  Returns { ok, reason, price, tier, bait }. */
+  buyRod(core, gen) {
+    const offer = this.rodOffer(core);
+    if (!offer.available) return { ok: false, reason: offer.reason, price: offer.price, tier: offer.tier };
+    const sim = core.sim;
+    const world = sim.world;
+    const paid = PF.player.award(core, { money: -offer.price }, gen);
+    if (!paid) return { ok: false, reason: "refused", price: offer.price, tier: offer.tier, bait: null };
+    PF.player.grant(core, { t: "rod", k: offer.tier }, 1, gen);
+    let bait = null;
+    if (offer.tier === ROD_TIERS[0]) {
+      bait = this.starterBait(world);
+      if (bait) PF.player.grant(core, { t: BAIT_TYPE, k: bait }, STARTER_BAIT, gen);
+    }
+    this._autoEquipTool(core, "fishing", "rod", gen);
+    const named = this.describe(world, { t: "rod", k: offer.tier });
+    PF.player.log(
+      core,
+      `Bought a ${named} from ${offer.keeper.name} for ${this.money(world, offer.price)}.`,
+      sim.day,
+      gen,
+    );
+    PF.player.bump(core, world.startZone, offer.keeper.name, { t: 1, s: `Sold you a ${named}.` }, gen);
+    return { ok: true, reason: null, price: offer.price, tier: offer.tier, bait };
   },
 
   /** The starting purse, paid when a SEALED world comes up on a block nothing has

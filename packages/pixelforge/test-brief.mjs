@@ -13681,6 +13681,221 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
   assert.equal(E.starterBait({ theme: "cozy-village" }), "worms", "which in a valley is worms");
 }
 
+// ── THE KEEPER SELLS TWO THINGS, AND RESOLVES THE SAME WAY FOR BOTH ──────────
+// M8's amendment: no rod is ever free, and the person who lets the room is the
+// person who sells the rod. Their resolution — reach first, then the room — is
+// now ONE helper both offers call, because a second copy of that line is a build
+// where the innkeeper lets you a room from across the counter and refuses to
+// sell you a rod from the same spot.
+{
+  const E = loadedPF.economy;
+  const P = loadedPF.player;
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Fallowmere",
+      prosperity: "modest",
+      backgroundPopulation: 40,
+      situation: "The bridge went in the spring flood and the ford is the only way across.",
+      cast: [
+        { name: "Perrin Quill", role: "innkeep", kind: "host", tint: "amber", home: "Fallowmere", household: 1 },
+        { name: "Wren Ash", role: "miller", kind: "maker", tint: "teal", home: "Fallowmere", household: 2 },
+      ],
+    },
+    { theme: "cozy-village", seed: 8080 },
+  );
+  const w = world.build(8080, "cozy-village", sealed);
+  let keeper = null;
+  let keeperZone = null;
+  let bystander = null;
+  for (const zoneId of Object.keys(w.zones)) {
+    for (const npc of w.zones[zoneId].npcs) {
+      if (typeof npc.lodging === "string" && !keeper) {
+        keeper = npc;
+        keeperZone = zoneId;
+      } else if (!npc.lodging && !bystander) bystander = npc;
+    }
+  }
+  assert.ok(keeper && bystander, "the compiled world has somebody who lets rooms and somebody who does not");
+  const room = w.zones[keeper.lodging];
+  if (!room.npcs.includes(keeper)) room.npcs.push(keeper); // the daypart may have them out; the room path is the case
+
+  const fresh = (chatId) => {
+    const sim = new loadedPF.Sim(w);
+    return { chatId, sim, hud: { toast() {}, refreshChips() {} }, markDirty() {} };
+  };
+  const stand = (core, zoneId, npc) => {
+    core.sim.zoneId = zoneId;
+    core.sim.nearNpc = npc;
+  };
+
+  try {
+    // ── THE SHARED RESOLUTION, on both paths and on neither ───────────────────
+    {
+      const core = fresh("chat-keeper-shared");
+      P.award(core, { money: 200 });
+      stand(core, w.startZone, bystander);
+      assert.equal(E.berthOffer(core).keeper, null, "out in the square by a villager, no berth");
+      assert.equal(E.rodOffer(core).keeper, null, "…and no rod either — one resolution, one answer");
+      assert.equal(E.rodOffer(core).reason, "no-keeper", "with the same reason the berth gives");
+
+      stand(core, keeperZone, keeper); // REACH: standing next to them, wherever that is
+      assert.equal(E.berthOffer(core).keeper, keeper, "in reach of the keeper, the berth is offered");
+      assert.equal(E.rodOffer(core).keeper, keeper, "…and so is the rod, by the same person");
+
+      stand(core, keeper.lodging, bystander); // ROOM: inside the inn, nearest to somebody else
+      assert.equal(E.berthOffer(core).keeper, keeper, "inside the room, the room answers for the berth");
+      assert.equal(E.rodOffer(core).keeper, keeper, "…and for the rod, which is the drift this helper prevents");
+    }
+
+    // ── THE LADDER: no rod → crude → decent → the button is gone ──────────────
+    {
+      const core = fresh("chat-rod-ladder");
+      stand(core, keeperZone, keeper);
+      P.award(core, { money: 200 });
+
+      const first = E.rodOffer(core);
+      assert.equal(first.tier, "crude", "a rodless player is quoted the entry rung");
+      assert.equal(first.price, E.price(w, E.rodPriceKey("crude")), "at the theme's own price for it");
+      assert.equal(first.available, true, "and can take it");
+
+      const bought = E.buyRod(core);
+      assert.equal(bought.ok, true, "the sale goes through");
+      assert.equal(bought.tier, "crude", "…of the rung that was quoted");
+      const after = P.get(core);
+      assert.equal(after.pouch.money, 200 - first.price, "the purse paid, exactly once");
+      assert.ok(
+        after.pouch.items.some((row) => row.t === "rod" && row.k === "crude"),
+        "the rod is in the pouch",
+      );
+      // AUTO-EQUIP, SCOPED: the tool slot, and only the tool slot.
+      assert.deepEqual(after.skills.equipped.fishing.tool, ["rod", "crude"], "…and in the verb's tool slot");
+      assert.equal(
+        after.skills.equipped.fishing.mod,
+        undefined,
+        "bait never auto-equips — the slot is the verb's own act",
+      );
+      // LINE AND TACKLE INCLUDED, at the slug the theme's own water yields.
+      const tin = after.pouch.items.find((row) => row.t === "bait");
+      assert.equal(tin.k, E.starterBait(w), "the starter stack is the theme's first bait variant");
+      assert.equal(tin.q, E.STARTER_BAIT, "…a real stack of it");
+      assert.equal(bought.bait, tin.k, "and the verb says what it threw in");
+      // …WHICH IS THE POINT: fished bait MERGES with it rather than orphaning a
+      // second row of a thing the player already has.
+      P.grant(core, { t: "bait", k: E.starterBait(w) }, 3);
+      assert.equal(after.pouch.items.filter((row) => row.t === "bait").length, 1, "one bait row, not two");
+      assert.equal(after.pouch.items.find((row) => row.t === "bait").q, E.STARTER_BAIT + 3, "…and it grew");
+      assert.equal(
+        Object.keys(after.bought ?? {}).length,
+        0,
+        "and nothing was written to `bought` — that map is world-bound shop depletion, and 0.12 ships no stock",
+      );
+
+      const second = E.rodOffer(core);
+      assert.equal(second.tier, "decent", "a crude owner is quoted the next rung up");
+      assert.equal(E.buyRod(core).ok, true, "…and takes it");
+      assert.deepEqual(P.get(core).skills.equipped.fishing.tool, ["rod", "decent"], "auto-equip takes the BEST rung");
+      assert.equal(
+        P.get(core).pouch.items.filter((row) => row.t === "rod").length,
+        2,
+        "…while the old rod stays in the bag: the ladder is a read, not a trade-in",
+      );
+
+      const done = E.rodOffer(core);
+      assert.equal(done.reason, "top-of-ladder", "a decent owner is quoted nothing");
+      assert.equal(done.price, null, "…and a null price is what makes the button VANISH rather than dim");
+      assert.equal(E.buyRod(core).ok, false, "and the verb refuses to sell a third one");
+    }
+
+    // ── A HOSTILE ROD ROW CLAMPS, AND THE LADDER GOES ON WORKING ──────────────
+    // A save carrying `{t:"rod", k:"legendary"}` — a newer build's rung, or a
+    // hand-edited row — resolves to CRUDE at every read. The ladder therefore
+    // quotes `decent`, which is benign and is exactly what resolve-at-read is
+    // for. grant() would refuse to mint that row, so the save is staged directly.
+    {
+      const core = fresh("chat-rod-hostile");
+      stand(core, keeperZone, keeper);
+      P.award(core, { money: 200 });
+      assert.equal(P.grant(core, { t: "rod", k: "legendary" }, 1), 0, "no mutator can mint that rung");
+      P.get(core).pouch.items.push({ t: "rod", q: 1, k: "legendary" });
+      assert.equal(E.rodTier(P.get(core)), 0, "the ladder reads it as crude");
+      assert.equal(E.rodOffer(core).tier, "decent", "…so the keeper quotes the rung above crude");
+      assert.equal(E.buyRod(core).ok, true, "and sells it");
+      assert.deepEqual(
+        P.get(core).skills.equipped.fishing.tool,
+        ["rod", "decent"],
+        "auto-equip skips the ungradable row and takes the real one",
+      );
+    }
+
+    // ── THE STUFFED POUCH IS REFUSED BEFORE A COIN MOVES ──────────────────────
+    // grant() cannot refuse after award() has charged, so the arity pre-check is
+    // the whole of what makes buyRod's no-rollback shape sound. A crude purchase
+    // is TWO new rows — the rod and the starter tin — unless the player somehow
+    // already holds bait, in which case it is one.
+    {
+      const core = fresh("chat-rod-stuffed");
+      stand(core, keeperZone, keeper);
+      P.award(core, { money: 200 });
+      const cap = P.CAPS.items;
+      for (let i = 0; i < cap - 1; i++) P.grant(core, { t: "catch-common", k: `filler-${i}` }, 1);
+      assert.equal(P.get(core).pouch.items.length, cap - 1, "one row of headroom, and a crude rod needs two");
+      const stuffed = E.rodOffer(core);
+      assert.equal(stuffed.available, false, "the offer refuses");
+      assert.equal(stuffed.reason, "pouch-full", "…saying which cap bit");
+      assert.equal(stuffed.price, E.price(w, E.rodPriceKey("crude")), "…while still quoting the price");
+      const before = P.get(core).pouch.money;
+      assert.equal(E.buyRod(core).ok, false, "and the verb refuses with it");
+      assert.equal(P.get(core).pouch.money, before, "NOTHING was charged — no half-purchase to roll back");
+      assert.equal(P.get(core).pouch.items.length, cap - 1, "…and no row was minted either");
+
+      // THE OTHER ARITY: a player who already holds bait needs one row, not two.
+      P.get(core).pouch.items.pop();
+      P.grant(core, { t: "bait", k: E.starterBait(w) }, 2);
+      assert.equal(P.get(core).pouch.items.length, cap - 1, "still one row of headroom");
+      assert.equal(E.rodOffer(core).available, true, "…but the tin is already there, so the rod is the only new row");
+      assert.equal(E.buyRod(core).ok, true, "and it fits");
+      assert.equal(P.get(core).pouch.items.length, cap, "exactly at the cap, with the starter stack merged in");
+    }
+
+    // ── AUTO-EQUIP IS SCOPED TO TOOLS, AT THIS CALL SITE ──────────────────────
+    // equip() validates by item TYPE and not by SLOT: it refuses a graded row
+    // whose `k` is off the ladder and is otherwise perfectly willing to put bait
+    // in a `tool` slot. So the scoping is the caller's job, and this is the
+    // caller. Pinned from both ends — the mutator's leniency is real, and the
+    // helper refuses anyway.
+    {
+      const core = fresh("chat-autoequip-scope");
+      P.award(core, { money: 200 });
+      assert.equal(
+        P.equip(core, "digging", "tool", { t: "bait", k: "worms" }),
+        true,
+        "the mutator itself would take bait into a tool slot",
+      );
+      P.equip(core, "digging", "tool", null);
+      P.grant(core, { t: "bait", k: "worms" }, 4);
+      P.grant(core, { t: "catch-prize", k: "old-tench" }, 1);
+      // AND THE ROW THAT MAKES THE GUARD LOAD-BEARING. An ungraded type's `k` is
+      // free, so nothing stops a bait row whose slug happens to READ like a rung.
+      // Without the type guard the pouch scan would find it, call it the best
+      // "bait" in the bag and bind it into the verb's TOOL slot — a bait rod.
+      assert.equal(P.grant(core, { t: "bait", k: "crude" }, 1), 1, "an ungraded row may carry a rung-shaped slug");
+      assert.equal(
+        E._autoEquipTool(core, "fishing", "bait"),
+        false,
+        "…and the helper still refuses a type QUALITY does not grade",
+      );
+      assert.equal(E._autoEquipTool(core, "fishing", "catch-prize"), false, "a catch never equips at all");
+      assert.equal(P.get(core).skills.equipped.fishing, undefined, "neither left a verb bucket behind");
+      P.grant(core, { t: "rod", k: "crude" }, 1);
+      assert.equal(E._autoEquipTool(core, "fishing", "rod"), true, "a tool does");
+      assert.deepEqual(P.get(core).skills.equipped.fishing, { tool: ["rod", "crude"] }, "…in the tool slot, alone");
+    }
+  } finally {
+    loadedPF.save.reset(); // the mutators self-dirty, and a dirty block arms a timer
+  }
+}
+
 // ── A DOM the size of the two surfaces that need one ──────────────────────────
 // Not a browser: exactly what PF.el touches (createElement, style, text,
 // attributes, listeners, children) plus fire(), so a click can be driven. Enough
