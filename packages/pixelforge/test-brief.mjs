@@ -14147,6 +14147,33 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
       assert.equal(E.rodOffer(core).keeper, keeper, "…and for the rod, which is the drift this helper prevents");
     }
 
+    // ── NO PLAYER BLOCK, AND BOTH OFFERS SAY SO IN THEIR OWN WORD ─────────────
+    // Not reachable in play — Sim's constructor default-initialises the block and
+    // every restore path overwrites it — and that is exactly why these two lines
+    // needed watching: both offers resolve the keeper FIRST and read the pouch
+    // two lines later, so with the guard gone they walk past a perfectly good
+    // keeper and dereference null. The fishing verb's seventh value is pinned the
+    // same way further down; these were the two guards doing the same job with
+    // nobody looking at them.
+    //
+    // The staged keeper is the whole fixture. Standing somewhere nobody lets
+    // rooms would refuse for "no-keeper" long before the block is read, and the
+    // case would pass with the guard deleted.
+    {
+      const core = fresh("chat-keeper-no-player");
+      stand(core, keeperZone, keeper);
+      assert.equal(E.berthOffer(core).keeper, keeper, "the fixture is standing at a keeper, block and all");
+      core.sim.player = null;
+      const berth = E.berthOffer(core);
+      assert.equal(berth.available, false, "no block, no berth");
+      assert.equal(berth.reason, "no-player", "…and the value names the BLOCK, not the person in front of you");
+      assert.equal(berth.keeper, null, "…so nothing half-built comes back with it");
+      const rod = E.rodOffer(core);
+      assert.equal(rod.available, false, "no block, no rod either");
+      assert.equal(rod.reason, "no-player", "…in the same word, from the same shape");
+      assert.equal(rod.tier, null, "…quoting no rung, because there is nobody to quote one to");
+    }
+
     // ── THE LADDER: no rod → crude → decent → the button is gone ──────────────
     {
       const core = fresh("chat-rod-ladder");
@@ -14767,6 +14794,31 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
         "pouch-full",
         "at the row cap only merges could land, so the session is refused",
       );
+    }
+
+    // ── A TARGET THE DAYPART TABLE ONLY LOOKS LIKE IT HAS ────────────────────
+    // "elevenses" above is the easy half. The window count is looked up out of
+    // PF.DAYPART_STARTS by whatever string the caller handed in, and a bare index
+    // read reaches Object.prototype: `constructor` comes back a FUNCTION, sails
+    // through the `!== undefined` test, and makes a window count of NaN. The loop
+    // then runs zero times and the verb returns ok with `windows: 0` — so the HUD
+    // toasts "Nothing biting" for a cast that never happened, which is a refusal
+    // wearing a result's clothes and the one shape of this bug a player could
+    // never report. The own-property test is what flattens all of it back into
+    // the same "unknown-target" a typo gets.
+    {
+      const at = angler({ level: 4 });
+      const clock = at.sim.clockMin;
+      const day = at.sim.day;
+      for (const target of ["constructor", "toString", "valueOf", "hasOwnProperty", "__proto__"]) {
+        const out = E.fish(at.core, target);
+        assert.equal(out.ok, false, `${target}: refused outright, not answered with an empty session`);
+        assert.equal(out.reason, "unknown-target", `${target}: …in the word a mistyped daypart gets`);
+        assert.equal(out.windows, 0, `${target}: …claiming no window`);
+        assert.deepEqual(out.caught, [], `${target}: …and nothing out of the water`);
+        assert.equal(at.sim.clockMin, clock, `${target}: …and not one minute of clock`);
+        assert.equal(at.sim.day, day, `${target}: …nor a day of it`);
+      }
     }
 
     // ── NO ROD: THE REFUSAL THAT POINTS AT A VENDOR ──────────────────────────
