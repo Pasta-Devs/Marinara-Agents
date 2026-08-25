@@ -12,10 +12,40 @@
 // so it inherits those variables directly: no palette to guess or keep in
 // sync, and it follows the user's actual active theme, not just light/dark.
 //
-// v1 slice: still just the persona item list from 00-element.js's earlier
-// inline version, relocated here. No equip slots/portrait/party tabs yet.
+// v1 slice: persona-only. Equip slots + bag/stored locations. No images,
+// locks, outfits, or party members yet.
 
 const QM_OWNER_ID = "persona";
+
+// Mirrors server.mjs's EQUIP_SLOTS exactly — client and server are separate
+// bundles, so this is duplicated rather than shared. Grouped for display
+// only; the slot ids themselves (and their order in server.mjs's
+// EQUIP_SLOTS) are the source of truth for what's valid.
+const QM_SLOT_GROUPS = [
+  { label: "Head & Neck", slots: ["head", "neck"] },
+  { label: "Eyes & Ears", slots: ["eyes", "ears"] },
+  { label: "Torso", slots: ["underwear_top", "clothing_torso", "armor_torso"] },
+  { label: "Legs", slots: ["underwear_bottom", "clothing_legs", "armor_legs"] },
+  { label: "Hands", slots: ["weapon_left_hand", "weapon_right_hand"] },
+  { label: "Other", slots: ["feet", "accessory", "belt"] },
+];
+const QM_SLOT_LABELS = {
+  head: "Head",
+  neck: "Neck",
+  eyes: "Eyes",
+  ears: "Ears",
+  feet: "Feet",
+  accessory: "Accessory",
+  belt: "Belt",
+  underwear_top: "Underwear (Top)",
+  underwear_bottom: "Underwear (Bottom)",
+  clothing_torso: "Clothing (Torso)",
+  clothing_legs: "Clothing (Legs)",
+  armor_torso: "Armor (Torso)",
+  armor_legs: "Armor (Legs)",
+  weapon_left_hand: "Weapon (Left Hand)",
+  weapon_right_hand: "Weapon (Right Hand)",
+};
 
 QM.dock = {
   chatId: null,
@@ -23,6 +53,7 @@ QM.dock = {
   root: null,
   body: null,
   errorNode: null,
+  equippedContainer: null,
   form: null,
   listContainer: null,
   items: null,
@@ -74,8 +105,8 @@ QM.dock = {
       position: "fixed",
       right: "16px",
       bottom: "16px",
-      width: "340px",
-      maxHeight: "70vh",
+      width: "380px",
+      maxHeight: "78vh",
       display: "none",
       flexDirection: "column",
       background: "var(--popover, #fff)",
@@ -125,9 +156,10 @@ QM.dock = {
     document.body.appendChild(root);
     this.root = root;
     this.body = body;
-    // Reset the cached body children — a fresh body element means the form
-    // and list container from any previous root no longer exist.
+    // Reset the cached body children — a fresh body element means everything
+    // built for a previous root no longer exists.
     this.errorNode = null;
+    this.equippedContainer = null;
     this.form = null;
     this.listContainer = null;
   },
@@ -159,6 +191,7 @@ QM.dock = {
     if (!this.chatId) {
       this.body.replaceChildren(this._textNode("No active chat."));
       this.errorNode = null;
+      this.equippedContainer = null;
       this.form = null;
       this.listContainer = null;
       return;
@@ -168,9 +201,22 @@ QM.dock = {
       this.errorNode = this._textNode("");
       this.errorNode.style.color = "var(--destructive, #c0392b)";
       this.errorNode.style.display = "none";
+
+      const equippedHeading = this._sectionHeading("Equipped");
+      this.equippedContainer = document.createElement("div");
+
+      const bagHeading = this._sectionHeading("Bag");
       this.form = this._buildAddItemForm();
       this.listContainer = document.createElement("div");
-      this.body.replaceChildren(this.errorNode, this.form, this.listContainer);
+
+      this.body.replaceChildren(
+        this.errorNode,
+        equippedHeading,
+        this.equippedContainer,
+        bagHeading,
+        this.form,
+        this.listContainer,
+      );
     }
 
     if (this.error) {
@@ -180,7 +226,21 @@ QM.dock = {
       this.errorNode.style.display = "none";
     }
 
+    this.equippedContainer.replaceChildren(this._buildEquippedSection());
     this.listContainer.replaceChildren(this._buildItemList());
+  },
+
+  _sectionHeading(text) {
+    const heading = document.createElement("h3");
+    heading.textContent = text;
+    Object.assign(heading.style, {
+      margin: "10px 0 6px",
+      fontSize: "12px",
+      textTransform: "uppercase",
+      letterSpacing: "0.04em",
+      color: "var(--muted-foreground, currentcolor)",
+    });
+    return heading;
   },
 
   _textNode(text) {
@@ -190,9 +250,129 @@ QM.dock = {
     return node;
   },
 
+  _bagItems() {
+    return (this.items ?? []).filter((item) => !item.location.startsWith("equipped:"));
+  },
+
+  _itemInSlot(slot) {
+    return (this.items ?? []).find((item) => item.location === `equipped:${slot}`) ?? null;
+  },
+
+  async _setLocation(itemId, location) {
+    const chatId = this.chatId;
+    if (!chatId) return;
+    try {
+      const result = await QM.updateItem(chatId, QM_OWNER_ID, itemId, { location });
+      this.items = result.items;
+      this.error = null;
+    } catch (error) {
+      this.error = error && error.message ? error.message : String(error);
+    }
+    this._paint();
+  },
+
+  _buildEquippedSection() {
+    const container = document.createElement("div");
+    Object.assign(container.style, { display: "flex", flexDirection: "column", gap: "8px" });
+
+    for (const group of QM_SLOT_GROUPS) {
+      const groupBox = document.createElement("div");
+      const groupLabel = document.createElement("div");
+      groupLabel.textContent = group.label;
+      Object.assign(groupLabel.style, {
+        fontSize: "11px",
+        color: "var(--muted-foreground, currentcolor)",
+        marginBottom: "3px",
+      });
+      groupBox.appendChild(groupLabel);
+
+      const rows = document.createElement("div");
+      Object.assign(rows.style, { display: "flex", flexDirection: "column", gap: "4px" });
+      for (const slot of group.slots) {
+        rows.appendChild(this._buildSlotRow(slot));
+      }
+      groupBox.appendChild(rows);
+      container.appendChild(groupBox);
+    }
+
+    return container;
+  },
+
+  _buildSlotRow(slot) {
+    const row = document.createElement("div");
+    Object.assign(row.style, {
+      display: "flex",
+      alignItems: "center",
+      gap: "6px",
+      border: "1px solid var(--border, rgba(128,128,128,0.3))",
+      borderRadius: "4px",
+      padding: "4px 6px",
+    });
+
+    const label = document.createElement("span");
+    label.textContent = QM_SLOT_LABELS[slot];
+    Object.assign(label.style, { width: "108px", flexShrink: "0", fontSize: "12px" });
+    row.appendChild(label);
+
+    const equippedItem = this._itemInSlot(slot);
+    if (equippedItem) {
+      const name = document.createElement("span");
+      name.textContent = equippedItem.name;
+      name.style.flex = "1";
+      name.title = equippedItem.description || "";
+
+      const unequipButton = document.createElement("button");
+      unequipButton.type = "button";
+      unequipButton.textContent = "Unequip";
+      Object.assign(unequipButton.style, {
+        background: "var(--secondary, transparent)",
+        color: "var(--secondary-foreground, inherit)",
+        border: "1px solid var(--border, rgba(0,0,0,0.2))",
+        borderRadius: "4px",
+        padding: "2px 6px",
+        cursor: "pointer",
+        fontSize: "12px",
+      });
+      unequipButton.addEventListener("click", () => this._setLocation(equippedItem.id, "bag"));
+
+      row.append(name, unequipButton);
+      return row;
+    }
+
+    const bagItems = this._bagItems();
+    const select = document.createElement("select");
+    select.disabled = bagItems.length === 0;
+    Object.assign(select.style, {
+      flex: "1",
+      background: "var(--input, transparent)",
+      color: "inherit",
+      border: "1px solid var(--border, rgba(0,0,0,0.2))",
+      borderRadius: "4px",
+      padding: "2px 4px",
+      fontSize: "12px",
+    });
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = bagItems.length === 0 ? "(nothing in bag)" : "Equip…";
+    select.appendChild(placeholder);
+    for (const item of bagItems) {
+      const option = document.createElement("option");
+      option.value = item.id;
+      option.textContent = item.name;
+      select.appendChild(option);
+    }
+    select.addEventListener("change", () => {
+      const itemId = select.value;
+      if (itemId) this._setLocation(itemId, `equipped:${slot}`);
+    });
+
+    row.appendChild(select);
+    return row;
+  },
+
   _buildAddItemForm() {
     const form = document.createElement("form");
-    Object.assign(form.style, { display: "flex", gap: "6px", marginBottom: "10px" });
+    Object.assign(form.style, { display: "flex", gap: "6px", marginBottom: "8px" });
 
     const nameInput = document.createElement("input");
     nameInput.type = "text";
@@ -266,9 +446,9 @@ QM.dock = {
       gap: "6px",
     });
 
-    const items = this.items ?? [];
+    const items = this._bagItems();
     if (items.length === 0) {
-      const empty = this._textNode("No items yet.");
+      const empty = this._textNode("Bag is empty.");
       empty.style.color = "var(--muted-foreground, currentcolor)";
       empty.style.margin = "0";
       list.appendChild(empty);
@@ -285,12 +465,15 @@ QM.dock = {
     const row = document.createElement("li");
     Object.assign(row.style, {
       display: "flex",
-      alignItems: "center",
-      gap: "6px",
+      flexDirection: "column",
+      gap: "4px",
       border: "1px solid var(--border, rgba(128,128,128,0.3))",
       borderRadius: "4px",
       padding: "4px 6px",
     });
+
+    const topLine = document.createElement("div");
+    Object.assign(topLine.style, { display: "flex", alignItems: "center", gap: "6px" });
 
     const label = document.createElement("span");
     label.textContent = item.name;
@@ -346,7 +529,36 @@ QM.dock = {
       this._paint();
     });
 
-    row.append(label, quantityInput, deleteButton);
+    topLine.append(label, quantityInput, deleteButton);
+
+    const bottomLine = document.createElement("div");
+    Object.assign(bottomLine.style, { display: "flex", alignItems: "center", gap: "6px" });
+
+    const storedLabel = document.createElement("span");
+    storedLabel.textContent = "Stored at:";
+    Object.assign(storedLabel.style, { fontSize: "11px", color: "var(--muted-foreground, currentcolor)" });
+
+    const storedInput = document.createElement("input");
+    storedInput.type = "text";
+    storedInput.placeholder = "bag";
+    storedInput.value = item.location.startsWith("stored:") ? item.location.slice("stored:".length) : "";
+    Object.assign(storedInput.style, {
+      flex: "1",
+      fontSize: "11px",
+      background: "var(--input, transparent)",
+      color: "inherit",
+      border: "1px solid var(--border, rgba(0,0,0,0.2))",
+      borderRadius: "4px",
+      padding: "2px 4px",
+    });
+    storedInput.addEventListener("change", () => {
+      const text = storedInput.value.trim();
+      this._setLocation(item.id, text ? `stored:${text}` : "bag");
+    });
+
+    bottomLine.append(storedLabel, storedInput);
+
+    row.append(topLine, bottomLine);
     return row;
   },
 };
