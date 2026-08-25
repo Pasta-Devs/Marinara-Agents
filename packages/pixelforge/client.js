@@ -1527,16 +1527,18 @@ PF.brief = (() => {
   // object stays the identity source it has always been, and `_folds` — the
   // read-side counterpart of `_repairs` — rides the copy and is never written back.
   //
-  // Where the compiler already HAS a reading for a value it does not recognise,
-  // the fold names it rather than inventing one: `FURNISH[kind] || FURNISH.dwelling`
-  // makes an unknown place a dwelling, `TINTS[tint] ?? 210` is grey's own hue, and
-  // an unknown tag is already placed as a plain rect with no painter. Those three
-  // fold to exactly what a newer build's value compiled to before this function
-  // existed, and all the fold adds is that a value naming something on
-  // Object.prototype can no longer pretend to be one of those tables' own entries.
-  // `surround` and `standing` are the two that do MOVE: the compiler reads an
-  // unrecognised one as a flat ground mix and as somebody with no rest anchor at
-  // all, and validate's own default is a better answer than either.
+  // Where the compiler's readings all agree on a fallback, the fold changes
+  // nothing observable: an unknown `tint` was already grey's hue (`?? 210`) and an
+  // unknown `tag` was already a plain rect with no painter — measured, those two
+  // compile identically folded or not. Everything else MOVES, deliberately.
+  // `prosperity` moving is this function's headline (the silent 38-of-48-zone
+  // loss above). `place.kind` moves because FURNISH's `|| dwelling` was never the
+  // only reading — upperPlan refuses non-household kinds outright and cellarPlan
+  // gives them no cellar, so an unfolded unknown compiled to a stunted dwelling,
+  // not a dwelling. `surround` and `standing` move to validate's own defaults,
+  // which beat a flat ground mix and a person with no rest anchor. In every case
+  // the fold's answer is the one seal time would have given, and a value naming
+  // something on Object.prototype can no longer pretend to be a table's entry.
   //
   // An ABSENT value stays absent. `?? "resident"` and `|| SCALES.village` are the
   // compiler's reading of a missing field, and folding one in would rewrite a brief

@@ -16438,7 +16438,14 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
         cast: [
           { name: "Alder Vance", role: "mayor", kind: "leader", tint: "blue", home: "Mossbrook", household: 1 },
           { name: "Nessa Vance", role: "daughter", kind: "folk", tint: "violet", home: "Mossbrook", household: 1 },
-          { name: "Perrin Quill", role: "innkeep", kind: "host", tint: "amber", home: "The Amber Hearth", household: 2 },
+          {
+            name: "Perrin Quill",
+            role: "innkeep",
+            kind: "host",
+            tint: "amber",
+            home: "The Amber Hearth",
+            household: 2,
+          },
           { name: "Old Sera", role: "weaver", kind: "elder", tint: "rose", home: "Mossbrook", household: 3 },
           { name: "Brint", role: "farmhand", kind: "grower", tint: "green", home: "Mossbrook", household: 4 },
           { name: "Marla", role: "smith", kind: "maker", tint: "teal", home: "Mossbrook", household: 5 },
@@ -16516,10 +16523,13 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     assert.deepEqual(hostile.w.briefFolds, ['scale: "constructor" -> "village"'], "and the fold is on the record");
   }
 
-  // (iii) A PLACE KIND NAMING A PROTOTYPE METHOD IS FOLDED BEFORE IT CAN BE CALLED.
-  // `(FURNISH[kind] || FURNISH.dwelling)(zone, w, h, …)` invoked
-  // Object.prototype.toString UNBOUND as a furnisher. The fold hands the interior
-  // builder "dwelling", which is the entry that `||` was already reaching for.
+  // (iii) A PLACE KIND NAMING A PROTOTYPE METHOD IS FOLDED BEFORE IT CAN BE READ.
+  // Pre-fold the compile died at `INTERIOR_DIMS[kind] || INTERIOR_DIMS.dwelling`
+  // — destructuring Object.prototype.toString as a dimensions pair (a function
+  // is not iterable) — which fires BEFORE the FURNISH table would have invoked it
+  // unbound. Same bug class, earlier line; either way the whole generated world
+  // fell to the 3-zone legacy layout. The fold hands every kind-keyed table
+  // "dwelling", the entry their fallbacks were already reaching for.
   {
     const hostile = built(planted((stored) => (stored.places[0].kind = "toString")));
     assert.equal(hostile.w.brieved, true, "the furnisher was never invoked — the compile completed");
@@ -16580,7 +16590,11 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     // `JSON.stringify(brief)` over the object `_configBrief` returns, so the pin is
     // that the reader still returns the STORED OBJECT — not a copy of it, not a
     // fold of it — and that two loads left its bytes exactly where they were.
-    assert.equal(loadedPF.save._configBrief(meta, "chat-566"), sealed, "the load path returns the stored object itself");
+    assert.equal(
+      loadedPF.save._configBrief(meta, "chat-566"),
+      sealed,
+      "the load path returns the stored object itself",
+    );
     assert.equal(JSON.stringify(meta.pixelforgeBrief), storedBytes, "and two loads did not move one byte of it");
     assert.equal(P.briefHashOf(meta.pixelforgeBrief), stamps.briefHash, "so the identity is the one it always was");
 
@@ -16630,7 +16644,10 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
       ['surround: "marsh" -> "rocky"', 'cast[1].standing: "pilgrim" -> "resident"'],
       "each unknown value folded to the default, and the world carries the trace a debugger can read",
     );
-    assert.ok(warned.some((line) => line.includes("this build does not know")), "…and the console was told as well");
+    assert.ok(
+      warned.some((line) => line.includes("this build does not know")),
+      "…and the console was told as well",
+    );
     assert.equal(
       Object.keys(sim.world.zones).length,
       Object.keys(built(brief566()).w.zones).length,
@@ -16651,7 +16668,11 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     const source = { scale: "village", name: "Larkmoor", cast: [{ name: "Solo", kind: "leader" }] };
     const repaired = brief.validate(source, { theme: "cozy-village", seed: seed566 });
     const again = brief.validate(JSON.parse(JSON.stringify(repaired)), { theme: "cozy-village", seed: seed566 });
-    assert.notEqual(JSON.stringify(again), JSON.stringify(repaired), "validate() does not return a sealed brief's bytes");
+    assert.notEqual(
+      JSON.stringify(again),
+      JSON.stringify(repaired),
+      "validate() does not return a sealed brief's bytes",
+    );
 
     // TWO: it re-runs the seal-time CAPS. A brief whose rank says less ground than
     // its content asks for loses places on every load — which is the very silent
