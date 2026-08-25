@@ -374,7 +374,7 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.2.13",
+    version: "2.1.14",
     minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
@@ -399,7 +399,7 @@ const features = [
   },
   {
     id: "memory-nag",
-    version: "1.0.14",
+    version: "1.0.10",
     minEngineVersion: "2.4.4",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Memory Nag",
@@ -460,7 +460,7 @@ const features = [
   {
     id: "conversation-calls",
     name: "Calls",
-    version: "1.0.13",
+    version: "1.0.12",
     minEngineVersion: "2.4.1",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
