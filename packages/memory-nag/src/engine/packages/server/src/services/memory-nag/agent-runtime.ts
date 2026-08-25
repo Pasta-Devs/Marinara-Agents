@@ -17,6 +17,7 @@ type AgentConfig = {
 type PreparedMemoryNagContext = {
   participants: ReturnType<typeof participantsFromAgentContext>;
   currentCharacterIds: string[];
+  allowedMemoryIds: string[];
   candidates: Array<{ id: string; text: string; characterIds: string[] }>;
   maximumNags: number;
 };
@@ -69,13 +70,27 @@ export const memoryNagAgentRuntime = {
       perCharacter: vault.settings.memoriesToConsider,
     });
     if (participants.length > 0 && !sameParticipants(vault.participants, participants)) {
-      await updateMemoryNagVault(context.chatId, (current) => ({ ...current, participants }));
+      void updateMemoryNagVault(context.chatId, (current) => ({ ...current, participants })).catch((error) => {
+        getMemoryNagRuntime().logger.warn(
+          "[memory-nag] Participant state failed to save for chat %s: %s",
+          context.chatId,
+          error instanceof Error ? error.message : String(error),
+        );
+      });
     }
+    const runtime = getMemoryNagRuntime();
+    runtime.logger.debugOverride(
+      runtime.isDebugAgentsEnabled(),
+      "[memory-nag] Prepared %d eligible vault memories for chat %s",
+      candidates.length,
+      context.chatId,
+    );
     return {
       participants,
       currentCharacterIds: participants
         .filter((participant) => participant.current)
         .map((participant) => participant.id),
+      allowedMemoryIds: candidates.map((memory) => memory.id),
       candidates: candidates.map((memory) => ({
         id: memory.id,
         text: memory.text,
@@ -95,7 +110,15 @@ export const memoryNagAgentRuntime = {
     preparedContext: unknown;
     result: AgentResult;
   }): Promise<AgentResult> {
-    const prepared = preparedContext as PreparedMemoryNagContext | null;
+    const prepared = preparedContext as PreparedMemoryNagContext | null | undefined;
+    if (result.success && !prepared) {
+      return {
+        ...result,
+        data: { nags_needed: false },
+        success: false,
+        error: "Memory Nag could not load its vault context for this turn.",
+      };
+    }
     let finalized = result;
     if (result.success && prepared) {
       const data = selectMemoryNagRecall(result.data, prepared.candidates, prepared.maximumNags);
