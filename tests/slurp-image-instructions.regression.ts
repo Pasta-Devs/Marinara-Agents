@@ -8,9 +8,11 @@ const images = readFileSync(
   "utf8",
 );
 
-assert.match(images, /configuredImageInstructions = input\.settings\.imageGenerationPrompt\?\.trim\(\)/u);
-assert.match(images, /configuredImageInstructions[\s\S]*?imagePromptInstructions/u);
-assert.match(images, /configuredImageInstructions[\s\S]*?connectionImageInstructions/u);
+// input.settings.imageGenerationPrompt reaches the model once, via loadPrompt()'s
+// userInstructions — imagePromptInstructions must not duplicate it (review finding).
+assert.match(images, /userInstructions: input\.settings\.imageGenerationPrompt/u);
+assert.match(images, /imagePromptInstructions = input\.imageConnection\.imagePromptInstructions\?\.trim\(\) \?\? ""/u);
+assert.doesNotMatch(images, /configuredImageInstructions/u);
 assert.match(images, /instructions: imagePromptInstructions/u);
 assert.match(images, /rewrittenPrompt \?\?[\s\S]*?instructionLine && !input\.promptOverride/u);
 

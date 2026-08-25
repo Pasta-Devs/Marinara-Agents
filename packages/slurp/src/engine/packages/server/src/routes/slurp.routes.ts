@@ -93,7 +93,7 @@ import {
   unlinkNoodlerBanner,
   resolveNoodlerBannerAbsolutePath,
 } from "../services/slurp/slurp-avatar.js";
-import { getErrorMessage } from "../services/slurp/slurp-public-support.js";
+import { getErrorMessage, resolvePersonaAccount } from "../services/slurp/slurp-public-support.js";
 import { generateNoodlerCreatorArtwork } from "../services/slurp/slurp-artwork.operation.js";
 
 const slurpTargetedRefreshSchema = noodlerTargetedRefreshSchema.extend({
@@ -541,11 +541,13 @@ export async function slurpRoutes(app: FastifyInstance) {
   async function resolveViewerIdentity(personaId: string) {
     const viewer = await resolveViewerPersona(personaId);
     if (!viewer) return null;
-    return {
-      personaId,
-      viewer,
-      actor: await noodle.getSlurpAccountForEntity("persona", personaId),
-    };
+    // The persona's own Slurp profile is normally provisioned at bootstrap, but it can be
+    // absent right after account deletion/cleanup — provision it here so interactions never
+    // 404 for a still-live persona (review finding).
+    const actor =
+      (await noodle.getSlurpAccountForEntity("persona", personaId)) ??
+      (await resolvePersonaAccount(noodle, characters, personaId));
+    return { personaId, viewer, actor };
   }
 
   function creatorBelongsToViewer(
