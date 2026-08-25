@@ -19087,6 +19087,77 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       loadedPF.quarantine.reset();
     });
   }
+
+  // ── THE FOLD IS REBUILT AT THE LIFT, NOT ONLY AT A REBUILD ────────────────
+  // `packFold`'s memo lives on the sim so that replacing the world replaces the
+  // fold, and for the INSTALL path that is the whole rule. The two lifts that
+  // leave the world standing are the ones it does not cover, and they are 0.13's
+  // own: the gate folds once while the pack is still absent — the fallback, whose
+  // work is world-FREE — and then the pack seals underneath it. A memo nobody
+  // cleared goes on offering the generic board for the rest of the session, on a
+  // world that has its own work written for it.
+  {
+    const packed = { ...wizardConfig(), pixelforgeBrief: packBrief, pixelforgePackWanted: true };
+
+    // (a) `_resumeHeldWorld`: the half-sealed chat, whose world is never rebuilt.
+    await withSavePath(async ({ behavior, tick, makeCore }) => {
+      await withGeneration(async () => {
+        await withPack(async () => {
+          behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+          const core = makeCore("chat-fold-resume", 4242);
+          core.host.chatMeta = packed;
+          core.sim = loadedPF.save.restore(packed, "chat-fold-resume");
+          assert.equal(loadedPF.save.armGate(core, packed), true, "the gate holds for the pack");
+          const held = loadedPF.save.packFold(core);
+          assert.equal(held.source, "default", "and under it the fallback is what folds");
+          assert.ok(
+            held.ids.length && held.ids.every((id) => id.startsWith("b:")),
+            "…offering the world-free generic work",
+          );
+          const worldBefore = core.sim.world;
+          await loadedPF.save.maybeGenerateBrief(core);
+          await tick();
+          assert.equal(loadedPF.save.gateHolds(core), false, "the pack sealed and the gate lifted");
+          assert.equal(core.sim.world, worldBefore, "…without rebuilding the world, which is this path's whole point");
+          const after = loadedPF.save.packFold(core);
+          assert.notEqual(after, held, "the fold was rebuilt anyway, at the lift");
+          assert.equal(after.source, "sealed", "…reading the pack that sealed while the gate held");
+          assert.ok(
+            after.ids.length && after.ids.every((id) => id.startsWith("p:")),
+            "…so the board offers the work written for THIS world",
+          );
+        });
+      });
+    });
+
+    // (b) THE BARE LIFT: the pack turns up from another device, nothing is
+    // installed and nothing is resumed, and the memo is exactly as stale.
+    await withSavePath(async ({ behavior, tick, makeCore }) => {
+      await withGeneration(async () => {
+        await withPack(async ({ packCount }) => {
+          behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+          const core = makeCore("chat-fold-bare", 4242);
+          core.host.chatMeta = packed;
+          core.sim = loadedPF.save.restore(packed, "chat-fold-bare");
+          assert.equal(loadedPF.save.armGate(core, packed), true, "gated for the pack");
+          const held = loadedPF.save.packFold(core);
+          assert.equal(held.source, "default", "the same fallback under the same held gate");
+          core.host.chatMeta = { ...packed, pixelforgePack: goodPack };
+          await loadedPF.save.maybeGenerateBrief(core);
+          await tick();
+          assert.equal(packCount(), 0, "nothing was generated: the pack arrived from somewhere else");
+          assert.equal(loadedPF.save.gateHolds(core), false, "and the gate came down");
+          const after = loadedPF.save.packFold(core);
+          assert.notEqual(after, held, "the bare lift rebuilds the fold too");
+          assert.equal(after.source, "sealed", "…onto the pack that turned up");
+          assert.ok(
+            after.ids.length && after.ids.every((id) => id.startsWith("p:")),
+            "…which is this world's own work, not the fallback's",
+          );
+        });
+      });
+    });
+  }
 }
 
 // ── THE DEFAULT PACK IS HELD TO ITS OWN SCHEMA AT BOOT (plan §2.2f) ──────────

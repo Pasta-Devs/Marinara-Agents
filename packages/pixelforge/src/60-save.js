@@ -528,11 +528,20 @@ PF.save = {
    *  RESIDENT ON THE SIM, and the two halves of that are both deliberate. It is
    *  DERIVED, so it is never saved: `snapshot()` emits a closed literal and this
    *  key is not in it, exactly as the feature register and the schedule handles are
-   *  recomputed rather than stored. And it is rebuilt EXACTLY when `core.sim` is,
-   *  which is what living on the sim buys — every path that replaces the world
-   *  (restore, `_rebuild`, `_installSealedWorld`) assigns a new sim and the fold
-   *  goes with the old one, so there is no invalidation rule to get wrong and no
-   *  site to remember to clear.
+   *  recomputed rather than stored. And living on the sim buys most of the
+   *  invalidation for free — every path that replaces the world (restore,
+   *  `_rebuild`, `_installSealedWorld`) assigns a new sim and the fold goes with the
+   *  old one.
+   *
+   *  THE ONE RULE THAT IS NOT FREE IS THE GATE'S LIFT, and 0.13 is what opened it:
+   *  two of the three ways out of the gate seal a pack under a world that is
+   *  deliberately NOT replaced (`_resumeHeldWorld` and the bare lift both leave the
+   *  standing world alone — a transplant there would be destructive). A memo taken
+   *  while the gate held answers for the pack that was ABSENT then, which on a
+   *  generated cast is the default pack folding to zero offers — an honestly empty
+   *  board pinned forever on a world that has work in it. So the rule is: REBUILT
+   *  WHEN `core.sim` IS REPLACED OR WHEN THE GATE LIFTS, and `_liftGate` clears the
+   *  slot because it is the one line every path out of the gate passes through.
    *
    *  Read through here rather than from 61-pack directly because the two inputs are
    *  this module's: the stored pack and the stored brief both come out of chat
@@ -683,6 +692,13 @@ PF.save = {
       console.warn("[pixelforge] refusing to start play in the placeholder world; the gate stays up");
       return;
     }
+    // THE PACK FOLD'S ONE INVALIDATION RULE (see `packFold`). The two lifts that do
+    // not replace the sim — `_resumeHeldWorld` and the bare lift — would otherwise
+    // leave the memo taken under the gate standing over a pack that has SINCE
+    // sealed. Cleared here rather than at those two sites because this is the line
+    // they both pass through, and the install path is untouched by it: it assigns a
+    // new sim one moment earlier, so the slot it clears is already empty.
+    if (core.sim) core.sim._packFold = null;
     this.gate = null;
     core.hud?.update?.();
     void this.adopt(core);
