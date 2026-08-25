@@ -1,4 +1,4 @@
-// Quartermaster 0.1.1 — Marinara Engine roleplay-tracker capability (single-file client bundle)
+// Quartermaster 0.1.2 — Marinara Engine roleplay-tracker capability (single-file client bundle)
 // Built from packages/quartermaster/src (3 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -10,10 +10,12 @@
 const QM = {};
 
 async function qmRequest(path, options) {
-  const response = await fetch(`/api/quartermaster${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
+  // Only set Content-Type when there's actually a JSON body — Fastify's body
+  // parser rejects a bodyless request (GET/DELETE) that still declares
+  // application/json with "Body cannot be empty when content-type is set to
+  // 'application/json'".
+  const headers = options && options.body ? { "Content-Type": "application/json" } : {};
+  const response = await fetch(`/api/quartermaster${path}`, { ...options, headers });
   const body = await response.json().catch(() => null);
   if (!response.ok) {
     throw new Error((body && body.error) || `Request failed (${response.status})`);
@@ -51,6 +53,12 @@ QM.deleteItem = (chatId, ownerId, itemId) =>
 // host-provided slot container, and BOTH the roleplay-tracker toolbar
 // button and the tracker-panel launcher just toggle this same panel open.
 //
+// Styled entirely with the host's own CSS custom properties (--popover,
+// --foreground, --border, etc. — defined on :root in the Engine's
+// globals.css). Our panel is plain light DOM appended under document.body,
+// so it inherits those variables directly: no palette to guess or keep in
+// sync, and it follows the user's actual active theme, not just light/dark.
+//
 // v1 slice: still just the persona item list from 00-element.js's earlier
 // inline version, relocated here. No equip slots/portrait/party tabs yet.
 
@@ -61,6 +69,9 @@ QM.dock = {
   isOpenFlag: false,
   root: null,
   body: null,
+  errorNode: null,
+  form: null,
+  listContainer: null,
   items: null,
   error: null,
 
@@ -114,10 +125,10 @@ QM.dock = {
       maxHeight: "70vh",
       display: "none",
       flexDirection: "column",
-      background: "#fff",
-      color: "#1a1a1a",
-      border: "1px solid rgba(0,0,0,0.15)",
-      borderRadius: "8px",
+      background: "var(--popover, #fff)",
+      color: "var(--popover-foreground, #1a1a1a)",
+      border: "1px solid var(--border, rgba(0,0,0,0.15))",
+      borderRadius: "var(--radius, 8px)",
       boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
       fontFamily: "system-ui, sans-serif",
       fontSize: "13px",
@@ -131,7 +142,7 @@ QM.dock = {
       alignItems: "center",
       justifyContent: "space-between",
       padding: "8px 10px",
-      borderBottom: "1px solid rgba(0,0,0,0.1)",
+      borderBottom: "1px solid var(--border, rgba(0,0,0,0.1))",
       fontWeight: "600",
     });
     const title = document.createElement("span");
@@ -161,6 +172,11 @@ QM.dock = {
     document.body.appendChild(root);
     this.root = root;
     this.body = body;
+    // Reset the cached body children — a fresh body element means the form
+    // and list container from any previous root no longer exist.
+    this.errorNode = null;
+    this.form = null;
+    this.listContainer = null;
   },
 
   async _loadAndPaint() {
@@ -180,24 +196,38 @@ QM.dock = {
     this._paint();
   },
 
+  // Rebuilds only what changed. The add-item form is built once and left
+  // alone on every repaint — rebuilding it on every add/delete/quantity
+  // change was wiping out whatever the user had already typed into the name
+  // field, since a fresh <input> has no value.
   _paint() {
     if (!this.body) return;
-    const chatId = this.chatId;
-    this.body.replaceChildren();
 
-    if (!chatId) {
-      this.body.appendChild(this._textNode("No active chat."));
+    if (!this.chatId) {
+      this.body.replaceChildren(this._textNode("No active chat."));
+      this.errorNode = null;
+      this.form = null;
+      this.listContainer = null;
       return;
     }
 
-    if (this.error) {
-      const errorNode = this._textNode(`Error: ${this.error}`);
-      errorNode.style.color = "#c0392b";
-      this.body.appendChild(errorNode);
+    if (!this.form || !this.body.contains(this.form)) {
+      this.errorNode = this._textNode("");
+      this.errorNode.style.color = "var(--destructive, #c0392b)";
+      this.errorNode.style.display = "none";
+      this.form = this._buildAddItemForm();
+      this.listContainer = document.createElement("div");
+      this.body.replaceChildren(this.errorNode, this.form, this.listContainer);
     }
 
-    this.body.appendChild(this._buildAddItemForm(chatId));
-    this.body.appendChild(this._buildItemList(chatId));
+    if (this.error) {
+      this.errorNode.textContent = `Error: ${this.error}`;
+      this.errorNode.style.display = "";
+    } else {
+      this.errorNode.style.display = "none";
+    }
+
+    this.listContainer.replaceChildren(this._buildItemList());
   },
 
   _textNode(text) {
@@ -207,7 +237,7 @@ QM.dock = {
     return node;
   },
 
-  _buildAddItemForm(chatId) {
+  _buildAddItemForm() {
     const form = document.createElement("form");
     Object.assign(form.style, { display: "flex", gap: "6px", marginBottom: "10px" });
 
@@ -215,38 +245,64 @@ QM.dock = {
     nameInput.type = "text";
     nameInput.placeholder = "Item name";
     nameInput.required = true;
-    nameInput.style.flex = "1";
+    Object.assign(nameInput.style, {
+      flex: "1",
+      background: "var(--input, transparent)",
+      color: "inherit",
+      border: "1px solid var(--border, rgba(0,0,0,0.2))",
+      borderRadius: "4px",
+      padding: "3px 6px",
+    });
 
     const quantityInput = document.createElement("input");
     quantityInput.type = "number";
     quantityInput.min = "1";
     quantityInput.value = "1";
-    quantityInput.style.width = "56px";
+    Object.assign(quantityInput.style, {
+      width: "56px",
+      background: "var(--input, transparent)",
+      color: "inherit",
+      border: "1px solid var(--border, rgba(0,0,0,0.2))",
+      borderRadius: "4px",
+      padding: "3px 6px",
+    });
 
     const addButton = document.createElement("button");
     addButton.type = "submit";
     addButton.textContent = "Add";
+    Object.assign(addButton.style, {
+      background: "var(--primary, #444)",
+      color: "var(--primary-foreground, #fff)",
+      border: "none",
+      borderRadius: "4px",
+      padding: "3px 10px",
+      cursor: "pointer",
+    });
 
     form.append(nameInput, quantityInput, addButton);
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      const chatId = this.chatId;
       const name = nameInput.value.trim();
-      if (!name) return;
+      if (!chatId || !name) return;
       addButton.disabled = true;
       try {
         const result = await QM.addItem(chatId, QM_OWNER_ID, { name, quantity: quantityInput.value });
         this.items = result.items;
         this.error = null;
+        nameInput.value = "";
+        quantityInput.value = "1";
       } catch (error) {
         this.error = error && error.message ? error.message : String(error);
       }
+      addButton.disabled = false;
       this._paint();
     });
 
     return form;
   },
 
-  _buildItemList(chatId) {
+  _buildItemList() {
     const list = document.createElement("ul");
     Object.assign(list.style, {
       listStyle: "none",
@@ -260,24 +316,25 @@ QM.dock = {
     const items = this.items ?? [];
     if (items.length === 0) {
       const empty = this._textNode("No items yet.");
-      empty.style.opacity = "0.7";
+      empty.style.color = "var(--muted-foreground, currentcolor)";
+      empty.style.margin = "0";
       list.appendChild(empty);
       return list;
     }
 
     for (const item of items) {
-      list.appendChild(this._buildItemRow(chatId, item));
+      list.appendChild(this._buildItemRow(item));
     }
     return list;
   },
 
-  _buildItemRow(chatId, item) {
+  _buildItemRow(item) {
     const row = document.createElement("li");
     Object.assign(row.style, {
       display: "flex",
       alignItems: "center",
       gap: "6px",
-      border: "1px solid rgba(128,128,128,0.3)",
+      border: "1px solid var(--border, rgba(128,128,128,0.3))",
       borderRadius: "4px",
       padding: "4px 6px",
     });
@@ -291,8 +348,17 @@ QM.dock = {
     quantityInput.type = "number";
     quantityInput.min = "1";
     quantityInput.value = String(item.quantity);
-    quantityInput.style.width = "48px";
+    Object.assign(quantityInput.style, {
+      width: "48px",
+      background: "var(--input, transparent)",
+      color: "inherit",
+      border: "1px solid var(--border, rgba(0,0,0,0.2))",
+      borderRadius: "4px",
+      padding: "2px 4px",
+    });
     quantityInput.addEventListener("change", async () => {
+      const chatId = this.chatId;
+      if (!chatId) return;
       try {
         const result = await QM.updateItem(chatId, QM_OWNER_ID, item.id, { quantity: quantityInput.value });
         this.items = result.items;
@@ -306,7 +372,17 @@ QM.dock = {
     const deleteButton = document.createElement("button");
     deleteButton.type = "button";
     deleteButton.textContent = "Delete";
+    Object.assign(deleteButton.style, {
+      background: "var(--destructive, #c0392b)",
+      color: "var(--destructive-foreground, #fff)",
+      border: "none",
+      borderRadius: "4px",
+      padding: "3px 8px",
+      cursor: "pointer",
+    });
     deleteButton.addEventListener("click", async () => {
+      const chatId = this.chatId;
+      if (!chatId) return;
       try {
         const result = await QM.deleteItem(chatId, QM_OWNER_ID, item.id);
         this.items = result.items;

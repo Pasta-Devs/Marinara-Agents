@@ -5,10 +5,12 @@
 const QM = {};
 
 async function qmRequest(path, options) {
-  const response = await fetch(`/api/quartermaster${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
+  // Only set Content-Type when there's actually a JSON body — Fastify's body
+  // parser rejects a bodyless request (GET/DELETE) that still declares
+  // application/json with "Body cannot be empty when content-type is set to
+  // 'application/json'".
+  const headers = options && options.body ? { "Content-Type": "application/json" } : {};
+  const response = await fetch(`/api/quartermaster${path}`, { ...options, headers });
   const body = await response.json().catch(() => null);
   if (!response.ok) {
     throw new Error((body && body.error) || `Request failed (${response.status})`);
