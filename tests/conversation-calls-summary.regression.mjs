@@ -86,7 +86,7 @@ assert.deepEqual(buildCallSummaryCompletionOptions(selected.model), {
 
 const packageRoot = join(repoRoot, "packages/conversation-calls");
 const manifest = JSON.parse(await readFile(join(packageRoot, "manifest.json"), "utf8"));
-assert.equal(manifest.version, "1.0.12");
+assert.equal(manifest.version, "1.0.13");
 assert.equal(manifest.engine.min, "2.4.1");
 for (const payload of manifest.files) {
   const bytes = await readFile(join(packageRoot, payload.path));
@@ -107,6 +107,14 @@ assert.match(artifactClient, /Per-chat call access\./u);
 assert.match(artifactClient, /aria-expanded/u);
 assert.doesNotMatch(artifactClient, /Per-chat call access, microphone handling/u);
 
+const callSurfaceSource = await readFile(
+  join(repoRoot, "sources/engine/packages/client/src/components/chat/ConversationCallSurface.tsx"),
+  "utf8",
+);
+assert.match(callSurfaceSource, /CALL_AUDIO_CONVERSION_YIELD_SAMPLES = 32_768/u);
+assert.match(callSurfaceSource, /await yieldDuringAudioConversion\(\)/u);
+assert.match(callSurfaceSource, /callSpeechSubmissionPendingRef\.current = false;\s+await playTurns\(result\.turns\)/u);
+
 for (const relativePath of ["catalog/catalog.json", "catalog/v2/catalog.json", "catalog/v3/catalog.json"]) {
   const catalog = JSON.parse(await readFile(join(repoRoot, relativePath), "utf8"));
   const entry = catalog.packages.find((item) => item.manifest?.id === "conversation-calls");
@@ -114,7 +122,7 @@ for (const relativePath of ["catalog/catalog.json", "catalog/v2/catalog.json", "
   assert.deepEqual(entry.manifest, manifest, `${relativePath} manifest`);
   assert.equal(entry.artifact.bytes, artifactBytes.byteLength, `${relativePath} artifact byte count`);
   assert.equal(entry.artifact.sha256, sha256(artifactBytes), `${relativePath} artifact digest`);
-  assert.match(entry.artifact.url, /conversation-calls-1\.0\.12\.zip$/u);
+  assert.match(entry.artifact.url, /conversation-calls-1\.0\.13\.zip$/u);
 }
 
 process.stdout.write("Conversation Calls summary regression passed.\n");
