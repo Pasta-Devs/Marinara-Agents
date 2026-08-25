@@ -33,7 +33,7 @@ const PACKAGE_ID = "quartermaster";
 // compares version strings, and two builds with an unchanged version look
 // identical to it even when the content differs). Drop the suffix to a
 // clean release version before this is ever proposed for real.
-const VERSION = "0.1.0-dev.1";
+const VERSION = "0.1.0-dev.2";
 // Declared against the exact staging Engine this scaffold was built and tested
 // against. Do not lower this to reach stable users — see CONTRIBUTING.md.
 const ENGINE_MIN = "2.4.4";
