@@ -8495,10 +8495,14 @@ PF.player = {
    *
    *  IT GUARDS ITSELF, which is the one thing about it that is not ordinary. The
    *  invariant is `flushedDay ≤ ledgerOwed < sim.day` and this is the only writer
-   *  that can break it, so it refuses unless
-   *      flushedDay ≤ throughDay ≤ intro.ledgerOwed  and  throughDay < sim.day
+   *  that can RAISE the gate, so a burn that would raise one refuses unless
+   *      flushedDay < throughDay ≤ intro.ledgerOwed  and  throughDay < sim.day
    *  with all three read from the LIVE sim at write time and not from whatever
-   *  the sender was looking at when it composed. That is what closes the seam the
+   *  the sender was looking at when it composed. A burn AT the gate raises
+   *  nothing, so it is held to `throughDay ≥ flushedDay` and no more: its whole
+   *  job is marking a notice-only tell, and a PARTIAL RESTORE can leave the gate
+   *  standing over a marker that owes nothing — a state the burn did not write
+   *  and cannot repair, but must not be starved by (see the guard body). That is what closes the seam the
    *  generation fence cannot see: `_gen` moves only on a chat switch, while
    *  `_rebuild` replaces `core.sim` wholesale WITHOUT touching it (a rewind, a
    *  swipe, a checkpoint load), so a send resolving over a rewound sim passes the
@@ -8525,7 +8529,8 @@ PF.player = {
    *  can honestly carry it.
    *
    *  Returns true when it wrote and false for every refusal — the fence, the
-   *  loading gate, a day that is not a day, and each of the three inequalities.
+   *  loading gate, a day that is not a day, the backwards gate, and (for a burn
+   *  that would raise the gate) either of the two day inequalities.
    *  The senders SWALLOW the refusal (no toast, no retry): a guard refusal after
    *  an accepted send leaves the tell in history un-burned and the next compose
    *  re-tells it, which is a §5 lost-flush cause and not something to interrupt
@@ -8539,11 +8544,24 @@ PF.player = {
     // Backwards: a tell composed against an older gate, resolving after a newer
     // one already rose. Nothing to do, and lowering the gate would re-tell.
     if (throughDay < gate) return false;
-    // Past what any sleep has made owed: the days beyond it are days the player
-    // has not finished living, or a rewound sim that never staged them.
-    if (throughDay > this.resolvedDay(sim.intro?.ledgerOwed)) return false;
-    // …and never the day underway, whatever the marker says.
-    if (throughDay >= this.resolvedDay(sim.day)) return false;
+    // THE TWO DAY CHECKS GUARD THE GATE'S ADVANCE, so they are asked only when
+    // there is one to guard. A burn AT the gate writes `max(gate, gate)` and
+    // moves it nowhere; the band it carried answers to its told-flag and not to
+    // a day, which is the whole reason the notices left the lines. A PARTIAL
+    // RESTORE is what makes the difference matter: the player block rehydrates
+    // outside the envelope's `v` gate, so a row this build cannot read the
+    // envelope of — or a newer build's row that moved `intro.ledgerOwed` — comes
+    // back with `flushedDay` standing over a marker that owes nothing. Asking
+    // these of a gate that cannot rise refused the notice-only tell FOREVER: no
+    // later day can lift `ledgerOwed` back over a `flushedDay` already above it,
+    // so the same notice rode every compose for the rest of the save's life.
+    if (throughDay > gate) {
+      // Past what any sleep has made owed: the days beyond it are days the player
+      // has not finished living, or a rewound sim that never staged them.
+      if (throughDay > this.resolvedDay(sim.intro?.ledgerOwed)) return false;
+      // …and never the day underway, whatever the marker says.
+      if (throughDay >= this.resolvedDay(sim.day)) return false;
+    }
     p.flushedDay = Math.max(gate, throughDay);
     for (const row of Array.isArray(notices) ? notices : []) {
       if (Array.isArray(row) && row.length >= 2 && !row[2]) row[2] = 1;

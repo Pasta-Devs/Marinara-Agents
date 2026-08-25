@@ -15435,6 +15435,30 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
       assert.equal(bandOnly.player.flushedDay, 0, "the gate stays where it was");
       assert.equal(bandOnly.player.ledger.notices[0][2], 1, "…and the notice is told");
 
+      // …AND THE SAME FLOOR WITH A GATE THAT OUTLIVED ITS MARKER. The partial
+      // restore is what produces it: the player block rehydrates OUTSIDE the
+      // envelope's `v` gate (60-save §"the player block, rehydrated"), so a row
+      // whose envelope this build cannot read — and equally a NEWER build's row
+      // that moved `intro.ledgerOwed` out from under a `v` we still accept —
+      // comes back carrying the gate the player earned and a marker that owes
+      // nothing. `flushedDay > ledgerOwed` is the one shape the invariant does
+      // not cover, because the burn is not the writer that made it.
+      //
+      // The band answers to its FLAG and not to a day, so this is still a tell:
+      // a notice-only compose burns AT the gate, `max` moves it nowhere, and the
+      // rows it carried are marked. Guarding that on the day numbers starved the
+      // band FOREVER — nothing below `flushedDay` can raise `ledgerOwed` back to
+      // it, so every later compose re-told the same notice.
+      const carried = staged({ owed: 0, gate: 5, day: 6, notices: [[3, "The world was severed and came back."]] });
+      assert.equal(
+        P.flush(carried.core, 5, carried.player.ledger.notices),
+        true,
+        "a burn AT a gate that outlived its marker is still a burn",
+      );
+      assert.equal(carried.player.flushedDay, 5, "…and it moves the gate nowhere");
+      assert.equal(carried.player.ledger.notices[0][2], 1, "…while the notice it carried is told");
+      assert.equal(carried.sim._composeLedger(), null, "…so the next compose has nothing left to say");
+
       // …AND A BURN WITH NO ROWS TELLS NO ROWS. A tell that carried only days
       // marks only days: the band is not swept up by a turn that never mentioned
       // it, which is the property the rebuild cases below turn on.
