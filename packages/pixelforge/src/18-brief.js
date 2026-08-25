@@ -506,6 +506,91 @@ PF.brief = (() => {
     return brief;
   }
 
+  // ── foldStored(): the READ-side fold (#566) ─────────────────────────────────
+  // validate() above is a SEAL-TIME guarantee, and it does not survive the round
+  // trip through chat metadata. `PF.save._configBrief` hands the compiler whatever
+  // the metadata holds, and ~14 reads inside 20-world's compile() index tables with
+  // it: a stored `prosperity: "constructor"` resolved to a function on
+  // Object.prototype and cost a town 38 of its 48 zones with nothing said, and a
+  // stored `scale` or `place.kind` threw and left build()'s catch-all degrading a
+  // compiled settlement to the 3-zone legacy layout behind one console.warn.
+  //
+  // THIS IS A FOLD, NOT A SECOND validate(), and that is the whole design. Running
+  // validate() again on read would re-run the seal-time POLICY passes too — the
+  // per-scale feature and place caps, the floors, the dedupe — against a brief
+  // sealed under a table that may not be this build's. A newer build that seats
+  // four places at hamlet rank writes a brief this one would strip to two on every
+  // load, which is the same silent zone loss the seam was opened for, arriving
+  // through the front door. Seal time may DROP; read time may only FOLD. Every
+  // array length, every name and every id crosses this function untouched, and
+  // what changes is only a value the compiler was about to use as a table key.
+  //
+  // AND IT NEVER TOUCHES THE CALLER'S OBJECT. The brief the save path holds is what
+  // PF.player.briefHashOf() stamps a save against, so a byte of it moving under the
+  // load path is a SPURIOUS SEVERANCE — rel rows, quests and home quarantined for a
+  // world that did not change. Neither hazard is theoretical: validate() reorders
+  // `src.cast` in place on the leader-hoist path, and it is not byte-idempotent
+  // anyway (a brief that took repairs at seal time re-validates with an empty
+  // `_repairs`, and a stock top-up member's key order is not the main path's). So
+  // the fold works on a deep copy that lives and dies inside build(), the stored
+  // object stays the identity source it has always been, and `_folds` — the
+  // read-side counterpart of `_repairs` — rides the copy and is never written back.
+  //
+  // Where the compiler already HAS a reading for a value it does not recognise,
+  // the fold names it rather than inventing one: `FURNISH[kind] || FURNISH.dwelling`
+  // makes an unknown place a dwelling, `TINTS[tint] ?? 210` is grey's own hue, and
+  // an unknown tag is already placed as a plain rect with no painter. Those three
+  // fold to exactly what a newer build's value compiled to before this function
+  // existed, and all the fold adds is that a value naming something on
+  // Object.prototype can no longer pretend to be one of those tables' own entries.
+  // `surround` and `standing` are the two that do MOVE: the compiler reads an
+  // unrecognised one as a flat ground mix and as somebody with no rest anchor at
+  // all, and validate's own default is a better answer than either.
+  //
+  // An ABSENT value stays absent. `?? "resident"` and `|| SCALES.village` are the
+  // compiler's reading of a missing field, and folding one in would rewrite a brief
+  // sealed before that field existed.
+  function foldStored(stored, seed) {
+    const brief = JSON.parse(JSON.stringify(stored));
+    const folds = [];
+    const foldAt = (owner, key, list, fallback, fieldPath) => {
+      if (!owner || typeof owner !== "object") return;
+      if (!Object.prototype.hasOwnProperty.call(owner, key)) return;
+      const was = owner[key];
+      if (was === null || was === undefined) return;
+      const now = foldEnum(was, list, fallback);
+      if (now === was) return;
+      owner[key] = now;
+      folds.push(`${fieldPath}: ${JSON.stringify(was)} -> ${JSON.stringify(now)}`);
+    };
+    const foldFeatures = (list, fieldPath) => {
+      if (!Array.isArray(list)) return;
+      // No default tag exists to fold to, and inventing one would put a feature on
+      // the map the brief never asked for. null is what the placement loops already
+      // read an unknown tag as (`FEATURE_RECTS[tag] ?? FEATURE_RECT`, `PLACERS[tag]?.`),
+      // and the row keeps its name, so the registry can still say what stands there.
+      list.forEach((feature, index) => foldAt(feature, "tag", FEATURE_TAGS, null, `${fieldPath}[${index}].tag`));
+    };
+    foldAt(brief, "theme", Object.keys(DEFAULT_BRIEFS), "cozy-village", "theme");
+    foldAt(brief, "scale", Object.keys(SCALES), "village", "scale");
+    foldAt(brief, "surround", SURROUNDS, pick(seed, "surround", SURROUNDS), "surround");
+    foldAt(brief, "prosperity", PROSPERITY, "modest", "prosperity");
+    foldFeatures(brief.features, "features");
+    if (Array.isArray(brief.places))
+      brief.places.forEach((place, index) => {
+        foldAt(place, "kind", PLACE_KINDS, "dwelling", `places[${index}].kind`);
+        foldFeatures(place?.features, `places[${index}].features`);
+      });
+    if (Array.isArray(brief.cast))
+      brief.cast.forEach((member, index) => {
+        foldAt(member, "kind", CAST_KINDS, "folk", `cast[${index}].kind`);
+        foldAt(member, "tint", Object.keys(TINTS), "grey", `cast[${index}].tint`);
+        foldAt(member, "standing", STANDING, "resident", `cast[${index}].standing`);
+      });
+    brief._folds = folds;
+    return brief;
+  }
+
   // ── defaults(): the themed brief a world compiles to when nobody wrote one ──
   // NOT a failure path any more (see generate()'s design revision): no failure
   // seals anything. What it remains is the schema's own worked example per theme —
@@ -972,5 +1057,18 @@ PF.brief = (() => {
     },
   };
 
-  return { VERSION, SCALES, TINTS, FEATURE_TAGS, CAPS, validate, defaults, guidance, schema, generate, salvageText };
+  return {
+    VERSION,
+    SCALES,
+    TINTS,
+    FEATURE_TAGS,
+    CAPS,
+    validate,
+    foldStored,
+    defaults,
+    guidance,
+    schema,
+    generate,
+    salvageText,
+  };
 })();

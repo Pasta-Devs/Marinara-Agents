@@ -587,7 +587,30 @@ PF.world = (() => {
       typeof sealedBrief._ids.zones === "object"
     ) {
       try {
-        return compile(sealedBrief, seed);
+        // #566: THE STORED BRIEF IS UNTRUSTED AT THIS DOOR. The gate above answers
+        // for its SHAPE and nothing has ever answered for its VALUES, which are
+        // table keys a dozen reads down inside compile(). The fold is here, on a
+        // private copy, and deliberately NOT in PF.save._configBrief: the object
+        // that reader hands back is the one PF.player.briefHashOf() stamps a save
+        // against, and a load path that returned different bytes than it was given
+        // would sever an honest save from its own unchanged world. Folded for the
+        // compiler, stored for the identity — PF.brief.foldStored says why the two
+        // cannot be the same object.
+        const folded = PF.brief.foldStored(sealedBrief, seed);
+        const world = compile(folded, seed);
+        if (folded._folds.length) {
+          // SAID OUT LOUD, which is the half of #566 that made the zone loss a bug
+          // rather than a degrade: a value this build has never heard of is either
+          // a hostile save or a brief from a newer build, and both are worth a line.
+          console.warn(
+            `[pixelforge] the stored brief carried ${folded._folds.length} value(s) this build does not know`,
+            folded._folds,
+          );
+          // Carried only when there ARE any, so a world compiled from an honest
+          // brief is byte-identical to the one this build compiled before the fold.
+          world.briefFolds = folded._folds;
+        }
+        return world;
       } catch (err) {
         console.warn("[pixelforge] stored brief failed to compile; using the themed legacy world", err);
       }
