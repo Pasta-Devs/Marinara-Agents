@@ -291,7 +291,9 @@ PF.save = {
   _packCache: new Map(),
   _packSeenInMeta: new Set(),
   /** Chats whose seal PATCH carried the marker's copy THIS session. The witness
-   *  half of `_packWanted` — see it for why the metadata alone is not enough. */
+   *  half of `_packWanted` — see it for why the metadata alone is not enough — and
+   *  it is evicted with the `_packCache` entry it belongs to rather than growing
+   *  for the life of the session (`_cachePack` says why the two share a rule). */
   _packWantedSealed: new Set(),
 
   /** Reads core.sim and core.chatId and NOTHING else: 80-setup calls this with
@@ -502,7 +504,14 @@ PF.save = {
   /** `_cacheBrief`'s twin, verbatim including the eviction rule: only entries the
    *  metadata has been observed to carry may be dropped, because until then this
    *  map is the only witness that the chat is sealed and dropping it would spend a
-   *  second paid call on a world that already exists. */
+   *  second paid call on a world that already exists.
+   *
+   *  The marker witness rides the same eviction, because it is answering a question
+   *  that entry has already closed: a chat whose pack this map holds is not owed
+   *  one, and once the METADATA is carrying that pack too — which is the only
+   *  condition under which the loop below may drop it — nothing is left for
+   *  "this chat was told to expect a pack" to decide. Left un-evicted it was the
+   *  one per-session set with no rule at all. */
   _cachePack(chatId, sealed) {
     if (!chatId || !sealed || !Array.isArray(sealed.templates)) return;
     this._packCache.delete(chatId);
@@ -519,6 +528,7 @@ PF.save = {
       if (dropped === null) break;
       this._packCache.delete(dropped);
       this._packSeenInMeta.delete(dropped);
+      this._packWantedSealed.delete(dropped);
     }
   },
 
@@ -715,6 +725,16 @@ PF.save = {
     // above. Idempotent by its own predicate, and SEALED WORLDS ONLY: `brieved`
     // marks a world compiled from a brief, and a themed default world is not a
     // world beginning — it is the world that has always been there.
+    //
+    // …AND IT ASKS THE WORLD, WHERE armGate ASKS THE METADATA (`_configBrief`).
+    // Written down because the two predicates diverge on exactly one shape and it
+    // is worth knowing which way: a stored brief that FAILS TO COMPILE. build()'s
+    // catch-all degrades it to the legacy layout, which carries no `brieved` mark,
+    // so this line declines and armGate's — reading the key, which is still there
+    // — pays on the NEXT boot instead. A one-boot deferral, not a loss, and the
+    // conservative direction of the two: this site pays for a world that was
+    // actually compiled from a brief, rather than for one whose brief only exists
+    // in the metadata.
     if (core.sim?.world?.brieved) PF.economy.grantStartingPurse(core);
   },
 
@@ -823,10 +843,24 @@ PF.save = {
       failure: typeof kind === "string" && kind ? kind : null,
       // WHICH CALL FAILED, carried onto the failure because the two are not the
       // same news. A brief-stage failure means there is no world yet; a pack-stage
-      // one means the world is written and safe and the retry is free. Defaulting
-      // to whatever the gate was already staged for keeps a caller that does not
-      // say from inventing a stage.
-      stage: stage === "pack" || stage === "brief" ? stage : (this.gate.stage ?? "brief"),
+      // one means the world is written and safe and the retry is free.
+      //
+      // A CALLER THAT DOES NOT SAY GETS THE STAGE DERIVED, and that is 0.13's
+      // correction. The one such caller is the catch-all, whose throw is nobody's
+      // verdict — and carrying the stamped stage there was a lie in exactly one
+      // place: a throw out of `_installSealedWorld` AFTER `_stageGate(core, "pack")`
+      // fronted the pack screen, whose copy promises the world is written and that
+      // trying again "does not rewrite the world" — while the retry, finding the
+      // placeholder still standing, recompiles it from the sealed brief. The
+      // placeholder IS the tell, and it is the same condition the retry branches
+      // on: while it stands, nothing has been installed and the retry is
+      // world-rewriting, which is the brief screen's sentence and not the pack's.
+      stage:
+        stage === "pack" || stage === "brief"
+          ? stage
+          : core.sim?.world?.interim
+            ? "brief"
+            : (this.gate.stage ?? "brief"),
     };
     core.hud?.update?.();
   },

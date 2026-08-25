@@ -12291,6 +12291,50 @@ await withSavePath(async ({ tick, makeCore }) => {
   S.reset();
 }
 
+// …AND THE PACK'S TWIN, WITH ITS THIRD SET (0.13). `_cachePack` copies the rule
+// above verbatim, and the marker witness rides the same eviction: it answers
+// "this chat was told to expect a pack", which is a question an entry the cache
+// is holding has already closed — and once the METADATA carries that pack too,
+// which is the only condition under which the entry may be dropped at all,
+// nothing is left for the witness to decide. Un-evicted it was the one
+// per-session set with no rule of its own: the map is bounded, the seen-set
+// beside it is bounded, and this one grew for the life of the session.
+{
+  const S = loadedPF.save;
+  S.reset();
+  S._packCache.clear();
+  S._packSeenInMeta.clear();
+  S._packWantedSealed.clear();
+  const packFor = (i) => ({
+    packVersion: 1,
+    theme: "cozy-village",
+    briefHash: i + 1,
+    templates: [{ id: `p:${i}:a`, giver: "Mira", verb: "visit", target: { place: "wilds" }, n: 1, title: "Out" }],
+    lines: [],
+    escalation: [],
+    overheard: [],
+  });
+  for (let i = 0; i < 12; i++) {
+    S._cachePack(`chat-pk-${i}`, packFor(i));
+    S._packWantedSealed.add(`chat-pk-${i}`);
+  }
+  assert.equal(S._packCache.size, 12, "twelve chats sealed a pack with the metadata still catching up: nothing drops");
+  const caughtUp = { pixelforgePack: packFor(3) };
+  assert.ok(S._configPack(caughtUp, "chat-pk-3"), "the metadata now carries chat-pk-3's pack itself");
+  S._cachePack("chat-pk-new", packFor(99));
+  assert.equal(S._packCache.has("chat-pk-3"), false, "so THAT is the entry the ceiling reclaims");
+  assert.equal(
+    S._packWantedSealed.has("chat-pk-3"),
+    false,
+    "…and the marker witness goes with it, rather than outliving every chat that ever held one",
+  );
+  assert.equal(S._packWantedSealed.has("chat-pk-4"), true, "no unacknowledged chat's witness was touched");
+  S._packCache.clear();
+  S._packSeenInMeta.clear();
+  S._packWantedSealed.clear();
+  S.reset();
+}
+
 // (at) #5406: THE WRITE ORDINAL, CONSUMED — AND EVERY FALLBACK PINNED.
 // The engine now stamps experience rows and metadata keys from one per-chat
 // counter (GET/PUT report `writeOrdinal`; metadata is mirrored at
@@ -19075,6 +19119,55 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       "…while the brief-stage note says nothing was stored",
     );
   }
+
+  // ── A THROW IS NOBODY'S VERDICT, SO IT DOES NOT INHERIT A STAGE ────────────
+  // The catch-all is the one caller that names no stage, and the stamped one was
+  // wrong for it in exactly the case the two-call sequence made reachable: the
+  // pack stage is stamped, the pack seals, and then the INSTALL throws. Carrying
+  // "pack" there fronts the screen whose copy says the world is written and that
+  // trying again does not rewrite it — while the world is still the placeholder
+  // and the retry recompiles it, which is the promise broken in the same breath
+  // it is made.
+  await withSavePath(async ({ behavior, tick, makeCore }) => {
+    await withGeneration(async () => {
+      await withPack(async ({ packCount }) => {
+        behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+        const meta = wizardConfig();
+        const core = makeCore("chat-pack-throw", 4242);
+        core.host.chatMeta = meta;
+        core.sim = loadedPF.save.restore(meta, "chat-pack-throw");
+        assert.equal(loadedPF.save.armGate(core, meta), true, "a chat owed both artifacts gates");
+        // Planted where a real throw lands: the rebuild inside the install, which
+        // is downstream of BOTH seals and of the pack stamp.
+        const realSim = loadedPF.Sim;
+        loadedPF.Sim = function Exploding() {
+          throw new TypeError("the compiled world would not build");
+        };
+        try {
+          await loadedPF.save.maybeGenerateBrief(core);
+          await tick();
+        } finally {
+          loadedPF.Sim = realSim;
+        }
+        assert.equal(packCount(), 1, "the pack call ran, so the gate was stamped for the pack before the throw");
+        assert.equal(loadedPF.save.gate.state, "failed", "the throw is a retry screen, not a spinner");
+        assert.equal(core.sim.world.interim, true, "and the world under it is still the placeholder");
+        assert.equal(
+          loadedPF.save.gate.stage,
+          "brief",
+          "…so the screen is the BRIEF one: nothing is installed, and pressing the button rewrites the world",
+        );
+        // …and that is not a wording preference. The retry does exactly what the
+        // brief-stage copy warns about and the pack-stage copy denies.
+        const placeholder = core.sim.world;
+        assert.equal(loadedPF.save.retryGeneration(core), true, "the button fires");
+        for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
+        assert.equal(loadedPF.save.gateHolds(core), false, "the gate lifts");
+        assert.notEqual(core.sim.world, placeholder, "onto a world the retry COMPILED — it rewrote the world");
+        assert.equal(core.sim.world.brieved, true, "…from the brief that was already sealed");
+      });
+    });
+  });
 
   // ── REHYDRATION UNDER A HELD GATE IS CONSUME-FREE, AND THE ARMS RE-RUN AT
   //    THE LIFT ────────────────────────────────────────────────────────────
