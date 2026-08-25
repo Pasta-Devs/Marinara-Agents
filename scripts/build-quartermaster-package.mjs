@@ -55,6 +55,15 @@ if (!INCOMPLETE_PACKAGE_IDS.has(PACKAGE_ID)) {
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 
+// Windows checkouts with core.autocrlf=true re-materialize committed LF files
+// as CRLF on any git-mediated working-tree write (checkout, merge, stash
+// pop) — Node's own writes stay LF, but git's don't. A build run right after
+// one of those operations would otherwise bake stray CRLF into the
+// concatenated bundle, producing a different artifact than the same source
+// built fresh. Normalize on read so the build is deterministic regardless of
+// how the working tree got here.
+const readTextNormalized = async (path) => (await readFile(path, "utf8")).replace(/\r\n/g, "\n");
+
 // ── Client bundle ────────────────────────────────────────────────────────────
 // src/*.js in filename order, wrapped in one strict IIFE. Inlining keeps the
 // client a single file with no second request and no third-party host.
@@ -67,7 +76,7 @@ const banner =
   `// Built from packages/quartermaster/src (${parts.length} modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.\n`;
 const body = [];
 for (const part of parts) {
-  body.push(`// ===== ${part} =====\n${await readFile(join(srcDir, part), "utf8")}`);
+  body.push(`// ===== ${part} =====\n${await readTextNormalized(join(srcDir, part))}`);
 }
 const clientBuffer = Buffer.from(`${banner}(() => {\n"use strict";\n${body.join("\n")}\n})();\n`, "utf8");
 
@@ -85,7 +94,7 @@ try {
 
 // ── Server entrypoint: hand-authored, hashed as-is ───────────────────────────
 const serverPath = join(packageRoot, "server.mjs");
-const serverBuffer = await readFile(serverPath);
+const serverBuffer = Buffer.from(await readTextNormalized(serverPath), "utf8");
 const serverSyntaxCheckDir = await mkdtemp(join(tmpdir(), "quartermaster-server-syntax-"));
 try {
   const syntaxCheckPath = join(serverSyntaxCheckDir, "server.check.mjs");
