@@ -68,3 +68,9 @@ QM.updateSettings = (chatId, ownerId, settings) =>
     method: "PATCH",
     body: JSON.stringify(settings),
   });
+
+QM.unequipAll = (chatId, ownerId) =>
+  qmRequest(`/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/unequip-all`, {
+    method: "POST",
+    body: "{}",
+  });

@@ -1,4 +1,4 @@
-// Quartermaster 0.1.4 — Marinara Engine roleplay-tracker capability (single-file client bundle)
+// Quartermaster 0.1.5 — Marinara Engine roleplay-tracker capability (single-file client bundle)
 // Built from packages/quartermaster/src (3 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -74,6 +74,12 @@ QM.updateSettings = (chatId, ownerId, settings) =>
     body: JSON.stringify(settings),
   });
 
+QM.unequipAll = (chatId, ownerId) =>
+  qmRequest(`/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/unequip-all`, {
+    method: "POST",
+    body: "{}",
+  });
+
 // ===== 10-dock.js =====
 // Quartermaster — self-managed floating sheet panel. Mirrors Beholder's
 // BH.dock (src/80-dock.js): the host's Tracker Panel is small and shared
@@ -83,19 +89,25 @@ QM.updateSettings = (chatId, ownerId, settings) =>
 // host-provided slot container, and BOTH the roleplay-tracker toolbar
 // button and the tracker-panel launcher just toggle this same panel open.
 //
-// Styled entirely with the host's own CSS custom properties (--popover,
-// --foreground, --border, etc. — defined on :root in the Engine's
-// globals.css). Our panel is plain light DOM appended under document.body,
-// so it inherits those variables directly: no palette to guess or keep in
-// sync, and it follows the user's actual active theme, not just light/dark.
+// Styled with the host's own CSS custom properties (--popover, --foreground,
+// --border, etc. — defined on :root in the Engine's globals.css) for general
+// chrome, since our panel is plain light DOM appended under document.body
+// and inherits them directly. Destructive/dismiss and save/create actions
+// use fixed red/green instead of var(--destructive)/var(--primary) on
+// purpose — this app's own theme maps --destructive to the same purple as
+// --primary, so following it would lose the actual red/green danger-vs-safe
+// signal, which matters more here than perfect theme fidelity.
 //
 // v1 slice: persona-only. Equip slots, bag/stored locations, item
-// descriptions, and saved outfits. appearanceFeedMode is selectable and
-// persisted but not yet wired to actually write a {{getvar}} appearance
-// macro — that's the next step now that outfit descriptions exist to test
-// it with. No images, locks, or party members yet.
+// descriptions + default slots, and saved outfits. appearanceFeedMode is
+// selectable and persisted but not yet wired to actually write a {{getvar}}
+// appearance macro. No images, locks, or party members yet.
 
 const QM_OWNER_ID = "persona";
+const QM_COLOR_DANGER = "#dc2626";
+const QM_COLOR_DANGER_FG = "#fff";
+const QM_COLOR_SUCCESS = "#16a34a";
+const QM_COLOR_SUCCESS_FG = "#fff";
 
 // Mirrors server.mjs's EQUIP_SLOTS exactly — client and server are separate
 // bundles, so this is duplicated rather than shared. Grouped for display
@@ -109,6 +121,7 @@ const QM_SLOT_GROUPS = [
   { label: "Hands", slots: ["weapon_left_hand", "weapon_right_hand"] },
   { label: "Other", slots: ["feet", "accessory", "belt"] },
 ];
+const QM_EQUIP_SLOTS = QM_SLOT_GROUPS.flatMap((group) => group.slots);
 const QM_SLOT_LABELS = {
   head: "Head",
   neck: "Neck",
@@ -197,8 +210,8 @@ QM.dock = {
       position: "fixed",
       right: "16px",
       bottom: "16px",
-      width: "380px",
-      maxHeight: "80vh",
+      width: "min(820px, 95vw)",
+      maxHeight: "82vh",
       display: "none",
       flexDirection: "column",
       background: "var(--popover, #fff)",
@@ -223,18 +236,9 @@ QM.dock = {
     });
     const title = document.createElement("span");
     title.textContent = "Quartermaster";
-    const closeButton = document.createElement("button");
-    closeButton.type = "button";
-    closeButton.textContent = "×";
+    const closeButton = this._button("×", { bg: QM_COLOR_DANGER, fg: QM_COLOR_DANGER_FG });
     closeButton.setAttribute("aria-label", "Close Quartermaster");
-    Object.assign(closeButton.style, {
-      border: "none",
-      background: "transparent",
-      fontSize: "16px",
-      lineHeight: "1",
-      cursor: "pointer",
-      color: "inherit",
-    });
+    Object.assign(closeButton.style, { fontSize: "14px", lineHeight: "1", padding: "2px 8px" });
     closeButton.addEventListener("click", () => this.close());
     header.append(title, closeButton);
 
@@ -299,34 +303,61 @@ QM.dock = {
 
     if (!this.form || !this.body.contains(this.form)) {
       this.errorNode = this._textNode("");
-      this.errorNode.style.color = "var(--destructive, #c0392b)";
+      this.errorNode.style.color = QM_COLOR_DANGER;
       this.errorNode.style.display = "none";
 
       const feedRow = this._buildAppearanceFeedRow();
 
-      const equippedHeading = this._sectionHeading("Equipped");
-      this.equippedContainer = document.createElement("div");
+      // Three columns side by side rather than stacked, so Equipped/
+      // Outfits/Bag are all visible at once instead of scrolling past each
+      // other.
+      const columns = document.createElement("div");
+      Object.assign(columns.style, { display: "flex", gap: "12px", alignItems: "flex-start" });
 
-      const outfitsHeading = this._sectionHeading("Outfits");
+      const equippedColumn = document.createElement("div");
+      Object.assign(equippedColumn.style, { flex: "1", minWidth: "0" });
+      const equippedHeadingRow = document.createElement("div");
+      Object.assign(equippedHeadingRow.style, {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+      });
+      const unequipAllButton = this._button("Unequip All", {
+        bg: "var(--secondary, transparent)",
+        fg: "var(--secondary-foreground, inherit)",
+        border: true,
+      });
+      unequipAllButton.addEventListener("click", async () => {
+        const chatId = this.chatId;
+        if (!chatId) return;
+        try {
+          const result = await QM.unequipAll(chatId, QM_OWNER_ID);
+          this.items = result.items;
+          this.outfits = result.outfits;
+          this.error = null;
+        } catch (error) {
+          this.error = error && error.message ? error.message : String(error);
+        }
+        this._paint();
+      });
+      equippedHeadingRow.append(this._sectionHeading("Equipped"), unequipAllButton);
+      this.equippedContainer = document.createElement("div");
+      equippedColumn.append(equippedHeadingRow, this.equippedContainer);
+
+      const outfitsColumn = document.createElement("div");
+      Object.assign(outfitsColumn.style, { flex: "1", minWidth: "0" });
       this.outfitsContainer = document.createElement("div");
       this.outfitForm = this._buildSaveOutfitForm();
+      outfitsColumn.append(this._sectionHeading("Outfits"), this.outfitForm, this.outfitsContainer);
 
-      const bagHeading = this._sectionHeading("Bag");
+      const bagColumn = document.createElement("div");
+      Object.assign(bagColumn.style, { flex: "1", minWidth: "0" });
       this.form = this._buildAddItemForm();
       this.listContainer = document.createElement("div");
+      bagColumn.append(this._sectionHeading("Bag"), this.form, this.listContainer);
 
-      this.body.replaceChildren(
-        this.errorNode,
-        feedRow,
-        equippedHeading,
-        this.equippedContainer,
-        outfitsHeading,
-        this.outfitsContainer,
-        this.outfitForm,
-        bagHeading,
-        this.form,
-        this.listContainer,
-      );
+      columns.append(equippedColumn, outfitsColumn, bagColumn);
+      this.body.replaceChildren(this.errorNode, feedRow, columns);
     }
 
     if (this.error) {
@@ -346,7 +377,7 @@ QM.dock = {
     const heading = document.createElement("h3");
     heading.textContent = text;
     Object.assign(heading.style, {
-      margin: "10px 0 6px",
+      margin: "0 0 6px",
       fontSize: "12px",
       textTransform: "uppercase",
       letterSpacing: "0.04em",
@@ -373,6 +404,25 @@ QM.dock = {
       fontSize: "12px",
     });
     return el;
+  },
+
+  // Shared button factory so danger/success/neutral styling stays
+  // consistent. bg/fg are CSS color values; border draws a themed outline
+  // for neutral (non-colored) buttons instead of a solid fill.
+  _button(text, { bg, fg, border } = {}) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = text;
+    Object.assign(button.style, {
+      background: bg ?? "var(--primary, #444)",
+      color: fg ?? "var(--primary-foreground, #fff)",
+      border: border ? "1px solid var(--border, rgba(0,0,0,0.2))" : "none",
+      borderRadius: "4px",
+      padding: "2px 8px",
+      cursor: "pointer",
+      fontSize: "12px",
+    });
+    return button;
   },
 
   _bagItems() {
@@ -418,7 +468,7 @@ QM.dock = {
       display: "flex",
       alignItems: "center",
       gap: "6px",
-      marginBottom: "6px",
+      marginBottom: "8px",
       fontSize: "12px",
     });
 
@@ -504,17 +554,10 @@ QM.dock = {
       name.textContent = equippedItem.name;
       name.style.flex = "1";
 
-      const unequipButton = document.createElement("button");
-      unequipButton.type = "button";
-      unequipButton.textContent = "Unequip";
-      Object.assign(unequipButton.style, {
-        background: "var(--secondary, transparent)",
-        color: "var(--secondary-foreground, inherit)",
-        border: "1px solid var(--border, rgba(0,0,0,0.2))",
-        borderRadius: "4px",
-        padding: "2px 6px",
-        cursor: "pointer",
-        fontSize: "12px",
+      const unequipButton = this._button("Unequip", {
+        bg: "var(--secondary, transparent)",
+        fg: "var(--secondary-foreground, inherit)",
+        border: true,
       });
       unequipButton.addEventListener("click", () => this._updateItem(equippedItem.id, { location: "bag" }));
 
@@ -557,6 +600,23 @@ QM.dock = {
     return input;
   },
 
+  _defaultSlotSelect(item) {
+    const select = this._smallInput("select");
+    const noneOption = document.createElement("option");
+    noneOption.value = "";
+    noneOption.textContent = "Default slot…";
+    select.appendChild(noneOption);
+    for (const slot of QM_EQUIP_SLOTS) {
+      const option = document.createElement("option");
+      option.value = slot;
+      option.textContent = QM_SLOT_LABELS[slot];
+      select.appendChild(option);
+    }
+    select.value = item.defaultSlot || "";
+    select.addEventListener("change", () => this._updateItem(item.id, { defaultSlot: select.value || null }));
+    return select;
+  },
+
   _buildSaveOutfitForm() {
     const form = document.createElement("form");
     Object.assign(form.style, { display: "flex", flexDirection: "column", gap: "4px", marginBottom: "8px" });
@@ -570,18 +630,8 @@ QM.dock = {
     nameInput.required = true;
     nameInput.style.flex = "1";
 
-    const saveButton = document.createElement("button");
+    const saveButton = this._button("Save", { bg: QM_COLOR_SUCCESS, fg: QM_COLOR_SUCCESS_FG });
     saveButton.type = "submit";
-    saveButton.textContent = "Save";
-    Object.assign(saveButton.style, {
-      background: "var(--primary, #444)",
-      color: "var(--primary-foreground, #fff)",
-      border: "none",
-      borderRadius: "4px",
-      padding: "3px 10px",
-      cursor: "pointer",
-      fontSize: "12px",
-    });
 
     line.append(nameInput, saveButton);
 
@@ -633,7 +683,7 @@ QM.dock = {
     if (outfits.length === 0) {
       const empty = this._textNode("No saved outfits yet.");
       empty.style.color = "var(--muted-foreground, currentcolor)";
-      empty.style.margin = "0 0 8px";
+      empty.style.margin = "0";
       list.appendChild(empty);
       return list;
     }
@@ -663,18 +713,7 @@ QM.dock = {
     name.textContent = this._outfitMatchesCurrent(outfit) ? `${outfit.name} (equipped)` : outfit.name;
     if (this._outfitMatchesCurrent(outfit)) name.style.fontWeight = "600";
 
-    const equipButton = document.createElement("button");
-    equipButton.type = "button";
-    equipButton.textContent = "Equip";
-    Object.assign(equipButton.style, {
-      background: "var(--primary, #444)",
-      color: "var(--primary-foreground, #fff)",
-      border: "none",
-      borderRadius: "4px",
-      padding: "2px 6px",
-      cursor: "pointer",
-      fontSize: "12px",
-    });
+    const equipButton = this._button("Equip");
     equipButton.addEventListener("click", async () => {
       const chatId = this.chatId;
       if (!chatId) return;
@@ -689,19 +728,12 @@ QM.dock = {
       this._paint();
     });
 
-    const updateButton = document.createElement("button");
-    updateButton.type = "button";
-    updateButton.textContent = "Update";
-    updateButton.title = "Resave the currently-equipped items into this outfit";
-    Object.assign(updateButton.style, {
-      background: "var(--secondary, transparent)",
-      color: "var(--secondary-foreground, inherit)",
-      border: "1px solid var(--border, rgba(0,0,0,0.2))",
-      borderRadius: "4px",
-      padding: "2px 6px",
-      cursor: "pointer",
-      fontSize: "12px",
+    const updateButton = this._button("Update", {
+      bg: "var(--secondary, transparent)",
+      fg: "var(--secondary-foreground, inherit)",
+      border: true,
     });
+    updateButton.title = "Resave the currently-equipped items into this outfit";
     updateButton.addEventListener("click", async () => {
       const chatId = this.chatId;
       if (!chatId) return;
@@ -716,18 +748,7 @@ QM.dock = {
       this._paint();
     });
 
-    const deleteButton = document.createElement("button");
-    deleteButton.type = "button";
-    deleteButton.textContent = "Delete";
-    Object.assign(deleteButton.style, {
-      background: "var(--destructive, #c0392b)",
-      color: "var(--destructive-foreground, #fff)",
-      border: "none",
-      borderRadius: "4px",
-      padding: "2px 6px",
-      cursor: "pointer",
-      fontSize: "12px",
-    });
+    const deleteButton = this._button("Delete", { bg: QM_COLOR_DANGER, fg: QM_COLOR_DANGER_FG });
     deleteButton.addEventListener("click", async () => {
       const chatId = this.chatId;
       if (!chatId) return;
@@ -788,17 +809,8 @@ QM.dock = {
     quantityInput.value = "1";
     quantityInput.style.width = "56px";
 
-    const addButton = document.createElement("button");
+    const addButton = this._button("Add", { bg: QM_COLOR_SUCCESS, fg: QM_COLOR_SUCCESS_FG });
     addButton.type = "submit";
-    addButton.textContent = "Add";
-    Object.assign(addButton.style, {
-      background: "var(--primary, #444)",
-      color: "var(--primary-foreground, #fff)",
-      border: "none",
-      borderRadius: "4px",
-      padding: "3px 10px",
-      cursor: "pointer",
-    });
 
     line.append(nameInput, quantityInput, addButton);
 
@@ -888,17 +900,7 @@ QM.dock = {
     quantityInput.style.width = "48px";
     quantityInput.addEventListener("change", () => this._updateItem(item.id, { quantity: quantityInput.value }));
 
-    const deleteButton = document.createElement("button");
-    deleteButton.type = "button";
-    deleteButton.textContent = "Delete";
-    Object.assign(deleteButton.style, {
-      background: "var(--destructive, #c0392b)",
-      color: "var(--destructive-foreground, #fff)",
-      border: "none",
-      borderRadius: "4px",
-      padding: "3px 8px",
-      cursor: "pointer",
-    });
+    const deleteButton = this._button("Delete", { bg: QM_COLOR_DANGER, fg: QM_COLOR_DANGER_FG });
     deleteButton.addEventListener("click", async () => {
       const chatId = this.chatId;
       if (!chatId) return;
@@ -934,7 +936,19 @@ QM.dock = {
 
     storedLine.append(storedLabel, storedInput);
 
-    row.append(topLine, storedLine, this._descriptionInput(item));
+    const equipLine = document.createElement("div");
+    Object.assign(equipLine.style, { display: "flex", alignItems: "center", gap: "6px" });
+    const defaultSlotSelect = this._defaultSlotSelect(item);
+    defaultSlotSelect.style.flex = "1";
+    const equipButton = this._button("Equip");
+    equipButton.disabled = !item.defaultSlot;
+    equipButton.style.opacity = item.defaultSlot ? "1" : "0.5";
+    equipButton.addEventListener("click", () => {
+      if (item.defaultSlot) this._updateItem(item.id, { location: `equipped:${item.defaultSlot}` });
+    });
+    equipLine.append(defaultSlotSelect, equipButton);
+
+    row.append(topLine, storedLine, equipLine, this._descriptionInput(item));
     return row;
   },
 };

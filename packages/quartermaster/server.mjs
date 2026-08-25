@@ -67,6 +67,13 @@ function normalizeText(value, maxLength) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }
 
+// Returns the normalized default-slot value (a slot id or null to clear),
+// or undefined if invalid.
+function normalizeDefaultSlot(value) {
+  if (value === null || value === "") return null;
+  return typeof value === "string" && EQUIP_SLOT_SET.has(value) ? value : undefined;
+}
+
 // Returns the normalized location string, or null if invalid.
 function normalizeLocation(value) {
   const text = normalizeText(value, MAX_STORED_LOCATION_LENGTH);
@@ -164,6 +171,8 @@ export async function activate(context) {
 
         const location = body.location === undefined ? "bag" : normalizeLocation(body.location);
         if (location === null) return reply.status(400).send({ error: "Invalid location" });
+        const defaultSlot = body.defaultSlot === undefined ? null : normalizeDefaultSlot(body.defaultSlot);
+        if (defaultSlot === undefined) return reply.status(400).send({ error: "Invalid defaultSlot" });
 
         const item = {
           id: randomUUID(),
@@ -171,6 +180,7 @@ export async function activate(context) {
           description: normalizeText(body.description, MAX_ITEM_DESCRIPTION_LENGTH),
           quantity: normalizeQuantity(body.quantity),
           location: "bag",
+          defaultSlot,
         };
         const state = await loadInventoryState(documents, chatId, ownerId);
         applyLocation(state.items, item, location);
@@ -198,7 +208,22 @@ export async function activate(context) {
           if (location === null) return reply.status(400).send({ error: "Invalid location" });
           applyLocation(state.items, item, location);
         }
+        if (body.defaultSlot !== undefined) {
+          const defaultSlot = normalizeDefaultSlot(body.defaultSlot);
+          if (defaultSlot === undefined) return reply.status(400).send({ error: "Invalid defaultSlot" });
+          item.defaultSlot = defaultSlot;
+        }
 
+        await saveInventoryState(documents, chatId, ownerId, state);
+        return { items: state.items, outfits: state.outfits };
+      });
+
+      routes.post("/inventory/:chatId/:ownerId/unequip-all", async (request, reply) => {
+        const { chatId, ownerId } = request.params;
+        const state = await loadInventoryState(documents, chatId, ownerId);
+        for (const item of state.items) {
+          if (item.location.startsWith("equipped:")) item.location = "bag";
+        }
         await saveInventoryState(documents, chatId, ownerId, state);
         return { items: state.items, outfits: state.outfits };
       });
