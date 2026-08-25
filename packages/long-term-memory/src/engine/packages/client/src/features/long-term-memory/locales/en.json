@@ -675,6 +675,7 @@
   "ui.longTermMemory.sourceoperation.excluded": "Excluded and unchanged",
   "ui.longTermMemory.sourceoperation.failed": "Failed",
   "ui.longTermMemory.sourceoperation.linkedMemories": "Linked memories",
+  "ui.longTermMemory.sourceoperation.linkedMemoriesCouldNotLoad": "Linked memories could not be loaded. Preview and apply are unavailable until they are ready.",
   "ui.longTermMemory.sourceoperation.links": "{{incoming}} incoming links; {{outgoing}} outgoing links",
   "ui.longTermMemory.sourceoperation.loadingLinkedMemories": "Loading linked memories...",
   "ui.longTermMemory.sourceoperation.manageSource": "Manage source",
