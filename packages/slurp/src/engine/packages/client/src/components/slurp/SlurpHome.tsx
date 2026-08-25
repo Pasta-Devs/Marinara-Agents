@@ -375,6 +375,8 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     // A reply/edit composed as the previous persona must not carry over and submit as the
     // newly-selected one, so discard in-flight composer, tool, and post-menu state first.
     postCardController.reset();
+    setEditingReplyId(null);
+    setEditingReplyContent("");
     setStoredPersonaId(account.entityId);
     if (mobile) setMobileDrawerOpen(false);
     else setAccountSwitcherOpen(false);
