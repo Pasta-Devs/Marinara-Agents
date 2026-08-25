@@ -13843,7 +13843,9 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
            Object.values(w.zones).map((zone) => [zone.id, zone.ground, zone.object, [...zone.solid], zone.features]),
          )).digest("hex"));`,
       ],
-      { encoding: "utf8" },
+      // Bounded, or a hung child blocks this SYNCHRONOUS call where no watchdog
+      // timer can fire — the one hang class the deadline above cannot break.
+      { encoding: "utf8", timeout: 60_000 },
     );
     assert.equal(child.status, 0, `the second interpreter compiled it too (${child.stderr})`);
     assert.equal(child.stdout, mine, "a fresh process compiles the same tiles, the same solidity and the same rows");
