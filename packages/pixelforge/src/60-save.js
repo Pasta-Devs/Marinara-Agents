@@ -11,6 +11,16 @@
 //     timeline seams do not rewind it.
 // Both: debounced, event-driven, flushed with keepalive on teardown — never
 // per-frame (Android whole-blob-rewrite shape, exploration R11/R28).
+//
+// This module also owns the CREATION SEQUENCE, and as of 0.13 that is two paid
+// calls rather than one: the world brief (18-brief) and then the offline content
+// pack (61-pack), behind a single loading gate and a single in-flight hold. The
+// window between them is a state 0.12 could not be in — a real, compiled world
+// whose people have nothing to say yet — so the four consumers of "is this chat
+// still waiting" are answered separately rather than by one widened predicate:
+// the interim mark and stamp evaluability stay BRIEF-only (identity), the gate is
+// the DISJUNCTION (content may hold play), and the lift is neither-owed. See
+// briefExpected/packExpected, which sit beside each other for that reason.
 
 // The envelope keys THIS build understands. Anything else on a restored save
 // was written by a NEWER build: simFromSaved parks it on sim._envelopeExtra and
