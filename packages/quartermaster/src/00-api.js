@@ -38,3 +38,33 @@ QM.deleteItem = (chatId, ownerId, itemId) =>
     `/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/items/${encodeURIComponent(itemId)}`,
     { method: "DELETE" },
   );
+
+QM.createOutfit = (chatId, ownerId, outfit) =>
+  qmRequest(`/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/outfits`, {
+    method: "POST",
+    body: JSON.stringify(outfit),
+  });
+
+QM.updateOutfit = (chatId, ownerId, outfitId, patch) =>
+  qmRequest(
+    `/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/outfits/${encodeURIComponent(outfitId)}`,
+    { method: "PATCH", body: JSON.stringify(patch) },
+  );
+
+QM.equipOutfit = (chatId, ownerId, outfitId) =>
+  qmRequest(
+    `/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/outfits/${encodeURIComponent(outfitId)}/equip`,
+    { method: "POST", body: "{}" },
+  );
+
+QM.deleteOutfit = (chatId, ownerId, outfitId) =>
+  qmRequest(
+    `/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/outfits/${encodeURIComponent(outfitId)}`,
+    { method: "DELETE" },
+  );
+
+QM.updateSettings = (chatId, ownerId, settings) =>
+  qmRequest(`/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/settings`, {
+    method: "PATCH",
+    body: JSON.stringify(settings),
+  });

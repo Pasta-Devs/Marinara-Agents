@@ -4,8 +4,11 @@
 // /api/quartermaster so the client element can read and mutate it.
 //
 // v1 slice: a flat item list for the persona only (name, description,
-// quantity, location) plus a fixed equip-slot vocabulary. No images, locks,
-// or party members yet — those build on this once equip/locations prove out.
+// quantity, location), a fixed equip-slot vocabulary, and saved outfits
+// (named snapshots of the equip-slot state). appearanceFeedMode is stored
+// here but not yet acted on — that's the next step, once there's a real
+// outfit description to actually feed into a {{getvar}} appearance macro.
+// No images, locks, or party members yet.
 //
 // location is one of:
 //   "bag"                 — carried, unequipped
@@ -21,6 +24,8 @@
 // <garment-type>_<region> rather than reusing the extension's UI-column
 // grouping, so a future narrative-driven equip agent can reason about
 // exactly what and where from the slot id alone.
+import { randomUUID } from "node:crypto";
+
 const EQUIP_SLOTS = [
   "head",
   "neck",
@@ -39,12 +44,15 @@ const EQUIP_SLOTS = [
   "weapon_right_hand",
 ];
 const EQUIP_SLOT_SET = new Set(EQUIP_SLOTS);
+const APPEARANCE_FEED_MODES = new Set(["off", "outfitDescription", "equippedNames"]);
 
 const PACKAGE_ID = "quartermaster";
 const INVENTORY_KIND = "inventory";
 const MAX_ITEM_NAME_LENGTH = 200;
 const MAX_ITEM_DESCRIPTION_LENGTH = 4000;
 const MAX_STORED_LOCATION_LENGTH = 200;
+const MAX_OUTFIT_NAME_LENGTH = 200;
+const MAX_OUTFIT_DESCRIPTION_LENGTH = 4000;
 
 function inventoryDocId(chatId, ownerId) {
   return `${chatId}:${ownerId}`;
@@ -85,19 +93,33 @@ function applyLocation(items, item, location) {
   item.location = location;
 }
 
+// slot -> itemId for every currently-equipped item.
+function currentEquippedSlots(items) {
+  const slots = {};
+  for (const item of items) {
+    if (item.location.startsWith("equipped:")) slots[item.location.slice("equipped:".length)] = item.id;
+  }
+  return slots;
+}
+
 async function loadInventoryDoc(documents, chatId, ownerId) {
   return documents.getById(PACKAGE_ID, inventoryDocId(chatId, ownerId));
 }
 
-async function loadInventoryItems(documents, chatId, ownerId) {
+async function loadInventoryState(documents, chatId, ownerId) {
   const doc = await loadInventoryDoc(documents, chatId, ownerId);
-  return Array.isArray(doc?.data?.items) ? doc.data.items : [];
+  return {
+    items: Array.isArray(doc?.data?.items) ? doc.data.items : [],
+    outfits: Array.isArray(doc?.data?.outfits) ? doc.data.outfits : [],
+    appearanceFeedMode: APPEARANCE_FEED_MODES.has(doc?.data?.appearanceFeedMode) ? doc.data.appearanceFeedMode : "off",
+  };
 }
 
-async function saveInventoryItems(documents, chatId, ownerId, items) {
+async function saveInventoryState(documents, chatId, ownerId, state) {
   const id = inventoryDocId(chatId, ownerId);
   const now = new Date().toISOString();
   const existing = await documents.getById(PACKAGE_ID, id);
+  const data = { chatId, ownerId, ...state };
   if (!existing) {
     await documents.create({
       id,
@@ -105,7 +127,7 @@ async function saveInventoryItems(documents, chatId, ownerId, items) {
       kind: INVENTORY_KIND,
       name: `Inventory ${id}`,
       description: "Quartermaster inventory record.",
-      data: { chatId, ownerId, items },
+      data,
       createdAt: now,
       updatedAt: now,
     });
@@ -117,7 +139,7 @@ async function saveInventoryItems(documents, chatId, ownerId, items) {
     expectedRevision: existing.revision,
     name: existing.name,
     description: existing.description,
-    data: { chatId, ownerId, items },
+    data,
     updatedAt: now,
   });
 }
@@ -130,8 +152,8 @@ export async function activate(context) {
     async (routes) => {
       routes.get("/inventory/:chatId/:ownerId", async (request, reply) => {
         const { chatId, ownerId } = request.params;
-        const items = await loadInventoryItems(documents, chatId, ownerId);
-        return { items, equipSlots: EQUIP_SLOTS };
+        const state = await loadInventoryState(documents, chatId, ownerId);
+        return { ...state, equipSlots: EQUIP_SLOTS };
       });
 
       routes.post("/inventory/:chatId/:ownerId/items", async (request, reply) => {
@@ -150,18 +172,18 @@ export async function activate(context) {
           quantity: normalizeQuantity(body.quantity),
           location: "bag",
         };
-        const items = await loadInventoryItems(documents, chatId, ownerId);
-        applyLocation(items, item, location);
-        items.push(item);
-        await saveInventoryItems(documents, chatId, ownerId, items);
-        return { items };
+        const state = await loadInventoryState(documents, chatId, ownerId);
+        applyLocation(state.items, item, location);
+        state.items.push(item);
+        await saveInventoryState(documents, chatId, ownerId, state);
+        return { items: state.items, outfits: state.outfits };
       });
 
       routes.patch("/inventory/:chatId/:ownerId/items/:itemId", async (request, reply) => {
         const { chatId, ownerId, itemId } = request.params;
         const body = request.body ?? {};
-        const items = await loadInventoryItems(documents, chatId, ownerId);
-        const item = items.find((candidate) => candidate.id === itemId);
+        const state = await loadInventoryState(documents, chatId, ownerId);
+        const item = state.items.find((candidate) => candidate.id === itemId);
         if (!item) return reply.status(404).send({ error: "Item not found" });
 
         if (body.name !== undefined) {
@@ -174,21 +196,117 @@ export async function activate(context) {
         if (body.location !== undefined) {
           const location = normalizeLocation(body.location);
           if (location === null) return reply.status(400).send({ error: "Invalid location" });
-          applyLocation(items, item, location);
+          applyLocation(state.items, item, location);
         }
 
-        await saveInventoryItems(documents, chatId, ownerId, items);
-        return { items };
+        await saveInventoryState(documents, chatId, ownerId, state);
+        return { items: state.items, outfits: state.outfits };
       });
 
       routes.delete("/inventory/:chatId/:ownerId/items/:itemId", async (request, reply) => {
         const { chatId, ownerId, itemId } = request.params;
-        const items = await loadInventoryItems(documents, chatId, ownerId);
-        const nextItems = items.filter((candidate) => candidate.id !== itemId);
-        if (nextItems.length === items.length) return reply.status(404).send({ error: "Item not found" });
+        const state = await loadInventoryState(documents, chatId, ownerId);
+        const nextItems = state.items.filter((candidate) => candidate.id !== itemId);
+        if (nextItems.length === state.items.length) return reply.status(404).send({ error: "Item not found" });
+        state.items = nextItems;
 
-        await saveInventoryItems(documents, chatId, ownerId, nextItems);
-        return { items: nextItems };
+        // An item leaving the inventory drops out of any saved outfit that
+        // referenced it, matching the extension's behavior — the outfit
+        // itself survives, just with one fewer slot filled.
+        for (const outfit of state.outfits) {
+          for (const [slot, referencedItemId] of Object.entries(outfit.slots)) {
+            if (referencedItemId === itemId) delete outfit.slots[slot];
+          }
+        }
+
+        await saveInventoryState(documents, chatId, ownerId, state);
+        return { items: state.items, outfits: state.outfits };
+      });
+
+      routes.post("/inventory/:chatId/:ownerId/outfits", async (request, reply) => {
+        const { chatId, ownerId } = request.params;
+        const body = request.body ?? {};
+        const name = normalizeText(body.name, MAX_OUTFIT_NAME_LENGTH);
+        if (!name) return reply.status(400).send({ error: "Outfit name is required" });
+
+        const state = await loadInventoryState(documents, chatId, ownerId);
+        const outfit = {
+          id: randomUUID(),
+          name,
+          description: normalizeText(body.description, MAX_OUTFIT_DESCRIPTION_LENGTH),
+          slots: currentEquippedSlots(state.items),
+        };
+        state.outfits.push(outfit);
+        await saveInventoryState(documents, chatId, ownerId, state);
+        return { items: state.items, outfits: state.outfits };
+      });
+
+      routes.patch("/inventory/:chatId/:ownerId/outfits/:outfitId", async (request, reply) => {
+        const { chatId, ownerId, outfitId } = request.params;
+        const body = request.body ?? {};
+        const state = await loadInventoryState(documents, chatId, ownerId);
+        const outfit = state.outfits.find((candidate) => candidate.id === outfitId);
+        if (!outfit) return reply.status(404).send({ error: "Outfit not found" });
+
+        if (body.name !== undefined) {
+          const name = normalizeText(body.name, MAX_OUTFIT_NAME_LENGTH);
+          if (!name) return reply.status(400).send({ error: "Outfit name is required" });
+          outfit.name = name;
+        }
+        if (body.description !== undefined) {
+          outfit.description = normalizeText(body.description, MAX_OUTFIT_DESCRIPTION_LENGTH);
+        }
+        // "Update" in the extension's sense — resave the currently-equipped
+        // items into this outfit without changing its name/description.
+        if (body.resnapshot === true) outfit.slots = currentEquippedSlots(state.items);
+
+        await saveInventoryState(documents, chatId, ownerId, state);
+        return { items: state.items, outfits: state.outfits };
+      });
+
+      routes.post("/inventory/:chatId/:ownerId/outfits/:outfitId/equip", async (request, reply) => {
+        const { chatId, ownerId, outfitId } = request.params;
+        const state = await loadInventoryState(documents, chatId, ownerId);
+        const outfit = state.outfits.find((candidate) => candidate.id === outfitId);
+        if (!outfit) return reply.status(404).send({ error: "Outfit not found" });
+
+        // Equipping an outfit replaces the whole equipped set in one step —
+        // everything currently worn comes off first, then the outfit's items
+        // go on. Matches the extension: "unequip whatever you're wearing and
+        // equip that outfit's items into their saved slots, in one step."
+        for (const item of state.items) {
+          if (item.location.startsWith("equipped:")) item.location = "bag";
+        }
+        for (const [slot, itemId] of Object.entries(outfit.slots)) {
+          const item = state.items.find((candidate) => candidate.id === itemId);
+          if (item) item.location = `equipped:${slot}`;
+        }
+
+        await saveInventoryState(documents, chatId, ownerId, state);
+        return { items: state.items, outfits: state.outfits };
+      });
+
+      routes.delete("/inventory/:chatId/:ownerId/outfits/:outfitId", async (request, reply) => {
+        const { chatId, ownerId, outfitId } = request.params;
+        const state = await loadInventoryState(documents, chatId, ownerId);
+        const nextOutfits = state.outfits.filter((candidate) => candidate.id !== outfitId);
+        if (nextOutfits.length === state.outfits.length) return reply.status(404).send({ error: "Outfit not found" });
+        state.outfits = nextOutfits;
+
+        await saveInventoryState(documents, chatId, ownerId, state);
+        return { items: state.items, outfits: state.outfits };
+      });
+
+      routes.patch("/inventory/:chatId/:ownerId/settings", async (request, reply) => {
+        const { chatId, ownerId } = request.params;
+        const body = request.body ?? {};
+        if (!APPEARANCE_FEED_MODES.has(body.appearanceFeedMode)) {
+          return reply.status(400).send({ error: "Invalid appearanceFeedMode" });
+        }
+        const state = await loadInventoryState(documents, chatId, ownerId);
+        state.appearanceFeedMode = body.appearanceFeedMode;
+        await saveInventoryState(documents, chatId, ownerId, state);
+        return { appearanceFeedMode: state.appearanceFeedMode };
       });
     },
     { prefix: `/api/${PACKAGE_ID}` },

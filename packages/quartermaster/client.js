@@ -1,4 +1,4 @@
-// Quartermaster 0.1.3 — Marinara Engine roleplay-tracker capability (single-file client bundle)
+// Quartermaster 0.1.4 — Marinara Engine roleplay-tracker capability (single-file client bundle)
 // Built from packages/quartermaster/src (3 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -44,6 +44,36 @@ QM.deleteItem = (chatId, ownerId, itemId) =>
     { method: "DELETE" },
   );
 
+QM.createOutfit = (chatId, ownerId, outfit) =>
+  qmRequest(`/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/outfits`, {
+    method: "POST",
+    body: JSON.stringify(outfit),
+  });
+
+QM.updateOutfit = (chatId, ownerId, outfitId, patch) =>
+  qmRequest(
+    `/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/outfits/${encodeURIComponent(outfitId)}`,
+    { method: "PATCH", body: JSON.stringify(patch) },
+  );
+
+QM.equipOutfit = (chatId, ownerId, outfitId) =>
+  qmRequest(
+    `/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/outfits/${encodeURIComponent(outfitId)}/equip`,
+    { method: "POST", body: "{}" },
+  );
+
+QM.deleteOutfit = (chatId, ownerId, outfitId) =>
+  qmRequest(
+    `/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/outfits/${encodeURIComponent(outfitId)}`,
+    { method: "DELETE" },
+  );
+
+QM.updateSettings = (chatId, ownerId, settings) =>
+  qmRequest(`/inventory/${encodeURIComponent(chatId)}/${encodeURIComponent(ownerId)}/settings`, {
+    method: "PATCH",
+    body: JSON.stringify(settings),
+  });
+
 // ===== 10-dock.js =====
 // Quartermaster — self-managed floating sheet panel. Mirrors Beholder's
 // BH.dock (src/80-dock.js): the host's Tracker Panel is small and shared
@@ -59,8 +89,11 @@ QM.deleteItem = (chatId, ownerId, itemId) =>
 // so it inherits those variables directly: no palette to guess or keep in
 // sync, and it follows the user's actual active theme, not just light/dark.
 //
-// v1 slice: persona-only. Equip slots + bag/stored locations. No images,
-// locks, outfits, or party members yet.
+// v1 slice: persona-only. Equip slots, bag/stored locations, item
+// descriptions, and saved outfits. appearanceFeedMode is selectable and
+// persisted but not yet wired to actually write a {{getvar}} appearance
+// macro — that's the next step now that outfit descriptions exist to test
+// it with. No images, locks, or party members yet.
 
 const QM_OWNER_ID = "persona";
 
@@ -93,6 +126,11 @@ const QM_SLOT_LABELS = {
   weapon_left_hand: "Weapon (Left Hand)",
   weapon_right_hand: "Weapon (Right Hand)",
 };
+const QM_APPEARANCE_FEED_OPTIONS = [
+  { value: "off", label: "Off" },
+  { value: "outfitDescription", label: "Outfit description" },
+  { value: "equippedNames", label: "Equipped item names" },
+];
 
 QM.dock = {
   chatId: null,
@@ -100,10 +138,15 @@ QM.dock = {
   root: null,
   body: null,
   errorNode: null,
+  feedSelect: null,
   equippedContainer: null,
+  outfitsContainer: null,
+  outfitForm: null,
   form: null,
   listContainer: null,
   items: null,
+  outfits: null,
+  appearanceFeedMode: "off",
   error: null,
 
   isOpen() {
@@ -114,6 +157,8 @@ QM.dock = {
     if (this.chatId === chatId) return;
     this.chatId = chatId;
     this.items = null;
+    this.outfits = null;
+    this.appearanceFeedMode = "off";
     this.error = null;
     if (this.isOpenFlag) this._loadAndPaint();
   },
@@ -153,7 +198,7 @@ QM.dock = {
       right: "16px",
       bottom: "16px",
       width: "380px",
-      maxHeight: "78vh",
+      maxHeight: "80vh",
       display: "none",
       flexDirection: "column",
       background: "var(--popover, #fff)",
@@ -206,7 +251,10 @@ QM.dock = {
     // Reset the cached body children — a fresh body element means everything
     // built for a previous root no longer exists.
     this.errorNode = null;
+    this.feedSelect = null;
     this.equippedContainer = null;
+    this.outfitsContainer = null;
+    this.outfitForm = null;
     this.form = null;
     this.listContainer = null;
   },
@@ -221,6 +269,8 @@ QM.dock = {
       try {
         const result = await QM.listItems(chatId, QM_OWNER_ID);
         this.items = result.items;
+        this.outfits = result.outfits;
+        this.appearanceFeedMode = result.appearanceFeedMode;
       } catch (error) {
         this.error = error && error.message ? error.message : String(error);
       }
@@ -228,17 +278,20 @@ QM.dock = {
     this._paint();
   },
 
-  // Rebuilds only what changed. The add-item form is built once and left
-  // alone on every repaint — rebuilding it on every add/delete/quantity
-  // change was wiping out whatever the user had already typed into the name
-  // field, since a fresh <input> has no value.
+  // Rebuilds only what changed. Forms are built once and left alone on every
+  // repaint — rebuilding them on every add/delete/quantity change was wiping
+  // out whatever the user had already typed, since a fresh <input> has no
+  // value.
   _paint() {
     if (!this.body) return;
 
     if (!this.chatId) {
       this.body.replaceChildren(this._textNode("No active chat."));
       this.errorNode = null;
+      this.feedSelect = null;
       this.equippedContainer = null;
+      this.outfitsContainer = null;
+      this.outfitForm = null;
       this.form = null;
       this.listContainer = null;
       return;
@@ -249,8 +302,14 @@ QM.dock = {
       this.errorNode.style.color = "var(--destructive, #c0392b)";
       this.errorNode.style.display = "none";
 
+      const feedRow = this._buildAppearanceFeedRow();
+
       const equippedHeading = this._sectionHeading("Equipped");
       this.equippedContainer = document.createElement("div");
+
+      const outfitsHeading = this._sectionHeading("Outfits");
+      this.outfitsContainer = document.createElement("div");
+      this.outfitForm = this._buildSaveOutfitForm();
 
       const bagHeading = this._sectionHeading("Bag");
       this.form = this._buildAddItemForm();
@@ -258,8 +317,12 @@ QM.dock = {
 
       this.body.replaceChildren(
         this.errorNode,
+        feedRow,
         equippedHeading,
         this.equippedContainer,
+        outfitsHeading,
+        this.outfitsContainer,
+        this.outfitForm,
         bagHeading,
         this.form,
         this.listContainer,
@@ -273,7 +336,9 @@ QM.dock = {
       this.errorNode.style.display = "none";
     }
 
+    this.feedSelect.value = this.appearanceFeedMode;
     this.equippedContainer.replaceChildren(this._buildEquippedSection());
+    this.outfitsContainer.replaceChildren(this._buildOutfitsList());
     this.listContainer.replaceChildren(this._buildItemList());
   },
 
@@ -297,6 +362,19 @@ QM.dock = {
     return node;
   },
 
+  _smallInput(tag) {
+    const el = document.createElement(tag);
+    Object.assign(el.style, {
+      background: "var(--input, transparent)",
+      color: "inherit",
+      border: "1px solid var(--border, rgba(0,0,0,0.2))",
+      borderRadius: "4px",
+      padding: "2px 4px",
+      fontSize: "12px",
+    });
+    return el;
+  },
+
   _bagItems() {
     return (this.items ?? []).filter((item) => !item.location.startsWith("equipped:"));
   },
@@ -305,17 +383,73 @@ QM.dock = {
     return (this.items ?? []).find((item) => item.location === `equipped:${slot}`) ?? null;
   },
 
-  async _setLocation(itemId, location) {
+  _currentEquippedSlots() {
+    const slots = {};
+    for (const item of this.items ?? []) {
+      if (item.location.startsWith("equipped:")) slots[item.location.slice("equipped:".length)] = item.id;
+    }
+    return slots;
+  },
+
+  _outfitMatchesCurrent(outfit) {
+    const current = this._currentEquippedSlots();
+    const outfitSlots = Object.entries(outfit.slots ?? {});
+    const currentSlots = Object.entries(current);
+    if (outfitSlots.length !== currentSlots.length) return false;
+    return outfitSlots.every(([slot, itemId]) => current[slot] === itemId);
+  },
+
+  async _updateItem(itemId, patch) {
     const chatId = this.chatId;
     if (!chatId) return;
     try {
-      const result = await QM.updateItem(chatId, QM_OWNER_ID, itemId, { location });
+      const result = await QM.updateItem(chatId, QM_OWNER_ID, itemId, patch);
       this.items = result.items;
       this.error = null;
     } catch (error) {
       this.error = error && error.message ? error.message : String(error);
     }
     this._paint();
+  },
+
+  _buildAppearanceFeedRow() {
+    const row = document.createElement("div");
+    Object.assign(row.style, {
+      display: "flex",
+      alignItems: "center",
+      gap: "6px",
+      marginBottom: "6px",
+      fontSize: "12px",
+    });
+
+    const label = document.createElement("span");
+    label.textContent = "Feed appearance:";
+    label.style.color = "var(--muted-foreground, currentcolor)";
+
+    const select = this._smallInput("select");
+    select.style.flex = "1";
+    for (const option of QM_APPEARANCE_FEED_OPTIONS) {
+      const optionEl = document.createElement("option");
+      optionEl.value = option.value;
+      optionEl.textContent = option.label;
+      select.appendChild(optionEl);
+    }
+    select.addEventListener("change", async () => {
+      const chatId = this.chatId;
+      if (!chatId) return;
+      try {
+        const result = await QM.updateSettings(chatId, QM_OWNER_ID, { appearanceFeedMode: select.value });
+        this.appearanceFeedMode = result.appearanceFeedMode;
+        this.error = null;
+      } catch (error) {
+        this.error = error && error.message ? error.message : String(error);
+      }
+      this._paint();
+    });
+    this.feedSelect = select;
+
+    row.append(label, select);
+    return row;
   },
 
   _buildEquippedSection() {
@@ -349,24 +483,26 @@ QM.dock = {
     const row = document.createElement("div");
     Object.assign(row.style, {
       display: "flex",
-      alignItems: "center",
-      gap: "6px",
+      flexDirection: "column",
+      gap: "3px",
       border: "1px solid var(--border, rgba(128,128,128,0.3))",
       borderRadius: "4px",
       padding: "4px 6px",
     });
 
+    const topLine = document.createElement("div");
+    Object.assign(topLine.style, { display: "flex", alignItems: "center", gap: "6px" });
+
     const label = document.createElement("span");
     label.textContent = QM_SLOT_LABELS[slot];
     Object.assign(label.style, { width: "108px", flexShrink: "0", fontSize: "12px" });
-    row.appendChild(label);
+    topLine.appendChild(label);
 
     const equippedItem = this._itemInSlot(slot);
     if (equippedItem) {
       const name = document.createElement("span");
       name.textContent = equippedItem.name;
       name.style.flex = "1";
-      name.title = equippedItem.description || "";
 
       const unequipButton = document.createElement("button");
       unequipButton.type = "button";
@@ -380,24 +516,18 @@ QM.dock = {
         cursor: "pointer",
         fontSize: "12px",
       });
-      unequipButton.addEventListener("click", () => this._setLocation(equippedItem.id, "bag"));
+      unequipButton.addEventListener("click", () => this._updateItem(equippedItem.id, { location: "bag" }));
 
-      row.append(name, unequipButton);
+      topLine.append(name, unequipButton);
+      row.appendChild(topLine);
+      row.appendChild(this._descriptionInput(equippedItem));
       return row;
     }
 
     const bagItems = this._bagItems();
-    const select = document.createElement("select");
+    const select = this._smallInput("select");
     select.disabled = bagItems.length === 0;
-    Object.assign(select.style, {
-      flex: "1",
-      background: "var(--input, transparent)",
-      color: "inherit",
-      border: "1px solid var(--border, rgba(0,0,0,0.2))",
-      borderRadius: "4px",
-      padding: "2px 4px",
-      fontSize: "12px",
-    });
+    select.style.flex = "1";
     const placeholder = document.createElement("option");
     placeholder.value = "";
     placeholder.textContent = bagItems.length === 0 ? "(nothing in bag)" : "Equip…";
@@ -410,42 +540,253 @@ QM.dock = {
     }
     select.addEventListener("change", () => {
       const itemId = select.value;
-      if (itemId) this._setLocation(itemId, `equipped:${slot}`);
+      if (itemId) this._updateItem(itemId, { location: `equipped:${slot}` });
     });
 
-    row.appendChild(select);
+    topLine.appendChild(select);
+    row.appendChild(topLine);
+    return row;
+  },
+
+  _descriptionInput(item) {
+    const input = this._smallInput("input");
+    input.type = "text";
+    input.placeholder = "Description";
+    input.value = item.description || "";
+    input.addEventListener("change", () => this._updateItem(item.id, { description: input.value }));
+    return input;
+  },
+
+  _buildSaveOutfitForm() {
+    const form = document.createElement("form");
+    Object.assign(form.style, { display: "flex", flexDirection: "column", gap: "4px", marginBottom: "8px" });
+
+    const line = document.createElement("div");
+    Object.assign(line.style, { display: "flex", gap: "6px" });
+
+    const nameInput = this._smallInput("input");
+    nameInput.type = "text";
+    nameInput.placeholder = "Save current as outfit…";
+    nameInput.required = true;
+    nameInput.style.flex = "1";
+
+    const saveButton = document.createElement("button");
+    saveButton.type = "submit";
+    saveButton.textContent = "Save";
+    Object.assign(saveButton.style, {
+      background: "var(--primary, #444)",
+      color: "var(--primary-foreground, #fff)",
+      border: "none",
+      borderRadius: "4px",
+      padding: "3px 10px",
+      cursor: "pointer",
+      fontSize: "12px",
+    });
+
+    line.append(nameInput, saveButton);
+
+    const descriptionInput = this._smallInput("input");
+    descriptionInput.type = "text";
+    descriptionInput.placeholder = "Description (fed to appearance when selected above)";
+    descriptionInput.style.width = "100%";
+    descriptionInput.style.boxSizing = "border-box";
+
+    form.append(line, descriptionInput);
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const chatId = this.chatId;
+      const name = nameInput.value.trim();
+      if (!chatId || !name) return;
+      saveButton.disabled = true;
+      try {
+        const result = await QM.createOutfit(chatId, QM_OWNER_ID, {
+          name,
+          description: descriptionInput.value,
+        });
+        this.items = result.items;
+        this.outfits = result.outfits;
+        this.error = null;
+        nameInput.value = "";
+        descriptionInput.value = "";
+      } catch (error) {
+        this.error = error && error.message ? error.message : String(error);
+      }
+      saveButton.disabled = false;
+      this._paint();
+    });
+
+    return form;
+  },
+
+  _buildOutfitsList() {
+    const list = document.createElement("ul");
+    Object.assign(list.style, {
+      listStyle: "none",
+      margin: "0",
+      padding: "0",
+      display: "flex",
+      flexDirection: "column",
+      gap: "6px",
+    });
+
+    const outfits = this.outfits ?? [];
+    if (outfits.length === 0) {
+      const empty = this._textNode("No saved outfits yet.");
+      empty.style.color = "var(--muted-foreground, currentcolor)";
+      empty.style.margin = "0 0 8px";
+      list.appendChild(empty);
+      return list;
+    }
+
+    for (const outfit of outfits) {
+      list.appendChild(this._buildOutfitRow(outfit));
+    }
+    return list;
+  },
+
+  _buildOutfitRow(outfit) {
+    const row = document.createElement("li");
+    Object.assign(row.style, {
+      display: "flex",
+      flexDirection: "column",
+      gap: "3px",
+      border: "1px solid var(--border, rgba(128,128,128,0.3))",
+      borderRadius: "4px",
+      padding: "4px 6px",
+    });
+
+    const topLine = document.createElement("div");
+    Object.assign(topLine.style, { display: "flex", alignItems: "center", gap: "6px" });
+
+    const name = document.createElement("span");
+    name.style.flex = "1";
+    name.textContent = this._outfitMatchesCurrent(outfit) ? `${outfit.name} (equipped)` : outfit.name;
+    if (this._outfitMatchesCurrent(outfit)) name.style.fontWeight = "600";
+
+    const equipButton = document.createElement("button");
+    equipButton.type = "button";
+    equipButton.textContent = "Equip";
+    Object.assign(equipButton.style, {
+      background: "var(--primary, #444)",
+      color: "var(--primary-foreground, #fff)",
+      border: "none",
+      borderRadius: "4px",
+      padding: "2px 6px",
+      cursor: "pointer",
+      fontSize: "12px",
+    });
+    equipButton.addEventListener("click", async () => {
+      const chatId = this.chatId;
+      if (!chatId) return;
+      try {
+        const result = await QM.equipOutfit(chatId, QM_OWNER_ID, outfit.id);
+        this.items = result.items;
+        this.outfits = result.outfits;
+        this.error = null;
+      } catch (error) {
+        this.error = error && error.message ? error.message : String(error);
+      }
+      this._paint();
+    });
+
+    const updateButton = document.createElement("button");
+    updateButton.type = "button";
+    updateButton.textContent = "Update";
+    updateButton.title = "Resave the currently-equipped items into this outfit";
+    Object.assign(updateButton.style, {
+      background: "var(--secondary, transparent)",
+      color: "var(--secondary-foreground, inherit)",
+      border: "1px solid var(--border, rgba(0,0,0,0.2))",
+      borderRadius: "4px",
+      padding: "2px 6px",
+      cursor: "pointer",
+      fontSize: "12px",
+    });
+    updateButton.addEventListener("click", async () => {
+      const chatId = this.chatId;
+      if (!chatId) return;
+      try {
+        const result = await QM.updateOutfit(chatId, QM_OWNER_ID, outfit.id, { resnapshot: true });
+        this.items = result.items;
+        this.outfits = result.outfits;
+        this.error = null;
+      } catch (error) {
+        this.error = error && error.message ? error.message : String(error);
+      }
+      this._paint();
+    });
+
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.textContent = "Delete";
+    Object.assign(deleteButton.style, {
+      background: "var(--destructive, #c0392b)",
+      color: "var(--destructive-foreground, #fff)",
+      border: "none",
+      borderRadius: "4px",
+      padding: "2px 6px",
+      cursor: "pointer",
+      fontSize: "12px",
+    });
+    deleteButton.addEventListener("click", async () => {
+      const chatId = this.chatId;
+      if (!chatId) return;
+      try {
+        const result = await QM.deleteOutfit(chatId, QM_OWNER_ID, outfit.id);
+        this.items = result.items;
+        this.outfits = result.outfits;
+        this.error = null;
+      } catch (error) {
+        this.error = error && error.message ? error.message : String(error);
+      }
+      this._paint();
+    });
+
+    topLine.append(name, equipButton, updateButton, deleteButton);
+    row.appendChild(topLine);
+
+    const descriptionInput = this._smallInput("input");
+    descriptionInput.type = "text";
+    descriptionInput.placeholder = "Description";
+    descriptionInput.value = outfit.description || "";
+    descriptionInput.addEventListener("change", async () => {
+      const chatId = this.chatId;
+      if (!chatId) return;
+      try {
+        const result = await QM.updateOutfit(chatId, QM_OWNER_ID, outfit.id, {
+          description: descriptionInput.value,
+        });
+        this.items = result.items;
+        this.outfits = result.outfits;
+        this.error = null;
+      } catch (error) {
+        this.error = error && error.message ? error.message : String(error);
+      }
+      this._paint();
+    });
+    row.appendChild(descriptionInput);
+
     return row;
   },
 
   _buildAddItemForm() {
     const form = document.createElement("form");
-    Object.assign(form.style, { display: "flex", gap: "6px", marginBottom: "8px" });
+    Object.assign(form.style, { display: "flex", flexDirection: "column", gap: "4px", marginBottom: "8px" });
 
-    const nameInput = document.createElement("input");
+    const line = document.createElement("div");
+    Object.assign(line.style, { display: "flex", gap: "6px" });
+
+    const nameInput = this._smallInput("input");
     nameInput.type = "text";
     nameInput.placeholder = "Item name";
     nameInput.required = true;
-    Object.assign(nameInput.style, {
-      flex: "1",
-      background: "var(--input, transparent)",
-      color: "inherit",
-      border: "1px solid var(--border, rgba(0,0,0,0.2))",
-      borderRadius: "4px",
-      padding: "3px 6px",
-    });
+    nameInput.style.flex = "1";
 
-    const quantityInput = document.createElement("input");
+    const quantityInput = this._smallInput("input");
     quantityInput.type = "number";
     quantityInput.min = "1";
     quantityInput.value = "1";
-    Object.assign(quantityInput.style, {
-      width: "56px",
-      background: "var(--input, transparent)",
-      color: "inherit",
-      border: "1px solid var(--border, rgba(0,0,0,0.2))",
-      borderRadius: "4px",
-      padding: "3px 6px",
-    });
+    quantityInput.style.width = "56px";
 
     const addButton = document.createElement("button");
     addButton.type = "submit";
@@ -459,7 +800,15 @@ QM.dock = {
       cursor: "pointer",
     });
 
-    form.append(nameInput, quantityInput, addButton);
+    line.append(nameInput, quantityInput, addButton);
+
+    const descriptionInput = this._smallInput("input");
+    descriptionInput.type = "text";
+    descriptionInput.placeholder = "Description (optional)";
+    descriptionInput.style.width = "100%";
+    descriptionInput.style.boxSizing = "border-box";
+
+    form.append(line, descriptionInput);
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       const chatId = this.chatId;
@@ -467,11 +816,17 @@ QM.dock = {
       if (!chatId || !name) return;
       addButton.disabled = true;
       try {
-        const result = await QM.addItem(chatId, QM_OWNER_ID, { name, quantity: quantityInput.value });
+        const result = await QM.addItem(chatId, QM_OWNER_ID, {
+          name,
+          quantity: quantityInput.value,
+          description: descriptionInput.value,
+        });
         this.items = result.items;
+        this.outfits = result.outfits;
         this.error = null;
         nameInput.value = "";
         quantityInput.value = "1";
+        descriptionInput.value = "";
       } catch (error) {
         this.error = error && error.message ? error.message : String(error);
       }
@@ -525,32 +880,13 @@ QM.dock = {
     const label = document.createElement("span");
     label.textContent = item.name;
     label.style.flex = "1";
-    label.title = item.description || "";
 
-    const quantityInput = document.createElement("input");
+    const quantityInput = this._smallInput("input");
     quantityInput.type = "number";
     quantityInput.min = "1";
     quantityInput.value = String(item.quantity);
-    Object.assign(quantityInput.style, {
-      width: "48px",
-      background: "var(--input, transparent)",
-      color: "inherit",
-      border: "1px solid var(--border, rgba(0,0,0,0.2))",
-      borderRadius: "4px",
-      padding: "2px 4px",
-    });
-    quantityInput.addEventListener("change", async () => {
-      const chatId = this.chatId;
-      if (!chatId) return;
-      try {
-        const result = await QM.updateItem(chatId, QM_OWNER_ID, item.id, { quantity: quantityInput.value });
-        this.items = result.items;
-        this.error = null;
-      } catch (error) {
-        this.error = error && error.message ? error.message : String(error);
-      }
-      this._paint();
-    });
+    quantityInput.style.width = "48px";
+    quantityInput.addEventListener("change", () => this._updateItem(item.id, { quantity: quantityInput.value }));
 
     const deleteButton = document.createElement("button");
     deleteButton.type = "button";
@@ -569,6 +905,7 @@ QM.dock = {
       try {
         const result = await QM.deleteItem(chatId, QM_OWNER_ID, item.id);
         this.items = result.items;
+        this.outfits = result.outfits;
         this.error = null;
       } catch (error) {
         this.error = error && error.message ? error.message : String(error);
@@ -578,34 +915,26 @@ QM.dock = {
 
     topLine.append(label, quantityInput, deleteButton);
 
-    const bottomLine = document.createElement("div");
-    Object.assign(bottomLine.style, { display: "flex", alignItems: "center", gap: "6px" });
+    const storedLine = document.createElement("div");
+    Object.assign(storedLine.style, { display: "flex", alignItems: "center", gap: "6px" });
 
     const storedLabel = document.createElement("span");
     storedLabel.textContent = "Stored at:";
     Object.assign(storedLabel.style, { fontSize: "11px", color: "var(--muted-foreground, currentcolor)" });
 
-    const storedInput = document.createElement("input");
+    const storedInput = this._smallInput("input");
     storedInput.type = "text";
     storedInput.placeholder = "bag";
     storedInput.value = item.location.startsWith("stored:") ? item.location.slice("stored:".length) : "";
-    Object.assign(storedInput.style, {
-      flex: "1",
-      fontSize: "11px",
-      background: "var(--input, transparent)",
-      color: "inherit",
-      border: "1px solid var(--border, rgba(0,0,0,0.2))",
-      borderRadius: "4px",
-      padding: "2px 4px",
-    });
+    storedInput.style.flex = "1";
     storedInput.addEventListener("change", () => {
       const text = storedInput.value.trim();
-      this._setLocation(item.id, text ? `stored:${text}` : "bag");
+      this._updateItem(item.id, { location: text ? `stored:${text}` : "bag" });
     });
 
-    bottomLine.append(storedLabel, storedInput);
+    storedLine.append(storedLabel, storedInput);
 
-    row.append(topLine, bottomLine);
+    row.append(topLine, storedLine, this._descriptionInput(item));
     return row;
   },
 };
