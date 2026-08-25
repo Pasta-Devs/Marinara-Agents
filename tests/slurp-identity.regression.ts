@@ -21,6 +21,11 @@ assert.match(
   routes,
   /async function resolveViewerIdentity\(personaId: string\)[\s\S]*?getSlurpAccountForEntity\("persona", personaId\)/u,
 );
+assert.match(
+  routes,
+  /resolvedActor\?\.kind === "persona" && resolvedActor\.entityId === personaId \? resolvedActor : null/u,
+  "Viewer identity fallback must not authorize a different persona account",
+);
 assert.match(routes, /actorAccountId: identity\.actor\.id,[\s\S]*?viewerPersonaId: identity\.personaId/u);
 assert.match(routes, /viewerActorAccountId: identity\.actor\.id/u);
 assert.match(

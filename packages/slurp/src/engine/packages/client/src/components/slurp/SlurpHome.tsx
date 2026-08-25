@@ -1021,7 +1021,12 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     currentDraft?: NoodleStageProfileInput;
   }) => {
     const noodlerAccountId = options?.noodlerAccountId ?? editingProfileId;
-    if (!draftNoodleAccountId && !noodlerAccountId) return;
+    if (!draftNoodleAccountId && !noodlerAccountId) {
+      // Was a silent no-op: the guided-persona "Generate draft" button looked dead with no
+      // toast, no dialog, and no network request when this source id went missing.
+      toast.error(localizeUi("ui.noodle.noodlerhome.noSourceSelectedForThisDraft"));
+      return;
+    }
     if (connections.length === 0) {
       toast.error(localizeUi("ui.noodle.stageprofileform.noConnectionsConfiguredAddOneInSettingsConnections"));
       return;
@@ -1187,7 +1192,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     if (!(await confirmProviderDisclosure())) return;
     const guide = serializeNoodlerPostGuide(title, body);
     const result = await generatePost.mutateAsync({
-      mode: "creator",
+      mode: "noodler",
       targetAccountId: profileId,
       ...(guide ? { noodlerPostGuide: guide } : {}),
       access,
@@ -1711,7 +1716,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
         <div className="hidden @min-[1024px]:block">
           <SubscriptionSections
             creators={(viewerQuery.data?.creators ?? []).filter(
-              (creator) => creator.profile.id !== mainAuthorProfile?.id,
+              (creator) => creator.profile.id !== mainAuthorProfile?.id && !creator.subscribed,
             )}
             onToggleSubscription={toggleCreatorSubscription}
             togglePending={toggleSubscription.isPending}
@@ -4105,7 +4110,9 @@ function ViewerHub({
       </div>
       <div className="hidden border-b border-[var(--noodle-divider)] py-3 @min-[1024px]:block @min-[1024px]:px-4 @min-[1280px]:hidden">
         <SubscriptionSections
-          creators={(scope?.creators ?? []).filter((creator) => creator.profile.id !== authorProfile?.id)}
+          creators={(scope?.creators ?? []).filter(
+            (creator) => creator.profile.id !== authorProfile?.id && !creator.subscribed,
+          )}
           onToggleSubscription={onToggleSubscription}
           togglePending={togglePending}
           onOpenProfile={postCardCtx.openAuthorProfile}
@@ -4931,7 +4938,7 @@ function SubscriptionSections({
         <h3 className="text-lg font-bold">{localizeUi("ui.noodle.subscriptionsections.creators")}</h3>
       </div>
       {creators.length > 0 ? (
-        <div className="divide-y divide-[var(--noodle-divider)]">
+        <div className="max-h-[28rem] divide-y divide-[var(--noodle-divider)] overflow-y-auto">
           {creators.map((creator) => {
             const openProfile = onOpenProfile ? () => onOpenProfile(creator.profile.id) : undefined;
             return (
