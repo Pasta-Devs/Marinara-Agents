@@ -9,6 +9,36 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// ── THE HARNESS ALWAYS LEAVES (Agents #554) ──────────────────────────────────
+// A red run was once seen to print an error and then sit past a ten-minute
+// timeout; six later attempts could not reproduce it. What those attempts did
+// settle is that the THROW path is not the one that needs a guard: node prints
+// an uncaught AssertionError and exits 1 in the same tick, with timers armed or
+// not, so a final catch here could only take node's own rendering of the red
+// away from the workflow that reads it, and buy nothing back.
+//
+// The shape that can sit forever is the one that never throws. withSavePath
+// stubs globalThis.setTimeout to RECORD rather than fire, six of the HUD cases
+// stub it away outright, and two package paths — 60-save's brief-storage ladder
+// and 58-player's quarantine one — wait on a promise that only a timer resolves.
+// A case that reaches one of those parks its await, the module promise never
+// settles, and node cannot report what nobody threw. With the loop drained it
+// says so and exits 13; with anything still alive it simply waits, which is a
+// hang with an error printed above it and no exit under it — the report exactly.
+//
+// So the guarantee is a deadline rather than a catch. The timer is unref'd on
+// purpose: it cannot hold a healthy run open (a green run takes ~5s and is long
+// gone before this comes due), and it can only fire inside a process that is
+// still alive at the deadline, which is the hang and nothing else. It prints
+// what the issue asked the next person to capture before killing it.
+const HANG_BUDGET_MS = 120_000; // ~25x a green run; raise it if you are sitting in a debugger
+const watchdog = setTimeout(() => {
+  console.error(`\nharness watchdog: ${HANG_BUDGET_MS}ms and no exit — a case is parked (Agents #554).`);
+  console.error("still alive:", process.getActiveResourcesInfo());
+  process.exit(1);
+}, HANG_BUDGET_MS);
+watchdog.unref();
+
 const here = dirname(fileURLToPath(import.meta.url));
 // Mirror the real bundle: concatenate the modules into one scope (the prelude
 // declares `const PF` itself) and return PF. 70-hud and 80-setup ride along
