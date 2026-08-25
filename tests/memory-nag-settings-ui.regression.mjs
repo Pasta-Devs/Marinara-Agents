@@ -9,6 +9,21 @@ const settings = readFileSync(new URL("MemoryNagSettings.tsx", sourceRoot), "utf
 const vault = readFileSync(new URL("MemoryNagVault.tsx", sourceRoot), "utf8");
 const styles = readFileSync(new URL("styles.ts", sourceRoot), "utf8");
 
+assert.doesNotMatch(
+  settings,
+  /memoryNag\.settings\.save/u,
+  "Memory Nag settings must not require a manual save action",
+);
+assert.match(
+  settings,
+  /window\.setTimeout\(\(\) => \{[\s\S]*void saveSettings\(\)[\s\S]*\}, 500\);/u,
+  "Memory Nag settings must autosave after a short quiet period",
+);
+assert.match(
+  settings,
+  /settingsVersionRef\.current === version/u,
+  "an older autosave response must not overwrite newer field edits",
+);
 assert.match(settings, /id="mn-memory-nag-vault-prompt"[\s\S]*rows=\{3\}/u);
 assert.equal(
   (settings.match(/className="mn-prompt-tool"/gu) ?? []).length,
@@ -22,8 +37,8 @@ assert.doesNotMatch(
 );
 assert.match(
   settings,
-  /disabled=\{saving \|\| scanning \|\| settings\.vaultPrompt === MEMORY_NAG_DEFAULT_VAULT_PROMPT\}/u,
-  "Vault prompt reset must stay disabled while saving, scanning, or already at the default",
+  /disabled=\{scanning \|\| settings\.vaultPrompt === MEMORY_NAG_DEFAULT_VAULT_PROMPT\}/u,
+  "Vault prompt reset must stay disabled while scanning or already at the default",
 );
 assert.match(
   settings,
