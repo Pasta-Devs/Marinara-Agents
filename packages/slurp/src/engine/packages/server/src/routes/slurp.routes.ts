@@ -544,9 +544,10 @@ export async function slurpRoutes(app: FastifyInstance) {
     // The persona's own Slurp profile is normally provisioned at bootstrap, but it can be
     // absent right after account deletion/cleanup — provision it here so interactions never
     // 404 for a still-live persona (review finding).
-    const actor =
+    const resolvedActor =
       (await noodle.getSlurpAccountForEntity("persona", personaId)) ??
       (await resolvePersonaAccount(noodle, characters, personaId));
+    const actor = resolvedActor?.kind === "persona" && resolvedActor.entityId === personaId ? resolvedActor : null;
     return { personaId, viewer, actor };
   }
 

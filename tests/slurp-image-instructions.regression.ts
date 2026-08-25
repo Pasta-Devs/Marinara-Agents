@@ -8,11 +8,15 @@ const images = readFileSync(
   "utf8",
 );
 
-// input.settings.imageGenerationPrompt reaches the model once, via loadPrompt()'s
-// userInstructions — imagePromptInstructions must not duplicate it (review finding).
+// The default template includes userInstructions, while a custom template may omit it. Preserve
+// configured instructions in the latter case without duplicating them in the former.
 assert.match(images, /userInstructions: input\.settings\.imageGenerationPrompt/u);
-assert.match(images, /imagePromptInstructions = input\.imageConnection\.imagePromptInstructions\?\.trim\(\) \?\? ""/u);
-assert.doesNotMatch(images, /configuredImageInstructions/u);
+assert.match(images, /configuredImageInstructions = input\.settings\.imageGenerationPrompt\.trim\(\)/u);
+assert.match(
+  images,
+  /configuredImageInstructions && !postPrompt\.includes\(configuredImageInstructions\) \? configuredImageInstructions : ""/u,
+);
+assert.match(images, /input\.imageConnection\.imagePromptInstructions\?\.trim\(\) \?\? ""/u);
 assert.match(images, /instructions: imagePromptInstructions/u);
 assert.match(images, /rewrittenPrompt \?\?[\s\S]*?instructionLine && !input\.promptOverride/u);
 
