@@ -586,6 +586,12 @@ PF.world = (() => {
       sealedBrief._ids &&
       typeof sealedBrief._ids.zones === "object"
     ) {
+      // Hoisted so the CATCH below can name the folds too. If a FOLDED brief fails
+      // to compile anyway, the folded values are the only ones that moved between
+      // what was stored and what the compiler read, which makes them the first
+      // thing to look at — and null until the fold has actually run, because a
+      // throw out of foldStored itself folded nothing.
+      let folded = null;
       try {
         // #566: THE STORED BRIEF IS UNTRUSTED AT THIS DOOR. The gate above answers
         // for its SHAPE and nothing has ever answered for its VALUES, which are
@@ -596,7 +602,7 @@ PF.world = (() => {
         // would sever an honest save from its own unchanged world. Folded for the
         // compiler, stored for the identity — PF.brief.foldStored says why the two
         // cannot be the same object.
-        const folded = PF.brief.foldStored(sealedBrief, seed);
+        folded = PF.brief.foldStored(sealedBrief, seed);
         const world = compile(folded, seed);
         if (folded._folds.length) {
           // SAID OUT LOUD, which is the half of #566 that made the zone loss a bug
@@ -612,7 +618,11 @@ PF.world = (() => {
         }
         return world;
       } catch (err) {
-        console.warn("[pixelforge] stored brief failed to compile; using the themed legacy world", err);
+        console.warn(
+          `[pixelforge] stored brief failed to compile after ${folded?._folds.length ?? 0} fold(s); using the themed legacy world`,
+          err,
+          folded?._folds ?? [],
+        );
       }
     }
     return buildLegacy(seed, theme);

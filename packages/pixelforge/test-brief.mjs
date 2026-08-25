@@ -16732,6 +16732,62 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     brief.foldStored(untouched, seed566);
     assert.equal(JSON.stringify(untouched), beforeFold, "…and foldStored() never touches the object it was handed");
   }
+
+  // (vii) THE THEME FOLD ASKS THE ART MODULE RATHER THAN KEEPING A LIST OF ITS
+  // OWN. `brief.theme` is spent on exactly ONE read downstream of the fold —
+  // `PF.art.setTheme(brief.theme)` (20-world) — so 10-art's table is the whole
+  // vocabulary this fold answers to, and a second copy of it here could only
+  // drift out of it. The drift is the future-theme divergence class the roadmap's
+  // swamp-biome prerequisites already track (LEGACY_ROLES skipping an unlisted
+  // theme in silence is the same shape): an art-only theme folded here would
+  // replace a VALID theme with the default, one screen before setTheme() would
+  // have accepted it (review).
+  {
+    const realThemeIds = loadedPF.art.themeIds;
+    const themed = (id) => {
+      const stored = planted((draft) => (draft.theme = id));
+      return brief.foldStored(stored, seed566)._folds;
+    };
+    try {
+      // The steady state first: this build's own themes move nothing, and a word
+      // that is not a theme still folds, so the whitelist is still a whitelist.
+      for (const id of realThemeIds()) assert.deepEqual(themed(id), [], `"${id}" is a theme, so nothing moves`);
+      assert.deepEqual(
+        themed("swamp-biome"),
+        ['theme: "swamp-biome" -> "cozy-village"'],
+        "a theme nothing in this build answers for still folds to the default",
+      );
+      // THE PIN. A build that ships a third theme is exactly this — one more id
+      // out of the art module — and the fold has to read that AT FOLD TIME to see
+      // it. A load-time copy of the list folds the newer build's honest theme
+      // away and hands the compiler cozy-village instead.
+      loadedPF.art.themeIds = () => [...realThemeIds(), "swamp-biome"];
+      assert.deepEqual(themed("swamp-biome"), [], "a theme the art module answers for is one the fold leaves alone");
+    } finally {
+      loadedPF.art.themeIds = realThemeIds;
+    }
+  }
+
+  // (viii) A DEGRADE NAMES THE FOLDS AS WELL. When the FOLDED brief throws
+  // anyway, build()'s catch-all is the only line anybody gets, and the folded
+  // values are the only ones that moved between what was stored and what the
+  // compiler read — the likeliest explanation, and the one thing the line did
+  // not carry (review).
+  {
+    // A brief that clears the shape gate and dies inside the compile: `_ids.zones`
+    // of null is `typeof "object"`, so the door opens, and the zone index built
+    // from `Object.entries(brief._ids.zones)` throws on the first read. It carries
+    // a foldable value too, which is what the warning owes the next reader.
+    const doomed = planted((draft) => {
+      draft.prosperity = "constructor";
+      draft._ids.zones = null;
+    });
+    const degraded = built(doomed);
+    assert.notEqual(degraded.w.brieved, true, "the folded brief failed to compile, so the world degraded as before");
+    const line = degraded.warned.find((text) => text.includes("failed to compile"));
+    assert.ok(line, "the degrade is still announced");
+    assert.ok(line.includes('prosperity: "constructor" -> "modest"'), "…and the line names the value the fold moved");
+  }
 }
 
 // ── A DOM the size of the two surfaces that need one ──────────────────────────

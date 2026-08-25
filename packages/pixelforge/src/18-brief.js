@@ -573,7 +573,18 @@ PF.brief = (() => {
       // and the row keeps its name, so the registry can still say what stands there.
       list.forEach((feature, index) => foldAt(feature, "tag", FEATURE_TAGS, null, `${fieldPath}[${index}].tag`));
     };
-    foldAt(brief, "theme", Object.keys(DEFAULT_BRIEFS), "cozy-village", "theme");
+    // Theme is the one fold whose vocabulary is not this module's to state.
+    // compile() spends `brief.theme` on a single read — `PF.art.setTheme()`
+    // (20-world) — so 10-art's table IS the whitelist, and it is asked for it at
+    // fold time rather than copied at load time. A copy would drift the moment a
+    // theme ships with art but no worked example here, and folding an art-only
+    // theme to cozy-village would replace a VALID value one screen before
+    // setTheme() would have accepted it: the future-theme divergence class the
+    // roadmap's swamp-biome prerequisites already track. No art module, no
+    // authority and so no fold — which is what 20-world's own `PF.art.setTheme ?`
+    // guard does with the same absence.
+    const themeIds = PF.art?.themeIds?.();
+    if (themeIds) foldAt(brief, "theme", themeIds, "cozy-village", "theme");
     foldAt(brief, "scale", Object.keys(SCALES), "village", "scale");
     foldAt(brief, "surround", SURROUNDS, pick(seed, "surround", SURROUNDS), "surround");
     foldAt(brief, "prosperity", PROSPERITY, "modest", "prosperity");
