@@ -16542,6 +16542,36 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     assert.deepEqual(hostile.w.briefFolds, ['places[0].kind: "toString" -> "dwelling"'], "and it is on the record");
   }
 
+  // (iii-b) A FEATURE TAG IS THE ONE FOLD WHOSE FALLBACK IS `null` RATHER THAN A
+  // WORD, and the only one whose value survives the compile into a registry row.
+  // The fold comment calls an unknown tag "already a plain rect with no painter",
+  // and for an ordinary unknown word it is — but the read that decides the rect is
+  // BARE (`FEATURE_RECTS[feature.tag] ?? FEATURE_RECT`, 20-world), so a tag naming
+  // a prototype method resolves to a FUNCTION, the `??` cannot fire, and the size
+  // spread into the register carries no `w` and no `h` at all. Folding to null is
+  // what puts a real rect back. The row keeps its NAME either way, which is the
+  // half that lets the registry still say what stands there.
+  {
+    const hostile = built(planted((stored) => (stored.features[0].tag = "valueOf")));
+    assert.equal(hostile.w.brieved, true, "an unknown feature tag still compiles the brief's world");
+    assert.deepEqual(hostile.w.briefFolds, ['features[0].tag: "valueOf" -> null'], "and the fold is on the record");
+    const rows = Object.values(hostile.w.zones).flatMap((zone) => zone.features ?? []);
+    // Against the VOCABULARY, not against `typeof`: a prototype key is a perfectly
+    // good string, so a type test here would pass just as happily on the unfolded
+    // row and pin nothing at all.
+    assert.ok(
+      rows.every((row) => row.tag === null || brief.FEATURE_TAGS.includes(row.tag)),
+      "no registry row carries a tag outside the shipped vocabulary",
+    );
+    assert.ok(
+      rows.every((row) => Number.isFinite(row.rect.w) && Number.isFinite(row.rect.h)),
+      "…and every row still has a rect with real sides, which the bare read could not give it",
+    );
+    const folded = rows.filter((row) => row.tag === null);
+    assert.equal(folded.length, 1, "exactly the one folded feature lost its tag");
+    assert.ok(folded[0].name, "…and it kept the name the registry answers with");
+  }
+
   // (iv) THE SEVERANCE RED. An honest save loads, and loads again, and is never
   // severed — because the fold never touches the object identity is computed from.
   //
