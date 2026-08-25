@@ -434,8 +434,22 @@ assert.match(workspace, /data-ltm-source-operation-excluded/u);
 assert.match(workspace, /data-ltm-source-operation-result/u);
 assert.match(workspace, /data-ltm-source-import-mode/u);
 assert.match(workspace, /importsAsMode/u);
+assert.match(workspace, /const changeSource = useCallback/u);
+assert.match(workspace, /\[changeSource, onRequestedSourceHandled, requestedSource\]/u);
+assert.match(workspace, /min-h-11 min-w-11[\s\S]*data-ltm-source-select-all/u);
+assert.match(workspace, /min-h-11 min-w-11[\s\S]*data-ltm-source-select=/u);
+assert.doesNotMatch(workspace, /opacity-0 transition-opacity pointer-events-none/u);
+assert.match(workspace, /prefers-reduced-motion: reduce[\s\S]*animation: none/u);
+assert.match(workspace, /resultToneClass[\s\S]*var\(--destructive\)/u);
+assert.match(workspace, /data-ltm-import-outcome[\s\S]*border-t border-\[var\(--border\)\]/u);
+assert.match(workspace, /linked\.isError[\s\S]*linkedMemoriesCouldNotLoad/u);
+assert.match(workspace, /!linked\.isSuccess/u);
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.importsAsMode"], "Imports as {{mode}}");
 assert.equal(locale["ui.longTermMemory.sourceoperation.clearAll"], "Clear all");
+assert.equal(
+  locale["ui.longTermMemory.sourceoperation.linkedMemoriesCouldNotLoad"],
+  "Linked memories could not load. Preview and apply are unavailable until lineage is available.",
+);
 assert.equal(
   locale["ui.longTermMemory.sourceoperation.confirmArchive"],
   "Archive the source and {{count}} selected linked memories?",

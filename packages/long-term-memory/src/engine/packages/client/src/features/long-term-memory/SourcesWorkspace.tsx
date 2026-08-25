@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
@@ -109,7 +109,9 @@ function resultToneClass(status: string) {
     ? "border border-[var(--border)] bg-[var(--marinara-editor-accent)]/15"
     : tone === "warning"
       ? "border border-[var(--marinara-editor-warning)]/40 text-[var(--marinara-editor-warning)]"
-      : "border border-[var(--border)] bg-[var(--secondary)]";
+      : tone === "danger"
+        ? "border border-[var(--destructive)]/35 text-[var(--destructive)]"
+        : "border border-[var(--border)] bg-[var(--secondary)]";
 }
 
 function importStatusLabel(status: string, localizeUi: LtmTranslationFunction) {
@@ -213,16 +215,18 @@ function EntrySelect({
     if (ref.current) ref.current.indeterminate = indeterminate;
   }, [indeterminate]);
   return (
-    <input
-      ref={ref}
-      type="checkbox"
-      checked={checked}
-      onChange={(event) => onChange(event.target.checked)}
-      aria-label={localizeUi("ui.longTermMemory.memoryvault.selectValue1", {
-        value1: entry.name,
-      })}
-      data-ltm-lorebook-entry-select={entry.id}
-    />
+    <label className="flex min-h-11 min-w-11 shrink-0 items-center justify-center">
+      <input
+        ref={ref}
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        aria-label={localizeUi("ui.longTermMemory.memoryvault.selectValue1", {
+          value1: entry.name,
+        })}
+        data-ltm-lorebook-entry-select={entry.id}
+      />
+    </label>
   );
 }
 
@@ -283,7 +287,7 @@ function SourceOperationWorkbench({
     setError("");
   };
   const previewOperation = async () => {
-    if ((operation === "copy" || operation === "move") && !destinationChatId) return;
+    if (!linked.isSuccess || ((operation === "copy" || operation === "move") && !destinationChatId)) return;
     setBusy("preview");
     setError("");
     setResult(null);
@@ -309,7 +313,7 @@ function SourceOperationWorkbench({
     }
   };
   const apply = async () => {
-    if (!previewed || busy || result) return;
+    if (!linked.isSuccess || !previewed || busy || result) return;
     if (operation === "archive" || operation === "delete") {
       const options = {
         title: localizeUi(`ui.longTermMemory.sourceoperation.apply${operation[0].toUpperCase()}${operation.slice(1)}`),
@@ -490,6 +494,13 @@ function SourceOperationWorkbench({
             {localizeUi("ui.longTermMemory.sourceoperation.loadingLinkedMemories")}
           </p>
         ) : null}
+        {linked.isError ? (
+          <StatusSurface tone="danger">
+            {linked.error instanceof Error
+              ? linked.error.message
+              : localizeUi("ui.longTermMemory.sourceoperation.linkedMemoriesCouldNotLoad")}
+          </StatusSurface>
+        ) : null}
         {memories.map((memory) => (
           <label
             key={memory.id}
@@ -520,7 +531,7 @@ function SourceOperationWorkbench({
       <Button
         primary
         disabled={
-          busy !== null || linked.isLoading || ((operation === "copy" || operation === "move") && !destinationChatId)
+          busy !== null || !linked.isSuccess || ((operation === "copy" || operation === "move") && !destinationChatId)
         }
         onClick={() => void previewOperation()}
         data-ltm-source-operation-action="preview"
@@ -595,6 +606,7 @@ function SourceOperationWorkbench({
             disabled={
               Boolean(result) ||
               busy !== null ||
+              !linked.isSuccess ||
               ((operation === "copy" || operation === "move") && !preview?.buckets.ready.length)
             }
             onClick={() => void apply()}
@@ -897,7 +909,7 @@ export default function SourcesWorkspace({
     if (!requestedSource) return;
     changeSource(requestedSource.source);
     onRequestedSourceHandled?.();
-  }, [onRequestedSourceHandled, requestedSource?.key]);
+  }, [changeSource, onRequestedSourceHandled, requestedSource]);
 
   useEffect(() => {
     if (selectedSource) setSource(selectedSource);
@@ -935,21 +947,24 @@ export default function SourcesWorkspace({
     ]);
   };
 
-  const clearImportResult = () => {
+  const clearImportResult = useCallback(() => {
     setImportResult(null);
     setImportResultContract(null);
     setCancelledImport(null);
     setImportError("");
     setReviewMessage("");
     setSourceOperation(null);
-  };
+  }, []);
 
-  const changeSource = (next: Source) => {
-    setSource(next);
-    onSourceChange?.(next);
-    if (next === "lorebooks") setLorebookMobilePane("navigator");
-    clearImportResult();
-  };
+  const changeSource = useCallback(
+    (next: Source) => {
+      setSource(next);
+      onSourceChange?.(next);
+      if (next === "lorebooks") setLorebookMobilePane("navigator");
+      clearImportResult();
+    },
+    [clearImportResult, onSourceChange],
+  );
 
   const changeImportScope = (next: string) => {
     setImportTargetId(next);
@@ -1129,7 +1144,7 @@ export default function SourcesWorkspace({
 
   const sourceInlineActions = (noteId: string, title: string) => (
     <>
-      <div className="hidden items-start gap-1 opacity-0 transition-opacity pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto group-hover:opacity-100 group-focus-within:opacity-100 md:flex">
+      <div className="hidden items-start gap-1 md:flex">
         <IconButton
           icon={extractingId === noteId ? Loader2 : Sparkles}
           label={localizeUi("ui.longTermMemory.sourcesworkspace.reExtractValue1", { value1: title })}
@@ -1228,6 +1243,15 @@ export default function SourcesWorkspace({
         @container ltm-destination (min-width: 72rem) {
           [data-ltm-import-scope-fields] {
             grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          [data-ltm-surface="sources"] *,
+          [data-ltm-surface="sources"] *::before,
+          [data-ltm-surface="sources"] *::after {
+            scroll-behavior: auto !important;
+            transition: none !important;
+            animation: none !important;
           }
         }
       `}</style>
@@ -1766,27 +1790,29 @@ export default function SourcesWorkspace({
             aria-labelledby={`ltm-source-panel-tab-${flatPanel}`}
           >
             <div className="flex flex-wrap items-center gap-3 border-b border-[var(--border)] px-3 py-2 text-xs font-semibold">
-              <input
-                ref={flatPanel === "available" ? selectAllRef : selectAllImportedRef}
-                type="checkbox"
-                aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.selectAllValue1", {
-                  value1:
-                    flatPanel === "available"
-                      ? localizeUi("ui.longTermMemory.sourcesworkspace.readyToImport")
-                      : localizeUi("ui.longTermMemory.sourcesworkspace.alreadyImported"),
-                })}
-                checked={activeFlatAllSelected}
-                disabled={activeFlatRows.length === 0}
-                onChange={(event) =>
-                  setSelections((current) => ({
-                    ...current,
-                    [flatPanel === "available" ? selectionKey : importedSelectionKey]: event.target.checked
-                      ? activeFlatRows.map((row) => row.sourceId)
-                      : [],
-                  }))
-                }
-                data-ltm-source-select-all={flatPanel}
-              />
+              <label className="flex min-h-11 min-w-11 shrink-0 items-center justify-center">
+                <input
+                  ref={flatPanel === "available" ? selectAllRef : selectAllImportedRef}
+                  type="checkbox"
+                  aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.selectAllValue1", {
+                    value1:
+                      flatPanel === "available"
+                        ? localizeUi("ui.longTermMemory.sourcesworkspace.readyToImport")
+                        : localizeUi("ui.longTermMemory.sourcesworkspace.alreadyImported"),
+                  })}
+                  checked={activeFlatAllSelected}
+                  disabled={activeFlatRows.length === 0}
+                  onChange={(event) =>
+                    setSelections((current) => ({
+                      ...current,
+                      [flatPanel === "available" ? selectionKey : importedSelectionKey]: event.target.checked
+                        ? activeFlatRows.map((row) => row.sourceId)
+                        : [],
+                    }))
+                  }
+                  data-ltm-source-select-all={flatPanel}
+                />
+              </label>
               <span>
                 {activeFlatSelectedIds.length} {localizeUi("ui.longTermMemory.memoryvault.selected")}
               </span>
@@ -1841,17 +1867,19 @@ export default function SourcesWorkspace({
                   className="group space-y-2 p-3"
                 >
                   <div className="flex items-start gap-3">
-                    <input
-                      type="checkbox"
-                      aria-label={localizeUi("ui.longTermMemory.memoryvault.selectValue1", { value1: row.title })}
-                      checked={activeFlatSelection.has(row.sourceId)}
-                      onChange={(event) =>
-                        flatPanel === "available"
-                          ? toggleSelected(row.sourceId, event.target.checked)
-                          : toggleImportedSelected(row.sourceId, event.target.checked)
-                      }
-                      data-ltm-source-select={row.sourceId}
-                    />
+                    <label className="flex min-h-11 min-w-11 shrink-0 items-center justify-center">
+                      <input
+                        type="checkbox"
+                        aria-label={localizeUi("ui.longTermMemory.memoryvault.selectValue1", { value1: row.title })}
+                        checked={activeFlatSelection.has(row.sourceId)}
+                        onChange={(event) =>
+                          flatPanel === "available"
+                            ? toggleSelected(row.sourceId, event.target.checked)
+                            : toggleImportedSelected(row.sourceId, event.target.checked)
+                        }
+                        data-ltm-source-select={row.sourceId}
+                      />
+                    </label>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-sm font-semibold">{row.title}</h3>
@@ -1961,7 +1989,7 @@ export default function SourcesWorkspace({
             <article
               key={item.sourceId}
               data-ltm-import-outcome={item.extractionStatus}
-              className="mari-editor-panel space-y-2 p-3"
+              className="space-y-2 border-t border-[var(--border)] pt-3"
             >
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <strong>{item.title}</strong>
