@@ -32,8 +32,8 @@ Add optional grid geometry to `SpatialLocation`:
 interface SpatialLocalGrid {
   columns: number; // 1–64
   rows: number; // 1–64
-  minZ: number; // signed elevation
-  maxZ: number; // signed elevation; at most 64 levels
+  minZ: number; // finite signed integer; minZ <= 0
+  maxZ: number; // finite signed integer; maxZ >= 0
 }
 
 interface SpatialGridPosition {
@@ -53,16 +53,20 @@ Rules:
 
 - `localGrid` defines the coordinate space owned by a parent.
 - `gridPosition` places a child inside that parent's coordinate space.
-- Missing Z defaults to `0` when importing compatible XY-only data.
+- `minZ` and `maxZ` are finite integers, `minZ <= maxZ`, the inclusive range `maxZ - minZ + 1` is at most 64 levels, and every grid contains `z = 0`.
+- Missing Z defaults to `0` when importing compatible XY-only data; the Engine schema and import normalizer enforce the same range rules.
 - Two children may share X/Y when their Z values differ.
 - Two children may not occupy the same complete `(x, y, z)` cell.
 - Positions must be integer, in bounds, and absent when the parent has no grid.
+- `gridPosition` is authoritative for semantic XYZ location. Existing normalized `placement` remains independent visual-layout metadata for legacy Map rendering and is never used for distance, direction, occupancy, or model context.
+- Import and save/reload normalize and preserve valid `placement` and `gridPosition` independently when both exist. If `gridPosition` is absent, conversion is only performed through the explicit previewed conversion action: `x = round(placement.x / 100 * (columns - 1))`, `y = round(placement.y / 100 * (rows - 1))`, `z = 0`; collisions are then repaired by the normal deterministic allocator. Existing data is never eagerly converted.
 - Existing normalized `placement`, List, Map, and Layers data remain readable.
 - The capability API minor version and minimum compatible Engine version increase before the updated package ships.
 
 ## Implementation
 
-- Add reusable geometry helpers for bounds, occupancy, horizontal direction, horizontal distance, vertical difference, and deterministic ordering.
+- Add reusable geometry helpers for bounds, occupancy, horizontal direction, horizontal distance, vertical difference, and deterministic ordering. Engine validation, server normalization, and model-context formatting use these same helpers rather than reimplementing the formulas.
+- Horizontal distance uses Chebyshev grid distance: `max(abs(target.x - source.x), abs(target.y - source.y))`. Direction uses the sign pair of the X/Y deltas (`east`/`west`, `north`/`south`, or their diagonal combination), so unequal magnitudes and equal-magnitude ties resolve identically. A zero X/Y delta is `same horizontal cell`; a vertical-only difference is formatted as, for example, `same horizontal cell, 2 levels above`.
 - Keep every coordinate local. Do not calculate global coordinates across ancestors because grids may represent radically different scales.
 - Project a bounded nested spatial address into model context:
 
@@ -92,21 +96,23 @@ Rules:
   - Zoom in enters that child's coordinate space without moving the story.
   - Zoom out returns to the parent space and restores its prior slice.
   - Set destination or Plan route remains a separate explicit action.
-- Extend AI creation and expansion to propose local grids and XYZ positions. Server normalization preserves valid positions, repairs collisions deterministically, places omitted children in free cells, and fails safely when capacity is exhausted.
+- Extend AI creation and expansion to propose local grids and XYZ positions. Server normalization preserves valid positions, repairs collisions deterministically, and places omitted children in free cells. Allocation is atomic: if every proposed child cannot be assigned without exceeding capacity, normalization returns no proposed definition and persistence writes nothing; partial-success definitions are not returned.
 - Land shared schemas and capability contracts in Engine first. Then update World Maps source, bundles, manifests, artifacts, catalog lanes, lifecycle fixtures, docs, and changelog in Marinara-Agents.
 
 ## Test Plan
 
-- Validate grid sizes, signed Z ranges, integer positions, duplicate XYZ occupancy, missing parents, out-of-bounds cells, and unsafe resizing.
-- Prove legacy definitions and XY-only imports remain readable with no eager rewrite.
+- Validate finite integer grid sizes, `minZ <= maxZ`, an inclusive maximum of 64 Z levels, required inclusion of `z = 0`, integer positions, duplicate XYZ occupancy, missing parents, out-of-bounds cells, and unsafe resizing.
+- Prove legacy definitions and XY-only imports default missing Z to `0` and remain readable with no eager rewrite; reject invalid Z ranges deterministically.
+- Round-trip a fixture containing both `placement` and `gridPosition`, proving semantic geometry follows `gridPosition`, visual placement is preserved, and neither field rewrites the other.
 - Verify multiple children may occupy the same X/Y on different Z levels.
-- Verify direction, distance, and elevation descriptions only compare siblings in the same local space.
+- Verify direction, Chebyshev distance, and elevation descriptions only compare siblings in the same local space, including cardinal, diagonal, equal-magnitude tie, unequal-magnitude diagonal, identical-cell, and vertical-only cases.
 - Build a nested region → town → building → floor → room fixture and round-trip it through save/reload, templates, shared worlds, drafts, branching, export/import, and archive/restore.
 - Prove changing slices and zooming never changes `currentLocationId`.
 - Prove only an accepted queued transition commits movement and creates a snapshot.
 - Test desktop snapping, keyboard positioning, mobile slice navigation, background alignment, current-branch highlighting, and deep zoom restoration.
-- Test AI generation, expansion into partially occupied volumes, collision repair, and full-grid failure.
-- Run Engine checks, package regressions, catalog validation, exact-artifact lifecycle validation, active/ready verification, and manual Roleplay/Game browser review.
+- Test AI generation, expansion into partially occupied volumes, collision repair, and a full-grid failure that returns no definition and performs no persistence.
+- Run Engine checks, package regressions, exact-artifact lifecycle validation, active/ready verification, and manual Roleplay/Game browser review.
+- Run and record `node scripts/test-catalog-lanes.mjs`, `node scripts/validate-package-locales.mjs`, and `node scripts/validate-catalog.mjs`. Required checks and CodeRabbit must complete before merging to `staging`; unchecked plan items are future-work reminders, not validation evidence.
 
 ## Assumptions
 
