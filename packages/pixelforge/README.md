@@ -79,6 +79,42 @@ Item names and the currency are **theme-bearing** — a sci-fi colony pays in cr
 berth chits, not coins and room keys — and a theme that ships without naming them fails a
 startup assertion rather than rendering raw tags at a player.
 
+## Something to do with the day (0.12.0)
+
+0.12 is the first release with a **second thing to do**. Stand beside water — a village pond, a
+stream, a colony's coolant pool — and a **Fish** button appears, naming the water it is about.
+Cast once, or fish until dawn, morning, dusk or night; a cast spends a fixed window of the clock,
+and a session that runs past midnight carries on into the next day. What comes out depends on how
+good you have got at it, what you are holding, and what time it is: each world has its own catch
+tables, and the fish, kelp, hauls and salvage in them are named for the place they came out of.
+Bait improves your odds and gets used up — and bait is also something the water gives back, so
+fishing supplies itself. Running out mid-session is not a stop; you just carry on casting bare.
+
+**Rods are bought, never given.** The innkeeper who lets you a room also sells tackle, one rung at
+a time: your first rod is cheap and comes with a starter tin of bait, and the button offers you the
+next one up until you own it, then goes away. A colony treats angling as a niche hobby and prices
+the same first rod accordingly. None of it is compulsory — nothing in the game needs you to own a
+rod, and any keeper anywhere will sell you the same next rod later, so you can ignore the whole
+thing forever if fishing is not why you are here.
+
+**Sleep, and a recap of the day.** With a bed — the berth you rent at the inn — you can sleep until
+dawn, morning, dusk or night. Sleeping costs no GM turn at all: it moves the clock, and the next
+message you send for your own reasons quietly carries a summary of the days that finished while the
+narrator was not looking. So the GM finds out you spent Tuesday at the millpond without you having
+to type it, and without a turn spent per cast.
+
+**Two new panels, on chips beside the purse.** The **journal** (📖) is your day ledger, grouped by
+day with the newest first, plus a band for the things that happened to the *save* rather than in a
+day. The **character sheet** (👤, or the `C` key) is your skills and what they are worth, what you
+have equipped, your purse, and how the settlement feels about you — drawn live, so a level earned
+while it is open shows up as soon as it happens.
+
+**Bridges.** Where a road runs through water, it is now planked over instead of the pond being
+dropped for getting in the road's way — which is what lets the **wilds** have one at all: the pool
+is wide enough that it always reached the road band the compiler holds in reserve, so a pond a brief
+asked for out in the wood simply never existed. A walkway over a pool is also a perfectly good place
+to stand and fish from.
+
 ## Art
 
 Two tiers, resolved at runtime with graceful degradation:
@@ -101,7 +137,7 @@ Two tiers, resolved at runtime with graceful degradation:
 packages/pixelforge/
 ├── src/                  # plain-JS modules, concatenated in filename order into client.js
 ├── docs/brief-schema.md  # the World Brief schema v1 spec (sealed; amendments inline)
-├── docs/player-state.md  # the S5 player block: wire contract, stamps, quarantine, ladder, gate
+├── docs/player-state.md  # the player block + the verbs: wire contract, stamps, quarantine, ladder, gate, fishing, the wrap-up
 ├── test-brief.mjs        # standalone validator/compiler/spatial regression harness
 ├── build/
 │   ├── build-art.mjs     # deterministic Tier-1 art generator (writes build/assets/, untracked)

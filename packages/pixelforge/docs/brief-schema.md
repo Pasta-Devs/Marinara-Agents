@@ -339,6 +339,21 @@ fallback chain is for third-party extension, not for shipping silent per-theme f
 | ruin           | roofless broken walls  | breached hull section    |
 | lookout        | raised stone pad       | observation platform     |
 
+**Water and roads (0.12).** Exactly one placement relaxed: a **wilds `water-feature`**, which runs
+a second pass of eight anchor attempts with the approach road off the reservation once the strict
+eight are spent. A settlement anchor overlapping an artery is still refused outright for every tag
+including this one, and `water-crossing` scans no anchors at all — the builder paints it at a fixed
+spot. Where a road runs through a water rect the road tiles are laid as **bridge** — a walkable
+treatment drawn over the water — and the water takes the rest (`20-world.js` `waterFill`). The
+crossing's hand-painted ford is the same idea and migrated onto the same tile, so the "ford" and
+"bridge" in the table above are now one visual system rather than two. It is a placement
+treatment and **not a taggable feature**: no new row in this vocabulary, no new `_ids` ordinal,
+and a settlement pond that decks a plaza with planks is a blessed outcome rather than a case to
+guard against — the plaza's `path` decks, while a `thriving` settlement's paved central 4×4 is
+`stone`, deliberately outside `ROAD_GROUND`, and waters over instead. What it bought is a
+`water-feature` in the wilds at all — the 8×5 anchor could never clear the reserved road band, so
+before this the wilds pond a brief asked for simply never existed.
+
 ## 7. Injection discipline (metering the prose)
 
 Written here because it is what keeps the brief from taxing every turn forever: `name` + free-text
@@ -387,18 +402,41 @@ they are rooms inside a building the settlement already contains, not destinatio
 The gate exists because this route is additive with **no delete**: a row written to a player's real
 map is permanent, so it ships with the zone type that needs it rather than a release later.
 
-Not yet exported (still §9 territory): the root's population phrase and per-feature locations —
+Not yet exported: the root's population phrase (still §9 territory) and per-feature locations —
 features have no zones of their own, and decorating the root would edit a location the user may
 have authored (the route deliberately cannot).
+
+**0.12's feature register is deliberately NOT exported here, and that is a decision rather than an
+oversight.** The register (§9) now holds a rect per feature, which is the first per-feature
+geometry the package has ever had, so extending this export is the obvious next thought. It is
+declined: rows written by this route are permanent on a player's real map with no delete, no field
+on a location is shaped to hold a rect, and the register is recomputed from the sealed brief on
+every compile — so an export would stamp derived, re-derivable data irreversibly onto somebody's
+map. The determinism lane in `test-brief.mjs` (same seed + brief → the same register) is the sole
+guard the register needs, and it is enough because nothing outside the package ever sees it.
 
 ## 9. Reserved consumers
 
 The schema seals fields before their consumers exist, so shipped briefs never need regeneration
 when a consumer lands — the schema is the contract, not the renderer. The pattern has paid out
-twice already: `prosperity` now drives dress (path material, fence quality, night-light density,
-ground-fill bias) and `backgroundPopulation` now leans the minted population within its rank's
-band (0.10, §1). Still waiting for a consumer: feature `name` labels (planned: on-map
-signage/inspect text — roadmap S2) and the root's population phrase (§8).
+three times now: `prosperity` drives dress (path material, fence quality, night-light density,
+ground-fill bias), `backgroundPopulation` leans the minted population within its rank's band
+(0.10, §1), and **feature `name` labels went live in 0.12** — a brief that named a pond eight
+releases ago says that name on a player's screen today, with no regeneration and no schema change.
+
+How the name arrives, since it is the pattern working exactly as designed. The compiler's
+placement loop records every feature it places into a per-zone register (`zone.features[]` —
+`{id, tag, name, rect}`, `20-world.js` `recordFeature`), and the `id` is the feature's **`_ids`
+ordinal** from §2, mirrored by POSITION rather than looked up by name so two features sharing a
+name cannot swap identities. The register is DERIVED and never serialized: it is recomputed from
+the sealed brief on every compile, so it costs no save bytes and cannot drift. What consumes the
+name is the fishing verb — the Fish button reads `🎣 Fish <name>` off the register row under the
+player's hand (`70-hud.js`), and each session's ledger line names the spot it was fished at
+(`59-economy.js` `_logDay`), which is what the journal panel shows and what the GM is told at the
+wrap-up. The planned on-map signage / inspect-text consumer (roadmap S2) is still ahead; this is a
+second consumer of the same field, not a replacement for it.
+
+Still waiting for a consumer: the root's population phrase (§8).
 
 ## 10. Guidance note on theme mismatch
 

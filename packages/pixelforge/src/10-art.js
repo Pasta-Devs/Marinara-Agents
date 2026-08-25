@@ -322,6 +322,26 @@ PF.art = (() => {
       px(g, 3, 11, 10, 1, PAL.white);
       px(g, 7, 13, 2, 2, PAL.stoneDark);
     },
+    /** WHERE THE ROAD CROSSES THE WATER. Painted water FIRST and decked over it,
+     *  because that is literally what the tile is: the water underneath is still
+     *  there, and a deck that did not show it would be a road tile with a wood
+     *  grain. The one-pixel margin of open water on all four sides is what makes
+     *  a run of them read as a boardwalk — the seam between two sections — and
+     *  is also why the tile needs no orientation: a bridge laid north-south and
+     *  one laid east-west are the same picture, which matters because the
+     *  compiler has no way to tell a placer which way a crossing runs.
+     *
+     *  Non-solid wherever it is laid: the whole point of the ruling is that the
+     *  road still crosses. No themed override, for the altar's reason — the
+     *  colony palette turns timber planking into deck plating on the same
+     *  silhouette, which is what a walkway over coolant is. */
+    bridge(g, rnd) {
+      PAINTERS.water(g, rnd);
+      px(g, 1, 1, T - 2, T - 2, PAL.beam);
+      px(g, 2, 2, T - 4, T - 4, PAL.path1);
+      for (let plank = 4; plank < T - 3; plank += 4) px(g, 2, plank, T - 4, 1, PAL.path2);
+      px(g, 2, 2, T - 4, 1, PAL.pathFleck);
+    },
   };
 
   // ── Themes ──────────────────────────────────────────────────────────────────

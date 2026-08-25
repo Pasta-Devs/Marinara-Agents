@@ -30,7 +30,8 @@ const currentPlayerV = () => PLAYER_MIGRATIONS.length + 1;
 //   EVICT (the cap makes room and the call succeeds) — relLines evicts the
 //     oldest line and leaves its row standing; boardDone / packDone evict the
 //     least-earned counter; ledgerDays / ledgerPerDay / ledgerStubs compact the
-//     buffer; found evicts the oldest discovery.
+//     buffer; found evicts the oldest discovery; `notices` evicts the oldest
+//     TOLD row, and an untold one only when every row is untold.
 //   TRUNCATE (the value is cut, the call succeeds) — lineChars, ledgerChars,
 //     skillLevel (the level stops climbing and xp is zeroed at the ceiling).
 //   REFUSE (the call does nothing and says so, which is the part the old header
@@ -62,6 +63,12 @@ const CAPS = {
   ledgerPerDay: 15,
   ledgerStubs: 30, // elided days, one stub line each
   ledgerChars: 200,
+  // The notice band's own rows (plan §2.5). Notices are explanations for
+  // something that already happened to the save — a severance, a loss, a
+  // restore — and a block carrying a dozen unread ones has bigger news than the
+  // thirteenth. Small on purpose, and it evicts TOLD rows first: an untold
+  // notice is one nobody has been given yet, so it is the last thing to lose.
+  notices: 12,
   found: 80,
   skillLevel: 20,
 };
@@ -69,6 +76,27 @@ const CAPS = {
 // Placeholder curve, exported so slice 6 can retune it without touching the
 // mutator: experience needed to leave level `l`.
 const xpPerLevel = (l) => 10 * Math.max(1, l);
+
+// The quality axis of a pouch row's `(t, k)` key, worst to best. It is a LADDER
+// and not a label set: the INDEX is the tier every multiplier reads, so the
+// order is load-bearing and an insertion in the middle would re-tier every save
+// in the wild. Frozen for that reason — a retune belongs in the multipliers the
+// index feeds, never in the ladder itself.
+//
+// IT GRADES TOOLS ONLY, and the rest of the field is not junk it is being
+// lenient about. Every other `k` in the pouch is a SEMANTIC SLUG — a catch row's
+// variant ("carp", "kelp"), a bait's kind — and a slug is not a worse "crude":
+// the two vocabularies share one field and must not share one validator. So the
+// grading rule is scoped by TYPE. TOOL_TYPES is the named set that says which
+// rows are graded; grant() and equip() refuse a graded row whose `k` is off the
+// ladder and leave every other row's `k` free.
+//
+// `rod` is 0.12's only tool, and it is named HERE while its item vocabulary and
+// its skins land with the verb that uses it: what the pouch needs at this layer
+// is the grading rule, which is a property of the key and belongs beside the
+// caps the mutators enforce.
+const QUALITY = Object.freeze(["crude", "decent", "fine", "masterwork"]);
+const TOOL_TYPES = new Set(["rod"]);
 
 // The quarantine bag's own ceiling, independent of the snapshot's (plan §4).
 // It lives in its own metadata key, so it competes with nothing — which is why
@@ -151,25 +179,64 @@ const sortedMap = (pairs) => {
   return out;
 };
 
+/** The grapheme units of a string, best-effort. Exported (see PF.player), because
+ *  the caps below are stated in graphemes and so is the ONE consumer that has to
+ *  agree with them from another file: the wrap-up tell measures whole ledger days
+ *  against `TUNING.ledgerTellChars` (30-sim `_composeLedger`), and that budget is
+ *  floor-asserted at load against `ledgerPerDay × ledgerChars`.
+ *
+ *  Measure the tell in code points while the caps count graphemes and the floor
+ *  assertion stops being a promise about the same quantity: one family emoji in a
+ *  zone name is seven code points wide, so a day the caps call legal can be four
+ *  times its own measured size and the budget drops it. What that costs is
+ *  OVER-EAGER TRUNCATION rather than a stall — the oldest owed day always rides,
+ *  fitting or not, so the flush still advances one day at a time — but a
+ *  multi-day tell would be cut short every turn on a save whose prose is not
+ *  ASCII, which is a real player writing real names. One measure, both sides. */
+const graphemes = (text) => {
+  const s = str(text);
+  try {
+    return globalThis.Intl?.Segmenter
+      ? Array.from(new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(s), (part) => part.segment)
+      : Array.from(s);
+  } catch {
+    return Array.from(s);
+  }
+};
+
 /** Grapheme-aware truncation: an `s` line is player-visible prose and a cut
  *  through a surrogate pair or a combining mark renders as a broken glyph. */
 const clip = (text, max) => {
   const s = str(text).replace(/\s+/g, " ").trim();
-  let units;
-  try {
-    units = globalThis.Intl?.Segmenter
-      ? Array.from(new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(s), (part) => part.segment)
-      : Array.from(s);
-  } catch {
-    units = Array.from(s);
-  }
+  const units = graphemes(s);
   return units.length <= max ? s : units.slice(0, max).join("");
+};
+
+/** The notice band's cap, applied wherever the array is normalized — the writer
+ *  below, `_enforceCaps`, and serialize() — so the wire, a restored block and a
+ *  live one cannot disagree about which twelve survived.
+ *
+ *  TOLD-OLDEST FIRST. A told notice has already reached the GM through the flush
+ *  and is only still here so the panel can show it; an untold one is a sentence
+ *  nobody has been given. When every row is untold the OLDEST goes, because a cap
+ *  that cannot bite is not a cap. */
+const evictNotices = (rows) => {
+  if (!Array.isArray(rows) || rows.length <= CAPS.notices) return Array.isArray(rows) ? rows : [];
+  const out = rows.slice();
+  while (out.length > CAPS.notices) {
+    const told = out.findIndex((row) => Array.isArray(row) && row[2]);
+    out.splice(told >= 0 ? told : 0, 1);
+  }
+  return out;
 };
 
 PF.player = {
   CAPS,
+  QUALITY,
+  TOOL_TYPES,
   MIGRATIONS: PLAYER_MIGRATIONS,
   xpPerLevel,
+  graphemes,
   /** The schema version THIS build writes. Derived — see PLAYER_MIGRATIONS. */
   currentV: currentPlayerV,
 
@@ -356,6 +423,34 @@ PF.player = {
           return out;
         }),
     };
+    // THE NOTICE BAND, which is a subtree and not a line class (plan §2.5,
+    // round-5 BLOCKER-1). A notice explains something that happened TO the save
+    // rather than something the player did in the world, so it is not part of
+    // the day transcript and does not belong in a day group: rows are
+    // `[day, text]` untold and `[day, text, 1]` told, and the TOLD FLAG is what
+    // the wrap-up tell reads instead of the day gate the lines answer to.
+    //
+    // EMITTED ONLY WHEN NON-EMPTY, which is `bought`'s precedent one level up:
+    // every save in the wild would otherwise gain four bytes of empty array for
+    // a band it has nothing to put in.
+    const notices = evictNotices(
+      (Array.isArray(p.ledger?.notices) ? p.ledger.notices : [])
+        .filter((row) => Array.isArray(row) && row.length >= 2)
+        .map((row) => {
+          const out = [posInt(row[0], 0), clip(row[1], CAPS.ledgerChars)];
+          if (row[2]) out.push(1);
+          return out;
+        })
+        // A ROW WITH NOTHING TO SAY IS NOT A ROW. `notice()` already refuses text
+        // that clips to nothing, so no row this build writes reaches here empty;
+        // a hostile save carrying `[3, "   "]` or a number where the sentence goes
+        // used to survive as `[3, ""]` — bytes on the wire, a slot against the
+        // cap, and a blank line in the panel no writer could account for. Dropped
+        // at the one place the wire is built, which is where `lines`' own
+        // shape-filter lives.
+        .filter((row) => row[1]),
+    );
+    if (notices.length) out.ledger.notices = notices;
     out.found = {
       zones: (Array.isArray(p.found?.zones) ? p.found.zones : [])
         .filter((z) => z && typeof z === "object" && str(z.p))
@@ -531,6 +626,17 @@ PF.player = {
       player.home = null;
       player.bought = null;
       const lines = player.ledger.lines;
+      // THE BAND GOES WITH THE TRANSCRIPT, AND IT IS A REAL LOSS — accepted, and
+      // stated rather than dressed up as the status quo (plan §5). A notice used
+      // to BE a ledger line, so a brief severance always took the pending ones;
+      // but a severed line was PARKED in the quarantine entry above and came home
+      // with the rest of the world-bound set, and the band is not parked and
+      // cannot be. So the format change that made a notice re-readable also made
+      // this loss permanent: what a brief severance drops here, nothing restores.
+      // What survives the window is the notice this severance is about to write,
+      // which 60-save appends after the strip. (`intro.ledgerOwed` is not touched
+      // and correctly is not: it is world-unbound, and the days it owes are days
+      // the player lived whatever world they lived them in.)
       player.ledger = { lines: [] };
       // COUPLED, and only when lines were ACTUALLY severed (plan §0): an empty
       // buffer must leave the gate exactly where it was, or a save with nothing
@@ -629,7 +735,18 @@ PF.player = {
           fields.questsDonePack && typeof fields.questsDonePack === "object" ? fields.questsDonePack : {};
       if (Array.isArray(fields.found)) player.found = { zones: fields.found };
       if (fields.home !== undefined) player.home = fields.home;
-      if (Array.isArray(fields.ledgerLines)) player.ledger = { lines: fields.ledgerLines };
+      if (Array.isArray(fields.ledgerLines)) {
+        // THE BAND IS NOT THE TRANSCRIPT, and a whole-object reassignment is how
+        // that gets forgotten. `ledgerLines` is the only thing the entry parked —
+        // the band was never quarantined and never could be, because it rode in
+        // on the LIVE block's own disk state and its rows are sentences nobody has
+        // been told yet. Reassigning `ledger` wholesale takes them with it, while
+        // the mint branch above (which touches the ledger not at all) keeps them,
+        // and two branches of one restore cannot disagree about that.
+        const band = Array.isArray(player.ledger?.notices) ? player.ledger.notices : null;
+        player.ledger = { lines: fields.ledgerLines };
+        if (band && band.length) player.ledger.notices = band;
+      }
       if (fields.flushedDay !== undefined) player.flushedDay = posInt(fields.flushedDay, player.flushedDay);
       // `bought` was severed with the rest of the world-bound set, so it comes
       // home with them.
@@ -685,7 +802,13 @@ PF.player = {
       return { dropped: [], notices };
     }
     player.quests.active = active.filter((q) => known.has(giverName(q.g)));
-    notices.push("A task you had taken on has no one left to hand it back to.");
+    // A LOSS, and the sentence has to say so. The rows above are PARKED — set
+    // aside, recoverable, and their copy says as much — while this quest is
+    // dropped and nothing brings it back. "No one left to hand it back to" is
+    // true and stops one clause short of the outcome, which is the difference
+    // between a notice and an explanation now that the band is re-readable
+    // (plan §2.5, M3's writer-site kind copy).
+    notices.push("A task you had taken on has no one left to hand it back to, so you have let it go.");
     return { dropped: dangling, notices };
   },
 
@@ -851,6 +974,18 @@ PF.player = {
         .map((row) => row.zone);
     }
     if (p.ledger && Array.isArray(p.ledger.lines)) this._compactLedger(p);
+    // The band answers to its own cap here too — BELT ONLY, and the reason is
+    // worth writing down because the line looks like it is catching something.
+    // Nothing can arrive over the cap: no quarantine entry carries notices (a
+    // severance parks `ledgerLines` and the band is not parked at all — see
+    // applyStamps), so there is no second band anywhere to concatenate a first
+    // one with, and every path that can put a row in one — `notice()`,
+    // `serialize()`, and `parse()` through it — has already run `evictNotices`.
+    // It stays because the cap is applied wherever the array is normalized and
+    // this is one of those places, and because the day an entry DOES bring a band
+    // home is the day this line is the only thing standing between two capped
+    // bands and one that is twice the cap.
+    if (p.ledger && Array.isArray(p.ledger.notices)) p.ledger.notices = evictNotices(p.ledger.notices);
     return p;
   },
 
@@ -910,6 +1045,78 @@ PF.player = {
     return fresh;
   },
 
+  // ── Resolve-at-read (plan §2.1) ────────────────────────────────────────────
+  // A SAVED STRING IS EVIDENCE, NEVER A VALUE. Each of these takes what the
+  // block happens to hold and answers with a number inside a stated range, so a
+  // row written by a hostile hand, an older build or a newer one can move the
+  // answer but can never leave the range. That is what makes them safe as
+  // determinism inputs: the fishing roll is seeded from the RESOLVED numbers, so
+  // two clients that disagree about what "legendary" means still roll the same
+  // fish out of the same water on the same minute.
+  //
+  // Pure, and deliberately so — they take values rather than the core, so the
+  // hash and the display can resolve the same row without either one reaching
+  // for live state the other cannot see.
+
+  /** A graded tool's tier: its place on the QUALITY ladder, with everything the
+   *  ladder does not name clamping to 0. A `k` that is off the ladder — a newer
+   *  build's "legendary", a bait slug, an empty string, a number — is CRUDE.
+   *  Never a throw, and never a bonus. */
+  resolvedToolTier(k) {
+    const at = QUALITY.indexOf(typeof k === "string" ? k : "");
+    return at < 0 ? 0 : at;
+  },
+
+  /** A modifier's tier, and it reads PRESENCE rather than grade. Bait `k` are
+   *  semantic slugs, so an index resolver would map a slotted bait and an EMPTY
+   *  slot to the same 0 and make the modifier inert — which is the whole reason
+   *  this one does not read QUALITY at all. 1 iff the slot holds a pair AND the
+   *  pouch still has a stack behind it; 0 for everything else.
+   *
+   *  `stack` is the pouch row the caller looked that pair up by, or a bare
+   *  count for a caller that already has one. A ROW IS CHECKED TO BE THE RIGHT
+   *  ROW: "backed by" is the claim being made, and a stack of something else
+   *  backs nothing.
+   *
+   *  What it does NOT check is the pair's TYPE. The mod slot is filled by the
+   *  verb's own per-session act and by nothing else, so a pair in it is a pair
+   *  the verb put there; a hostile save that slots something odd and carries a
+   *  real stack for it has spent a real stack, which is the thing the multiplier
+   *  is paid for. Graded modifiers are L2 content (§5) and arrive as a second
+   *  tier here, never as a QUALITY read. */
+  resolvedModTier(slot, stack) {
+    if (!Array.isArray(slot) || !str(slot[0])) return 0;
+    if (typeof stack === "number") return isFiniteInt(stack) && stack > 0 ? 1 : 0;
+    if (!stack || typeof stack !== "object") return 0;
+    if (str(stack.t) !== str(slot[0]) || str(stack.k) !== str(slot[1])) return 0;
+    return posInt(stack.q, 0) > 0 ? 1 : 0;
+  },
+
+  /** A DAY ORDINAL off untrusted state: a whole number at or above zero, and
+   *  zero for everything else. Small, and it exists because three files needed
+   *  the same read and a near-copy in each of them is how two of them come to
+   *  disagree — the restore that carries `intro.ledgerOwed` across a reload
+   *  (60-save), the sleep that stages it, and the wrap-up that composes against
+   *  it and the day gate (30-sim). Zero is the safe answer everywhere: it owes
+   *  nothing, tells nothing, and cannot lift a gate.
+   *
+   *  Beside the resolvers because it is one of them — a saved number is evidence
+   *  and not a value, and a `ledgerOwed` of "12", -3 or 1e9 has to come back as
+   *  a day this build can reason about rather than as a fact it inherited. */
+  resolvedDay(value) {
+    return posInt(value, 0);
+  },
+
+  /** A verb's level, clamped to the ladder the block can actually hold. `row` is
+   *  a `skills.verbs` entry or a bare number, and either one comes off save JSON
+   *  where `l` can be 0, 9,000, or the string "12". The floor is 1 rather than 0
+   *  because level 1 is where a verb starts: a player who has never fished still
+   *  rolls, they just roll at the bottom of the curve. */
+  resolvedLevel(row) {
+    const l = typeof row === "number" ? row : row?.l;
+    return PF.clamp(posInt(l, 1), 1, CAPS.skillLevel);
+  },
+
   // ── Mutation API (plan §3) ─────────────────────────────────────────────────
   // Every mutator RE-RESOLVES core.sim (never a captured sim — a chat switch
   // reassigns it under any caller holding one), is generation-FENCED on the
@@ -954,6 +1161,12 @@ PF.player = {
     if (!p) return 0;
     const { t, k } = this._itemKey(item);
     if (!t) return 0;
+    // A GRADED type's `k` has to be a rung. Refused rather than coerced down to
+    // "crude": coercion would still mint the row, the pouch would carry a
+    // quality nothing can name, and every resolver from then on would read a
+    // lie as a floor. An UNGRADED type keeps its free `k` — that field is where
+    // a catch row keeps its variant, and a variant is not a bad tier.
+    if (TOOL_TYPES.has(t) && !QUALITY.includes(k)) return 0;
     const n = Math.max(1, posInt(qty, 1));
     let row = p.pouch.items.find((it) => it.t === t && str(it.k) === k);
     if (!row) {
@@ -1027,6 +1240,11 @@ PF.player = {
     if (item != null) {
       const { t, k } = this._itemKey(item);
       if (!t) return false;
+      // The same grading rule grant() applies, for the same reason and at the
+      // same point — before anything is allocated. A slot is a pointer at a
+      // pouch row, so a pair the pouch would refuse to hold is a pair nothing
+      // can be pointing at.
+      if (TOOL_TYPES.has(t) && !QUALITY.includes(k)) return false;
       pair = [t, k];
     }
     const slots = this._bucket(p.skills.equipped, name);
@@ -1258,6 +1476,112 @@ PF.player = {
     if (at <= posInt(p.flushedDay, 0)) return false;
     p.ledger.lines.push([at, line]);
     this._compactLedger(p);
+    this._touch(core);
+    return true;
+  },
+
+  /** Append a notice to the band. Takes the BLOCK and not the core, which is the
+   *  one thing about it that breaks the shape of every mutator above: its only
+   *  caller is 60-save's rehydration, which runs before there is a live sim to
+   *  dirty and is deliberately a NON-MUTATION (the next real save carries it),
+   *  and which is also the one moment `_live`'s loading gate would refuse.
+   *
+   *  THE DAY IS THE DAY IT HAPPENED. The band is told-flagged rather than
+   *  day-gated, so nothing here has to lift a notice above the flush gate to keep
+   *  it tellable — which is what the old lines back-door had to do, and what put
+   *  a day header from the FUTURE into the wrap-up (plan §2.5).
+   *
+   *  Returns true when a row was appended, false for text that clips to nothing. */
+  notice(player, text, day) {
+    if (!player || typeof player !== "object") return false;
+    const line = clip(text, CAPS.ledgerChars);
+    if (!line) return false;
+    if (!player.ledger || typeof player.ledger !== "object") player.ledger = { lines: [] };
+    const rows = Array.isArray(player.ledger.notices) ? player.ledger.notices : [];
+    rows.push([posInt(day, 0), line]);
+    player.ledger.notices = evictNotices(rows);
+    return true;
+  },
+
+  /** THE WRAP-UP BURN (plan §2.5), and the other half of the two-field flush.
+   *  The compose selected `flushedDay < day ≤ intro.ledgerOwed` and the host has
+   *  ACCEPTED the turn carrying it; this is what makes that telling permanent —
+   *  the day gate rises to `throughDay`, and every notice that rode the same tell
+   *  is marked told.
+   *
+   *  IT GUARDS ITSELF, which is the one thing about it that is not ordinary. The
+   *  invariant is `flushedDay ≤ ledgerOwed < sim.day` and this is the only writer
+   *  that can RAISE the gate, so a burn that would raise one refuses unless
+   *      flushedDay < throughDay ≤ intro.ledgerOwed  and  throughDay < sim.day
+   *  with all three read from the LIVE sim at write time and not from whatever
+   *  the sender was looking at when it composed. A burn AT the gate raises
+   *  nothing, so it is held to `throughDay ≥ flushedDay` and no more: its whole
+   *  job is marking a notice-only tell, and a PARTIAL RESTORE can leave the gate
+   *  standing over a marker that owes nothing — a state the burn did not write
+   *  and cannot repair, but must not be starved by (see the guard body). That is what closes the seam the
+   *  generation fence cannot see: `_gen` moves only on a chat switch, while
+   *  `_rebuild` replaces `core.sim` wholesale WITHOUT touching it (a rewind, a
+   *  swipe, a checkpoint load), so a send resolving over a rewound sim passes the
+   *  fence and would otherwise write a future gate onto the rewound block.
+   *
+   *  `notices` IS THE ROWS THE COMPOSE CAPTURED — `pending.ledger.notices`,
+   *  handed back through the sender's closure-local pending — and not the live
+   *  band read again here. The guard is NOT enough to make those two the same
+   *  set, and that is the whole reason for the parameter. The guard reads three
+   *  numbers, and three of the five notice writers move none of them: the
+   *  dangling-quest repair, the mint severance and a restore landing on a gate
+   *  already where it was all append to the band while leaving `flushedDay`,
+   *  `ledgerOwed` and `day` untouched. Every one of them runs inside
+   *  `_rehydratePlayer` ← `simFromSaved` ← `_rebuild`, which is UNFENCED on the
+   *  same chat — so a rebuild landing mid-send hands the burn a live band with a
+   *  row NOBODY COMPOSED in it, and a re-read would mark it told. The band
+   *  answers to that flag and to nothing else, so a told row nobody was told is a
+   *  sentence destroyed in silence: no gate to re-open, no day to re-select.
+   *
+   *  Marking the CAPTURED rows is safe in the same interleaving for the opposite
+   *  reason: under a rebuild they are orphans of the sim that was replaced, and
+   *  writing a flag onto an object nothing reads any more is a no-op. The fresh
+   *  notice stays untold and rides the next compose, which is the only turn that
+   *  can honestly carry it.
+   *
+   *  Returns true when it wrote and false for every refusal — the fence, the
+   *  loading gate, a day that is not a day, the backwards gate, and (for a burn
+   *  that would raise the gate) either of the two day inequalities.
+   *  The senders SWALLOW the refusal (no toast, no retry): a guard refusal after
+   *  an accepted send leaves the tell in history un-burned and the next compose
+   *  re-tells it, which is a §5 lost-flush cause and not something to interrupt
+   *  the player about. The value is for the tests. */
+  flush(core, throughDay, notices, gen) {
+    const p = this._live(core, gen);
+    if (!p) return false;
+    const sim = core.sim;
+    if (!isFiniteInt(throughDay) || throughDay < 0) return false;
+    const gate = posInt(p.flushedDay, 0);
+    // Backwards: a tell composed against an older gate, resolving after a newer
+    // one already rose. Nothing to do, and lowering the gate would re-tell.
+    if (throughDay < gate) return false;
+    // THE TWO DAY CHECKS GUARD THE GATE'S ADVANCE, so they are asked only when
+    // there is one to guard. A burn AT the gate writes `max(gate, gate)` and
+    // moves it nowhere; the band it carried answers to its told-flag and not to
+    // a day, which is the whole reason the notices left the lines. A PARTIAL
+    // RESTORE is what makes the difference matter: the player block rehydrates
+    // outside the envelope's `v` gate, so a row this build cannot read the
+    // envelope of — or a newer build's row that moved `intro.ledgerOwed` — comes
+    // back with `flushedDay` standing over a marker that owes nothing. Asking
+    // these of a gate that cannot rise refused the notice-only tell FOREVER: no
+    // later day can lift `ledgerOwed` back over a `flushedDay` already above it,
+    // so the same notice rode every compose for the rest of the save's life.
+    if (throughDay > gate) {
+      // Past what any sleep has made owed: the days beyond it are days the player
+      // has not finished living, or a rewound sim that never staged them.
+      if (throughDay > this.resolvedDay(sim.intro?.ledgerOwed)) return false;
+      // …and never the day underway, whatever the marker says.
+      if (throughDay >= this.resolvedDay(sim.day)) return false;
+    }
+    p.flushedDay = Math.max(gate, throughDay);
+    for (const row of Array.isArray(notices) ? notices : []) {
+      if (Array.isArray(row) && row.length >= 2 && !row[2]) row[2] = 1;
+    }
     this._touch(core);
     return true;
   },

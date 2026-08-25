@@ -29,6 +29,7 @@
     "bunk": 24,
     "stairsUp": 25,
     "stairsDown": 26,
-    "bell": 27
+    "bell": 27,
+    "bridge": 28
   }
 }
