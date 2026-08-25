@@ -19113,6 +19113,106 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   );
 }
 
+// ── THE FOLD IS RESIDENT, DERIVED, AND NEVER ON THE WIRE ────────────────────
+// A world's selectable set is folded once per install or rebuild and lives on the
+// sim, which is what makes "rebuilt exactly when the world is" true without an
+// invalidation rule anybody has to remember — and what keeps it off the save,
+// where it would become a format to migrate on a route that is additive by policy.
+{
+  const packBrief = loadedPF.brief.validate(gateBriefData, { theme: "cozy-village", seed: 4242 });
+  const meta = {
+    gameSetupConfig: { experienceConfig: { generate: true, seed: 4242, theme: "cozy-village", packWanted: true } },
+    pixelforgeBrief: packBrief,
+    pixelforgePackWanted: true,
+  };
+  loadedPF.save.reset();
+  const core = {
+    chatId: "chat-fold",
+    host: { chatMeta: meta },
+    hud: { toast() {}, refreshChips() {} },
+  };
+  core.sim = loadedPF.save.restore(meta, "chat-fold");
+  const first = loadedPF.save.packFold(core);
+  assert.ok(first, "a world with no pack still folds — the default one reads in its place");
+  assert.equal(first.source, "default", "…which is what a packless sealed world offers from");
+  assert.equal(loadedPF.save.packFold(core), first, "asked twice, folded once");
+  // A rebuild is a new world, and the fold goes with the old one.
+  const before = core.sim;
+  core.sim = loadedPF.save.restore(meta, "chat-fold");
+  assert.notEqual(core.sim, before, "the world was rebuilt");
+  assert.notEqual(
+    loadedPF.save.packFold(core),
+    first,
+    "…and folded again, rather than answering for a world that is gone",
+  );
+  // NOT ONE BYTE OF IT REACHES THE WIRE.
+  const snap = loadedPF.save.snapshot(core);
+  const seen = [];
+  (function walk(node, path) {
+    if (!node || typeof node !== "object") return;
+    for (const key of Object.keys(node)) {
+      // `done_pack` is the player block's own completion counters and belongs on
+      // the wire; what must never be there is the FOLD or the artifact itself.
+      if (key === "_packFold" || key === "pixelforgePack" || key === "templates") seen.push(`${path}.${key}`);
+      walk(node[key], `${path}.${key}`);
+    }
+  })(snap, "snap");
+  assert.deepEqual(seen, [], `the envelope carries nothing pack-shaped anywhere (${seen.join(", ")})`);
+  assert.deepEqual(
+    [...loadedPF.save._envelopeKeys].sort(),
+    ["bindings", "chatId", "clockMin", "day", "facing", "intro", "player", "seed", "theme", "v", "x", "y", "zone"],
+    "and ENVELOPE_KEYS is exactly what it was — the pack asked the save for no room at all",
+  );
+  loadedPF.save.reset();
+}
+
+// ── SEAL-TIME CAPS ARE THE ONLY BUDGET THERE IS ─────────────────────────────
+// There is no storage budget (maintainer ruling): a sealed blob never grows, so
+// what these bound is what ONE call may hand us, and they are applied where every
+// other repair is — at the seal, item by item.
+{
+  const pack = loadedPF.pack;
+  const brief = loadedPF.brief.validate(gateBriefData, { theme: "cozy-village", seed: 4242 });
+  const giver = brief.cast[0].name;
+  const sealed = pack.validate(
+    {
+      templates: Array.from({ length: pack.CAPS.templates + 6 }, (_, i) => ({
+        slug: `row-${i}`,
+        giver,
+        verb: "visit",
+        target: { place: "wilds" },
+        n: 1,
+        title: i === 0 ? "T".repeat(pack.CAPS.title + 40) : `Row ${i}`,
+      })),
+      lines: Array.from({ length: pack.CAPS.lines + 10 }, (_, i) => ({
+        at: "settlement",
+        when: "day",
+        r: "stranger",
+        text: i === 0 ? "L".repeat(pack.CAPS.text + 80) : `Line ${i}`,
+      })),
+      escalation: Array.from({ length: pack.CAPS.escalation + 4 }, () => ({ npc: giver, text: "Ask me later." })),
+      overheard: Array.from({ length: pack.CAPS.overheard + 4 }, () => ({ at: "settlement", text: "…did you hear." })),
+    },
+    { theme: "cozy-village", seed: 4242, brief },
+  );
+  assert.equal(sealed.templates.length, pack.CAPS.templates, "templates clamp at the seal");
+  assert.equal(sealed.lines.length, pack.CAPS.lines, "…and so does the index");
+  assert.equal(sealed.escalation.length, pack.CAPS.escalation, "…and the escalation section");
+  assert.equal(sealed.overheard.length, pack.CAPS.overheard, "…and the overheard pool");
+  assert.ok(
+    loadedPF.player.graphemes(sealed.templates[0].title).length <= pack.CAPS.title,
+    "a title clips to something a board row can hold",
+  );
+  assert.ok(
+    loadedPF.player.graphemes(sealed.lines[0].text).length <= pack.CAPS.text,
+    "…and a line to something sayable",
+  );
+  assert.ok(
+    sealed._repairs.some((r) => r.startsWith("templates: over")),
+    "and the drops are logged rather than silent",
+  );
+}
+
 // ── ONE LIVE INSTANCE PER TEMPLATE, ENFORCED BELOW THE OFFER LAYER ──────────
 // The board mints day-bearing instance ids, so two instances of one template
 // never collide by id — and "at most one live job per template" is an invariant

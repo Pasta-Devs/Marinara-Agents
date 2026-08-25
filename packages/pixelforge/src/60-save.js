@@ -509,6 +509,34 @@ PF.save = {
     }
   },
 
+  /** THE WORLD'S PACK, FOLDED ONCE (plan §2.2d) — what this world can actually
+   *  offer, which is a different question from what the artifact says.
+   *
+   *  RESIDENT ON THE SIM, and the two halves of that are both deliberate. It is
+   *  DERIVED, so it is never saved: `snapshot()` emits a closed literal and this
+   *  key is not in it, exactly as the feature register and the schedule handles are
+   *  recomputed rather than stored. And it is rebuilt EXACTLY when `core.sim` is,
+   *  which is what living on the sim buys — every path that replaces the world
+   *  (restore, `_rebuild`, `_installSealedWorld`) assigns a new sim and the fold
+   *  goes with the old one, so there is no invalidation rule to get wrong and no
+   *  site to remember to clear.
+   *
+   *  Read through here rather than from 61-pack directly because the two inputs are
+   *  this module's: the stored pack and the stored brief both come out of chat
+   *  metadata, cache arms included. */
+  packFold(core) {
+    const sim = core?.sim;
+    if (!sim?.world) return null;
+    if (sim._packFold) return sim._packFold;
+    const meta =
+      core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
+    sim._packFold = PF.pack.fold(this._configPack(meta, core.chatId), {
+      brief: this._configBrief(meta, core.chatId),
+      world: sim.world,
+    });
+    return sim._packFold;
+  },
+
   /** The SEAL-SIDE marker, and the only reader of it (see PACK_WANTED_META_KEY for
    *  why the wizard's own copy is not trusted). Strict `=== true`: a truthy value
    *  a later release writes for some other reason must not arm a paid call. */
