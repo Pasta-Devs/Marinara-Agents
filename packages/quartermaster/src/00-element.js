@@ -68,6 +68,13 @@ class QuartermasterElement extends HTMLElement {
       this.replaceChildren(button);
       this._button = button;
     }
+    // Beholder's toolbar button (src/90-element.js) applies this same host
+    // class so third-party toolbar buttons match the native ones visually
+    // instead of rendering as bare, unstyled elements under the app's CSS
+    // reset. Without it the button has no chrome at all — looks like text.
+    const props = this._props;
+    const hostClass = props && typeof props.toolbarButtonClass === "string" ? props.toolbarButtonClass : "";
+    button.className = hostClass;
   }
 
   async _renderTrackerPanel() {

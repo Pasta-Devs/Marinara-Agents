@@ -1,4 +1,4 @@
-// Quartermaster 0.1.0 — Marinara Engine roleplay-tracker capability (single-file client bundle)
+// Quartermaster 0.1.0-dev.1 — Marinara Engine roleplay-tracker capability (single-file client bundle)
 // Built from packages/quartermaster/src (2 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -113,6 +113,13 @@ class QuartermasterElement extends HTMLElement {
       this.replaceChildren(button);
       this._button = button;
     }
+    // Beholder's toolbar button (src/90-element.js) applies this same host
+    // class so third-party toolbar buttons match the native ones visually
+    // instead of rendering as bare, unstyled elements under the app's CSS
+    // reset. Without it the button has no chrome at all — looks like text.
+    const props = this._props;
+    const hostClass = props && typeof props.toolbarButtonClass === "string" ? props.toolbarButtonClass : "";
+    button.className = hostClass;
   }
 
   async _renderTrackerPanel() {
