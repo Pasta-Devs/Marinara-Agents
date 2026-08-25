@@ -78,7 +78,7 @@ function NumberSetting({
   const [draft, setDraft] = useState(String(value));
   useEffect(() => setDraft(String(value)), [value]);
   const saveQueueRef = useRef(Promise.resolve());
-  const latestSaveRef = useRef<number | null>(null);
+  const saveGenerationRef = useRef(0);
   const commit = async (raw = draft, resetInvalid = true) => {
     const next = Number(raw);
     if (!raw.trim() || !Number.isInteger(next) || next < min || next > max) {
@@ -87,15 +87,16 @@ function NumberSetting({
     }
     // Serialize saves so a slow older request can't land after a newer one and persist a
     // stale value; skip a queued save (and its failure recovery) once a later edit has
-    // already superseded it. Swallow rejections so one failed save doesn't wedge the queue
-    // for every save queued after it.
-    latestSaveRef.current = next;
+    // already superseded it. Compare a generation token, not the value itself — a sequence
+    // like 1 -> 2 -> 1 would otherwise let the first save's failure recovery match the last.
+    // Swallow rejections so one failed save doesn't wedge the queue for every save after it.
+    const saveGeneration = ++saveGenerationRef.current;
     saveQueueRef.current = saveQueueRef.current.then(async () => {
-      if (latestSaveRef.current !== next) return;
+      if (saveGenerationRef.current !== saveGeneration) return;
       try {
-        if ((await onSave(next)) === false && latestSaveRef.current === next) setDraft(String(value));
+        if ((await onSave(next)) === false && saveGenerationRef.current === saveGeneration) setDraft(String(value));
       } catch {
-        if (latestSaveRef.current === next) setDraft(String(value));
+        if (saveGenerationRef.current === saveGeneration) setDraft(String(value));
       }
     });
     await saveQueueRef.current;
