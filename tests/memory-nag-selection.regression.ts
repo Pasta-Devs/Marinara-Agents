@@ -48,6 +48,11 @@ assert.ok(
     'Return only JSON: {"memories":[{"text":"...","characterIds":["id"]}],"resolvedMemoryIds":["existing-id"]}',
   ),
 );
+assert.equal(
+  (JSON.parse(customScanMessages[1]!.content) as { outputFormat?: unknown }).outputFormat,
+  "json",
+  "OpenAI Responses JSON mode requires the literal word json in an input message",
+);
 
 assert.deepEqual(selectMemoryNagRecall({ nags_needed: false, memoryIds: ["promise"] }, candidates, 3), {
   nags_needed: false,
