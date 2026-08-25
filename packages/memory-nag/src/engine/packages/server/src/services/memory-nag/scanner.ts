@@ -126,6 +126,7 @@ export function buildMemoryNagScanMessages(input: {
     {
       role: "user" as const,
       content: JSON.stringify({
+        outputFormat: "json",
         characters: characterList,
         activeMemories: memories,
         chatBatch: input.transcript,

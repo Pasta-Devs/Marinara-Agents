@@ -1,5 +1,5 @@
-import { BookOpen, Database, LoaderCircle, Maximize2, Play, RotateCcw, Save, Square, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { BookOpen, Database, LoaderCircle, Maximize2, Play, RotateCcw, Square, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -69,6 +69,12 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
   const [progress, setProgress] = useState<MemoryNagScanProgress | null>(null);
   const scanController = useRef<AbortController | null>(null);
   const hydratedChatId = useRef<string | null>(null);
+  const settingsRef = useRef<MemoryNagSettings>({ ...MEMORY_NAG_DEFAULTS });
+  const settingsVersionRef = useRef(0);
+  const attemptedVersionRef = useRef(0);
+  const failedVersionRef = useRef(0);
+  const retryCountRef = useRef(0);
+  const onDirtyChangeRef = useRef(onDirtyChange);
   const scanDialogRef = useModalDialog(
     scanOpen,
     () => {
@@ -95,38 +101,87 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
   useEffect(() => {
     if (!vault.data || vault.data.chatId !== chatId || hydratedChatId.current === chatId) return;
     hydratedChatId.current = chatId;
+    settingsRef.current = vault.data.settings;
+    settingsVersionRef.current = 0;
+    attemptedVersionRef.current = 0;
+    failedVersionRef.current = 0;
+    retryCountRef.current = 0;
     setSettings(vault.data.settings);
     onDirtyChange?.(false);
   }, [chatId, onDirtyChange, vault.data]);
 
-  useEffect(() => () => scanController.current?.abort(), []);
+  useEffect(() => {
+    onDirtyChangeRef.current = onDirtyChange;
+  }, [onDirtyChange]);
+
+  useEffect(() => {
+    return () => {
+      scanController.current?.abort();
+      onDirtyChangeRef.current?.(false);
+    };
+  }, []);
 
   const updateSettings = (patch: Partial<MemoryNagSettings>) => {
-    setSettings((current) => ({ ...current, ...patch }));
+    const next = { ...settingsRef.current, ...patch };
+    settingsRef.current = next;
+    settingsVersionRef.current += 1;
+    setSettings(next);
+    setMessage("");
     onDirtyChange?.(true);
   };
 
-  const saveSettings = async (showSuccess = true) => {
+  const saveSettings = useCallback(async () => {
+    const saveChatId = chatId;
+    const version = settingsVersionRef.current;
+    const nextSettings = clampSettings(settingsRef.current);
+    settingsRef.current = nextSettings;
+    setSettings(nextSettings);
     setSaving(true);
     setMessage("");
     try {
-      const nextSettings = clampSettings(settings);
-      setSettings(nextSettings);
       const saved = await memoryNagRequest<MemoryNagVault>(
-        `/settings/${encodeURIComponent(chatId)}`,
+        `/settings/${encodeURIComponent(saveChatId)}`,
         "PATCH",
         nextSettings,
       );
-      setSettings(saved.settings);
-      onDirtyChange?.(false);
-      if (showSuccess) setMessage(t("memoryNag.settings.saved"));
+      if (hydratedChatId.current === saveChatId) {
+        attemptedVersionRef.current = Math.max(attemptedVersionRef.current, version);
+        failedVersionRef.current = 0;
+        retryCountRef.current = 0;
+      }
+      if (hydratedChatId.current === saveChatId && settingsVersionRef.current === version) {
+        settingsRef.current = saved.settings;
+        setSettings(saved.settings);
+        onDirtyChange?.(false);
+      }
     } catch (error) {
-      if (showSuccess) setMessage(error instanceof Error ? error.message : String(error));
-      if (!showSuccess) throw error;
+      if (hydratedChatId.current === saveChatId && settingsVersionRef.current === version) {
+        retryCountRef.current += 1;
+        if (retryCountRef.current >= 2) failedVersionRef.current = version;
+      }
+      throw error;
     } finally {
       setSaving(false);
     }
-  };
+  }, [chatId, onDirtyChange]);
+
+  useEffect(() => {
+    const version = settingsVersionRef.current;
+    if (
+      !chatId ||
+      hydratedChatId.current !== chatId ||
+      saving ||
+      scanning ||
+      attemptedVersionRef.current >= version ||
+      failedVersionRef.current >= version
+    ) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void saveSettings().catch((error) => setMessage(error instanceof Error ? error.message : String(error)));
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [chatId, saveSettings, saving, scanning, settings]);
 
   const scanChat = async () => {
     const controller = new AbortController();
@@ -140,7 +195,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
     let resolved = 0;
     let previousProgress: Pick<MemoryNagScanProgress, "checkpointMessageId" | "processed"> | null = null;
     try {
-      await saveSettings(false);
+      await saveSettings();
       while (!controller.signal.aborted) {
         const next = await memoryNagRequest<MemoryNagScanProgress>(
           `/scan/${encodeURIComponent(chatId)}`,
@@ -186,7 +241,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
         <span>{t("memoryNag.settings.scanConnection")}</span>
         <select
           className="mari-chrome-field mn-field"
-          disabled={saving || scanning}
+          disabled={scanning}
           value={settings.scanConnectionId ?? ""}
           onChange={(event) => updateSettings({ scanConnectionId: event.target.value || null })}
         >
@@ -209,7 +264,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
           <textarea
             id="mn-memory-nag-vault-prompt"
             className="mari-chrome-field mn-field mn-textarea mn-prompt-textarea"
-            disabled={saving || scanning}
+            disabled={scanning}
             maxLength={MEMORY_NAG_VAULT_PROMPT_MAX_LENGTH}
             rows={3}
             value={settings.vaultPrompt}
@@ -239,7 +294,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
             <button
               type="button"
               className="mn-prompt-tool"
-              disabled={saving || scanning || settings.vaultPrompt === MEMORY_NAG_DEFAULT_VAULT_PROMPT}
+              disabled={scanning || settings.vaultPrompt === MEMORY_NAG_DEFAULT_VAULT_PROMPT}
               onClick={() => updateSettings({ vaultPrompt: MEMORY_NAG_DEFAULT_VAULT_PROMPT })}
               title={t("memoryNag.settings.resetPrompt")}
               aria-label={t("memoryNag.settings.resetPrompt")}
@@ -261,14 +316,14 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
               type="number"
               min={field.min}
               max={field.max}
-              disabled={saving || scanning}
+              disabled={scanning}
               value={settings[field.key]}
               onChange={(event) => {
                 const parsed = Number.parseInt(event.target.value, 10);
                 if (!Number.isFinite(parsed)) return;
                 updateSettings({ [field.key]: parsed });
               }}
-              onBlur={() => setSettings((current) => clampSettings(current))}
+              onBlur={() => updateSettings({ [field.key]: clampSettings(settingsRef.current)[field.key] })}
             />
           </label>
         ))}
@@ -279,15 +334,6 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
         </div>
       ) : null}
       <div className="mn-actions">
-        <button
-          type="button"
-          className="mari-agent-settings-action mari-agent-settings-action--primary"
-          disabled={saving || scanning}
-          onClick={() => void saveSettings()}
-        >
-          <Save className="mn-icon" aria-hidden="true" />
-          {t("memoryNag.settings.save")}
-        </button>
         <button
           id="mn-memory-nag-create-button"
           type="button"
@@ -329,7 +375,7 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
                 <div className="mn-modal-body">
                   <textarea
                     className="mari-chrome-field mn-field mn-expanded-prompt"
-                    disabled={saving || scanning}
+                    disabled={scanning}
                     maxLength={MEMORY_NAG_VAULT_PROMPT_MAX_LENGTH}
                     value={settings.vaultPrompt}
                     onChange={(event) => updateSettings({ vaultPrompt: event.target.value })}
