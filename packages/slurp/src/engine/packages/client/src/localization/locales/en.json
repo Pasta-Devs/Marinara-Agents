@@ -786,6 +786,7 @@
   "ui.noodle.noodlerhome.couldNotDeleteThisPost": "Could not delete this post.",
   "ui.noodle.noodlerhome.couldNotEnableAutomaticPosting": "Could not enable automatic posting.",
   "ui.noodle.noodlerhome.couldNotGenerateAStageProfileDraft": "Could not generate a Creator profile draft.",
+  "ui.noodle.noodlerhome.noSourceSelectedForThisDraft": "No character or persona is selected for this draft. Go back and pick a source.",
   "ui.noodle.noodlerhome.couldNotGenerateCreatorReply": "Your comment was posted, but the creator could not reply.",
   "ui.noodle.noodlerhome.couldNotGenerateTheReviewedImage": "Could not generate the reviewed image.",
   "ui.noodle.noodlerhome.couldNotInviteCharacter": "Could not invite the character to Noodle.",
