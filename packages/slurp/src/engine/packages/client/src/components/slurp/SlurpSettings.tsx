@@ -76,10 +76,10 @@ function NumberSetting({
 }) {
   const [draft, setDraft] = useState(String(value));
   useEffect(() => setDraft(String(value)), [value]);
-  const commit = async () => {
-    const next = Number(draft);
-    if (!Number.isInteger(next) || next < min || next > max) {
-      setDraft(String(value));
+  const commit = async (raw = draft, resetInvalid = true) => {
+    const next = Number(raw);
+    if (!raw.trim() || !Number.isInteger(next) || next < min || next > max) {
+      if (resetInvalid) setDraft(String(value));
       return;
     }
     if ((await onSave(next)) === false) setDraft(String(value));
@@ -90,7 +90,11 @@ function NumberSetting({
       min={min}
       max={max}
       value={draft}
-      onChange={(event) => setDraft(event.target.value)}
+      onChange={(event) => {
+        const nextDraft = event.target.value;
+        setDraft(nextDraft);
+        void commit(nextDraft, false);
+      }}
       onBlur={() => void commit()}
       onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
       className="h-10 w-full rounded-md border border-[var(--border)] bg-transparent px-3 text-sm"

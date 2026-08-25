@@ -448,12 +448,14 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   const exitToCreatorHub = async () => {
     if (!(await confirmDiscardProfileDraft())) return;
     if (!(await confirmDiscardNoodlerPostDrafts())) return;
+    clearProfileEditorState();
     setNoodlerPostDrafts({});
     onNavigate({ mode: "creator", view: "hub" });
   };
   const openSettings = async () => {
     if (!(await confirmDiscardProfileDraft())) return;
     if (!(await confirmDiscardNoodlerPostDrafts())) return;
+    clearProfileEditorState();
     setNoodlerPostDrafts({});
     // Open the shared two-pane settings on the NoodleR tab instead of a separate
     // stripped-down page, so both shells reach the same settings surface.
@@ -601,7 +603,15 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   // user chose to keep. Covers both new drafts and changed edits so no surface silently
   // discards work.
   const confirmDiscardProfileDraft = async (): Promise<boolean> => {
-    if (!profileDraft) return true;
+    const hasEditorState = Boolean(
+      profileDraft ||
+      creationStep === "source" ||
+      creationStep === "disclosure" ||
+      creationStep === "draft" ||
+      draftNoodleAccountId ||
+      editingProfileId,
+    );
+    if (!hasEditorState) return true;
     const editing = editingProfileId
       ? (accountsQuery.data?.find((profile) => profile.id === editingProfileId) ?? null)
       : null;
@@ -622,18 +632,33 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
       tone: "destructive",
     });
   };
-  const goToHub = async () => {
-    if (!(await confirmDiscardProfileDraft())) return;
+  const clearProfileEditorState = () => {
     invalidateProfileDraftGeneration();
     setCreationStep(null);
     setProfileDraft(null);
     setEditingProfileId(null);
+    setDraftNoodleAccountId(null);
+    setPreviousDraft(null);
+    setAcceptSourceChangesForProfileId(null);
+    setDraftSourceSnapshot(null);
+    setDraftSourceRevisionToken(null);
+    setSourceSearch("");
+    setSourceKind("all");
+    profileReturnToSettingsRef.current = null;
+  };
+  const prepareNavigationAwayFromProfileEditor = async () => {
+    if (!(await confirmDiscardProfileDraft())) return false;
+    clearProfileEditorState();
+    return true;
+  };
+  const goToHub = async () => {
+    if (!(await prepareNavigationAwayFromProfileEditor())) return;
     setFeedSearch("");
     onNavigate({ mode: "creator", view: "hub" });
     setMobileDrawerOpen(false);
   };
   const goToNoodlerSearch = async () => {
-    if (!(await confirmDiscardProfileDraft())) return;
+    if (!(await prepareNavigationAwayFromProfileEditor())) return;
     onNavigate({ mode: "creator", view: "search" });
     setMobileDrawerOpen(false);
     window.requestAnimationFrame(() => discoveryInputRef.current?.focus());
@@ -970,15 +995,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   };
 
   const closeProfileEditor = async () => {
-    if (!(await confirmDiscardProfileDraft())) return;
-    invalidateProfileDraftGeneration();
-    setProfileDraft(null);
-    setPreviousDraft(null);
-    setEditingProfileId(null);
-    setCreationStep(null);
-    setAcceptSourceChangesForProfileId(null);
-    setDraftSourceSnapshot(null);
-    setDraftSourceRevisionToken(null);
+    await prepareNavigationAwayFromProfileEditor();
   };
 
   const changeDisclosure = (value: NoodleIdentityDisclosure) => {
@@ -1092,9 +1109,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
         const refreshed = await accountsQuery.refetch();
         const existing = refreshed.data?.find((profile) => profile.sourceAccountId === draftNoodleAccountId);
         if (existing) {
-          invalidateProfileDraftGeneration();
-          setProfileDraft(null);
-          setCreationStep(null);
+          clearProfileEditorState();
           onNavigate({ mode: "creator", view: "profile", accountId: existing.id });
           toast.info(localizeUi("ui.noodle.noodlerhome.thatStageProfileAlreadyExistedSoItWasOpened"));
           return;
@@ -1265,7 +1280,8 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     onOpenMobileHome: exitToCreatorHub,
     onOpenNoodler: goToHub,
     onOpenSearch: goToNoodlerSearch,
-    onOpenProfile: () => {
+    onOpenProfile: async () => {
+      if (!(await prepareNavigationAwayFromProfileEditor())) return;
       setMobileDrawerOpen(false);
       onNavigate(
         mainAuthorProfile
