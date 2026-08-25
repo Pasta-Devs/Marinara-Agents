@@ -109,6 +109,80 @@ function currentEquippedSlots(items) {
   return slots;
 }
 
+function outfitMatchesCurrent(outfit, items) {
+  const current = currentEquippedSlots(items);
+  const outfitEntries = Object.entries(outfit.slots ?? {});
+  const currentEntries = Object.entries(current);
+  if (outfitEntries.length !== currentEntries.length) return false;
+  return outfitEntries.every(([slot, itemId]) => current[slot] === itemId);
+}
+
+// The text a {{getvar::quartermaster_appearance_<ownerId>}} macro should
+// currently resolve to, per the owner's appearanceFeedMode. "outfitDescription"
+// only has something to feed when the CURRENT equip state exactly matches a
+// saved outfit — there's no "current outfit" concept otherwise, so it's
+// empty rather than guessing.
+function computeAppearanceText(state) {
+  if (state.appearanceFeedMode === "outfitDescription") {
+    const matching = state.outfits.find((outfit) => outfitMatchesCurrent(outfit, state.items));
+    return matching ? matching.description : "";
+  }
+  if (state.appearanceFeedMode === "equippedNames") {
+    const names = [];
+    for (const slot of EQUIP_SLOTS) {
+      const item = state.items.find((candidate) => candidate.location === `equipped:${slot}`);
+      if (item) names.push(item.name);
+    }
+    return names.join(", ");
+  }
+  return "";
+}
+
+// One dynamic variable per owner (quartermaster_appearance_persona for now;
+// quartermaster_appearance_<characterId> once party support lands), written
+// via chatMeta.macroVariables so a user-placed {{getvar::...}} token in that
+// owner's appearance field resolves to it per chat. updateChatMetadata is a
+// full REPLACE of the chat's metadata, not a merge (confirmed against the
+// Engine's capability-persistence.service.ts), so this always reads the
+// current metadata first and writes back the merged object — never the
+// macroVariables patch alone, which would wipe every other metadata key the
+// chat (or another package) has written. withChatLock serializes this
+// against the Engine's own per-turn metadata writes (e.g. the narrator's own
+// {{setvar}} persistence) so the two can't race and drop each other's
+// change.
+function appearanceVariableName(ownerId) {
+  return `quartermaster_appearance_${ownerId}`;
+}
+
+async function syncAppearanceMacro(persistence, chatId, ownerId, state) {
+  const variableName = appearanceVariableName(ownerId);
+  const text = computeAppearanceText(state);
+  await persistence.withChatLock(chatId, async () => {
+    const chat = await persistence.getChat(chatId);
+    if (!chat) return;
+    const rawMetadata = chat.metadata;
+    const metadata =
+      typeof rawMetadata === "string"
+        ? (() => {
+            try {
+              const parsed = JSON.parse(rawMetadata);
+              return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+            } catch {
+              return {};
+            }
+          })()
+        : rawMetadata && typeof rawMetadata === "object"
+          ? { ...rawMetadata }
+          : {};
+    const macroVariables =
+      metadata.macroVariables && typeof metadata.macroVariables === "object" ? { ...metadata.macroVariables } : {};
+    if (macroVariables[variableName] === text) return;
+    macroVariables[variableName] = text;
+    metadata.macroVariables = macroVariables;
+    await persistence.updateChatMetadata({ chatId, metadata, updatedAt: new Date().toISOString() });
+  });
+}
+
 async function loadInventoryDoc(documents, chatId, ownerId) {
   return documents.getById(PACKAGE_ID, inventoryDocId(chatId, ownerId));
 }
@@ -153,7 +227,16 @@ async function saveInventoryState(documents, chatId, ownerId, state) {
 
 export async function activate(context) {
   const { api } = context;
-  const { documents } = api.runtime.persistence;
+  const { persistence } = api.runtime;
+  const { documents } = persistence;
+
+  // Every route below calls this instead of saveInventoryState directly, so
+  // the appearance macro can never fall out of sync with an equip/outfit/
+  // settings change — there's exactly one path to disk, and it's this one.
+  async function persistState(chatId, ownerId, state) {
+    await saveInventoryState(documents, chatId, ownerId, state);
+    await syncAppearanceMacro(persistence, chatId, ownerId, state);
+  }
 
   const releaseRoutes = await api.registerPrivilegedRoutes(
     async (routes) => {
@@ -185,7 +268,7 @@ export async function activate(context) {
         const state = await loadInventoryState(documents, chatId, ownerId);
         applyLocation(state.items, item, location);
         state.items.push(item);
-        await saveInventoryState(documents, chatId, ownerId, state);
+        await persistState(chatId, ownerId, state);
         return { items: state.items, outfits: state.outfits };
       });
 
@@ -214,7 +297,7 @@ export async function activate(context) {
           item.defaultSlot = defaultSlot;
         }
 
-        await saveInventoryState(documents, chatId, ownerId, state);
+        await persistState(chatId, ownerId, state);
         return { items: state.items, outfits: state.outfits };
       });
 
@@ -224,7 +307,7 @@ export async function activate(context) {
         for (const item of state.items) {
           if (item.location.startsWith("equipped:")) item.location = "bag";
         }
-        await saveInventoryState(documents, chatId, ownerId, state);
+        await persistState(chatId, ownerId, state);
         return { items: state.items, outfits: state.outfits };
       });
 
@@ -244,7 +327,7 @@ export async function activate(context) {
           }
         }
 
-        await saveInventoryState(documents, chatId, ownerId, state);
+        await persistState(chatId, ownerId, state);
         return { items: state.items, outfits: state.outfits };
       });
 
@@ -262,7 +345,7 @@ export async function activate(context) {
           slots: currentEquippedSlots(state.items),
         };
         state.outfits.push(outfit);
-        await saveInventoryState(documents, chatId, ownerId, state);
+        await persistState(chatId, ownerId, state);
         return { items: state.items, outfits: state.outfits };
       });
 
@@ -285,7 +368,7 @@ export async function activate(context) {
         // items into this outfit without changing its name/description.
         if (body.resnapshot === true) outfit.slots = currentEquippedSlots(state.items);
 
-        await saveInventoryState(documents, chatId, ownerId, state);
+        await persistState(chatId, ownerId, state);
         return { items: state.items, outfits: state.outfits };
       });
 
@@ -307,7 +390,7 @@ export async function activate(context) {
           if (item) item.location = `equipped:${slot}`;
         }
 
-        await saveInventoryState(documents, chatId, ownerId, state);
+        await persistState(chatId, ownerId, state);
         return { items: state.items, outfits: state.outfits };
       });
 
@@ -318,7 +401,7 @@ export async function activate(context) {
         if (nextOutfits.length === state.outfits.length) return reply.status(404).send({ error: "Outfit not found" });
         state.outfits = nextOutfits;
 
-        await saveInventoryState(documents, chatId, ownerId, state);
+        await persistState(chatId, ownerId, state);
         return { items: state.items, outfits: state.outfits };
       });
 
@@ -330,7 +413,7 @@ export async function activate(context) {
         }
         const state = await loadInventoryState(documents, chatId, ownerId);
         state.appearanceFeedMode = body.appearanceFeedMode;
-        await saveInventoryState(documents, chatId, ownerId, state);
+        await persistState(chatId, ownerId, state);
         return { appearanceFeedMode: state.appearanceFeedMode };
       });
     },

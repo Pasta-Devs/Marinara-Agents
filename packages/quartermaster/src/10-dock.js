@@ -320,6 +320,19 @@ QM.dock = {
       padding: "2px 4px",
       fontSize: "12px",
     });
+    // <select>'s CLOSED box respects author background/color reliably, but
+    // the OPEN dropdown popup is largely native-rendered by the browser —
+    // Chromium in particular picks its own colors for it based on the
+    // page's inherited color-scheme, ignoring var(--input)/color:inherit,
+    // which is what was producing white-background/light-text. Forcing
+    // color-scheme: light plus explicit (non-variable) colors here fixes
+    // both the closed box and the popup consistently — real theme-matching
+    // for the popup itself isn't reliably achievable across browsers.
+    if (tag === "select") {
+      el.style.colorScheme = "light";
+      el.style.background = "#fff";
+      el.style.color = "#000";
+    }
     return el;
   },
 

@@ -37,7 +37,7 @@ const PACKAGE_ID = "quartermaster";
 // live this session. Reset this to a clean starting version (0.1.0) in one
 // commit right before this is actually proposed; the intervening bumps are
 // disposable dev-iteration numbers, not real releases.
-const VERSION = "0.1.5";
+const VERSION = "0.1.6";
 // Declared against the exact staging Engine this scaffold was built and tested
 // against. Do not lower this to reach stable users — see CONTRIBUTING.md.
 const ENGINE_MIN = "2.4.4";
@@ -153,8 +153,11 @@ const manifest = {
   // storage: package-owned inventory/outfit/image records via persistence.documents.
   // routes: serves those records (and later, item/portrait images) under /api/quartermaster.
   // chat-read: the sheet needs to know which chat it's showing.
+  // chat-write: syncAppearanceMacro (server.mjs) writes chatMeta.macroVariables
+  //   via updateChatMetadata, so a user-placed {{getvar::...}} token in the
+  //   appearance field resolves to the current outfit/equipped items.
   // ui: the roleplay-tracker/tracker-panel client contribution.
-  permissions: ["chat-read", "routes", "storage", "ui"],
+  permissions: ["chat-read", "chat-write", "routes", "storage", "ui"],
   // The routes permission forces this: getCapabilityPackageInstallIssue in the
   // Engine's package-manager.service.ts rejects install for any package that
   // declares "routes" but restartRequired: false — privileged routes only
