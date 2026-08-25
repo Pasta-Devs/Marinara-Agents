@@ -117,23 +117,27 @@ function outfitMatchesCurrent(outfit, items) {
   return outfitEntries.every(([slot, itemId]) => current[slot] === itemId);
 }
 
+function equippedItemNamesText(items) {
+  const names = [];
+  for (const slot of EQUIP_SLOTS) {
+    const item = items.find((candidate) => candidate.location === `equipped:${slot}`);
+    if (item) names.push(item.name);
+  }
+  return names.join(", ");
+}
+
 // The text a {{getvar::quartermaster_appearance_<ownerId>}} macro should
 // currently resolve to, per the owner's appearanceFeedMode. "outfitDescription"
-// only has something to feed when the CURRENT equip state exactly matches a
-// saved outfit — there's no "current outfit" concept otherwise, so it's
-// empty rather than guessing.
+// falls back to the equipped item names when the current equip state doesn't
+// exactly match any saved outfit — there's no "current outfit" concept then,
+// but showing nothing would be worse than showing what's actually worn.
 function computeAppearanceText(state) {
   if (state.appearanceFeedMode === "outfitDescription") {
     const matching = state.outfits.find((outfit) => outfitMatchesCurrent(outfit, state.items));
-    return matching ? matching.description : "";
+    return matching ? matching.description : equippedItemNamesText(state.items);
   }
   if (state.appearanceFeedMode === "equippedNames") {
-    const names = [];
-    for (const slot of EQUIP_SLOTS) {
-      const item = state.items.find((candidate) => candidate.location === `equipped:${slot}`);
-      if (item) names.push(item.name);
-    }
-    return names.join(", ");
+    return equippedItemNamesText(state.items);
   }
   return "";
 }

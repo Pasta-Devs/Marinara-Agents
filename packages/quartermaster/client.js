@@ -1,4 +1,4 @@
-// Quartermaster 0.1.6 — Marinara Engine roleplay-tracker capability (single-file client bundle)
+// Quartermaster 0.1.7 — Marinara Engine roleplay-tracker capability (single-file client bundle)
 // Built from packages/quartermaster/src (3 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
