@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { staleNoodleAccountIds } from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-data-cleanup";
 
 const stale = staleNoodleAccountIds(
@@ -21,4 +22,11 @@ assert.deepEqual([...stale].sort(), [
   "character-uninvited",
   "persona-deleted",
 ]);
+
+const storageSource = readFileSync(
+  new URL("../packages/noodle/src/engine/packages/server/src/services/storage/noodle.storage.ts", import.meta.url),
+  "utf8",
+);
+assert.match(storageSource, /const currentStaleAccountIds = staleNoodleAccountIds/u);
+assert.match(storageSource, /staleAccountIds\.some\(\(accountId\) => !currentStaleAccountIds\.has\(accountId\)\)/u);
 console.log("Noodle data cleanup regression passed.");

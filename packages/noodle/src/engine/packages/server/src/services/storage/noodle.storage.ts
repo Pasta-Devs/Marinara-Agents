@@ -1286,7 +1286,12 @@ export function createNoodleStorage(db: DB) {
             stalePostIdSet.has(unlock.postId),
         )
         .map((unlock) => unlock.id);
-      await db.transaction(async (tx) => {
+      const cleanupApplied = await db.transaction(async (tx) => {
+        const currentAccounts = (
+          await tx.select().from(noodleAccounts).where(eq(noodleAccounts.platform, "noodle"))
+        ).filter((account) => account.id !== SETTINGS_ID);
+        const currentStaleAccountIds = staleNoodleAccountIds(currentAccounts, input.characterIds, input.personaIds);
+        if (staleAccountIds.some((accountId) => !currentStaleAccountIds.has(accountId))) return false;
         if (staleDigestIds.length)
           await tx.delete(noodleActivityDigests).where(inArray(noodleActivityDigests.id, staleDigestIds));
         if (staleInteractionIds.length)
@@ -1300,7 +1305,18 @@ export function createNoodleStorage(db: DB) {
         if (stalePostIds.length) await tx.delete(noodlePosts).where(inArray(noodlePosts.id, stalePostIds));
         if (staleRunIds.length) await tx.delete(noodleRefreshRuns).where(inArray(noodleRefreshRuns.id, staleRunIds));
         if (staleAccountIds.length) await tx.delete(noodleAccounts).where(inArray(noodleAccounts.id, staleAccountIds));
+        return true;
       });
+      if (!cleanupApplied)
+        return {
+          accounts: 0,
+          posts: 0,
+          interactions: 0,
+          digests: 0,
+          refreshRuns: 0,
+          subscriptions: 0,
+          unlocks: 0,
+        } satisfies NoodleDataDeletionCounts;
       return {
         accounts: staleAccountIds.length,
         posts: stalePostIds.length,
