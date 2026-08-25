@@ -905,6 +905,25 @@ export default function SourcesWorkspace({
     setImportCharacterId(null);
   }, [props.chatId]);
 
+  const clearImportResult = useCallback(() => {
+    setImportResult(null);
+    setImportResultContract(null);
+    setCancelledImport(null);
+    setImportError("");
+    setReviewMessage("");
+    setSourceOperation(null);
+  }, []);
+
+  const changeSource = useCallback(
+    (next: Source) => {
+      setSource(next);
+      onSourceChange?.(next);
+      if (next === "lorebooks") setLorebookMobilePane("navigator");
+      clearImportResult();
+    },
+    [clearImportResult, onSourceChange],
+  );
+
   useEffect(() => {
     if (!requestedSource) return;
     changeSource(requestedSource.source);
@@ -946,25 +965,6 @@ export default function SourcesWorkspace({
       queryKeys.lorebookPreview,
     ]);
   };
-
-  const clearImportResult = useCallback(() => {
-    setImportResult(null);
-    setImportResultContract(null);
-    setCancelledImport(null);
-    setImportError("");
-    setReviewMessage("");
-    setSourceOperation(null);
-  }, []);
-
-  const changeSource = useCallback(
-    (next: Source) => {
-      setSource(next);
-      onSourceChange?.(next);
-      if (next === "lorebooks") setLorebookMobilePane("navigator");
-      clearImportResult();
-    },
-    [clearImportResult, onSourceChange],
-  );
 
   const changeImportScope = (next: string) => {
     setImportTargetId(next);
