@@ -174,7 +174,7 @@
         "schemaVersion": 1,
         "id": "conversation-calls",
         "name": "Calls",
-        "version": "1.0.12",
+        "version": "1.0.13",
         "description": "Adds live audio and video calls with Conversation characters. Add as both a Command and an Agent in Chat Settings → Agents → Commands/Calls for Conversation mode.",
         "engine": {
           "min": "2.4.1",
@@ -199,8 +199,8 @@
         "files": [
           {
             "path": "agents.json",
-            "sha256": "1004e5c983744487f81ea5c0c5232aad637786476cf40bf31a7e4438aa47515e",
-            "bytes": 559
+            "sha256": "f531db07b1fe20d085f876b968e88cec1be70dbf844c3ffc8aab204ac3ceb86f",
+            "bytes": 454
           },
           {
             "path": "server.mjs",
@@ -209,8 +209,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "5f4d3cb22982dab18eaf97f047918ba5613c561cb4c17d3c1ee2304547ec2a6c",
-            "bytes": 850071
+            "sha256": "34f8369debed4f6fcd8a9fb323c2062a44feda44980d6f624777c54aef6f3a27",
+            "bytes": 850335
           }
         ],
         "permissions": [
@@ -227,9 +227,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/conversation-calls.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.12.zip",
-        "sha256": "140c511221c8670dd6910f88bb8e434a86a180fcb8fbac55a8bf0db1d8461e29",
-        "bytes": 3234736
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/conversation-calls-1.0.13.zip",
+        "sha256": "ac1abcbf18b1c12a2eb831af4c102d08e07d5c2fc2f621c4b3c368bffb7703cf",
+        "bytes": 3234895
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#conversation-calls"
     },
@@ -901,7 +901,7 @@
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.2.12",
+        "version": "1.2.13",
         "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
         "engine": {
           "min": "2.4.1",
@@ -938,8 +938,8 @@
           },
           {
             "path": "client.js",
-            "sha256": "af7ef4e4503ed9463b81f773e79b54be24bd0d45eff58c9a9f78e53efef10006",
-            "bytes": 828920
+            "sha256": "ed78286e60f0f82b090a07724e0df1809ce1c0c9435969bc1e18f79bd7d59626",
+            "bytes": 833356
           }
         ],
         "permissions": [
@@ -955,9 +955,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.2.12.zip",
-        "sha256": "1a559915b9bc25a8484ec3874b9a16eef34f5583015f60b655c0178e1cdb598f",
-        "bytes": 1212085
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.2.13.zip",
+        "sha256": "ae78e3193e5212a52347dba6aaf0a9bfa0778b530003f61f2bdbc98d7629c1ab",
+        "bytes": 1216521
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },

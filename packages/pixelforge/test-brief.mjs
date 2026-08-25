@@ -3,9 +3,41 @@
 // compiler invariants, injection metering, and spatial-binding regressions
 // through the spec's degenerate cases (docs/brief-schema.md §4-5, §7).
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+// ── THE HARNESS ALWAYS LEAVES (Agents #554) ──────────────────────────────────
+// A red run was once seen to print an error and then sit past a ten-minute
+// timeout; six later attempts could not reproduce it. What those attempts did
+// settle is that the THROW path is not the one that needs a guard: node prints
+// an uncaught AssertionError and exits 1 in the same tick, with timers armed or
+// not, so a final catch here could only take node's own rendering of the red
+// away from the workflow that reads it, and buy nothing back.
+//
+// The shape that can sit forever is the one that never throws. withSavePath
+// stubs globalThis.setTimeout to RECORD rather than fire, six of the HUD cases
+// stub it away outright, and two package paths — 60-save's brief-storage ladder
+// and 58-player's quarantine one — wait on a promise that only a timer resolves.
+// A case that reaches one of those parks its await, the module promise never
+// settles, and node cannot report what nobody threw. With the loop drained it
+// says so and exits 13; with anything still alive it simply waits, which is a
+// hang with an error printed above it and no exit under it — the report exactly.
+//
+// So the guarantee is a deadline rather than a catch. The timer is unref'd on
+// purpose: it cannot hold a healthy run open (a green run takes ~5s and is long
+// gone before this comes due), and it can only fire inside a process that is
+// still alive at the deadline, which is the hang and nothing else. It prints
+// what the issue asked the next person to capture before killing it.
+const HANG_BUDGET_MS = 120_000; // ~25x a green run; raise it if you are sitting in a debugger
+const watchdog = setTimeout(() => {
+  console.error(`\nharness watchdog: ${HANG_BUDGET_MS}ms and no exit — a case is parked (Agents #554).`);
+  console.error("still alive:", process.getActiveResourcesInfo());
+  process.exit(1);
+}, HANG_BUDGET_MS);
+watchdog.unref();
 
 const here = dirname(fileURLToPath(import.meta.url));
 // Mirror the real bundle: concatenate the modules into one scope (the prelude
@@ -15,7 +47,10 @@ const here = dirname(fileURLToPath(import.meta.url));
 // and neither touches the DOM until it is called (see the FakeNode shim near the
 // end of this file). 40-render and 90-element stay out: a canvas context and a
 // custom-element registration want a page, not a shim.
-const source = [
+// Named rather than spelled inline because the cross-process determinism case
+// hands this same list to a second interpreter, which loads the package exactly
+// the way this one does.
+const MODULES = [
   "00-prelude.js",
   "10-art.js",
   "15-assets.js",
@@ -30,9 +65,8 @@ const source = [
   "60-save.js",
   "70-hud.js",
   "80-setup.js",
-]
-  .map((file) => readFileSync(join(here, "src", file), "utf8"))
-  .join("\n");
+];
+const source = MODULES.map((file) => readFileSync(join(here, "src", file), "utf8")).join("\n");
 const loadedPF = new Function(`"use strict";\n${source}\nreturn PF;`)();
 // refresh() fire-and-forgets the maps export; without a stub every earlier
 // spatial case would hit undefined fetch and warn. 404 = "route absent" is the
@@ -1160,6 +1194,10 @@ const wayrestCast = [
   // Borrow the real methods off the shipped Sim prototype.
   sim.header = loadedPF.Sim.prototype.header.bind(sim);
   sim.composePrefix = loadedPF.Sim.prototype.composePrefix.bind(sim);
+  // …including the one compose calls for itself. This stand-in has no player
+  // block on it, which is exactly the shape `_composeLedger` answers null to, so
+  // the metering below still measures the prose parts and nothing else.
+  sim._composeLedger = loadedPF.Sim.prototype._composeLedger.bind(sim);
   sim.commitIntro = loadedPF.Sim.prototype.commitIntro.bind(sim);
   const npcVex = Object.values(w.zones)
     .flatMap((z) => z.npcs)
@@ -1969,6 +2007,85 @@ const wayrestCast = [
         adoptedZone,
         "the shadowed zone creates its own id instead",
       );
+    }
+  }
+
+  // 37c. Every id in this table belongs to the HOST — authored by hand or by
+  // the wizard's map instructions — and "__proto__" is a word every plain object
+  // already answers to (#567). Both halves of the binding handling broke on it,
+  // and the reachable damage is not the one the issue predicted:
+  //
+  //   * the adoption read at the top of `_plan` (`world.bindings[adopted]`) came
+  //     back Object.prototype — neither undefined nor the zone — so the adoption
+  //     was refused on the FIRST sync and the export posted a TWIN of the very
+  //     location it was meant to bind. Onto a player's real map, through a route
+  //     with no delete, so nothing takes it back;
+  //   * the write it would otherwise have reached (`bindings[locId] = zoneId`)
+  //     is a silent no-op on a plain object anyway — the prototype setter takes
+  //     an object or null and drops a string — which is why the refused adoption
+  //     above could never heal itself on a later pass either.
+  //
+  // The table is null-prototype from creation now (20-world), so the id is just
+  // an id: the adoption holds, the binding lands, and a later session is the
+  // cheap re-bind this module's own header promises.
+  {
+    const { w, core } = exportScaffold(2468, "chat-export-37c");
+    const adoptedZone = exportableZones(w)[0];
+    const adoptedName = w.zones[adoptedZone].name;
+    const posts = [];
+    let serverLocs = [{ id: "loc-root" }, { id: "__proto__", parentId: "loc-root", name: adoptedName }];
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision: 4, locations: serverLocs.slice() },
+      currentLocationId: "loc-root",
+      breadcrumb: [{ name: "Rootville" }],
+      destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async (chatId, body) => {
+      posts.push(body);
+      serverLocs = serverLocs.concat(body.locations.map((row) => ({ id: row.id })));
+      return { ok: true, status: 200, body: {} };
+    };
+    resetExportState();
+    await bindRoot(core);
+    await mapsExport.maybeSync(core);
+    assert.equal(w.bindings["__proto__"], adoptedZone, "a host location id of `__proto__` binds like any other id");
+    assert.equal(w.zones[adoptedZone].spatialLocationId, "__proto__", "and the zone records the adopted id");
+    assert.ok(
+      !posts.flatMap((p) => p.locations).some((row) => row.name === adoptedName),
+      "and no twin of it is ever posted — the row this route can never take back",
+    );
+    // Once, and then quiet. A later session re-plans the same world, finds the
+    // binding already hung, and reports NOTHING — the cheap re-bind the module's
+    // own header promises, which is what a refused adoption made impossible.
+    const dirtyAfterFirst = core.dirty;
+    const postsAfterFirst = posts.length;
+    assert.ok(dirtyAfterFirst > 0, "the first sync is the one that persists the bindings");
+    resetExportState();
+    await mapsExport.maybeSync(core);
+    assert.equal(core.dirty, dirtyAfterFirst, "a second sync reports no change — the binding stuck the first time");
+    assert.equal(posts.length, postsAfterFirst, "…and posts nothing further");
+
+    // The same table from the other end, and THIS is where the permanent churn
+    // lives: the first binding is written by 50-spatial off `currentLocationId`,
+    // which is exactly as host-owned as an authored id, and that write is
+    // unconditional. Bare, it vanished — so the table stayed empty, the seeding
+    // branch re-fired and re-dirtied on every single refresh, and maybeSync
+    // bailed for want of a root. A world that could never export, forever.
+    {
+      const { w: rw, core: rcore } = exportScaffold(1357, "chat-export-37c-root");
+      loadedPF.api.getSpatial = async () => ({
+        definition: { revision: 1, locations: [{ id: "__proto__" }] },
+        currentLocationId: "__proto__",
+        breadcrumb: [{ name: "Rootville" }],
+        destinations: [],
+      });
+      resetExportState();
+      await bindRoot(rcore);
+      assert.equal(rw.bindings["__proto__"], rw.startZone, "the first-seen location binds under that name too");
+      assert.equal(rw.zones[rw.startZone].spatialLocationId, "__proto__", "and the exterior records it");
+      const dirtyAfterSeed = rcore.dirty;
+      await bindRoot(rcore);
+      assert.equal(rcore.dirty, dirtyAfterSeed, "and the seeding branch never fires a second time for it");
     }
   }
 
@@ -2987,6 +3104,30 @@ const wayrestCast = [
   assert.equal(sim.waitUntil("dawn"), true, "waiting for a passed daypart still succeeds");
   assert.equal(sim.day, dayBefore + 1, "and rolls over to the next day");
   assert.equal(sim.clockMin, 5 * 60, "landing on dawn");
+}
+
+// 14g. …AND THE TABLE IT READS IS READ AS AN OWN PROPERTY.
+// PF.DAYPART_STARTS moved out of waitUntil's body when the fishing verb wanted
+// the same four thresholds, and a shared table is a table more than one caller
+// can be handed a hostile word for. `starts["constructor"]` answers with a
+// FUNCTION, which is not undefined: a bare read waves it past an
+// `=== undefined` guard, `clockMin` is assigned a function, and every clock read
+// downstream — the chip, the daypart, the darkness pass, the save byte — goes to
+// NaN on a sim that is otherwise perfectly healthy.
+{
+  const sim = new loadedPF.Sim(world.build(5150, "cozy-village", brief.defaults("cozy-village", 5150)));
+  sim.mode = "walk";
+  sim.clockMin = 10 * 60;
+  sim.day = 3;
+  for (const key of ["constructor", "toString", "valueOf", "hasOwnProperty", "__proto__"]) {
+    assert.equal(sim.waitUntil(key), false, `"${key}" is not a daypart, whatever the prototype answers with`);
+    assert.equal(sim.clockMin, 10 * 60, `…and the clock did not move for "${key}"`);
+    assert.equal(sim.day, 3, `…nor the day`);
+  }
+  assert.equal(typeof sim.clockMin, "number", "the clock is still a number and not a function");
+  assert.equal(sim.clockLabel(), "Day 3 · 10:00", "…and still renders as a time rather than NaN:NaN");
+  assert.equal(sim.waitUntil("dusk"), true, "while a word the table really holds still works");
+  assert.equal(sim.clockMin, 18 * 60, "…and lands where it always did");
 }
 
 // The 0.8.0 rooms fixture, shared by 14d and cases 51-53: a settlement with a
@@ -7146,13 +7287,20 @@ const cellarBrief = (prosperity) => ({
 // geometry, occupancy and schedule, and none of them look at whether a tile can
 // be SEEN. In the browser it would have been a solid square of bare floor in the
 // corner of every house in the world.
+//
+// THE GROUND LAYER JOINS THE SWEEP (0.12 slice 3b). It was left out because the
+// ground vocabulary had not grown since the themes landed, and the omission is
+// exactly the hole `bridge` would have fallen through: an unknown ground id does
+// not render as nothing, it renders as GRASS (10-art's tile() falls back to the
+// grass painter for an unknown id), so a bridge with no painter would have been
+// a lawn laid across a pond and every assertion in this file would have passed.
 {
   const drawable = new Set(loadedPF.art.painterNames());
   assert.ok(drawable.size > 10, `the art module reported its painters (${drawable.size})`);
   const missing = new Map();
   const look = (w, label) => {
     for (const zone of Object.values(w.zones)) {
-      for (const layer of ["object", "overhead"]) {
+      for (const layer of ["ground", "object", "overhead"]) {
         for (const tile of zone[layer]) {
           if (!tile || drawable.has(tile)) continue;
           if (!missing.has(tile)) missing.set(tile, `${label} ${zone.id}`);
@@ -7200,6 +7348,29 @@ const cellarBrief = (prosperity) => ({
     missing.size,
     0,
     `every placed tile can be drawn (${[...missing].map(([tile, where]) => `${tile} in ${where}`).join(", ")})`,
+  );
+}
+
+// ── THE BRIDGE IS DRAWN IN BOTH TIERS (0.12 slice 3b) ──────────────────────
+// The bridge ruling adds the first new GROUND id since the themes landed, and a
+// ground id has two art homes: 10-art's runtime painters (Tier-0) and the
+// build-time generator that bakes the shipped atlas (Tier-1). Missing Tier-1 art
+// is a soft failure by design — every draw resolves Tier1 ?? Tier0 — but missing
+// Tier-0 art is a bridge rendered as a lawn, so both are pinned.
+{
+  assert.ok(new Set(loadedPF.art.painterNames()).has("bridge"), "Tier-0 can paint a bridge");
+  // The Tier-1 generator writes PNGs to disk and cannot be run inside this
+  // process, so its painter table is read as SOURCE. That is enough to catch the
+  // failure that matters: a tile added to one tier and forgotten in the other.
+  const generator = readFileSync(join(here, "build", "build-art.mjs"), "utf8");
+  assert.ok(/\n {2}bridge\(g, rnd\) \{/.test(generator), "…and so can the Tier-1 generator");
+  // APPENDED, NEVER INSERTED — the generator's own rule, and the reason it is
+  // worth asserting rather than trusting: that table's key order IS the atlas
+  // index map, so a tile slotted in beside `water` where it reads nicely would
+  // silently shift every index under it and repaint the whole shipped world.
+  assert.ok(
+    generator.indexOf("\n  bridge(g, rnd) {") > generator.indexOf("\n  bell(g) {"),
+    "…with the new id on the END of the table, where the atlas index map can take it",
   );
 }
 
@@ -7831,6 +8002,63 @@ const cellarBrief = (prosperity) => ({
     frozen,
     "the legacy envelope serializes to exactly the bytes every deployed save compares against",
   );
+}
+
+// ── THE STAGED WRAP-UP DAY SURVIVES THE ROUND TRIP (0.12 slice 4) ──────────
+// The durable half of the two-field flush. `intro.ledgerOwed` is written by a
+// completed sleep and read by the compose that tells those days — and between
+// the two there is always at least one reload, or one `_rebuild`, which is the
+// same code path. The intro parse is a CLOSED literal: a subkey it does not name
+// is stripped on every restore, and the envelope carry cannot stand in for it
+// because that carry holds unknown TOP-LEVEL keys only. Without the one line in
+// simFromSaved that reads this field it is write-only state and the whole design
+// is a marker that never outlives the session that staged it.
+//
+// DECLARED BYTE MOVEMENT, and it is why this is a case rather than an assertion:
+// a save that HAS an intro block now round-trips carrying `"ledgerOwed":0`,
+// which is one extra write per open chat on first load. A save with no intro at
+// all — the frozen literal above, and every fresh sim — is untouched, because
+// snapshot() falls back to the three-key literal for a sim that never composed.
+{
+  const sim = new loadedPF.Sim(world.build(6120, "cozy-village"));
+  sim.intro = { world: true, zones: {}, npcs: {} };
+  sim.intro.ledgerOwed = 4; // what a completed sleep stages
+  const snap = JSON.parse(JSON.stringify(loadedPF.save.snapshot({ sim, chatId: "chat-owed" })));
+  assert.equal(snap.intro.ledgerOwed, 4, "snapshot emits `intro` wholesale, so the staged day is already on the wire");
+  const back = loadedPF.save.simFromSaved(snap, {}, "chat-owed");
+  assert.equal(back.intro.ledgerOwed, 4, "…and the restore CARRIES it — the parse literal names it");
+  assert.equal(back.intro.world, true, "with the one-shot flags it sits beside");
+
+  // A SAVED NUMBER IS EVIDENCE, NEVER A VALUE. This one is about to be compared
+  // against `sim.day` and used to lift a gate, so it comes back through the
+  // resolver: anything that is not a whole day at or above zero owes nothing.
+  for (const hostile of ["4", 3.5, -1, NaN, null, { day: 4 }]) {
+    const row = { ...snap, intro: { ...snap.intro, ledgerOwed: hostile } };
+    assert.equal(
+      loadedPF.save.simFromSaved(row, {}, "chat-owed-hostile").intro.ledgerOwed,
+      0,
+      `a ledgerOwed of ${JSON.stringify(hostile)} owes nothing`,
+    );
+  }
+
+  // THE MOVEMENT, PINNED IN BOTH DIRECTIONS. A pre-0.12 row carrying an intro
+  // gains the field at zero (declared); a row carrying no intro at all gains
+  // nothing, which is what keeps the frozen literal above frozen.
+  const pre = { v: 1, seed: 6120, theme: "cozy-village", intro: { world: true, zones: {}, npcs: {} } };
+  const lifted = loadedPF.save.simFromSaved(pre, {}, "chat-owed-pre");
+  assert.equal(lifted.intro.ledgerOwed, 0, "a 0.11 row's intro reads back owing nothing");
+  assert.equal(
+    JSON.stringify(loadedPF.save.snapshot({ sim: lifted, chatId: "chat-owed-pre" }).intro),
+    '{"world":true,"zones":{},"npcs":{},"ledgerOwed":0}',
+    "…and re-serializes carrying it — one extra write per open chat, declared",
+  );
+  const bare = loadedPF.save.simFromSaved({ v: 1, seed: 6120, theme: "cozy-village" }, {}, "chat-owed-bare");
+  assert.equal(
+    JSON.stringify(loadedPF.save.snapshot({ sim: bare, chatId: "chat-owed-bare" }).intro),
+    '{"world":false,"zones":{},"npcs":{}}',
+    "while a row with no intro at all still serializes to the bytes the frozen literal pins",
+  );
+  loadedPF.save.reset();
 }
 
 // ── ENVELOPE_KEYS AND snapshot() CANNOT DRIFT APART (S5 slice 1) ───────────
@@ -9207,6 +9435,20 @@ await withSavePath(async ({ armed, makeCore }) => {
     "leaving the quest whose giver is standing there",
   );
   assert.equal(out.notices.length, 1, "with a notice for the ledger");
+  // …AND THE NOTICE SAYS WHAT KIND OF THING THIS WAS. The severance notices are
+  // about rows that were PARKED and can come home; a dangling giver is a dropped
+  // quest and nothing brings it back. Now that the band is a surface a player
+  // re-reads rather than one sentence in a wrap-up, the outcome clause is the
+  // difference between a notice and an explanation (plan §2.5, M3).
+  // Pinned to the WHOLE sentence, exactly as its sibling in (z2) below is: a
+  // substring match holds while the clause around it is rewritten into
+  // something that no longer says the task is gone for good, which is the half
+  // of the copy the review was actually about.
+  assert.deepEqual(
+    out.notices,
+    ["A task you had taken on has no one left to hand it back to, so you have let it go."],
+    "…and it says, in full, that the task was let go",
+  );
 
   const all = P.defaultPlayer();
   all.quests.active = [
@@ -9232,12 +9474,314 @@ await withSavePath(async ({ armed, makeCore }) => {
     "the repair runs through the restore path too",
   );
   assert.equal(sim.dirty, false, "and does not dirty the sim — a repair is not a mutation");
-  // …and the notice is on the LIVE ledger, appended after the severance step.
+  // …and the notice is on the LIVE ledger's BAND, appended after the severance
+  // step. Not a line: a notice explains something that happened to the save, and
+  // the band is where the panel reads it and where the told flag lives (0.12).
   assert.ok(
-    sim.player.ledger.lines.some(([, text]) => /no one left/.test(text)),
-    "the notice reached the ledger",
+    (sim.player.ledger.notices ?? []).some(([, text]) => /no one left/.test(text)),
+    "the notice reached the band",
+  );
+  assert.equal(
+    sim.player.ledger.lines.filter(([, text]) => /no one left/.test(text)).length,
+    0,
+    "…and not the day transcript, which is what the day groups render",
   );
   loadedPF.save.reset();
+}
+
+// (z2) A NOTICE IS NOT A LEDGER LINE (0.12 slice 4).
+// FIVE writers explain a loss to the player — the two severances, the
+// dangling-quest repair, a park refusal and a restore — and every one of them
+// used to push its sentence onto `ledger.lines`, where the flush's DAY GATE
+// could bury it. The old sink lifted the day to `max(sim.day, flushedDay + 1)`
+// to stop that happening, so a save whose gate had run ahead of its clock
+// printed a day header FROM THE FUTURE into its own wrap-up. The band is its own
+// subtree now and answers to a told flag rather than to the day gate, so the
+// shift is deleted and the day a notice carries is the day it happened.
+{
+  const P = loadedPF.player;
+  const Q = loadedPF.quarantine;
+  const sealed = brief.defaults("cozy-village", 2201);
+  const w = world.build(2201, "cozy-village", sealed);
+  const meta = { pixelforgeBrief: sealed };
+  const here = P.stampsFor(w, sealed);
+  const minted = w.zones[w.startZone].npcs.find((npc) => !sealed.cast.some((member) => member.name === npc.name));
+  assert.ok(minted, "the fixture world minted somebody the brief never named");
+
+  const band = (sim) => sim.player.ledger.notices ?? [];
+  const texts = (sim) => band(sim).map(([, text]) => text);
+  const block = (stamps, extra = {}) => {
+    const p = P.defaultPlayer();
+    p.world = { ...stamps };
+    // A HIGH GATE OVER AN EMPTY BUFFER, which is the shape the day-shift hack was
+    // written for and the one it got wrong: with no lines to sever, nothing
+    // clamps `flushedDay` back down, so the gate stays ten days ahead of the
+    // clock and the old sink filed its notice on day 21 of a day-9 save.
+    p.flushedDay = 20;
+    Object.assign(p, extra);
+    return P.serialize(p);
+  };
+  const restore = (player, chatId) =>
+    loadedPF.save.simFromSaved({ v: 1, seed: 2201, theme: "cozy-village", day: 9, player }, meta, chatId);
+
+  // (1) THE BRIEF SEVERANCE. Its notice is the one thing that survives the window
+  // it is explaining, which is why the sink runs after the strip.
+  Q.reset();
+  const brieved = restore(
+    block({ seed: 1, briefHash: 2, mintStamp: 3 }, { rel: { village: { Nobody: { d: 2, t: 3 } } } }),
+    "chat-band-brief",
+  );
+  // THE HACK IS GONE, asserted before anything about the band: with the old sink
+  // restored this save's explanation lands on day 21, twelve days after the last
+  // day the player has lived, and the wrap-up renders a header from the future.
+  assert.deepEqual(
+    brieved.player.ledger.lines.filter(([day]) => day > brieved.day),
+    [],
+    "nothing is filed on a day the clock has not reached",
+  );
+  assert.equal(texts(brieved).length, 1, "the brief severance wrote one notice");
+  assert.ok(/belonged to another world/.test(texts(brieved)[0]), `…the one it means (${texts(brieved)[0]})`);
+  assert.equal(band(brieved)[0][0], 9, "AT THE DAY IT HAPPENED — not lifted past a gate sitting at 20");
+  assert.deepEqual(brieved.player.ledger.lines, [], "and the day transcript is left empty, not seeded with a notice");
+  assert.equal(band(brieved)[0].length, 2, "the row boots UNTOLD: two elements, no flag");
+
+  // (2) THE MINT SEVERANCE, the other half of the same writer.
+  Q.reset();
+  const minters = restore(
+    block({ ...here, mintStamp: here.mintStamp ^ 0xff }, { rel: { village: { [minted.name]: { d: 2, t: 3 } } } }),
+    "chat-band-mint",
+  );
+  assert.ok(
+    texts(minters).some((text) => /not the people who live here now/.test(text)),
+    `the mint severance's notice is in the band too (${texts(minters)})`,
+  );
+  assert.equal(band(minters)[0][0], 9, "…on the day it happened");
+
+  // (3) THE DANGLING-QUEST REPAIR, whose notice is about a loss the world caused
+  // rather than one the stamps did.
+  Q.reset();
+  const lost = restore(
+    block(here, {
+      quests: {
+        done_pack: {},
+        active: [
+          {
+            id: "q-real",
+            g: `z1|${sealed.cast[0].name}`,
+            verb: "gather",
+            target: "herb",
+            n: 1,
+            have: 0,
+            r: {},
+            day: 1,
+          },
+          { id: "q-ghost", g: "z1|Nobody At All", verb: "gather", target: "herb", n: 1, have: 0, r: {}, day: 1 },
+        ],
+      },
+    }),
+    "chat-band-quest",
+  );
+  assert.ok(/no one left to hand it back/.test(texts(lost)[0]), `the repair's notice is in the band (${texts(lost)})`);
+  assert.equal(band(lost)[0][0], 9, "…on the day it happened");
+
+  // (4) THE PARK REFUSAL, which is the writer that has to CONTRADICT the one
+  // above it: applyStamps has already stripped the block by the time the entry is
+  // offered to the bag, so a refusal means the comforting sentence is a lie.
+  Q.reset();
+  assert.equal(
+    Q.put("chat-band-refuse", "stamp", {
+      reason: "brief",
+      fromV: 1,
+      stamps: { seed: 1, briefHash: 2, mintStamp: 3 },
+      // Sized so the SLOT is legal and the merge is not: the bag unions a second
+      // severance into the first, and this one leaves it no room to union into.
+      fields: { rel: { z: { Huge: { d: 0, t: 0, s: "x".repeat(130_880) } } } },
+    }),
+    true,
+    "the bag is holding an earlier severance that fills it to the brim",
+  );
+  const refused = restore(
+    block({ seed: 1, briefHash: 2, mintStamp: 3 }, { rel: { village: { Nobody: { d: 2, t: 3 } } } }),
+    "chat-band-refuse",
+  );
+  assert.deepEqual(
+    texts(refused),
+    ["What you had done in the world that changed could not be kept, and is gone."],
+    "a severance the bag would not take says the TRUE sentence, and only that one",
+  );
+  assert.equal(band(refused)[0][0], 9, "…on the day it happened");
+
+  // (5) THE RESTORE, the one notice that is good news.
+  Q.reset();
+  assert.equal(
+    Q.put("chat-band-home", "stamp", {
+      reason: "brief",
+      fromV: 1,
+      stamps: { ...here },
+      fields: { ledgerLines: [[4, "Something from before the window."]], flushedDay: 3 },
+    }),
+    true,
+    "a stamp slot whose stamps are this world's own is a save coming home",
+  );
+  const homed = restore(block(here), "chat-band-home");
+  assert.ok(/is back/.test(texts(homed)[0]), `the restore's notice is in the band (${texts(homed)})`);
+  assert.equal(band(homed)[0][0], 9, "…on the day it happened");
+  assert.ok(
+    homed.player.ledger.lines.some(([day]) => day === 4),
+    "…and the lines it brought home are lines, not notices",
+  );
+
+  // …AND THE BAND THE LIVE BLOCK ARRIVED WITH IS STILL THERE. The restore brings
+  // the parked LINES home by reassigning `player.ledger` whole, and the band is
+  // not a line and was never parked: it rode in on the block's own disk state,
+  // carrying sentences nobody has been told yet. A whole-object reassignment
+  // forgets that and takes them with it — and the mint branch beside it, which
+  // touches the ledger not at all, keeps them. Two branches of one restore cannot
+  // disagree about whether a pending notice survives coming home.
+  Q.reset();
+  assert.equal(
+    Q.put("chat-band-carry", "stamp", {
+      reason: "brief",
+      fromV: 1,
+      stamps: { ...here },
+      fields: { ledgerLines: [[4, "Something from before the window."]], flushedDay: 3 },
+    }),
+    true,
+    "the same slot, and this time the live block has a band of its own",
+  );
+  const carried = restore(
+    block(here, { ledger: { lines: [], notices: [[8, "Something nobody has been told yet."]] } }),
+    "chat-band-carry",
+  );
+  assert.ok(
+    texts(carried).includes("Something nobody has been told yet."),
+    `the untold notice survived the restore (${texts(carried)})`,
+  );
+  assert.equal(
+    band(carried).find(([, text]) => text === "Something nobody has been told yet.")[2],
+    undefined,
+    "…and is STILL UNTOLD, because coming home is not being told",
+  );
+  assert.ok(
+    texts(carried).some((text) => /is back/.test(text)),
+    "…beside the restore's own notice, which appends after it as it always did",
+  );
+  assert.ok(
+    carried.player.ledger.lines.some(([day]) => day === 4),
+    "…and the parked lines still came home",
+  );
+
+  Q.reset();
+  loadedPF.save.reset();
+
+  // ── THE CAP EVICTS THE TOLD ONES FIRST ───────────────────────────────────────
+  // An untold notice is a sentence nobody has been given yet; a told one is only
+  // still here so the panel can show it. So the band spends the told rows first
+  // and only eats an untold one when there is nothing else left to eat.
+  {
+    const p = P.defaultPlayer();
+    for (let i = 0; i < P.CAPS.notices; i++) P.notice(p, `notice ${i}`, i + 1);
+    assert.equal(p.ledger.notices.length, P.CAPS.notices, "the band fills to its cap");
+    // THE OLDEST ROWS ARE UNTOLD AND THE TOLD ONES ARE NEWER, which is the whole
+    // fixture: evict by age alone and rows 0 and 1 go, and the player is never
+    // given two sentences that were still waiting for them.
+    p.ledger.notices[3][2] = 1;
+    p.ledger.notices[7][2] = 1;
+    P.notice(p, "the thirteenth", 99);
+    assert.equal(p.ledger.notices.length, P.CAPS.notices, "…and stays there");
+    assert.ok(!p.ledger.notices.some(([, text]) => text === "notice 3"), "the OLDEST TOLD row is what went");
+    assert.ok(
+      p.ledger.notices.some(([, text]) => text === "notice 0"),
+      "…and not the older UNTOLD one in front of it",
+    );
+    assert.ok(
+      p.ledger.notices.some(([, text]) => text === "notice 7"),
+      "…nor the newer told one behind it, which is still one told row too many to spend",
+    );
+    assert.ok(
+      p.ledger.notices.some(([, text]) => text === "the thirteenth"),
+      "the newcomer is in",
+    );
+
+    // …AND AN ALL-UNTOLD BAND STILL EVICTS, because a cap that cannot bite is not
+    // a cap. The oldest goes, which is the only order left to it.
+    const fresh = P.defaultPlayer();
+    for (let i = 0; i < P.CAPS.notices + 3; i++) P.notice(fresh, `untold ${i}`, i + 1);
+    assert.equal(fresh.ledger.notices.length, P.CAPS.notices, "the cap holds against nothing but untold rows");
+    assert.deepEqual(
+      [fresh.ledger.notices[0][1], fresh.ledger.notices.at(-1)[1]],
+      ["untold 3", `untold ${P.CAPS.notices + 2}`],
+      "…by dropping the three oldest",
+    );
+  }
+
+  // ── THE WIRE: EMITTED ONLY WHEN THERE IS SOMETHING TO EMIT ───────────────────
+  // The `bought` precedent, one level down. A band nobody has written into must
+  // cost a save nothing at all, or every row in the wild gains an empty array on
+  // its first load — undeclared byte drift on a wire other builds read.
+  {
+    const empty = P.serialize(P.defaultPlayer());
+    assert.deepEqual(empty.ledger, { lines: [] }, "an unwritten band emits NOTHING, not an empty array");
+    assert.equal(
+      JSON.stringify(P.serialize(P.parse(JSON.parse(JSON.stringify(empty))).player).ledger),
+      '{"lines":[]}',
+      "…and a legacy block round-trips to the same bytes it arrived as",
+    );
+
+    const written = P.defaultPlayer();
+    P.notice(written, "  a notice   with loose  spacing ", 4);
+    P.notice(written, "y".repeat(P.CAPS.ledgerChars + 40), 5);
+    written.ledger.notices[1][2] = 1;
+    const wire = JSON.parse(JSON.stringify(P.serialize(written)));
+    assert.deepEqual(
+      wire.ledger.notices[0],
+      [4, "a notice with loose spacing"],
+      "a written band rides the wire, clipped the way every other line is",
+    );
+    assert.equal(wire.ledger.notices[1].length, 3, "…and the TOLD flag is the optional third element");
+    assert.equal(wire.ledger.notices[1][1].length, P.CAPS.ledgerChars, "…with the text held to the ledger's own cap");
+
+    // TOLERANT ON THE WAY BACK IN, exactly as the lines beside it are: a row that
+    // is not a row is dropped, and a `notices` that is not an array is no band.
+    //
+    // …AND A ROW WITH NOTHING TO SAY IS NOT A ROW EITHER. `notice()` refuses text
+    // that clips to nothing, so nothing this build writes can be one; a hostile
+    // save can carry `[3, "   "]` or a number where the sentence goes, and both
+    // used to survive as `[3, ""]` — a band row costing bytes on the wire and a
+    // blank line in the panel that no writer could ever explain.
+    const hostile = P.parse({
+      ...wire,
+      ledger: {
+        lines: [],
+        notices: [[3, "kept"], "not a row", [], [7, "told", 9], { day: 1 }, [5, "   "], [6, 42], [8, "", 1]],
+      },
+    }).player;
+    assert.deepEqual(
+      hostile.ledger.notices,
+      [
+        [3, "kept"],
+        [7, "told", 1],
+      ],
+      "the shapes that are rows survive, the flag normalizes to 1, and the empty ones are dropped",
+    );
+    assert.equal(P.parse({ ...wire, ledger: { lines: [], notices: "band" } }).player.ledger.notices, undefined);
+    assert.equal(
+      P.serialize({ ...P.defaultPlayer(), ledger: { lines: [], notices: [[3, " \t "]] } }).ledger.notices,
+      undefined,
+      "…and a band that is nothing but empty rows emits no band at all",
+    );
+
+    // …AND THE 0.11 STRIP, WHICH IS A DOCUMENTED LOSS AND NOT A BUG (plan §5). A
+    // 0.11 client rebuilds `ledger` as `{lines}` and knows nothing about a band,
+    // so a visit from one takes the pending notices with it, permanently. Pinned
+    // as the shape of that loss: rebuild the ledger without the band and the
+    // notices are gone, while everything else about the block round-trips.
+    const visited = JSON.parse(JSON.stringify(wire));
+    visited.ledger = { lines: wire.ledger.lines };
+    const after = P.parse(visited).player;
+    assert.equal(after.ledger.notices, undefined, "a 0.11 visit strips the band — informational strings, no self-heal");
+    assert.equal(after.flushedDay, wire.flushedDay, "…while the day gate, which is not in the band, comes back");
+  }
 }
 
 // (aa) THE BRIEF-ARRIVAL TRANSPLANT SPLITS THE BLOCK, IT DOES NOT CARRY IT.
@@ -11053,7 +11597,8 @@ await withSavePath(async ({ behavior, makeCore }) => {
   );
 });
 
-// (aq) THE MINT STAMP CARRIES NO RAW CONTROL BYTES.
+// (aq) THE MINT STAMP CARRIES NO RAW CONTROL BYTES — AND NEITHER DOES ANY OTHER
+// MODULE.
 // mintStampOf built its hash input with two literal U+0000 bytes in the source.
 // The stamp is what every save's severance verdict turns on, so any tool that
 // normalizes control characters on the way through the repo — an editor, a
@@ -11082,11 +11627,26 @@ await withSavePath(async ({ behavior, makeCore }) => {
     "a generated mint stamps the same",
   );
   assert.equal(world.build(9001, "cozy-village").mintStamp, 2_496_143_703, "and a legacy one does too");
-  const source = readFileSync(join(here, "src", "20-world.js"), "utf8");
+  // THE WHOLE PACKAGE, and not the file the incident happened in. A guard that
+  // reads 20-world alone pins the one module where this has already been found
+  // and fixed, and watches nothing: a raw byte is a property of the SOURCE TREE —
+  // any editor, patch round-trip or copy-through-a-form can leave one in any file
+  // — and the corruption this slice actually hit landed in 59-economy, outside
+  // the guard's one file. Read in name order so the failure is stable, and every
+  // module names itself if it is the one carrying the byte.
+  const modules = readdirSync(join(here, "src"))
+    .filter((name) => name.endsWith(".js"))
+    .sort();
   assert.ok(
-    !source.includes(String.fromCharCode(0)),
-    "and the source no longer carries a raw control byte for anything to normalize",
+    modules.includes("20-world.js") && modules.includes("59-economy.js"),
+    `the sweep really did read the src directory (${modules.length} modules)`,
   );
+  for (const name of modules) {
+    assert.ok(
+      !readFileSync(join(here, "src", name), "utf8").includes(String.fromCharCode(0)),
+      `src/${name} carries no raw control byte for anything to normalize`,
+    );
+  }
 }
 
 // ═══ THE LOADING GATE (S5 slice 5) ═════════════════════════════════════════
@@ -11947,7 +12507,13 @@ await withSavePath(async ({ behavior, makeCore }) => {
     E.describe(scifi, { t: "lodging-key" }),
     "…nor carry a village's keys",
   );
-  assert.equal(E.describe(cozy, { t: "lodging-key", k: "brass" }), "brass room key", "the quality tier reads with it");
+  // `k` PREFIXES ON A TOOL AND NOWHERE ELSE, which is the 0.12 narrowing of a
+  // rule that used to be general. It was written when `k` meant "quality" for
+  // every row in the game; slice 2 scoped grading to TOOL_TYPES and slice 3
+  // made the other vocabulary real, so a lodging key's `k` is a slug nobody has
+  // claimed and prefixing it would read the same way "worms bait" does.
+  assert.equal(E.describe(cozy, { t: "rod", k: "crude" }), "crude fishing rod", "a tool's tier reads in front of it");
+  assert.equal(E.describe(cozy, { t: "lodging-key", k: "brass" }), "room key", "…and a non-tool's `k` does not");
   assert.equal(E.describe(cozy, { t: "star-chart" }), "star chart", "a type this build does not know still reads");
   assert.equal(E.describe(cozy, {}), "", "and a row with no type at all is nothing");
   assert.equal(E.money(cozy, -5), E.money(cozy, 0), "a negative purse is not a thing to render");
@@ -11983,6 +12549,152 @@ await withSavePath(async ({ behavior, makeCore }) => {
     "no-keeper",
     "and the berth offer answers rather than throwing",
   );
+}
+
+// ── THE THEME ID ITSELF IS RESOLVED AS AN OWN PROPERTY (#515) ─────────────────
+// The UPSTREAM half of the case directly above, and the reason a save row can
+// carry a prototype-named theme at all. `THEMES[id]` was bare, so "constructor"
+// came back a truthy FUNCTION, was accepted as a theme id, and was PINNED into
+// the module's `activeTheme` — the one thing setTheme's own docstring has always
+// promised an unknown id cannot do. From there it reaches world.theme, the save
+// row, and every theme-keyed table downstream of both.
+{
+  try {
+    for (const id of ["constructor", "__proto__", "toString", "valueOf", "hasOwnProperty"]) {
+      loadedPF.art.setTheme("cozy-village");
+      assert.equal(loadedPF.art.setTheme(id), "cozy-village", `"${id}" is not a theme, whatever the prototype answers`);
+      assert.equal(loadedPF.art.theme, "cozy-village", `…and it is not left pinned as the active one`);
+    }
+    // Not a blanket refusal of anything unfamiliar: the themes this build really
+    // ships still resolve to themselves, and an ordinary dropped one still lands
+    // on the default, which is the behaviour the docstring describes.
+    for (const id of loadedPF.art.themeIds()) {
+      assert.equal(loadedPF.art.setTheme(id), id, `"${id}" is a theme this build ships and still resolves to itself`);
+    }
+    assert.equal(loadedPF.art.setTheme("retired-theme"), "cozy-village", "and a theme this build dropped falls back");
+  } finally {
+    loadedPF.art.setTheme("cozy-village");
+  }
+}
+
+// ── THE WORKED EXAMPLE IS PICKED THE SAME WAY (#515, found by the sweep) ──────
+// defaults() reads DEFAULT_BRIEFS by the theme it is HANDED, before validate()
+// applies the whitelist one screen down, and it is exported — so the word comes
+// from wherever the caller got it. Bare, `defaults("__proto__")` handed
+// Object.prototype in as the worked example; it is an object, so it survived
+// validate()'s transport check, and every field then floored to nothing. The
+// brief came back themed cozy-village and EMPTY: the fallback on that line
+// reading as though it had fired when it had not.
+{
+  const cozy = JSON.stringify(brief.defaults("cozy-village", 5));
+  assert.equal(JSON.stringify(brief.defaults("retired-theme", 5)), cozy, "an unknown theme gets the default's brief");
+  for (const hostile of ["constructor", "__proto__", "toString", "valueOf", "hasOwnProperty"]) {
+    // The SAME brief, not merely a non-empty one: a prototype-named theme is a
+    // theme this build does not ship, and gets exactly what any other gets.
+    assert.equal(JSON.stringify(brief.defaults(hostile, 5)), cozy, `"${hostile}" gets it too, whole rather than empty`);
+  }
+  const scifi = brief.defaults("sci-fi-colony", 5);
+  assert.equal(scifi.theme, "sci-fi-colony", "and a theme this build does ship still gets its own worked example");
+  assert.ok(scifi.features.length > 0, "…with the features that example is written to carry");
+}
+
+// ── …AND A WHOLE COMPILED SETTLEMENT IS NOT LOST TO ONE (#515) ────────────────
+// The name book was the `??`-never-reaches-fallback shape: read bare,
+// RESIDENT_NAMES["__proto__"] is Object.prototype, `??` keeps it because it is
+// not nullish, and the first `nameBook.family[…]` throws — into build()'s catch,
+// which degrades to the LEGACY three-zone world. Silently, which is the part
+// worth a case: the only tell a player gets is that the settlement their brief
+// describes in eighteen zones comes back as three.
+//
+// Staged through the SEALED BRIEF's theme rather than through setTheme, with the
+// guard one file up removed for the length of the build. The point of the line
+// is that the name-book read stands on its own — not that the module above it
+// happens to keep hostile words away from it today.
+{
+  const realSetTheme = loadedPF.art.setTheme;
+  try {
+    const honest = world.build(4242, "cozy-village", brief.defaults("cozy-village", 4242));
+    assert.equal(honest.brieved, true, "the control is a compiled world and not a degraded one");
+    for (const hostile of ["constructor", "__proto__", "toString", "valueOf"]) {
+      const sealed = brief.defaults("cozy-village", 4242);
+      sealed.theme = hostile;
+      loadedPF.art.setTheme = null;
+      const w = world.build(4242, hostile, sealed);
+      loadedPF.art.setTheme = realSetTheme;
+      assert.equal(w.brieved, true, `a brief themed "${hostile}" COMPILES rather than degrading to the legacy world`);
+      assert.equal(Object.keys(w.zones).length, Object.keys(honest.zones).length, "…to its full zone count");
+      // And the fallback the line documents actually FIRED, rather than the read
+      // merely not throwing: the residents the compiler mints come back with the
+      // default book's names, byte for byte the ones the honest world minted.
+      assert.ok(w.minted.length > 0, "…with residents minted at all");
+      assert.deepEqual(w.minted, honest.minted, "…and named out of the book the fallback names");
+      assert.equal(w.mintStamp, honest.mintStamp, "…down to the stamp that travels with them");
+    }
+  } finally {
+    loadedPF.art.setTheme = realSetTheme;
+    loadedPF.art.setTheme("cozy-village");
+  }
+}
+
+// ── AND THE ROW THAT CARRIED ONE LOADS INTO THE DEFAULT WORLD (#515) ──────────
+// The chain end to end, through the real load path. A save row's `theme` is
+// untrusted JSON, simFromSaved hands it straight to world.build, and before the
+// guard it came back out AS world.theme — with the legacy layout's own name book
+// read off that same string, so every zone in the restored world was a place
+// with no name. The flush afterwards then wrote the hostile theme back down.
+{
+  try {
+    for (const hostile of ["constructor", "__proto__", "toString"]) {
+      const row = JSON.parse(`{"v":1,"seed":1234,"theme":${JSON.stringify(hostile)}}`);
+      const sim = loadedPF.save.simFromSaved(row, {}, "chat-proto-theme-515");
+      assert.equal(sim.world.theme, "cozy-village", `a row themed "${hostile}" restores the DEFAULT theme's world`);
+      assert.equal(loadedPF.art.theme, "cozy-village", "…and nothing was pinned to it on the way through");
+      for (const zone of Object.values(sim.world.zones)) {
+        assert.ok(typeof zone.name === "string" && zone.name.trim(), `…and ${zone.id} is a place with a name`);
+      }
+      // The row HEALS rather than round-tripping: the next flush writes back the
+      // theme the world it restored really has.
+      const snap = loadedPF.save.snapshot({ sim, chatId: "chat-proto-theme-515" });
+      assert.equal(snap.theme, "cozy-village", "…and the next write puts an honest theme back in the row");
+    }
+  } finally {
+    loadedPF.art.setTheme("cozy-village");
+  }
+}
+
+// ── THE ZONE A MOUNT LANDS IN IS AN OWN PROPERTY TOO (#567) ───────────────────
+// The same read on the WRITE side. `teleport` gated on a bare
+// `!this.world.zones[zoneId]`, and `zones["constructor"]` is a truthy FUNCTION,
+// so the early return did not fire: `zoneId` was pinned to a word no zone
+// answers to and `zone()` handed Object's own constructor to everything
+// downstream of the mount. Nothing catches that — the first `z.w` or `z.solid`
+// off it throws inside the frame loop, on a sim the player is standing in.
+// Latent only because both shipped callers pre-validate their id; `teleport` is
+// public on PF.Sim, and 60-save already spells this exact test out as `hasZone`
+// for the untrusted ids it takes off a save row.
+{
+  const sim = new loadedPF.Sim(world.build(9001, "cozy-village"));
+  const before = { zoneId: sim.zoneId, x: sim.x, y: sim.y };
+  for (const hostile of ["constructor", "__proto__", "toString", "valueOf", "hasOwnProperty"]) {
+    sim.dirty = false;
+    sim.teleport(hostile, 3, 3);
+    assert.equal(sim.zoneId, before.zoneId, `"${hostile}" is not a zone, whatever the prototype answers`);
+    assert.equal(sim.x, before.x, "…so the mount refuses and the player never moved");
+    assert.equal(sim.y, before.y, "…on either axis");
+    assert.equal(sim.dirty, false, "…and a mount that did not happen marks nothing save-worthy");
+    // The refusal is CLEAN, not merely early: the sim keeps stepping instead of
+    // throwing the first time the loop reads a width off a builtin.
+    assert.ok(sim.zone() && typeof sim.zone().w === "number", "…and zone() still answers with a real zone");
+    sim.step(1 / 60, {});
+  }
+  // Not a blanket refusal of anything unfamiliar: a real zone id still mounts,
+  // and an ordinary id this world does not have is refused exactly as before.
+  const inn = sim.world.zones.inn;
+  sim.teleport("inn", inn.spawn.x, inn.spawn.y);
+  assert.equal(sim.zoneId, "inn", "an honest zone id still mounts");
+  assert.equal(sim.x, (inn.spawn.x + 0.5) * loadedPF.TILE, "…at the tile it was handed");
+  sim.teleport("no-such-zone", 1, 1);
+  assert.equal(sim.zoneId, "inn", "and an honest id this world does not have is still refused");
 }
 
 // (av) THE BERTH: S3'S FIRST MONEY SINK AND P1'S BED, IN ONE TRANSACTION.
@@ -12887,6 +13599,2810 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
   assert.equal(offer.zoneId, gatheringId, "at the gathering that used to be missing");
 }
 
+// (az) THE FEATURE REGISTRY: WHERE A NAMED FEATURE ACTUALLY STANDS (0.12 slice 1).
+// A brief names its features and the compiler paints them, and until now nothing
+// wrote down WHERE. The tiles were the only record, and a tile cannot say which
+// feature it belongs to or what the brief called it. `zone.features[]` is that
+// record — {id, tag, name, rect} — written by the three sites that paint one:
+// the compiler's placement loops, the wilds builder's `water-crossing` branch
+// (which paints the stream itself, because the feature loop skips that tag), and
+// buildLegacy's fixed literals.
+//
+// Three properties are load-bearing and each has its own case below: the ids are
+// the BRIEF's ordinals and do not shuffle when a feature finds no room, the
+// wilds stream gets a row at all, and the whole list is DERIVED — a world is
+// rebuilt from (seed, theme, brief) on every load, so the registry must cost
+// exactly zero save bytes.
+{
+  const cast = [
+    { name: "Ivy", role: "warden", kind: "leader", tint: "blue", home: "Greenwood", household: 1 },
+    { name: "Bett", role: "innkeep", kind: "host", tint: "amber", home: "Greenwood", household: 2 },
+  ];
+  const seal = (features, places, scale, prosperity, seed) =>
+    brief.validate(
+      { scale, prosperity, name: "Greenwood", surround: "woods", features, places, cast },
+      { theme: "cozy-village", seed },
+    );
+  const wildsPlace = {
+    kind: "wilds",
+    name: "The Wood",
+    features: [
+      { tag: "water-crossing", name: "The Ford" },
+      { tag: "landmark-stone", name: "The Marker" },
+    ],
+  };
+  const registryOf = (w) =>
+    Object.fromEntries(Object.keys(w.zones).map((zoneId) => [zoneId, w.zones[zoneId].features]));
+
+  // ── DETERMINISM: the same seed and the same brief record the same rows ──────
+  // The registry is rebuilt on every load, so a row that drifted between two
+  // builds of one world would be a spot the player could stand at yesterday and
+  // not today. Ids, tags, names and rects, all of it, across every zone.
+  {
+    const sealed = seal(
+      [
+        { tag: "water-feature", name: "The Millpond" },
+        { tag: "crop-plots", name: "The Rows" },
+      ],
+      [wildsPlace],
+      "village",
+      "modest",
+      606,
+    );
+    const built = world.build(606, "cozy-village", sealed);
+    // EVERY zone carries the list, not only the ones that hold something: an
+    // absent array and an empty one read the same at a call site right up until
+    // the one that does not guard, and the consumer reads it every walking frame.
+    for (const zoneId of Object.keys(built.zones))
+      assert.ok(Array.isArray(built.zones[zoneId].features), `${zoneId}: the zone carries a feature registry`);
+    const first = registryOf(built);
+    const second = registryOf(world.build(606, "cozy-village", sealed));
+    assert.deepEqual(second, first, "same seed + same brief, same registry — rows do not drift between builds");
+    const rows = Object.values(first).flat();
+    assert.ok(rows.length >= 3, `and the sweep saw real rows (${rows.length})`);
+    for (const row of rows) {
+      assert.ok(/^f\d+$/.test(row.id), `${row.name}: a compiled row carries a brief ordinal, not "${row.id}"`);
+      assert.ok(loadedPF.brief.FEATURE_TAGS.includes(row.tag), `${row.name}: tagged from the closed vocabulary`);
+      assert.ok(
+        Number.isInteger(row.rect.x) && Number.isInteger(row.rect.y) && row.rect.w > 0 && row.rect.h > 0,
+        `${row.name}: a real rect`,
+      );
+    }
+    // …and the ids the compiler wrote are the ids the SEAL minted, not a
+    // parallel numbering that happens to agree today.
+    for (const row of rows) assert.equal(sealed._ids.features[row.id], row.name, `${row.id} is the sealed ordinal`);
+  }
+
+  // ── AN UNPLACEABLE FEATURE STILL SPENDS ITS ORDINAL ─────────────────────────
+  // An outpost is 560 tiles and its lots take most of them, so a fenced 8x5 crop
+  // plot declared second has genuinely nowhere to stand and is dropped ("a
+  // plainer settlement, never a sealed one"). What must NOT happen is the
+  // features after it sliding down a number: the sealed brief already promised
+  // `f3` to the wilds ford, and a registry that renumbered on a full map would
+  // be unquotable across two worlds built from one brief.
+  {
+    const sealed = seal(
+      [
+        { tag: "landmark-stone", name: "The Stone" },
+        { tag: "crop-plots", name: "The Rows" },
+      ],
+      [wildsPlace],
+      "outpost",
+      "struggling",
+      909,
+    );
+    assert.deepEqual(
+      sealed._ids.features,
+      { f1: "The Stone", f2: "The Rows", f3: "The Ford", f4: "The Marker" },
+      "the seal minted four ordinals, settlement first then the place's",
+    );
+    const w = world.build(909, "cozy-village", sealed);
+    const wildsId = `z${sealed.places.findIndex((place) => place.kind === "wilds") + 2}`;
+    assert.deepEqual(
+      w.zones.z1.features.map((row) => `${row.id}:${row.name}`),
+      ["f1:The Stone"],
+      "the outpost placed the stone and dropped the rows",
+    );
+    assert.deepEqual(
+      w.zones[wildsId].features.map((row) => `${row.id}:${row.name}`),
+      ["f3:The Ford", "f4:The Marker"],
+      "and the dropped feature still SPENT f2 — the ford is f3, not f2",
+    );
+    const again = world.build(909, "cozy-village", sealed);
+    assert.deepEqual(again.zones[wildsId].features, w.zones[wildsId].features, "stable across builds");
+  }
+
+  // ── THE WILDS STREAM IS A SPOT, NOT DEAD WATER ──────────────────────────────
+  // The wilds builder paints its stream itself (20-world's `water-crossing`
+  // branch) and the feature loop below it skips the tag outright, so the branch
+  // is the only site that can owe the crossing a row. Without it a brief-built
+  // stream would be water nothing knows the name of, while a legacy one fishes.
+  {
+    const sealed = seal([{ tag: "shrine", name: "The Shrine" }], [wildsPlace], "village", "modest", 313);
+    const w = world.build(313, "cozy-village", sealed);
+    const wildsId = `z${sealed.places.findIndex((place) => place.kind === "wilds") + 2}`;
+    const stream = w.zones[wildsId].features.find((row) => row.tag === "water-crossing");
+    assert.ok(stream, "the wilds crossing is on the register");
+    assert.equal(stream.name, "The Ford", "under the name the brief gave it");
+    assert.equal(sealed._ids.features[stream.id], "The Ford", "and its own brief ordinal");
+    assert.deepEqual(stream.rect, { x: 20, y: 1, w: 2, h: 22 }, "covering the stream the branch actually painted");
+    // Non-vacuous: that rect is where the water is.
+    const wilds = w.zones[wildsId];
+    let inside = 0;
+    for (let y = 1; y < 23; y++) for (let x = 20; x < 22; x++) if (wilds.ground[y * wilds.w + x] === "water") inside++;
+    assert.equal(inside, 40, `the rect holds the stream (${inside} water tiles, the ford's four laid over it)`);
+    // AND THE FOUR LAID OVER IT ARE THE BRIDGE (0.12 slice 3b). The ford was
+    // hand-laid `path` and the ruling migrated it: a road carried over water is
+    // one picture now, whether the road is a compiled pool's carriageway or a
+    // crossing the brief asked for by name. Non-solid as it always was — the
+    // count above is what proves the ford did not become water, and this is what
+    // proves it did not stay a paved road through a stream.
+    for (const [fx, fy] of [
+      [20, 12],
+      [21, 12],
+      [20, 13],
+      [21, 13],
+    ]) {
+      assert.equal(wilds.ground[fy * wilds.w + fx], "bridge", `the ford at (${fx},${fy}) is decked, not paved`);
+      assert.ok(!wilds.solid[fy * wilds.w + fx], `…and (${fx},${fy}) is still walked across`);
+    }
+  }
+
+  // ── THE LEGACY WORLD'S TWO RESERVED ROWS ────────────────────────────────────
+  // buildLegacy has no brief to mint ids from, so its water carries fixed
+  // reserved ids at the literals — and TAGS, because the consumer resolves its
+  // table by (theme, tag) and a legacy spot has to resolve like any other.
+  for (const theme of ["cozy-village", "sci-fi-colony"]) {
+    const w = world.build(77, theme, null);
+    const rows = Object.values(w.zones).flatMap((zone) => zone.features);
+    assert.equal(rows.length, 2, `${theme}: the legacy layout reserves exactly two water features`);
+    const pond = w.zones.village.features;
+    const stream = w.zones.forest.features;
+    assert.equal(pond.length, 1, `${theme}: the village keeps its pond`);
+    assert.equal(stream.length, 1, `${theme}: the wood keeps its stream`);
+    assert.equal(pond[0].id, "legacy:pond", `${theme}: at a reserved id`);
+    assert.equal(pond[0].tag, "water-feature", `${theme}: tagged so the table resolves`);
+    assert.deepEqual(pond[0].rect, { x: 33, y: 21, w: 7, h: 5 }, `${theme}: at the literal it is painted from`);
+    assert.equal(stream[0].id, "legacy:stream", `${theme}: at a reserved id`);
+    assert.equal(stream[0].tag, "water-crossing", `${theme}: tagged so the table resolves`);
+    assert.deepEqual(stream[0].rect, { x: 20, y: 1, w: 2, h: 22 }, `${theme}: at the literal it is painted from`);
+    // Themed, and from the theme's OWN vocabulary for that tag — the names its
+    // default brief already uses, so legacy and compiled worlds agree.
+    assert.ok(pond[0].name && stream[0].name, `${theme}: both named`);
+    assert.notEqual(pond[0].name, "water-feature", `${theme}: a name, not the tag`);
+  }
+  {
+    const fantasy = world.build(77, "cozy-village", null);
+    const scifi = world.build(77, "sci-fi-colony", null);
+    assert.notEqual(
+      fantasy.zones.village.features[0].name,
+      scifi.zones.village.features[0].name,
+      "and the two themes do not call it the same thing",
+    );
+  }
+
+  // ── nearFeature: WATER **AND** A RECT, NEITHER ALONE ────────────────────────
+  // The step loop's third proximity read, beside nearNpc and nearPortal. A rect
+  // may legitimately hold tiles the feature never watered — the ford is path
+  // straight across the stream rect, and a compiled pool's well stands inside
+  // the anchor rect beside it — so "inside a rect" cannot be the test. Standing
+  // at the bank is.
+  {
+    const w = world.build(7, "cozy-village", null);
+    const sim = new loadedPF.Sim(w);
+
+    sim.teleport("village", 32, 23); // grass, one step west of the pond's west bank
+    sim.step(0, {});
+    assert.ok(sim.nearFeature, "standing at the bank finds the pond");
+    assert.equal(sim.nearFeature.id, "legacy:pond", "…by name and id, not just 'some water'");
+    assert.equal(sim.nearFeature.name, w.zones.village.features[0].name, "the registry row itself, not a copy");
+
+    sim.teleport("village", 21, 17); // the spawn, mid-village: nowhere near water
+    sim.step(0, {});
+    assert.equal(sim.nearFeature, null, "and steps away from it again");
+
+    // THE FORD, AND THE WELL BY THE SAME TEST. (22,12) is the east approach: its
+    // west neighbour (21,12) is INSIDE the stream rect and is the path the ford
+    // laid, and no neighbour of it is water. A rect-only test would call this
+    // fishing; the two-sided test calls it a road.
+    //
+    // RE-BASELINED, 0.12 slice 3b: that tile read "path" until the bridge ruling
+    // migrated the hand-laid ford onto the new tile (one visual system for every
+    // road that crosses water). The ASSERTION is unchanged and is still the one
+    // worth making — the tile inside the rect is not water — only the word for
+    // what the ford is laid with has moved.
+    const forest = w.zones.forest;
+    assert.equal(forest.ground[12 * forest.w + 21], "bridge", "the ford's tile is inside the rect and is not water");
+    sim.teleport("forest", 22, 12);
+    sim.step(0, {});
+    assert.equal(sim.nearFeature, null, "a rect tile that is not water is not a spot");
+
+    sim.teleport("forest", 22, 10); // beside the stream proper, north of the ford
+    sim.step(0, {});
+    assert.equal(sim.nearFeature?.id, "legacy:stream", "…while the bank two tiles north of it is");
+  }
+
+  // ── THE ROAD MAY CROSS THE WATER NOW (0.12 slice 3b, the bridge ruling) ─────
+  // Slice-1's verify found that a wilds `water-feature` can never place: the
+  // anchor scan offers rows 8..11 and nothing else, an 8x5 rect starting on any
+  // of them reaches the road band at y12..13, and the scan refuses every rect
+  // that touches the road. A brief that asked for a pool in the wood therefore
+  // got silence, on every seed. The maintainer's ruling is that the road wins
+  // the tiles it is already standing on and the water takes the rest: road ∩
+  // pool becomes BRIDGE — walkable, drawn over the water — and the placement is
+  // permitted.
+  //
+  // Measured as a DIFFERENCE against the same wood with no features in it,
+  // because there is no other way to know which tiles the road had.
+  {
+    const pool = { tag: "water-feature", name: "The Pool" };
+    const town = [{ tag: "shrine", name: "The Shrine" }];
+    const sealed = seal(town, [{ ...wildsPlace, features: [...wildsPlace.features, pool] }], "village", "modest", 313);
+    const control = seal(town, [{ ...wildsPlace, features: [] }], "village", "modest", 313);
+    const w = world.build(313, "cozy-village", sealed);
+    const zone = w.zones[`z${sealed.places.findIndex((place) => place.kind === "wilds") + 2}`];
+    const bare = world.build(313, "cozy-village", control).zones[zone.id];
+    const row = zone.features.find((feature) => feature.tag === "water-feature");
+    assert.ok(row, "the wilds pool PLACES — before the ruling it never did, on any seed");
+    assert.equal(sealed._ids.features[row.id], "The Pool", "…through the normal path, under its own brief ordinal");
+    // NO NEW ROW CLASS. The bridge is placement TREATMENT of a water feature and
+    // not a feature of its own, so the register reads exactly as it would have if
+    // the pool had found dry ground: three rows, three brief ordinals, in the
+    // order the two writing sites run in.
+    assert.deepEqual(
+      zone.features.map((feature) => `${feature.tag}:${feature.name}`),
+      ["water-crossing:The Ford", "landmark-stone:The Marker", "water-feature:The Pool"],
+      "and mints no registry row of its own",
+    );
+
+    const groundAt = (z, x, y) => z.ground[y * z.w + x];
+    let water = 0;
+    let planked = 0;
+    for (let y = row.rect.y; y < row.rect.y + row.rect.h; y++) {
+      for (let x = row.rect.x; x < row.rect.x + row.rect.w; x++) {
+        const now = groundAt(zone, x, y);
+        const was = groundAt(bare, x, y);
+        if (now === "water") {
+          water++;
+          assert.notEqual(was, "path", `(${x},${y}): water was painted straight over the road`);
+          assert.ok(zone.solid[y * zone.w + x], `(${x},${y}): open water has to stay impassable`);
+        } else if (now === "bridge") {
+          planked++;
+          assert.equal(was, "path", `(${x},${y}): a bridge over ground that was never a road`);
+          assert.ok(!zone.solid[y * zone.w + x], `(${x},${y}): a solid bridge is a road that does not cross`);
+        }
+      }
+    }
+    // The pool is WHOLE — the placer's own 6x4 — whichever of the two tiles each
+    // square ended up as. A pond that lost tiles instead of decking them would
+    // show here as a total under 24, which is the millpond instrument's trick.
+    assert.equal(water + planked, 24, `the pool is whole (${water} water + ${planked} bridge)`);
+    assert.ok(planked > 0, "and the ruling's whole case is in it: part of the pool IS the road");
+    // NOTHING SOLID IS LEFT STANDING IN THE CARRIAGEWAY. Tested over the whole
+    // rect rather than over the water alone, because the pool paints an OBJECT
+    // too — its companion WELL, which is solid and has no bridge story at all.
+    // This is not hypothetical and it is why the relaxation had to be a second
+    // pass: write it as a widened first pass instead and the pool anchors a row
+    // lower, which stands the well at (15,12) in the middle of the road. No code
+    // guards the well, deliberately — with the strict pass running first the
+    // anchor that would put it there is refused before the road ever comes off
+    // the table, and a guard nothing can turn red is worse than none.
+    for (let y = row.rect.y; y < row.rect.y + row.rect.h; y++) {
+      for (let x = row.rect.x; x < row.rect.x + row.rect.w; x++) {
+        if (groundAt(bare, x, y) !== "path") continue;
+        assert.ok(!zone.solid[y * zone.w + x], `(${x},${y}): the road is blocked where it used to run`);
+      }
+    }
+
+    // END TO END, flood-filled rather than inferred: from the tile the portal
+    // delivers the player onto, across the decked pool, and on across the ford to
+    // the east approach. sealPockets closes anything it cannot reach, so a bridge
+    // that failed to carry the road would show up as a SEALED far side rather
+    // than as a hole — which is why the far tile is asserted reachable and not
+    // merely non-solid.
+    const reachable = (z, from, to) => {
+      const seen = new Set([from.y * z.w + from.x]);
+      const queue = [from];
+      while (queue.length) {
+        const { x, y } = queue.pop();
+        if (x === to.x && y === to.y) return true;
+        for (const [dx, dy] of [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ]) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= z.w || ny >= z.h) continue;
+          const at = ny * z.w + nx;
+          if (seen.has(at) || z.solid[at]) continue;
+          seen.add(at);
+          queue.push({ x: nx, y: ny });
+        }
+      }
+      return false;
+    };
+    assert.ok(reachable(zone, { x: 2, y: 12 }, { x: 24, y: 12 }), "the road still crosses the wood, pool and all");
+
+    // FISHING FROM THE BRIDGE, which the ruling gets for nothing: the shipped
+    // two-sided test asks whether a NEIGHBOUR is water inside a rect and has no
+    // opinion about what the player is standing on. A plank over the pool is a
+    // jetty by construction.
+    let deck = null;
+    for (let y = row.rect.y; y < row.rect.y + row.rect.h && !deck; y++)
+      for (let x = row.rect.x; x < row.rect.x + row.rect.w && !deck; x++)
+        if (groundAt(zone, x, y) === "bridge") deck = { x, y };
+    assert.ok(deck, "there is a plank to stand on");
+    try {
+      const sim = new loadedPF.Sim(w);
+      sim.teleport(zone.id, deck.x, deck.y);
+      sim.step(0, {});
+      assert.equal(sim.nearFeature?.id, row.id, "standing ON the bridge is standing at the pool");
+      const core = { chatId: "chat-bridge-cast", sim, hud: { toast() {}, refreshChips() {} }, markDirty() {} };
+      loadedPF.player.grant(core, { t: "rod", k: "crude" }, 1);
+      const offer = loadedPF.economy.fishOffer(core);
+      assert.equal(offer.available, true, "…and the water is on offer from up there");
+      assert.equal(offer.spot.id, row.id, "…naming the pool the plank is laid across");
+
+      // AND IT IS WALKABLE, driven through the real Sim rather than read off the
+      // solidity map: the feet box spans more than the tile underfoot, so a
+      // bridge one tile wide with water either side has to be tested by walking.
+      const before = sim.x;
+      for (let i = 0; i < 30; i++) sim.step(1 / 60, { left: true });
+      assert.ok(Math.abs(sim.x - before) > 1, "the player walks the bridge instead of standing on the water");
+    } finally {
+      loadedPF.save.reset(); // the mutators self-dirty, and a dirty block arms a timer
+    }
+  }
+
+  // ── A POOL THAT ALREADY FITTED DOES NOT MOVE (0.12 slice 3b) ────────────────
+  // The relaxation is a SECOND pass, and this is what that buys: the strict scan
+  // runs first and unchanged, so a wood whose road hangs off the other edge —
+  // the west-hung wilds, where the approach runs x16..34 — still finds the dry
+  // anchor it always found, lays no plank, and compiles the tiles it always did.
+  // A relaxation written as a widened first pass would have moved every one of
+  // them, which is the version of this change that would have been wrong.
+  {
+    const pool = { tag: "water-feature", name: "The Pool" };
+    const wood = { ...wildsPlace, features: [...wildsPlace.features, pool] };
+    const sealed = seal([], [wood, { ...wood, name: "The Far Wood" }], "village", "modest", 313);
+    const w = world.build(313, "cozy-village", sealed);
+    const west = w.zones[`z${sealed.places.map((place) => place.kind).lastIndexOf("wilds") + 2}`];
+    const row = west.features.find((feature) => feature.tag === "water-feature");
+    assert.ok(row, "the west-hung wood places its pool too");
+    let water = 0;
+    let planked = 0;
+    for (let y = row.rect.y; y < row.rect.y + row.rect.h; y++)
+      for (let x = row.rect.x; x < row.rect.x + row.rect.w; x++) {
+        if (west.ground[y * west.w + x] === "water") water++;
+        if (west.ground[y * west.w + x] === "bridge") planked++;
+      }
+    assert.equal(water, 24, "…whole, on dry ground, the way the strict scan already placed it");
+    assert.equal(planked, 0, "…and with no plank in it, because no road was ever in the way");
+    // AND AT THE SAME ANCHOR, which is the property this case is NAMED after and
+    // was the one thing it did not check (verify-3c F1). Counting water and
+    // planks says the pool is whole and dry — and a MOVED pool says exactly that
+    // too: written as a widened first pass instead of a second one, this pool
+    // relocates to (9,11) and still lands 24 water tiles with no plank in them,
+    // so the case stayed green against the mutant it exists to catch.
+    assert.deepEqual(row.rect, { x: 6, y: 10, w: 8, h: 5 }, "…on the anchor the strict scan has always given it");
+  }
+
+  // ── …AND WHAT DOES MOVE IS DECLARED (0.12 slice 3b) ─────────────────────────
+  // A confined sub-class of the ruling's own movement, recorded rather than left
+  // to be discovered (verify-3c F2). Anchors come off a cursor SHARED by every
+  // feature in a place's list, so a water feature that spends extra attempts
+  // before it settles hands the next feature a different cursor — and the
+  // features that move are the ones declared AFTER a pool, in a wood that now
+  // has a pool to declare.
+  //
+  // Measured across the shape: no zone moved without also gaining a pool, and no
+  // row was dropped. That is what makes it confined rather than drift, and it is
+  // part of "the wilds pond now places" rather than a second change hiding
+  // inside it. Pinned so the next thing that moves this stone has to re-pin it
+  // deliberately.
+  {
+    const pool = { tag: "water-feature", name: "The Pool" };
+    const first = { ...wildsPlace, features: [pool, ...wildsPlace.features] };
+    const sealed = seal([], [first], "village", "modest", 313);
+    const control = seal([], [{ ...wildsPlace }], "village", "modest", 313);
+    const zoneId = `z${sealed.places.findIndex((place) => place.kind === "wilds") + 2}`;
+    const rect = (w, tag) => w.zones[zoneId].features.find((row) => row.tag === tag)?.rect;
+    const withPool = world.build(313, "cozy-village", sealed);
+    const without = world.build(313, "cozy-village", control);
+    assert.ok(rect(withPool, "water-feature"), "the pool declared FIRST places, as the ruling intends");
+    assert.deepEqual(
+      rect(without, "landmark-stone"),
+      { x: 26, y: 8, w: 3, h: 3 },
+      "without a pool in front of it the marker stands where it always has",
+    );
+    assert.deepEqual(
+      rect(withPool, "landmark-stone"),
+      { x: 17, y: 9, w: 3, h: 3 },
+      "and with one in front of it it moves ONE place along the shared cursor — declared, not drift",
+    );
+    assert.equal(
+      withPool.zones[zoneId].features.length,
+      without.zones[zoneId].features.length + 1,
+      "…and nothing was dropped to make room for it",
+    );
+  }
+
+  // ── DETERMINISM ACROSS PROCESSES, BRIDGE AND ALL (0.12 slice 3b) ────────────
+  // The registry lane above proves two builds inside ONE process agree. That is
+  // the weaker half: the bridge substitution reads the ground a previous pass
+  // painted, so it is the first placement decision in the compiler that depends
+  // on state rather than on arithmetic, and "same answer in a fresh interpreter"
+  // is the property a player actually relies on — they compile this world again
+  // tomorrow, in a browser that has just started.
+  {
+    const pool = { tag: "water-feature", name: "The Pool" };
+    const sealed = seal([], [{ ...wildsPlace, features: [...wildsPlace.features, pool] }], "village", "modest", 313);
+    const digest = (w) =>
+      createHash("sha256")
+        .update(
+          JSON.stringify(
+            Object.values(w.zones).map((zone) => [zone.id, zone.ground, zone.object, [...zone.solid], zone.features]),
+          ),
+        )
+        .digest("hex");
+    const mine = digest(world.build(313, "cozy-village", sealed));
+    // The child re-READS the modules rather than being handed them: a Windows
+    // command line is measured in tens of kilobytes and the package is measured
+    // in hundreds, so passing the source would have made this case fail for a
+    // reason that has nothing to do with the compiler.
+    const child = spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `import { createHash } from "node:crypto";
+         import { readFileSync } from "node:fs";
+         import { join } from "node:path";
+         const here = ${JSON.stringify(here)};
+         const src = ${JSON.stringify(MODULES)}.map((f) => readFileSync(join(here, "src", f), "utf8")).join("\\n");
+         const PF = new Function('"use strict";\\n' + src + "\\nreturn PF;")();
+         const w = PF.world.build(313, "cozy-village", ${JSON.stringify(sealed)});
+         process.stdout.write(createHash("sha256").update(JSON.stringify(
+           Object.values(w.zones).map((zone) => [zone.id, zone.ground, zone.object, [...zone.solid], zone.features]),
+         )).digest("hex"));`,
+      ],
+      // Bounded, or a hung child blocks this SYNCHRONOUS call where no watchdog
+      // timer can fire — the one hang class the deadline above cannot break.
+      { encoding: "utf8", timeout: 60_000 },
+    );
+    assert.equal(child.status, 0, `the second interpreter compiled it too (${child.stderr})`);
+    assert.equal(child.stdout, mine, "a fresh process compiles the same tiles, the same solidity and the same rows");
+  }
+
+  // ── DERIVED: NOT ONE BYTE OF THE REGISTRY REACHES THE WIRE ──────────────────
+  // The whole design rests on this. A world is rebuilt from (seed, theme, brief)
+  // on every load, so the registry is recomputed and never stored — and if it
+  // ever leaked into the envelope it would become a format to migrate, on a
+  // route that is additive by policy.
+  {
+    const sealed = seal([{ tag: "water-feature", name: "The Millpond" }], [wildsPlace], "village", "modest", 606);
+    const w = world.build(606, "cozy-village", sealed);
+    assert.ok(
+      Object.values(w.zones).some((zone) => zone.features.length),
+      "the world under test actually carries a registry",
+    );
+    const sim = new loadedPF.Sim(w);
+    const snap = loadedPF.save.snapshot({ chatId: "chat-registry", sim, hud: { toast() {}, refreshChips() {} } });
+    const seen = [];
+    (function walk(node, path) {
+      if (!node || typeof node !== "object") return;
+      for (const key of Object.keys(node)) {
+        if (key === "features") seen.push(`${path}.${key}`);
+        walk(node[key], `${path}.${key}`);
+      }
+    })(snap, "snap");
+    assert.deepEqual(seen, [], `the envelope carries no features key anywhere (${seen.join(", ")})`);
+    assert.deepEqual(
+      [...loadedPF.save._envelopeKeys].sort(),
+      ["bindings", "chatId", "clockMin", "day", "facing", "intro", "player", "seed", "theme", "v", "x", "y", "zone"],
+      "and ENVELOPE_KEYS is exactly what it was — the registry asked for no room",
+    );
+  }
+}
+
+// ── THE LEGACY NAME BOOK AND THE DEFAULT BRIEF ARE ONE VOCABULARY ────────────
+// slice-1 verify F2. 20-world's ZONE_NAMES and 18-brief's DEFAULT_BRIEFS write
+// the same five strings per theme, and until now a COMMENT was the only thing
+// holding them together — two tables in two files, edited months apart. Driven
+// from both ends: the shipped tables really do agree where a player can see it,
+// and a rewrite of EITHER file fails the build rather than shipping a legacy
+// world that calls the pond something the compiled one does not.
+{
+  // Positive half, through the readers: what buildLegacy actually names its two
+  // water features is what the theme's default brief names the same two tags.
+  for (const theme of ["cozy-village", "sci-fi-colony"]) {
+    const legacy = world.build(77, theme, null);
+    const fallback = brief.defaults(theme, 1);
+    const wilds = fallback.places.find((place) => place.kind === "wilds");
+    assert.equal(
+      legacy.zones.village.features[0].name,
+      fallback.features.find((feature) => feature.tag === "water-feature").name,
+      `${theme}: the legacy pond is named out of the same book the brief uses`,
+    );
+    assert.equal(
+      legacy.zones.forest.features[0].name,
+      wilds.features.find((feature) => feature.tag === "water-crossing").name,
+      `${theme}: …and so is the legacy stream`,
+    );
+    assert.equal(legacy.zones.village.name, fallback.name, `${theme}: …and the settlement itself`);
+    assert.equal(
+      legacy.zones.inn.name,
+      fallback.places.find((place) => place.kind === "gathering").name,
+      `${theme}: …and the inn`,
+    );
+    assert.equal(legacy.zones.forest.name, wilds.name, `${theme}: …and the wood`);
+  }
+
+  // Negative half: the assertion fails the build from either side of the
+  // duplication. 20-world loads 18-brief's table at boot, so both files are in
+  // the same forced stack and either one can be the thing that moved.
+  const parts = ["00-prelude.js", "10-art.js", "15-assets.js", "18-brief.js", "20-world.js"];
+  const bootWorld = (file, from, to) => {
+    const source = parts
+      .map((name) => {
+        const text = readFileSync(join(here, "src", name), "utf8");
+        if (name !== file) return text;
+        const patched = text.replace(from, to);
+        assert.notEqual(patched, text, `the rewrite still names ${name}'s "${from}"`);
+        return patched;
+      })
+      .join("\n");
+    return () => new Function(`"use strict";\n${source}\nreturn PF;`)();
+  };
+  const plainWorld = () =>
+    new Function(
+      `"use strict";\n${parts.map((name) => readFileSync(join(here, "src", name), "utf8")).join("\n")}\nreturn PF;`,
+    )();
+  assert.ok(plainWorld().world, "the stack under test boots on its own — every throw below is a rewrite talking");
+  assert.throws(
+    bootWorld("20-world.js", `pond: "The Village Pond"`, `pond: "The Millpond"`),
+    /the legacy layout calls cozy-village's pond "The Millpond", its default brief calls it "The Village Pond"/,
+    "renaming the legacy pond and not the brief fails the build",
+  );
+  assert.throws(
+    bootWorld(
+      "18-brief.js",
+      `{ tag: "water-crossing", name: "The Stepping Stones" }`,
+      `{ tag: "water-crossing", name: "The Ford" }`,
+    ),
+    /the legacy layout calls cozy-village's stream "The Stepping Stones", its default brief calls it "The Ford"/,
+    "…and renaming the brief and not the legacy layout fails it from the other side",
+  );
+  // THE WHOLE BOOK, not only the water. The settlement, the inn and the wood are
+  // the same duplication and drift the same way.
+  assert.throws(
+    bootWorld("20-world.js", `inn: "The Meridian Cantina"`, `inn: "The Cantina"`),
+    /the legacy layout calls sci-fi-colony's inn "The Cantina", its default brief calls it "The Meridian Cantina"/,
+    "the gathering place is in the book too",
+  );
+
+  // ── AND THE SAME DUPLICATION ONE TABLE ALONG: THE FOUR RESIDENTS' ROLES ─────
+  // buildLegacy hardcoded "innkeeper", "farmer", "village guard" and "forager"
+  // theme-blind, right beside a ZONE_NAMES that has been themed since 0.4.0. It
+  // was invisible while a role was only ever a token's label; slice 3's no-rod
+  // refusal made it player-facing, because that sentence interpolates npc.role —
+  // so a legacy sci-fi colony was telling the player "You need an angling rig —
+  // the innkeeper stocks one", in a world with no inn anywhere in it.
+  //
+  // Same bug class as the names above and pinned the same way, in both
+  // directions. The four names are the anchor: buildLegacy stands up Mira, Tam,
+  // Rook and Fen, and so does every theme's default brief.
+  for (const theme of ["cozy-village", "sci-fi-colony"]) {
+    const legacy = world.build(77, theme, null);
+    const fallback = brief.defaults(theme, 1);
+    const residents = Object.values(legacy.zones).flatMap((zone) => zone.npcs);
+    assert.equal(residents.length, 4, `${theme}: the legacy layout stands its four people up`);
+    for (const npc of residents) {
+      const member = fallback.cast.find((cast) => cast.name === npc.name);
+      assert.ok(member, `${theme}: ${npc.name} is in the default brief's cast as well`);
+      assert.equal(npc.role, member.role, `${theme}: the legacy ${npc.name} does the job the brief gives them`);
+    }
+  }
+
+  // AND WHAT IT REACHES THE PLAYER AS, which is the whole reason this is worth a
+  // table rather than a comment. Driven through the shipped refusal on a LEGACY
+  // colony — the world the compiled-world case further down could not see.
+  {
+    const colony = new loadedPF.Sim(world.build(77, "sci-fi-colony", null));
+    const hint = loadedPF.economy.rodHint({ chatId: "chat-legacy-role", sim: colony, hud: { toast() {} } });
+    assert.ok(!/innkeeper/.test(hint), `a legacy colony has no innkeeper to send anyone to (${hint})`);
+    assert.ok(/cantina keeper/.test(hint), `…it has the person its own brief names (${hint})`);
+  }
+
+  assert.throws(
+    bootWorld("20-world.js", `Mira: "cantina keeper"`, `Mira: "barkeep"`),
+    /the legacy layout makes sci-fi-colony's Mira a "barkeep", its default brief makes them a "cantina keeper"/,
+    "rewriting the legacy role and not the brief fails the build",
+  );
+  // The brief-side rewrite has to name the DEFAULT_BRIEFS entry and not the
+  // STOCK_CAST row above it, which writes the same four roles a second time and
+  // would swallow a single-line rewrite: the assertion reads defaults(), so a
+  // patch that missed it would report "no exception" and mean nothing.
+  assert.throws(
+    bootWorld(
+      "18-brief.js",
+      `name: "Rook",\n          role: "pad marshal",`,
+      `name: "Rook",\n          role: "landing marshal",`,
+    ),
+    /the legacy layout makes sci-fi-colony's Rook a "pad marshal", its default brief makes them a "landing marshal"/,
+    "…and rewriting the brief and not the legacy layout fails it from the other side",
+  );
+}
+
+// ── THE CAST WINDOW'S CLOCK MOVER CROSSES MIDNIGHT ───────────────────────────
+// `advanceMinutes` is the fishing verb's mover and it is the only one in the sim
+// that can be more than a minute out of date about the day. The walking loop
+// ticks one minute at a time and can never overshoot; a cast window is fifteen
+// at once, and "fish until dawn" from a night spot is a session that is SUPPOSED
+// to cross into tomorrow. Without the wrap the clock reads 24:05 on day one, the
+// daypart word falls off the end of its own table, and the ledger files the
+// morning's catch under the night before it.
+{
+  const w = world.build(4242, "cozy-village");
+  const sim = new loadedPF.Sim(w);
+
+  sim.clockMin = 10 * 60;
+  sim.day = 3;
+  assert.equal(sim.advanceMinutes(15), 15, "an ordinary window reports the minutes it spent");
+  assert.equal(sim.clockMin, 10 * 60 + 15, "…and spends exactly those");
+  assert.equal(sim.day, 3, "inside one day, the day does not move");
+
+  // THE WRAP. 23:50 plus a fifteen-minute window is 00:05 tomorrow.
+  sim.clockMin = 23 * 60 + 50;
+  sim.day = 3;
+  sim.advanceMinutes(15);
+  assert.equal(sim.day, 4, "a window that crosses midnight moves the day");
+  assert.ok(sim.clockMin < 24 * 60, `…and the clock came back inside the day (${sim.clockMin})`);
+  assert.equal(sim.clockMin, 5, "…at five past midnight, not twenty-four-oh-five");
+  assert.equal(sim.daypart(), "night", "…which the daypart table can still answer for");
+
+  // A LOOP AND NOT A TEST: a jump longer than a day wraps as many times as it
+  // takes. Nothing on the verb's menu does this today, and a single `if` that
+  // silently left the clock at 26:00 would be waiting for the first thing that
+  // did.
+  sim.clockMin = 12 * 60;
+  sim.day = 1;
+  sim.advanceMinutes(3 * 24 * 60 + 30);
+  assert.equal(sim.day, 4, "three days and a half-hour is three days on");
+  assert.equal(sim.clockMin, 12 * 60 + 30, "…and half an hour past noon");
+
+  // SCHEDULES RESOLVE UNCONDITIONALLY, which is what the wrap is FOR: a night
+  // cast that lands after dawn must find the world's people where dawn puts
+  // them, not where midnight left them. A COMPILED world, because the legacy
+  // cast carries no schedules at all and would prove this vacuously.
+  {
+    const fresh = new loadedPF.Sim(world.build(4242, "cozy-village", brief.defaults("cozy-village", 4242)));
+    fresh.clockMin = 23 * 60 + 55;
+    fresh.day = 1;
+    fresh.resolveSchedules();
+    const census = () =>
+      Object.entries(fresh.world.zones)
+        .flatMap(([id, zone]) => zone.npcs.map((npc) => `${npc.id}@${id}:${Math.round(npc.x)},${Math.round(npc.y)}`))
+        .sort();
+    const asleep = census();
+    assert.ok(asleep.length > 4, `the compiled world has a cast to re-place (${asleep.length})`);
+    fresh.advanceMinutes(7 * 60); // 06:55 the next morning: night → dawn
+    assert.equal(fresh.day, 2, "the jump crossed the day");
+    assert.equal(fresh._daypart, "dawn", "…and the sim knows which daypart it landed in");
+    assert.notDeepEqual(census(), asleep, "…because the cast re-placed everybody for it");
+  }
+
+  // AND A NON-COUNT MOVES NOTHING. The verb passes TUNING.castMinutes, but the
+  // mover is public and a caller that hands it nonsense must not leave the clock
+  // at NaN — every daypart read and every save byte downstream is a number.
+  sim.clockMin = 60;
+  sim.day = 2;
+  for (const bad of [0, -15, 1.5, "15", undefined, null, NaN, Infinity]) {
+    assert.equal(sim.advanceMinutes(bad), 0, `${String(bad)} is not a count of minutes`);
+    assert.equal(sim.clockMin, 60, "…and the clock did not move for it");
+    assert.equal(sim.day, 2, "…nor the day");
+  }
+
+  // THE FRACTION UNDER THE CLOCK IS LEFT ALONE, which is the stated deviation
+  // between this mover and waitUntil one method up. waitUntil CLEARS `_clockAcc`
+  // because it jumps to a target, and a leftover fraction would tick that
+  // target's own minute early. An advance lays whole minutes on top of a
+  // fraction the player has genuinely already walked off, so clearing it would
+  // quietly lose those seconds: a cast taken mid-stride would reset the walking
+  // cadence, and the minute the player was most of the way through would start
+  // over. Observable, and observed rather than asserted about the field alone —
+  // the fraction still buys the minute it was owed on the very next step.
+  {
+    const walker = new loadedPF.Sim(w);
+    walker.mode = "walk";
+    walker.clockMin = 60;
+    walker.day = 2;
+    const perMinute = loadedPF.CLOCK_SECONDS_PER_GAME_MINUTE;
+    const walked = perMinute * 0.9; // nine tenths of a game minute already on foot
+    walker._clockAcc = walked;
+    walker.advanceMinutes(15);
+    assert.equal(walker._clockAcc, walked, "a cast spends whole minutes and does not touch the fraction under them");
+    assert.equal(walker.clockMin, 75, "…while spending every one of the whole ones");
+    walker.step(perMinute * 0.2, {}); // two tenths more: over the line, with a cast in between
+    assert.equal(walker.clockMin, 76, "the walked fraction still buys the minute it was owed");
+    // …AND waitUntil IS THE OTHER SIDE OF THE DEVIATION, so the difference is a
+    // decision rather than a thing one of them forgot.
+    walker._clockAcc = walked;
+    walker.waitUntil("dusk");
+    assert.equal(walker._clockAcc, 0, "a JUMP does clear it, because it lands on a target rather than past one");
+  }
+}
+
+// ═══ S4 ACTIVATION: THE LADDER, THE RESOLVERS, THE TUNING TABLE (0.12 s2) ════
+// Constants and pure reads, so the cases are constants and pure reads too: no
+// world, no save path, no clock. What they pin is the ground the fishing verb
+// gets built on — that a saved string can never leave the range its resolver
+// promises, that the quality ladder grades TOOLS and leaves every other `k`
+// alone, and that the load-time assertions actually fail a build.
+
+// ── THE RESOLVERS: A SAVED STRING IS EVIDENCE, NEVER A VALUE ─────────────────
+{
+  const P = loadedPF.player;
+
+  assert.deepEqual(
+    [...P.QUALITY],
+    ["crude", "decent", "fine", "masterwork"],
+    "the ladder is ordered worst to best — the index IS the tier",
+  );
+  assert.ok(Object.isFrozen(P.QUALITY), "…and frozen: every save in the wild was written against those positions");
+  assert.deepEqual(
+    P.QUALITY.map((k) => P.resolvedToolTier(k)),
+    [0, 1, 2, 3],
+    "each rung resolves to its own place on it",
+  );
+  assert.equal(P.resolvedToolTier("legendary"), 0, "a tier no ladder names is CRUDE — not a throw, and not a bonus");
+  assert.equal(P.resolvedToolTier(""), 0, "so is a row carrying no quality at all");
+  assert.equal(P.resolvedToolTier(undefined), 0, "…and so is no field");
+  assert.equal(P.resolvedToolTier(2), 0, "a number is not a rung: the ladder is read by NAME");
+  assert.equal(P.resolvedToolTier("Crude"), 0, "and the names are exact — a near miss is a miss");
+
+  // PRESENCE, WHICH IS THE WHOLE REASON THIS IS A SECOND RESOLVER. Bait `k` are
+  // semantic slugs, so an index read maps a slotted bait and an EMPTY slot onto
+  // the same 0 and the modifier is inert either way. The first pair of lines is
+  // that seam, stated rather than described.
+  const slot = ["bait", "worms"];
+  const stocked = { t: "bait", q: 3, k: "worms" };
+  assert.equal(P.resolvedToolTier("worms"), P.resolvedToolTier(""), "an index read cannot tell bait from no bait…");
+  assert.equal(P.resolvedModTier(slot, stocked), 1, "…while presence can: slotted, and stocked behind it");
+  assert.equal(P.resolvedModTier(null, stocked), 0, "an empty slot is no modifier, stack or no stack");
+  assert.equal(P.resolvedModTier(slot, { t: "bait", q: 0, k: "worms" }), 0, "a spent stack backs nothing");
+  assert.equal(P.resolvedModTier(slot, undefined), 0, "and neither does a row the pouch no longer holds");
+  assert.equal(P.resolvedModTier(slot, { t: "bait", q: 9, k: "grubs" }), 0, "nor a full stack of something ELSE");
+  assert.equal(P.resolvedModTier(slot, 2), 1, "a bare count is enough for a caller that already has one");
+  assert.equal(P.resolvedModTier(slot, 0), 0, "…and the same count at zero is the same refusal");
+  assert.equal(P.resolvedModTier(["", ""], 5), 0, "a pair with no type is not a pair");
+
+  assert.equal(P.resolvedLevel({ l: 7, x: 3 }), 7, "an ordinary skill row reads as itself");
+  assert.equal(P.resolvedLevel({ l: 0 }), 1, "the floor is 1 — a verb nobody has used still rolls, at the bottom");
+  assert.equal(P.resolvedLevel({ l: 9000 }), P.CAPS.skillLevel, "and the ceiling is the ladder the block can hold");
+  assert.equal(P.resolvedLevel({ l: -4 }), 1, "a negative level is not a level");
+  assert.equal(P.resolvedLevel({ l: "12" }), 1, "…and neither is a string one");
+  assert.equal(P.resolvedLevel(undefined), 1, "a verb with no row at all is level 1");
+  assert.equal(P.resolvedLevel(11), 11, "a bare number is taken, for a caller that already read the row");
+}
+
+// ── THE LADDER GRADES TOOLS, AND LEAVES EVERY OTHER `k` ALONE ────────────────
+// One field, two vocabularies. `k` is a QUALITY rung on a tool and a semantic
+// SLUG on everything else — a catch's variant, a bait's kind — so the validator
+// has to be scoped by type or "kelp" becomes a badly-spelled "crude".
+{
+  const P = loadedPF.player;
+  const core = { chatId: "chat-quality", sim: { player: P.defaultPlayer(), dirty: false } };
+  try {
+    assert.equal(P.grant(core, { t: "rod", k: "legendary" }, 1), 0, "a graded row off the ladder is refused outright");
+    assert.deepEqual(core.sim.player.pouch.items, [], "…and nothing was minted on the way to refusing it");
+    assert.equal(P.grant(core, { t: "rod", k: "" }, 1), 0, "an ungraded rod is the same refusal — a tool has a tier");
+    assert.equal(P.grant(core, { t: "rod", k: "decent" }, 1), 1, "and a rung is taken");
+
+    assert.equal(P.grant(core, { t: "catch-common", k: "kelp" }, 2), 2, "a variant slug is a variant, not a bad tier");
+    assert.equal(P.grant(core, { t: "bait", k: "worms" }, 5), 5, "…and bait keeps its own kind for the same reason");
+    assert.equal(P.grant(core, "lodging-key", 1), 1, "the one shipped keyless row is untouched by any of this");
+
+    // equip() applies the same rule at the same point — before it allocates.
+    assert.equal(
+      P.equip(core, "fishing", "tool", { t: "rod", k: "legendary" }),
+      false,
+      "a slot cannot point at a row the pouch would refuse to hold",
+    );
+    assert.equal(core.sim.player.skills.equipped.fishing, undefined, "…and the refusal left no verb bucket behind");
+    assert.equal(P.equip(core, "fishing", "tool", { t: "rod", k: "decent" }), true, "a graded pair equips");
+    assert.equal(P.equip(core, "fishing", "mod", { t: "bait", k: "worms" }), true, "an ungraded one equips freely");
+
+    // …which closes the loop: what equip() wrote is what the resolvers read.
+    const equipped = core.sim.player.skills.equipped.fishing;
+    assert.equal(P.resolvedToolTier(equipped.tool[1]), 1, "the equipped rod resolves to its own rung");
+    const stack = core.sim.player.pouch.items.find((it) => it.t === "bait" && it.k === "worms");
+    assert.equal(P.resolvedModTier(equipped.mod, stack), 1, "and the slotted bait resolves to a present modifier");
+
+    // THE WIRE IS NOT VALIDATED, ON PURPOSE. The rule belongs to the mutators:
+    // a save already carrying a rod nobody can mint any more must round-trip
+    // untouched and resolve to the floor, not vanish out of the player's pouch.
+    const hostile = P.serialize({
+      ...P.defaultPlayer(),
+      pouch: { money: 0, items: [{ t: "rod", q: 1, k: "legendary" }] },
+    });
+    assert.equal(hostile.pouch.items[0].k, "legendary", "a hostile quality survives serialization exactly as written");
+    assert.equal(P.resolvedToolTier(hostile.pouch.items[0].k), 0, "…and is read as crude every time it is read");
+  } finally {
+    loadedPF.save.reset(); // the mutators self-dirty, and a dirty block arms a timer
+  }
+}
+
+// ── THE LOAD-TIME ASSERTIONS ACTUALLY FAIL THE BUILD ─────────────────────────
+// An assertion nobody has watched fail is a comment with a throw in it. Each
+// case rewrites ONE invariant in the source and re-loads the stack the economy's
+// boot block needs, which is the forced-load idiom this file already uses on
+// 20-world's host resolution — and each rewrite is asserted to have LANDED, so a
+// case cannot pass green because the line it meant to break moved.
+{
+  const stack = ["00-prelude.js", "10-art.js", "58-player.js", "59-economy.js"];
+  const boot = (file, from, to) => {
+    const source = stack
+      .map((name) => {
+        const text = readFileSync(join(here, "src", name), "utf8");
+        if (name !== file) return text;
+        const patched = text.replace(from, to);
+        assert.notEqual(patched, text, `the rewrite still names ${file}'s "${from}"`);
+        return patched;
+      })
+      .join("\n");
+    return () => new Function(`"use strict";\n${source}\nreturn PF;`)();
+  };
+  const plain = () =>
+    new Function(
+      `"use strict";\n${stack.map((name) => readFileSync(join(here, "src", name), "utf8")).join("\n")}\nreturn PF;`,
+    )();
+  assert.ok(plain().economy.TUNING, "the stack under test boots on its own — every throw below is a rewrite talking");
+
+  // (a) EVERY (theme, tier) THE LADDER CAN QUOTE HAS A PRICE. A missing one
+  // reaches the player as the keeper refusing the sale, which is what a world
+  // that deliberately stocks nothing looks like too. KEY EXISTENCE ONLY: nothing
+  // couples these numbers to the purse or the berth (maintainer override).
+  assert.throws(
+    boot("59-economy.js", `, "rod:decent": 40`, ``),
+    /theme "cozy-village" has no price for a decent rod/,
+    "a rung the ladder quotes and the table does not price fails the build",
+  );
+  assert.throws(
+    boot("59-economy.js", `const ROD_TIERS = ["crude", "decent"]`, `const ROD_TIERS = ["crude", "legendary"]`),
+    /the rod ladder quotes "legendary", which is not a quality tier/,
+    "…and so does a rung that is not on the ladder at all",
+  );
+  for (const theme of loadedPF.art.themeIds()) {
+    for (const tier of loadedPF.economy.ROD_TIERS) {
+      assert.equal(
+        typeof loadedPF.economy.price({ theme }, loadedPF.economy.rodPriceKey(tier)),
+        "number",
+        `${theme} quotes a ${tier} rod through the shipped price reader`,
+      );
+    }
+  }
+
+  // (b) THE TELL'S FLOOR. Under one maximum-shape day the tell renders zero
+  // whole days, the burn advances through nothing, and the flush stalls for the
+  // rest of the save.
+  const maxShapeDay = loadedPF.player.CAPS.ledgerPerDay * loadedPF.player.CAPS.ledgerChars;
+  assert.equal(maxShapeDay, 3000, "one max-shape ledger day is 15 lines of 200 graphemes");
+  assert.ok(loadedPF.economy.TUNING.ledgerTellChars >= maxShapeDay, "and the shipped budget clears it");
+  assert.throws(
+    boot("59-economy.js", "ledgerTellChars: 3000", "ledgerTellChars: 2999"),
+    /TUNING\.ledgerTellChars \(2999\) is under one max-shape ledger day \(3000\)/,
+    "one grapheme under the floor fails the build",
+  );
+
+  // (c) THE XP TABLE IS THE SINGLE AUTHORITY, so a type missing from it is a
+  // yield that awards nothing — and the likeliest one to go missing is `bait`,
+  // which is the yield a fresh player meets first.
+  assert.throws(
+    boot("59-economy.js", `[BAIT_TYPE]: 1`, `_notbait: 1`),
+    /TUNING\.catchXp has no xp for "bait"/,
+    "bait pays through the same table or the build stops",
+  );
+  assert.throws(
+    boot("59-economy.js", `"catch-rare": 5`, `"catch-rarely": 5`),
+    /TUNING\.catchXp has no xp for "catch-rare"/,
+    "…and so does every one of the four roles",
+  );
+
+  // (d) THE LADDER AND ITS MULTIPLIERS ARE TWO LISTS IN TWO FILES indexed by one
+  // resolved number. Pinned from BOTH ends: a short multiplier list hands the
+  // curve `undefined` on the best rod in the game, and a lengthened ladder does
+  // the same thing without either file being edited.
+  assert.throws(
+    boot("59-economy.js", "toolMult: [1, 1.15, 1.3, 1.45]", "toolMult: [1, 1.15, 1.3]"),
+    /TUNING\.toolMult has 3 multipliers for 4 quality tiers/,
+    "a multiplier short of the ladder fails the build",
+  );
+  assert.throws(
+    boot("58-player.js", `"fine", "masterwork"]`, `"fine", "masterwork", "mythic"]`),
+    /TUNING\.toolMult has 4 multipliers for 5 quality tiers/,
+    "…and a rung added to the ladder fails it from the other side",
+  );
+
+  // (e) THE CATCH TABLES AND THE WORDS FOR WHAT THEY YIELD (0.12 slice 3). Same
+  // idiom, and one of these needs two rewrites at once — a theme's bait lives in
+  // two tables, so killing it takes both.
+  const bootAll = (edits) => {
+    const source = stack
+      .map((name) => {
+        let text = readFileSync(join(here, "src", name), "utf8");
+        for (const [file, from, to] of edits) {
+          if (file !== name) continue;
+          const patched = text.replace(from, to);
+          assert.notEqual(patched, text, `the rewrite still names ${name}'s "${from}"`);
+          text = patched;
+        }
+        return text;
+      })
+      .join("\n");
+    return () => new Function(`"use strict";\n${source}\nreturn PF;`)();
+  };
+
+  // EVERY VARIANT, IN EVERY THEME. The pouch is world-free, so a fish caught in a
+  // valley is still in the bag when the chat's next world is a colony — and a row
+  // with no word there would fall to the slug fallback that exists for a HOSTILE
+  // save, not for content this build ships.
+  assert.throws(
+    boot("59-economy.js", `"culture-kelp": "strange kelp"`, `"culture-kelp-x": "strange kelp"`),
+    /theme "cozy-village" has no name for "culture-kelp"/,
+    "a variant one theme fishes and the other cannot name fails the build",
+  );
+  // …AND THE 2×2 ITSELF, from the vocabulary side: a spot kind with no table is
+  // water the player can stand at and the verb cannot answer for.
+  assert.throws(
+    boot(
+      "59-economy.js",
+      `const SPOT_TAGS = ["water-feature", "water-crossing"]`,
+      `const SPOT_TAGS = ["water-feature", "water-crossing", "dense-growth"]`,
+    ),
+    /theme "cozy-village" has no catch table for "dense-growth"/,
+    "a spot kind the vocabulary names and no table answers for fails the build",
+  );
+  // A ROLE HAS TO BE A ROLE. A typo mints a pouch row of a type nothing skins,
+  // nothing prices and the xp table cannot pay for — and it looks exactly like
+  // the deliberate roleless entry that means bait.
+  assert.throws(
+    boot("59-economy.js", `role: "catch-prize", variant: "old-tench"`, `role: "catch-prizes", variant: "old-tench"`),
+    /cozy-village\/water-feature has an entry with the role "catch-prizes"/,
+    "a misspelled role fails the build rather than shipping as bait",
+  );
+  // AN ENTRY NOBODY CAN EVER DRAW. The draw is a level test and the level stops
+  // at the ceiling, so a minLevel above it is written content no save can reach.
+  assert.throws(
+    boot(
+      "59-economy.js",
+      `variant: "old-tench", weight: 2, minLevel: 12`,
+      `variant: "old-tench", weight: 2, minLevel: 21`,
+    ),
+    /cozy-village\/water-feature's "old-tench" needs level 21, outside 1\.\.20/,
+    "an entry gated above the skill ceiling fails the build",
+  );
+  // A DAYPART COLUMN THAT NEVER APPLIES, which is the failure that looks most
+  // like a tuned one: a plausible word, silently multiplying nothing forever.
+  assert.throws(
+    boot("59-economy.js", `daypart: { dawn: 2, day: 0.5 }`, `daypart: { evening: 2, day: 0.5 }`),
+    /cozy-village\/water-feature's "old-tench" is tuned for a daypart "evening"/,
+    "a daypart the clock does not have fails the build",
+  );
+  // AND A THEME WITH NO BAIT IN ITS WATER would sell a rod and hand over an empty
+  // tin: the crude purchase's starter stack takes its slug from exactly here.
+  assert.throws(
+    bootAll([
+      ["59-economy.js", `{ variant: "worms", weight: 24`, `{ role: "catch-common", variant: "worms", weight: 24`],
+      ["59-economy.js", `{ variant: "grubs", weight: 22`, `{ role: "catch-common", variant: "grubs", weight: 22`],
+    ]),
+    /theme "cozy-village" ships no bait entry for a first rod to come with/,
+    "a theme whose water yields no bait fails the build",
+  );
+  // A SLUG WITH THE LEDGER'S OWN SEPARATOR IN IT. _logDay counts a session's
+  // yields in a Map keyed `${type}:${variant}` and splits that key apart again to
+  // name them, so a variant carrying a ":" is TRUNCATED at it — a "sea:bass"
+  // renders as "sea", and the wrap-up tells the player about a thing that does
+  // not exist. Closed at boot rather than by escaping the key, because a slug
+  // with punctuation in it is content nobody needs and the encoding is one line
+  // shorter for never having to survive one.
+  // Renamed in its table AND in both themes' word lists, so the variant-skin
+  // assertion above is satisfied and the slug check is what is left to fail.
+  assert.throws(
+    bootAll([
+      ["59-economy.js", `variant: "mirror-pike"`, `variant: "mirror:pike"`],
+      ["59-economy.js", `"mirror-pike": "mirror pike"`, `"mirror:pike": "mirror pike"`],
+      ["59-economy.js", `"mirror-pike": "mirror pike"`, `"mirror:pike": "mirror pike"`],
+    ]),
+    /cozy-village\/water-feature's "mirror:pike" has a ":" in its slug, which is the ledger's own separator/,
+    "a variant slug carrying the ledger key's separator fails the build",
+  );
+}
+
+// ═══ SLICE 3: WHAT THE WATER GIVES UP, AND WHAT IT IS CALLED ════════════════
+// The tables and the vocabulary, driven through the READERS — which is the half
+// a load assertion cannot make. A table that satisfies every completeness check
+// and still renders a carp as "catch-common" passes the boot block and fails
+// here.
+{
+  const E = loadedPF.economy;
+
+  // ── THE 2×2 IS REAL, AND EVERY TABLE SPANS THE LADDER ───────────────────────
+  // (theme × spot kind). Still water and running water fish differently in any
+  // theme, which is the whole reason the key has two halves.
+  for (const theme of loadedPF.art.themeIds()) {
+    const w = { theme };
+    for (const tag of E.SPOT_TAGS) {
+      const table = E.catchTable(w, tag);
+      assert.ok(Array.isArray(table) && table.length, `${theme}/${tag} answers with a table`);
+      const types = new Set(table.map((entry) => E.entryType(entry)));
+      assert.ok(types.has(E.BAIT_TYPE), `${theme}/${tag} yields bait — fishing is bait's own finder`);
+      for (const role of E.CATCH_ROLES) assert.ok(types.has(role), `${theme}/${tag} reaches ${role}`);
+      // A LEVEL-1 PLAYER CAN DRAW SOMETHING. Every entry is gated by minLevel, so
+      // a table whose cheapest rung sat at level 3 would be water that answers
+      // nothing at all to the player who has just bought their first rod.
+      assert.ok(
+        table.some((entry) => entry.minLevel === 1),
+        `${theme}/${tag} has something in it for a player on their first day`,
+      );
+      // The prize rung is the top of the same table, not a second one.
+      const prize = table.find((entry) => entry.role === "catch-prize");
+      assert.ok(prize.minLevel > 1 && prize.weight < 5, `${theme}/${tag}'s prize is late and rare (${prize.variant})`);
+    }
+  }
+  assert.equal(E.catchTable({ theme: "cozy-village" }, "crop-plots"), null, "a tag that holds no water has no table");
+  assert.equal(E.catchTable({ theme: "cozy-village" }, "constructor"), null, "…and neither does one off the prototype");
+  assert.deepEqual(
+    E.catchTable({ theme: "retired-theme" }, "water-feature"),
+    E.catchTable({ theme: "cozy-village" }, "water-feature"),
+    "a save naming a theme this build dropped still fishes, in the fallback theme's water",
+  );
+
+  // ── SCI-FI FISHES FOR REAL FISH (M6 RULED) ──────────────────────────────────
+  // The ruling is content, so it is pinned as content: the colony's tables carry
+  // fish the valley's tables carry too, flavored variants of its own, AND yields
+  // that are not fish at all. All three, or the theme is a re-skin.
+  {
+    const variantsOf = (theme) =>
+      new Set(E.SPOT_TAGS.flatMap((tag) => E.catchTable({ theme }, tag).map((entry) => entry.variant)));
+    const cozy = variantsOf("cozy-village");
+    const scifi = variantsOf("sci-fi-colony");
+    const shared = [...scifi].filter((variant) => cozy.has(variant));
+    assert.ok(shared.length >= 2, `the colony fishes for real fish the valley knows too (${shared.join(", ")})`);
+    assert.ok(shared.includes("carp"), "…carp among them: a stocked pool is stocked with something");
+    for (const flavored of ["vat-strain", "pressure-eel"])
+      assert.ok(scifi.has(flavored) && !cozy.has(flavored), `${flavored} is the colony's own`);
+    for (const notAFish of ["culture-kelp", "filter-salvage"])
+      assert.ok(scifi.has(notAFish), `${notAFish} is a legitimate entry, not a consolation prize`);
+  }
+
+  // ── describe(): THE NAME KEYS ON THE VARIANT ────────────────────────────────
+  // A pouch row is `{t: role, k: variant}` and the ROLE is not what the thing is
+  // called. Without this the player's bag reads "catch-common ×3".
+  {
+    const cozy = { theme: "cozy-village", seed: 0 };
+    const scifi = { theme: "sci-fi-colony", seed: 0 };
+    const plain = (world, item) => {
+      const named = E.describe(world, item);
+      const flourish = E._flourish(world, item.t, item.k ?? "");
+      return flourish ? named.slice(flourish.length + 1) : named;
+    };
+    assert.equal(plain(cozy, { t: "catch-common", k: "carp" }), "carp", "a catch reads as its variant");
+    assert.equal(plain(cozy, { t: "catch-rare", k: "mirror-pike" }), "mirror pike", "…whatever rung it sits on");
+    assert.equal(plain(cozy, { t: "bait", k: "worms" }), "worms", "and bait does too — never 'worms bait'");
+    assert.ok(
+      !E.describe(cozy, { t: "bait", k: "worms" }).includes("hook bait"),
+      "…the type's own word stays out of it",
+    );
+    // THEME-BEARING, one level down from the type names: the same row reads in
+    // the words of whatever world the chat is in now, because the pouch crosses
+    // world changes and the row does not get renamed under the player.
+    assert.notEqual(
+      plain(cozy, { t: "catch-common", k: "culture-kelp" }),
+      plain(scifi, { t: "catch-common", k: "culture-kelp" }),
+      "the colony's kelp is called something else in a valley",
+    );
+    assert.equal(plain(scifi, { t: "catch-common", k: "carp" }), "carp", "…while a carp is a carp in either");
+
+    // AN UNKNOWN VARIANT RENDERS SLUG-DERIVED — a hostile save row, or a newer
+    // build's table — matching describe()'s unknown-TYPE philosophy exactly.
+    // Cosmetic, never a throw, and never a row that vanishes out of the bag.
+    assert.equal(
+      plain(cozy, { t: "catch-rare", k: "moon_carp-two" }),
+      "moon carp two",
+      "an unknown variant still reads",
+    );
+    assert.equal(plain(cozy, { t: "catch-rare", k: "constructor" }), "constructor", "…including one off the prototype");
+    assert.equal(
+      E.describe(cozy, { t: "catch-common", k: "" }),
+      E.describe(cozy, { t: "catch-common" }),
+      "and a catch row carrying no variant falls back to its type's own word",
+    );
+  }
+
+  // ── THE FLOURISH IS A DISPLAY OVERRIDE, KEYED (seed, t, k) ──────────────────
+  // Pouch rows MERGE — one carp row holding nine carp — so a per-catch epithet
+  // has nothing to live on. Per world per variant is the shape the data can
+  // carry: this valley's carp are the muddy ones, the next world's are not.
+  {
+    const one = { theme: "cozy-village", seed: 4242 };
+    const same = { theme: "cozy-village", seed: 4242 };
+    const other = { theme: "cozy-village", seed: 99 };
+    const carp = { t: "catch-common", k: "carp" };
+    assert.equal(E.describe(one, carp), E.describe(same, carp), "one world, one epithet, every time it is read");
+    assert.notEqual(E.describe(one, carp), E.describe(one, { t: "catch-common", k: "minnow" }), "…per variant");
+    const seeds = new Set(
+      [4242, 99, 7, 13, 2095930824].map((seed) => E.describe({ theme: "cozy-village", seed }, carp)),
+    );
+    assert.ok(seeds.size > 1, `and different worlds do not all fish the same carp (${[...seeds].join(" / ")})`);
+    assert.notEqual(E._flourish(other, "catch-prize", "old-tench"), "", "the prize rung has a pool of its own");
+    // SKIN-NAME FALLBACK: a type with no pool reads plainly. Rods and bait ship
+    // none, so nothing in the shop window has a mood.
+    for (const type of ["rod", "bait", "lodging-key"])
+      assert.equal(E._flourish(one, type, "crude"), "", `${type} has no pool and reads plainly`);
+    assert.equal(E.describe(one, { t: "rod", k: "crude" }), "crude fishing rod", "…which is what a rod reads as");
+    // A world with no seed at all (the wizard's throwaway, a bare `{theme}`)
+    // still renders rather than keying off undefined.
+    assert.ok(E.describe({ theme: "cozy-village" }, carp).endsWith("carp"), "a seedless world still names its fish");
+  }
+
+  // ── THE STARTER STACK MERGES WITH WHAT THE PLAYER THEN FISHES UP ────────────
+  // Its slug is the theme's FIRST bait variant, scanned in SPOT_TAGS order, so
+  // the tin the rod came with and the tin filled out of the pond are one row.
+  for (const theme of loadedPF.art.themeIds()) {
+    const slug = E.starterBait({ theme });
+    const firstTable = E.catchTable({ theme }, E.SPOT_TAGS[0]);
+    const firstBait = firstTable.find((entry) => E.entryType(entry) === E.BAIT_TYPE);
+    assert.equal(slug, firstBait.variant, `${theme}'s starter bait is the first bait its own water yields`);
+    assert.ok(E.describe({ theme }, { t: E.BAIT_TYPE, k: slug }), `${theme} names it`);
+  }
+  assert.equal(E.starterBait({ theme: "cozy-village" }), "worms", "which in a valley is worms");
+}
+
+// ── THE KEEPER SELLS TWO THINGS, AND RESOLVES THE SAME WAY FOR BOTH ──────────
+// M8's amendment: no rod is ever free, and the person who lets the room is the
+// person who sells the rod. Their resolution — reach first, then the room — is
+// now ONE helper both offers call, because a second copy of that line is a build
+// where the innkeeper lets you a room from across the counter and refuses to
+// sell you a rod from the same spot.
+{
+  const E = loadedPF.economy;
+  const P = loadedPF.player;
+  const sealed = brief.validate(
+    {
+      scale: "village",
+      name: "Fallowmere",
+      prosperity: "modest",
+      backgroundPopulation: 40,
+      situation: "The bridge went in the spring flood and the ford is the only way across.",
+      cast: [
+        { name: "Perrin Quill", role: "innkeep", kind: "host", tint: "amber", home: "Fallowmere", household: 1 },
+        { name: "Wren Ash", role: "miller", kind: "maker", tint: "teal", home: "Fallowmere", household: 2 },
+      ],
+    },
+    { theme: "cozy-village", seed: 8080 },
+  );
+  const w = world.build(8080, "cozy-village", sealed);
+  let keeper = null;
+  let keeperZone = null;
+  let bystander = null;
+  for (const zoneId of Object.keys(w.zones)) {
+    for (const npc of w.zones[zoneId].npcs) {
+      if (typeof npc.lodging === "string" && !keeper) {
+        keeper = npc;
+        keeperZone = zoneId;
+      } else if (!npc.lodging && !bystander) bystander = npc;
+    }
+  }
+  assert.ok(keeper && bystander, "the compiled world has somebody who lets rooms and somebody who does not");
+  const room = w.zones[keeper.lodging];
+  if (!room.npcs.includes(keeper)) room.npcs.push(keeper); // the daypart may have them out; the room path is the case
+
+  const fresh = (chatId) => {
+    const sim = new loadedPF.Sim(w);
+    return { chatId, sim, hud: { toast() {}, refreshChips() {} }, markDirty() {} };
+  };
+  const stand = (core, zoneId, npc) => {
+    core.sim.zoneId = zoneId;
+    core.sim.nearNpc = npc;
+  };
+
+  try {
+    // ── THE SHARED RESOLUTION, on both paths and on neither ───────────────────
+    {
+      const core = fresh("chat-keeper-shared");
+      P.award(core, { money: 200 });
+      stand(core, w.startZone, bystander);
+      assert.equal(E.berthOffer(core).keeper, null, "out in the square by a villager, no berth");
+      assert.equal(E.rodOffer(core).keeper, null, "…and no rod either — one resolution, one answer");
+      assert.equal(E.rodOffer(core).reason, "no-keeper", "with the same reason the berth gives");
+
+      stand(core, keeperZone, keeper); // REACH: standing next to them, wherever that is
+      assert.equal(E.berthOffer(core).keeper, keeper, "in reach of the keeper, the berth is offered");
+      assert.equal(E.rodOffer(core).keeper, keeper, "…and so is the rod, by the same person");
+
+      stand(core, keeper.lodging, bystander); // ROOM: inside the inn, nearest to somebody else
+      assert.equal(E.berthOffer(core).keeper, keeper, "inside the room, the room answers for the berth");
+      assert.equal(E.rodOffer(core).keeper, keeper, "…and for the rod, which is the drift this helper prevents");
+    }
+
+    // ── NO PLAYER BLOCK, AND BOTH OFFERS SAY SO IN THEIR OWN WORD ─────────────
+    // Not reachable in play — Sim's constructor default-initialises the block and
+    // every restore path overwrites it — and that is exactly why these two lines
+    // needed watching: both offers resolve the keeper FIRST and read the pouch
+    // two lines later, so with the guard gone they walk past a perfectly good
+    // keeper and dereference null. The fishing verb's seventh value is pinned the
+    // same way further down; these were the two guards doing the same job with
+    // nobody looking at them.
+    //
+    // The staged keeper is the whole fixture. Standing somewhere nobody lets
+    // rooms would refuse for "no-keeper" long before the block is read, and the
+    // case would pass with the guard deleted.
+    {
+      const core = fresh("chat-keeper-no-player");
+      stand(core, keeperZone, keeper);
+      assert.equal(E.berthOffer(core).keeper, keeper, "the fixture is standing at a keeper, block and all");
+      core.sim.player = null;
+      const berth = E.berthOffer(core);
+      assert.equal(berth.available, false, "no block, no berth");
+      assert.equal(berth.reason, "no-player", "…and the value names the BLOCK, not the person in front of you");
+      assert.equal(berth.keeper, null, "…so nothing half-built comes back with it");
+      const rod = E.rodOffer(core);
+      assert.equal(rod.available, false, "no block, no rod either");
+      assert.equal(rod.reason, "no-player", "…in the same word, from the same shape");
+      assert.equal(rod.tier, null, "…quoting no rung, because there is nobody to quote one to");
+    }
+
+    // ── THE LADDER: no rod → crude → decent → the button is gone ──────────────
+    {
+      const core = fresh("chat-rod-ladder");
+      stand(core, keeperZone, keeper);
+      P.award(core, { money: 200 });
+
+      const first = E.rodOffer(core);
+      assert.equal(first.tier, "crude", "a rodless player is quoted the entry rung");
+      assert.equal(first.price, E.price(w, E.rodPriceKey("crude")), "at the theme's own price for it");
+      assert.equal(first.available, true, "and can take it");
+
+      const bought = E.buyRod(core);
+      assert.equal(bought.ok, true, "the sale goes through");
+      assert.equal(bought.tier, "crude", "…of the rung that was quoted");
+      assert.deepEqual(
+        Object.keys(bought).sort(),
+        ["bait", "ok", "price", "reason", "tier"],
+        "and the sale's shape is the one every other return of this verb carries",
+      );
+      const after = P.get(core);
+      assert.equal(after.pouch.money, 200 - first.price, "the purse paid, exactly once");
+      assert.ok(
+        after.pouch.items.some((row) => row.t === "rod" && row.k === "crude"),
+        "the rod is in the pouch",
+      );
+      // AUTO-EQUIP, SCOPED: the tool slot, and only the tool slot.
+      assert.deepEqual(after.skills.equipped.fishing.tool, ["rod", "crude"], "…and in the verb's tool slot");
+      assert.equal(
+        after.skills.equipped.fishing.mod,
+        undefined,
+        "bait never auto-equips — the slot is the verb's own act",
+      );
+      // LINE AND TACKLE INCLUDED, at the slug the theme's own water yields.
+      const tin = after.pouch.items.find((row) => row.t === "bait");
+      assert.equal(tin.k, E.starterBait(w), "the starter stack is the theme's first bait variant");
+      assert.equal(tin.q, E.STARTER_BAIT, "…a real stack of it");
+      assert.equal(bought.bait, tin.k, "and the verb says what it threw in");
+      // …WHICH IS THE POINT: fished bait MERGES with it rather than orphaning a
+      // second row of a thing the player already has.
+      P.grant(core, { t: "bait", k: E.starterBait(w) }, 3);
+      assert.equal(after.pouch.items.filter((row) => row.t === "bait").length, 1, "one bait row, not two");
+      assert.equal(after.pouch.items.find((row) => row.t === "bait").q, E.STARTER_BAIT + 3, "…and it grew");
+      assert.equal(
+        Object.keys(after.bought ?? {}).length,
+        0,
+        "and nothing was written to `bought` — that map is world-bound shop depletion, and 0.12 ships no stock",
+      );
+
+      const second = E.rodOffer(core);
+      assert.equal(second.tier, "decent", "a crude owner is quoted the next rung up");
+      assert.equal(E.buyRod(core).ok, true, "…and takes it");
+      assert.deepEqual(P.get(core).skills.equipped.fishing.tool, ["rod", "decent"], "auto-equip takes the BEST rung");
+      assert.equal(
+        P.get(core).pouch.items.filter((row) => row.t === "rod").length,
+        2,
+        "…while the old rod stays in the bag: the ladder is a read, not a trade-in",
+      );
+
+      const done = E.rodOffer(core);
+      assert.equal(done.reason, "top-of-ladder", "a decent owner is quoted nothing");
+      assert.equal(done.price, null, "…and a null price is what makes the button VANISH rather than dim");
+      assert.equal(E.buyRod(core).ok, false, "and the verb refuses to sell a third one");
+    }
+
+    // ── A HOSTILE ROD ROW CLAMPS, AND THE LADDER GOES ON WORKING ──────────────
+    // A save carrying `{t:"rod", k:"legendary"}` — a newer build's rung, or a
+    // hand-edited row — resolves to CRUDE at every read. The ladder therefore
+    // quotes `decent`, which is benign and is exactly what resolve-at-read is
+    // for. grant() would refuse to mint that row, so the save is staged directly.
+    {
+      const core = fresh("chat-rod-hostile");
+      stand(core, keeperZone, keeper);
+      P.award(core, { money: 200 });
+      assert.equal(P.grant(core, { t: "rod", k: "legendary" }, 1), 0, "no mutator can mint that rung");
+      P.get(core).pouch.items.push({ t: "rod", q: 1, k: "legendary" });
+      assert.equal(E.rodTier(P.get(core)), 0, "the ladder reads it as crude");
+      assert.equal(E.rodOffer(core).tier, "decent", "…so the keeper quotes the rung above crude");
+      assert.equal(E.buyRod(core).ok, true, "and sells it");
+      assert.deepEqual(
+        P.get(core).skills.equipped.fishing.tool,
+        ["rod", "decent"],
+        "auto-equip skips the ungradable row and takes the real one",
+      );
+    }
+
+    // ── THE STUFFED POUCH IS REFUSED BEFORE A COIN MOVES ──────────────────────
+    // grant() cannot refuse after award() has charged, so the arity pre-check is
+    // the whole of what makes buyRod's no-rollback shape sound. A crude purchase
+    // is TWO new rows — the rod and the starter tin — unless the player somehow
+    // already holds bait, in which case it is one.
+    {
+      const core = fresh("chat-rod-stuffed");
+      stand(core, keeperZone, keeper);
+      P.award(core, { money: 200 });
+      const cap = P.CAPS.items;
+      for (let i = 0; i < cap - 1; i++) P.grant(core, { t: "catch-common", k: `filler-${i}` }, 1);
+      assert.equal(P.get(core).pouch.items.length, cap - 1, "one row of headroom, and a crude rod needs two");
+      const stuffed = E.rodOffer(core);
+      assert.equal(stuffed.available, false, "the offer refuses");
+      assert.equal(stuffed.reason, "pouch-full", "…saying which cap bit");
+      assert.equal(stuffed.price, E.price(w, E.rodPriceKey("crude")), "…while still quoting the price");
+      const before = P.get(core).pouch.money;
+      const refused = E.buyRod(core);
+      assert.equal(refused.ok, false, "and the verb refuses with it");
+      // ONE SHAPE ON EVERY RETURN. The refusal after `award()` says `bait: null`
+      // and this one, refusing earlier for the same purchase, used to omit the
+      // key entirely — two ways of saying "nothing came with it" from one verb,
+      // and a caller reading `bait` gets `undefined` from one branch and `null`
+      // from the other for no reason it could ever discover.
+      assert.deepEqual(
+        Object.keys(refused).sort(),
+        ["bait", "ok", "price", "reason", "tier"],
+        `a refused purchase carries the verb's whole shape (${Object.keys(refused).sort()})`,
+      );
+      assert.equal(refused.bait, null, "…with nothing thrown in, said in the same word the other refusal uses");
+      assert.equal(P.get(core).pouch.money, before, "NOTHING was charged — no half-purchase to roll back");
+      assert.equal(P.get(core).pouch.items.length, cap - 1, "…and no row was minted either");
+
+      // THE OTHER ARITY: a player who already holds bait needs one row, not two.
+      P.get(core).pouch.items.pop();
+      P.grant(core, { t: "bait", k: E.starterBait(w) }, 2);
+      assert.equal(P.get(core).pouch.items.length, cap - 1, "still one row of headroom");
+      assert.equal(E.rodOffer(core).available, true, "…but the tin is already there, so the rod is the only new row");
+      assert.equal(E.buyRod(core).ok, true, "and it fits");
+      assert.equal(P.get(core).pouch.items.length, cap, "exactly at the cap, with the starter stack merged in");
+    }
+
+    // ── AUTO-EQUIP IS SCOPED TO TOOLS, AT THIS CALL SITE ──────────────────────
+    // equip() validates by item TYPE and not by SLOT: it refuses a graded row
+    // whose `k` is off the ladder and is otherwise perfectly willing to put bait
+    // in a `tool` slot. So the scoping is the caller's job, and this is the
+    // caller. Pinned from both ends — the mutator's leniency is real, and the
+    // helper refuses anyway.
+    {
+      const core = fresh("chat-autoequip-scope");
+      P.award(core, { money: 200 });
+      assert.equal(
+        P.equip(core, "digging", "tool", { t: "bait", k: "worms" }),
+        true,
+        "the mutator itself would take bait into a tool slot",
+      );
+      P.equip(core, "digging", "tool", null);
+      P.grant(core, { t: "bait", k: "worms" }, 4);
+      P.grant(core, { t: "catch-prize", k: "old-tench" }, 1);
+      // AND THE ROW THAT MAKES THE GUARD LOAD-BEARING. An ungraded type's `k` is
+      // free, so nothing stops a bait row whose slug happens to READ like a rung.
+      // Without the type guard the pouch scan would find it, call it the best
+      // "bait" in the bag and bind it into the verb's TOOL slot — a bait rod.
+      assert.equal(P.grant(core, { t: "bait", k: "crude" }, 1), 1, "an ungraded row may carry a rung-shaped slug");
+      assert.equal(
+        E._autoEquipTool(core, "fishing", "bait"),
+        false,
+        "…and the helper still refuses a type QUALITY does not grade",
+      );
+      assert.equal(E._autoEquipTool(core, "fishing", "catch-prize"), false, "a catch never equips at all");
+      assert.equal(P.get(core).skills.equipped.fishing, undefined, "neither left a verb bucket behind");
+      P.grant(core, { t: "rod", k: "crude" }, 1);
+      assert.equal(E._autoEquipTool(core, "fishing", "rod"), true, "a tool does");
+      assert.deepEqual(P.get(core).skills.equipped.fishing, { tool: ["rod", "crude"] }, "…in the tool slot, alone");
+    }
+
+    // ── …AND THE ROW FILTER INSIDE THE SCAN, WHICH THE TYPE GUARD DOES NOT ────
+    // The scan skips any row whose `k` is not a rung, and that is a SECOND guard
+    // doing a second job. A hostile `{t:"rod", k:"legendary"}` resolves to tier 0
+    // — the same rung a crude rod resolves to — so a scan without the filter
+    // finds it first, keeps it (nothing later ranks strictly ABOVE tier 0), and
+    // hands equip() a `k` the mutator refuses: the verb ends up with no rod bound
+    // at all while a perfectly good crude one sits in the bag beside it. The
+    // ladder case further up cannot see this, because the rod it buys there is
+    // DECENT and outranks the clamped row on the way past.
+    {
+      const core = fresh("chat-autoequip-hostile");
+      P.get(core).pouch.items.push({ t: "rod", q: 1, k: "legendary" }); // FIRST in scan order
+      P.grant(core, { t: "rod", k: "crude" }, 1);
+      assert.equal(P.equip(core, "fishing", "tool", { t: "rod", k: "legendary" }), false, "equip() refuses that rung");
+      assert.equal(E._autoEquipTool(core, "fishing", "rod"), true, "…so the scan has to have skipped it");
+      assert.deepEqual(
+        P.get(core).skills.equipped.fishing.tool,
+        ["rod", "crude"],
+        "…and bound the real rod behind it, rather than nothing at all",
+      );
+    }
+  } finally {
+    loadedPF.save.reset(); // the mutators self-dirty, and a dirty block arms a timer
+  }
+}
+
+// ═══ THE FISHING VERB (0.12 slice 3's headline) ═════════════════════════════
+// A cast is one window of clock, spent atomically: advance, roll, grant, award,
+// accumulate. What the cases below pin is the part a playtest cannot see — that
+// the roll is a function of RESOLVED state and nothing else, that bait is read
+// before it is spent, that a session crossing midnight files each day under its
+// own day, and that a session which caught nothing still costs the hours it
+// spent.
+{
+  const E = loadedPF.economy;
+  const P = loadedPF.player;
+  const W = E.TUNING.castMinutes;
+
+  /** Put the player at the bank of a registry row: a standable tile with a water
+   *  tile of that row's rect next to it. The two-sided nearFeature test is
+   *  30-sim's and pinned there; this only has to land on a tile that satisfies it. */
+  const standAt = (sim, zoneId, row) => {
+    const z = sim.world.zones[zoneId];
+    for (let y = row.rect.y - 1; y <= row.rect.y + row.rect.h; y++) {
+      for (let x = row.rect.x - 1; x <= row.rect.x + row.rect.w; x++) {
+        if (x < 0 || y < 0 || x >= z.w || y >= z.h) continue;
+        if (z.ground[y * z.w + x] === "water" || z.solid[y * z.w + x]) continue;
+        sim.teleport(zoneId, x, y);
+        sim.step(0, {});
+        if (sim.nearFeature?.id === row.id) return true;
+      }
+    }
+    return false;
+  };
+
+  /** A player standing at the legacy pond with whatever kit the case asks for.
+   *  The legacy world because it is the smallest one that carries a registry row,
+   *  a keeper and a fixed layout — nothing here is about the compiler. */
+  let chats = 0;
+  const angler = ({ clockMin = 9 * 60, day = 3, level = 1, tier = "crude", bait = 0, seed = 7, xp = 0 } = {}) => {
+    const w = world.build(seed, "cozy-village", null);
+    const sim = new loadedPF.Sim(w);
+    sim.clockMin = clockMin;
+    sim.day = day;
+    sim.resolveSchedules();
+    let dirty = 0;
+    const core = {
+      chatId: `chat-fish-${++chats}`,
+      sim,
+      hud: { toast() {}, refreshChips() {} },
+      markDirty() {
+        dirty++;
+      },
+    };
+    assert.ok(standAt(sim, "village", w.zones.village.features[0]), "the fixture stands at the pond");
+    if (tier) {
+      P.grant(core, { t: "rod", k: tier }, 1);
+      P.equip(core, "fishing", "tool", { t: "rod", k: tier });
+    }
+    if (level > 1) P.award(core, { xp: 5 * level * (level - 1), verb: "fishing" });
+    if (xp) P.award(core, { xp, verb: "fishing" });
+    if (bait) P.grant(core, { t: "bait", k: "worms" }, bait);
+    return { w, sim, core, dirty: () => dirty };
+  };
+  const yieldList = (out) => out.caught.map((row) => `${row.t}:${row.k}`);
+  const yields = (out) => yieldList(out).join("|");
+  /** Total xp the block holds, from the ladder it climbed: Σ 10l for l < level, plus the remainder. */
+  const totalXp = (row) => (row ? 5 * row.l * (row.l - 1) + row.x : 0);
+
+  try {
+    // ── DETERMINISM: SAME STATE, SAME FISH ────────────────────────────────────
+    // The whole anti-save-scum property. A failed window is a fixed point escaped
+    // only by spending different time — reload it, replay it, and it is the same
+    // window with the same answer.
+    {
+      const a = angler({ level: 6 });
+      const b = angler({ level: 6 });
+      const first = E.fish(a.core, "dusk");
+      const second = E.fish(b.core, "dusk");
+      assert.ok(first.caught.length, `the session caught something to compare (${first.caught.length})`);
+      assert.equal(yields(second), yields(first), "two clients, one state — the same fish in the same order");
+      assert.equal(second.windows, first.windows, "…over the same number of windows");
+      // …AND THE STATE IS REALLY AN INPUT: move one resolved number and the
+      // stream re-keys.
+      assert.notEqual(
+        yields(E.fish(angler({ level: 6, day: 4 }).core, "dusk")),
+        yields(first),
+        "a different day is a different stream",
+      );
+      assert.notEqual(
+        yields(E.fish(angler({ level: 6, seed: 909 }).core, "dusk")),
+        yields(first),
+        "…and so is a different world",
+      );
+      assert.notEqual(yields(E.fish(angler({ level: 9 }).core, "dusk")), yields(first), "…and a level climbed since");
+
+      // THE WINDOW IS THE UNIT, and not the minute. `castWindow` is
+      // floor(clockMin / W), so a cast at nine and a cast at seven minutes past
+      // fall in the same window and ARE the same cast — which is the property
+      // that makes a reload land on the answer it landed on before.
+      const onTheHour = E.fish(angler({ level: 6, clockMin: 9 * 60 }).core, null);
+      const sevenPast = E.fish(angler({ level: 6, clockMin: 9 * 60 + 7 }).core, null);
+      assert.equal(yields(sevenPast), yields(onTheHour), "a minute inside a window is that window");
+
+      // AND TWO SESSIONS LINE UP WINDOW FOR WINDOW: starting one window later
+      // gives exactly the same stream minus that window's yield, because every
+      // window seeds itself and none of them carries state into the next.
+      let live = null;
+      for (let minute = 0; minute < 17 * 60 && !live; minute += W) {
+        const out = E.fish(angler({ level: 6, clockMin: minute }).core, null);
+        if (out.caught.length) live = minute;
+      }
+      assert.ok(live !== null, "some window before dusk yields something");
+      const whole = yieldList(E.fish(angler({ level: 6, clockMin: live }).core, "dusk"));
+      const tail = yieldList(E.fish(angler({ level: 6, clockMin: live + W }).core, "dusk"));
+      assert.ok(whole.length > tail.length, `the skipped window really did yield (${whole.length} vs ${tail.length})`);
+      assert.deepEqual(
+        whole.slice(whole.length - tail.length),
+        tail,
+        "…and the rest of the session is untouched by it",
+      );
+    }
+
+    // ── A HOSTILE ROD RESOLVES, AND BOTH CLIENTS PULL THE SAME FISH ───────────
+    // The seam the resolvers exist for. A save carrying `{t:"rod", k:"legendary"}`
+    // — a newer build's rung, or a hand-edited row — reads as CRUDE at the hash,
+    // so a client that has never heard of "legendary" rolls exactly the same
+    // window as one that has.
+    {
+      const hostile = angler({ level: 6, tier: null });
+      const block = P.get(hostile.core);
+      block.pouch.items.push({ t: "rod", q: 1, k: "legendary" });
+      block.skills.equipped.fishing = { tool: ["rod", "legendary"] };
+      const crude = angler({ level: 6, tier: "crude" });
+      assert.equal(
+        yields(E.fish(hostile.core, "dusk")),
+        yields(E.fish(crude.core, "dusk")),
+        "a rung nobody can name is crude at the hash, not a different stream",
+      );
+      // …and the tier is a real input, so a REAL upgrade does move it.
+      assert.notEqual(
+        yields(E.fish(angler({ level: 6, tier: "decent" }).core, "dusk")),
+        yields(E.fish(angler({ level: 6, tier: "crude" }).core, "dusk")),
+        "a decent rod fishes a different stream from a crude one",
+      );
+    }
+
+    // ── BAIT IS READ BEFORE IT IS SPENT ──────────────────────────────────────
+    // The flip point, pinned exactly rather than statistically. PRESENCE, not
+    // count: one bait and two bait roll the first window identically. And the
+    // window a bait is SPENT on rolls baited — the slot-clear that follows the
+    // last one lands on the window after, which then re-keys at tier 0 and reads
+    // exactly like a session that never had any.
+    // A TWO-WINDOW SESSION, so the flip lands inside one call: 06:30 is exactly
+    // two casts short of morning, and the bait selection happens once at the
+    // start of a session rather than once per window.
+    {
+      const fixture = { clockMin: 6 * 60 + 30, day: 3, level: 6, seed: 313 };
+      const first = (bait) => yieldList(E.fish(angler({ ...fixture, bait }).core, null));
+      const session = (bait) => E.fish(angler({ ...fixture, bait }).core, "day");
+      const second = (bait) => yieldList(session(bait)).slice(first(bait).length);
+      assert.equal(session(0).windows, 2, "the fixture really is two windows long");
+
+      assert.deepEqual(first(1), first(2), "one bait and two bait roll the same first window — PRESENCE, not count");
+      assert.notDeepEqual(first(1), first(0), "…and a baited window is not a baitless one: the tier is a hash input");
+      assert.deepEqual(
+        second(1),
+        second(0),
+        "the window AFTER the last bait re-keys at tier 0 — identical to never having had any",
+      );
+      assert.notDeepEqual(second(2), second(0), "…while a stack with one left still rolls the window it is spent on");
+      // Non-vacuous on every arm: each of those windows actually yielded.
+      for (const [what, got] of [
+        ["baitless first", first(0)],
+        ["baited first", first(1)],
+        ["baitless second", second(0)],
+        ["baited second", second(2)],
+      ])
+        assert.equal(
+          got.length,
+          1,
+          `${what} window yielded, so the comparison is about the fish and not about silence`,
+        );
+
+      // THE RECONCILIATION the slot-clear is: the stack is spent and the slot is
+      // not left pointing at a row that is gone. And it is NOT re-armed mid
+      // session even when the session fishes up more bait — the selection is a
+      // per-session act, so what it found is the next session's to spend.
+      const single = angler({ ...fixture, bait: 1 }).core;
+      const run = E.fish(single, "day");
+      const spent = P.get(single);
+      assert.equal(spent.skills.equipped.fishing.mod, undefined, "the spent slot is cleared, not left dangling");
+      assert.ok(
+        run.caught.some((row) => row.t === E.BAIT_TYPE),
+        "this session fished more bait up — which is the point: fishing is bait's own finder",
+      );
+      assert.equal(
+        spent.pouch.items.find((row) => row.t === E.BAIT_TYPE).q,
+        1,
+        "…one spent and one found, and the found one waits for the next session rather than re-arming this one",
+      );
+      // A SLOT POINTING AT A STACK THAT IS GONE is repaired by the verb, because
+      // the verb is the only thing that ever fills it.
+      const stale = angler({ level: 6, bait: 3 });
+      P.get(stale.core).skills.equipped.fishing = { tool: ["rod", "crude"], mod: ["bait", "chum"] };
+      E.fish(stale.core, null);
+      assert.deepEqual(
+        P.get(stale.core).skills.equipped.fishing.mod,
+        ["bait", "worms"],
+        "a slot pointing at a stack the pouch does not hold is re-pointed at one it does",
+      );
+    }
+
+    // ── A SESSION THAT CROSSES MIDNIGHT FILES EACH DAY UNDER ITS OWN DAY ──────
+    // The maintainer's ruled scenario made literal: the 00:30 sleeper flushes
+    // LAST NIGHT's catch. That only works if the pre-midnight half of the session
+    // was filed under the day it happened — the CAST and the FISH BOTH, which is
+    // the half a "one line per day" count cannot see. The crossing window belongs
+    // whole to the day its cast began in, and its day is filed once that window
+    // has fully resolved rather than half-way through it.
+    {
+      // A fixture whose CROSSING window yields, so both lines have contents worth
+      // reading. WHAT it yields is asked of a single cast over the same state —
+      // the same window, seeded identically — rather than written down here.
+      const solo = angler({ clockMin: 23 * 60 + 45, day: 5, level: 4 });
+      const crossing = E.fish(solo.core, null);
+      assert.equal(crossing.caught.length, 1, "the fixture's crossing window is one that catches");
+      const fish = E.describe(solo.w, crossing.caught[0]);
+
+      const night = angler({ clockMin: 23 * 60 + 45, day: 5, level: 4 });
+      const out = E.fish(night.core, "dawn");
+      assert.equal(night.sim.day, 6, "the session ran into the next day");
+      assert.ok(night.sim.clockMin < 24 * 60, "…with the clock inside it");
+      assert.deepEqual(out.days, [5, 6], "and it filed one line per day it spanned, in order");
+      const lines = P.get(night.core).ledger.lines;
+      const dayLine = (day) => {
+        const found = lines.filter((line) => line[0] === day);
+        assert.equal(found.length, 1, `ONE batched line for day ${day}`);
+        return found[0][1];
+      };
+      const before = dayLine(5);
+      const after = dayLine(6);
+      assert.ok(/Fished/.test(before) && /Fished/.test(after), "both of them say where");
+      // NON-VACUOUS: the wrap really did split a session that would otherwise be
+      // one line — only one window fell on day 5, and the other twenty did not.
+      assert.ok(/\b1 cast\b/.test(before), `day 5 got the single window it was owed (${before})`);
+      assert.ok(/\b20 casts\b/.test(after), `…and day 6 got the rest (${after})`);
+      // AND THE FISH WENT WITH THE CAST THAT SPENT THE HOURS. The crossing
+      // window's catch is filed under the day the cast BEGAN, and it is not on
+      // day 6's line — which is where a flush taken between that window's advance
+      // and its roll puts it, leaving day 5 reporting an empty hour.
+      assert.ok(before.includes(fish), `day 5's line names what the crossing window caught (${before})`);
+      assert.ok(!after.includes(fish), `…and day 6's line does not claim it (${after})`);
+      assert.ok(!/nothing biting/.test(after), `day 6 caught plenty of its own (${after})`);
+    }
+
+    // ── …AND A SINGLE CAST THAT CROSSES MIDNIGHT KEEPS ITS CATCH ──────────────
+    // The sharpest shape of the same ordering, because it is the one where a
+    // mis-placed flush loses the line outright rather than mis-filing it: one
+    // window, and the wrap it crosses is the last thing the session does. The
+    // pouch and the xp were never in doubt — what the ledger said was "1 cast,
+    // nothing biting" about a cast that landed a fish, which is a record that
+    // actively lies about the hour the player spent.
+    {
+      const at = angler({ clockMin: 23 * 60 + 45, day: 4, level: 1 });
+      const out = E.fish(at.core, null);
+      assert.equal(out.windows, 1, "one window");
+      assert.equal(at.sim.day, 5, "…which crossed midnight");
+      assert.equal(out.caught.length, 1, "…and caught something");
+      const fish = E.describe(at.w, out.caught[0]);
+      assert.deepEqual(out.days, [4], "the line is filed under the day the cast BEGAN, not the one it ended in");
+      const lines = P.get(at.core).ledger.lines;
+      assert.equal(lines.length, 1, "one line, and no orphan on the far side of midnight");
+      assert.equal(lines[0][0], 4, "…on day 4");
+      assert.ok(lines[0][1].includes(fish), `and it RECORDS the catch (${lines[0][1]})`);
+      assert.ok(!/nothing biting/.test(lines[0][1]), "…rather than reporting an empty hour to the wrap-up");
+    }
+
+    // ── THE DAY-D LINE PASSES log()'s GATE, AND THE GATE IS REAL ──────────────
+    // log() refuses a day the flush already covers. Mid-session `flushedDay` is
+    // at most D−1 — telling day D would need a completed sleep after D's
+    // midnight, which cannot have happened while the player is still at the
+    // water — so the wrap's day-D line always lands. Both halves pinned: at D−1
+    // it lands, and at D it would not, which is what makes the proof matter.
+    {
+      const safe = angler({ clockMin: 23 * 60 + 45, day: 5, level: 6 });
+      P.get(safe.core).flushedDay = 4;
+      assert.deepEqual(
+        E.fish(safe.core, "dawn").days,
+        [5, 6],
+        "flushedDay D−1 is the worst a session can meet, and it passes",
+      );
+
+      const gated = angler({ clockMin: 23 * 60 + 45, day: 5, level: 6 });
+      P.get(gated.core).flushedDay = 5;
+      assert.deepEqual(
+        E.fish(gated.core, "dawn").days,
+        [6],
+        "…and a day the gate covers is refused, so the gate is not decorative",
+      );
+    }
+
+    // ── A CAST THAT CAUGHT NOTHING STILL COSTS THE HOURS ──────────────────────
+    // The Wait precedent (70-hud): a clock mover that does not flag the save
+    // loses its time on reload. Staged at its sharpest — the ledger line is
+    // refused by the gate as well, so NO mutator runs at all and the verb's own
+    // markDirty is the only thing standing between the player and losing it.
+    {
+      let barren = null;
+      for (let minute = 0; minute < 24 * 60 && !barren; minute += W) {
+        const at = angler({ clockMin: minute, day: 3, level: 1 });
+        P.get(at.core).flushedDay = 3; // the line will be refused too
+        const before = at.sim.clockMin;
+        const out = E.fish(at.core, null);
+        if (out.caught.length) continue;
+        barren = { at, out, before };
+      }
+      assert.ok(barren, "a window somewhere in the day catches nothing — which is most of them at level 1");
+      assert.equal(barren.at.sim.clockMin, barren.before + W, "the window was spent");
+      assert.deepEqual(barren.out.days, [], "no ledger line survived the gate");
+      assert.deepEqual(
+        P.get(barren.at.core).pouch.items.filter((row) => row.t !== "rod"),
+        [],
+        "no row was minted",
+      );
+      assert.ok(barren.at.dirty() >= 1, "and the save was flagged anyway — refusals-after-advance included");
+    }
+
+    // ── XP GOES THROUGH ONE TABLE, KEYED ON `role ?? bait` ────────────────────
+    // A bait-first session must mint a skill row: a player who has plainly been
+    // fishing and whose sheet shows no fishing skill is the failure this closes.
+    {
+      const at = angler({ level: 1 });
+      const out = E.fish(at.core, "dusk");
+      const owed = out.caught.reduce((sum, row) => sum + E.TUNING.catchXp[row.t], 0);
+      assert.ok(owed > 0, `the session earned something (${owed})`);
+      assert.equal(totalXp(P.get(at.core).skills.verbs.fishing), owed, "the block holds exactly what the table owed");
+      assert.ok(
+        out.caught.some((row) => row.t === E.BAIT_TYPE),
+        "…and bait was part of it, paying through the same table",
+      );
+      // THE LEVEL-UP READ: award() carries no leveled flag, so the verb reads the
+      // PRIOR level itself. Staged one xp under the first threshold.
+      const edge = angler({ level: 1, xp: 9 });
+      assert.equal(P.get(edge.core).skills.verbs.fishing.x, 9, "one xp under leaving level 1");
+      const climbed = E.fish(edge.core, "dusk");
+      assert.equal(
+        climbed.leveled,
+        P.get(edge.core).skills.verbs.fishing.l,
+        "the session reports the level it reached",
+      );
+      assert.ok(climbed.leveled > 1, "…which is above where it started");
+      const flat = E.fish(angler({ level: 1 }).core, null);
+      assert.equal(flat.leveled, 0, "and a session that crossed nothing reports nothing");
+    }
+
+    // ── A MID-LOOP GRANT REFUSAL SKIPS THE GRANT AND THE AWARD, AND GOES ON ───
+    // grant() refuses only a NEW (t,k) row at the cap; merges never refuse. So a
+    // session can meet the cap on a variant it has not caught before, and what
+    // must NOT happen is xp for a fish that never entered the bag. Staged one row
+    // short of the cap at level 1, where the pond opens exactly two variants: the
+    // first to land takes the last row and the other can never be recorded.
+    {
+      const at = angler({ level: 1 });
+      const cap = P.CAPS.items;
+      const held = P.get(at.core).pouch.items.length;
+      for (let i = 0; i < cap - held - 1; i++) P.grant(at.core, { t: "catch-common", k: `filler-${i}` }, 1);
+      assert.equal(P.get(at.core).pouch.items.length, cap - 1, "one row of headroom");
+      const out = E.fish(at.core, "dawn");
+      assert.equal(out.ok, true, "the session runs to its target rather than stopping at the cap");
+      assert.ok(out.windows > 40, `…all ${out.windows} windows of it`);
+      const landed = new Set(out.caught.map((row) => `${row.t}:${row.k}`));
+      assert.equal(landed.size, 1, `exactly one variant could be recorded (${[...landed]})`);
+      assert.equal(P.get(at.core).pouch.items.length, cap, "the pouch is at the cap and stayed there");
+      // THE HALF THAT MATTERS: no xp was paid for a fish the pouch refused.
+      const owed = out.caught.reduce((sum, row) => sum + E.TUNING.catchXp[row.t], 0);
+      assert.equal(
+        totalXp(P.get(at.core).skills.verbs.fishing),
+        owed,
+        "the award was skipped with the grant, not after it",
+      );
+      // …and the ledger line names only what was actually landed.
+      const line = P.get(at.core).ledger.lines.find((row) => row[0] === P.get(at.core).ledger.lines[0][0])[1];
+      assert.ok(line.includes("Fished"), "a line was still written for the hours spent");
+    }
+
+    // ── "FISH UNTIL X" IS WHOLE WINDOWS TOWARD A DAYPART ──────────────────────
+    {
+      const at = angler({ clockMin: 9 * 60, day: 2, level: 4 });
+      const out = E.fish(at.core, "dusk");
+      assert.equal(out.windows, (18 * 60 - 9 * 60) / W, "nine hours of dusk-ward casting is thirty-six windows");
+      assert.equal(at.sim.clockMin, 18 * 60, "landing exactly on the boundary when the clock divides");
+      assert.equal(at.sim.day, 2, "…without touching the day");
+      // FROM INSIDE THE DAYPART IT IS ASKED FOR, "until dusk" means the NEXT one —
+      // the same reading waitUntil gives the same table.
+      const inside = angler({ clockMin: 19 * 60, day: 2, level: 4 });
+      E.fish(inside.core, "dusk");
+      assert.equal(inside.sim.day, 3, "asking for dusk from inside dusk is asking for a day of it");
+      // ONE CAST is one window, and the menu's other entry.
+      const single = angler({ clockMin: 9 * 60, level: 4 });
+      assert.equal(E.fish(single.core, null).windows, 1, "a single cast is one window");
+      assert.equal(single.sim.clockMin, 9 * 60 + W, "…and W minutes of clock");
+    }
+
+    // ── THE REFUSALS, EACH DISTINCT, AND NONE OF THEM SPENDS A MINUTE ─────────
+    {
+      const at = angler({ level: 4 });
+      const clock = at.sim.clockMin;
+      const refuse = (what) => {
+        const out = E.fish(at.core, null);
+        assert.equal(out.ok, false, `${what}: refused`);
+        assert.equal(at.sim.clockMin, clock, `${what}: and the clock did not move for it`);
+        return out;
+      };
+
+      at.sim.mode = "dialogue";
+      assert.equal(refuse("mid-conversation").reason, "wrong-mode", "walk only, like every other clock mover");
+      at.sim.mode = "walk";
+
+      at.sim.teleport("village", 21, 17); // the spawn, nowhere near water
+      at.sim.step(0, {});
+      assert.equal(refuse("dry land").reason, "not-near-water", "no spot, no session");
+      assert.ok(standAt(at.sim, "village", at.w.zones.village.features[0]), "…back to the bank");
+
+      loadedPF.save.gate = { chatId: at.core.chatId, state: "generating" };
+      assert.equal(refuse("under the gate").reason, "gate-held", "a world nobody has entered has no water in it yet");
+      loadedPF.save.gate = null;
+
+      assert.equal(E.fish(at.core, "elevenses").reason, "unknown-target", "a daypart the clock does not have");
+      assert.equal(at.sim.clockMin, clock, "…and that costs nothing either");
+
+      // POUCH-FULL, which is the cap refusing the session rather than a window.
+      const held = P.get(at.core).pouch.items.length;
+      for (let i = 0; i < P.CAPS.items - held; i++) P.grant(at.core, { t: "catch-common", k: `stuff-${i}` }, 1);
+      assert.equal(
+        refuse("a full bag").reason,
+        "pouch-full",
+        "at the row cap only merges could land, so the session is refused",
+      );
+    }
+
+    // ── A TARGET THE DAYPART TABLE ONLY LOOKS LIKE IT HAS ────────────────────
+    // "elevenses" above is the easy half. The window count is looked up out of
+    // PF.DAYPART_STARTS by whatever string the caller handed in, and a bare index
+    // read reaches Object.prototype: `constructor` comes back a FUNCTION, sails
+    // through the `!== undefined` test, and makes a window count of NaN. The loop
+    // then runs zero times and the verb returns ok with `windows: 0` — so the HUD
+    // toasts "Nothing biting" for a cast that never happened, which is a refusal
+    // wearing a result's clothes and the one shape of this bug a player could
+    // never report. The own-property test is what flattens all of it back into
+    // the same "unknown-target" a typo gets.
+    {
+      const at = angler({ level: 4 });
+      const clock = at.sim.clockMin;
+      const day = at.sim.day;
+      for (const target of ["constructor", "toString", "valueOf", "hasOwnProperty", "__proto__"]) {
+        const out = E.fish(at.core, target);
+        assert.equal(out.ok, false, `${target}: refused outright, not answered with an empty session`);
+        assert.equal(out.reason, "unknown-target", `${target}: …in the word a mistyped daypart gets`);
+        assert.equal(out.windows, 0, `${target}: …claiming no window`);
+        assert.deepEqual(out.caught, [], `${target}: …and nothing out of the water`);
+        assert.equal(at.sim.clockMin, clock, `${target}: …and not one minute of clock`);
+        assert.equal(at.sim.day, day, `${target}: …nor a day of it`);
+      }
+    }
+
+    // ── NO ROD: THE REFUSAL THAT POINTS AT A VENDOR ──────────────────────────
+    // M8's amendment made this reachable on purpose. The button stays visible for
+    // a rodless player standing at water, and pressing it says who sells one —
+    // which is what turns an invisible mechanic into a discoverable one.
+    {
+      const bare = angler({ tier: null });
+      const offer = E.fishOffer(bare.core);
+      assert.equal(offer.available, false, "no rod, no session");
+      assert.equal(offer.reason, "no-rod", "…said in its own words");
+      assert.ok(offer.spot, "but the offer still names the spot, which is what keeps the button on screen");
+      assert.ok(/innkeeper/.test(offer.hint), `and the hint names the keeper's compiled role (${offer.hint})`);
+      const out = E.fish(bare.core, "dusk");
+      assert.equal(out.reason, "no-rod", "the verb refuses with the same reason");
+      assert.equal(out.hint, offer.hint, "…and carries the hint the button would show");
+      assert.equal(bare.sim.clockMin, 9 * 60, "no hours were spent looking for a rod nobody has");
+
+      // THEMED, and interpolated rather than hardcoded: a colony has no
+      // innkeeper, and only the brief knows what it does have.
+      const colony = new loadedPF.Sim(world.build(4242, "sci-fi-colony", brief.defaults("sci-fi-colony", 4242)));
+      const colonyCore = { chatId: "chat-fish-hint", sim: colony, hud: { toast() {}, refreshChips() {} } };
+      const hint = E.rodHint(colonyCore);
+      assert.ok(/rig/.test(hint), `the colony's own words for the thing (${hint})`);
+      assert.ok(!/innkeeper/.test(hint), "…and not a valley's word for the person");
+      assert.ok(
+        /keeper|quartermaster|steward|lead|marshal|scout/.test(hint),
+        `naming whoever the brief made (${hint})`,
+      );
+      assert.notEqual(hint, E.rodHint(bare.core), "the two themes do not say the same sentence");
+
+      // THE LEVEL-UP TOAST, the other line a colony reads out of this verb — and
+      // the one that carried the raw English word instead of the theme's. The
+      // sheet already renders the skill through `verbSkin`, so a colony that
+      // levels "Fishing" on the toast and "Angling" on the panel is two names for
+      // one number. Driven off the prototype over a stubbed session because the
+      // sentence is what is under test and not the roll that earned it: a real
+      // level-up here would need a colony pond, a rod and the xp to tip it, none
+      // of which this line reads.
+      const toasts = [];
+      const surface = { core: colonyCore, toast: (t) => toasts.push(t), refreshChips() {} };
+      const realFish = E.fish;
+      try {
+        E.fish = () => ({ ok: true, reason: null, hint: "", windows: 1, caught: [], leveled: 4, days: [] });
+        loadedPF.Hud.prototype.fish.call(surface, "dusk");
+      } finally {
+        E.fish = realFish;
+      }
+      assert.equal(toasts.length, 1, "a level-up toasts once");
+      assert.ok(/^Angling is level 4 now/.test(toasts[0]), `…in the colony's word for the verb (${toasts[0]})`);
+      assert.ok(!/Fishing/.test(toasts[0]), "…and never the valley's");
+    }
+
+    // ── THE SEVENTH VALUE: NO PLAYER BLOCK ON THE SIM AT ALL ─────────────────
+    // Not player-facing and not reachable in play — Sim's constructor
+    // default-initialises the block and every restore path overwrites it — but it
+    // is a value the offer really can return, so it belongs in the verb's
+    // documented list beside `unknown-target` rather than sitting under it as an
+    // undocumented seventh. Folded into that same caller-class bracket: both are
+    // answered by the HUD's GENERIC sentence, because a control that spoke its
+    // own copy about a lifecycle condition would be writing player-facing words
+    // about a state no player can be in.
+    {
+      const at = angler({ level: 4 });
+      at.sim.player = null;
+      const offer = E.fishOffer(at.core);
+      assert.equal(offer.available, false, "no block, no session");
+      assert.equal(offer.reason, "no-player", "…in its own word, not folded into a refusal about the player");
+      assert.equal(offer.spot, null, "…and naming no spot, which is what keeps the button off the screen for it");
+      const out = E.fish(at.core, null);
+      assert.equal(out.reason, "no-player", "the verb refuses with the same value");
+      assert.equal(out.hint, "", "…carrying no hint of its own");
+      assert.equal(at.sim.clockMin, 9 * 60, "…before a minute is spent");
+      // AND WHAT IT REACHES THE PLAYER AS. Both callers toast
+      // `hint || fishRefusal(reason)`, so the generic line this falls to has to be
+      // a real sentence or a pressed button does nothing at all. Read off the
+      // prototype because fishRefusal touches no instance state and the DOM shim
+      // this file builds a real Hud over is declared further down.
+      const line = (reason) => loadedPF.Hud.prototype.fishRefusal(reason);
+      assert.ok(line("no-player").length > 0, "the generic line is a line");
+      assert.equal(line("no-player"), line("unknown-target"), "…and it is the one the other caller-class value gets");
+      assert.notEqual(line("no-player"), line("not-near-water"), "…while a player-facing refusal keeps its own words");
+    }
+  } finally {
+    loadedPF.save.reset(); // the mutators self-dirty, and a dirty block arms a timer
+  }
+}
+
+// ═══ THE WRAP-UP FLUSH (0.12 slice 4) ═══════════════════════════════════════
+// Two fields and one burn. `intro.ledgerOwed` is durable and says which days a
+// sleep has finished; `player.flushedDay` is durable and says which of them have
+// been told; the tell itself is composed fresh every time and stored nowhere. The
+// cases below are the state machine between them — the guard that refuses each
+// way it can be asked to break the invariant, and the interleavings where the sim
+// under a resolving send is not the sim that composed the turn.
+{
+  const P = loadedPF.player;
+  let chats = 0;
+  /** A player standing in a world with a staged wrap-up. `owed` is what a sleep
+   *  left behind, `gate` is how much of it has already been told. */
+  const staged = ({ day = 6, owed = 5, gate = 0, lines = [], notices = [] } = {}) => {
+    const w = world.build(11, "cozy-village", null);
+    const sim = new loadedPF.Sim(w);
+    sim.day = day;
+    sim.intro = { world: false, zones: {}, npcs: {}, ledgerOwed: owed };
+    const core = {
+      chatId: `chat-flush-${++chats}`,
+      sim,
+      host: { chatMeta: {} },
+      hud: { toast() {}, refreshChips() {} },
+      markDirty() {},
+    };
+    const p = P.get(core);
+    p.flushedDay = gate;
+    for (const [at, text] of lines) p.ledger.lines.push([at, text]);
+    for (const [at, text] of notices) P.notice(p, text, at);
+    assert.equal(sim.dirty, false, "the fixture is staged without dirtying anything");
+    return { w, sim, core, player: p };
+  };
+
+  try {
+    // ── THE GUARD REFUSES EACH INEQUALITY, SEPARATELY ─────────────────────────
+    // Three tests, and each one is the only thing standing between a real
+    // interleaving and a gate written where it does not belong. Pinned one at a
+    // time, because a single "it refuses" case passes with two of them deleted.
+    {
+      // BACKWARDS. A tell composed against an older gate, resolving after a
+      // newer one already rose: lowering the gate would re-tell days already told.
+      const back = staged({ gate: 4 });
+      assert.equal(P.flush(back.core, 3), false, "a throughDay BELOW the gate is refused");
+      assert.equal(back.player.flushedDay, 4, "…and the gate does not move");
+
+      // PAST WHAT ANY SLEEP MADE OWED. Days beyond the marker are days the player
+      // has not finished living, or days a rewound sim never staged.
+      const ahead = staged({ owed: 5, day: 9 });
+      assert.equal(P.flush(ahead.core, 6), false, "a throughDay ABOVE ledgerOwed is refused");
+      assert.equal(ahead.player.flushedDay, 0, "…and the gate does not move");
+
+      // AND NEVER THE DAY UNDERWAY, whatever the marker says. `ledgerOwed` is
+      // durable and `sim.day` is not, so a rewind can leave a marker standing over
+      // a clock that has gone backwards — and telling the day being lived means
+      // telling half of it and then never telling the rest.
+      const today = staged({ owed: 7, day: 6 });
+      assert.equal(P.flush(today.core, 6), false, "a throughDay AT the live day is refused, marker or no marker");
+      assert.equal(P.flush(today.core, 5), true, "…while the day before it is exactly what the tell is for");
+      assert.equal(today.player.flushedDay, 5, "and THAT one moves the gate");
+
+      // …AND ALL THREE ARE READ THROUGH THE RESOLVER, which a raw read passes for
+      // free on every ASCII-clean fixture above. `intro` is nested inside the
+      // envelope and `simFromSaved` resolves it on the way in, so the belt only
+      // matters on a sim built some other way (a rebuild from a hand-made row, a
+      // newer build's field) — but a string is exactly where the two readings
+      // diverge: `4 > "4"` is FALSE, so a raw read lets a marker that owes nothing
+      // license a burn, while `resolvedDay("4")` is 0 and refuses it.
+      const hostile = staged({ owed: "4", day: 6 });
+      assert.equal(P.flush(hostile.core, 4), false, 'a ledgerOwed of "4" owes nothing, so it licenses nothing');
+      assert.equal(hostile.player.flushedDay, 0, "…and the gate does not move");
+    }
+
+    // ── …AND WHAT IT DOES WHEN IT ACCEPTS ─────────────────────────────────────
+    {
+      const at = staged({ gate: 2, owed: 5, day: 6, notices: [[3, "Something was set aside."]] });
+      // The third argument is the rows the COMPOSE captured, which for an all-untold
+      // band is the band itself — what `_composeLedger` hands the sender (below).
+      assert.equal(
+        P.flush(at.core, 5, at.player.ledger.notices),
+        true,
+        "the ordinary case: gate < throughDay ≤ owed < day",
+      );
+      assert.equal(at.player.flushedDay, 5, "the gate rises to the day that was told");
+      assert.deepEqual(at.player.ledger.notices[0], [3, "Something was set aside.", 1], "…and the band is marked told");
+      assert.equal(at.sim.dirty, true, "…and the save is flagged, because the mutator does that for its callers");
+      assert.equal(loadedPF.player.get(at.core).ledger.notices[0][2], 1, "the flag is on the live block, not a copy");
+
+      // A SECOND BURN AT THE SAME DAY IS A NO-OP THAT STILL PASSES. Two senders
+      // can compose the same wrap-up and both be accepted (§5), so the second
+      // burn has to be harmless rather than refused — `max` is what makes it so.
+      assert.equal(P.flush(at.core, 5, at.player.ledger.notices), true, "an equal throughDay is accepted");
+      assert.equal(at.player.flushedDay, 5, "…and changes nothing");
+
+      // THE FLOOR CASE: nothing owed, nothing told, and a notice waiting. The
+      // band answers to its flag and not to a day, so a save that has never slept
+      // still tells its notices — and the burn that marks them raises no gate.
+      const bandOnly = staged({ owed: 0, gate: 0, day: 1, notices: [[1, "A task has no one to hand it back to."]] });
+      assert.equal(
+        P.flush(bandOnly.core, 0, bandOnly.player.ledger.notices),
+        true,
+        "throughDay 0 against owed 0 is a legal burn",
+      );
+      assert.equal(bandOnly.player.flushedDay, 0, "the gate stays where it was");
+      assert.equal(bandOnly.player.ledger.notices[0][2], 1, "…and the notice is told");
+
+      // …AND THE SAME FLOOR WITH A GATE THAT OUTLIVED ITS MARKER. The partial
+      // restore is what produces it: the player block rehydrates OUTSIDE the
+      // envelope's `v` gate (60-save §"the player block, rehydrated"), so a row
+      // whose envelope this build cannot read — and equally a NEWER build's row
+      // that moved `intro.ledgerOwed` out from under a `v` we still accept —
+      // comes back carrying the gate the player earned and a marker that owes
+      // nothing. `flushedDay > ledgerOwed` is the one shape the invariant does
+      // not cover, because the burn is not the writer that made it.
+      //
+      // The band answers to its FLAG and not to a day, so this is still a tell:
+      // a notice-only compose burns AT the gate, `max` moves it nowhere, and the
+      // rows it carried are marked. Guarding that on the day numbers starved the
+      // band FOREVER — nothing below `flushedDay` can raise `ledgerOwed` back to
+      // it, so every later compose re-told the same notice.
+      const carried = staged({ owed: 0, gate: 5, day: 6, notices: [[3, "The world was severed and came back."]] });
+      assert.equal(
+        P.flush(carried.core, 5, carried.player.ledger.notices),
+        true,
+        "a burn AT a gate that outlived its marker is still a burn",
+      );
+      assert.equal(carried.player.flushedDay, 5, "…and it moves the gate nowhere");
+      assert.equal(carried.player.ledger.notices[0][2], 1, "…while the notice it carried is told");
+      assert.equal(carried.sim._composeLedger(), null, "…so the next compose has nothing left to say");
+
+      // …AND A BURN WITH NO ROWS TELLS NO ROWS. A tell that carried only days
+      // marks only days: the band is not swept up by a turn that never mentioned
+      // it, which is the property the rebuild cases below turn on.
+      const daysOnly = staged({ gate: 2, owed: 5, day: 6, notices: [[3, "Nobody composed this one."]] });
+      assert.equal(P.flush(daysOnly.core, 5, []), true, "a burn carrying no notice rows is still a burn");
+      assert.equal(daysOnly.player.flushedDay, 5, "…and still moves the gate");
+      assert.equal(daysOnly.player.ledger.notices[0][2], undefined, "…while the band it never told stays untold");
+    }
+
+    // ── A DAY THAT IS NOT A DAY IS NOT A BURN ─────────────────────────────────
+    {
+      const at = staged({ owed: 5, day: 6 });
+      for (const junk of ["5", 4.5, -1, NaN, null, undefined]) {
+        assert.equal(P.flush(at.core, junk), false, `a throughDay of ${JSON.stringify(junk)} is refused`);
+      }
+      assert.equal(at.player.flushedDay, 0, "and none of them moved the gate");
+    }
+
+    // ── THE FENCE AND THE GATE, which every mutator answers to ────────────────
+    {
+      const at = staged({ owed: 5, day: 6 });
+      assert.equal(P.flush(at.core, 5, null, (loadedPF.save._gen ?? 0) + 1), false, "a stale generation is refused");
+      assert.equal(at.player.flushedDay, 0, "…and writes nothing");
+      loadedPF.save.gate = { chatId: at.core.chatId, state: "generating" };
+      assert.equal(P.flush(at.core, 5), false, "and so is a chat whose world is still being written");
+      loadedPF.save.gate = null;
+      assert.equal(at.player.flushedDay, 0, "…still writing nothing");
+      assert.equal(P.flush(at.core, 5), true, "with both lifted, the same call goes through");
+    }
+
+    // ── THE SAME-CHAT REBUILD, which is the seam the fence CANNOT see ─────────
+    // `_gen` moves on a chat switch only. `_rebuild` replaces `core.sim` wholesale
+    // without touching it — a rewind, a swipe, a checkpoint load — so a send that
+    // composed before one and resolves after it passes the fence with a
+    // `throughDay` belonging to a sim that no longer exists. The guard reads the
+    // LIVE sim, so the rewound block refuses it and keeps its own gate.
+    {
+      const at = staged({ owed: 5, day: 6, notices: [[4, "Something was set aside."]] });
+      // The row the rewind lands on: this chat, one sleep ago. It has no staged
+      // day in it, because the sleep that staged one has been rewound away.
+      const before = JSON.parse(JSON.stringify(loadedPF.save.snapshot(at.core)));
+      before.intro = { world: false, zones: {}, npcs: {} };
+      before.day = 6;
+      const composed = 5; // what the sender captured, against the sim above
+      loadedPF.save._rebuild(at.core, before);
+      assert.notEqual(at.core.sim, at.sim, "the rebuild really did replace the sim under the send");
+      assert.equal(at.core.sim.intro.ledgerOwed, 0, "…with one that owes nothing");
+      assert.equal(
+        P.flush(at.core, composed, at.player.ledger.notices),
+        false,
+        "so the burn is REFUSED, on the live sim's own numbers",
+      );
+      assert.equal(P.get(at.core).flushedDay, 0, "the rewound block keeps its gate");
+      // AND ITS BAND IS ITS OWN. The rebuilt block carries the same SENTENCE —
+      // it came off the same row — in a different row object, which is exactly
+      // why the burn must not reach it: marking that copy told would swallow a
+      // notice nobody has been given, on the strength of a tell composed against
+      // a sim that no longer exists.
+      const rebuilt = P.get(at.core).ledger.notices ?? [];
+      assert.equal(rebuilt.length, 1, "the rebuilt block carries its own copy of the band");
+      assert.notEqual(rebuilt[0], at.player.ledger.notices[0], "…a different row, rebuilt from the row's own bytes");
+      assert.equal(rebuilt[0][2], undefined, "and the refused burn left it untold");
+      // AND THE OLD BLOCK IS NOT WRITTEN INTO EITHER: the refusal happened before
+      // anything moved, so the sim that composed keeps its untold band as well.
+      assert.equal(at.player.ledger.notices[0][2], undefined, "the sim that composed keeps its band untold");
+    }
+
+    // ── THE REBUILD THE GUARD HAS NO REASON TO REFUSE ─────────────────────────
+    // The case above is the LOUD rebuild — a rewind, which un-stages the marker
+    // and is refused on the numbers. It is not the only rebuild there is. Three
+    // of the five notice writers (the dangling-quest repair, the mint severance,
+    // and a restore landing on a gate already where it was) leave `flushedDay`,
+    // `ledgerOwed` and `sim.day` exactly as they found them, so a send resolving
+    // over one of THOSE rebuilds meets a guard with nothing to object to. What it
+    // also meets is a notice NOBODY COMPOSED: written after the tell went out and
+    // owed to the next one.
+    //
+    // Which is the whole reason the burn marks the rows the COMPOSE captured
+    // rather than whatever is in the live band when it lands. The band answers to
+    // the told flag and to nothing else — no gate, no day — so a row marked told
+    // that nobody was told is a sentence destroyed in silence.
+    {
+      loadedPF.quarantine.reset();
+      const at = staged({
+        gate: 2,
+        owed: 5,
+        day: 7,
+        lines: [
+          [3, "The third."],
+          [4, "The fourth."],
+        ],
+      });
+      // A quest whose giver is standing in this world and one whose giver is not.
+      // Both, because EVERY giver dangling is a statement about the world rather
+      // than about the quests, and the repair declines that one (case z).
+      P.get(at.core).quests.active = [
+        { id: "q-real", g: "village|Tam", verb: "gather", target: "herb", n: 1, have: 0, r: {}, day: 1 },
+        { id: "q-ghost", g: "village|Nobody At All", verb: "gather", target: "herb", n: 1, have: 0, r: {}, day: 1 },
+      ];
+      at.sim.composePrefix(null);
+      const pend = at.sim._pendingIntro;
+      assert.deepEqual(
+        pend.ledger.notices,
+        [],
+        "the turn went out with an empty band — days to tell, and nothing else",
+      );
+      assert.equal(pend.ledger.throughDay, 4, "…reaching day 4");
+
+      // THE REBUILD, through the real machinery: the row this chat would have
+      // saved, rebuilt under the send exactly as _applyRewind and _adoptNow do it.
+      const row = JSON.parse(JSON.stringify(loadedPF.save.snapshot(at.core)));
+      loadedPF.save._rebuild(at.core, row);
+      const live = P.get(at.core);
+      assert.notEqual(at.core.sim, at.sim, "the rebuild replaced the sim under the send");
+      assert.deepEqual(
+        [live.flushedDay, at.core.sim.intro.ledgerOwed, at.core.sim.day],
+        [2, 5, 7],
+        "…and left every number the guard reads exactly where it found them",
+      );
+      const fresh = (live.ledger.notices ?? []).filter(([, text]) => /no one left to hand it back/.test(text));
+      assert.equal(fresh.length, 1, "the rebuild's own repair wrote a notice no compose has ever seen");
+      assert.equal(fresh[0][2], undefined, "…untold, because it is younger than the tell still in flight");
+
+      // AND THE BURN LANDS, because there is nothing here for the guard to catch.
+      assert.equal(
+        P.flush(at.core, pend.ledger.throughDay, pend.ledger.notices),
+        true,
+        "so the burn is ACCEPTED, on the live sim's numbers",
+      );
+      assert.equal(live.flushedDay, 4, "…raising the gate, which is what it was for");
+      assert.equal(fresh[0][2], undefined, "but the fresh notice is STILL UNTOLD — the burn marks what was composed");
+      const after = at.core.sim.composePrefix(null);
+      assert.ok(/no one left to hand it back/.test(after), `…so the NEXT turn is the one that carries it (${after})`);
+    }
+
+    // ── THE ROW ONLY THE SECOND COMPOSE CARRIED ───────────────────────────────
+    // No rebuild in this one, and the same rule decides it. Travel composes over
+    // an empty band and awaits; a notice is written under it; Talk composes and
+    // CARRIES that notice; then Travel's turn comes back accepted and burns. The
+    // row Travel never told is not Travel's to mark — and if it marks it, a Talk
+    // the host then refuses leaves a sentence that reached nobody flagged as
+    // delivered, which nothing in the band can undo.
+    {
+      const at = staged({ gate: 1, owed: 4, day: 6, lines: [[3, "The day they both told."]] });
+      at.sim.composePrefix(null);
+      const pendTravel = at.sim._pendingIntro;
+      assert.deepEqual(pendTravel.ledger.notices, [], "Travel composed over an empty band");
+
+      P.notice(at.player, "A task you had taken on has no one left to hand it back to, so you have let it go.", 4);
+      const talk = at.sim.composePrefix(null);
+      const pendTalk = at.sim._pendingIntro;
+      assert.ok(
+        /no one left to hand it back/.test(talk),
+        `…and Talk, composing after it, carries the notice (${talk})`,
+      );
+      assert.deepEqual(pendTalk.ledger.notices, [at.player.ledger.notices[0]], "…as the row itself");
+
+      assert.equal(
+        P.flush(at.core, pendTravel.ledger.throughDay, pendTravel.ledger.notices),
+        true,
+        "Travel's accepted turn burns",
+      );
+      assert.equal(at.player.flushedDay, 3, "…its own days");
+      assert.equal(at.player.ledger.notices[0][2], undefined, "…and NOT the row only Talk composed");
+      assert.equal(
+        P.flush(at.core, pendTalk.ledger.throughDay, pendTalk.ledger.notices),
+        true,
+        "then Talk's turn burns",
+      );
+      assert.equal(at.player.ledger.notices[0][2], 1, "…and THAT is what tells the notice it carried");
+    }
+
+    // ── WHAT THE TELL SELECTS, AND WHERE IT SITS IN THE TURN ──────────────────
+    {
+      const at = staged({
+        gate: 2,
+        owed: 5,
+        day: 7,
+        lines: [
+          [2, "Told already, on the day the gate covers."],
+          [3, "Day 3: 12 things happened.", 12],
+          [4, "Fished the millpond — 12 casts: carp x2."],
+          [4, "Took a berth at The Amber Hearth for 12 coins."],
+          [6, "Not owed yet — past the marker, and the player is still living it."],
+        ],
+        notices: [[3, "Some of what you had done here belonged to another world."]],
+      });
+      const prefix = at.sim.composePrefix(null);
+      const part = prefix.slice(prefix.indexOf("[Wrap-up"));
+      assert.ok(prefix.includes("[Wrap-up — "), "the tell rides the prefix as a part of its own");
+      assert.ok(prefix.startsWith("[World:"), "…and the header still comes first");
+      assert.ok(prefix.endsWith(part) && part.endsWith("]"), "the tell is LAST in the join — after the prose parts");
+
+      // THE WINDOW IS `flushedDay < day ≤ ledgerOwed`, both ends live.
+      assert.ok(!part.includes("Told already"), "a day at or below the gate has already been told");
+      assert.ok(!part.includes("Not owed yet"), "…and a day past the marker is not this turn's to tell");
+      assert.ok(part.includes("Day 3: 12 things happened."), "a STUB rides the tell — an elided day still happened");
+      assert.ok(part.includes("Day 4: Fished the millpond"), "and the days between are told whole");
+      assert.ok(part.includes("Took a berth"), "…every line of them, in the order they were logged");
+      assert.ok(part.indexOf("Day 3") < part.indexOf("Day 4"), "oldest day first, so the story arrives in order");
+      assert.ok(
+        /Also, about the world itself rather than the days in it: Some of what you had done/.test(part),
+        `and the untold band rides with ONE framing sentence (${part})`,
+      );
+
+      // COMPOSE IS PURE. Nothing is burned until the host says yes — a refused
+      // send must lose neither the days nor the notices.
+      assert.equal(at.player.flushedDay, 2, "compose moved no gate");
+      assert.equal(at.player.ledger.notices[0][2], undefined, "…and told no notice");
+      assert.equal(at.sim.dirty, false, "…and dirtied nothing");
+
+      // WHAT IT HANDS THE SENDER: the day it reached, and the notice ROWS it
+      // composed — the rows themselves, so the burn marks what was told.
+      const pend = at.sim._pendingIntro;
+      assert.equal(pend.ledger.throughDay, 4, "the pending carries the last day rendered whole");
+      assert.deepEqual(pend.ledger.notices, [at.player.ledger.notices[0]], "…and the band rows it composed");
+
+      // A RE-TELL IS NOT A REPLAY. Nothing stored the first throughDay, so a
+      // second compose over unmoved fields simply selects the same days again.
+      assert.equal(at.sim.composePrefix(null), prefix, "a recompose with nothing staged says the same thing");
+
+      // …AND THE BURN CLOSES IT.
+      assert.equal(P.flush(at.core, pend.ledger.throughDay, pend.ledger.notices), true, "the accepted turn burns");
+      assert.equal(at.player.flushedDay, 4, "the gate rose to the day that was told");
+      assert.equal(at.player.ledger.notices[0][2], 1, "the band it told is told");
+      assert.equal(at.sim.composePrefix(null), at.sim.header(), "and the next turn has nothing left to say");
+    }
+
+    // ── M10: NOTHING ELSE IN A TURN KNOWS FISHING HAPPENED ────────────────────
+    // The verb narrates nothing and takes no receipt turn. Its lines reach the GM
+    // through the wrap-up or not at all, so a prefix composed before the sleep
+    // that makes them owed carries no fishing word anywhere in it.
+    {
+      const quiet = staged({ owed: 0, day: 4, lines: [[3, "Fished the millpond — 12 casts: carp x2."]] });
+      assert.equal(quiet.sim.composePrefix(null), quiet.sim.header(), "nothing owed, nothing said");
+      quiet.sim.intro.ledgerOwed = 3; // what a sleep stages
+      const after = quiet.sim.composePrefix(null);
+      assert.ok(after.includes("Fished the millpond"), "…and after the sleep it is in the tell");
+      assert.equal(
+        after.indexOf("Fished"),
+        after.indexOf("[Wrap-up") + after.slice(after.indexOf("[Wrap-up")).indexOf("Fished"),
+        "…inside the wrap-up part, which is the only part that carries it",
+      );
+    }
+
+    // ── TRUNCATION DROPS THE NEWEST DAYS, AND THE BURN FOLLOWS IT ─────────────
+    // Whole days or none. The tell renders oldest-first until the next day would
+    // put it over `ledgerTellChars`, then stops — and the burn advances only
+    // through the last day rendered WHOLE, so `ledgerOwed` survives a partial
+    // tell and the next accepted turn picks up exactly where this one stopped.
+    {
+      const budget = loadedPF.economy.TUNING.ledgerTellChars;
+      const wide = "w".repeat(P.CAPS.ledgerChars);
+      // Sized off the shipped budget rather than written down: enough lines that
+      // TWO days fit and three cannot, so the drop is the budget's decision and
+      // not the fixture's.
+      const perDay = Math.floor(budget / 2 / P.CAPS.ledgerChars);
+      const dayCost = perDay * P.CAPS.ledgerChars;
+      assert.ok(2 * dayCost <= budget && 3 * dayCost > budget, `the fixture straddles the budget (${dayCost} each)`);
+      const lines = [];
+      for (const day of [3, 4, 5]) for (let i = 0; i < perDay; i++) lines.push([day, wide]);
+      const at = staged({ gate: 2, owed: 5, day: 9, lines });
+      const first = at.sim.composePrefix(null);
+      assert.ok(first.includes("Day 3:"), "the oldest owed day is told");
+      assert.ok(first.includes("Day 4:"), "…and the next one, because it still fits");
+      assert.ok(!first.includes("Day 5:"), "…and the NEWEST day is what the budget drops");
+      assert.equal(at.sim._pendingIntro.ledger.throughDay, 4, "so the burn covers only what was rendered whole");
+      assert.equal(P.flush(at.core, 4), true, "…and it is a legal burn");
+      assert.equal(at.player.flushedDay, 4, "the gate stops at the last whole day");
+      assert.equal(
+        P.get(at.core).ledger.lines.some(([day]) => day === 5),
+        true,
+        "day 5 is still in the buffer",
+      );
+      assert.equal(at.sim.intro.ledgerOwed, 5, "…and still owed: a partial tell does not spend the marker");
+      const second = at.sim.composePrefix(null);
+      assert.ok(second.includes("Day 5:") && !second.includes("Day 4:"), "the next turn continues from day 5");
+      assert.equal(at.sim._pendingIntro.ledger.throughDay, 5, "…and would burn through it");
+    }
+
+    // ── A MAXIMUM-SHAPE DAY RENDERS WHOLE, which is what the floor buys ───────
+    // `ledgerTellChars` is asserted at load against `ledgerPerDay × ledgerChars`
+    // (59-economy), and this is the case that spends it: the biggest day the
+    // caps allow — fifteen lines of two hundred graphemes — has to render, or the
+    // burn advances through nothing and the flush stalls for the rest of the save.
+    {
+      const lines = [];
+      for (let i = 0; i < P.CAPS.ledgerPerDay; i++) lines.push([3, "m".repeat(P.CAPS.ledgerChars)]);
+      const at = staged({ gate: 2, owed: 3, day: 5, lines });
+      const part = at.sim.composePrefix(null);
+      assert.ok(part.includes("Day 3:"), "a maximum-shape day is told");
+      assert.equal(
+        (part.match(new RegExp("m".repeat(P.CAPS.ledgerChars), "g")) ?? []).length,
+        P.CAPS.ledgerPerDay,
+        "…every line of it, whole",
+      );
+      assert.equal(at.sim._pendingIntro.ledger.throughDay, 3, "and the burn covers it");
+
+      // …AND A DAY NOTHING CAN FIT STILL RIDES. A day this build can write cannot
+      // exceed the budget, but a hostile save can carry fifty lines on one, and
+      // "tell nothing and advance nothing, forever" is the worse answer.
+      const huge = [];
+      for (let i = 0; i < 50; i++) huge.push([3, "h".repeat(P.CAPS.ledgerChars)]);
+      const over = staged({ gate: 2, owed: 3, day: 5, lines: huge });
+      assert.ok(over.sim.composePrefix(null).includes("Day 3:"), "an oversized day is told rather than stalling");
+      assert.equal(over.sim._pendingIntro.ledger.throughDay, 3, "…and the gate can still move past it");
+    }
+
+    // ── …AND IT IS MEASURED IN GRAPHEMES, WHICH ASCII CANNOT SHOW ─────────────
+    // Every ledger fixture above is ASCII, where a grapheme, a code point and a
+    // UTF-16 unit are the same thing — so swapping `PF.player.graphemes(text)` for
+    // `Array.from(text)` in the tell's budget survives every one of them. The caps
+    // are stated in graphemes and the floor assertion multiplies two of them, so a
+    // measure that disagrees makes the floor a promise about a different quantity
+    // and truncates legal days for content the player is allowed to write: a zone
+    // name with one family emoji in it is seven code points wide.
+    //
+    // The family cluster is the sharpest instrument for it — four astral code
+    // points and three joiners, ONE grapheme, and no shorter way to be seven times
+    // the size of what you look like.
+    {
+      const family = "\u{1F468}‍\u{1F469}‍\u{1F467}‍\u{1F466}";
+      assert.equal(P.graphemes(family).length, 1, "one cluster");
+      assert.equal(Array.from(family).length, 7, "…seven code points, which is the whole of the risk");
+
+      // (a) THE DISCRIMINATING PAIR. A short day, then an astral day whose
+      // GRAPHEME cost leaves the budget room to spare and whose code-point cost
+      // is four times over it. Measured right, the tell reaches day 4; measured in
+      // code points, day 4 is dropped and the burn stops a day short — the same
+      // over-eager truncation an emoji in a zone name would cause on a real save.
+      const budget = loadedPF.economy.TUNING.ledgerTellChars;
+      const astral = family.repeat(P.CAPS.ledgerChars);
+      const wideDay = 10;
+      assert.ok(
+        12 + wideDay * P.CAPS.ledgerChars <= budget && 12 + wideDay * P.CAPS.ledgerChars * 7 > budget,
+        "the fixture fits in graphemes and does not fit in code points, which is the whole case",
+      );
+      const pair = staged({ gate: 2, owed: 4, day: 6, lines: [[3, "A quiet day."]] });
+      for (let i = 0; i < wideDay; i++)
+        assert.equal(P.log(pair.core, astral, 4), true, "a legal astral line is logged");
+      const part = pair.sim.composePrefix(null);
+      assert.ok(part.includes("Day 3:") && part.includes("Day 4:"), `both days are told (${part.length} chars)`);
+      assert.equal(pair.sim._pendingIntro.ledger.throughDay, 4, "…so the burn reaches the astral day");
+
+      // (b) THE MAX-SHAPE ASTRAL DAY, which is the floor assertion's own promise
+      // spent on the widest content the caps permit: fifteen lines of two hundred
+      // CLUSTERS is exactly `ledgerPerDay × ledgerChars`, and 21,000 code points.
+      // Written through log(), so `clip` is measured here too — a code-point clip
+      // would cut each line at 28 clusters and through the middle of the 29th.
+      const max = staged({ gate: 2, owed: 3, day: 5 });
+      for (let i = 0; i < P.CAPS.ledgerPerDay; i++) assert.equal(P.log(max.core, astral, 3), true, "…and kept whole");
+      assert.equal(
+        P.graphemes(max.player.ledger.lines[0][1]).length,
+        P.CAPS.ledgerChars,
+        "clip counts clusters: a line at the cap loses nothing",
+      );
+      const whole = max.sim.composePrefix(null);
+      assert.ok(whole.includes("Day 3:"), "a maximum-shape astral day is told");
+      assert.equal(
+        whole.split(family).length - 1,
+        P.CAPS.ledgerPerDay * P.CAPS.ledgerChars,
+        "…every cluster of every line of it",
+      );
+      assert.equal(max.sim._pendingIntro.ledger.throughDay, 3, "and the burn covers it");
+    }
+
+    // ── THE COMPACTION RE-TELL: A TOLD DAY THAT BECAME A STUB ─────────────────
+    // A lost burn (§5) leaves the tell in history and the gate where it was, so
+    // the next compose says it again — and by then the buffer may have compacted
+    // the very days it is re-telling. The re-tell renders the STUB, which is
+    // bounded and content-preserving rather than a hole.
+    {
+      const at = staged({
+        gate: 0,
+        owed: 5,
+        day: 6,
+        lines: [
+          [1, "The first day."],
+          [2, "The second."],
+          [3, "The third."],
+          [4, "The fourth."],
+          [5, "The fifth."],
+        ],
+      });
+      const first = at.sim.composePrefix(null);
+      assert.ok(first.includes("The first day.") && first.includes("The fifth."), "the tell covers days 1 to 5");
+      // The send was accepted and the burn was lost — nothing is called here,
+      // which IS the lost flush. Then the day moves on and the buffer compacts.
+      assert.equal(P.log(at.core, "Something on day 6.", 6), true, "a later line compacts the buffer");
+      const again = at.sim.composePrefix(null);
+      assert.ok(!again.includes("The first day."), "day 1 is no longer a line");
+      assert.ok(/Day 1: 1 thing happened\./.test(again), `…it is a stub, and the re-tell renders it (${again})`);
+      assert.ok(again.includes("The fifth."), "…while the days still held in full are still told in full");
+      assert.equal(at.sim._pendingIntro.ledger.throughDay, 5, "and the re-tell still reaches the same day");
+    }
+
+    // ── TWO SENDERS, ONE WRAP-UP: BOTH ACCEPTED, THE SECOND BURN A NO-OP ──────
+    // Travel composes and awaits; Talk slips into the window and composes the
+    // same tell; the host accepts both, so the GM hears it twice in one history
+    // (§5, accepted). What must NOT happen is the second burn doing anything.
+    {
+      const at = staged({ gate: 1, owed: 4, day: 6, lines: [[3, "The day they both told."]] });
+      const travel = at.sim.composePrefix(null);
+      const pendTravel = at.sim._pendingIntro;
+      const talk = at.sim.composePrefix(null);
+      const pendTalk = at.sim._pendingIntro;
+      assert.equal(talk, travel, "the second compose selects the same days over the same live fields");
+      assert.notEqual(pendTalk, pendTravel, "…on its own pending object");
+      assert.equal(pendTalk.ledger.throughDay, pendTravel.ledger.throughDay, "…reaching the same day");
+      assert.equal(
+        P.flush(at.core, pendTravel.ledger.throughDay, pendTravel.ledger.notices),
+        true,
+        "the first burn goes through",
+      );
+      assert.equal(at.player.flushedDay, 3, "…and moves the gate");
+      assert.equal(
+        P.flush(at.core, pendTalk.ledger.throughDay, pendTalk.ledger.notices),
+        true,
+        "the second is accepted rather than refused",
+      );
+      assert.equal(at.player.flushedDay, 3, "…and changes nothing, which is what `max` is for");
+    }
+  } finally {
+    loadedPF.save.gate = null;
+    loadedPF.save.reset(); // the mutators self-dirty, and a dirty block arms a timer
+  }
+}
+
+// ═══ SLEEP, AND WHAT IT LEAVES BEHIND (0.12 slice 4) ════════════════════════
+// The verb sends nothing. It moves the clock and writes one number — the last day
+// that has fully elapsed — and the next turn the player sends for their own
+// reasons carries the wrap-up. The ruled staging variant is the simple one: ANY
+// completed sleep owes EVERY elapsed day, read after the advance, with no
+// crossing detection and no captured day-before.
+{
+  const P = loadedPF.player;
+  const E = loadedPF.economy;
+  let chats = 0;
+  const sleeper = ({ day = 4, clockMin = 21 * 60, home = "inn", zone = "inn" } = {}) => {
+    const w = world.build(7, "cozy-village", null);
+    const sim = new loadedPF.Sim(w);
+    sim.clockMin = clockMin;
+    sim.day = day;
+    sim.resolveSchedules();
+    const sent = [];
+    let dirty = 0;
+    const core = {
+      chatId: `chat-sleep-${++chats}`,
+      sim,
+      host: { chatMeta: {}, sendMessage: async (text) => (sent.push(text), true) },
+      hud: { toast() {}, refreshChips() {} },
+      markDirty() {
+        dirty++;
+      },
+    };
+    sim.teleport(zone, 3, 3);
+    sim.step(0, {});
+    if (home) P.setHome(core, home);
+    return { w, sim, core, sent, dirty: () => dirty };
+  };
+  const owedOf = (sim) => sim.intro?.ledgerOwed;
+
+  try {
+    // ── A COMPLETED SLEEP OWES EVERY DAY THAT IS OVER ─────────────────────────
+    {
+      const at = sleeper({ day: 4, clockMin: 21 * 60 });
+      const out = E.sleep(at.core, "dawn");
+      assert.equal(out.ok, true, "a bed and a daypart is a night's sleep");
+      assert.equal(at.sim.day, 5, "the target was behind the clock, so the day rolled");
+      assert.equal(at.sim.clockMin, loadedPF.DAYPART_STARTS.dawn, "…and landed on the daypart asked for");
+      assert.equal(owedOf(at.sim), 4, "and the day that ended is owed to the wrap-up");
+      assert.equal(out.owed, 4, "…which the verb says out loud");
+      assert.deepEqual(at.sent, [], "SENDS NOTHING — no turn, no narration, no await");
+      assert.ok(at.dirty() >= 1, "and flags the save, because a marker nobody wrote down is no marker");
+    }
+
+    // ── THE RULED CASE: A SLEEP THAT CROSSES NOTHING STILL STAGES ─────────────
+    // 00:30, four hours after a session ran through midnight. The clock does not
+    // move a day and the sleep does not cross one, and yesterday is still over —
+    // which is the whole of why the ruling is `day - 1` and not a crossing test.
+    {
+      const at = sleeper({ day: 6, clockMin: 30 });
+      assert.equal(E.sleep(at.core, "dawn").ok, true, "a half-hour lie-down is a completed sleep");
+      assert.equal(at.sim.day, 6, "the day did not move");
+      assert.equal(at.sim.clockMin, loadedPF.DAYPART_STARTS.dawn, "…the clock did");
+      assert.equal(owedOf(at.sim), 5, "and day 5 is owed — the ruled variant, with no crossing to detect");
+    }
+
+    // ── THE MARKER ONLY EVER CLIMBS ──────────────────────────────────────────
+    // Sleeps accumulate, and a rewind can take the clock backwards under a marker
+    // that was already promised. `max` is what stops a later sleep un-owing days.
+    {
+      const at = sleeper({ day: 4, clockMin: 21 * 60 });
+      at.sim.intro = { world: false, zones: {}, npcs: {}, ledgerOwed: 9 };
+      E.sleep(at.core, "dawn");
+      assert.equal(owedOf(at.sim), 9, "a smaller day never lowers the marker");
+      at.sim.day = 12;
+      E.sleep(at.core, "night");
+      assert.equal(owedOf(at.sim), 11, "…and a larger one raises it");
+    }
+
+    // ── WAIT NEVER STAGES, WHICH IS THE OTHER HALF OF THE RULE ───────────────
+    // A rest in the open is not a wrap-up. The homeless player is an accepted
+    // never-flush class (§5), and this is the line that makes it true.
+    {
+      const at = sleeper({ day: 4, clockMin: 21 * 60, home: null, zone: "village" });
+      assert.equal(at.sim.waitUntil("dawn"), true, "the bedless player can still wait the night out");
+      assert.equal(at.sim.day, 5, "…and the clock runs exactly as far");
+      assert.equal(owedOf(at.sim), undefined, "but nothing is owed, because nobody sat down and looked back");
+      const refused = E.sleep(at.core, "dawn");
+      assert.deepEqual(
+        [refused.ok, refused.reason],
+        [false, "no-bed"],
+        "and pressing Sleep without a bed refuses with its own value",
+      );
+      assert.equal(owedOf(at.sim), undefined, "…still staging nothing");
+    }
+
+    // ── THE BED IS A ROOM YOU HOLD, and the refusals around it ────────────────
+    {
+      const away = sleeper({ home: "inn", zone: "village" });
+      assert.equal(E.sleepOffer(away.core).reason, "no-bed", "a berth you are not standing in is not a bed");
+
+      const talking = sleeper();
+      talking.sim.mode = "dialogue";
+      const mid = E.sleep(talking.core, "dawn");
+      assert.deepEqual([mid.ok, mid.reason], [false, "wrong-mode"], "you cannot sleep through a conversation");
+      assert.equal(E.sleepOffer(talking.core).bed, true, "…and the button still says there is a bed here");
+
+      const streaming = sleeper();
+      streaming.core.host.isStreaming = true;
+      const busy = E.sleep(streaming.core, "dawn");
+      assert.deepEqual([busy.ok, busy.reason], [false, "streaming"], "nor through narration nobody has read yet");
+
+      const gated = sleeper();
+      loadedPF.save.gate = { chatId: gated.core.chatId, state: "generating" };
+      const held = E.sleep(gated.core, "dawn");
+      assert.deepEqual([held.ok, held.reason], [false, "gate-held"], "nor in a world still being written");
+      loadedPF.save.gate = null;
+
+      // …AND A TARGET THAT IS NOT A DAYPART. Driven through the inherited names
+      // too: `PF.DAYPART_STARTS["constructor"]` is a FUNCTION on a bare read, and
+      // waitUntil's own-property guard is what stops it becoming a clock.
+      const odd = sleeper();
+      for (const target of ["elevenses", "constructor", "toString", "__proto__", ""]) {
+        const out = E.sleep(odd.core, target);
+        assert.deepEqual([out.ok, out.reason], [false, "unknown-target"], `"${target}" is not a time of day`);
+      }
+      assert.equal(odd.sim.clockMin, 21 * 60, "…and not one minute was spent on any of them");
+      assert.equal(owedOf(odd.sim), undefined, "…nor anything staged");
+
+      // …AND EVERY REFUSAL HAS THE SAME SHAPE, which is `fish()`'s beside it: a
+      // refusal is the NOTHING-HAPPENED shape, all the way down. The reasons are
+      // distinct on purpose and the numbers must not be, or a caller reading
+      // `result.day` learns which KIND of refusal it got by accident — and reads a
+      // live clock off a call that moved nothing.
+      const nothing = { ok: false, day: 0, clockMin: 0, owed: 0 };
+      assert.deepEqual(E.sleep(odd.core, "elevenses"), { ...nothing, reason: "unknown-target" }, "a bad target");
+      assert.deepEqual(E.sleep(away.core, "dawn"), { ...nothing, reason: "no-bed" }, "…and a refused offer");
+      assert.deepEqual(E.sleep(talking.core, "dawn"), { ...nothing, reason: "wrong-mode" }, "…and a wrong moment");
+    }
+
+    // ── THE ARC'S HEADLINE, END TO END ────────────────────────────────────────
+    // The maintainer's ruled scenario, played out: fish through midnight, walk
+    // back to the room, bed down at 00:30, and the NEXT accepted turn tells the
+    // GM about the night before — INCLUDING the fish landed in the window that
+    // crossed. Every part of that is a separate mechanism (the per-day session
+    // split, the `day - 1` staging, the compose window, the burn), and this is
+    // the only case that asks whether they add up to the sentence the ruling
+    // promised.
+    {
+      const at = sleeper({ day: 5, clockMin: 23 * 60 + 45, home: "inn", zone: "village" });
+      at.sim.teleport("village", 32, 23);
+      at.sim.step(0, {});
+      assert.equal(
+        at.sim.nearFeature?.id,
+        "legacy:pond",
+        "the player is at the pond bank, a quarter hour before midnight",
+      );
+      P.grant(at.core, { t: "rod", k: "crude" }, 1);
+      P.equip(at.core, "fishing", "tool", { t: "rod", k: "crude" });
+      P.award(at.core, { xp: 5 * 4 * 3, verb: "fishing" }); // level 4, so the window yields
+
+      const crossing = E.fish(at.core, null);
+      assert.equal(at.sim.day, 6, "the cast crossed midnight");
+      assert.deepEqual(crossing.days, [5], "…and filed itself under the day it BEGAN in");
+      assert.equal(crossing.caught.length, 1, "…having landed something");
+      const fish = E.describe(at.w, crossing.caught[0]);
+      E.fish(at.core, null);
+      E.fish(at.core, null);
+      assert.equal(at.sim.clockMin, 30, "two more casts put the clock at 00:30");
+
+      // …the walk back to the room, and the bed.
+      at.sim.teleport("inn", 3, 3);
+      at.sim.step(0, {});
+      assert.equal(E.sleep(at.core, "dawn").ok, true, "and the 00:30 sleeper sleeps");
+      assert.equal(at.sim.day, 6, "the sleep crossed no midnight of its own");
+      assert.equal(owedOf(at.sim), 5, "…and day 5 is what it owes");
+
+      // THE NEXT TURN THE PLAYER SENDS FOR THEIR OWN REASONS.
+      const prefix = at.sim.composePrefix(null);
+      const part = prefix.slice(prefix.indexOf("[Wrap-up"));
+      assert.ok(part.includes("Day 5: Fished"), `the wrap-up tells day 5 (${part})`);
+      assert.ok(part.includes(fish), `…INCLUDING the fish the crossing window landed (${fish})`);
+      assert.ok(!part.includes("Day 6"), "and says nothing about the day the player is still living");
+      assert.equal(at.sim._pendingIntro.ledger.throughDay, 5, "the burn this turn would take reaches day 5");
+      assert.equal(
+        P.flush(at.core, at.sim._pendingIntro.ledger.throughDay, at.sim._pendingIntro.ledger.notices),
+        true,
+        "…and is a legal one",
+      );
+      assert.equal(P.get(at.core).flushedDay, 5, "so the night is told exactly once");
+      assert.equal(at.sim.composePrefix(null), at.sim.header(), "and the turn after it has nothing to add");
+    }
+  } finally {
+    loadedPF.save.gate = null;
+    loadedPF.save.reset();
+  }
+}
+
+// ── THE TRAVEL SENDER CAPTURES ITS OWN TURN (0.12 slice 4) ───────────────────
+// The burn hangs off an await, and there are two wrong ways to reach it that
+// both look right. Re-reading `sim._pendingIntro` after the send finds the null
+// `commitIntro` just wrote and burns NOTHING — for the rest of the save, so the
+// wrap-up is re-told on every single turn. Reading the stash fresh finds whatever
+// a sender that interleaved composed instead. The reference is captured before
+// the await and survives the wholesale null, which is the only version that burns
+// the turn that was actually sent.
+//
+// Driven through the real PF.spatial.travel, because that is where the capture
+// lives. The Talk sender is the same shape in 90-element, which this harness
+// cannot load (it wants a custom-element registry and a page).
+{
+  const P = loadedPF.player;
+  const prevGetSpatial = loadedPF.api.getSpatial;
+  loadedPF.api.getSpatial = async () => ({
+    definition: { revision: 3 },
+    currentLocationId: "root",
+    breadcrumb: [{ name: "root" }],
+    destinations: [{ id: "bar", name: "The Bar" }],
+  });
+  const sent = [];
+  const w = world.build(77, "cozy-village", null);
+  const sim = new loadedPF.Sim(w);
+  sim.day = 6;
+  sim.intro = { world: false, zones: {}, npcs: {}, ledgerOwed: 5 };
+  const core = {
+    chatId: "chat-travel-burn",
+    sim,
+    host: { packageId: "pixelforge", chatMeta: {}, sendMessage: async (text) => (sent.push(text), true) },
+    hud: { toast() {}, refreshChips() {} },
+    markDirty() {},
+  };
+  try {
+    P.get(core).ledger.lines.push([4, "Fished the millpond — 12 casts: carp x2."]);
+    P.notice(P.get(core), "A task you had taken on has no one left to hand it back to, so you have let it go.", 4);
+    loadedPF.spatial.reset();
+    await loadedPF.spatial.refresh(core);
+    await loadedPF.spatial.travel(core, { id: "bar", name: "The Bar" });
+    assert.equal(sent.length, 1, "the journey sent its turn");
+    assert.ok(sent[0].includes("[Wrap-up — Day 4: Fished the millpond"), `…carrying the wrap-up (${sent[0]})`);
+    assert.ok(sent[0].endsWith("We travel to The Bar."), "…before the player's own action text, at the end");
+    assert.equal(P.get(core).flushedDay, 4, "and the ACCEPTED turn burned it");
+    assert.equal(P.get(core).ledger.notices[0][2], 1, "…band and all");
+    assert.equal(sim._pendingIntro, null, "commitIntro nulled the stash, which is why the capture is closure-local");
+
+    // AND A REFUSED TURN BURNS NOTHING. Same journey, same tell, `false` back
+    // from the host: the days stay owed and the notice stays untold.
+    const refused = new loadedPF.Sim(w);
+    refused.day = 6;
+    refused.intro = { world: false, zones: {}, npcs: {}, ledgerOwed: 5 };
+    core.sim = refused;
+    core.chatId = "chat-travel-refused";
+    core.host.sendMessage = async () => false;
+    P.get(core).ledger.lines.push([4, "Fished the millpond — 12 casts: carp x2."]);
+    P.notice(P.get(core), "A task you had taken on has no one left to hand it back to, so you have let it go.", 4);
+    loadedPF.spatial.pending = null;
+    await loadedPF.spatial.travel(core, { id: "bar", name: "The Bar" });
+    assert.equal(P.get(core).flushedDay, 0, "a refused turn is not a telling");
+    assert.equal(P.get(core).ledger.notices[0][2], undefined, "…and its band is still owed to somebody");
+  } finally {
+    loadedPF.api.getSpatial = prevGetSpatial;
+    loadedPF.spatial.reset();
+    loadedPF.save.reset();
+  }
+}
+
 // ── A DOM the size of the two surfaces that need one ──────────────────────────
 // Not a browser: exactly what PF.el touches (createElement, style, text,
 // attributes, listeners, children) plus fire(), so a click can be driven. Enough
@@ -12921,8 +16437,55 @@ class FakeNode {
     this.children = nodes;
   }
   remove() {}
+  // ── THE NAMED SHIM EXTENSION (plan §6) ─────────────────────────────────────
+  // Three additions, all of them for ONE guard: `_hostOwnsKeyboard`
+  // (90-element), which is what stands between the `C` hotkey and a player
+  // typing into the host's message box. Without them the sheet's guard lanes
+  // migrate silently to browser-only, which is where a guard goes to stop being
+  // watched.
+  //
+  // (i) A node can have a SIZE. The guard measures a modal before believing in
+  // it, because the toast container is a permanently-mounted zero-size panel and
+  // the first live playtest showed a broad test misfiring on it. `_rect` is what
+  // a case stages; nothing in the package reads it.
+  getBoundingClientRect() {
+    const rect = this._rect ?? {};
+    return { width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, ...rect };
+  }
+  // (ii) …and a node can be asked whether the focused element is INSIDE it,
+  // which is the difference between the player typing into a host input and the
+  // player having just clicked one of our own buttons.
+  contains(node) {
+    if (!node) return false;
+    if (node === this) return true;
+    return this.children.some((child) => (child.contains ? child.contains(node) : false));
+  }
 }
-globalThis.document = { createElement: (tag) => new FakeNode(tag) };
+/** The staged-list matcher: exactly the `[attr="value"]` form the one shipped
+ *  selector uses, and no more. A staged node that carries `role` but not
+ *  `aria-modal` is correctly NOT found, which is the half a "return everything
+ *  staged" shim would quietly get wrong. */
+const stagedMatches = (node, selector) => {
+  const parts = String(selector).match(/\[[^\]]+\]/g) ?? [];
+  if (!parts.length) return false;
+  return parts.every((part) => {
+    const pair = part.match(/^\[([^=\]]+)="([^"]*)"\]$/);
+    return !!pair && node.getAttribute(pair[1]) === pair[2];
+  });
+};
+// (iii) The document-level half: focus is a document fact rather than a node
+// one, so `activeElement` is settable, and `querySelectorAll` reads a staged
+// list a case puts in front of the guard.
+globalThis.document = {
+  createElement: (tag) => new FakeNode(tag),
+  body: new FakeNode("body"),
+  documentElement: new FakeNode("html"),
+  activeElement: null,
+  _staged: [],
+  querySelectorAll(selector) {
+    return this._staged.filter((node) => stagedMatches(node, selector));
+  },
+};
 const walkNodes = (node, out = []) => {
   out.push(node);
   for (const child of node.children) walkNodes(child, out);
@@ -13063,6 +16626,725 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     globalThis.clearTimeout = realClearTimeout;
     loadedPF.save.reset();
     loadedPF.spatial.reset();
+  }
+}
+
+// ── THE ACTION STACK'S CENSUS, COUNTED RATHER THAN ASSUMED ───────────────────
+// §2.3's honest recount. The old "these are mutually rare" premise is STRUCK:
+// Talk is up for the whole of walk mode, keepers wander with no zone
+// restriction, and an inn beside a pond puts Talk, Wait, Keyboard, Travel, Fish,
+// Berth and Buy-Rod on screen at once by construction. Seven for slice 3; slice
+// 4 adds Sleep and the worst case is EIGHT, which is exactly why this is pinned:
+// adding a button means recounting here, deliberately, and the recount is what
+// the last change to this stack actually failed on.
+//
+// A DISPLAY-STATE pin over the real Hud on the shim, and not a layout one. The
+// shim has no layout engine and this case makes no claim about pixels.
+{
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = () => 0;
+  globalThis.clearTimeout = () => {};
+  loadedPF.save.reset();
+  loadedPF.spatial.reset();
+  try {
+    const P = loadedPF.player;
+    const w = world.build(7, "cozy-village", null);
+    const sim = new loadedPF.Sim(w);
+    const core = {
+      chatId: "chat-census",
+      sim,
+      interact() {},
+      setMode() {},
+      resume() {},
+      markDirty() {},
+    };
+    core.hud = new loadedPF.Hud(new FakeNode("div"), core);
+    const hud = core.hud;
+    const keeper = w.zones.inn.npcs.find((npc) => npc.lodging === "inn");
+    assert.ok(keeper, "the fixture has somebody who lets rooms");
+
+    // THE ENUMERATION. Named, so a failure says WHICH button appeared, and
+    // cross-checked against the stack's real children so a button added without
+    // touching this list fails here rather than passing unnoticed.
+    const stack = {
+      Talk: hud.talkBtn,
+      Berth: hud.berthBtn,
+      "Buy-Rod": hud.buyRodBtn,
+      Travel: hud.travelBtn,
+      Fish: hud.fishBtn,
+      Sleep: hud.sleepBtn,
+      Wait: hud.waitBtn,
+      Keyboard: hud.keyboardBtn,
+      Resume: hud.resumeBtn,
+    };
+    const buttons = hud.actions.children.filter((node) => node.tagName === "BUTTON");
+    assert.equal(
+      buttons.length,
+      Object.keys(stack).length,
+      `the census covers every button in the stack (${buttons.length})`,
+    );
+    for (const node of buttons)
+      assert.ok(
+        Object.values(stack).includes(node),
+        `every button in the stack is named in the census (${node.textContent})`,
+      );
+
+    // BEFORE THE FIRST UPDATE, which is a claim only this line makes: a
+    // display-gated button that ships visible is on screen for every frame
+    // before update() runs, and for the whole of a mount that never reaches one.
+    for (const name of ["Berth", "Buy-Rod", "Fish", "Sleep"])
+      assert.equal(stack[name].style.display, "none", `${name} boots HIDDEN, before anything has decided`);
+
+    const census = () => {
+      hud.update();
+      return Object.entries(stack)
+        .filter(([, node]) => node.style.display !== "none")
+        .map(([name]) => name)
+        .sort();
+    };
+    const standAtPond = () => {
+      sim.teleport("village", 32, 23);
+      sim.step(0, {});
+      assert.equal(sim.nearFeature?.id, "legacy:pond", "the fixture stands at the pond bank");
+    };
+
+    P.award(core, { money: 100 });
+
+    // (1) UNDER THE GATE: nothing at all, including the topbar.
+    loadedPF.save.gate = { chatId: core.chatId, state: "generating" };
+    assert.deepEqual(census(), [], "a world nobody has entered offers no actions");
+    assert.equal(hud.topbar.style.display, "none", "…and no chips either");
+    loadedPF.save.gate = null;
+
+    // (2) MID-CONVERSATION: the one guaranteed way back out, and nothing else.
+    sim.mode = "dialogue";
+    assert.deepEqual(census(), ["Resume"], "dialogue keeps exactly the exit");
+    sim.mode = "walk";
+
+    // (3) WALKING, NOWHERE IN PARTICULAR: the three that are never proximity-gated.
+    sim.teleport("village", 21, 17);
+    sim.step(0, {});
+    sim.nearNpc = null;
+    loadedPF.spatial.available = false;
+    assert.deepEqual(census(), ["Keyboard", "Talk", "Wait"], "mid-square with nobody about: three");
+
+    // (4) …WITH SOMEWHERE TO TRAVEL TO.
+    loadedPF.spatial.available = true;
+    assert.deepEqual(census(), ["Keyboard", "Talk", "Travel", "Wait"], "a known destination adds one");
+
+    // (5) …AND A KEEPER WITHIN REACH, who sells two different things.
+    sim.nearNpc = keeper;
+    assert.deepEqual(census(), ["Berth", "Buy-Rod", "Keyboard", "Talk", "Travel", "Wait"], "the keeper adds two");
+
+    // (6) STANDING AT THE WATER with the keeper beside you, which an inn built by
+    // a pond makes ordinary rather than exotic. Seven, and no bed in sight.
+    standAtPond();
+    sim.nearNpc = keeper;
+    assert.deepEqual(
+      census(),
+      ["Berth", "Buy-Rod", "Fish", "Keyboard", "Talk", "Travel", "Wait"],
+      "seven, and Sleep is not among them — the player has nowhere to sleep",
+    );
+    assert.equal(hud.fishBtn.style.opacity, "0.45", "…and Fish is offered dimmed to a rodless player, not hidden");
+    assert.ok(hud.fishBtn.textContent.includes(w.zones.village.features[0].name), "…naming the water it is about");
+
+    // (7) THE WORST CASE, WHICH IS EIGHT. The bed is the eighth, and it takes a
+    // berth held in the zone the player is standing in — staged here rather than
+    // walked to, because what the census is about is what the STACK does when all
+    // eight co-occur, not which brief produces a bedroom with a pond at the door.
+    P.setHome(core, "village");
+    assert.deepEqual(
+      census(),
+      ["Berth", "Buy-Rod", "Fish", "Keyboard", "Sleep", "Talk", "Travel", "Wait"],
+      "the full slice-4 stack is EIGHT — recount this when slice 5 adds anything",
+    );
+    assert.equal(hud.sleepBtn.style.opacity, "1", "…and the bed is offered, not dimmed");
+    // …AND IT IS THE BED THAT SHOWS IT, not the room: step out of the zone the
+    // berth is in and the button goes with it.
+    sim.teleport("inn", 3, 3);
+    sim.step(0, {});
+    assert.ok(!census().includes("Sleep"), "a bed you are not standing in offers nothing");
+    standAtPond();
+    sim.nearNpc = keeper;
+    assert.ok(census().includes("Sleep"), "and back in the zone it is back");
+
+    // (8) THE LADDER TOPS OUT AND ITS BUTTON GOES, which is the one stated
+    // divergence from the berth's never-vanish rule.
+    P.grant(core, { t: "rod", k: "decent" }, 1);
+    assert.deepEqual(
+      census(),
+      ["Berth", "Fish", "Keyboard", "Sleep", "Talk", "Travel", "Wait"],
+      "a decent rod is the end of that ladder, so the button leaves the stack",
+    );
+    assert.equal(hud.fishBtn.style.opacity, "1", "…while Fish stops being dimmed, having a rod behind it now");
+
+    // AND WALKING AWAY TAKES THE PROXIMITY ONES WITH IT — including any menu
+    // left standing open over water nobody is at.
+    hud.toggleFish();
+    assert.equal(hud.fishMenu.style.display, "flex", "the session menu opens at the bank");
+    assert.ok(
+      hud.fishMenu.children.some((node) => node.textContent === "Cast once"),
+      "…offering a single cast",
+    );
+    assert.equal(
+      hud.fishMenu.children.filter((node) => /^Fish until /.test(node.textContent)).length,
+      4,
+      "…and a session for each of the four dayparts, mirroring the Wait menu",
+    );
+    assert.ok(
+      hud.fishMenu.children.some((node) => /No bait/.test(node.textContent)),
+      "…with a bait line saying what the session would spend",
+    );
+    // …and the bed's menu opens the same way, with the Wait menu's own four.
+    hud.toggleSleep();
+    assert.equal(hud.sleepMenu.style.display, "flex", "the bed's menu opens where the bed is");
+    assert.equal(
+      hud.sleepMenu.children.filter((node) => /^Sleep until /.test(node.textContent)).length,
+      4,
+      "…offering the same four dayparts the Wait menu does",
+    );
+    sim.teleport("village", 21, 17);
+    sim.step(0, {});
+    sim.nearNpc = null;
+    // FIVE, not four: the bed is a ROOM and not a spot, so walking off the bank
+    // and away from the keeper leaves it exactly where it was.
+    assert.deepEqual(census(), ["Keyboard", "Sleep", "Talk", "Travel", "Wait"], "walking away puts the stack to five");
+    assert.equal(hud.fishMenu.style.display, "none", "…and closes the menu the water left open");
+    // LEAVING THE ROOM is what takes the bed, and the menu goes with it.
+    sim.teleport("inn", 3, 3);
+    sim.step(0, {});
+    sim.nearNpc = null;
+    assert.ok(!census().includes("Sleep"), "a room that is not yours has no bed in it for you");
+    assert.equal(hud.sleepMenu.style.display, "none", "…and the menu it left open is closed");
+
+    // (9) SLICE 5's PHASE: the two panels arrive and the STACK DOES NOT MOVE.
+    // Their openers are topbar chips beside the loc/clock/purse, not buttons in
+    // the action column — the column is the thumb zone and it stays the verbs'.
+    // The stack census above is the assertion that this is true; these are the
+    // assertions that say WHERE they went instead.
+    const openers = { Journal: hud.journalChip, Sheet: hud.sheetChip };
+    for (const [name, chip] of Object.entries(openers)) {
+      assert.ok(!hud.actions.children.includes(chip), `the ${name} opener is not in the action stack`);
+      assert.ok(hud.topbar.children.includes(chip), `…it is a chip in the topbar`);
+      // GLYPH-WIDTH DISCIPLINE (plan §2.8). The topbar has no width machinery —
+      // centred flex, nowrap chips, unbounded location prose, no overflow
+      // handling — so an opener that grew a word would be the thing that finally
+      // wrapped it, and the location toast is pinned 42px under a SINGLE row.
+      assert.equal(chip.tagName, "BUTTON", `the ${name} opener is a button, not a span: it has to be pressable`);
+      assert.ok(chip.getAttribute("aria-label"), `…and it says what it is, because a glyph is not a label`);
+      assert.equal([...String(chip.textContent)].length, 1, `…and it is ONE glyph wide (${chip.textContent})`);
+      assert.ok(/white-space:nowrap/.test(chip.style.cssText), `…which nothing is allowed to break onto a second line`);
+    }
+    assert.ok(!/flex-wrap/.test(hud.topbar.style.cssText), "and the bar itself never wraps");
+    assert.ok(/top:42px/.test(hud.locToastEl.style.cssText), "…which is what the location toast is pinned under");
+
+    // AND THEY HAVE THEIR OWN DISPLAY TOGGLE, which is the whole reason they are
+    // not free-riding on the topbar: the gate hides the bar, but DIALOGUE MODE
+    // does not, and a journal opener over a conversation opens a panel the
+    // player cannot walk out of.
+    sim.mode = "walk";
+    hud.update();
+    assert.equal(hud.journalChip.style.display, "", "walking, the openers are up");
+    sim.mode = "dialogue";
+    hud.update();
+    assert.equal(hud.topbar.style.display, "", "the topbar STAYS UP mid-conversation");
+    assert.equal(hud.journalChip.style.display, "none", "…and the openers do not, which is what the toggle is for");
+    assert.equal(hud.sheetChip.style.display, "none", "…both of them");
+    sim.mode = "walk";
+    hud.update();
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    loadedPF.save.gate = null;
+    loadedPF.save.reset();
+    loadedPF.spatial.reset();
+  }
+}
+
+// ═══ THE TWO PANELS (0.12 slice 5) ══════════════════════════════════════════
+// The journal and the character sheet, over the real Hud on the DOM shim. Two
+// surfaces with two different memos, and the memo is the whole engineering: a
+// panel that rebuilt every frame would write DOM sixty times a second, and one
+// that built at open would go stale the moment anything under it moved.
+{
+  const P = loadedPF.player;
+  const E = loadedPF.economy;
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = () => 0;
+  globalThis.clearTimeout = () => {};
+  // The asset loader is touched by two paths below (`_rebuild` and
+  // `onMainProps` both call load(), and a core with no packageId puts it in
+  // "failed" for the session), so its state is restored rather than left where
+  // these cases dropped it.
+  const assetsWas = {
+    status: loadedPF.assets.status,
+    noPackage: loadedPF.assets._noPackage,
+    failedAt: loadedPF.assets._failedAt,
+    requestedTheme: loadedPF.assets._requestedTheme,
+  };
+  loadedPF.save.reset();
+  loadedPF.spatial.reset();
+  let mounts = 0;
+  const mount = () => {
+    const w = world.build(7, "cozy-village", null);
+    const sim = new loadedPF.Sim(w);
+    const core = {
+      chatId: `chat-panels-${++mounts}`,
+      sim,
+      host: { chatMeta: {} },
+      interact() {},
+      setMode() {},
+      resume() {},
+      markDirty() {},
+    };
+    core.hud = new loadedPF.Hud(new FakeNode("div"), core);
+    return { w, sim, core, hud: core.hud, player: P.get(core) };
+  };
+  /** Every sentence a panel actually put on screen, in the order it drew them. */
+  const textOf = (node) =>
+    walkNodes(node)
+      .map((child) => String(child.textContent))
+      .filter(Boolean);
+  try {
+    // ── THE JOURNAL IS ONE LIST, AND THE BAND IS NOT IN IT ────────────────────
+    // Days newest first, lines inside a day in the order they were logged, and
+    // the notice band OUTSIDE the grouping entirely — it reads a different array
+    // and its rows answer to a told flag rather than to a day.
+    {
+      const at = mount();
+      const hud = at.hud;
+      assert.equal(hud.journalChip.style.display, "none", "the opener boots HIDDEN, before anything has decided");
+      assert.equal(hud.journalEl.style.display, "none", "…and the panel behind it is not up either");
+
+      at.player.ledger.lines.push(
+        [2, "Walked to the mill."],
+        [4, "Day 4: 12 things happened.", 12],
+        [2, "Slept badly."],
+        [5, "Fished the pond — 3 casts: carp x1."],
+      );
+      P.notice(at.player, "Something was set aside.", 3);
+      P.notice(at.player, "Something came back.", 5);
+      at.player.ledger.notices[0][2] = 1; // the older one has already been told
+
+      hud.update();
+      assert.equal(hud.journalChip.style.display, "", "walking, the opener is on screen");
+      hud.toggleJournal();
+      assert.equal(hud.journalEl.style.display, "flex", "and pressing it opens the panel");
+
+      const shown = textOf(hud.journalBody);
+      const where = (text) => shown.indexOf(text);
+      // NEWEST DAY FIRST, from each line's OWN day and not from the array order
+      // (day 2's lines were pushed first and last).
+      assert.ok(where("Day 5") >= 0 && where("Day 4") >= 0 && where("Day 2") >= 0, `three days grouped (${shown})`);
+      assert.ok(where("Day 5") < where("Day 4"), "day 5 is above day 4");
+      assert.ok(where("Day 4") < where("Day 2"), "…and day 4 above day 2");
+      assert.ok(where("Walked to the mill.") < where("Slept badly."), "inside a day, the order it was logged in");
+      // A STUB RENDERS AS ITS STUB TEXT — the sentence the ledger holds is the
+      // sentence the GM was given, and the panel does not tell a different story.
+      assert.ok(where("Day 4: 12 things happened.") > where("Day 4"), "the stub renders as its own text, in its day");
+
+      // THE BAND, and the structural claim about it: it reads `notices[]`, so
+      // neither sentence in it is anywhere in `lines[]`.
+      assert.ok(
+        at.player.ledger.lines.every((line) => !/Something (was set aside|came back)/.test(line[1])),
+        "the band's sentences are in NO ledger line — this is a second array, not a filtered one",
+      );
+      assert.ok(where("Day 5 — Something came back.") >= 0, "an UNTOLD notice is in the band");
+      assert.ok(where("Day 3 — Something was set aside.") >= 0, "…and so is a TOLD one: the band is history");
+      assert.ok(where("Day 5 — Something came back.") < where("Day 5"), "the band sits OUTSIDE the day grouping");
+      assert.equal(where("Day 3"), -1, "…and a notice's own day mints no day group of its own");
+    }
+
+    // ── THE JOURNAL'S MEMO: TWO ARRAYS AND TWO LENGTHS ────────────────────────
+    {
+      const at = mount();
+      const hud = at.hud;
+      at.player.ledger.lines.push([3, "Bought a rod."]);
+      hud.update();
+      hud.toggleJournal();
+      const drawn = hud.journalBody.children[0];
+      hud.update();
+      assert.equal(hud.journalBody.children[0], drawn, "an idle frame writes no DOM at all");
+
+      // A REPLACEMENT. log() appends and then `_compactLedger` rebuilds the whole
+      // array, so the identity half of the memo is what catches an ordinary line.
+      const wasLines = at.player.ledger.lines;
+      assert.equal(P.log(at.core, "Fished the pond.", 3), true, "a line is logged");
+      assert.notEqual(at.player.ledger.lines, wasLines, "…and compaction handed back a NEW array");
+      hud.update();
+      assert.notEqual(hud.journalBody.children[0], drawn, "so the panel rebuilt");
+      assert.ok(textOf(hud.journalBody).includes("Fished the pond."), "…with the new line in it");
+
+      // AN APPEND THAT KEPT ITS ARRAY. notice() pushes onto the band and hands
+      // the same array back while it is under the cap, so the LENGTH half of the
+      // memo is the only thing that can see this one. (The FIRST notice mints the
+      // band — a block with nothing to explain carries no `notices` key at all —
+      // so the identity-preserving case is the second.)
+      P.notice(at.player, "Something was set aside.", 2);
+      hud.update();
+      const rebuilt = hud.journalBody.children[0];
+      const wasBand = at.player.ledger.notices;
+      P.notice(at.player, "A third thing happened to the world.", 6);
+      assert.equal(at.player.ledger.notices, wasBand, "the append kept the array it pushed onto");
+      hud.update();
+      assert.notEqual(hud.journalBody.children[0], rebuilt, "the length moved, so the panel rebuilt anyway");
+      assert.ok(
+        textOf(hud.journalBody).includes("Day 6 — A third thing happened to the world."),
+        "…and the band has it",
+      );
+
+      // AND A REBUILD UNDER THE PANEL — a rewind, a swipe, a checkpoint load —
+      // replaces `core.sim` wholesale, which replaces both arrays with rows read
+      // back off the wire. The panel is looking at the OLD block until it is not.
+      const holding = hud.journalBody.children[0];
+      const row = JSON.parse(JSON.stringify(loadedPF.save.snapshot(at.core)));
+      loadedPF.save._rebuild(at.core, row);
+      assert.notEqual(at.core.sim, at.sim, "the rebuild really did replace the sim under the panel");
+      assert.notEqual(P.get(at.core).ledger.lines, wasLines, "…and the arrays with it");
+      hud.update();
+      assert.notEqual(hud.journalBody.children[0], holding, "so the panel is drawn from the block that is live now");
+    }
+
+    // ── THE SHEET IS A LIVE VALUE KEY, NOT A SNAPSHOT ─────────────────────────
+    // The player block carries no identity signal — every mutator mutates in
+    // place — so the sheet watches VALUES. Each case below is one value that has
+    // to be in the key, tested on its own, because a single "it re-renders" case
+    // passes with most of the key deleted.
+    {
+      const at = mount();
+      const hud = at.hud;
+      hud.update();
+      hud.toggleSheet();
+      assert.equal(hud.sheetEl.style.display, "flex", "the sheet opens");
+      assert.ok(textOf(hud.sheetStats).includes("Nothing practised yet"), "…on a player who has done nothing yet");
+
+      const idle = hud.sheetStats.children[0];
+      hud.update();
+      assert.equal(hud.sheetStats.children[0], idle, "an idle frame writes no DOM");
+
+      // XP PAID WHILE THE SHEET IS OPEN.
+      P.award(at.core, { xp: 4, verb: "fishing" });
+      hud.update();
+      assert.notEqual(hud.sheetStats.children[0], idle, "an award under an open sheet re-renders it");
+      const skills = textOf(hud.sheetStats);
+      assert.ok(skills.includes("Fishing"), "the skill is named in this theme's own word for it");
+      assert.ok(
+        skills.includes(`Level 1 — ${P.xpPerLevel(1) - 4} xp to go`),
+        `…with the level and what is left of it (${skills})`,
+      );
+
+      // A BARE HOSTILE FLIP: `d` does not move, `t` does not move, and the sheet
+      // still has to say so. The rung counts alone would miss it entirely.
+      P.bump(at.core, "village", "Rook", { t: 1 });
+      hud.update();
+      const known = hud.sheetStats.children[0];
+      assert.ok(!textOf(hud.sheetStats).includes("Hostile"), "one acquaintance, nobody hostile");
+      P.bump(at.core, "village", "Rook", { h: 1, t: 0 });
+      assert.equal(P.get(at.core).rel.village.Rook.d, 0, "the ladder did not move");
+      hud.update();
+      assert.notEqual(hud.sheetStats.children[0], known, "the hostile flag re-rendered the sheet on its own");
+      assert.ok(textOf(hud.sheetStats).includes("Hostile"), "…and the sheet flags them");
+
+      // EQUIPMENT, by the pair's VALUES: the equip writes a fresh array, the
+      // unequip `delete`s the slot, and both have to move the key. The rod is
+      // granted and DRAWN first, on its own frame — otherwise the bag's count
+      // moving would carry the equip's re-render and this case would pass with
+      // the equipped pairs missing from the key entirely.
+      P.grant(at.core, { t: "rod", k: "crude" }, 1);
+      hud.update();
+      const bare = hud.sheetStats.children[0];
+      P.equip(at.core, "fishing", "tool", { t: "rod", k: "crude" });
+      hud.update();
+      assert.notEqual(hud.sheetStats.children[0], bare, "equipping re-renders");
+      assert.ok(
+        textOf(hud.sheetStats).includes(E.describe(at.w, { t: "rod", k: "crude" })),
+        "…naming the rod the way every other surface names it",
+      );
+      assert.ok(textOf(hud.sheetStats).includes("Fishing rod"), "…under this theme's word for the slot");
+      const held = hud.sheetStats.children[0];
+      P.equip(at.core, "fishing", "tool", null);
+      hud.update();
+      assert.notEqual(hud.sheetStats.children[0], held, "and unequipping re-renders too — the `delete` path");
+      assert.ok(textOf(hud.sheetStats).includes("Nothing to hand"), "…back to an empty rack");
+
+      // THE PURSE AND WHAT IS CARRIED, both of which the key claims to project.
+      const poor = hud.sheetStats.children[0];
+      P.award(at.core, { money: 40 });
+      hud.update();
+      assert.notEqual(hud.sheetStats.children[0], poor, "money moving re-renders");
+      assert.ok(textOf(hud.sheetStats).includes(E.money(at.w, 40)), "…in this world's own money");
+      const light = hud.sheetStats.children[0];
+      P.grant(at.core, { t: "catch-common", k: "carp" }, 2);
+      hud.update();
+      assert.notEqual(hud.sheetStats.children[0], light, "and so does the count in the bag");
+      assert.ok(textOf(hud.sheetStats).includes("3 things"), "…which is the rod plus the two carp");
+
+      // A CAPPED SKILL READS "MAX". award() zeroes `x` at the ceiling, so the
+      // ordinary arithmetic would draw a bar that is empty and full at once.
+      at.player.skills.verbs.fishing = { l: P.CAPS.skillLevel, x: 0 };
+      hud.update();
+      assert.ok(
+        textOf(hud.sheetStats).includes(`Level ${P.CAPS.skillLevel} — MAX`),
+        `a capped skill reads MAX (${textOf(hud.sheetStats)})`,
+      );
+
+      // THE PORTRAIT, and the pre-ready window the plan accepts: Tier-0 art is
+      // drawn now and `assets.status` sits in the key, so the frame the authored
+      // sheets arrive is the frame the portrait upgrades.
+      const tier0 = hud.sheetArt.children[0];
+      assert.equal(tier0.tagName, "CANVAS", "the portrait is a canvas, drawn rather than described");
+      assert.ok(/image-rendering:pixelated/.test(tier0.style.cssText), "…as pixel art rather than a smeared one");
+      assert.ok(/width:72px;height:96px/.test(tier0.style.cssText), "…integer-scaled: a 12×16 frame at 6×");
+      assert.ok(textOf(hud.sheetArt).includes("Traveler"), "and the themed generic label is under it");
+      loadedPF.assets.status = "ready";
+      hud.update();
+      assert.notEqual(hud.sheetArt.children[0], tier0, "the authored art arriving redraws the portrait");
+      loadedPF.assets.status = assetsWas.status;
+    }
+
+    // ── AND THE THEME, WHICH IS FOUR OF THE SHEET'S ROWS AT ONCE ──────────────
+    // The skill names, `describe()`'s prose, the money heading and the label
+    // under the portrait all come out of the WORLD's word book, so a `_rebuild`
+    // landing a different theme under an open sheet has moved what the sheet
+    // draws without touching one player field. `assets.status` usually carries
+    // this along — the loader is theme-aware and `_rebuild` calls it — but a
+    // PARKED loader (no packageId, or inside the 30-second failed backoff)
+    // returns before it can move `status`, and then the theme term is the only
+    // thing left in the key that can see it.
+    {
+      const at = mount();
+      loadedPF.assets._noPackage = true;
+      loadedPF.assets.status = "failed";
+      at.player.skills.verbs.fishing = { l: 2, x: 0 };
+      at.hud.update();
+      at.hud.toggleSheet();
+      assert.ok(textOf(at.hud.sheetArt).includes("Traveler"), "the valley's sheet is open");
+      assert.ok(textOf(at.hud.sheetStats).includes("Coin"), "…with the valley's heading over the purse");
+      const valley = at.hud.sheetStats.children[0];
+      const row = JSON.parse(JSON.stringify(loadedPF.save.snapshot(at.core)));
+      row.theme = "sci-fi-colony";
+      loadedPF.save._rebuild(at.core, row);
+      assert.equal(at.core.sim.world.theme, "sci-fi-colony", "the rebuild landed the other theme");
+      assert.equal(loadedPF.assets.status, "failed", "…and the parked loader never moved `status` on the way");
+      at.hud.update();
+      assert.notEqual(at.hud.sheetStats.children[0], valley, "the sheet re-rendered on the theme alone");
+      assert.ok(textOf(at.hud.sheetArt).includes("Drifter"), "…saying who is standing there in this world's word");
+      assert.ok(textOf(at.hud.sheetStats).includes("Angling"), "…over this world's word for the skill");
+      assert.ok(textOf(at.hud.sheetStats).includes("Credit"), "…and this world's word for its money");
+      loadedPF.assets._noPackage = assetsWas.noPackage;
+      loadedPF.assets.status = assetsWas.status;
+    }
+
+    // ── THE WORD BOOK THE SHEET READS ─────────────────────────────────────────
+    // Skills, slots and the player's own label are per THEME, like every other
+    // name in the package. An unknown verb still renders rather than showing the
+    // block's raw key.
+    {
+      assert.equal(E.playerLabel({ theme: "cozy-village" }), "Traveler", "a valley has travellers in it");
+      assert.equal(E.playerLabel({ theme: "sci-fi-colony" }), "Drifter", "…and a colony has drifters");
+      assert.equal(E.verbSkin({ theme: "cozy-village" }, "fishing").name, "Fishing");
+      assert.equal(
+        E.verbSkin({ theme: "sci-fi-colony" }, "fishing").name,
+        "Angling",
+        "the same verb, this world's word",
+      );
+      assert.equal(E.verbSkin({ theme: "sci-fi-colony" }, "fishing").tool, "rig", "…and its slots with it");
+      assert.equal(
+        E.verbSkin({ theme: "cozy-village" }, "flying-a-kite").name,
+        "flying a kite",
+        "a verb no theme names still renders, slug-derived — a newer build's row is a display fact, not a hole",
+      );
+      // …and the PANEL reads it rather than hardcoding the valley's words. Only
+      // the word book is being exercised here, on a world whose theme was moved
+      // under it.
+      const at = mount();
+      at.sim.world.theme = "sci-fi-colony";
+      at.player.skills.verbs.fishing = { l: 2, x: 0 };
+      at.hud.update();
+      at.hud.toggleSheet();
+      assert.ok(textOf(at.hud.sheetArt).includes("Drifter"), "the colony's sheet says Drifter");
+      assert.ok(textOf(at.hud.sheetStats).includes("Angling"), "…over the colony's word for the skill");
+    }
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    loadedPF.assets.status = assetsWas.status;
+    loadedPF.assets._noPackage = assetsWas.noPackage;
+    loadedPF.assets._failedAt = assetsWas.failedAt;
+    loadedPF.assets._requestedTheme = assetsWas.requestedTheme;
+    loadedPF.save.reset();
+    loadedPF.spatial.reset();
+  }
+}
+
+// ═══ THE PANELS' TWO KEYS, AND WHAT MAY NOT REACH THEM ══════════════════════
+// The `C` hotkey and Escape live in the keydown handler BELOW its walk-mode
+// bail (90-element), which is what makes every guard above that line theirs for
+// free: the loading gate, focus inside a host control, a visible host modal.
+// Pinned one guard at a time, because a single "the key is inert" case passes
+// with three of them deleted.
+//
+// Drivable at all only because of the named shim extension further up: a
+// settable `document.activeElement`, a staged `querySelectorAll`, and nodes that
+// can have a size. Without those three this whole block is browser-only.
+{
+  const core = loadedPF.core;
+  const realSetTimeout = globalThis.setTimeout;
+  const realClearTimeout = globalThis.clearTimeout;
+  const realWindow = globalThis.window;
+  globalThis.setTimeout = () => 0;
+  globalThis.clearTimeout = () => {};
+  globalThis.window = { addEventListener() {}, removeEventListener() {} };
+  const assetsWas = {
+    status: loadedPF.assets.status,
+    noPackage: loadedPF.assets._noPackage,
+    failedAt: loadedPF.assets._failedAt,
+  };
+  loadedPF.save.reset();
+  try {
+    const w = world.build(7, "cozy-village", null);
+    const sim = new loadedPF.Sim(w);
+    core.chatId = "chat-panel-keys";
+    core.sim = sim;
+    core.host = { chatId: "chat-panel-keys", chatMeta: {} };
+    core._narrationDoneWas = true;
+    core._talkConfirm = null;
+    // The Hud mounts INTO the element the core calls its own, which is what
+    // makes "focus is inside our own surface" a real question below.
+    const mountEl = new FakeNode("div");
+    core._mainEl = mountEl;
+    const hud = new loadedPF.Hud(mountEl, core);
+    core.hud = hud;
+    core._keysBound = false;
+    core._bindKeys();
+    const press = (key, target) => core._keyDown({ key, target: target ?? null, preventDefault() {} });
+    hud.update();
+
+    // ── THE ORDINARY PRESS: `c` toggles, and Escape closes what is open ───────
+    press("c");
+    assert.equal(hud._sheet, true, "`c` opens the sheet");
+    assert.equal(hud.sheetEl.style.display, "flex", "…and puts it on screen");
+    press("c");
+    assert.equal(hud._sheet, false, "…and `c` again closes it: it toggles");
+    press("c");
+    assert.equal(hud._sheet, true, "open again");
+    press("escape");
+    assert.equal(hud._sheet, false, "Escape closes it");
+    assert.equal(hud.closePanels(), false, "…and with nothing open, Escape closes nothing and says so");
+
+    // AND OUR OWN PANELS ARE NOT MODAL DIALOGS, which is a trap and not a
+    // detail: `_hostOwnsKeyboard` believes any visible
+    // `[role="dialog"][aria-modal="true"]`, so a panel that marked itself one
+    // would make the very keys that close it inert the moment it opened.
+    for (const panel of [hud.sheetEl, hud.journalEl]) {
+      assert.equal(panel.getAttribute("aria-modal"), null, "a panel of ours is not an aria-modal dialog");
+      assert.equal(panel.getAttribute("role"), null, "…and claims no dialog role either");
+    }
+
+    // ── (1) THE LOADING GATE ──────────────────────────────────────────────────
+    loadedPF.save.gate = { chatId: core.chatId, state: "generating" };
+    press("c");
+    assert.equal(hud._sheet, false, "a world still being written has nobody to be a sheet about");
+    loadedPF.save.gate = null;
+
+    // ── (2) FOCUS INSIDE A HOST CONTROL ───────────────────────────────────────
+    const hostInput = new FakeNode("input");
+    document.activeElement = hostInput;
+    press("c");
+    assert.equal(hud._sheet, false, "a player typing into the host's own box is not pressing our hotkey");
+    // …and focus inside OUR surface is not the host owning anything. This is the
+    // half a broader guard gets wrong: the player has just clicked our own chip.
+    document.activeElement = hud.sheetChip;
+    press("c");
+    assert.equal(hud._sheet, true, "focus on our own chip is still our keyboard");
+    press("escape");
+    document.activeElement = null;
+
+    // ── (3) A VISIBLE HOST MODAL ──────────────────────────────────────────────
+    const modal = new FakeNode("div");
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    modal._rect = { width: 320, height: 200 };
+    document._staged = [modal];
+    press("c");
+    assert.equal(hud._sheet, false, "the setup wizard is open over us; `c` belongs to it");
+    // …and the MEASUREMENT is load-bearing, not the selector: the toast
+    // container is a permanently-mounted zero-size panel, and a guard that
+    // believed every match would make the hotkey dead for the whole session.
+    modal._rect = { width: 0, height: 0 };
+    press("c");
+    assert.equal(hud._sheet, true, "a modal with no size on screen is not a modal in the way");
+    press("escape");
+    // …and a staged node that is a dialog but NOT aria-modal is not a match at
+    // all, which is the selector's own half.
+    const bare = new FakeNode("div");
+    bare.setAttribute("role", "dialog");
+    bare._rect = { width: 320, height: 200 };
+    document._staged = [bare];
+    press("c");
+    assert.equal(hud._sheet, true, "a non-modal dialog does not take the keyboard");
+    press("escape");
+    document._staged = [];
+
+    // ── (4) THE WRONG MODE ────────────────────────────────────────────────────
+    sim.mode = "dialogue";
+    press("c");
+    assert.equal(hud._sheet, false, "there is no sheet to open mid-conversation");
+    sim.mode = "walk";
+    hud.update();
+
+    // ── CLOSE-ON-MODE-CHANGE, DRIVEN BY THE PROPS ─────────────────────────────
+    // Replay and combat arrive through onMainProps, not through anything the
+    // player pressed — so the sheet has to close under a mode change nobody in
+    // this package asked for. CLOSED and not hidden: a hidden one resurfaces
+    // drawn against whoever the player was before.
+    press("c");
+    assert.equal(hud._sheet, true, "the sheet is open when the host takes the screen");
+    const drawn = hud.sheetStats.children[0];
+    core.onMainProps({ chatId: core.chatId, replayActive: true, chatMeta: {} });
+    assert.equal(sim.mode, "replay", "the props moved the mode");
+    assert.equal(hud._sheet, false, "…and the sheet CLOSED");
+    assert.equal(hud.sheetEl.style.display, "none", "…off the screen with it");
+    assert.equal(hud._sheetKey, null, "…and its memo went too, so nothing stale can be resurfaced");
+    core.onMainProps({ chatId: core.chatId, replayActive: false, chatMeta: {} });
+    assert.equal(sim.mode, "walk", "the screen comes back");
+    press("c");
+    assert.notEqual(hud.sheetStats.children[0], drawn, "and reopening REBUILDS rather than resurfacing");
+
+    // THE JOURNAL ONLY HIDES, which is the deliberate difference: it is a list of
+    // what is written down, with no live descriptor to go stale, and a passing
+    // combat state should not throw the player's place in it away.
+    hud.closePanels();
+    hud.toggleJournal();
+    const listed = hud.journalBody.children[0];
+    assert.equal(hud._journal, true, "the journal is open");
+    core.onMainProps({ chatId: core.chatId, replayActive: true, chatMeta: {} });
+    assert.equal(hud._journal, true, "…and stays open through a replay");
+    assert.equal(hud.journalEl.style.display, "none", "…while being off the screen for it");
+    core.onMainProps({ chatId: core.chatId, replayActive: false, chatMeta: {} });
+    assert.equal(hud.journalEl.style.display, "flex", "and walking again brings it straight back");
+    assert.equal(hud.journalBody.children[0], listed, "…the same list, not a rebuilt one");
+    hud.closePanels();
+  } finally {
+    core._unbindKeys();
+    globalThis.setTimeout = realSetTimeout;
+    globalThis.clearTimeout = realClearTimeout;
+    if (realWindow === undefined) delete globalThis.window;
+    else globalThis.window = realWindow;
+    document.activeElement = null;
+    document._staged = [];
+    loadedPF.assets.status = assetsWas.status;
+    loadedPF.assets._noPackage = assetsWas.noPackage;
+    loadedPF.assets._failedAt = assetsWas.failedAt;
+    loadedPF.save.gate = null;
+    core.chatId = null;
+    core.sim = null;
+    core.hud = null;
+    core.host = null;
+    core._mainEl = null;
+    loadedPF.save.reset();
   }
 }
 

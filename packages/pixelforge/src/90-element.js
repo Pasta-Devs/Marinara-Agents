@@ -364,15 +364,33 @@ PF.core = {
     const gen = PF.save._gen ?? 0;
     this.setMode("dialogue");
     this.hud?.toast(`Talking to ${npc.name}`);
-    void Promise.resolve(
-      this.host.sendMessage(`${sim.composePrefix(npc)} I walk up to ${npc.name} the ${npc.role} and greet them.`),
-    )
+    const text = `${sim.composePrefix(npc)} I walk up to ${npc.name} the ${npc.role} and greet them.`;
+    // THE COMPOSED TURN'S OWN PENDING, captured HERE and closure-local. Two
+    // readings of this would be wrong and both are easy: re-reading
+    // `sim._pendingIntro` after the await finds the null commitIntro left behind
+    // and burns nothing FOREVER (the wrap-up would then be re-told on every turn
+    // for the rest of the save), and re-reading it before the burn finds whatever
+    // a sender that interleaved with this one composed instead. The object
+    // reference survives the wholesale null, so the turn that was sent is the
+    // turn that gets burned.
+    const pend = sim._pendingIntro;
+    void Promise.resolve(this.host.sendMessage(text))
       .then((ok) => {
         if (ok === false) {
           this.setMode("walk");
           this.hud?.toast("The story isn't accepting turns right now.");
         } else {
           sim.commitIntro();
+          // THE WRAP-UP BURN, on the same accepted-turn signal the one-shot flags
+          // burn on and for the same reason: a refused or failed send is not a
+          // telling. The mutator guards itself against the sim having moved under
+          // the await, and a refusal is SWALLOWED — no toast, no retry. The tell
+          // stays in history un-burned and the next compose says it again, which
+          // is a §5 lost-flush and not something to interrupt anybody about.
+          // The pending carries the notice ROWS as well as the day, so the burn
+          // marks the band THIS turn told rather than the live one, which a
+          // rebuild can have appended to under the await (plan §2.5).
+          if (pend?.ledger) PF.player.flush(this, pend.ledger.throughDay, pend.ledger.notices, gen);
           // P2's ledger goes live on the cheapest honest signal there is: the
           // encounter count moves when the host ACCEPTS the turn, exactly where
           // the one-shot intro flags burn, and for the same reason — a refused
@@ -444,6 +462,21 @@ PF.core = {
       } else if (k === "e") {
         // "e" only — Enter belongs to host buttons/menus (review finding)
         this.interact();
+      } else if (k === "c") {
+        // THE CHARACTER SHEET, and it is HERE rather than up beside the
+        // dialogue-Escape branch on purpose (plan §2.8): everything above this
+        // line is a guard the sheet needs — the loading gate, focus inside a
+        // host control, a visible host modal, and walk mode — and a branch at
+        // :451's level would skip every one of them.
+        this.hud?.toggleSheet();
+      } else if (k === "escape") {
+        // …and Escape closes whichever panel is open. It cannot race the
+        // dialogue-Escape branch above: that one returns, and a panel cannot be
+        // open in dialogue mode at all, because leaving walk closes the sheet
+        // and hides the journal (70-hud update()). No preventDefault, exactly as
+        // the branch above and `e` beside it decline it — the host's own Escape
+        // handling is not ours to cancel.
+        this.hud?.closePanels();
       }
     };
     // keyup ALWAYS clears, whatever the target or open panels — otherwise a

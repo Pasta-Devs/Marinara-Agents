@@ -1,4 +1,4 @@
-// Pixelforge 0.11.0 — Marinara Engine game-surface Experience (single-file client bundle)
+// Pixelforge 0.12.0 — Marinara Engine game-surface Experience (single-file client bundle)
 // Built from packages/pixelforge/src (16 modules) by scripts/build-pixelforge-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -44,6 +44,26 @@ PF.rng = (seed) => {
 };
 
 PF.clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+
+/** The value a map holds AT `key` ITSELF, or undefined. The only safe way to
+ *  read a table with a word this package did not write.
+ *
+ *  A bare `TABLE[key]` walks the prototype chain, and every object has one:
+ *  `TABLE["constructor"]` is a function, `TABLE["toString"]` is a function,
+ *  `TABLE["__proto__"]` is Object.prototype. All of them are truthy AND
+ *  non-nullish, which is the whole bug class — a `TABLE[key] || fallback` or
+ *  `TABLE[key] ?? fallback` written against a caller-, model- or save-supplied
+ *  key has a fallback that CANNOT FIRE, and the caller is handed a builtin
+ *  where it asked for a row. What happens next is never a clean refusal: the
+ *  builtin reads as a real answer and pins state, or the first property access
+ *  off it throws somewhere with a catch that degrades quietly.
+ *
+ *  Shared rather than re-argued per site because the S5 gates caught this same
+ *  read three times before it got a helper — the zone lookups (slices 1-2), the
+ *  player block's maps (slices 3-4), and the economy's skin and price tables
+ *  (slices 5-6). Whack-a-mole is not a strategy; a fallback goes through here. */
+PF.own = (map, key) =>
+  map && typeof map === "object" && Object.prototype.hasOwnProperty.call(map, key) ? map[key] : undefined;
 
 PF.uid = () => {
   if (globalThis.crypto?.randomUUID) return crypto.randomUUID();
@@ -536,6 +556,26 @@ PF.art = (() => {
       px(g, 3, 11, 10, 1, PAL.white);
       px(g, 7, 13, 2, 2, PAL.stoneDark);
     },
+    /** WHERE THE ROAD CROSSES THE WATER. Painted water FIRST and decked over it,
+     *  because that is literally what the tile is: the water underneath is still
+     *  there, and a deck that did not show it would be a road tile with a wood
+     *  grain. The one-pixel margin of open water on all four sides is what makes
+     *  a run of them read as a boardwalk — the seam between two sections — and
+     *  is also why the tile needs no orientation: a bridge laid north-south and
+     *  one laid east-west are the same picture, which matters because the
+     *  compiler has no way to tell a placer which way a crossing runs.
+     *
+     *  Non-solid wherever it is laid: the whole point of the ruling is that the
+     *  road still crosses. No themed override, for the altar's reason — the
+     *  colony palette turns timber planking into deck plating on the same
+     *  silhouette, which is what a walkway over coolant is. */
+    bridge(g, rnd) {
+      PAINTERS.water(g, rnd);
+      px(g, 1, 1, T - 2, T - 2, PAL.beam);
+      px(g, 2, 2, T - 4, T - 4, PAL.path1);
+      for (let plank = 4; plank < T - 3; plank += 4) px(g, 2, plank, T - 4, 1, PAL.path2);
+      px(g, 2, 2, T - 4, 1, PAL.pathFleck);
+    },
   };
 
   // ── Themes ──────────────────────────────────────────────────────────────────
@@ -680,7 +720,12 @@ PF.art = (() => {
    *  world builds already do. Unknown ids resolve to the fixed default, never
    *  whatever theme happens to be active (order-dependent worlds otherwise). */
   function setTheme(id) {
-    const theme = THEMES[typeof id === "string" ? id : ""] ? id : "cozy-village";
+    // PF.own, because "unknown" has to include the words every object answers
+    // to. The read was bare, so `THEMES["constructor"]` came back a truthy
+    // FUNCTION, "constructor" was accepted as a theme id and PINNED here — the
+    // one place the docstring above promises it cannot be — and from here it
+    // reaches world.theme, the save row, and every theme table downstream.
+    const theme = typeof id === "string" && PF.own(THEMES, id) ? id : "cozy-village";
     if (theme === activeTheme) return activeTheme;
     activeTheme = theme;
     for (const key of Object.keys(PAL)) delete PAL[key];
@@ -1458,7 +1503,14 @@ PF.brief = (() => {
   // the fixture the compiler's invariants are driven through, and the answer for
   // any future caller that needs a brief without a generation call behind it.
   function defaults(theme, seed) {
-    return validate(DEFAULT_BRIEFS[theme] || DEFAULT_BRIEFS["cozy-village"], { theme, seed });
+    // PF.own, because this read happens BEFORE validate() applies the same guard
+    // one screen up — and it is the parameter of an exported function, so the
+    // word arrives from wherever the caller got it. Bare, `defaults("__proto__")`
+    // handed Object.prototype to validate() as the worked example: an object, so
+    // it survived the transport check, and every field then floored to nothing.
+    // The theme came back cozy-village and the brief came back EMPTY, which is
+    // the fallback on this line reading as if it had fired when it had not.
+    return validate(PF.own(DEFAULT_BRIEFS, theme) || DEFAULT_BRIEFS["cozy-village"], { theme, seed });
   }
 
   /** Truncation salvage (§4.1/§5): strip fences, take the outermost balanced
@@ -1922,6 +1974,28 @@ PF.brief = (() => {
 PF.world = (() => {
   const T = PF.TILE;
 
+  /** The spatialLocationId → zoneId table, NULL-PROTOTYPE (#567).
+   *
+   *  Every key in it belongs to the HOST — a World Maps location id, authored by
+   *  hand or by the wizard's map instructions, never written by this package —
+   *  and on a plain `{}` the word "__proto__" is not a key at all. Writing a
+   *  string there is a silent no-op (the prototype setter takes an object or
+   *  null and drops the rest) and reading it back hands out Object.prototype.
+   *  Both halves were reachable and neither failed loudly: 50-spatial's seeding
+   *  write vanished, so its emptiness test re-fired and re-dirtied on every
+   *  refresh forever while the world never gained a root to export under; and
+   *  55-maps-export's adoption read came back Object.prototype, which is neither
+   *  undefined nor the zone, so the export refused its own adoption and posted a
+   *  TWIN of the location — through a route with no delete, onto a real map.
+   *
+   *  Fixed HERE rather than at the two sites because this is the one place the
+   *  table is made: 60-save restores a save's bindings by copying entries INTO
+   *  this object, so no plain map can arrive from stored state, and every read
+   *  and write of it downstream (both files above, plus 70-hud's chip test) is
+   *  covered by the one change. `Object.keys`, `delete` and `JSON.stringify` all
+   *  behave identically, so an honest id is byte-identical either side of it. */
+  const newBindings = () => Object.create(null);
+
   function makeZone(id, name, w, h, groundFill) {
     return {
       id,
@@ -1957,6 +2031,22 @@ PF.world = (() => {
       // gate has to ship with the zone type, never a release later.
       mapExport: true,
       lights: [], // {x, y} warm glow points at night
+      // NAMED FEATURES STANDING IN THIS ZONE: {id, tag, name, rect}. The tiles
+      // were the only record a feature had, and a tile cannot say which feature
+      // it belongs to or what the brief called it — so a consumer asking "what
+      // is the player standing beside" had nothing to read. Written by the three
+      // sites that paint one: the compiler's placement loops, the wilds
+      // builder's `water-crossing` branch (which paints its own stream, so the
+      // feature loop skips that tag), and buildLegacy's fixed literals.
+      //
+      // DERIVED, and that is the whole contract: a world is rebuilt from
+      // (seed, theme, brief) on every load, so this list is recomputed and never
+      // stored. It appears in no snapshot() key and in no ENVELOPE_KEYS entry,
+      // and putting it in either would turn a recomputable list into a save
+      // format to migrate. Every zone carries the array, empty or not — an
+      // absent one and an empty one read alike right up to the call site that
+      // does not guard, and the consumer reads it every walking frame.
+      features: [],
     };
   }
   const idx = (z, x, y) => y * z.w + x;
@@ -1967,6 +2057,39 @@ PF.world = (() => {
   };
   const fillRect = (z, x0, y0, w, h, layer, tileId, solid) => {
     for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) put(z, x, y, layer, tileId, solid);
+  };
+
+  // THE GROUND A ROAD IS LAID WITH. Two ids and not one, because a `struggling`
+  // settlement scuffs 18% of its road to `dirt` before a single building goes up
+  // and a scuffed road is no less a road for it. Deliberately NOT `stone`:
+  // paving is also a building's footprint, a workyard, a clearing and a ward
+  // square, and a plank decked across one of those is a bridge in the middle of
+  // a yard.
+  const ROAD_GROUND = new Set(["path", "dirt"]);
+
+  /** Lay water, decking a BRIDGE over whatever road is already standing in it.
+   *
+   *  The 0.12 ruling, and the whole of it: where a road meets water the road
+   *  wins the tiles it is on and the water takes the rest. A bridge is walkable
+   *  and drawn over the water, so the crossing survives and the pool is still a
+   *  pool — which is what let the water-feature placer stop refusing every
+   *  anchor in the wilds that touched the road band (see the wilds loop).
+   *
+   *  Reads the ground a previous pass painted, so it is order-dependent by
+   *  design: roads are laid before features everywhere this is called, and a
+   *  caller that watered first and paved after would get plain water. Throw-free
+   *  — the read is bounds-guarded, and it has to be for a reason beyond caution:
+   *  `idx` wraps an x past the east edge into the NEXT ROW, so an unguarded read
+   *  would test a tile on the wrong side of the map. This runs inside build()'s
+   *  silent-degrade try/catch, where a throw ships as a legacy world. */
+  const waterFill = (z, x0, y0, w, h) => {
+    for (let y = y0; y < y0 + h; y++) {
+      for (let x = x0; x < x0 + w; x++) {
+        const inside = x >= 0 && y >= 0 && x < z.w && y < z.h;
+        const road = inside && ROAD_GROUND.has(z.ground[idx(z, x, y)]);
+        put(z, x, y, "ground", road ? "bridge" : "water", !road);
+      }
+    }
   };
 
   /** A simple gabled building: stone footprint, plaster walls, roof overhead, one door.
@@ -2205,7 +2328,7 @@ PF.world = (() => {
 
   const PLACERS = {
     "water-feature"(z, x, y) {
-      fillRect(z, x, y, 6, 4, "ground", "water", true);
+      waterFill(z, x, y, 6, 4);
       put(z, x + 6, y + 1, "object", "well", true);
     },
     "crop-plots"(z, x, y) {
@@ -2283,7 +2406,12 @@ PF.world = (() => {
     },
     "water-crossing"(z, x, y) {
       // Placed by the wilds builder across its stream; here x,y is the ford column.
-      fillRect(z, x, y, 2, 2, "ground", "path", false);
+      // MIGRATED ONTO THE BRIDGE TILE (0.12). A hand-laid ford and a decked pool
+      // are the same idea — a road carried over water — and the only thing that
+      // made them different was shipping two pictures of it. Still non-solid,
+      // still four tiles, still inside the stream's rect: the crossing's geometry
+      // is untouched and only the word for what it is laid with has moved.
+      fillRect(z, x, y, 2, 2, "ground", "bridge", false);
     },
     "dense-growth"(z, x, y) {
       for (let dy = 0; dy < 4; dy++)
@@ -2322,10 +2450,97 @@ PF.world = (() => {
   }
 
   // Per-theme display names for the LEGACY fixed layout (pre-brief saves).
+  // `pond` and `stream` name the two water features the fixed layout reserves
+  // rows for. Both are the name that theme's OWN default brief gives the tag
+  // (18-brief DEFAULT_BRIEFS), so a legacy world and a compiled one call the
+  // same thing by the same word rather than inventing a second vocabulary.
   const ZONE_NAMES = {
-    "cozy-village": { village: "Hearthvale", inn: "The Amber Hearth Inn", forest: "The Whisperwood" },
-    "sci-fi-colony": { village: "Meridian Base", inn: "The Meridian Cantina", forest: "The Mast Field" },
+    "cozy-village": {
+      village: "Hearthvale",
+      inn: "The Amber Hearth Inn",
+      forest: "The Whisperwood",
+      pond: "The Village Pond",
+      stream: "The Stepping Stones",
+    },
+    "sci-fi-colony": {
+      village: "Meridian Base",
+      inn: "The Meridian Cantina",
+      forest: "The Mast Field",
+      pond: "The Coolant Pool",
+      stream: "The Conduit Bridge",
+    },
   };
+  // …AND WHAT THE FOUR OF THEM DO. The same duplication one table along, and it
+  // was the one nobody themed: the four legacy residents' roles were hardcoded
+  // in buildLegacy — "innkeeper", "farmer", "village guard", "forager" — right
+  // beside the themed name book above, so a sci-fi colony stood a farmer and a
+  // village guard in it.
+  //
+  // Invisible while a role was only a token's label, and player-facing the
+  // moment the no-rod refusal started interpolating `npc.role` (59-economy's
+  // rodHint): a legacy colony told the player "You need an angling rig — the
+  // innkeeper stocks one", pointing at an inn that does not exist in that world.
+  //
+  // Keyed by NAME because the name is the join: buildLegacy stands up Mira, Tam,
+  // Rook and Fen, and every theme's DEFAULT_BRIEFS cast names the same four. The
+  // assertion below holds this book to the brief exactly as it holds the name
+  // book, from the same source of truth and for the same reason.
+  const LEGACY_ROLES = {
+    "cozy-village": { Mira: "innkeeper", Tam: "farmer", Rook: "guard", Fen: "forager" },
+    "sci-fi-colony": {
+      Mira: "cantina keeper",
+      Tam: "hydroponics lead",
+      Rook: "pad marshal",
+      Fen: "salvage scout",
+    },
+  };
+  // BOTH BOOKS ABOVE ARE DUPLICATES, AND THIS IS WHAT KEEPS THEM ONE. Every
+  // string in them is also written in that theme's own DEFAULT_BRIEFS entry
+  // (18-brief) — the comment says the two agree and nothing made it true. They
+  // are tables in two files that get edited months apart, which is how a player
+  // ends up standing at The Village Pond in a legacy save and somewhere else in
+  // the compiled world beside it.
+  //
+  // The whole book, not only the water: the settlement, the inn, the wood and
+  // the four residents' trades are the same duplication and fail the same way.
+  // Read through `defaults()` rather than off the literal, because a repair pass
+  // that quietly renamed something on its way through validate() is exactly the
+  // drift worth catching.
+  //
+  // ASSERTED AT LOAD, deliberately not inside build(): that function degrades any
+  // compile throw to the legacy world (see its try/catch), so an invariant raised
+  // in there would be swallowed and would ship as a silently misnamed world
+  // instead of a failed build.
+  {
+    const named = (features, tag) => (features ?? []).find((feature) => feature.tag === tag)?.name;
+    for (const [theme, names] of Object.entries(ZONE_NAMES)) {
+      const fallback = PF.brief?.defaults?.(theme, 1);
+      if (!fallback) continue;
+      const wilds = fallback.places.find((place) => place.kind === "wilds");
+      const owed = {
+        village: fallback.name,
+        inn: fallback.places.find((place) => place.kind === "gathering")?.name,
+        forest: wilds?.name,
+        pond: named(fallback.features, "water-feature"),
+        stream: named(wilds?.features, "water-crossing"),
+      };
+      for (const [key, name] of Object.entries(owed)) {
+        if (names[key] !== name)
+          throw new Error(
+            `pixelforge: the legacy layout calls ${theme}'s ${key} "${names[key]}", its default brief calls it "${name}"`,
+          );
+      }
+      // The role book, held to the same standard from the same source. Read off
+      // the cast BY NAME, which is the join the two tables share.
+      for (const [who, role] of Object.entries(LEGACY_ROLES[theme] ?? {})) {
+        const owedRole = fallback.cast.find((member) => member.name === who)?.role;
+        if (role !== owedRole)
+          throw new Error(
+            `pixelforge: the legacy layout makes ${theme}'s ${who} a "${role}", its default brief makes them a "${owedRole}"`,
+          );
+      }
+    }
+  }
 
   function build(seed, theme, sealedBrief) {
     // Tight gate + containment: only a fully-sealed brief compiles, and a
@@ -2352,6 +2567,7 @@ PF.world = (() => {
   function buildLegacy(seed, theme) {
     const activeTheme = PF.art.setTheme ? PF.art.setTheme(theme) : "cozy-village";
     const names = ZONE_NAMES[activeTheme] || ZONE_NAMES["cozy-village"];
+    const roles = LEGACY_ROLES[activeTheme] || LEGACY_ROLES["cozy-village"];
     const rnd = PF.rng(seed);
 
     // ── The settlement exterior ──
@@ -2365,6 +2581,13 @@ PF.world = (() => {
     put(v, 21, 14, "object", "well", true);
     // pond
     fillRect(v, 33, 21, 7, 5, "ground", "water", true);
+    // The legacy layout has no brief behind it and so no ordinals to mint from,
+    // which is why its two water features carry FIXED reserved ids instead. They
+    // are TAGGED from the same closed vocabulary a brief uses (18-brief
+    // FEATURE_TAGS) because the consumer resolves per (theme, tag): an untagged
+    // legacy spot would be water that no table can answer for. Rect = the
+    // literal directly above, so the two move together or not at all.
+    v.features.push({ id: "legacy:pond", tag: "water-feature", name: names.pond, rect: { x: 33, y: 21, w: 7, h: 5 } });
     // crops with fence
     fillRect(v, 4, 20, 8, 5, "ground", "crop", false);
     for (let x = 3; x <= 12; x++) {
@@ -2411,7 +2634,21 @@ PF.world = (() => {
     borderTrees(f);
     fillRect(f, 1, 12, 19, 2, "ground", "path"); // west approach
     fillRect(f, 20, 1, 2, 22, "ground", "water", true); // the stream
-    fillRect(f, 20, 12, 2, 2, "ground", "path", false); // the ford
+    // The ford, MIGRATED onto the bridge tile alongside the compiled crossing's
+    // (0.12): the legacy wood and a brief-built one now cross their water by the
+    // same picture, which is the whole of the sub-decision. Non-solid as it
+    // always was — the geometry has not moved, only the tile it is laid with.
+    fillRect(f, 20, 12, 2, 2, "ground", "bridge", false); // the ford
+    // The stream's rect is the stream's own literal, and the ford's four tiles
+    // sit INSIDE it as bridge. That is deliberate and not a defect in the shape:
+    // a rect says where a feature stands, and the consumer's test — the neighbour
+    // tile IS water and lies in a rect — is what keeps the road out of the water.
+    f.features.push({
+      id: "legacy:stream",
+      tag: "water-crossing",
+      name: names.stream,
+      rect: { x: 20, y: 1, w: 2, h: 22 },
+    });
     fillRect(f, 22, 12, 4, 2, "ground", "path"); // east approach
     fillRect(f, 26, 9, 6, 5, "ground", "stone"); // the clearing
     put(f, 28, 11, "object", "wallStone", true); // the standing stone
@@ -2453,11 +2690,11 @@ PF.world = (() => {
 
     // NPCs — LLM characters in the story; sprites here are just their world tokens.
     v.npcs.push(
-      { id: "tam", name: "Tam", role: "farmer", hue: 96, x: 8, y: 22, wander: { x0: 4, y0: 20, x1: 11, y1: 24 } },
+      { id: "tam", name: "Tam", role: roles.Tam, hue: 96, x: 8, y: 22, wander: { x0: 4, y0: 20, x1: 11, y1: 24 } },
       {
         id: "rook",
         name: "Rook",
-        role: "village guard",
+        role: roles.Rook,
         hue: 210,
         x: 21,
         y: 10,
@@ -2467,7 +2704,7 @@ PF.world = (() => {
     n.npcs.push({
       id: "mira",
       name: "Mira",
-      role: "innkeeper",
+      role: roles.Mira,
       hue: 8,
       x: 5,
       y: 4,
@@ -2482,7 +2719,7 @@ PF.world = (() => {
     f.npcs.push({
       id: "fen",
       name: "Fen",
-      role: "forager",
+      role: roles.Fen,
       hue: 140,
       x: 29,
       y: 12,
@@ -2498,7 +2735,7 @@ PF.world = (() => {
       zones: { village: v, inn: n, forest: f },
       startZone: "village",
       // The exterior binds to the campaign's starting World Maps location once known.
-      bindings: {}, // spatialLocationId → zoneId
+      bindings: newBindings(), // spatialLocationId → zoneId
       // The legacy world mints nobody — its three neighbours are written out by
       // hand above. The stamp is still emitted (never absent, so the S5 read
       // never has to distinguish "no stamp" from "stamp zero") and moves only
@@ -3700,6 +3937,38 @@ PF.world = (() => {
     const zoneIdForPlace = (place) => `z${brief.places.indexOf(place) + 2}`;
     const zoneIdByName = new Map(Object.entries(brief._ids.zones).map(([id, name]) => [name, id]));
 
+    // ── Feature ids: the BRIEF's ordinals, tracked apart from placement ────────
+    // `_ids.features` is minted once at seal (18-brief), walking the settlement's
+    // own features first and then each place's IN BRIEF ORDER. Mirrored here by
+    // POSITION rather than looked up by name, because two features may
+    // legitimately share one and a name lookup would collapse them.
+    //
+    // The discipline that matters: an ordinal belongs to the feature the BRIEF
+    // wrote, not to the one the map found room for. A feature the placer skips
+    // ("a plainer settlement, never a sealed one") still SPENDS its ordinal, so
+    // every feature after it keeps the id the sealed brief already promised.
+    // Ids that shuffled whenever a village happened to be full would make the
+    // registry unquotable across two builds of the same world.
+    const featureIds = new Map();
+    {
+      let ordinal = 1;
+      for (const feature of brief.features) featureIds.set(feature, `f${ordinal++}`);
+      for (const place of brief.places)
+        for (const feature of place.features ?? []) featureIds.set(feature, `f${ordinal++}`);
+    }
+    /** Put a PLACED feature on the register of the zone that holds it.
+     *
+     *  `rect` is the extent the placement pass reserved — the placer's true
+     *  footprint plus the one-tile margin FEATURE_RECTS carries — and is
+     *  deliberately NOT carved down to the tiles the placer watered. A rect may
+     *  hold tiles the feature never painted water on (a `water-feature`'s well
+     *  stands at x+6; the wilds ford lays path straight across its stream), and
+     *  the consumer's own two-sided test is what excludes them. The exclusion
+     *  lives in the test, not in the shape. */
+    const recordFeature = (zone, feature, rect) => {
+      zone.features.push({ id: featureIds.get(feature), tag: feature.tag, name: feature.name, rect });
+    };
+
     // ── The settlement exterior (z1) ──
     const v = makeZone("z1", brief.name, scale.w, scale.h, "grass");
     v.mapKind = "settlement";
@@ -3954,7 +4223,12 @@ PF.world = (() => {
     // A side stream, so minting residents does not shift the tile RNG under the
     // ground cover and every world that had no minting still lays the same grass.
     const mintRnd = PF.rng(PF.hashStr(`${seed >>> 0}|residents|${brief.name}`));
-    const nameBook = RESIDENT_NAMES[activeTheme] ?? RESIDENT_NAMES["cozy-village"];
+    // Through PF.own so the fallback on the right is REACHABLE. Bare, a theme
+    // named "constructor" answered with a function, `??` saw something
+    // non-nullish and kept it, and the first `nameBook.family[…]` below threw —
+    // into build()'s catch, which degrades to the legacy three-zone world. A
+    // brief that compiles fine is not a thing to lose over a word.
+    const nameBook = PF.own(RESIDENT_NAMES, activeTheme) ?? RESIDENT_NAMES["cozy-village"];
     const takenNames = new Set(brief.cast.map((m) => m.name));
     const minted = [];
     // Off EVERY sealed household, resident or not: the target ignores the
@@ -4312,6 +4586,10 @@ PF.world = (() => {
       if (!anchor) continue; // genuinely nowhere left: a plainer settlement, never a sealed one
       PLACERS[feature.tag]?.(v, anchor.x, anchor.y);
       claimed.push({ x: anchor.x, y: anchor.y, ...size });
+      // The register gets its own rect object rather than the one `claimed`
+      // holds: the two lists have different lifetimes and aliasing them would
+      // make a future edit to either quietly reach into the other.
+      recordFeature(v, feature, { x: anchor.x, y: anchor.y, ...size });
     }
     const doorRects = buildings.map((b) => ({ x: b.door.doorX, y: b.door.doorY }));
     const stallReserved = stalls.flatMap((s) => [
@@ -4568,6 +4846,14 @@ PF.world = (() => {
         fillRect(zone, 20, 1, 2, 22, "ground", "water", true);
         PLACERS["water-crossing"](zone, 20, wMidY);
         fillRect(zone, 22, wMidY, 4, 2, "ground", "path");
+        // THE SITE THAT OWES THE CROSSING ITS ROW. The stream is painted HERE,
+        // by the builder, and the feature loop below skips `water-crossing`
+        // outright — the placer's whole job on that tag is the 2x2 ford. So no
+        // placement loop ever sees this feature, and without this line a
+        // brief-built stream would be water nothing knows the name of while a
+        // legacy one fishes. Rect = the stream literal three lines up.
+        const crossing = place.features.find((feature) => feature.tag === "water-crossing");
+        recordFeature(zone, crossing, { x: 20, y: 1, w: 2, h: 22 });
       }
       // GROUND THE WILDS CANNOT GIVE AWAY. A feature here used to be dropped at a
       // hard-coded anchor with no test of anything — not the road it had just
@@ -4584,11 +4870,13 @@ PF.world = (() => {
       // zero pixels. Reloading does not help: the save falls back to `zone.spawn`,
       // which is the other fence tile. 24 of 48 wilds zones on staging, so this
       // ships today and is not something this branch introduced.
-      const wildsReserved = [
-        east ? { x: 1, y: wMidY, w: 19, h: 2 } : { x: zone.w - 20, y: wMidY, w: 19, h: 2 },
-        { x: 1, y: wMidY, w: 4, h: 2 },
-        { x: zone.w - 5, y: wMidY, w: 4, h: 2 },
-      ];
+      // The APPROACH ROAD is held separately from the rest of the reservation
+      // because it is the one rect the bridge ruling can negotiate away (below).
+      // The other two are the tiles the portal delivers the player onto and the
+      // spawn beside them, and no ruling makes those negotiable: a pool that
+      // swallowed an arrival tile would be a decked-over doorstep at best.
+      const wildsRoad = east ? { x: 1, y: wMidY, w: 19, h: 2 } : { x: zone.w - 20, y: wMidY, w: 19, h: 2 };
+      const wildsReserved = [wildsRoad, { x: 1, y: wMidY, w: 4, h: 2 }, { x: zone.w - 5, y: wMidY, w: 4, h: 2 }];
       if (tags.has("water-crossing")) {
         wildsReserved.push({ x: 20, y: 1, w: 2, h: 22 }, { x: 20, y: wMidY, w: 6, h: 2 });
       }
@@ -4601,13 +4889,30 @@ PF.world = (() => {
         // is stepped over, and a feature with nowhere safe is dropped — the same
         // policy the settlement states as "a plainer settlement, never a sealed
         // one", which reads here as a plainer wood.
-        for (let attempt = 0; attempt < 8; attempt++) {
+        //
+        // …EXCEPT THAT WATER COULD NEVER FIT, which is what the bridge ruling
+        // answers. The scan offers rows 8..11 and nothing else, an 8x5 rect
+        // starting on any of them reaches the road band at y12..13, and the road
+        // was reserved outright — so a wilds `water-feature` was refused on every
+        // seed and the brief's pool simply never existed. Under the ruling the
+        // road is decked rather than blocked, so it stops being a reason to
+        // refuse the anchor.
+        //
+        // A SECOND PASS, not a widened first one, and that distinction is the
+        // whole of the byte-stability story: the strict eight run first and
+        // unchanged, so a pool that already found dry ground still finds the same
+        // ground. Only after they are spent does the road come off the table, and
+        // only for water — every other tag keeps its eight attempts exactly.
+        const attempts = feature.tag === "water-feature" ? 16 : 8;
+        for (let attempt = 0; attempt < attempts; attempt++) {
           const ax = anchorX;
           const ay = 8 + (((ax / 3) | 0) % 4);
           anchorX = Math.max(6, (anchorX + 9) % (zone.w - 10));
           if (ax < 1 || ay < 1 || ax + size.w > zone.w - 1 || ay + size.h > zone.h - 1) continue;
-          if (wildsReserved.some((r) => intersects({ x: ax, y: ay, ...size }, r))) continue;
+          const busy = attempt < 8 ? wildsReserved : wildsReserved.filter((rect) => rect !== wildsRoad);
+          if (busy.some((r) => intersects({ x: ax, y: ay, ...size }, r))) continue;
           PLACERS[feature.tag]?.(zone, ax, ay);
+          recordFeature(zone, feature, { x: ax, y: ay, ...size });
           break;
         }
       }
@@ -5174,7 +5479,7 @@ PF.world = (() => {
       situation: brief.situation,
       zones,
       startZone: "z1",
-      bindings: {},
+      bindings: newBindings(),
       // Derived, never saved (S5 §Q3a). `minted` names the residents the brief
       // did NOT. The severance itself keys off the complement of the brief's
       // cast rather than this list — a resident the OLD mint produced is in
@@ -5427,6 +5732,13 @@ PF.schedule = (() => {
 // package-local clock. Modes gate everything: "walk" is the only mode that
 // consumes input; "dialogue" hands the keyboard back to the host narration
 // input; "combat"/"replay" freeze the world under the host's own UI.
+// When each daypart BEGINS, in package-local minutes — the same four thresholds
+// daypart() reads from the other side. One table rather than a literal per
+// caller: waitUntil jumps to one of these, the fishing verb's "until dusk" loops
+// windows toward one, and a copy that drifted would be a rest action and a
+// session disagreeing about when the evening starts.
+PF.DAYPART_STARTS = { dawn: 5 * 60, day: 7 * 60, dusk: 18 * 60, night: 21 * 60 };
+
 PF.Sim = class {
   constructor(world) {
     this.world = world;
@@ -5443,6 +5755,10 @@ PF.Sim = class {
     this._clockAcc = 0;
     this.nearNpc = null;
     this.nearPortal = null;
+    // The named feature the player is standing at, or null (see step()). Derived
+    // per frame from the zone's own register (20-world makeZone.features), which
+    // is itself derived — nothing here is ever saved.
+    this.nearFeature = null;
     this._npcTimers = new Map();
     this._rnd = PF.rng((world.seed ^ 0x9e3779b9) >>> 0);
     this.dirty = false; // save-worthy change happened
@@ -5492,7 +5808,17 @@ PF.Sim = class {
   }
 
   teleport(zoneId, tx, ty) {
-    if (!this.world.zones[zoneId]) return;
+    // Own-property, because this early return is the ONLY thing standing between
+    // a caller-supplied word and the mount. `zones["constructor"]` is a truthy
+    // function, so bare, the guard did not fire: `zoneId` was pinned to a word no
+    // zone answers to and zone() handed Object's own constructor to the frame
+    // loop, which throws on the first `z.w`. Nothing catches that — and because
+    // the bare form also set `dirty` before the throw, the prototype-named id
+    // reached `snap.zone` first: a corrupt save AND a dead frame loop. Both
+    // shipped callers pre-validate today, but teleport is public on PF.Sim, and
+    // 60-save already spells this same test out as `hasZone` for ids taken off a
+    // save row — a refusal, cleanly, is the whole contract of the line.
+    if (!PF.own(this.world.zones, zoneId)) return;
     this.zoneId = zoneId;
     this.x = (tx + 0.5) * PF.TILE;
     this.y = (ty + 0.5) * PF.TILE;
@@ -5548,6 +5874,39 @@ PF.Sim = class {
         if (d < best) {
           best = d;
           this.nearNpc = npc;
+        }
+      }
+      // THE NAMED FEATURE UNDER THE PLAYER'S HAND, the third proximity read
+      // beside the two above and recomputed on the same terms: every walking
+      // frame, off the feet tile, null the moment they step away.
+      //
+      // The test is deliberately TWO-SIDED — a neighbour tile IS water AND that
+      // tile lies inside a registry rect. Neither half is the rule on its own.
+      // Water alone would make any puddle a feature and could not say which one;
+      // a rect alone would count tiles the feature never watered, and rects hold
+      // those by design (the wilds ford lays path straight across its stream,
+      // and a compiled pool's well stands inside the anchor rect beside it).
+      //
+      // Four neighbours, not eight: standing corner-on to a pond is standing
+      // near the bank, not at it. Skipped whole on a zone with no register,
+      // which is most of them.
+      this.nearFeature = null;
+      if (z.features.length) {
+        for (const [nx, ny] of [
+          [tx, ty - 1],
+          [tx, ty + 1],
+          [tx - 1, ty],
+          [tx + 1, ty],
+        ]) {
+          if (nx < 0 || ny < 0 || nx >= z.w || ny >= z.h) continue;
+          if (z.ground[ny * z.w + nx] !== "water") continue;
+          const row = z.features.find(
+            (f) => nx >= f.rect.x && nx < f.rect.x + f.rect.w && ny >= f.rect.y && ny < f.rect.y + f.rect.h,
+          );
+          if (row) {
+            this.nearFeature = row;
+            break;
+          }
         }
       }
     }
@@ -5619,14 +5978,80 @@ PF.Sim = class {
    *  until dusk" rest action). A JUMP, not an advance: NPCs re-place in one
    *  shot. Walk mode only, so it can never collide with the dialogue freeze. */
   waitUntil(target) {
-    const starts = { dawn: 5 * 60, day: 7 * 60, dusk: 18 * 60, night: 21 * 60 };
-    const at = starts[target];
+    // Own-property, now that the table is shared and reachable from more than one
+    // button: `starts["constructor"]` answered with a FUNCTION, which is not
+    // undefined, and the guard below would have waved it through onto clockMin.
+    const at = Object.prototype.hasOwnProperty.call(PF.DAYPART_STARTS, target) ? PF.DAYPART_STARTS[target] : undefined;
     if (at === undefined || this.mode !== "walk") return false;
     if (at <= this.clockMin) this.day++;
     this.clockMin = at;
     this._clockAcc = 0;
     this.resolveSchedules();
     return true;
+  }
+
+  /** Stage what the clock has finished (plan §2.5, M2's ruled variant): every day
+   *  BEFORE the one being lived is owed to the wrap-up. Called by the sleep verb
+   *  after its advance, and by nothing else — waking hours pass without anybody
+   *  sitting down to look back over them, which is the whole conceit.
+   *
+   *  THE RULED VARIANT IS THE SIMPLE ONE: `max(ledgerOwed, day - 1)`, read AFTER
+   *  the clock moved, with no crossing detection and no captured day-before. So a
+   *  sleep of any length at any hour owes every elapsed day, and the post-midnight
+   *  fisher who beds at 00:30 flushes last night's catch — the session filed its
+   *  pre-midnight half under the day it happened, this owes that day, and the
+   *  hours since midnight belong to the day still underway.
+   *
+   *  `max` because sleeps ACCUMULATE and the marker only ever climbs: a rewind
+   *  can take the clock backwards, and a marker that followed it down would
+   *  quietly un-owe days the player was already promised. The invariant
+   *  `ledgerOwed < sim.day` holds by construction — `waitUntil` cannot complete
+   *  without moving the clock — and the burn's own guard re-checks it anyway. */
+  stageLedgerOwed() {
+    this.intro ??= { world: false, zones: {}, npcs: {} };
+    this.intro.ledgerOwed = Math.max(PF.player.resolvedDay(this.intro.ledgerOwed), this.day - 1);
+    return this.intro.ledgerOwed;
+  }
+
+  /** Advance the clock by exactly `n` minutes. The fishing cast's mover, where
+   *  waitUntil is the rest action's, and the difference is what each one is FOR:
+   *  a rest is over when it reaches a time of day, while a cast SPENDS a fixed
+   *  window and lands wherever that leaves the clock. So this one takes minutes
+   *  and not a daypart.
+   *
+   *  IT WRAPS MIDNIGHT, and it has to. A cast window is a multi-minute jump, so
+   *  a session that starts at 23:50 crosses into the next day — a DESIGNED path,
+   *  since "fish until dawn" is on the verb's own menu. The walking loop above
+   *  can never be more than one day out because it ticks a minute at a time;
+   *  this can, so the wrap is a loop rather than a test.
+   *
+   *  `resolveSchedules()` then runs UNCONDITIONALLY, unlike the walking loop's
+   *  boundary test. A jump of any size can cross a daypart, and asking whether
+   *  it did costs the same as re-placing everybody in a world where nothing
+   *  moved — which is what waitUntil already concluded one method down.
+   *
+   *  NOT MODE-GATED, and waitUntil is: the guard belongs where the refusal is
+   *  legible. Wait is a button whose only refusal is the mode, so its mover says
+   *  no; fishing has five refusals of its own (59-economy `fish`), `wrong-mode`
+   *  among them, and a second silent gate here would turn one of them into a
+   *  no-op nobody could tell from a cast that caught nothing.
+   *
+   *  `_clockAcc` is deliberately left alone. waitUntil clears it because it
+   *  JUMPS to a target and a leftover fraction would tick that target's minute
+   *  early; an advance lays whole minutes on top of a fraction the player has
+   *  genuinely already walked, and clearing it would quietly lose it.
+   *
+   *  Returns the minutes advanced — 0 for anything that is not a positive whole
+   *  count, so a caller can tell a clock that moved from one that did not. */
+  advanceMinutes(n) {
+    if (!Number.isInteger(n) || n <= 0) return 0;
+    this.clockMin += n;
+    while (this.clockMin >= 24 * 60) {
+      this.clockMin -= 24 * 60;
+      this.day++;
+    }
+    this.resolveSchedules();
+    return n;
   }
 
   /** Re-place every scheduled NPC for the current daypart. Idempotent, O(cast),
@@ -5853,8 +6278,86 @@ PF.Sim = class {
       parts.push(`[${npc.name}: ${npc.persona}]`);
       pending.npc = npc.id;
     }
+    // THE WRAP-UP TELL, LAST IN THE JOIN — which puts it after the persona part
+    // and before the sender's own action text, where the plan asks for it (§2.6).
+    // It is also the ONLY part of any turn a fishing word can reach the GM
+    // through (M10 as amended): the verb narrates nothing, files ledger lines,
+    // and those lines are told here or not at all.
+    const ledger = this._composeLedger();
+    if (ledger) parts.push(ledger.text);
+    // The ephemeral half of the flush, handed to the sender rather than stored:
+    // which day the tell reached, and which notice ROWS rode with it. Compose
+    // stays pure — nothing here burns, and a refused or failed send must lose
+    // nothing, exactly as the one-shot flags above it must not.
+    pending.ledger = ledger ? { throughDay: ledger.throughDay, notices: ledger.notices } : null;
     this._pendingIntro = pending;
     return parts.join(" ");
+  }
+
+  /** The wrap-up tell: the days a completed sleep made owed and has not told, and
+   *  every notice still untold. Composed from the two live fields every time and
+   *  persisted NOWHERE — there is no stored "what we said last time", so a re-tell
+   *  after a lost burn simply reads the same live selection again and says the
+   *  same thing (plan §2.5). Returns null when there is nothing owed and nothing
+   *  untold, else { text, throughDay, notices }.
+   *
+   *  LINES: `flushedDay < day ≤ intro.ledgerOwed`, stubs included — an elided day
+   *  that says "12 things happened" is still the truest account of it there is.
+   *  NOTICES: every untold row, whatever day it carries. The band answers to its
+   *  flag rather than to the gate, which is the whole reason it left the lines.
+   *
+   *  WHOLE DAYS, OLDEST FIRST, AND THE NEWEST DROPPED. The budget is
+   *  `TUNING.ledgerTellChars`, measured in graphemes over the line TEXTS — not
+   *  over this function's own framing, because the budget is floor-asserted at
+   *  load against one maximum-shape day (`ledgerPerDay × ledgerChars`) and a
+   *  measure that counted the word "Day" would put a legal day over the floor and
+   *  stall the flush forever. Days are rendered oldest-first so the story arrives
+   *  in order, and the burn advances only through the last day rendered WHOLE, so
+   *  a truncated tell leaves `ledgerOwed` standing and the next turn continues
+   *  from where this one stopped.
+   *
+   *  …AND THE OLDEST DAY ALWAYS RIDES, over budget or not. A day this build can
+   *  WRITE cannot exceed the budget (that is what the floor assertion buys), but
+   *  a hostile save can carry fifty lines on one day, and "tell nothing, advance
+   *  nothing, forever" is a worse answer than one oversized part. */
+  _composeLedger() {
+    const player = this.player;
+    if (!player || typeof player !== "object") return null;
+    const owed = PF.player.resolvedDay(this.intro?.ledgerOwed);
+    const gate = PF.player.resolvedDay(player.flushedDay);
+    const lines = (Array.isArray(player.ledger?.lines) ? player.ledger.lines : []).filter((line) => {
+      if (!Array.isArray(line) || line.length < 2) return false;
+      const day = PF.player.resolvedDay(line[0]);
+      return day > gate && day <= owed;
+    });
+    const budget = PF.economy?.TUNING?.ledgerTellChars ?? 0;
+    const rendered = [];
+    let spent = 0;
+    let through = gate;
+    for (const day of [...new Set(lines.map((line) => PF.player.resolvedDay(line[0])))].sort((a, b) => a - b)) {
+      const texts = lines
+        .filter((line) => PF.player.resolvedDay(line[0]) === day)
+        .map((line) => (typeof line[1] === "string" ? line[1] : ""));
+      const cost = texts.reduce((sum, text) => sum + PF.player.graphemes(text).length, 0);
+      if (rendered.length && spent + cost > budget) break;
+      rendered.push(`Day ${day}: ${texts.join(" ")}`);
+      spent += cost;
+      through = day;
+    }
+    const untold = (Array.isArray(player.ledger?.notices) ? player.ledger.notices : []).filter(
+      (row) => Array.isArray(row) && row.length >= 2 && !row[2],
+    );
+    if (!rendered.length && !untold.length) return null;
+    const sentences = [...rendered];
+    // ONE framing sentence for the whole band, and it frames them as things that
+    // happened TO the world rather than in the player's days — which is what they
+    // are, and what the writer-site copy each of them carries will say in more
+    // detail as the band grows an actor to name (M3, roadmap).
+    if (untold.length) {
+      const said = untold.map((row) => (typeof row[1] === "string" ? row[1] : "")).join(" ");
+      sentences.push(`Also, about the world itself rather than the days in it: ${said}`);
+    }
+    return { text: `[Wrap-up — ${sentences.join(" ")}]`, throughDay: through, notices: untold };
   }
 
   /** Burn the one-shot flags for the last composed prefix (accepted turn). */
@@ -6240,11 +6743,29 @@ PF.spatial = {
     // then leave the NEW chat's state alone (same guard refresh() uses).
     const gen = this._gen;
     const chatId = core.chatId;
+    // A THIRD CAPTURE, and it is a DIFFERENT counter from the two above. Those
+    // are spatial's own generation and the chat id, which fence this journey's
+    // post-await branches; the player mutators fence on PF.save._gen, which moves
+    // on a chat switch and is what stops this turn's wrap-up burn landing on the
+    // arriving chat's block. Read pre-await, like everything else here.
+    const saveGen = PF.save._gen ?? 0;
     try {
       const text = `${core.sim.composePrefix(null)} We travel to ${dest.name}.`;
+      // The composed turn's own pending, closure-local — never re-read after the
+      // await, where commitIntro's wholesale null waits (see 90-element interact
+      // for the two ways this goes wrong).
+      const pend = core.sim._pendingIntro;
       const ok = await core.host.sendMessage(text, undefined, transition);
       if (gen !== this._gen || core.chatId !== chatId) return;
-      if (ok !== false) core.sim?.commitIntro?.();
+      if (ok !== false) {
+        core.sim?.commitIntro?.();
+        // The burn, on the accepted turn. Guarded inside the mutator and its
+        // refusal deliberately swallowed (plan §2.6). The captured pending hands
+        // back BOTH halves of what was told — the day and the notice ROWS — so
+        // the burn marks the band this turn carried and not whatever a rebuild
+        // has written into the live one since (plan §2.5).
+        if (pend?.ledger) PF.player.flush(core, pend.ledger.throughDay, pend.ledger.notices, saveGen);
+      }
       // Both post-await branches act only on THIS journey's pending entry: a
       // 1.12 reject event may already have cleared it mid-await (a second,
       // contradictory toast would follow), and the player may already have
@@ -6562,7 +7083,8 @@ const currentPlayerV = () => PLAYER_MIGRATIONS.length + 1;
 //   EVICT (the cap makes room and the call succeeds) — relLines evicts the
 //     oldest line and leaves its row standing; boardDone / packDone evict the
 //     least-earned counter; ledgerDays / ledgerPerDay / ledgerStubs compact the
-//     buffer; found evicts the oldest discovery.
+//     buffer; found evicts the oldest discovery; `notices` evicts the oldest
+//     TOLD row, and an untold one only when every row is untold.
 //   TRUNCATE (the value is cut, the call succeeds) — lineChars, ledgerChars,
 //     skillLevel (the level stops climbing and xp is zeroed at the ceiling).
 //   REFUSE (the call does nothing and says so, which is the part the old header
@@ -6594,6 +7116,12 @@ const CAPS = {
   ledgerPerDay: 15,
   ledgerStubs: 30, // elided days, one stub line each
   ledgerChars: 200,
+  // The notice band's own rows (plan §2.5). Notices are explanations for
+  // something that already happened to the save — a severance, a loss, a
+  // restore — and a block carrying a dozen unread ones has bigger news than the
+  // thirteenth. Small on purpose, and it evicts TOLD rows first: an untold
+  // notice is one nobody has been given yet, so it is the last thing to lose.
+  notices: 12,
   found: 80,
   skillLevel: 20,
 };
@@ -6601,6 +7129,27 @@ const CAPS = {
 // Placeholder curve, exported so slice 6 can retune it without touching the
 // mutator: experience needed to leave level `l`.
 const xpPerLevel = (l) => 10 * Math.max(1, l);
+
+// The quality axis of a pouch row's `(t, k)` key, worst to best. It is a LADDER
+// and not a label set: the INDEX is the tier every multiplier reads, so the
+// order is load-bearing and an insertion in the middle would re-tier every save
+// in the wild. Frozen for that reason — a retune belongs in the multipliers the
+// index feeds, never in the ladder itself.
+//
+// IT GRADES TOOLS ONLY, and the rest of the field is not junk it is being
+// lenient about. Every other `k` in the pouch is a SEMANTIC SLUG — a catch row's
+// variant ("carp", "kelp"), a bait's kind — and a slug is not a worse "crude":
+// the two vocabularies share one field and must not share one validator. So the
+// grading rule is scoped by TYPE. TOOL_TYPES is the named set that says which
+// rows are graded; grant() and equip() refuse a graded row whose `k` is off the
+// ladder and leave every other row's `k` free.
+//
+// `rod` is 0.12's only tool, and it is named HERE while its item vocabulary and
+// its skins land with the verb that uses it: what the pouch needs at this layer
+// is the grading rule, which is a property of the key and belongs beside the
+// caps the mutators enforce.
+const QUALITY = Object.freeze(["crude", "decent", "fine", "masterwork"]);
+const TOOL_TYPES = new Set(["rod"]);
 
 // The quarantine bag's own ceiling, independent of the snapshot's (plan §4).
 // It lives in its own metadata key, so it competes with nothing — which is why
@@ -6683,25 +7232,64 @@ const sortedMap = (pairs) => {
   return out;
 };
 
+/** The grapheme units of a string, best-effort. Exported (see PF.player), because
+ *  the caps below are stated in graphemes and so is the ONE consumer that has to
+ *  agree with them from another file: the wrap-up tell measures whole ledger days
+ *  against `TUNING.ledgerTellChars` (30-sim `_composeLedger`), and that budget is
+ *  floor-asserted at load against `ledgerPerDay × ledgerChars`.
+ *
+ *  Measure the tell in code points while the caps count graphemes and the floor
+ *  assertion stops being a promise about the same quantity: one family emoji in a
+ *  zone name is seven code points wide, so a day the caps call legal can be four
+ *  times its own measured size and the budget drops it. What that costs is
+ *  OVER-EAGER TRUNCATION rather than a stall — the oldest owed day always rides,
+ *  fitting or not, so the flush still advances one day at a time — but a
+ *  multi-day tell would be cut short every turn on a save whose prose is not
+ *  ASCII, which is a real player writing real names. One measure, both sides. */
+const graphemes = (text) => {
+  const s = str(text);
+  try {
+    return globalThis.Intl?.Segmenter
+      ? Array.from(new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(s), (part) => part.segment)
+      : Array.from(s);
+  } catch {
+    return Array.from(s);
+  }
+};
+
 /** Grapheme-aware truncation: an `s` line is player-visible prose and a cut
  *  through a surrogate pair or a combining mark renders as a broken glyph. */
 const clip = (text, max) => {
   const s = str(text).replace(/\s+/g, " ").trim();
-  let units;
-  try {
-    units = globalThis.Intl?.Segmenter
-      ? Array.from(new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(s), (part) => part.segment)
-      : Array.from(s);
-  } catch {
-    units = Array.from(s);
-  }
+  const units = graphemes(s);
   return units.length <= max ? s : units.slice(0, max).join("");
+};
+
+/** The notice band's cap, applied wherever the array is normalized — the writer
+ *  below, `_enforceCaps`, and serialize() — so the wire, a restored block and a
+ *  live one cannot disagree about which twelve survived.
+ *
+ *  TOLD-OLDEST FIRST. A told notice has already reached the GM through the flush
+ *  and is only still here so the panel can show it; an untold one is a sentence
+ *  nobody has been given. When every row is untold the OLDEST goes, because a cap
+ *  that cannot bite is not a cap. */
+const evictNotices = (rows) => {
+  if (!Array.isArray(rows) || rows.length <= CAPS.notices) return Array.isArray(rows) ? rows : [];
+  const out = rows.slice();
+  while (out.length > CAPS.notices) {
+    const told = out.findIndex((row) => Array.isArray(row) && row[2]);
+    out.splice(told >= 0 ? told : 0, 1);
+  }
+  return out;
 };
 
 PF.player = {
   CAPS,
+  QUALITY,
+  TOOL_TYPES,
   MIGRATIONS: PLAYER_MIGRATIONS,
   xpPerLevel,
+  graphemes,
   /** The schema version THIS build writes. Derived — see PLAYER_MIGRATIONS. */
   currentV: currentPlayerV,
 
@@ -6888,6 +7476,34 @@ PF.player = {
           return out;
         }),
     };
+    // THE NOTICE BAND, which is a subtree and not a line class (plan §2.5,
+    // round-5 BLOCKER-1). A notice explains something that happened TO the save
+    // rather than something the player did in the world, so it is not part of
+    // the day transcript and does not belong in a day group: rows are
+    // `[day, text]` untold and `[day, text, 1]` told, and the TOLD FLAG is what
+    // the wrap-up tell reads instead of the day gate the lines answer to.
+    //
+    // EMITTED ONLY WHEN NON-EMPTY, which is `bought`'s precedent one level up:
+    // every save in the wild would otherwise gain four bytes of empty array for
+    // a band it has nothing to put in.
+    const notices = evictNotices(
+      (Array.isArray(p.ledger?.notices) ? p.ledger.notices : [])
+        .filter((row) => Array.isArray(row) && row.length >= 2)
+        .map((row) => {
+          const out = [posInt(row[0], 0), clip(row[1], CAPS.ledgerChars)];
+          if (row[2]) out.push(1);
+          return out;
+        })
+        // A ROW WITH NOTHING TO SAY IS NOT A ROW. `notice()` already refuses text
+        // that clips to nothing, so no row this build writes reaches here empty;
+        // a hostile save carrying `[3, "   "]` or a number where the sentence goes
+        // used to survive as `[3, ""]` — bytes on the wire, a slot against the
+        // cap, and a blank line in the panel no writer could account for. Dropped
+        // at the one place the wire is built, which is where `lines`' own
+        // shape-filter lives.
+        .filter((row) => row[1]),
+    );
+    if (notices.length) out.ledger.notices = notices;
     out.found = {
       zones: (Array.isArray(p.found?.zones) ? p.found.zones : [])
         .filter((z) => z && typeof z === "object" && str(z.p))
@@ -7063,6 +7679,17 @@ PF.player = {
       player.home = null;
       player.bought = null;
       const lines = player.ledger.lines;
+      // THE BAND GOES WITH THE TRANSCRIPT, AND IT IS A REAL LOSS — accepted, and
+      // stated rather than dressed up as the status quo (plan §5). A notice used
+      // to BE a ledger line, so a brief severance always took the pending ones;
+      // but a severed line was PARKED in the quarantine entry above and came home
+      // with the rest of the world-bound set, and the band is not parked and
+      // cannot be. So the format change that made a notice re-readable also made
+      // this loss permanent: what a brief severance drops here, nothing restores.
+      // What survives the window is the notice this severance is about to write,
+      // which 60-save appends after the strip. (`intro.ledgerOwed` is not touched
+      // and correctly is not: it is world-unbound, and the days it owes are days
+      // the player lived whatever world they lived them in.)
       player.ledger = { lines: [] };
       // COUPLED, and only when lines were ACTUALLY severed (plan §0): an empty
       // buffer must leave the gate exactly where it was, or a save with nothing
@@ -7161,7 +7788,18 @@ PF.player = {
           fields.questsDonePack && typeof fields.questsDonePack === "object" ? fields.questsDonePack : {};
       if (Array.isArray(fields.found)) player.found = { zones: fields.found };
       if (fields.home !== undefined) player.home = fields.home;
-      if (Array.isArray(fields.ledgerLines)) player.ledger = { lines: fields.ledgerLines };
+      if (Array.isArray(fields.ledgerLines)) {
+        // THE BAND IS NOT THE TRANSCRIPT, and a whole-object reassignment is how
+        // that gets forgotten. `ledgerLines` is the only thing the entry parked —
+        // the band was never quarantined and never could be, because it rode in
+        // on the LIVE block's own disk state and its rows are sentences nobody has
+        // been told yet. Reassigning `ledger` wholesale takes them with it, while
+        // the mint branch above (which touches the ledger not at all) keeps them,
+        // and two branches of one restore cannot disagree about that.
+        const band = Array.isArray(player.ledger?.notices) ? player.ledger.notices : null;
+        player.ledger = { lines: fields.ledgerLines };
+        if (band && band.length) player.ledger.notices = band;
+      }
       if (fields.flushedDay !== undefined) player.flushedDay = posInt(fields.flushedDay, player.flushedDay);
       // `bought` was severed with the rest of the world-bound set, so it comes
       // home with them.
@@ -7217,7 +7855,13 @@ PF.player = {
       return { dropped: [], notices };
     }
     player.quests.active = active.filter((q) => known.has(giverName(q.g)));
-    notices.push("A task you had taken on has no one left to hand it back to.");
+    // A LOSS, and the sentence has to say so. The rows above are PARKED — set
+    // aside, recoverable, and their copy says as much — while this quest is
+    // dropped and nothing brings it back. "No one left to hand it back to" is
+    // true and stops one clause short of the outcome, which is the difference
+    // between a notice and an explanation now that the band is re-readable
+    // (plan §2.5, M3's writer-site kind copy).
+    notices.push("A task you had taken on has no one left to hand it back to, so you have let it go.");
     return { dropped: dangling, notices };
   },
 
@@ -7383,6 +8027,18 @@ PF.player = {
         .map((row) => row.zone);
     }
     if (p.ledger && Array.isArray(p.ledger.lines)) this._compactLedger(p);
+    // The band answers to its own cap here too — BELT ONLY, and the reason is
+    // worth writing down because the line looks like it is catching something.
+    // Nothing can arrive over the cap: no quarantine entry carries notices (a
+    // severance parks `ledgerLines` and the band is not parked at all — see
+    // applyStamps), so there is no second band anywhere to concatenate a first
+    // one with, and every path that can put a row in one — `notice()`,
+    // `serialize()`, and `parse()` through it — has already run `evictNotices`.
+    // It stays because the cap is applied wherever the array is normalized and
+    // this is one of those places, and because the day an entry DOES bring a band
+    // home is the day this line is the only thing standing between two capped
+    // bands and one that is twice the cap.
+    if (p.ledger && Array.isArray(p.ledger.notices)) p.ledger.notices = evictNotices(p.ledger.notices);
     return p;
   },
 
@@ -7442,6 +8098,78 @@ PF.player = {
     return fresh;
   },
 
+  // ── Resolve-at-read (plan §2.1) ────────────────────────────────────────────
+  // A SAVED STRING IS EVIDENCE, NEVER A VALUE. Each of these takes what the
+  // block happens to hold and answers with a number inside a stated range, so a
+  // row written by a hostile hand, an older build or a newer one can move the
+  // answer but can never leave the range. That is what makes them safe as
+  // determinism inputs: the fishing roll is seeded from the RESOLVED numbers, so
+  // two clients that disagree about what "legendary" means still roll the same
+  // fish out of the same water on the same minute.
+  //
+  // Pure, and deliberately so — they take values rather than the core, so the
+  // hash and the display can resolve the same row without either one reaching
+  // for live state the other cannot see.
+
+  /** A graded tool's tier: its place on the QUALITY ladder, with everything the
+   *  ladder does not name clamping to 0. A `k` that is off the ladder — a newer
+   *  build's "legendary", a bait slug, an empty string, a number — is CRUDE.
+   *  Never a throw, and never a bonus. */
+  resolvedToolTier(k) {
+    const at = QUALITY.indexOf(typeof k === "string" ? k : "");
+    return at < 0 ? 0 : at;
+  },
+
+  /** A modifier's tier, and it reads PRESENCE rather than grade. Bait `k` are
+   *  semantic slugs, so an index resolver would map a slotted bait and an EMPTY
+   *  slot to the same 0 and make the modifier inert — which is the whole reason
+   *  this one does not read QUALITY at all. 1 iff the slot holds a pair AND the
+   *  pouch still has a stack behind it; 0 for everything else.
+   *
+   *  `stack` is the pouch row the caller looked that pair up by, or a bare
+   *  count for a caller that already has one. A ROW IS CHECKED TO BE THE RIGHT
+   *  ROW: "backed by" is the claim being made, and a stack of something else
+   *  backs nothing.
+   *
+   *  What it does NOT check is the pair's TYPE. The mod slot is filled by the
+   *  verb's own per-session act and by nothing else, so a pair in it is a pair
+   *  the verb put there; a hostile save that slots something odd and carries a
+   *  real stack for it has spent a real stack, which is the thing the multiplier
+   *  is paid for. Graded modifiers are L2 content (§5) and arrive as a second
+   *  tier here, never as a QUALITY read. */
+  resolvedModTier(slot, stack) {
+    if (!Array.isArray(slot) || !str(slot[0])) return 0;
+    if (typeof stack === "number") return isFiniteInt(stack) && stack > 0 ? 1 : 0;
+    if (!stack || typeof stack !== "object") return 0;
+    if (str(stack.t) !== str(slot[0]) || str(stack.k) !== str(slot[1])) return 0;
+    return posInt(stack.q, 0) > 0 ? 1 : 0;
+  },
+
+  /** A DAY ORDINAL off untrusted state: a whole number at or above zero, and
+   *  zero for everything else. Small, and it exists because three files needed
+   *  the same read and a near-copy in each of them is how two of them come to
+   *  disagree — the restore that carries `intro.ledgerOwed` across a reload
+   *  (60-save), the sleep that stages it, and the wrap-up that composes against
+   *  it and the day gate (30-sim). Zero is the safe answer everywhere: it owes
+   *  nothing, tells nothing, and cannot lift a gate.
+   *
+   *  Beside the resolvers because it is one of them — a saved number is evidence
+   *  and not a value, and a `ledgerOwed` of "12", -3 or 1e9 has to come back as
+   *  a day this build can reason about rather than as a fact it inherited. */
+  resolvedDay(value) {
+    return posInt(value, 0);
+  },
+
+  /** A verb's level, clamped to the ladder the block can actually hold. `row` is
+   *  a `skills.verbs` entry or a bare number, and either one comes off save JSON
+   *  where `l` can be 0, 9,000, or the string "12". The floor is 1 rather than 0
+   *  because level 1 is where a verb starts: a player who has never fished still
+   *  rolls, they just roll at the bottom of the curve. */
+  resolvedLevel(row) {
+    const l = typeof row === "number" ? row : row?.l;
+    return PF.clamp(posInt(l, 1), 1, CAPS.skillLevel);
+  },
+
   // ── Mutation API (plan §3) ─────────────────────────────────────────────────
   // Every mutator RE-RESOLVES core.sim (never a captured sim — a chat switch
   // reassigns it under any caller holding one), is generation-FENCED on the
@@ -7486,6 +8214,12 @@ PF.player = {
     if (!p) return 0;
     const { t, k } = this._itemKey(item);
     if (!t) return 0;
+    // A GRADED type's `k` has to be a rung. Refused rather than coerced down to
+    // "crude": coercion would still mint the row, the pouch would carry a
+    // quality nothing can name, and every resolver from then on would read a
+    // lie as a floor. An UNGRADED type keeps its free `k` — that field is where
+    // a catch row keeps its variant, and a variant is not a bad tier.
+    if (TOOL_TYPES.has(t) && !QUALITY.includes(k)) return 0;
     const n = Math.max(1, posInt(qty, 1));
     let row = p.pouch.items.find((it) => it.t === t && str(it.k) === k);
     if (!row) {
@@ -7559,6 +8293,11 @@ PF.player = {
     if (item != null) {
       const { t, k } = this._itemKey(item);
       if (!t) return false;
+      // The same grading rule grant() applies, for the same reason and at the
+      // same point — before anything is allocated. A slot is a pointer at a
+      // pouch row, so a pair the pouch would refuse to hold is a pair nothing
+      // can be pointing at.
+      if (TOOL_TYPES.has(t) && !QUALITY.includes(k)) return false;
       pair = [t, k];
     }
     const slots = this._bucket(p.skills.equipped, name);
@@ -7790,6 +8529,112 @@ PF.player = {
     if (at <= posInt(p.flushedDay, 0)) return false;
     p.ledger.lines.push([at, line]);
     this._compactLedger(p);
+    this._touch(core);
+    return true;
+  },
+
+  /** Append a notice to the band. Takes the BLOCK and not the core, which is the
+   *  one thing about it that breaks the shape of every mutator above: its only
+   *  caller is 60-save's rehydration, which runs before there is a live sim to
+   *  dirty and is deliberately a NON-MUTATION (the next real save carries it),
+   *  and which is also the one moment `_live`'s loading gate would refuse.
+   *
+   *  THE DAY IS THE DAY IT HAPPENED. The band is told-flagged rather than
+   *  day-gated, so nothing here has to lift a notice above the flush gate to keep
+   *  it tellable — which is what the old lines back-door had to do, and what put
+   *  a day header from the FUTURE into the wrap-up (plan §2.5).
+   *
+   *  Returns true when a row was appended, false for text that clips to nothing. */
+  notice(player, text, day) {
+    if (!player || typeof player !== "object") return false;
+    const line = clip(text, CAPS.ledgerChars);
+    if (!line) return false;
+    if (!player.ledger || typeof player.ledger !== "object") player.ledger = { lines: [] };
+    const rows = Array.isArray(player.ledger.notices) ? player.ledger.notices : [];
+    rows.push([posInt(day, 0), line]);
+    player.ledger.notices = evictNotices(rows);
+    return true;
+  },
+
+  /** THE WRAP-UP BURN (plan §2.5), and the other half of the two-field flush.
+   *  The compose selected `flushedDay < day ≤ intro.ledgerOwed` and the host has
+   *  ACCEPTED the turn carrying it; this is what makes that telling permanent —
+   *  the day gate rises to `throughDay`, and every notice that rode the same tell
+   *  is marked told.
+   *
+   *  IT GUARDS ITSELF, which is the one thing about it that is not ordinary. The
+   *  invariant is `flushedDay ≤ ledgerOwed < sim.day` and this is the only writer
+   *  that can RAISE the gate, so a burn that would raise one refuses unless
+   *      flushedDay < throughDay ≤ intro.ledgerOwed  and  throughDay < sim.day
+   *  with all three read from the LIVE sim at write time and not from whatever
+   *  the sender was looking at when it composed. A burn AT the gate raises
+   *  nothing, so it is held to `throughDay ≥ flushedDay` and no more: its whole
+   *  job is marking a notice-only tell, and a PARTIAL RESTORE can leave the gate
+   *  standing over a marker that owes nothing — a state the burn did not write
+   *  and cannot repair, but must not be starved by (see the guard body). That is what closes the seam the
+   *  generation fence cannot see: `_gen` moves only on a chat switch, while
+   *  `_rebuild` replaces `core.sim` wholesale WITHOUT touching it (a rewind, a
+   *  swipe, a checkpoint load), so a send resolving over a rewound sim passes the
+   *  fence and would otherwise write a future gate onto the rewound block.
+   *
+   *  `notices` IS THE ROWS THE COMPOSE CAPTURED — `pending.ledger.notices`,
+   *  handed back through the sender's closure-local pending — and not the live
+   *  band read again here. The guard is NOT enough to make those two the same
+   *  set, and that is the whole reason for the parameter. The guard reads three
+   *  numbers, and three of the five notice writers move none of them: the
+   *  dangling-quest repair, the mint severance and a restore landing on a gate
+   *  already where it was all append to the band while leaving `flushedDay`,
+   *  `ledgerOwed` and `day` untouched. Every one of them runs inside
+   *  `_rehydratePlayer` ← `simFromSaved` ← `_rebuild`, which is UNFENCED on the
+   *  same chat — so a rebuild landing mid-send hands the burn a live band with a
+   *  row NOBODY COMPOSED in it, and a re-read would mark it told. The band
+   *  answers to that flag and to nothing else, so a told row nobody was told is a
+   *  sentence destroyed in silence: no gate to re-open, no day to re-select.
+   *
+   *  Marking the CAPTURED rows is safe in the same interleaving for the opposite
+   *  reason: under a rebuild they are orphans of the sim that was replaced, and
+   *  writing a flag onto an object nothing reads any more is a no-op. The fresh
+   *  notice stays untold and rides the next compose, which is the only turn that
+   *  can honestly carry it.
+   *
+   *  Returns true when it wrote and false for every refusal — the fence, the
+   *  loading gate, a day that is not a day, the backwards gate, and (for a burn
+   *  that would raise the gate) either of the two day inequalities.
+   *  The senders SWALLOW the refusal (no toast, no retry): a guard refusal after
+   *  an accepted send leaves the tell in history un-burned and the next compose
+   *  re-tells it, which is a §5 lost-flush cause and not something to interrupt
+   *  the player about. The value is for the tests. */
+  flush(core, throughDay, notices, gen) {
+    const p = this._live(core, gen);
+    if (!p) return false;
+    const sim = core.sim;
+    if (!isFiniteInt(throughDay) || throughDay < 0) return false;
+    const gate = posInt(p.flushedDay, 0);
+    // Backwards: a tell composed against an older gate, resolving after a newer
+    // one already rose. Nothing to do, and lowering the gate would re-tell.
+    if (throughDay < gate) return false;
+    // THE TWO DAY CHECKS GUARD THE GATE'S ADVANCE, so they are asked only when
+    // there is one to guard. A burn AT the gate writes `max(gate, gate)` and
+    // moves it nowhere; the band it carried answers to its told-flag and not to
+    // a day, which is the whole reason the notices left the lines. A PARTIAL
+    // RESTORE is what makes the difference matter: the player block rehydrates
+    // outside the envelope's `v` gate, so a row this build cannot read the
+    // envelope of — or a newer build's row that moved `intro.ledgerOwed` — comes
+    // back with `flushedDay` standing over a marker that owes nothing. Asking
+    // these of a gate that cannot rise refused the notice-only tell FOREVER: no
+    // later day can lift `ledgerOwed` back over a `flushedDay` already above it,
+    // so the same notice rode every compose for the rest of the save's life.
+    if (throughDay > gate) {
+      // Past what any sleep has made owed: the days beyond it are days the player
+      // has not finished living, or a rewound sim that never staged them.
+      if (throughDay > this.resolvedDay(sim.intro?.ledgerOwed)) return false;
+      // …and never the day underway, whatever the marker says.
+      if (throughDay >= this.resolvedDay(sim.day)) return false;
+    }
+    p.flushedDay = Math.max(gate, throughDay);
+    for (const row of Array.isArray(notices) ? notices : []) {
+      if (Array.isArray(row) && row.length >= 2 && !row[2]) row[2] = 1;
+    }
     this._touch(core);
     return true;
   },
@@ -8438,36 +9283,259 @@ PF.quarantine = {
 // room. Home ASSIGNMENT channels (a setup flag, P6 building) are enumerated in
 // the plan and deliberately not here.
 //
-// Everything below is CONTENT plus three game-facing entry points: berthOffer
-// describes and never charges, rentBerth and grantStartingPurse mutate. (The
-// rest — _skin, currency, money, describe, price — are the vocabulary those
-// three and the HUD read through.) It holds no state of its own: what persists
+// Everything below is CONTENT plus the game-facing entry points: the OFFERS
+// (berthOffer, rodOffer) describe and never charge, so the HUD can call them
+// every frame; the VERBS (rentBerth, buyRod, grantStartingPurse) mutate. The
+// rest — _skin, currency, money, describe, price, the catch tables — is the
+// vocabulary those read through. It holds no state of its own: what persists
 // goes through the shipped mutators (award/grant/setHome/log/bump) and lives in
 // the player block, which is what makes it rewind-safe.
+
+// The catch table's TYPE vocabulary — the fixed shared roles a table entry can
+// be, and the one non-catch yield water gives up. A table row carries a role and
+// a VARIANT slug ("carp", "kelp", "vat-strain"), and the role is the half that
+// means the same thing in every theme, which is why the xp table below is keyed
+// by it.
+const CATCH_ROLES = ["catch-common", "catch-uncommon", "catch-rare", "catch-prize"];
+// Bait is a real water yield and not a catch (fishing is bait's own finder), so
+// it sits outside the roles and still earns through the same table: the award
+// keys on `role ?? BAIT_TYPE`, which is what stops a bait-first session from
+// minting no skill row at all on a player who has plainly been fishing. A table
+// entry with no `role` IS a bait entry — one field, read one way.
+const BAIT_TYPE = "bait";
+// The types whose `k` is a VARIANT SLUG rather than a tier or nothing. describe()
+// keys their display name on `k`; PF.player.TOOL_TYPES is the other half of the
+// same split and keys on the type's own name with `k` as an adjective in front.
+const VARIANT_TYPES = new Set([...CATCH_ROLES, BAIT_TYPE]);
 
 // The closed item vocabulary. A pouch row is keyed `(t, k)` — type and quality —
 // and `t` has to mean the same thing in every theme or a save crossing a theme
 // change would be renaming the player's belongings. So the TYPES are shared and
 // only the SKIN (what it is called, and the glyph the purse shows) is per theme.
-const ITEM_TYPES = ["lodging-key"];
+const ITEM_TYPES = ["lodging-key", "rod", BAIT_TYPE, ...CATCH_ROLES];
+
+// The skill verbs this build ships a row for. A `skills.verbs` key is world-FREE
+// and means the same thing everywhere, exactly as an item type does — so the
+// verb is shared and only the SKIN is per theme, and the boot assertion below
+// demands every theme name each of these and the two slots it equips.
+const SKILL_VERBS = ["fishing"];
+
+// The four daypart words, which is the axis a catch table's multipliers are keyed
+// on. They mirror PF.Sim.daypart()'s own four and are written here because the sim
+// exports no list; the boot assertion below refuses a table entry keyed on
+// anything else, which is what stops a plausible-looking "evening" column from
+// shipping as a multiplier that never applies.
+const DAYPARTS = ["dawn", "day", "dusk", "night"];
+
+// The two feature tags that hold fishable water — the closed brief vocabulary's
+// own words (18-brief FEATURE_TAGS), and the second half of a catch table's key.
+// A spot's kind is where it stands in the world's shape, not what it is called:
+// still water and running water fish differently in any theme, so the table set
+// is (theme × kind) and both halves are asserted complete at boot.
+const SPOT_TAGS = ["water-feature", "water-crossing"];
+
+// ── What comes out of the water (plan §2.2) ──────────────────────────────────
+// One table per (theme, spot kind). An ENTRY is `{role, variant, weight,
+// minLevel, daypart}`:
+//   • `role`   — the shared TYPE, one of CATCH_ROLES. ABSENT means bait, which is
+//                a yield in its own right and the only one that is also an input.
+//   • `variant`— the entry's slug, and the pouch row's `k`. Row identity is
+//                `(role, variant)`, so kelp never merges into carp and a stack of
+//                one thing is a stack of one thing.
+//   • `weight` — relative share of the successful casts this table answers for.
+//   • `minLevel` — the level the entry becomes REACHABLE at; below it the entry
+//                is not in the draw at all, which is what makes the ladder feel
+//                like it opens water up rather than merely raising a percentage.
+//   • `daypart`— per-daypart multipliers over `weight`, absent meaning 1. This is
+//                0.12's ONLY live modifier (weather is L2, M9) and it is where a
+//                night spot stops being the same spot as a noon one.
+// NO PER-ENTRY XP: TUNING.catchXp is the single authority, keyed by TYPE, so a
+// rebalance happens in one place and cannot half-happen.
+//
+// SCI-FI IS NOT FISH-FREE (M6 RULED). A colony that stocks a coolant pool eats
+// carp out of it; what the theme adds is flavored variants beside the real fish
+// and non-fish yields — kelp cultures, filter salvage — that are legitimate
+// entries and not consolation prizes.
+const CATCH_TABLES = {
+  "cozy-village": {
+    "water-feature": [
+      { variant: "worms", weight: 24, minLevel: 1, daypart: { dawn: 1.2, night: 0.7 } },
+      { role: "catch-common", variant: "carp", weight: 34, minLevel: 1, daypart: { night: 0.7 } },
+      { role: "catch-uncommon", variant: "bream", weight: 18, minLevel: 3, daypart: { dusk: 1.3 } },
+      { role: "catch-rare", variant: "mirror-pike", weight: 6, minLevel: 7, daypart: { day: 0.6, night: 1.6 } },
+      { role: "catch-prize", variant: "old-tench", weight: 2, minLevel: 12, daypart: { dawn: 2, day: 0.5 } },
+    ],
+    "water-crossing": [
+      { variant: "grubs", weight: 22, minLevel: 1 },
+      { role: "catch-common", variant: "minnow", weight: 32, minLevel: 1 },
+      { role: "catch-uncommon", variant: "trout", weight: 17, minLevel: 4, daypart: { dawn: 1.4, dusk: 1.3 } },
+      { role: "catch-rare", variant: "silver-eel", weight: 6, minLevel: 8, daypart: { day: 0.5, night: 1.8 } },
+      { role: "catch-prize", variant: "crown-salmon", weight: 2, minLevel: 13, daypart: { dawn: 1.6 } },
+    ],
+  },
+  "sci-fi-colony": {
+    "water-feature": [
+      { variant: "chum", weight: 24, minLevel: 1 },
+      { role: "catch-common", variant: "carp", weight: 28, minLevel: 1, daypart: { night: 0.7 } },
+      { role: "catch-common", variant: "culture-kelp", weight: 14, minLevel: 1 },
+      { role: "catch-uncommon", variant: "vat-strain", weight: 16, minLevel: 3, daypart: { dusk: 1.3 } },
+      { role: "catch-rare", variant: "pressure-eel", weight: 6, minLevel: 7, daypart: { night: 1.6 } },
+      { role: "catch-prize", variant: "heritage-koi", weight: 2, minLevel: 12, daypart: { dawn: 1.8, day: 0.5 } },
+    ],
+    "water-crossing": [
+      { variant: "larvae", weight: 22, minLevel: 1 },
+      { role: "catch-common", variant: "minnow", weight: 30, minLevel: 1 },
+      { role: "catch-uncommon", variant: "filter-salvage", weight: 12, minLevel: 2 },
+      { role: "catch-uncommon", variant: "trout", weight: 16, minLevel: 4, daypart: { dawn: 1.4 } },
+      { role: "catch-rare", variant: "deepline-eel", weight: 6, minLevel: 8, daypart: { night: 1.8 } },
+      { role: "catch-prize", variant: "ice-run-char", weight: 2, minLevel: 13, daypart: { dawn: 1.6 } },
+    ],
+  },
+};
+
 const ITEM_SKINS = {
   "cozy-village": {
     currency: { one: "coin", many: "coins", glyph: "◍" },
-    items: { "lodging-key": { name: "room key", glyph: "🔑" } },
+    items: {
+      "lodging-key": { name: "room key", glyph: "🔑" },
+      rod: { name: "fishing rod", glyph: "🎣" },
+      [BAIT_TYPE]: { name: "hook bait", glyph: "🪱" },
+      "catch-common": { name: "catch", glyph: "🐟" },
+      "catch-uncommon": { name: "good catch", glyph: "🐟" },
+      "catch-rare": { name: "rare catch", glyph: "🐠" },
+      "catch-prize": { name: "prize catch", glyph: "🏆" },
+    },
+    // EVERY VARIANT ANY SHIPPED TABLE NAMES, in every theme — asserted at boot.
+    // The pouch is world-free, so a carp caught in a valley is still in the bag
+    // when the same chat's next world is a colony, and the row has to have a word
+    // there too. Which is also why the shared ones read the same in both maps: a
+    // carp is a carp in any world, and the entries that earn their keep are the
+    // ones a theme only ever sees in a traveller's pouch — this map's rendering
+    // of the colony's kelp and vat stock, and the colony's of a mirror pike.
+    variants: {
+      worms: "worms",
+      grubs: "grubs",
+      chum: "chum",
+      larvae: "wrigglers",
+      carp: "carp",
+      bream: "bream",
+      minnow: "minnow",
+      trout: "trout",
+      "mirror-pike": "mirror pike",
+      "silver-eel": "silver eel",
+      "old-tench": "old tench",
+      "crown-salmon": "crown salmon",
+      "culture-kelp": "strange kelp",
+      "vat-strain": "pale fish",
+      "pressure-eel": "deep eel",
+      "heritage-koi": "painted carp",
+      "filter-salvage": "odd scrap",
+      "deepline-eel": "black eel",
+      "ice-run-char": "ice char",
+    },
+    // The seeded flourish's word pools, keyed by the row's TYPE. A pool is a
+    // DISPLAY override and nothing else — no row, no byte and no roll depends on
+    // it — so a theme that ships none simply reads its plain names.
+    flourishes: {
+      "catch-common": ["plump", "muddy", "silver-sided"],
+      "catch-uncommon": ["bright-finned", "deep-water", "speckled"],
+      "catch-rare": ["scarred", "moon-pale", "grandfather"],
+      "catch-prize": ["storied", "long-hunted", "river-king's"],
+    },
+    // The refusals a player is meant to ACT on, in this theme's words. `{role}`
+    // is filled from the keeper's COMPILED role and never hardcoded: a sci-fi
+    // colony has no innkeeper, and only the brief knows what it does have.
+    hints: { noRod: "You need a rod — the {role} sells one." },
+    // WHAT THIS WORLD CALLS THE PERSON PLAYING IT. The package has no player
+    // name and the host props expose none, so the character sheet says what KIND
+    // of person is standing there rather than inventing a name for them (plan
+    // §2.8). An engine persona name + avatar is an enumerated Engine FR.
+    player: "Traveler",
+    // A VERB'S OWN WORD BOOK: what the skill is called here, and what its two
+    // equipment slots hold. The slot names are the closed `tool`/`mod` pair the
+    // block stores; a player should never be shown either of those words.
+    verbs: { fishing: { name: "Fishing", tool: "rod", mod: "bait" } },
   },
   "sci-fi-colony": {
     currency: { one: "credit", many: "credits", glyph: "◈" },
-    items: { "lodging-key": { name: "berth chit", glyph: "🔑" } },
+    items: {
+      "lodging-key": { name: "berth chit", glyph: "🔑" },
+      rod: { name: "angling rig", glyph: "🎣" },
+      [BAIT_TYPE]: { name: "lure stock", glyph: "🪱" },
+      "catch-common": { name: "haul", glyph: "🐟" },
+      "catch-uncommon": { name: "good haul", glyph: "🐟" },
+      "catch-rare": { name: "rare haul", glyph: "🐠" },
+      "catch-prize": { name: "record haul", glyph: "🏆" },
+    },
+    variants: {
+      worms: "worms",
+      grubs: "grubs",
+      chum: "chum",
+      larvae: "tank larvae",
+      carp: "carp",
+      bream: "bream",
+      minnow: "minnow",
+      trout: "trout",
+      "mirror-pike": "mirror pike",
+      "silver-eel": "silver eel",
+      "old-tench": "old tench",
+      "crown-salmon": "crown salmon",
+      "culture-kelp": "culture kelp",
+      "vat-strain": "vat strain",
+      "pressure-eel": "pressure eel",
+      "heritage-koi": "heritage koi",
+      "filter-salvage": "filter salvage",
+      "deepline-eel": "deepline eel",
+      "ice-run-char": "ice-run char",
+    },
+    flourishes: {
+      "catch-common": ["tank-bred", "pale", "filter-fed"],
+      "catch-uncommon": ["odd-scaled", "cold-run", "gene-drifted"],
+      "catch-rare": ["unlogged", "pressure-marked", "off-manifest"],
+      "catch-prize": ["record", "founder-stock", "hand-listed"],
+    },
+    hints: { noRod: "You need an angling rig — the {role} stocks one." },
+    player: "Drifter",
+    verbs: { fishing: { name: "Angling", tool: "rig", mod: "lure" } },
   },
 };
+
+// The rungs the rod ladder can quote (plan §2.4). 0.12 sells two: a rodless
+// player is offered `crude`, a crude owner is offered `decent`, and a
+// decent-or-better owner is offered nothing at all. The upper QUALITY tiers are
+// content for a later release and are deliberately absent — the boot assertion
+// at the foot of this file demands a price row for every rung this list names,
+// in every theme, so adding one here is what makes the build insist on pricing
+// it rather than letting a keeper refuse the sale at play as "not for sale".
+const ROD_TIERS = ["crude", "decent"];
+
+/** The price key a rod tier is quoted under. One helper rather than two format
+ *  strings in two files, so the assertion and the offer cannot drift apart. */
+const rodPriceKey = (tier) => `rod:${tier}`;
 
 // Fixed price lists, per theme (plan §2: "0.11 can ship fixed price lists first").
 // The weekly deterministic stock tables the plan describes need L2's calendar and
 // arrive with it; nothing here blocks that and nothing here has to be unpicked for
 // it — a table lookup replaces the constant and the verbs do not move.
+//
+// THE ROD ROWS ARE PER (THEME, TIER) BECAUSE ACQUISITION IS PER THEME, which is
+// the whole of the maintainer's amended ruling: no rod is ever free, and what
+// differs between worlds is what buying one COSTS you. Fantasy fishing is a
+// common thing to do, so its entry rod is cheap — half a night's berth, which is
+// "easily obtainable" made concrete. A sci-fi colony fishes as a niche hobby, so
+// its keeper quotes the same entry rod at FOUR TIMES the fantasy price (24
+// against 6 — the stated multiple), standing in until the hobby-store and
+// online-shopping mechanic lands and takes sci-fi rod acquisition off the keeper
+// entirely. The premium sits on the ENTRY rung because acquisition is what the
+// ruling is about; `decent` is a deliberate upgrade in either world and is
+// priced the same in both.
+//
+// Every number here is retunable DATA and nothing asserts a relationship between
+// them — see TUNING's price-interplay note for what a tuner should watch while
+// moving them.
 const PRICES = {
-  "cozy-village": { berth: 12 },
-  "sci-fi-colony": { berth: 12 },
+  "cozy-village": { berth: 12, "rod:crude": 6, "rod:decent": 40 },
+  "sci-fi-colony": { berth: 12, "rod:crude": 24, "rod:decent": 40 },
 };
 
 // What a new game starts with. It exists because a sink with no source is not a
@@ -8478,10 +9546,98 @@ const PRICES = {
 // for why that condition and not a default value.
 const STARTING_PURSE = 40;
 
+// "Line and tackle included" — the stack of bait that rides the FIRST rod
+// purchase. Its slug is the theme's own first bait variant (see starterBait), so
+// it merges with the bait the player then fishes up rather than orphaning a
+// second row beside it. A purchase quantity and not a fishing number, which is
+// why it sits beside the starting purse and not in TUNING.
+const STARTER_BAIT = 8;
+
+// ── Fishing's tuning table (plan §2.2, §2.4) ─────────────────────────────────
+// Exported and retunable, and it is the ONLY place a number the fishing verb
+// uses is written: a tuner changes how fishing plays by editing this object and
+// touching nothing else. Every field carries its own comment because "no
+// unstated numbers" is the rule the plan set for this table specifically.
+//
+// PACING, stated so a retune can be checked against an intent instead of a
+// feeling. The FIXED side is the ladder: leaving level `l` costs 10l xp
+// (PF.player.xpPerLevel) against a ceiling of CAPS.skillLevel 20, so the cap is
+// Σ 10l for l = 1…19 = 1,900 xp and nothing below can move it. The target is
+// that a player who fishes as their day's work gets there in a few dozen of
+// those days. At `castMinutes` 15 a ten-hour day is 40 windows; mid-curve
+// (decent rod, BAITLESS, halfway up the ladder) lands p = 0.48 × 1.15 ≈ 0.55, so
+// ≈ 22 of them yield; a common-heavy table pays ≈ 1.8 xp a yield. Call it 40 xp
+// a day, and the cap is ≈ 48 days of nothing but fishing. A day fished BAITED
+// throughout is the same chain times `baitMult`: p ≈ 0.69, ≈ 50 xp, ≈ 38 days —
+// which is the honest range, since no real session stays on one side of it.
+//
+// THE CATCH TABLE MOVES THAT AS MUCH AS THIS OBJECT DOES, and the BAIT SHARE is
+// the sharpest lever in it: bait pays `catchXp[BAIT_TYPE]`, the floor, and it
+// also refills the stack the bait multiplier rides on — so a high bait weight is
+// a self-sustaining, slow-earning table, and a low one drains toward baitless
+// casting at the lower multiplier. Recompose the table and the arithmetic above
+// has to be redone.
+//
+// PRICE INTERPLAY — A NOTE FOR TUNERS, NOT AN INVARIANT (maintainer override,
+// 2026-08-24). Nothing in this build asserts that a starting purse can afford a
+// rod, a berth, or both, and that is deliberate: 0.12 ships no income mechanic,
+// nobody is required to sleep in a rented berth, and income arrives in later
+// releases. The rod-against-berth fork is a PLAYER's choice and the build
+// declines to have an opinion about it. What a tuner should know while moving
+// numbers: STARTING_PURSE 40 against a 12-coin berth and the 6-coin fantasy
+// entry rod leaves room for both several times over, while the 24-credit sci-fi
+// rod turns the same purse into a real decision — and a player who spends the
+// purse down before buying is priced out of fishing until income lands, which is
+// an accepted limitation and not a bug.
+const TUNING = {
+  // THE SUCCESS CURVE, one family for every cast:
+  //     p = base(level) * toolMult[toolTier] * modMult[modTier]
+  // where base(level) = min(baseCeil, baseAt1 + basePerLevel * (level - 1)) and
+  // every tier is a RESOLVED index (PF.player.resolvedToolTier /
+  // resolvedModTier), never a string off the save.
+  baseAt1: 0.3, // chance at level 1 with a crude rod and no bait: a third of casts
+  basePerLevel: 0.02, // added per level climbed, so level 20 sits at 0.68
+  baseCeil: 0.8, // the curve's own ceiling, so no retune of the two above can promise every cast
+  // One multiplier per QUALITY rung, in ladder order — crude is 1.0 because a
+  // rod is the price of ENTRY and not a bonus, and the two upper rungs are live
+  // numbers waiting on the content that sells them. Its length is asserted
+  // against QUALITY's at boot: a ladder and a multiplier list that can disagree
+  // is a silently mis-tiered curve.
+  toolMult: [1, 1.15, 1.3, 1.45],
+  // The modifier list is `[1, baitMult]` and only the second entry is tunable:
+  // tier 0 is a BAITLESS cast, which is the baseline by definition rather than a
+  // number anybody chose. Presence-based, so this is what bait is worth — not
+  // what a grade of bait is worth (graded mods are L2 content).
+  baitMult: 1.25,
+  castMinutes: 15, // one cast = one window = this many minutes of clock, and 1440 divides by it
+  // XP per successful window, keyed by the yield's TYPE — the four roles and
+  // bait — and this table is the single xp authority: table entries carry no xp
+  // of their own, so a rebalance happens in one place. Asserted complete at boot.
+  catchXp: { "catch-common": 1, "catch-uncommon": 2, "catch-rare": 5, "catch-prize": 10, [BAIT_TYPE]: 1 },
+  // The wrap-up tell's size budget, in graphemes. It renders WHOLE DAYS or none,
+  // so this is floor-asserted at boot against one maximum-shape day
+  // (CAPS.ledgerPerDay × CAPS.ledgerChars = 3,000) — under that floor the tell
+  // renders zero days, the burn advances through nothing, and the flush stalls
+  // forever. It is set AT the floor on purpose: one max-shape day is guaranteed
+  // to render, an ordinary day is a small fraction of it so several fit, and a
+  // prompt part is not a place to spend more than it has to.
+  ledgerTellChars: 3000,
+};
+
 PF.economy = {
   ITEM_TYPES,
   PRICES,
   STARTING_PURSE,
+  STARTER_BAIT,
+  ROD_TIERS,
+  CATCH_ROLES,
+  BAIT_TYPE,
+  SKILL_VERBS,
+  CATCH_TABLES,
+  SPOT_TAGS,
+  DAYPARTS,
+  TUNING,
+  rodPriceKey,
 
   /** The theme's skin table, falling back to the default theme rather than
    *  throwing: a save can name a theme this build no longer ships.
@@ -8502,6 +9658,25 @@ PF.economy = {
     return this._skin(world).currency;
   },
 
+  /** What this world calls the person playing it — the character sheet's themed
+   *  generic label (plan §2.8), standing in until the engine exposes a persona
+   *  name and avatar. */
+  playerLabel(world) {
+    return this._skin(world).player;
+  },
+
+  /** A verb's word book: its display name and the words for its two equipment
+   *  slots. An UNKNOWN verb still renders, slug-derived, exactly as describe()'s
+   *  unknown type does one method down — a save can carry a skill row written by
+   *  a newer build, and the sheet showing it as "flying" is a display fact
+   *  rather than a hole. */
+  verbSkin(world, verb) {
+    const name = typeof verb === "string" ? verb : "";
+    const book = this._skin(world).verbs;
+    if (Object.prototype.hasOwnProperty.call(book, name)) return book[name];
+    return { name: name.replace(/[-_]/g, " "), tool: "tool", mod: "modifier" };
+  },
+
   /** `12 coins`, `1 coin`. The purse chip and every price string go through this
    *  so a sci-fi colony never charges anybody "coins". */
   money(world, amount) {
@@ -8513,18 +9688,90 @@ PF.economy = {
   /** A pouch row's display name. An UNKNOWN type still renders — a newer build's
    *  item, or one a GM channel grants later, reads as its own tag rather than
    *  vanishing from the purse. The completeness assertion below is what keeps
-   *  every type this build can actually produce out of that fallback. */
+   *  every type this build can actually produce out of that fallback.
+   *
+   *  `k` IS TWO VOCABULARIES AND THIS IS WHERE THAT SHOWS (plan §2.2). On a
+   *  TOOL it is a tier and reads as an adjective — "crude rod". On a catch or a
+   *  bait it is a VARIANT SLUG and it is the name: the type is "catch-common"
+   *  and the thing in the bag is a carp, so the lookup keys on `k` and the
+   *  type's own word is only the fallback for a row that carries none. The old
+   *  path put the two together and would have rendered "worms bait", which is
+   *  why it is now scoped rather than general — and why a row whose type is
+   *  neither takes no prefix at all, `k` there being a slug nobody has claimed. */
   describe(world, item) {
     const t = typeof item === "string" ? item : typeof item?.t === "string" ? item.t : "";
     if (!t) return "";
+    const skin = this._skin(world);
     // The items map takes an own-property read for the same reason the skin table
     // does one line up: `t` is a pouch row's type off untrusted save JSON, and
     // `items["constructor"]` resolves to a function whose `.name` is "Object".
-    const items = this._skin(world).items;
-    const skin = Object.prototype.hasOwnProperty.call(items, t) ? items[t] : null;
-    const name = skin ? skin.name : t.replace(/[-_]/g, " ");
-    const quality = typeof item === "object" && typeof item?.k === "string" ? item.k : "";
-    return quality ? `${quality} ${name}` : name;
+    const typeSkin = Object.prototype.hasOwnProperty.call(skin.items, t) ? skin.items[t] : null;
+    const typeName = typeSkin ? typeSkin.name : t.replace(/[-_]/g, " ");
+    const k = typeof item === "object" && typeof item?.k === "string" ? item.k : "";
+    let base = typeName;
+    if (PF.player.TOOL_TYPES.has(t)) base = k ? `${k} ${typeName}` : typeName;
+    else if (VARIANT_TYPES.has(t) && k) {
+      // A VARIANT NO SKIN KNOWS still renders, slug-derived, exactly as an
+      // unknown TYPE does one line up — a hostile save row or a newer build's
+      // table is a display problem and never a throw.
+      base = Object.prototype.hasOwnProperty.call(skin.variants, k) ? skin.variants[k] : k.replace(/[-_]/g, " ");
+    }
+    const flourish = this._flourish(world, t, k);
+    return flourish ? `${flourish} ${base}` : base;
+  },
+
+  /** The seeded display override, keyed `(seed, t, k)` uniformly (plan §2.2).
+   *
+   *  Keyed on the WORLD's seed and not on the moment, because pouch rows MERGE:
+   *  there is one carp row holding nine carp, so a per-catch epithet would have
+   *  nothing to live on. Per world per variant is the shape the data can carry —
+   *  this valley's carp are the muddy ones and the next world's are not — and it
+   *  is computable wherever describe() runs, so the purse chip, the ledger and
+   *  the sheet all say the same thing without anybody storing it.
+   *
+   *  Returns "" when the theme ships no pool for that type, which is the
+   *  skin-name fallback: rods, bait and keys read plainly, and a pool added later
+   *  is a content change and not a mechanism one. */
+  _flourish(world, t, k) {
+    const pools = this._skin(world).flourishes;
+    if (!Object.prototype.hasOwnProperty.call(pools, t)) return "";
+    const pool = pools[t];
+    if (!Array.isArray(pool) || !pool.length) return "";
+    const seed = Number.isFinite(world?.seed) ? world.seed >>> 0 : 0;
+    return pool[PF.hashStr(`${seed}:${t}:${k}`) % pool.length];
+  },
+
+  /** The catch table for a world's theme and a spot's tag, or null when the tag
+   *  is not one that holds water. Own-property both ways: `world.theme` and a
+   *  registry row's `tag` are both strings this file did not write. */
+  catchTable(world, tag) {
+    const theme = typeof world?.theme === "string" ? world.theme : "cozy-village";
+    const byTheme = Object.prototype.hasOwnProperty.call(CATCH_TABLES, theme)
+      ? CATCH_TABLES[theme]
+      : CATCH_TABLES["cozy-village"];
+    if (typeof tag !== "string" || !Object.prototype.hasOwnProperty.call(byTheme, tag)) return null;
+    return byTheme[tag];
+  },
+
+  /** A table entry's pouch TYPE. `role ?? BAIT_TYPE` in one place, so the xp
+   *  award, the row identity and the ledger line cannot disagree about what a
+   *  roleless entry is. */
+  entryType(entry) {
+    return typeof entry?.role === "string" && entry.role ? entry.role : BAIT_TYPE;
+  },
+
+  /** The bait variant a theme's first rod purchase throws in. THE THEME'S FIRST
+   *  bait entry, scanned in SPOT_TAGS order — so the starter stack merges with
+   *  the bait the player then fishes out of that same water instead of sitting
+   *  beside it as a second row of a thing they already have. Null for a theme
+   *  whose tables carry no bait at all, which the boot assertion refuses. */
+  starterBait(world) {
+    for (const tag of SPOT_TAGS) {
+      for (const entry of this.catchTable(world, tag) ?? []) {
+        if (this.entryType(entry) === BAIT_TYPE) return entry.variant;
+      }
+    }
+    return null;
   },
 
   /** The price of a named thing in this world, or null when it is not for sale
@@ -8572,6 +9819,24 @@ PF.economy = {
     return null;
   },
 
+  /** THE KEEPER, whichever way you found them: reach first, then the room. Both
+   *  halves of the rule, in one place, because the keeper now sells two things.
+   *
+   *  Reach first, so a keeper you are standing next to always answers for their
+   *  own room even when you are both inside somebody else's; the room second,
+   *  because being inside the inn is the other half of the same fact and it is
+   *  the half a player actually discovers (see _keeperInRoom for the playtest
+   *  that found it).
+   *
+   *  EXTRACTED RATHER THAN COPIED (plan §2.4). The berth and the rod are quoted
+   *  by the same person and their resolutions must not drift: a second copy of
+   *  this line would be a build where the innkeeper lets you a room from across
+   *  the counter and refuses to sell you a rod from the same spot. */
+  _keeper(sim) {
+    const inReach = sim?.nearNpc;
+    return typeof inReach?.lodging === "string" && inReach.lodging ? inReach : this._keeperInRoom(sim);
+  },
+
   /** Is there a berth on offer where the player is standing, and what would it
    *  cost? Describes only — it never charges anything, so the HUD can call it
    *  every frame and a caller can render the refusal instead of hiding the
@@ -8590,8 +9855,7 @@ PF.economy = {
     const sim = core?.sim;
     const world = sim?.world;
     const no = (reason) => ({ available: false, reason, keeper: null, zoneId: null, price: null, home: null });
-    const inReach = sim?.nearNpc;
-    const npc = typeof inReach?.lodging === "string" && inReach.lodging ? inReach : this._keeperInRoom(sim);
+    const npc = this._keeper(sim);
     if (!sim || !npc) return no("no-keeper");
     if (!world?.zones || !Object.prototype.hasOwnProperty.call(world.zones, npc.lodging)) return no("no-lodging");
     const price = this.price(world, "berth");
@@ -8638,6 +9902,529 @@ PF.economy = {
     PF.player.log(core, `Took a berth at ${place} for ${this.money(world, offer.price)}.`, sim.day, gen);
     PF.player.bump(core, world.startZone, offer.keeper.name, { t: 1, s: `Let you a berth at ${place}.` }, gen);
     return { ok: true, reason: null, price: offer.price, zoneId: offer.zoneId };
+  },
+
+  // ── Sleep (what the berth is FOR) ──────────────────────────────────────────
+
+  /** Is there a bed where the player is standing? Describes only, so the HUD can
+   *  call it every frame. Returns { available, reason, bed, zoneId }.
+   *
+   *  BED-GATED ON THE HOME ANCHOR, which is the same fact rentBerth wrote: the
+   *  anchor IS the lodging zone the player holds a berth in (`setHome(zoneId)`),
+   *  so "in your home zone" and "in a lodging zone you have paid for" are one
+   *  test and not two. A homeless player has nowhere to sleep — the §5
+   *  never-flush class, accepted and stated — and a minted `{minted:true}` anchor
+   *  names no zone to stand in, so it is not one either.
+   *
+   *  `bed` is the render test the button gates on, exactly as `spot` is the fish
+   *  button's and `price !== null` is the berth's: a refusal that still says
+   *  there is a bed here is about the MOMENT (mid-conversation, mid-stream) and
+   *  belongs on screen saying so; one that says there is no bed is about the
+   *  place, and there is nothing to show. */
+  sleepOffer(core) {
+    const sim = core?.sim;
+    const no = (reason) => ({ available: false, reason, bed: false, zoneId: null });
+    if (!sim) return no("no-sim");
+    if (PF.save?.gateHolds?.(core)) return no("gate-held");
+    const player = PF.player.get(core);
+    if (!player) return no("no-player");
+    const home = typeof player.home === "string" ? player.home : "";
+    if (!home || home !== sim.zoneId) return no("no-bed");
+    const offer = { available: true, reason: null, bed: true, zoneId: home };
+    // Walk only, like every other clock mover: sleeping through a conversation
+    // would move the person being talked to.
+    if (sim.mode !== "walk") return { ...offer, available: false, reason: "wrong-mode" };
+    // …and never under a turn that is still being written. Sleep sends nothing,
+    // so this is not about the pipeline: it is that the hours would pass under
+    // narration the player has not read yet (the Talk verb's own rule).
+    if (core.host?.isStreaming) return { ...offer, available: false, reason: "streaming" };
+    return offer;
+  },
+
+  /** Sleep until the next occurrence of a daypart, and stage what that finished.
+   *
+   *  SENDS NOTHING, which is the whole shape of it: no turn, no narration, no
+   *  await. What it leaves behind is `intro.ledgerOwed`, and the next turn the
+   *  player sends for their OWN reasons carries the wrap-up (plan §2.6, ruling 1).
+   *  That is why there is no `!PF.spatial.pending` guard here: sleeping under an
+   *  in-flight send is safe, because staging only ever RAISES the marker and the
+   *  in-flight burn's guard reads live and still passes for its smaller day.
+   *
+   *  The mover is `waitUntil` — the rest action's jump, which pre-rolls the day
+   *  when the target is behind the clock and re-places everybody on arrival — and
+   *  not `advanceMinutes`, which takes minutes rather than a time of day.
+   *
+   *  Staging reads the clock AFTER the advance and takes the max (30-sim
+   *  `stageLedgerOwed`). Returns { ok, reason, day, clockMin, owed }.
+   *
+   *  EVERY REFUSAL IS THE SAME SHAPE, and it is the NOTHING-HAPPENED one that
+   *  `fish()` uses beside it: `reason` carries which refusal it was and the
+   *  numbers carry zero, because nothing moved. The reasons are distinct on
+   *  purpose; the numbers must not be, or a caller reading `day` learns the KIND
+   *  of refusal by accident and reads a live clock off a call that spent no
+   *  minutes. */
+  sleep(core, target) {
+    const no = (reason) => ({ ok: false, reason, day: 0, clockMin: 0, owed: 0 });
+    const offer = this.sleepOffer(core);
+    if (!offer.available) return no(offer.reason);
+    const sim = core.sim;
+    if (!sim.waitUntil(target)) return no("unknown-target");
+    const owed = sim.stageLedgerOwed();
+    // The Wait precedent (70-hud): a clock mover that does not flag the save
+    // loses its hours on reload, and this one also has a marker to lose.
+    core.markDirty?.();
+    return { ok: true, reason: null, day: sim.day, clockMin: sim.clockMin, owed };
+  },
+
+  // ── The rod (the keeper's second trade) ────────────────────────────────────
+
+  /** The rung the player has already climbed: the MAX over pouch rows typed
+   *  `rod` of `resolvedToolTier(k)`, or null when there is no rod row at all.
+   *
+   *  POUCH-ONLY, and derived — nothing anywhere writes a "rods bought" field
+   *  (plan §2.4). Auto-equip guarantees an equipped rod has a pouch row behind
+   *  it, and the pouch is world-free while rods are unremovable in 0.12, so a
+   *  severance can never resurrect a rung already climbed.
+   *
+   *  Through the resolver and not `indexOf`: a hostile `k` ("legendary") clamps
+   *  to 0 and the ladder goes on quoting `decent`, which is benign and is what
+   *  the whole resolve-at-read discipline is for. NULL is a different answer from
+   *  0 — no rod at all against a crude one — and the no-rod refusal is exactly
+   *  that absence. */
+  rodTier(player) {
+    let best = null;
+    for (const row of player?.pouch?.items ?? []) {
+      if (row?.t !== "rod") continue;
+      const tier = PF.player.resolvedToolTier(row.k);
+      if (best === null || tier > best) best = tier;
+    }
+    return best;
+  },
+
+  /** What the keeper would sell you next, and what it costs. Describes only, so
+   *  the HUD can call it every frame. Returns { available, reason, keeper, tier,
+   *  price }.
+   *
+   *  ONE BUTTON, ONE LADDER: the offer quotes the next rung the player LACKS —
+   *  no rod quotes `crude`, a crude owner quotes `decent`, and a decent-or-better
+   *  owner is quoted nothing and the button VANISHES. That last part is a stated
+   *  divergence from the berth button's never-vanish rule: a berth is a thing you
+   *  can want again tomorrow, while rod ownership is global and permanent, and a
+   *  forever-dimmed chip saying "you already have one" is dead chrome.
+   *
+   *  Cannot-afford is the berth's own idiom instead — shown, dimmed, still
+   *  quoting the price, because a control that disappears when the purse runs
+   *  short teaches the player nothing about what to save for.
+   *
+   *  POUCH HEADROOM IS CHECKED HERE, with the arity the purchase actually needs:
+   *  a crude rod arrives with a starter bait stack, so it is TWO new rows unless
+   *  the player somehow already holds bait, and a decent rod is one. This
+   *  pre-check is what makes buyRod's no-rollback shape sound — grant() cannot be
+   *  allowed to refuse after award() has already charged. */
+  rodOffer(core) {
+    const sim = core?.sim;
+    const world = sim?.world;
+    const no = (reason) => ({ available: false, reason, keeper: null, tier: null, price: null });
+    const npc = this._keeper(sim);
+    if (!sim || !npc) return no("no-keeper");
+    const player = PF.player.get(core);
+    if (!player) return no("no-player");
+    const owned = this.rodTier(player);
+    const tier = owned === null ? ROD_TIERS[0] : ROD_TIERS[owned + 1];
+    if (!tier) return no("top-of-ladder");
+    const price = this.price(world, rodPriceKey(tier));
+    if (price === null) return no("not-for-sale");
+    const offer = { available: true, reason: null, keeper: npc, tier, price };
+    const items = player.pouch?.items ?? [];
+    const rows = owned === null ? (items.some((row) => row?.t === BAIT_TYPE) ? 1 : 2) : 1;
+    if (items.length + rows > PF.player.CAPS.items) return { ...offer, available: false, reason: "pouch-full" };
+    if ((player.pouch?.money ?? 0) < price) return { ...offer, available: false, reason: "cannot-afford" };
+    return offer;
+  },
+
+  /** Bind the best tool of a type to a verb after an acquisition (plan §2.4).
+   *  Best = the highest QUALITY index the pouch holds. Bait NEVER auto-equips —
+   *  the mod slot is the fishing verb's own per-session act, not a standing
+   *  preference — and a catch never equips at all.
+   *
+   *  THE SCOPING IS ENFORCED HERE AND NOT BY THE MUTATOR. equip() validates by
+   *  item TYPE and not by slot: it refuses a graded row whose `k` is off the
+   *  ladder and is otherwise perfectly willing to put bait in a `tool` slot. So
+   *  the call site is what keeps tools in tool slots, and this one refuses
+   *  outright any type QUALITY does not grade rather than trusting a check that
+   *  is not being made. A pouch holding only an ungradable rod equips nothing and
+   *  fishes at the floor, which is the same answer from either end. */
+  _autoEquipTool(core, verb, type, gen) {
+    if (!PF.player.TOOL_TYPES.has(type)) return false;
+    const player = PF.player.get(core);
+    let best = null;
+    for (const row of player?.pouch?.items ?? []) {
+      if (row?.t !== type || !PF.player.QUALITY.includes(row.k)) continue;
+      if (best === null || PF.player.resolvedToolTier(row.k) > PF.player.resolvedToolTier(best)) best = row.k;
+    }
+    if (best === null) return false;
+    return PF.player.equip(core, verb, "tool", { t: type, k: best }, gen);
+  },
+
+  /** Buy the rod the button is offering. rentBerth's shape, for rentBerth's
+   *  reason — every effect goes through a shipped mutator in an order that cannot
+   *  half-charge anybody:
+   *    1. re-read the offer (the HUD's copy is a frame old);
+   *    2. `award({ money: -price })` — the purse pays, and it is the ONLY thing
+   *       that can refuse after the pre-checks, with nothing after it having run;
+   *    3. `grant` the rod, plus the starter bait stack on the FIRST purchase
+   *       ("line and tackle included"), at the theme's own first bait slug so it
+   *       merges with what the player then fishes up;
+   *    4. auto-equip, scoped to tools;
+   *    5. `log()` — the day-ledger line the wrap-up will tell;
+   *    6. `bump()` — the keeper remembers, settlement-scoped like every other.
+   *  Nothing is written to `bought`: that map is world-bound shop DEPLETION and
+   *  0.12 ships no shop stock, exactly as rentBerth writes none.
+   *
+   *  NEVER FORCED. This is a proximity button and nothing else — no modal, no
+   *  quest gate, and nothing in the package depends on rod ownership. Skipping
+   *  the first settlement's offer costs nothing: the ladder is a stateless
+   *  derived read, so any keeper anywhere sells the same next rung later.
+   *
+   *  Returns { ok, reason, price, tier, bait }. */
+  buyRod(core, gen) {
+    const offer = this.rodOffer(core);
+    // ONE SHAPE ON EVERY RETURN, `bait` included: this branch and the refusal
+    // after award() below are the same verb refusing the same purchase, and a
+    // caller asking what came with the rod should not get `undefined` from one
+    // of them and `null` from the other.
+    if (!offer.available) return { ok: false, reason: offer.reason, price: offer.price, tier: offer.tier, bait: null };
+    const sim = core.sim;
+    const world = sim.world;
+    const paid = PF.player.award(core, { money: -offer.price }, gen);
+    if (!paid) return { ok: false, reason: "refused", price: offer.price, tier: offer.tier, bait: null };
+    PF.player.grant(core, { t: "rod", k: offer.tier }, 1, gen);
+    let bait = null;
+    if (offer.tier === ROD_TIERS[0]) {
+      bait = this.starterBait(world);
+      if (bait) PF.player.grant(core, { t: BAIT_TYPE, k: bait }, STARTER_BAIT, gen);
+    }
+    this._autoEquipTool(core, "fishing", "rod", gen);
+    const named = this.describe(world, { t: "rod", k: offer.tier });
+    PF.player.log(
+      core,
+      `Bought a ${named} from ${offer.keeper.name} for ${this.money(world, offer.price)}.`,
+      sim.day,
+      gen,
+    );
+    PF.player.bump(core, world.startZone, offer.keeper.name, { t: 1, s: `Sold you a ${named}.` }, gen);
+    return { ok: true, reason: null, price: offer.price, tier: offer.tier, bait };
+  },
+
+  // ── Fishing (plan §2.1) ────────────────────────────────────────────────────
+  // WHY THE VERB LIVES IN THIS FILE. It is the same shape as rentBerth: content
+  // (the tables, TUNING, the words) plus an OFFER that describes and a VERB that
+  // mutates, holding no state of its own and putting everything durable through
+  // a shipped mutator. 58-player is the state BLOCK and deliberately ships no
+  // verbs; 30-sim loads before both and could not see either. So it goes beside
+  // the other transaction, and the file header names it.
+  //
+  // A CAST IS ONE WINDOW. `castWindow = floor(clockMin / castMinutes)`, and the
+  // window's identity — its day and its index — is read BEFORE the clock moves,
+  // so the roll belongs to the slice of time it was spent in.
+  //
+  // SYNCHRONOUS AND ATOMIC. Advance, roll, grant, award, accumulate, in one pass:
+  // no await, no cutscene, nothing that can be interleaved with a chat switch
+  // half-way through a cast. The GM hears about none of it here — outcomes reach
+  // the prompt only through the sleep-recap flush (Ruling 1, M10).
+  //
+  // REFUSAL VALUES, each distinct, all of them read before a single minute is
+  // spent:
+  //   gate-held      — a world nobody has entered has no water in it yet.
+  //   wrong-mode     — walk only, like every other clock mover.
+  //   not-near-water — no registry row under the player's hand, or one whose tag
+  //                    is not a kind that holds water.
+  //   no-rod         — REACHABLE and deliberately so (M8's amendment): the
+  //                    button stays visible for a rodless player and answers with
+  //                    a themed hint pointing at the keeper who sells one, which
+  //                    is what makes the mechanic discoverable instead of
+  //                    invisible.
+  //   pouch-full     — at the row cap only MERGES can land, so a session would
+  //                    spend real hours to be told nothing new. Refused up front
+  //                    rather than half-working. (Conservative on purpose: a
+  //                    merge would still succeed. The mid-loop refusal below is
+  //                    the other end of the same cap and does not refuse the
+  //                    session.)
+  //   unknown-target — a CALLER error and not a player-facing one; the menu can
+  //                    only produce the four daypart words or none at all.
+  //   no-player      — the same class, and listed rather than folded into one of
+  //                    the five above: there is no player block on this sim at
+  //                    all, which Sim's constructor and every restore path make
+  //                    unreachable in play. Like unknown-target it is answered by
+  //                    the HUD's GENERIC line (70-hud fishRefusal) instead of
+  //                    copy of its own, because a control that spoke its own
+  //                    sentence here would be writing player-facing words about a
+  //                    state no player can be in.
+
+  /** The bait stack a session would slot: the first live bait row in the pouch.
+   *  The mod slot is a per-session SELECTION and not a standing preference, so
+   *  there is nothing stored to consult and this is the whole of the choice. */
+  _baitRow(player) {
+    for (const row of player?.pouch?.items ?? []) {
+      if (row?.t === BAIT_TYPE && (row.q ?? 0) > 0) return row;
+    }
+    return null;
+  },
+
+  /** Anybody in this world who lets rooms, near or not. The no-rod hint points at
+   *  the vendor, and the vendor is worth naming even when the player is standing
+   *  at a pond three zones away from them. */
+  _anyKeeper(sim) {
+    const near = this._keeper(sim);
+    if (near) return near;
+    for (const zoneId of Object.keys(sim?.world?.zones ?? {})) {
+      for (const npc of sim.world.zones[zoneId].npcs ?? []) {
+        if (typeof npc?.lodging === "string" && npc.lodging) return npc;
+      }
+    }
+    return null;
+  },
+
+  /** "You need a rod — the innkeeper sells one." THEMED, and interpolating the
+   *  keeper's COMPILED role rather than a hardcoded word, because a sci-fi colony
+   *  has no innkeeper and the brief is what decides what it does have (the Talk
+   *  sender's `npc.role` idiom, 90-element). A world with nobody letting rooms
+   *  drops the clause rather than inventing a vendor. */
+  rodHint(core) {
+    const sim = core?.sim;
+    const template = this._skin(sim?.world).hints.noRod;
+    const role = this._anyKeeper(sim)?.role;
+    if (typeof role !== "string" || !role) return template.replace(/ — .*$/, ".");
+    return template.replace("{role}", role);
+  },
+
+  /** Is there water to fish where the player is standing, what would a session
+   *  spend, and what is stopping it? Describes only — no clock moves, nothing is
+   *  taken — so the HUD can call it every frame.
+   *
+   *  Returns { available, reason, spot, tag, bait, hint }. `spot` is the render
+   *  test the button gates on, exactly as `price !== null` is the berth's: a
+   *  refusal that still names a spot is one the player should SEE, because it is
+   *  a refusal about them rather than about the place. */
+  fishOffer(core) {
+    const sim = core?.sim;
+    const no = (reason) => ({ available: false, reason, spot: null, tag: null, bait: null, hint: "" });
+    if (PF.save?.gateHolds?.(core)) return no("gate-held");
+    if (!sim || sim.mode !== "walk") return no("wrong-mode");
+    const spot = sim.nearFeature;
+    if (!spot || !SPOT_TAGS.includes(spot.tag)) return no("not-near-water");
+    const player = PF.player.get(core);
+    if (!player) return no("no-player");
+    const at = { available: true, reason: null, spot, tag: spot.tag, bait: this._baitRow(player), hint: "" };
+    if (this.rodTier(player) === null) return { ...at, available: false, reason: "no-rod", hint: this.rodHint(core) };
+    if ((player.pouch?.items ?? []).length >= PF.player.CAPS.items)
+      return { ...at, available: false, reason: "pouch-full" };
+    return at;
+  },
+
+  /** Slot the session's bait, or clear the slot. The verb's own per-session act
+   *  (plan §2.4): there is no standing preference and no extra UI, so this is
+   *  where the slot and the pouch are reconciled — a slot pointing at a stack
+   *  that is gone is cleared, and a live stack with no slot is taken up.
+   *
+   *  ONLY EVER BAIT INTO THE MOD SLOT. equip() validates by item type and not by
+   *  slot, so the scoping is this call site's job exactly as it is the auto-equip
+   *  helper's. */
+  _slotBait(core, gen) {
+    const player = PF.player.get(core);
+    if (!player) return null;
+    const slot = player.skills?.equipped?.fishing?.mod;
+    if (Array.isArray(slot) && slot[0] === BAIT_TYPE) {
+      const held = player.pouch.items.find((row) => row.t === BAIT_TYPE && row.k === slot[1]);
+      if (held && (held.q ?? 0) > 0) return held;
+    }
+    const row = this._baitRow(player);
+    if (!row) {
+      if (slot) PF.player.equip(core, "fishing", "mod", null, gen);
+      return null;
+    }
+    PF.player.equip(core, "fishing", "mod", { t: BAIT_TYPE, k: row.k }, gen);
+    return row;
+  },
+
+  /** Draw one entry: weight × this daypart's multiplier, over the entries the
+   *  player's level has opened up. Null when the level has opened nothing, which
+   *  a shipped table never does (every one of them holds a level-1 entry) and a
+   *  hostile one might. */
+  _draw(rnd, table, level, part) {
+    let total = 0;
+    for (const entry of table) {
+      if (level < entry.minLevel) continue;
+      total += entry.weight * (entry.daypart?.[part] ?? 1);
+    }
+    if (!(total > 0)) return null;
+    let roll = rnd() * total;
+    for (const entry of table) {
+      if (level < entry.minLevel) continue;
+      roll -= entry.weight * (entry.daypart?.[part] ?? 1);
+      if (roll < 0) return entry;
+    }
+    return null;
+  },
+
+  /** One batched ledger line for one DAY of a session (plan §2.1). Written for
+   *  the day that just ended once the window that ended it has fully resolved,
+   *  and again after the loop for the day the session's last cast began in — so a
+   *  post-midnight fisher's pre-midnight catch is filed under the day it happened
+   *  and the 00:30 sleep can flush it.
+   *
+   *  THE ACCUMULATOR CARRIES ITS OWN DAY and this reads it rather than taking one
+   *  from the caller. A tally is a day's tally: filing it under a day somebody
+   *  else worked out is how the crossing window's cast came to be recorded on one
+   *  day and the fish it landed on the next.
+   *
+   *  GATE-SAFE by construction: `log()` refuses a day the flush already covers,
+   *  and mid-session `flushedDay ≤ D−1` always — telling day D would need
+   *  `ledgerOwed ≥ D`, which needs a completed sleep after D's midnight, which
+   *  cannot have happened while the player is still standing at the water. */
+  _logDay(core, world, spot, tally, gen) {
+    if (!tally.windows) return false;
+    const day = tally.day;
+    const counts = new Map();
+    for (const entry of tally.caught) {
+      const key = `${this.entryType(entry)}:${entry.variant}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    const casts = `${tally.windows} cast${tally.windows === 1 ? "" : "s"}`;
+    if (!counts.size) return PF.player.log(core, `Fished ${spot.name} — ${casts}, nothing biting.`, day, gen);
+    const named = [...counts].map(([key, n]) => {
+      const [t, k] = key.split(":");
+      const name = this.describe(world, { t, k });
+      return n > 1 ? `${name} ×${n}` : name;
+    });
+    return PF.player.log(core, `Fished ${spot.name} — ${casts}: ${named.join(", ")}.`, day, gen);
+  },
+
+  /** Fish. `target` is null for one cast, or a daypart word for a session that
+   *  loops windows until the clock reaches that daypart's start (overshooting by
+   *  at most one window, because a cast is a whole window and not a fraction).
+   *
+   *  DETERMINISM. Each window seeds its own stream from
+   *  `hash(seed, day, castWindow, spotId, level, toolTier, modTier)` — every one
+   *  of them RESOLVED (58-player's resolvers), never a raw string off the save,
+   *  so two clients that disagree about what "legendary" means still pull the
+   *  same fish out of the same water on the same minute. A failed window is a
+   *  fixed point escaped only by spending different time, which IS the
+   *  anti-save-scum property and is stated rather than discovered.
+   *
+   *  BAIT PRESENCE IS READ BEFORE IT IS SPENT. The window a bait was consumed on
+   *  rolls BAITED; the slot-clear that follows the last one affects the NEXT
+   *  window, which then re-keys the hash at tier 0 and goes on fishing at the
+   *  lower rate. Exhaustion is a continuation, never a stop.
+   *
+   *  MID-LOOP GRANT REFUSAL. grant() refuses only a NEW `(t,k)` row at the pouch
+   *  cap — merges never refuse — so a session can meet the cap on a variant it
+   *  has not caught before. That window's grant AND its award are skipped and it
+   *  logs nothing; the loop continues, because the cap bounds species DIVERSITY
+   *  and not the session.
+   *
+   *  Returns { ok, reason, hint, windows, caught, leveled, days }. */
+  fish(core, target, gen) {
+    const opening = this.fishOffer(core);
+    if (!opening.available)
+      return { ok: false, reason: opening.reason, hint: opening.hint, windows: 0, caught: [], leveled: 0, days: [] };
+    const sim = core.sim;
+    const world = sim.world;
+    const spot = opening.spot;
+    const table = this.catchTable(world, spot.tag) ?? [];
+    const W = TUNING.castMinutes;
+    const modMult = [1, TUNING.baitMult];
+
+    let windows = 1;
+    if (target != null) {
+      const at = Object.prototype.hasOwnProperty.call(PF.DAYPART_STARTS, target)
+        ? PF.DAYPART_STARTS[target]
+        : undefined;
+      if (at === undefined)
+        return { ok: false, reason: "unknown-target", hint: "", windows: 0, caught: [], leveled: 0, days: [] };
+      // The NEXT occurrence, exactly as waitUntil reads the same table: asking to
+      // fish until dusk from inside dusk is asking for a day of it.
+      const delta = at > sim.clockMin ? at - sim.clockMin : at + 24 * 60 - sim.clockMin;
+      windows = Math.max(1, Math.ceil(delta / W));
+    }
+
+    this._slotBait(core, gen);
+    const caught = [];
+    const days = [];
+    let leveled = 0;
+    let spent = 0;
+    // THE ACCUMULATOR KNOWS WHICH DAY IT IS, and that is the whole of the
+    // ordering: it belongs to the day the casts in it BEGAN, which stops being
+    // `sim.day` the moment one of them crosses midnight.
+    let tally = { day: sim.day, windows: 0, caught: [] };
+
+    for (let i = 0; i < windows; i++) {
+      // THE WRAP, FILED AT THE TOP OF THE WINDOW AFTER IT. The previous window
+      // crossed midnight, so its day is over and everything that window resolved
+      // — its cast AND its fish — is already in the accumulator. Filed here and
+      // not between an advance and the roll that follows it: a flush taken inside
+      // a window files that window's cast under the day it began and its catch
+      // under the day after, and a session of ONE such window loses the catch
+      // line altogether.
+      if (tally.windows && sim.day !== tally.day) {
+        if (this._logDay(core, world, spot, tally, gen)) days.push(tally.day);
+        tally = { day: sim.day, windows: 0, caught: [] };
+      }
+      const live = PF.player.get(core);
+      if (!live) break; // a chat switch landed under us; the mutators would refuse anyway
+      const slots = live.skills?.equipped?.fishing ?? null;
+      const modSlot = Array.isArray(slots?.mod) ? slots.mod : null;
+      const stack = modSlot ? live.pouch.items.find((row) => row.t === modSlot[0] && row.k === modSlot[1]) : null;
+      // READ BEFORE TAKE. This is the window the bait is being spent on.
+      const modTier = PF.player.resolvedModTier(modSlot, stack);
+      const toolTier = PF.player.resolvedToolTier(Array.isArray(slots?.tool) ? slots.tool[1] : "");
+      const level = PF.player.resolvedLevel(live.skills?.verbs?.fishing);
+      const day = sim.day;
+      const castWindow = Math.floor(sim.clockMin / W);
+      const part = sim.daypart();
+
+      sim.advanceMinutes(W);
+      spent += W;
+      tally.windows += 1;
+      // THE BAIT IS SPENT for the window that was read as holding it, and the
+      // slot follows the stack out rather than being left pointing at a row the
+      // pouch no longer has.
+      if (modTier === 1) {
+        PF.player.take(core, { t: modSlot[0], k: modSlot[1] }, 1, gen);
+        if (!live.pouch.items.some((row) => row.t === modSlot[0] && row.k === modSlot[1]))
+          PF.player.equip(core, "fishing", "mod", null, gen);
+      }
+
+      const rnd = PF.rng(PF.hashStr(`${world.seed}:${day}:${castWindow}:${spot.id}:${level}:${toolTier}:${modTier}`));
+      const base = Math.min(TUNING.baseCeil, TUNING.baseAt1 + TUNING.basePerLevel * (level - 1));
+      // Unclamped on purpose: the roll is `rnd() < p` and rnd() never reaches 1,
+      // so a p at or over 1 simply always lands — which is what the top of a
+      // fully-equipped ladder is supposed to feel like, and is unreachable in
+      // 0.12 anyway (fine and masterwork are not sold).
+      const p = base * TUNING.toolMult[toolTier] * modMult[modTier];
+      if (rnd() >= p) continue;
+      const entry = this._draw(rnd, table, level, part);
+      if (!entry) continue;
+      const type = this.entryType(entry);
+      // The PRIOR level, read before the award, because award() returns the new
+      // one and carries no "leveled" flag of its own.
+      const before = PF.player.resolvedLevel(live.skills?.verbs?.fishing);
+      if (!PF.player.grant(core, { t: type, k: entry.variant }, 1, gen)) continue;
+      const paid = PF.player.award(core, { xp: TUNING.catchXp[type] ?? 0, verb: "fishing" }, gen);
+      if (paid?.level > before) leveled = paid.level;
+      tally.caught.push(entry);
+      caught.push({ t: type, k: entry.variant });
+    }
+
+    // THE LAST DAY THE SESSION TOUCHED, which is the day its last cast began in
+    // and not necessarily the one the clock is showing: a session whose final
+    // window crossed midnight files that window under the day before.
+    if (tally.windows && this._logDay(core, world, spot, tally, gen)) days.push(tally.day);
+    // EVERY PATH THAT MOVED THE CLOCK, refusals-after-advance included (the Wait
+    // precedent, 70-hud): the mutators self-dirty, but a session of failed casts
+    // runs no mutator at all and would otherwise lose its hours on reload.
+    if (spent) core.markDirty?.();
+    return { ok: true, reason: null, hint: "", windows: spent / W, caught, leveled, days };
   },
 
   /** The starting purse, paid when a SEALED world comes up on a block nothing has
@@ -8698,6 +10485,16 @@ PF.economy = {
 // a sci-fi colony charging "coins" is exactly the out-of-place-"Maud Thatch"
 // failure the maintainer called out for name books.
 {
+  // EVERY VARIANT ANY SHIPPED TABLE NAMES, gathered across ALL themes before any
+  // one theme is checked. The pouch is world-free: a carp caught in a valley is
+  // still in the bag when the same chat's next world is a colony, and a row with
+  // no word there would fall to the slug fallback that exists for a HOSTILE save,
+  // not for content this build ships. So the demand is on the union, not on each
+  // theme's own list.
+  const shippedVariants = new Set();
+  for (const byTag of Object.values(CATCH_TABLES))
+    for (const table of Object.values(byTag)) for (const entry of table) shippedVariants.add(entry.variant);
+
   for (const theme of PF.art?.themeIds?.() ?? []) {
     const skin = ITEM_SKINS[theme];
     if (!skin) throw new Error(`pixelforge: theme "${theme}" ships no item vocabulary`);
@@ -8706,9 +10503,124 @@ PF.economy = {
     for (const type of ITEM_TYPES) {
       if (!skin.items?.[type]?.name) throw new Error(`pixelforge: theme "${theme}" has no name for item "${type}"`);
     }
+    for (const variant of shippedVariants) {
+      if (!skin.variants?.[variant]) throw new Error(`pixelforge: theme "${theme}" has no name for "${variant}"`);
+    }
+    // THE REFUSAL A PLAYER IS MEANT TO ACT ON. A theme without it answers a
+    // pressed button with an empty toast, which reads as a broken control rather
+    // than as a mechanic with a vendor behind it — and the `{role}` slot is what
+    // keeps it out of hardcoding an innkeeper into a colony.
+    if (!skin.hints?.noRod?.includes("{role}"))
+      throw new Error(`pixelforge: theme "${theme}" has no no-rod hint naming a vendor`);
+    // THE PERSON AND THEIR VERBS, which the character sheet renders and nothing
+    // else does. A theme missing either would show an empty label under the
+    // portrait, or the raw block key ("fishing") where the skill's name goes —
+    // the same silently-unnamed failure the item vocabulary is asserted against.
+    if (!skin.player) throw new Error(`pixelforge: theme "${theme}" has no word for the person playing it`);
+    for (const verb of SKILL_VERBS) {
+      const book = skin.verbs?.[verb];
+      if (!book?.name || !book.tool || !book.mod)
+        throw new Error(`pixelforge: theme "${theme}" does not name the "${verb}" skill and both of its slots`);
+    }
+    // THE 2×2, both halves. A theme with no table for a spot kind is water the
+    // player can stand at and the verb cannot answer for; an EMPTY table is the
+    // same hole with a shape, and it would divide by a zero weight rather than
+    // refuse. The wilds `water-feature` never places today (slice-1 verify F1)
+    // and its tables are still required — settlements and the legacy world reach
+    // that kind, and the drop is a placement fact, not a vocabulary one.
+    const byTag = CATCH_TABLES[theme];
+    if (!byTag) throw new Error(`pixelforge: theme "${theme}" ships no catch tables`);
+    for (const tag of SPOT_TAGS) {
+      const table = byTag[tag];
+      if (!Array.isArray(table) || !table.length)
+        throw new Error(`pixelforge: theme "${theme}" has no catch table for "${tag}"`);
+      for (const entry of table) {
+        // A role has to be a ROLE. A typo mints a pouch row of a type nothing
+        // skins, nothing prices and the xp table cannot pay for — and it would
+        // look exactly like the deliberate roleless entry that means bait.
+        if (entry.role !== undefined && !CATCH_ROLES.includes(entry.role))
+          throw new Error(`pixelforge: ${theme}/${tag} has an entry with the role "${entry.role}"`);
+        if (!entry.variant || typeof entry.variant !== "string")
+          throw new Error(`pixelforge: ${theme}/${tag} has an entry with no variant slug`);
+        // …AND NOT THE LEDGER'S OWN SEPARATOR IN IT. _logDay counts a session's
+        // yields in a Map keyed `${type}:${variant}` and splits that key apart
+        // again to name them, so a slug carrying a colon is truncated at it: a
+        // "sea:bass" is rendered as "sea" and the wrap-up tells the player about
+        // a thing that does not exist. Closed here rather than by escaping the
+        // key, because a slug with punctuation in it is content nobody needs and
+        // an encoding that never has to survive one is a line shorter.
+        if (entry.variant.includes(":"))
+          throw new Error(
+            `pixelforge: ${theme}/${tag}'s "${entry.variant}" has a ":" in its slug, which is the ledger's own separator`,
+          );
+        if (!(typeof entry.weight === "number" && entry.weight > 0))
+          throw new Error(`pixelforge: ${theme}/${tag}'s "${entry.variant}" has no positive weight`);
+        // A minLevel above the ceiling is an entry NOBODY can ever draw: the draw
+        // is a level test and the level stops climbing at the cap, so the row is
+        // written content that no save can reach.
+        if (!Number.isInteger(entry.minLevel) || entry.minLevel < 1 || entry.minLevel > PF.player.CAPS.skillLevel)
+          throw new Error(
+            `pixelforge: ${theme}/${tag}'s "${entry.variant}" needs level ${entry.minLevel}, outside 1..${PF.player.CAPS.skillLevel}`,
+          );
+        for (const [part, mult] of Object.entries(entry.daypart ?? {})) {
+          // A plausible word that is not one of the four is a column that never
+          // applies — silently, forever, and looking exactly like a tuned one.
+          if (!DAYPARTS.includes(part))
+            throw new Error(`pixelforge: ${theme}/${tag}'s "${entry.variant}" is tuned for a daypart "${part}"`);
+          if (!(typeof mult === "number" && Number.isFinite(mult) && mult >= 0))
+            throw new Error(`pixelforge: ${theme}/${tag}'s "${entry.variant}" has a ${part} multiplier of ${mult}`);
+        }
+      }
+    }
+    // …AND A BAIT ENTRY SOMEWHERE IN THE THEME, because the crude rod's purchase
+    // throws in a starter stack whose slug is exactly this (see starterBait). A
+    // theme with none would sell a rod and hand over an empty tin.
+    if (!PF.economy.starterBait({ theme }))
+      throw new Error(`pixelforge: theme "${theme}" ships no bait entry for a first rod to come with`);
     if (typeof PRICES[theme]?.berth !== "number")
       throw new Error(`pixelforge: theme "${theme}" has no price for a berth`);
+    // EVERY RUNG THE LADDER CAN QUOTE, in every theme. A missing rod price would
+    // otherwise reach the player as the keeper refusing the sale — price()
+    // answers null for "not for sale here", and a rod the build means to sell
+    // and forgot to price is indistinguishable from one it deliberately does
+    // not stock. KEY EXISTENCE ONLY: no assertion couples these numbers to the
+    // purse or to the berth (maintainer override, 2026-08-24 — income arrives
+    // in later releases and berth-sleeping is optional), so what the build
+    // insists on is that a quotable rung is quotable, never that it is cheap.
+    for (const tier of ROD_TIERS) {
+      // …and a rung has to be a rung. A tier that is not on the QUALITY ladder
+      // resolves to crude at every read, so the ladder would quote a rod nobody
+      // can be recorded as owning and would keep quoting it forever.
+      if (!PF.player.QUALITY.includes(tier))
+        throw new Error(`pixelforge: the rod ladder quotes "${tier}", which is not a quality tier`);
+      if (typeof PRICES[theme]?.[rodPriceKey(tier)] !== "number")
+        throw new Error(`pixelforge: theme "${theme}" has no price for a ${tier} rod`);
+    }
   }
+  // THE TELL'S FLOOR. The wrap-up tell renders whole days or none, so a budget
+  // under one maximum-shape day renders zero days — the burn then advances
+  // through nothing, `ledgerOwed` never falls, and every sleep for the rest of
+  // the save tells the player the same nothing. Asserted here rather than
+  // discovered there.
+  const maxShapeDay = PF.player.CAPS.ledgerPerDay * PF.player.CAPS.ledgerChars;
+  if (!(TUNING.ledgerTellChars >= maxShapeDay))
+    throw new Error(
+      `pixelforge: TUNING.ledgerTellChars (${TUNING.ledgerTellChars}) is under one max-shape ledger day (${maxShapeDay})`,
+    );
+  // The xp table is the single authority, so a type missing from it is a yield
+  // that awards nothing — a silent hole rather than a loud one, and the one it
+  // would most likely be is `bait`, which is the yield a fresh player meets
+  // first.
+  for (const type of [...CATCH_ROLES, BAIT_TYPE]) {
+    if (typeof TUNING.catchXp[type] !== "number") throw new Error(`pixelforge: TUNING.catchXp has no xp for "${type}"`);
+  }
+  // The ladder and its multipliers, pinned to the same length. They are two
+  // lists in two files indexed by the same resolved number, and a short one
+  // hands `undefined` to the curve — NaN chance, on the best rod in the game.
+  if (TUNING.toolMult.length !== PF.player.QUALITY.length)
+    throw new Error(
+      `pixelforge: TUNING.toolMult has ${TUNING.toolMult.length} multipliers for ${PF.player.QUALITY.length} quality tiers`,
+    );
 }
 
 // ===== 60-save.js =====
@@ -9555,10 +11467,24 @@ PF.save = {
       // chat reopened at midnight would show a town going about its morning.
       sim.resolveSchedules();
       if (saved.intro && typeof saved.intro === "object") {
+        // A CLOSED LITERAL, and that is the fact this line exists to answer.
+        // Every subkey not named here is stripped on every restore AND on every
+        // `_rebuild`, and the envelope carry cannot cover for it: `_envelopeExtra`
+        // holds unknown TOP-LEVEL keys, so a known key's unknown SUBKEY rides
+        // nothing at all. Adding a field under `intro` therefore means adding it
+        // HERE, in the same change, or it is write-only state.
         sim.intro = {
           world: saved.intro.world === true,
           zones: saved.intro.zones && typeof saved.intro.zones === "object" ? { ...saved.intro.zones } : {},
           npcs: saved.intro.npcs && typeof saved.intro.npcs === "object" ? { ...saved.intro.npcs } : {},
+          // THE DURABLE HALF OF THE TWO-FIELD FLUSH (plan §2.5): the last day a
+          // completed sleep made owed. It lives under `intro` because that key is
+          // already in the envelope and a wrap-up marker is not worth an
+          // ENVELOPE_KEYS entry of its own — and the whole design is void without
+          // this line, since a marker that does not survive a reload can never
+          // outlive the session that staged it. Read through the resolver: it
+          // comes off save JSON and it is about to be compared against `sim.day`.
+          ledgerOwed: PF.player.resolvedDay(saved.intro.ledgerOwed),
         };
       }
       if (saved.bindings && typeof saved.bindings === "object") {
@@ -9655,7 +11581,13 @@ PF.save = {
       // only fires when the entry will not fit at all; when it does fire, the
       // player gets the true sentence instead of the comforting one.
       notices.length = 0;
-      notices.push("What belonged to the world that changed could not be kept, and is gone.");
+      // THE SAME EVENT AS THE SENTENCE IT REPLACES, with the other outcome — so
+      // it takes that sentence's own subject. applyStamps says "what you had
+      // done here"; this one used to say "what belonged to the world that
+      // changed", which is true, abstract, and reads like a different incident
+      // when the two sit a scroll apart in the band (plan §2.5, M3's
+      // writer-site kind copy).
+      notices.push("What you had done in the world that changed could not be kept, and is gone.");
     }
     if (applied.evaluated && !applied.severed) {
       const stamp = PF.quarantine.peek("stamp");
@@ -9674,12 +11606,18 @@ PF.save = {
     const repaired = PF.player.repairQuests(player, world, applied.evaluated);
     notices.push(...repaired.notices);
 
-    // 4. NOTICES, appended to the LIVE ledger — after the severance that emptied
-    // it, so the one thing that survives the window is the explanation for it.
-    // Never at or below the gate: a line the gate covers is one the flush will
-    // skip, and a notice nobody is ever told is worse than no notice at all.
-    const noticeDay = Math.max(sim.day, player.flushedDay + 1);
-    for (const text of notices) player.ledger.lines.push([noticeDay, text]);
+    // 4. NOTICES, appended to the band's own array — after the severance that
+    // emptied the ledger, so the one thing that survives the window is the
+    // explanation for it.
+    //
+    // AT THE DAY IT HAPPENED, which took a format change to be able to say
+    // (plan §2.5). These used to be ledger LINES, and a line at or below the
+    // flush gate is one the wrap-up skips — so the day was shifted up to
+    // `max(sim.day, flushedDay + 1)` to keep the notice tellable, which printed
+    // a day header from the FUTURE into the tell whenever the gate had run
+    // ahead of the clock. The band is told-flagged instead of day-gated, so the
+    // shift is deleted along with the back-door it existed for.
+    for (const text of notices) PF.player.notice(player, text, sim.day);
     return player;
   },
 
@@ -11047,10 +12985,20 @@ PF.save = {
 PF.Hud = class {
   constructor(rootEl, core) {
     this.core = core;
+    const chip =
+      "pointer-events:auto;background:rgba(20,24,20,0.82);color:#f3efe2;border:1px solid rgba(243,239,226,0.25);" +
+      "border-radius:6px;padding:3px 9px;font:600 11px/1.5 ui-monospace,Consolas,monospace;white-space:nowrap;";
     const S = {
-      chip:
-        "pointer-events:auto;background:rgba(20,24,20,0.82);color:#f3efe2;border:1px solid rgba(243,239,226,0.25);" +
-        "border-radius:6px;padding:3px 9px;font:600 11px/1.5 ui-monospace,Consolas,monospace;white-space:nowrap;",
+      chip,
+      // THE PANEL OPENERS' clothes (plan §2.8). The topbar has NO width machinery
+      // — centred flex, nowrap chips, unbounded location prose, no overflow
+      // handling — so the openers are GLYPH-WIDTH by construction: one emoji plus
+      // an aria-label, never a word that grows with a translation. That IS the
+      // width argument, and it is what keeps the bar to the single row the
+      // location toast is pinned 42px under. They are BUTTONS rather than the
+      // spans beside them, because a control has to be pressable and focusable;
+      // `pointer-events:auto` is already on the chip they wear.
+      chipBtn: `${chip}cursor:pointer;padding:3px 8px;`,
       btn:
         "pointer-events:auto;background:rgba(20,24,20,0.88);color:#f3efe2;border:1px solid rgba(243,239,226,0.35);" +
         "border-radius:8px;padding:9px 13px;font:700 12px/1 ui-monospace,Consolas,monospace;cursor:pointer;min-height:40px;",
@@ -11078,10 +13026,17 @@ PF.Hud = class {
     // no economy in it should not carry a permanent "0 coins" telling the player
     // about a system they are not playing.
     this.purseChip = PF.el("span", { style: `${S.chip}display:none;`, text: "" });
+    // THE TWO PANEL OPENERS (plan §2.8), beside the chips that already say where
+    // you are rather than in the action column — the thumb zone belongs to the
+    // verbs. Boot HIDDEN on the berth button's discipline: the gate hides the
+    // whole topbar for free, but the topbar STAYS UP in dialogue mode, so
+    // `!inWorld` hiding is a toggle these two have to own (see update()).
+    this.journalChip = this._chip("📖", "open the journal", () => this.toggleJournal());
+    this.sheetChip = this._chip("👤", "open the character sheet", () => this.toggleSheet());
     this.topbar = PF.el(
       "div",
       { style: "position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:2;" },
-      [this.locChip, this.clockChip, this.purseChip],
+      [this.locChip, this.clockChip, this.purseChip, this.journalChip, this.sheetChip],
     );
 
     this.talkBtn = this._btn("Talk (E)", () => core.interact());
@@ -11098,7 +13053,34 @@ PF.Hud = class {
     // quoting a room in a world that has not compiled.
     this.berthBtn = this._btn("Rent a berth", () => this.rentBerth());
     this.berthBtn.style.display = "none";
+    // The keeper's SECOND trade (M8's amendment: no rod is ever free). Same
+    // discipline as the berth beside it — boot hidden, offer-gated per frame,
+    // dimmed rather than hidden when the purse is short — with one deliberate
+    // divergence: it VANISHES once the ladder is topped out, because rod
+    // ownership is global and permanent and a forever-dimmed chip is dead chrome.
+    this.buyRodBtn = this._btn("Buy a rod", () => this.buyRod());
+    this.buyRodBtn.style.display = "none";
     this.travelBtn = this._btn("Travel", () => this.toggleTravel());
+    // 0.12's headline verb, on the same gating as the berth: shown whenever the
+    // player is standing at a registry spot that holds water — INCLUDING when
+    // they have no rod, because the refusal is what points them at the vendor and
+    // a button that hides itself teaches nobody the mechanic exists.
+    this.fishBtn = this._btn("🎣 Fish…", () => this.toggleFish());
+    this.fishBtn.style.display = "none";
+    this.fishMenu = PF.el("div", {
+      style:
+        "display:none;flex-direction:column;gap:6px;align-items:flex-end;max-height:40vh;overflow:auto;pointer-events:auto;",
+    });
+    // P5's bed, beside the other clock mover because that is what it is — a Wait
+    // you can only do where you have a bed, and the only one that leaves a
+    // wrap-up behind. Boot hidden and offer-gated per frame, like the berth that
+    // sells the bed in the first place.
+    this.sleepBtn = this._btn("🛏 Sleep…", () => this.toggleSleep());
+    this.sleepBtn.style.display = "none";
+    this.sleepMenu = PF.el("div", {
+      style:
+        "display:none;flex-direction:column;gap:6px;align-items:flex-end;max-height:40vh;overflow:auto;pointer-events:auto;",
+    });
     this.waitBtn = this._btn("⏩ Wait…", () => this.toggleWait());
     this.keyboardBtn = this._btn("Keyboard", () => core.setMode("dialogue"));
     this.resumeBtn = this._btn("▶ Resume walking", () => core.resume());
@@ -11112,7 +13094,20 @@ PF.Hud = class {
         style:
           "position:absolute;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px;align-items:flex-end;z-index:2;",
       },
-      [this.talkBtn, this.berthBtn, this.travelBtn, this.waitMenu, this.waitBtn, this.keyboardBtn, this.resumeBtn],
+      [
+        this.talkBtn,
+        this.berthBtn,
+        this.buyRodBtn,
+        this.travelBtn,
+        this.fishMenu,
+        this.fishBtn,
+        this.sleepMenu,
+        this.sleepBtn,
+        this.waitMenu,
+        this.waitBtn,
+        this.keyboardBtn,
+        this.resumeBtn,
+      ],
     );
 
     // Touch D-pad. touch-action:none so the browser doesn't claim the gesture
@@ -11201,6 +13196,58 @@ PF.Hud = class {
     this.gateEl.setAttribute("role", "status");
     this.gateEl.setAttribute("aria-live", "polite");
 
+    // ── The two panels (plan §2.5, §2.8) ────────────────────────────────────
+    // Both are full-surface, on the gate's own shape one block up, and both are
+    // children of `this.root` — which is their WHOLE teardown story. The gate is
+    // the precedent: it is built here, appended to the root below, and
+    // `destroy()`'s `this.root.remove()` takes it away with everything else. A
+    // panel with a teardown of its own would be a second thing to forget.
+    //
+    // Under the gate in z as well as in the list: a world still being written has
+    // no journal to read and nobody to be a sheet about.
+    //
+    // AND NEITHER IS AN `aria-modal` DIALOG, deliberately. `_hostOwnsKeyboard`
+    // (90-element) treats any visible `[role="dialog"][aria-modal="true"]` as the
+    // host owning the keyboard — so marking our own panel one would make the very
+    // keys that close it inert the moment it opened.
+    const panelStyle =
+      "position:absolute;inset:0;flex-direction:column;gap:8px;pointer-events:auto;z-index:3;" +
+      "padding:12px;box-sizing:border-box;background:rgba(12,14,12,0.94);color:#f3efe2;" +
+      "font:12px/1.6 ui-monospace,Consolas,monospace;";
+    const panelHead = "display:flex;align-items:center;justify-content:space-between;gap:8px;flex:0 0 auto;";
+    const panelTitle = "font:700 13px/1.5 inherit;";
+    this.journalBody = PF.el("div", {
+      style: "flex:1 1 auto;overflow:auto;display:flex;flex-direction:column;gap:10px;",
+    });
+    this.journalEl = PF.el("div", { style: panelStyle, "aria-label": "journal" }, [
+      PF.el("div", { style: panelHead }, [
+        PF.el("div", { style: panelTitle, text: "Journal" }),
+        this._btn("✕ Close", () => this.closeJournal()),
+      ]),
+      this.journalBody,
+    ]);
+    // The sheet's two columns: the sprite on the left with the themed generic
+    // label under it, the sections on the right (plan §2.8).
+    this.sheetArt = PF.el("div", {
+      style: "flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:6px;",
+    });
+    this.sheetStats = PF.el("div", {
+      style: "flex:1 1 auto;overflow:auto;display:flex;flex-direction:column;gap:2px;",
+    });
+    this.sheetEl = PF.el("div", { style: panelStyle, "aria-label": "character sheet" }, [
+      PF.el("div", { style: panelHead }, [
+        PF.el("div", { style: panelTitle, text: "Character" }),
+        this._btn("✕ Close", () => this.closeSheet()),
+      ]),
+      PF.el("div", { style: "flex:1 1 auto;display:flex;gap:14px;overflow:hidden;" }, [this.sheetArt, this.sheetStats]),
+    ]);
+    // Both boot DOWN, as a property rather than inside the style string: the
+    // toggles and update() write this same property, and a boot state expressed
+    // only in `cssText` is one nothing can read back (the berth button's own
+    // discipline).
+    this.journalEl.style.display = "none";
+    this.sheetEl.style.display = "none";
+
     this.root = PF.el(
       "div",
       { style: "position:absolute;inset:0;pointer-events:none;font-family:ui-monospace,Consolas,monospace;" },
@@ -11212,6 +13259,8 @@ PF.Hud = class {
         this.captionEl,
         this.toastEl,
         this.locToastEl,
+        this.journalEl,
+        this.sheetEl,
         this.gateEl,
       ],
     );
@@ -11219,11 +13268,28 @@ PF.Hud = class {
     this._toastTimer = 0;
     this._locToastTimer = 0;
     this._mode = null;
+    // The panels' open flags and their memos. Both memos are CLEARED rather than
+    // compared against a sentinel when a panel opens, so opening always paints.
+    this._journal = false;
+    this._journalMemo = null;
+    this._sheet = false;
+    this._sheetKey = null;
     this.refreshChips();
   }
 
   _btn(text, onclick) {
     return PF.el("button", { type: "button", style: this.S.btn, text, onclick });
+  }
+
+  /** A glyph-width topbar opener: a button wearing the chip's styling, boot
+   *  hidden, and carrying the words the glyph does not say. */
+  _chip(glyph, label, onclick) {
+    const node = PF.el("button", { type: "button", "aria-label": label, style: this.S.chipBtn, text: glyph, onclick });
+    // Hidden as a PROPERTY rather than inside the style string, exactly as the
+    // berth button beside it is: update() writes this same property, and a
+    // boot state expressed only in `cssText` is one nothing can read back.
+    node.style.display = "none";
+    return node;
   }
 
   destroy() {
@@ -11285,6 +13351,182 @@ PF.Hud = class {
     this.waitMenu.style.display = "flex";
   }
 
+  /** The bed's menu, mirroring the Wait menu one method up — the same four
+   *  dayparts, because a sleep is a rest that happens to be somewhere. It SENDS
+   *  NOTHING: the hours pass, the wrap-up is staged, and the next turn the player
+   *  sends for their own reasons carries it (plan §2.6). */
+  toggleSleep() {
+    const open = this.sleepMenu.style.display !== "flex";
+    if (!open) {
+      this.sleepMenu.style.display = "none";
+      return;
+    }
+    const offer = PF.economy.sleepOffer(this.core);
+    if (!offer.available) {
+      // Answered where it was pressed, rather than behind a menu whose every
+      // entry then refuses — the fishing verb's own idiom.
+      this.sleepMenu.style.display = "none";
+      this.toast(this.sleepRefusal(offer.reason));
+      return;
+    }
+    this.sleepMenu.replaceChildren();
+    for (const [part, label] of [
+      ["dawn", "Sleep until dawn"],
+      ["day", "Sleep until morning"],
+      ["dusk", "Sleep until dusk"],
+      ["night", "Sleep until night"],
+    ]) {
+      this.sleepMenu.appendChild(
+        this._btn(label, () => {
+          this.sleepMenu.style.display = "none";
+          this.sleep(part);
+        }),
+      );
+    }
+    this.sleepMenu.style.display = "flex";
+  }
+
+  /** The bed's refusals, turned into sentences. `no-bed` is absent on purpose:
+   *  the button is not on screen where there is no bed, so a line for it would be
+   *  copy nobody can reach. */
+  sleepRefusal(reason) {
+    if (reason === "wrong-mode") return "Not while you're talking — resume walking first";
+    if (reason === "streaming") return "The story is still being written…";
+    if (reason === "gate-held") return "Not yet — your world is still being written.";
+    return "You can't sleep just now.";
+  }
+
+  /** Spend the night (or the morning). `sleep` moves the clock, stages the
+   *  wrap-up and flags the save itself, so this only says what happened — and
+   *  re-reads the chips, because the clock is one of them. */
+  sleep(target) {
+    const result = PF.economy.sleep(this.core, target);
+    if (!result.ok) {
+      this.toast(this.sleepRefusal(result.reason));
+      return;
+    }
+    this.refreshChips();
+    this.toast(`You sleep — ${this.core.sim.clockLabel()}`);
+  }
+
+  /** The session menu, mirroring the Wait menu one method up: a single cast, or
+   *  a session that runs until one of the four dayparts. The BAIT LINE at the top
+   *  is not a control — it is what the session is about to spend, shown before it
+   *  spends it, because the slotting is automatic and the player would otherwise
+   *  watch a stack drain without ever having been told it was in play. */
+  toggleFish() {
+    const open = this.fishMenu.style.display !== "flex";
+    if (!open) {
+      this.fishMenu.style.display = "none";
+      return;
+    }
+    const offer = PF.economy.fishOffer(this.core);
+    if (!offer.available) {
+      // A refusal is answered where it is pressed, not behind a menu that then
+      // refuses every entry in it.
+      this.fishMenu.style.display = "none";
+      this.toast(offer.hint || this.fishRefusal(offer.reason));
+      return;
+    }
+    this.fishMenu.replaceChildren();
+    const world = this.core.sim.world;
+    this.fishMenu.appendChild(
+      PF.el("span", {
+        style: this.S.chip,
+        text: offer.bait
+          ? `Bait: ${offer.bait.q} × ${PF.economy.describe(world, offer.bait)}`
+          : "No bait — casting bare",
+      }),
+    );
+    for (const [target, label] of [
+      [null, "Cast once"],
+      ["dawn", "Fish until dawn"],
+      ["day", "Fish until morning"],
+      ["dusk", "Fish until dusk"],
+      ["night", "Fish until night"],
+    ]) {
+      this.fishMenu.appendChild(
+        this._btn(label, () => {
+          this.fishMenu.style.display = "none";
+          this.fish(target);
+        }),
+      );
+    }
+    this.fishMenu.style.display = "flex";
+  }
+
+  /** The verb's refusal values, turned into sentences. `no-rod` is absent on
+   *  purpose: it carries its own themed hint naming the keeper who sells one, and
+   *  a generic line here would throw that away.
+   *
+   *  `unknown-target` and `no-player` are absent on purpose too, for the opposite
+   *  reason: neither is a refusal about the PLAYER. One is a caller handing the
+   *  verb a daypart word that does not exist and the other is a sim with no
+   *  player block on it, so both take the fall-through rather than copy written
+   *  about a state nobody can be in — which is exactly why that fall-through has
+   *  to be a real sentence. Both callers toast `hint || fishRefusal(reason)`, and
+   *  an empty line there is a pressed button that does nothing at all. */
+  fishRefusal(reason) {
+    if (reason === "wrong-mode") return "Not while you're talking — resume walking first";
+    if (reason === "not-near-water") return "There is no water to fish here.";
+    if (reason === "pouch-full") return "Your bag is full — there is nowhere to put a catch.";
+    if (reason === "gate-held") return "Not yet — your world is still being written.";
+    return "You can't fish just now.";
+  }
+
+  /** Spend the session. `fish` moves the clock and flags the save itself, so this
+   *  only turns what came back into a sentence — and re-reads the chips, because
+   *  the purse chip counts what is in the bag. */
+  fish(target) {
+    const result = PF.economy.fish(this.core, target);
+    if (!result.ok) {
+      this.toast(result.hint || this.fishRefusal(result.reason));
+      return;
+    }
+    const world = this.core.sim.world;
+    const clock = this.core.sim.clockLabel();
+    this.refreshChips();
+    if (result.leveled) {
+      // THEMED, out of the same word book the sheet reads (`verbSkin`): a colony
+      // levels "Angling", and this line was the one place the raw verb reached a
+      // player at all.
+      this.toast(`${PF.economy.verbSkin(world, "fishing").name} is level ${result.leveled} now — ${clock}`);
+      return;
+    }
+    if (!result.caught.length) {
+      this.toast(`Nothing biting — ${clock}`);
+      return;
+    }
+    const last = PF.economy.describe(world, result.caught[result.caught.length - 1]);
+    this.toast(
+      result.caught.length === 1
+        ? `You land a ${last} — ${clock}`
+        : `${result.caught.length} landed, the last a ${last} — ${clock}`,
+    );
+  }
+
+  /** Take the rod the button is offering. The offer is re-read inside buyRod, so
+   *  a frame-old button cannot overcharge anybody; this turns the refusals into
+   *  sentences, exactly as rentBerth's caller does. */
+  buyRod() {
+    const world = this.core.sim?.world;
+    const result = PF.economy.buyRod(this.core);
+    if (result.ok) {
+      const named = PF.economy.describe(world, { t: "rod", k: result.tier });
+      this.toast(
+        result.bait
+          ? `A ${named} is yours, line and tackle included — ${PF.economy.money(world, result.price)}.`
+          : `A ${named} is yours — ${PF.economy.money(world, result.price)}.`,
+      );
+      this.refreshChips();
+      return;
+    }
+    if (result.reason === "cannot-afford")
+      this.toast(`Not enough on you — that rod is ${PF.economy.money(world, result.price)}.`);
+    else if (result.reason === "pouch-full") this.toast("Your bag is too full to carry it.");
+    else this.toast("There is no rod to be had here.");
+  }
+
   toggleTravel() {
     const open = this.travelMenu.style.display !== "flex";
     if (!open) {
@@ -11322,6 +13564,369 @@ PF.Hud = class {
     else if (result.reason === "cannot-afford")
       this.toast(`Not enough on you — a berth is ${PF.economy.money(world, result.price)}.`);
     else this.toast("There is no room to be had here.");
+  }
+
+  // ── The panels (plan §2.5, §2.8) ───────────────────────────────────────────
+  // Two surfaces, one rule each. The JOURNAL is a list that changes when the
+  // arrays under it change, so its memo is the arrays themselves. The SHEET is a
+  // portrait of live state that no array identity tracks — every player mutator
+  // mutates IN PLACE — so its memo is a VALUE key, on the purse chip's idiom
+  // further down. Neither writes DOM at rest.
+
+  /** Is the surface in a state where a panel may be open at all? Both openers
+   *  answer to this: the chips are hidden outside walk mode and under the gate,
+   *  and the key branches (90-element) inherit the same guards, but a click can
+   *  still land on a frame-old chip. */
+  _panelsAllowed() {
+    return this.core.sim?.mode === "walk" && !PF.save.gateHolds(this.core);
+  }
+
+  /** Close whatever panel is open, and say whether anything was open to close.
+   *
+   *  The Escape branch (90-element) DISCARDS that answer on purpose: it declines
+   *  `preventDefault` either way, because the host's own Escape handling is not
+   *  ours to cancel, so "the key meant something here" is not a question it has
+   *  to ask. The return is the honest answer for a caller that does — today that
+   *  is the harness, which pins it. */
+  closePanels() {
+    const open = this._journal || this._sheet;
+    this.closeJournal();
+    this.closeSheet();
+    return open;
+  }
+
+  toggleJournal() {
+    if (!this._panelsAllowed()) return;
+    if (this._journal) {
+      this.closeJournal();
+      return;
+    }
+    // One surface at a time: both are full-screen, so a second one opening over
+    // the first would be a panel nobody can see under a panel nobody closed.
+    this.closeSheet();
+    this._journal = true;
+    this._journalMemo = null;
+    this._journalSync();
+    this.journalEl.style.display = "flex";
+  }
+
+  closeJournal() {
+    this._journal = false;
+    this._journalMemo = null;
+    this.journalEl.style.display = "none";
+  }
+
+  /** The journal's memo: the two ARRAYS and their two lengths (plan §2.5). The
+   *  identities catch a wholesale replacement — `_compactLedger` rebuilds
+   *  `ledger.lines` on every append, and a restore assigns a fresh band — and
+   *  the lengths catch an append that kept the array it pushed onto, which is
+   *  exactly what `notice()` does while the band is under its cap.
+   *
+   *  What it deliberately does NOT track is the told flag: the band shows told
+   *  and untold rows alike, so a burn changes nothing the panel draws. */
+  _journalSync() {
+    const player = PF.player.get(this.core);
+    const lines = Array.isArray(player?.ledger?.lines) ? player.ledger.lines : null;
+    const notices = Array.isArray(player?.ledger?.notices) ? player.ledger.notices : null;
+    const memo = this._journalMemo;
+    if (
+      memo &&
+      memo.lines === lines &&
+      memo.notices === notices &&
+      memo.lineCount === (lines?.length ?? 0) &&
+      memo.noticeCount === (notices?.length ?? 0)
+    )
+      return;
+    this._journalMemo = { lines, notices, lineCount: lines?.length ?? 0, noticeCount: notices?.length ?? 0 };
+    this._renderJournal(lines ?? [], notices ?? []);
+  }
+
+  /** ONE LIST, day-grouped from each line's own day, newest day first — and the
+   *  NOTICE BAND outside the grouping entirely, because it reads a DIFFERENT
+   *  array (plan §2.5). A notice explains something that happened to the SAVE
+   *  rather than something the player did in a day, so it has no day group to
+   *  belong to; the band is history and shows told and untold rows alike.
+   *
+   *  Lines inside a day keep the order they were logged in, which is the order
+   *  the wrap-up tells them in. A STUB renders as its stub text and nothing else
+   *  — the sentence the ledger holds ("Day 4: 12 things happened.") is the same
+   *  sentence the GM was given, and rewriting it here would be the panel telling
+   *  a different story from the tell. */
+  _renderJournal(lines, notices) {
+    const body = this.journalBody;
+    body.replaceChildren();
+    const dim = "opacity:0.7;";
+    if (notices.length) {
+      // The band's framing echoes the tell's own framing sentence (30-sim
+      // `_composeLedger`) so the player reads here the words they were told
+      // there — and it is written to receive an ACTOR when the autonomous-change
+      // mechanism arrives and a notice can say who did it (M3, roadmap).
+      const band = PF.el("div", {
+        style:
+          "display:flex;flex-direction:column;gap:2px;padding-left:8px;border-left:2px solid rgba(243,239,226,0.35);",
+      });
+      band.appendChild(
+        PF.el("div", { style: `font:700 12px/1.6 inherit;${dim}`, text: "About the world itself, not the days in it" }),
+      );
+      // NEWEST FIRST — and newest here means most recently WRITTEN, not the
+      // highest day. The two agree everywhere except after a rewind, where a
+      // restore's notice carries a day BELOW the severance notice it is the
+      // sequel to, so the descending day sort the groups below use would print
+      // the sentence saying the world went above the notice of it coming back.
+      // Reverse insertion order is what puts the sequel on top. These rows are
+      // events about the save and the day on them is a stamp, not the order
+      // they happened in; the day groups below sort, because a line really does
+      // belong to its day.
+      for (const row of notices.slice().reverse()) {
+        const said = typeof row?.[1] === "string" ? row[1] : "";
+        band.appendChild(PF.el("div", { text: `Day ${PF.player.resolvedDay(row?.[0])} — ${said}` }));
+      }
+      body.appendChild(band);
+    }
+    const days = [...new Set(lines.map((line) => PF.player.resolvedDay(line?.[0])))].sort((a, b) => b - a);
+    for (const day of days) {
+      const group = PF.el("div", { style: "display:flex;flex-direction:column;gap:2px;" }, [
+        PF.el("div", { style: `font:700 12px/1.6 inherit;${dim}`, text: `Day ${day}` }),
+      ]);
+      for (const line of lines) {
+        if (PF.player.resolvedDay(line?.[0]) !== day) continue;
+        const stub = PF.player.resolvedDay(line?.[2]) > 0;
+        group.appendChild(PF.el("div", { style: stub ? dim : "", text: typeof line?.[1] === "string" ? line[1] : "" }));
+      }
+      body.appendChild(group);
+    }
+    if (!days.length && !notices.length)
+      body.appendChild(PF.el("div", { style: dim, text: "Nothing written down yet." }));
+  }
+
+  toggleSheet() {
+    if (!this._panelsAllowed()) return;
+    if (this._sheet) {
+      this.closeSheet();
+      return;
+    }
+    this.closeJournal();
+    this._sheet = true;
+    this._sheetKey = this._sheetValueKey();
+    this._renderSheet();
+    this.sheetEl.style.display = "flex";
+  }
+
+  /** CLOSED, not hidden (plan §2.8). A hidden sheet resurfacing after a mode
+   *  change is the stale path — it comes back drawn against whoever the player
+   *  was before the combat or the replay — so the flag and the memo both go and
+   *  the next open rebuilds from scratch. */
+  closeSheet() {
+    this._sheet = false;
+    this._sheetKey = null;
+    this.sheetEl.style.display = "none";
+  }
+
+  /** A whole number off untrusted block state. The sheet renders save JSON, so
+   *  an `x` can be "12", -3 or a NaN; ONE reader for the key and the render,
+   *  which is what makes "the key is the projection of what the sheet draws"
+   *  true rather than nearly true. */
+  _num(value) {
+    const n = Math.trunc(Number(value));
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+
+  _carried(pouch) {
+    return (Array.isArray(pouch?.items) ? pouch.items : []).reduce((n, item) => n + this._num(item?.q), 0);
+  }
+
+  /** Standing as the sheet shows it: how many people sit on each rung of the
+   *  disposition ladder across every zone, and how many are hostile. The
+   *  hostile flag is COUNTED SEPARATELY because it is a flag and not a rung —
+   *  and because an `h` flipping with `d` unmoved has to move the key. */
+  _standing(player) {
+    const tiers = [0, 0, 0, 0];
+    let hostile = 0;
+    for (const [, rows] of Object.entries(player?.rel ?? {})) {
+      for (const [, row] of Object.entries(rows ?? {})) {
+        if (!row || typeof row !== "object") continue;
+        tiers[PF.clamp(this._num(row.d), 0, 3)] += 1;
+        if (row.h) hostile += 1;
+      }
+    }
+    return { tiers, hostile };
+  }
+
+  /** THE LIVE VALUE KEY (plan §2.8), on the purse chip's idiom: cheap enough to
+   *  compute every frame the sheet is open, and it moves exactly when something
+   *  the sheet draws moves. The player block carries no identity signal to watch
+   *  — every mutator mutates in place — so a built-at-open sheet would go stale
+   *  the moment a Talk bumped somebody or a cast paid xp.
+   *
+   *  THE INVARIANT: this key is the projection of PRECISELY what the sheet
+   *  renders. Widening the sheet — per-NPC rows, names, a new section — widens
+   *  the key in the same change, or the new half never re-renders. */
+  _sheetValueKey() {
+    const player = PF.player.get(this.core);
+    const world = this.core.sim?.world;
+    const byKey = (a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+    const verbs = Object.entries(player?.skills?.verbs ?? {})
+      .sort(byKey)
+      .map(([verb, row]) => `${verb}:${PF.player.resolvedLevel(row)}:${this._num(row?.x)}`)
+      .join(",");
+    // The pairs BY VALUE, which covers the fresh-pair equip and the `delete`
+    // unequip alike: a slot that lost its pair renders as an empty half.
+    const gear = Object.entries(player?.skills?.equipped ?? {})
+      .sort(byKey)
+      .map(
+        ([verb, slots]) =>
+          `${verb}:${["tool", "mod"]
+            .map((slot) => (Array.isArray(slots?.[slot]) ? `${slots[slot][0]}/${slots[slot][1]}` : ""))
+            .join("+")}`,
+      )
+      .join(",");
+    const { tiers, hostile } = this._standing(player);
+    return [
+      this._num(player?.pouch?.money),
+      this._carried(player?.pouch),
+      verbs,
+      gear,
+      tiers.join("/"),
+      hostile,
+      // FOUR ROWS AT ONCE: the skill names, `describe()`'s prose, the money
+      // heading and the label under the portrait all come out of the WORLD's
+      // word book, so a rebuild that lands a different theme has moved what the
+      // sheet draws without moving one player field. The loader usually carries
+      // it (a theme change moves `assets.status` below), but a PARKED loader —
+      // no packageId, or inside the failed backoff — never moves at all.
+      world?.theme ?? "",
+      // The portrait's own input: the pre-ready Tier-0 window is accepted, and
+      // this is what upgrades it the frame the authored sheets arrive.
+      PF.assets?.status ?? "",
+    ].join("|");
+  }
+
+  /** The sheet as DATA (plan §2.8): `[{section, rows: [{label, value, kind,
+   *  detail?, source?}]}]`. `detail` and `source` ship in the shape and empty —
+   *  they are the seam the extended journal fills when perks, boons and
+   *  enchanted equipment land, and a shape grown later is a shape every consumer
+   *  has to be re-taught. */
+  _sheetDescriptor() {
+    const world = this.core.sim?.world;
+    const player = PF.player.get(this.core);
+    const byKey = (a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+    const out = [];
+
+    const skills = Object.entries(player?.skills?.verbs ?? {})
+      .sort(byKey)
+      .map(([verb, row]) => {
+        const level = PF.player.resolvedLevel(row);
+        // A CAPPED SKILL READS "MAX", never "0 xp to go": award() zeroes `x` at
+        // the ceiling, so the ordinary arithmetic would draw a bar that is
+        // permanently empty and permanently full at once (plan §2.8).
+        const value =
+          level >= PF.player.CAPS.skillLevel
+            ? `Level ${level} — MAX`
+            : `Level ${level} — ${Math.max(0, PF.player.xpPerLevel(level) - this._num(row?.x))} xp to go`;
+        return { label: PF.economy.verbSkin(world, verb).name, value, kind: "skill" };
+      });
+    out.push({
+      section: "Skills",
+      rows: skills.length ? skills : [{ label: "Nothing practised yet", value: "", kind: "skill" }],
+    });
+
+    const gear = [];
+    for (const [verb, slots] of Object.entries(player?.skills?.equipped ?? {}).sort(byKey)) {
+      const skin = PF.economy.verbSkin(world, verb);
+      for (const slot of ["tool", "mod"]) {
+        const pair = slots?.[slot];
+        if (!Array.isArray(pair) || typeof pair[0] !== "string" || !pair[0]) continue;
+        gear.push({
+          label: `${skin.name} ${skin[slot]}`,
+          value: PF.economy.describe(world, { t: pair[0], k: typeof pair[1] === "string" ? pair[1] : "" }),
+          kind: "equipment",
+        });
+      }
+    }
+    out.push({
+      section: "Equipment",
+      rows: gear.length ? gear : [{ label: "Nothing to hand", value: "", kind: "equipment" }],
+    });
+
+    const carried = this._carried(player?.pouch);
+    const { one } = PF.economy.currency(world);
+    out.push({
+      // Named for what this world calls its money, so a colony's sheet carries no
+      // "Coin" heading over a purse full of credits.
+      section: `${one.charAt(0).toUpperCase()}${one.slice(1)}`,
+      rows: [
+        { label: "Purse", value: PF.economy.money(world, this._num(player?.pouch?.money)), kind: "money" },
+        { label: "Carried", value: `${carried} ${carried === 1 ? "thing" : "things"}`, kind: "count" },
+      ],
+    });
+
+    // THE AGGREGATE, not a roll-call: how many people stand on each rung, across
+    // every zone. Per-NPC rows belong to the extended surface the journal becomes
+    // (plan §2.8). The rung words are theme-BLIND on purpose — a stranger is a
+    // stranger in any world, and the ladder is the same four steps everywhere.
+    const { tiers, hostile } = this._standing(player);
+    const standing = ["Strangers", "Acquainted", "Friendly", "Close"].map((label, rung) => ({
+      label,
+      value: String(tiers[rung]),
+      kind: "standing",
+    }));
+    if (hostile) standing.push({ label: "Hostile", value: String(hostile), kind: "standing" });
+    out.push({ section: "Standing", rows: standing });
+    return out;
+  }
+
+  /** The portrait: the player's own walk sprite, facing the reader, drawn onto a
+   *  frame-sized offscreen canvas and integer-scaled up with
+   *  `image-rendering: pixelated` — which is what the underlay does with the
+   *  world canvas (90-element `attachUnderlay`), and the only way pixel art
+   *  survives being made bigger.
+   *
+   *  Hue 158 is the world draw's own fallback constant for the player
+   *  (40-render), so the Tier-0 portrait is the same person the map shows. A
+   *  refused 2d context draws nothing and is not a reason to fail: the sheet is
+   *  a panel of text with a picture on it. */
+  _portrait() {
+    const sprites = PF.assets?.status === "ready" ? PF.assets.sprites : null;
+    const fw = this._num(sprites?.frameWidth) || 12;
+    const fh = this._num(sprites?.frameHeight) || 16;
+    const canvas = PF.offscreen(fw, fh);
+    const pctx = canvas.getContext?.("2d");
+    if (pctx) {
+      pctx.imageSmoothingEnabled = false;
+      PF.art.drawActor(pctx, "player", 158, 0, 0, false, 0, 0);
+    }
+    const scale = 6;
+    canvas.style.cssText =
+      `width:${fw * scale}px;height:${fh * scale}px;` +
+      "image-rendering:pixelated;image-rendering:crisp-edges;display:block;";
+    return canvas;
+  }
+
+  _renderSheet() {
+    const world = this.core.sim?.world;
+    // THE THEMED GENERIC LABEL. The package has no player name and the host props
+    // expose none, so the sheet says what KIND of person is standing there rather
+    // than inventing one (plan §2.8; engine persona name + avatar is an
+    // enumerated Engine FR).
+    this.sheetArt.replaceChildren(
+      this._portrait(),
+      PF.el("div", { style: "font:700 12px/1.5 inherit;", text: PF.economy.playerLabel(world) }),
+    );
+    const stats = this.sheetStats;
+    stats.replaceChildren();
+    for (const { section, rows } of this._sheetDescriptor()) {
+      stats.appendChild(
+        PF.el("div", { style: "font:700 12px/1.6 inherit;opacity:0.7;margin-top:6px;", text: section }),
+      );
+      for (const row of rows) {
+        stats.appendChild(
+          PF.el("div", { style: "display:flex;justify-content:space-between;gap:12px;" }, [
+            PF.el("span", { style: "opacity:0.8;", text: row.label }),
+            PF.el("span", { text: row.value }),
+          ]),
+        );
+      }
+    }
   }
 
   refreshChips() {
@@ -11403,6 +14008,29 @@ PF.Hud = class {
       if (!inWorld) {
         this.berthBtn.style.display = "none";
         this._berth = null;
+        this.buyRodBtn.style.display = "none";
+        this._rod = null;
+        this.fishBtn.style.display = "none";
+        this._fish = null;
+        this.sleepBtn.style.display = "none";
+        this._sleep = null;
+      }
+      // THE PANEL OPENERS, on the berth button's cadence and for a reason of
+      // their own: the gate hides the whole topbar, but the topbar STAYS UP in
+      // dialogue mode, so `!inWorld` hiding is a toggle these two have to own.
+      this.journalChip.style.display = inWorld ? "" : "none";
+      this.sheetChip.style.display = inWorld ? "" : "none";
+      // …AND THE PANELS THEMSELVES. The sheet CLOSES (plan §2.8): `e`, a cutscene
+      // beat, and the props-driven replay/combat modes can all fire under an open
+      // one, and a sheet that merely hid would resurface drawn against whoever
+      // the player was before. The journal only hides — it is a list of what is
+      // written down, with no live descriptor to go stale, and losing a scroll
+      // position to a passing combat state would be its own small rudeness.
+      if (!inWorld) {
+        this.closeSheet();
+        this.journalEl.style.display = "none";
+      } else if (this._journal) {
+        this.journalEl.style.display = "flex";
       }
       this.travelBtn.style.display = inWorld && spatialAvail ? "" : "none";
       this.waitBtn.style.display = inWorld ? "" : "none";
@@ -11415,6 +14043,8 @@ PF.Hud = class {
       this.resumeBtn.textContent = combatResumeApplies ? "▶ Resume exploring" : "▶ Resume walking";
       this.travelMenu.style.display = "none";
       this.waitMenu.style.display = "none";
+      this.fishMenu.style.display = "none";
+      this.sleepMenu.style.display = "none";
       if (mode === "dialogue" && !gate) this.toast("Type in the message box below — Resume to keep walking");
     }
     // Nothing below the gate means anything: there is no beat to caption, nobody
@@ -11468,10 +14098,71 @@ PF.Hud = class {
               : `Rent a berth (${PF.economy.money(sim.world, offer.price)})`;
         }
       }
+      // The rod ladder, on the berth's cadence and memoised the same way. The
+      // key carries the TIER as well as the reason, so the button re-labels when
+      // the ladder moves up a rung under it.
+      const rod = PF.economy.rodOffer(this.core);
+      // A price is quoted only when a real keeper is within reach and there is a
+      // rung left to sell, so — exactly as with the berth — one test covers "is
+      // there anything to show at all". This is also where the button VANISHES at
+      // the top of the ladder: no rung, no price, no button.
+      const rodShown = rod.price !== null;
+      const rodKey = rodShown ? `${rod.reason ?? "ok"}:${rod.tier}:${rod.price}` : "";
+      if (rodKey !== this._rod) {
+        this._rod = rodKey;
+        this.buyRodBtn.style.display = rodShown ? "" : "none";
+        if (rodShown) {
+          this.buyRodBtn.style.opacity = rod.available ? "1" : "0.45";
+          const named = PF.economy.describe(sim.world, { t: "rod", k: rod.tier });
+          this.buyRodBtn.textContent = `Buy a ${named} (${PF.economy.money(sim.world, rod.price)})`;
+        }
+      }
+      // The spot. `offer.spot` is the render test here — a refusal that still
+      // names a spot is one about the PLAYER (no rod, full bag) and belongs on
+      // screen saying so; one that names none is about the place, and there is
+      // nothing to say. The bait count rides the memo key so the menu's line is
+      // never a stack ago.
+      const water = PF.economy.fishOffer(this.core);
+      const fishKey = water.spot ? `${water.reason ?? "ok"}:${water.spot.id}:${water.bait?.q ?? 0}` : "";
+      if (fishKey !== this._fish) {
+        this._fish = fishKey;
+        this.fishBtn.style.display = water.spot ? "" : "none";
+        if (water.spot) {
+          this.fishBtn.style.opacity = water.available ? "1" : "0.45";
+          this.fishBtn.textContent = `🎣 Fish ${water.spot.name}`;
+        } else {
+          // Walking away from the bank closes the menu with the button: a list of
+          // casts for water nobody is standing at is a list that refuses.
+          this.fishMenu.style.display = "none";
+        }
+      }
+      // The bed, on the same cadence: `bed` is the render test, the reason rides
+      // the key so a refusal re-labels nothing but re-dims correctly, and walking
+      // out of the room takes the menu with the button.
+      const bed = PF.economy.sleepOffer(this.core);
+      const sleepKey = bed.bed ? `${bed.reason ?? "ok"}` : "";
+      if (sleepKey !== this._sleep) {
+        this._sleep = sleepKey;
+        this.sleepBtn.style.display = bed.bed ? "" : "none";
+        if (bed.bed) this.sleepBtn.style.opacity = bed.available ? "1" : "0.45";
+        else this.sleepMenu.style.display = "none";
+      }
       const clock = sim.clockLabel();
       if (clock !== this._clock) {
         this._clock = clock;
         this.refreshChips();
+      }
+      // THE OPEN PANELS, each on its own memo. Both run only while their panel is
+      // up, and both write DOM only on a change — a journal nobody has opened
+      // costs nothing, and an open sheet at rest costs one string compare beside
+      // an update() already running berthOffer's zone scan.
+      if (this._journal) this._journalSync();
+      if (this._sheet) {
+        const key = this._sheetValueKey();
+        if (key !== this._sheetKey) {
+          this._sheetKey = key;
+          this._renderSheet();
+        }
       }
     }
   }
@@ -12132,15 +14823,33 @@ PF.core = {
     const gen = PF.save._gen ?? 0;
     this.setMode("dialogue");
     this.hud?.toast(`Talking to ${npc.name}`);
-    void Promise.resolve(
-      this.host.sendMessage(`${sim.composePrefix(npc)} I walk up to ${npc.name} the ${npc.role} and greet them.`),
-    )
+    const text = `${sim.composePrefix(npc)} I walk up to ${npc.name} the ${npc.role} and greet them.`;
+    // THE COMPOSED TURN'S OWN PENDING, captured HERE and closure-local. Two
+    // readings of this would be wrong and both are easy: re-reading
+    // `sim._pendingIntro` after the await finds the null commitIntro left behind
+    // and burns nothing FOREVER (the wrap-up would then be re-told on every turn
+    // for the rest of the save), and re-reading it before the burn finds whatever
+    // a sender that interleaved with this one composed instead. The object
+    // reference survives the wholesale null, so the turn that was sent is the
+    // turn that gets burned.
+    const pend = sim._pendingIntro;
+    void Promise.resolve(this.host.sendMessage(text))
       .then((ok) => {
         if (ok === false) {
           this.setMode("walk");
           this.hud?.toast("The story isn't accepting turns right now.");
         } else {
           sim.commitIntro();
+          // THE WRAP-UP BURN, on the same accepted-turn signal the one-shot flags
+          // burn on and for the same reason: a refused or failed send is not a
+          // telling. The mutator guards itself against the sim having moved under
+          // the await, and a refusal is SWALLOWED — no toast, no retry. The tell
+          // stays in history un-burned and the next compose says it again, which
+          // is a §5 lost-flush and not something to interrupt anybody about.
+          // The pending carries the notice ROWS as well as the day, so the burn
+          // marks the band THIS turn told rather than the live one, which a
+          // rebuild can have appended to under the await (plan §2.5).
+          if (pend?.ledger) PF.player.flush(this, pend.ledger.throughDay, pend.ledger.notices, gen);
           // P2's ledger goes live on the cheapest honest signal there is: the
           // encounter count moves when the host ACCEPTS the turn, exactly where
           // the one-shot intro flags burn, and for the same reason — a refused
@@ -12212,6 +14921,21 @@ PF.core = {
       } else if (k === "e") {
         // "e" only — Enter belongs to host buttons/menus (review finding)
         this.interact();
+      } else if (k === "c") {
+        // THE CHARACTER SHEET, and it is HERE rather than up beside the
+        // dialogue-Escape branch on purpose (plan §2.8): everything above this
+        // line is a guard the sheet needs — the loading gate, focus inside a
+        // host control, a visible host modal, and walk mode — and a branch at
+        // :451's level would skip every one of them.
+        this.hud?.toggleSheet();
+      } else if (k === "escape") {
+        // …and Escape closes whichever panel is open. It cannot race the
+        // dialogue-Escape branch above: that one returns, and a panel cannot be
+        // open in dialogue mode at all, because leaving walk closes the sheet
+        // and hides the journal (70-hud update()). No preventDefault, exactly as
+        // the branch above and `e` beside it decline it — the host's own Escape
+        // handling is not ours to cancel.
+        this.hud?.closePanels();
       }
     };
     // keyup ALWAYS clears, whatever the target or open panels — otherwise a

@@ -841,10 +841,24 @@ PF.save = {
       // chat reopened at midnight would show a town going about its morning.
       sim.resolveSchedules();
       if (saved.intro && typeof saved.intro === "object") {
+        // A CLOSED LITERAL, and that is the fact this line exists to answer.
+        // Every subkey not named here is stripped on every restore AND on every
+        // `_rebuild`, and the envelope carry cannot cover for it: `_envelopeExtra`
+        // holds unknown TOP-LEVEL keys, so a known key's unknown SUBKEY rides
+        // nothing at all. Adding a field under `intro` therefore means adding it
+        // HERE, in the same change, or it is write-only state.
         sim.intro = {
           world: saved.intro.world === true,
           zones: saved.intro.zones && typeof saved.intro.zones === "object" ? { ...saved.intro.zones } : {},
           npcs: saved.intro.npcs && typeof saved.intro.npcs === "object" ? { ...saved.intro.npcs } : {},
+          // THE DURABLE HALF OF THE TWO-FIELD FLUSH (plan §2.5): the last day a
+          // completed sleep made owed. It lives under `intro` because that key is
+          // already in the envelope and a wrap-up marker is not worth an
+          // ENVELOPE_KEYS entry of its own — and the whole design is void without
+          // this line, since a marker that does not survive a reload can never
+          // outlive the session that staged it. Read through the resolver: it
+          // comes off save JSON and it is about to be compared against `sim.day`.
+          ledgerOwed: PF.player.resolvedDay(saved.intro.ledgerOwed),
         };
       }
       if (saved.bindings && typeof saved.bindings === "object") {
@@ -941,7 +955,13 @@ PF.save = {
       // only fires when the entry will not fit at all; when it does fire, the
       // player gets the true sentence instead of the comforting one.
       notices.length = 0;
-      notices.push("What belonged to the world that changed could not be kept, and is gone.");
+      // THE SAME EVENT AS THE SENTENCE IT REPLACES, with the other outcome — so
+      // it takes that sentence's own subject. applyStamps says "what you had
+      // done here"; this one used to say "what belonged to the world that
+      // changed", which is true, abstract, and reads like a different incident
+      // when the two sit a scroll apart in the band (plan §2.5, M3's
+      // writer-site kind copy).
+      notices.push("What you had done in the world that changed could not be kept, and is gone.");
     }
     if (applied.evaluated && !applied.severed) {
       const stamp = PF.quarantine.peek("stamp");
@@ -960,12 +980,18 @@ PF.save = {
     const repaired = PF.player.repairQuests(player, world, applied.evaluated);
     notices.push(...repaired.notices);
 
-    // 4. NOTICES, appended to the LIVE ledger — after the severance that emptied
-    // it, so the one thing that survives the window is the explanation for it.
-    // Never at or below the gate: a line the gate covers is one the flush will
-    // skip, and a notice nobody is ever told is worse than no notice at all.
-    const noticeDay = Math.max(sim.day, player.flushedDay + 1);
-    for (const text of notices) player.ledger.lines.push([noticeDay, text]);
+    // 4. NOTICES, appended to the band's own array — after the severance that
+    // emptied the ledger, so the one thing that survives the window is the
+    // explanation for it.
+    //
+    // AT THE DAY IT HAPPENED, which took a format change to be able to say
+    // (plan §2.5). These used to be ledger LINES, and a line at or below the
+    // flush gate is one the wrap-up skips — so the day was shifted up to
+    // `max(sim.day, flushedDay + 1)` to keep the notice tellable, which printed
+    // a day header from the FUTURE into the tell whenever the gate had run
+    // ahead of the clock. The band is told-flagged instead of day-gated, so the
+    // shift is deleted along with the back-door it existed for.
+    for (const text of notices) PF.player.notice(player, text, sim.day);
     return player;
   },
 

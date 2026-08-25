@@ -3,6 +3,13 @@
 // package-local clock. Modes gate everything: "walk" is the only mode that
 // consumes input; "dialogue" hands the keyboard back to the host narration
 // input; "combat"/"replay" freeze the world under the host's own UI.
+// When each daypart BEGINS, in package-local minutes — the same four thresholds
+// daypart() reads from the other side. One table rather than a literal per
+// caller: waitUntil jumps to one of these, the fishing verb's "until dusk" loops
+// windows toward one, and a copy that drifted would be a rest action and a
+// session disagreeing about when the evening starts.
+PF.DAYPART_STARTS = { dawn: 5 * 60, day: 7 * 60, dusk: 18 * 60, night: 21 * 60 };
+
 PF.Sim = class {
   constructor(world) {
     this.world = world;
@@ -19,6 +26,10 @@ PF.Sim = class {
     this._clockAcc = 0;
     this.nearNpc = null;
     this.nearPortal = null;
+    // The named feature the player is standing at, or null (see step()). Derived
+    // per frame from the zone's own register (20-world makeZone.features), which
+    // is itself derived — nothing here is ever saved.
+    this.nearFeature = null;
     this._npcTimers = new Map();
     this._rnd = PF.rng((world.seed ^ 0x9e3779b9) >>> 0);
     this.dirty = false; // save-worthy change happened
@@ -68,7 +79,17 @@ PF.Sim = class {
   }
 
   teleport(zoneId, tx, ty) {
-    if (!this.world.zones[zoneId]) return;
+    // Own-property, because this early return is the ONLY thing standing between
+    // a caller-supplied word and the mount. `zones["constructor"]` is a truthy
+    // function, so bare, the guard did not fire: `zoneId` was pinned to a word no
+    // zone answers to and zone() handed Object's own constructor to the frame
+    // loop, which throws on the first `z.w`. Nothing catches that — and because
+    // the bare form also set `dirty` before the throw, the prototype-named id
+    // reached `snap.zone` first: a corrupt save AND a dead frame loop. Both
+    // shipped callers pre-validate today, but teleport is public on PF.Sim, and
+    // 60-save already spells this same test out as `hasZone` for ids taken off a
+    // save row — a refusal, cleanly, is the whole contract of the line.
+    if (!PF.own(this.world.zones, zoneId)) return;
     this.zoneId = zoneId;
     this.x = (tx + 0.5) * PF.TILE;
     this.y = (ty + 0.5) * PF.TILE;
@@ -124,6 +145,39 @@ PF.Sim = class {
         if (d < best) {
           best = d;
           this.nearNpc = npc;
+        }
+      }
+      // THE NAMED FEATURE UNDER THE PLAYER'S HAND, the third proximity read
+      // beside the two above and recomputed on the same terms: every walking
+      // frame, off the feet tile, null the moment they step away.
+      //
+      // The test is deliberately TWO-SIDED — a neighbour tile IS water AND that
+      // tile lies inside a registry rect. Neither half is the rule on its own.
+      // Water alone would make any puddle a feature and could not say which one;
+      // a rect alone would count tiles the feature never watered, and rects hold
+      // those by design (the wilds ford lays path straight across its stream,
+      // and a compiled pool's well stands inside the anchor rect beside it).
+      //
+      // Four neighbours, not eight: standing corner-on to a pond is standing
+      // near the bank, not at it. Skipped whole on a zone with no register,
+      // which is most of them.
+      this.nearFeature = null;
+      if (z.features.length) {
+        for (const [nx, ny] of [
+          [tx, ty - 1],
+          [tx, ty + 1],
+          [tx - 1, ty],
+          [tx + 1, ty],
+        ]) {
+          if (nx < 0 || ny < 0 || nx >= z.w || ny >= z.h) continue;
+          if (z.ground[ny * z.w + nx] !== "water") continue;
+          const row = z.features.find(
+            (f) => nx >= f.rect.x && nx < f.rect.x + f.rect.w && ny >= f.rect.y && ny < f.rect.y + f.rect.h,
+          );
+          if (row) {
+            this.nearFeature = row;
+            break;
+          }
         }
       }
     }
@@ -195,14 +249,80 @@ PF.Sim = class {
    *  until dusk" rest action). A JUMP, not an advance: NPCs re-place in one
    *  shot. Walk mode only, so it can never collide with the dialogue freeze. */
   waitUntil(target) {
-    const starts = { dawn: 5 * 60, day: 7 * 60, dusk: 18 * 60, night: 21 * 60 };
-    const at = starts[target];
+    // Own-property, now that the table is shared and reachable from more than one
+    // button: `starts["constructor"]` answered with a FUNCTION, which is not
+    // undefined, and the guard below would have waved it through onto clockMin.
+    const at = Object.prototype.hasOwnProperty.call(PF.DAYPART_STARTS, target) ? PF.DAYPART_STARTS[target] : undefined;
     if (at === undefined || this.mode !== "walk") return false;
     if (at <= this.clockMin) this.day++;
     this.clockMin = at;
     this._clockAcc = 0;
     this.resolveSchedules();
     return true;
+  }
+
+  /** Stage what the clock has finished (plan §2.5, M2's ruled variant): every day
+   *  BEFORE the one being lived is owed to the wrap-up. Called by the sleep verb
+   *  after its advance, and by nothing else — waking hours pass without anybody
+   *  sitting down to look back over them, which is the whole conceit.
+   *
+   *  THE RULED VARIANT IS THE SIMPLE ONE: `max(ledgerOwed, day - 1)`, read AFTER
+   *  the clock moved, with no crossing detection and no captured day-before. So a
+   *  sleep of any length at any hour owes every elapsed day, and the post-midnight
+   *  fisher who beds at 00:30 flushes last night's catch — the session filed its
+   *  pre-midnight half under the day it happened, this owes that day, and the
+   *  hours since midnight belong to the day still underway.
+   *
+   *  `max` because sleeps ACCUMULATE and the marker only ever climbs: a rewind
+   *  can take the clock backwards, and a marker that followed it down would
+   *  quietly un-owe days the player was already promised. The invariant
+   *  `ledgerOwed < sim.day` holds by construction — `waitUntil` cannot complete
+   *  without moving the clock — and the burn's own guard re-checks it anyway. */
+  stageLedgerOwed() {
+    this.intro ??= { world: false, zones: {}, npcs: {} };
+    this.intro.ledgerOwed = Math.max(PF.player.resolvedDay(this.intro.ledgerOwed), this.day - 1);
+    return this.intro.ledgerOwed;
+  }
+
+  /** Advance the clock by exactly `n` minutes. The fishing cast's mover, where
+   *  waitUntil is the rest action's, and the difference is what each one is FOR:
+   *  a rest is over when it reaches a time of day, while a cast SPENDS a fixed
+   *  window and lands wherever that leaves the clock. So this one takes minutes
+   *  and not a daypart.
+   *
+   *  IT WRAPS MIDNIGHT, and it has to. A cast window is a multi-minute jump, so
+   *  a session that starts at 23:50 crosses into the next day — a DESIGNED path,
+   *  since "fish until dawn" is on the verb's own menu. The walking loop above
+   *  can never be more than one day out because it ticks a minute at a time;
+   *  this can, so the wrap is a loop rather than a test.
+   *
+   *  `resolveSchedules()` then runs UNCONDITIONALLY, unlike the walking loop's
+   *  boundary test. A jump of any size can cross a daypart, and asking whether
+   *  it did costs the same as re-placing everybody in a world where nothing
+   *  moved — which is what waitUntil already concluded one method down.
+   *
+   *  NOT MODE-GATED, and waitUntil is: the guard belongs where the refusal is
+   *  legible. Wait is a button whose only refusal is the mode, so its mover says
+   *  no; fishing has five refusals of its own (59-economy `fish`), `wrong-mode`
+   *  among them, and a second silent gate here would turn one of them into a
+   *  no-op nobody could tell from a cast that caught nothing.
+   *
+   *  `_clockAcc` is deliberately left alone. waitUntil clears it because it
+   *  JUMPS to a target and a leftover fraction would tick that target's minute
+   *  early; an advance lays whole minutes on top of a fraction the player has
+   *  genuinely already walked, and clearing it would quietly lose it.
+   *
+   *  Returns the minutes advanced — 0 for anything that is not a positive whole
+   *  count, so a caller can tell a clock that moved from one that did not. */
+  advanceMinutes(n) {
+    if (!Number.isInteger(n) || n <= 0) return 0;
+    this.clockMin += n;
+    while (this.clockMin >= 24 * 60) {
+      this.clockMin -= 24 * 60;
+      this.day++;
+    }
+    this.resolveSchedules();
+    return n;
   }
 
   /** Re-place every scheduled NPC for the current daypart. Idempotent, O(cast),
@@ -429,8 +549,86 @@ PF.Sim = class {
       parts.push(`[${npc.name}: ${npc.persona}]`);
       pending.npc = npc.id;
     }
+    // THE WRAP-UP TELL, LAST IN THE JOIN — which puts it after the persona part
+    // and before the sender's own action text, where the plan asks for it (§2.6).
+    // It is also the ONLY part of any turn a fishing word can reach the GM
+    // through (M10 as amended): the verb narrates nothing, files ledger lines,
+    // and those lines are told here or not at all.
+    const ledger = this._composeLedger();
+    if (ledger) parts.push(ledger.text);
+    // The ephemeral half of the flush, handed to the sender rather than stored:
+    // which day the tell reached, and which notice ROWS rode with it. Compose
+    // stays pure — nothing here burns, and a refused or failed send must lose
+    // nothing, exactly as the one-shot flags above it must not.
+    pending.ledger = ledger ? { throughDay: ledger.throughDay, notices: ledger.notices } : null;
     this._pendingIntro = pending;
     return parts.join(" ");
+  }
+
+  /** The wrap-up tell: the days a completed sleep made owed and has not told, and
+   *  every notice still untold. Composed from the two live fields every time and
+   *  persisted NOWHERE — there is no stored "what we said last time", so a re-tell
+   *  after a lost burn simply reads the same live selection again and says the
+   *  same thing (plan §2.5). Returns null when there is nothing owed and nothing
+   *  untold, else { text, throughDay, notices }.
+   *
+   *  LINES: `flushedDay < day ≤ intro.ledgerOwed`, stubs included — an elided day
+   *  that says "12 things happened" is still the truest account of it there is.
+   *  NOTICES: every untold row, whatever day it carries. The band answers to its
+   *  flag rather than to the gate, which is the whole reason it left the lines.
+   *
+   *  WHOLE DAYS, OLDEST FIRST, AND THE NEWEST DROPPED. The budget is
+   *  `TUNING.ledgerTellChars`, measured in graphemes over the line TEXTS — not
+   *  over this function's own framing, because the budget is floor-asserted at
+   *  load against one maximum-shape day (`ledgerPerDay × ledgerChars`) and a
+   *  measure that counted the word "Day" would put a legal day over the floor and
+   *  stall the flush forever. Days are rendered oldest-first so the story arrives
+   *  in order, and the burn advances only through the last day rendered WHOLE, so
+   *  a truncated tell leaves `ledgerOwed` standing and the next turn continues
+   *  from where this one stopped.
+   *
+   *  …AND THE OLDEST DAY ALWAYS RIDES, over budget or not. A day this build can
+   *  WRITE cannot exceed the budget (that is what the floor assertion buys), but
+   *  a hostile save can carry fifty lines on one day, and "tell nothing, advance
+   *  nothing, forever" is a worse answer than one oversized part. */
+  _composeLedger() {
+    const player = this.player;
+    if (!player || typeof player !== "object") return null;
+    const owed = PF.player.resolvedDay(this.intro?.ledgerOwed);
+    const gate = PF.player.resolvedDay(player.flushedDay);
+    const lines = (Array.isArray(player.ledger?.lines) ? player.ledger.lines : []).filter((line) => {
+      if (!Array.isArray(line) || line.length < 2) return false;
+      const day = PF.player.resolvedDay(line[0]);
+      return day > gate && day <= owed;
+    });
+    const budget = PF.economy?.TUNING?.ledgerTellChars ?? 0;
+    const rendered = [];
+    let spent = 0;
+    let through = gate;
+    for (const day of [...new Set(lines.map((line) => PF.player.resolvedDay(line[0])))].sort((a, b) => a - b)) {
+      const texts = lines
+        .filter((line) => PF.player.resolvedDay(line[0]) === day)
+        .map((line) => (typeof line[1] === "string" ? line[1] : ""));
+      const cost = texts.reduce((sum, text) => sum + PF.player.graphemes(text).length, 0);
+      if (rendered.length && spent + cost > budget) break;
+      rendered.push(`Day ${day}: ${texts.join(" ")}`);
+      spent += cost;
+      through = day;
+    }
+    const untold = (Array.isArray(player.ledger?.notices) ? player.ledger.notices : []).filter(
+      (row) => Array.isArray(row) && row.length >= 2 && !row[2],
+    );
+    if (!rendered.length && !untold.length) return null;
+    const sentences = [...rendered];
+    // ONE framing sentence for the whole band, and it frames them as things that
+    // happened TO the world rather than in the player's days — which is what they
+    // are, and what the writer-site copy each of them carries will say in more
+    // detail as the band grows an actor to name (M3, roadmap).
+    if (untold.length) {
+      const said = untold.map((row) => (typeof row[1] === "string" ? row[1] : "")).join(" ");
+      sentences.push(`Also, about the world itself rather than the days in it: ${said}`);
+    }
+    return { text: `[Wrap-up — ${sentences.join(" ")}]`, throughDay: through, notices: untold };
   }
 
   /** Burn the one-shot flags for the last composed prefix (accepted turn). */

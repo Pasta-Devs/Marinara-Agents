@@ -512,7 +512,14 @@ PF.brief = (() => {
   // the fixture the compiler's invariants are driven through, and the answer for
   // any future caller that needs a brief without a generation call behind it.
   function defaults(theme, seed) {
-    return validate(DEFAULT_BRIEFS[theme] || DEFAULT_BRIEFS["cozy-village"], { theme, seed });
+    // PF.own, because this read happens BEFORE validate() applies the same guard
+    // one screen up — and it is the parameter of an exported function, so the
+    // word arrives from wherever the caller got it. Bare, `defaults("__proto__")`
+    // handed Object.prototype to validate() as the worked example: an object, so
+    // it survived the transport check, and every field then floored to nothing.
+    // The theme came back cozy-village and the brief came back EMPTY, which is
+    // the fallback on this line reading as if it had fired when it had not.
+    return validate(PF.own(DEFAULT_BRIEFS, theme) || DEFAULT_BRIEFS["cozy-village"], { theme, seed });
   }
 
   /** Truncation salvage (§4.1/§5): strip fences, take the outermost balanced
