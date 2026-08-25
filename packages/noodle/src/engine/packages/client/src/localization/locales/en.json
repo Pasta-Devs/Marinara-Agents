@@ -422,7 +422,7 @@
   "ui.noodle.noodlehome.cleanupUnusedNoodleDataConfirm": "Clean Up Data",
   "ui.noodle.noodlehome.cleanupUnusedNoodleDataDone": "Unused Noodle data removed. Deleted {{accounts}} accounts and {{posts}} posts.",
   "ui.noodle.noodlehome.cleanupUnusedNoodleDataFailed": "Could not clean up unused Noodle data.",
-  "ui.noodle.noodlehome.cleanupUnusedNoodleDataMessage": "Remove Noodle accounts linked to deleted characters or personas, plus their dependent posts, interactions, subscriptions, unlocks, digests, and refresh records. Active Noodle data stays.",
+  "ui.noodle.noodlehome.cleanupUnusedNoodleDataMessage": "Remove uninvited Noodle accounts and accounts linked to deleted characters or personas, plus their dependent posts, interactions, subscriptions, unlocks, digests, and refresh records. Active Noodle data stays.",
   "ui.noodle.noodlehome.clearSearch": "Clear search",
   "ui.noodle.noodlehome.clearsTimelineContentWhileKeepingProfilesFollowsInvitesAnd": "Clears timeline content while keeping profiles, follows, invites, and Noodle settings.",
   "ui.noodle.noodlehome.comment": "comment",

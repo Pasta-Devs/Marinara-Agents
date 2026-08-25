@@ -4090,39 +4090,41 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
             title={localizeUi("ui.noodle.noodlehome.resetNoodle")}
             help={localizeUi("ui.noodle.noodlehome.clearsTimelineContentWhileKeepingProfilesFollowsInvitesAnd")}
           >
-            <button
-              type="button"
-              onClick={resetTimeline}
-              disabled={resetNoodleTimeline.isPending}
-              className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] transition-colors hover:border-[var(--noodle-accent)]/60 hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {resetNoodleTimeline.isPending ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
+            <div className="grid gap-2">
+              <button
+                type="button"
+                onClick={resetTimeline}
+                disabled={resetNoodleTimeline.isPending}
+                className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] transition-colors hover:border-[var(--noodle-accent)]/60 hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {resetNoodleTimeline.isPending ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Trash2 size={14} className="text-[var(--noodle-accent)]" />
+                )}
+                {resetNoodleTimeline.isPending
+                  ? localizeUi("ui.noodle.noodlehome.resettingNoodle")
+                  : localizeUi("ui.noodle.noodlehome.resetNoodleTimeline")}
+              </button>
+              <button
+                type="button"
+                onClick={cleanupUnusedNoodleData}
+                disabled={cleanupUnusedData.isPending || deleteAllData.isPending}
+                className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] transition-colors hover:border-[var(--noodle-accent)]/60 hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
                 <Trash2 size={14} className="text-[var(--noodle-accent)]" />
-              )}
-              {resetNoodleTimeline.isPending
-                ? localizeUi("ui.noodle.noodlehome.resettingNoodle")
-                : localizeUi("ui.noodle.noodlehome.resetNoodleTimeline")}
-            </button>
-            <button
-              type="button"
-              onClick={cleanupUnusedNoodleData}
-              disabled={cleanupUnusedData.isPending || deleteAllData.isPending}
-              className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] transition-colors hover:border-[var(--noodle-accent)]/60 hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Trash2 size={14} className="text-[var(--noodle-accent)]" />
-              {localizeUi("ui.noodle.noodlehome.cleanupUnusedNoodleData")}
-            </button>
-            <button
-              type="button"
-              onClick={deleteAllNoodleData}
-              disabled={cleanupUnusedData.isPending || deleteAllData.isPending}
-              className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-[var(--destructive)] px-3 py-2 text-xs font-bold text-[var(--destructive-foreground)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Trash2 size={14} />
-              {localizeUi("ui.noodle.noodlehome.deleteAllNoodleData")}
-            </button>
+                {localizeUi("ui.noodle.noodlehome.cleanupUnusedNoodleData")}
+              </button>
+              <button
+                type="button"
+                onClick={deleteAllNoodleData}
+                disabled={cleanupUnusedData.isPending || deleteAllData.isPending}
+                className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--destructive)]/50 bg-[var(--background)] px-3 py-2 text-xs font-bold text-[var(--destructive)] transition-colors hover:bg-[var(--destructive)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Trash2 size={14} />
+                {localizeUi("ui.noodle.noodlehome.deleteAllNoodleData")}
+              </button>
+            </div>
           </Section>
         </>
       )}

@@ -48,6 +48,15 @@ assert.match(viewerHook, /postsByCreator/u);
 assert.match(viewerHook, /refetchOnMount: "always"/u);
 assert.match(viewerHook, /while \(cursor\)[\s\S]*const scope = await api\.get<NoodlerViewerScope>/u);
 
+const subscriptionHook = hooks.slice(
+  hooks.indexOf("export function useToggleNoodlerSubscription"),
+  hooks.indexOf("export function useToggleNoodlerFollow"),
+);
+assert.match(
+  subscriptionHook,
+  /refetchQueries\(\{ queryKey: noodleKeys\.viewer\(input\.personaId\), type: "active" \}\)/u,
+);
+
 const home = readFileSync("packages/slurp/src/engine/packages/client/src/components/slurp/SlurpHome.tsx", "utf8");
 assert.match(home, /NOODLER_FEED_WINDOW_SIZE = 20/u);
 assert.match(home, /feed\.slice\(0, visibleFeedCount\)/u);
