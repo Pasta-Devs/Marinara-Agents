@@ -19,12 +19,14 @@ async function main() {
   );
   const { activate } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/server-entry.ts");
-  const { ltmExtractionSettingsPatchSchema, ltmExtractionSettingsSchema } =
+  const { ltmDraftPreflightResponseSchema, ltmExtractionSettingsPatchSchema, ltmExtractionSettingsSchema } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
   const { addRejectedSuggestions } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/rejected-suggestions.ts");
-  const { longTermMemoryInjectionReceiptPath } =
+  const { longTermMemoryInjectionReceiptPath, recordLongTermMemoryZeroMatch } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/usage.ts");
+  const { prepareGenerationLongTermMemory } =
+    await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/generation-injection.ts");
   const app = Fastify();
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-routes-"));
   const packageManifest = JSON.parse(
@@ -437,6 +439,53 @@ async function main() {
       state: "not_recorded",
       dispatchedAt: null,
     });
+    const zeroMatchReceipt = await recordLongTermMemoryZeroMatch("zero-match-chat", storageService.root);
+    assert.ok(zeroMatchReceipt);
+    assert.equal(Array.isArray(zeroMatchReceipt.chunks), true);
+    assert.equal(zeroMatchReceipt.chunks.length, 0);
+    const zeroMatchInjection = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/last-injection/zero-match-chat",
+      headers,
+    });
+    assert.equal(zeroMatchInjection.statusCode, 200, zeroMatchInjection.body);
+    assert.deepEqual(
+      {
+        memoryCount: zeroMatchInjection.json().memoryCount,
+        tokenCount: zeroMatchInjection.json().tokenCount,
+        memories: zeroMatchInjection.json().memories,
+        state: zeroMatchInjection.json().state,
+      },
+      { memoryCount: 0, tokenCount: 0, memories: [], state: "no_matches" },
+    );
+    assert.ok(
+      typeof zeroMatchInjection.json().dispatchedAt === "string" &&
+        Number.isFinite(Date.parse(zeroMatchInjection.json().dispatchedAt)),
+      "a zero-match recall must carry a parseable dispatchedAt timestamp",
+    );
+    const recallZeroMatch = await prepareGenerationLongTermMemory({
+      root: storageService.root,
+      chatId: "game-empty",
+      chatMode: "game",
+      characterIds: [],
+      messages: [{ role: "user", content: "A query that matches no saved memory." }],
+    });
+    assert.equal(recallZeroMatch, null, "a zero-match recall injects nothing");
+    const recalledZeroMatch = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/last-injection/game-empty",
+      headers,
+    });
+    assert.equal(recalledZeroMatch.json().state, "no_matches");
+    assert.equal(recalledZeroMatch.json().memoryCount, 0);
+    const missingDraft = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/drafts/10000000-0000-4000-8000-000000000099/accept",
+      headers,
+      payload: {},
+    });
+    assert.equal(missingDraft.statusCode, 404, missingDraft.body);
+    assert.equal(missingDraft.json().code, "ltm_draft_not_found");
     assert.deepEqual(Object.keys(status.json().indexes).sort(), [
       "chunkCount",
       "chunkFormatVersion",
@@ -480,6 +529,79 @@ async function main() {
       },
     });
     assert.equal(created.statusCode, 201, created.body);
+    const secondCreated = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/notes",
+      headers,
+      payload: {
+        ...created.json().note,
+        id: "world_route_second",
+        title: "Second route fixture",
+        scope: { chatId: "chat-z", chatIds: ["chat-z"] },
+      },
+    });
+    assert.equal(secondCreated.statusCode, 201, secondCreated.body);
+    const unfiltered = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/notes",
+      headers,
+    });
+    assert.equal(unfiltered.statusCode, 200, unfiltered.body);
+    assert.equal(
+      unfiltered.json().some((note: any) => note.id === "world_route_fixture"),
+      true,
+    );
+    const byIds = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/notes?ids=world_route_second,world_route_fixture,world_route_second,world_missing_route",
+      headers,
+    });
+    assert.equal(byIds.statusCode, 200, byIds.body);
+    assert.deepEqual(
+      byIds.json().map((note: any) => note.id),
+      ["world_route_second", "world_route_fixture"],
+    );
+    assert.equal(byIds.headers["x-ltm-has-more"], undefined);
+    assert.equal(byIds.headers["x-ltm-next-offset"], undefined);
+    for (const [key, value] of [
+      ["type", "world"],
+      ["status", "active"],
+      ["tag", "route_fixture"],
+      ["scopeChatIds", "chat-a"],
+      ["scopeGroupId", "group-a"],
+      ["scopeGroupIds", "group-a"],
+      ["scopeCharacterIds", "character-a"],
+      ["scopePersonaId", "persona-a"],
+      ["scopePersonaIds", "persona-a"],
+      ["includeGlobal", "false"],
+      ["offset", "0"],
+      ["limit", "1"],
+    ]) {
+      const incompatible = await app.inject({
+        method: "GET",
+        url: `/api/long-term-memory/notes?ids=world_route_fixture&${key}=${value}`,
+        headers,
+      });
+      assert.equal(incompatible.statusCode, 400, `${key}: ${incompatible.body}`);
+    }
+    const emptyIds = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/notes?ids=",
+      headers,
+    });
+    assert.equal(emptyIds.statusCode, 400, emptyIds.body);
+    const malformedIds = await app.inject({
+      method: "GET",
+      url: "/api/long-term-memory/notes?ids=INVALID-ID",
+      headers,
+    });
+    assert.equal(malformedIds.statusCode, 400, malformedIds.body);
+    const overflowIds = await app.inject({
+      method: "GET",
+      url: `/api/long-term-memory/notes?ids=${Array.from({ length: 101 }, (_, index) => `world_route_overflow_${index}`).join(",")}`,
+      headers,
+    });
+    assert.equal(overflowIds.statusCode, 400, overflowIds.body);
     const conflictingScope = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/notes",
@@ -3203,6 +3325,334 @@ async function main() {
       review.json().sources[0]?.targets.some((target: any) => target.noteId === "world_eastern_gate"),
       true,
     );
+    const preflight = await app.inject({
+      method: "POST",
+      url: `/api/long-term-memory/drafts/${draft.id}/preflight`,
+      headers,
+      payload: { mutationIds: [mutationId], bulk: false },
+    });
+    assert.equal(preflight.statusCode, 200, preflight.body);
+    assert.deepEqual(preflight.json().blockedMutationIds, []);
+    assert.deepEqual(preflight.json().readyMutationIds, [eventMutationId, mutationId]);
+    assert.equal(preflight.json().rows.find((row: any) => row.mutationId === mutationId).status, "ready");
+    const invalidPreflight = await app.inject({
+      method: "POST",
+      url: `/api/long-term-memory/drafts/${draft.id}/preflight`,
+      headers,
+      payload: { mutationIds: ["10000000-0000-4000-8000-000000000099"] },
+    });
+    assert.equal(invalidPreflight.statusCode, 409, invalidPreflight.body);
+    assert.equal(invalidPreflight.json().code, "ltm_draft_mutation_missing");
+    const blockedMutationId = "10000000-0000-4000-8000-000000000003";
+    await storageService.storage.createNote({
+      id: "source_route_blocked",
+      title: "Blocked preflight source",
+      type: "source",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: ["source_summary"],
+      keywords: [],
+      links: [],
+      sections: {
+        source: {
+          text: "A separate source for blocked preflight.",
+          updatedAt: "2026-07-17T00:00:00.000Z",
+        },
+      },
+    });
+    const blockedDraft = await storageService.drafts.createDraft({
+      source: { sourceNoteId: "source_route_blocked", chatId: "chat-a" },
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      modes: ["roleplay"],
+      response: {
+        summary: "Missing target preflight",
+        mutations: [
+          {
+            id: blockedMutationId,
+            claimKind: "change",
+            kind: "add_link",
+            risk: "medium",
+            confidence: 0.8,
+            summary: "Link to missing memory",
+            evidence: ["source_note:source_route_blocked"],
+            noteId: "world_eastern_gate",
+            link: { target: "world_missing_target", relation: "evidenced_by" },
+          },
+        ],
+      },
+    });
+    const blockedPreflight = await app.inject({
+      method: "POST",
+      url: `/api/long-term-memory/drafts/${blockedDraft.id}/preflight`,
+      headers,
+      payload: { mutationIds: [blockedMutationId] },
+    });
+    assert.equal(blockedPreflight.statusCode, 200, blockedPreflight.body);
+    assert.deepEqual(blockedPreflight.json().blockedMutationIds, [blockedMutationId]);
+    assert.equal(blockedPreflight.json().rows[0].status, "blocked");
+    assert.match(blockedPreflight.json().rows[0].blockers[0].message, /link target not found/u);
+    const emptyDraft = await storageService.drafts.createDraft({
+      source: { sourceNoteId: "source_route_blocked", chatId: "chat-a" },
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      modes: ["roleplay"],
+      response: { summary: "Empty pending draft", mutations: [] },
+    });
+    const emptyDraftAccept = await app.inject({
+      method: "POST",
+      url: `/api/long-term-memory/drafts/${emptyDraft.id}/accept`,
+      headers,
+      payload: {},
+    });
+    assert.equal(emptyDraftAccept.statusCode, 409, emptyDraftAccept.body);
+    assert.equal(emptyDraftAccept.json().code, "ltm_draft_no_pending_mutations");
+    const conflictMutationId = "10000000-0000-4000-8000-000000000004";
+    await storageService.storage.createNote({
+      id: "world_existing_conflict",
+      title: "Existing conflicted memory",
+      type: "world",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: [],
+      keywords: ["gate"],
+      links: [],
+      conflicts: [
+        {
+          field: "facts",
+          existing: "The gate is open.",
+          proposed: "The gate is sealed.",
+          resolution: "pending",
+          policy: "manual_review",
+        },
+      ],
+      sections: { facts: { text: "The gate is open.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+    });
+    const conflictDraft = await storageService.drafts.createDraft({
+      source: { sourceNoteId: "source_route_blocked", chatId: "chat-a" },
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      modes: ["roleplay"],
+      response: {
+        summary: "Pending conflict preflight",
+        mutations: [
+          {
+            id: conflictMutationId,
+            claimKind: "change",
+            kind: "create_note",
+            risk: "medium",
+            confidence: 0.8,
+            summary: "Create conflicted memory",
+            evidence: ["source_note:source_route_blocked"],
+            note: {
+              id: "world_existing_conflict",
+              title: "Eastern gate update",
+              type: "world",
+              status: "active",
+              modes: ["roleplay"],
+              scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+              tags: [],
+              keywords: ["gate"],
+              links: [],
+              conflicts: [
+                {
+                  field: "facts",
+                  existing: "The gate is open.",
+                  proposed: "The gate is sealed.",
+                  resolution: "pending",
+                  policy: "manual_review",
+                },
+              ],
+              sections: {
+                facts: {
+                  text: "The eastern gate is sealed.",
+                  updatedAt: "2026-07-17T00:00:00.000Z",
+                },
+              },
+            },
+          },
+        ],
+      },
+    });
+    const conflictPreflight = await app.inject({
+      method: "POST",
+      url: `/api/long-term-memory/drafts/${conflictDraft.id}/preflight`,
+      headers,
+      payload: { mutationIds: [conflictMutationId] },
+    });
+    assert.equal(conflictPreflight.statusCode, 200, conflictPreflight.body);
+    assert.equal(conflictPreflight.json().rows[0].status, "blocked");
+    assert.equal(conflictPreflight.json().rows[0].blockers[0].code, "unresolved_conflict");
+    const missingCreateConflictMutationId = "10000000-0000-4000-8000-000000000007";
+    const missingCreateConflictDraft = await storageService.drafts.createDraft({
+      source: { sourceNoteId: "source_route_blocked", chatId: "chat-a" },
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      modes: ["roleplay"],
+      response: {
+        summary: "Pending conflict on a new memory",
+        mutations: [
+          {
+            id: missingCreateConflictMutationId,
+            claimKind: "change",
+            kind: "create_note",
+            risk: "medium",
+            confidence: 0.8,
+            summary: "Create a new conflicted memory",
+            evidence: ["source_note:source_route_blocked"],
+            note: {
+              id: "world_missing_create_conflict",
+              title: "New conflicted memory",
+              type: "world",
+              status: "active",
+              modes: ["roleplay"],
+              scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+              tags: [],
+              keywords: [],
+              links: [],
+              conflicts: [
+                {
+                  field: "facts",
+                  existing: "An earlier claim.",
+                  proposed: "A new claim.",
+                  resolution: "pending",
+                  policy: "manual_review",
+                },
+              ],
+              sections: { facts: { text: "A new claim.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+            },
+          },
+        ],
+      },
+    });
+    const missingCreateConflictPreflight = await app.inject({
+      method: "POST",
+      url: `/api/long-term-memory/drafts/${missingCreateConflictDraft.id}/preflight`,
+      headers,
+      payload: { mutationIds: [missingCreateConflictMutationId] },
+    });
+    assert.equal(missingCreateConflictPreflight.statusCode, 200, missingCreateConflictPreflight.body);
+    assert.equal(missingCreateConflictPreflight.json().rows[0].targetId, "world_missing_create_conflict");
+    assert.equal(missingCreateConflictPreflight.json().rows[0].blockers[0].code, "unresolved_conflict");
+    const capSourceId = "source_route_cap";
+    await storageService.storage.createNote({
+      id: capSourceId,
+      title: "Section cap source",
+      type: "source",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: ["source_summary"],
+      keywords: [],
+      links: [],
+      sections: { source: { text: "Section cap evidence.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+    });
+    await storageService.storage.createNote({
+      id: "world_section_cap",
+      title: "Section cap target",
+      type: "world",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: [],
+      keywords: ["cap"],
+      links: [],
+      sections: { facts: { text: "x".repeat(20_000), updatedAt: "2026-07-17T00:00:00.000Z" } },
+    });
+    const capMutationId = "10000000-0000-4000-8000-000000000005";
+    const capDraft = await storageService.drafts.createDraft({
+      source: { sourceNoteId: capSourceId, chatId: "chat-a" },
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      modes: ["roleplay"],
+      response: {
+        summary: "Section cap preflight",
+        mutations: [
+          {
+            id: capMutationId,
+            claimKind: "static",
+            kind: "append_section",
+            risk: "low",
+            confidence: 0.8,
+            summary: "Append beyond section cap",
+            evidence: [`source_note:${capSourceId}`],
+            noteId: "world_section_cap",
+            sectionKey: "facts",
+            text: "This addition exceeds the section limit.",
+          },
+        ],
+      },
+    });
+    const capPreflight = await app.inject({
+      method: "POST",
+      url: `/api/long-term-memory/drafts/${capDraft.id}/preflight`,
+      headers,
+      payload: { mutationIds: [capMutationId] },
+    });
+    assert.equal(capPreflight.statusCode, 200, capPreflight.body);
+    assert.equal(capPreflight.json().rows[0].status, "blocked");
+    assert.equal(capPreflight.json().rows[0].blockers[0].code, "projection_limit_exceeded");
+    const groundingSourceId = "source_route_grounding";
+    await storageService.storage.createNote({
+      id: groundingSourceId,
+      title: "Grounding source",
+      type: "source",
+      status: "active",
+      modes: ["roleplay"],
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      tags: ["source_summary"],
+      keywords: [],
+      links: [],
+      sections: { source: { text: "Grounding evidence.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+    });
+    const groundingMutationId = "10000000-0000-4000-8000-000000000006";
+    const groundingDraft = await storageService.drafts.createDraft({
+      source: { sourceNoteId: groundingSourceId, chatId: "chat-a" },
+      scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+      modes: ["roleplay"],
+      response: {
+        summary: "Timeline grounding preflight",
+        mutations: [
+          {
+            id: groundingMutationId,
+            claimKind: "change",
+            kind: "create_note",
+            risk: "medium",
+            confidence: 0.8,
+            summary: "Create an ungrounded world change",
+            evidence: [`source_note:${groundingSourceId}`],
+            note: {
+              id: "world_ungrounded_change",
+              title: "Ungrounded change",
+              type: "world",
+              status: "active",
+              modes: ["roleplay"],
+              scope: { chatId: "chat-a", chatIds: ["chat-a"] },
+              tags: [],
+              keywords: ["grounding"],
+              links: [],
+              sections: { facts: { text: "A changed fact without an event.", updatedAt: "2026-07-17T00:00:00.000Z" } },
+            },
+          },
+        ],
+      },
+    });
+    const groundingPreflight = await app.inject({
+      method: "POST",
+      url: `/api/long-term-memory/drafts/${groundingDraft.id}/preflight`,
+      headers,
+      payload: { mutationIds: [groundingMutationId] },
+    });
+    assert.equal(groundingPreflight.statusCode, 200, groundingPreflight.body);
+    assert.equal(groundingPreflight.json().rows[0].status, "blocked");
+    assert.equal(groundingPreflight.json().rows[0].blockers[0].code, "missing_timeline_grounding");
+    assert.match(groundingPreflight.json().rows[0].blockers[0].message, /timeline event grounded/u);
+    const expandedPreflightResponse = ltmDraftPreflightResponseSchema.parse({
+      draftId: draft.id,
+      selectedMutationIds: [mutationId],
+      readyMutationIds: Array.from({ length: 1_001 }, () => mutationId),
+      blockedMutationIds: [],
+      autoIncludedMutationIds: [],
+      rows: [],
+    });
+    assert.equal(expandedPreflightResponse.readyMutationIds.length, 1_001);
     assert.equal(
       (
         await app.inject({
@@ -3225,6 +3675,11 @@ async function main() {
     assert.equal(
       (await storageService.storage.getNote("world_eastern_gate"))?.sections.facts.text,
       "The eastern gate is sealed at dusk.",
+    );
+    assert.deepEqual(
+      (await storageService.storage.getNote("world_eastern_gate"))?.links,
+      [{ target: "timeline_eastern_gate_sealed", relation: "evidenced_by" }],
+      "accepted memories preserve their evidenced_by timeline link",
     );
     const integrity = await app.inject({
       method: "GET",

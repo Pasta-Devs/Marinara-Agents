@@ -1,0 +1,14 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": { "locale": "fr", "direction": "ltr" },
+  "package": {
+    "name": "Memory Nag",
+    "description": "Conserve un bref coffre de souvenirs de jeu de rôle pour chaque chat et ne rappelle que les détails non résolus utiles au tour actuel. Ajoutez l’agent dans Paramètres du chat → Agents → Agents de suivi en mode Jeu de rôle."
+  },
+  "agents": {
+    "memory-nag": {
+      "name": "Memory Nag",
+      "description": "Conserve un bref coffre de souvenirs de jeu de rôle pour chaque chat et ne rappelle que les détails non résolus utiles au tour actuel."
+    }
+  }
+}

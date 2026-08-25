@@ -90,6 +90,12 @@ const longTermMemoryOwnedSourcePaths = [
   "packages/client/src/features/long-term-memory",
 ];
 const longTermMemorySourceRoot = join(packagesDir, "long-term-memory/src/engine");
+const memoryNagSourceRoot = join(packagesDir, "memory-nag/src/engine");
+const memoryNagOwnedSourcePaths = [
+  "packages/shared/src/features/agents/memory-nag",
+  "packages/server/src/services/memory-nag",
+  "packages/client/src/features/memory-nag",
+];
 const noodleSourceRoot = join(packagesDir, "noodle/src/engine");
 const noodleOwnedSourcePaths = [
   "packages/client/src/components/noodle",
@@ -114,6 +120,7 @@ const noodleOwnedSourcePaths = [
   "packages/server/src/services/noodle/noodle-image-prompt.ts",
   "packages/server/src/services/noodle/noodle-image-retry.ts",
   "packages/server/src/services/noodle/noodle-interaction-policy.ts",
+  "packages/server/src/services/noodle/noodle-model-capabilities.ts",
   "packages/server/src/services/noodle/noodle-participant-selection.ts",
   "packages/server/src/services/noodle/noodle-post-target.ts",
   "packages/server/src/services/noodle/noodle-profile-avatar.ts",
@@ -168,7 +175,7 @@ async function prepareFeatureBuildRoot(feature) {
       cleanup: () => rm(buildRoot, { recursive: true, force: true }),
     };
   }
-  if (feature.id === "long-term-memory") {
+  if (feature.id === "long-term-memory" || feature.id === "memory-nag") {
     if (!existsSync(feature.packageSourceRoot)) {
       throw new Error(`Missing package-owned ${feature.name} source`);
     }
@@ -254,8 +261,8 @@ async function removeOwnedSourceSnapshots(excludedPaths) {
 const features = [
   {
     id: "noodle",
-    version: "1.2.4",
-    minEngineVersion: "2.4.2",
+    version: "1.2.14",
+    minEngineVersion: "2.4.4",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Noodle",
     description: "Explore the Noodle public timeline as an optional local social world.",
@@ -310,7 +317,7 @@ const features = [
   },
   {
     id: "slurp",
-    version: "1.0.8",
+    version: "1.0.19",
     minEngineVersion: "2.4.3",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Slurp",
@@ -329,7 +336,7 @@ const features = [
       ko: {
         name: "Slurp",
         description:
-          "Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 NoodleR 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Slurp를 여세요.",
+          "Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 Slurp 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Slurp를 여세요.",
         homeBrowserTab: {
           label: "Slurp",
           ariaLabel: "Slurp 열기",
@@ -338,7 +345,7 @@ const features = [
       pl: {
         name: "Slurp",
         description:
-          "Utwórz lokalne profile twórców z postaci silnika lub person silnika, publikuj publiczne lub zablokowane posty NoodleR i symuluj subskrypcje oraz aktywność publiczności. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Slurp na stronie głównej.",
+          "Utwórz lokalne profile twórców z postaci silnika lub person silnika, publikuj publiczne lub zablokowane posty Slurp i symuluj subskrypcje oraz aktywność publiczności. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Slurp na stronie głównej.",
         homeBrowserTab: {
           label: "Slurp",
           ariaLabel: "Otwórz Slurp",
@@ -367,7 +374,7 @@ const features = [
   },
   {
     id: "long-term-memory",
-    version: "1.2.7",
+    version: "1.2.14",
     minEngineVersion: "2.4.1",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Long-Term Memory",
@@ -391,8 +398,63 @@ const features = [
     },
   },
   {
+    id: "memory-nag",
+    version: "1.0.17",
+    minEngineVersion: "2.4.4",
+    maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
+    name: "Memory Nag",
+    description:
+      "Keeps a short per-chat vault of roleplay memories and recalls only the unresolved details that matter to the current turn.",
+    category: "tracker",
+    kind: ["agent"],
+    modes: ["roleplay"],
+    permissions: ["agent-runtime", "chat-read", "prompt-context", "routes", "storage", "ui"],
+    serverImport: "packages/server/src/services/memory-nag/server-entry.ts",
+    serverEntry: true,
+    clientImport: "packages/client/src/features/memory-nag/client-entry.tsx",
+    packageSourceRoot: memoryNagSourceRoot,
+    ownedSourcePaths: memoryNagOwnedSourcePaths,
+    engineBoundaryPath: join(packagesDir, "memory-nag/engine-boundary.json"),
+    boundaryDisplayName: "Memory Nag",
+    capabilityApi: { major: 1, minor: 14 },
+    agent: {
+      description:
+        "Keeps a short per-chat vault of roleplay memories and recalls only the unresolved details that matter to the current turn.",
+      phase: "post_processing",
+      runtimeDisabled: false,
+      execution: "pipeline",
+      defaultInjectAsSection: false,
+      defaultSettings: {
+        resultType: "memory_nag",
+        contextSize: 5,
+        maxTokens: 4096,
+        temperature: 0,
+        contextSources: {
+          chatHistory: true,
+          characters: false,
+          persona: false,
+          activatedLorebookEntries: false,
+          chatSummary: false,
+          authorNotes: false,
+          trackerData: false,
+          recalledMemories: false,
+        },
+      },
+      defaultPromptTemplate: [
+        "Decide whether one of the supplied vault memories should nag the roleplay characters after the latest turn.",
+        "Choose only IDs listed in allowedMemoryIds inside <agent_runtime_context>. Participant IDs are character IDs, never memory IDs. Never create, rewrite, or combine a memory.",
+        "A nag should fit what is happening now: an unresolved promise, past harm, relationship strain, warning, debt, or relevant admission. Quiet or unrelated moments usually need none.",
+        "Do not select a memory that only repeats the immediate scene or an action happening now. Recall relevant events from earlier in the story.",
+        'Return JSON only. If no nag fits: {"nags_needed":false}. If nags fit: {"nags_needed":true,"memoryIds":["exact-id"]}.',
+      ].join("\n"),
+    },
+    contributions: {
+      slots: ["chat-settings", "roleplay-tracker", "tracker-panel"],
+    },
+  },
+  {
     id: "hierarchical-maps",
-    version: "1.4.0",
+    version: "1.4.2",
     minEngineVersion: "2.4.2",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "World Maps",
@@ -409,7 +471,7 @@ const features = [
   {
     id: "conversation-calls",
     name: "Calls",
-    version: "1.0.9",
+    version: "1.0.13",
     minEngineVersion: "2.4.1",
     description: "Adds live audio and video calls with Conversation characters.",
     kind: ["agent", "conversation-calls"],
@@ -501,6 +563,14 @@ const longTermMemoryBoundary = selectedFeatures.some((feature) => feature.id ===
       boundaryPath: join(packagesDir, "long-term-memory/engine-boundary.json"),
       displayName: "Long-Term Memory",
       capabilityApi: { major: 1, minor: 6 },
+    })
+  : null;
+const memoryNagBoundary = selectedFeatures.some((feature) => feature.id === "memory-nag")
+  ? await assertPackagePrivateImportBoundary({
+      sourceRoot: memoryNagSourceRoot,
+      boundaryPath: join(packagesDir, "memory-nag/engine-boundary.json"),
+      displayName: "Memory Nag",
+      capabilityApi: { major: 1, minor: 14 },
     })
   : null;
 
@@ -1328,7 +1398,7 @@ if (!customElements.get(${JSON.stringify(tag)})) customElements.define(${JSON.st
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Loader2, Phone, PhoneIncoming, PhoneOff } from "lucide-react";
+import { ChevronRight, Loader2, Phone, PhoneIncoming, PhoneOff } from "lucide-react";
 import { Toaster, toast } from "sonner";
 import { ConversationCallSurface } from ${JSON.stringify(surface)};
 import { useAcceptConversationCall, useConversationCallStatus, useDeclineConversationCall, useStartConversationCall } from ${JSON.stringify(hooks)};
@@ -1370,14 +1440,20 @@ function Settings({ props }) {
   const videoPresence = value?.callCharacterVideoEnabled === true;
   const automaticClips = videoPresence && value?.callAutomaticVideoClipsEnabled === true;
   const customClips = videoPresence && value?.callCustomVideoClipsEnabled === true;
-  return <section style={props.style} className={"mari-chat-option-field space-y-3 rounded-lg px-3 py-2.5 transition-all" + (callsEnabled ? " mari-chat-option-field--active" : "")}>
-    <div className="flex items-start gap-2">
-      <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--secondary)] text-[var(--muted-foreground)]"><Phone size="0.875rem" /></span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-xs font-medium text-[var(--foreground)]">Calls</span>
-        <span className="text-[0.625rem] leading-snug text-[var(--muted-foreground)]">Per-chat call access, microphone handling, camera/screen input, and character video setup.</span>
-      </span>
+  const open = props.expanded === true;
+  const setOpen = typeof props.onExpandedChange === "function" ? props.onExpandedChange : () => {};
+  return <section style={props.style} className="rounded-xl border border-[var(--border)] bg-[var(--secondary)]/70">
+    <div className="flex items-start p-3">
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="-m-1 flex min-w-0 flex-1 items-start gap-2 rounded-lg p-1 text-left transition-colors hover:bg-[var(--accent)]/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--primary)]/60">
+        <Phone size="0.75rem" className="mt-0.5 text-[var(--primary)]" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-[0.6875rem] font-medium text-[var(--foreground)]">Calls</span>
+          <span className="mt-1 block text-[0.625rem] text-[var(--muted-foreground)]">Per-chat call access.</span>
+        </span>
+        <ChevronRight size="0.75rem" className={"mt-0.5 shrink-0 text-[var(--muted-foreground)] transition-transform" + (open ? " rotate-90" : "")} />
+      </button>
     </div>
+    {open ? <div className="space-y-3 px-3 pb-2">
     <Toggle label="Audio/Video Calls" description="Show the call button for you in this conversation." enabled={callsEnabled} onClick={() => updateMetadata({ conversationCallsEnabled: !callsEnabled })} />
     {callsEnabled ? <>
       <div className="space-y-1.5 border-t border-[var(--border)]/60 pt-3">
@@ -1409,6 +1485,7 @@ function Settings({ props }) {
         {videoPresence ? <p className="text-[0.55rem] leading-snug text-[var(--muted-foreground)]">Character video presence uses clips from Character Sprites. Automatic clips generate cached idle and talking clips from character avatars; Custom clips let characters sparsely create one-off requested clips.</p> : null}
       </div> : <p className="rounded-lg border border-dashed border-[var(--border)] px-2.5 py-2 text-[0.59375rem] leading-snug text-[var(--muted-foreground)]">Turn on the call audio pipeline here to use local mic transcription, browser speech recognition, manual system dictation, optional provider-native audio/video input, and call controls.</p>}
     </> : null}
+    </div> : null}
   </section>;
 }
 function Root({ element }) {
@@ -1428,11 +1505,12 @@ function Root({ element }) {
   const expanded = useExpanded(chatId);
   const active = status.data?.activeCall || null;
   const ringing = status.data?.ringingCall || null;
+  const toolbarButtonClass = typeof props.toolbarButtonClass === "string" ? props.toolbarButtonClass : "mari-chrome-control flex h-8 w-8 items-center justify-center p-0 max-md:h-9 max-md:w-9";
   if (!chatId) return null;
   if (element.getAttribute("view") === "settings") return <Settings props={props} />;
   if (element.getAttribute("view") === "toolbar") {
     if (!callsEnabled && !active) return null;
-    return <button type="button" className="mari-chrome-control flex h-9 w-9 items-center justify-center p-0" title={active ? "Open call" : "Start call"} onClick={async () => {
+    return <button type="button" className={toolbarButtonClass} title={active ? "Open call" : "Start call"} onClick={async () => {
       if (active) return setExpanded(chatId);
       try {
         await start.mutateAsync();
@@ -1515,18 +1593,21 @@ for (const feature of selectedFeatures) {
   const agentDefinition = {
     id: feature.id,
     name: feature.name,
-    description,
+    description: feature.agent?.description ?? feature.description,
     author: "Pasta Devs",
-    phase: "pre_generation",
+    phase: feature.agent?.phase ?? "pre_generation",
     enabledByDefault: false,
     category: feature.category ?? "misc",
-    runtimeDisabled: true,
+    runtimeDisabled: feature.agent?.runtimeDisabled ?? true,
+    ...(feature.agent?.defaultInjectAsSection === undefined
+      ? {}
+      : { defaultInjectAsSection: feature.agent.defaultInjectAsSection }),
     ...(feature.libraryHidden ? { libraryHidden: true } : {}),
     modeAllowlist: feature.modes,
     defaultTools: [],
-    defaultSettings: {},
-    defaultPromptTemplate: "",
-    execution: "feature",
+    defaultSettings: feature.agent?.defaultSettings ?? {},
+    defaultPromptTemplate: feature.agent?.defaultPromptTemplate ?? "",
+    execution: feature.agent?.execution ?? "feature",
   };
   const agentsBuffer = Buffer.from(`${JSON.stringify([agentDefinition], null, 2)}\n`);
   const serverPath = join(sourceDir, "server.mjs");
@@ -1568,7 +1649,9 @@ for (const feature of selectedFeatures) {
       ? hierarchicalMapsBoundary
       : feature.id === "long-term-memory"
         ? longTermMemoryBoundary
-        : null;
+        : feature.id === "memory-nag"
+          ? memoryNagBoundary
+          : null;
   const manifest = {
     schemaVersion: boundary ? 2 : 1,
     ...(boundary

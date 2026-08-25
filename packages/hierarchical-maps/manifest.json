@@ -10,7 +10,7 @@
   },
   "id": "hierarchical-maps",
   "name": "World Maps",
-  "version": "1.4.0",
+  "version": "1.4.2",
   "description": "Adds persistent hierarchical locations, durable shared worlds, reusable artwork, customizable Direct Link lines, and movement to Roleplay and Game. Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay and Game modes.",
   "engine": {
     "min": "2.4.2",
@@ -41,8 +41,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "d30af31c7e3b76d137366c3b0963a318d2a20b8287d9f6c9dad038ed9beafd03",
-      "bytes": 647
+      "sha256": "42d95c7fea1ac79de89fbc8805e1dc8e2886ad3ba2a8d8396718bdc643f4f165",
+      "bytes": 557
     },
     {
       "path": "server.mjs",
@@ -51,8 +51,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "b8dfd2f604c826cdbc87c3a781293cd08782471ecc55b490ff1c801af0834a02",
-      "bytes": 926112
+      "sha256": "5f32e0e5248e1acd51dbb47d3d20f1a1a4c32372532634b7fd08f2b799be91fb",
+      "bytes": 926421
     }
   ],
   "permissions": [

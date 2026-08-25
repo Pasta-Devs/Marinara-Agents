@@ -1,10 +1,12 @@
-import { FileText, Loader2, Pencil, RefreshCw, RotateCcw, Save, Trash2, UsersRound } from "lucide-react";
+import { CalendarClock, FileText, Loader2, Pencil, RefreshCw, RotateCcw, Save, Trash2, UsersRound } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   useDeleteNoodlerStageProfile,
+  useDeleteAllSlurpData,
+  useDeleteUnusedSlurpData,
   useAdoptNoodlerSourceIdentity,
   useDismissNoodlerSourceChanges,
   useNoodlerAccounts,
@@ -16,9 +18,11 @@ import {
   useSlurpConnections,
   useSlurpSettings,
   useUpdateNoodlerAutoPosting,
+  useUpdateNoodlerScheduleSlot,
   useUpdateSlurpImageConnections,
   useUpdateSlurpSettings,
   type SlurpSettings,
+  type SlurpScheduleSlot,
 } from "../../hooks/use-slurp";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { Modal } from "../ui/Modal";
@@ -36,6 +40,7 @@ type SlurpSettingsProps = {
   navigation: Extract<SlurpNavigationState, { mode: "creator-settings" }>;
   onNavigate: (navigation: SlurpNavigationState) => void;
   onAddCreators: () => void;
+  personaSourceIds: ReadonlySet<string>;
   onEditCreator: (creator: NoodlerManagedStageProfile) => void;
   onRedraftCreator: (creator: NoodlerManagedStageProfile) => void;
   onRestartOnboarding: () => void;
@@ -51,7 +56,7 @@ const archetypeLabels: Record<(typeof archetypes)[number], string> = {
   freeResource: "Helpful readers",
 };
 const DEFAULT_SLURP_GENERATION_GUIDANCE =
-  "All NoodleR creators and viewers are adults (18+). This is an adult creator page: flirty, suggestive, teasing, and sensual posts are common, and explicit posts appear regularly when they suit the creator — but they are not required and need not be the majority. Tease the locked posts and answer flirty comments in kind. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one bluntly, a funny one filthily. Ordinary posts — updates, humor, behind the scenes, project news — matter just as much and keep both the page and the character human. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.";
+  "All Slurp creators and viewers are adults (18+). This is an adult creator page: flirty, suggestive, teasing, and sensual posts are common, and explicit posts appear regularly when they suit the creator — but they are not required and need not be the majority. Tease the locked posts and answer flirty comments in kind. Keep each creator's personality intact: a shy creator flirts shyly, a blunt one bluntly, a funny one filthily. Ordinary posts — updates, humor, behind the scenes, project news — matter just as much and keep both the page and the character human. Keep low mood or conflict uncommon and character-specific, and do not let recent posts set the default mood.";
 const DEFAULT_SLURP_IMAGE_GENERATION_PROMPT =
   "Create a polished social-media image for an adult Creator post. Match the creator's identity, personality, body, clothing, and established visual details. Follow the post's mood and subject. Describe the pose, expression, setting, lighting, camera angle, composition, and visible details clearly. Flirty, suggestive, sensual, or explicit imagery is allowed when it fits the post and creator, but do not force sexual content into ordinary updates. Keep the image coherent, intentional, and suitable for a public or locked Creator feed.";
 
@@ -72,13 +77,29 @@ function NumberSetting({
 }) {
   const [draft, setDraft] = useState(String(value));
   useEffect(() => setDraft(String(value)), [value]);
-  const commit = async () => {
-    const next = Number(draft);
-    if (!Number.isInteger(next) || next < min || next > max) {
-      setDraft(String(value));
+  const saveQueueRef = useRef(Promise.resolve());
+  const saveGenerationRef = useRef(0);
+  const commit = async (raw = draft, resetInvalid = true) => {
+    const next = Number(raw);
+    if (!raw.trim() || !Number.isInteger(next) || next < min || next > max) {
+      if (resetInvalid) setDraft(String(value));
       return;
     }
-    if ((await onSave(next)) === false) setDraft(String(value));
+    // Serialize saves so a slow older request can't land after a newer one and persist a
+    // stale value; skip a queued save (and its failure recovery) once a later edit has
+    // already superseded it. Compare a generation token, not the value itself — a sequence
+    // like 1 -> 2 -> 1 would otherwise let the first save's failure recovery match the last.
+    // Swallow rejections so one failed save doesn't wedge the queue for every save after it.
+    const saveGeneration = ++saveGenerationRef.current;
+    saveQueueRef.current = saveQueueRef.current.then(async () => {
+      if (saveGenerationRef.current !== saveGeneration) return;
+      try {
+        if ((await onSave(next)) === false && saveGenerationRef.current === saveGeneration) setDraft(String(value));
+      } catch {
+        if (saveGenerationRef.current === saveGeneration) setDraft(String(value));
+      }
+    });
+    await saveQueueRef.current;
   };
   return (
     <input
@@ -86,7 +107,11 @@ function NumberSetting({
       min={min}
       max={max}
       value={draft}
-      onChange={(event) => setDraft(event.target.value)}
+      onChange={(event) => {
+        const nextDraft = event.target.value;
+        setDraft(nextDraft);
+        void commit(nextDraft, false);
+      }}
       onBlur={() => void commit()}
       onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
       className="h-10 w-full rounded-md border border-[var(--border)] bg-transparent px-3 text-sm"
@@ -98,6 +123,7 @@ export function SlurpSettings({
   navigation,
   onNavigate,
   onAddCreators,
+  personaSourceIds,
   onEditCreator,
   onRedraftCreator,
   onRestartOnboarding,
@@ -113,6 +139,7 @@ export function SlurpSettings({
   const [refreshModalOpen, setRefreshModalOpen] = useState(false);
   const [refreshAccountIds, setRefreshAccountIds] = useState<Set<string>>(new Set());
   const [refreshAccess, setRefreshAccess] = useState<"public" | "locked">("locked");
+  const [scheduleCreatorId, setScheduleCreatorId] = useState<string | null>(null);
   useEffect(() => {
     if (settings) {
       if (!generationGuidanceEditorOpen) setGenerationGuidanceDraft(settings.generationGuidance);
@@ -135,10 +162,13 @@ export function SlurpSettings({
   const fanStatusQuery = useNoodlerFanActivityStatus(section === "audience");
   const reserveStatusQuery = useNoodlerReserveStatus(section === "creators");
   const updateAuto = useUpdateNoodlerAutoPosting();
+  const updateScheduleSlot = useUpdateNoodlerScheduleSlot();
   const refreshFans = useRefreshNoodlerFanActivityNow();
   const refreshCreators = useRefreshTargetedNoodlerCreatorsNow();
   const updateImages = useUpdateSlurpImageConnections();
   const deleteCreator = useDeleteNoodlerStageProfile();
+  const deleteAllData = useDeleteAllSlurpData();
+  const deleteUnusedData = useDeleteUnusedSlurpData();
   const adoptSourceIdentity = useAdoptNoodlerSourceIdentity();
   const dismissSourceChanges = useDismissNoodlerSourceChanges();
   const connectionsQuery = useSlurpConnections(section === "general" || section === "images" || section === "creators");
@@ -146,6 +176,12 @@ export function SlurpSettings({
     (connection) => connection.provider === "image_generation",
   );
   const imageSettings = imageSettingsQuery.data;
+  const personaCreator = (creator: NoodlerManagedStageProfile) =>
+    Boolean(creator.sourceAccountId && personaSourceIds.has(creator.sourceAccountId));
+  const automationCreators = (accountsQuery.data ?? []).filter((creator) => !personaCreator(creator));
+  const scheduleCreator = accountsQuery.data?.find((creator) => creator.id === scheduleCreatorId) ?? null;
+  const scheduleSlots =
+    reserveStatusQuery.data?.creators.find((creator) => creator.accountId === scheduleCreatorId)?.slots ?? [];
   const generationGuidanceIsDefault = settings?.generationGuidance === DEFAULT_SLURP_GENERATION_GUIDANCE;
   const imagePromptIsDefault = settings?.imageGenerationPrompt === DEFAULT_SLURP_IMAGE_GENERATION_PROMPT;
   const activityPreset = settings && slurpActivityPresetForSettings(settings);
@@ -233,10 +269,9 @@ export function SlurpSettings({
                   type="button"
                   disabled={accountsQuery.isLoading || accountsQuery.isError}
                   onClick={() => {
-                    const creators = accountsQuery.data ?? [];
-                    const enabled = creators.filter((creator) => creator.autoPosting.enabled);
+                    const enabled = automationCreators.filter((creator) => creator.autoPosting.enabled);
                     setRefreshAccountIds(
-                      new Set((enabled.length > 0 ? enabled : creators).map((creator) => creator.id)),
+                      new Set((enabled.length > 0 ? enabled : automationCreators).map((creator) => creator.id)),
                     );
                     setRefreshAccess("locked");
                     setRefreshModalOpen(true);
@@ -286,6 +321,19 @@ export function SlurpSettings({
                   onChange={(value) => update("nightQuiet", value)}
                 />
               </div>
+              <Field label={t("ui.slurp.settings.generationMode")} detail={t("ui.slurp.settings.generationModeDetail")}>
+                <select
+                  value={settings.autoPostGenerationMode}
+                  disabled={updateSettings.isPending}
+                  onChange={(event) =>
+                    void update("autoPostGenerationMode", event.target.value as SlurpSettings["autoPostGenerationMode"])
+                  }
+                  className="h-10 w-full rounded-md border border-[var(--border)] bg-transparent px-3 text-sm disabled:opacity-50"
+                >
+                  <option value="pre_generate">{t("ui.slurp.settings.generationModePreGenerate")}</option>
+                  <option value="on_demand">{t("ui.slurp.settings.generationModeOnDemand")}</option>
+                </select>
+              </Field>
               <PromptCard
                 title="Generation guidance"
                 value={settings.generationGuidance}
@@ -381,6 +429,12 @@ export function SlurpSettings({
               </Field>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Toggle
+                  label={t("ui.slurp.settings.images.interpretPrompts")}
+                  detail={t("ui.slurp.settings.images.interpretPromptsDetail")}
+                  value={settings.enableImageInterpretation}
+                  onChange={(value) => update("enableImageInterpretation", value)}
+                />
+                <Toggle
                   label={t("ui.slurp.settings.images.useAvatarReferences")}
                   detail={t("ui.slurp.settings.images.useAvatarReferencesDetail")}
                   value={settings.imageGenerationUseAvatarReferences}
@@ -469,23 +523,25 @@ export function SlurpSettings({
                                 @{creator.handle} ·{" "}
                                 {status?.nextPreparedAt
                                   ? `Next ${new Date(status.nextPreparedAt).toLocaleString()}`
-                                  : creator.sourceStatus.state}
+                                  : t(`ui.slurp.settings.creators.sourceStatus.${creator.sourceStatus.state}`)}
                               </span>
                             </span>
                           </button>
-                          <Toggle
-                            label={t("ui.slurp.settings.creators.autoPost")}
-                            value={creator.autoPosting.enabled}
-                            compact
-                            onChange={(value) =>
-                              updateAuto.mutate(
-                                { accountId: creator.id, enabled: value },
-                                {
-                                  onError: (error) => toast.error(errorMessage(error)),
-                                },
-                              )
-                            }
-                          />
+                          {!personaCreator(creator) && (
+                            <Toggle
+                              label={t("ui.slurp.settings.creators.autoPost")}
+                              value={creator.autoPosting.enabled}
+                              compact
+                              onChange={(value) =>
+                                updateAuto.mutate(
+                                  { accountId: creator.id, enabled: value },
+                                  {
+                                    onError: (error) => toast.error(errorMessage(error)),
+                                  },
+                                )
+                              }
+                            />
+                          )}
                           <Toggle
                             label={t("ui.slurp.settings.creators.images")}
                             value={creator.autoPosting.imagesEnabled}
@@ -531,6 +587,14 @@ export function SlurpSettings({
                               </option>
                             ))}
                           </select>
+                          <button
+                            type="button"
+                            aria-label={t("ui.slurp.settings.creators.scheduleLabel", { name: creator.displayName })}
+                            onClick={() => setScheduleCreatorId(creator.id)}
+                            className="flex h-10 w-10 items-center justify-center rounded-md border border-[var(--border)] hover:bg-[var(--accent)]"
+                          >
+                            <CalendarClock size={15} />
+                          </button>
                           <button
                             type="button"
                             aria-label={t("ui.slurp.settings.creators.editLabel", { name: creator.displayName })}
@@ -600,12 +664,13 @@ export function SlurpSettings({
                                 disabled={dismissSourceChanges.isPending}
                                 onClick={() =>
                                   dismissSourceChanges.mutate(creator.id, {
+                                    onSuccess: () => toast.success(t("ui.slurp.settings.creators.acceptedChanges")),
                                     onError: (error) => toast.error(errorMessage(error)),
                                   })
                                 }
                                 className="min-h-9 rounded-md border border-[var(--border)] px-3 text-xs font-semibold disabled:opacity-50"
                               >
-                                {t("ui.slurp.settings.creators.dismiss")}
+                                {t("ui.slurp.settings.creators.acceptChanges")}
                               </button>
                             </div>
                           </div>
@@ -640,6 +705,64 @@ export function SlurpSettings({
                 >
                   <RefreshCw size={14} />
                   {t("ui.slurp.settings.advanced.restartSetup")}
+                </button>
+              </div>
+              <div className="rounded-md border border-red-400/30 p-4">
+                <h2 className="text-sm font-semibold">{t("ui.slurp.settings.advanced.deleteAllTitle")}</h2>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
+                  {t("ui.slurp.settings.advanced.deleteAllDetail")}
+                </p>
+                <button
+                  type="button"
+                  disabled={deleteAllData.isPending}
+                  onClick={() =>
+                    void showConfirmDialog({
+                      title: t("ui.slurp.settings.advanced.deleteAllConfirmTitle"),
+                      message: t("ui.slurp.settings.advanced.deleteAllConfirmDetail"),
+                      confirmLabel: t("ui.slurp.settings.advanced.deleteAllButton"),
+                    })
+                      .then((confirmed) => {
+                        if (!confirmed) return;
+                        deleteAllData.mutate(undefined, {
+                          onSuccess: () => toast.success(t("ui.slurp.settings.advanced.deleteAllSuccess")),
+                          onError: (error) => toast.error(errorMessage(error)),
+                        });
+                      })
+                      .catch((error) => toast.error(errorMessage(error)))
+                  }
+                  className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md border border-red-400/50 px-3 text-xs font-semibold text-red-300 hover:bg-red-400/10 disabled:opacity-50"
+                >
+                  <Trash2 size={14} />
+                  {t("ui.slurp.settings.advanced.deleteAllButton")}
+                </button>
+              </div>
+              <div className="rounded-md border border-[var(--border)] p-4">
+                <h2 className="text-sm font-semibold">{t("ui.slurp.settings.advanced.deleteUnusedTitle")}</h2>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--muted-foreground)]">
+                  {t("ui.slurp.settings.advanced.deleteUnusedDetail")}
+                </p>
+                <button
+                  type="button"
+                  disabled={deleteUnusedData.isPending || deleteAllData.isPending}
+                  onClick={() =>
+                    void showConfirmDialog({
+                      title: t("ui.slurp.settings.advanced.deleteUnusedConfirmTitle"),
+                      message: t("ui.slurp.settings.advanced.deleteUnusedConfirmDetail"),
+                      confirmLabel: t("ui.slurp.settings.advanced.deleteUnusedButton"),
+                    })
+                      .then((confirmed) => {
+                        if (!confirmed) return;
+                        deleteUnusedData.mutate(undefined, {
+                          onSuccess: () => toast.success(t("ui.slurp.settings.advanced.deleteUnusedSuccess")),
+                          onError: (error) => toast.error(errorMessage(error)),
+                        });
+                      })
+                      .catch((error) => toast.error(errorMessage(error)))
+                  }
+                  className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--border)] px-3 text-xs font-semibold hover:bg-[var(--accent)] disabled:opacity-50"
+                >
+                  <Trash2 size={14} />
+                  {t("ui.slurp.settings.advanced.deleteUnusedButton")}
                 </button>
               </div>
             </div>
@@ -787,7 +910,7 @@ export function SlurpSettings({
               <div className="flex gap-2 text-xs">
                 <button
                   type="button"
-                  onClick={() => setRefreshAccountIds(new Set((accountsQuery.data ?? []).map((creator) => creator.id)))}
+                  onClick={() => setRefreshAccountIds(new Set(automationCreators.map((creator) => creator.id)))}
                   className="text-[var(--noodle-accent)] hover:underline"
                 >
                   {t("ui.slurp.settings.refresh.selectAll")}
@@ -802,7 +925,7 @@ export function SlurpSettings({
               </div>
             </div>
             <div className="mt-2 max-h-64 divide-y divide-[var(--border)] overflow-y-auto rounded-md border border-[var(--border)]">
-              {(accountsQuery.data ?? []).map((creator) => (
+              {automationCreators.map((creator) => (
                 <label
                   key={creator.id}
                   className="flex min-h-12 cursor-pointer items-center gap-3 px-3 py-2 hover:bg-[var(--accent)]/40"
@@ -858,7 +981,7 @@ export function SlurpSettings({
               onClick={() => setRefreshModalOpen(false)}
               className="min-h-10 rounded-md border border-[var(--border)] px-4 text-xs font-semibold"
             >
-              {t("capabilities.actions.cancel")}
+              {t("ui.slurp.actions.cancel")}
             </button>
             <button
               type="button"
@@ -886,6 +1009,57 @@ export function SlurpSettings({
               {t("ui.slurp.settings.refresh.generate", { count: refreshAccountIds.size || "" })}
             </button>
           </div>
+        </div>
+      </Modal>
+      <Modal
+        open={Boolean(scheduleCreatorId)}
+        onClose={() => setScheduleCreatorId(null)}
+        title={t("ui.slurp.settings.creators.scheduleTitle", { name: scheduleCreator?.displayName ?? "" })}
+        width="max-w-xl"
+        closeDisabled={updateScheduleSlot.isPending}
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-[var(--muted-foreground)]">{t("ui.slurp.settings.creators.scheduleDetail")}</p>
+          {reserveStatusQuery.isLoading ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-sm text-[var(--muted-foreground)]">
+              <Loader2 size={18} className="animate-spin" />
+              {t("ui.noodle.noodlerschedulemanagermodal.loadingStatus")}
+            </div>
+          ) : reserveStatusQuery.isError ? (
+            <div className="rounded-md border border-red-400/30 p-5 text-sm">
+              <p>{t("ui.noodle.noodlerschedulemanagermodal.couldNotLoadStatus")}</p>
+              <button
+                type="button"
+                onClick={() => void reserveStatusQuery.refetch()}
+                className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--border)] px-3 font-semibold"
+              >
+                <RefreshCw size={14} />
+                {t("capabilities.actions.tryAgain")}
+              </button>
+            </div>
+          ) : scheduleSlots.length > 0 ? (
+            <div className="space-y-3">
+              {scheduleSlots.map((slot) => (
+                <ScheduleSlotEditor
+                  key={`${slot.id}:${slot.publishAt}`}
+                  slot={slot}
+                  pending={updateScheduleSlot.isPending}
+                  onSave={async (publishAt) => {
+                    try {
+                      await updateScheduleSlot.mutateAsync({ slotId: slot.id, publishAt });
+                      toast.success(t("ui.slurp.settings.creators.scheduleSaved"));
+                    } catch (error) {
+                      toast.error(errorMessage(error));
+                    }
+                  }}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-md border border-dashed border-[var(--border)] p-5 text-sm text-[var(--muted-foreground)]">
+              {t("ui.slurp.settings.creators.scheduleEmpty")}
+            </p>
+          )}
         </div>
       </Modal>
       <PromptEditor
@@ -919,6 +1093,60 @@ export function SlurpSettings({
         pending={updateSettings.isPending}
       />
     </>
+  );
+}
+
+function localDateTimeValue(value: string): string {
+  const date = new Date(value);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+function ScheduleSlotEditor({
+  slot,
+  pending,
+  onSave,
+}: {
+  slot: SlurpScheduleSlot;
+  pending: boolean;
+  onSave: (publishAt: string) => Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState(() => localDateTimeValue(slot.publishAt));
+  const parsed = Date.parse(draft);
+  const unchanged = !Number.isNaN(parsed) && new Date(parsed).toISOString() === slot.publishAt;
+  const valid = !Number.isNaN(parsed) && parsed > Date.now();
+  return (
+    <div className="rounded-md border border-[var(--border)] p-3">
+      <div className="mb-2 flex items-center justify-between gap-2 text-xs text-[var(--muted-foreground)]">
+        <span>
+          {slot.state === "prepared"
+            ? t("ui.slurp.settings.creators.prepared")
+            : t("ui.slurp.settings.creators.scheduled")}
+        </span>
+        <span>{new Date(slot.publishAt).toLocaleString()}</span>
+      </div>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <input
+          type="datetime-local"
+          aria-label={t("ui.slurp.settings.creators.publicationTime")}
+          value={draft}
+          min={localDateTimeValue(new Date(Date.now() + 60_000).toISOString())}
+          disabled={pending}
+          onChange={(event) => setDraft(event.target.value)}
+          className="h-10 min-w-0 flex-1 rounded-md border border-[var(--border)] bg-transparent px-3 text-sm disabled:opacity-50"
+        />
+        <button
+          type="button"
+          disabled={pending || unchanged || !valid}
+          onClick={() => void onSave(new Date(parsed).toISOString())}
+          className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-[var(--noodle-accent-foreground)] disabled:opacity-45"
+        >
+          {pending ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+          {t("ui.slurp.settings.creators.saveTime")}
+        </button>
+      </div>
+    </div>
   );
 }
 

@@ -68,7 +68,7 @@ async function main() {
     await import(`${source}/paths.ts`);
   const { LongTermMemoryStorage } = await import(`${source}/storage.ts`);
   const { LongTermMemoryDraftStore } = await import(`${source}/draft-store.ts`);
-  const { applyLongTermMemoryDraft } = await import(`${source}/reconciliation.ts`);
+  const { applyLongTermMemoryDraft, preflightLongTermMemoryDraft } = await import(`${source}/reconciliation.ts`);
   const { compileEvidenceUnitExtraction } = await import(`${source}/evidence-unit-extraction.ts`);
   const { extractionFingerprintForLtmSourceNote, isLtmSourceExtractionFingerprintCurrent, sourceHashForLtmSourceNote } =
     await import(`${source}/source-hash.ts`);
@@ -1006,15 +1006,18 @@ async function main() {
           ],
         },
       });
+      const groundingResult = await applyLongTermMemoryDraft(existingEventDependencyDraft.id, {
+        root,
+        mutationIds: [groundEventMutationId],
+        rebuildIndexes: false,
+      });
+      assert.deepEqual(groundingResult.appliedMutationIds, [groundEventMutationId]);
       const existingEventDependencyResult = await applyLongTermMemoryDraft(existingEventDependencyDraft.id, {
         root,
         mutationIds: [updateRelationshipMutationId],
         rebuildIndexes: false,
       });
-      assert.deepEqual(
-        new Set(existingEventDependencyResult.appliedMutationIds),
-        new Set([groundEventMutationId, updateRelationshipMutationId]),
-      );
+      assert.deepEqual(existingEventDependencyResult.appliedMutationIds, [updateRelationshipMutationId]);
 
       const staticMutationId = randomUUID();
       const staticDraft = await draftStore.createDraft({
@@ -1048,6 +1051,111 @@ async function main() {
         rebuildIndexes: false,
       });
       assert.deepEqual(staticApplied.appliedMutationIds, [staticMutationId]);
+
+      const destructiveTarget = await storage.createNote({
+        ...noteInput,
+        id: "thread_destructive_gate",
+        title: "Destructive gate target",
+        type: "thread",
+        scope: legacySource.scope,
+        links: [],
+        sections: { status: { text: "The gate remains unresolved.", updatedAt: timestamp } },
+      });
+      const destructiveEventId = randomUUID();
+      const destructiveLinkId = randomUUID();
+      const destructiveMutationId = randomUUID();
+      const destructiveDraft = await draftStore.createDraft({
+        source: { sourceNoteId: canonicalSourceId, chatId: "chat-a" },
+        scope: destructiveTarget.scope,
+        modes: destructiveTarget.modes,
+        response: {
+          summary: "Resolve the gate thread with its source event.",
+          mutations: [
+            {
+              id: destructiveEventId,
+              kind: "create_note",
+              risk: "low",
+              confidence: 0.9,
+              summary: "Create gate resolution event",
+              evidence: [`source_note:${canonicalSourceId}`],
+              note: {
+                id: "timeline_destructive_gate",
+                title: "Gate resolution",
+                type: "timeline_event",
+                status: "active",
+                modes: destructiveTarget.modes,
+                scope: destructiveTarget.scope,
+                tags: ["typed_memory", "timeline_event"],
+                keywords: [],
+                links: [{ target: canonicalSourceId, relation: "extracted_from" }],
+                sections: { event: { text: "The gate was resolved.", updatedAt: timestamp } },
+              },
+            },
+            {
+              id: destructiveLinkId,
+              kind: "add_link",
+              risk: "low",
+              confidence: 0.9,
+              summary: "Link the thread to its resolution",
+              evidence: [`source_note:${canonicalSourceId}`],
+              noteId: destructiveTarget.id,
+              link: { target: "timeline_destructive_gate", relation: "evidenced_by" },
+            },
+            {
+              id: destructiveMutationId,
+              claimKind: "change",
+              kind: "set_status",
+              risk: "medium",
+              confidence: 0.9,
+              summary: "Resolve the gate thread",
+              evidence: [`source_note:${canonicalSourceId}`],
+              noteId: destructiveTarget.id,
+              status: "resolved",
+            },
+          ],
+        },
+      });
+      const destructivePreflight = await preflightLongTermMemoryDraft(destructiveDraft.id, {
+        root,
+        mutationIds: [destructiveMutationId],
+        bulk: true,
+      });
+      assert.equal(destructivePreflight.blockedMutationIds.length, 0);
+      assert.deepEqual(
+        new Set(destructivePreflight.autoIncludedMutationIds),
+        new Set([destructiveEventId, destructiveLinkId]),
+      );
+      const combinedDestructivePreflight = await preflightLongTermMemoryDraft(destructiveDraft.id, {
+        root,
+        mutationIds: [destructiveMutationId, destructiveLinkId],
+      });
+      const destructiveBlocker = combinedDestructivePreflight.rows
+        .find((row) => row.mutationId === destructiveMutationId)
+        ?.blockers.find((blocker) => blocker.code === "destructive_disposition_requires_explicit_review");
+      assert.equal(
+        destructiveBlocker?.message,
+        "Rewrite and other destructive changes must be reviewed and applied one at a time.",
+      );
+      await assert.rejects(
+        applyLongTermMemoryDraft(destructiveDraft.id, {
+          root,
+          mutationIds: [destructiveMutationId, destructiveLinkId],
+          rebuildIndexes: false,
+        }),
+        (error: unknown) =>
+          error instanceof Error &&
+          error.message === "Rewrite and other destructive changes must be reviewed and applied one at a time.",
+      );
+      const destructiveApplied = await applyLongTermMemoryDraft(destructiveDraft.id, {
+        root,
+        mutationIds: [destructiveMutationId],
+        rebuildIndexes: false,
+      });
+      assert.deepEqual(
+        new Set(destructiveApplied.appliedMutationIds),
+        new Set([destructiveEventId, destructiveLinkId, destructiveMutationId]),
+      );
+      assert.equal((await storage.getNote(destructiveTarget.id))?.status, "resolved");
 
       const unlinkedChangeMutationId = randomUUID();
       const unlinkedChangeDraft = await draftStore.createDraft({

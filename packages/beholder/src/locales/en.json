@@ -1,0 +1,18 @@
+{
+  "_meta": {
+    "description": "Client-side interface strings for the Beholder capability (toolbar toggle and floating panel). Bundled into client.js by scripts/build-beholder-package.mjs."
+  },
+  "toolbarLabel": "Beholder",
+  "trackerPanelLabel": "Open Beholder",
+  "dockTitle": "Beholder",
+  "dockClose": "Close Beholder",
+  "dockPopOut": "Open Beholder in a new tab",
+  "resizeWindow": "Resize Beholder",
+  "layerColor": "Color",
+  "layerColorHint": "Color word annotation on chips",
+  "layerDamage": "Damage",
+  "layerDamageHint": "Damage-tier visuals + damage word",
+  "layerWounds": "Wounds",
+  "layerWoundsHint": "Wounds, bleeding, severity",
+  "layerBarLabel": "Detail layers"
+}

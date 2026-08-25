@@ -1,0 +1,14 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": { "locale": "pl", "direction": "ltr" },
+  "package": {
+    "name": "Memory Nag",
+    "description": "Przechowuje dla każdego czatu krótki skarbiec wspomnień z roleplayu i przywołuje tylko nierozwiązane szczegóły istotne w bieżącej turze. Dodaj agenta w trybie Roleplay przez Ustawienia czatu → Agenci → Agenci śledzący."
+  },
+  "agents": {
+    "memory-nag": {
+      "name": "Memory Nag",
+      "description": "Przechowuje dla każdego czatu krótki skarbiec wspomnień z roleplayu i przywołuje tylko nierozwiązane szczegóły istotne w bieżącej turze."
+    }
+  }
+}

@@ -15,7 +15,16 @@ import {
 import { assertHierarchicalMapsPrivateImportBoundary } from "./hierarchical-maps-boundary.mjs";
 import { INCOMPLETE_PACKAGE_IDS, STAGING_ONLY_PACKAGE_IDS } from "./catalog-incomplete.mjs";
 import { assertPackagePrivateImportBoundary } from "./package-engine-boundary.mjs";
-import { OFFICIAL_PACKAGE_GUIDANCE, withPackageActivationGuidance } from "./catalog-package-guidance.mjs";
+import {
+  assertDeclaredFilesMatchManifest,
+  assertEveryPackageManifestIntegrity,
+  readZip,
+} from "./package-manifest-integrity.mjs";
+import {
+  OFFICIAL_PACKAGE_GUIDANCE,
+  withPackageActivationGuidance,
+  withoutPackageActivationGuidance,
+} from "./catalog-package-guidance.mjs";
 import {
   assertPortableFilenameComponent,
   assertPortableRelativePath,
@@ -253,25 +262,6 @@ function assertLocalizedField(value, maximum, label) {
       `${label} does not match capability API ${ENGINE_CAPABILITY_API.major}.${ENGINE_CAPABILITY_API.minor}`,
     );
   }
-}
-
-function readZip(args, { packageId, artifactPath, member = null, purpose }) {
-  const result = spawnSync("unzip", args, {
-    encoding: member ? undefined : "utf8",
-    maxBuffer: 120 * 1024 * 1024,
-  });
-  if (result.error?.code === "ENOENT") {
-    throw new Error(
-      `Cannot ${purpose} ${packageId} artifact ${artifactPath}: unzip executable was not found; install unzip and retry`,
-    );
-  }
-  if (result.status !== 0) {
-    const detail = result.stderr?.toString().trim() || result.error?.message || `exit status ${result.status}`;
-    throw new Error(
-      `Could not ${purpose} ${member ? `member ${member} from ` : ""}${packageId} artifact ${artifactPath}: ${detail}`,
-    );
-  }
-  return result;
 }
 
 async function validateTurnGameRuntime(manifest, packageRoot) {
@@ -584,31 +574,7 @@ for (const entry of catalog.packages) {
       throw new Error(`Unsupported Home browser tab icon format ${iconPath} for ${manifest.id}`);
     }
   }
-  for (const declared of manifest.files) {
-    const sourcePayload = await readFile(
-      await resolveContainedPortablePath(packageRoot, declared.path, `Declared file for ${manifest.id}`),
-    );
-    const archivedPayload = readZip(["-p", artifactPath, declared.path], {
-      packageId: manifest.id,
-      artifactPath,
-      member: declared.path,
-      purpose: "read",
-    });
-    for (const [location, payload] of [
-      ["source", sourcePayload],
-      ["artifact", archivedPayload.stdout],
-    ]) {
-      if (payload.byteLength !== declared.bytes) {
-        throw new Error(`${manifest.id} ${declared.path} ${location} size does not match its manifest`);
-      }
-      if (createHash("sha256").update(payload).digest("hex") !== declared.sha256) {
-        throw new Error(`${manifest.id} ${declared.path} ${location} hash does not match its manifest`);
-      }
-    }
-    if (!sourcePayload.equals(archivedPayload.stdout)) {
-      throw new Error(`${manifest.id} ${declared.path} differs between package source and artifact`);
-    }
-  }
+  await assertDeclaredFilesMatchManifest({ manifest, packageRoot, artifactPath });
 
   for (const entrypoint of [manifest.entrypoints.server, manifest.entrypoints.client].filter(Boolean)) {
     const syntax = spawnSync(
@@ -640,7 +606,13 @@ for (const entry of catalog.packages) {
     throw new Error(`Package ${manifest.id} does not define its matching agent id`);
   }
   const matchingDefinitions = agentDefinitions.filter((definition) => definition.id === manifest.id);
-  if (matchingDefinitions.some((definition) => definition.description !== manifest.description)) {
+  const activeAgentDescription = withoutPackageActivationGuidance(manifest.id, manifest.description);
+  if (
+    matchingDefinitions.some(
+      (definition) =>
+        definition.description !== manifest.description && definition.description !== activeAgentDescription,
+    )
+  ) {
     throw new Error(`Package ${manifest.id} agent description does not match its manifest description`);
   }
   for (const definition of agentDefinitions) {
@@ -800,6 +772,12 @@ for (const entry of catalog.packages) {
   }
 }
 
+// The loop above only ever sees `catalog.packages`, so a package held out of
+// every catalog by INCOMPLETE_PACKAGE_IDS had no byte check at all — which is
+// how pixelforge shipped a manifest, artifact, and source that disagreed
+// (#544). Sweep the rest of packages/ with the same assertions.
+const uncataloguedIntegrity = await assertEveryPackageManifestIntegrity({ repoRoot, cataloguedIds: ids });
+
 // Guidance may be authored ahead of listing for an incomplete package (its id
 // is absent from the catalog by design), so exempt those ids from exactness.
 const guidanceIds = Object.keys(OFFICIAL_PACKAGE_GUIDANCE)
@@ -813,10 +791,17 @@ if (JSON.stringify(guidanceIds) !== JSON.stringify([...ids].sort())) {
 // Staging-only packages live in the preview overlay and are counted separately.
 const agentOnly = publishedCatalog.packages.filter((entry) => !entry.manifest.entrypoints.server).length;
 const features = publishedCatalog.packages.length - agentOnly;
-if (publishedCatalog.packages.length !== 35 || agentOnly !== 24 || features !== 11) {
-  throw new Error(`Expected 24 agents and 11 features, found ${agentOnly} and ${features}`);
+if (publishedCatalog.packages.length !== 36 || agentOnly !== 24 || features !== 12) {
+  throw new Error(`Expected 24 agents and 12 features, found ${agentOnly} and ${features}`);
 }
 console.log(`Catalog valid: ${publishedCatalog.packages.length} packages (${agentOnly} agents, ${features} features).`);
+if (uncataloguedIntegrity.checked.length > 0) {
+  const withoutArtifact = uncataloguedIntegrity.withoutArtifact;
+  console.log(
+    `Uncatalogued package manifests valid: ${uncataloguedIntegrity.checked.join(", ")}` +
+      `${withoutArtifact.length > 0 ? ` (source only, no committed artifact: ${withoutArtifact.join(", ")})` : ""}.`,
+  );
+}
 if (previewCatalog.packages.length > 0) {
   console.log(
     `Preview overlay valid: ${previewCatalog.packages.length} staging-only package(s) (${previewCatalog.packages

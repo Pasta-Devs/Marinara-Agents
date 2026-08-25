@@ -52,6 +52,13 @@ const reviewQueue = readFileSync(
   ),
   "utf8",
 );
+const api = readFileSync(
+  new URL(
+    "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/api.ts",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const workspaceLayout = readFileSync(
   new URL(
     "../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/LtmWorkspace.tsx",
@@ -104,6 +111,10 @@ assert.match(settings, /reasoningEffort: resolved\.reasoningEffort \?\? "low"/u)
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.syncSelected_8c57bdb"], undefined);
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.refreshSelectedSources"], "Refresh selected sources");
 assert.equal(locale["ui.longTermMemory.activityview.totalTokens"], "Total: {{count}} tokens");
+assert.equal(
+  locale["ui.longTermMemory.longtermmemorydetail.savedButNotSearchable"],
+  "Saved with lexical recall only: semantic embeddings are unavailable.",
+);
 assert.match(vault, /function MemoryAvailabilityWorkbench/u);
 assert.match(vault, /data-ltm-availability-workbench/u);
 assert.ok(vault.lastIndexOf("data-ltm-availability-summary") < vault.lastIndexOf("data-ltm-details"));
@@ -128,6 +139,32 @@ assert.equal(locale["ui.longTermMemory.memoryvault.chooseWhereUsed"], "Choose wh
 assert.equal(locale["ui.longTermMemory.memoryvault.saveAvailability"], "Save availability");
 assert.equal(locale["ui.longTermMemory.memoryvault.addMemoryTo"], "Add this memory to:");
 assert.match(vault, /data-ltm-select-mode/u);
+assert.match(
+  vault,
+  /const scopeTargetResolved = Boolean\(\s*target && targetContextKey\.current === contextKey &&\s*scopeTargets\.isSuccess &&\s*targetScopeResolved,?\s*\)/u,
+);
+assert.match(vault, /scopeTargets\.isLoading/u);
+assert.match(vault, /scopeTargets\.isError/u);
+assert.match(vault, /scopeTargets\.refetch\(\)/u);
+assert.ok(vault.indexOf("scopeTargets.isError") < vault.indexOf("noMemoriesFound"));
+assert.match(
+  vault,
+  /scopeTargetResolved\s*&&\s*!scopeTargets\.isError\s*&&\s*!notes\.isLoading\s*&&\s*!notes\.isError\s*&&\s*notes\.isSuccess\s*&&\s*!visible\.length/u,
+);
+const notesQueryStart = vault.indexOf("const notes = useQuery");
+const notesQueryEnd = vault.indexOf("const settings = useQuery", notesQueryStart);
+assert.ok(notesQueryStart >= 0 && notesQueryEnd > notesQueryStart);
+assert.match(vault.slice(notesQueryStart, notesQueryEnd), /enabled:\s*scopeTargetResolved/u);
+assert.match(vault, /loadingMemoryScope/u);
+assert.match(vault, /memoryScopeCouldNotLoad/u);
+assert.match(vault, /retryMemoryScope/u);
+const vaultFeedbackIndex = vault.indexOf("data-ltm-vault-feedback");
+const workspaceIndex = vault.indexOf("<LtmWorkspace", vault.indexOf("</style>"));
+const navigatorContentStart = vault.indexOf("content: (", workspaceIndex);
+const navigatorContentEnd = vault.indexOf("workbench={{", navigatorContentStart);
+assert.ok(vaultFeedbackIndex >= 0 && vaultFeedbackIndex < workspaceIndex);
+assert.ok(navigatorContentStart >= 0 && navigatorContentEnd > navigatorContentStart);
+assert.doesNotMatch(vault.slice(navigatorContentStart, navigatorContentEnd), /data-ltm-vault-feedback/u);
 assert.match(vault, /sourceFilter/u);
 assert.doesNotMatch(vault, /availableEverywhereFilter|setAvailableEverywhereFilter/u);
 assert.match(vault, /data-ltm-source-readonly/u);
@@ -206,7 +243,14 @@ assert.doesNotMatch(vault, /characterWithName/u);
 assert.match(vault, /data-ltm-keyword-editor/u);
 assert.match(vault, /getLtmKeywordIntent/u);
 assert.match(vault, /removeLtmKeyword/u);
-assert.doesNotMatch(vault, /setLtmManualKeywords|function TokenEditor/u);
+assert.match(vault, /setLtmManualKeywords/u);
+assert.match(vault, /data-ltm-keyword-input/u);
+assert.match(vault, /data-ltm-keyword-add/u);
+assert.match(vault, /ui\.longTermMemory\.memoryvault\.addKeyword/u);
+assert.match(vault, /event\.key !== "Enter"/u);
+assert.match(vault, /event\.nativeEvent\.isComposing/u);
+assert.match(vault, /manualKeywordTooLong/u);
+assert.match(vault, /manualKeywordLimit/u);
 assert.match(vault, /renameDetails/u);
 assert.match(vault, /renameDialogRef/u);
 assert.match(vault, /place-items-center bg-black\/50/u);
@@ -255,6 +299,60 @@ assert.equal(locale["ui.longTermMemory.memoryvault.saveAndContinue"], "Save and 
 assert.match(vault, /extractionImportance/u);
 assert.match(vault, /extractionConfidence/u);
 assert.match(vault, /data-ltm-validation-summary/u);
+assert.match(vault, /data-ltm-vault-feedback/u);
+assert.match(vault, /data-ltm-note-actions-desktop[\s\S]*md:flex/u);
+assert.doesNotMatch(vault, /data-ltm-note-actions-desktop[\s\S]*opacity-0/u);
+assert.doesNotMatch(vault, /data-ltm-note-actions-desktop[\s\S]*pointer-events-none/u);
+assert.match(vault, /data-ltm-note-actions-open/u);
+assert.match(vault, /type ArchiveUndoState/u);
+assert.match(vault, /const \[archiveUndo, setArchiveUndo\]/u);
+assert.match(vault, /async function undoArchive/u);
+assert.match(vault, /previousArchiveStatuses/u);
+assert.match(vault, /setArchiveUndo\(\{ notes: archiveUndoNotes \}\)/u);
+assert.match(vault, /archiveUndoFailed/u);
+assert.match(vault, /Promise\.allSettled/u);
+assert.match(vault, /successfulRestores[\s\S]*status: "archived"/u);
+assert.match(
+  vault,
+  /const archiveCompleted\s*=\s*[\s\S]*result\.status === "complete"[\s\S]*ids\.every\(\(id\) => updatedNoteIds\.has\(id\)\)/u,
+);
+assert.match(vault, /if \(archiveCompleted && archiveUndoNotes\.length === ids\.length\) setArchiveUndo/u);
+assert.match(
+  vault,
+  /const allRestored\s*=\s*results\.every[\s\S]*result\.value\.status === "complete"[\s\S]*result\.value\.skippedNoteIds\.length === 0[\s\S]*result\.value\.failedNoteIds\.length === 0[\s\S]*actualIds\.length === expectedIds\.size[\s\S]*new Set\(actualIds\)\.size === expectedIds\.size[\s\S]*actualIds\.every\(\(id\) => expectedIds\.has\(id\)\)[\s\S]*if \(!allRestored\)/u,
+);
+assert.match(vault, /if \(!allRestored\)[\s\S]*Promise\.allSettled[\s\S]*await invalidate\(\);[\s\S]*throw new Error/u);
+assert.equal(locale["ui.longTermMemory.memoryvault.undo"], "Undo");
+assert.equal(locale["ui.longTermMemory.memoryvault.archiveSuccessOne"], "{{count}} memory archived.");
+assert.equal(locale["ui.longTermMemory.memoryvault.archiveSuccessOther"], "{{count}} memories archived.");
+assert.equal(locale["ui.longTermMemory.memoryvault.archiveUndoFailed"], "Could not undo the archive.");
+const clearFiltersMatch = vault.match(/const clearNavigatorFilters = \(\) => \{\n([\s\S]*?)\n\s+\};/u);
+assert.ok(clearFiltersMatch, "clearNavigatorFilters handler must exist");
+const clearFiltersBody = clearFiltersMatch?.[1] ?? "";
+assert.match(clearFiltersBody, /setSearch\(""\);/u);
+assert.match(clearFiltersBody, /setStatusFilter\("all"\);/u);
+assert.match(clearFiltersBody, /setSourceFilter\(false\);/u);
+assert.match(clearFiltersBody, /setSort\("updated"\);/u);
+assert.doesNotMatch(clearFiltersBody, /setTarget/u);
+assert.match(
+  vault,
+  /const hasFilterableNotes = allNotes\.length > 0 && \(sourceFilter \|\| allNotes\.some\(\(note\) => note\.type !== "source"\)\);/u,
+);
+const emptyStateStart = vault.indexOf("{hasFilterableNotes ? (");
+const emptyStateEnd = vault.indexOf("\n                  </div>", emptyStateStart);
+assert.ok(emptyStateStart >= 0 && emptyStateEnd > emptyStateStart, "complete empty-state conditional must exist");
+assert.match(
+  vault.slice(emptyStateStart, emptyStateEnd),
+  /hasFilterableNotes \? \([\s\S]*filteredEmptyDescription[\s\S]*filteredEmptyFilters[\s\S]*onClick=\{clearNavigatorFilters\}[\s\S]*\)\s*:\s*\([\s\S]*noMemoriesFound[\s\S]*\)/u,
+);
+assert.match(vault, /filteredEmptyFilters[\s\S]*activeFilterLabels\.join\(", "\)/u);
+assert.match(vault, /filteredEmptySourcesOnly/u);
+assert.match(vault, /onClick=\{clearNavigatorFilters\}/u);
+assert.match(vault, /value1: target\?\.label \?\? localizeUi\("ui\.longTermMemory\.memoryvault\.allMemories"\)/u);
+assert.ok(
+  vault.indexOf("data-ltm-vault-feedback") < vault.indexOf("<LtmWorkspace\n"),
+  "shared Vault feedback must stay visible above the pane-switching workspace",
+);
 assert.match(sharedControls, /HTMLAttributes<HTMLDivElement>/u);
 assert.match(sharedControls, /<div\s+role=\{tone === "danger" \? "alert" : "status"\}/u);
 assert.doesNotMatch(vault, /<div role="alert"><StatusSurface tone="danger">/u);
@@ -334,7 +432,19 @@ assert.match(workspace, /excludedNoteIds: excludedMemories/u);
 assert.match(workspace, /data-ltm-source-operation-preview/u);
 assert.match(workspace, /data-ltm-source-operation-excluded/u);
 assert.match(workspace, /data-ltm-source-operation-result/u);
+assert.match(workspace, /data-ltm-source-import-mode/u);
+assert.match(workspace, /const sourceCheckboxClass = "size-6 shrink-0 accent-/u);
+assert.match(workspace, /linked\.isError[\s\S]*linkedMemoriesCouldNotLoad/u);
+assert.match(workspace, /!linked\.data \|\| linked\.isError \|\| !previewed/u);
+assert.match(workspace, /tone === "danger"[\s\S]*var\(--destructive\)/u);
+assert.match(workspace, /className="hidden items-start gap-1 md:flex"/u);
+assert.doesNotMatch(workspace, /group-hover:pointer-events-auto|transition-opacity/u);
+assert.match(workspace, /className="space-y-2 border-t border-\[var\(--border\)\] py-3 first:border-t-0"/u);
+assert.match(workspace, /\[changeSource, onRequestedSourceHandled, requestedSource\]/u);
+assert.match(workspace, /importsAsMode/u);
+assert.equal(locale["ui.longTermMemory.sourcesworkspace.importsAsMode"], "Imports as {{mode}}");
 assert.equal(locale["ui.longTermMemory.sourceoperation.clearAll"], "Clear all");
+assert.match(locale["ui.longTermMemory.sourceoperation.linkedMemoriesCouldNotLoad"], /could not be loaded/u);
 assert.equal(
   locale["ui.longTermMemory.sourceoperation.confirmArchive"],
   "Archive the source and {{count}} selected linked memories?",
@@ -344,8 +454,74 @@ assert.equal(
   "Permanently delete the source and {{count}} selected linked memories?",
 );
 assert.match(types, /onOpenSources\?: \(source\?: SourceTab\) => boolean \| Promise<boolean>/u);
+assert.match(api, /export async function requestNotesByIds/u);
+assert.match(api, /if \(!requestedIds\.length\) return \[\] as T\[\]/u);
+assert.match(api, /new URLSearchParams/u);
+assert.match(api, /undefined, signal/u);
+assert.match(api, /const missingIds = requestedIds\.filter/u);
+assert.doesNotMatch(reviewQueue, /requestAllNotes/u);
+assert.match(reviewQueue, /requestNotesByIds<LtmNote>\(contextNoteIds, signal\)/u);
+assert.match(reviewQueue, /"review-context", contextNoteIds/u);
+assert.match(reviewQueue, /row\.disposition !== "new"/u);
+assert.match(reviewQueue, /reviewContextReady/u);
+assert.match(reviewQueue, /reviewContextFailed/u);
+assert.match(reviewQueue, /memoryContextUnavailable/u);
+assert.match(reviewQueue, /data-ltm-review-rejected-count/);
+assert.match(reviewQueue, /onSaveRequest/);
+assert.match(reviewQueue, /buildPersistedReviewState/);
+assert.match(reviewQueue, /window\.setTimeout/);
+assert.match(reviewQueue, /pagehide/);
+assert.match(reviewQueue, /onBlur=\{\(\) => queueMicrotask/);
 assert.match(reviewQueue, /item\.draft\.status === "pending"/u);
 assert.match(reviewQueue, /skippableSelectedRows/u);
+assert.match(reviewQueue, /REVIEW_STATE_STORAGE_KEY/u);
+assert.match(reviewQueue, /draftReviewFingerprint/u);
+assert.match(reviewQueue, /savedReviewStateDiscarded/u);
+assert.match(reviewQueue, /failedMutationIds/u);
+assert.match(reviewQueue, /retryFailed/u);
+assert.match(reviewQueue, /review\.refetch\(\)/u);
+assert.match(reviewQueue, /pendingMutationIds/u);
+assert.match(reviewQueue, /mutationFingerprints/u);
+assert.match(reviewQueue, /contextFingerprint/u);
+assert.match(reviewQueue, /appliedMutationIds/u);
+assert.match(reviewQueue, /setResult\(null\)/u);
+assert.match(reviewQueue, /reviewFailed/u);
+assert.match(reviewQueue, /reviewProgress/u);
+assert.match(reviewQueue, /MAX_APPEND_TEXT_LENGTH = 20_000/u);
+assert.match(reviewQueue, /MAX_SECTION_TEXT_LENGTH = 24_000/u);
+assert.match(reviewQueue, /charactersRemaining(?:One|Other)/u);
+assert.match(reviewQueue, /textExceedsLimit/u);
+assert.match(reviewQueue, /preflight/u);
+assert.match(reviewQueue, /data-ltm-review-preflight/u);
+assert.match(reviewQueue, /data-ltm-review-conflicts/u);
+assert.match(reviewQueue, /moreConflictsOne/u);
+assert.match(reviewQueue, /moreConflictsOther/u);
+assert.match(reviewQueue, /preflightMissing/u);
+assert.doesNotMatch(reviewQueue, /label\.replace\("\{\{value\}\}"/u);
+assert.match(reviewQueue, /preflightBlocked/u);
+assert.match(reviewQueue, /preflightSummary/u);
+assert.match(reviewQueue, /applyPreflighted/u);
+assert.match(reviewQueue, /data-ltm-review-action/u);
+assert.match(reviewQueue, /reviewChangeForTitle/u);
+assert.match(reviewQueue, /applyChangeForTitle/u);
+assert.match(reviewQueue, /noteById\.get\(mutation\.link\.target\)\?\.title/u);
+assert.match(reviewQueue, /data-ltm-review-summary/u);
+assert.match(reviewQueue, /data-ltm-review-evidence-summary/u);
+assert.match(reviewQueue, /confirmDiscard/u);
+assert.match(reviewQueue, /discardDependentWarning/u);
+assert.match(reviewQueue, /reviewQueueEmpty/u);
+assert.match(reviewQueue, /className=\{workspaceUnavailable \|\| reviewDataUnavailable \? "hidden" : ""\}/u);
+assert.equal(locale["ui.longTermMemory.reviewqueue.retryFailed"], "Retry failed review actions");
+assert.equal(locale["ui.longTermMemory.reviewqueue.reviewChangeForTitle"], "Review change for {{title}}");
+assert.equal(locale["ui.longTermMemory.reviewqueue.applyChangeForTitle"], "Apply change for {{title}}");
+assert.equal(locale["ui.longTermMemory.reviewqueue.discard"], "Discard");
+assert.equal(locale["ui.longTermMemory.reviewqueue.sourcesPane"], "Sources");
+assert.equal(locale["ui.longTermMemory.reviewqueue.reviewPane"], "Review");
+assert.equal(locale["ui.longTermMemory.reviewqueue.loadingMemoryContext"], "Loading memory context.");
+assert.equal(locale["ui.longTermMemory.reviewqueue.memoryContextUnavailable"], "Memory context unavailable");
+assert.equal(locale["ui.longTermMemory.reviewqueue.reviewFailed"], "Review failed drafts");
+assert.equal(locale["ui.longTermMemory.reviewqueue.charactersRemainingOne"], "{{count}} character remaining");
+assert.equal(locale["ui.longTermMemory.reviewqueue.charactersRemainingOther"], "{{count}} characters remaining");
 assert.match(locale["ui.longTermMemory.sourceoperation.deleteDetachment"], /detached/u);
 
 process.stdout.write(

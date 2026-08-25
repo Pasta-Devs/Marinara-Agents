@@ -5,7 +5,7 @@ import { clampGenerationMaxOutputTokens } from "../generation/output-token-limit
 import { noodleSamplingOptions } from "./slurp-sampling-options.js";
 import { resolveStoredChatOptions, resolveStoredMaxTokens } from "../generation/generation-parameters.js";
 import { parseGameJsonish } from "../game/jsonish.js";
-import { requireModelAnswer } from "./slurp-model-answer.js";
+import { modelAnswerForCorrection, requireModelAnswer } from "./slurp-model-answer.js";
 import type { BaseLLMProvider, ChatMessage } from "../llm/base-provider.js";
 import { createCharacterGalleryStorage } from "../storage/character-gallery.storage.js";
 import { createCharactersStorage } from "../storage/characters.storage.js";
@@ -152,7 +152,7 @@ export async function generateMissingNoodleProfiles(input: {
     maxTokens: resolveStoredMaxTokens(input.connection.defaultParameters, profileSetupMaxTokens(targets.length)),
     maxTokensOverride: input.connection.maxTokensOverride,
   });
-  const result = await input.provider.chatComplete(messages, {
+  const completionOptions = {
     model: input.connection.model,
     maxTokens,
     ...noodleSamplingOptions(
@@ -162,10 +162,39 @@ export async function generateMissingNoodleProfiles(input: {
     stream: false,
     debugMode: input.debugMode,
     responseFormat: noodleResponseFormat(input.connection.model, "profiles"),
-  });
-  const generated = parseNoodleGeneratedProfiles(
-    parseGameJsonish(requireModelAnswer(result.content ?? "", "public profiles")),
-  );
+  } as const;
+  const result = await input.provider.chatComplete(messages, completionOptions);
+  let generated: ReturnType<typeof parseNoodleGeneratedProfiles>;
+  try {
+    generated = parseNoodleGeneratedProfiles(
+      parseGameJsonish(requireModelAnswer(result.content ?? "", "public profiles")),
+    );
+  } catch (error) {
+    logger.warn(error, "[noodle] Profile generation returned an unusable response; retrying once");
+    generated = { profiles: [], rejected: [] };
+  }
+  if (generated.profiles.length === 0 && targets.length > 0) {
+    logger.warn("[noodle] Profile generation returned no usable profiles; retrying once");
+    const retry = await input.provider.chatComplete(
+      [
+        ...messages,
+        ...(modelAnswerForCorrection(result.content)
+          ? [{ role: "assistant" as const, content: modelAnswerForCorrection(result.content)! }]
+          : []),
+        {
+          role: "user",
+          content: `The previous response contained no usable profiles. Return exactly one valid profile for every requested entityId. Use the requested JSON profile schema. Return JSON only.`,
+        },
+      ],
+      completionOptions,
+    );
+    generated = parseNoodleGeneratedProfiles(
+      parseGameJsonish(requireModelAnswer(retry.content ?? "", "public profiles")),
+    );
+  }
+  if (generated.profiles.length === 0) {
+    throw new Error("Profile generation returned no usable profiles after correction.");
+  }
   if (generated.rejected.length > 0) {
     logger.warn(
       "[noodle] Skipped %d invalid generated profile row(s); valid profiles will still be applied",

@@ -1,0 +1,3500 @@
+/* Beholder extension — settings drawer + floating state panel + paper-doll mode
+   ─────────────────────────────────────────────────────────────────────────
+   Design system: "Tactical Codex" — refined editorial dark-mode UI.
+   - Cinzel for headings (panel title, char name) — engraved nameplate feel
+   - JetBrains Mono for data labels (slot names, drawer section caps, gauges)
+   - Body inherits host font
+   - Type/space/color tokens declared on .beholder-panel ↓
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* Remote webfont @import removed for packaging: a catalog package must not
+   fetch from third-party hosts. Display face falls back to var(--font-sans). */
+/* Settings drawer — grouped sections with helper text. */
+#beholder_settings small.opacity50p {
+    display: block;
+    margin-top: 6px;
+    opacity: 0.6;
+    font-size: 0.85em;
+}
+.bh-settings-main-toggle {
+    padding: 6px 8px;
+    margin-bottom: 6px;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+}
+.bh-settings-section {
+    margin: 8px 0;
+    padding: 0;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.08));
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.015);
+}
+.bh-settings-section > summary {
+    cursor: pointer;
+    padding: 7px 10px;
+    list-style: none;
+    user-select: none;
+    font-size: 0.95em;
+    border-radius: 6px;
+    position: relative;
+    padding-right: 24px;
+}
+.bh-settings-section > summary::-webkit-details-marker { display: none; }
+.bh-settings-section > summary::after {
+    content: "›";
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%) rotate(0deg);
+    transition: transform 0.18s;
+    opacity: 0.5;
+    font-size: 1.2em;
+}
+.bh-settings-section[open] > summary::after {
+    transform: translateY(-50%) rotate(90deg);
+}
+.bh-settings-section > summary b { color: var(--SmartThemeEmColor, var(--bh-chroma, var(--primary))); }
+.bh-settings-body {
+    padding: 0 10px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.bh-settings-body label:not(.checkbox_label) {
+    font-size: 0.88em;
+    opacity: 0.85;
+    margin-top: 6px;
+}
+.bh-settings-body .checkbox_label { margin-top: 6px; }
+.bh-help {
+    display: block;
+    margin-top: 2px;
+    margin-bottom: 4px;
+    opacity: 0.55;
+    font-size: 0.78em;
+    line-height: 1.4;
+}
+.bh-help-inline {
+    margin-left: 4px;
+    opacity: 0.6;
+    font-size: 0.85em;
+    font-weight: normal;
+    font-style: italic;
+}
+.bh-help code,
+.bh-settings-body code {
+    background: rgba(255, 255, 255, 0.06);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.92em;
+}
+.bh-settings-buttons {
+    gap: 6px;
+    margin-top: 8px;
+}
+
+/* ─── Floating state panel ────────────────────────────────────────────── */
+
+.beholder-panel {
+    position: fixed;
+    z-index: 9000;
+    width: min(420px, calc(100vw - 40px));
+    max-height: 86vh;
+    min-width: 240px;
+    min-height: 180px;
+    /* Fixed-width panel (no resize). Container queries below auto-switch
+       to the single-column list layout when the panel is narrow. */
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: var(--SmartThemeBlurTintColor, rgba(20, 20, 24, 0.92));
+    color: var(--SmartThemeBodyColor, #e0e0e0);
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.15));
+    border-radius: 12px;
+    box-shadow:
+        0 1px 0 rgba(255, 255, 255, 0.05) inset,
+        0 12px 40px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    user-select: none;
+
+    /* ────── DESIGN TOKENS ──────────────────────────────────────────────
+       Every panel-scoped value should reference one of these. Adding a
+       new font-size or padding without a token is a design-system bug. */
+
+    /* Master scale knob. The host updates it from the floating window's
+       available width and height so chrome, cards, and the doll scale together. */
+    --bh-ui-scale: 1.1;
+    font-size: calc(0.875em * var(--bh-ui-scale));
+
+    /* Type ramp (em, relative to panel base). Five steps, named by role —
+       NOT by size. Use the role, not the number, when picking. */
+    --bh-text-meta:      0.78em;   /* slot caps, POV hint, tab pulse */
+    --bh-text-secondary: 0.875em;  /* species, gauge label, drawer hint */
+    --bh-text-body:      1em;      /* chips, tabs, drawer buttons */
+    --bh-text-large:     1.143em;  /* panel title, gauge value, drawer focus */
+    --bh-text-display:   1.357em;  /* char name */
+
+    /* Font families. Scoped via `font-family: var(--bh-font-display)` etc.
+       so the host site's body font keeps governing default text — these
+       only apply where we explicitly opt in. */
+    --bh-font-display: "Cinzel", "Trajan Pro", "Georgia", serif;
+    --bh-font-data:    "JetBrains Mono", "SF Mono", "Menlo", "Consolas", monospace;
+
+    /* Spacing scale — multiples of 4. Em-based so it co-scales with the type. */
+    --bh-space-1: 0.286em;   /*  4px @ 14px base */
+    --bh-space-2: 0.571em;   /*  8px */
+    --bh-space-3: 0.857em;   /* 12px */
+    --bh-space-4: 1.143em;   /* 16px */
+    --bh-space-5: 1.714em;   /* 24px */
+
+    /* Color roles — neutrals layered over the host theme background. Used
+       for elevated/inset surfaces and divider strengths. */
+    --bh-surface-1: rgba(255, 255, 255, 0.025);  /* inset (drawer, gauge bg) */
+    --bh-surface-2: rgba(255, 255, 255, 0.05);   /* elevated (header, hover) */
+    --bh-surface-3: rgba(255, 255, 255, 0.085);  /* pressed / active control */
+    --bh-divider:   rgba(255, 255, 255, 0.08);   /* hairline dividers */
+    --bh-border:    rgba(255, 255, 255, 0.18);   /* control borders, focus */
+
+    /* Opacity roles — apply via opacity: var(...) for consistent muting. */
+    --bh-mute-strong: 0.45;  /* meta, POV hint */
+    --bh-mute-soft:   0.7;   /* secondary text */
+    --bh-mute-none:   1;     /* primary */
+}
+/* When user has manually resized, drop the max-height cap so their size sticks. */
+.beholder-panel[data-resized="true"] {
+    max-height: none;
+}
+
+/* (Legacy data-mode rules removed — only one layout now. Mobile is
+   handled via @container query below.) */
+
+/* No tracked state renders a full-size default-human placeholder (same width +
+   chrome as a populated panel) so the extension shows at its real size on first
+   open, with all header tools visible. data-empty only mutes the placeholder
+   name + caption and drops its interactive view controls (it's visual-only
+   until real state arrives). */
+.beholder-panel[data-empty="true"] .bh-char-name {
+    opacity: 0.4;
+}
+.beholder-panel[data-empty="true"] .bh-figure-controls {
+    display: none;
+}
+.bh-placeholder-note {
+    margin: 14px 14px 6px;
+    padding: 10px 14px;
+    text-align: center;
+    font-size: var(--bh-text-secondary);
+    line-height: 1.5;
+    color: var(--bh-gold, var(--bh-chroma, var(--primary)));
+    background: linear-gradient(160deg, color-mix(in srgb, var(--bh-accent) 14%, transparent), color-mix(in srgb, var(--bh-accent) 4%, transparent));
+    border: 1px solid color-mix(in srgb, var(--bh-accent) 40%, transparent);
+    border-radius: 8px;
+}
+.bh-placeholder-note b { color: var(--bh-chroma, var(--primary)); font-weight: 600; }
+
+/* Note/intent bar mounted above the chat input: input grows, the apply button
+   sits to its right (not stacked under). */
+.beholder-notebox {
+    display: flex;
+    gap: var(--bh-space-2, 6px);
+    align-items: stretch;
+    margin: 4px 0;
+}
+.beholder-notebox .beholder-notebox-input { flex: 1 1 auto; min-width: 0; }
+.beholder-notebox .beholder-notebox-btn { flex: 0 0 auto; }
+
+.beholder-panel.beholder-dragging {
+    opacity: 0.85;
+}
+
+.beholder-panel-header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--bh-space-2) var(--bh-space-3);
+    background: var(--bh-surface-2);
+    border-bottom: 1px solid var(--bh-divider);
+    cursor: move;
+}
+/* Hairline accent rule across the top of the header — quiet brand mark.
+   Fades in from the left edge so the panel feels "anchored" on its left side. */
+.beholder-panel-header::before {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; top: 0;
+    height: 1px;
+    background: linear-gradient(
+        90deg,
+        var(--bh-accent, var(--primary)) 0%,
+        color-mix(in srgb, var(--bh-accent) 40%, transparent) 22%,
+        transparent 60%
+    );
+    pointer-events: none;
+    opacity: 0.7;
+}
+.beholder-panel-title {
+    font-family: var(--bh-font-display);
+    font-size: var(--bh-text-large);
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    color: var(--SmartThemeBodyColor, #e8eaee);
+}
+
+.beholder-panel-controls {
+    display: flex;
+    gap: var(--bh-space-2);
+    font-size: var(--bh-text-body);
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.beholder-panel-controls .fa-solid,
+.beholder-tool-btn {
+    cursor: pointer;
+    opacity: var(--bh-mute-soft);
+    transition: opacity 0.15s, color 0.15s, transform 0.15s;
+}
+/* Header tool icons + active control bump slightly larger than the
+   backfill chevrons so the tool row reads as the primary actions. */
+.beholder-panel-controls .fa-solid,
+.beholder-tool-btn { font-size: 1.08em; padding: 4px; }
+.beholder-panel-controls .fa-solid:hover {
+    opacity: 1;
+    color: var(--bh-accent, var(--primary));
+}
+.beholder-panel-controls .fa-solid:active {
+    transform: scale(0.92);
+}
+
+/* ─── Layer bar ──────────────────────────────────────────────────────────
+   Sits directly under the header as a permanent control strip. Reads like
+   the legend row on a vintage anatomical chart: hairline divider above and
+   below, JetBrains Mono small-caps labels, a thin "engagement bar" beneath
+   each active layer instead of a chunky fill. Off layers fade to mute-strong
+   so the user can see at a glance which dimensions of the state are hidden.
+
+   Disengaged label gets a thin double-strike instead of an underline — a
+   subtle "redacted" cue that echoes editorial typography.                   */
+.beholder-layer-bar {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    padding: var(--bh-space-1) var(--bh-space-3) calc(var(--bh-space-1) + 1px);
+    background: var(--bh-surface-1);
+    border-bottom: 1px solid var(--bh-divider);
+    position: relative;
+}
+/* Bracket marks at both ends, the way an instrument bezel anchors a scale. */
+.beholder-layer-bar::before,
+.beholder-layer-bar::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    width: 4px;
+    height: 9px;
+    border: 1px solid var(--bh-divider);
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+.beholder-layer-bar::before { left: var(--bh-space-2); border-right: none;  }
+.beholder-layer-bar::after  { right: var(--bh-space-2); border-left:  none; }
+
+.bh-layer-cell {
+    position: relative;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--bh-space-1) 0 calc(var(--bh-space-1) + 2px);
+    min-width: 0;
+}
+.bh-layer-cell input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+.bh-layer-cell span {
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-meta);
+    font-weight: 500;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--bh-body);
+    opacity: var(--bh-mute-strong);
+    line-height: 1;
+    text-align: center;
+    transition: opacity 0.12s ease, color 0.12s ease, letter-spacing 0.12s ease;
+    position: relative;
+    padding: 1px 2px 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: clip;
+}
+/* Disengaged: a thin overstrike line through the label — editorial "redacted"
+   cue, gentler than strikethrough. Drawn as a pseudo-element so it doesn't
+   shift typographic metrics. */
+.bh-layer-cell span::before {
+    content: "";
+    position: absolute;
+    left: 8%; right: 8%;
+    top: calc(50% - 1px);
+    height: 1px;
+    background: currentColor;
+    opacity: 0.35;
+    transition: opacity 0.12s ease, transform 0.12s ease;
+    transform-origin: center;
+}
+/* Engagement bar — the "instrument" cue. Sits beneath the label, drawn as
+   the cell's own pseudo so it tracks cell width, not text width. */
+.bh-layer-cell::after {
+    content: "";
+    position: absolute;
+    left: 18%; right: 18%;
+    bottom: 0;
+    height: 2px;
+    background: var(--bh-accent, var(--primary));
+    transform: scaleX(0);
+    transform-origin: center;
+    transition: transform 0.18s ease, opacity 0.18s ease;
+    opacity: 0;
+}
+.bh-layer-cell:hover span {
+    opacity: var(--bh-mute-none);
+    color: var(--bh-accent, var(--primary));
+}
+.bh-layer-cell:hover span::before { opacity: 0; }
+.bh-layer-cell:hover::after {
+    transform: scaleX(0.55);
+    opacity: 0.55;
+}
+.bh-layer-cell input:checked + span {
+    opacity: var(--bh-mute-none);
+    color: var(--SmartThemeBodyColor, #e8eaee);
+    letter-spacing: 0.26em;        /* fractionally widens — "tuned in" */
+}
+.bh-layer-cell input:checked + span::before { opacity: 0; }
+.bh-layer-cell:has(input:checked)::after {
+    transform: scaleX(1);
+    opacity: 1;
+}
+.bh-layer-cell input:focus-visible + span {
+    outline: 1px dashed var(--bh-accent);
+    outline-offset: 3px;
+}
+
+/* Narrow container: tighten letter-spacing so labels still fit on 4 cells. */
+@container bhpanel (max-width: 320px) {
+    .bh-layer-cell span { letter-spacing: 0.14em; font-size: 0.72em; }
+    .bh-layer-cell input:checked + span { letter-spacing: 0.18em; }
+}
+
+.beholder-panel-body {
+    padding: var(--bh-space-3) var(--bh-space-3) var(--bh-space-4);
+    overflow-y: auto;
+    /* Vertical scrolls; horizontal is CLIPPED (never spills past the panel border).
+       `clip` (not `hidden`) adds no scrollbar and composes with overflow-y:auto. The
+       grid/wrap fixes above make content FIT; this is the belt-and-suspenders so a
+       stray wide card can never poke over the right edge again. */
+    overflow-x: clip;
+    flex: 1;
+    /* Subtle scrollbar tuning to feel integrated rather than borrowed. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--bh-border) transparent;
+}
+.beholder-panel-body::-webkit-scrollbar { width: 6px; }
+.beholder-panel-body::-webkit-scrollbar-track { background: transparent; }
+.beholder-panel-body::-webkit-scrollbar-thumb {
+    background: var(--bh-border);
+    border-radius: 3px;
+}
+
+
+.bh-empty-text {
+    color: var(--SmartThemeBodyColor, #888);
+    opacity: var(--bh-mute-soft);
+    text-align: center;
+    padding: var(--bh-space-2) 0;
+    font-size: var(--bh-text-secondary);
+    font-style: italic;
+}
+
+/* ─── Compact mode (legacy text list) ─────────────────────────────────── */
+
+.beholder-char {
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.08));
+}
+.beholder-char:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+.beholder-char-name {
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: var(--SmartThemeEmColor, var(--bh-chroma, var(--primary)));
+}
+.beholder-species {
+    font-weight: normal;
+    opacity: 0.5;
+    font-size: 0.85em;
+    margin-left: 6px;
+}
+.beholder-row { line-height: 1.5; word-wrap: break-word; }
+.beholder-label {
+    display: inline-block;
+    min-width: 60px;
+    opacity: 0.55;
+    font-size: 0.8em;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+.beholder-item { margin-right: 4px; }
+.beholder-slot { opacity: 0.45; font-size: 0.85em; font-style: italic; }
+.beholder-wound { color: #ff7676; }
+.beholder-dmg-warn { color: var(--bh-chroma, var(--primary)); }
+.beholder-dmg-bad  { color: #ff8585; }
+
+/* ─── Doll mode ───────────────────────────────────────────────────────── */
+
+/* Tier color scale — drives slot row borders + damage chips */
+.beholder-panel {
+    --bh-tier-0: #6ad48b; /* pristine, lightly worn */
+    --bh-tier-1: var(--bh-chroma); /* frayed, soiled */
+    --bh-tier-2: #e9933b; /* damaged, cracked */
+    --bh-tier-3: #e26464; /* torn, bloodstained */
+    --bh-tier-4: #8c3030; /* tatters, ruined */
+    /* Legacy token names remain aliases so the imported renderer stays small,
+       but every interface accent follows the host theme. */
+    --bh-gold: var(--bh-chroma);
+    --bh-gold-deep: var(--bh-accent);
+    --bh-gold-soft: color-mix(in srgb, var(--bh-chroma) 82%, var(--foreground));
+    --bh-holding: var(--bh-gold);
+    --bh-body: var(--SmartThemeBodyColor, #cfd2d6);
+    --bh-body-soft: color-mix(in srgb, var(--bh-body) 25%, transparent);
+    --bh-accent: var(--bh-accent-pref, var(--primary));
+    --bh-wound: #ff5252;
+}
+
+/* Character tabs — name nav for multi-char chats. Wraps to multiple rows
+   when there are more tabs than fit on one row (instead of horizontal
+   scrolling, which hides off-screen characters). */
+.bh-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--bh-space-1) var(--bh-space-2);
+    margin-bottom: var(--bh-space-3);
+    padding-bottom: var(--bh-space-1);
+    border-bottom: 1px solid var(--bh-divider);
+}
+.bh-tab {
+    background: transparent;
+    border: none;
+    color: var(--bh-body);
+    padding: var(--bh-space-1) var(--bh-space-2) var(--bh-space-1);
+    font: inherit;
+    font-family: var(--bh-font-display);
+    font-size: var(--bh-text-body);
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    opacity: 0.55;
+    border-bottom: 2px solid transparent;
+    transition: opacity 0.15s, border-color 0.15s, color 0.15s;
+    white-space: nowrap;
+}
+.bh-tab:hover { opacity: 0.85; }
+.bh-tab-active {
+    opacity: 1;
+    border-bottom-color: var(--bh-accent);
+    color: var(--SmartThemeEmColor, var(--bh-chroma, var(--primary)));
+    font-weight: 600;
+}
+
+/* Multi-char "updated" indicator. Critical for the multi-char RP case:
+   when Maggie's state changes while Tim's tab is active, the dot on
+   Maggie's tab signals "she changed, click to see." */
+.bh-tab-updated {
+    opacity: 0.85;
+    color: var(--bh-accent);
+}
+.bh-tab-updated .bh-tab-pulse {
+    color: var(--bh-accent);
+    font-size: var(--bh-text-meta);
+    margin-left: var(--bh-space-1);
+    vertical-align: middle;
+}
+/* Absent — character is tracked but not currently in the scene. Tab stays
+   clickable (last-known state preserved) but reads as "on the roster, not
+   here right now": dimmed, italic, no accent. Hover brightens slightly so
+   it's clear the tab is still interactive. */
+.bh-tab-absent {
+    opacity: 0.38;
+    font-style: italic;
+}
+.bh-tab-absent:hover { opacity: 0.7; }
+.bh-tab-absent.bh-tab-active {
+    /* If user explicitly views an absent char, lift the dim a little so
+       their state is readable, but keep italic so the off-scene status is
+       still legible. */
+    opacity: 0.72;
+}
+
+.bh-char-doll {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.bh-char-head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--bh-space-3);
+    padding: var(--bh-space-1) 0 var(--bh-space-2);
+    border-bottom: 1px solid var(--bh-divider);
+    margin-bottom: var(--bh-space-2);
+    position: relative;
+}
+/* Decorative inscription rule under the character name — codex page feel.
+   Sits over the head's bottom border, accenting the left edge. */
+.bh-char-head::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: -1px;
+    width: 32px;
+    height: 1px;
+    background: var(--SmartThemeEmColor, var(--bh-chroma, var(--primary)));
+    opacity: 0.55;
+}
+.bh-char-name {
+    font-family: var(--bh-font-display);
+    font-weight: 600;
+    font-size: var(--bh-text-display);
+    color: var(--SmartThemeEmColor, var(--bh-chroma, var(--primary)));
+    letter-spacing: 0.06em;
+    line-height: 1.15;
+}
+
+/* (Stamina gauge removed — the stamina field is no longer tracked. Any
+   residual gauge element is hidden via the .bh-char-head .bh-gauge
+   display:none rule appended below.) */
+.bh-char-species {
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-secondary);
+    font-weight: 600;
+    color: var(--primary, var(--bh-body));
+    opacity: 1;
+    letter-spacing: 0.08em;
+    text-transform: lowercase;
+    padding: 1px var(--bh-space-2);
+    border: 1px solid color-mix(in srgb, var(--primary, var(--bh-divider)) 45%, transparent);
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--primary, var(--bh-surface-1)) 12%, transparent);
+}
+/* v0.4 (2026-06-03): `bh-char-gender` rules removed along with the gender
+   field. The wings rules below are kept defensively in case a v0.5+ state
+   still emits a `wings` slot — they harmlessly do nothing when paperdoll.js
+   never renders the element. */
+.bh-char-species::before {
+    content: "·";
+    margin-right: 4px;
+    opacity: 0.5;
+}
+
+/* The 3-col grid: left labels | silhouette | right labels */
+.bh-doll-grid {
+    display: grid;
+    /* minmax(0, 1fr) — NOT bare 1fr. A bare `1fr` track has an implicit min of
+       min-content, so a wide chip (a long item name) forces the side column — and the
+       whole grid — past the panel's right edge. minmax(0,…) lets the track shrink and
+       the content wrap/clip instead of overflowing. */
+    grid-template-columns: minmax(0, 1fr) calc(140px * var(--bh-ui-scale, 1)) minmax(0, 1fr);
+    gap: calc(6px * var(--bh-ui-scale, 1));
+    align-items: start;
+}
+.bh-doll-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 0;
+}
+.bh-figure { display: flex; justify-content: center; }
+
+.bh-col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+.bh-col-empty { min-height: 1px; }
+
+/* ─── Narrow-viewport / ST sidebar adaptation ──────────────────────────
+   Container queries (not media queries) — the panel responds to its OWN
+   size, so it adapts whether it's narrow because of viewport (mobile) or
+   because the user docked it in a narrow ST sidebar. */
+.beholder-panel {
+    container-type: inline-size;
+    container-name: bhpanel;
+}
+/* ─── Mobile / narrow context = section digest (auto) ─────────────────────
+   Above 360px the panel is the paperdoll grid. Below, the digest takes
+   over: wounds → held → worn → state flags, sorted by IMPORTANCE rather
+   than by anatomy. The silhouette + slot cards aren't useful at narrow
+   widths once the spatial cue is gone — the digest reformats the same
+   data as a priority feed. Both are always rendered; CSS picks one. */
+.bh-digest { display: none; }
+@container bhpanel (max-width: 360px) {
+    .bh-doll-grid     { display: none; }
+    .bh-doll-grid.bh-paired { display: none; }
+    .bh-digest        { display: block; }
+    /* Auto-narrow always shows the digest; hide the digest-side layout
+       switch (the panel has no doll grid to switch between at this width). */
+    .bh-layout-switch-row { display: none; }
+    /* Header tools collapse to the overflow (⋯) trigger when narrow. */
+    .beholder-tool-btn { display: none; }
+    .beholder-tools-more { display: inline-block; }
+}
+
+/* Per-slot CARD: one card per anatomical slot, contains chips for each
+   worn item / held item / wound that belongs to it. Replaces the
+   one-row-per-thing layout (which repeated the slot name on every card).
+   The card's left border = worst damage tier across all items in that slot. */
+.bh-slot-card {
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    padding: 4px 6px 5px 9px;
+    position: relative;
+    line-height: 1.3;
+    /* In paired mode the card IS the grid item (the .bh-col wrapper is display:contents),
+       so it needs its own min-width:0 to shrink below its content and let the text wrap
+       instead of forcing the track — and the panel — wider. */
+    min-width: 0;
+    font-size: 1em;
+}
+/* Card no longer carries a tier border — damage tier reads off each chip's
+   own left bar (CSS ::before below) so the colored stripes match each
+   chip's actual height. Empty card still gets faint outline via main
+   .bh-slot-card border style above. */
+
+/* Wound-count marker in the slot card header (✚ or ✚N for >1). */
+.bh-slot-card-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px;
+}
+/* (Slot-head wound mark removed — the wound chips inside the card already
+   say the same thing; the head-level glyph was duplicating info.) */
+/* Right-column = true mirror of left. Border anchors to the right edge
+   (toward the silhouette), and chip content reverses so dots/swatches/
+   glyphs cluster on the right side near the border, multi-slot tags
+   + wound marks float to the left. Text within each label still reads
+   left-to-right — only the element order flips. */
+.bh-col-right .bh-slot-card-head { flex-direction: row-reverse; }
+.bh-slot-card .bh-slot-name {
+    font-family: var(--bh-font-data);
+    font-size: 0.82em;          /* slot card scale already shrinks; bump back to readable */
+    font-weight: 500;
+    opacity: 0.65;
+    text-transform: lowercase;
+    letter-spacing: 0.06em;
+    font-style: normal;
+}
+
+/* Right-column cards mirror the border. */
+.bh-col-right .bh-slot-card { text-align: right; padding-left: 6px; padding-right: 9px; }
+.bh-col-right .bh-slot-card::before { inset: 0 0 0 auto; border-radius: 0 6px 6px 0; }
+
+/* Empty / ghost slot card: faint one-liner, no chips. Lets users see what
+   slots ARE available without dominating the visual. */
+.bh-slot-card.bh-slot-empty {
+    background: transparent;
+    border-style: dashed;
+    border-color: rgba(255, 255, 255, 0.05);
+    opacity: 0.35;
+    padding: 2px 6px 2px 9px;
+}
+.bh-slot-card.bh-slot-empty::before {
+    background: rgba(255, 255, 255, 0.06);
+}
+.bh-slot-card.bh-slot-empty:hover { opacity: 0.7; }
+
+/* Bare slot card (v0.3 — narration explicitly confirmed uncovered).
+   Skin-tone left bar + italic "bare" tag in the same slot as missing's tag.
+   Visually distinct from .bh-slot-empty (which means "unknown / nothing said").
+   Mutually exclusive with worn/items per schema, so no chips. */
+.bh-slot-card.bh-slot-bare {
+    background: rgba(220, 188, 156, 0.04);
+    border-style: solid;
+    border-color: rgba(220, 188, 156, 0.18);
+    opacity: 0.85;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 8px 4px 9px;
+}
+.bh-slot-card.bh-slot-bare::before {
+    background: linear-gradient(180deg, rgba(220, 188, 156, 0.5), rgba(220, 188, 156, 0.25));
+}
+.bh-slot-bare-tag {
+    color: rgba(220, 188, 156, 0.95);
+    font-family: var(--bh-font-data);
+    font-size: 0.78em;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-style: normal;
+    font-weight: 600;
+}
+.bh-slot-card.bh-slot-bare:hover {
+    opacity: 1;
+    border-color: rgba(220, 188, 156, 0.45);
+}
+
+/* ─── Layered worn-items staircase ──────────────────────────────────────
+   When a slot has >1 worn item (chest with gambeson + chainmail + breastplate),
+   each chip gets a left-side index gutter and a faint connector line. The
+   first chip is the outermost layer (per schema worn[0] = outer). */
+.bh-chip-layered {
+    display: flex;
+    align-items: stretch;
+    gap: var(--bh-space-1);
+    position: relative;
+}
+.bh-chip-layer-idx {
+    font-family: var(--bh-font-data);
+    font-size: 0.65em;
+    font-weight: 600;
+    color: var(--bh-body);
+    opacity: 0.4;
+    min-width: 10px;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+}
+/* Connector line tying the indices into a vertical stack. */
+.bh-chip-layered:not(:first-child) .bh-chip-layer-idx::before {
+    content: "";
+    position: absolute;
+    top: -3px;
+    bottom: 50%;
+    width: 1px;
+    background: var(--bh-border);
+    opacity: 0.5;
+}
+.bh-chip-layered:not(:last-child) .bh-chip-layer-idx::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    bottom: -3px;
+    width: 1px;
+    background: var(--bh-border);
+    opacity: 0.5;
+}
+.bh-chip-layered:first-child .bh-chip-layer-idx { color: var(--SmartThemeEmColor, var(--bh-chroma, var(--primary))); opacity: 0.55; }
+.bh-chip-layered:hover .bh-chip-layer-idx       { opacity: 0.9; }
+/* Right-column layered chips mirror: index ends up on the right side (toward
+   the body), connector tick still runs vertically through the index gutter. */
+.bh-col-right .bh-chip-layered { flex-direction: row-reverse; }
+
+/* Missing / lost slot card: vertical gray slits, strikethrough on the slot
+   name, "missing" tag. Distinct from empty and off-body. */
+.bh-slot-card.bh-slot-missing {
+    background: repeating-linear-gradient(
+        90deg,
+        rgba(140, 140, 140, 0.07) 0px, rgba(140, 140, 140, 0.07) 1px,
+        transparent 1px, transparent 6px
+    );
+    border-style: dashed;
+    border-color: rgba(140, 140, 140, 0.3);
+    opacity: 0.65;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 8px 4px 9px;
+}
+.bh-slot-card.bh-slot-missing::before { background: rgba(140, 140, 140, 0.45); }
+.bh-slot-card.bh-slot-missing .bh-slot-name {
+    text-decoration: line-through;
+    opacity: 0.7;
+}
+.bh-slot-missing-tag {
+    color: rgba(160, 160, 160, 0.95);
+    font-family: var(--bh-font-data);
+    font-size: 0.78em;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-style: normal;
+    font-weight: 600;
+}
+.bh-slot-card.bh-slot-missing:hover {
+    opacity: 0.85;
+    border-color: rgba(160, 160, 160, 0.5);
+}
+
+/* Chips inside a slot card: one per item / wound. Damage tier shows as a
+   small dot before the item name; the card border still shows the worst
+   tier across all items, the per-chip dot tells you which item is which. */
+.bh-slot-chips {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 2px;
+}
+.bh-chip {
+    display: flex;
+    flex-wrap: wrap;             /* allows the verbose sub-row to drop below */
+    align-items: baseline;
+    font-size: 1.0em;
+    line-height: 1.35;
+    padding: 1px 0;
+    cursor: help;
+    /* Wrap at WORD boundaries only (no mid-word breaks). Long names that
+       genuinely need to wrap will, but won't shatter into "breastpla|te". */
+    overflow-wrap: normal;
+    word-break: normal;
+}
+/* Chip head — prefix glyphs + item name + multi-slot tag share ONE inner
+   flex line that never wraps as a unit. The text inside is allowed to wrap
+   to multiple lines via min-width:0, but the dot/glyph/swatch stay glued to
+   the start of the FIRST line. Previously the chip was a single flex with
+   wrap, so a long item name would push to a new row, orphaning the prefix
+   on the row above. */
+.bh-chip-head {
+    display: flex;
+    flex: 1 1 100%;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+    flex-wrap: nowrap;
+}
+.bh-chip-text {
+    font-weight: 500;
+    flex: 1 1 auto;
+    min-width: 0;
+    /* A single over-long token (an item name with no spaces) can't wrap at a space,
+       so break it as a LAST RESORT rather than let it overflow the column past the
+       panel edge. Multi-word names still wrap at spaces first (this only fires when a
+       word is wider than the column). */
+    overflow-wrap: anywhere;
+    /* Sentence case at the display layer: normalize the model's casing
+       (lowercase everything) and then capitalize the first letter. Means
+       "ARMING SWORD" and "arming sword" both render as "Arming sword".
+       Display normalization only — the underlying data stays as authored. */
+    text-transform: lowercase;
+}
+.bh-chip-text::first-letter {
+    text-transform: uppercase;
+}
+.bh-chip-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--bh-tier-0);
+    align-self: center;
+}
+.bh-chip.bh-tier-1 .bh-chip-dot { background: var(--bh-tier-1); }
+.bh-chip.bh-tier-2 .bh-chip-dot { background: var(--bh-tier-2); }
+.bh-chip.bh-tier-3 .bh-chip-dot { background: var(--bh-tier-3); }
+.bh-chip.bh-tier-4 .bh-chip-dot { background: var(--bh-tier-4); }
+/* Hide the per-chip damage dot in desktop (doll-grid) — the card's left
+   border already encodes the same tier for each item. Mobile (digest)
+   keeps the dot because there's no card border to read off. */
+.bh-doll-grid .bh-chip-dot { display: none; }
+
+/* ─── Color swatch (v0.3 worn[].color / holding.color) ──────────────────
+   Inline color square beside the damage dot. Encodes the item's color
+   without stealing characters from the item name. Schema palette = 16
+   controlled colors; free-text variants fall back to .bh-c-other (neutral)
+   and rely on the tooltip for the exact word. */
+.bh-chip-swatch {
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    flex-shrink: 0;
+    align-self: center;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25) inset;
+}
+/* Schema's 16-color controlled palette — chosen for legibility on dark bg. */
+.bh-c-red    { background: #d6534b; }
+.bh-c-orange { background: #e6883a; }
+.bh-c-yellow { background: #e6c64b; }
+.bh-c-green  { background: #5ec27a; }
+.bh-c-blue   { background: #4d8fdc; }
+.bh-c-purple { background: #9d6dcc; }
+.bh-c-pink   { background: #e687a3; }
+.bh-c-brown  { background: #8a5a3a; }
+.bh-c-black  { background: #1f1f24; border-color: rgba(255, 255, 255, 0.3); }
+.bh-c-white  { background: #f0f0f0; border-color: rgba(255, 255, 255, 0.4); }
+.bh-c-gray   { background: #888c92; }
+.bh-c-beige  { background: #d6c7a3; }
+.bh-c-gold   { background: #d4a93a; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25) inset, 0 0 4px rgba(212, 169, 58, 0.4); }
+.bh-c-silver { background: #b5b8bd; }
+.bh-c-navy   { background: #2a3d6b; }
+.bh-c-tan    { background: #c4a878; }
+/* Free-text color (crimson, burgundy, etc.): neutral swatch with a hint
+   underline so it reads as "color present, see tooltip". */
+.bh-c-other  {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
+    border-style: dashed;
+}
+
+/* Held items use the chat chroma for their ✦ glyph, while the chip text stays
+   neutral so color swatches and damage state remain readable. */
+.bh-chip-hold .bh-chip-text { color: inherit; }
+.bh-chip-hold .bh-chip-glyph {
+    color: var(--bh-holding);
+    font-size: 0.95em;
+    text-shadow: 0 0 4px color-mix(in srgb, var(--bh-chroma) 35%, transparent);
+}
+
+/* Wound chips: severity-colored (1=minor amber, 2=serious orange, 3=critical red).
+   v0.3 supplies explicit severity + bleeding fields. */
+.bh-chip-wound .bh-chip-glyph { font-size: 0.95em; }
+.bh-chip-wound-1 { color: var(--bh-chroma, var(--primary)); }
+.bh-chip-wound-1 .bh-chip-glyph { text-shadow: 0 0 4px color-mix(in srgb, var(--bh-accent) 45%, transparent); }
+.bh-chip-wound-2 { color: #e9933b; }
+.bh-chip-wound-2 .bh-chip-glyph { text-shadow: 0 0 4px rgba(233, 147, 59, 0.5); }
+.bh-chip-wound-3 { color: #ff4747; }
+.bh-chip-wound-3 .bh-chip-glyph { text-shadow: 0 0 4px rgba(255, 71, 71, 0.55); }
+.bh-chip-glyph { flex-shrink: 0; }
+
+/* Bleeding indicator — the wound chip's ✚ glyph pulses with a saturated
+   red halo. Settled middle ground: slightly larger base, modest scale +
+   opacity pulse, still distinct from a STATIC red ✚ but not jumpy. */
+.bh-chip-bleeding .bh-chip-glyph {
+    display: inline-block;
+    color: #ff3838 !important;
+    font-size: 1.12em;
+    line-height: 1;
+    text-shadow:
+        0 0 4px rgba(255, 56, 56, 0.9),
+        0 0 9px rgba(255, 56, 56, 0.55) !important;
+    animation: bh-bleed-pulse 1.3s ease-in-out infinite;
+    transform-origin: center;
+}
+@keyframes bh-bleed-pulse {
+    0%, 100% {
+        opacity: 0.78;
+        transform: scale(1);
+        text-shadow:
+            0 0 3px rgba(255, 56, 56, 0.65),
+            0 0 6px rgba(255, 56, 56, 0.3);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.1);
+        text-shadow:
+            0 0 5px rgba(255, 56, 56, 0.95),
+            0 0 11px rgba(255, 56, 56, 0.55),
+            0 0 16px rgba(255, 56, 56, 0.3);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .bh-chip-bleeding .bh-chip-glyph {
+        animation: none;
+        opacity: 1;
+        transform: scale(1.08);
+    }
+}
+
+/* ─── Verbose sub-row (Full view) ──────────────────────────────────────
+   Spells out what tooltips show: damage word, color word, severity word,
+   bleeding word. The whole row is hidden by default and forced onto a new
+   line (flex-basis 100%) under the chip text in Full view — keeps slot
+   cards the same width regardless of label length. */
+.bh-chip-verbose {
+    font-family: var(--bh-font-data);
+    font-size: 0.78em;
+    letter-spacing: 0.04em;
+    opacity: 0.75;
+    text-transform: lowercase;
+}
+/* Verbose row is no longer gated by Meta — each label inside has its own
+   layer gate (color → Color layer, damage label → always, sev/bleed → live
+   on wound chips that are themselves Wound-gated). Meta now only controls
+   species pill, layer indices, and multi-slot ⌖ tags. */
+.bh-chip-verbose-row {
+    display: flex;
+    flex-basis: 100%;            /* forces line break inside the wrapping chip */
+    flex-direction: column;      /* stack labels vertically — consistent placement
+                                    regardless of how many labels or how long;
+                                    we have length, not width, in slot cards. */
+    gap: 1px;
+    /* Indent past the dot + swatch so labels visually pair with the item text */
+    padding-left: 20px;
+    margin-top: 2px;
+}
+/* Layer ownership of verbose labels:
+     .bh-chip-verbose-dmg    → Damage layer
+     .bh-chip-verbose-color  → Color layer
+     .bh-chip-verbose-sev    → Wounds layer (cascades — wound chip is the gate)
+     .bh-chip-verbose-bleed  → Wounds layer (cascades — wound chip is the gate)
+   The per-label hide rules live alongside the other Damage/Color/Wounds rules
+   below (search "bh-hide-damage", etc.). The row hide rules below collapse
+   the container when every visible label would be gone — no orphan margin. */
+.bh-chip-verbose-dmg   { color: inherit; opacity: 0.85; }
+.bh-chip-verbose-color { opacity: 0.7; font-style: italic; }
+.bh-chip-verbose-sev   { color: inherit; font-weight: 600; opacity: 0.9; }
+.bh-chip-verbose-bleed {
+    color: var(--bh-wound);
+    font-weight: 600;
+    text-shadow: 0 0 4px rgba(255, 71, 71, 0.4);
+}
+/* Collapse the verbose row when every label that WOULD render is layer-hidden.
+   Three explicit cases cover all "no visible content left" combinations. */
+.beholder-panel.bh-hide-color.bh-hide-damage .bh-chip-verbose-row:not(:has(.bh-chip-verbose-sev, .bh-chip-verbose-bleed)) { display: none; }
+.beholder-panel.bh-hide-color:not(.bh-hide-damage) .bh-chip-verbose-row:not(:has(.bh-chip-verbose-dmg, .bh-chip-verbose-sev, .bh-chip-verbose-bleed)) { display: none; }
+.beholder-panel.bh-hide-damage:not(.bh-hide-color) .bh-chip-verbose-row:not(:has(.bh-chip-verbose-color, .bh-chip-verbose-sev, .bh-chip-verbose-bleed)) { display: none; }
+
+/* Wounds chips own their severity-dot decoration; sev dots and the verbose
+   sev word are both severity cues — keep dots for the visual signal, words
+   for the spelled-out tier. They render together when wounds layer is on,
+   disappear together when it's off (wound chip is hidden as a whole). */
+
+/* Multi-slot annotation — when a row covers >1 slot (sundress on 4 slots,
+   gown on chest+waist+legs). The chip still appears in every slot it covers
+   (testers prefer this), but the small ⌖N tag signals "this item also lives
+   in other cards" so readers don't think they're seeing duplicates. */
+.bh-chip-multi {
+    font-family: var(--bh-font-data);
+    font-size: 0.7em;
+    letter-spacing: 0.04em;
+    color: var(--bh-body);
+    opacity: 0.45;
+    margin-left: var(--bh-space-1);
+    padding: 0 4px;
+    border: 1px solid var(--bh-divider);
+    border-radius: 3px;
+    flex-shrink: 0;
+    align-self: center;
+    cursor: help;
+}
+.bh-chip-multi:hover { opacity: 0.85; border-color: var(--bh-border); }
+
+/* Per-chip damage bar (desktop only) — positioned at the CARD'S LEFT EDGE
+   (negative offset hops out of the chip's normal flow, into the card's
+   padding-left). Each bar's height matches its own chip exactly, so a
+   chest with three layered items shows three stacked bars at the card
+   edge — together they read as a single segmented "card border" that's
+   item-aware. Wounds get no bar (different concern).
+   Adjacent bars extend ±1px so they meet across the chip-gap, forming a
+   continuous left edge. Mobile digest uses chip-dots instead. */
+.bh-doll-grid .bh-chip {
+    position: relative;
+}
+.bh-doll-grid .bh-chip::before {
+    content: "";
+    position: absolute;
+    left: -9px;            /* card has padding-left: 9px → bar lands at card edge */
+    top: -1px;
+    bottom: -1px;
+    width: 3px;
+    background: var(--chip-bar, transparent);
+}
+.bh-doll-grid .bh-chip.bh-tier-0 { --chip-bar: var(--bh-tier-0); }
+.bh-doll-grid .bh-chip.bh-tier-1 { --chip-bar: var(--bh-tier-1); }
+.bh-doll-grid .bh-chip.bh-tier-2 { --chip-bar: var(--bh-tier-2); }
+.bh-doll-grid .bh-chip.bh-tier-3 { --chip-bar: var(--bh-tier-3); }
+.bh-doll-grid .bh-chip.bh-tier-4 { --chip-bar: var(--bh-tier-4); }
+/* Wound chips have no bar — gear damage is a different concern. */
+.bh-doll-grid .bh-chip-wound::before { display: none; }
+/* Right-column mirror — bars on the right edge (card has padding-right: 9px
+   on right-col cards). */
+.bh-doll-grid .bh-col-right .bh-chip::before { left: auto; right: -9px; }
+
+/* Layered worn chips: the bar is positioned on the WRAPPER (not the inner
+   chip), so it lands at the card's left edge instead of inside the wrapper
+   (where it was overlapping the layer-index gutter and hiding the 1/2/3).
+   The tier class is copied onto the wrapper at render time. */
+.bh-doll-grid .bh-chip-layered::before {
+    content: "";
+    position: absolute;
+    left: -9px;
+    top: -1px;
+    bottom: -1px;
+    width: 3px;
+    background: var(--chip-bar, transparent);
+}
+.bh-doll-grid .bh-chip-layered.bh-tier-0 { --chip-bar: var(--bh-tier-0); }
+.bh-doll-grid .bh-chip-layered.bh-tier-1 { --chip-bar: var(--bh-tier-1); }
+.bh-doll-grid .bh-chip-layered.bh-tier-2 { --chip-bar: var(--bh-tier-2); }
+.bh-doll-grid .bh-chip-layered.bh-tier-3 { --chip-bar: var(--bh-tier-3); }
+.bh-doll-grid .bh-chip-layered.bh-tier-4 { --chip-bar: var(--bh-tier-4); }
+/* Inner chip's bar is suppressed when wrapped, to avoid double drawing. */
+.bh-doll-grid .bh-chip-layered .bh-chip::before { display: none; }
+/* Right-column wrapper bar mirrors to the right edge. */
+.bh-doll-grid .bh-col-right .bh-chip-layered::before { left: auto; right: -9px; }
+
+/* Wound group divider — dashed hairline above the wounds sub-list so the
+   gear group and the wound group read as distinct sections inside one
+   slot card. */
+.bh-slot-wounds {
+    margin-top: var(--bh-space-2);
+    padding-top: var(--bh-space-2);
+    border-top: 1px dashed var(--bh-divider);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+/* Right-col chip content mirrors: dot/swatch/glyph end up on the right
+   (toward the silhouette in the middle), multi-slot tag flips to the left,
+   text still reads LTR inside its element. The row-reverse goes on the
+   head (the inner prefix line); the chip itself stays normal so the verbose
+   row stays BELOW the head, not above. */
+.bh-col-right .bh-chip-head { flex-direction: row-reverse; }
+/* Verbose sub-row indent flips for right-col: indent on the RIGHT (away from
+   the body), labels stacked vertically and right-aligned so they sit under
+   the item text as it appears in the mirrored layout. */
+.bh-col-right .bh-chip-verbose-row {
+    padding-left: 0;
+    padding-right: 20px;
+    align-items: flex-end;
+}
+
+/* Spanning-item section: a horizontal strip above the doll grid for items
+   that occupy multiple slots (sundress on chest+waist+legs renders once
+   here, not in every slot card). */
+.bh-spanning-section {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 6px;
+    margin: 4px 2px 6px;
+    padding: 4px 6px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px dashed rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+}
+.bh-spanning-label {
+    font-size: 0.7em;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    opacity: 0.45;
+    margin-right: 2px;
+}
+.bh-chip-spanning {
+    padding: 2px 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    cursor: help;
+}
+.bh-chip-spanning .bh-chip-slots {
+    font-size: 0.78em;
+    opacity: 0.5;
+    font-style: italic;
+    margin-left: 2px;
+}
+
+/* (Obsolete single-row card styling removed — replaced by .bh-slot-card +
+   .bh-chip layout above. Left intentionally so the file is shorter.) */
+
+/* (Right-column mirroring moved into .bh-slot-card / .bh-chip rules above.) */
+
+/* Silhouette — scales with the panel's --bh-ui-scale knob. */
+.bh-silhouette {
+    width: calc(140px * var(--bh-ui-scale, 1));
+    height: calc(440px * var(--bh-ui-scale, 1));
+    display: block;
+    color: var(--bh-body);
+}
+.bh-body-fill {
+    fill: var(--bh-body-soft);
+    stroke: var(--bh-body);
+    stroke-width: 1;
+    stroke-opacity: 0.45;
+}
+
+.bh-wound-marker .bh-wound-dot {
+    fill: var(--bh-wound);
+    stroke: rgba(0, 0, 0, 0.5);
+    stroke-width: 0.8;
+    filter: drop-shadow(0 0 3px rgba(255, 60, 60, 0.55));
+    /* Animation budget ≤1 at a time (per UX research). A static dot is
+       legible on its own; reserve motion for future severity tiers
+       (critical/bleeding) which will animate exclusively. */
+}
+.bh-wound-marker .bh-wound-count {
+    font-size: 7px;
+    fill: #fff;
+    font-weight: 700;
+    pointer-events: none;
+}
+
+/* Held-item marker on the silhouette hand — just the ✦ glyph, no circle.
+   pointer-events: none so the hand part underneath stays hoverable for
+   the hover-link with the slot card. */
+.bh-hold-marker {
+    pointer-events: none;
+}
+.bh-hold-marker .bh-hold-icon {
+    font-size: 8px;
+    fill: var(--bh-holding);
+    font-weight: 700;
+    filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.65));
+}
+
+/* (Gauge CSS removed — the only consumer was the stamina gauge, which is no
+   longer tracked. A defensive .bh-char-head .bh-gauge{display:none} is
+   appended below to hide any residual gauge element.) */
+
+/* Old .bh-wounds-block (bottom <details> list) removed — wounds are now
+   first-class slot rows alongside worn/holding (see .bh-row-wound below). */
+
+/* Viewer-perspective hint below the silhouette: the figure faces the user,
+   so character-right renders on viewer-left. Without this, ~30% of first-
+   time testers think the model swapped hands. */
+.bh-figure {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--bh-space-2);
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+}
+.bh-pov-hint {
+    display: flex;
+    align-items: center;
+    gap: var(--bh-space-1);
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-meta);
+    letter-spacing: 0.16em;
+    opacity: var(--bh-mute-strong);
+    text-transform: uppercase;
+    cursor: help;
+    padding-top: var(--bh-space-1);
+    white-space: nowrap;
+}
+.bh-pov-hint:hover { opacity: var(--bh-mute-soft); }
+.bh-pov-axis { opacity: 0.5; letter-spacing: 0; }
+.bh-pov-note {
+    font-family: inherit;
+    font-size: 0.92em;
+    letter-spacing: 0.04em;
+    text-transform: lowercase;
+    font-style: italic;
+    margin-left: var(--bh-space-1);
+    opacity: 0.85;
+}
+
+/* ─── Body-part tinting on the silhouette ────────────────────────────── */
+/* Per-part visual encoding:
+     STROKE (ring outside the part) = armor damage tier
+     FILL   (interior of the part)  = wound severity
+   `paint-order: stroke` shifts the fill to paint OVER the inner half of
+   the stroke, so the visible stroke ring sits entirely OUTSIDE the fill —
+   no muddled blend when armor and wound are both red. Thicker stroke at
+   high tiers makes the ring unambiguous. */
+.bh-part .bh-body-fill {
+    paint-order: stroke fill;
+    transition: stroke 0.2s ease, stroke-width 0.2s ease, fill 0.2s ease;
+}
+.bh-part .bh-body-fill.bh-part-tier-2 { stroke: var(--bh-tier-2); stroke-width: 3.0; stroke-opacity: 1; }
+.bh-part .bh-body-fill.bh-part-tier-3 { stroke: var(--bh-tier-3); stroke-width: 4.0; stroke-opacity: 1; }
+.bh-part .bh-body-fill.bh-part-tier-4 { stroke: var(--bh-tier-4); stroke-width: 5.0; stroke-opacity: 1; }
+
+/* Body-part wound fill — tier by MAX SEVERITY. Hue + opacity both shift so
+   the three severities are unambiguous at a glance:
+     minor    = soft amber, ~20% — a passing visual nudge ("there's a wound")
+     serious  = clear orange, ~40% — body part is meaningfully hurt
+     critical = saturated red, ~65% — alarming, draws the eye
+   Critical also gets a thin red stroke overlay so it pops even when the
+   part is small (eyes, ears). */
+/* Wound fill — interior tint by severity. Stroke is reserved for ARMOR;
+   wound severity reads from the fill color (no stroke override). This
+   keeps the two channels orthogonal: ring = armor, interior = body. */
+.bh-part .bh-body-fill.bh-part-wound-1 {
+    fill: color-mix(in srgb, var(--bh-chroma) 20%, transparent);
+}
+.bh-part .bh-body-fill.bh-part-wound-2 {
+    fill: rgba(233, 147, 59, 0.42);
+}
+.bh-part .bh-body-fill.bh-part-wound-3 {
+    fill: rgba(255, 71, 71, 0.65);
+}
+
+/* Missing / acquired-loss body part: gray vertical hatch + dashed outline.
+   Distinct from off-body (species lacks this part — handled in row layer with
+   ⌀ glyph) and from empty (no item — handled by ghost card). */
+.bh-part .bh-body-fill.bh-part-missing {
+    fill: url(#bh-missing-pattern);
+    stroke: rgba(140, 140, 140, 0.6) !important;
+    stroke-opacity: 0.7 !important;
+    stroke-dasharray: 4 3;
+}
+
+/* Hover any part to see slot + damage + wounds tooltip via <title>. */
+.bh-part { cursor: help; }
+.bh-part:hover .bh-body-fill { filter: brightness(1.15); }
+
+/* Hover-link: visually pair a body part with its slot row(s) and vice versa.
+   !important here because the hide-damage / hide-wounds rules above use
+   !important to neutralize tier strokes and wound fills — without it the
+   hover-link highlight gets stomped in every view except Full.
+
+   The fill is explicitly mixed with the accent color (not just a brightness
+   filter) so the highlight reads as a tinted REGION rather than a bright
+   outline. Critical on slim slots like legs/arms where the silhouette's
+   pale soft-body fill barely shifts under a brightness filter alone. */
+.bh-part.bh-hover-link .bh-body-fill {
+    fill: var(--bh-accent, var(--primary)) !important;
+    fill-opacity: 0.55 !important;
+    filter: drop-shadow(0 0 5px var(--bh-accent, var(--primary))) !important;
+    stroke: var(--bh-accent, var(--primary)) !important;
+    stroke-width: 2 !important;
+    stroke-opacity: 0.95 !important;
+}
+.bh-slot-card.bh-hover-link {
+    background: color-mix(in srgb, var(--bh-accent) 10%, transparent);
+    border-color: color-mix(in srgb, var(--bh-accent) 55%, transparent);
+}
+.bh-slot-card.bh-hover-link::before {
+    box-shadow: 0 0 6px var(--bh-accent, var(--primary));
+}
+.bh-chip-spanning.bh-hover-link {
+    background: color-mix(in srgb, var(--bh-accent) 14%, transparent);
+    border-color: color-mix(in srgb, var(--bh-accent) 60%, transparent);
+}
+
+/* Spine line — back-view anchor so users know they're seeing the back. */
+.bh-spine-line {
+    stroke: var(--bh-body);
+    stroke-width: 0.8;
+    stroke-opacity: 0.35;
+    stroke-dasharray: 2 3;
+    fill: none;
+}
+
+/* Count badges on body parts: ×N for multi-wounds, +N for layered clothes.
+   Solves the "1 wound vs 3 wounds look identical in fill intensity" and
+   "I can't tell if there's a cloak over my chest tunic" problems. */
+.bh-count-badge { pointer-events: none; }
+.bh-badge-circle { stroke: rgba(0, 0, 0, 0.45); stroke-width: 0.6; }
+.bh-badge-wound-bg  { fill: var(--bh-wound); filter: drop-shadow(0 0 3px rgba(255, 60, 60, 0.55)); }
+.bh-badge-layers-bg { fill: var(--bh-holding); filter: drop-shadow(0 0 3px color-mix(in srgb, var(--bh-chroma) 40%, transparent)); }
+.bh-badge-text {
+    font-size: 7.5px;
+    font-weight: 700;
+    fill: #fff;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    font-family: inherit;
+}
+
+/* Species family tag (top of silhouette, only shown for non-humanoid). */
+.bh-family-tag {
+    fill: var(--bh-accent);
+    font-size: 7px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    opacity: 0.65;
+    font-family: inherit;
+}
+
+/* Stroke-only body parts (digitigrade legs, serpentine tail) — inherit
+   tier/wound strokes from .bh-part-tier-* / .bh-part-wound-*. */
+.bh-silhouette .bh-tail,
+.bh-silhouette .bh-digi-leg {
+    stroke: var(--bh-body);
+    stroke-opacity: 0.45;
+}
+
+/* Wings (v0.4) — drawn behind the body in the SVG layering, slightly
+   reduced opacity so they read as "behind / further from camera"
+   rather than competing with the torso. The full saturation comes
+   back on hover-link. Feathered vs leathery just change the path
+   geometry, not the visual treatment. */
+.bh-silhouette .bh-wings {
+    opacity: 0.72;
+}
+.bh-silhouette .bh-wings.bh-part-tier-2,
+.bh-silhouette .bh-wings.bh-part-tier-3,
+.bh-silhouette .bh-wings.bh-part-tier-4 {
+    opacity: 0.9;
+}
+.bh-silhouette .bh-tail.bh-part-tier-2,
+.bh-silhouette .bh-digi-leg.bh-part-tier-2 { stroke: var(--bh-tier-2); stroke-opacity: 1; }
+.bh-silhouette .bh-tail.bh-part-tier-3,
+.bh-silhouette .bh-digi-leg.bh-part-tier-3 { stroke: var(--bh-tier-3); stroke-opacity: 1; }
+.bh-silhouette .bh-tail.bh-part-tier-4,
+.bh-silhouette .bh-digi-leg.bh-part-tier-4 { stroke: var(--bh-tier-4); stroke-opacity: 1; }
+
+/* Off-silhouette slot row hint: a serpentine character's worn boot still
+   shows in the row list, but flagged so users know it doesn't appear on
+   the body diagram. */
+.bh-row-off-body {
+    opacity: 0.6;
+}
+.bh-off-body {
+    display: inline-block;
+    margin-left: 4px;
+    color: var(--bh-tier-2);
+    font-size: 0.85em;
+    opacity: 0.8;
+    cursor: help;
+}
+
+/* ─── Onboarding popover (first-impression explainer) ─────────────────── */
+.beholder-onboard {
+    background: var(--SmartThemeBlurTintColor, rgba(20, 20, 24, 0.95));
+    color: var(--SmartThemeBodyColor, #e0e0e0);
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.18));
+    border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    font-size: 0.875em;
+    line-height: 1.55;
+    animation: bh-onboard-in 0.25s ease-out;
+}
+.beholder-onboard .bh-onboard-title {
+    font-family: Cinzel, "Trajan Pro", Georgia, serif;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    font-size: 1.05em;
+}
+@keyframes bh-onboard-in {
+    from { opacity: 0; transform: scale(0.95); }
+    to   { opacity: 1; transform: scale(1); }
+}
+.bh-onboard-arrow {
+    position: absolute;
+    top: 18px;
+    width: 0; height: 0;
+    border-top: 8px solid transparent;
+    border-bottom: 8px solid transparent;
+}
+.beholder-onboard[data-side="right"] .bh-onboard-arrow {
+    right: -8px;
+    border-left: 8px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.18));
+}
+.beholder-onboard[data-side="left"] .bh-onboard-arrow {
+    left: -8px;
+    border-right: 8px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.18));
+}
+.bh-onboard-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.1));
+}
+.bh-onboard-title {
+    font-weight: 700;
+    color: var(--bh-accent, var(--primary));
+    letter-spacing: 0.5px;
+}
+.bh-onboard-close {
+    cursor: pointer;
+    opacity: 0.55;
+    transition: opacity 0.15s;
+}
+.bh-onboard-close:hover { opacity: 1; }
+.bh-onboard-body {
+    padding: 10px 12px;
+}
+.bh-onboard-body b { color: var(--bh-accent, var(--primary)); font-weight: 600; }
+.bh-onboard-tips {
+    margin: 8px 0 0;
+    padding: 0 0 0 18px;
+    font-size: 0.92em;
+}
+.bh-onboard-tips li {
+    margin: 3px 0;
+    color: var(--SmartThemeBodyColor, #d0d0d0);
+    opacity: 0.85;
+}
+.bh-onboard-foot {
+    padding: 8px 12px 10px;
+    text-align: right;
+    border-top: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.06));
+}
+.bh-onboard-dismiss {
+    background: var(--bh-accent, var(--primary));
+    color: #fff;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.95em;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+}
+.bh-onboard-dismiss:hover { filter: brightness(1.1); }
+
+/* ─── Inline per-message delta badges ─────────────────────────────────── */
+/* Annotates each AI message with what the extractor saw change. Lives in
+   the chat DOM, appended after .mes_text. Shows testers that the extractor
+   ran on this turn; great debug surface for the model itself. */
+.beholder-msg-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 4px 0 6px;
+    padding: 4px 8px;
+    border-left: 2px solid var(--bh-accent, var(--primary));
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 0 4px 4px 0;
+    font-size: 0.78em;
+    line-height: 1.45;
+}
+.beholder-msg-noop {
+    color: var(--SmartThemeBodyColor, #aaa);
+    opacity: 0.4;
+    font-style: italic;
+    font-size: 0.75em;
+}
+.bh-msg-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 7px 2px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    color: var(--SmartThemeBodyColor, #d0d0d0);
+}
+.bh-msg-char {
+    font-weight: 600;
+    color: var(--SmartThemeEmColor, var(--bh-chroma, var(--primary)));
+    font-size: 0.92em;
+}
+.bh-msg-text { opacity: 0.92; }
+
+/* Semantic colors per delta kind */
+.bh-msg-add   { border-color: rgba(106, 212, 139, 0.5); color: #6ad48b; }
+.bh-msg-clear { border-color: rgba(233, 147, 59, 0.5);  color: #e9933b; }
+.bh-msg-hold  { border-color: color-mix(in srgb, var(--bh-chroma) 50%, transparent); color: var(--bh-chroma); }
+.bh-msg-wound { border-color: rgba(255, 82, 82, 0.55);  color: #ff7676; }
+.bh-msg-heal  { border-color: rgba(120, 220, 255, 0.5); color: #78dcff; }
+.bh-msg-mod   { border-color: rgba(136, 170, 255, 0.5); color: #aac3ff; }
+.bh-msg-add .bh-msg-char,
+.bh-msg-clear .bh-msg-char,
+.bh-msg-hold .bh-msg-char,
+.bh-msg-wound .bh-msg-char,
+.bh-msg-heal .bh-msg-char,
+.bh-msg-mod .bh-msg-char {
+    color: inherit;
+    opacity: 0.85;
+}
+
+/* ─── Front / Back view toggle ──────────────────────────────────────────
+   Segmented pill toggle. The whole control is one button (a single click
+   flips the view), but visually it reads as a Front | Back switch with
+   the active label highlighted. */
+.bh-figure-controls {
+    display: flex;
+    justify-content: center;
+    margin-top: var(--bh-space-2);
+}
+.bh-view-toggle {
+    background: var(--bh-surface-1);
+    color: var(--bh-body);
+    border: 1px solid var(--bh-border);
+    border-radius: 999px;
+    padding: var(--bh-space-1) var(--bh-space-3);
+    font: inherit;
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-secondary);
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--bh-space-2);
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+.bh-view-toggle:hover {
+    background: var(--bh-surface-2);
+    border-color: var(--bh-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--bh-accent) 10%, transparent);
+}
+.bh-view-front-label,
+.bh-view-back-label {
+    transition: color 0.15s, opacity 0.15s;
+    opacity: var(--bh-mute-strong);
+}
+.bh-view-active {
+    opacity: 1;
+    color: var(--SmartThemeEmColor, var(--bh-chroma, var(--primary)));
+    font-weight: 600;
+}
+.bh-view-sep {
+    opacity: 0.35;
+    font-size: 0.9em;
+    letter-spacing: 0;
+}
+
+/* Damage-tier legend popover (toggled by ? icon in panel header). Solves
+   the "is this damage or wound severity?" first-impression confusion. */
+.beholder-legend {
+    padding: var(--bh-space-3) var(--bh-space-3) var(--bh-space-3) var(--bh-space-4);
+    border-bottom: 1px solid var(--bh-divider);
+    font-size: var(--bh-text-secondary);
+    background: var(--bh-surface-1);
+}
+.beholder-legend[hidden] { display: none; }
+.bh-legend-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0;
+    line-height: 1.3;
+}
+.bh-legend-bar {
+    display: inline-block;
+    width: 3px;
+    height: 14px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+.bh-legend-bar.bh-tier-0 { background: var(--bh-tier-0); }
+.bh-legend-bar.bh-tier-1 { background: var(--bh-tier-1); }
+.bh-legend-bar.bh-tier-2 { background: var(--bh-tier-2); }
+.bh-legend-bar.bh-tier-3 { background: var(--bh-tier-3); }
+.bh-legend-bar.bh-tier-4 { background: var(--bh-tier-4); }
+.bh-legend-bar.bh-tier-holding { background: var(--bh-holding); }
+.bh-legend-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--bh-wound);
+    box-shadow: 0 0 4px var(--bh-wound);
+    margin-left: 0;
+    flex-shrink: 0;
+}
+
+/* Height-only resize handle (bottom edge). Width is intentionally locked —
+   changing it throws off the doll grid columns + chip layouts. The handle
+   is a thin horizontal grip with ns-resize cursor centered on the bottom
+   border so it reads as "stretch downward" not "resize corner". */
+.beholder-resize-handle {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 2px;
+    width: 44px;
+    height: 5px;
+    cursor: ns-resize;
+    z-index: 50;
+    border-radius: 999px;
+    background: var(--bh-border);
+    opacity: 0.55;
+    transition: opacity 0.15s, background 0.15s, width 0.15s;
+}
+.beholder-resize-handle:hover {
+    opacity: 1;
+    background: var(--bh-accent, var(--primary));
+    width: 60px;
+}
+.beholder-panel.beholder-resizing { user-select: none; }
+
+/* ─── Mobile digest ────────────────────────────────────────────────────
+   The narrow-width replacement for the doll grid. Four sections in
+   priority order: Wounds → Held → Worn → State (missing/bare). Each row
+   is one chip + a faint slot annotation on the right. */
+.bh-digest-section {
+    margin-bottom: var(--bh-space-3);
+}
+.bh-digest-section:last-child { margin-bottom: 0; }
+.bh-digest-heading {
+    display: flex;
+    align-items: baseline;
+    gap: var(--bh-space-2);
+    margin: 0 0 var(--bh-space-2);
+    padding-bottom: var(--bh-space-1);
+    border-bottom: 1px solid var(--bh-divider);
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-secondary);
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--bh-body);
+    opacity: var(--bh-mute-soft);
+}
+.bh-digest-count {
+    font-size: 0.85em;
+    opacity: 0.6;
+    font-weight: 500;
+    margin-left: auto;
+}
+.bh-digest-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--bh-space-1);
+}
+
+/* Grouped worn list: each anatomical region (head, torso, arms, legs) is a
+   sub-block with its own subheading + nested list. Visually separates a
+   long worn list into 4 scannable chunks instead of one wall. */
+.bh-digest-list-grouped {
+    gap: var(--bh-space-3);
+}
+.bh-digest-group {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.bh-digest-subhead {
+    display: flex;
+    align-items: center;
+    gap: var(--bh-space-2);
+    font-family: var(--bh-font-display);
+    font-size: var(--bh-text-secondary);
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    color: var(--SmartThemeEmColor, var(--bh-chroma, var(--primary)));
+    opacity: 0.85;
+    margin: 0 0 var(--bh-space-2);
+    padding: var(--bh-space-1) 0 var(--bh-space-1) var(--bh-space-2);
+    border-left: 2px solid var(--SmartThemeEmColor, var(--bh-chroma, var(--primary)));
+    background: linear-gradient(90deg, color-mix(in srgb, var(--bh-chroma) 6%, transparent), transparent 60%);
+    border-radius: 0 4px 4px 0;
+}
+.bh-digest-group-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--bh-space-1);
+}
+.bh-digest-row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--bh-space-2);
+    padding: var(--bh-space-1) 0;
+    line-height: 1.35;
+}
+.bh-digest-row .bh-chip {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.bh-digest-slot {
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-meta);
+    text-transform: lowercase;
+    letter-spacing: 0.06em;
+    opacity: 0.55;
+    flex-shrink: 0;
+    text-align: right;
+    align-self: center;
+}
+.bh-digest-layer {
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-meta);
+    font-weight: 600;
+    color: var(--SmartThemeEmColor, var(--bh-chroma, var(--primary)));
+    opacity: 0.65;
+    margin-left: var(--bh-space-1);
+    flex-shrink: 0;
+}
+.bh-digest-flag {
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-meta);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    padding: 2px 8px;
+    border: 1px solid var(--bh-border);
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+.bh-digest-flag-missing {
+    color: rgba(160, 160, 160, 0.95);
+    border-color: rgba(140, 140, 140, 0.4);
+    background: rgba(140, 140, 140, 0.06);
+}
+.bh-digest-flag-bare {
+    color: rgba(220, 188, 156, 0.95);
+    border-color: rgba(220, 188, 156, 0.4);
+    background: rgba(220, 188, 156, 0.06);
+}
+.bh-digest-row-flag {
+    justify-content: space-between;
+}
+/* Section-level color cues, semantic (not nth-of-type — those break when an
+   earlier section is filtered out). */
+.bh-digest-section-wounds .bh-digest-heading { color: var(--bh-wound); }
+.bh-digest-section-held   .bh-digest-heading { color: var(--bh-holding); }
+
+/* ─── Mobile digest × view-ladder filters ──────────────────────────────
+   The doll-grid selectors above don't fire in mobile (the grid is
+   display:none). These mirror the same hide semantics for the digest. */
+
+/* hide-wounds: drop the whole wounds section + heading + count. */
+.beholder-panel.bh-hide-wounds .bh-digest-section-wounds {
+    display: none !important;
+}
+
+/* hide-damage: tier-colored heading on wounds is fine (it's wound color,
+   not damage). But neutralize held heading's gold "holding" tint so the
+   visual budget matches the wider hide-damage view. */
+.beholder-panel.bh-hide-damage .bh-digest-section-held .bh-digest-heading {
+    color: var(--bh-body) !important;
+    opacity: var(--bh-mute-soft);
+}
+
+/* hide-meta: drop multi-slot tag inside digest rows (already covered by
+   .bh-chip-multi rule above, no extra rule needed here). */
+
+
+/* ─── Hide color ─────────────────────────────────────────────────────────
+   The chip swatch (the small color square next to each item name) is now
+   IDENTITY — it always renders, even with this layer off, because color is
+   often the cheapest way to distinguish one of two similar items at a glance
+   ("the *red* cloak vs the *blue* cloak"). The Color layer instead toggles
+   the verbose color label inside the chip's wrapping row ("rust-red leather"
+   etc.). Identity stays visible; verbose annotation is opt-in. */
+.beholder-panel.bh-hide-color .bh-chip-verbose-color {
+    display: none !important;
+}
+
+/* ─── Hide wounds — drop wound chips + body-part red tint ──────────────── */
+.beholder-panel.bh-hide-wounds .bh-chip-wound {
+    display: none !important;
+}
+/* Restore the default body-part fill / stroke (var(--bh-body-soft) is the
+   default `.bh-body-fill` color; var(--bh-body) is text-near-white and was
+   the white-out bug). */
+.beholder-panel.bh-hide-wounds .bh-body-fill.bh-part-wound-1,
+.beholder-panel.bh-hide-wounds .bh-body-fill.bh-part-wound-2,
+.beholder-panel.bh-hide-wounds .bh-body-fill.bh-part-wound-3 {
+    fill: var(--bh-body-soft) !important;
+    stroke: var(--bh-body) !important;
+    stroke-opacity: 0.45 !important;
+    filter: none !important;
+}
+/* Compact mode equivalent */
+.beholder-panel.bh-hide-wounds .beholder-wound,
+.beholder-panel.bh-hide-wounds .beholder-row:has(.beholder-wound) { display: none !important; }
+
+/* ─── Hide gear damage tier — every damage visual neutralized ─────────── */
+.beholder-panel.bh-hide-damage .bh-chip-verbose-dmg { display: none !important; }
+.beholder-panel.bh-hide-damage .bh-chip-dot { display: none !important; }
+.beholder-panel.bh-hide-damage .bh-chip.bh-tier-0,
+.beholder-panel.bh-hide-damage .bh-chip.bh-tier-1,
+.beholder-panel.bh-hide-damage .bh-chip.bh-tier-2,
+.beholder-panel.bh-hide-damage .bh-chip.bh-tier-3,
+.beholder-panel.bh-hide-damage .bh-chip.bh-tier-4 {
+    color: inherit !important;
+}
+/* Per-chip damage bar — kill the chip-bar CSS var so the ::before becomes
+   transparent. Covers both inline chips AND the layered-wrapper bars. */
+.beholder-panel.bh-hide-damage .bh-chip,
+.beholder-panel.bh-hide-damage .bh-chip-layered {
+    --chip-bar: transparent !important;
+}
+/* Body-part armor-tier stroke off */
+.beholder-panel.bh-hide-damage .bh-body-fill.bh-part-tier-2,
+.beholder-panel.bh-hide-damage .bh-body-fill.bh-part-tier-3,
+.beholder-panel.bh-hide-damage .bh-body-fill.bh-part-tier-4 {
+    stroke: none !important;
+    stroke-width: 0 !important;
+}
+.beholder-panel.bh-hide-damage .bh-silhouette .bh-tail.bh-part-tier-2,
+.beholder-panel.bh-hide-damage .bh-silhouette .bh-tail.bh-part-tier-3,
+.beholder-panel.bh-hide-damage .bh-silhouette .bh-tail.bh-part-tier-4,
+.beholder-panel.bh-hide-damage .bh-silhouette .bh-digi-leg.bh-part-tier-2,
+.beholder-panel.bh-hide-damage .bh-silhouette .bh-digi-leg.bh-part-tier-3,
+.beholder-panel.bh-hide-damage .bh-silhouette .bh-digi-leg.bh-part-tier-4 {
+    stroke-opacity: 0 !important;
+}
+/* Held items: drop the gold glyph tint to neutral too */
+.beholder-panel.bh-hide-damage .bh-chip-hold .bh-chip-glyph {
+    color: inherit !important;
+    text-shadow: none !important;
+}
+/* ─── Backfill status strip ──────────────────────────────────────────────
+   Sits between the header and the layer bar. Two modes — offer banner (on
+   chat change, before the run) and progress strip (during the run). Quiet
+   surface tint + thin divider so it reads as system chrome, not a chip.    */
+.beholder-backfill-status {
+    padding: var(--bh-space-2) var(--bh-space-3);
+    /* Gold left-edge + faint tint so this reads as the same CTA family as the
+       no-model banner (which sits directly below it). */
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--bh-accent) 10%, transparent),
+        color-mix(in srgb, var(--bh-accent) 2%, transparent) 60%,
+        transparent
+    );
+    border-bottom: 1px solid color-mix(in srgb, var(--bh-accent) 40%, transparent);
+    box-shadow: inset 3px 0 0 var(--bh-gold-deep);
+    font-size: var(--bh-text-secondary);
+}
+.beholder-backfill-status[hidden] { display: none; }
+.bh-bf-progress {
+    display: flex;
+    align-items: center;
+    gap: var(--bh-space-3);
+    flex-wrap: wrap;
+}
+.bh-bf-text { flex: 1 1 auto; opacity: 0.85; line-height: 1.45; }
+.beholder-backfill-status .bh-btn {
+    padding: 7px 14px;
+    font-size: var(--bh-text-secondary);
+}
+.bh-bf-bar {
+    flex: 0 1 120px;
+    height: 6px;
+    background: var(--bh-divider);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.bh-bf-bar-fill {
+    display: block;
+    height: 100%;
+    background: var(--bh-accent, var(--primary));
+    transition: width 0.2s ease-out;
+}
+
+/* ─── Backfill split-button + menu ───────────────────────────────────────
+   Header "history" control is a 2-part split button: clock icon (default
+   action) + caret (opens a small dropdown menu with the less-frequent
+   ops — re-seed-only, rebuild-from-scratch). Menu is absolute-positioned
+   so the panel layout doesn't reflow when it opens. */
+.beholder-backfill-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    position: relative;
+}
+.beholder-backfill-group .beholder-backfill-more {
+    /* The click handler is on this element, so its box IS the hit target. It used
+       to be font-size:0.7em + padding:0 2px — a near-unclickable sliver you had to
+       hit pixel-perfect. Give it a real, comfortable button-sized target. */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.82em;
+    line-height: 1;
+    min-width: 20px;
+    min-height: 22px;
+    padding: 4px 6px;
+    cursor: pointer;
+    border-radius: 5px;
+    transition: background .12s ease, color .12s ease;
+}
+.beholder-backfill-group .beholder-backfill-more:hover {
+    background: var(--bh-surface-2, rgba(255, 255, 255, 0.09));
+    color: var(--bh-accent, var(--primary));
+}
+.beholder-backfill-group.bh-menu-open .beholder-backfill-more {
+    opacity: 1;
+    color: var(--bh-accent, var(--primary));
+}
+
+.beholder-bf-menu {
+    /* Rendered to <body> + fixed-positioned by panel.js at the caret, so the
+       panel's overflow:hidden + container-type can't clip it. The gold brand
+       tokens are scoped to .beholder-panel; this menu lives on <body>, so it
+       re-declares the ones it + its items use (otherwise it renders unbranded). */
+    --bh-accent: var(--primary);
+    --bh-chroma: var(--marinara-chat-chrome-accent, var(--primary));
+    --bh-gold: var(--bh-chroma);
+    --bh-gold-deep: var(--bh-accent);
+    --bh-border: rgba(255, 255, 255, 0.18);
+    --bh-surface-2: rgba(255, 255, 255, 0.07);
+    --bh-mute-soft: 0.7;
+    position: fixed;
+    z-index: 10001;
+    min-width: 240px;
+    max-width: min(320px, calc(100vw - 16px));
+    padding: 4px;
+    /* Match the panel's surface exactly (host theme tint), not a hardcoded dark. */
+    background: var(--SmartThemeBlurTintColor, rgba(20, 20, 24, 0.92));
+    border: 1px solid var(--bh-border);
+    border-radius: 8px;
+    box-shadow: rgba(0, 0, 0, 0.55) 0 8px 28px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    color: var(--SmartThemeBodyColor, #cfd2d6);
+    font-size: 0.875em;
+}
+/* Gold top hairline — matches the .beholder-tools-menu header dropdown. */
+.beholder-bf-menu::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 1px;
+    border-radius: 8px 8px 0 0;
+    background: linear-gradient(90deg, var(--bh-gold-deep), color-mix(in srgb, var(--bh-accent) 35%, transparent) 40%, transparent 80%);
+    opacity: 0.75;
+}
+.beholder-bf-menu .bh-bf-mode {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 9px;
+    width: 100%;
+    padding: 9px 11px;
+    background: transparent;
+    border: none;
+    border-radius: 5px;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+    line-height: 1.35;
+    transition: background 0.12s;
+}
+/* Gold leading icon — the brand's accent, same as the tools (⋯) menu items. */
+.beholder-bf-menu .bh-bf-mode > i {
+    flex-shrink: 0;
+    width: 16px;
+    margin-top: 2px;
+    text-align: center;
+    color: var(--bh-gold-deep);
+}
+.beholder-bf-menu .bh-bf-mode-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.beholder-bf-menu .bh-bf-mode:hover,
+.beholder-bf-menu .bh-bf-mode:focus-visible {
+    background: var(--bh-surface-2);
+    outline: none;
+}
+.beholder-bf-menu .bh-bf-mode-title {
+    font-weight: 600;
+    color: var(--SmartThemeBodyColor, #e6e6e6);
+}
+.beholder-bf-menu .bh-bf-mode-sub {
+    opacity: var(--bh-mute-soft);
+    font-size: 0.9em;
+}
+.beholder-bf-menu .bh-bf-mode-danger > i,
+.beholder-bf-menu .bh-bf-mode-danger .bh-bf-mode-title {
+    color: #ff9888;
+}
+.beholder-bf-menu .bh-bf-mode-danger:hover .bh-bf-mode-title {
+    color: #ffb0a0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Gold brand overlay — buttons, header tools, paired grid, layout switch,
+   bottom-sheet editor, view overlays (settings / doctor / inspector / help),
+   the desktop slot editor, slot lock/edit decoration, and toasts. All of
+   these read from the gold + surface + space tokens declared on
+   .beholder-panel above.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Quiet brand mark before the panel title — a small filled lens glyph. */
+.beholder-panel-title::before {
+    content: "◉";
+    color: var(--bh-gold-deep);
+    margin-right: 0.45em;
+    font-size: 0.82em;
+    text-shadow: color-mix(in srgb, var(--bh-accent) 55%, transparent) 0 0 9px;
+    vertical-align: 0.06em;
+}
+
+/* Defensive: hide any residual char-head gauge element (stamina retired). */
+.beholder-panel .bh-char-head .bh-gauge { display: none !important; }
+
+/* Idle (untracked) facial features on the silhouette render faintly so the
+   face still reads as a face even when no eye/ear/mouth slot is populated. */
+.bh-silhouette .bh-face-idle { fill: rgba(207, 210, 214, 0.1); stroke-opacity: 0.28; }
+
+/* Onboarding popover — gold restyle (higher-specificity overrides of the
+   neutral defaults above). */
+.beholder-onboard .bh-onboard-title {
+    color: var(--bh-gold-deep, var(--bh-accent, var(--primary)));
+    font-family: "Cinzel", "Trajan Pro", "Georgia", serif;
+}
+.beholder-onboard .bh-onboard-body b { color: var(--bh-chroma, var(--primary)); }
+.beholder-onboard .bh-onboard-dismiss {
+    background: linear-gradient(160deg, color-mix(in srgb, var(--bh-accent) 28%, transparent), color-mix(in srgb, var(--bh-accent) 10%, transparent));
+    border: 1px solid color-mix(in srgb, var(--bh-accent) 60%, transparent);
+    color: var(--bh-chroma, var(--primary));
+}
+.beholder-onboard .bh-onboard-dismiss:hover {
+    filter: none;
+    box-shadow: color-mix(in srgb, var(--bh-accent) 25%, transparent) 0 4px 18px;
+}
+
+/* ─── Button family ──────────────────────────────────────────────────────
+   Shared pill button used across the view overlays + editors. */
+.bh-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 12px;
+    border-radius: 7px;
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-secondary);
+    letter-spacing: 0.05em;
+    border: 1px solid var(--bh-border);
+    background: var(--bh-surface-1);
+    color: var(--bh-body);
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s, transform 0.1s;
+}
+.bh-btn:active { transform: scale(0.97); }
+.bh-btn:hover {
+    border-color: var(--bh-gold-deep);
+    color: var(--SmartThemeBodyColor, #e8eaee);
+}
+.bh-btn-primary {
+    background: linear-gradient(160deg, color-mix(in srgb, var(--bh-accent) 24%, transparent), color-mix(in srgb, var(--bh-accent) 7%, transparent));
+    border-color: color-mix(in srgb, var(--bh-accent) 60%, transparent);
+    color: var(--bh-chroma, var(--primary));
+}
+.bh-btn-primary:hover {
+    box-shadow: color-mix(in srgb, var(--bh-accent) 22%, transparent) 0 4px 18px;
+    border-color: var(--bh-gold-deep);
+}
+.bh-btn-danger {
+    border-color: rgba(255, 130, 110, 0.45);
+    color: rgb(255, 152, 136);
+}
+.bh-btn-danger:hover {
+    border-color: rgb(255, 152, 136);
+    color: rgb(255, 176, 160);
+    box-shadow: none;
+}
+.bh-btn[disabled] { opacity: 0.45; pointer-events: none; }
+
+/* ─── Header tool icons + overflow menu ──────────────────────────────────
+   The flat icon row (settings / doctor / inspector / help) + a "⋯" overflow
+   trigger, separated from the backfill group and close button by thin
+   dividers. The icons collapse into the overflow menu at narrow widths
+   (see the 360px container query above). */
+.beholder-tool-btn:focus-visible {
+    outline: 1px solid var(--bh-gold-deep);
+    outline-offset: 2px;
+    border-radius: 3px;
+    opacity: 1;
+}
+.beholder-panel-controls .bh-header-sep {
+    width: 1px;
+    height: 14px;
+    align-self: center;
+    flex-shrink: 0;
+    margin: 0 1px;
+    background: var(--bh-border);
+    opacity: 0.8;
+}
+.beholder-tools-more { display: none; }
+.beholder-tools-more.bh-more-open { opacity: 1; color: var(--bh-accent); }
+.beholder-tools-menu {
+    position: absolute;
+    top: calc(100% + 5px);
+    right: var(--bh-space-3);
+    z-index: 10001;
+    min-width: 180px;
+    padding: var(--bh-space-1);
+    background: rgba(16, 18, 24, 0.98);
+    border: 1px solid var(--bh-border);
+    border-radius: 8px;
+    box-shadow: rgba(0, 0, 0, 0.55) 0 8px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+.beholder-tools-menu::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 1px;
+    border-radius: 8px 8px 0 0;
+    background: linear-gradient(90deg, var(--bh-gold-deep), color-mix(in srgb, var(--bh-accent) 35%, transparent) 40%, transparent 80%);
+    opacity: 0.75;
+}
+.beholder-tools-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 9px 11px;
+    background: transparent;
+    border: none;
+    border-radius: 5px;
+    color: var(--SmartThemeBodyColor, #e6e6e6);
+    font: inherit;
+    font-size: var(--bh-text-body);
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s;
+}
+.beholder-tools-item:hover,
+.beholder-tools-item:focus-visible {
+    background: var(--bh-surface-2);
+    outline: none;
+}
+.beholder-tools-item i { width: 17px; text-align: center; color: var(--bh-gold-deep); }
+
+/* ─── Paired doll grid ───────────────────────────────────────────────────
+   Left / center figure / right column layout. Each anatomical pair sits
+   across columns 1 and 3; the empty half of a populated pair gets a faint
+   ghost card so the grid stays balanced. (Collapses to the digest at narrow
+   widths via the 360px container query above.) */
+.bh-doll-grid.bh-paired {
+    display: grid;
+    /* minmax(0, …) side tracks — see the base .bh-doll-grid note. Extra-important here
+       because `.bh-col { display: contents }` below dissolves the columns, so the SLOT
+       CARDS are the direct grid items; a bare `1fr` would size to the widest card's
+       min-content and push the right column over the panel edge. */
+    grid-template-columns: minmax(0, 1fr) minmax(calc(132px * var(--bh-ui-scale, 1)), calc(148px * var(--bh-ui-scale, 1))) minmax(0, 1fr);
+    gap: calc(4px * var(--bh-ui-scale, 1)) calc(6px * var(--bh-ui-scale, 1));
+    align-items: stretch;
+}
+.bh-doll-grid.bh-paired .bh-col { display: contents; }
+.bh-doll-grid.bh-paired .bh-figure { align-self: start; }
+.bh-doll-grid.bh-paired .bh-slot-ghosted { opacity: 0.22; }
+.bh-doll-grid.bh-paired .bh-slot-ghosted:hover { opacity: 0.5; }
+
+/* ─── Layout switch (paired / columns / list) ────────────────────────────
+   List mode forces the digest render via .bh-layout-compact. */
+.beholder-panel.bh-layout-compact .bh-doll-grid { display: none; }
+.beholder-panel.bh-layout-compact .bh-digest { display: block; }
+.bh-layout-switch {
+    display: inline-flex;
+    margin-top: var(--bh-space-2);
+    border: 1px solid var(--bh-border);
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--bh-surface-1);
+}
+.bh-layout-switch .bh-ls-opt {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--bh-body);
+    opacity: var(--bh-mute-strong);
+    padding: 2px 9px;
+    font-size: var(--bh-text-meta);
+    line-height: 1.2;
+    transition: background 0.15s, color 0.15s, opacity 0.15s;
+}
+.bh-layout-switch .bh-ls-opt + .bh-ls-opt { border-left: 1px solid var(--bh-divider); }
+.bh-layout-switch .bh-ls-opt:hover {
+    opacity: 0.85;
+    color: var(--SmartThemeBodyColor, #e8eaee);
+}
+.bh-layout-switch .bh-ls-opt.bh-ls-active {
+    opacity: 1;
+    color: var(--bh-gold, var(--bh-chroma, var(--primary)));
+    background: var(--bh-surface-2);
+}
+.bh-layout-switch-row { display: flex; justify-content: flex-end; }
+
+/* Digest toolbar — "Edit slots" action on the left, a layout switch on the
+   right, above the digest priority feed. */
+.bh-digest-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--bh-space-2);
+    margin-bottom: var(--bh-space-3);
+}
+.bh-digest-edit {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 14px;
+    border-radius: 8px;
+    background: linear-gradient(160deg, color-mix(in srgb, var(--bh-accent) 20%, transparent), color-mix(in srgb, var(--bh-accent) 6%, transparent));
+    border: 1px solid color-mix(in srgb, var(--bh-accent) 50%, transparent);
+    color: var(--bh-chroma, var(--primary));
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-secondary);
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: box-shadow 0.15s, border-color 0.15s;
+}
+.bh-digest-edit:hover {
+    box-shadow: color-mix(in srgb, var(--bh-accent) 20%, transparent) 0 3px 14px;
+    border-color: var(--bh-gold-deep);
+}
+.bh-digest-edit i { font-size: 0.9em; }
+
+/* ─── Mobile bottom sheet (slot picker + slot editor) ────────────────────
+   Slides up from the bottom of the panel on touch / narrow layouts. */
+.bh-sheet-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 95;
+    background: rgba(0, 0, 0, 0.45);
+    animation: 0.15s ease-out bh-view-in;
+}
+.bh-edit-sheet {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 96;
+    max-height: 88%;
+    display: flex;
+    flex-direction: column;
+    background: var(--SmartThemeBlurTintColor, rgba(13, 15, 20, 0.98));
+    border-top: 1px solid var(--bh-border);
+    border-radius: 14px 14px 0 0;
+    box-shadow: rgba(0, 0, 0, 0.6) 0 -10px 40px;
+    animation: 0.2s cubic-bezier(0.2, 0.7, 0.2, 1) bh-sheet-up;
+}
+@keyframes bh-sheet-up {
+    0% { transform: translateY(100%); }
+    100% { transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .bh-edit-sheet { animation: none; }
+    .bh-sheet-backdrop { animation: none; }
+}
+.bh-edit-sheet::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 1px;
+    border-radius: 14px 14px 0 0;
+    background: linear-gradient(90deg, var(--bh-gold-deep) 0%, color-mix(in srgb, var(--bh-accent) 40%, transparent) 22%, transparent 60%);
+    opacity: 0.8;
+}
+.bh-sheet-head {
+    display: flex;
+    align-items: center;
+    gap: var(--bh-space-2);
+    padding: var(--bh-space-3);
+    border-bottom: 1px solid var(--bh-divider);
+    flex-shrink: 0;
+}
+.bh-sheet-back,
+.bh-sheet-close {
+    cursor: pointer;
+    opacity: var(--bh-mute-soft);
+    padding: 5px;
+    font-size: 1.05em;
+    transition: opacity 0.15s, color 0.15s;
+}
+.bh-sheet-back[hidden] { display: none; }
+.bh-sheet-back:hover,
+.bh-sheet-close:hover { opacity: 1; color: var(--bh-gold-deep); }
+.bh-sheet-title {
+    flex: 1 1 0%;
+    font-family: var(--bh-font-display);
+    font-size: var(--bh-text-large);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+}
+.bh-sheet-close { margin-left: auto; }
+.bh-sheet-body {
+    flex: 1 1 0%;
+    overflow-y: auto;
+    padding: var(--bh-space-3);
+    scrollbar-width: thin;
+    scrollbar-color: var(--bh-border) transparent;
+}
+.bh-sheet-lockrow {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: var(--bh-space-2);
+}
+.bh-sheet-body .bh-editor-body { max-height: none; overflow: visible; padding: 0; }
+.bh-sheet-body .bh-editor-foot {
+    border-top: 1px solid var(--bh-divider);
+    margin-top: var(--bh-space-3);
+    padding: var(--bh-space-3) 0 0;
+    background: transparent;
+}
+.bh-slot-picker { display: flex; flex-direction: column; gap: var(--bh-space-3); }
+.bh-pick-region-head {
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-meta);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--bh-gold-deep);
+    margin-bottom: var(--bh-space-1);
+}
+.bh-pick-slot {
+    display: flex;
+    align-items: center;
+    gap: var(--bh-space-2);
+    width: 100%;
+    padding: 10px 12px;
+    margin-bottom: 3px;
+    background: var(--bh-surface-1);
+    border: 1px solid var(--bh-divider);
+    border-radius: 8px;
+    color: var(--bh-body);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s;
+}
+.bh-pick-slot:hover,
+.bh-pick-slot:focus-visible {
+    background: var(--bh-surface-2);
+    border-color: var(--bh-gold-deep);
+    outline: none;
+}
+.bh-pick-label {
+    flex-shrink: 0;
+    min-width: 5.5em;
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-secondary);
+    letter-spacing: 0.04em;
+    text-transform: lowercase;
+    color: var(--SmartThemeBodyColor, #e6e6e6);
+}
+.bh-pick-summary {
+    flex: 1 1 0%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--bh-text-secondary);
+    opacity: 0.85;
+}
+.bh-pick-summary.bh-pick-empty { opacity: 0.4; font-style: italic; }
+.bh-pick-summary.bh-pick-bare { color: rgba(220, 188, 156, 0.95); opacity: 1; }
+.bh-pick-summary.bh-pick-missing { color: rgba(160, 160, 160, 0.95); font-style: italic; opacity: 1; }
+.bh-pick-mark { flex-shrink: 0; font-size: 0.85em; }
+.bh-pick-lock { color: var(--bh-gold); }
+.bh-pick-edited { color: var(--bh-gold-deep); }
+.bh-pick-arrow { flex-shrink: 0; opacity: 0.4; font-size: 0.8em; }
+
+/* ─── View overlay (settings / doctor / inspector / help) ────────────────
+   Full-panel overlay surface with its own header, scroll body, and a set of
+   collapsible sections. */
+.bh-view {
+    position: absolute;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    background: var(--SmartThemeBlurTintColor, rgba(13, 15, 20, 0.97));
+    border-radius: 12px;
+    overflow: hidden;
+    animation: 0.18s ease-out bh-view-in;
+}
+@keyframes bh-view-in {
+    0% { opacity: 0; transform: translateY(6px); }
+    100% { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .bh-view { animation: none; }
+}
+.bh-view-head {
+    display: flex;
+    align-items: center;
+    gap: var(--bh-space-2);
+    padding: var(--bh-space-2) var(--bh-space-3);
+    background: var(--bh-surface-2);
+    border-bottom: 1px solid var(--bh-divider);
+    position: relative;
+    flex-shrink: 0;
+    cursor: move;
+}
+.bh-view-head::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 1px;
+    background: linear-gradient(90deg, var(--bh-gold-deep) 0%, color-mix(in srgb, var(--bh-accent) 40%, transparent) 22%, transparent 60%);
+    opacity: 0.7;
+}
+.bh-view-back {
+    cursor: pointer;
+    opacity: var(--bh-mute-soft);
+    padding: 2px 6px 2px 2px;
+    transition: opacity 0.15s, color 0.15s;
+}
+.bh-view-back:hover { opacity: 1; color: var(--bh-gold-deep); }
+.bh-view-title {
+    font-family: var(--bh-font-display);
+    font-size: var(--bh-text-large);
+    font-weight: 600;
+    letter-spacing: 0.1em;
+}
+.bh-view-title .bh-view-crumb {
+    opacity: 0.45;
+    font-size: 0.82em;
+    letter-spacing: 0.08em;
+    margin-right: 0.4em;
+}
+.bh-view-body {
+    flex: 1 1 0%;
+    overflow-y: auto;
+    padding: var(--bh-space-3);
+    scrollbar-width: thin;
+    scrollbar-color: var(--bh-border) transparent;
+    font-size: var(--bh-text-secondary);
+    user-select: text;
+}
+.bh-vsection {
+    border: 1px solid var(--bh-divider);
+    border-radius: 10px;
+    background: var(--bh-surface-1);
+    margin-bottom: var(--bh-space-3);
+    overflow: hidden;
+}
+.bh-vsection > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: var(--bh-space-2) var(--bh-space-3);
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-meta);
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--bh-gold-deep);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    user-select: none;
+}
+.bh-vsection > summary::-webkit-details-marker { display: none; }
+.bh-vsection > summary::after {
+    content: "›";
+    margin-left: auto;
+    opacity: 0.5;
+    transition: transform 0.15s;
+    font-size: 1.25em;
+    letter-spacing: 0;
+}
+.bh-vsection[open] > summary::after { transform: rotate(90deg); }
+.bh-vsection-body {
+    padding: 0 var(--bh-space-3) var(--bh-space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--bh-space-3);
+}
+.bh-vsection-body p { margin: 0; opacity: 0.8; line-height: 1.5; }
+/* The Advanced > custom-endpoint body is NOT a .bh-vsection-body, so it missed the
+   column-gap spacing and its endpoint/model/key bars stacked flush. Match the same
+   rhythm so each field has a few px of breathing room under it. */
+.bh-adv-endpoint-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--bh-space-3);
+}
+.bh-field { display: flex; flex-direction: column; gap: 3px; }
+.bh-field > label {
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-meta);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.6;
+}
+.bh-input,
+.bh-select {
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--bh-border);
+    border-radius: 6px;
+    color: var(--SmartThemeBodyColor, #e6e6e6);
+    font: inherit;
+    padding: 6px 9px;
+    width: 100%;
+    box-sizing: border-box;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+.bh-input:focus-visible,
+.bh-select:focus-visible {
+    outline: none;
+    border-color: var(--bh-gold-deep);
+    box-shadow: color-mix(in srgb, var(--bh-accent) 12%, transparent) 0 0 0 3px;
+}
+.bh-check { display: flex; align-items: baseline; gap: 8px; cursor: pointer; line-height: 1.45; }
+.bh-check input { accent-color: var(--bh-gold-deep); flex-shrink: 0; }
+.bh-check small { display: block; opacity: 0.55; font-size: 0.88em; }
+.bh-row-actions { display: flex; gap: var(--bh-space-2); flex-wrap: wrap; align-items: center; }
+.bh-conn-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-meta);
+    letter-spacing: 0.06em;
+    opacity: 0.85;
+}
+.bh-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--bh-mute-strong, #777);
+}
+.bh-dot-ok { background: rgb(106, 212, 139); box-shadow: rgba(106, 212, 139, 0.6) 0 0 6px; }
+.bh-dot-warn { background: var(--bh-accent); box-shadow: color-mix(in srgb, var(--bh-accent) 60%, transparent) 0 0 6px; }
+.bh-dot-bad { background: rgb(226, 100, 100); box-shadow: rgba(226, 100, 100, 0.6) 0 0 6px; }
+.bh-dot-busy { background: var(--bh-gold-deep); animation: 1s ease-in-out infinite bh-dot-pulse; }
+@keyframes bh-dot-pulse {
+    50% { opacity: 0.35; }
+}
+.bh-vitals { display: flex; flex-direction: column; }
+.bh-vital {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 6px 2px;
+    border-bottom: 1px dashed var(--bh-divider);
+    line-height: 1.4;
+}
+.bh-vital:last-child { border-bottom: none; }
+.bh-vital .bh-dot { align-self: center; }
+.bh-vital-label {
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-meta);
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    opacity: 0.6;
+    flex: 0 0 34%;
+}
+.bh-vital-value { flex: 1 1 0%; min-width: 0; overflow-wrap: anywhere; }
+.bh-vital-value code {
+    background: rgba(255, 255, 255, 0.06);
+    padding: 0 5px;
+    border-radius: 3px;
+    font-size: 0.92em;
+}
+.bh-code {
+    background: rgba(0, 0, 0, 0.32);
+    border: 1px solid var(--bh-divider);
+    border-radius: 8px;
+    padding: var(--bh-space-2) var(--bh-space-3);
+    font-family: var(--bh-font-data);
+    font-size: 0.8em;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 240px;
+    overflow-y: auto;
+    margin: 0;
+    color: var(--bh-body);
+    scrollbar-width: thin;
+    scrollbar-color: var(--bh-border) transparent;
+    user-select: text;
+}
+.bh-pane-meta {
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-meta);
+    letter-spacing: 0.05em;
+    opacity: 0.5;
+    margin-left: auto;
+    text-transform: none;
+}
+.bh-vlog { display: flex; flex-direction: column; gap: 4px; }
+.bh-vlog-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-family: var(--bh-font-data);
+    font-size: 0.8em;
+    line-height: 1.45;
+    padding: 4px 8px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.025);
+    border-left: 2px solid var(--bh-divider);
+}
+.bh-vlog-row b { flex-shrink: 0; font-size: 0.85em; letter-spacing: 0.1em; }
+.bh-vlog-warn { border-left-color: var(--bh-accent); }
+.bh-vlog-warn b { color: var(--bh-accent); }
+.bh-vlog-error { border-left-color: rgb(226, 100, 100); }
+.bh-vlog-error b { color: rgb(255, 118, 118); }
+.bh-vlog-ok { border-left-color: rgb(106, 212, 139); opacity: 0.75; }
+.bh-vlog-ok b { color: rgb(106, 212, 139); }
+.bh-turns { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+.bh-turns th {
+    font-family: var(--bh-font-data);
+    font-size: 0.78em;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    opacity: 0.5;
+    text-align: left;
+    padding: 3px 8px 5px 0;
+    border-bottom: 1px solid var(--bh-divider);
+    font-weight: 500;
+}
+.bh-turns td {
+    padding: 5px 8px 5px 0;
+    border-bottom: 1px dashed var(--bh-divider);
+    font-family: var(--bh-font-data);
+    font-size: 0.92em;
+}
+.bh-turns tr:last-child td { border-bottom: none; }
+.bh-tips {
+    margin: 0;
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+.bh-tips li { line-height: 1.5; opacity: 0.85; }
+.bh-tips li::marker { color: var(--bh-gold-deep); }
+.bh-tips b { color: var(--bh-chroma, var(--primary)); font-weight: 600; }
+.bh-orn {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: var(--bh-space-2) auto;
+    max-width: 220px;
+    color: color-mix(in srgb, var(--bh-accent) 55%, transparent);
+    font-size: 0.85em;
+    text-shadow: color-mix(in srgb, var(--bh-accent) 50%, transparent) 0 0 12px;
+}
+.bh-orn span {
+    flex: 1 1 0%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--bh-accent) 35%, transparent));
+}
+.bh-orn span:last-child {
+    background: linear-gradient(90deg, color-mix(in srgb, var(--bh-accent) 35%, transparent), transparent);
+}
+
+/* ─── Desktop slot editor (floating popover) ─────────────────────────────
+   Per-slot worn / held / wound editor anchored to the clicked card. */
+.bh-editor {
+    position: absolute;
+    z-index: 80;
+    width: min(330px, 100% - 16px);
+    background: rgba(16, 18, 24, 0.98);
+    border: 1px solid var(--bh-border);
+    border-radius: 10px;
+    box-shadow: rgba(0, 0, 0, 0.6) 0 14px 44px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    font-size: var(--bh-text-secondary);
+    animation: 0.15s ease-out bh-view-in;
+}
+.bh-editor-head {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: var(--bh-space-2) var(--bh-space-3);
+    background: var(--bh-surface-2);
+    border-bottom: 1px solid var(--bh-divider);
+    position: relative;
+}
+.bh-editor-head::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 1px;
+    background: linear-gradient(90deg, var(--bh-gold-deep), color-mix(in srgb, var(--bh-accent) 35%, transparent) 40%, transparent 80%);
+    opacity: 0.7;
+}
+.bh-editor-title {
+    font-family: var(--bh-font-display);
+    font-weight: 600;
+    font-size: var(--bh-text-large);
+    letter-spacing: 0.08em;
+}
+.bh-editor-slot {
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-meta);
+    letter-spacing: 0.08em;
+    text-transform: lowercase;
+    opacity: 0.55;
+}
+.bh-editor-close { margin-left: auto; cursor: pointer; opacity: 0.6; }
+.bh-editor-close:hover { opacity: 1; color: var(--bh-gold-deep); }
+.bh-editor-body {
+    padding: var(--bh-space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--bh-space-2);
+    overflow-y: auto;
+    max-height: 52vh;
+    scrollbar-width: thin;
+    scrollbar-color: var(--bh-border) transparent;
+}
+.bh-editor-group-label {
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-meta);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--bh-gold-deep);
+    opacity: 0.85;
+    margin-top: var(--bh-space-1);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.bh-editor-group-label::after { content: ""; flex: 1 1 0%; height: 1px; background: var(--bh-divider); }
+.bh-editor-row {
+    display: grid;
+    grid-template-columns: 1fr 86px 74px 22px;
+    gap: 6px;
+    align-items: center;
+}
+.bh-editor-row .bh-input,
+.bh-editor-row .bh-select { padding: 4px 7px; font-size: 0.92em; }
+.bh-editor-row-wound { grid-template-columns: 1fr 86px 24px 22px; }
+.bh-editor-remove {
+    background: none;
+    border: none;
+    color: var(--bh-body);
+    opacity: 0.4;
+    cursor: pointer;
+    font-size: 0.95em;
+    padding: 2px;
+    transition: opacity 0.12s, color 0.12s;
+}
+.bh-editor-remove:hover { opacity: 1; color: rgb(255, 133, 133); }
+.bh-editor-add {
+    align-self: flex-start;
+    background: none;
+    border: 1px dashed var(--bh-border);
+    border-radius: 6px;
+    color: var(--bh-body);
+    opacity: 0.6;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.88em;
+    padding: 3px 10px;
+    transition: opacity 0.12s, border-color 0.12s, color 0.12s;
+}
+.bh-editor-add:hover { opacity: 1; border-color: var(--bh-gold-deep); color: var(--bh-chroma, var(--primary)); }
+.bh-bleed-check { display: inline-flex; align-items: center; justify-content: center; }
+.bh-bleed-check input { accent-color: rgb(255, 71, 71); }
+.bh-editor-body.bhe-missing-mode > :not(.bh-row-actions):not(.bh-editor-group-label:last-of-type) {
+    opacity: 0.35;
+    pointer-events: none;
+}
+.bh-editor-body.bhe-missing-mode > .bh-row-actions,
+.bh-editor-body.bhe-missing-mode > .bh-editor-group-label:last-of-type {
+    opacity: 1;
+    pointer-events: auto;
+}
+.bh-editor-foot {
+    display: flex;
+    gap: var(--bh-space-2);
+    padding: var(--bh-space-2) var(--bh-space-3);
+    border-top: 1px solid var(--bh-divider);
+    background: var(--bh-surface-1);
+    align-items: center;
+}
+.bh-editor-foot .bh-btn-primary { margin-left: auto; }
+.bh-lock-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-meta);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    opacity: 0.6;
+    border: 1px solid var(--bh-border);
+    border-radius: 20px;
+    padding: 2px 10px;
+    transition: opacity 0.15s, border-color 0.15s, color 0.15s;
+    user-select: none;
+}
+.bh-lock-toggle:hover { opacity: 1; }
+.bh-lock-toggle.bh-locked-on {
+    opacity: 1;
+    color: var(--bh-gold);
+    border-color: color-mix(in srgb, var(--bh-chroma) 50%, transparent);
+    text-shadow: color-mix(in srgb, var(--bh-chroma) 40%, transparent) 0 0 8px;
+}
+
+/* ─── Slot card lock / user-edited decoration ────────────────────────────
+   A locked slot is pinned by the user so model deltas can't overwrite it; a
+   user-edited slot carries a small ✎ mark. */
+.bh-slot-card { cursor: pointer; }
+.bh-slot-card.bh-slot-locked {
+    border-color: color-mix(in srgb, var(--bh-accent) 45%, transparent);
+    background: color-mix(in srgb, var(--bh-accent) 5%, transparent);
+}
+.bh-slot-lock-glyph {
+    color: var(--bh-gold);
+    font-size: 0.72em;
+    margin-left: 5px;
+    text-shadow: color-mix(in srgb, var(--bh-chroma) 45%, transparent) 0 0 7px;
+    flex-shrink: 0;
+}
+.bh-slot-card.bh-slot-user-edited .bh-slot-name::after {
+    content: "✎";
+    color: var(--bh-gold-deep);
+    font-size: 0.85em;
+    margin-left: 5px;
+    opacity: 0.8;
+}
+
+/* ─── Toast ──────────────────────────────────────────────────────────────
+   Transient confirmation message, centered near the bottom of the viewport. */
+.bh-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 86px;
+    transform: translateX(-50%) translateY(8px);
+    z-index: 99999;
+    background: rgba(16, 18, 24, 0.97);
+    border: 1px solid color-mix(in srgb, var(--bh-accent) 55%, transparent);
+    border-radius: 9px;
+    color: var(--bh-chroma, var(--primary));
+    font: 13px / 1.45 "JetBrains Mono", monospace;
+    letter-spacing: 0.03em;
+    padding: 9px 18px;
+    box-shadow: rgba(0, 0, 0, 0.55) 0 10px 34px, color-mix(in srgb, var(--bh-accent) 12%, transparent) 0 0 22px;
+    opacity: 0;
+    transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none;
+    max-width: min(520px, 86vw);
+    text-align: center;
+}
+.bh-toast.bh-toast-in { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Local-model card + "no model active" banner (browser-engine surfaces)
+   ─────────────────────────────────────────────────────────────────────────
+   Built entirely from the existing gold + surface + space tokens. The card
+   lives at the top of the settings view's Connection section (above the
+   custom-endpoint fields, which move under a collapsed Advanced <details>);
+   the banner is a persistent strip in the panel, modelled on the backfill
+   status strip. No new color system — readiness dots reuse .bh-dot*,
+   buttons reuse .bh-btn family, the progress bar mirrors .bh-bf-bar.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Local-model card ───────────────────────────────────────────────────
+   An elevated panel inside the settings view. Reads as the primary control
+   for the connection section — a touch more presence than a .bh-vsection
+   (gold hairline top rule, like the editor/header chrome) without inventing
+   new tokens. */
+.bh-localmodel-card {
+    position: relative;
+    border: 1px solid var(--bh-border);
+    border-radius: 10px;
+    background: var(--bh-surface-2);
+    padding: var(--bh-space-3);
+    margin-bottom: var(--bh-space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--bh-space-2);
+    overflow: hidden;
+}
+/* Quiet gold top rule — same anchored-on-the-left gradient the header and
+   editor use, so the card reads as part of the brand chrome. */
+.bh-localmodel-card::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 1px;
+    background: linear-gradient(
+        90deg,
+        var(--bh-gold-deep),
+        color-mix(in srgb, var(--bh-accent) 35%, transparent) 40%,
+        transparent 80%
+    );
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+/* Card header: a label + the lifecycle status pill. */
+.bh-lm-head {
+    display: flex;
+    align-items: center;
+    gap: var(--bh-space-2);
+    flex-wrap: wrap;
+}
+.bh-lm-title {
+    font-family: var(--bh-font-display);
+    font-size: var(--bh-text-large);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--SmartThemeBodyColor, #e8eaee);
+}
+/* Microchip accent at the right of the head (the leading status dot is the
+   primary marker). */
+.bh-lm-glyph {
+    color: var(--bh-gold-deep);
+    opacity: 0.6;
+    margin-left: auto;
+    font-size: 0.95em;
+}
+/* The pinned model id / version line under the header. */
+.bh-lm-modelid {
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-meta);
+    opacity: 0.6;
+    margin: 2px 0 6px;
+}
+.bh-lm-modelid code { font-family: inherit; }
+/* Status pill — a dot + short word ("ready", "off", "downloading…").
+   Reuses the conn-status idiom and the .bh-dot* color set. */
+.bh-lm-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-left: auto;
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-meta);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    opacity: 0.85;
+    white-space: nowrap;
+}
+
+/* Descriptive copy line below the header (state-dependent prose). */
+.bh-lm-copy {
+    font-size: var(--bh-text-secondary);
+    line-height: 1.5;
+    opacity: 0.8;
+    margin: 0;
+}
+.bh-lm-copy code {
+    background: rgba(255, 255, 255, 0.06);
+    padding: 0 5px;
+    border-radius: 3px;
+    font-size: 0.92em;
+}
+
+/* ─── Readiness rows (GPU / Disk / RAM) ──────────────────────────────────
+   Same anatomy as the Doctor vitals: a status dot, a mono label, a value.
+   Reuses .bh-dot / .bh-dot-ok / .bh-dot-warn / .bh-dot-bad exactly. */
+.bh-lm-readiness {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--bh-divider);
+    border-radius: 8px;
+    background: var(--bh-surface-1);
+    padding: 0 var(--bh-space-3);
+}
+.bh-lm-readiness-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--bh-divider);
+    line-height: 1.4;
+}
+.bh-lm-readiness-row:last-child { border-bottom: none; }
+.bh-lm-readiness-row .bh-dot { align-self: center; }
+.bh-lm-readiness-label {
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-meta);
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    opacity: 0.6;
+    flex: 0 0 22%;
+    min-width: 56px;
+}
+.bh-lm-readiness-value {
+    flex: 1 1 0%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-size: var(--bh-text-secondary);
+}
+/* "hint only" qualifier (RAM is a total-not-free Chromium hint). Quiet
+   trailing note so the honest copy doesn't read as a hard number. */
+.bh-lm-readiness-hint {
+    font-family: var(--bh-font-data);
+    font-size: 0.82em;
+    letter-spacing: 0.04em;
+    opacity: 0.45;
+    margin-left: 6px;
+    text-transform: lowercase;
+}
+/* Actionable help line under a FAILED gate (e.g. how to enable WebGPU per
+   browser) — a readable gold block note, NOT the faint inline qualifier above. */
+.bh-lm-hint {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.86em;
+    line-height: 1.45;
+    color: var(--bh-gold-soft, var(--bh-chroma, var(--primary)));
+    opacity: 0.9;
+}
+/* Card "update available" indicator (persists after the dialog is dismissed). */
+.bh-lm-update {
+    display: flex;
+    align-items: center;
+    gap: var(--bh-space-2);
+    margin: var(--bh-space-2) 0;
+    padding: var(--bh-space-2) var(--bh-space-3);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bh-accent) 12%, transparent);
+    box-shadow: inset 2px 0 0 var(--bh-gold-deep);
+    font-size: var(--bh-text-secondary);
+}
+.bh-lm-update > span { flex: 1 1 auto; min-width: 0; }
+.bh-lm-update .bh-btn { flex: 0 0 auto; padding: 5px 12px; }
+
+/* ─── Model-update banner (in-panel CTA strip; sibling of the no-model banner) ── */
+.bh-update-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--bh-space-3);
+    flex-wrap: wrap;
+    padding: var(--bh-space-2) var(--bh-space-3);
+    font-size: var(--bh-text-secondary);
+    border-bottom: 1px solid color-mix(in srgb, var(--bh-accent) 40%, transparent);
+    box-shadow: inset 3px 0 0 var(--bh-gold-deep);
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--bh-accent) 16%, transparent),
+        color-mix(in srgb, var(--bh-accent) 4%, transparent) 60%,
+        transparent
+    );
+}
+.bh-update-banner-copy { flex: 1 1 auto; min-width: 0; line-height: 1.45; }
+.bh-update-banner-copy > i { color: var(--bh-gold-deep); margin-right: 4px; }
+.bh-update-banner-actions {
+    display: flex;
+    gap: var(--bh-space-2);
+    flex: 1 1 100%;
+}
+.bh-update-banner .bh-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px 12px;
+    font-size: var(--bh-text-secondary);
+    text-decoration: none;
+}
+.bh-update-banner .bh-update-now { flex: 1 1 0%; }
+.bh-update-banner .bh-update-later { flex: 0 0 auto; padding: 6px 10px; opacity: 0.8; }
+
+/* ─── Progress bar (download / load) ─────────────────────────────────────
+   Mirrors the backfill bar (.bh-bf-bar) but full-width with a label row, so
+   the long weight-streaming phase reads clearly. */
+.bh-lm-progress {
+    display: flex;
+    flex-direction: column;
+    gap: var(--bh-space-1);
+}
+.bh-lm-progress-label {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--bh-space-2);
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-meta);
+    letter-spacing: 0.06em;
+    opacity: 0.75;
+}
+.bh-lm-progress-pct { font-weight: 600; color: var(--bh-chroma, var(--primary)); }
+.bh-lm-progress-bar {
+    height: 6px;
+    background: var(--bh-divider);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.bh-lm-progress-fill {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: var(--bh-accent, var(--primary));
+    box-shadow: color-mix(in srgb, var(--bh-accent) 40%, transparent) 0 0 8px;
+    transition: width 0.2s ease-out;
+}
+/* Indeterminate phase (WebGPU kernel compile reports no fine-grained pct):
+   a slow shimmer across the bar. Honors reduced-motion. */
+.bh-lm-progress-bar.bh-lm-indeterminate .bh-lm-progress-fill {
+    width: 40%;
+    box-shadow: none;
+    animation: bh-lm-indet 1.3s ease-in-out infinite;
+}
+@keyframes bh-lm-indet {
+    0%   { transform: translateX(-110%); }
+    100% { transform: translateX(310%); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .bh-lm-progress-bar.bh-lm-indeterminate .bh-lm-progress-fill {
+        animation: none;
+        width: 100%;
+        opacity: 0.5;
+    }
+}
+
+/* ─── Primary lifecycle button ───────────────────────────────────────────
+   The card's single action (Download · ~X.X GB / Enable / Disable / Retry /
+   Pause). Built on .bh-btn + .bh-btn-primary, just stretched full-width and
+   sized a step up so it reads as the card's call-to-action. Disable uses the
+   existing danger variant; the action row carries one button at a time. */
+.bh-lm-action { display: flex; gap: var(--bh-space-2); align-items: center; }
+.bh-lm-btn {
+    flex: 1 1 auto;
+    justify-content: center;
+    padding: 8px 14px;
+    font-size: var(--bh-text-body);
+    letter-spacing: 0.06em;
+}
+/* Download size / sublabel inside the button, dimmed so the verb leads. */
+.bh-lm-btn .bh-lm-btn-sub {
+    opacity: 0.7;
+    font-size: 0.88em;
+    letter-spacing: 0.04em;
+}
+
+/* ─── Collapsed Advanced section (custom endpoint) ───────────────────────
+   The existing endpoint/model/apiKey fields move under this <details>. It's
+   a quieter sibling of .bh-vsection — same disclosure idiom, dimmed summary
+   so it visually defers to the local-model card above it. */
+.bh-lm-advanced {
+    border: 1px solid var(--bh-divider);
+    border-radius: 8px;
+    background: var(--bh-surface-1);
+    margin-bottom: var(--bh-space-3);
+    overflow: hidden;
+}
+.bh-lm-advanced > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: var(--bh-space-2) var(--bh-space-3);
+    font-family: var(--bh-font-data);
+    font-size: var(--bh-text-meta);
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--bh-body);
+    opacity: 0.6;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    user-select: none;
+    transition: opacity 0.15s, color 0.15s;
+}
+.bh-lm-advanced > summary:hover { opacity: 0.9; color: var(--bh-gold-deep); }
+.bh-lm-advanced > summary::-webkit-details-marker { display: none; }
+.bh-lm-advanced > summary::after {
+    content: "›";
+    margin-left: auto;
+    opacity: 0.5;
+    transition: transform 0.15s;
+    font-size: 1.25em;
+    letter-spacing: 0;
+}
+.bh-lm-advanced[open] > summary {
+    opacity: 0.85;
+    color: var(--bh-gold-deep);
+}
+.bh-lm-advanced[open] > summary::after { transform: rotate(90deg); }
+.bh-lm-advanced-body {
+    padding: 0 var(--bh-space-3) var(--bh-space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--bh-space-2);
+}
+
+/* ─── "No model active" banner ───────────────────────────────────────────
+   A persistent strip in the panel, shown when no transport resolves
+   (inactive). Two on-brand variants:
+     .bh-banner-warn  — alarm (never set up / endpoint unreachable): gold-edged
+                        prominent strip that asks for action.
+     .bh-banner-calm  — deliberate "disabled" note: quieter, neutral chrome
+                        so a purposeful off-state doesn't read as an error.
+   Modelled on .beholder-backfill-status (surface tint, divider, [hidden]). */
+.bh-no-model-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--bh-space-3);
+    flex-wrap: wrap;
+    padding: var(--bh-space-2) var(--bh-space-3);
+    background: var(--bh-surface-1);
+    border-bottom: 1px solid var(--bh-divider);
+    font-size: var(--bh-text-secondary);
+    position: relative;
+}
+.bh-no-model-banner[hidden] { display: none; }
+.bh-no-model-banner .bh-banner-copy {
+    flex: 1 1 auto;
+    min-width: 0;
+    line-height: 1.45;
+}
+.bh-banner-copy b { color: var(--bh-chroma, var(--primary)); font-weight: 600; }
+.bh-no-model-banner .bh-banner-icon {
+    flex-shrink: 0;
+    align-self: center;
+}
+.bh-no-model-banner .bh-banner-actions {
+    display: flex;
+    gap: var(--bh-space-2);
+    flex: 1 1 100%;
+    justify-content: center;
+}
+/* Reuse the pill buttons, sized down to strip scale (matches the backfill
+   strip's menu_button sizing). */
+.bh-no-model-banner .bh-btn {
+    padding: 7px 14px;
+    font-size: var(--bh-text-secondary);
+}
+/* Full-width gold buttons — split the action row evenly so the CTA reads as one
+   solid block rather than centered shrink-to-fit pills. */
+.bh-no-model-banner .bh-banner-actions .bh-btn {
+    flex: 1 1 0%;
+    justify-content: center;
+}
+
+/* Warn variant — prominent but on-brand: gold-tinted left accent + a leading
+   ◈ glyph that draws the eye without an alarm-red color. */
+.bh-no-model-banner.bh-banner-warn,
+.bh-no-model-banner.bh-banner-loading {
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--bh-accent) 16%, transparent),
+        color-mix(in srgb, var(--bh-accent) 4%, transparent) 60%,
+        transparent
+    );
+    border-bottom-color: color-mix(in srgb, var(--bh-accent) 40%, transparent);
+    box-shadow: inset 3px 0 0 var(--bh-gold-deep);
+}
+/* "Loading" shares the gold edge but leans calmer (lighter fill) + a gold spinner,
+   so it reads as in-progress, not alarm — and stays on the gold house style. */
+.bh-no-model-banner.bh-banner-loading {
+    background: linear-gradient(
+        90deg,
+        color-mix(in srgb, var(--bh-accent) 10%, transparent),
+        color-mix(in srgb, var(--bh-accent) 2%, transparent) 60%,
+        transparent
+    );
+}
+.bh-no-model-banner .bh-banner-spin { color: var(--bh-gold-deep); }
+.bh-no-model-banner.bh-banner-warn .bh-banner-icon {
+    color: var(--bh-gold-deep);
+    text-shadow: color-mix(in srgb, var(--bh-accent) 45%, transparent) 0 0 8px;
+}
+
+/* Calm variant — deliberate off: muted, no gold pull, a quiet ○ marker.
+   It's still persistent, just a note rather than a call to action. */
+.bh-no-model-banner.bh-banner-calm {
+    background: var(--bh-surface-1);
+    opacity: 0.9;
+}
+.bh-no-model-banner.bh-banner-calm .bh-banner-copy {
+    opacity: var(--bh-mute-soft);
+}
+.bh-no-model-banner.bh-banner-calm .bh-banner-icon {
+    color: var(--bh-body);
+    opacity: 0.5;
+}
+.bh-no-model-banner.bh-banner-calm .bh-btn { opacity: 0.8; }
+.bh-no-model-banner.bh-banner-calm .bh-btn:hover { opacity: 1; }
+
+/* ─── Narrow-container behavior (consistent with the panel's @container) ──
+   Below 360px the panel is the mobile digest; the card + banner stack their
+   actions full-width and drop the readiness label column to a fixed minimum
+   so values keep room. Mirrors the existing bhpanel container queries. */
+@container bhpanel (max-width: 360px) {
+    .bh-lm-head { gap: var(--bh-space-1); }
+    .bh-lm-status { margin-left: 0; flex-basis: 100%; }
+    .bh-lm-readiness-label { flex-basis: 30%; }
+    .bh-no-model-banner { gap: var(--bh-space-2); }
+    .bh-no-model-banner .bh-banner-actions {
+        flex-basis: 100%;
+        justify-content: stretch;
+    }
+    .bh-no-model-banner .bh-banner-actions .bh-btn { flex: 1 1 0%; justify-content: center; }
+}
+@container bhpanel (max-width: 320px) {
+    .bh-lm-action { flex-direction: column; align-items: stretch; }
+    .bh-lm-btn { width: 100%; }
+}
+
+/* ─── Characters view (roster: reorder · hide · merge) ───────────────────── */
+.bh-ch-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--bh-space-1, 0.286em); }
+.bh-ch {
+    display: flex; align-items: center; gap: var(--bh-space-2, 0.571em);
+    padding: var(--bh-space-1, 0.286em) var(--bh-space-2, 0.571em);
+    border: 1px solid transparent;
+    border-left: 2px solid transparent;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.025);
+    flex-wrap: wrap;
+}
+.bh-ch-you { border-left-color: var(--bh-accent, #88aaff); }
+.bh-ch-star { color: var(--bh-accent, #88aaff); font-size: 0.8em; }
+.bh-ch-grip { cursor: grab; opacity: var(--bh-mute-soft, 0.5); font-size: 0.85em; flex: 0 0 auto; }
+.bh-ch-grip:active { cursor: grabbing; }
+.bh-ch-dragging { opacity: 0.45; }
+.bh-ch-dropzone { border-color: var(--bh-accent, #88aaff); }
+.bh-ch-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.bh-ch-name {
+    font-family: var(--bh-font-display);
+    font-size: var(--bh-text-body, 1em);
+    letter-spacing: 0.04em;
+    color: var(--bh-body);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.bh-ch-aliases { display: flex; flex-wrap: wrap; gap: var(--bh-space-1, 0.286em); }
+.bh-ch-alias {
+    display: inline-flex; align-items: center; gap: 0.3em;
+    font-size: var(--bh-text-meta, 0.78em);
+    opacity: 0.72;
+    padding: 0.05em 0.4em;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.05);
+}
+.bh-ch-alias .fa-xmark { cursor: pointer; opacity: 0.55; font-size: 0.85em; }
+.bh-ch-alias .fa-xmark:hover { opacity: 1; }
+.bh-ch-tools { display: flex; align-items: center; gap: var(--bh-space-2, 0.571em); flex: 0 0 auto; }
+.bh-ch-tools i {
+    cursor: pointer; opacity: var(--bh-mute-soft, 0.5);
+    transition: opacity 0.15s, color 0.15s; font-size: 1.02em; padding: 2px;
+}
+.bh-ch-tools i:hover { opacity: 1; }
+.bh-ch-hide:hover, .bh-ch-unhide:hover, .bh-ch-merge:hover { color: var(--bh-accent, #88aaff); }
+.bh-ch-hidden { opacity: 0.55; }
+.bh-ch-empty { opacity: 0.6; font-style: italic; padding: var(--bh-space-2, 0.571em); }
+.bh-ch-tray { margin-top: var(--bh-space-3, 0.857em); }
+.bh-ch-tray-cap {
+    display: block; font-size: var(--bh-text-meta, 0.78em);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    opacity: 0.45; margin-bottom: var(--bh-space-1, 0.286em);
+}
+/* inline "is <name>" merge picker */
+.bh-ch-pick {
+    flex: 1 1 100%;
+    display: flex; flex-wrap: wrap; align-items: center; gap: var(--bh-space-1, 0.286em);
+    margin-top: var(--bh-space-1, 0.286em);
+    padding-top: var(--bh-space-1, 0.286em);
+    border-top: 1px dashed var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.12));
+}
+.bh-ch-pick-lead { font-size: var(--bh-text-meta, 0.78em); opacity: 0.55; font-style: italic; }
+.bh-ch-pill {
+    cursor: pointer;
+    font-family: var(--bh-font-display);
+    font-size: var(--bh-text-meta, 0.85em);
+    letter-spacing: 0.03em;
+    color: var(--bh-body);
+    background: transparent;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.18));
+    border-radius: 4px;
+    padding: 0.15em 0.6em;
+    opacity: 0.85;
+    transition: opacity 0.12s, border-color 0.12s, color 0.12s;
+}
+.bh-ch-pill:hover { opacity: 1; border-color: var(--bh-accent, #88aaff); color: var(--SmartThemeEmColor, var(--bh-chroma, var(--primary))); }
+.bh-ch-pick-input {
+    flex: 1 1 6em; min-width: 5em;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255, 255, 255, 0.15));
+    border-radius: 4px; color: inherit;
+    padding: 0.2em 0.4em; font-size: var(--bh-text-meta, 0.78em);
+}

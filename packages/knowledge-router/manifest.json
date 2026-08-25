@@ -17,8 +17,8 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "10acd80dfa8a32a9c42a0754d69ee702adbb6353cac72514f648b31178bff239",
-      "bytes": 1685
+      "sha256": "74fc1e5cc1d90129c3dc1e5a5cd76431a036570d27b91aea7c975e73c124fd85",
+      "bytes": 1606
     }
   ],
   "permissions": [

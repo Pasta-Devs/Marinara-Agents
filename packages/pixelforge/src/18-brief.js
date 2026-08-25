@@ -9,11 +9,28 @@ PF.brief = (() => {
   const VERSION = 1;
 
   // ── Vocabularies (the form does the teaching) ───────────────────────────────
+  // Sized so the STREET GRID has somewhere to put a street. The grid lays a lot
+  // every 8 rows and every 9 columns, and a map only 30 tall has room for two
+  // rows of them however wide it is — so a village used to lay six lots on 1320
+  // tiles and read as a hamlet with a lot of grass. Lots per rank now run
+  // 4 / 8 / 16 / 36 / 80, which is the first progression where each rank looks
+  // like a bigger VERSION of the one below rather than the same place zoomed.
+  //
+  // `buildings` is the ceiling on how many of those lots get laid out, and it is
+  // deliberately kept ABOVE what the population arithmetic asks for at each rank
+  // (20-world's RESIDENT_HOUSEHOLDS). The ground should permit and the people
+  // should decide; when this number binds first, every settlement of a rank comes
+  // out the same size no matter who lives there, which is the bug that made a
+  // city eighteen buildings wide whatever its brief said.
   const SCALES = {
     outpost: { w: 28, h: 20, buildings: 4 },
-    hamlet: { w: 34, h: 24, buildings: 6 },
-    village: { w: 44, h: 30, buildings: 8 },
-    town: { w: 56, h: 38, buildings: 12 },
+    hamlet: { w: 48, h: 28, buildings: 8 },
+    village: { w: 60, h: 40, buildings: 16 },
+    town: { w: 76, h: 52, buildings: 34 },
+    // A CITY. Roomy on purpose: it is the rank where districts (roadmap W3) will
+    // eventually carve the map into wards with their own gravity, and the ground
+    // wants to be there before the machinery that divides it.
+    city: { w: 104, h: 72, buildings: 76 },
   };
   const SURROUNDS = ["woods", "fields", "rocky", "water", "barren"];
   const PROSPERITY = ["struggling", "modest", "thriving"];
@@ -64,6 +81,11 @@ PF.brief = (() => {
   const SETTLEMENT_TAGS = new Set(FEATURE_TAGS.filter((t) => t !== "water-crossing" && t !== "dense-growth"));
 
   const CAPS = {
+    // The ceiling a brief may ASK for. What a settlement can actually hold is
+    // per-scale (FEATURE_ROOM below) — an outpost is 560 tiles and four of its
+    // lots are now houses, so four named features have nowhere to stand and the
+    // last two are dropped in silence. Small settlements holding fewer features
+    // is correct; asking for four and losing two without a word is not.
     features: 4,
     places: 4,
     wilds: 2,
@@ -72,8 +94,24 @@ PF.brief = (() => {
     sanctuary: 1,
     castMin: 4,
     castMax: 10,
-    household: 6,
+    // AN ID SPACE, not an occupancy bound. The two were the same constant, and
+    // that conflation is the same bug as `household` carrying both kinship and
+    // address: `Math.min(CAPS.household, n)` clamps WHICH group you are in, while
+    // the oversize-split pass used the identical number to bound HOW MANY share
+    // one. Ten people must be able to be ten unrelated households — a convent, a
+    // barracks, a boarding house — so the id space is the cast size, and nothing
+    // caps the members of a group any more.
+    household: 10,
   };
+  // How many named features the GROUND of each rank can actually carry, measured
+  // rather than guessed: with the street-grid allocator an outpost seats two, a
+  // hamlet three, and everything from a village up seats the full ask.
+  const FEATURE_ROOM = { outpost: 2, hamlet: 3, village: 4, town: 4, city: 4 };
+  // Named places take LOTS, and an outpost lays four of them. Four places leave
+  // nothing for the houses the cast still needs, so the drop guard fires and the
+  // brief loses buildings it named. What the rank can seat, it seals; the rest
+  // never gets promised.
+  const PLACE_ROOM = { outpost: 2, hamlet: 3, village: 4, town: 4, city: 4 };
   const BRIEF_BYTE_BUDGET = 8_192;
 
   // ── Deterministic entropy: ONE source ───────────────────────────────────────
@@ -127,7 +165,8 @@ PF.brief = (() => {
   /** scale may arrive as a POPULATION NUMBER (the most-observed weak-model slip). */
   function foldScale(value, repairs) {
     if (typeof value === "number" && Number.isFinite(value)) {
-      const bucket = value < 8 ? "outpost" : value < 20 ? "hamlet" : value < 60 ? "village" : "town";
+      const bucket =
+        value < 8 ? "outpost" : value < 20 ? "hamlet" : value < 60 ? "village" : value < 200 ? "town" : "city";
       repairs.push(`scale: bucketed number ${value} -> ${bucket}`);
       return bucket;
     }
@@ -176,8 +215,17 @@ PF.brief = (() => {
     // Pass 3 — zones. Item-level drop: an unknown tag drops the WHOLE feature.
     // The cap applies to KEPT items (a leading run of junk must not discard
     // the valid features behind it — the places loop's semantics).
+    const featureRoom = Math.min(CAPS.features, FEATURE_ROOM[brief.scale] ?? CAPS.features);
     for (const item of asArray(src.features)) {
-      if (brief.features.length >= CAPS.features) break;
+      if (brief.features.length >= featureRoom) {
+        // SAID OUT LOUD. Everything else in this pass records what it dropped
+        // and why; a rank running out of ground is a better reason than most,
+        // and the whole point of the cap is that a settlement stops PROMISING
+        // what it cannot hold. Losing the promise silently would just move the
+        // silence one layer up.
+        repairs.push(`features: ${brief.scale} has room for ${featureRoom}; dropped the rest`);
+        break;
+      }
       const tag = foldEnum(item?.tag, FEATURE_TAGS, null);
       if (!tag || !SETTLEMENT_TAGS.has(tag)) {
         repairs.push(`features: dropped item with tag ${JSON.stringify(item?.tag ?? null)}`);
@@ -231,8 +279,12 @@ PF.brief = (() => {
     let hallCount = 0;
     let gatheringCount = 0;
     let sanctuaryCount = 0;
+    const placeRoom = Math.min(CAPS.places, PLACE_ROOM[brief.scale] ?? CAPS.places);
     for (const item of asArray(src.places)) {
-      if (brief.places.length >= CAPS.places) break;
+      if (brief.places.length >= placeRoom) {
+        repairs.push(`places: ${brief.scale} has room for ${placeRoom}; dropped the rest`);
+        break;
+      }
       const kind = foldEnum(item?.kind, PLACE_KINDS, null);
       if (!kind) {
         repairs.push(`places: dropped item with kind ${JSON.stringify(item?.kind ?? null)}`);
@@ -264,20 +316,40 @@ PF.brief = (() => {
 
     // §4.3: a host with no gathering place synthesizes AT MOST ONE interior
     // named from the host — the player must be able to walk into the inn.
+    //
+    // Run TWICE, against two different casts, because §4.3 is a post-condition on
+    // the SEALED cast and this call can only see the model's draft. The raw cast
+    // is not the sealed one: pass 6's quality floor tops up from STOCK, and every
+    // stock roster leads with a `host`. So the brief that needs the synthesis most
+    // — one whose cast failed validation outright — was the one brief that never
+    // got it, and the compiler builds the common room from the gathering PLACE (a
+    // `host` in the cast alone binds to nothing). Measured on a live playtest: a
+    // colony compiled fifteen zones of "X's home" plus a farm, with a keeper who
+    // had nowhere to keep and a berth nobody could rent. This call stays where it
+    // is anyway, one pass ahead of the cast, so a model that named a host CAN
+    // still resolve a `home` at the interior it just earned.
+    const gatheringForHost = (people) => {
+      if (brief.places.some((p) => p.kind === "gathering")) return;
+      if (brief.places.length >= placeRoom) return;
+      const host = people.find((item) => foldEnum(item?.kind ?? item?.role, CAST_KINDS, null) === "host");
+      // The theme's own word for its common room. `${hostName}'s` alone reads as
+      // one more house on the row — it stood in a street of "Rook's home" and
+      // "Fen's home" and the player could not tell which door was the inn. Both
+      // default briefs already carry the idiom (the Amber Hearth INN, the Meridian
+      // CANTINA); the host's name is budgeted so `${name}'s ${noun}` still fits the
+      // 24 characters the schema asks a model for — "'s " is three of them.
+      const noun = GATHERING_NOUNS[theme] || GATHERING_NOUNS["cozy-village"];
+      const hostName = host ? capText(host.name, Math.max(6, 24 - 3 - noun.length)) : "";
+      if (!hostName) return;
+      brief.places.push({
+        kind: "gathering",
+        name: dedupeName(`${hostName}'s ${noun}`, "places-host"),
+        flavor: "",
+      });
+      repairs.push(`places: synthesized a gathering interior for host ${hostName}`);
+    };
     const rawCast = asArray(src.cast);
-    const hasGathering = brief.places.some((p) => p.kind === "gathering");
-    if (!hasGathering && brief.places.length < CAPS.places) {
-      const host = rawCast.find((item) => foldEnum(item?.kind ?? item?.role, CAST_KINDS, null) === "host");
-      const hostName = host ? capText(host.name, 20) : "";
-      if (hostName) {
-        brief.places.push({
-          kind: "gathering",
-          name: dedupeName(`${hostName}'s`, "places-host"),
-          flavor: "",
-        });
-        repairs.push(`places: synthesized a gathering interior for host ${hostName}`);
-      }
-    }
+    gatheringForHost(rawCast);
 
     // Pass 4 — cast. Over the cap, the leader survives (§4.4): hoist the first
     // leader to the front before truncating by original order.
@@ -304,6 +376,22 @@ PF.brief = (() => {
         if (homeRaw) repairs.push(`cast[${brief.cast.length}].home: unresolved ${JSON.stringify(homeRaw)} -> root`);
         home = brief.name;
       }
+      // WORKPLACE — where the working day is spent, when OWNERSHIP cannot say.
+      // Ownership answers it for a smith with a forge, but it is one building per
+      // person and one person per building, so it can never place a school's second
+      // teacher, a market's fourth seller, or a shop assistant.
+      //
+      // Same exact -> folded resolution as `home`, and no substring matching for the
+      // same reason: a guessed binding is forever.
+      //
+      // Unresolved falls to NULL, not to the root the way `home` does. "Works at the
+      // settlement" says nothing a wander box could be built from, and a null
+      // workplace IS every brief that has ever compiled — so the derivation in
+      // 20-world runs exactly as before for anyone who does not name one.
+      const workplaceRaw = capText(item?.workplace, 24);
+      const workplace = zoneNames.includes(workplaceRaw) ? workplaceRaw : (zoneFolds.get(fold(workplaceRaw)) ?? null);
+      if (workplaceRaw && !workplace)
+        repairs.push(`cast[${brief.cast.length}].workplace: unresolved ${JSON.stringify(workplaceRaw)} -> none`);
       const householdNumber = Number(item?.household);
       brief.cast.push({
         name: dedupeName(name, `cast[${brief.cast.length}]`),
@@ -315,6 +403,7 @@ PF.brief = (() => {
           pick(seed, `cast-tint-${brief.cast.length}`, Object.keys(TINTS)),
         ),
         home,
+        ...(workplace ? { workplace } : {}),
         household: Number.isFinite(householdNumber)
           ? Math.max(1, Math.min(CAPS.household, Math.round(householdNumber)))
           : 1,
@@ -348,23 +437,16 @@ PF.brief = (() => {
       for (let i = splitAt; i < brief.cast.length; i++) brief.cast[i].household = 2;
       repairs.push("cast: single household split into two");
     }
-    // Oversized households split (>6 members share a number).
-    const byHousehold = new Map();
-    for (const member of brief.cast) {
-      const list = byHousehold.get(member.household) ?? [];
-      list.push(member);
-      byHousehold.set(member.household, list);
-    }
-    for (const [id, members] of byHousehold) {
-      if (members.length <= CAPS.household) continue;
-      // Seed-derived target (§3's single-entropy rule): scan from a seeded
-      // offset for the first free household number.
-      let next = 1 + ((det(seed, `household-split-${id}`)() * CAPS.household) | 0);
-      while (byHousehold.has(next)) next = (next % (CAPS.household * 2)) + 1;
-      for (const member of members.slice(CAPS.household)) member.household = next;
-      byHousehold.set(next, members.slice(CAPS.household));
-      repairs.push(`cast: household ${id} split (over ${CAPS.household} members)`);
-    }
+    // The oversized-household split is GONE. It bounded how many people could
+    // share one number, using the same constant that bounds which numbers exist —
+    // and a group is no longer bounded at all, because ten unrelated lodgers under
+    // one roof is a thing a brief has to be able to say.
+    //
+    // It also shipped a live contract violation. `next` escaped its own cap by
+    // `(next % (CAPS.household * 2)) + 1`, so the pass sealed household numbers
+    // ABOVE the schema's own maximum: measured at 263 members over 400 seeds with
+    // seven kin and three singletons. And it wrote into `byHousehold` while
+    // iterating that same Map. Deleting the pass retires both.
     const tints = new Set(brief.cast.map((c) => c.tint));
     if (tints.size < Math.min(3, brief.cast.length)) {
       const keys = Object.keys(TINTS);
@@ -383,6 +465,16 @@ PF.brief = (() => {
       });
       repairs.push("places: floor top-up wilds zone");
     }
+    // §4.3 again, against the cast that actually SEALED — see gatheringForHost.
+    // Last of the floors on purpose: the wilds top-up answers "this settlement has
+    // no named place at all", which is a different lack, and running ahead of it
+    // would silently spend that floor and leave a colony with an inn and no
+    // outside. So a TOP-UPPED host gets both floors. (The pass-3 call is the one
+    // path that still spends the wilds floor: a model host with zero surviving
+    // places seals [gathering] and no wilds — deliberate, because that model DID
+    // name a place through its host, and the floor answers namelessness, not a
+    // missing outdoors.)
+    gatheringForHost(brief.cast);
 
     // Identity (§2): opaque ordinal ids assigned once, stored in the sealed brief.
     const ids = { zones: {}, cast: {}, features: {} };
@@ -414,9 +506,118 @@ PF.brief = (() => {
     return brief;
   }
 
-  // ── defaults(): the themed fallback brief (skip / failure — never a gate) ───
+  // ── foldStored(): the READ-side fold (#566) ─────────────────────────────────
+  // validate() above is a SEAL-TIME guarantee, and it does not survive the round
+  // trip through chat metadata. `PF.save._configBrief` hands the compiler whatever
+  // the metadata holds, and ~14 reads inside 20-world's compile() index tables with
+  // it: a stored `prosperity: "constructor"` resolved to a function on
+  // Object.prototype and cost a town 38 of its 48 zones with nothing said, and a
+  // stored `scale` or `place.kind` threw and left build()'s catch-all degrading a
+  // compiled settlement to the 3-zone legacy layout behind one console.warn.
+  //
+  // THIS IS A FOLD, NOT A SECOND validate(), and that is the whole design. Running
+  // validate() again on read would re-run the seal-time POLICY passes too — the
+  // per-scale feature and place caps, the floors, the dedupe — against a brief
+  // sealed under a table that may not be this build's. A newer build that seats
+  // four places at hamlet rank writes a brief this one would strip to two on every
+  // load, which is the same silent zone loss the seam was opened for, arriving
+  // through the front door. Seal time may DROP; read time may only FOLD. Every
+  // array length, every name and every id crosses this function untouched, and
+  // what changes is only a value the compiler was about to use as a table key.
+  //
+  // AND IT NEVER TOUCHES THE CALLER'S OBJECT. The brief the save path holds is what
+  // PF.player.briefHashOf() stamps a save against, so a byte of it moving under the
+  // load path is a SPURIOUS SEVERANCE — rel rows, quests and home quarantined for a
+  // world that did not change. Neither hazard is theoretical: validate() reorders
+  // `src.cast` in place on the leader-hoist path, and it is not byte-idempotent
+  // anyway (a brief that took repairs at seal time re-validates with an empty
+  // `_repairs`, and a stock top-up member's key order is not the main path's). So
+  // the fold works on a deep copy that lives and dies inside build(), the stored
+  // object stays the identity source it has always been, and `_folds` — the
+  // read-side counterpart of `_repairs` — rides the copy and is never written back.
+  //
+  // Where the compiler's readings all agree on a fallback, the fold changes
+  // nothing observable: an unknown `tint` was already grey's hue (`?? 210`) and an
+  // unknown `tag` was already a plain rect with no painter — measured, those two
+  // compile identically folded or not. Everything else MOVES, deliberately.
+  // `prosperity` moving is this function's headline (the silent 38-of-48-zone
+  // loss above). `place.kind` moves because FURNISH's `|| dwelling` was never the
+  // only reading — upperPlan refuses non-household kinds outright and cellarPlan
+  // gives them no cellar, so an unfolded unknown compiled to a stunted dwelling,
+  // not a dwelling. `surround` and `standing` move to validate's own defaults,
+  // which beat a flat ground mix and a person with no rest anchor. In every case
+  // the fold's answer is the one seal time would have given, and a value naming
+  // something on Object.prototype can no longer pretend to be a table's entry.
+  //
+  // An ABSENT value stays absent. `?? "resident"` and `|| SCALES.village` are the
+  // compiler's reading of a missing field, and folding one in would rewrite a brief
+  // sealed before that field existed.
+  function foldStored(stored, seed) {
+    const brief = JSON.parse(JSON.stringify(stored));
+    const folds = [];
+    const foldAt = (owner, key, list, fallback, fieldPath) => {
+      if (!owner || typeof owner !== "object") return;
+      if (!Object.prototype.hasOwnProperty.call(owner, key)) return;
+      const was = owner[key];
+      if (was === null || was === undefined) return;
+      const now = foldEnum(was, list, fallback);
+      if (now === was) return;
+      owner[key] = now;
+      folds.push(`${fieldPath}: ${JSON.stringify(was)} -> ${JSON.stringify(now)}`);
+    };
+    const foldFeatures = (list, fieldPath) => {
+      if (!Array.isArray(list)) return;
+      // No default tag exists to fold to, and inventing one would put a feature on
+      // the map the brief never asked for. null is what the placement loops already
+      // read an unknown tag as (`FEATURE_RECTS[tag] ?? FEATURE_RECT`, `PLACERS[tag]?.`),
+      // and the row keeps its name, so the registry can still say what stands there.
+      list.forEach((feature, index) => foldAt(feature, "tag", FEATURE_TAGS, null, `${fieldPath}[${index}].tag`));
+    };
+    // Theme is the one fold whose vocabulary is not this module's to state.
+    // compile() spends `brief.theme` on a single read — `PF.art.setTheme()`
+    // (20-world) — so 10-art's table IS the whitelist, and it is asked for it at
+    // fold time rather than copied at load time. A copy would drift the moment a
+    // theme ships with art but no worked example here, and folding an art-only
+    // theme to cozy-village would replace a VALID value one screen before
+    // setTheme() would have accepted it: the future-theme divergence class the
+    // roadmap's swamp-biome prerequisites already track. No art module, no
+    // authority and so no fold — which is what 20-world's own `PF.art.setTheme ?`
+    // guard does with the same absence.
+    const themeIds = PF.art?.themeIds?.();
+    if (themeIds) foldAt(brief, "theme", themeIds, "cozy-village", "theme");
+    foldAt(brief, "scale", Object.keys(SCALES), "village", "scale");
+    foldAt(brief, "surround", SURROUNDS, pick(seed, "surround", SURROUNDS), "surround");
+    foldAt(brief, "prosperity", PROSPERITY, "modest", "prosperity");
+    foldFeatures(brief.features, "features");
+    if (Array.isArray(brief.places))
+      brief.places.forEach((place, index) => {
+        foldAt(place, "kind", PLACE_KINDS, "dwelling", `places[${index}].kind`);
+        foldFeatures(place?.features, `places[${index}].features`);
+      });
+    if (Array.isArray(brief.cast))
+      brief.cast.forEach((member, index) => {
+        foldAt(member, "kind", CAST_KINDS, "folk", `cast[${index}].kind`);
+        foldAt(member, "tint", Object.keys(TINTS), "grey", `cast[${index}].tint`);
+        foldAt(member, "standing", STANDING, "resident", `cast[${index}].standing`);
+      });
+    brief._folds = folds;
+    return brief;
+  }
+
+  // ── defaults(): the themed brief a world compiles to when nobody wrote one ──
+  // NOT a failure path any more (see generate()'s design revision): no failure
+  // seals anything. What it remains is the schema's own worked example per theme —
+  // the fixture the compiler's invariants are driven through, and the answer for
+  // any future caller that needs a brief without a generation call behind it.
   function defaults(theme, seed) {
-    return validate(DEFAULT_BRIEFS[theme] || DEFAULT_BRIEFS["cozy-village"], { theme, seed });
+    // PF.own, because this read happens BEFORE validate() applies the same guard
+    // one screen up — and it is the parameter of an exported function, so the
+    // word arrives from wherever the caller got it. Bare, `defaults("__proto__")`
+    // handed Object.prototype to validate() as the worked example: an object, so
+    // it survived the transport check, and every field then floored to nothing.
+    // The theme came back cozy-village and the brief came back EMPTY, which is
+    // the fallback on this line reading as if it had fired when it had not.
+    return validate(PF.own(DEFAULT_BRIEFS, theme) || DEFAULT_BRIEFS["cozy-village"], { theme, seed });
   }
 
   /** Truncation salvage (§4.1/§5): strip fences, take the outermost balanced
@@ -495,14 +696,33 @@ PF.brief = (() => {
    *  chat_busy; one plain re-roll on truncation (the route's maxTokens is
    *  min()-only — "never a raise" — so a numeric override could only shrink
    *  the budget); salvage of the LONGEST truncated raw seen across attempts.
-   *  Returns a SEALED brief only for outcomes worth sealing: success, salvage,
-   *  or a deterministic/paid failure (400 contract, 422 provider/parse) →
-   *  themed defaults. Transient outcomes — 404 route-absent, 409, 429, 5xx,
-   *  network error, budget timeout — return NULL so the caller leaves the
-   *  chat unsealed and the next boot simply tries again. */
+   *
+   *  Returns a SEALED brief for the two outcomes that produce a REAL one —
+   *  success and salvage — and NULL for every failure, so the caller leaves the
+   *  chat unsealed and the next visit simply tries again.
+   *
+   *  DESIGN REVISION (this release, maintainer ruling #7 / plan §Q3b). The 0.4.0
+   *  ladder sealed THEMED DEFAULTS on a deterministic/paid failure — 400 contract,
+   *  422 provider/parse — on the reasoning that a paid call per visit is worse
+   *  than the default world. That decision predates the loading gate and does not
+   *  survive it: back then a default world was what the player was already walking
+   *  in, so sealing it changed nothing they could see. Now the gate holds play
+   *  precisely so that nobody invests in a world that is going to be discarded,
+   *  and the README states the contract plainly — "a generation failure is a retry
+   *  screen; nothing is stored". Sealing defaults on a 400 makes that sentence
+   *  false in the one case a player cannot undo: the key is written, the chat is
+   *  permanently a themed default, and the three paragraphs of setting they wrote
+   *  are gone with no way back. The paid-call worry is also nearly hypothetical
+   *  now — capPreferences clamps to 7,800 against the route's 8,000 cap, so the
+   *  reachable 400 is a contract bug rather than a long setting.
+   *
+   *  `onFailure(kind)` reports WHY, once, so the retry screen can say something
+   *  truer than "something went wrong" — a deterministic refusal and a busy engine
+   *  want different sentences from the player. Kinds: "unavailable" (404/409/429/
+   *  5xx), "refused" (400/422 with nothing salvageable), "network", "timeout". */
   async function generate(
     chatId,
-    { theme, seed, preferences, onProgress, budgetMs = 90_000, busyWaitMs = Math.min(15_000, budgetMs / 6) },
+    { theme, seed, preferences, onProgress, onFailure, budgetMs = 90_000, busyWaitMs = Math.min(15_000, budgetMs / 6) },
   ) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), budgetMs);
@@ -543,24 +763,34 @@ PF.brief = (() => {
       }
       if (response.status === 404 || response.status === 409 || response.status === 429 || response.status >= 500) {
         console.warn("[pixelforge] world generation unavailable (transient); retrying next visit", response.status);
+        onFailure?.("unavailable");
         return null;
       }
+      // 400 (contract) and 422 (provider/parse, nothing salvageable). Deterministic
+      // — trying again probably gets the same answer — but STILL a retry screen and
+      // still nothing stored, because the alternative is deciding a themed default
+      // world on the player's behalf and writing it down where they cannot undo it.
       console.warn(
-        "[pixelforge] world generation failed; sealing the themed default",
+        "[pixelforge] world generation was refused; the chat stays unsealed",
         response.status,
         response.body?.error ?? null,
       );
+      onFailure?.("refused");
+      return null;
     } catch (err) {
       // Network trouble and the budget timeout are both transient — leave the
       // chat unsealed rather than freezing the default world in forever.
-      if (!controller.signal.aborted)
+      if (!controller.signal.aborted) {
         console.warn("[pixelforge] world generation failed (network); retrying next visit", err);
-      else console.warn("[pixelforge] world generation timed out; retrying next visit");
+        onFailure?.("network");
+      } else {
+        console.warn("[pixelforge] world generation timed out; retrying next visit");
+        onFailure?.("timeout");
+      }
       return null;
     } finally {
       clearTimeout(timer);
     }
-    return defaults(theme, seed);
   }
 
   // ── guidance(): the exact text that ships in the one call ───────────────────
@@ -588,8 +818,13 @@ PF.brief = (() => {
       "- cast: 4-10 story-relevant people of {name, role, kind, tint, home, household, persona, standing}.",
       `  kind (machine field) from: ${CAST_KINDS.join(" | ")}. role: <=24 chars free text (their title).`,
       `  tint from: ${Object.keys(TINTS).join(" | ")}. home: the NAME of the zone they live in.`,
-      "  household: 1-6 — people sharing a number share a roof; buildings are derived from",
-      "  households, so do NOT list one household per person unless they truly live alone.",
+      "  workplace (optional): the NAME of the zone they work in, when it is not the one they",
+      "  live in and they do not run it themselves — a second teacher at the school, a shop",
+      "  assistant, one of several sellers at a market. Omit it for anyone who works at home.",
+      "  household: 1-10 — people sharing a number share a roof. Buildings are derived from",
+      "  households, so do NOT give everyone their own number unless they truly live apart.",
+      "  Unrelated people CAN share one: lodgers at a boarding house, sisters at a convent,",
+      "  recruits in a barracks are all one number, and there is no limit on how many.",
       "  persona: <=100 chars — what they want, and what they are hiding.",
       `  standing (optional, default resident): one of ${STANDING.join(" | ")}. transient = passing`,
       "  through; fringe = lives apart at the edges (hermit, outcast, refugee); destitute = no home.",
@@ -644,7 +879,8 @@ PF.brief = (() => {
               kind: { type: "string", enum: CAST_KINDS },
               tint: { type: "string", enum: Object.keys(TINTS) },
               home: text(24),
-              household: { type: "integer", minimum: 1, maximum: 6 },
+              workplace: text(24),
+              household: { type: "integer", minimum: 1, maximum: 10 },
               persona: text(100),
               standing: { type: "string", enum: STANDING },
             },
@@ -670,6 +906,12 @@ PF.brief = (() => {
     ruin: "The Ruin",
     lookout: "The Lookout",
   };
+  // What each theme calls its common room, for the §4.3 host synthesis. Read off
+  // the default briefs, which name theirs in full: "The Amber Hearth Inn" and
+  // "The Meridian Cantina". PLACE_LABELS is the generic fallback for a place the
+  // model named nothing at all; this is the possessive a person's own house of
+  // hospitality takes.
+  const GATHERING_NOUNS = { "cozy-village": "Inn", "sci-fi-colony": "Cantina" };
   const PLACE_LABELS = {
     gathering: "The Hearth",
     workshop: "The Works",
@@ -828,5 +1070,18 @@ PF.brief = (() => {
     },
   };
 
-  return { VERSION, SCALES, TINTS, FEATURE_TAGS, CAPS, validate, defaults, guidance, schema, generate, salvageText };
+  return {
+    VERSION,
+    SCALES,
+    TINTS,
+    FEATURE_TAGS,
+    CAPS,
+    validate,
+    foldStored,
+    defaults,
+    guidance,
+    schema,
+    generate,
+    salvageText,
+  };
 })();

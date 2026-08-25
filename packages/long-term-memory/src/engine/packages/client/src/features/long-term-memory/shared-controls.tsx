@@ -15,7 +15,8 @@ import { useLtmTranslation } from "./localization";
 let activePopover: { id: string; close: () => void } | null = null;
 
 export const inputClass = "mari-editor-field min-h-11 w-full px-3 text-sm";
-export const compactInputClass = "mari-editor-field min-h-8 w-full px-2.5 text-[0.6875rem]";
+export const compactInputClass = "mari-chrome-field min-h-9 w-full !rounded-md px-3 py-2 text-xs";
+export const compactInputStyle = { color: "var(--foreground)" } as const;
 
 export const Button = forwardRef<
   HTMLButtonElement,
@@ -80,6 +81,7 @@ export function InfoPopover({
   label,
   content,
   wide = false,
+  compact = false,
 }: {
   label: string;
   content: ReactNode;
@@ -139,7 +141,7 @@ export function InfoPopover({
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [open, wide]);
+  }, [compact, open, wide]);
 
   useEffect(() => {
     if (!open) return;
@@ -156,7 +158,7 @@ export function InfoPopover({
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("pointerdown", onPointerDown);
     };
-  }, [open]);
+  }, [id, open]);
 
   useEffect(() => {
     if (open) activePopover = { id, close: closeRef.current };
@@ -164,7 +166,7 @@ export function InfoPopover({
       clearCloseTimer();
       if (activePopover?.id === id) activePopover = null;
     };
-  }, [open]);
+  }, [id, open, pinned]);
 
   return (
     <>
@@ -179,8 +181,12 @@ export function InfoPopover({
         aria-controls={open ? `${id}-panel` : undefined}
         aria-describedby={open && !pinned ? `${id}-panel` : undefined}
         data-ltm-info={label}
-        className="inline-grid h-11 w-11 shrink-0 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-        style={{ height: "2.75rem", width: "2.75rem", flexShrink: 0 }}
+        className={`${compact ? "h-7 w-7" : "h-11 w-11"} inline-grid shrink-0 place-items-center rounded-md text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]`}
+        style={
+          compact
+            ? { height: "1.75rem", width: "1.75rem", flexShrink: 0 }
+            : { height: "2.75rem", width: "2.75rem", flexShrink: 0 }
+        }
         onMouseEnter={show}
         onMouseLeave={scheduleClose}
         onFocus={show}
@@ -265,8 +271,8 @@ export function NumberField({
     committedText.current = String(value);
   }, [value]);
   return (
-    <div className={`space-y-1 font-medium text-[var(--muted-foreground)] ${compact ? "text-[0.625rem]" : "text-xs"}`}>
-      <span className="flex items-center gap-1">
+    <div className={`space-y-1 font-medium ${compact ? "text-[0.625rem]" : "text-xs"}`}>
+      <span className="flex items-center gap-1 text-[var(--foreground)]">
         <span id={`${id}-label`}>{label}</span>
         {help ? <InfoPopover label={label} content={help} compact={compact} /> : null}
       </span>
@@ -275,6 +281,7 @@ export function NumberField({
         aria-labelledby={`${id}-label`}
         data-ltm-control="number"
         className={compact ? compactInputClass : inputClass}
+        style={compact ? compactInputStyle : undefined}
         type="number"
         value={text}
         min={min}
@@ -322,7 +329,7 @@ export function StatusSurface({
       role={tone === "danger" ? "alert" : "status"}
       aria-live="polite"
       data-ltm-status={tone}
-      className={`mari-editor-panel mari-editor-panel--soft flex items-center gap-2 ${compact ? "px-2 py-1.5 text-[0.625rem]" : "min-h-11 px-3 text-xs"} ${toneClass} ${className}`}
+      className={`${compact ? "rounded-md border border-[var(--border)] bg-[var(--background)]/75 px-2 py-1.5 text-[0.625rem]" : "mari-editor-panel mari-editor-panel--soft min-h-11 px-3 text-xs"} flex items-center gap-2 ${toneClass} ${className}`}
       {...props}
     >
       {busy ? <Loader2 aria-hidden="true" size="0.875rem" className="animate-spin motion-reduce:animate-none" /> : null}

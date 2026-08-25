@@ -28,6 +28,7 @@ import {
   type NoodlerFanIdentityProvider,
 } from "./slurp-fan-identity-provider.js";
 import { noodleResponseFormat } from "./slurp-response-format.js";
+import { normalizeSlurpFanActivityRows } from "./slurp-fan-activity-response.js";
 
 type GenerationConnection = NonNullable<Awaited<ReturnType<ReturnType<typeof createConnectionsStorage>["getWithKey"]>>>;
 
@@ -127,7 +128,7 @@ function buildFanActivityMessages(input: {
   settings: Pick<SlurpSettings, "fanLikesPerRefresh" | "fanRepliesPerRefresh" | "fanRepostsPerRefresh">;
 }): ChatMessage[] {
   const system = [
-    "Propose quiet synthetic audience activity for the supplied NoodleR posts.",
+    "Propose quiet synthetic audience activity for the supplied Slurp posts.",
     "Posts marked locked are paid posts. Only subscribers see them, so react to the title and the fact it is paid; never invent or state its hidden contents.",
     "Use only supplied creator IDs, actor handles, and post IDs. Never invent identifiers.",
     "Likes and reposts have null content. Replies are one short sentence, normally under 180 characters, natural, relevant, and not repetitive.",
@@ -153,7 +154,7 @@ function buildFanActivityMessages(input: {
   }));
   return [
     { role: "system", content: system },
-    { role: "user", content: `# NoodleR audience data\n${JSON.stringify({ creators }, null, 2)}` },
+    { role: "user", content: `# Slurp audience data\n${JSON.stringify({ creators }, null, 2)}` },
   ];
 }
 
@@ -202,33 +203,35 @@ async function generateFanActivity(input: {
     "[debug/noodler-fan] Model response received (%d characters); content is redacted.",
     content.length,
   );
-  const parsed = parseGeneratedFanActivityResponse(parseGameJsonish(requireModelAnswer(content, "fan activity")));
+  const creatorAccountIdByPostId = new Map(
+    input.creators.flatMap((candidate) => candidate.posts.map((post) => [post.id, candidate.creator.id] as const)),
+  );
+  const parsed = parseGeneratedFanActivityResponse(
+    parseGameJsonish(requireModelAnswer(content, "fan activity")),
+    creatorAccountIdByPostId,
+  );
   if (parsed.rejected > 0) {
     logger.warn("Ignored %d malformed generated NoodleR fan activities", parsed.rejected);
   }
   return parsed.value;
 }
 
-export function parseGeneratedFanActivityResponse(value: unknown): {
+export function parseGeneratedFanActivityResponse(
+  value: unknown,
+  creatorAccountIdByPostId: ReadonlyMap<string, string> = new Map(),
+): {
   value: NoodleGeneratedFanRefresh;
   rejected: number;
 } {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return { value: { activities: [] }, rejected: 0 };
-  }
-  const activities = (value as { activities?: unknown }).activities;
-  if (!Array.isArray(activities)) return { value: { activities: [] }, rejected: 0 };
-  const accepted = activities.flatMap((activity) => {
-    if (!activity || typeof activity !== "object" || Array.isArray(activity)) return [];
-    const row = activity as Record<string, unknown>;
-    const parsed = noodleGeneratedFanActivitySchema.safeParse({
-      ...row,
-      creatorAccountId: row.creatorAccountId ?? row.creatorId,
-      targetPostId: row.targetPostId ?? row.postId,
-    });
+  const normalized = normalizeSlurpFanActivityRows(value, creatorAccountIdByPostId);
+  const accepted = normalized.rows.flatMap((row) => {
+    const parsed = noodleGeneratedFanActivitySchema.safeParse(row);
     return parsed.success ? [parsed.data] : [];
   });
-  return { value: { activities: accepted }, rejected: activities.length - accepted.length };
+  return {
+    value: { activities: accepted },
+    rejected: normalized.rejected + normalized.rows.length - accepted.length,
+  };
 }
 
 export async function prepareNoodlerFanCreatorCandidates(input: {

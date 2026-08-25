@@ -1,0 +1,35 @@
+[
+  {
+    "id": "memory-nag",
+    "name": "Memory Nag",
+    "description": "Keeps a short per-chat vault of roleplay memories and recalls only the unresolved details that matter to the current turn.",
+    "author": "Pasta Devs",
+    "phase": "post_processing",
+    "enabledByDefault": false,
+    "category": "tracker",
+    "runtimeDisabled": false,
+    "defaultInjectAsSection": false,
+    "modeAllowlist": [
+      "roleplay"
+    ],
+    "defaultTools": [],
+    "defaultSettings": {
+      "resultType": "memory_nag",
+      "contextSize": 5,
+      "maxTokens": 4096,
+      "temperature": 0,
+      "contextSources": {
+        "chatHistory": true,
+        "characters": false,
+        "persona": false,
+        "activatedLorebookEntries": false,
+        "chatSummary": false,
+        "authorNotes": false,
+        "trackerData": false,
+        "recalledMemories": false
+      }
+    },
+    "defaultPromptTemplate": "Decide whether one of the supplied vault memories should nag the roleplay characters after the latest turn.\nChoose only IDs listed in allowedMemoryIds inside <agent_runtime_context>. Participant IDs are character IDs, never memory IDs. Never create, rewrite, or combine a memory.\nA nag should fit what is happening now: an unresolved promise, past harm, relationship strain, warning, debt, or relevant admission. Quiet or unrelated moments usually need none.\nDo not select a memory that only repeats the immediate scene or an action happening now. Recall relevant events from earlier in the story.\nReturn JSON only. If no nag fits: {\"nags_needed\":false}. If nags fit: {\"nags_needed\":true,\"memoryIds\":[\"exact-id\"]}.",
+    "execution": "pipeline"
+  }
+]

@@ -10,6 +10,7 @@ import {
   CalendarClock,
   Crop,
   Dices,
+  Download,
   FileText,
   FolderOpen,
   Heart,
@@ -19,6 +20,7 @@ import {
   Loader2,
   MessageCircle,
   Pencil,
+  Plus,
   RefreshCw,
   RotateCcw,
   Save,
@@ -26,6 +28,7 @@ import {
   Settings2,
   Smile,
   Trash2,
+  Upload,
   X,
   UserMinus,
   UserPlus,
@@ -79,6 +82,15 @@ import {
 } from "../../hooks/use-prompt-overrides";
 import { useUploadGlobalGalleryImages } from "../../hooks/use-global-gallery";
 import type { ChatImage } from "../../hooks/use-gallery";
+import type { PackageNoodleSettings, PackageNoodleSettingsUpdateInput } from "./noodle-settings-defaults";
+import {
+  mergeNoodlePromptPreset,
+  NOODLE_PROMPT_PRESET_LIMIT,
+  NOODLE_PROMPT_PRESET_NAME_LIMIT,
+  parseNoodlePromptPresetImport,
+  sanitizeNoodlePromptPresets,
+  type NoodlePromptPreset,
+} from "./noodle-prompt-presets";
 import { HelpTooltip } from "../ui/HelpTooltip";
 import {
   ConversationMediaPickerPanel,
@@ -88,6 +100,7 @@ import {
 import { ChatImageLightbox } from "../chat/ChatImageLightbox";
 import { ExpandedTextarea } from "../ui/ExpandedTextarea";
 import { Modal } from "../ui/Modal";
+import { NoodleIntroDialog, useNoodleIntro } from "./NoodleIntroDialog";
 import {
   ImagePromptReviewModal,
   type ImagePromptOverride,
@@ -95,10 +108,12 @@ import {
 } from "../ui/ImagePromptReviewModal";
 import {
   useConfirmNoodleImagePrompts,
+  useCleanupUnusedNoodleData,
   useClearNoodleInvites,
   useCreateNoodleInteraction,
   useCreateNoodlePost,
   useDeleteNoodleInteraction,
+  useDeleteAllNoodleData,
   useDeleteNoodlePost,
   useInviteNoodleCharacter,
   useInviteNoodleCharacters,
@@ -127,6 +142,8 @@ import {
   NOODLE_BLUE,
   NOODLE_ICON_SCOPE_CLASS,
   NOODLE_PERSONA_SWITCHER_PAGE_SIZE,
+  HIDE_ON_SCROLL_CLASS,
+  useHideOnScroll,
 } from "./NoodleShell";
 import type {
   NoodleNavigationState,
@@ -232,6 +249,12 @@ type NoodleConfirmAction =
     }
   | {
       kind: "reset-timeline";
+      title: string;
+      message: string;
+      confirmLabel: string;
+    }
+  | {
+      kind: "cleanup-unused" | "delete-all-data";
       title: string;
       message: string;
       confirmLabel: string;
@@ -623,6 +646,8 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const refreshNoodle = useRefreshNoodle();
   const confirmNoodleImagePrompts = useConfirmNoodleImagePrompts();
   const resetNoodleTimeline = useResetNoodleTimeline();
+  const cleanupUnusedData = useCleanupUnusedNoodleData();
+  const deleteAllData = useDeleteAllNoodleData();
   const noodlePromptDetail = usePromptOverride(NOODLE_TIMELINE_BASE_PROMPT_KEY);
   const noodlePromptDefault = usePromptOverrideDefault(NOODLE_TIMELINE_BASE_PROMPT_KEY);
   const saveNoodlePrompt = useSavePromptOverride();
@@ -650,6 +675,13 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const replyMediaToolRef = useRef<HTMLDivElement | null>(null);
   const accountSwitcherRef = useRef<HTMLDivElement | null>(null);
   const timelineScrollRef = useRef<HTMLDivElement | null>(null);
+  const [timelineScroller, setTimelineScroller] = useState<HTMLDivElement | null>(null);
+  const setTimelineScrollerRef = useCallback((node: HTMLDivElement | null) => {
+    timelineScrollRef.current = node;
+    setTimelineScroller(node);
+  }, []);
+  const setStickyHeader = useHideOnScroll(timelineScroller);
+  const [introOpen, dismissIntro] = useNoodleIntro();
   const mobileDrawerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const composerRestoreFocusRef = useRef<HTMLElement | null>(null);
   const profileDraftAccountIdRef = useRef<string | null>(null);
@@ -722,8 +754,12 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
   const [editingReplyId, setEditingReplyId] = useState<string | null>(null);
   const [editingReplyContent, setEditingReplyContent] = useState("");
   const [confirmAction, setConfirmAction] = useState<NoodleConfirmAction | null>(null);
+  const [deleteAllConfirmation, setDeleteAllConfirmation] = useState("");
   const [noodlePromptEditorOpen, setNoodlePromptEditorOpen] = useState(false);
   const [noodlePromptDraft, setNoodlePromptDraft] = useState("");
+  const [promptPresetName, setPromptPresetName] = useState("");
+  const [promptPresetDialogOpen, setPromptPresetDialogOpen] = useState(false);
+  const promptPresetImportRef = useRef<HTMLInputElement | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
   const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
@@ -997,7 +1033,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     setRefreshTimeDraft("");
   }, [editingRefreshTime, scheduler?.scheduledTimes]);
 
-  const saveSettings = (patch: NoodleSettingsUpdateInput) => {
+  const saveSettings = (patch: PackageNoodleSettingsUpdateInput) => {
     updateSettings.mutate(patch, {
       onError: (error) =>
         toast.error(
@@ -1005,6 +1041,14 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
         ),
     });
   };
+
+  const saveSettingsAsync = (patch: PackageNoodleSettingsUpdateInput): Promise<void> =>
+    new Promise((resolve, reject) => {
+      updateSettings.mutate(patch, {
+        onSuccess: () => resolve(),
+        onError: reject,
+      });
+    });
 
   const openNoodlePromptEditor = () => {
     if (!noodlePromptText) {
@@ -1036,6 +1080,117 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : localizeUi("ui.noodle.noodlehome.couldNotSaveTheNoodlePrompt"),
+      );
+    }
+  };
+
+  const promptPresets = sanitizeNoodlePromptPresets((settings as PackageNoodleSettings | undefined)?.promptPresets);
+  const savePromptPreset = async () => {
+    if (!noodlePromptDraft.trim()) {
+      toast.error(localizeUi("ui.noodle.noodlehome.theNoodlePromptCannotBeEmpty"));
+      return;
+    }
+    if (!promptPresetName.trim()) {
+      toast.error(localizeUi("ui.noodle.noodlehome.promptPresetNameRequired"));
+      return;
+    }
+    const normalizedName = promptPresetName.trim().slice(0, NOODLE_PROMPT_PRESET_NAME_LIMIT);
+    const hasExistingName = promptPresets.some(
+      (preset) => preset.name.toLocaleLowerCase() === normalizedName.toLocaleLowerCase(),
+    );
+    if (promptPresets.length >= NOODLE_PROMPT_PRESET_LIMIT && !hasExistingName) {
+      toast.error(localizeUi("ui.noodle.noodlehome.promptPresetLimitReached"));
+      return;
+    }
+    const next = mergeNoodlePromptPreset(promptPresets, { name: normalizedName, template: noodlePromptDraft });
+    try {
+      await saveSettingsAsync({ promptPresets: next });
+      setPromptPresetDialogOpen(false);
+      setPromptPresetName("");
+      toast.success(localizeUi("ui.noodle.noodlehome.promptPresetSaved"));
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : localizeUi("ui.noodle.noodlehome.couldNotUpdateNoodleSettings"),
+      );
+    }
+  };
+
+  const applyPromptPreset = async (preset: NoodlePromptPreset) => {
+    try {
+      await saveNoodlePrompt.mutateAsync({
+        key: NOODLE_TIMELINE_BASE_PROMPT_KEY,
+        template: preset.template,
+        enabled: true,
+      });
+      setNoodlePromptDraft(preset.template);
+      setPromptPresetDialogOpen(false);
+      toast.success(localizeUi("ui.noodle.noodlehome.promptPresetLoaded"));
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : localizeUi("ui.noodle.noodlehome.couldNotSaveTheNoodlePrompt"),
+      );
+    }
+  };
+
+  const deletePromptPreset = async (name: string) => {
+    const confirmed = await showConfirmDialog({
+      title: localizeUi("ui.noodle.noodlehome.promptPresetDeleteTitle"),
+      message: localizeUi("ui.noodle.noodlehome.promptPresetDeleteMessage", { name }),
+      confirmLabel: localizeUi("ui.noodle.noodlehome.promptPresetDeleteConfirm"),
+    });
+    if (!confirmed) return;
+    saveSettings({ promptPresets: promptPresets.filter((preset) => preset.name !== name) });
+  };
+
+  const exportPromptPresets = () => {
+    const blob = new Blob([JSON.stringify({ marinaraNoodlePrompts: 1, presets: promptPresets }, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "marinara-noodle-prompts.json";
+    document.body.append(anchor);
+    anchor.click();
+    window.setTimeout(() => {
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    }, 0);
+  };
+
+  const importPromptPresets = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      const imported = parseNoodlePromptPresetImport(JSON.parse(await file.text()));
+      if (!imported.length) throw new Error(localizeUi("ui.noodle.noodlehome.promptPresetImportInvalid"));
+      const merged = [...promptPresets];
+      let kept = 0;
+      for (const preset of imported) {
+        if (merged.length >= NOODLE_PROMPT_PRESET_LIMIT) break;
+        let name = preset.name;
+        let suffix = 2;
+        while (merged.some((item) => item.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+          const suffixText = ` (${suffix++})`;
+          name = `${preset.name.slice(0, NOODLE_PROMPT_PRESET_NAME_LIMIT - suffixText.length)}${suffixText}`;
+        }
+        merged.push({ ...preset, name });
+        kept += 1;
+      }
+      const next = sanitizeNoodlePromptPresets(merged);
+      if (kept > 0) await saveSettingsAsync({ promptPresets: next });
+      toast.success(
+        kept === imported.length
+          ? localizeUi("ui.noodle.noodlehome.promptPresetsImported")
+          : localizeUi("ui.noodle.noodlehome.promptPresetsImportedPartial", {
+              kept,
+              total: imported.length,
+            }),
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : localizeUi("ui.noodle.noodlehome.promptPresetImportInvalid"),
       );
     }
   };
@@ -1546,7 +1701,11 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
           ? resetNoodleTimeline.isPending
           : confirmAction?.kind === "uninvite-everybody"
             ? clearInvites.isPending
-            : false;
+            : confirmAction?.kind === "cleanup-unused"
+              ? cleanupUnusedData.isPending
+              : confirmAction?.kind === "delete-all-data"
+                ? deleteAllData.isPending
+                : false;
   const normalizedProfileHandle = profileHandle.trim().replace(/^@+/, "");
   const isEditingProfile = canEditViewedProfile && profileEditing;
   const profileDisplayName = canEditViewedProfile
@@ -2455,6 +2614,25 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
     });
   };
 
+  const cleanupUnusedNoodleData = () => {
+    setConfirmAction({
+      kind: "cleanup-unused",
+      title: localizeUi("ui.noodle.noodlehome.cleanupUnusedNoodleData"),
+      message: localizeUi("ui.noodle.noodlehome.cleanupUnusedNoodleDataMessage"),
+      confirmLabel: localizeUi("ui.noodle.noodlehome.cleanupUnusedNoodleDataConfirm"),
+    });
+  };
+
+  const deleteAllNoodleData = () => {
+    setDeleteAllConfirmation("");
+    setConfirmAction({
+      kind: "delete-all-data",
+      title: localizeUi("ui.noodle.noodlehome.deleteAllNoodleData"),
+      message: localizeUi("ui.noodle.noodlehome.deleteAllNoodleDataMessage"),
+      confirmLabel: localizeUi("ui.noodle.noodlehome.deleteAllNoodleDataConfirm"),
+    });
+  };
+
   const confirmNoodleAction = () => {
     if (!confirmAction) return;
     if (confirmAction.kind === "delete-post") {
@@ -2506,6 +2684,44 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       });
       return;
     }
+    if (confirmAction.kind === "cleanup-unused") {
+      cleanupUnusedData.mutate(undefined, {
+        onSuccess: (counts) => {
+          setConfirmAction(null);
+          toast.success(
+            localizeUi("ui.noodle.noodlehome.cleanupUnusedNoodleDataDone", {
+              accounts: counts.accounts,
+              posts: counts.posts,
+            }),
+          );
+        },
+        onError: (error) =>
+          toast.error(
+            error instanceof Error ? error.message : localizeUi("ui.noodle.noodlehome.cleanupUnusedNoodleDataFailed"),
+          ),
+      });
+      return;
+    }
+    if (confirmAction.kind === "delete-all-data") {
+      if (deleteAllConfirmation !== "DELETE") return;
+      deleteAllData.mutate(undefined, {
+        onSuccess: (counts) => {
+          setConfirmAction(null);
+          setDeleteAllConfirmation("");
+          toast.success(
+            localizeUi("ui.noodle.noodlehome.deleteAllNoodleDataDone", {
+              accounts: counts.accounts,
+              posts: counts.posts,
+            }),
+          );
+        },
+        onError: (error) =>
+          toast.error(
+            error instanceof Error ? error.message : localizeUi("ui.noodle.noodlehome.deleteAllNoodleDataFailed"),
+          ),
+      });
+      return;
+    }
     resetNoodleTimeline.mutate(undefined, {
       onSuccess: () => {
         clearReplyComposer();
@@ -2549,6 +2765,12 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
         onError: (error) =>
           toast.error(
             error instanceof Error ? error.message : localizeUi("ui.noodle.noodlehome.couldNotRefreshNoodle"),
+            {
+              action: {
+                label: localizeUi("capabilities.actions.tryAgain"),
+                onClick: triggerRefresh,
+              },
+            },
           ),
       },
     );
@@ -2850,6 +3072,86 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
               <Pencil size={14} aria-hidden="true" className="shrink-0 text-[var(--noodle-accent)]" />
               <span>{localizeUi("ui.noodle.noodlehome.editPrompt")}</span>
             </button>
+          </div>
+          <div className="border-t border-[var(--marinara-chat-chrome-panel-border)] pt-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className={labelClass}>{localizeUi("ui.noodle.noodlehome.savedPrompts")}</p>
+              <span className="text-[0.68rem] text-[var(--muted-foreground)]">{promptPresets.length}/20</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <select
+                aria-label={localizeUi("ui.noodle.noodlehome.savedPrompts")}
+                className={`${fieldClass} max-w-full flex-1 sm:max-w-xs`}
+                defaultValue=""
+                onChange={(event) => {
+                  const preset = promptPresets.find((item) => item.name === event.target.value);
+                  if (preset) void applyPromptPreset(preset);
+                  event.target.value = "";
+                }}
+              >
+                <option value="">{localizeUi("ui.noodle.noodlehome.selectSavedPrompt")}</option>
+                {promptPresets.map((preset) => (
+                  <option key={preset.name} value={preset.name}>
+                    {preset.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => {
+                  setPromptPresetName("");
+                  setPromptPresetDialogOpen(true);
+                }}
+                disabled={updateSettings.isPending || !noodlePromptDraft.trim()}
+                title={localizeUi("ui.noodle.noodlehome.savePromptPreset")}
+                className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border border-[var(--noodle-accent)]/35 px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <Plus size={13} />
+                {localizeUi("ui.noodle.noodlehome.saveAs")}
+              </button>
+              <button
+                type="button"
+                onClick={exportPromptPresets}
+                disabled={!promptPresets.length}
+                title={localizeUi("ui.noodle.noodlehome.exportPrompts")}
+                className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border border-[var(--border)] px-3 text-xs font-semibold text-[var(--foreground)] hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <Download size={13} />
+                <span className="sr-only">{localizeUi("ui.noodle.noodlehome.exportPrompts")}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => promptPresetImportRef.current?.click()}
+                title={localizeUi("ui.noodle.noodlehome.importPrompts")}
+                className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-md border border-[var(--border)] px-3 text-xs font-semibold text-[var(--foreground)] hover:bg-[var(--accent)]"
+              >
+                <Upload size={13} />
+                <span className="sr-only">{localizeUi("ui.noodle.noodlehome.importPrompts")}</span>
+              </button>
+              <input
+                ref={promptPresetImportRef}
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={importPromptPresets}
+              />
+            </div>
+            {promptPresets.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {promptPresets.map((preset) => (
+                  <button
+                    key={preset.name}
+                    type="button"
+                    onClick={() => void deletePromptPreset(preset.name)}
+                    title={`${localizeUi("ui.noodle.noodlehome.deletePromptPreset")}: ${preset.name}`}
+                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[0.68rem] text-[var(--muted-foreground)] hover:bg-[var(--destructive)]/10 hover:text-[var(--destructive)]"
+                  >
+                    <Trash2 size={11} />
+                    {preset.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </Section>
@@ -3431,6 +3733,16 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   }
                 />
               )}
+              {settings.participantSelectionMode === "all" && (
+                <NumberSetting
+                  label={localizeUi("ui.noodle.noodlehome.accountsPerRefresh")}
+                  help={localizeUi("ui.noodle.noodlehome.allInvitedRotationHelp")}
+                  value={settings.participantMax}
+                  min={1}
+                  max={100}
+                  onCommit={(value) => saveSettings({ participantMax: value })}
+                />
+              )}
             </div>
           </Section>
 
@@ -3569,6 +3881,13 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                         imageGenerationUseAvatarReferences: checked,
                       })
                     }
+                  />
+                  <ToggleSetting
+                    label={localizeUi("ui.noodle.noodlehome.enableImageInterpretation")}
+                    help={localizeUi("ui.noodle.noodlehome.enableImageInterpretationHelp")}
+                    checked={(settings as PackageNoodleSettings).enableImageInterpretation !== false}
+                    disabled={updateSettings.isPending}
+                    onChange={(checked) => saveSettings({ enableImageInterpretation: checked })}
                   />
                   <ToggleSetting
                     label={localizeUi("ui.noodle.noodlehome.includeDescriptions")}
@@ -3771,21 +4090,41 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
             title={localizeUi("ui.noodle.noodlehome.resetNoodle")}
             help={localizeUi("ui.noodle.noodlehome.clearsTimelineContentWhileKeepingProfilesFollowsInvitesAnd")}
           >
-            <button
-              type="button"
-              onClick={resetTimeline}
-              disabled={resetNoodleTimeline.isPending}
-              className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] transition-colors hover:border-[var(--noodle-accent)]/60 hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {resetNoodleTimeline.isPending ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
+            <div className="grid gap-2">
+              <button
+                type="button"
+                onClick={resetTimeline}
+                disabled={resetNoodleTimeline.isPending}
+                className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] transition-colors hover:border-[var(--noodle-accent)]/60 hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {resetNoodleTimeline.isPending ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Trash2 size={14} className="text-[var(--noodle-accent)]" />
+                )}
+                {resetNoodleTimeline.isPending
+                  ? localizeUi("ui.noodle.noodlehome.resettingNoodle")
+                  : localizeUi("ui.noodle.noodlehome.resetNoodleTimeline")}
+              </button>
+              <button
+                type="button"
+                onClick={cleanupUnusedNoodleData}
+                disabled={cleanupUnusedData.isPending || deleteAllData.isPending}
+                className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] bg-[var(--background)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] transition-colors hover:border-[var(--noodle-accent)]/60 hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
                 <Trash2 size={14} className="text-[var(--noodle-accent)]" />
-              )}
-              {resetNoodleTimeline.isPending
-                ? localizeUi("ui.noodle.noodlehome.resettingNoodle")
-                : localizeUi("ui.noodle.noodlehome.resetNoodleTimeline")}
-            </button>
+                {localizeUi("ui.noodle.noodlehome.cleanupUnusedNoodleData")}
+              </button>
+              <button
+                type="button"
+                onClick={deleteAllNoodleData}
+                disabled={cleanupUnusedData.isPending || deleteAllData.isPending}
+                className="flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-[var(--destructive)]/50 bg-[var(--background)] px-3 py-2 text-xs font-bold text-[var(--destructive)] transition-colors hover:bg-[var(--destructive)]/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Trash2 size={14} />
+                {localizeUi("ui.noodle.noodlehome.deleteAllNoodleData")}
+              </button>
+            </div>
           </Section>
         </>
       )}
@@ -4334,6 +4673,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
             className="hidden"
             onChange={handleReplyImageFile}
           />
+          <NoodleIntroDialog open={introOpen} onClose={dismissIntro} />
           {imageLightbox && (
             <ChatImageLightbox
               image={imageLightbox}
@@ -4346,73 +4686,80 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
       }
     >
       <div
-        ref={timelineScrollRef}
+        ref={setTimelineScrollerRef}
         data-component="NoodleView.TimelineScroller"
         className="min-h-0 flex-1 overflow-y-auto"
         data-noodle-content-scroll="true"
       >
         <div className="min-h-full w-full border-x border-[var(--noodle-divider)] bg-[var(--background)]">
           {activeNoodleView === "home" && (
+            // The wordmark and the tab row travel together, so the whole bar leaves
+            // on the way down and comes back as one on the way up.
             <div
-              className="sticky top-0 z-30 grid h-14 grid-cols-[3rem_minmax(0,1fr)_3rem] items-center border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 px-3 backdrop-blur @min-[1024px]:hidden"
-              data-component="NoodleView.MobileHeader"
+              ref={setStickyHeader}
+              className={cn("sticky top-0 z-30", HIDE_ON_SCROLL_CLASS)}
+              data-component="NoodleView.StickyHeader"
             >
-              <button
-                ref={mobileDrawerTriggerRef}
-                type="button"
-                onClick={() => setMobileDrawerOpen(true)}
-                className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-[var(--accent)]"
-                title={localizeUi("ui.noodle.noodlehome.openAccountMenu")}
-                aria-label={localizeUi("ui.noodle.noodlehome.openNoodleAccountMenu")}
+              <div
+                className="grid h-14 grid-cols-[3rem_minmax(0,1fr)_3rem] items-center border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 px-3 backdrop-blur @min-[1024px]:hidden"
+                data-component="NoodleView.MobileHeader"
               >
-                {personaAccount ? (
-                  <Avatar account={personaAccount} size="sm" />
-                ) : (
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 ring-1 ring-[var(--noodle-accent)]/25">
-                    <AtSign size={18} />
-                  </span>
-                )}
-              </button>
-              <NoodleLogo className="mx-auto h-9 w-14" />
-              <span aria-hidden="true" />
+                <button
+                  ref={mobileDrawerTriggerRef}
+                  type="button"
+                  onClick={() => setMobileDrawerOpen(true)}
+                  className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-[var(--accent)]"
+                  title={localizeUi("ui.noodle.noodlehome.openAccountMenu")}
+                  aria-label={localizeUi("ui.noodle.noodlehome.openNoodleAccountMenu")}
+                >
+                  {personaAccount ? (
+                    <Avatar account={personaAccount} size="sm" />
+                  ) : (
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--noodle-accent)]/15 ring-1 ring-[var(--noodle-accent)]/25">
+                      <AtSign size={18} />
+                    </span>
+                  )}
+                </button>
+                <NoodleLogo className="mx-auto h-9 w-14" />
+                <span aria-hidden="true" />
+              </div>
+              {isAccountSearch ? (
+                <div className="flex h-12 items-center gap-3 border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 px-4 backdrop-blur">
+                  <AtSign size={19} className="text-[var(--noodle-accent)]" />
+                  <div className="min-w-0">
+                    <h2 className="truncate text-sm font-bold">{localizeUi("ui.noodle.noodlehome.accounts")}</h2>
+                    <p className="truncate text-[0.68rem] text-[var(--muted-foreground)]">
+                      {accountSearchTerm
+                        ? localizeUi("ui.noodle.noodlehome.value1_0a5edda", {
+                            value1: accountSearchTerm,
+                          })
+                        : localizeUi("ui.noodle.noodlehome.typeAHandleAfter")}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 backdrop-blur">
+                  {TIMELINE_TABS.map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setTimelineTab(tab.id)}
+                      className={cn(
+                        "relative flex h-12 items-center justify-center text-sm font-bold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]",
+                        timelineTab === tab.id && "text-[var(--foreground)]",
+                      )}
+                      aria-pressed={timelineTab === tab.id}
+                    >
+                      {tab.label}
+                      {timelineTab === tab.id && (
+                        <span className="absolute bottom-0 left-1/2 h-1 w-14 -translate-x-1/2 rounded-full bg-[var(--noodle-accent)]" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
-          {activeNoodleView === "home" &&
-            (isAccountSearch ? (
-              <div className="sticky top-14 z-20 flex h-12 items-center gap-3 border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 px-4 backdrop-blur @min-[1024px]:top-0">
-                <AtSign size={19} className="text-[var(--noodle-accent)]" />
-                <div className="min-w-0">
-                  <h2 className="truncate text-sm font-bold">{localizeUi("ui.noodle.noodlehome.accounts")}</h2>
-                  <p className="truncate text-[0.68rem] text-[var(--muted-foreground)]">
-                    {accountSearchTerm
-                      ? localizeUi("ui.noodle.noodlehome.value1_0a5edda", {
-                          value1: accountSearchTerm,
-                        })
-                      : localizeUi("ui.noodle.noodlehome.typeAHandleAfter")}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="sticky top-14 z-20 grid grid-cols-2 border-b border-[var(--noodle-divider)] bg-[var(--background)]/95 backdrop-blur @min-[1024px]:top-0">
-                {TIMELINE_TABS.map((tab) => (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setTimelineTab(tab.id)}
-                    className={cn(
-                      "relative flex h-12 items-center justify-center text-sm font-bold text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]",
-                      timelineTab === tab.id && "text-[var(--foreground)]",
-                    )}
-                    aria-pressed={timelineTab === tab.id}
-                  >
-                    {tab.label}
-                    {timelineTab === tab.id && (
-                      <span className="absolute bottom-0 left-1/2 h-1 w-14 -translate-x-1/2 rounded-full bg-[var(--noodle-accent)]" />
-                    )}
-                  </button>
-                ))}
-              </div>
-            ))}
 
           {activeNoodleView === "home" && !isAccountSearch && !composeOpen && (
             <NoodleComposerShell
@@ -4639,7 +4986,7 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   })}
                 </div>
               </div>
-              <div className="pb-[calc(56px+env(safe-area-inset-bottom))] @min-[1024px]:pb-0">{settingsContent}</div>
+              <div className="pb-[calc(56px+var(--noodle-safe-bottom))] @min-[1024px]:pb-0">{settingsContent}</div>
             </div>
           ) : activeNoodleView === "profile" && profileConnectionTab ? (
             <div className="min-h-full">
@@ -5022,6 +5369,51 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
           </div>
         }
       />
+      <Modal
+        open={promptPresetDialogOpen}
+        onClose={() => setPromptPresetDialogOpen(false)}
+        title={localizeUi("ui.noodle.noodlehome.savePromptPreset")}
+        width="max-w-sm"
+        panelClassName={NOODLE_ICON_SCOPE_CLASS}
+        panelStyle={getNoodleAccentStyle(NOODLE_BLUE)}
+      >
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            savePromptPreset();
+          }}
+        >
+          <label className="block space-y-2">
+            <span className={labelClass}>{localizeUi("ui.noodle.noodlehome.promptPresetName")}</span>
+            <input
+              autoFocus
+              value={promptPresetName}
+              onChange={(event) => setPromptPresetName(event.target.value)}
+              maxLength={60}
+              className={fieldClass}
+              placeholder={localizeUi("ui.noodle.noodlehome.promptPresetNamePlaceholder")}
+            />
+          </label>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setPromptPresetDialogOpen(false)}
+              className="h-9 rounded-md border border-[var(--border)] px-4 text-xs font-semibold hover:bg-[var(--accent)]"
+            >
+              {localizeUi("chat.delete.dialog.cancel")}
+            </button>
+            <button
+              type="submit"
+              disabled={!promptPresetName.trim() || updateSettings.isPending}
+              className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[var(--noodle-accent)] px-4 text-xs font-bold text-zinc-950 disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              <Save size={13} />
+              {localizeUi("ui.noodle.noodlehome.savePrompt")}
+            </button>
+          </div>
+        </form>
+      </Modal>
       <ExpandedTextarea
         open={noodlePromptEditorOpen}
         onClose={closeNoodlePromptEditor}
@@ -5046,6 +5438,19 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
               {localizeUi("ui.noodle.noodlehome.restoreDefault")}
             </button>
             <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setPromptPresetName("");
+                  setPromptPresetDialogOpen(true);
+                }}
+                disabled={!noodlePromptDraft.trim() || saveNoodlePrompt.isPending || resetNoodlePrompt.isPending}
+                title={localizeUi("ui.noodle.noodlehome.savePromptPreset")}
+                className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-md border border-[var(--noodle-accent)]/35 px-3 text-xs font-semibold text-[var(--noodle-accent)] hover:bg-[var(--noodle-accent)]/10 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <Plus size={13} />
+                <span className="hidden sm:inline">{localizeUi("ui.noodle.noodlehome.saveAs")}</span>
+              </button>
               <button
                 type="button"
                 onClick={closeNoodlePromptEditor}
@@ -5085,11 +5490,24 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
         >
           <div className="space-y-4">
             <p className="text-sm leading-6 text-[var(--foreground)]">{confirmAction.message}</p>
+            {confirmAction.kind === "delete-all-data" && (
+              <input
+                value={deleteAllConfirmation}
+                onChange={(event) => setDeleteAllConfirmation(event.target.value)}
+                placeholder="DELETE"
+                aria-label="DELETE"
+                className={fieldClass}
+                autoFocus
+              />
+            )}
             <div className="flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setConfirmAction(null)}
-                disabled={confirmActionPending}
+                disabled={
+                  confirmActionPending ||
+                  (confirmAction.kind === "delete-all-data" && deleteAllConfirmation !== "DELETE")
+                }
                 className="h-9 rounded-md border border-[var(--marinara-chat-chrome-panel-border)] px-4 text-xs font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {localizeUi("chat.delete.dialog.cancel")}
@@ -5102,7 +5520,8 @@ export function NoodleHome({ navigation, onNavigate }: NoodleHomeProps) {
                   "flex h-9 items-center justify-center gap-2 rounded-md px-4 text-xs font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
                   confirmAction.kind === "delete-post" ||
                     confirmAction.kind === "delete-reply" ||
-                    confirmAction.kind === "reset-timeline"
+                    confirmAction.kind === "reset-timeline" ||
+                    confirmAction.kind === "delete-all-data"
                     ? "bg-[var(--destructive)] text-[var(--destructive-foreground)] [&_svg]:!text-[var(--destructive-foreground)] hover:opacity-90"
                     : "border border-[var(--noodle-accent)]/45 bg-[var(--noodle-accent)] text-zinc-950 [&_svg]:!text-zinc-950 hover:bg-[var(--noodle-accent)]/85",
                 )}

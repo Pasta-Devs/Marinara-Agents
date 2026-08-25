@@ -1,0 +1,14 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": { "locale": "ko", "direction": "ltr" },
+  "package": {
+    "name": "Memory Nag",
+    "description": "채팅별로 짧은 롤플레이 기억 보관함을 유지하고 현재 턴에 중요한 미해결 내용만 떠올립니다. 롤플레이 모드의 채팅 설정 → 에이전트 → 트래커 에이전트에서 추가하세요."
+  },
+  "agents": {
+    "memory-nag": {
+      "name": "Memory Nag",
+      "description": "채팅별로 짧은 롤플레이 기억 보관함을 유지하고 현재 턴에 중요한 미해결 내용만 떠올립니다."
+    }
+  }
+}

@@ -31,6 +31,16 @@ export type NoodleRefreshResult = {
   imagePromptReviewItems: ImagePromptReviewItem[];
 };
 
+export type NoodleDataDeletionCounts = {
+  accounts: number;
+  posts: number;
+  interactions: number;
+  digests: number;
+  refreshRuns: number;
+  subscriptions: number;
+  unlocks: number;
+};
+
 export const noodleKeys = {
   all: ["noodle"] as const,
   bootstrap: () => [...noodleKeys.all, "bootstrap"] as const,
@@ -270,6 +280,22 @@ export function useResetNoodleTimeline() {
     mutationFn: () => api.delete<NoodleBootstrap>("/noodle/timeline"),
     onSuccess: (bootstrap) => qc.setQueryData(noodleKeys.bootstrap(), bootstrap),
     onSettled: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
+  });
+}
+
+export function useCleanupUnusedNoodleData() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<NoodleDataDeletionCounts>("/noodle/data/cleanup-unused", {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
+  });
+}
+
+export function useDeleteAllNoodleData() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.delete<NoodleDataDeletionCounts>("/noodle/data?confirmation=DELETE"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: noodleKeys.bootstrap() }),
   });
 }
 

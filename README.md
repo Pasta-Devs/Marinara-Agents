@@ -4,7 +4,7 @@ Official downloadable agents and capability packages for [Marinara Engine](https
 
 Marinara Engine starts lightweight: a fresh installation contains no optional agents. Open **Agents → Download Agents** on desktop or mobile to browse this catalog, read what each package does, and install only the features you want. Installed packages appear in the normal Agents panel and the chat modes they support. You can update or uninstall them from the same catalog. Restart Marinara Engine when the installer asks you to do so.
 
-Across its Engine compatibility lanes, the catalog currently contains **35 first-party packages**: 6 Writer Agents, 10 Tracker Agents, and 19 Misc Agents. Most packages support **Marinara Engine v2.3.0+**; Long-Term Memory requires **v2.4.1**; World Maps, Storyboard, and Noodle require **v2.4.2**; and Beholder, Inventory Tracker, Haptic Feedback, and Slurp require **v2.4.3**. Every package accepts compatible Engine v2 and v3 releases below **v4.0.0**. Each Engine release sees only the packages compatible with its major version. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
+Across its Engine compatibility lanes, the catalog currently contains **36 first-party packages**: 6 Writer Agents, 11 Tracker Agents, and 19 Misc Agents. Most packages support **Marinara Engine v2.3.0+**; Long-Term Memory requires **v2.4.1**; World Maps and Storyboard require **v2.4.2**; Inventory Tracker, Haptic Feedback, and Slurp require **v2.4.3**; and Beholder, Noodle, and Memory Nag require **v2.4.4**. Every package accepts compatible Engine v2 and v3 releases below **v4.0.0**. Each Engine release sees only the packages compatible with its major version. Users upgrading from an older Engine keep every feature that was available before the package split. Migration downloads matching packages once and preserves existing chat selections, agent settings, runtime data, and history.
 
 ## Official catalog
 
@@ -29,6 +29,7 @@ Across its Engine compatibility lanes, the catalog currently contains **35 first
 | Custom Tracker | [`custom-tracker`](packages/custom-tracker/manifest.json) | Tracks user-defined currencies, counters, flags, and other custom fields. |
 | Expression Engine | [`expression`](packages/expression/manifest.json) | Detects character emotions and selects matching Visual Novel sprites or expressions. |
 | Inventory Tracker | [`inventory-tracker`](packages/inventory-tracker/manifest.json) | Tracks currencies, equipped gear, and carried items as separate structured lists. |
+| Memory Nag | [`memory-nag`](packages/memory-nag/manifest.json) | Keeps a short per-chat vault of roleplay memories and recalls only unresolved details that matter to the current turn. |
 | World Maps | [`hierarchical-maps`](packages/hierarchical-maps/manifest.json) | Adds persistent nested locations, durable shared worlds, reusable artwork, customizable Direct Link lines, map authoring, and movement. |
 | Persona Stats | [`persona-stats`](packages/persona-stats/manifest.json) | Tracks the player persona's status bars and custom stats from narrative events. |
 | Quest Tracker | [`quest`](packages/quest/manifest.json) | Manages quest objectives, completion states, and rewards. |
@@ -66,6 +67,7 @@ These packages are being built in this repository but are not ready for the stab
 
 | Package | ID | Availability | Status |
 | --- | --- | --- | --- |
+| Gacha Forge | [`gacha-forge`](packages/gacha-forge/manifest.json) | Staging only | Forge a gacha world from your lorebooks, pull on banners, collect the generated cast, play story chapters told by a visual-novel narrator, then farm materials, gear and train your units, and claim the login event and battle pass from **Home → Gacha Forge**. Offered to Engine `staging` testers while the game mode is exercised. |
 | Pixelforge | [`pixelforge`](packages/pixelforge/manifest.json) | In development | A walkable pixel-art RPG Experience for Game Mode: generated settlements, NPCs, and story-driven exploration. Under active development; not yet listed for users. |
 
 ### Localization sources

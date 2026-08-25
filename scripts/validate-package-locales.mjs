@@ -205,3 +205,57 @@ if (missingNoodleKeys.length > 0) {
 console.log(
   `Noodle UI locales valid: en=${noodleEnglishKeys.length}, de=${Object.keys(noodleCatalogs.get("de")).length}, ko=${Object.keys(noodleCatalogs.get("ko")).length}, pl=${Object.keys(noodleCatalogs.get("pl")).length}.`,
 );
+
+const memoryNagUiLocaleRoot = join(
+  packagesRoot,
+  "memory-nag/src/engine/packages/client/src/features/memory-nag/locales",
+);
+const memoryNagUiLocaleFiles = (await readdir(memoryNagUiLocaleRoot)).filter((name) => name.endsWith(".json")).sort();
+const expectedMemoryNagUiLocaleFiles = [
+  "ar.json",
+  "de.json",
+  "en.json",
+  "es.json",
+  "fr.json",
+  "hi.json",
+  "ja.json",
+  "ko.json",
+  "pl.json",
+  "pt-BR.json",
+  "ru.json",
+  "zh-Hans.json",
+].sort();
+if (JSON.stringify(memoryNagUiLocaleFiles) !== JSON.stringify(expectedMemoryNagUiLocaleFiles)) {
+  throw new Error("Memory Nag UI localization must cover every supported Engine locale");
+}
+
+const memoryNagEnglish = JSON.parse(await readFile(join(memoryNagUiLocaleRoot, "en.json"), "utf8"));
+const memoryNagEnglishKeys = Object.keys(memoryNagEnglish).filter((key) => key !== "_meta");
+for (const localeFile of memoryNagUiLocaleFiles) {
+  const locale = localeFile.slice(0, -".json".length);
+  const catalog = JSON.parse(await readFile(join(memoryNagUiLocaleRoot, localeFile), "utf8"));
+  assertRecord(catalog, `Memory Nag ${locale} UI localization`);
+  if (catalog._meta?.locale !== locale) {
+    throw new Error(`Memory Nag ${locale} UI localization metadata must match its filename`);
+  }
+  const expectedDirection = locale === "ar" ? "rtl" : "ltr";
+  if (catalog._meta?.direction !== expectedDirection) {
+    throw new Error(`Memory Nag ${locale} UI localization direction must be ${expectedDirection}`);
+  }
+  const keys = Object.keys(catalog).filter((key) => key !== "_meta");
+  if (JSON.stringify(keys) !== JSON.stringify(memoryNagEnglishKeys)) {
+    throw new Error(`Memory Nag ${locale} UI localization keys must match English`);
+  }
+  for (const key of memoryNagEnglishKeys) {
+    if (typeof catalog[key] !== "string" || !catalog[key].trim()) {
+      throw new Error(`Memory Nag ${locale} UI localization key ${key} is empty`);
+    }
+    const englishTokens = [...memoryNagEnglish[key].matchAll(/\{\{[A-Za-z0-9_]+\}\}/gu)].map((match) => match[0]);
+    const localizedTokens = [...catalog[key].matchAll(/\{\{[A-Za-z0-9_]+\}\}/gu)].map((match) => match[0]);
+    if (JSON.stringify(englishTokens.sort()) !== JSON.stringify(localizedTokens.sort())) {
+      throw new Error(`Memory Nag ${locale} UI localization key ${key} changed interpolation tokens`);
+    }
+  }
+}
+
+console.log(`Memory Nag UI locales valid: ${memoryNagUiLocaleFiles.length} catalogs.`);

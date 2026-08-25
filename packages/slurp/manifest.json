@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "slurp",
   "name": "Slurp",
-  "version": "1.0.8",
+  "version": "1.0.19",
   "description": "The standalone successor to NoodleR: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
   "localizations": {
     "de": {
@@ -15,7 +15,7 @@
     },
     "ko": {
       "name": "Slurp",
-      "description": "Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 NoodleR 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Slurp를 여세요.",
+      "description": "Engine 캐릭터나 Engine 페르소나로 로컬 크리에이터 프로필을 만들고, 공개 또는 잠긴 Slurp 게시물을 게시하며, 구독 및 청중 활동을 시뮬레이션합니다. 패키지를 설치하고 안내에 따라 Marinara Engine을 다시 시작한 다음 홈 → Slurp를 여세요.",
       "homeBrowserTab": {
         "label": "Slurp",
         "ariaLabel": "Slurp 열기"
@@ -23,7 +23,7 @@
     },
     "pl": {
       "name": "Slurp",
-      "description": "Utwórz lokalne profile twórców z postaci silnika lub person silnika, publikuj publiczne lub zablokowane posty NoodleR i symuluj subskrypcje oraz aktywność publiczności. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Slurp na stronie głównej.",
+      "description": "Utwórz lokalne profile twórców z postaci silnika lub person silnika, publikuj publiczne lub zablokowane posty Slurp i symuluj subskrypcje oraz aktywność publiczności. Zainstaluj pakiet, uruchom ponownie Marinara Engine po wyświetleniu monitu, a następnie otwórz zakładkę Slurp na stronie głównej.",
       "homeBrowserTab": {
         "label": "Slurp",
         "ariaLabel": "Otwórz Slurp"
@@ -57,18 +57,18 @@
   "files": [
     {
       "path": "agents.json",
-      "sha256": "e6bc01992d2c0010a0fa3dc5d53365ad554942cff886997462b46203c61f105d",
-      "bytes": 702
+      "sha256": "05408a5f537cef354c9f4ef9340825c9427e1774d3cdd1f29435c3b1cf39a6c4",
+      "bytes": 625
     },
     {
       "path": "server.mjs",
-      "sha256": "ce0f0c40ee4a422972cb74443b7e630e9c1a20bde49aac5cf2c927ed5dd7dec8",
-      "bytes": 2262607
+      "sha256": "b267955494c5e68301397ad7e59ea5e2a0c654f31368c1950be68edccdbec7d9",
+      "bytes": 2730606
     },
     {
       "path": "client.js",
-      "sha256": "78ac26568611ddda24dc57439bb1cca48a8c82e052ef76e551c81ea4fee17ed6",
-      "bytes": 2329508
+      "sha256": "d0ef89906c504b4baf1c959cb4a13464af451f99fe81cc6699149113c4b943d3",
+      "bytes": 2427720
     },
     {
       "path": "slurp-logo.png",

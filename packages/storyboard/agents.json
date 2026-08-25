@@ -2,7 +2,7 @@
   {
     "id": "storyboard",
     "name": "Storyboard",
-    "description": "Plans still or animated Game and Roleplay storyboards with separate planning prompts and shared provider formatters. Add the Agent in Chat Settings → Agents → Misc Agents/Storyboard for Roleplay and Game modes.",
+    "description": "Plans still or animated Game and Roleplay storyboards with separate planning prompts and shared provider formatters.",
     "phase": "post_processing",
     "enabledByDefault": false,
     "category": "misc",

@@ -160,3 +160,14 @@ export function removeNoodlerAccountMedia(accountId: string): void {
     logger.warn(error, "[noodler] Failed to remove NoodleR media dir for account %s", accountId);
   }
 }
+
+/** Remove only the Slurp media namespace. Engine and Noodle media stay outside this path. */
+export function removeAllNoodlerMedia(): void {
+  const dir = resolveNoodlerMediaAbsolutePath("noodler-media");
+  if (!dir) return;
+  try {
+    rmSync(dir, { recursive: true, force: true });
+  } catch (error) {
+    logger.warn(error, "[noodler] Failed to remove all Slurp media");
+  }
+}

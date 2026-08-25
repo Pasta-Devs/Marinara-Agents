@@ -6,7 +6,7 @@ import type {
   LtmLastInjectionResponse,
 } from "../../../../shared/src/features/agents/long-term-memory/schema.js";
 import { queryKeys, request } from "./api";
-import { InfoPopover, NumberField, StatusSurface, compactInputClass } from "./shared-controls";
+import { InfoPopover, NumberField, StatusSurface, compactInputClass, compactInputStyle } from "./shared-controls";
 import type { CapabilityProps } from "./types";
 import { LastInjectionSummary } from "./LastInjectionSummary";
 import { useLtmTranslation } from "./localization";
@@ -65,8 +65,8 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
           <p>{localizeUi("ui.longTermMemory.chatsettings.recallExplanation")}</p>
           <p>{localizeUi("ui.longTermMemory.chatsettings.lastInjectionSummaryGuidance")}</p>
         </div>
-        <div className="space-y-1 text-[0.625rem] font-medium text-[var(--muted-foreground)]">
-          <span id={recallStyleLabelId} className="flex items-center gap-1">
+        <div className="space-y-1 text-[0.625rem] font-medium">
+          <span id={recallStyleLabelId} className="flex items-center gap-1 text-[var(--foreground)]">
             {localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
             <InfoPopover
               label={localizeUi("ui.longTermMemory.chatsettings.recallStyle")}
@@ -78,6 +78,7 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
             aria-labelledby={recallStyleLabelId}
             data-ltm-control="select"
             className={compactInputClass}
+            style={compactInputStyle}
             disabled={pending || readOnly}
             value={effectiveStyle}
             onChange={(event) => update({ longTermMemoryRecallStyle: event.target.value })}
@@ -147,7 +148,7 @@ export function ChatSettings({ props }: { props: CapabilityProps }) {
         <button
           type="button"
           onClick={props.onOpenAgentSettings}
-          className="inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] px-2.5 text-[0.625rem] font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]"
+          className="mari-agent-settings-action inline-flex min-h-8 w-full items-center justify-center gap-1.5 px-2.5 text-[0.625rem]"
         >
           <Settings2 aria-hidden="true" size="0.75rem" />
           {localizeUi("ui.longTermMemory.chatsettings.openLongTermMemorySettings")}

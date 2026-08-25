@@ -1,4 +1,17 @@
-import { DEFAULT_NOODLE_SETTINGS, type NoodleSettings } from "@marinara-engine/shared";
+import { DEFAULT_NOODLE_SETTINGS, type NoodleSettings, type NoodleSettingsUpdateInput } from "@marinara-engine/shared";
+
+export type PackageNoodleSettings = NoodleSettings & {
+  enableImageInterpretation: boolean;
+  promptPresets: import("./noodle-prompt-presets").NoodlePromptPreset[];
+};
+export type PackageNoodleSettingsUpdateInput = NoodleSettingsUpdateInput &
+  Partial<Pick<PackageNoodleSettings, "enableImageInterpretation">> &
+  Partial<Pick<PackageNoodleSettings, "promptPresets">>;
+const PACKAGE_NOODLE_SETTINGS_DEFAULTS: PackageNoodleSettings = {
+  ...DEFAULT_NOODLE_SETTINGS,
+  enableImageInterpretation: true,
+  promptPresets: [],
+};
 
 /**
  * Which settings each section owns.
@@ -13,7 +26,7 @@ import { DEFAULT_NOODLE_SETTINGS, type NoodleSettings } from "@marinara-engine/s
  */
 export type NoodleSettingsSectionId = "general" | "timeline" | "images" | "participants" | "advanced";
 
-export const NOODLE_SETTINGS_SECTION_KEYS: Record<NoodleSettingsSectionId, readonly (keyof NoodleSettings)[]> = {
+export const NOODLE_SETTINGS_SECTION_KEYS: Record<NoodleSettingsSectionId, readonly (keyof PackageNoodleSettings)[]> = {
   general: ["generationConnectionId", "refreshesPerDay", "theme"],
   timeline: ["maxGeneratedPostsPerRefresh", "maxRepliesPerRefresh", "maxRepostsPerRefresh", "maxLikesPerRefresh"],
   images: [
@@ -22,6 +35,7 @@ export const NOODLE_SETTINGS_SECTION_KEYS: Record<NoodleSettingsSectionId, reado
     "imageGenerationPrompt",
     "imageGenerationUseAvatarReferences",
     "imageGenerationIncludeDescriptions",
+    "enableImageInterpretation",
     "allowGalleryImageAttachments",
     "maxImagesPerRefresh",
     "imageCaptioningEnabled",
@@ -44,6 +58,7 @@ export const NOODLE_SETTINGS_SECTION_KEYS: Record<NoodleSettingsSectionId, reado
     "carryoverModes",
     "carryoverHours",
     "carryoverMaxItems",
+    "promptPresets",
   ],
 };
 
@@ -56,15 +71,16 @@ export const NOODLE_SETTINGS_SECTION_KEYS: Record<NoodleSettingsSectionId, reado
  * tab show a permanent badge for every user, which tells you nothing. A reset of the Images
  * section would also clear the image connections it depends on.
  */
-const NOODLE_SETTINGS_RESET_EXCLUDED: ReadonlySet<keyof NoodleSettings> = new Set([
+const NOODLE_SETTINGS_RESET_EXCLUDED: ReadonlySet<keyof PackageNoodleSettings> = new Set([
   "generationConnectionId",
   "imageGenerationConnectionId",
   "imageCaptioningConnectionId",
+  "promptPresets",
 ]);
 
-function isDefault(settings: NoodleSettings, key: keyof NoodleSettings): boolean {
+function isDefault(settings: PackageNoodleSettings, key: keyof PackageNoodleSettings): boolean {
   const current = settings[key];
-  const shipped = DEFAULT_NOODLE_SETTINGS[key];
+  const shipped = PACKAGE_NOODLE_SETTINGS_DEFAULTS[key];
   // Arrays and the archetype-weight record need a value comparison; the rest are primitives.
   if (typeof current === "object" && current !== null) {
     return JSON.stringify(current) === JSON.stringify(shipped);
@@ -74,9 +90,9 @@ function isDefault(settings: NoodleSettings, key: keyof NoodleSettings): boolean
 
 /** Keys in this section whose value differs from the shipped default. */
 export function changedNoodleSettingKeys(
-  settings: NoodleSettings | undefined,
+  settings: PackageNoodleSettings | undefined,
   section: NoodleSettingsSectionId,
-): (keyof NoodleSettings)[] {
+): (keyof PackageNoodleSettings)[] {
   if (!settings) return [];
   return NOODLE_SETTINGS_SECTION_KEYS[section].filter(
     (key) => !NOODLE_SETTINGS_RESET_EXCLUDED.has(key) && !isDefault(settings, key),
@@ -88,12 +104,12 @@ export function changedNoodleSettingKeys(
  * keys that already match are left out, so a reset writes nothing when there is nothing to undo.
  */
 export function noodleSettingsResetPatch(
-  settings: NoodleSettings | undefined,
+  settings: PackageNoodleSettings | undefined,
   section: NoodleSettingsSectionId,
-): Partial<NoodleSettings> {
+): Partial<PackageNoodleSettings> {
   const patch: Record<string, unknown> = {};
   for (const key of changedNoodleSettingKeys(settings, section)) {
-    patch[key] = DEFAULT_NOODLE_SETTINGS[key];
+    patch[key] = PACKAGE_NOODLE_SETTINGS_DEFAULTS[key];
   }
-  return patch as Partial<NoodleSettings>;
+  return patch as Partial<PackageNoodleSettings>;
 }

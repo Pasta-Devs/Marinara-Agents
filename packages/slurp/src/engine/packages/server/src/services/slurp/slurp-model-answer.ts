@@ -13,3 +13,14 @@ export function requireModelAnswer(content: string, what: string): string {
     `The generation model returned an empty response for ${what}. Check the Slurp generation connection: raise its max output tokens, or pick a model that answers with JSON.`,
   );
 }
+
+/** Do not teach a correction turn that an empty JSON array was an acceptable assistant shape. */
+export function modelAnswerForCorrection(content: string | null | undefined): string | null {
+  const trimmed = content?.trim();
+  if (!trimmed) return null;
+  const unfenced = trimmed
+    .replace(/^```(?:json)?\s*/iu, "")
+    .replace(/\s*```$/u, "")
+    .trim();
+  return !unfenced || /^\[\s*\]$/u.test(unfenced) ? null : trimmed;
+}

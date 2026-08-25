@@ -174,8 +174,14 @@ PF.art = (() => {
       px(g, 12, 4, 2, 10, PAL.fence);
       px(g, 0, 6, T, 2, PAL.fence);
     },
+    /** NO GROUND FILL. The renderer draws an object tile straight over the ground
+     *  tile and the draw is opaque, so a painter that fills its own background is
+     *  declaring what it stands on. A well does not get to: it is the middle of
+     *  the plaza, where the ground is paving, and filling grass1 put a green
+     *  square in the middle of every square in the game — including the four ward
+     *  squares, which are stone by definition. Left transparent, the paving shows
+     *  through and the same sprite works on grass, path and stone alike. */
     well(g) {
-      px(g, 0, 0, T, T, PAL.grass1);
       px(g, 2, 4, 12, 10, PAL.well);
       px(g, 4, 6, 8, 6, PAL.ink);
       px(g, 2, 2, 12, 2, PAL.beam);
@@ -194,8 +200,11 @@ PF.art = (() => {
       dither(g, rnd, PAL.leafHi, 9);
       dither(g, rnd, PAL.grass3, 4);
     },
+    /** Also unfilled, and for the same reason plus one: `floor1` is an INTERIOR
+     *  timber colour, so a market board on the square used to lay a plank of
+     *  floorboard down outdoors. Transparent works indoors too — the floor tile
+     *  it sits on is the one it was imitating. */
     table(g) {
-      px(g, 0, 0, T, T, PAL.floor1);
       px(g, 2, 3, 12, 9, PAL.counter);
       px(g, 3, 4, 10, 7, PAL.path1);
     },
@@ -224,6 +233,26 @@ PF.art = (() => {
     },
     // The shop's stock: the tile that says there is something here to buy. Solid,
     // so it reads as furniture the shopkeeper stands in front of.
+    /** The fire a household lives around, and the first thing in a dwelling that
+     *  is neither a bed nor a surface to put something down on.
+     *
+     *  Painted as a stone surround with the opening cut into it rather than as a
+     *  free-standing object, because a hearth is part of the WALL it is set in —
+     *  a fireplace in the middle of a room reads as a barbecue. The glow uses
+     *  `windowGlow`, which the colony palette turns from firelight to cold blue,
+     *  so the same silhouette is a hab's heat exchanger over there without
+     *  needing a painter override.
+     *
+     *  Laid solid: you warm yourself in front of a fire, not on top of one. */
+    hearth(g) {
+      px(g, 0, 0, T, T, PAL.floor1);
+      px(g, 1, 1, 14, 14, PAL.stone);
+      px(g, 1, 1, 14, 2, PAL.stoneDark);
+      px(g, 3, 4, 10, 1, PAL.stoneDark);
+      px(g, 4, 5, 8, 10, PAL.ink);
+      px(g, 5, 9, 6, 5, PAL.windowGlow);
+      px(g, 6, 11, 4, 3, PAL.white);
+    },
     shelf(g) {
       px(g, 0, 0, T, T, PAL.counter);
       px(g, 0, 0, T, 1, PAL.beam);
@@ -292,6 +321,26 @@ PF.art = (() => {
       px(g, 3, 11, 10, 2, PAL.doorKnob);
       px(g, 3, 11, 10, 1, PAL.white);
       px(g, 7, 13, 2, 2, PAL.stoneDark);
+    },
+    /** WHERE THE ROAD CROSSES THE WATER. Painted water FIRST and decked over it,
+     *  because that is literally what the tile is: the water underneath is still
+     *  there, and a deck that did not show it would be a road tile with a wood
+     *  grain. The one-pixel margin of open water on all four sides is what makes
+     *  a run of them read as a boardwalk — the seam between two sections — and
+     *  is also why the tile needs no orientation: a bridge laid north-south and
+     *  one laid east-west are the same picture, which matters because the
+     *  compiler has no way to tell a placer which way a crossing runs.
+     *
+     *  Non-solid wherever it is laid: the whole point of the ruling is that the
+     *  road still crosses. No themed override, for the altar's reason — the
+     *  colony palette turns timber planking into deck plating on the same
+     *  silhouette, which is what a walkway over coolant is. */
+    bridge(g, rnd) {
+      PAINTERS.water(g, rnd);
+      px(g, 1, 1, T - 2, T - 2, PAL.beam);
+      px(g, 2, 2, T - 4, T - 4, PAL.path1);
+      for (let plank = 4; plank < T - 3; plank += 4) px(g, 2, plank, T - 4, 1, PAL.path2);
+      px(g, 2, 2, T - 4, 1, PAL.pathFleck);
     },
   };
 
@@ -408,8 +457,9 @@ PF.art = (() => {
           dither(g, rnd, PAL.cropRipe, 3);
         },
         // atmosphere recycler where the village well stood
+        // Unfilled, like the village well it replaces — a recycler stands on the
+        // colony's paving, not on a patch of turf it brought with it.
         well(g) {
-          px(g, 0, 0, T, T, PAL.grass1);
           px(g, 3, 3, 10, 11, PAL.well);
           px(g, 4, 4, 8, 2, PAL.leafHi);
           px(g, 4, 7, 8, 1, PAL.wallDark);
@@ -436,7 +486,12 @@ PF.art = (() => {
    *  world builds already do. Unknown ids resolve to the fixed default, never
    *  whatever theme happens to be active (order-dependent worlds otherwise). */
   function setTheme(id) {
-    const theme = THEMES[typeof id === "string" ? id : ""] ? id : "cozy-village";
+    // PF.own, because "unknown" has to include the words every object answers
+    // to. The read was bare, so `THEMES["constructor"]` came back a truthy
+    // FUNCTION, "constructor" was accepted as a theme id and PINNED here — the
+    // one place the docstring above promises it cannot be — and from here it
+    // reaches world.theme, the save row, and every theme table downstream.
+    const theme = typeof id === "string" && PF.own(THEMES, id) ? id : "cozy-village";
     if (theme === activeTheme) return activeTheme;
     activeTheme = theme;
     for (const key of Object.keys(PAL)) delete PAL[key];
@@ -507,6 +562,14 @@ PF.art = (() => {
 
   return {
     PAL,
+    /** Every object name this module can actually draw.
+     *
+     *  Exported for one reason: nothing anywhere checked that a tile the compiler
+     *  PLACES has a painter to draw it with. A new object compiled, passed the
+     *  whole harness, and would have rendered as bare floor in the browser — the
+     *  one failure a headless test suite cannot see and the only one a player
+     *  would notice immediately. The harness now compares the two sets. */
+    painterNames: () => Object.keys(PAINTERS),
     tile,
     actor,
     drawActor,

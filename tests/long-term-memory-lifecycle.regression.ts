@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { compileEngineVisualStyles } from "./engine-visual-styles.ts";
 import { runWithSafeCleanup } from "./regression-helpers.ts";
 
 const repoRoot = resolve(dirname(process.argv[1] ?? process.cwd()), "..");
@@ -17,6 +18,7 @@ const packageManifest = JSON.parse(readFileSync(join(repoRoot, "packages/long-te
 const artifactPath = join(repoRoot, `artifacts/long-term-memory-${packageManifest.version}.zip`);
 const artifactUrl = `https://1.1.1.1/artifacts/long-term-memory-${packageManifest.version}.zip`;
 const artifactBytes = readFileSync(artifactPath);
+const visualOutputDir = process.env.MARINARA_VISUAL_OUTPUT_DIR ? resolve(process.env.MARINARA_VISUAL_OUTPUT_DIR) : null;
 function unzip(args: string[], purpose: string) {
   try {
     return execFileSync("unzip", args, { encoding: "utf8" });
@@ -32,16 +34,6 @@ const artifactManifest = JSON.parse(
   unzip(["-p", artifactPath, "manifest.json"], `read ${artifactPath}/manifest.json`),
 ) as Record<string, unknown>;
 const artifactClient = unzip(["-p", artifactPath, "client.js"], `read ${artifactPath}/client.js`);
-const engineStyles = readFileSync(join(engineRoot, "packages/client/src/styles/globals.css"), "utf8");
-const activationFixtureStyles = `
-  [data-ltm-surface="detail"] .hidden { display: none; }
-  @media (min-width: 768px) {
-    [data-ltm-surface="detail"] .md\\:flex { display: flex; }
-  }
-  @media (min-width: 1024px) {
-    [data-ltm-surface="detail"] .lg\\:inline { display: inline; }
-  }
-`;
 const originalFetch = globalThis.fetch;
 let catalogOnline = true;
 
@@ -113,6 +105,11 @@ async function importEngine<T>(relativePath: string): Promise<T> {
   return import(pathToFileURL(join(engineRoot, relativePath)).href) as Promise<T>;
 }
 async function main() {
+  if (visualOutputDir) mkdirSync(visualOutputDir, { recursive: true });
+  const engineStyles = await compileEngineVisualStyles(
+    engineRoot,
+    join(repoRoot, "packages/long-term-memory/src/engine/packages/client/src/**/*.{ts,tsx}"),
+  );
   const { labelKeys, localizedLabel } = await import(
     pathToFileURL(
       join(
@@ -237,7 +234,7 @@ async function main() {
       );
       assert.match(
         artifactClient,
-        /extract:(?:\w+\.)?\w+!=="refresh"/u,
+        /extract:[^,}]+!=="refresh"/u,
         "Normal imports must continue extracting source notes",
       );
       assert.match(
@@ -289,6 +286,7 @@ async function main() {
       let deletedSuggestionId: string | null = null;
       const scopeTargetQueries: string[] = [];
       const noteQueries: string[] = [];
+      const reviewContextQueries: string[] = [];
       const reviewQueries: string[] = [];
       const rejectedSuggestionQueries: string[] = [];
       const reviewActionCalls: Array<{
@@ -296,20 +294,24 @@ async function main() {
         draftId: string;
         mutationIds: string[];
       }> = [];
+      const reviewEditedMutationIds: string[][] = [];
       const reviewDraftIds = {
         first: "10000000-0000-4000-8000-000000000011",
         second: "10000000-0000-4000-8000-000000000012",
         recovery: "10000000-0000-4000-8000-000000000013",
+        merge: "10000000-0000-4000-8000-000000000014",
       };
       const reviewMutationIds = {
         first: "10000000-0000-4000-8000-000000000021",
         second: "10000000-0000-4000-8000-000000000022",
+        partial: "10000000-0000-4000-8000-000000000023",
+        merge: "10000000-0000-4000-8000-000000000024",
       };
       const makeReviewDraft = (
         draftId: string,
         mutationId?: string,
         title = "Review fixture memory",
-        mutation?: Record<string, unknown>,
+        mutation?: Record<string, unknown> | Record<string, unknown>[],
       ) => ({
         id: draftId,
         status: "pending",
@@ -323,35 +325,37 @@ async function main() {
         modes: ["roleplay"],
         summary: `${title} summary`,
         mutations: mutationId
-          ? [
-              mutation ?? {
-                id: mutationId,
-                kind: "create_note",
-                claimKind: "addition",
-                risk: "low",
-                confidence: 0.9,
-                summary: title,
-                evidence: ["source_note:source_mobile_review"],
-                note: {
-                  id: `world_${mutationId.slice(-3)}`,
-                  title,
-                  type: "world",
-                  status: "active",
-                  modes: ["roleplay"],
-                  scope: {},
-                  tags: [],
-                  keywords: [],
-                  links: [],
-                  sections: {
-                    facts: {
-                      text: `${title} content.`,
-                      importance: "major",
-                      updatedAt: "2026-07-30T00:00:00.000Z",
+          ? Array.isArray(mutation)
+            ? mutation
+            : [
+                mutation ?? {
+                  id: mutationId,
+                  kind: "create_note",
+                  claimKind: "static",
+                  risk: "low",
+                  confidence: 0.9,
+                  summary: title,
+                  evidence: ["source_note:source_mobile_review"],
+                  note: {
+                    id: `world_${mutationId.slice(-3)}`,
+                    title,
+                    type: "world",
+                    status: "active",
+                    modes: ["roleplay"],
+                    scope: {},
+                    tags: [],
+                    keywords: [],
+                    links: [],
+                    sections: {
+                      facts: {
+                        text: `${title} content.`,
+                        importance: "major",
+                        updatedAt: "2026-07-30T00:00:00.000Z",
+                      },
                     },
                   },
                 },
-              },
-            ]
+              ]
           : [],
       });
       const makeExistingReviewMutation = () => ({
@@ -370,6 +374,46 @@ async function main() {
           updatedAt: "2026-07-30T00:00:00.000Z",
         },
       });
+      const makePartialReviewMutation = () => ({
+        id: reviewMutationIds.partial,
+        kind: "create_note",
+        claimKind: "static",
+        risk: "low",
+        confidence: 0.9,
+        summary: "Pending partial review memory",
+        evidence: ["source_note:source_mobile_review"],
+        note: {
+          id: "world_partial_mobile",
+          title: "Pending partial review memory",
+          type: "world",
+          status: "active",
+          modes: ["roleplay"],
+          scope: {},
+          tags: [],
+          keywords: [],
+          links: [],
+          sections: {
+            facts: {
+              text: "Pending partial review memory content.",
+              importance: "major",
+              updatedAt: "2026-07-30T00:00:00.000Z",
+            },
+          },
+        },
+      });
+      const makeMergeCreateMutation = () => {
+        const mutation = makePartialReviewMutation();
+        return {
+          ...mutation,
+          id: reviewMutationIds.merge,
+          summary: "Merge proposed mobile memory",
+          note: {
+            ...mutation.note,
+            id: "world_merge_proposal_mobile",
+            title: "Merge proposed mobile memory",
+          },
+        };
+      };
       let reviewSources: any[] = [
         {
           sourceNoteId: "source_mobile_recovery",
@@ -410,11 +454,22 @@ async function main() {
               deduplications: [],
             },
             {
-              draft: makeReviewDraft(
-                reviewDraftIds.second,
-                reviewMutationIds.second,
-                "Second mobile review memory",
+              draft: makeReviewDraft(reviewDraftIds.second, reviewMutationIds.second, "Second mobile review memory", [
                 makeExistingReviewMutation(),
+                makePartialReviewMutation(),
+              ]),
+              freshness: "fresh",
+              blockReasons: [],
+              diagnostics: [],
+              candidateRejections: [],
+              deduplications: [],
+            },
+            {
+              draft: makeReviewDraft(
+                reviewDraftIds.merge,
+                reviewMutationIds.merge,
+                "Merge proposed mobile memory",
+                makeMergeCreateMutation(),
               ),
               freshness: "fresh",
               blockReasons: [],
@@ -434,7 +489,7 @@ async function main() {
                   mutation: {
                     id: reviewMutationIds.first,
                     kind: "create_note",
-                    claimKind: "addition",
+                    claimKind: "static",
                     risk: "low",
                     confidence: 0.9,
                     summary: "First mobile review memory",
@@ -478,12 +533,48 @@ async function main() {
                 },
               ],
             },
+            {
+              noteId: "world_partial_mobile",
+              title: "Pending partial review memory",
+              noteType: "world",
+              rows: [
+                {
+                  draftId: reviewDraftIds.second,
+                  mutation: makePartialReviewMutation(),
+                  disposition: "new",
+                  diagnostics: [],
+                  changes: [],
+                },
+              ],
+            },
+            {
+              noteId: "world_merge_target_mobile",
+              title: "Existing merge target",
+              noteType: "world",
+              rows: [
+                {
+                  draftId: reviewDraftIds.merge,
+                  mutation: makeMergeCreateMutation(),
+                  disposition: "merge",
+                  diagnostics: [],
+                  changes: [],
+                },
+              ],
+            },
           ],
         },
       ];
       let healthState: "healthy" | "degraded" = "healthy";
       let noteTotal = 5;
       let pendingDraftCount = 2;
+      let failSecondReviewAccept = false;
+      let failReviewContext = false;
+      let omitReviewContextId: string | null = null;
+      let reviewPreflightBlocked = false;
+      let confirmReviewDiscard = false;
+      let lastReviewDiscardMessage = "";
+      let reviewQueueEmpty = false;
+      let reviewFingerprintRevision = 0;
       let lastInjectionRequests = 0;
       browserServer = createServer(async (request, response) => {
         const url = new URL(request.url ?? "/", "http://127.0.0.1");
@@ -498,8 +589,7 @@ async function main() {
             `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/globals.css"><script type="module" src="/client.js"></script>`,
             "text/html",
           );
-        if (url.pathname === "/globals.css")
-          return send(200, `${engineStyles}\n${activationFixtureStyles}`, "text/css");
+        if (url.pathname === "/globals.css") return send(200, engineStyles, "text/css");
         if (url.pathname === "/client.js") return send(200, artifactClient, "application/javascript");
         if (request.method === "GET" && url.pathname === "/api/connections") return send(200, []);
         if (!url.pathname.startsWith("/api/long-term-memory/")) return send(404, {});
@@ -507,7 +597,14 @@ async function main() {
           return send(200, {
             initialized: true,
             directory: "long-term-memory",
-            notes: { total: noteTotal, byType: {}, byStatus: {} },
+            notes: {
+              total: noteTotal,
+              sourceNotes: 1,
+              savedMemories: Math.max(0, noteTotal - 1),
+              pendingDrafts: pendingDraftCount,
+              byType: {},
+              byStatus: {},
+            },
             events: { logAvailable: false, bytes: null },
             indexes: {
               health: healthState,
@@ -572,20 +669,38 @@ async function main() {
             });
           return send(200, {
             generatedAt: "2026-07-30T00:00:00.000Z",
-            sources: reviewSources,
+            sources: reviewQueueEmpty
+              ? []
+              : reviewSources.map((source) => ({
+                  ...source,
+                  drafts: source.drafts.map((item: any) => ({
+                    ...item,
+                    draft: {
+                      ...item.draft,
+                      updatedAt: reviewFingerprintRevision ? "2026-07-30T00:00:01.000Z" : item.draft.updatedAt,
+                    },
+                  })),
+                })),
             counts: {
-              sources: reviewSources.length,
-              drafts: reviewSources.reduce((count, source) => count + source.drafts.length, 0),
-              mutations: reviewSources.reduce(
-                (count, source) =>
-                  count +
-                  source.drafts.reduce((draftCount: number, item: any) => draftCount + item.draft.mutations.length, 0),
-                0,
-              ),
-              blockedDrafts: reviewSources.reduce(
-                (count, source) => count + source.drafts.filter((item: any) => item.blockReasons.length).length,
-                0,
-              ),
+              sources: reviewQueueEmpty ? 0 : reviewSources.length,
+              drafts: reviewQueueEmpty ? 0 : reviewSources.reduce((count, source) => count + source.drafts.length, 0),
+              mutations: reviewQueueEmpty
+                ? 0
+                : reviewSources.reduce(
+                    (count, source) =>
+                      count +
+                      source.drafts.reduce(
+                        (draftCount: number, item: any) => draftCount + item.draft.mutations.length,
+                        0,
+                      ),
+                    0,
+                  ),
+              blockedDrafts: reviewQueueEmpty
+                ? 0
+                : reviewSources.reduce(
+                    (count, source) => count + source.drafts.filter((item: any) => item.blockReasons.length).length,
+                    0,
+                  ),
               candidateRejections: 0,
               deduplications: 0,
             },
@@ -669,6 +784,27 @@ async function main() {
               version: 1,
             },
             {
+              id: "world_merge_target_mobile",
+              title: "Existing merge target",
+              type: "world",
+              status: "active",
+              modes: ["roleplay"],
+              scope: {},
+              tags: [],
+              keywords: [],
+              links: [],
+              sections: {
+                facts: {
+                  text: "Existing merge target text.",
+                  importance: "major",
+                  updatedAt: "2026-07-30T00:00:00.000Z",
+                },
+              },
+              createdAt: "2026-07-30T00:00:00.000Z",
+              updatedAt: "2026-07-30T00:00:00.000Z",
+              version: 1,
+            },
+            {
               id: "world_outside_current_chat",
               title: "Memory outside current chat",
               type: "world",
@@ -689,9 +825,48 @@ async function main() {
               updatedAt: "2026-07-30T00:00:00.000Z",
               version: 1,
             },
+            {
+              id: "source_mobile_recovery",
+              title: "Mobile recovery source",
+              type: "source",
+              status: "active",
+              modes: ["roleplay"],
+              scope: {},
+              tags: [],
+              keywords: [],
+              links: [],
+              sections: { source: { text: "Mobile recovery source text.", updatedAt: noteTimestamp } },
+              createdAt: noteTimestamp,
+              updatedAt: noteTimestamp,
+              version: 1,
+            },
+            {
+              id: "world_mobile_recovery",
+              title: "Mobile recovery memory",
+              type: "world",
+              status: "active",
+              modes: ["roleplay"],
+              scope: {},
+              tags: [],
+              keywords: [],
+              links: [],
+              sections: { facts: { text: "Mobile recovery memory text.", updatedAt: noteTimestamp } },
+              createdAt: noteTimestamp,
+              updatedAt: noteTimestamp,
+              version: 1,
+            },
             legacyGlobalNote,
             scopedDesktopNote,
           ];
+          if (url.searchParams.has("ids")) {
+            reviewContextQueries.push(url.search);
+            if (failReviewContext) return send(503, { error: "review context temporarily unavailable" });
+            const requestedIds = new Set(url.searchParams.get("ids")?.split(",") ?? []);
+            return send(
+              200,
+              notes.filter((note) => requestedIds.has(note.id) && note.id !== omitReviewContextId),
+            );
+          }
           return send(
             200,
             url.searchParams.get("scopeCharacterIds") === "character-a"
@@ -715,6 +890,28 @@ async function main() {
             sections: {
               facts: {
                 text: "Second mobile review memory text.",
+                importance: "major",
+                updatedAt: "2026-07-30T00:00:00.000Z",
+              },
+            },
+            createdAt: "2026-07-30T00:00:00.000Z",
+            updatedAt: "2026-07-30T00:00:00.000Z",
+            version: 1,
+          });
+        if (request.method === "GET" && url.pathname.endsWith("/notes/world_merge_target_mobile"))
+          return send(200, {
+            id: "world_merge_target_mobile",
+            title: "Existing merge target",
+            type: "world",
+            status: "active",
+            modes: ["roleplay"],
+            scope: {},
+            tags: [],
+            keywords: [],
+            links: [],
+            sections: {
+              facts: {
+                text: "Existing merge target text.",
                 importance: "major",
                 updatedAt: "2026-07-30T00:00:00.000Z",
               },
@@ -750,6 +947,7 @@ async function main() {
               {
                 sourceId: "chat-a:summary-desktop-reextract",
                 title: "Desktop re-extract source",
+                importMode: "conversation",
                 mutationCount: 0,
                 summary: "An imported source held open for re-extraction.",
                 snippet: "The re-extract action should show progress.",
@@ -787,6 +985,7 @@ async function main() {
                       {
                         sourceId: "lorebook_mobile_fixture:entry_mobile_harbor:0",
                         title: "Mobile Field Guide: Harbor Signals",
+                        importMode: "roleplay",
                         mutationCount: 1,
                         summary: "Harbor signal colors and their meanings.",
                         snippet: "A blue lantern marks the safe channel after dusk.",
@@ -803,29 +1002,31 @@ async function main() {
           rejectedSuggestionQueries.push(url.search);
           if (url.searchParams.has("chatId")) return send(200, { suggestions: [], total: 0 });
           return send(200, {
-            suggestions: [
-              {
-                id: rejectedSuggestionId,
-                fingerprint: "a".repeat(64),
-                source: { sourceNoteId: "source_mobile_recovery" },
-                scope: {},
-                modes: ["roleplay"],
-                candidate: {
-                  index: 0,
-                  reason: "invalid_format",
-                  message: "A recoverable mobile memory.",
-                  snippet: "A recoverable mobile memory.",
-                  recovery: {
-                    noteType: "world",
-                    noteId: "world_mobile_recovery",
-                    sectionKey: "facts",
+            suggestions: reviewQueueEmpty
+              ? []
+              : [
+                  {
+                    id: rejectedSuggestionId,
+                    fingerprint: "a".repeat(64),
+                    source: { sourceNoteId: "source_mobile_recovery" },
+                    scope: {},
+                    modes: ["roleplay"],
+                    candidate: {
+                      index: 0,
+                      reason: "invalid_format",
+                      message: "A recoverable mobile memory.",
+                      snippet: "A recoverable mobile memory.",
+                      recovery: {
+                        noteType: "world",
+                        noteId: "world_mobile_recovery",
+                        sectionKey: "facts",
+                      },
+                    },
+                    createdAt: "2026-07-30T00:00:00.000Z",
+                    lastSeenAt: "2026-07-30T00:00:00.000Z",
                   },
-                },
-                createdAt: "2026-07-30T00:00:00.000Z",
-                lastSeenAt: "2026-07-30T00:00:00.000Z",
-              },
-            ],
-            total: 1,
+                ],
+            total: reviewQueueEmpty ? 0 : 1,
           });
         }
         if (request.method === "POST" && url.pathname.endsWith("/notes")) {
@@ -849,22 +1050,156 @@ async function main() {
               resolve();
             };
           });
-        if (request.method === "POST" && (url.pathname.endsWith("/accept") || url.pathname.endsWith("/skip"))) {
+        if (request.method === "POST" && url.pathname.endsWith("/preflight")) {
           const chunks: Buffer[] = [];
           for await (const chunk of request) chunks.push(Buffer.from(chunk));
           const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
             mutationIds?: string[];
           };
+          const mutationIds = body.mutationIds ?? [];
+          const targetByMutationId: Record<string, string> = {
+            [reviewMutationIds.first]: "world_new_mobile",
+            [reviewMutationIds.second]: "world_second_mobile",
+            [reviewMutationIds.partial]: "world_partial_mobile",
+          };
+          const blockedMutationIds = reviewPreflightBlocked ? [reviewMutationIds.second] : [];
+          const conflictMutationIds = reviewPreflightBlocked ? [reviewMutationIds.partial] : [];
+          return send(200, {
+            draftId: decodeURIComponent(url.pathname.split("/").at(-2)!),
+            selectedMutationIds: mutationIds,
+            readyMutationIds: mutationIds.filter((id) => !blockedMutationIds.includes(id)),
+            blockedMutationIds,
+            autoIncludedMutationIds: [],
+            rows: mutationIds.map((mutationId) => ({
+              mutationId,
+              targetId: targetByMutationId[mutationId] ?? `world_${mutationId.slice(-3)}`,
+              disposition: "new",
+              status: blockedMutationIds.includes(mutationId) ? "blocked" : "ready",
+              autoIncluded: false,
+              blockers: blockedMutationIds.includes(mutationId)
+                ? [{ code: "fixture_blocked", message: "Fixture preflight blocked this mutation." }]
+                : [],
+              conflicts: conflictMutationIds.includes(mutationId)
+                ? [
+                    {
+                      field: "facts",
+                      existing: "Existing fixture value",
+                      proposed: "Proposed fixture value",
+                      resolution: "pending",
+                      policy: "manual review",
+                    },
+                  ]
+                : [],
+            })),
+          });
+        }
+        if (request.method === "POST" && (url.pathname.endsWith("/accept") || url.pathname.endsWith("/skip"))) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of request) chunks.push(Buffer.from(chunk));
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+            mutationIds?: string[];
+            editedMutations?: Array<{ id: string }>;
+          };
           const action = url.pathname.endsWith("/accept") ? "accept" : "skip";
           const draftId = decodeURIComponent(url.pathname.split("/").at(-2)!);
           const mutationIds = body.mutationIds ?? [];
+          reviewEditedMutationIds.push((body.editedMutations ?? []).map((mutation) => mutation.id));
           reviewActionCalls.push({ action, draftId, mutationIds });
-          reviewSources = reviewSources
-            .map((source) => ({
+          if (
+            action === "accept" &&
+            draftId === reviewDraftIds.second &&
+            mutationIds.includes(reviewMutationIds.second)
+          ) {
+            if (failSecondReviewAccept) return send(503, { error: "temporary review failure" });
+            reviewSources = reviewSources.map((source) => ({
               ...source,
-              drafts: source.drafts.filter((item: any) => item.draft.id !== draftId),
-            }))
-            .filter((source) => source.drafts.length > 0);
+              drafts: source.drafts.map((item: any) =>
+                item.draft.id === draftId
+                  ? {
+                      ...item,
+                      draft: {
+                        ...item.draft,
+                        updatedAt: "2026-07-30T00:00:01.000Z",
+                        appliedMutationIds: [reviewMutationIds.second],
+                        mutations: item.draft.mutations.filter(
+                          (mutation: any) => mutation.id === reviewMutationIds.partial,
+                        ),
+                      },
+                    }
+                  : item,
+              ),
+              targets: source.targets.map((target: any) => ({
+                ...target,
+                rows: target.rows.filter(
+                  (row: any) => row.draftId !== draftId || row.mutation.id === reviewMutationIds.partial,
+                ),
+              })),
+            }));
+          } else if (
+            action === "accept" &&
+            draftId === reviewDraftIds.second &&
+            mutationIds.includes(reviewMutationIds.partial)
+          ) {
+            reviewSources = reviewSources
+              .map((source) => ({
+                ...source,
+                drafts: source.drafts.map((item: any) =>
+                  item.draft.id === draftId
+                    ? {
+                        ...item,
+                        draft: {
+                          ...item.draft,
+                          mutations: item.draft.mutations.filter(
+                            (mutation: any) => mutation.id !== reviewMutationIds.partial,
+                          ),
+                        },
+                      }
+                    : item,
+                ),
+                targets: source.targets.map((target: any) => ({
+                  ...target,
+                  rows: target.rows.filter(
+                    (row: any) => row.draftId !== draftId || row.mutation.id !== reviewMutationIds.partial,
+                  ),
+                })),
+              }))
+              .filter((source) => source.drafts.some((item: any) => item.draft.mutations.length > 0));
+          } else if (action === "skip" && draftId === reviewDraftIds.merge) {
+            reviewSources = reviewSources
+              .map((source) => ({
+                ...source,
+                drafts: source.drafts
+                  .filter((item: any) => item.draft.id !== draftId)
+                  .map((item: any) =>
+                    item.draft.id === reviewDraftIds.second
+                      ? {
+                          ...item,
+                          draft: {
+                            ...item.draft,
+                            mutations: item.draft.mutations.filter(
+                              (mutation: any) => mutation.id !== reviewMutationIds.partial,
+                            ),
+                          },
+                        }
+                      : item,
+                  ),
+                targets: source.targets.map((target: any) => ({
+                  ...target,
+                  rows: target.rows.filter(
+                    (row: any) =>
+                      row.draftId !== reviewDraftIds.second || row.mutation.id !== reviewMutationIds.partial,
+                  ),
+                })),
+              }))
+              .filter((source) => source.drafts.some((item: any) => item.draft.mutations.length > 0));
+          } else {
+            reviewSources = reviewSources
+              .map((source) => ({
+                ...source,
+                drafts: source.drafts.filter((item: any) => item.draft.id !== draftId),
+              }))
+              .filter((source) => source.drafts.length > 0);
+          }
           return action === "accept"
             ? send(200, {
                 appliedMutationIds: mutationIds,
@@ -872,7 +1207,12 @@ async function main() {
                 autoIncludedMutationIds: [],
                 indexRebuild: { status: "not_requested" },
               })
-            : send(200, { mutationIds });
+            : send(200, {
+                mutationIds:
+                  draftId === reviewDraftIds.merge
+                    ? [...new Set([...mutationIds, reviewMutationIds.partial])]
+                    : mutationIds,
+              });
         }
         if (request.method === "DELETE" && url.pathname.includes("/rejected-suggestions/")) {
           deletedSuggestionId = decodeURIComponent(url.pathname.split("/").at(-1)!);
@@ -899,6 +1239,10 @@ async function main() {
         promptPresetEditorOpens.push(Date.now());
       });
       await page.exposeFunction("declineDestinationChange", () => false);
+      await page.exposeFunction("confirmReviewDiscard", (options: { message?: string }) => {
+        lastReviewDiscardMessage = options.message ?? "";
+        return confirmReviewDiscard;
+      });
       await page.addInitScript(() => {
         Object.defineProperty(Crypto.prototype, "randomUUID", {
           configurable: true,
@@ -932,7 +1276,7 @@ async function main() {
       const memoryScope = page.locator("[data-ltm-memory-scope]");
       await memoryScope.locator(":scope > summary").waitFor();
       assert.equal(
-        await memoryScope.locator(":scope > summary").innerText(),
+        (await memoryScope.locator(":scope > summary").textContent())?.trim(),
         "Currently viewing memories in:desktop chat",
       );
       assert.equal(await page.getByText("Memory outside current chat").count(), 0);
@@ -957,8 +1301,10 @@ async function main() {
         "Character A",
       );
       assert.equal(
-        await memoryScope.locator('[data-ltm-memory-scope-picker="chat"]').locator(":scope > summary").innerText(),
-        "ChatDesktop chat",
+        (await memoryScope.locator('[data-ltm-memory-scope-picker="chat"]').locator(":scope > summary").textContent())
+          ?.replace(/\s+/gu, "")
+          .trim(),
+        "ChatDesktopchat",
       );
       assert.equal(
         await memoryScope
@@ -1153,7 +1499,9 @@ async function main() {
       await page.getByRole("button", { name: "Cancel" }).click();
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
       await page.locator('[data-ltm-review-source-select="source_mobile_review"]').click();
-      await page.locator("[data-ltm-review-mutation-toggle]").click();
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-review-mutation-toggle]`)
+        .click();
       await page.evaluate(() => {
         const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
           capabilityProps?: Record<string, unknown>;
@@ -1169,7 +1517,38 @@ async function main() {
         element.dispatchEvent(new CustomEvent("marinara-capability-props"));
         localStorage.removeItem("marinara-long-term-memory-onboarding-v1");
       });
-      await page.locator("[data-ltm-review-mutation] textarea").first().fill("Dirty memory");
+      await page.evaluate(() => {
+        let writes = 0;
+        const originalSetItem = localStorage.setItem.bind(localStorage);
+        localStorage.setItem = function (key, value) {
+          if (key.startsWith("marinara_ltm_review_state:")) writes += 1;
+          return originalSetItem(key, value);
+        };
+        const counter = {
+          get value() {
+            return writes;
+          },
+        };
+        Object.defineProperty(window, "reviewStateWriteCount", {
+          configurable: true,
+          get: Object.getOwnPropertyDescriptor(counter, "value")?.get,
+        });
+      });
+      const dirtyEditor = page.locator("[data-ltm-review-mutation] textarea").first();
+      await dirtyEditor.fill("Dirty memory draft");
+      await dirtyEditor.fill("Dirty memory latest");
+      await dirtyEditor.fill("Dirty memory");
+      await page.waitForTimeout(350);
+      assert.equal(await page.evaluate(() => (window as any).reviewStateWriteCount), 1);
+      await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+      await page.locator('[data-ltm-review-source-select="source_mobile_recovery"]').click();
+      await page.locator('[data-ltm-review-source-select="source_mobile_review"]').click();
+      await page.locator("[data-ltm-review-mutation-toggle]").click();
+      assert.equal(await page.locator("[data-ltm-review-mutation] textarea").first().inputValue(), "Dirty memory");
+      assert.deepEqual(
+        await page.evaluate(() => Object.keys(localStorage).filter((key) => key.includes("review_state"))),
+        ["marinara_ltm_review_state:desktop-chat"],
+      );
       await setupGuide.click();
       await page.getByRole("button", { name: "Next: How recall works" }).click();
       await page.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
@@ -1184,6 +1563,7 @@ async function main() {
       );
       await page.getByRole("button", { name: "Close", exact: true }).click();
       pendingDraftCount = 0;
+      reviewFingerprintRevision = 0;
       await page.reload();
       await page.evaluate((version) => {
         const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
@@ -1211,7 +1591,28 @@ async function main() {
       await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
       await page.locator('[data-ltm-review-source-select="source_mobile_review"]').click();
       await page.locator("[data-ltm-review-mutation-toggle]").click();
-      await page.locator("[data-ltm-review-mutation] textarea").first().fill("Dirty memory");
+      assert.equal(await page.locator("[data-ltm-review-mutation] textarea").first().inputValue(), "Dirty memory");
+      reviewFingerprintRevision = 1;
+      await page.reload();
+      await page.evaluate((version) => {
+        const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: unknown;
+        };
+        element.setAttribute("view", "detail");
+        element.capabilityProps = {
+          agent: { name: "Long-Term Memory" },
+          chatId: "desktop-chat",
+          chatName: "desktop chat",
+          chatMode: "conversation",
+          enabledForChat: true,
+          package: { version },
+        };
+        document.body.append(element);
+      }, packageManifest.version);
+      await page.locator('[data-ltm-surface="detail"]').waitFor();
+      await page.locator('[data-ltm-navigation="desktop"] [data-ltm-destination="review"]').click();
+      await page.locator("[data-ltm-review-state-warning]").waitFor();
+      reviewFingerprintRevision = 0;
       await setupGuide.click();
       await page.getByRole("button", { name: "Next: How recall works" }).click();
       await page.getByRole("button", { name: "Next: Enabling it for the Current Chat" }).click();
@@ -1479,6 +1880,17 @@ async function main() {
       assert.ok(reviewQueries.every((query) => query === "?includeInvalidated=true"));
       assert.ok(rejectedSuggestionQueries.length > 0);
       assert.ok(rejectedSuggestionQueries.every((query) => query === ""));
+      assert.ok(reviewContextQueries.length > 0);
+      assert.ok(reviewContextQueries.every((query) => query.startsWith("?ids=")));
+      assert.ok(reviewContextQueries.some((query) => query.includes("world_merge_target_mobile")));
+      assert.equal(
+        reviewContextQueries.some((query) => query.includes("includeGlobal")),
+        false,
+      );
+      assert.equal(
+        reviewContextQueries.some((query) => query.includes("limit=500")),
+        false,
+      );
       await page.setViewportSize({ width: 390, height: 844 });
       healthState = "degraded";
       await page.reload();
@@ -1550,9 +1962,85 @@ async function main() {
       assert.match(await healthInfoPanel.innerText(), /12 indexed chunks/u);
       assert.match(await healthInfoPanel.innerText(), /Check Settings > Maintenance > Reindex recall data\./u);
 
+      failReviewContext = true;
       await page.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="review"]').click();
+      const reviewContextError = page
+        .locator('[data-ltm-status="danger"]')
+        .filter({ hasText: "Memory context could not load." });
+      await reviewContextError.waitFor();
+      assert.equal(await page.locator("[data-ltm-workspace]").isVisible(), false);
+      assert.equal(await page.locator('[data-ltm-review-action="apply"]').count(), 0);
+      const reviewUtilitySizes = await page
+        .locator('[data-ltm-status="danger"] button, [data-ltm-review-rejected-count]')
+        .evaluateAll((elements) =>
+          elements
+            .map((element) => element.getBoundingClientRect().toJSON())
+            .filter((rect) => rect.width > 0 && rect.height > 0),
+        );
+      assert.ok(
+        reviewUtilitySizes.length >= 1 && reviewUtilitySizes.every((rect) => rect.width >= 44 && rect.height >= 44),
+        JSON.stringify(reviewUtilitySizes),
+      );
+      failReviewContext = false;
+      omitReviewContextId = "world_second_mobile";
+      await reviewContextError.getByRole("button", { name: "Retry" }).click();
+      await reviewContextError.waitFor();
+      assert.equal(await page.locator("[data-ltm-workspace]").isVisible(), false);
+      omitReviewContextId = null;
+      await reviewContextError.getByRole("button", { name: "Retry" }).click();
+      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
       await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
-      await page.locator('[data-ltm-review-source-select="source_mobile_review"]').click();
+      const restoredContextSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
+      if ((await restoredContextSource.getAttribute("aria-expanded")) === "false") {
+        await restoredContextSource.click();
+      }
+      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      await page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.first}"]`).click();
+      await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
+      const restoredAccept = page.locator(
+        `[data-ltm-review-mutation="${reviewMutationIds.first}"] [aria-label^="Review change "]`,
+      );
+      assert.equal(await restoredAccept.isDisabled(), false);
+      await restoredAccept.click();
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-review-action="apply"]`)
+        .waitFor();
+      assert.equal(
+        await page
+          .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [aria-label^="Apply change "]`)
+          .count(),
+        1,
+      );
+      const firstMutation = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"]`);
+      assert.equal(await firstMutation.locator("[data-ltm-review-summary]").count(), 1);
+      assert.equal(await firstMutation.locator("[data-ltm-review-evidence-summary]").count(), 1);
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-review-action="apply"]`)
+        .click();
+      await page.waitForFunction(
+        (mutationId) => !document.querySelector(`[data-ltm-review-mutation="${mutationId}"]`),
+        reviewMutationIds.first,
+      );
+      const mergeSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
+      if ((await mergeSource.getAttribute("aria-expanded")) === "false") {
+        await mergeSource.click();
+      }
+      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      await page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.merge}"]`).click();
+      await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
+      const mergeMutation = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.merge}"]`);
+      await mergeMutation.locator("[data-ltm-review-mutation-toggle]").click();
+      await mergeMutation.getByRole("button", { name: "Open memory" }).click();
+      await page.locator('[data-ltm-surface="vault"]').waitFor();
+      await page.locator("[data-ltm-note-editor]").waitFor();
+      assert.equal(await page.locator("[data-ltm-note-editor] input").first().inputValue(), "Existing merge target");
+      await page.locator('[data-ltm-control="navigation"][data-ltm-destination="review"]').last().click();
+      await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
+      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      const restoredReviewSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
+      if ((await restoredReviewSource.getAttribute("aria-expanded")) === "false") {
+        await restoredReviewSource.click();
+      }
       await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
       await page.locator('[data-ltm-review-draft-select="10000000-0000-4000-8000-000000000012"]').click();
       await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
@@ -1568,7 +2056,11 @@ async function main() {
       assert.match(reviewText, /Update section/u);
       assert.match(reviewText, /Major/u);
       assert.equal(await page.locator("[data-ltm-review-operation]").count(), 1);
-      await page.locator("[data-ltm-review-mutation-toggle]").click();
+      if (visualOutputDir)
+        await page.screenshot({ path: join(visualOutputDir, "long-term-memory-review-mobile.png"), fullPage: true });
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-review-mutation-toggle]`)
+        .click();
       await page.getByRole("button", { name: "Open memory" }).click();
       await page.locator('[data-ltm-surface="vault"]').waitFor();
       await page.locator("[data-ltm-note-editor]").waitFor();
@@ -1584,7 +2076,7 @@ async function main() {
       await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
       await page.setViewportSize({ width: 1280, height: 900 });
       const acceptButtonSize = await page
-        .locator('[data-ltm-review-mutation] [aria-label^="Accept "]')
+        .locator("[data-ltm-review-mutation] [data-ltm-review-action]")
         .first()
         .evaluate((button) => {
           const rect = button.getBoundingClientRect();
@@ -1600,6 +2092,8 @@ async function main() {
       assert.ok(acceptButtonSize.height >= 44);
       assert.equal(acceptButtonSize.iconWidth, "1rem");
       assert.equal(acceptButtonSize.iconHeight, "1rem");
+      if (visualOutputDir)
+        await page.screenshot({ path: join(visualOutputDir, "long-term-memory-review-desktop.png"), fullPage: true });
       await page.setViewportSize({ width: 390, height: 844 });
       const reviewTextAfterViewportChanges = await page.locator('[data-ltm-workspace-pane="workbench"]').innerText();
       assert.doesNotMatch(
@@ -1620,35 +2114,139 @@ async function main() {
       await page
         .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-control="review-select"]`)
         .check();
-      await page.getByRole("button", { name: "Skip selected (1)" }).click();
-      const firstMutation = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"]`);
-      await firstMutation.waitFor({ state: "visible" });
-      await page.waitForFunction(
-        (mutationId) =>
-          document
-            .querySelector(`[data-ltm-review-mutation="${mutationId}"]`)
-            ?.textContent?.includes("First mobile review memory"),
-        reviewMutationIds.first,
-      );
       await page
-        .locator(`[data-ltm-review-mutation="${reviewMutationIds.first}"] [data-ltm-control="review-select"]`)
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-review-mutation-toggle]`)
+        .click();
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] textarea`)
+        .fill("Edited pending partial memory");
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-control="review-select"]`)
         .check();
-      await page.getByRole("button", { name: "Accept eligible (1)" }).click();
-      await page.waitForFunction(
-        () => !document.querySelector('[data-ltm-review-source-select="source_mobile_review"]'),
+      reviewPreflightBlocked = true;
+      failSecondReviewAccept = false;
+      await page.getByRole("button", { name: "Accept eligible (2)" }).click();
+      await page.locator("[data-ltm-review-preflight]").first().waitFor();
+      assert.equal(await page.locator('[data-ltm-review-preflight][role="alert"]').count(), 1);
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-review-mutation-toggle]`)
+        .click();
+      assert.equal(await page.locator("[data-ltm-review-conflicts]").count(), 1);
+      assert.equal(
+        await page
+          .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-review-action="blocked"]`)
+          .isDisabled(),
+        true,
       );
+      assert.equal(await page.getByRole("button", { name: /^Apply preflighted \(1\)/ }).count(), 1);
       assert.deepEqual(reviewActionCalls, [
-        {
-          action: "skip",
-          draftId: reviewDraftIds.second,
-          mutationIds: [reviewMutationIds.second],
-        },
         {
           action: "accept",
           draftId: reviewDraftIds.first,
           mutationIds: [reviewMutationIds.first],
         },
       ]);
+      reviewPreflightBlocked = false;
+      await page.getByRole("button", { name: "Clear" }).click();
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.second}"] [data-ltm-control="review-select"]`)
+        .check();
+      await page
+        .locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"] [data-ltm-control="review-select"]`)
+        .check();
+      failSecondReviewAccept = true;
+      await page.getByRole("button", { name: "Accept eligible (2)" }).click();
+      await page.getByRole("button", { name: /^Apply preflighted \(2\)/ }).click();
+      await page.getByRole("button", { name: "Retry failed review actions" }).waitFor();
+      failSecondReviewAccept = false;
+      await page.getByRole("button", { name: "Retry failed review actions" }).click();
+      await page.getByText("Retry preflight complete. Review the results before applying again.").waitFor();
+      const editedPartial = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.partial}"]`);
+      assert.match(await editedPartial.locator("[data-ltm-review-summary]").innerText(), /Edited proposal/u);
+      await page.getByRole("button", { name: /^Apply preflighted \(/ }).click();
+      await page.waitForFunction(
+        (mutationId) => !document.querySelector(`[data-ltm-review-mutation="${mutationId}"]`),
+        reviewMutationIds.second,
+      );
+      assert.deepEqual(reviewEditedMutationIds.at(-1), [reviewMutationIds.partial]);
+      assert.deepEqual(reviewActionCalls, [
+        {
+          action: "accept",
+          draftId: reviewDraftIds.first,
+          mutationIds: [reviewMutationIds.first],
+        },
+        {
+          action: "accept",
+          draftId: reviewDraftIds.second,
+          mutationIds: [reviewMutationIds.second, reviewMutationIds.partial],
+        },
+        {
+          action: "accept",
+          draftId: reviewDraftIds.second,
+          mutationIds: [reviewMutationIds.second, reviewMutationIds.partial],
+        },
+      ]);
+
+      await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
+      const discardSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
+      if ((await discardSource.getAttribute("aria-expanded")) === "false") await discardSource.click();
+      await page.locator(`[data-ltm-review-draft-select="${reviewDraftIds.merge}"]`).click();
+      await page.locator('[data-ltm-workspace-pane-tab="workbench"]').click();
+      const mergeDiscardMutation = page.locator(`[data-ltm-review-mutation="${reviewMutationIds.merge}"]`);
+      const skipCallCountBeforeDecline = reviewActionCalls.length;
+      confirmReviewDiscard = false;
+      await page.evaluate(() => {
+        const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: Record<string, unknown>;
+        };
+        element.capabilityProps = {
+          ...element.capabilityProps,
+          confirmAction: (
+            window as Window & {
+              confirmReviewDiscard: (options: { message?: string }) => boolean;
+            }
+          ).confirmReviewDiscard,
+        };
+        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+      });
+      await mergeDiscardMutation.getByRole("button", { name: /^Discard proposal /u }).click();
+      assert.equal(reviewActionCalls.length, skipCallCountBeforeDecline);
+      assert.match(lastReviewDiscardMessage, /Dependent proposals may also be discarded\./u);
+      confirmReviewDiscard = true;
+      await page.evaluate(() => {
+        const element = document.querySelector("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: Record<string, unknown>;
+        };
+        element.capabilityProps = {
+          ...element.capabilityProps,
+          confirmAction: (
+            window as Window & {
+              confirmReviewDiscard: (options: { message?: string }) => boolean;
+            }
+          ).confirmReviewDiscard,
+        };
+        element.dispatchEvent(new CustomEvent("marinara-capability-props"));
+      });
+      await mergeDiscardMutation.getByRole("button", { name: /^Discard proposal /u }).click();
+      assert.equal(reviewActionCalls.at(-1)?.action, "skip");
+
+      reviewQueueEmpty = true;
+      await page.reload();
+      await page.evaluate((version) => {
+        const element = document.createElement("marinara-capability-long-term-memory") as HTMLElement & {
+          capabilityProps?: unknown;
+        };
+        element.setAttribute("view", "detail");
+        element.capabilityProps = { agent: { name: "Long-Term Memory" }, package: { version } };
+        document.body.append(element);
+      }, packageManifest.version);
+      await page.locator('[data-ltm-surface="detail"]').waitFor();
+      await page.locator('[data-ltm-navigation="mobile"] [data-ltm-destination="review"]').click();
+      await page
+        .getByText("No proposed memories need review yet. Import a source, then choose Extract to review.")
+        .waitFor();
+      assert.equal(await page.locator("[data-ltm-workspace]").isVisible(), false);
+      reviewQueueEmpty = false;
 
       healthState = "healthy";
       await page.setViewportSize({ width: 1280, height: 900 });
@@ -1685,6 +2283,9 @@ async function main() {
           ),
       );
       await page.locator("[data-ltm-rejected-suggestions] > summary").click();
+      const recoveryReviewText = await page.locator('[data-ltm-workspace-pane="workbench"]').innerText();
+      assert.match(recoveryReviewText, /Mobile recovery source/u);
+      assert.match(recoveryReviewText, /Mobile recovery memory/u);
       await page.getByRole("button", { name: /^Recover suggestion:/u }).click();
       await page.locator("[data-ltm-note-editor]").waitFor();
       await page.locator("[data-ltm-details-toggle]").click();
@@ -1982,7 +2583,9 @@ async function main() {
       const desktopReextractRow = page.locator('[data-ltm-source-id="chat-a:summary-desktop-reextract"]');
       await desktopReextractRow.hover();
       const desktopReextract = desktopReextractRow.locator('[data-ltm-source-action="re-extract"]');
-      await desktopReextract.click();
+      // ponytail: this lifecycle assertion covers re-extraction state; pointer geometry belongs in focused UI tests.
+      await desktopReextract.focus();
+      await desktopReextract.press("Enter");
       await page.waitForFunction(
         () =>
           document.querySelector('[data-ltm-surface="sources"]')?.getAttribute("data-ltm-extraction-status") ===

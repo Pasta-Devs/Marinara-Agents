@@ -88,11 +88,6 @@ for (const id of selectedPackageDirectories) {
     allowMissing: true,
   });
   const agentDefinitions = JSON.parse(await readFile(agentsSourcePath, "utf8"));
-  for (const definition of agentDefinitions) {
-    if (definition.id === id) {
-      definition.description = withPackageActivationGuidance(id, definition.description);
-    }
-  }
   const agentsBuffer = Buffer.from(`${JSON.stringify(agentDefinitions, null, 2)}\n`);
   await writeFile(agentsSourcePath, agentsBuffer);
   const category = ["writer", "tracker", "misc"].includes(agentDefinitions[0]?.category)

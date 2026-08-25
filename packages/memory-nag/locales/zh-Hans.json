@@ -1,0 +1,14 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": { "locale": "zh-Hans", "direction": "ltr" },
+  "package": {
+    "name": "Memory Nag",
+    "description": "为每个聊天保存一个简短的角色扮演记忆库，并且只回想与当前轮次有关的未解决细节。请在角色扮演模式的聊天设置 → 智能体 → 追踪器智能体中添加此智能体。"
+  },
+  "agents": {
+    "memory-nag": {
+      "name": "Memory Nag",
+      "description": "为每个聊天保存一个简短的角色扮演记忆库，并且只回想与当前轮次有关的未解决细节。"
+    }
+  }
+}

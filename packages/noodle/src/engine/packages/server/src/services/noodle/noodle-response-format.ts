@@ -1,7 +1,7 @@
 import { isOpenAIGpt56Model } from "@marinara-engine/shared";
 
-const NOODLE_POST_HARD_MAX_LENGTH = 4000;
-const NOODLE_REPLY_HARD_MAX_LENGTH = 2000;
+export const NOODLE_POST_HARD_MAX_LENGTH = 4000;
+export const NOODLE_REPLY_HARD_MAX_LENGTH = 2000;
 
 export const NOODLE_JSON_OUTPUT_HEADING = "# JSON Output Format";
 

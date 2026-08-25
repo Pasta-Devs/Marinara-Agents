@@ -53,9 +53,15 @@ for (const [file, source] of Object.entries(parsers)) {
 }
 assert.match(
   draft,
-  /response\.content\?\.trim\(\)\s*\?\s*\[\{ role: "assistant"/u,
-  "The repair retry must not send an empty assistant turn",
+  /modelAnswerForCorrection\(response\.content\)/u,
+  "The repair retry must filter empty and empty-array assistant answers",
 );
+assert.match(
+  draft,
+  /const retry = await provider\.chatComplete/u,
+  "Stage profile generation must retry malformed output once",
+);
+assert.match(draft, /That was not a valid stage profile object/u, "The retry must send a repair instruction");
 
 // Every bulk exclusion carries a reason against its creator, or the wizard cannot say which
 // creator failed for which cause.

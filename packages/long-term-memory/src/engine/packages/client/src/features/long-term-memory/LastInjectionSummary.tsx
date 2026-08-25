@@ -19,9 +19,15 @@ export function LastInjectionSummary({
 }) {
   const { t: localizeUi, locale } = useLtmTranslation();
   return (
-    <details data-ltm-last-injection aria-busy={loading} className="mari-editor-panel mari-editor-panel--soft">
+    <details
+      data-ltm-last-injection
+      aria-busy={loading}
+      className={
+        compact ? "mari-chat-option-field overflow-hidden !rounded-md" : "mari-editor-panel mari-editor-panel--soft"
+      }
+    >
       <summary
-        className={`flex cursor-pointer items-center justify-between font-semibold ${compact ? "min-h-8 gap-2 px-2.5 py-1.5 text-[0.625rem]" : "min-h-11 gap-3 px-3 py-2 text-xs"}`}
+        className={`flex cursor-pointer items-center justify-between font-semibold ${compact ? "min-h-9 gap-2 px-3 py-2 text-[0.6875rem]" : "min-h-11 gap-3 px-3 py-2 text-xs"}`}
       >
         <span>
           {error
@@ -30,24 +36,33 @@ export function LastInjectionSummary({
               ? localizeUi("ui.longTermMemory.lastinjectionsummary.loadingLastInjection")
               : data?.state === "not_recorded"
                 ? localizeUi("ui.longTermMemory.lastinjectionsummary.noRecallRecorded")
-                : data?.memoryCount
-                  ? localizeUi(
-                      selectLtmPluralForm(locale, data.memoryCount) === "one"
-                        ? "ui.longTermMemory.lastinjectionsummary.injectedOne"
-                        : "ui.longTermMemory.lastinjectionsummary.injectedOther",
-                      {
-                        count: data.memoryCount,
-                      },
-                    )
-                  : localizeUi("ui.longTermMemory.lastinjectionsummary.noMemoriesInjectedYet")}
+                : data?.state === "no_matches"
+                  ? localizeUi("ui.longTermMemory.lastinjectionsummary.recallFoundNoMemories")
+                  : data?.memoryCount
+                    ? localizeUi(
+                        selectLtmPluralForm(locale, data.memoryCount) === "one"
+                          ? "ui.longTermMemory.lastinjectionsummary.injectedOne"
+                          : "ui.longTermMemory.lastinjectionsummary.injectedOther",
+                        {
+                          count: data.memoryCount,
+                        },
+                      )
+                    : localizeUi("ui.longTermMemory.lastinjectionsummary.noMemoriesInjectedYet")}
         </span>
-        {data && !error ? (
+        {data && !error && (data.dispatchedAt || data.memoryCount > 0) ? (
           <span className="shrink-0 text-[0.6875rem] font-normal text-[var(--muted-foreground)]">
-            {data.tokenCount.toLocaleString(locale)} {localizeUi("ui.longTermMemory.activityview.tokens")}
+            {data.dispatchedAt
+              ? localizeUi("ui.longTermMemory.lastinjectionsummary.recalledAt", {
+                  timestamp: new Date(data.dispatchedAt).toLocaleString(locale),
+                })
+              : null}
+            {data.memoryCount > 0
+              ? `${data.dispatchedAt ? " · " : ""}${data.tokenCount.toLocaleString(locale)} ${localizeUi("ui.longTermMemory.activityview.tokens")}`
+              : null}
           </span>
         ) : null}
       </summary>
-      <div className={`border-t border-[var(--border)] ${compact ? "px-2.5 py-1.5" : "px-3 py-2"}`}>
+      <div className="border-t border-[var(--border)] px-3 py-2">
         {error ? (
           <StatusSurface tone="danger" compact={compact}>
             {localizeUi("ui.longTermMemory.lastinjectionsummary.theLastRecallCouldNotLoad")}
@@ -101,7 +116,9 @@ export function LastInjectionSummary({
             {localizeUi(
               data?.state === "not_recorded"
                 ? "ui.longTermMemory.lastinjectionsummary.noRecallRecorded"
-                : "ui.longTermMemory.lastinjectionsummary.noMemoriesWereInjectedInTheLastRecall",
+                : data?.state === "no_matches"
+                  ? "ui.longTermMemory.lastinjectionsummary.recallRanButFoundNoRelevantMemories"
+                  : "ui.longTermMemory.lastinjectionsummary.noMemoriesWereInjectedInTheLastRecall",
             )}
           </p>
         ) : null}

@@ -1,0 +1,14 @@
+{
+  "$schema": "../../../schemas/package-localization.schema.json",
+  "_meta": { "locale": "pt-BR", "direction": "ltr" },
+  "package": {
+    "name": "Memory Nag",
+    "description": "Mantém um pequeno cofre de memórias de roleplay por chat e recupera apenas os detalhes não resolvidos que importam para o turno atual. Adicione o agente em Configurações do chat → Agentes → Agentes de rastreamento no modo Roleplay."
+  },
+  "agents": {
+    "memory-nag": {
+      "name": "Memory Nag",
+      "description": "Mantém um pequeno cofre de memórias de roleplay por chat e recupera apenas os detalhes não resolvidos que importam para o turno atual."
+    }
+  }
+}

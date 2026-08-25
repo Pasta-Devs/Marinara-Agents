@@ -32,6 +32,7 @@ import {
   getLtmKeywordIntent,
   ltmKeywordKey,
   removeLtmKeyword,
+  setLtmManualKeywords,
 } from "../../../../shared/src/features/agents/long-term-memory/keywords.js";
 import {
   getLtmScopeChatIds,
@@ -157,6 +158,9 @@ type AvailabilityTargets = {
   branches: AvailabilityChatTarget[];
 };
 type BulkAvailabilityTargetKind = "group" | "chat" | "branch" | "character" | "persona";
+type ArchiveUndoState = {
+  notes: Array<{ id: string; status: LtmStatus }>;
+};
 
 function splitBulkAvailabilityTarget(target: string): [BulkAvailabilityTargetKind, string] {
   const [kind, ...parts] = target.split(":");
@@ -1218,6 +1222,7 @@ export default function MemoryVault({
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [archiveUndo, setArchiveUndo] = useState<ArchiveUndoState | null>(null);
   const [recoverySuggestionId, setRecoverySuggestionId] = useState<string | null>(null);
   const [bulkStatus, setBulkStatus] = useState<LtmStatus>("active");
   const [bulkModes, setBulkModes] = useState<LtmMode[]>(["roleplay"]);
@@ -1232,6 +1237,7 @@ export default function MemoryVault({
   const [openActionNoteId, setOpenActionNoteId] = useState<string | null>(null);
   const [linkTarget, setLinkTarget] = useState("");
   const [linkRelation, setLinkRelation] = useState<LtmLink["relation"]>("involves");
+  const [keywordInput, setKeywordInput] = useState("");
   const [sectionKey, setSectionKey] = useState("");
   const [addingSection, setAddingSection] = useState(false);
   const [renamingSectionKey, setRenamingSectionKey] = useState<string | null>(null);
@@ -1356,6 +1362,7 @@ export default function MemoryVault({
     setBusy("");
     setError("");
     setNotice("");
+    setArchiveUndo(null);
     setOpenActionNoteId(null);
     setDetailsOpen(false);
     setLinkTarget("");
@@ -1376,17 +1383,25 @@ export default function MemoryVault({
       setTarget((current) => (current ? { ...current, scope: scopeTargets.data!.currentScope! } : current));
     }
   }, [props.chatId, scopeTargets.data, target?.id]);
+  const currentScope = scopeTargets.data?.currentScope;
+  const targetScopeResolved =
+    target?.id !== `chat:${props.chatId}` ||
+    Boolean(target.scope && currentScope && sameScope(target.scope, currentScope));
+  const scopeTargetResolved = Boolean(
+    target && targetContextKey.current === contextKey && scopeTargets.isSuccess && targetScopeResolved,
+  );
+  const notesScope = target?.id === `chat:${props.chatId}` ? currentScope : target?.scope;
   const notes = useQuery({
-    queryKey: [...queryKeys.notes, contextKey, target?.id, target?.scope],
-    enabled: Boolean(target) && targetContextKey.current === contextKey,
+    queryKey: [...queryKeys.notes, contextKey, target?.id, notesScope],
+    enabled: scopeTargetResolved,
     queryFn: () =>
       requestAllNotes<LtmNote>(
         `/notes?${new URLSearchParams({
-          ...(target?.scope?.chatIds?.length ? { scopeChatIds: target.scope.chatIds.join(",") } : {}),
-          ...(target?.scope?.groupId ? { scopeGroupId: target.scope.groupId } : {}),
-          ...(target?.scope?.characterIds?.length ? { scopeCharacterIds: target.scope.characterIds.join(",") } : {}),
-          ...(target?.scope?.personaId ? { scopePersonaId: target.scope.personaId } : {}),
-          ...(target?.scope ? { includeGlobal: "false" } : {}),
+          ...(notesScope?.chatIds?.length ? { scopeChatIds: notesScope.chatIds.join(",") } : {}),
+          ...(notesScope?.groupId ? { scopeGroupId: notesScope.groupId } : {}),
+          ...(notesScope?.characterIds?.length ? { scopeCharacterIds: notesScope.characterIds.join(",") } : {}),
+          ...(notesScope?.personaId ? { scopePersonaId: notesScope.personaId } : {}),
+          ...(notesScope ? { includeGlobal: "false" } : {}),
         })}`,
       ),
   });
@@ -1424,6 +1439,13 @@ export default function MemoryVault({
           ? right.createdAt.localeCompare(left.createdAt)
           : right.updatedAt.localeCompare(left.updatedAt),
     );
+  const hasFilterableNotes = allNotes.length > 0 && (sourceFilter || allNotes.some((note) => note.type !== "source"));
+  const clearNavigatorFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+    setSourceFilter(false);
+    setSort("updated");
+  };
   const hiddenChecked = [...checked].filter((id) => !visible.some((note) => note.id === id)).length;
   const toggleVisibleSelection = (selected: boolean) =>
     setChecked((current) => {
@@ -1533,8 +1555,8 @@ export default function MemoryVault({
     selectedConversationId,
   ]);
   const selectedCharacter = scopeTargets.data?.characters.find((character) => character.id === selectedCharacterId);
-  const characterScopeTargets = (scopeTargets.data?.characters ?? []).map(
-    (character) => targets.find((candidate) => candidate.id === `character:${character.id}`)!,
+  const characterScopeTargets = (scopeTargets.data?.characters ?? []).map((character) =>
+    targets.find((candidate) => candidate.id === `character:${character.id}`)!,
   );
   const conversationScopeTargets = conversations.map((conversation) => {
     const [kind, id] = conversation.id.split(/:(.+)/, 2);
@@ -1579,6 +1601,18 @@ export default function MemoryVault({
       label: localizeUi("ui.longTermMemory.memoryvault.sortCreated"),
     },
   ];
+  const activeFilterLabels = [
+    search.trim() ? localizeUi("ui.longTermMemory.memoryvault.filteredEmptySearch", { value1: search.trim() }) : "",
+    statusFilter !== "all"
+      ? localizeUi("ui.longTermMemory.memoryvault.filteredEmptyStatus", { value1: statusLabel(statusFilter) })
+      : "",
+    sourceFilter ? localizeUi("ui.longTermMemory.memoryvault.filteredEmptySourcesOnly") : "",
+    sort !== "updated"
+      ? localizeUi("ui.longTermMemory.memoryvault.filteredEmptySort", {
+          value1: sortScopeTargets.find((candidate) => candidate.id === sort)?.label ?? sort,
+        })
+      : "",
+  ].filter(Boolean);
   const pickerTargets = useMemo<PickerTarget[]>(
     () => [
       ...(scopeTargets.data?.chats ?? []).map((chat) => ({
@@ -1720,6 +1754,7 @@ export default function MemoryVault({
     setSaved("");
     setIsNew(true);
     setRecoverySuggestionId(recoveryHandoff.rejectedSuggestionId ?? null);
+    setKeywordInput("");
     setError("");
     setNotice(localizeUi("ui.longTermMemory.memoryvault.reviewRecoveredSuggestion"));
     setDetailsOpen(false);
@@ -1782,11 +1817,13 @@ export default function MemoryVault({
     setDraft(null);
     setAvailabilityOpen(null);
     setChecked(new Set());
+    setArchiveUndo(null);
     setSaved("");
     setIsNew(false);
     setRecoverySuggestionId(null);
     setLinkTarget("");
     setLinkRelation("involves");
+    setKeywordInput("");
     setSectionKey("");
     setAddingSection(false);
     setMobilePane("navigator");
@@ -1829,6 +1866,7 @@ export default function MemoryVault({
     setRecoverySuggestionId(null);
     setLinkTarget("");
     setLinkRelation("involves");
+    setKeywordInput("");
     setSectionKey("");
     setAddingSection(false);
     setError("");
@@ -1854,6 +1892,7 @@ export default function MemoryVault({
     setRecoverySuggestionId(null);
     setLinkTarget("");
     setLinkRelation("involves");
+    setKeywordInput("");
     setSectionKey("");
     setAddingSection(false);
     setDetailsOpen(false);
@@ -1886,6 +1925,73 @@ export default function MemoryVault({
   }
   async function invalidate() {
     await invalidateLtmQueries(client, [queryKeys.notes, queryKeys.status, queryKeys.activity]);
+  }
+  async function undoArchive(recovery: ArchiveUndoState) {
+    if (archiveUndo !== recovery) return;
+    const session = editorSession.current;
+    setBusy("undo-archive");
+    setError("");
+    try {
+      const notesByStatus = new Map<LtmStatus, string[]>();
+      for (const note of recovery.notes) {
+        const ids = notesByStatus.get(note.status) ?? [];
+        ids.push(note.id);
+        notesByStatus.set(note.status, ids);
+      }
+      const restoreGroups = [...notesByStatus].map(([status, noteIds]) => ({ status, noteIds }));
+      const results = await Promise.allSettled(
+        restoreGroups.map(({ status, noteIds }) =>
+          request<LtmBulkNoteResult>("/notes/batch", "POST", { noteIds, status }),
+        ),
+      );
+      if (session !== editorSession.current) return;
+      const successfulRestores = results.flatMap((result, index) => {
+        const group = restoreGroups[index];
+        if (!group || result.status !== "fulfilled") return [];
+        const expectedIds = new Set(group.noteIds);
+        const restoredIds = result.value.updatedNoteIds.filter((id) => expectedIds.has(id));
+        return restoredIds.length ? [{ noteIds: restoredIds }] : [];
+      });
+      const allRestored = results.every((result, index) => {
+        const group = restoreGroups[index];
+        if (!group || result.status !== "fulfilled") return false;
+        const expectedIds = new Set(group.noteIds);
+        const actualIds = result.value.updatedNoteIds;
+        return (
+          result.value.status === "complete" &&
+          result.value.skippedNoteIds.length === 0 &&
+          result.value.failedNoteIds.length === 0 &&
+          actualIds.length === expectedIds.size &&
+          new Set(actualIds).size === expectedIds.size &&
+          actualIds.every((id) => expectedIds.has(id))
+        );
+      });
+      if (!allRestored) {
+        await Promise.allSettled(
+          successfulRestores.map(({ noteIds }) =>
+            request<LtmBulkNoteResult>("/notes/batch", "POST", { noteIds, status: "archived" }),
+          ),
+        );
+        await invalidate();
+        throw new Error("Archive undo did not restore every memory.");
+      }
+      setArchiveUndo(null);
+      setNotice(
+        localizeUi(
+          selectLtmPluralForm(locale, recovery.notes.length) === "one"
+            ? "ui.longTermMemory.memoryvault.archiveUndoSuccessOne"
+            : "ui.longTermMemory.memoryvault.archiveUndoSuccessOther",
+          { count: recovery.notes.length },
+        ),
+      );
+      await invalidate();
+    } catch {
+      if (session === editorSession.current) {
+        setError(localizeUi("ui.longTermMemory.memoryvault.archiveUndoFailed"));
+      }
+    } finally {
+      if (session === editorSession.current) setBusy("");
+    }
   }
   function openAvailability() {
     if (!draft) return;
@@ -2233,9 +2339,17 @@ export default function MemoryVault({
     )
       return;
     if (action === "delete") {
+      setArchiveUndo(null);
       await deleteSelected(ids);
       return;
     }
+    setArchiveUndo(null);
+    const previousArchiveStatuses = new Map(
+      ids.flatMap((id) => {
+        const status = allNotes.find((note) => note.id === id)?.status;
+        return status ? [[id, status] as const] : [];
+      }),
+    );
     setBusy(action);
     try {
       const availabilityScope = bulkAvailabilityScope(bulkAvailabilityTargets);
@@ -2272,20 +2386,39 @@ export default function MemoryVault({
         setChecked(unresolved);
       }
       const updatedForm = selectLtmPluralForm(locale, result.updatedNoteIds.length);
+      const updatedNoteIds = new Set(result.updatedNoteIds);
+      const archiveCompleted =
+        action === "archive" &&
+        result.status === "complete" &&
+        updatedNoteIds.size === ids.length &&
+        updatedNoteIds.size === result.updatedNoteIds.length &&
+        ids.every((id) => updatedNoteIds.has(id));
+      const archiveUndoNotes = archiveCompleted
+        ? result.updatedNoteIds.flatMap((id) => {
+            const status = previousArchiveStatuses.get(id);
+            return status ? [{ id, status }] : [];
+          })
+        : [];
       const message = localizeUi(
-        unresolved.size
+        archiveCompleted
           ? updatedForm === "one"
-            ? "ui.longTermMemory.memoryvault.batchUpdatedWithIssuesOne"
-            : "ui.longTermMemory.memoryvault.batchUpdatedWithIssuesOther"
-          : updatedForm === "one"
-            ? "ui.longTermMemory.memoryvault.batchUpdatedOne"
-            : "ui.longTermMemory.memoryvault.batchUpdatedOther",
+            ? "ui.longTermMemory.memoryvault.archiveSuccessOne"
+            : "ui.longTermMemory.memoryvault.archiveSuccessOther"
+          : unresolved.size
+            ? updatedForm === "one"
+              ? "ui.longTermMemory.memoryvault.batchUpdatedWithIssuesOne"
+              : "ui.longTermMemory.memoryvault.batchUpdatedWithIssuesOther"
+            : updatedForm === "one"
+              ? "ui.longTermMemory.memoryvault.batchUpdatedOne"
+              : "ui.longTermMemory.memoryvault.batchUpdatedOther",
         {
           updated: result.updatedNoteIds.length,
           skipped: result.skippedNoteIds.length,
           failed: result.failedNoteIds.length,
+          count: result.updatedNoteIds.length,
         },
       );
+      if (archiveCompleted && archiveUndoNotes.length === ids.length) setArchiveUndo({ notes: archiveUndoNotes });
       setOpenActionNoteId(null);
       if (unresolved.size) {
         setNotice("");
@@ -2326,6 +2459,31 @@ export default function MemoryVault({
   const update = <K extends keyof LtmNote>(key: K, value: LtmNote[K]) => {
     setSaveState("idle");
     setDraft((current) => (current ? { ...current, [key]: value } : current));
+  };
+  const addKeywords = () => {
+    if (!draft) return;
+    const values = keywordInput
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (!values.length) return;
+    if (values.some((value) => value.length > 80)) {
+      setError(localizeUi("ui.longTermMemory.memoryvault.manualKeywordTooLong"));
+      return;
+    }
+    const manualKeywords = [...getLtmKeywordIntent(draft).manual, ...values];
+    const next = setLtmManualKeywords(draft, manualKeywords);
+    if (next.manualKeywords.length > 30) {
+      setError(localizeUi("ui.longTermMemory.memoryvault.manualKeywordLimit"));
+      return;
+    }
+    setError("");
+    setSaveState("idle");
+    setDraft((current) => {
+      if (!current) return current;
+      return { ...current, ...setLtmManualKeywords(current, manualKeywords) };
+    });
+    setKeywordInput("");
   };
   const updateConflict = (index: number, text: string) => {
     if (!draft?.conflicts) return;
@@ -2480,6 +2638,21 @@ export default function MemoryVault({
           transform: rotate(90deg);
         }
       `}</style>
+      {error || notice || archiveUndo ? (
+        <div data-ltm-vault-feedback className="contents">
+          {error ? <StatusSurface tone="danger">{error}</StatusSurface> : null}
+          {notice || archiveUndo ? (
+            <StatusSurface tone="success">
+              <span className="min-w-0 flex-1">{notice}</span>
+              {archiveUndo ? (
+                <Button disabled={Boolean(busy)} onClick={() => void undoArchive(archiveUndo)}>
+                  {localizeUi("ui.longTermMemory.memoryvault.undo")}
+                </Button>
+              ) : null}
+            </StatusSurface>
+          ) : null}
+        </div>
+      ) : null}
       <LtmWorkspace
         activeMobilePane={mobilePane}
         onMobilePaneChange={setMobilePane}
@@ -2686,12 +2859,6 @@ export default function MemoryVault({
                   </span>
                 </div>
               </section>
-              {error || notice ? (
-                <div data-ltm-vault-feedback className="contents">
-                  {error ? <StatusSurface tone="danger">{error}</StatusSurface> : null}
-                  {notice ? <StatusSurface tone="success">{notice}</StatusSurface> : null}
-                </div>
-              ) : null}
               {checked.size ? (
                 <section
                   data-ltm-bulk-actions
@@ -2888,10 +3055,21 @@ export default function MemoryVault({
                   if (state) state.scrollTop = event.currentTarget.scrollTop;
                 }}
               >
-                {notes.isLoading ? (
+                {scopeTargets.isError ? (
+                  <StatusSurface tone="danger">
+                    {localizeUi("ui.longTermMemory.memoryvault.memoryScopeCouldNotLoad")}{" "}
+                    <button type="button" className="underline" onClick={() => void scopeTargets.refetch()}>
+                      {localizeUi("ui.longTermMemory.memoryvault.retryMemoryScope")}
+                    </button>
+                  </StatusSurface>
+                ) : null}
+                {!scopeTargetResolved && scopeTargets.isLoading ? (
+                  <StatusSurface busy>{localizeUi("ui.longTermMemory.memoryvault.loadingMemoryScope")}</StatusSurface>
+                ) : null}
+                {scopeTargetResolved && notes.isLoading ? (
                   <StatusSurface busy>{localizeUi("ui.longTermMemory.memoryvault.loadingMemories")}</StatusSurface>
                 ) : null}
-                {notes.isError ? (
+                {scopeTargetResolved && notes.isError ? (
                   <StatusSurface tone="danger">
                     {localizeUi("ui.longTermMemory.memoryvault.memoriesCouldNotLoad")}{" "}
                     <button type="button" className="underline" onClick={() => void notes.refetch()}>
@@ -2976,7 +3154,10 @@ export default function MemoryVault({
                                 ) : null}
                               </button>
                               {note.type !== "source" ? (
-                                <div className="hidden flex-col items-start gap-1 pt-1 opacity-0 transition-opacity pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto group-hover:opacity-100 group-focus-within:opacity-100 md:flex">
+                                <div
+                                  data-ltm-note-actions-desktop
+                                  className="hidden shrink-0 flex-col items-start gap-1 pt-1 text-[var(--muted-foreground)] md:flex"
+                                >
                                   <IconButton
                                     icon={Archive}
                                     label={localizeUi("ui.longTermMemory.memoryvault.archiveValue1", {
@@ -3039,9 +3220,32 @@ export default function MemoryVault({
                     </details>
                   );
                 })}
-                {!notes.isLoading && !notes.isError && !visible.length ? (
+                {scopeTargetResolved &&
+                !scopeTargets.isError &&
+                !notes.isLoading &&
+                !notes.isError &&
+                notes.isSuccess &&
+                !visible.length ? (
                   <div className="p-5 text-center text-xs text-[var(--muted-foreground)]">
-                    <p>{localizeUi("ui.longTermMemory.memoryvault.noMemoriesFound")}</p>
+                    {hasFilterableNotes ? (
+                      <>
+                        <p>
+                          {localizeUi("ui.longTermMemory.memoryvault.filteredEmptyDescription", {
+                            value1: target?.label ?? localizeUi("ui.longTermMemory.memoryvault.allMemories"),
+                          })}
+                        </p>
+                        <p className="mt-2">
+                          {localizeUi("ui.longTermMemory.memoryvault.filteredEmptyFilters", {
+                            value1: activeFilterLabels.join(", "),
+                          })}
+                        </p>
+                        <Button className="mt-3" onClick={clearNavigatorFilters}>
+                          {localizeUi("ui.longTermMemory.memoryvault.clearFilters")}
+                        </Button>
+                      </>
+                    ) : (
+                      <p>{localizeUi("ui.longTermMemory.memoryvault.noMemoriesFound")}</p>
+                    )}
                   </div>
                 ) : null}
               </section>
@@ -3531,6 +3735,25 @@ export default function MemoryVault({
                                         </Pill>
                                       );
                                     })}
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    <input
+                                      className={`${inputClass} min-w-0 flex-1 basis-40`}
+                                      value={keywordInput}
+                                      onChange={(event) => setKeywordInput(event.target.value)}
+                                      onKeyDown={(event) => {
+                                        if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+                                        event.preventDefault();
+                                        addKeywords();
+                                      }}
+                                      placeholder={localizeUi("ui.longTermMemory.memoryvault.addKeyword")}
+                                      aria-label={localizeUi("ui.longTermMemory.memoryvault.addKeyword")}
+                                      data-ltm-keyword-input
+                                    />
+                                    <Button disabled={!keywordInput.trim()} onClick={addKeywords} data-ltm-keyword-add>
+                                      <Plus aria-hidden="true" size="0.75rem" />
+                                      {localizeUi("ui.longTermMemory.tokeneditor.add")}
+                                    </Button>
                                   </div>
                                 </section>
                                 {draft.type === "thread" || draft.type === "world" || draft.type === "tone" ? (

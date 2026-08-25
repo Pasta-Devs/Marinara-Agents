@@ -51,6 +51,11 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     modes: ["roleplay"],
     activation: "Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
   },
+  "memory-nag": {
+    modes: ["roleplay"],
+    activation:
+      "Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode. Once active, configure it in its standalone Memory Nag section.",
+  },
   "persona-stats": {
     modes: ["roleplay"],
     activation: "Add the Agent in Chat Settings → Agents → Tracker Agents for Roleplay mode.",
@@ -124,6 +129,10 @@ export const OFFICIAL_PACKAGE_GUIDANCE = Object.freeze({
     modes: ["conversation", "roleplay", "game"],
     activation: "Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
   },
+  "gacha-forge": {
+    modes: ["conversation", "roleplay", "game"],
+    activation: "Install it, restart Marinara Engine when prompted, then open Home → Gacha Forge.",
+  },
   pixelforge: {
     modes: ["game"],
     activation: "Install it, then choose Pixelforge as the Experience when creating a Game Mode chat.",
@@ -160,4 +169,11 @@ export function withPackageActivationGuidance(packageId, description) {
   const activation = OFFICIAL_PACKAGE_GUIDANCE[packageId]?.activation;
   if (!activation || normalized.endsWith(activation)) return normalized;
   return `${normalized} ${activation}`;
+}
+
+export function withoutPackageActivationGuidance(packageId, description) {
+  const normalized = String(description || "").trim();
+  const activation = OFFICIAL_PACKAGE_GUIDANCE[packageId]?.activation;
+  if (!activation || !normalized.endsWith(activation)) return normalized;
+  return normalized.slice(0, -activation.length).trim();
 }

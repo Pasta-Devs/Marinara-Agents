@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
@@ -92,6 +92,7 @@ const importStatusLabelKeys: Record<string, string> = {
   partial_success: "ui.longTermMemory.sourcesworkspace.statusPartialSuccess",
   no_suggestions_created: "ui.longTermMemory.sourcesworkspace.statusNoSuggestionsCreated",
 };
+const sourceCheckboxClass = "size-6 shrink-0 accent-[var(--marinara-editor-accent)]";
 
 function resultTone(status: string): "neutral" | "success" | "warning" | "danger" {
   return status === "success" || status === "succeeded" || status === "created" || status === "refreshed"
@@ -109,7 +110,9 @@ function resultToneClass(status: string) {
     ? "border border-[var(--border)] bg-[var(--marinara-editor-accent)]/15"
     : tone === "warning"
       ? "border border-[var(--marinara-editor-warning)]/40 text-[var(--marinara-editor-warning)]"
-      : "border border-[var(--border)] bg-[var(--secondary)]";
+      : tone === "danger"
+        ? "border border-[var(--destructive)]/40 bg-[var(--destructive)]/10 text-[var(--destructive)]"
+        : "border border-[var(--border)] bg-[var(--secondary)]";
 }
 
 function importStatusLabel(status: string, localizeUi: LtmTranslationFunction) {
@@ -128,6 +131,17 @@ function freshnessLabel(freshness: LorebookCandidate["freshness"], localizeUi: L
 
 function sourceStatusLabel(row: PreviewRow, localizeUi: LtmTranslationFunction) {
   return freshnessLabel(row.freshness, localizeUi);
+}
+
+function sourceModeLabel(mode: LtmMode, localizeUi: LtmTranslationFunction) {
+  const labels: Record<LtmMode, string> = {
+    conversation: "ui.longTermMemory.sourcesworkspace.conversation",
+    roleplay: "ui.longTermMemory.sourcesworkspace.roleplay",
+    game: "ui.longTermMemory.sourcesworkspace.game",
+  };
+  return localizeUi("ui.longTermMemory.sourcesworkspace.importsAsMode", {
+    mode: localizeUi(labels[mode]),
+  });
 }
 
 function entryStatusLabel(entry: LtmLorebookPreviewEntry, localizeUi: LtmTranslationFunction) {
@@ -205,6 +219,7 @@ function EntrySelect({
     <input
       ref={ref}
       type="checkbox"
+      className={sourceCheckboxClass}
       checked={checked}
       onChange={(event) => onChange(event.target.checked)}
       aria-label={localizeUi("ui.longTermMemory.memoryvault.selectValue1", {
@@ -272,7 +287,8 @@ function SourceOperationWorkbench({
     setError("");
   };
   const previewOperation = async () => {
-    if ((operation === "copy" || operation === "move") && !destinationChatId) return;
+    if (!linked.data || linked.isError || ((operation === "copy" || operation === "move") && !destinationChatId))
+      return;
     setBusy("preview");
     setError("");
     setResult(null);
@@ -298,7 +314,7 @@ function SourceOperationWorkbench({
     }
   };
   const apply = async () => {
-    if (!previewed || busy || result) return;
+    if (!linked.data || linked.isError || !previewed || busy || result) return;
     if (operation === "archive" || operation === "delete") {
       const options = {
         title: localizeUi(`ui.longTermMemory.sourceoperation.apply${operation[0].toUpperCase()}${operation.slice(1)}`),
@@ -479,6 +495,11 @@ function SourceOperationWorkbench({
             {localizeUi("ui.longTermMemory.sourceoperation.loadingLinkedMemories")}
           </p>
         ) : null}
+        {linked.isError ? (
+          <StatusSurface tone="danger">
+            {localizeUi("ui.longTermMemory.sourceoperation.linkedMemoriesCouldNotLoad")}
+          </StatusSurface>
+        ) : null}
         {memories.map((memory) => (
           <label
             key={memory.id}
@@ -486,6 +507,7 @@ function SourceOperationWorkbench({
           >
             <input
               type="checkbox"
+              className={sourceCheckboxClass}
               checked={selected.has(memory.id)}
               onChange={(event) => {
                 setSelectedLinkedIds((ids) =>
@@ -509,7 +531,10 @@ function SourceOperationWorkbench({
       <Button
         primary
         disabled={
-          busy !== null || linked.isLoading || ((operation === "copy" || operation === "move") && !destinationChatId)
+          busy !== null ||
+          !linked.data ||
+          linked.isError ||
+          ((operation === "copy" || operation === "move") && !destinationChatId)
         }
         onClick={() => void previewOperation()}
         data-ltm-source-operation-action="preview"
@@ -584,6 +609,8 @@ function SourceOperationWorkbench({
             disabled={
               Boolean(result) ||
               busy !== null ||
+              !linked.data ||
+              linked.isError ||
               ((operation === "copy" || operation === "move") && !preview?.buckets.ready.length)
             }
             onClick={() => void apply()}
@@ -872,6 +899,25 @@ export default function SourcesWorkspace({
                 })
               : localizeUi("ui.longTermMemory.sourcesworkspace.sourceSavedNoProposals");
 
+  const clearImportResult = useCallback(() => {
+    setImportResult(null);
+    setImportResultContract(null);
+    setCancelledImport(null);
+    setImportError("");
+    setReviewMessage("");
+    setSourceOperation(null);
+  }, []);
+
+  const changeSource = useCallback(
+    (next: Source) => {
+      setSource(next);
+      onSourceChange?.(next);
+      if (next === "lorebooks") setLorebookMobilePane("navigator");
+      clearImportResult();
+    },
+    [clearImportResult, onSourceChange],
+  );
+
   useEffect(() => {
     if (!importTargets.some((target) => target.id === importTargetId))
       setImportTargetId(props.chatId ? `chat:${props.chatId}` : "all");
@@ -886,7 +932,7 @@ export default function SourcesWorkspace({
     if (!requestedSource) return;
     changeSource(requestedSource.source);
     onRequestedSourceHandled?.();
-  }, [onRequestedSourceHandled, requestedSource?.key]);
+  }, [changeSource, onRequestedSourceHandled, requestedSource]);
 
   useEffect(() => {
     if (selectedSource) setSource(selectedSource);
@@ -922,22 +968,6 @@ export default function SourcesWorkspace({
       queryKeys.preview,
       queryKeys.lorebookPreview,
     ]);
-  };
-
-  const clearImportResult = () => {
-    setImportResult(null);
-    setImportResultContract(null);
-    setCancelledImport(null);
-    setImportError("");
-    setReviewMessage("");
-    setSourceOperation(null);
-  };
-
-  const changeSource = (next: Source) => {
-    setSource(next);
-    onSourceChange?.(next);
-    if (next === "lorebooks") setLorebookMobilePane("navigator");
-    clearImportResult();
   };
 
   const changeImportScope = (next: string) => {
@@ -1118,7 +1148,7 @@ export default function SourcesWorkspace({
 
   const sourceInlineActions = (noteId: string, title: string) => (
     <>
-      <div className="hidden items-start gap-1 opacity-0 transition-opacity pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto group-hover:opacity-100 group-focus-within:opacity-100 md:flex">
+      <div className="hidden items-start gap-1 md:flex">
         <IconButton
           icon={extractingId === noteId ? Loader2 : Sparkles}
           label={localizeUi("ui.longTermMemory.sourcesworkspace.reExtractValue1", { value1: title })}
@@ -1625,6 +1655,9 @@ export default function SourcesWorkspace({
                                         {entry.candidateCount} {localizeUi("ui.longTermMemory.sourcesworkspace.parts")}
                                       </span>
                                     ) : null}
+                                    <span className="text-xs text-[var(--muted-foreground)]">
+                                      {sourceModeLabel(entry.candidates[0]?.importMode ?? "roleplay", localizeUi)}
+                                    </span>
                                   </div>
                                   <p className="mt-1 whitespace-pre-wrap break-words text-xs text-[var(--muted-foreground)]">
                                     {entry.candidates[0]?.snippet}
@@ -1755,6 +1788,7 @@ export default function SourcesWorkspace({
               <input
                 ref={flatPanel === "available" ? selectAllRef : selectAllImportedRef}
                 type="checkbox"
+                className={sourceCheckboxClass}
                 aria-label={localizeUi("ui.longTermMemory.sourcesworkspace.selectAllValue1", {
                   value1:
                     flatPanel === "available"
@@ -1829,6 +1863,7 @@ export default function SourcesWorkspace({
                   <div className="flex items-start gap-3">
                     <input
                       type="checkbox"
+                      className={sourceCheckboxClass}
                       aria-label={localizeUi("ui.longTermMemory.memoryvault.selectValue1", { value1: row.title })}
                       checked={activeFlatSelection.has(row.sourceId)}
                       onChange={(event) =>
@@ -1846,6 +1881,12 @@ export default function SourcesWorkspace({
                           className="rounded-full border border-[var(--border)] bg-[var(--secondary)] px-2 py-0.5 text-[0.625rem] font-semibold uppercase"
                         >
                           {sourceStatusLabel(row, localizeUi)}
+                        </span>
+                        <span
+                          data-ltm-source-import-mode={row.importMode}
+                          className="text-xs text-[var(--muted-foreground)]"
+                        >
+                          {sourceModeLabel(row.importMode, localizeUi)}
                         </span>
                       </div>
                       <p className="mt-1 text-xs text-[var(--muted-foreground)]">{row.summary}</p>
@@ -1941,10 +1982,13 @@ export default function SourcesWorkspace({
             <article
               key={item.sourceId}
               data-ltm-import-outcome={item.extractionStatus}
-              className="mari-editor-panel space-y-2 p-3"
+              className="space-y-2 border-t border-[var(--border)] py-3 first:border-t-0"
             >
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <strong>{item.title}</strong>
+                <span data-ltm-import-result-mode={item.note.modes[0]} className="text-[var(--muted-foreground)]">
+                  {sourceModeLabel(item.note.modes[0] ?? "roleplay", localizeUi)}
+                </span>
                 <span
                   data-ltm-source-write-status={item.sourceWriteStatus}
                   className={`rounded-full px-2 py-0.5 ${resultToneClass(item.sourceWriteStatus)}`}
