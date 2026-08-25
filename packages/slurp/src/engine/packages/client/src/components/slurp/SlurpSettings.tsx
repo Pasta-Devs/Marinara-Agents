@@ -955,7 +955,7 @@ export function SlurpSettings({
               onClick={() => setRefreshModalOpen(false)}
               className="min-h-10 rounded-md border border-[var(--border)] px-4 text-xs font-semibold"
             >
-              {t("capabilities.actions.cancel")}
+              {t("ui.slurp.actions.cancel")}
             </button>
             <button
               type="button"

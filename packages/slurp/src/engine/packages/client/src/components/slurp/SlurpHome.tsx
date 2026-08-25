@@ -670,6 +670,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     },
   ) => {
     if (!viewerPersonaId) return;
+    if (input.askForReply && !(await confirmProviderDisclosure())) return;
     const viewerReply = await createInteraction.mutateAsync(
       {
         postId: post.id,
@@ -682,10 +683,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
         onError: (error) => toast.error(errorMessage(error, localizeUi("ui.noodle.noodlerhome.couldNotPostThisReply"))),
       },
     );
-    // The comment is already posted at this point. Opting out simply stops here, so no provider
-    // request is made and the failure toast below can only ever mean a reply was actually asked for.
     if (!input.askForReply) return;
-    if (!(await confirmProviderDisclosure())) return;
     try {
       await triggerCreatorReply.mutateAsync({
         postId: post.id,

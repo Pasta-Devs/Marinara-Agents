@@ -1466,7 +1466,7 @@ export function SlurpOnboardingWizard({ open, selectionOnly = false, onClose, on
               onClick={() => setProviderConfirmationOpen(false)}
               className="min-h-10 rounded-md border border-[var(--border)] px-4 text-xs font-semibold"
             >
-              {t("capabilities.actions.cancel")}
+              {t("ui.slurp.actions.cancel")}
             </button>
             <button
               type="button"
