@@ -63,6 +63,7 @@ const MODULES = [
   "58-player.js",
   "59-economy.js",
   "60-save.js",
+  "61-pack.js",
   "70-hud.js",
   "80-setup.js",
 ];
@@ -18035,6 +18036,483 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     loadedPF.api.getJson = realGetJson;
     loadedPF.save.reset();
   }
+}
+
+// ── THE CONTENT PACK: THE SCHEMA IS THE CONTRACT (0.13 slice 1) ──────────────
+// The pack is sealed forever and validated exactly once, on the way in from a
+// generation call whose schema is ADVISORY (#5135 — strictSchema is unavailable
+// to additionalProperties schemas and stays false). So what the model sends is
+// not a shape anything guaranteed, and every claim the read side makes about a
+// template row is a claim seal time has to have already made true.
+{
+  const pack = loadedPF.pack;
+  const briefFor = (cast) =>
+    loadedPF.brief.validate(
+      {
+        scale: "village",
+        name: "Packton",
+        cast: cast.map((name, index) => ({
+          name,
+          kind: "folk",
+          tint: "blue",
+          home: "Packton",
+          household: index + 1,
+        })),
+      },
+      { theme: "cozy-village", seed: 77 },
+    );
+  const sealedBrief = briefFor(["Alder Vance", "Marla", "Wren Ash", "Perrin Quill"]);
+  // Enough lines to clear the floor, so every case below is about the TEMPLATES.
+  const filler = (n) =>
+    Array.from({ length: n }, (_, i) => ({
+      at: "settlement",
+      when: "day",
+      r: "stranger",
+      text: `line ${i}`,
+    }));
+  // …and enough templates to clear the OTHER floor, tagged so the case under test
+  // can read its own rows back out of the sealed list.
+  const ballast = () =>
+    Array.from({ length: pack.TUNING.floorTemplates }, (_, i) => ({
+      slug: `ballast-${i}`,
+      giver: "Perrin Quill",
+      verb: "visit",
+      target: { place: "hall" },
+      n: 1,
+      title: `Ballast ${i}`,
+    }));
+  const subject = (sealed) => sealed.templates.filter((row) => !row.id.includes(":ballast-"));
+  const seal = (templates, extra = {}) =>
+    pack.validate(
+      { templates: [...templates, ...ballast()], lines: filler(pack.TUNING.floorLines), ...extra },
+      { theme: "cozy-village", seed: 77, brief: sealedBrief },
+    );
+
+  // GATHER IS A WORD, NOT A MECHANIC. The enum takes four verbs and this build
+  // ships three sites to verify them at; a model asked for chores writes
+  // "gather" for the thing this package does by fishing, and dropping a good row
+  // over a synonym is a worse answer than folding it and saying so.
+  {
+    const sealed = seal([
+      { giver: "Marla", verb: "gather", target: { role: "catch-common" }, n: 4, title: "Four for the pot" },
+    ]);
+    const rows = subject(sealed);
+    assert.equal(rows.length, 1, "the gather row survives");
+    assert.equal(rows[0].verb, "catch", "…as a catch");
+    assert.ok(
+      sealed._repairs.some((r) => r.includes("gather -> catch")),
+      "and the fold is repair-logged rather than silent",
+    );
+    assert.ok(rows[0].id.startsWith("p:"), "a generated template is world-BOUND (p: class)");
+  }
+
+  // A VERB WITH NO SITE TO PROGRESS AT CANNOT SEAL. This is where combat-shaped
+  // quests are refused (plan §Q5): by the enum, not by a policy sentence.
+  {
+    const sealed = seal([
+      { giver: "Marla", verb: "defeat", target: { npc: "Wren Ash" }, n: 1, title: "Deal with the miller" },
+      { giver: "Marla", verb: "visit", target: { place: "wilds" }, n: 1, title: "Walk out" },
+    ]);
+    const rows = subject(sealed);
+    assert.equal(rows.length, 1, "the combat-shaped row is gone");
+    assert.equal(rows[0].verb, "visit", "…and the good row beside it is not");
+    assert.ok(
+      sealed._repairs.some((r) => r.includes('"defeat"')),
+      "the drop names the verb it refused",
+    );
+  }
+
+  // GIVER ∈ THE SEALED CAST, for every generated row. A giver the brief never
+  // named is a quest that exists to be mint-parked or repair-dropped.
+  {
+    const sealed = seal([
+      { giver: "Nobody At All", verb: "catch", target: { role: "catch-common" }, n: 2, title: "Two fish" },
+      { giver: "Alder Vance", verb: "catch", target: { role: "catch-common" }, n: 2, title: "Two fish" },
+    ]);
+    const rows = subject(sealed);
+    assert.equal(rows.length, 1, "the stranger's row folds out at the seal");
+    assert.equal(rows[0].giver, "Alder Vance", "the cast member's row stays");
+    assert.ok(
+      sealed._repairs.some((r) => r.includes("is not in the sealed cast")),
+      "and the drop says why",
+    );
+  }
+
+  // TARGET GRAIN, EXPLICIT AND BOUND TO ITS VERB. A role is any yield of that
+  // role; a variant is one exact slug of this theme's; deliver takes a person and
+  // visit takes a place, and nothing takes somebody else's grain.
+  {
+    const sealed = seal([
+      { giver: "Marla", verb: "catch", target: { role: "catch-rare" }, n: 1, title: "One good fish" },
+      { giver: "Marla", verb: "catch", target: { variant: "carp" }, n: 3, title: "Three carp" },
+      { giver: "Marla", verb: "catch", target: { variant: "vat-strain" }, n: 3, title: "Not in this theme" },
+      { giver: "Marla", verb: "catch", target: { npc: "Wren Ash" }, n: 1, title: "Catch a person" },
+      { giver: "Marla", verb: "deliver", target: { npc: "Wren Ash" }, n: 1, title: "Word to the miller" },
+      { giver: "Marla", verb: "deliver", target: { role: "catch-common" }, n: 1, title: "Deliver a role" },
+      { giver: "Marla", verb: "visit", target: { place: "gathering" }, n: 1, title: "Come by the inn" },
+      { giver: "Marla", verb: "visit", target: { place: "the moon" }, n: 1, title: "Go somewhere unreal" },
+    ]);
+    const rows = subject(sealed);
+    assert.deepEqual(
+      rows.map((t) => pack.targetString(t)),
+      ["catch-rare", "carp", "Wren Ash", "gathering"],
+      "four grains resolve and four do not: a colony's variant, a person to catch, a role to deliver, a place that is not one",
+    );
+    assert.equal(rows[1].n, 3, "a counting verb keeps its count");
+    assert.equal(rows[2].n, 1, "…and a non-counting one is always one");
+  }
+
+  // THE SCHEMA EXCLUDES MONEY AND XP, and the seal is what makes that true: the
+  // reward is TUNING-derived from (verb, n) and the pack never authors numbers.
+  {
+    const sealed = seal([
+      {
+        giver: "Marla",
+        verb: "catch",
+        target: { role: "catch-common" },
+        n: 2,
+        title: "Two fish",
+        r: { money: 9999, xp: 500 },
+        money: 9999,
+        xp: 500,
+      },
+    ]);
+    assert.deepEqual(
+      Object.keys(subject(sealed)[0]).sort(),
+      ["giver", "id", "n", "target", "title", "verb"],
+      "a sealed template row is six fields and none of them is a price",
+    );
+  }
+
+  // THE SUBSTANCE FLOOR IS A SEAL/FAIL BOUNDARY. Under it nothing seals — the
+  // gate holds and the retry is free, which is the whole reason a thin pack is
+  // not allowed to become a permanent one.
+  {
+    const thin = pack.validate(
+      { templates: [{ giver: "Marla", verb: "visit", target: { place: "wilds" }, n: 1, title: "Out" }], lines: [] },
+      { theme: "cozy-village", seed: 77, brief: sealedBrief },
+    );
+    assert.equal(thin, null, "a pack under the line floor does not seal");
+    const enough = seal([
+      { giver: "Marla", verb: "visit", target: { place: "wilds" }, n: 1, title: "Out" },
+      { giver: "Marla", verb: "visit", target: { place: "hall" }, n: 1, title: "In" },
+      { giver: "Marla", verb: "catch", target: { role: "catch-common" }, n: 1, title: "One" },
+    ]);
+    assert.equal(subject(enough).length, pack.TUNING.floorTemplates, "exactly the floor's worth under test");
+    assert.ok(enough, "…and one at the floor does");
+    assert.equal(enough.templates.length, pack.TUNING.floorTemplates * 2, "the three under test plus the ballast");
+  }
+
+  // OBJECT-KEYED TRANSPORT, the shape a provider without json_schema hands back.
+  {
+    const sealed = pack.validate(
+      {
+        templates: Object.fromEntries(
+          [{ giver: "Marla", verb: "catch", target: { role: "catch-common" }, n: 2, title: "Two" }, ...ballast()].map(
+            (row, i) => [`k${i}`, row],
+          ),
+        ),
+        lines: Object.fromEntries(filler(pack.TUNING.floorLines).map((row, i) => [`k${i}`, row])),
+      },
+      { theme: "cozy-village", seed: 77, brief: sealedBrief },
+    );
+    assert.equal(subject(sealed).length, 1, "an object-keyed template list is still a list");
+    assert.equal(sealed.lines.length, pack.TUNING.floorLines, "…and so is an object-keyed line index");
+  }
+
+  // THE INDEX AXES FOLD OR THE LINE DROPS, and the two optional axes stay ABSENT
+  // when they were absent: the weather seam costs nothing until L2 fills it, and
+  // an untagged line is not a line that chose "no topic".
+  {
+    const sealed = pack.validate(
+      {
+        templates: [
+          { giver: "Marla", verb: "catch", target: { role: "catch-common" }, n: 1, title: "One" },
+          ...ballast(),
+        ],
+        lines: [
+          ...filler(pack.TUNING.floorLines),
+          { at: "Gathering", when: "Dusk", r: "Friend", text: "Sit down.", topic: "Work" },
+          { at: "gathering", when: "dusk", r: "friend", text: "Fair enough.", w: "fair" },
+          { at: "the mill", when: "dusk", r: "friend", text: "Nowhere this build has." },
+          { at: "gathering", when: "teatime", r: "friend", text: "No such hour." },
+          { at: "gathering", when: "dusk", r: "shouting", text: "No such register." },
+          { at: "gathering", when: "dusk", r: "friend", text: "", topic: "rumor" },
+        ],
+      },
+      { theme: "cozy-village", seed: 77, brief: sealedBrief },
+    );
+    const extra = sealed.lines.slice(pack.TUNING.floorLines);
+    assert.equal(extra.length, 2, "four unusable rows dropped: no such place, hour, register, or text");
+    assert.deepEqual(
+      extra[0],
+      { at: "gathering", when: "dusk", r: "friend", text: "Sit down.", topic: "work" },
+      "a capitalized index key folds onto the vocabulary, tag included",
+    );
+    assert.deepEqual(
+      Object.keys(extra[1]).sort(),
+      ["at", "r", "text", "w", "when"],
+      "an explicit weather is kept and an absent topic stays absent",
+    );
+    assert.equal(extra[0].w, undefined, "…and an absent weather stays absent too");
+  }
+
+  // ESCALATION IS FENCED TO THE CAST, by name and nothing else: the pack may say
+  // what somebody SAYS and never who they are.
+  {
+    const sealed = pack.validate(
+      {
+        templates: [
+          { giver: "Marla", verb: "catch", target: { role: "catch-common" }, n: 1, title: "One" },
+          ...ballast(),
+        ],
+        lines: filler(pack.TUNING.floorLines),
+        escalation: [
+          { npc: "Marla", text: "You heard about the field, then?", kind: "leader", tint: "red", household: 9 },
+          { npc: "A Stranger", text: "I am not in this world." },
+        ],
+      },
+      { theme: "cozy-village", seed: 77, brief: sealedBrief },
+    );
+    assert.equal(sealed.escalation.length, 1, "the line for somebody the brief never named is dropped");
+    assert.deepEqual(
+      Object.keys(sealed.escalation[0]).sort(),
+      ["npc", "text"],
+      "and the row that stays is a name and a sentence — no machine fields ride in on it",
+    );
+  }
+}
+
+// ── THE SHARED MATCHER PREDICATE (plan §2.2d) ────────────────────────────────
+// One function for the seal validator, the default-pack lane and (when the
+// lifecycle slice lands it) fish()'s granted region. It reads the quest ROW's
+// bare target string, because that is all the progress site ever has.
+{
+  const pack = loadedPF.pack;
+  assert.equal(pack.matches("catch-common", { t: "catch-common", k: "carp" }), true, "role grain: any variant counts");
+  assert.equal(pack.matches("catch-common", { t: "catch-common", k: "minnow" }), true, "…any variant at all");
+  assert.equal(pack.matches("catch-common", { t: "catch-rare", k: "mirror-pike" }), false, "…but not another role");
+  assert.equal(pack.matches("carp", { t: "catch-common", k: "carp" }), true, "variant grain: the exact (t, k)");
+  assert.equal(pack.matches("carp", { t: "catch-common", k: "bream" }), false, "…and no other slug");
+  assert.equal(
+    pack.matches("carp", { t: "bait", k: "carp" }),
+    false,
+    "…and not a NON-catch row whose slug collided: variant grain is the pair, not the half",
+  );
+  assert.equal(pack.matches("", { t: "catch-common", k: "carp" }), false, "an empty target matches nothing");
+  assert.equal(pack.matches("catch-common", null), false, "…and neither does an empty yield");
+  assert.equal(
+    pack.matches("constructor", { t: "constructor", k: "constructor" }),
+    false,
+    "a prototype word is not a role, whatever it is named",
+  );
+}
+
+// ── FOLD AT READ: THE SELECTABLE SET, AND ONLY IT (plan §2.2d) ───────────────
+{
+  const pack = loadedPF.pack;
+  const sealedBrief = loadedPF.brief.validate(
+    {
+      scale: "village",
+      name: "Foldton",
+      cast: [
+        { name: "Alder Vance", kind: "leader", tint: "blue", home: "Foldton", household: 1 },
+        { name: "Marla", kind: "grower", tint: "green", home: "Foldton", household: 2 },
+        { name: "Wren Ash", kind: "maker", tint: "teal", home: "Foldton", household: 3 },
+        { name: "Perrin Quill", kind: "host", tint: "amber", home: "Foldton", household: 4 },
+      ],
+    },
+    { theme: "cozy-village", seed: 505 },
+  );
+  const built = world.build(505, "cozy-village", sealedBrief);
+  const hash = loadedPF.player.briefHashOf(sealedBrief);
+  const sealedPack = {
+    packVersion: 1,
+    theme: "cozy-village",
+    briefHash: hash,
+    templates: [
+      { id: "p:x:a", giver: "Marla", verb: "catch", target: { role: "catch-common" }, n: 3, title: "Three" },
+      { id: "p:x:b", giver: "Marla", verb: "catch", target: { variant: "carp" }, n: 2, title: "Two carp" },
+      { id: "p:x:gone", giver: "Nobody Here", verb: "visit", target: { place: "wilds" }, n: 1, title: "Out" },
+      { id: "p:x:alien", giver: "Marla", verb: "catch", target: { variant: "vat-strain" }, n: 1, title: "Wrong theme" },
+      { id: "p:x:ghost", giver: "Marla", verb: "deliver", target: { npc: "Nobody Here" }, n: 1, title: "To nobody" },
+    ],
+    lines: [],
+    escalation: [],
+    overheard: [],
+  };
+  const folded = pack.fold(sealedPack, { brief: sealedBrief, world: built });
+  assert.equal(folded.source, "sealed", "the pack sealed against this brief is the one that reads");
+  assert.equal(folded.demoted, false, "and nothing was demoted");
+  assert.deepEqual(
+    folded.ids,
+    ["p:x:a", "p:x:b"],
+    "three rows fold OUT of the selectable set: a giver nobody stands up, a variant this theme has no table for, and a delivery to nobody",
+  );
+
+  // DEMOTION TOUCHES THE SELECTABLE SET AND NOTHING ELSE. The pack carries the
+  // hash it sealed against; a world that moved under it reads the default pack's
+  // work instead, and every live row the player is carrying is untouched by that.
+  {
+    const stale = { ...sealedPack, briefHash: (hash ^ 0x5f5f5f5f) >>> 0 };
+    const demoted = pack.fold(stale, { brief: sealedBrief, world: built });
+    assert.equal(demoted.demoted, true, "a hash mismatch demotes");
+    assert.equal(demoted.source, "default", "…to the default pack");
+    assert.ok(
+      demoted.pack.templates.every((row) => row.id.startsWith("b:")),
+      "whose work is world-FREE",
+    );
+    // …AND IT FOLDS TO NOTHING HERE, which is Q9's own sentence and not a
+    // surprise: the default pack's givers are the four stock residents, and a
+    // GENERATED cast contains none of them. The board goes honestly empty; what
+    // it must not do is offer work from people this world never stood up.
+    assert.deepEqual(demoted.ids, [], "against a generated cast the fallback offers nothing rather than strangers");
+    // The world it actually serves is the one a declined or pre-0.13 chat
+    // compiles, and there it is full.
+    assert.equal(
+      pack.fold(null, { brief: null, world: world.build(505, "cozy-village", null) }).ids.length,
+      pack.defaults("cozy-village").templates.length,
+      "and in the world it exists for — a legacy layout with the stock four in it — every row survives",
+    );
+  }
+
+  // NO PACK AT ALL — a declined or pre-0.13 chat — is the same read path, and it
+  // is NOT a demotion: nothing was replaced, there was nothing there.
+  {
+    const none = pack.fold(null, { brief: sealedBrief, world: built });
+    assert.equal(none.source, "default", "a world with no pack reads the default one");
+    assert.equal(none.demoted, false, "and is not demoted, because nothing of its own was set aside");
+  }
+
+  // THE DAILY SELECTION hashes over the SORTED SURVIVING IDS and is memoised by
+  // day: the board a player saw on day 12 is the board day 12 always had.
+  {
+    const day12 = pack.selection(folded, 505, 12);
+    assert.equal(day12.length, Math.min(pack.TUNING.K, folded.ids.length), "K offers, or every survivor when fewer");
+    assert.deepEqual(
+      pack.selection(folded, 505, 12).map((t) => t.id),
+      day12.map((t) => t.id),
+      "asking twice on the same day is the same board",
+    );
+    assert.equal(new Set(day12.map((t) => t.id)).size, day12.length, "and no template is offered to itself twice");
+    const empty = pack.fold(
+      {
+        packVersion: 1,
+        theme: "cozy-village",
+        briefHash: hash,
+        templates: [],
+        lines: [],
+        escalation: [],
+        overheard: [],
+      },
+      { brief: sealedBrief, world: built },
+    );
+    assert.deepEqual(pack.selection(empty, 505, 12), [], "a world with nothing to offer offers nothing");
+  }
+
+  // INSTANCE IDS CARRY THE TEMPLATE, which is what lets a completion counter be
+  // keyed by template when the row itself carries no template field.
+  {
+    assert.equal(pack.instanceId(37, "p:x:a"), "b1.d37.p:x:a", "board, day, template");
+    assert.equal(pack.templateOf("b1.d37.p:x:a"), "p:x:a", "…and back again");
+    assert.equal(pack.templateOf("b1.d0.b:catch-common-3"), "b:catch-common-3", "the default pack's class too");
+    assert.equal(pack.templateOf("q1"), null, "a row that is not a board instance says so");
+    assert.equal(pack.templateOf("b1.dx.p:x:a"), null, "…and so does one that only looks like one");
+  }
+}
+
+// ── THE DEFAULT PACK IS HELD TO ITS OWN SCHEMA AT BOOT (plan §2.2f) ──────────
+// The skins' idiom (59-economy) and the legacy name book's (20-world): the
+// negative half is what makes a boot assertion an assertion rather than a
+// comment. This artifact is only ever read on a day something else already went
+// wrong — a declined generation, a chat older than the feature, a pack whose
+// world moved under it — so a hole in it is a hole nobody meets until the worst
+// possible moment.
+{
+  const bootPack = (file, edits) => {
+    const source = MODULES.map((name) => {
+      const text = readFileSync(join(here, "src", name), "utf8");
+      if (name !== file) return text;
+      let patched = text;
+      for (const [from, to, all] of edits) {
+        const next = all ? patched.split(from).join(to) : patched.replace(from, to);
+        assert.notEqual(next, patched, `the rewrite still names ${name}'s "${from}"`);
+        patched = next;
+      }
+      return patched;
+    }).join("\n");
+    return () => new Function(`"use strict";\n${source}\nreturn PF;`)();
+  };
+  assert.ok(
+    bootPack("61-pack.js", [["const VERSION = 1;", "const VERSION = 1; // untouched"]])().pack,
+    "the stack under test boots on its own — every throw below is a rewrite talking",
+  );
+
+  assert.throws(
+    bootPack("61-pack.js", [[`slug: "visit-wilds", giver: "Fen"`, `slug: "visit-wilds", giver: "Nobody"`]]),
+    /is given by Nobody, who is not in .* stock cast/,
+    "a default giver nobody stands up fails the build",
+  );
+  assert.throws(
+    bootPack("61-pack.js", [
+      [
+        `{ slug: "catch-rare-1", giver: "Rook", verb: "catch", target: { role: "catch-rare" }, n: 1 }`,
+        `{ slug: "catch-rare-1", giver: "Rook", verb: "catch", target: { variant: "carp" }, n: 1 }`,
+      ],
+    ]),
+    /targets a variant, which is not theme-shared/,
+    "…and so does a world-free template that quietly became theme-bound",
+  );
+  assert.throws(
+    bootPack("61-pack.js", [[`line("wilds", "day", "stranger",`, `line("nowhere", "day", "stranger",`]]),
+    /is keyed \(nowhere, day\), which is not an index cell/,
+    "…and a line keyed outside the index",
+  );
+
+  // THE DISJOINT NAMESPACES, from the economy's side — the half the matcher rests
+  // on. The skin books are rewritten with the table so the ECONOMY's own
+  // completeness assertion still passes and the throw under test is the only one
+  // that can fire.
+  assert.throws(
+    bootPack("59-economy.js", [
+      [`variant: "bream"`, `variant: "catch-prize"`],
+      [`      bream: "bream",`, `      "catch-prize": "bream",`, true],
+    ]),
+    /is both a catch variant and a catch role; the two namespaces must stay disjoint/,
+    "a variant slug that is also a role name fails the build, because the matcher could not tell them apart",
+  );
+}
+
+// ── THE DAILY SELECTION IS THE SAME IN A SECOND INTERPRETER ──────────────────
+// The board is derived, never saved: `hash(seed, day, "b1")` over the sorted
+// surviving ids. So the same world on the same day has to deal the same offers in
+// a browser that has just started, tomorrow, on another machine — the compiler's
+// own cross-process case one layer up.
+{
+  const day = 12;
+  const seed = 909;
+  const mine = loadedPF.pack
+    .selection(loadedPF.pack.fold(null, { brief: null, world: world.build(seed, "cozy-village", null) }), seed, day)
+    .map((template) => template.id)
+    .join(",");
+  assert.ok(mine, "there is a board to compare");
+  const child = spawnSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `import { readFileSync } from "node:fs";
+       import { join } from "node:path";
+       const here = ${JSON.stringify(here)};
+       const src = ${JSON.stringify(MODULES)}.map((f) => readFileSync(join(here, "src", f), "utf8")).join("\\n");
+       const PF = new Function('"use strict";\\n' + src + "\\nreturn PF;")();
+       const folded = PF.pack.fold(null, { brief: null, world: PF.world.build(${seed}, "cozy-village", null) });
+       process.stdout.write(PF.pack.selection(folded, ${seed}, ${day}).map((t) => t.id).join(","));`,
+    ],
+    { encoding: "utf8", timeout: 60_000 },
+  );
+  assert.equal(child.status, 0, `the second interpreter folded the same pack too (${child.stderr})`);
+  assert.equal(child.stdout, mine, "a fresh process deals the same day the same work");
 }
 
 console.log("brief validator + compiler: all cases passed");
