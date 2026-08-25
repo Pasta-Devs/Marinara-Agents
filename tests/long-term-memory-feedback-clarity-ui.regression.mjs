@@ -433,9 +433,18 @@ assert.match(workspace, /data-ltm-source-operation-preview/u);
 assert.match(workspace, /data-ltm-source-operation-excluded/u);
 assert.match(workspace, /data-ltm-source-operation-result/u);
 assert.match(workspace, /data-ltm-source-import-mode/u);
+assert.match(workspace, /const sourceCheckboxClass = "size-6 shrink-0 accent-/u);
+assert.match(workspace, /linked\.isError[\s\S]*linkedMemoriesCouldNotLoad/u);
+assert.match(workspace, /!linked\.data \|\| linked\.isError \|\| !previewed/u);
+assert.match(workspace, /tone === "danger"[\s\S]*var\(--destructive\)/u);
+assert.match(workspace, /className="hidden items-start gap-1 md:flex"/u);
+assert.doesNotMatch(workspace, /group-hover:pointer-events-auto|transition-opacity/u);
+assert.match(workspace, /className="space-y-2 border-t border-\[var\(--border\)\] py-3 first:border-t-0"/u);
+assert.match(workspace, /\[changeSource, onRequestedSourceHandled, requestedSource\]/u);
 assert.match(workspace, /importsAsMode/u);
 assert.equal(locale["ui.longTermMemory.sourcesworkspace.importsAsMode"], "Imports as {{mode}}");
 assert.equal(locale["ui.longTermMemory.sourceoperation.clearAll"], "Clear all");
+assert.match(locale["ui.longTermMemory.sourceoperation.linkedMemoriesCouldNotLoad"], /could not be loaded/u);
 assert.equal(
   locale["ui.longTermMemory.sourceoperation.confirmArchive"],
   "Archive the source and {{count}} selected linked memories?",
