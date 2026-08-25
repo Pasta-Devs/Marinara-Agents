@@ -45,6 +45,26 @@ PF.rng = (seed) => {
 
 PF.clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
+/** The value a map holds AT `key` ITSELF, or undefined. The only safe way to
+ *  read a table with a word this package did not write.
+ *
+ *  A bare `TABLE[key]` walks the prototype chain, and every object has one:
+ *  `TABLE["constructor"]` is a function, `TABLE["toString"]` is a function,
+ *  `TABLE["__proto__"]` is Object.prototype. All of them are truthy AND
+ *  non-nullish, which is the whole bug class — a `TABLE[key] || fallback` or
+ *  `TABLE[key] ?? fallback` written against a caller-, model- or save-supplied
+ *  key has a fallback that CANNOT FIRE, and the caller is handed a builtin
+ *  where it asked for a row. What happens next is never a clean refusal: the
+ *  builtin reads as a real answer and pins state, or the first property access
+ *  off it throws somewhere with a catch that degrades quietly.
+ *
+ *  Shared rather than re-argued per site because the S5 gates caught this same
+ *  read three times before it got a helper — the zone lookups (slices 1-2), the
+ *  player block's maps (slices 3-4), and the economy's skin and price tables
+ *  (slices 5-6). Whack-a-mole is not a strategy; a fallback goes through here. */
+PF.own = (map, key) =>
+  map && typeof map === "object" && Object.prototype.hasOwnProperty.call(map, key) ? map[key] : undefined;
+
 PF.uid = () => {
   if (globalThis.crypto?.randomUUID) return crypto.randomUUID();
   return `pf-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -700,7 +720,12 @@ PF.art = (() => {
    *  world builds already do. Unknown ids resolve to the fixed default, never
    *  whatever theme happens to be active (order-dependent worlds otherwise). */
   function setTheme(id) {
-    const theme = THEMES[typeof id === "string" ? id : ""] ? id : "cozy-village";
+    // PF.own, because "unknown" has to include the words every object answers
+    // to. The read was bare, so `THEMES["constructor"]` came back a truthy
+    // FUNCTION, "constructor" was accepted as a theme id and PINNED here — the
+    // one place the docstring above promises it cannot be — and from here it
+    // reaches world.theme, the save row, and every theme table downstream.
+    const theme = typeof id === "string" && PF.own(THEMES, id) ? id : "cozy-village";
     if (theme === activeTheme) return activeTheme;
     activeTheme = theme;
     for (const key of Object.keys(PAL)) delete PAL[key];
@@ -1478,7 +1503,14 @@ PF.brief = (() => {
   // the fixture the compiler's invariants are driven through, and the answer for
   // any future caller that needs a brief without a generation call behind it.
   function defaults(theme, seed) {
-    return validate(DEFAULT_BRIEFS[theme] || DEFAULT_BRIEFS["cozy-village"], { theme, seed });
+    // PF.own, because this read happens BEFORE validate() applies the same guard
+    // one screen up — and it is the parameter of an exported function, so the
+    // word arrives from wherever the caller got it. Bare, `defaults("__proto__")`
+    // handed Object.prototype to validate() as the worked example: an object, so
+    // it survived the transport check, and every field then floored to nothing.
+    // The theme came back cozy-village and the brief came back EMPTY, which is
+    // the fallback on this line reading as if it had fired when it had not.
+    return validate(PF.own(DEFAULT_BRIEFS, theme) || DEFAULT_BRIEFS["cozy-village"], { theme, seed });
   }
 
   /** Truncation salvage (§4.1/§5): strip fences, take the outermost balanced
@@ -1941,6 +1973,28 @@ PF.brief = (() => {
 // are used — the world model is wholly package-owned (exploration R09/R10).
 PF.world = (() => {
   const T = PF.TILE;
+
+  /** The spatialLocationId → zoneId table, NULL-PROTOTYPE (#567).
+   *
+   *  Every key in it belongs to the HOST — a World Maps location id, authored by
+   *  hand or by the wizard's map instructions, never written by this package —
+   *  and on a plain `{}` the word "__proto__" is not a key at all. Writing a
+   *  string there is a silent no-op (the prototype setter takes an object or
+   *  null and drops the rest) and reading it back hands out Object.prototype.
+   *  Both halves were reachable and neither failed loudly: 50-spatial's seeding
+   *  write vanished, so its emptiness test re-fired and re-dirtied on every
+   *  refresh forever while the world never gained a root to export under; and
+   *  55-maps-export's adoption read came back Object.prototype, which is neither
+   *  undefined nor the zone, so the export refused its own adoption and posted a
+   *  TWIN of the location — through a route with no delete, onto a real map.
+   *
+   *  Fixed HERE rather than at the two sites because this is the one place the
+   *  table is made: 60-save restores a save's bindings by copying entries INTO
+   *  this object, so no plain map can arrive from stored state, and every read
+   *  and write of it downstream (both files above, plus 70-hud's chip test) is
+   *  covered by the one change. `Object.keys`, `delete` and `JSON.stringify` all
+   *  behave identically, so an honest id is byte-identical either side of it. */
+  const newBindings = () => Object.create(null);
 
   function makeZone(id, name, w, h, groundFill) {
     return {
@@ -2681,7 +2735,7 @@ PF.world = (() => {
       zones: { village: v, inn: n, forest: f },
       startZone: "village",
       // The exterior binds to the campaign's starting World Maps location once known.
-      bindings: {}, // spatialLocationId → zoneId
+      bindings: newBindings(), // spatialLocationId → zoneId
       // The legacy world mints nobody — its three neighbours are written out by
       // hand above. The stamp is still emitted (never absent, so the S5 read
       // never has to distinguish "no stamp" from "stamp zero") and moves only
@@ -4169,7 +4223,12 @@ PF.world = (() => {
     // A side stream, so minting residents does not shift the tile RNG under the
     // ground cover and every world that had no minting still lays the same grass.
     const mintRnd = PF.rng(PF.hashStr(`${seed >>> 0}|residents|${brief.name}`));
-    const nameBook = RESIDENT_NAMES[activeTheme] ?? RESIDENT_NAMES["cozy-village"];
+    // Through PF.own so the fallback on the right is REACHABLE. Bare, a theme
+    // named "constructor" answered with a function, `??` saw something
+    // non-nullish and kept it, and the first `nameBook.family[…]` below threw —
+    // into build()'s catch, which degrades to the legacy three-zone world. A
+    // brief that compiles fine is not a thing to lose over a word.
+    const nameBook = PF.own(RESIDENT_NAMES, activeTheme) ?? RESIDENT_NAMES["cozy-village"];
     const takenNames = new Set(brief.cast.map((m) => m.name));
     const minted = [];
     // Off EVERY sealed household, resident or not: the target ignores the
@@ -5420,7 +5479,7 @@ PF.world = (() => {
       situation: brief.situation,
       zones,
       startZone: "z1",
-      bindings: {},
+      bindings: newBindings(),
       // Derived, never saved (S5 §Q3a). `minted` names the residents the brief
       // did NOT. The severance itself keys off the complement of the brief's
       // cast rather than this list — a resident the OLD mint produced is in
@@ -5749,7 +5808,17 @@ PF.Sim = class {
   }
 
   teleport(zoneId, tx, ty) {
-    if (!this.world.zones[zoneId]) return;
+    // Own-property, because this early return is the ONLY thing standing between
+    // a caller-supplied word and the mount. `zones["constructor"]` is a truthy
+    // function, so bare, the guard did not fire: `zoneId` was pinned to a word no
+    // zone answers to and zone() handed Object's own constructor to the frame
+    // loop, which throws on the first `z.w`. Nothing catches that — and because
+    // the bare form also set `dirty` before the throw, the prototype-named id
+    // reached `snap.zone` first: a corrupt save AND a dead frame loop. Both
+    // shipped callers pre-validate today, but teleport is public on PF.Sim, and
+    // 60-save already spells this same test out as `hasZone` for ids taken off a
+    // save row — a refusal, cleanly, is the whole contract of the line.
+    if (!PF.own(this.world.zones, zoneId)) return;
     this.zoneId = zoneId;
     this.x = (tx + 0.5) * PF.TILE;
     this.y = (ty + 0.5) * PF.TILE;

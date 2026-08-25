@@ -486,7 +486,12 @@ PF.art = (() => {
    *  world builds already do. Unknown ids resolve to the fixed default, never
    *  whatever theme happens to be active (order-dependent worlds otherwise). */
   function setTheme(id) {
-    const theme = THEMES[typeof id === "string" ? id : ""] ? id : "cozy-village";
+    // PF.own, because "unknown" has to include the words every object answers
+    // to. The read was bare, so `THEMES["constructor"]` came back a truthy
+    // FUNCTION, "constructor" was accepted as a theme id and PINNED here — the
+    // one place the docstring above promises it cannot be — and from here it
+    // reaches world.theme, the save row, and every theme table downstream.
+    const theme = typeof id === "string" && PF.own(THEMES, id) ? id : "cozy-village";
     if (theme === activeTheme) return activeTheme;
     activeTheme = theme;
     for (const key of Object.keys(PAL)) delete PAL[key];

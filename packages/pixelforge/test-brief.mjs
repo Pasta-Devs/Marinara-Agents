@@ -2010,6 +2010,85 @@ const wayrestCast = [
     }
   }
 
+  // 37c. Every id in this table belongs to the HOST — authored by hand or by
+  // the wizard's map instructions — and "__proto__" is a word every plain object
+  // already answers to (#567). Both halves of the binding handling broke on it,
+  // and the reachable damage is not the one the issue predicted:
+  //
+  //   * the adoption read at the top of `_plan` (`world.bindings[adopted]`) came
+  //     back Object.prototype — neither undefined nor the zone — so the adoption
+  //     was refused on the FIRST sync and the export posted a TWIN of the very
+  //     location it was meant to bind. Onto a player's real map, through a route
+  //     with no delete, so nothing takes it back;
+  //   * the write it would otherwise have reached (`bindings[locId] = zoneId`)
+  //     is a silent no-op on a plain object anyway — the prototype setter takes
+  //     an object or null and drops a string — which is why the refused adoption
+  //     above could never heal itself on a later pass either.
+  //
+  // The table is null-prototype from creation now (20-world), so the id is just
+  // an id: the adoption holds, the binding lands, and a later session is the
+  // cheap re-bind this module's own header promises.
+  {
+    const { w, core } = exportScaffold(2468, "chat-export-37c");
+    const adoptedZone = exportableZones(w)[0];
+    const adoptedName = w.zones[adoptedZone].name;
+    const posts = [];
+    let serverLocs = [{ id: "loc-root" }, { id: "__proto__", parentId: "loc-root", name: adoptedName }];
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision: 4, locations: serverLocs.slice() },
+      currentLocationId: "loc-root",
+      breadcrumb: [{ name: "Rootville" }],
+      destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async (chatId, body) => {
+      posts.push(body);
+      serverLocs = serverLocs.concat(body.locations.map((row) => ({ id: row.id })));
+      return { ok: true, status: 200, body: {} };
+    };
+    resetExportState();
+    await bindRoot(core);
+    await mapsExport.maybeSync(core);
+    assert.equal(w.bindings["__proto__"], adoptedZone, "a host location id of `__proto__` binds like any other id");
+    assert.equal(w.zones[adoptedZone].spatialLocationId, "__proto__", "and the zone records the adopted id");
+    assert.ok(
+      !posts.flatMap((p) => p.locations).some((row) => row.name === adoptedName),
+      "and no twin of it is ever posted — the row this route can never take back",
+    );
+    // Once, and then quiet. A later session re-plans the same world, finds the
+    // binding already hung, and reports NOTHING — the cheap re-bind the module's
+    // own header promises, which is what a refused adoption made impossible.
+    const dirtyAfterFirst = core.dirty;
+    const postsAfterFirst = posts.length;
+    assert.ok(dirtyAfterFirst > 0, "the first sync is the one that persists the bindings");
+    resetExportState();
+    await mapsExport.maybeSync(core);
+    assert.equal(core.dirty, dirtyAfterFirst, "a second sync reports no change — the binding stuck the first time");
+    assert.equal(posts.length, postsAfterFirst, "…and posts nothing further");
+
+    // The same table from the other end, and THIS is where the permanent churn
+    // lives: the first binding is written by 50-spatial off `currentLocationId`,
+    // which is exactly as host-owned as an authored id, and that write is
+    // unconditional. Bare, it vanished — so the table stayed empty, the seeding
+    // branch re-fired and re-dirtied on every single refresh, and maybeSync
+    // bailed for want of a root. A world that could never export, forever.
+    {
+      const { w: rw, core: rcore } = exportScaffold(1357, "chat-export-37c-root");
+      loadedPF.api.getSpatial = async () => ({
+        definition: { revision: 1, locations: [{ id: "__proto__" }] },
+        currentLocationId: "__proto__",
+        breadcrumb: [{ name: "Rootville" }],
+        destinations: [],
+      });
+      resetExportState();
+      await bindRoot(rcore);
+      assert.equal(rw.bindings["__proto__"], rw.startZone, "the first-seen location binds under that name too");
+      assert.equal(rw.zones[rw.startZone].spatialLocationId, "__proto__", "and the exterior records it");
+      const dirtyAfterSeed = rcore.dirty;
+      await bindRoot(rcore);
+      assert.equal(rcore.dirty, dirtyAfterSeed, "and the seeding branch never fires a second time for it");
+    }
+  }
+
   // 38. An accepted batch whose rows never appear in the re-read (a proxy
   // eating writes, a stale read replica) surrenders instead of posting
   // forever — the regression that OOM'd the harness when first written.
@@ -12470,6 +12549,152 @@ await withSavePath(async ({ behavior, makeCore }) => {
     "no-keeper",
     "and the berth offer answers rather than throwing",
   );
+}
+
+// ── THE THEME ID ITSELF IS RESOLVED AS AN OWN PROPERTY (#515) ─────────────────
+// The UPSTREAM half of the case directly above, and the reason a save row can
+// carry a prototype-named theme at all. `THEMES[id]` was bare, so "constructor"
+// came back a truthy FUNCTION, was accepted as a theme id, and was PINNED into
+// the module's `activeTheme` — the one thing setTheme's own docstring has always
+// promised an unknown id cannot do. From there it reaches world.theme, the save
+// row, and every theme-keyed table downstream of both.
+{
+  try {
+    for (const id of ["constructor", "__proto__", "toString", "valueOf", "hasOwnProperty"]) {
+      loadedPF.art.setTheme("cozy-village");
+      assert.equal(loadedPF.art.setTheme(id), "cozy-village", `"${id}" is not a theme, whatever the prototype answers`);
+      assert.equal(loadedPF.art.theme, "cozy-village", `…and it is not left pinned as the active one`);
+    }
+    // Not a blanket refusal of anything unfamiliar: the themes this build really
+    // ships still resolve to themselves, and an ordinary dropped one still lands
+    // on the default, which is the behaviour the docstring describes.
+    for (const id of loadedPF.art.themeIds()) {
+      assert.equal(loadedPF.art.setTheme(id), id, `"${id}" is a theme this build ships and still resolves to itself`);
+    }
+    assert.equal(loadedPF.art.setTheme("retired-theme"), "cozy-village", "and a theme this build dropped falls back");
+  } finally {
+    loadedPF.art.setTheme("cozy-village");
+  }
+}
+
+// ── THE WORKED EXAMPLE IS PICKED THE SAME WAY (#515, found by the sweep) ──────
+// defaults() reads DEFAULT_BRIEFS by the theme it is HANDED, before validate()
+// applies the whitelist one screen down, and it is exported — so the word comes
+// from wherever the caller got it. Bare, `defaults("__proto__")` handed
+// Object.prototype in as the worked example; it is an object, so it survived
+// validate()'s transport check, and every field then floored to nothing. The
+// brief came back themed cozy-village and EMPTY: the fallback on that line
+// reading as though it had fired when it had not.
+{
+  const cozy = JSON.stringify(brief.defaults("cozy-village", 5));
+  assert.equal(JSON.stringify(brief.defaults("retired-theme", 5)), cozy, "an unknown theme gets the default's brief");
+  for (const hostile of ["constructor", "__proto__", "toString", "valueOf", "hasOwnProperty"]) {
+    // The SAME brief, not merely a non-empty one: a prototype-named theme is a
+    // theme this build does not ship, and gets exactly what any other gets.
+    assert.equal(JSON.stringify(brief.defaults(hostile, 5)), cozy, `"${hostile}" gets it too, whole rather than empty`);
+  }
+  const scifi = brief.defaults("sci-fi-colony", 5);
+  assert.equal(scifi.theme, "sci-fi-colony", "and a theme this build does ship still gets its own worked example");
+  assert.ok(scifi.features.length > 0, "…with the features that example is written to carry");
+}
+
+// ── …AND A WHOLE COMPILED SETTLEMENT IS NOT LOST TO ONE (#515) ────────────────
+// The name book was the `??`-never-reaches-fallback shape: read bare,
+// RESIDENT_NAMES["__proto__"] is Object.prototype, `??` keeps it because it is
+// not nullish, and the first `nameBook.family[…]` throws — into build()'s catch,
+// which degrades to the LEGACY three-zone world. Silently, which is the part
+// worth a case: the only tell a player gets is that the settlement their brief
+// describes in eighteen zones comes back as three.
+//
+// Staged through the SEALED BRIEF's theme rather than through setTheme, with the
+// guard one file up removed for the length of the build. The point of the line
+// is that the name-book read stands on its own — not that the module above it
+// happens to keep hostile words away from it today.
+{
+  const realSetTheme = loadedPF.art.setTheme;
+  try {
+    const honest = world.build(4242, "cozy-village", brief.defaults("cozy-village", 4242));
+    assert.equal(honest.brieved, true, "the control is a compiled world and not a degraded one");
+    for (const hostile of ["constructor", "__proto__", "toString", "valueOf"]) {
+      const sealed = brief.defaults("cozy-village", 4242);
+      sealed.theme = hostile;
+      loadedPF.art.setTheme = null;
+      const w = world.build(4242, hostile, sealed);
+      loadedPF.art.setTheme = realSetTheme;
+      assert.equal(w.brieved, true, `a brief themed "${hostile}" COMPILES rather than degrading to the legacy world`);
+      assert.equal(Object.keys(w.zones).length, Object.keys(honest.zones).length, "…to its full zone count");
+      // And the fallback the line documents actually FIRED, rather than the read
+      // merely not throwing: the residents the compiler mints come back with the
+      // default book's names, byte for byte the ones the honest world minted.
+      assert.ok(w.minted.length > 0, "…with residents minted at all");
+      assert.deepEqual(w.minted, honest.minted, "…and named out of the book the fallback names");
+      assert.equal(w.mintStamp, honest.mintStamp, "…down to the stamp that travels with them");
+    }
+  } finally {
+    loadedPF.art.setTheme = realSetTheme;
+    loadedPF.art.setTheme("cozy-village");
+  }
+}
+
+// ── AND THE ROW THAT CARRIED ONE LOADS INTO THE DEFAULT WORLD (#515) ──────────
+// The chain end to end, through the real load path. A save row's `theme` is
+// untrusted JSON, simFromSaved hands it straight to world.build, and before the
+// guard it came back out AS world.theme — with the legacy layout's own name book
+// read off that same string, so every zone in the restored world was a place
+// with no name. The flush afterwards then wrote the hostile theme back down.
+{
+  try {
+    for (const hostile of ["constructor", "__proto__", "toString"]) {
+      const row = JSON.parse(`{"v":1,"seed":1234,"theme":${JSON.stringify(hostile)}}`);
+      const sim = loadedPF.save.simFromSaved(row, {}, "chat-proto-theme-515");
+      assert.equal(sim.world.theme, "cozy-village", `a row themed "${hostile}" restores the DEFAULT theme's world`);
+      assert.equal(loadedPF.art.theme, "cozy-village", "…and nothing was pinned to it on the way through");
+      for (const zone of Object.values(sim.world.zones)) {
+        assert.ok(typeof zone.name === "string" && zone.name.trim(), `…and ${zone.id} is a place with a name`);
+      }
+      // The row HEALS rather than round-tripping: the next flush writes back the
+      // theme the world it restored really has.
+      const snap = loadedPF.save.snapshot({ sim, chatId: "chat-proto-theme-515" });
+      assert.equal(snap.theme, "cozy-village", "…and the next write puts an honest theme back in the row");
+    }
+  } finally {
+    loadedPF.art.setTheme("cozy-village");
+  }
+}
+
+// ── THE ZONE A MOUNT LANDS IN IS AN OWN PROPERTY TOO (#567) ───────────────────
+// The same read on the WRITE side. `teleport` gated on a bare
+// `!this.world.zones[zoneId]`, and `zones["constructor"]` is a truthy FUNCTION,
+// so the early return did not fire: `zoneId` was pinned to a word no zone
+// answers to and `zone()` handed Object's own constructor to everything
+// downstream of the mount. Nothing catches that — the first `z.w` or `z.solid`
+// off it throws inside the frame loop, on a sim the player is standing in.
+// Latent only because both shipped callers pre-validate their id; `teleport` is
+// public on PF.Sim, and 60-save already spells this exact test out as `hasZone`
+// for the untrusted ids it takes off a save row.
+{
+  const sim = new loadedPF.Sim(world.build(9001, "cozy-village"));
+  const before = { zoneId: sim.zoneId, x: sim.x, y: sim.y };
+  for (const hostile of ["constructor", "__proto__", "toString", "valueOf", "hasOwnProperty"]) {
+    sim.dirty = false;
+    sim.teleport(hostile, 3, 3);
+    assert.equal(sim.zoneId, before.zoneId, `"${hostile}" is not a zone, whatever the prototype answers`);
+    assert.equal(sim.x, before.x, "…so the mount refuses and the player never moved");
+    assert.equal(sim.y, before.y, "…on either axis");
+    assert.equal(sim.dirty, false, "…and a mount that did not happen marks nothing save-worthy");
+    // The refusal is CLEAN, not merely early: the sim keeps stepping instead of
+    // throwing the first time the loop reads a width off a builtin.
+    assert.ok(sim.zone() && typeof sim.zone().w === "number", "…and zone() still answers with a real zone");
+    sim.step(1 / 60, {});
+  }
+  // Not a blanket refusal of anything unfamiliar: a real zone id still mounts,
+  // and an ordinary id this world does not have is refused exactly as before.
+  const inn = sim.world.zones.inn;
+  sim.teleport("inn", inn.spawn.x, inn.spawn.y);
+  assert.equal(sim.zoneId, "inn", "an honest zone id still mounts");
+  assert.equal(sim.x, (inn.spawn.x + 0.5) * loadedPF.TILE, "…at the tile it was handed");
+  sim.teleport("no-such-zone", 1, 1);
+  assert.equal(sim.zoneId, "inn", "and an honest id this world does not have is still refused");
 }
 
 // (av) THE BERTH: S3'S FIRST MONEY SINK AND P1'S BED, IN ONE TRANSACTION.
