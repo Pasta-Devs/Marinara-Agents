@@ -104,6 +104,18 @@ export default tseslint.config(
     },
   },
   {
+    // Quartermaster's client modules are concatenated into one IIFE by
+    // scripts/build-quartermaster-package.mjs, so they share a scope that
+    // per-file linting cannot see. QM is defined in 00-api.js and used by
+    // sibling modules.
+    files: ["packages/quartermaster/src/**/*.js"],
+    languageOptions: {
+      globals: {
+        QM: "readonly",
+      },
+    },
+  },
+  {
     files: ["scripts/validate-pr-triage.mjs"],
     rules: {
       "no-regex-spaces": "off",
