@@ -11,7 +11,8 @@ export async function generateAndApplyNoodlerCreatorReply(
   input: {
     postId: string;
     parentInteractionId: string;
-    viewerAccountId: string;
+    viewerPersonaId: string;
+    viewerActorAccountId: string;
     debugMode?: boolean;
   },
 ): Promise<NoodlerCreatorReplyResult> {
@@ -37,7 +38,8 @@ export async function generateAndApplyNoodlerCreatorReply(
       post.authorAccountId,
       post.id,
       input.parentInteractionId,
-      input.viewerAccountId,
+      input.viewerPersonaId,
+      input.viewerActorAccountId,
     );
     if (claim.status !== "claimed") return claim;
     let content: string;

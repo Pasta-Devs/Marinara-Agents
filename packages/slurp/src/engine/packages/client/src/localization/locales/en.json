@@ -16,6 +16,7 @@
   "settings.notifications.customSound.status.custom": "Custom",
   "settings.sections.imageGeneration.title": "Image Generation",
   "settings.sections.notifications.title": "Notifications",
+  "ui.slurp.actions.cancel": "Cancel",
   "ui.agents.agenteditor.aShortSummaryOfWhatThisAgentDoesPlus": "A short summary of what this agent does, plus author credit for the person or team who made it.",
   "ui.agents.agenteditor.activationKeywords": "Activation Keywords",
   "ui.agents.agenteditor.addAsPromptSection": "Add as Prompt Section",

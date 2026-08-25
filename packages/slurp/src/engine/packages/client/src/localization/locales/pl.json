@@ -12,6 +12,7 @@
   "settings.notifications.customSound.status.custom": "Własny",
   "settings.sections.imageGeneration.title": "Generowanie obrazów",
   "settings.sections.notifications.title": "Powiadomienia",
+  "ui.slurp.actions.cancel": "Anuluj",
   "ui.slurp.settings.generationMode": "Automatyczne generowanie",
   "ui.slurp.settings.generationModeDetail": "Przygotuj posty wcześniej albo generuj je dopiero o zaplanowanej godzinie.",
   "ui.slurp.settings.generationModePreGenerate": "Przygotuj wcześniej",

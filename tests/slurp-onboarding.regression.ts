@@ -94,7 +94,7 @@ assert.match(
 );
 assert.match(
   home,
-  /function StageProfileView\(\{[\s\S]*?viewerAccount,\s*slurpSettings,\s*postCardCtx,/u,
+  /function StageProfileView\(\{[\s\S]*?viewerAccount,[\s\S]*?viewerActorAccount,[\s\S]*?slurpSettings,[\s\S]*?postCardCtx,/u,
   "Creator profile pages must receive their Slurp settings prop",
 );
 assert.match(

@@ -50,6 +50,7 @@ import {
   useTriggerNoodlerCreatorReply,
   useCreateNoodlerStageProfile,
   useDeleteNoodlerPost,
+  useDeleteNoodlerInteraction,
   useGenerateNoodlerNoodlePost,
   useConfirmNoodlerImagePrompts,
   useRunNoodlerAutoPostNow,
@@ -67,6 +68,7 @@ import {
   useToggleNoodlerSubscription,
   useUnlockNoodlerPost,
   useUpdateNoodlerPost,
+  useUpdateNoodlerInteraction,
   useReplaceNoodlerPostImage,
   useUpdateNoodlerAccess,
   useUpdateNoodlerAutoPosting,
@@ -348,6 +350,20 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     (shellPersonaAccount &&
       accountsQuery.data?.find((profile) => profile.sourceAccountId === shellPersonaAccount.id)) ||
     null;
+  const viewerActorAccount =
+    shellPersonaAccount && myCreatorProfile
+      ? ({
+          ...shellPersonaAccount,
+          id: myCreatorProfile.id,
+          handle: myCreatorProfile.handle,
+          displayName: myCreatorProfile.displayName,
+          bio: myCreatorProfile.bio,
+          avatarUrl: myCreatorProfile.avatarUrl,
+          avatarCrop: myCreatorProfile.avatarCrop,
+          createdAt: myCreatorProfile.createdAt,
+          updatedAt: myCreatorProfile.updatedAt,
+        } as NoodleAccount)
+      : null;
   const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const mobileDrawerTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -432,12 +448,14 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   const exitToCreatorHub = async () => {
     if (!(await confirmDiscardProfileDraft())) return;
     if (!(await confirmDiscardNoodlerPostDrafts())) return;
+    clearProfileEditorState();
     setNoodlerPostDrafts({});
     onNavigate({ mode: "creator", view: "hub" });
   };
   const openSettings = async () => {
     if (!(await confirmDiscardProfileDraft())) return;
     if (!(await confirmDiscardNoodlerPostDrafts())) return;
+    clearProfileEditorState();
     setNoodlerPostDrafts({});
     // Open the shared two-pane settings on the NoodleR tab instead of a separate
     // stripped-down page, so both shells reach the same settings surface.
@@ -486,6 +504,8 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   // viewer feed is refetched on success.
   const updatePost = useUpdateNoodlerPost();
   const deletePost = useDeleteNoodlerPost();
+  const updateInteraction = useUpdateNoodlerInteraction();
+  const deleteInteraction = useDeleteNoodlerInteraction();
   const updateAccess = useUpdateNoodlerAccess();
   const [draftNoodleAccountId, setDraftNoodleAccountId] = useState<string | null>(null);
   const [sourceSearch, setSourceSearch] = useState("");
@@ -583,7 +603,15 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   // user chose to keep. Covers both new drafts and changed edits so no surface silently
   // discards work.
   const confirmDiscardProfileDraft = async (): Promise<boolean> => {
-    if (!profileDraft) return true;
+    const hasEditorState = Boolean(
+      profileDraft ||
+      creationStep === "source" ||
+      creationStep === "disclosure" ||
+      creationStep === "draft" ||
+      draftNoodleAccountId ||
+      editingProfileId,
+    );
+    if (!hasEditorState) return true;
     const editing = editingProfileId
       ? (accountsQuery.data?.find((profile) => profile.id === editingProfileId) ?? null)
       : null;
@@ -604,18 +632,33 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
       tone: "destructive",
     });
   };
-  const goToHub = async () => {
-    if (!(await confirmDiscardProfileDraft())) return;
+  const clearProfileEditorState = () => {
     invalidateProfileDraftGeneration();
     setCreationStep(null);
     setProfileDraft(null);
     setEditingProfileId(null);
+    setDraftNoodleAccountId(null);
+    setPreviousDraft(null);
+    setAcceptSourceChangesForProfileId(null);
+    setDraftSourceSnapshot(null);
+    setDraftSourceRevisionToken(null);
+    setSourceSearch("");
+    setSourceKind("all");
+    profileReturnToSettingsRef.current = null;
+  };
+  const prepareNavigationAwayFromProfileEditor = async () => {
+    if (!(await confirmDiscardProfileDraft())) return false;
+    clearProfileEditorState();
+    return true;
+  };
+  const goToHub = async () => {
+    if (!(await prepareNavigationAwayFromProfileEditor())) return;
     setFeedSearch("");
     onNavigate({ mode: "creator", view: "hub" });
     setMobileDrawerOpen(false);
   };
   const goToNoodlerSearch = async () => {
-    if (!(await confirmDiscardProfileDraft())) return;
+    if (!(await prepareNavigationAwayFromProfileEditor())) return;
     onNavigate({ mode: "creator", view: "search" });
     setMobileDrawerOpen(false);
     window.requestAnimationFrame(() => discoveryInputRef.current?.focus());
@@ -635,14 +678,17 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
             : localizeUi("ui.noodle.noodlerhome.couldNotReactToThisPost"),
         ),
       );
-    if (active) removeInteraction.mutate({ postId: post.id, personaId: viewerPersonaId, type }, { onError });
-    else createInteraction.mutate({ postId: post.id, personaId: viewerPersonaId, type }, { onError });
+    const actorAccountId = viewerActorAccount?.id;
+    if (active)
+      removeInteraction.mutate({ postId: post.id, personaId: viewerPersonaId, actorAccountId, type }, { onError });
+    else createInteraction.mutate({ postId: post.id, personaId: viewerPersonaId, actorAccountId, type }, { onError });
   };
   const reactToReply = (post: NoodlePostCardModel, reply: NoodleInteraction, active: boolean) => {
     if (!viewerPersonaId) return;
     const payload = {
       postId: post.id,
       personaId: viewerPersonaId,
+      actorAccountId: viewerActorAccount?.id,
       type: "like" as const,
       parentInteractionId: reply.id,
     };
@@ -654,7 +700,13 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   const voteInPoll = (post: NoodlePostCardModel, optionId: string, selectedOptionId: string | null) => {
     if (!viewerPersonaId || optionId === selectedOptionId) return;
     createInteraction.mutate(
-      { postId: post.id, personaId: viewerPersonaId, type: "vote", content: optionId },
+      {
+        postId: post.id,
+        personaId: viewerPersonaId,
+        actorAccountId: viewerActorAccount?.id,
+        type: "vote",
+        content: optionId,
+      },
       {
         onError: (error) =>
           toast.error(errorMessage(error, localizeUi("ui.noodle.noodlerhome.couldNotVoteInThisPoll"))),
@@ -670,6 +722,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     },
   ) => {
     if (!viewerPersonaId) return;
+    if (input.askForReply && !(await confirmProviderDisclosure())) return;
     const viewerReply = await createInteraction.mutateAsync(
       {
         postId: post.id,
@@ -682,10 +735,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
         onError: (error) => toast.error(errorMessage(error, localizeUi("ui.noodle.noodlerhome.couldNotPostThisReply"))),
       },
     );
-    // The comment is already posted at this point. Opting out simply stops here, so no provider
-    // request is made and the failure toast below can only ever mean a reply was actually asked for.
     if (!input.askForReply) return;
-    if (!(await confirmProviderDisclosure())) return;
     try {
       await triggerCreatorReply.mutateAsync({
         postId: post.id,
@@ -748,9 +798,56 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
       },
     );
   };
+  const [editingReplyId, setEditingReplyId] = useState<string | null>(null);
+  const [editingReplyContent, setEditingReplyContent] = useState("");
+  const startEditingReply = (reply: NoodleInteraction) => {
+    setEditingReplyId(reply.id);
+    setEditingReplyContent(reply.content ?? "");
+  };
+  const cancelEditingReply = () => {
+    setEditingReplyId(null);
+    setEditingReplyContent("");
+  };
+  const saveEditedReply = (post: NoodlePostCardModel, reply: NoodleInteraction) => {
+    if (!viewerPersonaId) return;
+    const content = editingReplyContent.trim();
+    if (!content && !reply.imageUrl) {
+      toast.error(localizeUi("ui.noodle.noodlehome.commentsNeedTextOrAnImage"));
+      return;
+    }
+    updateInteraction.mutate(
+      {
+        postId: post.id,
+        interactionId: reply.id,
+        personaId: viewerPersonaId,
+        content,
+      },
+      {
+        onSuccess: cancelEditingReply,
+        onError: (error) =>
+          toast.error(errorMessage(error, localizeUi("ui.noodle.noodlehome.couldNotEditNoodleComment"))),
+      },
+    );
+  };
+  const deleteNoodleReply = async (post: NoodlePostCardModel, reply: NoodleInteraction) => {
+    const confirmed = await showConfirmDialog({
+      title: localizeUi("ui.noodle.noodlehome.deleteNoodleComment"),
+      message: localizeUi("ui.noodle.noodlehome.thisRemovesTheCommentAndAnyRepliesOrLikes"),
+      confirmLabel: localizeUi("ui.noodle.noodlepostcard.deleteComment"),
+      tone: "destructive",
+    });
+    if (!confirmed || !viewerPersonaId) return;
+    deleteInteraction.mutate(
+      { postId: post.id, interactionId: reply.id, personaId: viewerPersonaId },
+      {
+        onError: (error) =>
+          toast.error(errorMessage(error, localizeUi("ui.noodle.noodlehome.couldNotDeleteNoodleComment"))),
+      },
+    );
+  };
   const postCardController = useNoodlePostCardController({
     postManagement: false,
-    personaAccount: shellPersonaAccount,
+    personaAccount: viewerActorAccount,
     savePost,
     deletePost: deleteNoodlePost,
     reactToPost,
@@ -765,6 +862,17 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     updatePostPending: updatePost.isPending || replacePostImage.isPending,
     titleMaxLength: NOODLER_POST_TITLE_MAX_LENGTH,
     allowPollOnlyEdits: true,
+    replyManagement: {
+      editingReplyId,
+      editingReplyContent,
+      setEditingReplyContent,
+      startEditingReply,
+      cancelEditingReply,
+      saveEditedReply,
+      deleteNoodleReply,
+      updateInteraction,
+      deleteInteraction,
+    },
     deduplicatePollBody: false,
     imageFit: "contain",
     imageEditing: {
@@ -896,15 +1004,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   };
 
   const closeProfileEditor = async () => {
-    if (!(await confirmDiscardProfileDraft())) return;
-    invalidateProfileDraftGeneration();
-    setProfileDraft(null);
-    setPreviousDraft(null);
-    setEditingProfileId(null);
-    setCreationStep(null);
-    setAcceptSourceChangesForProfileId(null);
-    setDraftSourceSnapshot(null);
-    setDraftSourceRevisionToken(null);
+    await prepareNavigationAwayFromProfileEditor();
   };
 
   const changeDisclosure = (value: NoodleIdentityDisclosure) => {
@@ -1018,9 +1118,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
         const refreshed = await accountsQuery.refetch();
         const existing = refreshed.data?.find((profile) => profile.sourceAccountId === draftNoodleAccountId);
         if (existing) {
-          invalidateProfileDraftGeneration();
-          setProfileDraft(null);
-          setCreationStep(null);
+          clearProfileEditorState();
           onNavigate({ mode: "creator", view: "profile", accountId: existing.id });
           toast.info(localizeUi("ui.noodle.noodlerhome.thatStageProfileAlreadyExistedSoItWasOpened"));
           return;
@@ -1191,7 +1289,8 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     onOpenMobileHome: exitToCreatorHub,
     onOpenNoodler: goToHub,
     onOpenSearch: goToNoodlerSearch,
-    onOpenProfile: () => {
+    onOpenProfile: async () => {
+      if (!(await prepareNavigationAwayFromProfileEditor())) return;
       setMobileDrawerOpen(false);
       onNavigate(
         mainAuthorProfile
@@ -1226,6 +1325,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
           navigation={navigation}
           onNavigate={onNavigate}
           onAddCreators={() => setOnboardingMode("add-creators")}
+          personaSourceIds={new Set(personas.map((persona) => persona.id))}
           onEditCreator={(creator) => {
             beginEdit(creator);
             onNavigate({ mode: "creator", view: "profile", accountId: creator.id, returnToSettings: navigation });
@@ -1249,6 +1349,15 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
               setOnboardingState("completed");
             }
           }}
+          onSeeFeed={
+            onboardingMode === "add-creators"
+              ? () => {
+                  setOnboardingMode(null);
+                  setFeedTab("all");
+                  onNavigate({ mode: "creator", view: "hub" });
+                }
+              : undefined
+          }
           onSkipped={() => setOnboardingMode(null)}
         />
       </NoodleShell>
@@ -1500,6 +1609,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
             posts={postsQuery.data ?? []}
             viewerCreator={selectedViewerCreator}
             viewerAccount={shellPersonaAccount}
+            viewerActorAccount={viewerActorAccount}
             slurpSettings={slurpSettingsQuery.data ?? null}
             postCardCtx={postCardCtx}
             viewerAccounts={viewerAccounts}
@@ -2749,6 +2859,7 @@ function StageProfileView({
   posts,
   viewerCreator,
   viewerAccount,
+  viewerActorAccount,
   slurpSettings,
   postCardCtx,
   viewerAccounts,
@@ -2786,6 +2897,7 @@ function StageProfileView({
   posts: SlurpProfilePost[];
   viewerCreator: NonNullable<ReturnType<typeof useNoodlerViewer>["data"]>["creators"][number] | null;
   viewerAccount: NoodleAccount | null;
+  viewerActorAccount: NoodleAccount | null;
   slurpSettings: ReturnType<typeof useSlurpSettings>["data"] | null;
   postCardCtx: ReturnType<typeof useNoodlePostCardController>["ctx"];
   viewerAccounts: NoodleAccount[];
@@ -3032,7 +3144,7 @@ function StageProfileView({
               post={item.model}
               ctx={{
                 ...postCardCtx,
-                personaAccount: viewingOwnCreator ? null : viewerAccount,
+                personaAccount: viewingOwnCreator ? null : viewerActorAccount,
                 postManagement: managedCreator,
               }}
             />

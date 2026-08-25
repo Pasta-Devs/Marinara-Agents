@@ -40,6 +40,7 @@ type SlurpSettingsProps = {
   navigation: Extract<SlurpNavigationState, { mode: "creator-settings" }>;
   onNavigate: (navigation: SlurpNavigationState) => void;
   onAddCreators: () => void;
+  personaSourceIds: ReadonlySet<string>;
   onEditCreator: (creator: NoodlerManagedStageProfile) => void;
   onRedraftCreator: (creator: NoodlerManagedStageProfile) => void;
   onRestartOnboarding: () => void;
@@ -76,10 +77,10 @@ function NumberSetting({
 }) {
   const [draft, setDraft] = useState(String(value));
   useEffect(() => setDraft(String(value)), [value]);
-  const commit = async () => {
-    const next = Number(draft);
-    if (!Number.isInteger(next) || next < min || next > max) {
-      setDraft(String(value));
+  const commit = async (raw = draft, resetInvalid = true) => {
+    const next = Number(raw);
+    if (!raw.trim() || !Number.isInteger(next) || next < min || next > max) {
+      if (resetInvalid) setDraft(String(value));
       return;
     }
     if ((await onSave(next)) === false) setDraft(String(value));
@@ -90,7 +91,11 @@ function NumberSetting({
       min={min}
       max={max}
       value={draft}
-      onChange={(event) => setDraft(event.target.value)}
+      onChange={(event) => {
+        const nextDraft = event.target.value;
+        setDraft(nextDraft);
+        void commit(nextDraft, false);
+      }}
       onBlur={() => void commit()}
       onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
       className="h-10 w-full rounded-md border border-[var(--border)] bg-transparent px-3 text-sm"
@@ -102,6 +107,7 @@ export function SlurpSettings({
   navigation,
   onNavigate,
   onAddCreators,
+  personaSourceIds,
   onEditCreator,
   onRedraftCreator,
   onRestartOnboarding,
@@ -154,6 +160,9 @@ export function SlurpSettings({
     (connection) => connection.provider === "image_generation",
   );
   const imageSettings = imageSettingsQuery.data;
+  const personaCreator = (creator: NoodlerManagedStageProfile) =>
+    Boolean(creator.sourceAccountId && personaSourceIds.has(creator.sourceAccountId));
+  const automationCreators = (accountsQuery.data ?? []).filter((creator) => !personaCreator(creator));
   const scheduleCreator = accountsQuery.data?.find((creator) => creator.id === scheduleCreatorId) ?? null;
   const scheduleSlots =
     reserveStatusQuery.data?.creators.find((creator) => creator.accountId === scheduleCreatorId)?.slots ?? [];
@@ -244,10 +253,9 @@ export function SlurpSettings({
                   type="button"
                   disabled={accountsQuery.isLoading || accountsQuery.isError}
                   onClick={() => {
-                    const creators = accountsQuery.data ?? [];
-                    const enabled = creators.filter((creator) => creator.autoPosting.enabled);
+                    const enabled = automationCreators.filter((creator) => creator.autoPosting.enabled);
                     setRefreshAccountIds(
-                      new Set((enabled.length > 0 ? enabled : creators).map((creator) => creator.id)),
+                      new Set((enabled.length > 0 ? enabled : automationCreators).map((creator) => creator.id)),
                     );
                     setRefreshAccess("locked");
                     setRefreshModalOpen(true);
@@ -503,19 +511,21 @@ export function SlurpSettings({
                               </span>
                             </span>
                           </button>
-                          <Toggle
-                            label={t("ui.slurp.settings.creators.autoPost")}
-                            value={creator.autoPosting.enabled}
-                            compact
-                            onChange={(value) =>
-                              updateAuto.mutate(
-                                { accountId: creator.id, enabled: value },
-                                {
-                                  onError: (error) => toast.error(errorMessage(error)),
-                                },
-                              )
-                            }
-                          />
+                          {!personaCreator(creator) && (
+                            <Toggle
+                              label={t("ui.slurp.settings.creators.autoPost")}
+                              value={creator.autoPosting.enabled}
+                              compact
+                              onChange={(value) =>
+                                updateAuto.mutate(
+                                  { accountId: creator.id, enabled: value },
+                                  {
+                                    onError: (error) => toast.error(errorMessage(error)),
+                                  },
+                                )
+                              }
+                            />
+                          )}
                           <Toggle
                             label={t("ui.slurp.settings.creators.images")}
                             value={creator.autoPosting.imagesEnabled}
@@ -884,7 +894,7 @@ export function SlurpSettings({
               <div className="flex gap-2 text-xs">
                 <button
                   type="button"
-                  onClick={() => setRefreshAccountIds(new Set((accountsQuery.data ?? []).map((creator) => creator.id)))}
+                  onClick={() => setRefreshAccountIds(new Set(automationCreators.map((creator) => creator.id)))}
                   className="text-[var(--noodle-accent)] hover:underline"
                 >
                   {t("ui.slurp.settings.refresh.selectAll")}
@@ -899,7 +909,7 @@ export function SlurpSettings({
               </div>
             </div>
             <div className="mt-2 max-h-64 divide-y divide-[var(--border)] overflow-y-auto rounded-md border border-[var(--border)]">
-              {(accountsQuery.data ?? []).map((creator) => (
+              {automationCreators.map((creator) => (
                 <label
                   key={creator.id}
                   className="flex min-h-12 cursor-pointer items-center gap-3 px-3 py-2 hover:bg-[var(--accent)]/40"
@@ -955,7 +965,7 @@ export function SlurpSettings({
               onClick={() => setRefreshModalOpen(false)}
               className="min-h-10 rounded-md border border-[var(--border)] px-4 text-xs font-semibold"
             >
-              {t("capabilities.actions.cancel")}
+              {t("ui.slurp.actions.cancel")}
             </button>
             <button
               type="button"

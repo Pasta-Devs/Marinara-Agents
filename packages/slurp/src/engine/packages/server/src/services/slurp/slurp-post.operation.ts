@@ -87,6 +87,9 @@ export async function generateAndApplyNoodlerPost(
     if (!account) {
       return { status: "noodler_account_not_found" } as const;
     }
+    if (account.kind === "persona" && account.sourceKind === "persona") {
+      return { status: "disabled" } as const;
+    }
     const publicAccount = await noodle.resolveAccountSource(account);
     if (!publicAccount) {
       return { status: "noodler_account_not_found" } as const;
@@ -186,8 +189,14 @@ export async function refreshTargetedNoodlerCreatorsNow(
   // One creator named twice is one refresh, not two: the per-account lock already serializes the
   // work, but without this the response reports that creator twice.
   const targetAccountIds = [...new Set(accountIds)];
+  const eligibleAccounts = new Set(
+    (await noodle.listNoodlerAccounts())
+      .filter((account) => !(account.kind === "persona" && account.sourceKind === "persona"))
+      .map((account) => account.id),
+  );
+  const eligibleTargetAccountIds = targetAccountIds.filter((accountId) => eligibleAccounts.has(accountId));
   const settled = await settleAgentJobsWithConcurrencyLimit(
-    targetAccountIds,
+    eligibleTargetAccountIds,
     MAX_CONCURRENT_MANUAL_REFRESH,
     async (accountId): Promise<NoodlerRefreshNowOutcome> => {
       const result = await generateAndApplyNoodlerPost(db, {
@@ -202,10 +211,14 @@ export async function refreshTargetedNoodlerCreatorsNow(
     },
   );
   const outcomes = settled.map((entry, index): NoodlerRefreshNowOutcome => {
+    const accountId = eligibleTargetAccountIds[index]!;
     if (entry.status === "fulfilled") return entry.value;
-    logger.error(entry.reason, "[noodler] Targeted refresh failed for creator %s", targetAccountIds[index]!);
-    return { accountId: targetAccountIds[index]!, status: "error" };
+    logger.error(entry.reason, "[noodler] Targeted refresh failed for creator %s", accountId);
+    return { accountId, status: "error" };
   });
+  for (const accountId of targetAccountIds) {
+    if (!eligibleAccounts.has(accountId)) outcomes.push({ accountId, status: "skipped" });
+  }
   return { status: "ok", outcomes };
 }
 
