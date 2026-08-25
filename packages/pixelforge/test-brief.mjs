@@ -18791,7 +18791,15 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         assert.equal(
           loadedPF.save.packExpected(meta, "chat-pack-2"),
           false,
-          "the formula alone sees a pack key and asks for nothing",
+          "nothing is owed on this metadata — though it is the missing seal-side marker that says so, one term early",
+        );
+        // …AND THE PACK-KEY TERM IS WHAT DECIDES IT ONCE THE MARKER IS THERE. With
+        // the copy present the formula runs past its first clause, and the only
+        // thing left standing between this chat and a paid call is the key.
+        assert.equal(
+          loadedPF.save.packExpected({ ...meta, pixelforgePackWanted: true }, "chat-pack-2b"),
+          false,
+          "a chat that IS owed a pack and already has a key at that key asks for nothing either",
         );
         assert.equal(loadedPF.save.armGate(core, meta), true, "…and the BRIEF is what gates this chat");
         calls.length = 0;
@@ -18851,11 +18859,41 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     assert.equal(loadedPF.save.packExpected(preRelease, "chat-pre"), false, "a pre-0.13 seal is never owed a pack");
     // (12) the wizard was pre-0.13 and the CLIENT that sealed was 0.13: there was
     // nothing to copy, so the seal PATCH copied nothing.
-    assert.equal(
-      loadedPF.save.packExpected({ ...preRelease, pixelforgeBrief: packBrief }, "chat-12"),
-      false,
-      "a pre-0.13 wizard sealed by a new client is packless, and that is the designed answer rather than a bug report",
-    );
+    //
+    // DRIVEN RATHER THAN ASSERTED, because the claim is about what the seal PATCH
+    // WRITES — and no amount of reading the formula against a hand-built metadata
+    // blob can see that. This is also the only lane that pins the PATCH's negative
+    // half: every other one watches it carry the copy, and a PATCH that copied on
+    // every seal would pass all of them.
+    await withSavePath(async ({ calls, behavior, tick, makeCore }) => {
+      await withGeneration(async ({ postCount }) => {
+        await withPack(async ({ packCount }) => {
+          behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+          const meta = { gameSetupConfig: { experienceConfig: { generate: true, seed: 4242, theme: "cozy-village" } } };
+          const core = makeCore("chat-12", 4242);
+          core.host.chatMeta = meta;
+          core.sim = loadedPF.save.restore(meta, "chat-12");
+          assert.equal(loadedPF.save.armGate(core, meta), true, "the chat gates for its BRIEF");
+          assert.equal(loadedPF.save.gate.stage, "brief", "…and for nothing else");
+          calls.length = 0;
+          await loadedPF.save.maybeGenerateBrief(core);
+          await tick();
+          assert.equal(postCount(), 1, "the brief call ran");
+          assert.deepEqual(
+            calls.filter((c) => c.kind === "patch").map((c) => Object.keys(c.patch).sort()),
+            [["pixelforgeBrief"]],
+            "and the seal PATCH carried the artifact ALONE — there was no wizard answer to copy",
+          );
+          assert.equal(packCount(), 0, "so no pack call was ever made");
+          assert.equal(loadedPF.save.gateHolds(core), false, "and the gate lifted on the brief alone");
+          assert.equal(
+            loadedPF.save.packExpected(afterPatches(meta, calls), "chat-12"),
+            false,
+            "…leaving a chat that is packless and stays packless, which is Q9's ruling made structural",
+          );
+        });
+      });
+    });
     // (13) the wizard was 0.13 and the client that SEALED was 0.12: the config
     // asks for a pack and the seal-side copy does not exist, so the formula says
     // no — the same disposition as 12, by construction.
@@ -18989,9 +19027,18 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         await tick();
         assert.equal(postCount(), 1, "the brief call ran");
         assert.equal(packCount(), 1, "…and the pack call is in flight");
-        // Every other door into the dispatcher, while the pack call is parked.
-        await loadedPF.save.maybeGenerateBrief(core);
-        loadedPF.save.retryGeneration(core);
+        // RE-ENTERED WHILE THE PACK CALL IS PARKED, and deliberately NOT awaited: a
+        // hold that let this through would reach the same fixture promise the first
+        // call is parked on, so awaiting the re-entry would HANG the harness rather
+        // than fail it — the counts below would never be reached and the break would
+        // read as a timeout with no diagnostic. Held open and asserted against
+        // instead, then drained at the foot of the case.
+        const reentry = loadedPF.save.maybeGenerateBrief(core);
+        // The retry button is the OTHER door, and it refuses one clause earlier than
+        // the hold does: its own gate is "generating", not "failed". Asserted rather
+        // than called and discarded — this case cannot claim to drive it into the
+        // dispatcher, because it never gets that far.
+        assert.equal(loadedPF.save.retryGeneration(core), false, "the retry button refuses a gate that is not failed");
         await tick();
         assert.equal(postCount(), 1, "no second brief call");
         assert.equal(packCount(), 1, "and no second PAID pack call");
@@ -19003,6 +19050,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         assert.equal(loadedPF.save.gateHolds(core), true, "play is still held while the second call is in flight");
         assert.equal(loadedPF.save.gate.stage, "pack", "…at the stage it is actually waiting on");
         releasePack();
+        await reentry;
         await first;
         await tick();
         assert.equal(loadedPF.save.gateHolds(core), false, "the sequence finishes and the gate lifts");
