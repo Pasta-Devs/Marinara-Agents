@@ -19113,6 +19113,77 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   );
 }
 
+// ── ONE LIVE INSTANCE PER TEMPLATE, ENFORCED BELOW THE OFFER LAYER ──────────
+// The board mints day-bearing instance ids, so two instances of one template
+// never collide by id — and "at most one live job per template" is an invariant
+// the offers section enforces by not re-offering taken work, which is a layer the
+// restore paths run underneath. Mint severance parks a row, tomorrow the player
+// takes the same job again, and the mint restore CONCATS the parked copy back:
+// two live rows for one job, both of which every progress site would advance.
+{
+  const P = loadedPF.player;
+  const row = (id, have) => ({
+    id,
+    g: "z1|Perrin Quill",
+    verb: "catch",
+    target: "catch-common",
+    n: 5,
+    have,
+    r: { money: 0, xp: 0 },
+    day: 1,
+  });
+
+  // The named regression: mint-park, re-accept, restore.
+  {
+    const player = P.defaultPlayer();
+    player.quests.active = [row("b1.d38.p:x:a", 1)]; // taken again today
+    const restored = P.restoreStamped(
+      player,
+      {
+        reason: "mint",
+        fromV: P.currentV(),
+        stamps: { seed: 0, briefHash: 0, mintStamp: 0 },
+        fields: { rel: {}, questsActive: [row("b1.d37.p:x:a", 4)] }, // parked yesterday
+      },
+      { seed: 0, mintStamp: 0 },
+      null,
+    );
+    assert.ok(restored, "the parked row comes home");
+    assert.equal(restored.quests.active.length, 1, "…and there is exactly ONE live instance of that template");
+    assert.equal(restored.quests.active[0].id, "b1.d38.p:x:a", "the LIVE row wins, as it always has");
+    assert.equal(restored.quests.active[0].have, 1, "…including its progress, not the parked row's");
+  }
+
+  // Two PARKED copies fall back to the existing preference: furthest along.
+  {
+    const player = P.defaultPlayer();
+    const merged = P._dedupeActive([row("b1.d10.p:x:a", 2), row("b1.d11.p:x:a", 4)], 0);
+    assert.equal(merged.length, 1, "two parked instances of one template collapse");
+    assert.equal(merged[0].have, 4, "…to whichever got further");
+    void player;
+  }
+
+  // AND NOTHING ELSE COLLAPSES. Two different templates, and two rows that are not
+  // board instances at all, are still two rows.
+  {
+    assert.equal(
+      P._dedupeActive([row("b1.d10.p:x:a", 1), row("b1.d10.p:x:b", 1)], 0).length,
+      2,
+      "different templates stay different jobs",
+    );
+    assert.equal(
+      P._dedupeActive([row("q1", 1), row("q2", 1)], 0).length,
+      2,
+      "…and a row that is not a board instance dedupes by id exactly as before",
+    );
+    assert.equal(
+      P._dedupeActive([row("b1.d10.b:visit-wilds", 1), row("b1.d10.b:visit-wilds", 3)], 0).length,
+      1,
+      "the default pack's class is board work too",
+    );
+  }
+}
+
 // ── THE DAILY SELECTION IS THE SAME IN A SECOND INTERPRETER ──────────────────
 // The board is derived, never saved: `hash(seed, day, "b1")` over the sorted
 // surviving ids. So the same world on the same day has to deal the same offers in

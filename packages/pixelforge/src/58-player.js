@@ -889,20 +889,42 @@ PF.player = {
 
   /** Dedupe active quests by id. `liveCount` is how many of the leading rows
    *  came from the LIVE block: the row the player is playing wins outright, and
-   *  two parked copies of one quest fall back to whichever got further. */
+   *  two parked copies of one quest fall back to whichever got further.
+   *
+   *  BOARD INSTANCES DEDUPE AT TEMPLATE GRAIN, which is wider than the id and has
+   *  to be (0.13). A board instance id carries the day it was offered on
+   *  (`b1.d37.<template>` — 61-pack `instanceId`), so two instances of ONE template
+   *  taken on different days never collide by id, and the "at most one live
+   *  instance per template" invariant the offer layer enforces has NO owner below
+   *  it. The restore paths are exactly where that bites: a mint severance parks a
+   *  row, the player takes the same work again tomorrow, and the mint restore
+   *  CONCATs the parked copy back onto the live list — two live rows for one job,
+   *  both of which the progress site would advance.
+   *
+   *  The preference order does not move: live first, then furthest along. Only what
+   *  counts as "the same quest" widens.
+   *
+   *  Read through `PF.pack` rather than re-deriving the id shape here, in 20-world's
+   *  `PF.art?.setTheme` idiom: this file owns the ROW and the pack layer owns the
+   *  convention for the ids it mints, and a second copy of that shape is how the
+   *  dedupe comes to disagree with the counter about which template a row belongs
+   *  to. Absent pack layer, absent convention — the key falls back to the id, which
+   *  is the behaviour this function had before the board existed and the right one
+   *  for any world with no board in it. */
   _dedupeActive(active, liveCount) {
     const held = new Map();
     active.forEach((q, index) => {
       const id = str(q?.id);
       if (!id) return;
+      const key = PF.pack?.templateOf?.(id) ?? id;
       const live = index < liveCount;
-      const prior = held.get(id);
+      const prior = held.get(key);
       if (!prior) {
-        held.set(id, { q, live });
+        held.set(key, { q, live });
         return;
       }
       if (prior.live) return;
-      if (live || posInt(q?.have, 0) > posInt(prior.q?.have, 0)) held.set(id, { q, live });
+      if (live || posInt(q?.have, 0) > posInt(prior.q?.have, 0)) held.set(key, { q, live });
     });
     return [...held.values()].map((row) => row.q);
   },
