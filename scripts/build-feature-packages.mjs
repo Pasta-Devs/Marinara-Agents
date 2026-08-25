@@ -399,7 +399,7 @@ const features = [
   },
   {
     id: "memory-nag",
-    version: "1.0.16",
+    version: "1.0.17",
     minEngineVersion: "2.4.4",
     maxEngineExclusive: MAX_ENGINE_EXCLUSIVE,
     name: "Memory Nag",
@@ -444,6 +444,7 @@ const features = [
         "Decide whether one of the supplied vault memories should nag the roleplay characters after the latest turn.",
         "Choose only IDs listed in allowedMemoryIds inside <agent_runtime_context>. Participant IDs are character IDs, never memory IDs. Never create, rewrite, or combine a memory.",
         "A nag should fit what is happening now: an unresolved promise, past harm, relationship strain, warning, debt, or relevant admission. Quiet or unrelated moments usually need none.",
+        "Do not select a memory that only repeats the immediate scene or an action happening now. Recall relevant events from earlier in the story.",
         'Return JSON only. If no nag fits: {"nags_needed":false}. If nags fit: {"nags_needed":true,"memoryIds":["exact-id"]}.',
       ].join("\n"),
     },

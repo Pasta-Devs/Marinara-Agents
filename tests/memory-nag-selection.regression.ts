@@ -142,6 +142,57 @@ assert.deepEqual(
   ["dottore-note", "promise"],
 );
 
+const sharedQuotaShortlist = shortlistMemoryNags({
+  memories: [
+    {
+      id: "shared",
+      text: "A shared promise remains unsettled.",
+      characterIds: ["dottore", "pantalone"],
+      status: "active",
+      sourceMessageIds: [],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-04T00:00:00.000Z",
+    },
+    ...["dottore", "pantalone", "pantalone-extra"].map((id, index) => ({
+      id,
+      text: `${id} has an unresolved older memory.`,
+      characterIds: [id.startsWith("pantalone") ? "pantalone" : "dottore"],
+      status: "active" as const,
+      sourceMessageIds: [],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: `2026-01-0${3 - index}T00:00:00.000Z`,
+    })),
+  ],
+  participants: [
+    { id: "dottore", name: "Dottore", current: true },
+    { id: "pantalone", name: "Pantalone", current: true },
+  ],
+  context: {
+    chatId: "shared-quota",
+    chatMode: "roleplay",
+    recentMessages: [{ role: "user", content: "Dottore and Pantalone speak." }],
+    mainResponse: "They consider old promises.",
+    gameState: null,
+    characters: [],
+    memory: {},
+  },
+  perCharacter: 2,
+});
+assert.deepEqual(
+  sharedQuotaShortlist.map((memory) => memory.id),
+  ["shared", "dottore", "pantalone"],
+  "a shared memory must consume the quota of every associated relevant character",
+);
+
+const memoryNagDefinition = JSON.parse(
+  readFileSync(new URL("../packages/memory-nag/agents.json", import.meta.url), "utf8"),
+) as Array<{ defaultPromptTemplate: string }>;
+assert.match(
+  memoryNagDefinition[0]!.defaultPromptTemplate,
+  /Do not select a memory that only repeats the immediate scene or an action happening now/u,
+  "Memory Nag must recall earlier history instead of narrating the present scene back to the model",
+);
+
 const checkpointVault = { checkpointMessageId: "deleted-message", checkpointMessageCount: 20 };
 assert.equal(
   memoryNagScanStart(
