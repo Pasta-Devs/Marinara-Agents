@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { staleNoodleAccountIds } from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-data-cleanup";
+import {
+  applyNoodleCleanupIfStillStale,
+  staleNoodleAccountIds,
+} from "../packages/noodle/src/engine/packages/server/src/services/noodle/noodle-data-cleanup";
 
 const stale = staleNoodleAccountIds(
   [
@@ -27,6 +30,37 @@ const storageSource = readFileSync(
   new URL("../packages/noodle/src/engine/packages/server/src/services/storage/noodle.storage.ts", import.meta.url),
   "utf8",
 );
-assert.match(storageSource, /const currentStaleAccountIds = staleNoodleAccountIds/u);
-assert.match(storageSource, /staleAccountIds\.some\(\(accountId\) => !currentStaleAccountIds\.has\(accountId\)\)/u);
-console.log("Noodle data cleanup regression passed.");
+assert.match(storageSource, /applyNoodleCleanupIfStillStale/u);
+
+const accountRows = [{ id: "character-reinvited", kind: "character", entityId: "character-4", invited: "true" }];
+const dependentRows = ["post", "interaction", "digest", "run", "subscription", "unlock"];
+applyNoodleCleanupIfStillStale({
+  plannedAccountIds: ["character-reinvited"],
+  currentAccounts: accountRows,
+  characterIds: new Set(["character-4"]),
+  personaIds: new Set(),
+  counts: { accounts: 1, posts: 1, interactions: 1, digests: 1, refreshRuns: 1, subscriptions: 1, unlocks: 1 },
+  apply: async () => {
+    accountRows.splice(0);
+    dependentRows.splice(0);
+  },
+}).then(
+  (cleanupCounts) => {
+    assert.deepEqual(cleanupCounts, {
+      accounts: 0,
+      posts: 0,
+      interactions: 0,
+      digests: 0,
+      refreshRuns: 0,
+      subscriptions: 0,
+      unlocks: 0,
+    });
+    assert.equal(accountRows.length, 1, "a reinvited account must survive cleanup");
+    assert.equal(dependentRows.length, 6, "dependent rows must survive when cleanup becomes stale");
+    console.log("Noodle data cleanup regression passed.");
+  },
+  (error) => {
+    console.error(error);
+    process.exitCode = 1;
+  },
+);

@@ -21,7 +21,12 @@ import {
 } from "../noodle/noodle-refresh-schedule.js";
 import { pruneNoodleRefreshRuns } from "./noodle-refresh-run-retention.js";
 import { createNoodlePoll, readNoodlePollFromMetadata } from "@marinara-engine/shared";
-import { staleNoodleAccountIds } from "../noodle/noodle-data-cleanup.js";
+import {
+  applyNoodleCleanupIfStillStale,
+  staleNoodleAccountIds,
+  type NoodleDataDeletionCounts,
+} from "../noodle/noodle-data-cleanup.js";
+export type { NoodleDataDeletionCounts } from "../noodle/noodle-data-cleanup.js";
 
 const SETTINGS_ID = "noodle.settings";
 const DEFAULT_SETTINGS: Record<string, unknown> = {
@@ -68,16 +73,6 @@ type PostRow = Row<typeof noodlePosts>;
 type InteractionRow = Row<typeof noodleInteractions>;
 type DigestRow = Row<typeof noodleActivityDigests>;
 type RefreshRunRow = Row<typeof noodleRefreshRuns>;
-
-export type NoodleDataDeletionCounts = {
-  accounts: number;
-  posts: number;
-  interactions: number;
-  digests: number;
-  refreshRuns: number;
-  subscriptions: number;
-  unlocks: number;
-};
 
 function record(value: unknown): Record<string, any> {
   if (typeof value !== "string")
@@ -1286,46 +1281,43 @@ export function createNoodleStorage(db: DB) {
             stalePostIdSet.has(unlock.postId),
         )
         .map((unlock) => unlock.id);
-      const cleanupApplied = await db.transaction(async (tx) => {
+      return db.transaction(async (tx) => {
         const currentAccounts = (
           await tx.select().from(noodleAccounts).where(eq(noodleAccounts.platform, "noodle"))
         ).filter((account) => account.id !== SETTINGS_ID);
-        const currentStaleAccountIds = staleNoodleAccountIds(currentAccounts, input.characterIds, input.personaIds);
-        if (staleAccountIds.some((accountId) => !currentStaleAccountIds.has(accountId))) return false;
-        if (staleDigestIds.length)
-          await tx.delete(noodleActivityDigests).where(inArray(noodleActivityDigests.id, staleDigestIds));
-        if (staleInteractionIds.length)
-          await tx.delete(noodleInteractions).where(inArray(noodleInteractions.id, staleInteractionIds));
-        if (staleSubscriptionIds.length)
-          await tx
-            .delete(noodleAccountSubscriptions)
-            .where(inArray(noodleAccountSubscriptions.id, staleSubscriptionIds));
-        if (staleUnlockIds.length)
-          await tx.delete(noodlePostUnlocks).where(inArray(noodlePostUnlocks.id, staleUnlockIds));
-        if (stalePostIds.length) await tx.delete(noodlePosts).where(inArray(noodlePosts.id, stalePostIds));
-        if (staleRunIds.length) await tx.delete(noodleRefreshRuns).where(inArray(noodleRefreshRuns.id, staleRunIds));
-        if (staleAccountIds.length) await tx.delete(noodleAccounts).where(inArray(noodleAccounts.id, staleAccountIds));
-        return true;
+        return applyNoodleCleanupIfStillStale({
+          plannedAccountIds: staleAccountIds,
+          currentAccounts,
+          characterIds: input.characterIds,
+          personaIds: input.personaIds,
+          counts: {
+            accounts: staleAccountIds.length,
+            posts: stalePostIds.length,
+            interactions: staleInteractionIds.length,
+            digests: staleDigestIds.length,
+            refreshRuns: staleRunIds.length,
+            subscriptions: staleSubscriptionIds.length,
+            unlocks: staleUnlockIds.length,
+          },
+          apply: async () => {
+            if (staleDigestIds.length)
+              await tx.delete(noodleActivityDigests).where(inArray(noodleActivityDigests.id, staleDigestIds));
+            if (staleInteractionIds.length)
+              await tx.delete(noodleInteractions).where(inArray(noodleInteractions.id, staleInteractionIds));
+            if (staleSubscriptionIds.length)
+              await tx
+                .delete(noodleAccountSubscriptions)
+                .where(inArray(noodleAccountSubscriptions.id, staleSubscriptionIds));
+            if (staleUnlockIds.length)
+              await tx.delete(noodlePostUnlocks).where(inArray(noodlePostUnlocks.id, staleUnlockIds));
+            if (stalePostIds.length) await tx.delete(noodlePosts).where(inArray(noodlePosts.id, stalePostIds));
+            if (staleRunIds.length)
+              await tx.delete(noodleRefreshRuns).where(inArray(noodleRefreshRuns.id, staleRunIds));
+            if (staleAccountIds.length)
+              await tx.delete(noodleAccounts).where(inArray(noodleAccounts.id, staleAccountIds));
+          },
+        });
       });
-      if (!cleanupApplied)
-        return {
-          accounts: 0,
-          posts: 0,
-          interactions: 0,
-          digests: 0,
-          refreshRuns: 0,
-          subscriptions: 0,
-          unlocks: 0,
-        } satisfies NoodleDataDeletionCounts;
-      return {
-        accounts: staleAccountIds.length,
-        posts: stalePostIds.length,
-        interactions: staleInteractionIds.length,
-        digests: staleDigestIds.length,
-        refreshRuns: staleRunIds.length,
-        subscriptions: staleSubscriptionIds.length,
-        unlocks: staleUnlockIds.length,
-      } satisfies NoodleDataDeletionCounts;
     },
     async deleteAllData() {
       const counts = {
