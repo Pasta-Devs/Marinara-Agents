@@ -40,7 +40,7 @@
 // override. Never commit a catalog generated that way — validation rejects it.
 export const INCOMPLETE_PACKAGE_IDS = new Set(["pixelforge"]);
 
-export const STAGING_ONLY_PACKAGE_IDS = new Set([]);
+export const STAGING_ONLY_PACKAGE_IDS = new Set(["gacha-forge"]);
 
 // A package is in exactly one state. Both sets hiding the same id would make
 // the published/overlay split order-dependent, so reject it at import time.
