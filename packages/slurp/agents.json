@@ -2,7 +2,7 @@
   {
     "id": "slurp",
     "name": "Slurp",
-    "description": "The standalone successor to NoodleR: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity. Install it, restart Marinara Engine when prompted, then open Home → Slurp.",
+    "description": "The standalone successor to NoodleR: create a local Creator profile from an Engine character or persona, publish public or locked posts, and simulate subscriptions and audience activity.",
     "author": "Pasta Devs",
     "phase": "pre_generation",
     "enabledByDefault": false,

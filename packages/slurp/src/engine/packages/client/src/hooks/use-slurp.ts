@@ -819,7 +819,7 @@ export function useToggleNoodlerSubscription() {
         mergeSlurpViewerShell(current, scope),
       );
       return Promise.all([
-        qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
+        qc.refetchQueries({ queryKey: noodleKeys.viewer(input.personaId), type: "active" }),
         qc.invalidateQueries({
           queryKey: noodleKeys.noodlerSubscribers(input.creatorAccountId),
         }),

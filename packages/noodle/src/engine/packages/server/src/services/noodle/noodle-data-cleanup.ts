@@ -2,6 +2,7 @@ export type NoodleCleanupAccount = {
   id: string;
   kind: string;
   entityId: string;
+  invited?: boolean | string;
 };
 
 export function staleNoodleAccountIds(
@@ -14,7 +15,9 @@ export function staleNoodleAccountIds(
       .filter(
         (account) =>
           (account.kind === "character" && !characterIds.has(account.entityId)) ||
-          (account.kind === "persona" && !personaIds.has(account.entityId)),
+          (account.kind === "persona" && !personaIds.has(account.entityId)) ||
+          ((account.kind === "character" || account.kind === "random_user") &&
+            (account.invited === false || account.invited === "false")),
       )
       .map((account) => account.id),
   );
