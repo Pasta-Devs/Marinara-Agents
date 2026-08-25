@@ -348,6 +348,20 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     (shellPersonaAccount &&
       accountsQuery.data?.find((profile) => profile.sourceAccountId === shellPersonaAccount.id)) ||
     null;
+  const viewerActorAccount =
+    shellPersonaAccount && myCreatorProfile
+      ? ({
+          ...shellPersonaAccount,
+          id: myCreatorProfile.id,
+          handle: myCreatorProfile.handle,
+          displayName: myCreatorProfile.displayName,
+          bio: myCreatorProfile.bio,
+          avatarUrl: myCreatorProfile.avatarUrl,
+          avatarCrop: myCreatorProfile.avatarCrop,
+          createdAt: myCreatorProfile.createdAt,
+          updatedAt: myCreatorProfile.updatedAt,
+        } as NoodleAccount)
+      : null;
   const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const mobileDrawerTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -748,7 +762,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   };
   const postCardController = useNoodlePostCardController({
     postManagement: false,
-    personaAccount: shellPersonaAccount,
+    personaAccount: viewerActorAccount,
     savePost,
     deletePost: deleteNoodlePost,
     reactToPost,
@@ -1498,6 +1512,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
             posts={postsQuery.data ?? []}
             viewerCreator={selectedViewerCreator}
             viewerAccount={shellPersonaAccount}
+            viewerActorAccount={viewerActorAccount}
             slurpSettings={slurpSettingsQuery.data ?? null}
             postCardCtx={postCardCtx}
             viewerAccounts={viewerAccounts}
@@ -2747,6 +2762,7 @@ function StageProfileView({
   posts,
   viewerCreator,
   viewerAccount,
+  viewerActorAccount,
   slurpSettings,
   postCardCtx,
   viewerAccounts,
@@ -2784,6 +2800,7 @@ function StageProfileView({
   posts: SlurpProfilePost[];
   viewerCreator: NonNullable<ReturnType<typeof useNoodlerViewer>["data"]>["creators"][number] | null;
   viewerAccount: NoodleAccount | null;
+  viewerActorAccount: NoodleAccount | null;
   slurpSettings: ReturnType<typeof useSlurpSettings>["data"] | null;
   postCardCtx: ReturnType<typeof useNoodlePostCardController>["ctx"];
   viewerAccounts: NoodleAccount[];
@@ -3030,7 +3047,7 @@ function StageProfileView({
               post={item.model}
               ctx={{
                 ...postCardCtx,
-                personaAccount: viewingOwnCreator ? null : viewerAccount,
+                personaAccount: viewingOwnCreator ? null : viewerActorAccount,
                 postManagement: managedCreator,
               }}
             />

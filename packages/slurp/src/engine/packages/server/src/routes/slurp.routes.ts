@@ -527,6 +527,16 @@ export async function slurpRoutes(app: FastifyInstance) {
     return noodle.getViewer(personaId);
   }
 
+  async function resolveViewerIdentity(personaId: string) {
+    const viewer = await resolveViewerPersona(personaId);
+    if (!viewer) return null;
+    return {
+      personaId,
+      viewer,
+      actor: await noodle.getSlurpAccountForEntity("persona", personaId),
+    };
+  }
+
   function creatorBelongsToViewer(
     account: Awaited<ReturnType<typeof noodle.getNoodlerAccountById>>,
     viewer: NoodleAccount,
@@ -830,6 +840,8 @@ export async function slurpRoutes(app: FastifyInstance) {
     const parsed = noodlerCreateInteractionSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
+    const identity = await resolveViewerIdentity(parsed.data.personaId);
+    if (!identity?.actor) return reply.code(404).send({ error: "Slurp viewer profile not found" });
     const gated = await resolveGatedNoodlerPost(parsed.data.personaId, id);
     if (!gated) return reply.code(404).send({ error: "NoodleR post not found" });
     if (parsed.data.type === "vote") {
@@ -840,7 +852,8 @@ export async function slurpRoutes(app: FastifyInstance) {
       }
     }
     const interaction = await noodle.createNoodlerInteraction(id, {
-      actorAccountId: gated.viewer.id,
+      actorAccountId: identity.actor.id,
+      viewerPersonaId: identity.personaId,
       type: parsed.data.type,
       content: parsed.data.content ?? null,
       parentInteractionId: parsed.data.parentInteractionId ?? null,
@@ -856,13 +869,14 @@ export async function slurpRoutes(app: FastifyInstance) {
       postId: string;
       interactionId: string;
     };
-    const viewer = await resolveViewerPersona(parsed.data.personaId);
-    if (!viewer) return reply.code(404).send({ error: "Noodle persona not found" });
+    const identity = await resolveViewerIdentity(parsed.data.personaId);
+    if (!identity?.actor) return reply.code(404).send({ error: "Slurp viewer profile not found" });
     try {
       const result = await generateAndApplyNoodlerCreatorReply(app.db, {
         postId,
         parentInteractionId: interactionId,
-        viewerAccountId: viewer.id,
+        viewerPersonaId: identity.personaId,
+        viewerActorAccountId: identity.actor.id,
         debugMode: parsed.data.debugMode === true,
       });
       if (result.status === "generated") return reply.code(201).send(result);
@@ -902,10 +916,13 @@ export async function slurpRoutes(app: FastifyInstance) {
     const parsed = noodlerRemoveInteractionSchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
     const { id } = req.params as { id: string };
+    const identity = await resolveViewerIdentity(parsed.data.personaId);
+    if (!identity?.actor) return reply.code(404).send({ error: "Slurp viewer profile not found" });
     const gated = await resolveGatedNoodlerPost(parsed.data.personaId, id);
     if (!gated) return reply.code(404).send({ error: "NoodleR post not found" });
     const interaction = await noodle.deleteNoodlerInteraction(id, {
-      actorAccountId: gated.viewer.id,
+      actorAccountId: identity.actor.id,
+      viewerPersonaId: identity.personaId,
       type: parsed.data.type,
       parentInteractionId: parsed.data.parentInteractionId ?? null,
     });
@@ -1086,7 +1103,9 @@ export async function slurpRoutes(app: FastifyInstance) {
     const subscribers = (
       await Promise.all(
         page.items.map(async (subscription): Promise<NoodlerSubscriber | null> => {
-          const account = await noodle.getViewer(subscription.viewerAccountId);
+          const account =
+            (await noodle.getSlurpAccountForEntity("persona", subscription.viewerAccountId)) ??
+            (await noodle.getViewer(subscription.viewerAccountId));
           if (!account) return null;
           return {
             id: account.id,
