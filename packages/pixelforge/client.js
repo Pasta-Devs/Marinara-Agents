@@ -45,6 +45,26 @@ PF.rng = (seed) => {
 
 PF.clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
+/** The value a map holds AT `key` ITSELF, or undefined. The only safe way to
+ *  read a table with a word this package did not write.
+ *
+ *  A bare `TABLE[key]` walks the prototype chain, and every object has one:
+ *  `TABLE["constructor"]` is a function, `TABLE["toString"]` is a function,
+ *  `TABLE["__proto__"]` is Object.prototype. All of them are truthy AND
+ *  non-nullish, which is the whole bug class — a `TABLE[key] || fallback` or
+ *  `TABLE[key] ?? fallback` written against a caller-, model- or save-supplied
+ *  key has a fallback that CANNOT FIRE, and the caller is handed a builtin
+ *  where it asked for a row. What happens next is never a clean refusal: the
+ *  builtin reads as a real answer and pins state, or the first property access
+ *  off it throws somewhere with a catch that degrades quietly.
+ *
+ *  Shared rather than re-argued per site because the S5 gates caught this same
+ *  read three times before it got a helper — the zone lookups (slices 1-2), the
+ *  player block's maps (slices 3-4), and the economy's skin and price tables
+ *  (slices 5-6). Whack-a-mole is not a strategy; a fallback goes through here. */
+PF.own = (map, key) =>
+  map && typeof map === "object" && Object.prototype.hasOwnProperty.call(map, key) ? map[key] : undefined;
+
 PF.uid = () => {
   if (globalThis.crypto?.randomUUID) return crypto.randomUUID();
   return `pf-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -700,7 +720,12 @@ PF.art = (() => {
    *  world builds already do. Unknown ids resolve to the fixed default, never
    *  whatever theme happens to be active (order-dependent worlds otherwise). */
   function setTheme(id) {
-    const theme = THEMES[typeof id === "string" ? id : ""] ? id : "cozy-village";
+    // PF.own, because "unknown" has to include the words every object answers
+    // to. The read was bare, so `THEMES["constructor"]` came back a truthy
+    // FUNCTION, "constructor" was accepted as a theme id and PINNED here — the
+    // one place the docstring above promises it cannot be — and from here it
+    // reaches world.theme, the save row, and every theme table downstream.
+    const theme = typeof id === "string" && PF.own(THEMES, id) ? id : "cozy-village";
     if (theme === activeTheme) return activeTheme;
     activeTheme = theme;
     for (const key of Object.keys(PAL)) delete PAL[key];
@@ -1478,7 +1503,14 @@ PF.brief = (() => {
   // the fixture the compiler's invariants are driven through, and the answer for
   // any future caller that needs a brief without a generation call behind it.
   function defaults(theme, seed) {
-    return validate(DEFAULT_BRIEFS[theme] || DEFAULT_BRIEFS["cozy-village"], { theme, seed });
+    // PF.own, because this read happens BEFORE validate() applies the same guard
+    // one screen up — and it is the parameter of an exported function, so the
+    // word arrives from wherever the caller got it. Bare, `defaults("__proto__")`
+    // handed Object.prototype to validate() as the worked example: an object, so
+    // it survived the transport check, and every field then floored to nothing.
+    // The theme came back cozy-village and the brief came back EMPTY, which is
+    // the fallback on this line reading as if it had fired when it had not.
+    return validate(PF.own(DEFAULT_BRIEFS, theme) || DEFAULT_BRIEFS["cozy-village"], { theme, seed });
   }
 
   /** Truncation salvage (§4.1/§5): strip fences, take the outermost balanced
@@ -4169,7 +4201,12 @@ PF.world = (() => {
     // A side stream, so minting residents does not shift the tile RNG under the
     // ground cover and every world that had no minting still lays the same grass.
     const mintRnd = PF.rng(PF.hashStr(`${seed >>> 0}|residents|${brief.name}`));
-    const nameBook = RESIDENT_NAMES[activeTheme] ?? RESIDENT_NAMES["cozy-village"];
+    // Through PF.own so the fallback on the right is REACHABLE. Bare, a theme
+    // named "constructor" answered with a function, `??` saw something
+    // non-nullish and kept it, and the first `nameBook.family[…]` below threw —
+    // into build()'s catch, which degrades to the legacy three-zone world. A
+    // brief that compiles fine is not a thing to lose over a word.
+    const nameBook = PF.own(RESIDENT_NAMES, activeTheme) ?? RESIDENT_NAMES["cozy-village"];
     const takenNames = new Set(brief.cast.map((m) => m.name));
     const minted = [];
     // Off EVERY sealed household, resident or not: the target ignores the
