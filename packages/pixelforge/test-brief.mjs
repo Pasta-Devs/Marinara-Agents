@@ -2028,7 +2028,15 @@ const wayrestCast = [
   // The table is null-prototype from creation now (20-world), so the id is just
   // an id: the adoption holds, the binding lands, and a later session is the
   // cheap re-bind this module's own header promises.
-  {
+  //
+  // ALONE AMONG THE CASES HERE, THIS ONE PUTS ITS STUBS BACK. The harness is one
+  // module top to bottom, and what this case leaves on PF.api is a spatial
+  // definition whose only location id is `__proto__` — a fixture no later case
+  // asked for. Every case below happens to re-stub both members before it drives
+  // anything, so nothing reads the leak today; the restore is what keeps that a
+  // fact rather than a coincidence the next case has to re-establish (review).
+  const stubsBefore37c = { getSpatial: loadedPF.api.getSpatial, postLocations: loadedPF.api.postSpatialLocations };
+  try {
     const { w, core } = exportScaffold(2468, "chat-export-37c");
     const adoptedZone = exportableZones(w)[0];
     const adoptedName = w.zones[adoptedZone].name;
@@ -2087,7 +2095,16 @@ const wayrestCast = [
       await bindRoot(rcore);
       assert.equal(rcore.dirty, dirtyAfterSeed, "and the seeding branch never fires a second time for it");
     }
+  } finally {
+    loadedPF.api.getSpatial = stubsBefore37c.getSpatial;
+    loadedPF.api.postSpatialLocations = stubsBefore37c.postLocations;
   }
+  assert.equal(loadedPF.api.getSpatial, stubsBefore37c.getSpatial, "37c hands the spatial GET back the way it got it");
+  assert.equal(
+    loadedPF.api.postSpatialLocations,
+    stubsBefore37c.postLocations,
+    "…and the POST too, so no later case inherits a map whose only location is `__proto__`",
+  );
 
   // 38. An accepted batch whose rows never appear in the re-read (a proxy
   // eating writes, a stale read replica) surrenders instead of posting
@@ -16400,6 +16417,393 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     loadedPF.api.getSpatial = prevGetSpatial;
     loadedPF.spatial.reset();
     loadedPF.save.reset();
+  }
+}
+
+// ═══ THE STORED BRIEF IS UNTRUSTED ON THE LOAD PATH (#566) ═══════════════════
+// validate() seals a brief ONCE and the guarantee stops there. `_configBrief`
+// hands back `meta.pixelforgeBrief` exactly as stored and build()'s gate asks
+// only about its SHAPE, so a dozen reads inside compile() index tables with
+// values nothing ever vetted. Measured on this fixture before the fold: a stored
+// `prosperity: "constructor"` compiled 10 zones where the brief asks for 37, with
+// no warning of any kind, and a stored `scale` or `place.kind` naming a prototype
+// method threw into build()'s catch-all and served the 3-zone legacy layout in
+// place of a town.
+//
+// The fold sits at build()'s door, on a private copy, and deliberately NOT in
+// `_configBrief`. That placement is the whole design and it has its own two cases
+// at the end of this section: the object the save path holds is what
+// briefHashOf() stamps a save against, and a load that handed back different
+// bytes than it was given would sever an honest save from its own unchanged
+// world.
+{
+  const P = loadedPF.player;
+  const seed566 = 566566;
+  const brief566 = () =>
+    brief.validate(
+      {
+        scale: "town",
+        name: "Mossbrook",
+        prosperity: "modest",
+        surround: "fields",
+        features: [{ tag: "market-stalls" }, { tag: "shrine" }],
+        places: [
+          { kind: "gathering", name: "The Amber Hearth" },
+          { kind: "hall", name: "Moot Hall" },
+          { kind: "wilds", name: "Thornwood", features: [{ tag: "dense-growth" }] },
+        ],
+        cast: [
+          { name: "Alder Vance", role: "mayor", kind: "leader", tint: "blue", home: "Mossbrook", household: 1 },
+          { name: "Nessa Vance", role: "daughter", kind: "folk", tint: "violet", home: "Mossbrook", household: 1 },
+          {
+            name: "Perrin Quill",
+            role: "innkeep",
+            kind: "host",
+            tint: "amber",
+            home: "The Amber Hearth",
+            household: 2,
+          },
+          { name: "Old Sera", role: "weaver", kind: "elder", tint: "rose", home: "Mossbrook", household: 3 },
+          { name: "Brint", role: "farmhand", kind: "grower", tint: "green", home: "Mossbrook", household: 4 },
+          { name: "Marla", role: "smith", kind: "maker", tint: "teal", home: "Mossbrook", household: 5 },
+        ],
+      },
+      { theme: "cozy-village", seed: seed566 },
+    );
+  const planted = (mutate) => {
+    const stored = brief566();
+    mutate(stored);
+    return stored;
+  };
+  const tiles = (w) => JSON.stringify(w.zones);
+  const built = (stored) => {
+    const warned = [];
+    const realWarn = console.warn;
+    console.warn = (...args) => warned.push(args.map(String).join(" "));
+    try {
+      return { w: world.build(seed566, "cozy-village", stored), warned };
+    } finally {
+      console.warn = realWarn;
+    }
+  };
+
+  // (i) A HOSTILE `prosperity` COMPILES THE DEFAULT'S WORLD, NOT A QUARTER OF ONE.
+  // `HOUSEHOLD_LEAN[brief.prosperity] ?? 1` is the read that did the damage: a
+  // prototype key is not undefined, so the `?? 1` never fired, the household
+  // arithmetic multiplied by a function, and the settlement came out a fraction of
+  // its own size. The fold makes it the world "modest" already means — the same
+  // TILES, not merely the same zone tally.
+  {
+    const honest = built(brief566());
+    assert.equal(honest.warned.length, 0, "an honest brief says nothing on the way through the fold");
+    const hostile = built(planted((stored) => (stored.prosperity = "constructor")));
+    assert.equal(
+      Object.keys(hostile.w.zones).length,
+      Object.keys(honest.w.zones).length,
+      "a hostile prosperity compiles the DEFAULT prosperity's zone count, not a silent fraction of it",
+    );
+    assert.equal(tiles(hostile.w), tiles(honest.w), "…down to the tiles, because the fold's default IS `modest`");
+    assert.deepEqual(hostile.w.briefFolds, ['prosperity: "constructor" -> "modest"'], "and the world says what moved");
+    assert.ok(
+      hostile.warned.some((line) => line.includes("this build does not know")),
+      "…out loud, which is the half that made the loss a bug rather than a degrade",
+    );
+    // Non-vacuous: prosperity really does move this fixture's size, so a case that
+    // asserts "same as the default" is asserting something.
+    const thriving = built(planted((stored) => (stored.prosperity = "thriving")));
+    assert.notEqual(
+      Object.keys(thriving.w.zones).length,
+      Object.keys(honest.w.zones).length,
+      "the fixture is one whose zone count actually answers to prosperity",
+    );
+  }
+
+  // (ii) A HOSTILE `scale` STILL COMPILES ITS OWN SETTLEMENT, NOT THE LEGACY THREE.
+  // `SCALES[brief.scale] || SCALES.village` looks defended and is not: the
+  // prototype entry is truthy, so `scale.w` was undefined and makeZone threw. The
+  // catch-all above swallowed it and the player got the fixed four-NPC village
+  // that pre-brief saves compile to — a whole generated world gone behind one
+  // console.warn.
+  {
+    const hostile = built(planted((stored) => (stored.scale = "constructor")));
+    assert.equal(hostile.w.brieved, true, "a hostile scale still compiles the BRIEF's world");
+    const legacy = world.build(seed566, "cozy-village");
+    assert.ok(
+      Object.keys(hostile.w.zones).length > Object.keys(legacy.zones).length,
+      `…and not the ${Object.keys(legacy.zones).length}-zone legacy layout it used to degrade to`,
+    );
+    assert.equal(
+      tiles(hostile.w),
+      tiles(built(planted((stored) => (stored.scale = "village"))).w),
+      "it is exactly the world the fold's default rank builds",
+    );
+    assert.deepEqual(hostile.w.briefFolds, ['scale: "constructor" -> "village"'], "and the fold is on the record");
+  }
+
+  // (iii) A PLACE KIND NAMING A PROTOTYPE METHOD IS FOLDED BEFORE IT CAN BE READ.
+  // Pre-fold the compile died at `INTERIOR_DIMS[kind] || INTERIOR_DIMS.dwelling`
+  // — destructuring Object.prototype.toString as a dimensions pair (a function
+  // is not iterable) — which fires BEFORE the FURNISH table would have invoked it
+  // unbound. Same bug class, earlier line; either way the whole generated world
+  // fell to the 3-zone legacy layout. The fold hands every kind-keyed table
+  // "dwelling", the entry their fallbacks were already reaching for.
+  {
+    const hostile = built(planted((stored) => (stored.places[0].kind = "toString")));
+    assert.equal(hostile.w.brieved, true, "the furnisher was never invoked — the compile completed");
+    assert.ok(zoneNamed(hostile.w, "The Amber Hearth"), "the named place still has its zone");
+    assert.equal(
+      tiles(hostile.w),
+      tiles(built(planted((stored) => (stored.places[0].kind = "dwelling"))).w),
+      "furnished as a dwelling, which is what an unrecognised kind already fell back to",
+    );
+    assert.deepEqual(hostile.w.briefFolds, ['places[0].kind: "toString" -> "dwelling"'], "and it is on the record");
+  }
+
+  // (iii-b) A FEATURE TAG IS THE ONE FOLD WHOSE FALLBACK IS `null` RATHER THAN A
+  // WORD, and the only one whose value survives the compile into a registry row.
+  // The fold comment calls an unknown tag "already a plain rect with no painter",
+  // and for an ordinary unknown word it is — but the read that decides the rect is
+  // BARE (`FEATURE_RECTS[feature.tag] ?? FEATURE_RECT`, 20-world), so a tag naming
+  // a prototype method resolves to a FUNCTION, the `??` cannot fire, and the size
+  // spread into the register carries no `w` and no `h` at all. Folding to null is
+  // what puts a real rect back. The row keeps its NAME either way, which is the
+  // half that lets the registry still say what stands there.
+  {
+    const hostile = built(planted((stored) => (stored.features[0].tag = "valueOf")));
+    assert.equal(hostile.w.brieved, true, "an unknown feature tag still compiles the brief's world");
+    assert.deepEqual(hostile.w.briefFolds, ['features[0].tag: "valueOf" -> null'], "and the fold is on the record");
+    const rows = Object.values(hostile.w.zones).flatMap((zone) => zone.features ?? []);
+    // Against the VOCABULARY, not against `typeof`: a prototype key is a perfectly
+    // good string, so a type test here would pass just as happily on the unfolded
+    // row and pin nothing at all.
+    assert.ok(
+      rows.every((row) => row.tag === null || brief.FEATURE_TAGS.includes(row.tag)),
+      "no registry row carries a tag outside the shipped vocabulary",
+    );
+    assert.ok(
+      rows.every((row) => Number.isFinite(row.rect.w) && Number.isFinite(row.rect.h)),
+      "…and every row still has a rect with real sides, which the bare read could not give it",
+    );
+    const folded = rows.filter((row) => row.tag === null);
+    assert.equal(folded.length, 1, "exactly the one folded feature lost its tag");
+    assert.ok(folded[0].name, "…and it kept the name the registry answers with");
+  }
+
+  // (iv) THE SEVERANCE RED. An honest save loads, and loads again, and is never
+  // severed — because the fold never touches the object identity is computed from.
+  //
+  // The fixture is chosen to be the one a re-validate would have broken: its cast
+  // is under the floor, so sealing topped it up from STOCK, and a stock member's
+  // key order is not the main path's. Re-validating that brief on read returns the
+  // same VALUES in different BYTES, which is a different briefHash, which is a
+  // severance for a world that did not change. The last assertion in this block
+  // pins that hazard as real rather than imagined.
+  {
+    const larkmoor = { scale: "village", name: "Larkmoor", cast: [{ name: "Solo", kind: "leader" }] };
+    const sealed = brief.validate(larkmoor, { theme: "cozy-village", seed: seed566 });
+    assert.ok(sealed._repairs.length > 0, "the fixture is a brief that took repairs at seal time");
+    const storedBytes = JSON.stringify(sealed);
+    const meta = { pixelforgeBrief: sealed };
+    const w = world.build(seed566, "cozy-village", sealed);
+    const stamps = P.stampsFor(w, sealed);
+
+    const played = P.defaultPlayer();
+    played.world = { ...stamps };
+    played.rel = { z1: { Solo: { d: 3, t: 9 } } };
+    played.home = "z1";
+    played.pouch.money = 12;
+    const row = { v: 1, seed: seed566, theme: "cozy-village", player: P.serialize(played) };
+
+    const severedNotice = (sim) =>
+      (sim.player.ledger.notices ?? []).some(([, text]) => /set aside|are not the people/.test(text));
+
+    const first = loadedPF.save.simFromSaved(row, meta, "chat-566");
+    assert.equal(first.world.brieved, true, "the honest save loads into its own compiled world");
+    assert.equal(severedNotice(first), false, "and nothing was severed");
+    assert.deepEqual(first.player.rel.z1.Solo, { d: 3, t: 9 }, "the relationship row is intact");
+    assert.equal(first.player.home, "z1", "…and so is the home");
+    assert.equal(first.player.world.briefHash, stamps.briefHash, "the block re-stamps to the same brief hash");
+
+    // THE SAME SAVE, THROUGH THE SAME SEAM, A SECOND TIME. This is the shape a
+    // spurious severance actually takes: not one bad load, but a world that never
+    // agrees with itself twice running.
+    const again = { ...row, player: P.serialize(first.player) };
+    const second = loadedPF.save.simFromSaved(again, meta, "chat-566");
+    assert.equal(severedNotice(second), false, "the second load severs nothing either");
+    assert.deepEqual(second.player.rel.z1.Solo, { d: 3, t: 9 }, "the row survived both trips");
+    assert.equal(second.player.home, "z1", "and the home with it");
+
+    // BYTE-IDENTITY ON WHAT THE COMPARISON ACTUALLY CONSUMES. briefHashOf() hashes
+    // `JSON.stringify(brief)` over the object `_configBrief` returns, so the pin is
+    // that the reader still returns the STORED OBJECT — not a copy of it, not a
+    // fold of it — and that two loads left its bytes exactly where they were.
+    assert.equal(
+      loadedPF.save._configBrief(meta, "chat-566"),
+      sealed,
+      "the load path returns the stored object itself",
+    );
+    assert.equal(JSON.stringify(meta.pixelforgeBrief), storedBytes, "and two loads did not move one byte of it");
+    assert.equal(P.briefHashOf(meta.pixelforgeBrief), stamps.briefHash, "so the identity is the one it always was");
+
+    // …AND THE HAZARD IS REAL. Had the fold been put in `_configBrief`, THIS is the
+    // number the second load would have compared against.
+    const revalidated = brief.validate(JSON.parse(storedBytes), { theme: sealed.theme, seed: seed566 });
+    assert.notEqual(
+      P.briefHashOf(revalidated),
+      stamps.briefHash,
+      "an honest brief does NOT re-validate to its own bytes — folding on the read path would sever it from itself",
+    );
+
+    // AND THE MACHINERY IS NOT DEADENED. A brief that genuinely moved still severs.
+    const other = brief.defaults("sci-fi-colony", seed566);
+    const moved = loadedPF.save.simFromSaved(again, { pixelforgeBrief: other }, "chat-566-moved");
+    assert.equal(severedNotice(moved), true, "a brief that really changed still severs");
+    assert.deepEqual(moved.player.rel, {}, "…and still takes the world-bound rows with it");
+    loadedPF.quarantine.reset();
+    loadedPF.save.reset();
+  }
+
+  // (v) FORWARD COMPAT: AN UNKNOWN-BUT-HONEST VALUE FOLDS, LEAVES A TRACE, AND
+  // WRITES NOTHING BACK. This is the path that makes the whole thing reachable
+  // without a hostile save: a newer build adds a vocabulary entry, an older build
+  // reads the brief it wrote. What that build owes is the default and a sentence,
+  // not a silently smaller world — and NOT a repair written back over the newer
+  // build's own brief, which is why the fold's `_folds` never leaves the copy.
+  {
+    const stored = planted((draft) => {
+      draft.surround = "marsh";
+      draft.cast[1].standing = "pilgrim";
+    });
+    const storedBytes = JSON.stringify(stored);
+    const row = { v: 1, seed: seed566, theme: "cozy-village", player: P.serialize(P.defaultPlayer()) };
+    const realWarn = console.warn;
+    const warned = [];
+    console.warn = (...args) => warned.push(args.map(String).join(" "));
+    let sim;
+    try {
+      sim = loadedPF.save.simFromSaved(row, { pixelforgeBrief: stored }, "chat-566-future");
+    } finally {
+      console.warn = realWarn;
+    }
+    assert.equal(sim.world.brieved, true, "the older build still compiles the newer build's world");
+    assert.deepEqual(
+      sim.world.briefFolds,
+      ['surround: "marsh" -> "rocky"', 'cast[1].standing: "pilgrim" -> "resident"'],
+      "each unknown value folded to the default, and the world carries the trace a debugger can read",
+    );
+    assert.ok(
+      warned.some((line) => line.includes("this build does not know")),
+      "…and the console was told as well",
+    );
+    assert.equal(
+      Object.keys(sim.world.zones).length,
+      Object.keys(built(brief566()).w.zones).length,
+      "and nothing was DROPPED for being unrecognised — a read-side fold folds, it never removes",
+    );
+    assert.equal(JSON.stringify(stored), storedBytes, "the stored brief is byte-for-byte what the newer build wrote");
+    assert.equal("_folds" in stored, false, "the repair trace never leaks back onto the stored metadata");
+    loadedPF.save.reset();
+  }
+
+  // (vi) WHY THE FOLD IS NOT A SECOND validate(), pinned so nobody simplifies it
+  // into one. Two properties, both measured, and either one alone rules validate()
+  // out of the load path.
+  {
+    // ONE: it is not byte-idempotent, so its output can never be what a save's
+    // identity is computed from. (Case (iv) drives the consequence; this is the
+    // property.)
+    const source = { scale: "village", name: "Larkmoor", cast: [{ name: "Solo", kind: "leader" }] };
+    const repaired = brief.validate(source, { theme: "cozy-village", seed: seed566 });
+    const again = brief.validate(JSON.parse(JSON.stringify(repaired)), { theme: "cozy-village", seed: seed566 });
+    assert.notEqual(
+      JSON.stringify(again),
+      JSON.stringify(repaired),
+      "validate() does not return a sealed brief's bytes",
+    );
+
+    // TWO: it re-runs the seal-time CAPS. A brief whose rank says less ground than
+    // its content asks for loses places on every load — which is the very silent
+    // zone loss this section exists to close, arriving through the front door.
+    const shrunk = brief566();
+    shrunk.scale = "outpost";
+    assert.ok(
+      brief.validate(JSON.parse(JSON.stringify(shrunk)), { theme: "cozy-village", seed: seed566 }).places.length <
+        shrunk.places.length,
+      "re-validating on read would DROP places the sealed brief named",
+    );
+    assert.equal(
+      brief.foldStored(shrunk, seed566).places.length,
+      shrunk.places.length,
+      "…and the fold keeps every one of them, because read time may only fold",
+    );
+
+    // THREE: validate() mutates its argument on the leader-hoist path, which is
+    // the other way a load could rewrite the bytes a save is stamped against.
+    const hoist = { scale: "village", name: "Hoist", cast: [] };
+    for (let i = 0; i < 12; i++) hoist.cast.push({ name: `P${i}`, kind: i === 11 ? "leader" : "folk" });
+    const beforeHoist = JSON.stringify(hoist);
+    brief.validate(hoist, { theme: "cozy-village", seed: seed566 });
+    assert.notEqual(JSON.stringify(hoist), beforeHoist, "validate() reorders the cast it was handed");
+    const untouched = planted(() => {});
+    const beforeFold = JSON.stringify(untouched);
+    brief.foldStored(untouched, seed566);
+    assert.equal(JSON.stringify(untouched), beforeFold, "…and foldStored() never touches the object it was handed");
+  }
+
+  // (vii) THE THEME FOLD ASKS THE ART MODULE RATHER THAN KEEPING A LIST OF ITS
+  // OWN. `brief.theme` is spent on exactly ONE read downstream of the fold —
+  // `PF.art.setTheme(brief.theme)` (20-world) — so 10-art's table is the whole
+  // vocabulary this fold answers to, and a second copy of it here could only
+  // drift out of it. The drift is the future-theme divergence class the roadmap's
+  // swamp-biome prerequisites already track (LEGACY_ROLES skipping an unlisted
+  // theme in silence is the same shape): an art-only theme folded here would
+  // replace a VALID theme with the default, one screen before setTheme() would
+  // have accepted it (review).
+  {
+    const realThemeIds = loadedPF.art.themeIds;
+    const themed = (id) => {
+      const stored = planted((draft) => (draft.theme = id));
+      return brief.foldStored(stored, seed566)._folds;
+    };
+    try {
+      // The steady state first: this build's own themes move nothing, and a word
+      // that is not a theme still folds, so the whitelist is still a whitelist.
+      for (const id of realThemeIds()) assert.deepEqual(themed(id), [], `"${id}" is a theme, so nothing moves`);
+      assert.deepEqual(
+        themed("swamp-biome"),
+        ['theme: "swamp-biome" -> "cozy-village"'],
+        "a theme nothing in this build answers for still folds to the default",
+      );
+      // THE PIN. A build that ships a third theme is exactly this — one more id
+      // out of the art module — and the fold has to read that AT FOLD TIME to see
+      // it. A load-time copy of the list folds the newer build's honest theme
+      // away and hands the compiler cozy-village instead.
+      loadedPF.art.themeIds = () => [...realThemeIds(), "swamp-biome"];
+      assert.deepEqual(themed("swamp-biome"), [], "a theme the art module answers for is one the fold leaves alone");
+    } finally {
+      loadedPF.art.themeIds = realThemeIds;
+    }
+  }
+
+  // (viii) A DEGRADE NAMES THE FOLDS AS WELL. When the FOLDED brief throws
+  // anyway, build()'s catch-all is the only line anybody gets, and the folded
+  // values are the only ones that moved between what was stored and what the
+  // compiler read — the likeliest explanation, and the one thing the line did
+  // not carry (review).
+  {
+    // A brief that clears the shape gate and dies inside the compile: `_ids.zones`
+    // of null is `typeof "object"`, so the door opens, and the zone index built
+    // from `Object.entries(brief._ids.zones)` throws on the first read. It carries
+    // a foldable value too, which is what the warning owes the next reader.
+    const doomed = planted((draft) => {
+      draft.prosperity = "constructor";
+      draft._ids.zones = null;
+    });
+    const degraded = built(doomed);
+    assert.notEqual(degraded.w.brieved, true, "the folded brief failed to compile, so the world degraded as before");
+    const line = degraded.warned.find((text) => text.includes("failed to compile"));
+    assert.ok(line, "the degrade is still announced");
+    assert.ok(line.includes('prosperity: "constructor" -> "modest"'), "…and the line names the value the fold moved");
   }
 }
 

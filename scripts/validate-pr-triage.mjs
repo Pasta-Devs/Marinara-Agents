@@ -40,6 +40,7 @@ export function validatePullRequestTriage() {
   );
   const approvalEvaluator = readFileSync(new URL("./evaluate-owner-approval.mjs", import.meta.url), "utf8");
   const codeOwners = readFileSync(new URL("../.github/CODEOWNERS", import.meta.url), "utf8");
+  const codeqlWorkflow = readFileSync(new URL("../.github/workflows/codeql.yml", import.meta.url), "utf8");
   const triggersSectionStart = triageWorkflow.indexOf("\non:\n");
   const triggersSectionEnd = triageWorkflow.indexOf("\nconcurrency:\n", triggersSectionStart);
   const jobsSectionStart = triageWorkflow.indexOf("\njobs:\n");
@@ -108,6 +109,7 @@ export function validatePullRequestTriage() {
   );
 
   assert.match(codeOwners, /^\* @SpicyMarinara$/mu);
+  assert.match(codeqlWorkflow, /pull_request:\s*\n\s*branches:\s*\[main, staging\]/u);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

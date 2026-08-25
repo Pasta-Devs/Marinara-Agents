@@ -278,6 +278,27 @@ response is **never stored** (checkpoints capture by value — see #5110).
 **Global budget:** the sealed brief must serialize ≤8 KB; over-budget briefs truncate prose fields
 in reverse-leverage order (`persona`s → zone `flavor`s → `flavor`) before anything structural.
 
+**Read-side fold (#566).** The seal is a guarantee about the moment of sealing and nothing
+re-asserted it after the brief round-tripped through chat metadata: `PF.save._configBrief` returns
+`meta.pixelforgeBrief` as stored and `PF.world.build`'s gate asks only about its SHAPE, so a dozen
+reads inside the compiler indexed tables with values nothing had vetted. `PF.brief.foldStored` folds
+those values on a PRIVATE COPY at build()'s door, before the compiler sees them.
+
+It is **not** a second `validate()`, and the difference is a contract: **seal time may DROP; read
+time may only FOLD.** Re-running the repair passes on read would re-apply the per-rank caps and
+floors to a brief sealed under a table that may not be this build's — an older build would silently
+strip places a newer one seated, which is the same silent zone loss the fold exists to close. Every
+array length, name and id crosses the fold untouched; only a value the compiler was about to use as
+a table key can move, and it moves to the default (`_ids` and prose are not folded at all).
+
+The fold is also why the copy is private. `PF.player.briefHashOf` hashes `JSON.stringify(brief)` over
+the object `_configBrief` hands back, so a load path that returned different bytes than it was given
+would sever an honest save from its own unchanged world. `validate()` is not byte-idempotent (a brief
+that took repairs re-validates with an empty `_repairs`, and a stock top-up member's key order is not
+the main path's) and it reorders the cast it is handed on the leader-hoist path — either alone rules
+it out of the read path. Fold results ride the copy as `_folds`, surface on the compiled world as
+`briefFolds` when there are any, and are **never written back** to the stored brief.
+
 ## 5. Latency & failure budget (generation BLOCKS behind a loading gate — amended twice)
 
 _Amended from the sealed draft (which put generation in the wizard with a Skip button): the
