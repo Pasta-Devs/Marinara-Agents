@@ -183,6 +183,16 @@ assert.equal(
 );
 
 async function assertFailedRecallPreservesCompletedRecall(): Promise<void> {
+  const missingContextResult = await memoryNagAgentRuntime.finalizeResult({
+    agent: {} as never,
+    context: { chatId: "missing-context", chatMode: "roleplay" } as never,
+    preparedContext: undefined,
+    result: { success: true, data: { nags_needed: true, memoryIds: ["character-id"] } } as never,
+  });
+  assert.equal(missingContextResult.success, false);
+  assert.deepEqual(missingContextResult.data, { nags_needed: false });
+  assert.match(missingContextResult.error ?? "", /could not load its vault context/u);
+
   let storedVaultDocument: Record<string, unknown> | null = {
     id: "memory-nag-failed-recall",
     revision: 1,
@@ -212,6 +222,7 @@ async function assertFailedRecallPreservesCompletedRecall(): Promise<void> {
   const preparedRecall = {
     participants: [],
     currentCharacterIds: [],
+    allowedMemoryIds: [recalledMemory.id],
     candidates: [{ id: recalledMemory.id, text: recalledMemory.text, characterIds: recalledMemory.characterIds }],
     maximumNags: 1,
   };
@@ -338,6 +349,21 @@ assert.match(
   memoryNagToolbarSource,
   /hasCompletedRecall \? \([\s\S]*mn-toolbar-word[\s\S]*<MessageSquareQuote className="mn-toolbar-initial-icon"/u,
   "Memory Nag must show its dialogue icon until the tracker completes its first successful recall",
+);
+assert.match(
+  memoryNagRuntimeSource,
+  /allowedMemoryIds: candidates\.map\(\(memory\) => memory\.id\)/u,
+  "Memory Nag must label the only IDs the recall model is allowed to return",
+);
+assert.match(
+  memoryNagRuntimeSource,
+  /Prepared %d eligible vault memories/u,
+  "Memory Nag debug output must expose whether recall candidates were prepared",
+);
+assert.match(
+  memoryNagRuntimeSource,
+  /data: \{ nags_needed: false \},[\s\S]*success: false,[\s\S]*could not load its vault context/u,
+  "Memory Nag must fail closed when its package runtime context is unavailable",
 );
 assert.match(
   memoryNagRuntimeSource,
