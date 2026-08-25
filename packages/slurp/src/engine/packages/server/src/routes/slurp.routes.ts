@@ -366,6 +366,16 @@ export async function slurpRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const parsed = noodleAccountSettingsPatchSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const account = await noodle.getNoodlerAccountById(id);
+    if (!account) return reply.code(404).send({ error: "Creator account not found" });
+    if (
+      account.sourceKind === "persona" &&
+      account.kind === "persona" &&
+      parsed.data.subtree === "scheduler" &&
+      parsed.data.patch.autoPosting?.enabled === true
+    ) {
+      return reply.code(400).send({ error: "Persona-owned Slurp profiles cannot post automatically." });
+    }
     const updated = await noodle.patchAccountSettings(id, parsed.data);
     if (!updated) return reply.code(404).send({ error: "Creator account not found" });
     return updated;
@@ -1846,6 +1856,9 @@ export async function slurpRoutes(app: FastifyInstance) {
       if (result.status === "connection_not_found") {
         return reply.code(404).send({ error: "Noodle generation connection not found" });
       }
+      if (result.status === "disabled") {
+        return reply.code(400).send({ error: "Persona-owned Slurp profiles cannot post automatically" });
+      }
       return reply.code(404).send({ error: "NoodleR account not found." });
     } catch (error) {
       logger.error(error, "[noodler] Manual run-now failed");
@@ -1947,6 +1960,9 @@ export async function slurpRoutes(app: FastifyInstance) {
       }
       if (result.status === "connection_not_found") {
         return reply.code(404).send({ error: "Noodle generation connection not found" });
+      }
+      if (result.status === "disabled") {
+        return reply.code(400).send({ error: "Persona-owned Slurp profiles cannot post automatically" });
       }
       return reply.code(404).send({ error: "NoodleR account not found." });
     } catch (error) {

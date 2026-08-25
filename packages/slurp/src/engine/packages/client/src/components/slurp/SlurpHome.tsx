@@ -678,14 +678,17 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
             : localizeUi("ui.noodle.noodlerhome.couldNotReactToThisPost"),
         ),
       );
-    if (active) removeInteraction.mutate({ postId: post.id, personaId: viewerPersonaId, type }, { onError });
-    else createInteraction.mutate({ postId: post.id, personaId: viewerPersonaId, type }, { onError });
+    const actorAccountId = viewerActorAccount?.id;
+    if (active)
+      removeInteraction.mutate({ postId: post.id, personaId: viewerPersonaId, actorAccountId, type }, { onError });
+    else createInteraction.mutate({ postId: post.id, personaId: viewerPersonaId, actorAccountId, type }, { onError });
   };
   const reactToReply = (post: NoodlePostCardModel, reply: NoodleInteraction, active: boolean) => {
     if (!viewerPersonaId) return;
     const payload = {
       postId: post.id,
       personaId: viewerPersonaId,
+      actorAccountId: viewerActorAccount?.id,
       type: "like" as const,
       parentInteractionId: reply.id,
     };
@@ -697,7 +700,13 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   const voteInPoll = (post: NoodlePostCardModel, optionId: string, selectedOptionId: string | null) => {
     if (!viewerPersonaId || optionId === selectedOptionId) return;
     createInteraction.mutate(
-      { postId: post.id, personaId: viewerPersonaId, type: "vote", content: optionId },
+      {
+        postId: post.id,
+        personaId: viewerPersonaId,
+        actorAccountId: viewerActorAccount?.id,
+        type: "vote",
+        content: optionId,
+      },
       {
         onError: (error) =>
           toast.error(errorMessage(error, localizeUi("ui.noodle.noodlerhome.couldNotVoteInThisPoll"))),
@@ -1316,6 +1325,7 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
           navigation={navigation}
           onNavigate={onNavigate}
           onAddCreators={() => setOnboardingMode("add-creators")}
+          personaSourceIds={new Set(personas.map((persona) => persona.id))}
           onEditCreator={(creator) => {
             beginEdit(creator);
             onNavigate({ mode: "creator", view: "profile", accountId: creator.id, returnToSettings: navigation });
@@ -1339,6 +1349,15 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
               setOnboardingState("completed");
             }
           }}
+          onSeeFeed={
+            onboardingMode === "add-creators"
+              ? () => {
+                  setOnboardingMode(null);
+                  setFeedTab("all");
+                  onNavigate({ mode: "creator", view: "hub" });
+                }
+              : undefined
+          }
           onSkipped={() => setOnboardingMode(null)}
         />
       </NoodleShell>

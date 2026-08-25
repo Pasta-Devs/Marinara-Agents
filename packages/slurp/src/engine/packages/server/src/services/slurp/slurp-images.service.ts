@@ -183,7 +183,9 @@ export async function generateNoodlerPostImage(input: {
   });
   const styleGuidance = resolveImageStyleGuidanceText(imageSettings.styleProfiles, compiledPrompt.profile.id);
   const rawFinalPrompt = redactIdentity(input.promptOverride?.prompt.trim() || compiledPrompt.prompt);
-  const imagePromptInstructions = input.imageConnection.imagePromptInstructions?.trim();
+  const configuredImageInstructions = input.settings.imageGenerationPrompt?.trim();
+  const connectionImageInstructions = input.imageConnection.imagePromptInstructions?.trim();
+  const imagePromptInstructions = [configuredImageInstructions, connectionImageInstructions].filter(Boolean).join("\n");
   const instructionLine = imagePromptInstructions
     ? `User image instructions: ${imagePromptInstructions.replace(/\s+/g, " ").slice(0, 5000)}`
     : "";

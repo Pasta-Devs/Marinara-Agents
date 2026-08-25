@@ -1893,9 +1893,10 @@ export function createSlurpStorage(db: DB) {
             disclosureMode,
             stagePersonality: account.settings.privacy.stagePersonality ?? "",
             access: account.settings.privacy.access,
-            autoPosting: currentSource
-              ? (account.settings.scheduler.autoPosting ?? defaultAutoPostingSettings())
-              : { ...(account.settings.scheduler.autoPosting ?? defaultAutoPostingSettings()), enabled: false },
+            autoPosting:
+              currentSource && !(account.kind === "persona" && account.sourceKind === "persona")
+                ? (account.settings.scheduler.autoPosting ?? defaultAutoPostingSettings())
+                : { ...(account.settings.scheduler.autoPosting ?? defaultAutoPostingSettings()), enabled: false },
             fanActivity: account.settings.scheduler.fanActivity ?? null,
             sourceStatus: !currentSource
               ? { state: "missing" as const }
@@ -2303,6 +2304,9 @@ export function createSlurpStorage(db: DB) {
           }
           next = { ...current, social };
         } else if (input.subtree === "scheduler") {
+          if (row.sourceKind === "persona" && row.kind === "persona" && input.patch.autoPosting?.enabled === true) {
+            return null;
+          }
           const currentAuto = current.scheduler.autoPosting ?? defaultAutoPostingSettings();
           const patchAuto = input.patch.autoPosting;
           const patchFan = input.patch.fanActivity;
@@ -2364,6 +2368,13 @@ export function createSlurpStorage(db: DB) {
         .filter((account) => account.settings.scheduler.autoPosting?.enabled === true);
       const checked = await Promise.all(
         enabled.map(async (account) => {
+          if (account.sourceKind === "persona" && account.kind === "persona") {
+            await this.patchAccountSettings(account.id, {
+              subtree: "scheduler",
+              patch: { autoPosting: { enabled: false } },
+            });
+            return null;
+          }
           const publicAccount = await this.resolveAccountSource(account);
           if (publicAccount && (await resolveNoodlerSourceSnapshot(db, publicAccount))) return account;
           await this.patchAccountSettings(account.id, {
