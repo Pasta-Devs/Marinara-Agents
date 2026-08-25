@@ -18496,12 +18496,14 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     };
     loadedPF.save._packCache.clear();
     loadedPF.save._packSeenInMeta.clear();
+    loadedPF.save._packWantedSealed.clear();
     try {
       await run({ behavior, packCount: () => calls });
     } finally {
       loadedPF.pack.generate = realGenerate;
       loadedPF.save._packCache.clear();
       loadedPF.save._packSeenInMeta.clear();
+      loadedPF.save._packWantedSealed.clear();
     }
   };
   /** What the host's metadata looks like after the PATCHes this run made — the
@@ -18823,6 +18825,42 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
           true,
           "so the next visit tries again rather than reading a world with no work in it",
         );
+      });
+    });
+  });
+
+  // ── THE RETRY BUTTON RETRIES THE CALL THAT FAILED ─────────────────────────
+  // A pack-stage failure leaves a chat whose brief is sealed and whose marker copy
+  // is on the HOST, not in the metadata blob we are holding. Read from that blob
+  // alone, the retry would decide nothing is owed and LIFT — handing the player a
+  // packless world from the button whose own copy promises the opposite.
+  await withSavePath(async ({ behavior, tick, makeCore }) => {
+    await withGeneration(async ({ postCount }) => {
+      await withPack(async ({ behavior: packBehavior, packCount }) => {
+        behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+        let answer = null;
+        packBehavior.pack = async (chatId, { brief }) => (answer === "ok" ? packOf(brief) : null);
+        const meta = wizardConfig();
+        const core = makeCore("chat-pack-retry", 4242);
+        core.host.chatMeta = meta;
+        core.sim = loadedPF.save.restore(meta, "chat-pack-retry");
+        loadedPF.save.armGate(core, meta);
+        await loadedPF.save.maybeGenerateBrief(core);
+        await tick();
+        assert.equal(postCount(), 1, "the brief sealed");
+        assert.equal(packCount(), 1, "…and the pack call failed");
+        assert.equal(loadedPF.save.gate.state, "failed", "so the screen offers a retry");
+        assert.equal(loadedPF.save.gate.stage, "pack", "at the pack stage");
+        assert.equal(core.sim.world.interim, true, "and the world under it is still the placeholder");
+
+        answer = "ok";
+        assert.equal(loadedPF.save.retryGeneration(core), true, "the button fires");
+        await tick();
+        assert.equal(postCount(), 1, "NO second brief call — the world is already written and paid for");
+        assert.equal(packCount(), 2, "the pack call is what ran again");
+        assert.equal(loadedPF.save.gateHolds(core), false, "and this time the gate lifted");
+        assert.equal(core.sim.world.interim, undefined, "onto the compiled world, not the placeholder");
+        assert.equal(P.get(core).pouch.money, loadedPF.economy.STARTING_PURSE, "with the purse paid at that lift");
       });
     });
   });

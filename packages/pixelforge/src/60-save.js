@@ -280,6 +280,9 @@ PF.save = {
    *  that window the chat is half-sealed. */
   _packCache: new Map(),
   _packSeenInMeta: new Set(),
+  /** Chats whose seal PATCH carried the marker's copy THIS session. The witness
+   *  half of `_packWanted` — see it for why the metadata alone is not enough. */
+  _packWantedSealed: new Set(),
 
   /** Reads core.sim and core.chatId and NOTHING else: 80-setup calls this with
    *  a synthetic two-key core, and reaching for core.host/hud/render there
@@ -539,9 +542,18 @@ PF.save = {
 
   /** The SEAL-SIDE marker, and the only reader of it (see PACK_WANTED_META_KEY for
    *  why the wizard's own copy is not trusted). Strict `=== true`: a truthy value
-   *  a later release writes for some other reason must not arm a paid call. */
-  _packWanted(meta) {
-    return meta?.[PACK_WANTED_META_KEY] === true;
+   *  a later release writes for some other reason must not arm a paid call.
+   *
+   *  …AND THIS SESSION'S OWN WITNESS, for the same reason `_briefCache` exists: the
+   *  copy is written by a PATCH to the host, and the metadata blob in our hand does
+   *  not have it yet. Without the witness, the retry button after a pack-stage
+   *  failure reads a marker-less meta, decides nothing is owed, and LIFTS — the
+   *  player is handed a packless world by the button whose own copy says trying
+   *  again is free. The set is added to at exactly one place, the seal PATCH that
+   *  writes the copy, so it carries the same authority and opens no second door. */
+  _packWanted(meta, chatId) {
+    if (meta?.[PACK_WANTED_META_KEY] === true) return true;
+    return !!chatId && this._packWantedSealed.has(chatId);
   },
 
   /** The wizard's answer, read at exactly ONE site — the seal PATCH, which copies
@@ -573,7 +585,7 @@ PF.save = {
    *  documented: there is no side door through which a wizard re-run can start
    *  retro-generating work for a world somebody has been playing for months. */
   packExpected(meta, chatId) {
-    if (!this._packWanted(meta)) return false;
+    if (!this._packWanted(meta, chatId)) return false;
     if (this._configPack(meta, chatId)) return false;
     return !!this._configBrief(meta, chatId) || this.briefExpected(meta, chatId);
   },
@@ -949,7 +961,8 @@ PF.save = {
         // pack. Copied HERE and nowhere else, which is what makes the copy
         // unmintable by any later rewrite of the wizard config it was read from.
         const patch = { pixelforgeBrief: sealed };
-        if (this._configPackWanted(meta)) patch[PACK_WANTED_META_KEY] = true;
+        const wantsPack = this._configPackWanted(meta);
+        if (wantsPack) patch[PACK_WANTED_META_KEY] = true;
         let stored = false;
         for (let attempt = 0; attempt < 3 && !stored; attempt++) {
           try {
@@ -969,6 +982,10 @@ PF.save = {
         // returns here, and the cache is the only thing that will tell the next visit
         // this world is already sealed rather than generating it a second time.
         this._cacheBrief(chatId, sealed);
+        // The witness lands beside the cache and for the same reason: until the
+        // host's metadata comes back carrying the copy, this is the only thing
+        // that knows this chat is owed a pack.
+        if (wantsPack) this._packWantedSealed.add(chatId);
       }
 
       // ── CALL TWO: THE CONTENT PACK ──────────────────────────────────────────
