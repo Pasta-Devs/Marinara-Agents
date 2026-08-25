@@ -1164,6 +1164,34 @@ async function main() {
                 })),
               }))
               .filter((source) => source.drafts.some((item: any) => item.draft.mutations.length > 0));
+          } else if (action === "skip" && draftId === reviewDraftIds.merge) {
+            reviewSources = reviewSources
+              .map((source) => ({
+                ...source,
+                drafts: source.drafts
+                  .filter((item: any) => item.draft.id !== draftId)
+                  .map((item: any) =>
+                    item.draft.id === reviewDraftIds.second
+                      ? {
+                          ...item,
+                          draft: {
+                            ...item.draft,
+                            mutations: item.draft.mutations.filter(
+                              (mutation: any) => mutation.id !== reviewMutationIds.partial,
+                            ),
+                          },
+                        }
+                      : item,
+                  ),
+                targets: source.targets.map((target: any) => ({
+                  ...target,
+                  rows: target.rows.filter(
+                    (row: any) =>
+                      row.draftId !== reviewDraftIds.second || row.mutation.id !== reviewMutationIds.partial,
+                  ),
+                })),
+              }))
+              .filter((source) => source.drafts.some((item: any) => item.draft.mutations.length > 0));
           } else {
             reviewSources = reviewSources
               .map((source) => ({

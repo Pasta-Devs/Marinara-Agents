@@ -495,6 +495,7 @@ assert.match(reviewQueue, /applyPreflighted/u);
 assert.match(reviewQueue, /data-ltm-review-action/u);
 assert.match(reviewQueue, /reviewChangeForTitle/u);
 assert.match(reviewQueue, /applyChangeForTitle/u);
+assert.match(reviewQueue, /noteById\.get\(mutation\.link\.target\)\?\.title/u);
 assert.match(reviewQueue, /data-ltm-review-summary/u);
 assert.match(reviewQueue, /data-ltm-review-evidence-summary/u);
 assert.match(reviewQueue, /confirmDiscard/u);

@@ -351,7 +351,7 @@ function mutationHasOverlongText(mutation: LtmDraftMutation) {
         : false;
 }
 
-function mutationProposedText(mutation: LtmDraftMutation) {
+function mutationProposedText(mutation: LtmDraftMutation, noteById: ReadonlyMap<string, LtmNote>) {
   if (mutation.kind === "create_note")
     return Object.values(mutation.note.sections)
       .map((section) => section.text.trim())
@@ -362,7 +362,7 @@ function mutationProposedText(mutation: LtmDraftMutation) {
   if (mutation.kind === "set_keywords") return mutation.keywords.join(", ");
   if (mutation.kind === "set_status") return mutation.status;
   if (mutation.kind === "set_subjects") return mutation.subjects.map((subject) => subject.key).join(", ");
-  if (mutation.kind === "add_link") return mutation.link.target;
+  if (mutation.kind === "add_link") return noteById.get(mutation.link.target)?.title?.trim() || mutation.link.target;
   return "";
 }
 
@@ -2159,7 +2159,7 @@ export default function ReviewQueue({
           })
         : targetTitle;
     const previewChange = previewChanges[0];
-    const proposedText = mutationProposedText(mutation);
+    const proposedText = mutationProposedText(mutation, noteById);
     const collapsedBody = edited || projectionStale ? proposedText : targetBody;
     const changeSummary = edited
       ? localizeUi("ui.longTermMemory.reviewqueue.editedProposalSummary", {
