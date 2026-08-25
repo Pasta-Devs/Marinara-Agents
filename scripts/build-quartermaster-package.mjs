@@ -28,12 +28,16 @@ const packageRoot = join(repoRoot, "packages/quartermaster");
 const artifactsDir = join(repoRoot, "artifacts");
 
 const PACKAGE_ID = "quartermaster";
-// -dev.N while iterating locally: bump N on every build meant for a live
-// test so Download Agents offers Update instead of only Uninstall (it
-// compares version strings, and two builds with an unchanged version look
-// identical to it even when the content differs). Drop the suffix to a
-// clean release version before this is ever proposed for real.
-const VERSION = "0.1.0-dev.2";
+// Bump the patch version on every build meant for a live install test, so
+// Download Agents offers Update instead of only Uninstall (it compares
+// version strings; an unchanged version looks identical to it even when the
+// content differs). NOT a -dev.N prerelease suffix: semver ranks a
+// prerelease BELOW its plain release (0.1.0-dev.2 < 0.1.0), so once 0.1.0
+// was ever installed, no prerelease build could ever look newer — confirmed
+// live this session. Reset this to a clean starting version (0.1.0) in one
+// commit right before this is actually proposed; the intervening bumps are
+// disposable dev-iteration numbers, not real releases.
+const VERSION = "0.1.1";
 // Declared against the exact staging Engine this scaffold was built and tested
 // against. Do not lower this to reach stable users — see CONTRIBUTING.md.
 const ENGINE_MIN = "2.4.4";
