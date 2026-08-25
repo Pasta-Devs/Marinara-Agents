@@ -2028,7 +2028,15 @@ const wayrestCast = [
   // The table is null-prototype from creation now (20-world), so the id is just
   // an id: the adoption holds, the binding lands, and a later session is the
   // cheap re-bind this module's own header promises.
-  {
+  //
+  // ALONE AMONG THE CASES HERE, THIS ONE PUTS ITS STUBS BACK. The harness is one
+  // module top to bottom, and what this case leaves on PF.api is a spatial
+  // definition whose only location id is `__proto__` — a fixture no later case
+  // asked for. Every case below happens to re-stub both members before it drives
+  // anything, so nothing reads the leak today; the restore is what keeps that a
+  // fact rather than a coincidence the next case has to re-establish (review).
+  const stubsBefore37c = { getSpatial: loadedPF.api.getSpatial, postLocations: loadedPF.api.postSpatialLocations };
+  try {
     const { w, core } = exportScaffold(2468, "chat-export-37c");
     const adoptedZone = exportableZones(w)[0];
     const adoptedName = w.zones[adoptedZone].name;
@@ -2087,7 +2095,16 @@ const wayrestCast = [
       await bindRoot(rcore);
       assert.equal(rcore.dirty, dirtyAfterSeed, "and the seeding branch never fires a second time for it");
     }
+  } finally {
+    loadedPF.api.getSpatial = stubsBefore37c.getSpatial;
+    loadedPF.api.postSpatialLocations = stubsBefore37c.postLocations;
   }
+  assert.equal(loadedPF.api.getSpatial, stubsBefore37c.getSpatial, "37c hands the spatial GET back the way it got it");
+  assert.equal(
+    loadedPF.api.postSpatialLocations,
+    stubsBefore37c.postLocations,
+    "…and the POST too, so no later case inherits a map whose only location is `__proto__`",
+  );
 
   // 38. An accepted batch whose rows never appear in the re-read (a proxy
   // eating writes, a stale read replica) surrenders instead of posting
