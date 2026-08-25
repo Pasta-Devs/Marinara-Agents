@@ -401,6 +401,13 @@ const localeRoot = fileURLToPath(
 );
 const sourceFiles = [];
 const usedKeys = new Set();
+function sourceBetween(source, start, end) {
+  const startIndex = source.indexOf(start);
+  assert.notEqual(startIndex, -1, `Missing source marker: ${start}`);
+  const endIndex = source.indexOf(end, startIndex + start.length);
+  assert.notEqual(endIndex, -1, `Missing source marker: ${end}`);
+  return source.slice(startIndex, endIndex);
+}
 function collectSourceFiles(directory) {
   for (const name of readdirSync(directory, { withFileTypes: true })) {
     const file = join(directory, name.name);
@@ -434,9 +441,18 @@ assert.match(workspace, /data-ltm-source-operation-excluded/u);
 assert.match(workspace, /data-ltm-source-operation-result/u);
 assert.match(workspace, /data-ltm-source-import-mode/u);
 assert.match(workspace, /const sourceCheckboxClass = "size-6 shrink-0 accent-/u);
-assert.match(workspace, /linked\.isError[\s\S]*linkedMemoriesCouldNotLoad/u);
-assert.match(workspace, /!linked\.data \|\| linked\.isError \|\| !previewed/u);
-assert.match(workspace, /tone === "danger"[\s\S]*var\(--destructive\)/u);
+const linkedMemoryErrorBranch = sourceBetween(workspace, "{linked.isError ? (", ") : null}");
+assert.match(linkedMemoryErrorBranch, /linkedMemoriesCouldNotLoad/u);
+const previewOperationBranch = sourceBetween(
+  workspace,
+  "const previewOperation = async () => {",
+  "const apply = async",
+);
+assert.match(previewOperationBranch, /!linked\.data \|\| linked\.isError/u);
+const applyOperationBranch = sourceBetween(workspace, "const apply = async () => {", "return (\n    <div");
+assert.match(applyOperationBranch, /!linked\.data \|\| linked\.isError \|\| !previewed/u);
+const destructiveResultToneBranch = sourceBetween(workspace, "function resultToneClass", "function importStatusLabel");
+assert.match(destructiveResultToneBranch, /tone === "danger"[\s\S]*var\(--destructive\)/u);
 assert.match(workspace, /className="hidden items-start gap-1 md:flex"/u);
 assert.doesNotMatch(workspace, /group-hover:pointer-events-auto|transition-opacity/u);
 assert.match(workspace, /className="space-y-2 border-t border-\[var\(--border\)\] py-3 first:border-t-0"/u);
