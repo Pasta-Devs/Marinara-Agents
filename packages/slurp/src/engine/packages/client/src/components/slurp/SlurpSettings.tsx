@@ -1,6 +1,6 @@
 import { CalendarClock, FileText, Loader2, Pencil, RefreshCw, RotateCcw, Save, Trash2, UsersRound } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
@@ -77,13 +77,29 @@ function NumberSetting({
 }) {
   const [draft, setDraft] = useState(String(value));
   useEffect(() => setDraft(String(value)), [value]);
+  const saveQueueRef = useRef(Promise.resolve());
+  const saveGenerationRef = useRef(0);
   const commit = async (raw = draft, resetInvalid = true) => {
     const next = Number(raw);
     if (!raw.trim() || !Number.isInteger(next) || next < min || next > max) {
       if (resetInvalid) setDraft(String(value));
       return;
     }
-    if ((await onSave(next)) === false) setDraft(String(value));
+    // Serialize saves so a slow older request can't land after a newer one and persist a
+    // stale value; skip a queued save (and its failure recovery) once a later edit has
+    // already superseded it. Compare a generation token, not the value itself — a sequence
+    // like 1 -> 2 -> 1 would otherwise let the first save's failure recovery match the last.
+    // Swallow rejections so one failed save doesn't wedge the queue for every save after it.
+    const saveGeneration = ++saveGenerationRef.current;
+    saveQueueRef.current = saveQueueRef.current.then(async () => {
+      if (saveGenerationRef.current !== saveGeneration) return;
+      try {
+        if ((await onSave(next)) === false && saveGenerationRef.current === saveGeneration) setDraft(String(value));
+      } catch {
+        if (saveGenerationRef.current === saveGeneration) setDraft(String(value));
+      }
+    });
+    await saveQueueRef.current;
   };
   return (
     <input
