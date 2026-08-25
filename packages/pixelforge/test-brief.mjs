@@ -2010,6 +2010,85 @@ const wayrestCast = [
     }
   }
 
+  // 37c. Every id in this table belongs to the HOST — authored by hand or by
+  // the wizard's map instructions — and "__proto__" is a word every plain object
+  // already answers to (#567). Both halves of the binding handling broke on it,
+  // and the reachable damage is not the one the issue predicted:
+  //
+  //   * the adoption read at the top of `_plan` (`world.bindings[adopted]`) came
+  //     back Object.prototype — neither undefined nor the zone — so the adoption
+  //     was refused on the FIRST sync and the export posted a TWIN of the very
+  //     location it was meant to bind. Onto a player's real map, through a route
+  //     with no delete, so nothing takes it back;
+  //   * the write it would otherwise have reached (`bindings[locId] = zoneId`)
+  //     is a silent no-op on a plain object anyway — the prototype setter takes
+  //     an object or null and drops a string — which is why the refused adoption
+  //     above could never heal itself on a later pass either.
+  //
+  // The table is null-prototype from creation now (20-world), so the id is just
+  // an id: the adoption holds, the binding lands, and a later session is the
+  // cheap re-bind this module's own header promises.
+  {
+    const { w, core } = exportScaffold(2468, "chat-export-37c");
+    const adoptedZone = exportableZones(w)[0];
+    const adoptedName = w.zones[adoptedZone].name;
+    const posts = [];
+    let serverLocs = [{ id: "loc-root" }, { id: "__proto__", parentId: "loc-root", name: adoptedName }];
+    loadedPF.api.getSpatial = async () => ({
+      definition: { revision: 4, locations: serverLocs.slice() },
+      currentLocationId: "loc-root",
+      breadcrumb: [{ name: "Rootville" }],
+      destinations: [],
+    });
+    loadedPF.api.postSpatialLocations = async (chatId, body) => {
+      posts.push(body);
+      serverLocs = serverLocs.concat(body.locations.map((row) => ({ id: row.id })));
+      return { ok: true, status: 200, body: {} };
+    };
+    resetExportState();
+    await bindRoot(core);
+    await mapsExport.maybeSync(core);
+    assert.equal(w.bindings["__proto__"], adoptedZone, "a host location id of `__proto__` binds like any other id");
+    assert.equal(w.zones[adoptedZone].spatialLocationId, "__proto__", "and the zone records the adopted id");
+    assert.ok(
+      !posts.flatMap((p) => p.locations).some((row) => row.name === adoptedName),
+      "and no twin of it is ever posted — the row this route can never take back",
+    );
+    // Once, and then quiet. A later session re-plans the same world, finds the
+    // binding already hung, and reports NOTHING — the cheap re-bind the module's
+    // own header promises, which is what a refused adoption made impossible.
+    const dirtyAfterFirst = core.dirty;
+    const postsAfterFirst = posts.length;
+    assert.ok(dirtyAfterFirst > 0, "the first sync is the one that persists the bindings");
+    resetExportState();
+    await mapsExport.maybeSync(core);
+    assert.equal(core.dirty, dirtyAfterFirst, "a second sync reports no change — the binding stuck the first time");
+    assert.equal(posts.length, postsAfterFirst, "…and posts nothing further");
+
+    // The same table from the other end, and THIS is where the permanent churn
+    // lives: the first binding is written by 50-spatial off `currentLocationId`,
+    // which is exactly as host-owned as an authored id, and that write is
+    // unconditional. Bare, it vanished — so the table stayed empty, the seeding
+    // branch re-fired and re-dirtied on every single refresh, and maybeSync
+    // bailed for want of a root. A world that could never export, forever.
+    {
+      const { w: rw, core: rcore } = exportScaffold(1357, "chat-export-37c-root");
+      loadedPF.api.getSpatial = async () => ({
+        definition: { revision: 1, locations: [{ id: "__proto__" }] },
+        currentLocationId: "__proto__",
+        breadcrumb: [{ name: "Rootville" }],
+        destinations: [],
+      });
+      resetExportState();
+      await bindRoot(rcore);
+      assert.equal(rw.bindings["__proto__"], rw.startZone, "the first-seen location binds under that name too");
+      assert.equal(rw.zones[rw.startZone].spatialLocationId, "__proto__", "and the exterior records it");
+      const dirtyAfterSeed = rcore.dirty;
+      await bindRoot(rcore);
+      assert.equal(rcore.dirty, dirtyAfterSeed, "and the seeding branch never fires a second time for it");
+    }
+  }
+
   // 38. An accepted batch whose rows never appear in the re-read (a proxy
   // eating writes, a stale read replica) surrenders instead of posting
   // forever — the regression that OOM'd the harness when first written.
@@ -12581,6 +12660,41 @@ await withSavePath(async ({ behavior, makeCore }) => {
   } finally {
     loadedPF.art.setTheme("cozy-village");
   }
+}
+
+// ── THE ZONE A MOUNT LANDS IN IS AN OWN PROPERTY TOO (#567) ───────────────────
+// The same read on the WRITE side. `teleport` gated on a bare
+// `!this.world.zones[zoneId]`, and `zones["constructor"]` is a truthy FUNCTION,
+// so the early return did not fire: `zoneId` was pinned to a word no zone
+// answers to and `zone()` handed Object's own constructor to everything
+// downstream of the mount. Nothing catches that — the first `z.w` or `z.solid`
+// off it throws inside the frame loop, on a sim the player is standing in.
+// Latent only because both shipped callers pre-validate their id; `teleport` is
+// public on PF.Sim, and 60-save already spells this exact test out as `hasZone`
+// for the untrusted ids it takes off a save row.
+{
+  const sim = new loadedPF.Sim(world.build(9001, "cozy-village"));
+  const before = { zoneId: sim.zoneId, x: sim.x, y: sim.y };
+  for (const hostile of ["constructor", "__proto__", "toString", "valueOf", "hasOwnProperty"]) {
+    sim.dirty = false;
+    sim.teleport(hostile, 3, 3);
+    assert.equal(sim.zoneId, before.zoneId, `"${hostile}" is not a zone, whatever the prototype answers`);
+    assert.equal(sim.x, before.x, "…so the mount refuses and the player never moved");
+    assert.equal(sim.y, before.y, "…on either axis");
+    assert.equal(sim.dirty, false, "…and a mount that did not happen marks nothing save-worthy");
+    // The refusal is CLEAN, not merely early: the sim keeps stepping instead of
+    // throwing the first time the loop reads a width off a builtin.
+    assert.ok(sim.zone() && typeof sim.zone().w === "number", "…and zone() still answers with a real zone");
+    sim.step(1 / 60, {});
+  }
+  // Not a blanket refusal of anything unfamiliar: a real zone id still mounts,
+  // and an ordinary id this world does not have is refused exactly as before.
+  const inn = sim.world.zones.inn;
+  sim.teleport("inn", inn.spawn.x, inn.spawn.y);
+  assert.equal(sim.zoneId, "inn", "an honest zone id still mounts");
+  assert.equal(sim.x, (inn.spawn.x + 0.5) * loadedPF.TILE, "…at the tile it was handed");
+  sim.teleport("no-such-zone", 1, 1);
+  assert.equal(sim.zoneId, "inn", "and an honest id this world does not have is still refused");
 }
 
 // (av) THE BERTH: S3'S FIRST MONEY SINK AND P1'S BED, IN ONE TRANSACTION.

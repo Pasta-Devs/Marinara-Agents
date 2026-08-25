@@ -79,7 +79,15 @@ PF.Sim = class {
   }
 
   teleport(zoneId, tx, ty) {
-    if (!this.world.zones[zoneId]) return;
+    // Own-property, because this early return is the ONLY thing standing between
+    // a caller-supplied word and the mount. `zones["constructor"]` is a truthy
+    // function, so bare, the guard did not fire: `zoneId` was pinned to a word no
+    // zone answers to and zone() handed Object's own constructor to the frame
+    // loop, which throws on the first `z.w`. Nothing catches that. Both shipped
+    // callers pre-validate today, but teleport is public on PF.Sim, and 60-save
+    // already spells this same test out as `hasZone` for the ids it takes off a
+    // save row — a refusal, cleanly, is the whole contract of the line.
+    if (!PF.own(this.world.zones, zoneId)) return;
     this.zoneId = zoneId;
     this.x = (tx + 0.5) * PF.TILE;
     this.y = (ty + 0.5) * PF.TILE;

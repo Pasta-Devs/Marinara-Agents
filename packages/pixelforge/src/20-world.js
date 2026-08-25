@@ -5,6 +5,28 @@
 PF.world = (() => {
   const T = PF.TILE;
 
+  /** The spatialLocationId → zoneId table, NULL-PROTOTYPE (#567).
+   *
+   *  Every key in it belongs to the HOST — a World Maps location id, authored by
+   *  hand or by the wizard's map instructions, never written by this package —
+   *  and on a plain `{}` the word "__proto__" is not a key at all. Writing a
+   *  string there is a silent no-op (the prototype setter takes an object or
+   *  null and drops the rest) and reading it back hands out Object.prototype.
+   *  Both halves were reachable and neither failed loudly: 50-spatial's seeding
+   *  write vanished, so its emptiness test re-fired and re-dirtied on every
+   *  refresh forever while the world never gained a root to export under; and
+   *  55-maps-export's adoption read came back Object.prototype, which is neither
+   *  undefined nor the zone, so the export refused its own adoption and posted a
+   *  TWIN of the location — through a route with no delete, onto a real map.
+   *
+   *  Fixed HERE rather than at the two sites because this is the one place the
+   *  table is made: 60-save restores a save's bindings by copying entries INTO
+   *  this object, so no plain map can arrive from stored state, and every read
+   *  and write of it downstream (both files above, plus 70-hud's chip test) is
+   *  covered by the one change. `Object.keys`, `delete` and `JSON.stringify` all
+   *  behave identically, so an honest id is byte-identical either side of it. */
+  const newBindings = () => Object.create(null);
+
   function makeZone(id, name, w, h, groundFill) {
     return {
       id,
@@ -744,7 +766,7 @@ PF.world = (() => {
       zones: { village: v, inn: n, forest: f },
       startZone: "village",
       // The exterior binds to the campaign's starting World Maps location once known.
-      bindings: {}, // spatialLocationId → zoneId
+      bindings: newBindings(), // spatialLocationId → zoneId
       // The legacy world mints nobody — its three neighbours are written out by
       // hand above. The stamp is still emitted (never absent, so the S5 read
       // never has to distinguish "no stamp" from "stamp zero") and moves only
@@ -3488,7 +3510,7 @@ PF.world = (() => {
       situation: brief.situation,
       zones,
       startZone: "z1",
-      bindings: {},
+      bindings: newBindings(),
       // Derived, never saved (S5 §Q3a). `minted` names the residents the brief
       // did NOT. The severance itself keys off the complement of the brief's
       // cast rather than this list — a resident the OLD mint produced is in
