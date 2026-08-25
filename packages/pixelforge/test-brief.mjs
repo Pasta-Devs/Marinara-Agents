@@ -18419,6 +18419,191 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     assert.equal(pack.templateOf("q1"), null, "a row that is not a board instance says so");
     assert.equal(pack.templateOf("b1.dx.p:x:a"), null, "…and so does one that only looks like one");
   }
+
+  // THE READ DOOR IS THE SEAL'S EQUAL (#566's seam posture, applied to the pack).
+  // validate() runs ONCE, on the way in from a call whose schema is advisory — and
+  // then the artifact round-trips through chat metadata, where what comes back is
+  // whatever is at that key. A forward build's row (the schema widens: L2's
+  // weather word, pack-v2, and this client keeps carrying the key by design),
+  // another device's, a hand-edited one. So every claim the offer layer makes
+  // about a template is a claim this door has to make AGAIN, or it ended at the
+  // seal — which is exactly the argument 20-world already lost once and answered
+  // with `PF.brief.foldStored`. Seal time may DROP; read time may only FOLD.
+  {
+    const marla = "Marla";
+    const stored = [
+      { id: "p:h:combat", giver: marla, verb: "defeat", target: { npc: "Wren Ash" }, n: 1, title: "Deal with him" },
+      { id: "p:h:no-grain", giver: marla, verb: "catch", target: {}, n: 2, title: "Nothing named" },
+      { id: "p:h:no-target-key", giver: marla, verb: "catch", n: 2, title: "No target at all" },
+      { id: "p:h:future-grain", giver: marla, verb: "catch", target: { item: "lantern" }, n: 1, title: "A later grain" },
+      // A grain that resolves but is not this verb's — a place to catch, a role to
+      // walk to. The old read loop had no clause that fired on it at all.
+      { id: "p:h:wrong-grain", giver: marla, verb: "visit", target: { role: "catch-common" }, n: 1, title: "Go role" },
+      // …and a row that tagged TWO. The seal takes the verb's first allowed grain,
+      // so the read has to take the same one rather than refusing or guessing.
+      {
+        id: "p:h:two-grain",
+        giver: marla,
+        verb: "catch",
+        target: { role: "catch-common", variant: "carp" },
+        n: 2,
+        title: "Two of something",
+      },
+      { id: "p:h:gather", giver: marla, verb: "gather", target: { role: "catch-common" }, n: 2, title: "Gather two" },
+      { id: "p:h:huge-n", giver: marla, verb: "catch", target: { role: "catch-common" }, n: 1e9, title: "A billion" },
+      { id: "p:h:long-title", giver: marla, verb: "visit", target: { place: "wilds" }, n: 1, title: "T".repeat(4000) },
+      {
+        id: "p:h:markup-title",
+        giver: marla,
+        verb: "visit",
+        target: { place: "gathering" },
+        n: 1,
+        title: '<img src=x onerror="alert(1)">\n\n**Come by** the inn',
+      },
+      {
+        id: "p:h:money",
+        giver: marla,
+        verb: "catch",
+        target: { variant: "carp" },
+        n: 2,
+        title: "Two carp",
+        r: { money: 9999, xp: 500 },
+      },
+      // An own `__proto__` key, which is what JSON.parse makes of a stored blob
+      // carrying one — and chat metadata is JSON both ways.
+      JSON.parse(
+        '{"id":"p:h:proto","giver":"Marla","verb":"visit","target":{"place":"hall"},"n":1,' +
+          '"title":"Wait here","__proto__":{"polluted":true}}',
+      ),
+      { id: "p:h:ok", giver: marla, verb: "catch", target: { role: "catch-rare" }, n: 1, title: "One good fish" },
+    ];
+    const hostile = pack.fold(
+      {
+        packVersion: 1,
+        theme: "cozy-village",
+        briefHash: hash,
+        templates: stored,
+        lines: [],
+        escalation: [],
+        overheard: [],
+      },
+      { brief: sealedBrief, world: built },
+    );
+    assert.equal(hostile.source, "sealed", "the fixture is a pack this world reads as its own");
+    assert.deepEqual(
+      hostile.ids,
+      [
+        "p:h:gather",
+        "p:h:huge-n",
+        "p:h:long-title",
+        "p:h:markup-title",
+        "p:h:money",
+        "p:h:ok",
+        "p:h:proto",
+        "p:h:two-grain",
+      ],
+      "five rows fold OUT: a verb with no site, an empty target, a missing one, a grain no build here has heard of, and one belonging to another verb",
+    );
+    assert.deepEqual(
+      hostile.byId.get("p:h:two-grain").target,
+      { role: "catch-common" },
+      "…and a row that tagged two grains resolves to the verb's FIRST, which is the answer the seal gives it",
+    );
+
+    // …AND THE SURVIVORS ARE THE SEAL'S OWN SET, row for row and field for field.
+    // The claim is not "the read door is strict", which any door can be: it is
+    // "the read door is strict about the same things", which is the only version
+    // of it a schema that widens later can keep.
+    const shape = (row) => `${row.verb}|${pack.targetString(row)}|${row.n}|${row.title}`;
+    const resealed = pack.validate(
+      {
+        templates: [
+          ...stored,
+          ...Array.from({ length: pack.TUNING.floorTemplates }, (_, i) => ({
+            slug: `ballast-${i}`,
+            giver: marla,
+            verb: "visit",
+            target: { place: "hall" },
+            n: 1,
+            title: `Ballast ${i}`,
+          })),
+        ],
+        lines: Array.from({ length: pack.TUNING.floorLines }, (_, i) => ({
+          at: "settlement",
+          when: "day",
+          r: "stranger",
+          text: `line ${i}`,
+        })),
+      },
+      { theme: "cozy-village", seed: 505, brief: sealedBrief },
+    );
+    assert.deepEqual(
+      resealed.templates
+        .filter((row) => !row.id.includes(":ballast-"))
+        .map(shape)
+        .sort(),
+      hostile.ids.map((id) => shape(hostile.byId.get(id))).sort(),
+      "the two doors agree on what survives and on what it says, down to the clamp and the clip",
+    );
+
+    // THE CLAMP AND THE CLIP, named. Scalar excess costs the row nothing — it is
+    // the structural failures above that fold out.
+    assert.equal(hostile.byId.get("p:h:huge-n").n, pack.CAPS.n, "a billion clamps to the biggest count a row may ask");
+    assert.ok(
+      loadedPF.player.graphemes(hostile.byId.get("p:h:long-title").title).length <= pack.CAPS.title,
+      "…and four thousand characters clip to something a board row can hold",
+    );
+    const markup = hostile.byId.get("p:h:markup-title").title;
+    assert.ok(
+      !/[<>*]/.test(markup) && !markup.includes("\n"),
+      "…through the SEAL'S OWN helper, so a title carrying a tag and two newlines arrives as one line of plain text",
+    );
+    assert.equal(
+      hostile.byId.get("p:h:gather").verb,
+      "catch",
+      "`gather` folds to the mechanic at this door too: the word is a synonym, and dropping a good row over one is the worse answer",
+    );
+
+    // A CLOSED SHAPE, AND A COPY. The stored object never reaches the offer layer,
+    // so a reward the schema excludes — or any other key a hostile save invented —
+    // is unreachable rather than merely unread.
+    for (const id of hostile.ids) {
+      const row = hostile.byId.get(id);
+      assert.deepEqual(
+        Object.keys(row).sort(),
+        ["giver", "id", "n", "target", "title", "verb"],
+        `the folded ${id} is the same closed six fields a sealed row is`,
+      );
+      const grains = Object.keys(row.target);
+      assert.equal(grains.length, 1, `…and ${id}'s target is one grain`);
+      assert.ok(pack.TARGET_GRAINS.includes(grains[0]), `…which is a grain this build named (${grains[0]})`);
+    }
+    const money = stored.find((row) => row.id === "p:h:money");
+    assert.notEqual(hostile.byId.get("p:h:money"), money, "the row on the board is a COPY, not the stored object");
+    assert.equal(money.r.money, 9999, "…and the artifact is untouched: read time folds what it reads, it never repairs");
+    assert.equal({}.polluted, undefined, "and an own __proto__ key in the artifact polluted nothing");
+  }
+
+  // HASH ZERO IS NOT A BRIEF, so it can never be a seal. `briefHashOf(null)` is 0
+  // and so is the default pack's own sentinel, which means the equality would hold
+  // on any world that never sealed a brief — a legacy chat, a declined one — and a
+  // foreign artifact would adopt as that world's own content.
+  {
+    const legacy = world.build(505, "cozy-village", null);
+    const zeroPack = {
+      packVersion: 1,
+      theme: "cozy-village",
+      briefHash: 0,
+      templates: [{ id: "p:0:a", giver: "Mira", verb: "visit", target: { place: "wilds" }, n: 1, title: "Out" }],
+      lines: [],
+      escalation: [],
+      overheard: [],
+    };
+    const read = pack.fold(zeroPack, { brief: null, world: legacy });
+    assert.notEqual(read.source, "sealed", "a hash-zero pack is nobody's sealed pack, whatever world reads it");
+    assert.equal(read.source, "default", "…so the world reads the fallback it has always read");
+    assert.ok(!read.ids.includes("p:0:a"), "and a stranger's work is not on its board");
+  }
 }
 
 // ── THE TWO-CALL STATE MACHINE, CELL BY CELL (0.13 slice 1) ─────────────────

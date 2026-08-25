@@ -456,10 +456,10 @@ PF.pack = (() => {
      *     through the shared fallback, complete and abandon normally, and sever
      *     and repair exactly as before. A demotion is a content fact, not a save
      *     event.
-     *  2. THE SELECTABLE SET. A template whose giver is in no zone's `npcs`, or
-     *     whose target this world cannot resolve, folds OUT — never offered,
-     *     therefore never accepted, therefore never repair-dropped. The dangling
-     *     row the repair pass exists to catch is one this set can no longer mint.
+     *  2. THE SELECTABLE SET, through `foldStoredTemplate` — the row-level door
+     *     where a stored template is answered for in full. Never offered is never
+     *     accepted is never repair-dropped, so the dangling row the repair pass
+     *     exists to catch is one this set can no longer mint.
      *  3. THE SORTED IDS. The daily selection hashes over the SORTED SET of
      *     surviving ids and never over post-fold ordinals, so a template folding
      *     out changes which rows survive and not which day the survivors land on.
@@ -467,8 +467,18 @@ PF.pack = (() => {
     fold(stored, { brief, world }) {
       const theme = str(world?.theme) || "cozy-village";
       const briefHash = PF.player.briefHashOf(brief);
+      // A PACK IS SEALED AGAINST A BRIEF, AND HASH ZERO IS NOT A BRIEF. It is what
+      // `briefHashOf` answers for a world that has none, and it is the DEFAULT
+      // pack's own sentinel (below) — so on a brief-less world the equality would
+      // hold for any artifact carrying the sentinel, and a foreign or hand-written
+      // pack would adopt as that world's own sealed content. Never-sealed is the
+      // only honest reading of a hash that means "there was nothing to hash".
       const sealed =
-        stored && typeof stored === "object" && Array.isArray(stored.templates) && stored.briefHash === briefHash
+        briefHash !== 0 &&
+        stored &&
+        typeof stored === "object" &&
+        Array.isArray(stored.templates) &&
+        stored.briefHash === briefHash
           ? stored
           : null;
       const demoted = !!stored && !sealed;
@@ -477,16 +487,10 @@ PF.pack = (() => {
       for (const zoneId of Object.keys(world?.zones ?? {})) {
         for (const npc of world.zones[zoneId]?.npcs ?? []) if (npc?.name) known.add(npc.name);
       }
-      const variants = this.variantsOf(theme);
       const byId = new Map();
       for (const template of pack.templates) {
-        if (!template?.id || !known.has(str(template.giver))) continue;
-        const target = template.target ?? {};
-        if (target.role !== undefined && !PF.economy.CATCH_ROLES.includes(target.role)) continue;
-        if (target.variant !== undefined && !variants.has(target.variant)) continue;
-        if (target.npc !== undefined && !known.has(target.npc)) continue;
-        if (target.place !== undefined && !LOCATIONS.includes(target.place)) continue;
-        byId.set(template.id, template);
+        const row = this.foldStoredTemplate(template, { known, theme });
+        if (row) byId.set(row.id, row);
       }
       return {
         pack,
@@ -497,6 +501,83 @@ PF.pack = (() => {
         // Memo slot for the daily selection, keyed by day (see selection()).
         _day: -1,
         _offers: [],
+      };
+    },
+
+    /** ONE STORED TEMPLATE, ANSWERED FOR AT THE READ DOOR — the pack's twin of
+     *  18-brief `foldStored` (#566), and it exists for that seam's exact reason:
+     *  validate()'s guarantees are SEAL-TIME and do not survive the round trip
+     *  through chat metadata. THE STORED PACK IS UNTRUSTED HERE. It reaches this
+     *  door from a forward-build client (the schema widens — L2's weather word,
+     *  pack-v2 — and an older client keeps carrying the key by design), from
+     *  another device, and from a hand-edited or foreign chatMeta; and every field
+     *  below is one this build then SPENDS: `verb` picks which progress site
+     *  advances the row, `target` flattens to the bare string the matcher reads,
+     *  `n` is a number a player is asked to reach, `title` renders into a board
+     *  row and the quest tab.
+     *
+     *  THE SEAM POSTURE IS #566'S, unchanged: seal time may DROP, read time may
+     *  only FOLD. So a STRUCTURAL failure — a verb with no site, no single
+     *  resolvable grain, a giver nobody stands up — folds the row OUT of the
+     *  selectable set, which costs this world an offer and costs the artifact
+     *  nothing; and SCALAR excess CLAMPS and CLIPS rather than costing the row.
+     *
+     *  `gather` FOLDS TO `catch` HERE TOO, and that is a deliberate call rather
+     *  than an oversight: the word is a synonym for the mechanic, the seal already
+     *  answers it that way, and the fold is one own-key lookup. A row that reached
+     *  storage unfolded — sealed by a build whose table read differently, or
+     *  hand-written — is answered rather than dropped over a word.
+     *
+     *  AND IT ALWAYS RETURNS A COPY, never the stored object. The row it hands
+     *  back is the closed six-field shape validate() emits, so a stored `r` (the
+     *  reward the schema excludes and TUNING derives) or any other key a hostile
+     *  save invented is UNREACHABLE from everything downstream, rather than riding
+     *  into the offer layer on an object nobody re-read. */
+    foldStoredTemplate(stored, { known, theme }) {
+      if (!stored || typeof stored !== "object") return null;
+      const id = str(stored.id);
+      if (!id) return null;
+      // The giver fence, and it is the same one the seal applies one release
+      // earlier: work is offered by somebody standing in this world or by nobody.
+      const giver = str(stored.giver);
+      if (!known.has(giver)) return null;
+      const asked = str(stored.verb);
+      const verb = PF.own(VERB_FOLD, asked) ?? asked;
+      // THE MECHANICS ENUM, NOT THE WIDER SEAL-ACCEPT ONE. `VERBS` is what a
+      // generation call may WRITE; MECHANICS is what this build can VERIFY, and a
+      // row it cannot verify could only ever be accepted and then never completed.
+      // `foldTarget` below refuses the same rows a step later (a verb with no
+      // mechanic has no grain bound to it either), so this line is the statement
+      // rather than the enforcement — and it is worth stating, because the day
+      // GRAINS_FOR_VERB gains an entry is the day the two stop agreeing by luck.
+      if (!MECHANICS.includes(verb)) return null;
+      // THE GRAIN RULE IS THE SEAL'S OWN, CALLED HERE — not a second copy written
+      // to look like it. Same grain-to-verb binding, same role/variant/place
+      // vocabularies, same first-allowed-grain-that-resolves answer for a row that
+      // tagged two, and the same CAPS.slug clip on the value. A private copy of
+      // this is exactly how a row comes to resolve one way at the seal and another
+      // at the read; the only argument it takes differently is the cast, and that
+      // difference IS the read side — the seal asks who the brief named, this asks
+      // who is standing in the world about to offer the work.
+      const target = this.foldTarget(stored.target, verb, { cast: known, theme });
+      if (!target) return null;
+      return {
+        id,
+        giver,
+        verb,
+        // A fresh one-grain object out of foldTarget, so a second key beside the
+        // grain — a forward build's, a hostile save's — cannot ride into the row.
+        target,
+        // THE SEAL'S OWN ARITHMETIC, not a second one written to look like it: a
+        // counting verb clamps into [1, CAPS.n] and a non-counting one is always
+        // one. Two doors doing different sums is how a stored row comes to ask for
+        // a number this build's own seal could never have written.
+        n: verb === "catch" ? PF.clamp(Math.round(Number(stored.n) || 1), 1, CAPS.n) : 1,
+        // …and the seal's own text hygiene, through the SAME helper rather than a
+        // fork of it: a title is plain text that clips safe, because it renders in
+        // a board row and anything that could reflow one is stripped at a door
+        // rather than at every read.
+        title: capText(stored.title, CAPS.title) || `${verb} ${this.targetString({ target })}`,
       };
     },
 
