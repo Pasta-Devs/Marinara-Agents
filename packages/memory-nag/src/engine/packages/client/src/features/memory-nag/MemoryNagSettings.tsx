@@ -72,6 +72,9 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
   const settingsRef = useRef<MemoryNagSettings>({ ...MEMORY_NAG_DEFAULTS });
   const settingsVersionRef = useRef(0);
   const attemptedVersionRef = useRef(0);
+  const failedVersionRef = useRef(0);
+  const retryCountRef = useRef(0);
+  const onDirtyChangeRef = useRef(onDirtyChange);
   const scanDialogRef = useModalDialog(
     scanOpen,
     () => {
@@ -101,17 +104,22 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
     settingsRef.current = vault.data.settings;
     settingsVersionRef.current = 0;
     attemptedVersionRef.current = 0;
+    failedVersionRef.current = 0;
+    retryCountRef.current = 0;
     setSettings(vault.data.settings);
     onDirtyChange?.(false);
   }, [chatId, onDirtyChange, vault.data]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    onDirtyChangeRef.current = onDirtyChange;
+  }, [onDirtyChange]);
+
+  useEffect(() => {
+    return () => {
       scanController.current?.abort();
-      onDirtyChange?.(false);
-    },
-    [onDirtyChange],
-  );
+      onDirtyChangeRef.current?.(false);
+    };
+  }, []);
 
   const updateSettings = (patch: Partial<MemoryNagSettings>) => {
     const next = { ...settingsRef.current, ...patch };
@@ -127,7 +135,6 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
     const version = settingsVersionRef.current;
     const nextSettings = clampSettings(settingsRef.current);
     settingsRef.current = nextSettings;
-    attemptedVersionRef.current = Math.max(attemptedVersionRef.current, version);
     setSettings(nextSettings);
     setSaving(true);
     setMessage("");
@@ -137,11 +144,22 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
         "PATCH",
         nextSettings,
       );
+      if (hydratedChatId.current === saveChatId) {
+        attemptedVersionRef.current = Math.max(attemptedVersionRef.current, version);
+        failedVersionRef.current = 0;
+        retryCountRef.current = 0;
+      }
       if (hydratedChatId.current === saveChatId && settingsVersionRef.current === version) {
         settingsRef.current = saved.settings;
         setSettings(saved.settings);
         onDirtyChange?.(false);
       }
+    } catch (error) {
+      if (hydratedChatId.current === saveChatId && settingsVersionRef.current === version) {
+        retryCountRef.current += 1;
+        if (retryCountRef.current >= 2) failedVersionRef.current = version;
+      }
+      throw error;
     } finally {
       setSaving(false);
     }
@@ -149,7 +167,14 @@ export function MemoryNagSettings({ props }: { props: CapabilityProps }) {
 
   useEffect(() => {
     const version = settingsVersionRef.current;
-    if (!chatId || hydratedChatId.current !== chatId || saving || scanning || attemptedVersionRef.current >= version) {
+    if (
+      !chatId ||
+      hydratedChatId.current !== chatId ||
+      saving ||
+      scanning ||
+      attemptedVersionRef.current >= version ||
+      failedVersionRef.current >= version
+    ) {
       return;
     }
     const timer = window.setTimeout(() => {

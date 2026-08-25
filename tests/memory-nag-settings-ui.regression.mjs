@@ -24,6 +24,21 @@ assert.match(
   /settingsVersionRef\.current === version/u,
   "an older autosave response must not overwrite newer field edits",
 );
+assert.match(
+  settings,
+  /const onDirtyChangeRef = useRef\(onDirtyChange\);[\s\S]*onDirtyChangeRef\.current = onDirtyChange;[\s\S]*scanController\.current\?\.abort\(\);[\s\S]*onDirtyChangeRef\.current\?\.\(false\);[\s\S]*\}, \[\]\);/u,
+  "settings cleanup must only abort scans when the component unmounts",
+);
+assert.match(
+  settings,
+  /const saved = await memoryNagRequest<[\s\S]*attemptedVersionRef\.current = Math\.max\(attemptedVersionRef\.current, version\);/u,
+  "an autosave version must count as attempted only after persistence succeeds",
+);
+assert.match(
+  settings,
+  /retryCountRef\.current \+= 1;[\s\S]*retryCountRef\.current >= 2[\s\S]*failedVersionRef\.current >= version/u,
+  "failed autosaves must retry once without entering an unbounded retry loop",
+);
 assert.match(settings, /id="mn-memory-nag-vault-prompt"[\s\S]*rows=\{3\}/u);
 assert.equal(
   (settings.match(/className="mn-prompt-tool"/gu) ?? []).length,
