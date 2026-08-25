@@ -998,24 +998,41 @@ PF.Hud = class {
     // player can be looking at a retry button that will keep giving the same
     // answer. It has to be in the memo key or the sentence never changes.
     const gateWhy = gate === "failed" ? (PF.save.gate.failure ?? null) : null;
+    // WHICH ARTIFACT the gate is waiting on — the world itself or the content
+    // written for it (0.13's second generation call). Two different screens: at the
+    // brief stage there is no world yet, and at the pack stage the world is already
+    // sealed and safe. In the memo key for the same reason `gateWhy` is: a stage
+    // that changed without the state changing would leave the wrong sentence up.
+    const gateStage = gate ? (PF.save.gate.stage ?? "brief") : null;
     if (
       mode !== this._mode ||
       spatialAvail !== this._spatialAvail ||
       gate !== this._gate ||
-      gateWhy !== this._gateWhy
+      gateWhy !== this._gateWhy ||
+      gateStage !== this._gateStage
     ) {
       this._mode = mode;
       this._spatialAvail = spatialAvail;
       this._gate = gate;
       this._gateWhy = gateWhy;
+      this._gateStage = gateStage;
       const inWorld = mode === "walk" && !gate;
       this.gateEl.style.display = gate ? "flex" : "none";
       this.gateRetry.style.display = gate === "failed" ? "" : "none";
-      this.gateTitle.textContent = gate === "failed" ? "The world didn't finish being written." : "Writing your world…";
+      this.gateTitle.textContent =
+        gate === "failed"
+          ? gateStage === "pack"
+            ? "The work for this world didn't finish being written."
+            : "The world didn't finish being written."
+          : gateStage === "pack"
+            ? "Writing what your world has to say…"
+            : "Writing your world…";
       this.gateBody.textContent =
         gate === "failed"
-          ? `${PF.save.gateReason(gateWhy)} Nothing was lost and nothing was decided for you — this chat is exactly as you left it. Try again whenever you like.`
-          : "One generation call is shaping the settlement, its people and the places in it. This can take a minute.";
+          ? `${PF.save.gateReason(gateWhy, gateStage)} ${PF.save.gateStageNote(gateStage)}`
+          : gateStage === "pack"
+            ? "The settlement is written. One more call is filling in what its people say and the work they have to offer."
+            : "One generation call is shaping the settlement, its people and the places in it. This can take a minute.";
       this.topbar.style.display = gate ? "none" : "";
       // Replay: the host owns the whole screen. Combat: keep a minimal HUD —
       // the mode is inferred from the narrative gameActiveState, which can flip

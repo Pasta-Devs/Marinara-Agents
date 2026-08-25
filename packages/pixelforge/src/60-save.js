@@ -74,6 +74,27 @@ const schemaVersionOf = (value) =>
 // can visit many chats, so the oldest entry goes rather than the map growing.
 const BRIEF_CACHE_MAX = 8;
 
+// THE CONTENT PACK'S TWO TOP-LEVEL KEYS (0.13, plan §2.2a/§2.2g). The pack is a
+// SECOND sealed blob at its own key beside the brief's, per-key shallow-merge
+// PATCH like every other: an older client carries it untouched across a round
+// trip because it never reads or writes that key at all. It has no legacy nested
+// home — the brief's `_configBrief` still reads one because chats were sealed
+// before the key moved, and the pack has never lived anywhere else.
+//
+// `pixelforgePackWanted` is the SEAL-SIDE MARKER and the whole of it is WHERE it
+// is written. The wizard's answer lives in `experienceConfig`, and that object is
+// REWRITABLE: /game/create's reuse-an-existing-chat arm replaces gameSetupConfig
+// wholesale while the spread preserves top-level keys, so a formula that read the
+// wizard's copy could be flipped ON for a veteran chat sealed years of play ago
+// (retro-generation nobody asked for, a paid call per chat) or OFF for a chat
+// mid-creation with a pack call still owed (silently packless forever). The seal
+// PATCH takes a COPY of the answer and stores it beside the brief it sealed, and
+// packExpected() reads only that copy — which no setupConfig rewrite can mint and
+// none can erase. A chat sealed before this release carries no copy and is
+// therefore never expected to have a pack, which is exactly the ruling (Q9).
+const PACK_META_KEY = "pixelforgePack";
+const PACK_WANTED_META_KEY = "pixelforgePackWanted";
+
 // The ladder's rows and what each one MEANS at each site (plan §Q2). A table
 // rather than a switch in three places: the whole finding behind slice 4 is that
 // the sites disagreed about rows nobody had written down.
@@ -250,6 +271,15 @@ PF.save = {
    *  evict: past that point the metadata knows, and the cache is a convenience.
    *  An entry that is NOT in here is the only witness there is (see _cacheBrief). */
   _briefSeenInMeta: new Set(),
+  /** The pack's twin of the two maps above, and it is a twin on purpose: the
+   *  escape-safety argument is identical (a pack that seals while the player is in
+   *  another chat cannot patch the metadata blob they are holding), so the reading
+   *  rule, the eviction rule and the witness set are the same. Two caches rather
+   *  than one entry holding both because the two artifacts seal at different
+   *  moments — the brief lands one call before the pack does, and for the whole of
+   *  that window the chat is half-sealed. */
+  _packCache: new Map(),
+  _packSeenInMeta: new Set(),
 
   /** Reads core.sim and core.chatId and NOTHING else: 80-setup calls this with
    *  a synthetic two-key core, and reaching for core.host/hud/render there
@@ -425,9 +455,99 @@ PF.save = {
    *  expression: the interim world mark, the stamp-evaluability gate, the
    *  loading gate, and maybeGenerateBrief's nothing-to-generate branch. Separate
    *  copies of a predicate this load-bearing is how the gate and the interim mark
-   *  come to disagree about which chats are which. */
+   *  come to disagree about which chats are which.
+   *
+   *  0.13 SPLIT THOSE FOUR CONSUMERS RATHER THAN WIDENING THIS ONE, and the split
+   *  is the design (plan §2.2a): the brief is world IDENTITY and the pack is world
+   *  CONTENT, so the interim mark and stamp evaluability stay BRIEF-ONLY (a world
+   *  compiled from a sealed brief is a real world whether or not anybody has
+   *  written what its people say), while the loading GATE is the DISJUNCTION —
+   *  either artifact still owed holds play — and the LIFT is neither-owed. Content
+   *  holds the gate; it never defines identity. */
   briefExpected(meta, chatId) {
     return !this._configBrief(meta, chatId) && meta?.pixelforgeBrief === undefined && this._configGenerate(meta);
+  },
+
+  /** The sealed content pack, from the same two places the brief comes from: the
+   *  top-level key first, then this session's own cache (see `_cachePack`). */
+  _configPack(meta, chatId) {
+    const top =
+      meta && typeof meta[PACK_META_KEY] === "object" && meta[PACK_META_KEY] !== null ? meta[PACK_META_KEY] : null;
+    // A pack is a template list. Anything else at that key — a marker shape a
+    // later release invents, a truncated write — is NOT a pack, and answering
+    // "absent" is what lets the creation path overwrite it rather than reading
+    // work off an object that has none.
+    if (top && Array.isArray(top.templates)) {
+      if (chatId && this._packCache.has(chatId)) this._packSeenInMeta.add(chatId);
+      return top;
+    }
+    if (top) return null;
+    const cached = chatId ? this._packCache.get(chatId) : null;
+    return cached && Array.isArray(cached.templates) ? cached : null;
+  },
+
+  /** `_cacheBrief`'s twin, verbatim including the eviction rule: only entries the
+   *  metadata has been observed to carry may be dropped, because until then this
+   *  map is the only witness that the chat is sealed and dropping it would spend a
+   *  second paid call on a world that already exists. */
+  _cachePack(chatId, sealed) {
+    if (!chatId || !sealed || !Array.isArray(sealed.templates)) return;
+    this._packCache.delete(chatId);
+    this._packSeenInMeta.delete(chatId);
+    this._packCache.set(chatId, sealed);
+    while (this._packCache.size > BRIEF_CACHE_MAX) {
+      let dropped = null;
+      for (const key of this._packCache.keys()) {
+        if (this._packSeenInMeta.has(key)) {
+          dropped = key;
+          break;
+        }
+      }
+      if (dropped === null) break;
+      this._packCache.delete(dropped);
+      this._packSeenInMeta.delete(dropped);
+    }
+  },
+
+  /** The SEAL-SIDE marker, and the only reader of it (see PACK_WANTED_META_KEY for
+   *  why the wizard's own copy is not trusted). Strict `=== true`: a truthy value
+   *  a later release writes for some other reason must not arm a paid call. */
+  _packWanted(meta) {
+    return meta?.[PACK_WANTED_META_KEY] === true;
+  },
+
+  /** The wizard's answer, read at exactly ONE site — the seal PATCH, which copies
+   *  it to the seal-side key above. Nothing else may read it, and that is the
+   *  whole of the fix. */
+  _configPackWanted(meta) {
+    const setup =
+      meta && typeof meta.gameSetupConfig === "object" && meta.gameSetupConfig !== null ? meta.gameSetupConfig : null;
+    const outer =
+      setup && typeof setup.experienceConfig === "object" && setup.experienceConfig !== null
+        ? setup.experienceConfig
+        : null;
+    const inner =
+      outer && typeof outer.experienceConfig === "object" && outer.experienceConfig !== null
+        ? outer.experienceConfig
+        : null;
+    return inner?.packWanted === true || outer?.packWanted === true;
+  },
+
+  /** "This chat is owed a content pack." The brief's predicate, one release later
+   *  and one term wider: the seal-side marker is present, the brief is sealed or
+   *  still coming, and no pack exists yet.
+   *
+   *  Every excluded case is excluded by the middle term. A `{skipped:true}` chat
+   *  declined the call, so `_configBrief` is null and `briefExpected` is false and
+   *  no pack is ever owed. A legacy chat has no generate flag and reads the same
+   *  way. A chat sealed before this release carries no seal-side marker and fails
+   *  the first term forever, which is Q9's ruling made structural rather than
+   *  documented: there is no side door through which a wizard re-run can start
+   *  retro-generating work for a world somebody has been playing for months. */
+  packExpected(meta, chatId) {
+    if (!this._packWanted(meta)) return false;
+    if (this._configPack(meta, chatId)) return false;
+    return !!this._configBrief(meta, chatId) || this.briefExpected(meta, chatId);
   },
 
   /** The wizard's opt-in for surface-side world generation (0.4.0 chats). */
@@ -454,7 +574,9 @@ PF.save = {
    *  play immediately; so does a chat whose generation was declined, whose
    *  `{skipped:true}` marker briefExpected() reads as "sealed enough". */
   armGate(core, meta) {
-    if (!core?.chatId || !this.briefExpected(meta, core.chatId)) {
+    const briefWanted = !!core?.chatId && this.briefExpected(meta, core.chatId);
+    const packWanted = !!core?.chatId && this.packExpected(meta, core.chatId);
+    if (!briefWanted && !packWanted) {
       this.gate = null;
       // THE STARTING PURSE IS A PROPERTY OF STATE, NOT OF AN INSTANT (slice 6).
       // It used to be paid at exactly ONE moment — the tail of the generation
@@ -471,8 +593,21 @@ PF.save = {
         PF.economy.grantStartingPurse(core);
       return false;
     }
-    this.gate = { chatId: core.chatId, state: "generating", attempts: 0 };
+    // WHICH ARTIFACT IS OWED, carried on the gate because the screen the player is
+    // looking at is not the same screen in the two cases: at the brief stage there
+    // is no world yet, and at the pack stage the world is written and safe and what
+    // is being waited on is the work posted in it. A chat owed both starts at the
+    // brief and is re-stamped when the second call begins.
+    this.gate = { chatId: core.chatId, state: "generating", attempts: 0, stage: briefWanted ? "brief" : "pack" };
     return true;
+  },
+
+  /** Which artifact the gate is waiting on now. Called when the second call starts
+   *  so the screen (and any failure it turns into) says the true thing. */
+  _stageGate(core, stage) {
+    if (!this.gateHolds(core)) return;
+    this.gate = { ...this.gate, stage };
+    core.hud?.update?.();
   },
 
   /** Does the gate hold for THIS core's chat? Every refusal below asks this and
@@ -501,6 +636,20 @@ PF.save = {
     this.gate = null;
     core.hud?.update?.();
     void this.adopt(core);
+    // S3'S STARTING PURSE, AT THE LIFT — every lift, which is the 0.13 correction.
+    // It used to be paid at the two sites that arrive at a playable world (armGate
+    // for the chats that never gate, `_installSealedWorld` for the ones that do),
+    // and the two-call gate opened a third way out that touched neither: a gate
+    // armed for a PACK on an already-compiled world, lifting because the pack key
+    // turned up (another device sealed it) rather than because anything was
+    // installed. armGate had already declined to pay — the gate was arming — and
+    // no install ran, so the world began with an empty purse and the untouched
+    // predicate refuses forever after the first coin is earned. Paid here instead,
+    // where every path out of the gate passes, after the mutators reopen a line
+    // above. Idempotent by its own predicate, and SEALED WORLDS ONLY: `brieved`
+    // marks a world compiled from a brief, and a themed default world is not a
+    // world beginning — it is the world that has always been there.
+    if (core.sim?.world?.brieved) PF.economy.grantStartingPurse(core);
   },
 
   /** Everything that happens once a sealed brief is IN HAND: compile the world it
@@ -541,26 +690,51 @@ PF.save = {
     this._lastSerialized = null;
     core.render?.clearZones?.();
     void PF.assets.load(core);
+    // THE ARMS THE GATED BOOT DEFERRED, run against the world that just compiled
+    // and BEFORE the gate lifts — see `_quarantineArms` for why they were deferred
+    // and why here is the moment they come due.
+    this._runDeferredArms(core, chatId, sealed);
     // The gate lifts BEFORE the first dirty flag, and the order is load-bearing:
     // markDirty refuses while the gate holds, so arming the save first would
     // arm nothing and the freshly compiled world would wait for some unrelated
-    // later event to be written at all.
+    // later event to be written at all. The lift also pays S3's starting purse —
+    // at the one moment that is unambiguously "this world begins now", through the
+    // mutators the gate was refusing a line ago, and for sealed worlds only.
     this._liftGate(core);
-    // S3's starting purse, at the one moment that is unambiguously "this world
-    // begins now" and after the lift, because it goes through the mutators the
-    // gate was refusing a line ago (PF.economy.grantStartingPurse says why this
-    // moment and not a default on the block). armGate pays the same debt on every
-    // boot path that never reaches here — and applies the same test: SEALED
-    // worlds only. A skipped marker reaches this tail with `sealed` null and a
-    // themed default under it, and a default world is not a world beginning — it
-    // is the world that has always been there, which is what keeps the purse off
-    // every declined and legacy chat alike (armGate's own guard already pays
-    // those nothing; two chats on the identical default world must hold the
-    // same money).
-    if (sealed) PF.economy.grantStartingPurse(core);
     core.hud?.refreshChips();
     core.hud?.toast("The world takes shape.");
     this.markDirty(core);
+  },
+
+  /** The pack sealed onto a world that was ALREADY compiled — the half-sealed
+   *  cell, where the brief was in hand before this session began and only the pack
+   *  was owed.
+   *
+   *  Deliberately NOT `_installSealedWorld`: nothing here needs rebuilding, and a
+   *  transplant would be actively destructive. The world standing under the gate
+   *  IS the real one, and the block standing in it is the player's own — so a
+   *  transplant would strip every world-bound field they already own into the
+   *  quarantine bag and route it home through a restore, for a world that never
+   *  changed. What is actually owed is the two deferred arms and the lift. */
+  _resumeHeldWorld(core, chatId, sealed) {
+    this._runDeferredArms(core, chatId, sealed);
+    this._liftGate(core);
+    core.hud?.refreshChips();
+    this.markDirty(core);
+  },
+
+  /** Re-run the rehydration arms a gated boot skipped, at the lift, against the
+   *  world about to be played. Notices land at the current day, exactly as they do
+   *  at boot. Idempotent: a consumed slot is gone, a re-stamped block agrees with
+   *  its world, and a repair that already ran finds nothing dangling. */
+  _runDeferredArms(core, chatId, sealed) {
+    const player = core.sim?.player;
+    if (!player || !core.sim.world) return;
+    const notices = this._quarantineArms(player, core.sim.world, sealed, chatId, {
+      briefExpected: false,
+      deferConsuming: false,
+    });
+    for (const text of notices) PF.player.notice(player, text, core.sim.day);
   },
 
   /** Generation did not seal. The chat stays UNSEALED — which is the whole
@@ -574,13 +748,19 @@ PF.save = {
    *  refused request are the same screen but not the same sentence, and a
    *  deterministic 400 that reads as a mystery is a player pressing a button that
    *  will never work. Absent for the throw path, which has no verdict to report. */
-  _failGate(core, kind) {
+  _failGate(core, kind, stage) {
     if (!this.gateHolds(core)) return;
     this.gate = {
       ...this.gate,
       state: "failed",
       attempts: this.gate.attempts + 1,
       failure: typeof kind === "string" && kind ? kind : null,
+      // WHICH CALL FAILED, carried onto the failure because the two are not the
+      // same news. A brief-stage failure means there is no world yet; a pack-stage
+      // one means the world is written and safe and the retry is free. Defaulting
+      // to whatever the gate was already staged for keeps a caller that does not
+      // say from inventing a stage.
+      stage: stage === "pack" || stage === "brief" ? stage : (this.gate.stage ?? "brief"),
     };
     core.hud?.update?.();
   },
@@ -598,10 +778,16 @@ PF.save = {
    *  Unknown or absent kinds fall back to the honest generic — a throw has no
    *  verdict to report, and a kind a newer ladder invents must not blank the
    *  panel. */
-  gateReason(kind) {
+  gateReason(kind, stage) {
     switch (kind) {
       case "refused":
-        return "The request was turned down rather than delayed, so another attempt may well get the same answer; a shorter, plainer setting description is the likeliest thing to change it.";
+        // THE ADVICE HALF IS BRIEF-STAGE ONLY. At the pack stage the setting has
+        // already been spent — it produced the world the player is about to walk
+        // into — and telling them to rewrite it would be asking them to change the
+        // one thing that worked.
+        return stage === "pack"
+          ? "The request was turned down rather than delayed, so another attempt may well get the same answer."
+          : "The request was turned down rather than delayed, so another attempt may well get the same answer; a shorter, plainer setting description is the likeliest thing to change it.";
       case "unavailable":
         return "The engine could not take the request just now — it may be busy with something else.";
       case "network":
@@ -613,6 +799,17 @@ PF.save = {
       default:
         return "Something went wrong partway through.";
     }
+  },
+
+  /** The sentence AFTER the reason, which is the half that differs by STAGE. At the
+   *  brief stage nothing was stored and the chat is untouched. At the pack stage the
+   *  world already exists and is safe: what failed is the work posted in it, the
+   *  retry costs nothing, and — said explicitly, because it is the thing a player
+   *  would fear — pressing it does not regenerate the world. */
+  gateStageNote(stage) {
+    return stage === "pack"
+      ? "Your world is written and safe — this was only the work posted in it. Trying again is free, and it does not rewrite the world."
+      : "Nothing was lost and nothing was decided for you — this chat is exactly as you left it. Try again whenever you like.";
   },
 
   /** The retry the gate's failure state offers, and the only caller is that
@@ -642,10 +839,16 @@ PF.save = {
    *  pre-0.4.0 chats never re-generate. */
   async maybeGenerateBrief(core) {
     const chatId = core.chatId;
+    // ONE HOLD FOR THE WHOLE SEQUENCE (plan §2.2a): brief call, store, cache, pack
+    // call, store, cache, fence, install. Every dispatcher entry checks it — this
+    // one, the retry button's, and the boot's — because the two calls are one
+    // paid transaction and re-entering it halfway would run the second call twice.
     if (!chatId || this._generating.has(chatId)) return;
     const meta =
       core.host && typeof core.host.chatMeta === "object" && core.host.chatMeta !== null ? core.host.chatMeta : {};
-    if (!this.briefExpected(meta, chatId)) {
+    const briefWanted = this.briefExpected(meta, chatId);
+    const packWanted = this.packExpected(meta, chatId);
+    if (!briefWanted && !packWanted) {
       // Nothing to generate. A gate armed against a metadata blob that has since
       // caught up (or against this session's own cache) lifts here rather than
       // waiting for a generation call that would find nothing to do.
@@ -667,6 +870,12 @@ PF.save = {
         this._installSealedWorld(core, chatId, this._configBrief(meta, chatId), seed, theme);
         return;
       }
+      // THE BARE LIFT, onto a world that is already compiled — reachable now
+      // without a brief in flight at all: a gate armed for a PACK comes down here
+      // when the pack key turns up from somewhere else (another device sealed it).
+      // The arms the gated boot deferred come due at THIS lift too, for the same
+      // reason they come due at an install: the next frame is play.
+      if (this.gateHolds(core)) this._runDeferredArms(core, chatId, this._configBrief(meta, chatId));
       this._liftGate(core);
       return;
     }
@@ -684,50 +893,119 @@ PF.save = {
       ]
         .filter(Boolean)
         .join("\n");
-      let failure = null;
-      const sealed = await PF.brief.generate(chatId, {
-        theme,
-        seed,
-        preferences,
-        onFailure: (kind) => {
-          failure = kind;
-        },
-      });
-      if (!sealed) {
-        // EVERY failure — a busy engine, the network, the budget timeout, a route
-        // that is not there, and now a deterministic 400 or 422 as well: do NOT
-        // seal. The key stays absent, this visit offers retry, and the next visit
-        // arms the gate again. There is deliberately no "play the default world"
-        // escape on any branch: sealing a default world for a player who wrote
-        // three paragraphs of setting is the outcome ruling #7 exists to forbid,
-        // and a deterministic failure is the one case they could never undo.
-        if (chatId === core.chatId) this._failGate(core, failure);
-        return;
-      }
-      let stored = false;
-      for (let attempt = 0; attempt < 3 && !stored; attempt++) {
-        try {
-          await PF.api.patchMetadata(chatId, { pixelforgeBrief: sealed });
-          stored = true;
-        } catch (err) {
-          if (attempt === 2) console.warn("[pixelforge] brief storage failed; the chat stays unsealed", err);
-          else await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+      // ── CALL ONE: THE BRIEF ─────────────────────────────────────────────────
+      let sealed = this._configBrief(meta, chatId);
+      if (briefWanted) {
+        let failure = null;
+        sealed = await PF.brief.generate(chatId, {
+          theme,
+          seed,
+          preferences,
+          onFailure: (kind) => {
+            failure = kind;
+          },
+        });
+        if (!sealed) {
+          // EVERY failure — a busy engine, the network, the budget timeout, a route
+          // that is not there, and now a deterministic 400 or 422 as well: do NOT
+          // seal. The key stays absent, this visit offers retry, and the next visit
+          // arms the gate again. There is deliberately no "play the default world"
+          // escape on any branch: sealing a default world for a player who wrote
+          // three paragraphs of setting is the outcome ruling #7 exists to forbid,
+          // and a deterministic failure is the one case they could never undo.
+          if (chatId === core.chatId) this._failGate(core, failure, "brief");
+          return;
         }
+        // THE SEAL PATCH CARRIES THE MARKER'S COPY (plan §2.2a). One PATCH, two
+        // keys: the artifact and the era fact that this chat was created wanting a
+        // pack. Copied HERE and nowhere else, which is what makes the copy
+        // unmintable by any later rewrite of the wizard config it was read from.
+        const patch = { pixelforgeBrief: sealed };
+        if (this._configPackWanted(meta)) patch[PACK_WANTED_META_KEY] = true;
+        let stored = false;
+        for (let attempt = 0; attempt < 3 && !stored; attempt++) {
+          try {
+            await PF.api.patchMetadata(chatId, patch);
+            stored = true;
+          } catch (err) {
+            if (attempt === 2) console.warn("[pixelforge] brief storage failed; the chat stays unsealed", err);
+            else await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+          }
+        }
+        if (!stored) {
+          if (chatId === core.chatId) this._failGate(core, "storage", "brief");
+          return;
+        }
+        // Cached BEFORE the chat fence below, and that ordering is the gate's
+        // escape-safety: a generation that lands while the player is in another chat
+        // returns here, and the cache is the only thing that will tell the next visit
+        // this world is already sealed rather than generating it a second time.
+        this._cacheBrief(chatId, sealed);
       }
-      if (!stored) {
-        if (chatId === core.chatId) this._failGate(core, "storage");
-        return;
+
+      // ── CALL TWO: THE CONTENT PACK ──────────────────────────────────────────
+      // Wanted when the formula already says so (the half-sealed chat this visit
+      // arrived at), or when THIS visit just sealed the brief for a chat whose
+      // wizard asked for one. The second arm cannot ask the formula: the formula
+      // reads the seal-side marker, and the PATCH that wrote it landed on the host
+      // and not on the metadata blob in our hand.
+      //
+      // AT CREATION, A MISMATCHED PACK IS ABSENT. A pack sealed against a
+      // different brief is somebody else's world's content — the reuse-an-existing-
+      // chat arm can leave one behind — and overwriting it is right where demoting
+      // it would leave the chat permanently reading a fallback.
+      const existingPack = this._configPack(meta, chatId);
+      const packStale = !!existingPack && existingPack.briefHash !== PF.player.briefHashOf(sealed);
+      const wantPack =
+        !!sealed && (packWanted || (briefWanted && this._configPackWanted(meta) && (!existingPack || packStale)));
+      if (wantPack) {
+        this._stageGate(core, "pack");
+        let failure = null;
+        const pack = await PF.pack.generate(chatId, {
+          theme,
+          seed,
+          brief: sealed,
+          preferences,
+          onFailure: (kind) => {
+            failure = kind;
+          },
+        });
+        if (!pack) {
+          // THE WORLD IS ALREADY SAFE HERE, which is the whole difference between
+          // this failure and the one above: the brief is sealed and stored, so the
+          // retry screen says so and the retry costs one call, not a world.
+          if (chatId === core.chatId) this._failGate(core, failure, "pack");
+          return;
+        }
+        let packStored = false;
+        for (let attempt = 0; attempt < 3 && !packStored; attempt++) {
+          try {
+            await PF.api.patchMetadata(chatId, { [PACK_META_KEY]: pack });
+            packStored = true;
+          } catch (err) {
+            if (attempt === 2) console.warn("[pixelforge] pack storage failed; the world stays packless", err);
+            else await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+          }
+        }
+        if (!packStored) {
+          if (chatId === core.chatId) this._failGate(core, "storage", "pack");
+          return;
+        }
+        this._cachePack(chatId, pack);
       }
-      // Cached BEFORE the chat fence below, and that ordering is the gate's
-      // escape-safety: a generation that lands while the player is in another chat
-      // returns here, and the cache is the only thing that will tell the next visit
-      // this world is already sealed rather than generating it a second time.
-      this._cacheBrief(chatId, sealed);
+
+      // THE CHAT FENCE, after BOTH stores and BOTH caches and before any install:
+      // everything above belongs to the chat the call was made for and lands
+      // wherever the player is; everything below touches the world in front of them.
       if (chatId !== core.chatId) return;
       // Build the world the brief describes, lift onto it, pay the purse. Shared
       // with the retry path above, which is how a throw out of any of it stays
-      // recoverable instead of stranding the player in the placeholder.
-      this._installSealedWorld(core, chatId, sealed, seed, theme);
+      // recoverable instead of stranding the player in the placeholder. A chat that
+      // only owed a PACK is already standing in its real world, so it resumes
+      // rather than recompiling (`_resumeHeldWorld` says why that distinction is
+      // not cosmetic).
+      if (briefWanted || core.sim?.world?.interim) this._installSealedWorld(core, chatId, sealed, seed, theme);
+      else this._resumeHeldWorld(core, chatId, sealed);
     } catch (err) {
       // NEVER A SPINNER WITH NOTHING BEHIND IT. Every failure the generation
       // ladder KNOWS about is already a `null` seal handled above; this is the
@@ -912,17 +1190,62 @@ PF.save = {
    *  defaults boot behind it. */
   _rehydratePlayer(saved, world, brief, meta, chatId, sim) {
     const briefExpected = this.briefExpected(meta, chatId);
+    // WILL THE GATE HOLD? Asked of the METADATA rather than of `this.gate`, because
+    // rehydration runs BEFORE armGate on every boot path (90-element restores and
+    // then arms), so the flag is not up yet — and the two facts armGate is about to
+    // ask are exactly these two.
+    const gateWillHold = briefExpected || this.packExpected(meta, chatId);
     // 1. PARSE / MIGRATE.
     const parsed = PF.player.parse(saved && typeof saved === "object" ? saved.player : null);
     const player = parsed.player;
     if (parsed.quarantine) this._park(chatId, parsed.quarantine.slot, parsed.quarantine.entry);
 
+    const notices = this._quarantineArms(player, world, brief, chatId, {
+      briefExpected,
+      deferConsuming: gateWillHold,
+    });
+
+    // 4. NOTICES, appended to the band's own array — after the severance that
+    // emptied the ledger, so the one thing that survives the window is the
+    // explanation for it.
+    //
+    // AT THE DAY IT HAPPENED, which took a format change to be able to say
+    // (plan §2.5). These used to be ledger LINES, and a line at or below the
+    // flush gate is one the wrap-up skips — so the day was shifted up to
+    // `max(sim.day, flushedDay + 1)` to keep the notice tellable, which printed
+    // a day header from the FUTURE into the tell whenever the gate had run
+    // ahead of the clock. The band is told-flagged instead of day-gated, so the
+    // shift is deleted along with the back-door it existed for.
+    for (const text of notices) PF.player.notice(player, text, sim.day);
+    return player;
+  },
+
+  /** Steps 1b-3 of the §Q5 rehydration: the arm that CONSUMES the version slot,
+   *  the severance that fills the stamp one, the arm that consumes THAT, and the
+   *  gated dangling repair. Returns the notices they wrote.
+   *
+   *  FACTORED OUT BECAUSE IT NOW HAS TWO CALLERS, and the second one is the whole
+   *  point (plan §2.2a, round-3 fresh B1). Under a held gate, rehydration is
+   *  CONSUME-FREE: the two arms that take a quarantine slot are skipped, because a
+   *  boot that consumes a slot and then fails its generation has spent the bag on a
+   *  session that never played — the save flush refuses under the gate, so nothing
+   *  records what the consume restored, and the slot is gone next time. What is NOT
+   *  skipped is the severance PARK: applyStamps strips the live block before it
+   *  hands the entry over, so declining to park would be a real loss, and parking
+   *  the same loss twice is lossless because the stamp slot MERGES.
+   *
+   *  The deferred arms then RE-RUN AT THE LIFT (`_runDeferredArms`), before the
+   *  first ungated frame — not on some later boot. The next-ungated-boot path
+   *  serves FAILURE sessions only, which is exactly the case where nothing was
+   *  played and nothing was lost by waiting. */
+  _quarantineArms(player, world, brief, chatId, { briefExpected, deferConsuming }) {
+    const notices = [];
     // 1b. VERSION RE-ADOPTION. A block this build could not read last time is
     // readable now. It CONSUMES the slot — that is what makes a third boot a
     // no-op — and the block it displaces is parked in setAside, which no machine
     // ever restores: two live blocks cannot both be the player's state, and only
     // the player can say which one they meant.
-    const held = PF.quarantine.peek("version");
+    const held = deferConsuming ? null : PF.quarantine.peek("version");
     const heldV = held && typeof held.fromV === "number" && Number.isFinite(held.fromV) ? held.fromV : null;
     if (held && held.adoptable === true && heldV !== null && heldV <= PF.player.currentV()) {
       const readopted = PF.player.parse(held.block);
@@ -947,7 +1270,7 @@ PF.save = {
     // 2. STAMPS / SEVERANCE, then the other direction: a stamp slot whose world
     // is the world we just built is a save coming home.
     const applied = PF.player.applyStamps(player, world, brief, briefExpected);
-    const notices = [...applied.notices];
+    notices.push(...applied.notices);
     if (applied.severed && !this._park(chatId, applied.severed.slot, applied.severed.entry)) {
       // applyStamps has ALREADY stripped the live block by the time it hands the
       // entry over, so a refusal here is a real loss — and the notice it wrote
@@ -963,7 +1286,10 @@ PF.save = {
       // writer-site kind copy).
       notices.push("What you had done in the world that changed could not be kept, and is gone.");
     }
-    if (applied.evaluated && !applied.severed) {
+    // 2b. …AND THE OTHER DIRECTION, which is the second arm a held gate defers:
+    // it CONSUMES the stamp slot, and a consume whose result no flush can record
+    // is a slot spent for nothing.
+    if (!deferConsuming && applied.evaluated && !applied.severed) {
       const stamp = PF.quarantine.peek("stamp");
       if (stamp) {
         const restored = PF.player.restoreStamped(player, stamp, world, brief);
@@ -979,20 +1305,7 @@ PF.save = {
     // the sim and does not arm a write of its own. The next real save carries it.
     const repaired = PF.player.repairQuests(player, world, applied.evaluated);
     notices.push(...repaired.notices);
-
-    // 4. NOTICES, appended to the band's own array — after the severance that
-    // emptied the ledger, so the one thing that survives the window is the
-    // explanation for it.
-    //
-    // AT THE DAY IT HAPPENED, which took a format change to be able to say
-    // (plan §2.5). These used to be ledger LINES, and a line at or below the
-    // flush gate is one the wrap-up skips — so the day was shifted up to
-    // `max(sim.day, flushedDay + 1)` to keep the notice tellable, which printed
-    // a day header from the FUTURE into the tell whenever the gate had run
-    // ahead of the clock. The band is told-flagged instead of day-gated, so the
-    // shift is deleted along with the back-door it existed for.
-    for (const text of notices) PF.player.notice(player, text, sim.day);
-    return player;
+    return notices;
   },
 
   /** Self-heal (review finding): ~40 engine call sites still use the unqueued
@@ -1056,7 +1369,9 @@ PF.save = {
     // _generating and _briefCache are deliberately NOT cleared — a generation
     // in flight for the chat we are leaving must still seal, and the brief it
     // seals is what stops the next visit generating that world all over again.
-    // (_briefSeenInMeta rides with the cache it describes, for the same reason.)
+    // (_briefSeenInMeta rides with the cache it describes, for the same reason,
+    // and so do the pack's two: a pack that seals after the player has left is
+    // exactly the case its cache exists for.)
     this.gate = null;
     // The in-memory quarantine bag is per-chat, exactly like the caches above:
     // restore() hydrates the arriving chat's key into it a few lines later.

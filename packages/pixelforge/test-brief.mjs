@@ -18421,6 +18421,636 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   }
 }
 
+// ── THE TWO-CALL STATE MACHINE, CELL BY CELL (0.13 slice 1) ─────────────────
+// The (brief x pack) matrix is the audit artifact this slice owes, and it is a
+// matrix because the two artifacts seal at different moments: for the whole
+// window between them a chat is HALF-SEALED, which is a state 0.12 could not be
+// in and every consumer had to be re-answered for. Thirteen reachable cells, and
+// the disposition of each is asserted below in its own block:
+//
+//   #  brief                     pack              disposition
+//   1  expected (gen on, no key) absent            gate, two calls, one install
+//   2  expected                  present, foreign  creation OVERWRITES it
+//   3  sealed, marker present    absent            gate at the PACK stage, one call
+//   4  sealed, no marker (pre)   absent            never expected — packless (Q9)
+//   5  {skipped:true}            absent            never expected; default pack reads
+//   6  legacy (no generate flag) absent            never expected
+//   7  sealed                    sealed, matching  play; no gate, no call
+//   8  sealed                    sealed, stale     demote at READ; no gate, no call
+//   9  sealed                    cache-only        the cache is the witness; no call
+//  10  cache-only                absent            the brief reads from the cache
+//  11  {skipped} landing mid-gate any              install(null); never expected
+//  12  pre-0.13 wizard, 0.13 seal absent           no seal-side copy — packless
+//  13  0.13 wizard, 0.12 seal     absent           no seal-side copy — packless
+//
+// Cell 13 is the one whose disposition the plan's own cell list and its M1 fix
+// disagree about, and the FORMULA is what settles it: the seal-side copy is
+// written by the seal PATCH, an 0.12 client's seal wrote no such key, so the chat
+// reads exactly like cell 12 and is packless. The behaviour the plan describes
+// for it — marker, sealed, no pack, the gate arms and the pack call runs — is
+// real and is cell 3, which an 0.13 client reaches whenever its own pack call
+// failed and the session ended.
+{
+  const P = loadedPF.player;
+  const packBrief = loadedPF.brief.validate(gateBriefData, { theme: "cozy-village", seed: 4242 });
+  /** A pack that seals against a given brief, through the real validator — a
+   *  fixture that could not survive the seal would be pinning a state the machine
+   *  can never actually be in. */
+  const packOf = (brief) => {
+    const giver = brief.cast[0].name;
+    const sealed = loadedPF.pack.validate(
+      {
+        templates: [
+          { giver, verb: "catch", target: { role: "catch-common" }, n: 3, title: "Three for the pot" },
+          { giver, verb: "visit", target: { place: "wilds" }, n: 1, title: "Walk out" },
+          { giver, verb: "deliver", target: { npc: brief.cast[1].name }, n: 1, title: "Word to the mill" },
+        ],
+        lines: Array.from({ length: loadedPF.pack.TUNING.floorLines }, (_, i) => ({
+          at: "settlement",
+          when: "day",
+          r: "stranger",
+          text: `A line ${i}`,
+        })),
+      },
+      { theme: brief.theme, seed: 4242, brief },
+    );
+    assert.ok(sealed, "the pack fixture seals");
+    return sealed;
+  };
+  const goodPack = packOf(packBrief);
+  const wizardConfig = (extra = {}) => ({
+    gameSetupConfig: {
+      experienceConfig: { generate: true, seed: 4242, theme: "cozy-village", packWanted: true, ...extra },
+    },
+  });
+
+  /** Stub the pack's call seam (slice 2 owns its body) and clear the two caches
+   *  the machine keeps, so no cell inherits another's sealed pack. */
+  const withPack = async (run) => {
+    const realGenerate = loadedPF.pack.generate;
+    const behavior = { pack: async (chatId, { brief }) => packOf(brief) };
+    let calls = 0;
+    loadedPF.pack.generate = (chatId, options) => {
+      calls += 1;
+      return behavior.pack(chatId, options);
+    };
+    loadedPF.save._packCache.clear();
+    loadedPF.save._packSeenInMeta.clear();
+    try {
+      await run({ behavior, packCount: () => calls });
+    } finally {
+      loadedPF.pack.generate = realGenerate;
+      loadedPF.save._packCache.clear();
+      loadedPF.save._packSeenInMeta.clear();
+    }
+  };
+  /** What the host's metadata looks like after the PATCHes this run made — the
+   *  engine's own per-key shallow merge, which is why two keys in one PATCH and
+   *  two PATCHes of one key each are the same thing to the next boot. */
+  const afterPatches = (meta, calls) => {
+    const next = { ...meta };
+    for (const call of calls) if (call.kind === "patch") Object.assign(next, call.patch);
+    return next;
+  };
+
+  // ── CELL 1: the whole sequence, one hold, one install ──────────────────────
+  await withSavePath(async ({ calls, behavior, tick, makeCore }) => {
+    await withGeneration(async ({ postCount }) => {
+      await withPack(async ({ packCount }) => {
+        behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+        const meta = wizardConfig();
+        const core = makeCore("chat-pack-1", 4242);
+        core.host.chatMeta = meta;
+        core.sim = loadedPF.save.restore(meta, "chat-pack-1");
+        assert.equal(loadedPF.save.armGate(core, meta), true, "a chat owed both artifacts gates");
+        assert.equal(loadedPF.save.gate.stage, "brief", "…starting at the brief");
+        calls.length = 0;
+        await loadedPF.save.maybeGenerateBrief(core);
+        await tick();
+        assert.equal(postCount(), 1, "exactly one brief call");
+        assert.equal(packCount(), 1, "…and exactly one pack call");
+        const patches = calls.filter((c) => c.kind === "patch");
+        assert.deepEqual(
+          patches.map((c) => Object.keys(c.patch).sort()),
+          [["pixelforgeBrief", "pixelforgePackWanted"], ["pixelforgePack"]],
+          "the seal PATCH carries the marker's COPY beside the brief, and the pack lands under its own key",
+        );
+        assert.equal(loadedPF.save.gateHolds(core), false, "the gate lifts once");
+        assert.equal(core.sim.world.brieved, true, "onto the compiled world");
+        assert.equal(P.get(core).pouch.money, loadedPF.economy.STARTING_PURSE, "with the starting purse paid");
+
+        // …and the next boot reads a chat that owes nothing.
+        const settled = afterPatches(meta, calls);
+        assert.equal(loadedPF.save.packExpected(settled, "chat-pack-1"), false, "cell 7: nothing is owed any more");
+        assert.equal(loadedPF.save.briefExpected(settled, "chat-pack-1"), false, "…on either side");
+      });
+    });
+  });
+
+  // ── CELL 2: a foreign pack at creation is ABSENT, not a demotion ───────────
+  await withSavePath(async ({ calls, behavior, tick, makeCore }) => {
+    await withGeneration(async () => {
+      await withPack(async ({ packCount }) => {
+        behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+        const foreign = { ...goodPack, briefHash: (goodPack.briefHash ^ 0x1234) >>> 0 };
+        const meta = { ...wizardConfig(), pixelforgePack: foreign };
+        const core = makeCore("chat-pack-2", 4242);
+        core.host.chatMeta = meta;
+        core.sim = loadedPF.save.restore(meta, "chat-pack-2");
+        assert.equal(
+          loadedPF.save.packExpected(meta, "chat-pack-2"),
+          false,
+          "the formula alone sees a pack key and asks for nothing",
+        );
+        assert.equal(loadedPF.save.armGate(core, meta), true, "…and the BRIEF is what gates this chat");
+        calls.length = 0;
+        await loadedPF.save.maybeGenerateBrief(core);
+        await tick();
+        assert.equal(packCount(), 1, "creation generates a pack anyway: a stranger's pack is not this world's");
+        const written = calls.find((c) => c.kind === "patch" && c.patch.pixelforgePack);
+        assert.ok(written, "…and overwrites the key");
+        assert.equal(
+          written.patch.pixelforgePack.briefHash,
+          loadedPF.player.briefHashOf(loadedPF.save._configBrief(afterPatches(meta, calls), "chat-pack-2")),
+          "with one sealed against the brief this chat just sealed",
+        );
+      });
+    });
+  });
+
+  // ── CELL 3: the half-sealed chat — the pack stage, alone ───────────────────
+  await withSavePath(async ({ calls, behavior, tick, makeCore }) => {
+    await withGeneration(async ({ postCount }) => {
+      await withPack(async ({ packCount }) => {
+        behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+        const meta = { ...wizardConfig(), pixelforgeBrief: packBrief, pixelforgePackWanted: true };
+        const core = makeCore("chat-pack-3", 4242);
+        core.host.chatMeta = meta;
+        core.sim = loadedPF.save.restore(meta, "chat-pack-3");
+        assert.equal(core.sim.world.interim, undefined, "the world is REAL: the interim mark is brief-only");
+        assert.equal(core.sim.world.brieved, true, "…compiled from the sealed brief");
+        assert.equal(loadedPF.save.briefExpected(meta, "chat-pack-3"), false, "no brief is owed");
+        assert.equal(loadedPF.save.packExpected(meta, "chat-pack-3"), true, "a pack is");
+        assert.equal(loadedPF.save.armGate(core, meta), true, "so the gate holds — the DISJUNCTION, not the brief");
+        assert.equal(loadedPF.save.gate.stage, "pack", "…and says which artifact it is waiting on");
+        const worldBefore = core.sim.world;
+        calls.length = 0;
+        await loadedPF.save.maybeGenerateBrief(core);
+        await tick();
+        assert.equal(postCount(), 0, "no second brief call: the world is already written");
+        assert.equal(packCount(), 1, "one pack call");
+        assert.equal(core.sim.world, worldBefore, "and the world is not recompiled under the player");
+        assert.equal(loadedPF.save.gateHolds(core), false, "the gate lifts");
+        assert.equal(
+          P.get(core).pouch.money,
+          loadedPF.economy.STARTING_PURSE,
+          "THE PURSE IS PAID AT THIS LIFT: armGate declined to pay because it was arming, and no install ran",
+        );
+      });
+    });
+  });
+
+  // ── CELLS 4, 12, 13: no seal-side copy, ever ───────────────────────────────
+  {
+    // (4) a chat sealed before this release: the wizard never wrote the answer.
+    const preRelease = {
+      gameSetupConfig: { experienceConfig: { generate: true, seed: 1, theme: "cozy-village" } },
+      pixelforgeBrief: packBrief,
+    };
+    assert.equal(loadedPF.save.packExpected(preRelease, "chat-pre"), false, "a pre-0.13 seal is never owed a pack");
+    // (12) the wizard was pre-0.13 and the CLIENT that sealed was 0.13: there was
+    // nothing to copy, so the seal PATCH copied nothing.
+    assert.equal(
+      loadedPF.save.packExpected({ ...preRelease, pixelforgeBrief: packBrief }, "chat-12"),
+      false,
+      "a pre-0.13 wizard sealed by a new client is packless, and that is the designed answer rather than a bug report",
+    );
+    // (13) the wizard was 0.13 and the client that SEALED was 0.12: the config
+    // asks for a pack and the seal-side copy does not exist, so the formula says
+    // no — the same disposition as 12, by construction.
+    const sealedByOldClient = { ...wizardConfig(), pixelforgeBrief: packBrief };
+    assert.equal(
+      loadedPF.save.packExpected(sealedByOldClient, "chat-13"),
+      false,
+      "an 0.13 wizard whose brief was sealed by an 0.12 client stays packless: the formula reads the seal-side copy only",
+    );
+    // …AND THAT IS THE WHOLE POINT OF READING THE COPY. The same chat, with its
+    // setupConfig replaced wholesale by /game/create's reuse arm (the one mutator
+    // that does not spread), still answers the same way — no rewrite can mint a
+    // paid call on a world somebody has been playing.
+    const veteran = { pixelforgeBrief: packBrief, pixelforgeSave: null };
+    assert.equal(
+      loadedPF.save.packExpected({ ...veteran, ...wizardConfig() }, "chat-veteran"),
+      false,
+      "a veteran chat re-targeted by a 0.13 wizard is not retro-generated",
+    );
+    // …and the reverse: a chat mid-creation whose config was replaced by a
+    // marker-less one keeps its pending pack, because the copy is what is read.
+    assert.equal(
+      loadedPF.save.packExpected(
+        {
+          gameSetupConfig: { experienceConfig: { generate: true, seed: 1, theme: "cozy-village" } },
+          pixelforgeBrief: packBrief,
+          pixelforgePackWanted: true,
+        },
+        "chat-mid",
+      ),
+      true,
+      "…and a config rewrite cannot silently downgrade a chat that is owed one",
+    );
+  }
+
+  // ── CELLS 5, 6, 11: declined, legacy, and a marker landing mid-gate ────────
+  {
+    const declined = { ...wizardConfig(), pixelforgeBrief: { skipped: true } };
+    assert.equal(loadedPF.save.briefExpected(declined, "chat-5"), false, "a declined chat expects no brief");
+    assert.equal(
+      loadedPF.save.packExpected(declined, "chat-5"),
+      false,
+      "…and none of the pack either, marker or no marker: a chat that declined the call declined both",
+    );
+    assert.equal(
+      loadedPF.save.packExpected({ ...declined, pixelforgePackWanted: true }, "chat-5b"),
+      false,
+      "…even with a seal-side copy from a brief that never sealed",
+    );
+    const legacy = { pixelforgeSave: null };
+    assert.equal(loadedPF.save.packExpected(legacy, "chat-6"), false, "a legacy chat is never owed one");
+    assert.equal(
+      loadedPF.save.packExpected({ ...legacy, pixelforgePackWanted: true }, "chat-6b"),
+      false,
+      "…and a stray marker on one does not conjure a brief to hang it off",
+    );
+  }
+
+  // ── CELLS 7, 8, 9, 10: the read side, with nothing owed ────────────────────
+  {
+    const sealedChat = { ...wizardConfig(), pixelforgeBrief: packBrief, pixelforgePackWanted: true };
+    // (7) a matching pack: nothing is expected and the world reads its own work.
+    const whole = { ...sealedChat, pixelforgePack: goodPack };
+    assert.equal(loadedPF.save.packExpected(whole, "chat-7"), false, "a sealed pack is not an owed one");
+    const built = world.build(4242, "cozy-village", packBrief);
+    const readWhole = loadedPF.pack.fold(loadedPF.save._configPack(whole, "chat-7"), {
+      brief: packBrief,
+      world: built,
+    });
+    assert.equal(readWhole.source, "sealed", "the world reads the pack written for it");
+    assert.ok(readWhole.ids.length, "…and has work to offer");
+    // (8) a stale pack: still not expected (the key exists), and the READ demotes.
+    const stale = { ...sealedChat, pixelforgePack: { ...goodPack, briefHash: (goodPack.briefHash ^ 0x99) >>> 0 } };
+    assert.equal(loadedPF.save.packExpected(stale, "chat-8"), false, "a stale pack is not regenerated behind a gate");
+    assert.equal(
+      loadedPF.pack.fold(loadedPF.save._configPack(stale, "chat-8"), { brief: packBrief, world: built }).demoted,
+      true,
+      "…it is demoted at read, where a demotion costs no call and no play",
+    );
+    // (9) cache-only: the pack sealed this session and the metadata has not caught
+    // up. The cache is the only witness there is, and it must be believed or the
+    // next visit pays for a second one.
+    loadedPF.save._packCache.clear();
+    loadedPF.save._packSeenInMeta.clear();
+    assert.equal(loadedPF.save.packExpected(sealedChat, "chat-9"), true, "before the cache, a pack is owed");
+    loadedPF.save._cachePack("chat-9", goodPack);
+    assert.equal(loadedPF.save.packExpected(sealedChat, "chat-9"), false, "after it, nothing is");
+    assert.equal(loadedPF.save._configPack(sealedChat, "chat-9"), goodPack, "and the read finds it");
+    assert.equal(
+      loadedPF.save._configPack(sealedChat, "chat-other"),
+      null,
+      "…for that chat only: the cache is keyed by chat and cannot leak a world into another one",
+    );
+    loadedPF.save._packCache.clear();
+    loadedPF.save._packSeenInMeta.clear();
+    // (10) the BRIEF cache-only, pack absent: the pack's own dispatcher has to see
+    // the brief through the same cache or it would hash a world nobody sealed.
+    const half = { ...wizardConfig(), pixelforgePackWanted: true };
+    loadedPF.save._briefCache.clear();
+    assert.equal(loadedPF.save.packExpected(half, "chat-10"), true, "the marker is there and the brief is coming");
+    loadedPF.save._cacheBrief("chat-10", packBrief);
+    assert.equal(loadedPF.save._configBrief(half, "chat-10"), packBrief, "the brief reads from this session's cache");
+    assert.equal(loadedPF.save.packExpected(half, "chat-10"), true, "…and the pack is still owed against it");
+    loadedPF.save._briefCache.clear();
+  }
+
+  // ── ONE HOLD FOR THE WHOLE SEQUENCE ───────────────────────────────────────
+  // Re-entering the dispatcher while the two-call transaction is in flight must
+  // not start a second one: the pack call is PAID, and the flag that covers it has
+  // to span both calls rather than one.
+  await withSavePath(async ({ behavior, tick, makeCore }) => {
+    await withGeneration(async ({ responses, postCount }) => {
+      await withPack(async ({ behavior: packBehavior, packCount }) => {
+        behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+        let releasePack;
+        const parked = new Promise((resolve) => {
+          releasePack = resolve;
+        });
+        packBehavior.pack = async ({ brief }) => {
+          void brief;
+          await parked;
+          return goodPack;
+        };
+        responses.post = async () => ({ status: 200, body: { ok: true, data: gateBriefData } });
+        const meta = wizardConfig();
+        const core = makeCore("chat-pack-hold", 4242);
+        core.host.chatMeta = meta;
+        core.sim = loadedPF.save.restore(meta, "chat-pack-hold");
+        loadedPF.save.armGate(core, meta);
+        const first = loadedPF.save.maybeGenerateBrief(core);
+        await tick();
+        assert.equal(postCount(), 1, "the brief call ran");
+        assert.equal(packCount(), 1, "…and the pack call is in flight");
+        // Every other door into the dispatcher, while the pack call is parked.
+        await loadedPF.save.maybeGenerateBrief(core);
+        loadedPF.save.retryGeneration(core);
+        await tick();
+        assert.equal(postCount(), 1, "no second brief call");
+        assert.equal(packCount(), 1, "and no second PAID pack call");
+        // …AND NOTHING LIFTED. This is the half a call-count assertion cannot see:
+        // a hold that covered only the first call would let a re-entry take the
+        // nothing-to-generate branch — the brief reads as sealed from this
+        // session's cache — install the world and start play with the pack call
+        // still in flight, which is the gate's whole promise broken by a re-entry.
+        assert.equal(loadedPF.save.gateHolds(core), true, "play is still held while the second call is in flight");
+        assert.equal(loadedPF.save.gate.stage, "pack", "…at the stage it is actually waiting on");
+        releasePack();
+        await first;
+        await tick();
+        assert.equal(loadedPF.save.gateHolds(core), false, "the sequence finishes and the gate lifts");
+      });
+    });
+  });
+
+  // ── THE CACHE IS WRITTEN AFTER THE PATCH, NEVER BEFORE ────────────────────
+  // `_cacheBrief`'s rule, copied verbatim for the pack: the cache says "this chat
+  // is sealed", and saying it before the store landed would suppress the retry
+  // that is the only thing between a failed write and a world nobody has.
+  await withSavePath(async ({ armed, behavior, tick, makeCore }) => {
+    await withGeneration(async () => {
+      await withPack(async ({ packCount }) => {
+        behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+        behavior.patch = async (chatId, patch) => {
+          if (patch.pixelforgePack) throw new Error("the pack PATCH did not land");
+        };
+        const meta = { ...wizardConfig(), pixelforgeBrief: packBrief, pixelforgePackWanted: true };
+        const core = makeCore("chat-pack-store", 4242);
+        core.host.chatMeta = meta;
+        core.sim = loadedPF.save.restore(meta, "chat-pack-store");
+        loadedPF.save.armGate(core, meta);
+        // The storage ladder BACKS OFF between attempts, and this fixture records
+        // timers rather than firing them — so the run is pumped rather than
+        // awaited, which is the harness's own note about the two package paths
+        // that park on a promise only a timer resolves.
+        const run = loadedPF.save.maybeGenerateBrief(core);
+        for (let i = 0; i < 8; i++) {
+          await tick();
+          const sleeps = armed.filter((timer) => timer.ms === 500 || timer.ms === 1000);
+          for (const timer of sleeps) armed.splice(armed.indexOf(timer), 1);
+          for (const timer of sleeps) timer.fn();
+        }
+        await run;
+        await tick();
+        assert.equal(packCount(), 1, "the call was made");
+        assert.equal(
+          loadedPF.save._packCache.has("chat-pack-store"),
+          false,
+          "…and nothing was cached, because the PATCH never landed",
+        );
+        assert.equal(loadedPF.save.gateHolds(core), true, "the gate still holds");
+        assert.equal(loadedPF.save.gate.state, "failed", "…on a retry screen");
+        assert.equal(loadedPF.save.gate.failure, "storage", "naming the write that failed");
+        assert.equal(loadedPF.save.gate.stage, "pack", "…and the stage it failed at");
+        assert.equal(
+          loadedPF.save.packExpected(core.host.chatMeta, "chat-pack-store"),
+          true,
+          "so the next visit tries again rather than reading a world with no work in it",
+        );
+      });
+    });
+  });
+
+  // ── THE RETRY SCREEN KNOWS WHICH CALL FAILED ──────────────────────────────
+  {
+    assert.notEqual(
+      loadedPF.save.gateReason("refused", "brief"),
+      loadedPF.save.gateReason("refused", "pack"),
+      "a refusal reads differently once the world exists",
+    );
+    assert.ok(
+      loadedPF.save.gateReason("refused", "brief").includes("setting description"),
+      "at the brief stage the setting is the thing to change",
+    );
+    assert.ok(
+      !loadedPF.save.gateReason("refused", "pack").includes("setting"),
+      "at the pack stage it is not: the setting already produced the world",
+    );
+    assert.ok(
+      loadedPF.save.gateStageNote("pack").includes("safe") &&
+        loadedPF.save.gateStageNote("pack").includes("does not rewrite the world"),
+      "and the pack-stage note says the world is safe and the retry is free",
+    );
+    assert.ok(
+      loadedPF.save.gateStageNote("brief").includes("Nothing was lost"),
+      "…while the brief-stage note says nothing was stored",
+    );
+  }
+
+  // ── REHYDRATION UNDER A HELD GATE IS CONSUME-FREE, AND THE ARMS RE-RUN AT
+  //    THE LIFT ────────────────────────────────────────────────────────────
+  // The half-sealed boot is the first state in which the gate holds over a REAL
+  // world, and rehydration's two consuming arms run on every boot. A boot that
+  // consumes a quarantine slot and then fails its pack call has spent the bag on a
+  // session that never played: the flush refuses under the gate, so nothing
+  // records what came back, and next time the slot is gone.
+  {
+    const stampEntry = (brief, built) => ({
+      reason: "brief",
+      fromV: P.currentV(),
+      stamps: P.stampsFor(built, brief),
+      fields: {
+        rel: { z1: { "Perrin Quill": { d: 2, t: 3 } } },
+        questsActive: [],
+        questsDonePack: { "p:x:a": 2 },
+        found: [],
+        bought: null,
+        home: null,
+        ledgerLines: [],
+        flushedDayWas: 0,
+        flushedDay: 0,
+      },
+    });
+
+    // (i) THE FAILURE SESSION KEEPS THE SLOT.
+    await withSavePath(async ({ behavior, tick, makeCore }) => {
+      await withGeneration(async () => {
+        await withPack(async ({ behavior: packBehavior }) => {
+          behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+          packBehavior.pack = async () => null;
+          const meta = { ...wizardConfig(), pixelforgeBrief: packBrief, pixelforgePackWanted: true };
+          const core = makeCore("chat-pack-consume", 4242);
+          core.host.chatMeta = meta;
+          const built = world.build(4242, "cozy-village", packBrief);
+          loadedPF.quarantine.reset();
+          loadedPF.quarantine.put("chat-pack-consume", "stamp", stampEntry(packBrief, built));
+          core.sim = loadedPF.save.restore(meta, "chat-pack-consume");
+          assert.ok(
+            loadedPF.quarantine.peek("stamp"),
+            "the gated boot did NOT consume the matching slot, even though the world it belongs to is the one standing",
+          );
+          loadedPF.save.armGate(core, meta);
+          await loadedPF.save.maybeGenerateBrief(core);
+          await tick();
+          assert.equal(loadedPF.save.gate.state, "failed", "the pack call failed");
+          assert.ok(loadedPF.quarantine.peek("stamp"), "…and the slot is still in the bag for the next session");
+          loadedPF.quarantine.reset();
+        });
+      });
+    });
+
+    // (ii) THE SUCCESS LIFT LANDS THE RESTORE BEFORE THE FIRST UNGATED FRAME.
+    await withSavePath(async ({ behavior, tick, makeCore }) => {
+      await withGeneration(async () => {
+        await withPack(async () => {
+          behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+          const meta = { ...wizardConfig(), pixelforgeBrief: packBrief, pixelforgePackWanted: true };
+          const core = makeCore("chat-pack-lift", 4242);
+          core.host.chatMeta = meta;
+          const built = world.build(4242, "cozy-village", packBrief);
+          loadedPF.quarantine.reset();
+          loadedPF.quarantine.put("chat-pack-lift", "stamp", stampEntry(packBrief, built));
+          core.sim = loadedPF.save.restore(meta, "chat-pack-lift");
+          assert.deepEqual(P.get(core).rel, {}, "nothing came home while the gate held");
+          loadedPF.save.armGate(core, meta);
+          await loadedPF.save.maybeGenerateBrief(core);
+          await tick();
+          assert.equal(loadedPF.save.gateHolds(core), false, "the pack sealed and the gate lifted");
+          assert.equal(P.get(core).rel?.z1?.["Perrin Quill"]?.t, 3, "and what was set aside is back");
+          assert.equal(P.get(core).quests.done_pack["p:x:a"], 2, "…all of it");
+          assert.equal(loadedPF.quarantine.peek("stamp"), null, "the slot was consumed exactly once, at the lift");
+          loadedPF.quarantine.reset();
+        });
+      });
+    });
+
+    // (iii) THE SAME RE-RUN AT THE OTHER LIFT — the one that INSTALLS. A chat
+    // owed both artifacts boots on the placeholder, so the arm that comes due is
+    // the version re-adoption: a block this build could not read last time is
+    // readable now, and deferring it under the gate would otherwise mean the
+    // player walks into their new world as a defaults boot with the real block
+    // still parked.
+    await withSavePath(async ({ behavior, tick, makeCore }) => {
+      await withGeneration(async () => {
+        await withPack(async () => {
+          behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+          const meta = wizardConfig();
+          const core = makeCore("chat-pack-readopt", 4242);
+          core.host.chatMeta = meta;
+          loadedPF.quarantine.reset();
+          const carried = P.defaultPlayer();
+          carried.pouch = { money: 7, items: [] };
+          loadedPF.quarantine.put("chat-pack-readopt", "version", {
+            adoptable: true,
+            fromV: P.currentV(),
+            block: P.serialize(carried),
+          });
+          core.sim = loadedPF.save.restore(meta, "chat-pack-readopt");
+          assert.ok(loadedPF.quarantine.peek("version"), "the gated boot left the version slot alone");
+          assert.equal(P.get(core).pouch.money, 0, "…and booted defaults under the gate");
+          loadedPF.save.armGate(core, meta);
+          await loadedPF.save.maybeGenerateBrief(core);
+          await tick();
+          assert.equal(loadedPF.save.gateHolds(core), false, "both calls landed and the gate lifted");
+          assert.equal(P.get(core).pouch.money, 7, "the re-adoption ran at the lift, before the first ungated frame");
+          assert.equal(loadedPF.quarantine.peek("version"), null, "…consuming the slot exactly once");
+          assert.ok(loadedPF.quarantine.peek("setAside"), "and parking the block it displaced for a human to resolve");
+          loadedPF.quarantine.reset();
+        });
+      });
+    });
+
+    // (iv) …AND AT THE BARE LIFT, which is the third way out of a held gate and
+    // the one 0.12 could barely reach: the gate was armed for a PACK, and the pack
+    // key turns up from somewhere else (a second device sealed it) so there is
+    // nothing left to generate. Nothing is installed and nothing is resumed —
+    // the gate simply comes down — and the next frame is play either way.
+    await withSavePath(async ({ behavior, tick, makeCore }) => {
+      await withGeneration(async () => {
+        await withPack(async ({ packCount }) => {
+          behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+          const meta = { ...wizardConfig(), pixelforgeBrief: packBrief, pixelforgePackWanted: true };
+          const core = makeCore("chat-pack-bare", 4242);
+          core.host.chatMeta = meta;
+          const built = world.build(4242, "cozy-village", packBrief);
+          loadedPF.quarantine.reset();
+          loadedPF.quarantine.put("chat-pack-bare", "stamp", stampEntry(packBrief, built));
+          core.sim = loadedPF.save.restore(meta, "chat-pack-bare");
+          assert.equal(loadedPF.save.armGate(core, meta), true, "the gate armed for the pack");
+          assert.ok(loadedPF.quarantine.peek("stamp"), "…leaving the slot parked");
+          // The other device's pack lands in the metadata we are holding.
+          core.host.chatMeta = { ...meta, pixelforgePack: goodPack };
+          await loadedPF.save.maybeGenerateBrief(core);
+          await tick();
+          assert.equal(packCount(), 0, "nothing was generated: the pack already exists");
+          assert.equal(loadedPF.save.gateHolds(core), false, "and the gate came down");
+          assert.equal(P.get(core).rel?.z1?.["Perrin Quill"]?.t, 3, "the deferred restore landed at THIS lift too");
+          assert.equal(
+            P.get(core).pouch.money,
+            0,
+            "and the purse is DECLINED, correctly: a block with rows coming home is a veteran's, not a new game's",
+          );
+          loadedPF.quarantine.reset();
+
+          // The same lift with nothing to restore is the one that pays: armGate
+          // declined because it was arming, and no install ran, so this bare lift
+          // is the only site left.
+          const fresh = makeCore("chat-pack-bare-2", 4242);
+          fresh.host.chatMeta = meta;
+          fresh.sim = loadedPF.save.restore(meta, "chat-pack-bare-2");
+          assert.equal(loadedPF.save.armGate(fresh, meta), true, "gated for the pack");
+          fresh.host.chatMeta = { ...meta, pixelforgePack: goodPack };
+          await loadedPF.save.maybeGenerateBrief(fresh);
+          await tick();
+          assert.equal(loadedPF.save.gateHolds(fresh), false, "the gate came down");
+          assert.equal(P.get(fresh).pouch.money, loadedPF.economy.STARTING_PURSE, "…and the world began with a purse");
+        });
+      });
+    });
+
+    // …AND THE SEVERANCE PARK STILL RUNS UNDER THE GATE, because applyStamps
+    // strips the live block before it hands the entry over. Twice is lossless: the
+    // stamp slot MERGES rather than refusing, which is the fact the lane asserts.
+    await withSavePath(async ({ makeCore }) => {
+      const core = makeCore("chat-pack-sever", 4242);
+      const meta = { ...wizardConfig(), pixelforgeBrief: packBrief, pixelforgePackWanted: true };
+      core.host.chatMeta = meta;
+      loadedPF.quarantine.reset();
+      const foreignStamps = { seed: 1, briefHash: 2, mintStamp: 3 };
+      const saved = {
+        v: 1,
+        chatId: "chat-pack-sever",
+        seed: 4242,
+        theme: "cozy-village",
+        zone: "z1",
+        player: {
+          ...P.serialize(P.defaultPlayer()),
+          world: foreignStamps,
+          rel: { z1: { Somebody: { d: 1, t: 1 } } },
+          found: { zones: [{ p: "z2", e: 0, d: 0, day: 1 }] },
+        },
+      };
+      loadedPF.save.simFromSaved(saved, meta, "chat-pack-sever");
+      const first = loadedPF.quarantine.peek("stamp");
+      assert.ok(first, "a gated boot still PARKS what it severed — declining to park would be the real loss");
+      assert.ok(first.fields.rel.z1.Somebody, "with the rows in it");
+      // The same session again (a rebuild under the same held gate).
+      loadedPF.save.simFromSaved(saved, meta, "chat-pack-sever");
+      const merged = loadedPF.quarantine.peek("stamp");
+      assert.ok(merged, "a second severance is not refused");
+      assert.ok(merged.fields.rel.z1.Somebody, "…and the first loss is still in the slot: the bag MERGED them");
+      assert.equal(merged.at, first.at, "the held entry stays the anchor");
+      loadedPF.quarantine.reset();
+    });
+  }
+}
+
 // ── THE DEFAULT PACK IS HELD TO ITS OWN SCHEMA AT BOOT (plan §2.2f) ──────────
 // The skins' idiom (59-economy) and the legacy name book's (20-world): the
 // negative half is what makes a boot assertion an assertion rather than a
