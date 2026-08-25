@@ -23,6 +23,7 @@ import {
   noodlerViewerPersonaSchema,
   noodleGenerationRequestSchema,
   noodleAccountSettingsPatchSchema,
+  noodleInteractionUpdateSchema,
   noodleStageProfileUpdateSchema,
   noodleStageProfileDraftRequestSchema,
   readNoodlePollFromMetadata,
@@ -928,6 +929,49 @@ export async function slurpRoutes(app: FastifyInstance) {
     });
     if (!interaction) return reply.code(404).send({ error: "NoodleR interaction not found" });
     return interaction;
+  });
+
+  app.patch("/noodler/posts/:postId/interactions/:interactionId", async (req, reply) => {
+    const { postId, interactionId } = req.params as { postId: string; interactionId: string };
+    const parsed = noodleInteractionUpdateSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const interaction = await noodle.getInteractionById(interactionId);
+    if (!interaction || interaction.postId !== postId)
+      return reply.code(404).send({ error: "Slurp comment not found" });
+    if (interaction.type !== "reply") return reply.code(403).send({ error: "Only comments can be edited." });
+    const identity = await resolveViewerIdentity(parsed.data.personaId);
+    if (!identity?.actor) return reply.code(404).send({ error: "Slurp viewer profile not found" });
+    const actor = await noodle.getNoodlerAccountById(interaction.actorAccountId);
+    const canManage =
+      interaction.actorAccountId === identity.actor.id ||
+      (actor?.kind === "character" && actor.sourceKind === "character");
+    if (!canManage) return reply.code(403).send({ error: "You can only edit comments owned by this persona." });
+    const content = parsed.data.content === undefined ? interaction.content : parsed.data.content?.trim() || null;
+    const imageUrl = parsed.data.imageUrl === undefined ? interaction.imageUrl : parsed.data.imageUrl?.trim() || null;
+    if (!content && !imageUrl) return reply.code(400).send({ error: "Comments need text or an image." });
+    const updated = await noodle.updateInteraction(interactionId, { content, imageUrl });
+    if (!updated) return reply.code(404).send({ error: "Slurp comment not found" });
+    return updated;
+  });
+
+  app.delete("/noodler/posts/:postId/interactions/:interactionId", async (req, reply) => {
+    const { postId, interactionId } = req.params as { postId: string; interactionId: string };
+    const parsed = noodlerViewerPersonaSchema.safeParse(req.query);
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.flatten() });
+    const interaction = await noodle.getInteractionById(interactionId);
+    if (!interaction || interaction.postId !== postId)
+      return reply.code(404).send({ error: "Slurp comment not found" });
+    if (interaction.type !== "reply") return reply.code(403).send({ error: "Only comments can be deleted." });
+    const identity = await resolveViewerIdentity(parsed.data.personaId);
+    if (!identity?.actor) return reply.code(404).send({ error: "Slurp viewer profile not found" });
+    const actor = await noodle.getNoodlerAccountById(interaction.actorAccountId);
+    const canManage =
+      interaction.actorAccountId === identity.actor.id ||
+      (actor?.kind === "character" && actor.sourceKind === "character");
+    if (!canManage) return reply.code(403).send({ error: "You can only delete comments owned by this persona." });
+    const deleted = await noodle.deleteInteractionById(interactionId);
+    if (deleted.length === 0) return reply.code(404).send({ error: "Slurp comment not found" });
+    return deleted;
   });
 
   // NoodleR posts are stage-profile posts the user fully owns, so edit/delete route

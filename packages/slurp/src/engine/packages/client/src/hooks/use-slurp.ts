@@ -970,6 +970,40 @@ export function useDeleteNoodlerPost() {
   });
 }
 
+export function useUpdateNoodlerInteraction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      postId,
+      interactionId,
+      personaId,
+      ...input
+    }: {
+      postId: string;
+      interactionId: string;
+      personaId: string;
+      content?: string | null;
+      imageUrl?: string | null;
+    }) =>
+      api.patch<NoodleInteraction>(
+        `/slurp/noodler/posts/${encodeURIComponent(postId)}/interactions/${encodeURIComponent(interactionId)}`,
+        { personaId, ...input },
+      ),
+    onSuccess: (_interaction, input) => qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
+  });
+}
+
+export function useDeleteNoodlerInteraction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ postId, interactionId, personaId }: { postId: string; interactionId: string; personaId: string }) =>
+      api.delete<NoodleInteraction[]>(
+        `/slurp/noodler/posts/${encodeURIComponent(postId)}/interactions/${encodeURIComponent(interactionId)}?personaId=${encodeURIComponent(personaId)}`,
+      ),
+    onSuccess: (_deleted, input) => qc.invalidateQueries({ queryKey: noodleKeys.viewer(input.personaId) }),
+  });
+}
+
 export function useUpdateNoodlerAccess() {
   const qc = useQueryClient();
   return useMutation({

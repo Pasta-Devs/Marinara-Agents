@@ -50,6 +50,7 @@ import {
   useTriggerNoodlerCreatorReply,
   useCreateNoodlerStageProfile,
   useDeleteNoodlerPost,
+  useDeleteNoodlerInteraction,
   useGenerateNoodlerNoodlePost,
   useConfirmNoodlerImagePrompts,
   useRunNoodlerAutoPostNow,
@@ -67,6 +68,7 @@ import {
   useToggleNoodlerSubscription,
   useUnlockNoodlerPost,
   useUpdateNoodlerPost,
+  useUpdateNoodlerInteraction,
   useReplaceNoodlerPostImage,
   useUpdateNoodlerAccess,
   useUpdateNoodlerAutoPosting,
@@ -500,6 +502,8 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
   // viewer feed is refetched on success.
   const updatePost = useUpdateNoodlerPost();
   const deletePost = useDeleteNoodlerPost();
+  const updateInteraction = useUpdateNoodlerInteraction();
+  const deleteInteraction = useDeleteNoodlerInteraction();
   const updateAccess = useUpdateNoodlerAccess();
   const [draftNoodleAccountId, setDraftNoodleAccountId] = useState<string | null>(null);
   const [sourceSearch, setSourceSearch] = useState("");
@@ -760,6 +764,53 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
       },
     );
   };
+  const [editingReplyId, setEditingReplyId] = useState<string | null>(null);
+  const [editingReplyContent, setEditingReplyContent] = useState("");
+  const startEditingReply = (reply: NoodleInteraction) => {
+    setEditingReplyId(reply.id);
+    setEditingReplyContent(reply.content ?? "");
+  };
+  const cancelEditingReply = () => {
+    setEditingReplyId(null);
+    setEditingReplyContent("");
+  };
+  const saveEditedReply = (post: NoodlePostCardModel, reply: NoodleInteraction) => {
+    if (!viewerPersonaId) return;
+    const content = editingReplyContent.trim();
+    if (!content && !reply.imageUrl) {
+      toast.error(localizeUi("ui.noodle.noodlehome.commentsNeedTextOrAnImage"));
+      return;
+    }
+    updateInteraction.mutate(
+      {
+        postId: post.id,
+        interactionId: reply.id,
+        personaId: viewerPersonaId,
+        content,
+      },
+      {
+        onSuccess: cancelEditingReply,
+        onError: (error) =>
+          toast.error(errorMessage(error, localizeUi("ui.noodle.noodlehome.couldNotEditNoodleComment"))),
+      },
+    );
+  };
+  const deleteNoodleReply = async (post: NoodlePostCardModel, reply: NoodleInteraction) => {
+    const confirmed = await showConfirmDialog({
+      title: localizeUi("ui.noodle.noodlehome.deleteNoodleComment"),
+      message: localizeUi("ui.noodle.noodlehome.thisRemovesTheCommentAndAnyRepliesOrLikes"),
+      confirmLabel: localizeUi("ui.noodle.noodlepostcard.deleteComment"),
+      tone: "destructive",
+    });
+    if (!confirmed || !viewerPersonaId) return;
+    deleteInteraction.mutate(
+      { postId: post.id, interactionId: reply.id, personaId: viewerPersonaId },
+      {
+        onError: (error) =>
+          toast.error(errorMessage(error, localizeUi("ui.noodle.noodlehome.couldNotDeleteNoodleComment"))),
+      },
+    );
+  };
   const postCardController = useNoodlePostCardController({
     postManagement: false,
     personaAccount: viewerActorAccount,
@@ -777,6 +828,17 @@ export function SlurpHome({ navigation, onNavigate }: SlurpHomeProps) {
     updatePostPending: updatePost.isPending || replacePostImage.isPending,
     titleMaxLength: NOODLER_POST_TITLE_MAX_LENGTH,
     allowPollOnlyEdits: true,
+    replyManagement: {
+      editingReplyId,
+      editingReplyContent,
+      setEditingReplyContent,
+      startEditingReply,
+      cancelEditingReply,
+      saveEditedReply,
+      deleteNoodleReply,
+      updateInteraction,
+      deleteInteraction,
+    },
     deduplicatePollBody: false,
     imageFit: "contain",
     imageEditing: {
