@@ -508,7 +508,10 @@ PF.Hud = class {
     const clock = this.core.sim.clockLabel();
     this.refreshChips();
     if (result.leveled) {
-      this.toast(`Fishing is level ${result.leveled} now — ${clock}`);
+      // THEMED, out of the same word book the sheet reads (`verbSkin`): a colony
+      // levels "Angling", and this line was the one place the raw verb reached a
+      // player at all.
+      this.toast(`${PF.economy.verbSkin(world, "fishing").name} is level ${result.leveled} now — ${clock}`);
       return;
     }
     if (!result.caught.length) {
@@ -689,10 +692,12 @@ PF.Hud = class {
       // NEWEST FIRST — and newest here means most recently WRITTEN, not the
       // highest day. The two agree everywhere except after a rewind, where a
       // restore's notice carries a day BELOW the severance notice it is the
-      // sequel to, and sorting by day would print the world coming back above
-      // the sentence saying it went. These rows are events about the save and
-      // the day on them is a stamp, not the order they happened in; the day
-      // groups below sort, because a line really does belong to its day.
+      // sequel to, so the descending day sort the groups below use would print
+      // the sentence saying the world went above the notice of it coming back.
+      // Reverse insertion order is what puts the sequel on top. These rows are
+      // events about the save and the day on them is a stamp, not the order
+      // they happened in; the day groups below sort, because a line really does
+      // belong to its day.
       for (const row of notices.slice().reverse()) {
         const said = typeof row?.[1] === "string" ? row[1] : "";
         band.appendChild(PF.el("div", { text: `Day ${PF.player.resolvedDay(row?.[0])} — ${said}` }));

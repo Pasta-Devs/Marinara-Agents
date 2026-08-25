@@ -15273,6 +15273,27 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
         `naming whoever the brief made (${hint})`,
       );
       assert.notEqual(hint, E.rodHint(bare.core), "the two themes do not say the same sentence");
+
+      // THE LEVEL-UP TOAST, the other line a colony reads out of this verb — and
+      // the one that carried the raw English word instead of the theme's. The
+      // sheet already renders the skill through `verbSkin`, so a colony that
+      // levels "Fishing" on the toast and "Angling" on the panel is two names for
+      // one number. Driven off the prototype over a stubbed session because the
+      // sentence is what is under test and not the roll that earned it: a real
+      // level-up here would need a colony pond, a rod and the xp to tip it, none
+      // of which this line reads.
+      const toasts = [];
+      const surface = { core: colonyCore, toast: (t) => toasts.push(t), refreshChips() {} };
+      const realFish = E.fish;
+      try {
+        E.fish = () => ({ ok: true, reason: null, hint: "", windows: 1, caught: [], leveled: 4, days: [] });
+        loadedPF.Hud.prototype.fish.call(surface, "dusk");
+      } finally {
+        E.fish = realFish;
+      }
+      assert.equal(toasts.length, 1, "a level-up toasts once");
+      assert.ok(/^Angling is level 4 now/.test(toasts[0]), `…in the colony's word for the verb (${toasts[0]})`);
+      assert.ok(!/Fishing/.test(toasts[0]), "…and never the valley's");
     }
 
     // ── THE SEVENTH VALUE: NO PLAYER BLOCK ON THE SIM AT ALL ─────────────────
