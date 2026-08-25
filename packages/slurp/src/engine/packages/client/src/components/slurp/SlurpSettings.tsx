@@ -86,11 +86,17 @@ function NumberSetting({
       return;
     }
     // Serialize saves so a slow older request can't land after a newer one and persist a
-    // stale value; skip a queued save once a later edit has already superseded it.
+    // stale value; skip a queued save (and its failure recovery) once a later edit has
+    // already superseded it. Swallow rejections so one failed save doesn't wedge the queue
+    // for every save queued after it.
     latestSaveRef.current = next;
     saveQueueRef.current = saveQueueRef.current.then(async () => {
       if (latestSaveRef.current !== next) return;
-      if ((await onSave(next)) === false) setDraft(String(value));
+      try {
+        if ((await onSave(next)) === false && latestSaveRef.current === next) setDraft(String(value));
+      } catch {
+        if (latestSaveRef.current === next) setDraft(String(value));
+      }
     });
     await saveQueueRef.current;
   };
