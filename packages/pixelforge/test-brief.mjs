@@ -12472,6 +12472,117 @@ await withSavePath(async ({ behavior, makeCore }) => {
   );
 }
 
+// ── THE THEME ID ITSELF IS RESOLVED AS AN OWN PROPERTY (#515) ─────────────────
+// The UPSTREAM half of the case directly above, and the reason a save row can
+// carry a prototype-named theme at all. `THEMES[id]` was bare, so "constructor"
+// came back a truthy FUNCTION, was accepted as a theme id, and was PINNED into
+// the module's `activeTheme` — the one thing setTheme's own docstring has always
+// promised an unknown id cannot do. From there it reaches world.theme, the save
+// row, and every theme-keyed table downstream of both.
+{
+  try {
+    for (const id of ["constructor", "__proto__", "toString", "valueOf", "hasOwnProperty"]) {
+      loadedPF.art.setTheme("cozy-village");
+      assert.equal(loadedPF.art.setTheme(id), "cozy-village", `"${id}" is not a theme, whatever the prototype answers`);
+      assert.equal(loadedPF.art.theme, "cozy-village", `…and it is not left pinned as the active one`);
+    }
+    // Not a blanket refusal of anything unfamiliar: the themes this build really
+    // ships still resolve to themselves, and an ordinary dropped one still lands
+    // on the default, which is the behaviour the docstring describes.
+    for (const id of loadedPF.art.themeIds()) {
+      assert.equal(loadedPF.art.setTheme(id), id, `"${id}" is a theme this build ships and still resolves to itself`);
+    }
+    assert.equal(loadedPF.art.setTheme("retired-theme"), "cozy-village", "and a theme this build dropped falls back");
+  } finally {
+    loadedPF.art.setTheme("cozy-village");
+  }
+}
+
+// ── THE WORKED EXAMPLE IS PICKED THE SAME WAY (#515, found by the sweep) ──────
+// defaults() reads DEFAULT_BRIEFS by the theme it is HANDED, before validate()
+// applies the whitelist one screen down, and it is exported — so the word comes
+// from wherever the caller got it. Bare, `defaults("__proto__")` handed
+// Object.prototype in as the worked example; it is an object, so it survived
+// validate()'s transport check, and every field then floored to nothing. The
+// brief came back themed cozy-village and EMPTY: the fallback on that line
+// reading as though it had fired when it had not.
+{
+  const cozy = JSON.stringify(brief.defaults("cozy-village", 5));
+  assert.equal(JSON.stringify(brief.defaults("retired-theme", 5)), cozy, "an unknown theme gets the default's brief");
+  for (const hostile of ["constructor", "__proto__", "toString", "valueOf", "hasOwnProperty"]) {
+    // The SAME brief, not merely a non-empty one: a prototype-named theme is a
+    // theme this build does not ship, and gets exactly what any other gets.
+    assert.equal(JSON.stringify(brief.defaults(hostile, 5)), cozy, `"${hostile}" gets it too, whole rather than empty`);
+  }
+  const scifi = brief.defaults("sci-fi-colony", 5);
+  assert.equal(scifi.theme, "sci-fi-colony", "and a theme this build does ship still gets its own worked example");
+  assert.ok(scifi.features.length > 0, "…with the features that example is written to carry");
+}
+
+// ── …AND A WHOLE COMPILED SETTLEMENT IS NOT LOST TO ONE (#515) ────────────────
+// The name book was the `??`-never-reaches-fallback shape: read bare,
+// RESIDENT_NAMES["__proto__"] is Object.prototype, `??` keeps it because it is
+// not nullish, and the first `nameBook.family[…]` throws — into build()'s catch,
+// which degrades to the LEGACY three-zone world. Silently, which is the part
+// worth a case: the only tell a player gets is that the settlement their brief
+// describes in eighteen zones comes back as three.
+//
+// Staged through the SEALED BRIEF's theme rather than through setTheme, with the
+// guard one file up removed for the length of the build. The point of the line
+// is that the name-book read stands on its own — not that the module above it
+// happens to keep hostile words away from it today.
+{
+  const realSetTheme = loadedPF.art.setTheme;
+  try {
+    const honest = world.build(4242, "cozy-village", brief.defaults("cozy-village", 4242));
+    assert.equal(honest.brieved, true, "the control is a compiled world and not a degraded one");
+    for (const hostile of ["constructor", "__proto__", "toString", "valueOf"]) {
+      const sealed = brief.defaults("cozy-village", 4242);
+      sealed.theme = hostile;
+      loadedPF.art.setTheme = null;
+      const w = world.build(4242, hostile, sealed);
+      loadedPF.art.setTheme = realSetTheme;
+      assert.equal(w.brieved, true, `a brief themed "${hostile}" COMPILES rather than degrading to the legacy world`);
+      assert.equal(Object.keys(w.zones).length, Object.keys(honest.zones).length, "…to its full zone count");
+      // And the fallback the line documents actually FIRED, rather than the read
+      // merely not throwing: the residents the compiler mints come back with the
+      // default book's names, byte for byte the ones the honest world minted.
+      assert.ok(w.minted.length > 0, "…with residents minted at all");
+      assert.deepEqual(w.minted, honest.minted, "…and named out of the book the fallback names");
+      assert.equal(w.mintStamp, honest.mintStamp, "…down to the stamp that travels with them");
+    }
+  } finally {
+    loadedPF.art.setTheme = realSetTheme;
+    loadedPF.art.setTheme("cozy-village");
+  }
+}
+
+// ── AND THE ROW THAT CARRIED ONE LOADS INTO THE DEFAULT WORLD (#515) ──────────
+// The chain end to end, through the real load path. A save row's `theme` is
+// untrusted JSON, simFromSaved hands it straight to world.build, and before the
+// guard it came back out AS world.theme — with the legacy layout's own name book
+// read off that same string, so every zone in the restored world was a place
+// with no name. The flush afterwards then wrote the hostile theme back down.
+{
+  try {
+    for (const hostile of ["constructor", "__proto__", "toString"]) {
+      const row = JSON.parse(`{"v":1,"seed":1234,"theme":${JSON.stringify(hostile)}}`);
+      const sim = loadedPF.save.simFromSaved(row, {}, "chat-proto-theme-515");
+      assert.equal(sim.world.theme, "cozy-village", `a row themed "${hostile}" restores the DEFAULT theme's world`);
+      assert.equal(loadedPF.art.theme, "cozy-village", "…and nothing was pinned to it on the way through");
+      for (const zone of Object.values(sim.world.zones)) {
+        assert.ok(typeof zone.name === "string" && zone.name.trim(), `…and ${zone.id} is a place with a name`);
+      }
+      // The row HEALS rather than round-tripping: the next flush writes back the
+      // theme the world it restored really has.
+      const snap = loadedPF.save.snapshot({ sim, chatId: "chat-proto-theme-515" });
+      assert.equal(snap.theme, "cozy-village", "…and the next write puts an honest theme back in the row");
+    }
+  } finally {
+    loadedPF.art.setTheme("cozy-village");
+  }
+}
+
 // (av) THE BERTH: S3'S FIRST MONEY SINK AND P1'S BED, IN ONE TRANSACTION.
 // The plan's chosen vertical (§2, Decisions #2): there is no automatic home, so
 // the player-driven path to a bed is renting a room — which is also the first

@@ -40,6 +40,26 @@ PF.rng = (seed) => {
 
 PF.clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
+/** The value a map holds AT `key` ITSELF, or undefined. The only safe way to
+ *  read a table with a word this package did not write.
+ *
+ *  A bare `TABLE[key]` walks the prototype chain, and every object has one:
+ *  `TABLE["constructor"]` is a function, `TABLE["toString"]` is a function,
+ *  `TABLE["__proto__"]` is Object.prototype. All of them are truthy AND
+ *  non-nullish, which is the whole bug class — a `TABLE[key] || fallback` or
+ *  `TABLE[key] ?? fallback` written against a caller-, model- or save-supplied
+ *  key has a fallback that CANNOT FIRE, and the caller is handed a builtin
+ *  where it asked for a row. What happens next is never a clean refusal: the
+ *  builtin reads as a real answer and pins state, or the first property access
+ *  off it throws somewhere with a catch that degrades quietly.
+ *
+ *  Shared rather than re-argued per site because the S5 gates caught this same
+ *  read three times before it got a helper — the zone lookups (slices 1-2), the
+ *  player block's maps (slices 3-4), and the economy's skin and price tables
+ *  (slices 5-6). Whack-a-mole is not a strategy; a fallback goes through here. */
+PF.own = (map, key) =>
+  map && typeof map === "object" && Object.prototype.hasOwnProperty.call(map, key) ? map[key] : undefined;
+
 PF.uid = () => {
   if (globalThis.crypto?.randomUUID) return crypto.randomUUID();
   return `pf-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;

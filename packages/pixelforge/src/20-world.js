@@ -2232,7 +2232,12 @@ PF.world = (() => {
     // A side stream, so minting residents does not shift the tile RNG under the
     // ground cover and every world that had no minting still lays the same grass.
     const mintRnd = PF.rng(PF.hashStr(`${seed >>> 0}|residents|${brief.name}`));
-    const nameBook = RESIDENT_NAMES[activeTheme] ?? RESIDENT_NAMES["cozy-village"];
+    // Through PF.own so the fallback on the right is REACHABLE. Bare, a theme
+    // named "constructor" answered with a function, `??` saw something
+    // non-nullish and kept it, and the first `nameBook.family[…]` below threw —
+    // into build()'s catch, which degrades to the legacy three-zone world. A
+    // brief that compiles fine is not a thing to lose over a word.
+    const nameBook = PF.own(RESIDENT_NAMES, activeTheme) ?? RESIDENT_NAMES["cozy-village"];
     const takenNames = new Set(brief.cast.map((m) => m.name));
     const minted = [];
     // Off EVERY sealed household, resident or not: the target ignores the
