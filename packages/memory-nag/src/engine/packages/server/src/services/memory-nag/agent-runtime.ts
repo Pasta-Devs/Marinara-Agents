@@ -69,16 +69,16 @@ export const memoryNagAgentRuntime = {
       context: recentContext,
       perCharacter: vault.settings.memoriesToConsider,
     });
+    const runtime = getMemoryNagRuntime();
     if (participants.length > 0 && !sameParticipants(vault.participants, participants)) {
       void updateMemoryNagVault(context.chatId, (current) => ({ ...current, participants })).catch((error) => {
-        getMemoryNagRuntime().logger.warn(
+        runtime.logger.warn(
           "[memory-nag] Participant state failed to save for chat %s: %s",
           context.chatId,
           error instanceof Error ? error.message : String(error),
         );
       });
     }
-    const runtime = getMemoryNagRuntime();
     runtime.logger.debugOverride(
       runtime.isDebugAgentsEnabled(),
       "[memory-nag] Prepared %d eligible vault memories for chat %s",
