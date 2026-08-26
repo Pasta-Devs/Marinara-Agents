@@ -1931,6 +1931,8 @@ export default function MemoryVault({
       queryKeys.review,
       queryKeys.pendingDrafts,
       queryKeys.rejectedSuggestions,
+      queryKeys.integrity,
+      queryKeys.lastInjectionRoot,
     ]);
   }
   async function undoArchive(recovery: ArchiveUndoState) {
