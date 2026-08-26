@@ -56,7 +56,7 @@ import { quarantineLegacyCapturedTurnSources } from "./legacy-source-quarantine.
 import { isAdditiveLtmSection } from "./draft-projector.js";
 import { logger } from "./package-runtime.js";
 import { ensureLtmActivityIndex } from "./activity-index.js";
-import { manualContribution, renderSectionContributions, sectionContributions } from "./section-contributions.js";
+import { manualContribution, renderSectionContributions } from "./section-contributions.js";
 import { extractionFingerprintForLtmSourceNote, sourceHashForLtmSourceNote } from "./source-hash.js";
 
 export type UpdateLtmNotePatch = Partial<Omit<LtmNote, "id" | "createdAt" | "updatedAt" | "version">> & {
@@ -440,12 +440,11 @@ export class LongTermMemoryStorage {
                 const { contributions: _previousContributions, ...previousFields } = previous ?? {};
                 const { contributions: _nextContributions, ...nextFields } = section;
                 if (previous && JSON.stringify(previousFields) === JSON.stringify(nextFields)) return [key, previous];
+                // A manual edit supersedes the section's accumulated contributions. Keeping prior source
+                // contributions would re-render deleted or rewritten lines above the edit ("ghost" text).
                 return [
                   key,
-                  renderSectionContributions(
-                    [...sectionContributions(previous), manualContribution(section)],
-                    isAdditiveLtmSection(current, key),
-                  )!,
+                  renderSectionContributions([manualContribution(section)], isAdditiveLtmSection(current, key))!,
                 ];
               }),
             )
