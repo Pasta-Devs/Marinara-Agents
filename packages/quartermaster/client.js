@@ -1,4 +1,4 @@
-// Quartermaster 0.1.8 — Marinara Engine roleplay-tracker capability (single-file client bundle)
+// Quartermaster 0.1.9 — Marinara Engine roleplay-tracker capability (single-file client bundle)
 // Built from packages/quartermaster/src (3 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -298,6 +298,10 @@ QM.dock = {
         this.items = result.items;
         this.outfits = result.outfits;
         this.appearanceFeedMode = result.appearanceFeedMode;
+        // Server-resolved (chat's personaId -> that persona's avatarPath) —
+        // neither slot's capabilityProps carries this, confirmed against the
+        // Engine's actual render sites.
+        this.setPersonaAvatarUrl(result.personaAvatarUrl || null);
       } catch (error) {
         this.error = error && error.message ? error.message : String(error);
       }
@@ -1101,17 +1105,12 @@ class QuartermasterElement extends HTMLElement {
     return this._props && typeof this._props.chatId === "string" ? this._props.chatId : null;
   }
 
-  get _personaAvatarUrl() {
-    const personaInfo = this._props && this._props.personaInfo;
-    return personaInfo && typeof personaInfo.avatarUrl === "string" ? personaInfo.avatarUrl : null;
-  }
-
   _render() {
+    // Neither slot's capabilityProps carries personaInfo/avatarUrl (checked
+    // against the Engine's actual RoleplayHUD.tsx/TrackerDataSidebar.tsx
+    // render sites) — the portrait is resolved server-side instead, from
+    // the GET /inventory response. See QM.dock._loadAndPaint.
     QM.dock.setChat(this._chatId);
-    // Only one of the two slot instances (roleplay-tracker/tracker-panel) is
-    // confirmed to carry personaInfo — set whichever one actually has it
-    // rather than risk clobbering a real avatar with null from the other.
-    if (this._personaAvatarUrl) QM.dock.setPersonaAvatarUrl(this._personaAvatarUrl);
 
     let button = this._button;
     if (!button || !this.contains(button)) {

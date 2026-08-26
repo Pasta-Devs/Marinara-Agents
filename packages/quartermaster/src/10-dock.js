@@ -215,6 +215,10 @@ QM.dock = {
         this.items = result.items;
         this.outfits = result.outfits;
         this.appearanceFeedMode = result.appearanceFeedMode;
+        // Server-resolved (chat's personaId -> that persona's avatarPath) —
+        // neither slot's capabilityProps carries this, confirmed against the
+        // Engine's actual render sites.
+        this.setPersonaAvatarUrl(result.personaAvatarUrl || null);
       } catch (error) {
         this.error = error && error.message ? error.message : String(error);
       }

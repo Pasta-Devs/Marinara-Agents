@@ -200,6 +200,21 @@ async function loadInventoryState(documents, chatId, ownerId) {
   };
 }
 
+// Neither slot instance's capabilityProps carries personaInfo/avatarUrl --
+// confirmed against the Engine's actual render sites this session
+// (RoleplayHUD.tsx's roleplay-tracker props and TrackerDataSidebar.tsx's
+// tracker-panel props are both far narrower than assumed). So the portrait
+// is resolved server-side instead: the chat's personaId, then that
+// persona's avatarPath via the resources facade — the same field name the
+// Engine's own client reads (persona.avatarPath) for the identical purpose.
+async function resolvePersonaAvatarUrl(persistence, resources, chatId) {
+  const chat = await persistence.getChat(chatId);
+  if (!chat || !chat.personaId) return null;
+  const [persona] = await resources.listPersonas([chat.personaId]);
+  const avatarPath = persona && persona.data && typeof persona.data.avatarPath === "string" ? persona.data.avatarPath : null;
+  return avatarPath || null;
+}
+
 async function saveInventoryState(documents, chatId, ownerId, state) {
   const id = inventoryDocId(chatId, ownerId);
   const now = new Date().toISOString();
@@ -231,7 +246,7 @@ async function saveInventoryState(documents, chatId, ownerId, state) {
 
 export async function activate(context) {
   const { api } = context;
-  const { persistence } = api.runtime;
+  const { persistence, resources } = api.runtime;
   const { documents } = persistence;
 
   // Every route below calls this instead of saveInventoryState directly, so
@@ -247,7 +262,8 @@ export async function activate(context) {
       routes.get("/inventory/:chatId/:ownerId", async (request, reply) => {
         const { chatId, ownerId } = request.params;
         const state = await loadInventoryState(documents, chatId, ownerId);
-        return { ...state, equipSlots: EQUIP_SLOTS };
+        const personaAvatarUrl = await resolvePersonaAvatarUrl(persistence, resources, chatId);
+        return { ...state, equipSlots: EQUIP_SLOTS, personaAvatarUrl };
       });
 
       routes.post("/inventory/:chatId/:ownerId/items", async (request, reply) => {
