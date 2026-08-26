@@ -188,9 +188,10 @@ export async function generateNoodlerPostImage(input: {
   // Custom prompt templates may omit `userInstructions`, so restore configured instructions only
   // when the rendered prompt does not already contain them.
   const configuredImageInstructions = input.settings.imageGenerationPrompt.trim();
+  const connectionImageInstructions = input.imageConnection.imagePromptInstructions?.trim() ?? "";
   const imagePromptInstructions = [
     configuredImageInstructions && !postPrompt.includes(configuredImageInstructions) ? configuredImageInstructions : "",
-    input.imageConnection.imagePromptInstructions?.trim() ?? "",
+    connectionImageInstructions,
   ]
     .filter(Boolean)
     .join("\n");
@@ -217,7 +218,13 @@ export async function generateNoodlerPostImage(input: {
     selectNoodleImageProviderPrompt({
       rewrittenPrompt,
       rawPrompt: rawProviderPrompt,
-      privateContext: [imagePromptInstructions, characterPersonality, characterImageInstructions, styleGuidance],
+      privateContext: [
+        configuredImageInstructions,
+        connectionImageInstructions,
+        characterPersonality,
+        characterImageInstructions,
+        styleGuidance,
+      ],
     }),
   );
   const finalPrompt = input.compositionGuard ? `${finalPromptBase}\n\n${input.compositionGuard}` : finalPromptBase;

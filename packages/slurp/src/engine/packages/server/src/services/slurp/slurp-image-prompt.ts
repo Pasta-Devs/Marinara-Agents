@@ -15,12 +15,12 @@ export function selectNoodleImageProviderPrompt(input: {
 
   const normalizedPrompt = rewrittenPrompt.toLocaleLowerCase().replace(/\s+/gu, " ");
   const hasInternalMarker =
-    /(?:^|[\n<])\s*(?:user image instructions|image prompting instructions|generation guidance|personality|character image preferences|character[ _]context|art[ _]style[ _]guidance|post text)\s*[:>]/iu.test(
+    /(?:^|[\n<])\s*(?:user[ _]image[ _]instructions|image[ _]prompting[ _]instructions|generation[ _]guidance|personality|character[ _]image[ _]preferences|character[ _]context|art[ _]style[ _]guidance|post[ _]text)\s*[:>]/iu.test(
       rewrittenPrompt,
     );
   const copiesPrivateContext = input.privateContext?.some((value) => {
     const normalizedValue = value?.trim().toLocaleLowerCase().replace(/\s+/gu, " ");
-    return normalizedValue && normalizedValue.length >= 8 && normalizedPrompt.includes(normalizedValue);
+    return normalizedValue && /[\p{L}\p{N}]/u.test(normalizedValue) && normalizedPrompt.includes(normalizedValue);
   });
 
   return hasInternalMarker || copiesPrivateContext ? input.rawPrompt : rewrittenPrompt;

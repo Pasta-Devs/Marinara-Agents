@@ -20,6 +20,8 @@ assert.equal(selectNoodleImageProviderPrompt({ rewrittenPrompt: appearancePrompt
 for (const leakedRewrite of [
   `A person reading beside a window.\n${internalContext}`,
   "A person reading beside a window.\n<character_context>private context</character_context>",
+  "A person reading beside a window.\n<generation_guidance>private context</generation_guidance>",
+  "A person reading beside a window.\n<user_image_instructions>private context</user_image_instructions>",
   "A person reading beside a window.\nCharacter image preferences: private context",
   `A person reading beside a window.\n${styleGuidance}`,
   "A person reading beside a window.\n<art_style_guidance>private style</art_style_guidance>",
@@ -33,6 +35,23 @@ for (const leakedRewrite of [
     rawPrompt,
   );
 }
+
+assert.equal(
+  selectNoodleImageProviderPrompt({
+    rewrittenPrompt: "A person reading beside a window with no text.",
+    rawPrompt,
+    privateContext: ["no text"],
+  }),
+  rawPrompt,
+);
+assert.equal(
+  selectNoodleImageProviderPrompt({
+    rewrittenPrompt,
+    rawPrompt,
+    privateContext: ["."],
+  }),
+  rewrittenPrompt,
+);
 
 // Disabled interpretation and rewrite failure both use the raw visual prompt only.
 for (const unavailablePrompt of [null, undefined, ""]) {
