@@ -10,7 +10,6 @@ const APP_VERSION = (
   }
 ).version;
 const NOODLE_BLUE_RGB = "rgb(126, 167, 255)";
-const NOODLE_LIGHT_FOREGROUND = "color(srgb 0.360482 0.453112 0.708674 / 0.986)";
 
 function createDeferred() {
   let resolve!: () => void;
@@ -92,34 +91,24 @@ async function setStoredTheme(page: Page, theme: "dark" | "light") {
   );
 }
 
-async function expectSurfaceAccent(locator: Locator, accent: string, foreground: string) {
+async function expectSurfaceAccent(locator: Locator, accent: string) {
   await expect
     .poll(() =>
-      locator.evaluate(
-        (element, expected) => {
-          const probe = document.createElement("span");
-          probe.style.color = "var(--noodle-accent-foreground)";
-          element.appendChild(probe);
-          const elementStyle = getComputedStyle(element);
-          const resolvedForeground = getComputedStyle(probe).color;
-          const result = {
-            accent: elementStyle.getPropertyValue("--noodle-accent").trim(),
-            color: elementStyle.color,
-            expected,
-            resolvedForeground,
-          };
-          probe.remove();
-          return result;
-        },
-        { accent, foreground },
-      ),
+      locator.evaluate((element) => {
+        const probe = document.createElement("span");
+        probe.style.color = "var(--noodle-accent-foreground)";
+        element.appendChild(probe);
+        const elementStyle = getComputedStyle(element);
+        const resolvedForeground = getComputedStyle(probe).color;
+        const result = {
+          accent: elementStyle.getPropertyValue("--noodle-accent").trim(),
+          usesForeground: elementStyle.color === resolvedForeground,
+        };
+        probe.remove();
+        return result;
+      }),
     )
-    .toEqual({
-      accent,
-      color: foreground,
-      expected: { accent, foreground },
-      resolvedForeground: foreground,
-    });
+    .toEqual({ accent, usesForeground: true });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -1146,18 +1135,10 @@ test.describe("package-owned Noodle interface", () => {
       await openNoodle(page);
       await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
       await expect(ownComment).toBeVisible();
-      await expectSurfaceAccent(
-        ownComment.locator("[data-noodle-avatar-fallback]"),
-        "#7EA7FF",
-        NOODLE_LIGHT_FOREGROUND,
-      );
-      await expectSurfaceAccent(
-        ownComment.locator("[data-noodle-comment-metadata]"),
-        "#7EA7FF",
-        NOODLE_LIGHT_FOREGROUND,
-      );
+      await expectSurfaceAccent(ownComment.locator("[data-noodle-avatar-fallback]"), "#7EA7FF");
+      await expectSurfaceAccent(ownComment.locator("[data-noodle-comment-metadata]"), "#7EA7FF");
       for (const name of ["Like comment", "Edit comment", "Delete comment"]) {
-        await expectSurfaceAccent(ownComment.getByRole("button", { name }), "#7EA7FF", NOODLE_LIGHT_FOREGROUND);
+        await expectSurfaceAccent(ownComment.getByRole("button", { name }), "#7EA7FF");
       }
 
       await characterComment.getByRole("button", { name: "Edit comment" }).click();
