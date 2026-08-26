@@ -77,6 +77,9 @@ QM.dock = {
   items: null,
   outfits: null,
   appearanceFeedMode: "off",
+  personaAvatarUrl: null,
+  portraitImage: null,
+  portraitPlaceholder: null,
   error: null,
 
   isOpen() {
@@ -89,8 +92,26 @@ QM.dock = {
     this.items = null;
     this.outfits = null;
     this.appearanceFeedMode = "off";
+    // A different chat can have a different active persona — better to show
+    // nothing briefly than a leftover portrait from the previous chat until
+    // the element's next capabilityProps update supplies the real one.
+    this.personaAvatarUrl = null;
+    this._clearPortrait();
     this.error = null;
     if (this.isOpenFlag) this._loadAndPaint();
+  },
+
+  setPersonaAvatarUrl(url) {
+    if (this.personaAvatarUrl === url) return;
+    this.personaAvatarUrl = url;
+    if (url && this.portraitImage) this.portraitImage.src = url;
+    else if (!url) this._clearPortrait();
+  },
+
+  _clearPortrait() {
+    if (this.portraitImage) this.portraitImage.removeAttribute("src");
+    if (this.portraitImage) this.portraitImage.style.display = "none";
+    if (this.portraitPlaceholder) this.portraitPlaceholder.style.display = "block";
   },
 
   toggle() {
@@ -178,6 +199,8 @@ QM.dock = {
     this.outfitForm = null;
     this.form = null;
     this.listContainer = null;
+    this.portraitImage = null;
+    this.portraitPlaceholder = null;
   },
 
   async _loadAndPaint() {
@@ -215,6 +238,8 @@ QM.dock = {
       this.outfitForm = null;
       this.form = null;
       this.listContainer = null;
+      this.portraitImage = null;
+      this.portraitPlaceholder = null;
       return;
     }
 
@@ -259,7 +284,7 @@ QM.dock = {
       });
       equippedHeadingRow.append(this._sectionHeading("Equipped"), unequipAllButton);
       this.equippedContainer = document.createElement("div");
-      equippedColumn.append(equippedHeadingRow, this.equippedContainer);
+      equippedColumn.append(equippedHeadingRow, this._buildPortrait(), this.equippedContainer);
 
       const outfitsColumn = document.createElement("div");
       Object.assign(outfitsColumn.style, { flex: "1", minWidth: "0" });
@@ -430,6 +455,61 @@ QM.dock = {
 
     row.append(label, select);
     return row;
+  },
+
+  // Built once (like the forms) and cached on this.portraitImage so
+  // setPersonaAvatarUrl can update it live without a repaint. v1 just shows
+  // the persona's real avatar — a package-owned generated/uploaded portrait
+  // (per the extension: separate from the persona avatar, swaps on equip)
+  // is later work, once this layout is settled.
+  _buildPortrait() {
+    const wrapper = document.createElement("div");
+    Object.assign(wrapper.style, { display: "flex", justifyContent: "center", marginBottom: "8px" });
+
+    const frame = document.createElement("div");
+    Object.assign(frame.style, {
+      width: "120px",
+      height: "120px",
+      borderRadius: "var(--radius, 8px)",
+      border: "1px solid var(--border, rgba(128,128,128,0.3))",
+      overflow: "hidden",
+      background: "var(--muted, rgba(128,128,128,0.15))",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+    });
+
+    const image = document.createElement("img");
+    image.alt = "Persona portrait";
+    Object.assign(image.style, {
+      width: "100%",
+      height: "100%",
+      objectFit: "cover",
+      display: this.personaAvatarUrl ? "block" : "none",
+    });
+    if (this.personaAvatarUrl) image.src = this.personaAvatarUrl;
+    this.portraitImage = image;
+
+    const placeholder = document.createElement("span");
+    placeholder.textContent = "No portrait";
+    Object.assign(placeholder.style, {
+      fontSize: "11px",
+      color: "var(--muted-foreground, currentcolor)",
+      display: this.personaAvatarUrl ? "none" : "block",
+    });
+    image.addEventListener("error", () => {
+      image.style.display = "none";
+      placeholder.style.display = "block";
+    });
+    image.addEventListener("load", () => {
+      image.style.display = "block";
+      placeholder.style.display = "none";
+    });
+    this.portraitPlaceholder = placeholder;
+
+    frame.append(image, placeholder);
+    wrapper.appendChild(frame);
+    return wrapper;
   },
 
   _buildEquippedSection() {

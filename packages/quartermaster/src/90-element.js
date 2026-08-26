@@ -7,12 +7,13 @@
 // both slots launch the same BH.dock rather than each rendering their own
 // content.
 //
-// v1 slice: persona-only inventory. No equip slots, images, locks, party
-// members, or narrator ingestion yet.
+// v1 slice: persona-only inventory. No images, locks, party members, or
+// narrator ingestion yet.
 //
-// Game Mode coverage is unresolved — roleplay-tracker/tracker-panel are
-// documented as Roleplay-only; not yet decided how (or whether) this reaches
-// Game Mode.
+// Game Mode: confirmed unreachable, not just undocumented — AppShell.tsx
+// gates the Tracker Panel with `activeChat?.mode === "roleplay"`, and
+// RoleplayHUD.tsx (which renders the roleplay-tracker toolbar button) is
+// Roleplay-only by construction. No package code can route around either.
 
 class QuartermasterElement extends HTMLElement {
   constructor() {
@@ -51,8 +52,17 @@ class QuartermasterElement extends HTMLElement {
     return this._props && typeof this._props.chatId === "string" ? this._props.chatId : null;
   }
 
+  get _personaAvatarUrl() {
+    const personaInfo = this._props && this._props.personaInfo;
+    return personaInfo && typeof personaInfo.avatarUrl === "string" ? personaInfo.avatarUrl : null;
+  }
+
   _render() {
     QM.dock.setChat(this._chatId);
+    // Only one of the two slot instances (roleplay-tracker/tracker-panel) is
+    // confirmed to carry personaInfo — set whichever one actually has it
+    // rather than risk clobbering a real avatar with null from the other.
+    if (this._personaAvatarUrl) QM.dock.setPersonaAvatarUrl(this._personaAvatarUrl);
 
     let button = this._button;
     if (!button || !this.contains(button)) {
