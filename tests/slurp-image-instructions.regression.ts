@@ -52,6 +52,16 @@ assert.equal(
   }),
   rewrittenPrompt,
 );
+for (const shortContext of ["a", "1"]) {
+  assert.equal(
+    selectNoodleImageProviderPrompt({
+      rewrittenPrompt,
+      rawPrompt,
+      privateContext: [shortContext],
+    }),
+    rewrittenPrompt,
+  );
+}
 
 // Disabled interpretation and rewrite failure both use the raw visual prompt only.
 for (const unavailablePrompt of [null, undefined, ""]) {

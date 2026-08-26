@@ -20,7 +20,7 @@ export function selectNoodleImageProviderPrompt(input: {
     );
   const copiesPrivateContext = input.privateContext?.some((value) => {
     const normalizedValue = value?.trim().toLocaleLowerCase().replace(/\s+/gu, " ");
-    return normalizedValue && /[\p{L}\p{N}]/u.test(normalizedValue) && normalizedPrompt.includes(normalizedValue);
+    return normalizedValue && normalizedValue.length > 1 && normalizedPrompt.includes(normalizedValue);
   });
 
   return hasInternalMarker || copiesPrivateContext ? input.rawPrompt : rewrittenPrompt;
