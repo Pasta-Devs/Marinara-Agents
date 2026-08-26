@@ -95,17 +95,26 @@ async function expectSurfaceAccent(locator: Locator, accent: string) {
   await expect
     .poll(() =>
       locator.evaluate((element) => {
+        const target = element as HTMLElement;
+        const property = "--noodle-accent-foreground";
+        const originalValue = target.style.getPropertyValue(property);
+        const originalPriority = target.style.getPropertyPriority(property);
+        const sentinel = "rgb(1, 2, 3)";
         const probe = document.createElement("span");
-        probe.style.color = "var(--noodle-accent-foreground)";
+        probe.style.color = sentinel;
         element.appendChild(probe);
-        const elementStyle = getComputedStyle(element);
-        const resolvedForeground = getComputedStyle(probe).color;
-        const result = {
-          accent: elementStyle.getPropertyValue("--noodle-accent").trim(),
-          usesForeground: elementStyle.color === resolvedForeground,
-        };
-        probe.remove();
-        return result;
+        try {
+          target.style.setProperty(property, sentinel);
+          const elementStyle = getComputedStyle(element);
+          return {
+            accent: elementStyle.getPropertyValue("--noodle-accent").trim(),
+            usesForeground: elementStyle.color === getComputedStyle(probe).color,
+          };
+        } finally {
+          if (originalValue) target.style.setProperty(property, originalValue, originalPriority);
+          else target.style.removeProperty(property);
+          probe.remove();
+        }
       }),
     )
     .toEqual({ accent, usesForeground: true });
