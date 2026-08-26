@@ -37,7 +37,7 @@ const PACKAGE_ID = "quartermaster";
 // live this session. Reset this to a clean starting version (0.1.0) in one
 // commit right before this is actually proposed; the intervening bumps are
 // disposable dev-iteration numbers, not real releases.
-const VERSION = "0.2.1";
+const VERSION = "0.2.2";
 // Declared against the exact staging Engine this scaffold was built and tested
 // against. Do not lower this to reach stable users — see CONTRIBUTING.md.
 const ENGINE_MIN = "2.4.4";

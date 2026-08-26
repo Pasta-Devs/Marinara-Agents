@@ -1,4 +1,4 @@
-// Quartermaster 0.2.1 — Marinara Engine roleplay-tracker capability (single-file client bundle)
+// Quartermaster 0.2.2 — Marinara Engine roleplay-tracker capability (single-file client bundle)
 // Built from packages/quartermaster/src (6 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -1040,20 +1040,30 @@ QM.dock = {
 // ===== 15-panel.js =====
 // Quartermaster — inline tracker-panel accordion. Renders directly into the
 // tracker-panel slot's element (unlike the toolbar slot, which is just a
-// launcher button for QM.dock) as a native <details>/<summary> tree, matching
-// how built-in trackers like Inventory Tracker show up as a collapsible
-// section in the same panel: a top-level "Quartermaster" section containing
-// three sub-sections (Equipped, Outfits, Inventory). A pure view over
-// QM.state (05-state.js) — see 10-dock.js's header comment for why both
+// launcher button for QM.dock), matching how built-in trackers show up as a
+// collapsible section in the same panel: a top-level "Quartermaster" section
+// containing three sub-sections (Equipped, Outfits, Inventory). A pure view
+// over QM.state (05-state.js) — see 10-dock.js's header comment for why both
 // views share one state module instead of each keeping their own copy.
 //
-// The <details>/<summary> tree is built ONCE and cached (this.root, per
-// subsection this._equipped.content etc.) — only the content <div> inside
-// each subsection gets replaceChildren() on every repaint. Rebuilding the
-// <details> elements themselves on every equip/unequip (the first version
-// did this) reset them to closed every time, since a freshly-created
-// <details> has no memory of being open — collapsing the whole menu on
-// every click.
+// Headers are hand-built <div>/<button> structures, NOT <details>/<summary>.
+// The Engine's native section header (SectionHeader in SectionControls.tsx)
+// is a clickable button containing, in order, a rotating chevron span, an
+// icon span, and a title span, with its own hover/focus treatment — <summary>
+// has no equivalent slot for the icon and no hover styling hook that matches.
+// memory-nag (MemoryNagTrackerPanel.tsx), a real capability package rendering
+// into this same tracker-panel slot, independently hand-builds the identical
+// chevron-frame → icon → title layout with manually-tracked collapsed state
+// for the same reason — confirming this is the established pattern for
+// package-supplied tracker-panel content, not just native-only.
+//
+// The whole DOM tree (including headers) is built ONCE and cached (this.root,
+// per-section refs in this._sections) — only each section's content <div>
+// gets replaceChildren() on every repaint, and expanded/collapsed state lives
+// in this.expanded rather than in the DOM. Rebuilding elements from scratch on
+// every equip/unequip (the first version did this with <details>) reset them
+// to closed every time, since a freshly-created element has no memory of
+// prior state — collapsing the whole menu on every click.
 //
 // Styled with the Engine's OWN tracker-panel Tailwind classes (copied
 // verbatim from SectionControls.tsx / InventoryTrackerPanel.tsx /
@@ -1066,9 +1076,31 @@ const QM_TRACKER_TEXT_ROW = "text-[0.6875rem] leading-[0.875rem]";
 const QM_TRACKER_TEXT_MICRO = "text-[0.625rem] leading-[0.75rem]";
 const QM_TRACKER_SECTION_SHELL_CLASS =
   "relative z-10 overflow-hidden border-b border-[var(--border)] bg-[var(--tracker-panel-section-background,color-mix(in_srgb,var(--card)_5%,transparent))] shadow-[inset_0_1px_0_color-mix(in_srgb,var(--foreground)_5%,transparent)]";
-const QM_TRACKER_SUMMARY_CLASS =
-  "flex min-h-7 cursor-pointer select-none items-center gap-1 border-b border-[var(--border)]/42 px-1 py-0.5 font-semibold uppercase tracking-[0.08em] text-[var(--foreground)]/62 " +
+// Header container: layout/border only, not interactive — mirrors
+// SectionHeader's outer element in SectionControls.tsx.
+const QM_TRACKER_HEADER_CLASS =
+  "relative flex min-h-7 items-center gap-1 border-b border-[var(--border)]/42 px-1 py-0.5";
+// The actual clickable toggle inside the header — carries the hover/focus
+// treatment, copied verbatim from SectionHeader's button className.
+const QM_TRACKER_TOGGLE_CLASS =
+  "flex min-w-0 flex-1 items-center gap-1 self-stretch rounded-sm px-0 text-left cursor-pointer select-none transition-colors hover:bg-[var(--accent)]/18 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[var(--border)]";
+const QM_TRACKER_CHEVRON_FRAME_CLASS = "flex h-3.5 w-3 shrink-0 items-center justify-center";
+const QM_TRACKER_CHEVRON_CLASS =
+  "text-[color:var(--tracker-profile-icon,var(--muted-foreground))] opacity-60 transition-transform duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]";
+const QM_TRACKER_ICON_CLASS =
+  "flex h-3.5 w-3.5 shrink-0 items-center justify-center text-[color:var(--tracker-profile-icon,var(--muted-foreground))] opacity-75";
+const QM_TRACKER_TITLE_CLASS =
+  "min-w-0 flex-1 truncate font-semibold uppercase tracking-[0.08em] text-[var(--foreground)]/62 " +
   QM_TRACKER_TEXT_MICRO;
+// Lucide's ChevronDown path, redrawn at a fixed pixel size (not left to the
+// component's own 24x24 default) so it actually fits the chevron frame —
+// memory-nag's own chevron CSS does the same thing (explicit width/height on
+// the icon itself) rather than relying on the frame to clip it.
+const QM_TRACKER_CHEVRON_SVG =
+  '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" ' +
+  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+  '<path d="m6 9 6 6 6-6"></path>' +
+  "</svg>";
 const QM_TRACKER_EMPTY_CLASS =
   "rounded-sm border border-dashed border-[color-mix(in_srgb,var(--tracker-inline-rule,var(--border))_38%,transparent)] px-1 py-1 text-center text-[color-mix(in_srgb,var(--tracker-inline-muted,var(--muted-foreground))_66%,transparent)] " +
   QM_TRACKER_TEXT_ROW;
@@ -1084,6 +1116,14 @@ QM.panel = {
   equippedContent: null,
   outfitsContent: null,
   inventoryContent: null,
+  // Collapsed by default for every section, matching the previous
+  // <details>-without-`open`-attribute behavior — this rewrite changes how
+  // the header looks and where state lives, not the default open/closed
+  // state. Persists across repaints and container remounts (e.g. switching
+  // between detached/docked tracker panel) since it lives on `this`, not
+  // rebuilt with the DOM.
+  expanded: { root: false, equipped: false, outfits: false, inventory: false },
+  _sections: null,
 
   mount(container) {
     if (this.container === container) {
@@ -1114,13 +1154,11 @@ QM.panel = {
   },
 
   _buildStructure() {
-    const root = document.createElement("details");
+    const root = document.createElement("div");
     root.className = QM_TRACKER_SECTION_SHELL_CLASS;
 
-    const summary = document.createElement("summary");
-    summary.textContent = "Quartermaster";
-    summary.className = QM_TRACKER_SUMMARY_CLASS;
-    root.appendChild(summary);
+    const rootSection = this._buildHeader("Quartermaster", QM_ICON_SVG, "root");
+    root.appendChild(rootSection.header);
 
     const body = document.createElement("div");
     Object.assign(body.style, { display: "flex", flexDirection: "column" });
@@ -1130,28 +1168,93 @@ QM.panel = {
     this.errorNode.style.color = QM_COLOR_DANGER;
     this.errorNode.style.display = "none";
 
-    const equipped = this._buildSubsectionShell("Equipped");
+    const equipped = this._buildSubsection("Equipped", "equipped");
     this.equippedContent = equipped.content;
-    const outfits = this._buildSubsectionShell("Outfits");
+    const outfits = this._buildSubsection("Outfits", "outfits");
     this.outfitsContent = outfits.content;
-    const inventory = this._buildSubsectionShell("Inventory");
+    const inventory = this._buildSubsection("Inventory", "inventory");
     this.inventoryContent = inventory.content;
 
-    body.append(this.errorNode, equipped.details, outfits.details, inventory.details);
+    body.append(this.errorNode, equipped.wrapper, outfits.wrapper, inventory.wrapper);
     root.appendChild(body);
+
+    this._sections = {
+      root: { toggle: rootSection.toggle, chevron: rootSection.chevron, content: body },
+      equipped: { toggle: equipped.toggle, chevron: equipped.chevron, content: equipped.content },
+      outfits: { toggle: outfits.toggle, chevron: outfits.chevron, content: outfits.content },
+      inventory: { toggle: inventory.toggle, chevron: inventory.chevron, content: inventory.content },
+    };
+    this._applyExpanded();
 
     this.container.replaceChildren(root);
     this.root = root;
   },
 
-  _buildSubsectionShell(label) {
-    const details = document.createElement("details");
-    const summary = document.createElement("summary");
-    summary.textContent = label;
-    summary.className = QM_TRACKER_SUMMARY_CLASS;
+  // Hand-built replica of the native SectionHeader (SectionControls.tsx): a
+  // header shell (layout/border only) containing one clickable toggle button
+  // with a rotating chevron, an optional package icon, and a title — see the
+  // file-level comment for why this replaces <details>/<summary>. `iconSvg`
+  // is only passed for the root section: nested sub-sections aren't separate
+  // packages, so they get the chevron + hover + title but no icon slot.
+  _buildHeader(label, iconSvg, key) {
+    const header = document.createElement("div");
+    header.className = QM_TRACKER_HEADER_CLASS;
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = QM_TRACKER_TOGGLE_CLASS;
+
+    const chevronFrame = document.createElement("span");
+    chevronFrame.className = QM_TRACKER_CHEVRON_FRAME_CLASS;
+    chevronFrame.setAttribute("aria-hidden", "true");
+    const chevron = document.createElement("span");
+    chevron.className = QM_TRACKER_CHEVRON_CLASS;
+    chevron.innerHTML = QM_TRACKER_CHEVRON_SVG;
+    chevronFrame.appendChild(chevron);
+    toggle.appendChild(chevronFrame);
+
+    if (iconSvg) {
+      const iconSpan = document.createElement("span");
+      iconSpan.className = QM_TRACKER_ICON_CLASS;
+      iconSpan.setAttribute("aria-hidden", "true");
+      iconSpan.innerHTML = iconSvg;
+      toggle.appendChild(iconSpan);
+    }
+
+    const title = document.createElement("span");
+    title.textContent = label;
+    title.className = QM_TRACKER_TITLE_CLASS;
+    toggle.appendChild(title);
+
+    toggle.setAttribute("aria-label", label);
+    toggle.addEventListener("click", () => this._toggleSection(key));
+    header.appendChild(toggle);
+
+    return { header, toggle, chevron };
+  },
+
+  _buildSubsection(label, key) {
+    const wrapper = document.createElement("div");
+    const built = this._buildHeader(label, null, key);
     const content = document.createElement("div");
-    details.append(summary, content);
-    return { details, content };
+    wrapper.append(built.header, content);
+    return { wrapper, content, toggle: built.toggle, chevron: built.chevron };
+  },
+
+  _toggleSection(key) {
+    this.expanded[key] = !this.expanded[key];
+    this._applyExpanded();
+  },
+
+  _applyExpanded() {
+    if (!this._sections) return;
+    for (const key of Object.keys(this._sections)) {
+      const { toggle, chevron, content } = this._sections[key];
+      const open = this.expanded[key];
+      content.style.display = open ? "" : "none";
+      chevron.classList.toggle("-rotate-90", !open);
+      toggle.setAttribute("aria-expanded", String(open));
+    }
   },
 
   _updateContent() {
