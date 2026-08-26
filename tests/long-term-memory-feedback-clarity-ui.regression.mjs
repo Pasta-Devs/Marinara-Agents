@@ -462,7 +462,14 @@ assert.match(api, /const missingIds = requestedIds\.filter/u);
 assert.doesNotMatch(reviewQueue, /requestAllNotes/u);
 assert.match(reviewQueue, /requestNotesByIds<LtmNote>\(sourceContextNoteIds, signal\)/u);
 assert.match(reviewQueue, /requestNotesByIds<LtmNote>\([\s\S]*true,/u);
-assert.match(reviewQueue, /"review-context", contextNoteIds/u);
+assert.match(reviewQueue, /"review-context", contextNoteIds, sourceContextNoteIds/u);
+const optionalContextIds = ["shared-note", "optional-target"];
+const sourceContextIds = ["shared-note"];
+assert.notDeepEqual(
+  ["review-context", optionalContextIds, []],
+  ["review-context", optionalContextIds, sourceContextIds],
+  "source/optional context transitions must produce a new review query key even when IDs are unchanged",
+);
 assert.match(reviewQueue, /row\.disposition !== "new"/u);
 assert.match(reviewQueue, /reviewContextReady/u);
 assert.match(reviewQueue, /reviewContextFailed/u);

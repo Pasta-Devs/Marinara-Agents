@@ -1146,7 +1146,7 @@ export default function ReviewQueue({
     [rejectedSuggestions.data?.suggestions, review.data?.sources],
   );
   const notes = useQuery({
-    queryKey: [...queryKeys.notes, "review-context", contextNoteIds],
+    queryKey: [...queryKeys.notes, "review-context", contextNoteIds, sourceContextNoteIds],
     queryFn: async ({ signal }) => {
       const sourceIds = new Set(sourceContextNoteIds);
       const [sources, optionalContext] = await Promise.all([
