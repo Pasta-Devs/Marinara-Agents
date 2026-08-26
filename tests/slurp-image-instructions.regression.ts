@@ -53,13 +53,14 @@ assert.equal(
   rewrittenPrompt,
 );
 for (const shortContext of ["a", "1"]) {
+  const contextPrompt = `${rewrittenPrompt} ${shortContext}`;
   assert.equal(
     selectNoodleImageProviderPrompt({
-      rewrittenPrompt,
+      rewrittenPrompt: contextPrompt,
       rawPrompt,
       privateContext: [shortContext],
     }),
-    rewrittenPrompt,
+    contextPrompt,
   );
 }
 
