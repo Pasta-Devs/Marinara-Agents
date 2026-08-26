@@ -15,7 +15,7 @@ export function selectNoodleImageProviderPrompt(input: {
 
   const normalizedPrompt = rewrittenPrompt.toLocaleLowerCase().replace(/\s+/gu, " ");
   const hasInternalMarker =
-    /(?:^|[\n<])\s*(?:user image instructions|image prompting instructions|generation guidance|personality|appearance|character image preferences|character[ _]context|post text)\s*[:>]/iu.test(
+    /(?:^|[\n<])\s*(?:user image instructions|image prompting instructions|generation guidance|personality|character image preferences|character[ _]context|art[ _]style[ _]guidance|post text)\s*[:>]/iu.test(
       rewrittenPrompt,
     );
   const copiesPrivateContext = input.privateContext?.some((value) => {

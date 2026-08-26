@@ -217,7 +217,7 @@ export async function generateNoodlerPostImage(input: {
     selectNoodleImageProviderPrompt({
       rewrittenPrompt,
       rawPrompt: rawProviderPrompt,
-      privateContext: [imagePromptInstructions, characterDescription, characterPersonality, characterImageInstructions],
+      privateContext: [imagePromptInstructions, characterPersonality, characterImageInstructions, styleGuidance],
     }),
   );
   const finalPrompt = input.compositionGuard ? `${finalPromptBase}\n\n${input.compositionGuard}` : finalPromptBase;

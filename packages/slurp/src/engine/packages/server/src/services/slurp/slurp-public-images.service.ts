@@ -229,7 +229,7 @@ export async function generateNoodlePostImage(input: {
   const finalPrompt = selectNoodleImageProviderPrompt({
     rewrittenPrompt,
     rawPrompt: rawProviderPrompt,
-    privateContext: [imagePromptInstructions, characterDescription, characterPersonality, characterImageInstructions],
+    privateContext: [imagePromptInstructions, characterPersonality, characterImageInstructions, styleGuidance],
   });
   const finalNegativePrompt = input.promptOverride
     ? input.promptOverride.negativePrompt?.trim() || undefined

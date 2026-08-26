@@ -9,21 +9,26 @@ const renderedTemplatePrompt =
   "Create a post. User image instructions: private instructions. Personality: private context.";
 const internalContext = "User image instructions: preserve the personality notes. Personality: private context.";
 const rewrittenPrompt = "A person reading beside a sunlit window, medium shot.";
+const appearancePrompt = "Appearance: green eyes, short black hair, and a blue jacket.";
+const styleGuidance = "Use a hand-painted editorial watercolor style.";
 
 // Interpretation success sends the rewritten visual prompt only.
 assert.equal(selectNoodleImageProviderPrompt({ rewrittenPrompt, rawPrompt }), rewrittenPrompt);
 assert.equal(selectNoodleImageProviderPrompt({ rewrittenPrompt, rawPrompt }).includes(internalContext), false);
+assert.equal(selectNoodleImageProviderPrompt({ rewrittenPrompt: appearancePrompt, rawPrompt }), appearancePrompt);
 
 for (const leakedRewrite of [
   `A person reading beside a window.\n${internalContext}`,
   "A person reading beside a window.\n<character_context>private context</character_context>",
   "A person reading beside a window.\nCharacter image preferences: private context",
+  `A person reading beside a window.\n${styleGuidance}`,
+  "A person reading beside a window.\n<art_style_guidance>private style</art_style_guidance>",
 ]) {
   assert.equal(
     selectNoodleImageProviderPrompt({
       rewrittenPrompt: leakedRewrite,
       rawPrompt,
-      privateContext: [internalContext],
+      privateContext: [internalContext, styleGuidance],
     }),
     rawPrompt,
   );
