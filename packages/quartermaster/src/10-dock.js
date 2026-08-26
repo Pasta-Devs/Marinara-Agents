@@ -82,8 +82,37 @@ const QM_DOCK_COLUMNS_STACK_WIDTH = 760;
 // isn't wide enough for the ring side-by-side.
 const QM_DOCK_RING_STACK_WIDTH = 560;
 
+// UI Size — a CSS zoom factor applied to a wrapper around everything in the
+// dock's body except the UI-size row itself (kept at a fixed, predictable
+// size so it stays a stable control regardless of the current zoom) and the
+// header/resize-handle chrome. zoom (not transform:scale) because it
+// affects real layout — content correctly reflows and wraps at its scaled
+// size instead of visually stretching past its box — and dock-only per the
+// request: the tracker panel (15-panel.js) reads the same QM.state but
+// isn't part of this wrapper, so it's unaffected.
+const QM_UI_SIZE_KEY = "marinara.quartermaster.uiSize";
+const QM_UI_SIZES = { S: 0.85, M: 1, L: 1.2 };
+
 function qmClampWindowValue(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
+}
+
+function qmReadUiSize() {
+  try {
+    const stored = window.localStorage.getItem(QM_UI_SIZE_KEY);
+    if (stored && QM_UI_SIZES[stored]) return stored;
+  } catch {
+    // A blocked storage read falls back to the default size.
+  }
+  return "M";
+}
+
+function qmWriteUiSize(size) {
+  try {
+    window.localStorage.setItem(QM_UI_SIZE_KEY, size);
+  } catch {
+    // Persisting is a convenience; the session still works without it.
+  }
 }
 
 function qmReadWindowGeometry() {
@@ -121,8 +150,13 @@ QM.dock = {
   header: null,
   body: null,
   columns: null,
+  zoomWrapper: null,
+  uiSizeButtons: null,
   errorNode: null,
   feedSelect: null,
+  settingsSection: null,
+  settingsContent: null,
+  settingsChevron: null,
   underwearToggle: null,
   armorToggle: null,
   weaponsToggle: null,
@@ -136,6 +170,11 @@ QM.dock = {
   portraitPlaceholder: null,
   geometry: qmReadWindowGeometry(),
   bodyWidth: QM_WINDOW_DEFAULT_WIDTH,
+  uiSize: qmReadUiSize(),
+  // Collapsed by default to keep the dock compact; not persisted — a session
+  // -only UI preference, unlike geometry/uiSize which are worth remembering
+  // across visits.
+  settingsExpanded: false,
   _windowBound: false,
   _interaction: null,
   _boundsObserver: null,
@@ -263,15 +302,23 @@ QM.dock = {
     this._bodyObserver.observe(this.body);
   },
 
+  _zoomFactor() {
+    return QM_UI_SIZES[this.uiSize] || 1;
+  },
+
   // Cheap re-layout that doesn't touch QM.state — just toggles flex
   // direction on the stable, cached column/ring containers based on the
   // last measured body width. The ring's own middleRow is rebuilt on every
   // state repaint anyway (_buildEquippedSection), so it just reads
   // this.bodyWidth fresh each time rather than needing a matching toggle
-  // here.
+  // here. Thresholds scale by the current zoom factor: at UI Size L,
+  // zoomed content needs more real (unzoomed) body pixels to fit the same
+  // logical layout, so the stack point has to move out to match, or L would
+  // stack sooner than it actually needs to.
   _applyResponsiveLayout() {
     if (this.columns) {
-      this.columns.style.flexDirection = this.bodyWidth < QM_DOCK_COLUMNS_STACK_WIDTH ? "column" : "row";
+      const stacked = this.bodyWidth < QM_DOCK_COLUMNS_STACK_WIDTH * this._zoomFactor();
+      this.columns.style.flexDirection = stacked ? "column" : "row";
     }
     if (this.equippedContainer) this.equippedContainer.replaceChildren(this._buildEquippedSection());
   },
@@ -437,8 +484,13 @@ QM.dock = {
     // Reset the cached body children — a fresh body element means everything
     // built for a previous root no longer exists.
     this.columns = null;
+    this.zoomWrapper = null;
+    this.uiSizeButtons = null;
     this.errorNode = null;
     this.feedSelect = null;
+    this.settingsSection = null;
+    this.settingsContent = null;
+    this.settingsChevron = null;
     this.underwearToggle = null;
     this.armorToggle = null;
     this.weaponsToggle = null;
@@ -476,8 +528,13 @@ QM.dock = {
     if (!QM.state.chatId) {
       this.body.replaceChildren(QM.textNode("No active chat."));
       this.columns = null;
+      this.zoomWrapper = null;
+      this.uiSizeButtons = null;
       this.errorNode = null;
       this.feedSelect = null;
+      this.settingsSection = null;
+      this.settingsContent = null;
+      this.settingsChevron = null;
       this.underwearToggle = null;
       this.armorToggle = null;
       this.weaponsToggle = null;
@@ -493,12 +550,18 @@ QM.dock = {
     }
 
     if (!this.form || !this.body.contains(this.form)) {
+      // Outside the zoom wrapper, so it stays a fixed-size, stable control
+      // no matter what size it's currently set to.
+      const uiSizeRow = this._buildUiSizeRow();
+
+      this.zoomWrapper = document.createElement("div");
+
       this.errorNode = QM.textNode("");
       this.errorNode.style.color = QM_COLOR_DANGER;
       this.errorNode.style.display = "none";
 
       const feedRow = this._buildAppearanceFeedRow();
-      const visibilityRow = this._buildSlotVisibilityRow();
+      this.settingsSection = this._buildSettingsSection();
 
       // Built once and cached — the ring layout re-inserts this same node on
       // every repaint instead of rebuilding it, so equipping/unequipping
@@ -511,7 +574,7 @@ QM.dock = {
         display: "flex",
         gap: "12px",
         alignItems: "flex-start",
-        flexDirection: this.bodyWidth < QM_DOCK_COLUMNS_STACK_WIDTH ? "column" : "row",
+        flexDirection: this.bodyWidth < QM_DOCK_COLUMNS_STACK_WIDTH * this._zoomFactor() ? "column" : "row",
       });
       this.columns = columns;
 
@@ -549,7 +612,9 @@ QM.dock = {
       bagColumn.append(QM.sectionHeading("Bag"), this.form, this.listContainer);
 
       columns.append(outfitsColumn, equippedColumn, bagColumn);
-      this.body.replaceChildren(this.errorNode, feedRow, visibilityRow, columns);
+      this.zoomWrapper.append(this.errorNode, feedRow, this.settingsSection, columns);
+      this.body.replaceChildren(uiSizeRow, this.zoomWrapper);
+      this._applyUiSize();
     }
 
     if (QM.state.error) {
@@ -598,41 +663,162 @@ QM.dock = {
     return row;
   },
 
-  // Three checkboxes, not selects — each is a single on/off toggle. Matches
-  // the original extension's SLOT_GROUPS convention: armor, underwear, and
-  // weapon are the only groups with a toggle, everything else is always on.
-  // A group hidden here removes its slots from both the portrait ring and
-  // the equip picker (07-ui.js's defaultSlotSelect), not just a cosmetic
-  // hide — see QM.state.groupVisible/slotVisible.
+  // Fixed-size (outside the zoom wrapper) so the size control itself
+  // doesn't grow/shrink along with everything it controls. The active size
+  // gets QM.button's primary fill; the other two stay neutral outlines —
+  // reapplied by _applyUiSize rather than baked in here, so a size change
+  // can update the same buttons in place without rebuilding them.
+  _buildUiSizeRow() {
+    const row = document.createElement("div");
+    Object.assign(row.style, {
+      display: "flex",
+      alignItems: "center",
+      gap: "6px",
+      marginBottom: "8px",
+      fontSize: "12px",
+      flexShrink: "0",
+    });
+
+    const label = document.createElement("span");
+    label.textContent = "UI Size:";
+    label.style.color = "var(--muted-foreground, currentcolor)";
+    row.appendChild(label);
+
+    this.uiSizeButtons = {};
+    for (const size of Object.keys(QM_UI_SIZES)) {
+      const button = QM.button(size);
+      button.style.padding = "2px 10px";
+      button.addEventListener("click", () => this._setUiSize(size));
+      this.uiSizeButtons[size] = button;
+      row.appendChild(button);
+    }
+    return row;
+  },
+
+  _setUiSize(size) {
+    if (!QM_UI_SIZES[size] || this.uiSize === size) return;
+    this.uiSize = size;
+    qmWriteUiSize(size);
+    this._applyUiSize();
+    // The zoom factor changed, which shifts the effective stack thresholds
+    // (_applyResponsiveLayout and _buildEquippedSection both read it) even
+    // though the real body width didn't move.
+    this._applyResponsiveLayout();
+  },
+
+  _applyUiSize() {
+    if (this.zoomWrapper) this.zoomWrapper.style.zoom = this._zoomFactor();
+    for (const [size, button] of Object.entries(this.uiSizeButtons || {})) {
+      const active = size === this.uiSize;
+      button.style.background = active ? "var(--primary, #444)" : "var(--secondary, transparent)";
+      button.style.color = active ? "var(--primary-foreground, #fff)" : "var(--secondary-foreground, inherit)";
+      button.style.border = active ? "none" : "1px solid var(--border, rgba(0,0,0,0.2))";
+    }
+  },
+
+  // A collapsible wrapper (chevron + label, click to expand) around the
+  // slot-visibility toggles — collapsed by default to keep the dock compact
+  // when there's nothing to configure. Built once; the toggle checkboxes
+  // inside get their checked state synced every repaint (_paint), same as
+  // the other cached form-like controls.
+  _buildSettingsSection() {
+    const section = document.createElement("div");
+    Object.assign(section.style, {
+      border: "1px solid var(--border, rgba(128,128,128,0.3))",
+      borderRadius: "4px",
+      marginBottom: "8px",
+      overflow: "hidden",
+    });
+
+    const header = document.createElement("button");
+    header.type = "button";
+    Object.assign(header.style, {
+      display: "flex",
+      alignItems: "center",
+      gap: "6px",
+      width: "100%",
+      padding: "6px 8px",
+      background: "var(--secondary, transparent)",
+      color: "inherit",
+      border: "none",
+      font: "inherit",
+      textAlign: "left",
+      cursor: "pointer",
+    });
+
+    const chevron = document.createElement("span");
+    chevron.textContent = "▸";
+    Object.assign(chevron.style, {
+      display: "inline-block",
+      transition: "transform 0.15s ease",
+      transform: this.settingsExpanded ? "rotate(90deg)" : "rotate(0deg)",
+    });
+    this.settingsChevron = chevron;
+
+    const label = document.createElement("span");
+    label.textContent = "Settings";
+    Object.assign(label.style, {
+      fontWeight: "600",
+      fontSize: "12px",
+      textTransform: "uppercase",
+      letterSpacing: "0.04em",
+    });
+
+    header.append(chevron, label);
+    header.addEventListener("click", () => {
+      this.settingsExpanded = !this.settingsExpanded;
+      this.settingsContent.style.display = this.settingsExpanded ? "" : "none";
+      this.settingsChevron.style.transform = this.settingsExpanded ? "rotate(90deg)" : "rotate(0deg)";
+    });
+
+    const content = document.createElement("div");
+    Object.assign(content.style, { padding: "8px", display: this.settingsExpanded ? "" : "none" });
+    content.appendChild(this._buildSlotVisibilityRow());
+    this.settingsContent = content;
+
+    section.append(header, content);
+    return section;
+  },
+
+  // A single row, one checkbox per group: "Show Slots: [ ] Underwear
+  // [ ] Armor [ ] Weapons". Matches the original extension's SLOT_GROUPS
+  // convention — armor, underwear, and weapon are the only groups with a
+  // toggle, everything else is always on. A group hidden here removes its
+  // slots from both the portrait ring and the equip picker (07-ui.js's
+  // defaultSlotSelect), not just a cosmetic hide — see
+  // QM.state.groupVisible/slotVisible.
   _buildSlotVisibilityRow() {
     const row = document.createElement("div");
     Object.assign(row.style, {
       display: "flex",
       flexWrap: "wrap",
       alignItems: "center",
-      gap: "12px",
-      marginBottom: "8px",
+      gap: "10px",
       fontSize: "12px",
     });
 
+    const label = document.createElement("span");
+    label.textContent = "Show Slots:";
+    label.style.color = "var(--muted-foreground, currentcolor)";
+    row.appendChild(label);
+
     const build = (labelText, onChange) => {
-      const label = document.createElement("label");
-      Object.assign(label.style, { display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" });
+      const checkboxLabel = document.createElement("label");
+      Object.assign(checkboxLabel.style, { display: "flex", alignItems: "center", gap: "4px", cursor: "pointer" });
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
       checkbox.addEventListener("change", () => onChange(checkbox.checked));
       const text = document.createElement("span");
       text.textContent = labelText;
-      text.style.color = "var(--muted-foreground, currentcolor)";
-      label.append(checkbox, text);
-      return { label, checkbox };
+      checkboxLabel.append(checkbox, text);
+      return { label: checkboxLabel, checkbox };
     };
 
-    const underwear = build("Show underwear slots", (value) => QM.state.updateShowUnderwear(value));
+    const underwear = build("Underwear", (value) => QM.state.updateShowUnderwear(value));
     this.underwearToggle = underwear.checkbox;
-    const armor = build("Show armor slots", (value) => QM.state.updateShowArmor(value));
+    const armor = build("Armor", (value) => QM.state.updateShowArmor(value));
     this.armorToggle = armor.checkbox;
-    const weapons = build("Show weapon slots", (value) => QM.state.updateShowWeapons(value));
+    const weapons = build("Weapons", (value) => QM.state.updateShowWeapons(value));
     this.weaponsToggle = weapons.checkbox;
 
     row.append(underwear.label, armor.label, weapons.label);
@@ -713,7 +899,7 @@ QM.dock = {
 
     wrapper.appendChild(this._buildSlotBoxRow(QM_PORTRAIT_LAYOUT.top));
 
-    const ringStacked = this.bodyWidth < QM_DOCK_RING_STACK_WIDTH;
+    const ringStacked = this.bodyWidth < QM_DOCK_RING_STACK_WIDTH * this._zoomFactor();
     const middleRow = document.createElement("div");
     Object.assign(middleRow.style, {
       display: "flex",
