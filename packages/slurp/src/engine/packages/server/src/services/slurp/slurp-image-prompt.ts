@@ -8,8 +8,22 @@ function stripCodeFence(value: string): string {
 export function selectNoodleImageProviderPrompt(input: {
   rewrittenPrompt: string | null | undefined;
   rawPrompt: string;
+  privateContext?: ReadonlyArray<string | null | undefined>;
 }): string {
-  return input.rewrittenPrompt?.trim() || input.rawPrompt;
+  const rewrittenPrompt = input.rewrittenPrompt?.trim();
+  if (!rewrittenPrompt) return input.rawPrompt;
+
+  const normalizedPrompt = rewrittenPrompt.toLocaleLowerCase().replace(/\s+/gu, " ");
+  const hasInternalMarker =
+    /(?:^|[\n<])\s*(?:user image instructions|image prompting instructions|generation guidance|personality|appearance|character image preferences|character[ _]context|post text)\s*[:>]/iu.test(
+      rewrittenPrompt,
+    );
+  const copiesPrivateContext = input.privateContext?.some((value) => {
+    const normalizedValue = value?.trim().toLocaleLowerCase().replace(/\s+/gu, " ");
+    return normalizedValue && normalizedValue.length >= 8 && normalizedPrompt.includes(normalizedValue);
+  });
+
+  return hasInternalMarker || copiesPrivateContext ? input.rawPrompt : rewrittenPrompt;
 }
 
 /**

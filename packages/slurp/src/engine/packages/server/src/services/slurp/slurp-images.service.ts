@@ -214,7 +214,11 @@ export async function generateNoodlerPostImage(input: {
         })
       : null;
   const finalPromptBase = redactIdentity(
-    selectNoodleImageProviderPrompt({ rewrittenPrompt, rawPrompt: rawProviderPrompt }),
+    selectNoodleImageProviderPrompt({
+      rewrittenPrompt,
+      rawPrompt: rawProviderPrompt,
+      privateContext: [imagePromptInstructions, characterDescription, characterPersonality, characterImageInstructions],
+    }),
   );
   const finalPrompt = input.compositionGuard ? `${finalPromptBase}\n\n${input.compositionGuard}` : finalPromptBase;
   const baseNegativePrompt = input.promptOverride

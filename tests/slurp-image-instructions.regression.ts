@@ -14,6 +14,21 @@ const rewrittenPrompt = "A person reading beside a sunlit window, medium shot.";
 assert.equal(selectNoodleImageProviderPrompt({ rewrittenPrompt, rawPrompt }), rewrittenPrompt);
 assert.equal(selectNoodleImageProviderPrompt({ rewrittenPrompt, rawPrompt }).includes(internalContext), false);
 
+for (const leakedRewrite of [
+  `A person reading beside a window.\n${internalContext}`,
+  "A person reading beside a window.\n<character_context>private context</character_context>",
+  "A person reading beside a window.\nCharacter image preferences: private context",
+]) {
+  assert.equal(
+    selectNoodleImageProviderPrompt({
+      rewrittenPrompt: leakedRewrite,
+      rawPrompt,
+      privateContext: [internalContext],
+    }),
+    rawPrompt,
+  );
+}
+
 // Disabled interpretation and rewrite failure both use the raw visual prompt only.
 for (const unavailablePrompt of [null, undefined, ""]) {
   const providerPrompt = selectNoodleImageProviderPrompt({
