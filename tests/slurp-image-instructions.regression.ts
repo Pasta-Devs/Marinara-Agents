@@ -5,6 +5,8 @@ import { selectNoodleImageProviderPrompt } from "../packages/slurp/src/engine/pa
 
 const root = join(import.meta.dirname, "..");
 const rawPrompt = "A person reading beside a window.";
+const renderedTemplatePrompt =
+  "Create a post. User image instructions: private instructions. Personality: private context.";
 const internalContext = "User image instructions: preserve the personality notes. Personality: private context.";
 const rewrittenPrompt = "A person reading beside a sunlit window, medium shot.";
 
@@ -14,9 +16,13 @@ assert.equal(selectNoodleImageProviderPrompt({ rewrittenPrompt, rawPrompt }).inc
 
 // Disabled interpretation and rewrite failure both use the raw visual prompt only.
 for (const unavailablePrompt of [null, undefined, ""]) {
-  const providerPrompt = selectNoodleImageProviderPrompt({ rewrittenPrompt: unavailablePrompt, rawPrompt });
+  const providerPrompt = selectNoodleImageProviderPrompt({
+    rewrittenPrompt: unavailablePrompt,
+    rawPrompt,
+  });
   assert.equal(providerPrompt, rawPrompt);
   assert.equal(providerPrompt.includes(internalContext), false);
+  assert.equal(providerPrompt.includes(renderedTemplatePrompt), false);
 }
 
 const images = readFileSync(

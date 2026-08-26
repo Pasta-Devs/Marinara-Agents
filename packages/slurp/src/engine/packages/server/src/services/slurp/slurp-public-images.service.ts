@@ -205,6 +205,7 @@ export async function generateNoodlePostImage(input: {
   });
   const styleGuidance = resolveImageStyleGuidanceText(imageSettings.styleProfiles, compiledPrompt.profile.id);
   const rawFinalPrompt = input.promptOverride?.prompt.trim() || compiledPrompt.prompt;
+  const rawProviderPrompt = input.promptOverride?.prompt.trim() || input.draftPrompt.trim();
   const imagePromptInstructions = input.imageConnection.imagePromptInstructions?.trim();
   const characterContext = [
     characterDescription ? `Appearance:\n${characterDescription}` : "",
@@ -225,7 +226,7 @@ export async function generateNoodlePostImage(input: {
           styleGuidance,
         })
       : null;
-  const finalPrompt = selectNoodleImageProviderPrompt({ rewrittenPrompt, rawPrompt: rawFinalPrompt });
+  const finalPrompt = selectNoodleImageProviderPrompt({ rewrittenPrompt, rawPrompt: rawProviderPrompt });
   const finalNegativePrompt = input.promptOverride
     ? input.promptOverride.negativePrompt?.trim() || undefined
     : compiledPrompt.negativePrompt || undefined;

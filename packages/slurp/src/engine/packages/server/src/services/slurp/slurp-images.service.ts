@@ -184,6 +184,7 @@ export async function generateNoodlerPostImage(input: {
   });
   const styleGuidance = resolveImageStyleGuidanceText(imageSettings.styleProfiles, compiledPrompt.profile.id);
   const rawFinalPrompt = redactIdentity(input.promptOverride?.prompt.trim() || compiledPrompt.prompt);
+  const rawProviderPrompt = redactIdentity(input.promptOverride?.prompt.trim() || input.draftPrompt.trim());
   // Custom prompt templates may omit `userInstructions`, so restore configured instructions only
   // when the rendered prompt does not already contain them.
   const configuredImageInstructions = input.settings.imageGenerationPrompt.trim();
@@ -213,7 +214,7 @@ export async function generateNoodlerPostImage(input: {
         })
       : null;
   const finalPromptBase = redactIdentity(
-    selectNoodleImageProviderPrompt({ rewrittenPrompt, rawPrompt: rawFinalPrompt }),
+    selectNoodleImageProviderPrompt({ rewrittenPrompt, rawPrompt: rawProviderPrompt }),
   );
   const finalPrompt = input.compositionGuard ? `${finalPromptBase}\n\n${input.compositionGuard}` : finalPromptBase;
   const baseNegativePrompt = input.promptOverride
