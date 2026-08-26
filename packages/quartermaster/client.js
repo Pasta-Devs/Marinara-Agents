@@ -1,5 +1,5 @@
-// Quartermaster 0.1.9 — Marinara Engine roleplay-tracker capability (single-file client bundle)
-// Built from packages/quartermaster/src (3 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
+// Quartermaster 0.2.0 — Marinara Engine roleplay-tracker capability (single-file client bundle)
+// Built from packages/quartermaster/src (6 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
 // ===== 00-api.js =====
@@ -80,34 +80,15 @@ QM.unequipAll = (chatId, ownerId) =>
     body: "{}",
   });
 
-// ===== 10-dock.js =====
-// Quartermaster — self-managed floating sheet panel. Mirrors Beholder's
-// BH.dock (src/80-dock.js): the host's Tracker Panel is small and shared
-// chrome, not roomy enough for a real character-sheet layout (portrait,
-// equip-slot columns, inventory grid). So the panel lives in its own
-// fixed-position element appended to document.body, independent of any
-// host-provided slot container, and BOTH the roleplay-tracker toolbar
-// button and the tracker-panel launcher just toggle this same panel open.
-//
-// Styled with the host's own CSS custom properties (--popover, --foreground,
-// --border, etc. — defined on :root in the Engine's globals.css) for general
-// chrome, since our panel is plain light DOM appended under document.body
-// and inherits them directly. Destructive/dismiss and save/create actions
-// use fixed red/green instead of var(--destructive)/var(--primary) on
-// purpose — this app's own theme maps --destructive to the same purple as
-// --primary, so following it would lose the actual red/green danger-vs-safe
-// signal, which matters more here than perfect theme fidelity.
-//
-// v1 slice: persona-only. Equip slots, bag/stored locations, item
-// descriptions + default slots, and saved outfits. appearanceFeedMode is
-// selectable and persisted but not yet wired to actually write a {{getvar}}
-// appearance macro. No images, locks, or party members yet.
+// ===== 05-state.js =====
+// Quartermaster — shared reactive state for the persona's inventory. Both
+// QM.dock (the self-managed floating panel) and QM.panel (the inline
+// tracker-panel accordion) read from and mutate through this single source,
+// so equipping/unequipping in one place is immediately reflected in the
+// other if both happen to be visible at once — each view just subscribes
+// and repaints on change rather than keeping its own copy.
 
 const QM_OWNER_ID = "persona";
-const QM_COLOR_DANGER = "#dc2626";
-const QM_COLOR_DANGER_FG = "#fff";
-const QM_COLOR_SUCCESS = "#16a34a";
-const QM_COLOR_SUCCESS_FG = "#fff";
 
 // Mirrors server.mjs's EQUIP_SLOTS exactly — client and server are separate
 // bundles, so this is duplicated rather than shared. Grouped for display
@@ -144,10 +125,297 @@ const QM_APPEARANCE_FEED_OPTIONS = [
   { value: "outfitDescription", label: "Outfit description" },
   { value: "equippedNames", label: "Equipped item names" },
 ];
+const QM_COLOR_DANGER = "#dc2626";
+const QM_COLOR_DANGER_FG = "#fff";
+const QM_COLOR_SUCCESS = "#16a34a";
+const QM_COLOR_SUCCESS_FG = "#fff";
+
+function qmSortByName(list) {
+  return list.slice().sort((a, b) => a.name.localeCompare(b.name));
+}
+
+QM.state = {
+  chatId: null,
+  items: null,
+  outfits: null,
+  appearanceFeedMode: "off",
+  personaAvatarUrl: null,
+  error: null,
+  _listeners: new Set(),
+
+  subscribe(fn) {
+    this._listeners.add(fn);
+    return () => this._listeners.delete(fn);
+  },
+
+  _notify() {
+    for (const fn of this._listeners) fn();
+  },
+
+  setChat(chatId) {
+    if (this.chatId === chatId) return;
+    this.chatId = chatId;
+    this.items = null;
+    this.outfits = null;
+    this.appearanceFeedMode = "off";
+    this.personaAvatarUrl = null;
+    this.error = null;
+    this._notify();
+    this.ensureLoaded();
+  },
+
+  ensureLoaded() {
+    if (!this.chatId || this.items !== null) return;
+    this._reload();
+  },
+
+  async _reload() {
+    const chatId = this.chatId;
+    if (!chatId) return;
+    try {
+      const result = await QM.listItems(chatId, QM_OWNER_ID);
+      if (this.chatId !== chatId) return; // chat changed while this was in flight
+      this.items = result.items;
+      this.outfits = result.outfits;
+      this.appearanceFeedMode = result.appearanceFeedMode;
+      this.personaAvatarUrl = result.personaAvatarUrl || null;
+      this.error = null;
+    } catch (error) {
+      this.error = error && error.message ? error.message : String(error);
+    }
+    this._notify();
+  },
+
+  async _mutate(request) {
+    const chatId = this.chatId;
+    if (!chatId) return;
+    try {
+      const result = await request;
+      if (this.chatId !== chatId) return;
+      if (result.items !== undefined) this.items = result.items;
+      if (result.outfits !== undefined) this.outfits = result.outfits;
+      if (result.appearanceFeedMode !== undefined) this.appearanceFeedMode = result.appearanceFeedMode;
+      this.error = null;
+    } catch (error) {
+      this.error = error && error.message ? error.message : String(error);
+    }
+    this._notify();
+  },
+
+  addItem(item) {
+    return this._mutate(QM.addItem(this.chatId, QM_OWNER_ID, item));
+  },
+  updateItem(itemId, patch) {
+    return this._mutate(QM.updateItem(this.chatId, QM_OWNER_ID, itemId, patch));
+  },
+  deleteItem(itemId) {
+    return this._mutate(QM.deleteItem(this.chatId, QM_OWNER_ID, itemId));
+  },
+  unequipAll() {
+    return this._mutate(QM.unequipAll(this.chatId, QM_OWNER_ID));
+  },
+  createOutfit(outfit) {
+    return this._mutate(QM.createOutfit(this.chatId, QM_OWNER_ID, outfit));
+  },
+  updateOutfit(outfitId, patch) {
+    return this._mutate(QM.updateOutfit(this.chatId, QM_OWNER_ID, outfitId, patch));
+  },
+  equipOutfit(outfitId) {
+    return this._mutate(QM.equipOutfit(this.chatId, QM_OWNER_ID, outfitId));
+  },
+  deleteOutfit(outfitId) {
+    return this._mutate(QM.deleteOutfit(this.chatId, QM_OWNER_ID, outfitId));
+  },
+  updateAppearanceFeedMode(mode) {
+    return this._mutate(QM.updateSettings(this.chatId, QM_OWNER_ID, { appearanceFeedMode: mode }));
+  },
+
+  // ── Derived, sorted views. Every list-producing getter sorts A-Z here so
+  // no render path can accidentally show raw insertion order again. ──
+  bagItems() {
+    return qmSortByName((this.items ?? []).filter((item) => !item.location.startsWith("equipped:")));
+  },
+
+  // [{ label, items }], Bag first then each "stored:<name>" category A-Z by
+  // label; items within a category A-Z by name.
+  itemsByLocationCategory() {
+    const categories = new Map();
+    for (const item of this.bagItems()) {
+      const label = item.location === "bag" ? "Bag" : item.location.slice("stored:".length);
+      if (!categories.has(label)) categories.set(label, []);
+      categories.get(label).push(item);
+    }
+    const labels = [...categories.keys()].sort((a, b) => {
+      if (a === "Bag") return -1;
+      if (b === "Bag") return 1;
+      return a.localeCompare(b);
+    });
+    return labels.map((label) => ({ label, items: categories.get(label) }));
+  },
+
+  // [{ slot, item }] for occupied slots, in EQUIP_SLOTS' fixed anatomical
+  // order — that order is itself the sort, not insertion order.
+  equippedEntries() {
+    const items = this.items ?? [];
+    const entries = [];
+    for (const slot of QM_EQUIP_SLOTS) {
+      const item = items.find((candidate) => candidate.location === `equipped:${slot}`);
+      if (item) entries.push({ slot, item });
+    }
+    return entries;
+  },
+
+  itemInSlot(slot) {
+    return (this.items ?? []).find((item) => item.location === `equipped:${slot}`) ?? null;
+  },
+
+  sortedOutfits() {
+    return qmSortByName(this.outfits ?? []);
+  },
+
+  outfitItemNames(outfit) {
+    const items = this.items ?? [];
+    return Object.values(outfit.slots ?? {})
+      .map((itemId) => items.find((item) => item.id === itemId))
+      .filter(Boolean)
+      .map((item) => item.name)
+      .sort((a, b) => a.localeCompare(b));
+  },
+
+  outfitMatchesCurrent(outfit) {
+    const current = {};
+    for (const item of this.items ?? []) {
+      if (item.location.startsWith("equipped:")) current[item.location.slice("equipped:".length)] = item.id;
+    }
+    const outfitEntries = Object.entries(outfit.slots ?? {});
+    const currentEntries = Object.entries(current);
+    if (outfitEntries.length !== currentEntries.length) return false;
+    return outfitEntries.every(([slot, itemId]) => current[slot] === itemId);
+  },
+};
+
+// ===== 07-ui.js =====
+// Quartermaster — small shared DOM-building helpers used by both QM.dock
+// (the floating panel) and QM.panel (the inline tracker-panel accordion),
+// so the two views stay visually and behaviorally consistent instead of
+// each hand-rolling their own button/input styling.
+
+QM.textNode = function textNode(text) {
+  const node = document.createElement("p");
+  node.style.margin = "0 0 8px";
+  node.textContent = text;
+  return node;
+};
+
+QM.sectionHeading = function sectionHeading(text) {
+  const heading = document.createElement("h3");
+  heading.textContent = text;
+  Object.assign(heading.style, {
+    margin: "0 0 6px",
+    fontSize: "12px",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+    color: "var(--muted-foreground, currentcolor)",
+  });
+  return heading;
+};
+
+QM.smallInput = function smallInput(tag) {
+  const el = document.createElement(tag);
+  Object.assign(el.style, {
+    background: "var(--input, transparent)",
+    color: "inherit",
+    border: "1px solid var(--border, rgba(0,0,0,0.2))",
+    borderRadius: "4px",
+    padding: "2px 4px",
+    fontSize: "12px",
+  });
+  // <select>'s CLOSED box respects author background/color reliably, but the
+  // OPEN dropdown popup is largely native-rendered by the browser —
+  // Chromium in particular picks colors for it from the page's inherited
+  // color-scheme, ignoring var(--input)/color:inherit, which produced
+  // white-background/light-text. Forcing color-scheme: light plus explicit
+  // (non-variable) colors fixes both the closed box and the popup
+  // consistently — real theme-matching for the popup itself isn't reliably
+  // achievable across browsers.
+  if (tag === "select") {
+    el.style.colorScheme = "light";
+    el.style.background = "#fff";
+    el.style.color = "#000";
+  }
+  return el;
+};
+
+// Shared button factory so danger/success/neutral styling stays consistent.
+// bg/fg are CSS color values; border draws a themed outline for neutral
+// (non-colored) buttons instead of a solid fill.
+QM.button = function button(text, { bg, fg, border } = {}) {
+  const el = document.createElement("button");
+  el.type = "button";
+  el.textContent = text;
+  Object.assign(el.style, {
+    background: bg ?? "var(--primary, #444)",
+    color: fg ?? "var(--primary-foreground, #fff)",
+    border: border ? "1px solid var(--border, rgba(0,0,0,0.2))" : "none",
+    borderRadius: "4px",
+    padding: "2px 8px",
+    cursor: "pointer",
+    fontSize: "12px",
+  });
+  return el;
+};
+
+QM.descriptionInput = function descriptionInput(item) {
+  const input = QM.smallInput("input");
+  input.type = "text";
+  input.placeholder = "Description";
+  input.value = item.description || "";
+  input.addEventListener("change", () => QM.state.updateItem(item.id, { description: input.value }));
+  return input;
+};
+
+QM.defaultSlotSelect = function defaultSlotSelect(item) {
+  const select = QM.smallInput("select");
+  const noneOption = document.createElement("option");
+  noneOption.value = "";
+  noneOption.textContent = "Default slot…";
+  select.appendChild(noneOption);
+  for (const slot of QM_EQUIP_SLOTS) {
+    const option = document.createElement("option");
+    option.value = slot;
+    option.textContent = QM_SLOT_LABELS[slot];
+    select.appendChild(option);
+  }
+  select.value = item.defaultSlot || "";
+  select.addEventListener("change", () => QM.state.updateItem(item.id, { defaultSlot: select.value || null }));
+  return select;
+};
+
+// ===== 10-dock.js =====
+// Quartermaster — self-managed floating sheet panel. Mirrors Beholder's
+// BH.dock (src/80-dock.js): the host's Tracker Panel is small and shared
+// chrome, not roomy enough for a real character-sheet layout (portrait,
+// equip-slot columns, inventory grid). So the panel lives in its own
+// fixed-position element appended to document.body, independent of any
+// host-provided slot container.
+//
+// A pure view over QM.state (05-state.js) — subscribes while open, repaints
+// on every change, unsubscribes while closed. The tracker-panel slot has its
+// own inline accordion view (15-panel.js) reading the same state, so
+// equipping something in one place is reflected in the other immediately.
+//
+// Styled with the host's own CSS custom properties (--popover, --foreground,
+// --border, etc. — defined on :root in the Engine's globals.css) for general
+// chrome, since our panel is plain light DOM appended under document.body
+// and inherits them directly. Destructive/dismiss and save/create actions
+// use fixed red/green instead of var(--destructive)/var(--primary) on
+// purpose — this app's own theme maps --destructive to the same purple as
+// --primary, so following it would lose the actual red/green danger-vs-safe
+// signal, which matters more here than perfect theme fidelity.
 
 QM.dock = {
-  chatId: null,
   isOpenFlag: false,
+  unsubscribe: null,
   root: null,
   body: null,
   errorNode: null,
@@ -157,44 +425,11 @@ QM.dock = {
   outfitForm: null,
   form: null,
   listContainer: null,
-  items: null,
-  outfits: null,
-  appearanceFeedMode: "off",
-  personaAvatarUrl: null,
   portraitImage: null,
   portraitPlaceholder: null,
-  error: null,
 
   isOpen() {
     return this.isOpenFlag;
-  },
-
-  setChat(chatId) {
-    if (this.chatId === chatId) return;
-    this.chatId = chatId;
-    this.items = null;
-    this.outfits = null;
-    this.appearanceFeedMode = "off";
-    // A different chat can have a different active persona — better to show
-    // nothing briefly than a leftover portrait from the previous chat until
-    // the element's next capabilityProps update supplies the real one.
-    this.personaAvatarUrl = null;
-    this._clearPortrait();
-    this.error = null;
-    if (this.isOpenFlag) this._loadAndPaint();
-  },
-
-  setPersonaAvatarUrl(url) {
-    if (this.personaAvatarUrl === url) return;
-    this.personaAvatarUrl = url;
-    if (url && this.portraitImage) this.portraitImage.src = url;
-    else if (!url) this._clearPortrait();
-  },
-
-  _clearPortrait() {
-    if (this.portraitImage) this.portraitImage.removeAttribute("src");
-    if (this.portraitImage) this.portraitImage.style.display = "none";
-    if (this.portraitPlaceholder) this.portraitPlaceholder.style.display = "block";
   },
 
   toggle() {
@@ -207,12 +442,18 @@ QM.dock = {
     this._ensureRoot();
     this.root.style.display = "flex";
     this._syncToggles();
-    this._loadAndPaint();
+    if (!this.unsubscribe) this.unsubscribe = QM.state.subscribe(() => this._paint());
+    QM.state.ensureLoaded();
+    this._paint();
   },
 
   close() {
     this.isOpenFlag = false;
     if (this.root) this.root.style.display = "none";
+    if (this.unsubscribe) {
+      this.unsubscribe();
+      this.unsubscribe = null;
+    }
     this._syncToggles();
   },
 
@@ -257,7 +498,7 @@ QM.dock = {
     });
     const title = document.createElement("span");
     title.textContent = "Quartermaster";
-    const closeButton = this._button("×", { bg: QM_COLOR_DANGER, fg: QM_COLOR_DANGER_FG });
+    const closeButton = QM.button("×", { bg: QM_COLOR_DANGER, fg: QM_COLOR_DANGER_FG });
     closeButton.setAttribute("aria-label", "Close Quartermaster");
     Object.assign(closeButton.style, { fontSize: "14px", lineHeight: "1", padding: "2px 8px" });
     closeButton.addEventListener("click", () => this.close());
@@ -286,38 +527,15 @@ QM.dock = {
     this.portraitPlaceholder = null;
   },
 
-  async _loadAndPaint() {
-    const chatId = this.chatId;
-    if (!chatId) {
-      this._paint();
-      return;
-    }
-    if (this.items === null) {
-      try {
-        const result = await QM.listItems(chatId, QM_OWNER_ID);
-        this.items = result.items;
-        this.outfits = result.outfits;
-        this.appearanceFeedMode = result.appearanceFeedMode;
-        // Server-resolved (chat's personaId -> that persona's avatarPath) —
-        // neither slot's capabilityProps carries this, confirmed against the
-        // Engine's actual render sites.
-        this.setPersonaAvatarUrl(result.personaAvatarUrl || null);
-      } catch (error) {
-        this.error = error && error.message ? error.message : String(error);
-      }
-    }
-    this._paint();
-  },
-
   // Rebuilds only what changed. Forms are built once and left alone on every
   // repaint — rebuilding them on every add/delete/quantity change was wiping
   // out whatever the user had already typed, since a fresh <input> has no
   // value.
   _paint() {
-    if (!this.body) return;
+    if (!this.body || !this.isOpenFlag) return;
 
-    if (!this.chatId) {
-      this.body.replaceChildren(this._textNode("No active chat."));
+    if (!QM.state.chatId) {
+      this.body.replaceChildren(QM.textNode("No active chat."));
       this.errorNode = null;
       this.feedSelect = null;
       this.equippedContainer = null;
@@ -331,15 +549,12 @@ QM.dock = {
     }
 
     if (!this.form || !this.body.contains(this.form)) {
-      this.errorNode = this._textNode("");
+      this.errorNode = QM.textNode("");
       this.errorNode.style.color = QM_COLOR_DANGER;
       this.errorNode.style.display = "none";
 
       const feedRow = this._buildAppearanceFeedRow();
 
-      // Three columns side by side rather than stacked, so Equipped/
-      // Outfits/Bag are all visible at once instead of scrolling past each
-      // other.
       const columns = document.createElement("div");
       Object.assign(columns.style, { display: "flex", gap: "12px", alignItems: "flex-start" });
 
@@ -351,25 +566,13 @@ QM.dock = {
         alignItems: "center",
         justifyContent: "space-between",
       });
-      const unequipAllButton = this._button("Unequip All", {
+      const unequipAllButton = QM.button("Unequip All", {
         bg: "var(--secondary, transparent)",
         fg: "var(--secondary-foreground, inherit)",
         border: true,
       });
-      unequipAllButton.addEventListener("click", async () => {
-        const chatId = this.chatId;
-        if (!chatId) return;
-        try {
-          const result = await QM.unequipAll(chatId, QM_OWNER_ID);
-          this.items = result.items;
-          this.outfits = result.outfits;
-          this.error = null;
-        } catch (error) {
-          this.error = error && error.message ? error.message : String(error);
-        }
-        this._paint();
-      });
-      equippedHeadingRow.append(this._sectionHeading("Equipped"), unequipAllButton);
+      unequipAllButton.addEventListener("click", () => QM.state.unequipAll());
+      equippedHeadingRow.append(QM.sectionHeading("Equipped"), unequipAllButton);
       this.equippedContainer = document.createElement("div");
       equippedColumn.append(equippedHeadingRow, this._buildPortrait(), this.equippedContainer);
 
@@ -377,131 +580,30 @@ QM.dock = {
       Object.assign(outfitsColumn.style, { flex: "1", minWidth: "0" });
       this.outfitsContainer = document.createElement("div");
       this.outfitForm = this._buildSaveOutfitForm();
-      outfitsColumn.append(this._sectionHeading("Outfits"), this.outfitForm, this.outfitsContainer);
+      outfitsColumn.append(QM.sectionHeading("Outfits"), this.outfitForm, this.outfitsContainer);
 
       const bagColumn = document.createElement("div");
       Object.assign(bagColumn.style, { flex: "1", minWidth: "0" });
       this.form = this._buildAddItemForm();
       this.listContainer = document.createElement("div");
-      bagColumn.append(this._sectionHeading("Bag"), this.form, this.listContainer);
+      bagColumn.append(QM.sectionHeading("Bag"), this.form, this.listContainer);
 
       columns.append(equippedColumn, outfitsColumn, bagColumn);
       this.body.replaceChildren(this.errorNode, feedRow, columns);
     }
 
-    if (this.error) {
-      this.errorNode.textContent = `Error: ${this.error}`;
+    if (QM.state.error) {
+      this.errorNode.textContent = `Error: ${QM.state.error}`;
       this.errorNode.style.display = "";
     } else {
       this.errorNode.style.display = "none";
     }
 
-    this.feedSelect.value = this.appearanceFeedMode;
+    this.feedSelect.value = QM.state.appearanceFeedMode;
+    if (QM.state.personaAvatarUrl && this.portraitImage) this.portraitImage.src = QM.state.personaAvatarUrl;
     this.equippedContainer.replaceChildren(this._buildEquippedSection());
     this.outfitsContainer.replaceChildren(this._buildOutfitsList());
     this.listContainer.replaceChildren(this._buildItemList());
-  },
-
-  _sectionHeading(text) {
-    const heading = document.createElement("h3");
-    heading.textContent = text;
-    Object.assign(heading.style, {
-      margin: "0 0 6px",
-      fontSize: "12px",
-      textTransform: "uppercase",
-      letterSpacing: "0.04em",
-      color: "var(--muted-foreground, currentcolor)",
-    });
-    return heading;
-  },
-
-  _textNode(text) {
-    const node = document.createElement("p");
-    node.style.margin = "0 0 8px";
-    node.textContent = text;
-    return node;
-  },
-
-  _smallInput(tag) {
-    const el = document.createElement(tag);
-    Object.assign(el.style, {
-      background: "var(--input, transparent)",
-      color: "inherit",
-      border: "1px solid var(--border, rgba(0,0,0,0.2))",
-      borderRadius: "4px",
-      padding: "2px 4px",
-      fontSize: "12px",
-    });
-    // <select>'s CLOSED box respects author background/color reliably, but
-    // the OPEN dropdown popup is largely native-rendered by the browser —
-    // Chromium in particular picks its own colors for it based on the
-    // page's inherited color-scheme, ignoring var(--input)/color:inherit,
-    // which is what was producing white-background/light-text. Forcing
-    // color-scheme: light plus explicit (non-variable) colors here fixes
-    // both the closed box and the popup consistently — real theme-matching
-    // for the popup itself isn't reliably achievable across browsers.
-    if (tag === "select") {
-      el.style.colorScheme = "light";
-      el.style.background = "#fff";
-      el.style.color = "#000";
-    }
-    return el;
-  },
-
-  // Shared button factory so danger/success/neutral styling stays
-  // consistent. bg/fg are CSS color values; border draws a themed outline
-  // for neutral (non-colored) buttons instead of a solid fill.
-  _button(text, { bg, fg, border } = {}) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = text;
-    Object.assign(button.style, {
-      background: bg ?? "var(--primary, #444)",
-      color: fg ?? "var(--primary-foreground, #fff)",
-      border: border ? "1px solid var(--border, rgba(0,0,0,0.2))" : "none",
-      borderRadius: "4px",
-      padding: "2px 8px",
-      cursor: "pointer",
-      fontSize: "12px",
-    });
-    return button;
-  },
-
-  _bagItems() {
-    return (this.items ?? []).filter((item) => !item.location.startsWith("equipped:"));
-  },
-
-  _itemInSlot(slot) {
-    return (this.items ?? []).find((item) => item.location === `equipped:${slot}`) ?? null;
-  },
-
-  _currentEquippedSlots() {
-    const slots = {};
-    for (const item of this.items ?? []) {
-      if (item.location.startsWith("equipped:")) slots[item.location.slice("equipped:".length)] = item.id;
-    }
-    return slots;
-  },
-
-  _outfitMatchesCurrent(outfit) {
-    const current = this._currentEquippedSlots();
-    const outfitSlots = Object.entries(outfit.slots ?? {});
-    const currentSlots = Object.entries(current);
-    if (outfitSlots.length !== currentSlots.length) return false;
-    return outfitSlots.every(([slot, itemId]) => current[slot] === itemId);
-  },
-
-  async _updateItem(itemId, patch) {
-    const chatId = this.chatId;
-    if (!chatId) return;
-    try {
-      const result = await QM.updateItem(chatId, QM_OWNER_ID, itemId, patch);
-      this.items = result.items;
-      this.error = null;
-    } catch (error) {
-      this.error = error && error.message ? error.message : String(error);
-    }
-    this._paint();
   },
 
   _buildAppearanceFeedRow() {
@@ -518,7 +620,7 @@ QM.dock = {
     label.textContent = "Feed appearance:";
     label.style.color = "var(--muted-foreground, currentcolor)";
 
-    const select = this._smallInput("select");
+    const select = QM.smallInput("select");
     select.style.flex = "1";
     for (const option of QM_APPEARANCE_FEED_OPTIONS) {
       const optionEl = document.createElement("option");
@@ -526,26 +628,15 @@ QM.dock = {
       optionEl.textContent = option.label;
       select.appendChild(optionEl);
     }
-    select.addEventListener("change", async () => {
-      const chatId = this.chatId;
-      if (!chatId) return;
-      try {
-        const result = await QM.updateSettings(chatId, QM_OWNER_ID, { appearanceFeedMode: select.value });
-        this.appearanceFeedMode = result.appearanceFeedMode;
-        this.error = null;
-      } catch (error) {
-        this.error = error && error.message ? error.message : String(error);
-      }
-      this._paint();
-    });
+    select.addEventListener("change", () => QM.state.updateAppearanceFeedMode(select.value));
     this.feedSelect = select;
 
     row.append(label, select);
     return row;
   },
 
-  // Built once (like the forms) and cached on this.portraitImage so
-  // setPersonaAvatarUrl can update it live without a repaint. v1 just shows
+  // Built once (like the forms) and cached on this.portraitImage so a
+  // refreshed avatar can be applied live without a repaint. v1 just shows
   // the persona's real avatar — a package-owned generated/uploaded portrait
   // (per the extension: separate from the persona avatar, swaps on equip)
   // is later work, once this layout is settled.
@@ -568,13 +659,14 @@ QM.dock = {
 
     const image = document.createElement("img");
     image.alt = "Persona portrait";
+    const hasAvatar = Boolean(QM.state.personaAvatarUrl);
     Object.assign(image.style, {
       width: "100%",
       height: "100%",
       objectFit: "cover",
-      display: this.personaAvatarUrl ? "block" : "none",
+      display: hasAvatar ? "block" : "none",
     });
-    if (this.personaAvatarUrl) image.src = this.personaAvatarUrl;
+    if (hasAvatar) image.src = QM.state.personaAvatarUrl;
     this.portraitImage = image;
 
     const placeholder = document.createElement("span");
@@ -582,7 +674,7 @@ QM.dock = {
     Object.assign(placeholder.style, {
       fontSize: "11px",
       color: "var(--muted-foreground, currentcolor)",
-      display: this.personaAvatarUrl ? "none" : "block",
+      display: hasAvatar ? "none" : "block",
     });
     image.addEventListener("error", () => {
       image.style.display = "none";
@@ -645,27 +737,27 @@ QM.dock = {
     Object.assign(label.style, { width: "108px", flexShrink: "0", fontSize: "12px" });
     topLine.appendChild(label);
 
-    const equippedItem = this._itemInSlot(slot);
+    const equippedItem = QM.state.itemInSlot(slot);
     if (equippedItem) {
       const name = document.createElement("span");
       name.textContent = equippedItem.name;
       name.style.flex = "1";
 
-      const unequipButton = this._button("Unequip", {
+      const unequipButton = QM.button("Unequip", {
         bg: "var(--secondary, transparent)",
         fg: "var(--secondary-foreground, inherit)",
         border: true,
       });
-      unequipButton.addEventListener("click", () => this._updateItem(equippedItem.id, { location: "bag" }));
+      unequipButton.addEventListener("click", () => QM.state.updateItem(equippedItem.id, { location: "bag" }));
 
       topLine.append(name, unequipButton);
       row.appendChild(topLine);
-      row.appendChild(this._descriptionInput(equippedItem));
+      row.appendChild(QM.descriptionInput(equippedItem));
       return row;
     }
 
-    const bagItems = this._bagItems();
-    const select = this._smallInput("select");
+    const bagItems = QM.state.bagItems();
+    const select = QM.smallInput("select");
     select.disabled = bagItems.length === 0;
     select.style.flex = "1";
     const placeholder = document.createElement("option");
@@ -680,38 +772,12 @@ QM.dock = {
     }
     select.addEventListener("change", () => {
       const itemId = select.value;
-      if (itemId) this._updateItem(itemId, { location: `equipped:${slot}` });
+      if (itemId) QM.state.updateItem(itemId, { location: `equipped:${slot}` });
     });
 
     topLine.appendChild(select);
     row.appendChild(topLine);
     return row;
-  },
-
-  _descriptionInput(item) {
-    const input = this._smallInput("input");
-    input.type = "text";
-    input.placeholder = "Description";
-    input.value = item.description || "";
-    input.addEventListener("change", () => this._updateItem(item.id, { description: input.value }));
-    return input;
-  },
-
-  _defaultSlotSelect(item) {
-    const select = this._smallInput("select");
-    const noneOption = document.createElement("option");
-    noneOption.value = "";
-    noneOption.textContent = "Default slot…";
-    select.appendChild(noneOption);
-    for (const slot of QM_EQUIP_SLOTS) {
-      const option = document.createElement("option");
-      option.value = slot;
-      option.textContent = QM_SLOT_LABELS[slot];
-      select.appendChild(option);
-    }
-    select.value = item.defaultSlot || "";
-    select.addEventListener("change", () => this._updateItem(item.id, { defaultSlot: select.value || null }));
-    return select;
   },
 
   _buildSaveOutfitForm() {
@@ -721,18 +787,18 @@ QM.dock = {
     const line = document.createElement("div");
     Object.assign(line.style, { display: "flex", gap: "6px" });
 
-    const nameInput = this._smallInput("input");
+    const nameInput = QM.smallInput("input");
     nameInput.type = "text";
     nameInput.placeholder = "Save current as outfit…";
     nameInput.required = true;
     nameInput.style.flex = "1";
 
-    const saveButton = this._button("Save", { bg: QM_COLOR_SUCCESS, fg: QM_COLOR_SUCCESS_FG });
+    const saveButton = QM.button("Save", { bg: QM_COLOR_SUCCESS, fg: QM_COLOR_SUCCESS_FG });
     saveButton.type = "submit";
 
     line.append(nameInput, saveButton);
 
-    const descriptionInput = this._smallInput("input");
+    const descriptionInput = QM.smallInput("input");
     descriptionInput.type = "text";
     descriptionInput.placeholder = "Description (fed to appearance when selected above)";
     descriptionInput.style.width = "100%";
@@ -741,25 +807,13 @@ QM.dock = {
     form.append(line, descriptionInput);
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const chatId = this.chatId;
       const name = nameInput.value.trim();
-      if (!chatId || !name) return;
+      if (!name) return;
       saveButton.disabled = true;
-      try {
-        const result = await QM.createOutfit(chatId, QM_OWNER_ID, {
-          name,
-          description: descriptionInput.value,
-        });
-        this.items = result.items;
-        this.outfits = result.outfits;
-        this.error = null;
-        nameInput.value = "";
-        descriptionInput.value = "";
-      } catch (error) {
-        this.error = error && error.message ? error.message : String(error);
-      }
+      await QM.state.createOutfit({ name, description: descriptionInput.value });
       saveButton.disabled = false;
-      this._paint();
+      nameInput.value = "";
+      descriptionInput.value = "";
     });
 
     return form;
@@ -776,9 +830,9 @@ QM.dock = {
       gap: "6px",
     });
 
-    const outfits = this.outfits ?? [];
+    const outfits = QM.state.sortedOutfits();
     if (outfits.length === 0) {
-      const empty = this._textNode("No saved outfits yet.");
+      const empty = QM.textNode("No saved outfits yet.");
       empty.style.color = "var(--muted-foreground, currentcolor)";
       empty.style.margin = "0";
       list.appendChild(empty);
@@ -805,83 +859,36 @@ QM.dock = {
     const topLine = document.createElement("div");
     Object.assign(topLine.style, { display: "flex", alignItems: "center", gap: "6px" });
 
+    const equipped = QM.state.outfitMatchesCurrent(outfit);
     const name = document.createElement("span");
     name.style.flex = "1";
-    name.textContent = this._outfitMatchesCurrent(outfit) ? `${outfit.name} (equipped)` : outfit.name;
-    if (this._outfitMatchesCurrent(outfit)) name.style.fontWeight = "600";
+    name.textContent = equipped ? `${outfit.name} (equipped)` : outfit.name;
+    if (equipped) name.style.fontWeight = "600";
 
-    const equipButton = this._button("Equip");
-    equipButton.addEventListener("click", async () => {
-      const chatId = this.chatId;
-      if (!chatId) return;
-      try {
-        const result = await QM.equipOutfit(chatId, QM_OWNER_ID, outfit.id);
-        this.items = result.items;
-        this.outfits = result.outfits;
-        this.error = null;
-      } catch (error) {
-        this.error = error && error.message ? error.message : String(error);
-      }
-      this._paint();
-    });
+    const equipButton = QM.button("Equip");
+    equipButton.addEventListener("click", () => QM.state.equipOutfit(outfit.id));
 
-    const updateButton = this._button("Update", {
+    const updateButton = QM.button("Update", {
       bg: "var(--secondary, transparent)",
       fg: "var(--secondary-foreground, inherit)",
       border: true,
     });
     updateButton.title = "Resave the currently-equipped items into this outfit";
-    updateButton.addEventListener("click", async () => {
-      const chatId = this.chatId;
-      if (!chatId) return;
-      try {
-        const result = await QM.updateOutfit(chatId, QM_OWNER_ID, outfit.id, { resnapshot: true });
-        this.items = result.items;
-        this.outfits = result.outfits;
-        this.error = null;
-      } catch (error) {
-        this.error = error && error.message ? error.message : String(error);
-      }
-      this._paint();
-    });
+    updateButton.addEventListener("click", () => QM.state.updateOutfit(outfit.id, { resnapshot: true }));
 
-    const deleteButton = this._button("Delete", { bg: QM_COLOR_DANGER, fg: QM_COLOR_DANGER_FG });
-    deleteButton.addEventListener("click", async () => {
-      const chatId = this.chatId;
-      if (!chatId) return;
-      try {
-        const result = await QM.deleteOutfit(chatId, QM_OWNER_ID, outfit.id);
-        this.items = result.items;
-        this.outfits = result.outfits;
-        this.error = null;
-      } catch (error) {
-        this.error = error && error.message ? error.message : String(error);
-      }
-      this._paint();
-    });
+    const deleteButton = QM.button("Delete", { bg: QM_COLOR_DANGER, fg: QM_COLOR_DANGER_FG });
+    deleteButton.addEventListener("click", () => QM.state.deleteOutfit(outfit.id));
 
     topLine.append(name, equipButton, updateButton, deleteButton);
     row.appendChild(topLine);
 
-    const descriptionInput = this._smallInput("input");
+    const descriptionInput = QM.smallInput("input");
     descriptionInput.type = "text";
     descriptionInput.placeholder = "Description";
     descriptionInput.value = outfit.description || "";
-    descriptionInput.addEventListener("change", async () => {
-      const chatId = this.chatId;
-      if (!chatId) return;
-      try {
-        const result = await QM.updateOutfit(chatId, QM_OWNER_ID, outfit.id, {
-          description: descriptionInput.value,
-        });
-        this.items = result.items;
-        this.outfits = result.outfits;
-        this.error = null;
-      } catch (error) {
-        this.error = error && error.message ? error.message : String(error);
-      }
-      this._paint();
-    });
+    descriptionInput.addEventListener("change", () =>
+      QM.state.updateOutfit(outfit.id, { description: descriptionInput.value }),
+    );
     row.appendChild(descriptionInput);
 
     return row;
@@ -894,24 +901,24 @@ QM.dock = {
     const line = document.createElement("div");
     Object.assign(line.style, { display: "flex", gap: "6px" });
 
-    const nameInput = this._smallInput("input");
+    const nameInput = QM.smallInput("input");
     nameInput.type = "text";
     nameInput.placeholder = "Item name";
     nameInput.required = true;
     nameInput.style.flex = "1";
 
-    const quantityInput = this._smallInput("input");
+    const quantityInput = QM.smallInput("input");
     quantityInput.type = "number";
     quantityInput.min = "1";
     quantityInput.value = "1";
     quantityInput.style.width = "56px";
 
-    const addButton = this._button("Add", { bg: QM_COLOR_SUCCESS, fg: QM_COLOR_SUCCESS_FG });
+    const addButton = QM.button("Add", { bg: QM_COLOR_SUCCESS, fg: QM_COLOR_SUCCESS_FG });
     addButton.type = "submit";
 
     line.append(nameInput, quantityInput, addButton);
 
-    const descriptionInput = this._smallInput("input");
+    const descriptionInput = QM.smallInput("input");
     descriptionInput.type = "text";
     descriptionInput.placeholder = "Description (optional)";
     descriptionInput.style.width = "100%";
@@ -920,27 +927,14 @@ QM.dock = {
     form.append(line, descriptionInput);
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const chatId = this.chatId;
       const name = nameInput.value.trim();
-      if (!chatId || !name) return;
+      if (!name) return;
       addButton.disabled = true;
-      try {
-        const result = await QM.addItem(chatId, QM_OWNER_ID, {
-          name,
-          quantity: quantityInput.value,
-          description: descriptionInput.value,
-        });
-        this.items = result.items;
-        this.outfits = result.outfits;
-        this.error = null;
-        nameInput.value = "";
-        quantityInput.value = "1";
-        descriptionInput.value = "";
-      } catch (error) {
-        this.error = error && error.message ? error.message : String(error);
-      }
+      await QM.state.addItem({ name, quantity: quantityInput.value, description: descriptionInput.value });
       addButton.disabled = false;
-      this._paint();
+      nameInput.value = "";
+      quantityInput.value = "1";
+      descriptionInput.value = "";
     });
 
     return form;
@@ -957,9 +951,9 @@ QM.dock = {
       gap: "6px",
     });
 
-    const items = this._bagItems();
+    const items = QM.state.bagItems();
     if (items.length === 0) {
-      const empty = this._textNode("Bag is empty.");
+      const empty = QM.textNode("Bag is empty.");
       empty.style.color = "var(--muted-foreground, currentcolor)";
       empty.style.margin = "0";
       list.appendChild(empty);
@@ -990,27 +984,15 @@ QM.dock = {
     label.textContent = item.name;
     label.style.flex = "1";
 
-    const quantityInput = this._smallInput("input");
+    const quantityInput = QM.smallInput("input");
     quantityInput.type = "number";
     quantityInput.min = "1";
     quantityInput.value = String(item.quantity);
     quantityInput.style.width = "48px";
-    quantityInput.addEventListener("change", () => this._updateItem(item.id, { quantity: quantityInput.value }));
+    quantityInput.addEventListener("change", () => QM.state.updateItem(item.id, { quantity: quantityInput.value }));
 
-    const deleteButton = this._button("Delete", { bg: QM_COLOR_DANGER, fg: QM_COLOR_DANGER_FG });
-    deleteButton.addEventListener("click", async () => {
-      const chatId = this.chatId;
-      if (!chatId) return;
-      try {
-        const result = await QM.deleteItem(chatId, QM_OWNER_ID, item.id);
-        this.items = result.items;
-        this.outfits = result.outfits;
-        this.error = null;
-      } catch (error) {
-        this.error = error && error.message ? error.message : String(error);
-      }
-      this._paint();
-    });
+    const deleteButton = QM.button("Delete", { bg: QM_COLOR_DANGER, fg: QM_COLOR_DANGER_FG });
+    deleteButton.addEventListener("click", () => QM.state.deleteItem(item.id));
 
     topLine.append(label, quantityInput, deleteButton);
 
@@ -1021,32 +1003,240 @@ QM.dock = {
     storedLabel.textContent = "Stored at:";
     Object.assign(storedLabel.style, { fontSize: "11px", color: "var(--muted-foreground, currentcolor)" });
 
-    const storedInput = this._smallInput("input");
+    const storedInput = QM.smallInput("input");
     storedInput.type = "text";
     storedInput.placeholder = "bag";
     storedInput.value = item.location.startsWith("stored:") ? item.location.slice("stored:".length) : "";
     storedInput.style.flex = "1";
     storedInput.addEventListener("change", () => {
       const text = storedInput.value.trim();
-      this._updateItem(item.id, { location: text ? `stored:${text}` : "bag" });
+      QM.state.updateItem(item.id, { location: text ? `stored:${text}` : "bag" });
     });
 
     storedLine.append(storedLabel, storedInput);
 
     const equipLine = document.createElement("div");
     Object.assign(equipLine.style, { display: "flex", alignItems: "center", gap: "6px" });
-    const defaultSlotSelect = this._defaultSlotSelect(item);
+    const defaultSlotSelect = QM.defaultSlotSelect(item);
     defaultSlotSelect.style.flex = "1";
-    const equipButton = this._button("Equip");
+    const equipButton = QM.button("Equip");
     equipButton.disabled = !item.defaultSlot;
     equipButton.style.opacity = item.defaultSlot ? "1" : "0.5";
     equipButton.addEventListener("click", () => {
-      if (item.defaultSlot) this._updateItem(item.id, { location: `equipped:${item.defaultSlot}` });
+      if (item.defaultSlot) QM.state.updateItem(item.id, { location: `equipped:${item.defaultSlot}` });
     });
     equipLine.append(defaultSlotSelect, equipButton);
 
-    row.append(topLine, storedLine, equipLine, this._descriptionInput(item));
+    row.append(topLine, storedLine, equipLine, QM.descriptionInput(item));
     return row;
+  },
+};
+
+// ===== 15-panel.js =====
+// Quartermaster — inline tracker-panel accordion. Renders directly into the
+// tracker-panel slot's element (unlike the toolbar slot, which is just a
+// launcher button for QM.dock) as a native <details>/<summary> tree, matching
+// how built-in trackers like Inventory Tracker show up as a collapsible
+// section in the same panel: a top-level "Quartermaster" section containing
+// three sub-sections (Equipped, Outfits, Inventory). A pure view over
+// QM.state (05-state.js) — see 10-dock.js's header comment for why both
+// views share one state module instead of each keeping their own copy.
+//
+// This is the compact, read-mostly companion to the floating dock: Equipped
+// and Outfits can act (unequip/equip), Inventory is just name + qty per the
+// requested scope — full editing (descriptions, stored locations, adding
+// items) stays in the dock.
+
+QM.panel = {
+  container: null,
+  unsubscribe: null,
+
+  mount(container) {
+    if (this.container === container) {
+      this.paint();
+      return;
+    }
+    this.unmount();
+    this.container = container;
+    this.unsubscribe = QM.state.subscribe(() => this.paint());
+    QM.state.ensureLoaded();
+    this.paint();
+  },
+
+  unmount() {
+    if (this.unsubscribe) {
+      this.unsubscribe();
+      this.unsubscribe = null;
+    }
+    this.container = null;
+  },
+
+  paint() {
+    if (!this.container) return;
+    this.container.replaceChildren(this._build());
+  },
+
+  _build() {
+    const root = document.createElement("details");
+    Object.assign(root.style, { fontSize: "12px", fontFamily: "system-ui, sans-serif" });
+
+    const summary = document.createElement("summary");
+    summary.textContent = "Quartermaster";
+    Object.assign(summary.style, { cursor: "pointer", fontWeight: "600", padding: "4px 0" });
+    root.appendChild(summary);
+
+    if (!QM.state.chatId) {
+      root.appendChild(QM.textNode("No active chat."));
+      return root;
+    }
+
+    const body = document.createElement("div");
+    Object.assign(body.style, { display: "flex", flexDirection: "column", gap: "4px", padding: "4px 0 4px 10px" });
+
+    if (QM.state.error) {
+      const errorNode = QM.textNode(`Error: ${QM.state.error}`);
+      errorNode.style.color = QM_COLOR_DANGER;
+      body.appendChild(errorNode);
+    }
+
+    body.append(
+      this._buildSubsection("Equipped", this._buildEquipped()),
+      this._buildSubsection("Outfits", this._buildOutfits()),
+      this._buildSubsection("Inventory", this._buildInventory()),
+    );
+
+    root.appendChild(body);
+    return root;
+  },
+
+  _buildSubsection(label, content) {
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = label;
+    Object.assign(summary.style, { cursor: "pointer", padding: "3px 0" });
+    Object.assign(details.style, { borderTop: "1px solid var(--border, rgba(128,128,128,0.2))" });
+    details.append(summary, content);
+    return details;
+  },
+
+  _row(children) {
+    const row = document.createElement("div");
+    Object.assign(row.style, {
+      display: "flex",
+      alignItems: "center",
+      gap: "6px",
+      padding: "3px 0 3px 8px",
+    });
+    row.append(...children);
+    return row;
+  },
+
+  _buildEquipped() {
+    const list = document.createElement("div");
+    const entries = QM.state.equippedEntries();
+    if (entries.length === 0) {
+      list.appendChild(this._empty("Nothing equipped."));
+      return list;
+    }
+    for (const { slot, item } of entries) {
+      const name = document.createElement("span");
+      name.textContent = item.name;
+      name.style.flex = "1";
+
+      const slotLabel = document.createElement("span");
+      slotLabel.textContent = QM_SLOT_LABELS[slot];
+      Object.assign(slotLabel.style, { color: "var(--muted-foreground, currentcolor)", fontSize: "11px" });
+
+      const unequipButton = QM.button("Unequip", {
+        bg: "var(--secondary, transparent)",
+        fg: "var(--secondary-foreground, inherit)",
+        border: true,
+      });
+      unequipButton.addEventListener("click", () => QM.state.updateItem(item.id, { location: "bag" }));
+
+      list.appendChild(this._row([name, slotLabel, unequipButton]));
+    }
+    return list;
+  },
+
+  _buildOutfits() {
+    const list = document.createElement("div");
+    const outfits = QM.state.sortedOutfits();
+    if (outfits.length === 0) {
+      list.appendChild(this._empty("No saved outfits yet."));
+      return list;
+    }
+    for (const outfit of outfits) {
+      const wrapper = document.createElement("div");
+      Object.assign(wrapper.style, { padding: "3px 0 3px 8px" });
+
+      const topLine = document.createElement("div");
+      Object.assign(topLine.style, { display: "flex", alignItems: "center", gap: "6px" });
+
+      const name = document.createElement("span");
+      name.textContent = outfit.name;
+      name.style.flex = "1";
+      name.style.fontWeight = "600";
+
+      const equipped = QM.state.outfitMatchesCurrent(outfit);
+      const toggleButton = equipped
+        ? QM.button("Unequip", {
+            bg: "var(--secondary, transparent)",
+            fg: "var(--secondary-foreground, inherit)",
+            border: true,
+          })
+        : QM.button("Equip");
+      toggleButton.addEventListener("click", () =>
+        equipped ? QM.state.unequipAll() : QM.state.equipOutfit(outfit.id),
+      );
+
+      topLine.append(name, toggleButton);
+
+      const itemNames = QM.state.outfitItemNames(outfit);
+      const itemsLine = document.createElement("div");
+      itemsLine.textContent = itemNames.length > 0 ? itemNames.join(", ") : "(empty)";
+      Object.assign(itemsLine.style, { color: "var(--muted-foreground, currentcolor)", fontSize: "11px" });
+
+      wrapper.append(topLine, itemsLine);
+      list.appendChild(wrapper);
+    }
+    return list;
+  },
+
+  _buildInventory() {
+    const list = document.createElement("div");
+    const categories = QM.state.itemsByLocationCategory();
+    if (categories.length === 0) {
+      list.appendChild(this._empty("Bag is empty."));
+      return list;
+    }
+    for (const category of categories) {
+      const categoryLabel = document.createElement("div");
+      categoryLabel.textContent = category.label;
+      Object.assign(categoryLabel.style, {
+        color: "var(--muted-foreground, currentcolor)",
+        fontSize: "11px",
+        padding: "3px 0 0 8px",
+      });
+      list.appendChild(categoryLabel);
+      for (const item of category.items) {
+        const name = document.createElement("span");
+        name.textContent = item.name;
+        name.style.flex = "1";
+        const qty = document.createElement("span");
+        qty.textContent = `×${item.quantity}`;
+        qty.style.color = "var(--muted-foreground, currentcolor)";
+        list.appendChild(this._row([name, qty]));
+      }
+    }
+    return list;
+  },
+
+  _empty(text) {
+    const node = document.createElement("div");
+    node.textContent = text;
+    Object.assign(node.style, { color: "var(--muted-foreground, currentcolor)", padding: "3px 0 3px 8px" });
+    return node;
   },
 };
 
@@ -1054,11 +1244,10 @@ QM.dock = {
 // Quartermaster — capability package client entrypoint.
 // Registers <marinara-capability-quartermaster>, mounted by the host once per
 // slot instance with a "view" attribute telling us which one — "toolbar" for
-// the compact roleplay-tracker launcher, "tracker" for the tracker-panel
-// launcher. Both are just buttons that toggle QM.dock (10-dock.js), the
-// self-managed floating panel — matches Beholder's src/90-element.js, where
-// both slots launch the same BH.dock rather than each rendering their own
-// content.
+// the compact roleplay-tracker icon button (opens QM.dock, the floating
+// panel), "tracker" for the tracker-panel slot, which renders the real
+// inline accordion (QM.panel, 15-panel.js) directly rather than being a
+// launcher.
 //
 // v1 slice: persona-only inventory. No images, locks, party members, or
 // narrator ingestion yet.
@@ -1067,6 +1256,17 @@ QM.dock = {
 // gates the Tracker Panel with `activeChat?.mode === "roleplay"`, and
 // RoleplayHUD.tsx (which renders the roleplay-tracker toolbar button) is
 // Roleplay-only by construction. No package code can route around either.
+
+// A backpack, stroke-based to match the app's own (Lucide-style) toolbar
+// icons rather than looking like a pasted-in logo image. Deliberately not a
+// person silhouette — that's Persona Stats' icon.
+const QM_ICON_SVG =
+  '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" ' +
+  'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+  '<rect x="5" y="8" width="14" height="13" rx="2"></rect>' +
+  '<path d="M9 8V6a3 3 0 0 1 6 0v2"></path>' +
+  '<rect x="9" y="12" width="6" height="4" rx="1"></rect>' +
+  "</svg>";
 
 class QuartermasterElement extends HTMLElement {
   constructor() {
@@ -1099,6 +1299,7 @@ class QuartermasterElement extends HTMLElement {
 
   disconnectedCallback() {
     this.removeEventListener("marinara-capability-props", this._onPropsEvent);
+    if (QM.panel.container === this) QM.panel.unmount();
   }
 
   get _chatId() {
@@ -1106,26 +1307,29 @@ class QuartermasterElement extends HTMLElement {
   }
 
   _render() {
-    // Neither slot's capabilityProps carries personaInfo/avatarUrl (checked
-    // against the Engine's actual RoleplayHUD.tsx/TrackerDataSidebar.tsx
-    // render sites) — the portrait is resolved server-side instead, from
-    // the GET /inventory response. See QM.dock._loadAndPaint.
-    QM.dock.setChat(this._chatId);
+    QM.state.setChat(this._chatId);
+
+    const view = this.getAttribute("view");
+    if (view === "tracker") {
+      QM.panel.mount(this);
+      return;
+    }
 
     let button = this._button;
     if (!button || !this.contains(button)) {
       button = document.createElement("button");
       button.type = "button";
+      button.innerHTML = QM_ICON_SVG;
       button.addEventListener("click", () => QM.dock.toggle());
       this.replaceChildren(button);
       this._button = button;
     }
 
-    const view = this.getAttribute("view");
     const props = this._props;
     const hostClass = props && typeof props.toolbarButtonClass === "string" ? props.toolbarButtonClass : "";
     button.className = `${hostClass} qm-launch`.trim();
-    button.textContent = view === "tracker" ? "Open Quartermaster" : "Quartermaster";
+    button.title = "Quartermaster";
+    button.setAttribute("aria-label", "Quartermaster");
     button.setAttribute("aria-pressed", QM.dock.isOpen() ? "true" : "false");
   }
 }

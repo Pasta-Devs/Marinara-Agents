@@ -106,12 +106,22 @@ export default tseslint.config(
   {
     // Quartermaster's client modules are concatenated into one IIFE by
     // scripts/build-quartermaster-package.mjs, so they share a scope that
-    // per-file linting cannot see. QM is defined in 00-api.js and used by
+    // per-file linting cannot see. QM is defined in 00-api.js; the
+    // QM_*/QM_COLOR_* constants are defined in 05-state.js and used by
     // sibling modules.
     files: ["packages/quartermaster/src/**/*.js"],
     languageOptions: {
       globals: {
         QM: "readonly",
+        QM_OWNER_ID: "readonly",
+        QM_SLOT_GROUPS: "readonly",
+        QM_EQUIP_SLOTS: "readonly",
+        QM_SLOT_LABELS: "readonly",
+        QM_APPEARANCE_FEED_OPTIONS: "readonly",
+        QM_COLOR_DANGER: "readonly",
+        QM_COLOR_DANGER_FG: "readonly",
+        QM_COLOR_SUCCESS: "readonly",
+        QM_COLOR_SUCCESS_FG: "readonly",
       },
     },
   },

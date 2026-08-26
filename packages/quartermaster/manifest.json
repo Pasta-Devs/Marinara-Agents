@@ -10,7 +10,7 @@
   },
   "id": "quartermaster",
   "name": "Quartermaster",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "description": "A per-chat RPG character sheet and inventory manager: equip slots, item locations, saved outfits, portrait and item images, and a read-only stat display. Early scaffold — most features are not yet implemented.",
   "engine": {
     "min": "2.4.4",
@@ -38,8 +38,8 @@
     },
     {
       "path": "client.js",
-      "sha256": "a9c03ce4633b5eedbdbfc34587bffbf557a8cda7bb0f4363011888ffa55ffcb2",
-      "bytes": 39939
+      "sha256": "d665cfcdf2d34fcc3277df81240226ecd13c11fcc4dc041b59adac2bdeed3b58",
+      "bytes": 47120
     },
     {
       "path": "server.mjs",
