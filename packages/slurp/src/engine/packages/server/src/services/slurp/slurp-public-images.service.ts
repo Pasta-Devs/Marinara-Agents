@@ -25,6 +25,7 @@ import { createPromptOverridesStorage } from "../storage/prompt-overrides.storag
 import { loadPrompt, NOODLE_IMAGE_POST } from "../prompt-overrides/index.js";
 import { generateNoodleImageWithRetry } from "./slurp-image-retry.js";
 import { rewriteNoodleImagePrompt } from "./slurp-image-prompt-rewrite.js";
+import { selectNoodleImageProviderPrompt } from "./slurp-image-prompt.js";
 import { resolveNoodlerImageConnectionId } from "./slurp-image-connections.js";
 import type { ConnectionAdmissionMode } from "../generation/connection-admission.js";
 import {
@@ -224,7 +225,7 @@ export async function generateNoodlePostImage(input: {
           styleGuidance,
         })
       : null;
-  const finalPrompt = rewrittenPrompt ?? rawFinalPrompt;
+  const finalPrompt = selectNoodleImageProviderPrompt({ rewrittenPrompt, rawPrompt: rawFinalPrompt });
   const finalNegativePrompt = input.promptOverride
     ? input.promptOverride.negativePrompt?.trim() || undefined
     : compiledPrompt.negativePrompt || undefined;

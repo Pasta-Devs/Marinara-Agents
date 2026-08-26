@@ -24,6 +24,7 @@ import { characterAppearanceFromRow, characterNoodleImageContextFromRow } from "
 import type { NoodleImagePromptReviewItem, ReviewedNoodleImagePrompt } from "./slurp-public-images.service.js";
 import { characterNameFromRow } from "./slurp-public-support.js";
 import { reviewedNoodlerPhysicalFacts } from "./slurp-prompt-safety.js";
+import { selectNoodleImageProviderPrompt } from "./slurp-image-prompt.js";
 
 const REVIEWED_IMAGE_CLAIM_LEASE_MS = 2 * 60 * 1000;
 const REVIEWED_IMAGE_CLAIM_RENEW_MS = 30 * 1000;
@@ -211,7 +212,9 @@ export async function generateNoodlerPostImage(input: {
           styleGuidance,
         })
       : null;
-  const finalPromptBase = redactIdentity(rewrittenPrompt ?? rawFinalPrompt);
+  const finalPromptBase = redactIdentity(
+    selectNoodleImageProviderPrompt({ rewrittenPrompt, rawPrompt: rawFinalPrompt }),
+  );
   const finalPrompt = input.compositionGuard ? `${finalPromptBase}\n\n${input.compositionGuard}` : finalPromptBase;
   const baseNegativePrompt = input.promptOverride
     ? redactIdentity(input.promptOverride.negativePrompt?.trim() || "") || undefined

@@ -4,6 +4,14 @@ function stripCodeFence(value: string): string {
   return match?.[1]?.trim() || trimmed;
 }
 
+/** Select only the visual prompt that can be sent to an image provider. */
+export function selectNoodleImageProviderPrompt(input: {
+  rewrittenPrompt: string | null | undefined;
+  rawPrompt: string;
+}): string {
+  return input.rewrittenPrompt?.trim() || input.rawPrompt;
+}
+
 /**
  * Recover the visual idea when a weaker timeline model wraps imagePrompt in
  * JSON or repeats Marinara's legacy prompt-assembly labels inside the field.

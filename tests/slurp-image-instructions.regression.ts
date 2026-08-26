@@ -1,31 +1,35 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { selectNoodleImageProviderPrompt } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-image-prompt";
 
 const root = join(import.meta.dirname, "..");
+const rawPrompt = "A person reading beside a window.";
+const internalContext = "User image instructions: preserve the personality notes. Personality: private context.";
+const rewrittenPrompt = "A person reading beside a sunlit window, medium shot.";
+
+// Interpretation success sends the rewritten visual prompt only.
+assert.equal(selectNoodleImageProviderPrompt({ rewrittenPrompt, rawPrompt }), rewrittenPrompt);
+assert.equal(selectNoodleImageProviderPrompt({ rewrittenPrompt, rawPrompt }).includes(internalContext), false);
+
+// Disabled interpretation and rewrite failure both use the raw visual prompt only.
+for (const unavailablePrompt of [null, undefined, ""]) {
+  const providerPrompt = selectNoodleImageProviderPrompt({ rewrittenPrompt: unavailablePrompt, rawPrompt });
+  assert.equal(providerPrompt, rawPrompt);
+  assert.equal(providerPrompt.includes(internalContext), false);
+}
+
 const images = readFileSync(
   join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-images.service.ts"),
   "utf8",
 );
-
-// The default template includes userInstructions, while a custom template may omit it. Preserve
-// configured instructions in the latter case without duplicating them in the former.
-assert.match(images, /userInstructions: input\.settings\.imageGenerationPrompt/u);
-assert.match(images, /configuredImageInstructions = input\.settings\.imageGenerationPrompt\.trim\(\)/u);
-assert.match(
-  images,
-  /configuredImageInstructions && !postPrompt\.includes\(configuredImageInstructions\) \? configuredImageInstructions : ""/u,
-);
-assert.match(images, /input\.imageConnection\.imagePromptInstructions\?\.trim\(\) \?\? ""/u);
-assert.match(images, /instructions: imagePromptInstructions/u);
-assert.match(images, /rewrittenPrompt \?\?[\s\S]*?rawFinalPrompt/u);
-assert.doesNotMatch(images, /User image instructions:/u);
-
 const publicImages = readFileSync(
   join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-public-images.service.ts"),
   "utf8",
 );
-assert.match(publicImages, /rewrittenPrompt \?\?[\s\S]*?rawFinalPrompt/u);
-assert.doesNotMatch(publicImages, /User image instructions:/u);
+for (const source of [images, publicImages]) {
+  assert.match(source, /selectNoodleImageProviderPrompt/u);
+  assert.doesNotMatch(source, /User image instructions:/u);
+}
 
 console.log("Slurp image instruction regressions passed");
