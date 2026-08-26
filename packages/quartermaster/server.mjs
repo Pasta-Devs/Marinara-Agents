@@ -50,8 +50,27 @@ const EQUIP_SLOTS = [
   "belt",
 ];
 const EQUIP_SLOT_SET = new Set(EQUIP_SLOTS);
-const UNDERWEAR_SLOTS = new Set(["underwear_top", "underwear_bottom"]);
+// Three of the extension's original SLOT_GROUPS toggles (armor/underwear/
+// weapon) — the rest of the slots ("just regular slots", per the request)
+// have no group and are always on. SLOT_GROUP_DEFAULTS is the fresh-owner
+// default for each: underwear off (SFW by default), armor/weapons on (most
+// characters use them; hiding is for the RP styles that don't).
+const SLOT_GROUPS = {
+  underwear: new Set(["underwear_top", "underwear_bottom"]),
+  armor: new Set(["armor_torso", "armor_legs"]),
+  weapons: new Set(["weapon_left_hand", "weapon_right_hand"]),
+};
+const SLOT_GROUP_DEFAULTS = { underwear: false, armor: true, weapons: true };
 const APPEARANCE_FEED_MODES = new Set(["off", "outfitDescription", "equippedNames"]);
+
+// A slot with no group is always visible/equippable. `visibility` is the
+// {showUnderwear, showArmor, showWeapons} slice of an inventory state.
+function slotGroupVisible(slot, visibility) {
+  for (const [group, slots] of Object.entries(SLOT_GROUPS)) {
+    if (slots.has(slot)) return visibility[`show${group[0].toUpperCase()}${group.slice(1)}`] === true;
+  }
+  return true;
+}
 
 const PACKAGE_ID = "quartermaster";
 const INVENTORY_KIND = "inventory";
@@ -81,19 +100,19 @@ function normalizeDefaultSlot(value) {
   return typeof value === "string" && EQUIP_SLOT_SET.has(value) ? value : undefined;
 }
 
-// Returns the normalized location string, or null if invalid. `showUnderwear`
-// gates equipping INTO an underwear slot the same way it gates the client's
-// slot picker — "enable/disable the underwear slots", not just hide them —
-// so an agent or direct API call can't equip one while the owner has them
-// turned off. Already-equipped underwear items are left alone by this check;
-// it only blocks new equips.
-function normalizeLocation(value, showUnderwear) {
+// Returns the normalized location string, or null if invalid. `visibility`
+// gates equipping INTO a hidden group's slot the same way it gates the
+// client's slot picker — "enable/disable", not just hide — so an agent or
+// direct API call can't equip one while the owner has that group turned off.
+// Already-equipped items in a since-hidden group are left alone by this
+// check; it only blocks new equips.
+function normalizeLocation(value, visibility) {
   const text = normalizeText(value, MAX_STORED_LOCATION_LENGTH);
   if (!text || text === "bag") return "bag";
   if (text.startsWith("equipped:")) {
     const slot = text.slice("equipped:".length);
     if (!EQUIP_SLOT_SET.has(slot)) return null;
-    if (UNDERWEAR_SLOTS.has(slot) && !showUnderwear) return null;
+    if (!slotGroupVisible(slot, visibility)) return null;
     return text;
   }
   if (text.startsWith("stored:")) {
@@ -211,9 +230,11 @@ async function loadInventoryState(documents, chatId, ownerId) {
     items: Array.isArray(doc?.data?.items) ? doc.data.items : [],
     outfits: Array.isArray(doc?.data?.outfits) ? doc.data.outfits : [],
     appearanceFeedMode: APPEARANCE_FEED_MODES.has(doc?.data?.appearanceFeedMode) ? doc.data.appearanceFeedMode : "off",
-    // Off by default: an owner's underwear slots stay disabled and hidden
-    // until explicitly turned on, so a freshly-created inventory is SFW.
-    showUnderwear: doc?.data?.showUnderwear === true,
+    // Per-group defaults (SLOT_GROUP_DEFAULTS): underwear off so a fresh
+    // inventory is SFW, armor/weapons on since most characters use them.
+    showUnderwear: typeof doc?.data?.showUnderwear === "boolean" ? doc.data.showUnderwear : SLOT_GROUP_DEFAULTS.underwear,
+    showArmor: typeof doc?.data?.showArmor === "boolean" ? doc.data.showArmor : SLOT_GROUP_DEFAULTS.armor,
+    showWeapons: typeof doc?.data?.showWeapons === "boolean" ? doc.data.showWeapons : SLOT_GROUP_DEFAULTS.weapons,
   };
 }
 
@@ -293,7 +314,7 @@ export async function activate(context) {
         if (defaultSlot === undefined) return reply.status(400).send({ error: "Invalid defaultSlot" });
 
         const state = await loadInventoryState(documents, chatId, ownerId);
-        const location = body.location === undefined ? "bag" : normalizeLocation(body.location, state.showUnderwear);
+        const location = body.location === undefined ? "bag" : normalizeLocation(body.location, state);
         if (location === null) return reply.status(400).send({ error: "Invalid location" });
 
         const item = {
@@ -325,7 +346,7 @@ export async function activate(context) {
         if (body.description !== undefined) item.description = normalizeText(body.description, MAX_ITEM_DESCRIPTION_LENGTH);
         if (body.quantity !== undefined) item.quantity = normalizeQuantity(body.quantity);
         if (body.location !== undefined) {
-          const location = normalizeLocation(body.location, state.showUnderwear);
+          const location = normalizeLocation(body.location, state);
           if (location === null) return reply.status(400).send({ error: "Invalid location" });
           applyLocation(state.items, item, location);
         }
@@ -420,14 +441,14 @@ export async function activate(context) {
         // everything currently worn comes off first, then the outfit's items
         // go on. Matches the extension: "unequip whatever you're wearing and
         // equip that outfit's items into their saved slots, in one step."
-        // An outfit saved while underwear was visible can still reference
-        // underwear slots after it's turned off again — skip just those
+        // An outfit saved while a group was visible can still reference that
+        // group's slots after it's turned off again — skip just those
         // assignments rather than failing the whole outfit.
         for (const item of state.items) {
           if (item.location.startsWith("equipped:")) item.location = "bag";
         }
         for (const [slot, itemId] of Object.entries(outfit.slots)) {
-          if (UNDERWEAR_SLOTS.has(slot) && !state.showUnderwear) continue;
+          if (!slotGroupVisible(slot, state)) continue;
           const item = state.items.find((candidate) => candidate.id === itemId);
           if (item) item.location = `equipped:${slot}`;
         }
@@ -458,15 +479,19 @@ export async function activate(context) {
           }
           state.appearanceFeedMode = body.appearanceFeedMode;
         }
-        if (body.showUnderwear !== undefined) {
-          if (typeof body.showUnderwear !== "boolean") {
-            return reply.status(400).send({ error: "Invalid showUnderwear" });
-          }
-          state.showUnderwear = body.showUnderwear;
+        for (const key of ["showUnderwear", "showArmor", "showWeapons"]) {
+          if (body[key] === undefined) continue;
+          if (typeof body[key] !== "boolean") return reply.status(400).send({ error: `Invalid ${key}` });
+          state[key] = body[key];
         }
 
         await persistState(chatId, ownerId, state);
-        return { appearanceFeedMode: state.appearanceFeedMode, showUnderwear: state.showUnderwear };
+        return {
+          appearanceFeedMode: state.appearanceFeedMode,
+          showUnderwear: state.showUnderwear,
+          showArmor: state.showArmor,
+          showWeapons: state.showWeapons,
+        };
       });
     },
     { prefix: `/api/${PACKAGE_ID}` },

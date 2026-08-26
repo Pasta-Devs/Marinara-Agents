@@ -10,6 +10,13 @@ QM.textNode = function textNode(text) {
   return node;
 };
 
+// Centered — the Outfits/Equipped/Bag column headings sat flush left before
+// (the default for a block element), which read as misaligned against the
+// centered portrait ring between them. In the Equipped column the heading
+// sits in a grid alongside the Unequip All button (10-dock.js), which
+// centers it via a spacer column regardless of this text-align; here it
+// matters for Outfits/Bag, where the heading is the column's sole full-width
+// child.
 QM.sectionHeading = function sectionHeading(text) {
   const heading = document.createElement("h3");
   heading.textContent = text;
@@ -19,6 +26,7 @@ QM.sectionHeading = function sectionHeading(text) {
     textTransform: "uppercase",
     letterSpacing: "0.04em",
     color: "var(--muted-foreground, currentcolor)",
+    textAlign: "center",
   });
   return heading;
 };
@@ -83,11 +91,11 @@ QM.defaultSlotSelect = function defaultSlotSelect(item) {
   noneOption.value = "";
   noneOption.textContent = "Default slot…";
   select.appendChild(noneOption);
-  // Underwear slots drop out of the picker while hidden, matching the
-  // portrait ring — same "disabled AND hidden" behavior as the original
-  // extension's groupEnabled(), not just a cosmetic hide.
+  // A hidden group's slots drop out of the picker, matching the portrait
+  // ring — same "disabled AND hidden" behavior as the original extension's
+  // groupEnabled(), not just a cosmetic hide.
   for (const slot of QM_EQUIP_SLOTS) {
-    if (!QM.state.showUnderwear && QM_UNDERWEAR_SLOTS.has(slot)) continue;
+    if (!QM.state.slotVisible(slot)) continue;
     const option = document.createElement("option");
     option.value = slot;
     option.textContent = QM_SLOT_LABELS[slot];

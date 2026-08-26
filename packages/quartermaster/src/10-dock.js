@@ -18,15 +18,114 @@
 // purpose — this app's own theme maps --destructive to the same purple as
 // --primary, so following it would lose the actual red/green danger-vs-safe
 // signal, which matters more here than perfect theme fidelity.
+//
+// Draggable/resizable/mobile-aware: ported from Beholder's own dock, which
+// solves the identical problem (a floating panel over the same host) —
+// geometry as CSS custom properties + a stylesheet with !important (inline
+// styles can't express :hover or @media, so position/size move out of
+// Object.assign and into QM_DOCK_STYLE below), pointerdown-driven move/
+// resize, chat-area bounds clamping via the same .rpg-chat-area/TopBar
+// selectors, and a 767px mobile breakpoint that goes full-screen — same
+// breakpoint Beholder uses elsewhere in the host, kept consistent rather
+// than picked independently. touch-action:none on drag surfaces and
+// env(safe-area-inset-bottom) on the scrolling body are both host
+// conventions confirmed against Pixelforge's own touch surfaces, not
+// Quartermaster-specific choices.
+
+const QM_DOCK_STYLE_ID = "qm-dock-style";
+const QM_DOCK_STYLE = `
+#qm-dock-root{
+  position:fixed !important;
+  top:var(--qm-window-top,4rem) !important;
+  left:var(--qm-window-left,calc(100vw - 36rem)) !important;
+  right:auto !important; bottom:auto !important;
+  width:var(--qm-window-width,min(960px,calc(100vw - 2rem))) !important;
+  height:var(--qm-window-height,min(640px,calc(100vh - 5rem))) !important;
+  display:flex !important;
+}
+#qm-dock-root.qm-dock-collapsed{ display:none !important; }
+#qm-dock-header{ cursor:move; touch-action:none; }
+#qm-dock-resize-handle{
+  position:absolute; right:.25rem; bottom:.25rem; width:1.25rem; height:1.25rem;
+  border:0; border-radius:.25rem; padding:0; background:transparent;
+  color:var(--muted-foreground, currentcolor); cursor:nwse-resize; opacity:.6; touch-action:none;
+}
+#qm-dock-resize-handle::after{
+  content:""; position:absolute; right:.3rem; bottom:.3rem; width:.5rem; height:.5rem;
+  border-right:2px solid currentColor; border-bottom:2px solid currentColor;
+}
+#qm-dock-resize-handle:hover{ opacity:1; background:var(--accent, rgba(128,128,128,0.15)); }
+#qm-dock-root.qm-dock-dragging, #qm-dock-root.qm-dock-resizing{ user-select:none; }
+@media (max-width:767px){
+  #qm-dock-root{
+    top:var(--qm-mobile-top,0px) !important; left:0 !important; right:0 !important; bottom:0 !important;
+    width:100% !important; height:calc(100dvh - var(--qm-mobile-top,0px)) !important; border-radius:0 !important;
+  }
+  #qm-dock-header{ cursor:default; touch-action:auto; }
+  #qm-dock-resize-handle{ display:none !important; }
+  #qm-dock-body{ padding-bottom:max(10px, env(safe-area-inset-bottom)) !important; }
+}
+`;
+
+const QM_WINDOW_KEY = "marinara.quartermaster.window";
+const QM_WINDOW_MARGIN = 12;
+const QM_WINDOW_MIN_WIDTH = 320;
+const QM_WINDOW_MIN_HEIGHT = 360;
+const QM_WINDOW_DEFAULT_WIDTH = 960;
+const QM_WINDOW_DEFAULT_HEIGHT = 640;
+// Below this measured content width the 3 columns stack vertically instead
+// of overlapping — this is also what fixes the ring overflowing into the
+// Outfits/Bag columns at the old fixed size, not just a resize nicety.
+const QM_DOCK_COLUMNS_STACK_WIDTH = 760;
+// Below this, the ring's own left-stack/portrait/right-stack row also
+// stacks vertically, for narrow phones where even one full-width column
+// isn't wide enough for the ring side-by-side.
+const QM_DOCK_RING_STACK_WIDTH = 560;
+
+function qmClampWindowValue(value, minimum, maximum) {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function qmReadWindowGeometry() {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(QM_WINDOW_KEY) || "null");
+    if (stored && [stored.left, stored.top, stored.width, stored.height].every((value) => Number.isFinite(value))) {
+      return stored;
+    }
+  } catch {
+    // A blocked or stale storage value falls back to the default placement.
+  }
+  return null;
+}
+
+function qmWriteWindowGeometry(geometry) {
+  try {
+    window.localStorage.setItem(QM_WINDOW_KEY, JSON.stringify(geometry));
+  } catch {
+    // Persisting is a convenience; the session still works without it.
+  }
+}
+
+function qmEnsureDockStyle() {
+  if (document.getElementById(QM_DOCK_STYLE_ID)) return;
+  const style = document.createElement("style");
+  style.id = QM_DOCK_STYLE_ID;
+  style.textContent = QM_DOCK_STYLE;
+  (document.head || document.body).appendChild(style);
+}
 
 QM.dock = {
   isOpenFlag: false,
   unsubscribe: null,
   root: null,
+  header: null,
   body: null,
+  columns: null,
   errorNode: null,
   feedSelect: null,
   underwearToggle: null,
+  armorToggle: null,
+  weaponsToggle: null,
   equippedContainer: null,
   outfitsContainer: null,
   outfitForm: null,
@@ -35,6 +134,12 @@ QM.dock = {
   portraitWrapper: null,
   portraitImage: null,
   portraitPlaceholder: null,
+  geometry: qmReadWindowGeometry(),
+  bodyWidth: QM_WINDOW_DEFAULT_WIDTH,
+  _windowBound: false,
+  _interaction: null,
+  _boundsObserver: null,
+  _bodyObserver: null,
 
   isOpen() {
     return this.isOpenFlag;
@@ -48,8 +153,9 @@ QM.dock = {
   openPanel() {
     this.isOpenFlag = true;
     this._ensureRoot();
-    this.root.style.display = "flex";
+    this.root.classList.remove("qm-dock-collapsed");
     this._syncToggles();
+    this.syncGeometry();
     if (!this.unsubscribe) this.unsubscribe = QM.state.subscribe(() => this._paint());
     QM.state.ensureLoaded();
     this._paint();
@@ -57,7 +163,7 @@ QM.dock = {
 
   close() {
     this.isOpenFlag = false;
-    if (this.root) this.root.style.display = "none";
+    if (this.root) this.root.classList.add("qm-dock-collapsed");
     if (this.unsubscribe) {
       this.unsubscribe();
       this.unsubscribe = null;
@@ -71,21 +177,198 @@ QM.dock = {
     }
   },
 
+  isMobile() {
+    return window.matchMedia("(max-width: 767px)").matches;
+  },
+
+  // The live roleplay chat area, not the viewport — keeps the dock from
+  // drifting over the composer or off past the sidebar. Same selectors
+  // Beholder's dock uses against this same host.
+  getChatBounds() {
+    const areas = Array.from(document.querySelectorAll(".rpg-chat-area"))
+      .map((element) => element.getBoundingClientRect())
+      .filter((rect) => rect.width > 1 && rect.height > 1)
+      .sort((left, right) => right.width * right.height - left.width * left.height);
+    const rect = areas[0] || { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+    const topbar = document.querySelector('[data-component="TopBar"], header.mari-topbar');
+    const topbarBottom = topbar ? topbar.getBoundingClientRect().bottom : rect.top;
+    const top = Math.min(rect.bottom, Math.max(rect.top, topbarBottom));
+    return { left: rect.left, top, right: rect.right, bottom: rect.bottom };
+  },
+
+  applyGeometry(geometry) {
+    if (!this.root) return;
+    this.root.style.setProperty("--qm-window-left", `${Math.round(geometry.left)}px`);
+    this.root.style.setProperty("--qm-window-top", `${Math.round(geometry.top)}px`);
+    this.root.style.setProperty("--qm-window-width", `${Math.round(geometry.width)}px`);
+    this.root.style.setProperty("--qm-window-height", `${Math.round(geometry.height)}px`);
+  },
+
+  syncGeometry() {
+    if (!this.root) return;
+    const bounds = this.getChatBounds();
+    this.root.style.setProperty("--qm-mobile-top", `${Math.round(bounds.top)}px`);
+    if (this.isMobile()) return;
+
+    const availableWidth = Math.max(1, bounds.right - bounds.left);
+    const availableHeight = Math.max(1, bounds.bottom - bounds.top);
+    const margin = Math.min(QM_WINDOW_MARGIN, availableWidth / 4, availableHeight / 4);
+    const maxWidth = Math.max(1, availableWidth - margin * 2);
+    const maxHeight = Math.max(1, availableHeight - margin * 2);
+    const minWidth = Math.min(QM_WINDOW_MIN_WIDTH, maxWidth);
+    const minHeight = Math.min(QM_WINDOW_MIN_HEIGHT, maxHeight);
+    const width = qmClampWindowValue(this.geometry?.width ?? QM_WINDOW_DEFAULT_WIDTH, minWidth, maxWidth);
+    const height = qmClampWindowValue(this.geometry?.height ?? QM_WINDOW_DEFAULT_HEIGHT, minHeight, maxHeight);
+    const defaultLeft = bounds.right - margin - width;
+    const defaultTop = bounds.top + margin;
+    const left = qmClampWindowValue(
+      this.geometry?.left ?? defaultLeft,
+      bounds.left + margin,
+      bounds.right - margin - width,
+    );
+    const top = qmClampWindowValue(
+      this.geometry?.top ?? defaultTop,
+      bounds.top + margin,
+      bounds.bottom - margin - height,
+    );
+    this.geometry = { left, top, width, height };
+    this.applyGeometry(this.geometry);
+  },
+
+  observeChatBounds() {
+    if (typeof ResizeObserver !== "function") return;
+    this._boundsObserver?.disconnect();
+    this._boundsObserver = new ResizeObserver(() => this.syncGeometry());
+    const area = Array.from(document.querySelectorAll(".rpg-chat-area")).find((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 1 && rect.height > 1;
+    });
+    if (area) this._boundsObserver.observe(area);
+    const main = document.querySelector(".mari-main");
+    if (main && main !== area) this._boundsObserver.observe(main);
+  },
+
+  // Tracks the dock's own content width so the columns/ring can reflow as
+  // it's resized, independent of the chat-bounds observer above (which
+  // tracks where the dock is ALLOWED to be, not how wide it currently is).
+  observeBodyWidth() {
+    if (typeof ResizeObserver !== "function" || !this.body) return;
+    this._bodyObserver?.disconnect();
+    this._bodyObserver = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect?.width;
+      if (!width || Math.abs(width - this.bodyWidth) < 4) return;
+      this.bodyWidth = width;
+      this._applyResponsiveLayout();
+    });
+    this._bodyObserver.observe(this.body);
+  },
+
+  // Cheap re-layout that doesn't touch QM.state — just toggles flex
+  // direction on the stable, cached column/ring containers based on the
+  // last measured body width. The ring's own middleRow is rebuilt on every
+  // state repaint anyway (_buildEquippedSection), so it just reads
+  // this.bodyWidth fresh each time rather than needing a matching toggle
+  // here.
+  _applyResponsiveLayout() {
+    if (this.columns) {
+      this.columns.style.flexDirection = this.bodyWidth < QM_DOCK_COLUMNS_STACK_WIDTH ? "column" : "row";
+    }
+    if (this.equippedContainer) this.equippedContainer.replaceChildren(this._buildEquippedSection());
+  },
+
+  resizeBy(deltaWidth, deltaHeight) {
+    if (this.isMobile()) return;
+    this.syncGeometry();
+    const bounds = this.getChatBounds();
+    const geometry = this.geometry;
+    if (!geometry) return;
+    const margin = Math.min(QM_WINDOW_MARGIN, (bounds.right - bounds.left) / 4, (bounds.bottom - bounds.top) / 4);
+    const maxWidth = Math.max(1, bounds.right - margin - geometry.left);
+    const maxHeight = Math.max(1, bounds.bottom - margin - geometry.top);
+    this.geometry = {
+      ...geometry,
+      width: qmClampWindowValue(geometry.width + deltaWidth, Math.min(QM_WINDOW_MIN_WIDTH, maxWidth), maxWidth),
+      height: qmClampWindowValue(geometry.height + deltaHeight, Math.min(QM_WINDOW_MIN_HEIGHT, maxHeight), maxHeight),
+    };
+    this.applyGeometry(this.geometry);
+    qmWriteWindowGeometry(this.geometry);
+  },
+
+  // Pointerdown-driven move (header) or resize (corner handle). Ported from
+  // Beholder's dock almost verbatim — same host, same problem.
+  startInteraction(kind, event) {
+    if (this.isMobile() || event.button !== 0 || !this.root) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (kind === "move" && target?.closest("button, input, label, select, textarea, a")) return;
+    event.preventDefault();
+    this._interaction?.();
+
+    const pointerId = event.pointerId;
+    const startRect = this.root.getBoundingClientRect();
+    const start = {
+      x: event.clientX,
+      y: event.clientY,
+      left: startRect.left,
+      top: startRect.top,
+      width: startRect.width,
+      height: startRect.height,
+    };
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = kind === "move" ? "move" : "nwse-resize";
+    document.body.style.userSelect = "none";
+    this.root.classList.add(kind === "move" ? "qm-dock-dragging" : "qm-dock-resizing");
+
+    const onMove = (moveEvent) => {
+      if (moveEvent.pointerId !== pointerId) return;
+      const bounds = this.getChatBounds();
+      const margin = Math.min(QM_WINDOW_MARGIN, (bounds.right - bounds.left) / 4, (bounds.bottom - bounds.top) / 4);
+      const deltaX = moveEvent.clientX - start.x;
+      const deltaY = moveEvent.clientY - start.y;
+      if (kind === "move") {
+        const left = qmClampWindowValue(start.left + deltaX, bounds.left + margin, bounds.right - margin - start.width);
+        const top = qmClampWindowValue(start.top + deltaY, bounds.top + margin, bounds.bottom - margin - start.height);
+        this.geometry = { left, top, width: start.width, height: start.height };
+      } else {
+        const maxWidth = Math.max(1, bounds.right - margin - start.left);
+        const maxHeight = Math.max(1, bounds.bottom - margin - start.top);
+        this.geometry = {
+          left: start.left,
+          top: start.top,
+          width: qmClampWindowValue(start.width + deltaX, Math.min(QM_WINDOW_MIN_WIDTH, maxWidth), maxWidth),
+          height: qmClampWindowValue(start.height + deltaY, Math.min(QM_WINDOW_MIN_HEIGHT, maxHeight), maxHeight),
+        };
+      }
+      this.applyGeometry(this.geometry);
+    };
+
+    const finish = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onEnd);
+      window.removeEventListener("pointercancel", onEnd);
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      this.root?.classList.remove("qm-dock-dragging", "qm-dock-resizing");
+      if (this.geometry) qmWriteWindowGeometry(this.geometry);
+      this._interaction = null;
+    };
+    const onEnd = (endEvent) => {
+      if (endEvent.pointerId === pointerId) finish();
+    };
+    this._interaction = finish;
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onEnd);
+    window.addEventListener("pointercancel", onEnd);
+  },
+
   _ensureRoot() {
     if (this.root && document.body.contains(this.root)) return;
+    qmEnsureDockStyle();
 
     const root = document.createElement("div");
     root.id = "qm-dock-root";
+    root.className = "qm-dock-collapsed";
     Object.assign(root.style, {
-      position: "fixed",
-      right: "16px",
-      bottom: "16px",
-      // Wider than the flat 3-column list this replaced — the center column
-      // now needs room for a portrait flanked by two stacked slot columns on
-      // each side, plus a slot row above and below it.
-      width: "min(960px, 95vw)",
-      maxHeight: "82vh",
-      display: "none",
       flexDirection: "column",
       background: "var(--popover, #fff)",
       color: "var(--popover-foreground, #1a1a1a)",
@@ -99,6 +382,7 @@ QM.dock = {
     });
 
     const header = document.createElement("div");
+    header.id = "qm-dock-header";
     Object.assign(header.style, {
       display: "flex",
       alignItems: "center",
@@ -106,6 +390,7 @@ QM.dock = {
       padding: "8px 10px",
       borderBottom: "1px solid var(--border, rgba(0,0,0,0.1))",
       fontWeight: "600",
+      flexShrink: "0",
     });
     const title = document.createElement("span");
     title.textContent = "Quartermaster";
@@ -114,22 +399,49 @@ QM.dock = {
     Object.assign(closeButton.style, { fontSize: "14px", lineHeight: "1", padding: "2px 8px" });
     closeButton.addEventListener("click", () => this.close());
     header.append(title, closeButton);
+    header.addEventListener("pointerdown", (event) => this.startInteraction("move", event));
 
     const body = document.createElement("div");
+    body.id = "qm-dock-body";
     Object.assign(body.style, {
       padding: "10px",
       overflowY: "auto",
+      flex: "1",
+      minHeight: "0",
     });
 
-    root.append(header, body);
+    const resizeHandle = document.createElement("button");
+    resizeHandle.type = "button";
+    resizeHandle.id = "qm-dock-resize-handle";
+    resizeHandle.title = "Resize Quartermaster";
+    resizeHandle.setAttribute("aria-label", "Resize Quartermaster");
+    resizeHandle.addEventListener("pointerdown", (event) => this.startInteraction("resize", event));
+    resizeHandle.addEventListener("keydown", (event) => {
+      const step = event.shiftKey ? 48 : 16;
+      const delta = {
+        ArrowLeft: [-step, 0],
+        ArrowRight: [step, 0],
+        ArrowUp: [0, -step],
+        ArrowDown: [0, step],
+      }[event.key];
+      if (!delta) return;
+      event.preventDefault();
+      this.resizeBy(delta[0], delta[1]);
+    });
+
+    root.append(header, body, resizeHandle);
     document.body.appendChild(root);
     this.root = root;
+    this.header = header;
     this.body = body;
     // Reset the cached body children — a fresh body element means everything
     // built for a previous root no longer exists.
+    this.columns = null;
     this.errorNode = null;
     this.feedSelect = null;
     this.underwearToggle = null;
+    this.armorToggle = null;
+    this.weaponsToggle = null;
     this.equippedContainer = null;
     this.outfitsContainer = null;
     this.outfitForm = null;
@@ -138,6 +450,20 @@ QM.dock = {
     this.portraitWrapper = null;
     this.portraitImage = null;
     this.portraitPlaceholder = null;
+
+    this.observeChatBounds();
+    this.observeBodyWidth();
+    if (!this._windowBound) {
+      this._windowBound = true;
+      let frame = 0;
+      window.addEventListener("resize", () => {
+        if (frame) return;
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          this.syncGeometry();
+        });
+      });
+    }
   },
 
   // Rebuilds only what changed. Forms are built once and left alone on every
@@ -149,9 +475,12 @@ QM.dock = {
 
     if (!QM.state.chatId) {
       this.body.replaceChildren(QM.textNode("No active chat."));
+      this.columns = null;
       this.errorNode = null;
       this.feedSelect = null;
       this.underwearToggle = null;
+      this.armorToggle = null;
+      this.weaponsToggle = null;
       this.equippedContainer = null;
       this.outfitsContainer = null;
       this.outfitForm = null;
@@ -169,7 +498,7 @@ QM.dock = {
       this.errorNode.style.display = "none";
 
       const feedRow = this._buildAppearanceFeedRow();
-      const underwearRow = this._buildUnderwearToggleRow();
+      const visibilityRow = this._buildSlotVisibilityRow();
 
       // Built once and cached — the ring layout re-inserts this same node on
       // every repaint instead of rebuilding it, so equipping/unequipping
@@ -177,41 +506,50 @@ QM.dock = {
       this.portraitWrapper = this._buildPortrait();
 
       const columns = document.createElement("div");
-      Object.assign(columns.style, { display: "flex", gap: "12px", alignItems: "flex-start" });
+      columns.id = "qm-dock-columns";
+      Object.assign(columns.style, {
+        display: "flex",
+        gap: "12px",
+        alignItems: "flex-start",
+        flexDirection: this.bodyWidth < QM_DOCK_COLUMNS_STACK_WIDTH ? "column" : "row",
+      });
+      this.columns = columns;
 
       // Left: Outfits. Center: portrait ring. Right: Bag/Inventory.
       const outfitsColumn = document.createElement("div");
-      Object.assign(outfitsColumn.style, { flex: "1", minWidth: "0" });
+      Object.assign(outfitsColumn.style, { flex: "1", minWidth: "0", width: "100%" });
       this.outfitsContainer = document.createElement("div");
       this.outfitForm = this._buildSaveOutfitForm();
       outfitsColumn.append(QM.sectionHeading("Outfits"), this.outfitForm, this.outfitsContainer);
 
       const equippedColumn = document.createElement("div");
-      Object.assign(equippedColumn.style, { flex: "1.6", minWidth: "0" });
+      Object.assign(equippedColumn.style, { flex: "1.6", minWidth: "0", width: "100%" });
       const equippedHeadingRow = document.createElement("div");
       Object.assign(equippedHeadingRow.style, {
-        display: "flex",
+        display: "grid",
+        gridTemplateColumns: "1fr auto 1fr",
         alignItems: "center",
-        justifyContent: "space-between",
+        gap: "6px",
       });
+      const equippedHeadingSpacer = document.createElement("span");
       const unequipAllButton = QM.button("Unequip All", {
         bg: "var(--secondary, transparent)",
         fg: "var(--secondary-foreground, inherit)",
         border: true,
       });
       unequipAllButton.addEventListener("click", () => QM.state.unequipAll());
-      equippedHeadingRow.append(QM.sectionHeading("Equipped"), unequipAllButton);
+      equippedHeadingRow.append(equippedHeadingSpacer, QM.sectionHeading("Equipped"), unequipAllButton);
       this.equippedContainer = document.createElement("div");
       equippedColumn.append(equippedHeadingRow, this.equippedContainer);
 
       const bagColumn = document.createElement("div");
-      Object.assign(bagColumn.style, { flex: "1", minWidth: "0" });
+      Object.assign(bagColumn.style, { flex: "1", minWidth: "0", width: "100%" });
       this.form = this._buildAddItemForm();
       this.listContainer = document.createElement("div");
       bagColumn.append(QM.sectionHeading("Bag"), this.form, this.listContainer);
 
       columns.append(outfitsColumn, equippedColumn, bagColumn);
-      this.body.replaceChildren(this.errorNode, feedRow, underwearRow, columns);
+      this.body.replaceChildren(this.errorNode, feedRow, visibilityRow, columns);
     }
 
     if (QM.state.error) {
@@ -223,6 +561,8 @@ QM.dock = {
 
     this.feedSelect.value = QM.state.appearanceFeedMode;
     this.underwearToggle.checked = QM.state.showUnderwear;
+    this.armorToggle.checked = QM.state.showArmor;
+    this.weaponsToggle.checked = QM.state.showWeapons;
     if (QM.state.personaAvatarUrl && this.portraitImage) this.portraitImage.src = QM.state.personaAvatarUrl;
     this.equippedContainer.replaceChildren(this._buildEquippedSection());
     this.outfitsContainer.replaceChildren(this._buildOutfitsList());
@@ -258,32 +598,44 @@ QM.dock = {
     return row;
   },
 
-  // A checkbox, not a select — this is a single on/off toggle, not a choice
-  // among several modes. Off by default (see QM.state.showUnderwear):
-  // matches the original extension's groupEnabled() convention of a group
-  // hidden here removing its slots from both the portrait layout and the
-  // equip picker (07-ui.js's defaultSlotSelect), not just a cosmetic hide.
-  _buildUnderwearToggleRow() {
-    const row = document.createElement("label");
+  // Three checkboxes, not selects — each is a single on/off toggle. Matches
+  // the original extension's SLOT_GROUPS convention: armor, underwear, and
+  // weapon are the only groups with a toggle, everything else is always on.
+  // A group hidden here removes its slots from both the portrait ring and
+  // the equip picker (07-ui.js's defaultSlotSelect), not just a cosmetic
+  // hide — see QM.state.groupVisible/slotVisible.
+  _buildSlotVisibilityRow() {
+    const row = document.createElement("div");
     Object.assign(row.style, {
       display: "flex",
+      flexWrap: "wrap",
       alignItems: "center",
-      gap: "6px",
+      gap: "12px",
       marginBottom: "8px",
       fontSize: "12px",
-      cursor: "pointer",
     });
 
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.addEventListener("change", () => QM.state.updateShowUnderwear(checkbox.checked));
-    this.underwearToggle = checkbox;
+    const build = (labelText, onChange) => {
+      const label = document.createElement("label");
+      Object.assign(label.style, { display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" });
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.addEventListener("change", () => onChange(checkbox.checked));
+      const text = document.createElement("span");
+      text.textContent = labelText;
+      text.style.color = "var(--muted-foreground, currentcolor)";
+      label.append(checkbox, text);
+      return { label, checkbox };
+    };
 
-    const text = document.createElement("span");
-    text.textContent = "Show underwear slots";
-    text.style.color = "var(--muted-foreground, currentcolor)";
+    const underwear = build("Show underwear slots", (value) => QM.state.updateShowUnderwear(value));
+    this.underwearToggle = underwear.checkbox;
+    const armor = build("Show armor slots", (value) => QM.state.updateShowArmor(value));
+    this.armorToggle = armor.checkbox;
+    const weapons = build("Show weapon slots", (value) => QM.state.updateShowWeapons(value));
+    this.weaponsToggle = weapons.checkbox;
 
-    row.append(checkbox, text);
+    row.append(underwear.label, armor.label, weapons.label);
     return row;
   },
 
@@ -352,26 +704,38 @@ QM.dock = {
   // slots to each side, and a row below — the character-sheet layout from
   // the original extension, not the flat grouped list this replaced. Layout
   // data lives in QM_PORTRAIT_LAYOUT (05-state.js) so the dock only handles
-  // arrangement, not slot membership.
+  // arrangement, not slot membership or visibility rules. Below
+  // QM_DOCK_RING_STACK_WIDTH the left-stack/portrait/right-stack row itself
+  // stacks vertically too, for phone-width docks.
   _buildEquippedSection() {
     const wrapper = document.createElement("div");
     Object.assign(wrapper.style, { display: "flex", flexDirection: "column", gap: "6px", alignItems: "center" });
 
     wrapper.appendChild(this._buildSlotBoxRow(QM_PORTRAIT_LAYOUT.top));
 
+    const ringStacked = this.bodyWidth < QM_DOCK_RING_STACK_WIDTH;
     const middleRow = document.createElement("div");
-    Object.assign(middleRow.style, { display: "flex", gap: "8px", alignItems: "flex-start", justifyContent: "center" });
+    Object.assign(middleRow.style, {
+      display: "flex",
+      flexDirection: ringStacked ? "column" : "row",
+      gap: "8px",
+      alignItems: "center",
+      justifyContent: "center",
+      width: "100%",
+    });
 
     const leftStack = document.createElement("div");
     Object.assign(leftStack.style, { display: "flex", gap: "4px" });
     for (const group of QM_PORTRAIT_LAYOUT.left) {
+      if (group.group && !QM.state.groupVisible(group.group)) continue;
       leftStack.appendChild(this._buildSlotBoxColumn(group.header, group.slots));
     }
     // Stacked beneath the Clothing column specifically (the last column
-    // appended above), not a third column of its own — matches "underneath
-    // clothing" from the requested layout. Dropped entirely while hidden,
-    // same as every other underwear-gated surface (05-state.js/07-ui.js).
-    if (QM.state.showUnderwear) {
+    // appended above, since Clothing has no group and is always present),
+    // not a third column of its own — matches "underneath clothing" from
+    // the requested layout. Dropped entirely while hidden, same as every
+    // other group-gated surface (05-state.js/07-ui.js).
+    if (QM.state.groupVisible("underwear")) {
       const clothingColumn = leftStack.lastElementChild;
       clothingColumn.appendChild(this._buildSlotBoxColumnHeading(QM_PORTRAIT_LAYOUT.underwear.header));
       for (const slot of QM_PORTRAIT_LAYOUT.underwear.slots) clothingColumn.appendChild(this._buildSlotBox(slot));
@@ -380,6 +744,7 @@ QM.dock = {
     const rightStack = document.createElement("div");
     Object.assign(rightStack.style, { display: "flex", gap: "4px" });
     for (const group of QM_PORTRAIT_LAYOUT.right) {
+      if (group.group && !QM.state.groupVisible(group.group)) continue;
       rightStack.appendChild(this._buildSlotBoxColumn(group.header, group.slots));
     }
 
@@ -752,11 +1117,11 @@ QM.dock = {
     const defaultSlotSelect = QM.defaultSlotSelect(item);
     defaultSlotSelect.style.flex = "1";
     const equipButton = QM.button("Equip");
-    // A stored defaultSlot can still point at an underwear slot that's since
+    // A stored defaultSlot can still point at a slot whose group has since
     // been hidden (defaultSlotSelect just won't offer it as an option
     // anymore) — block the shortcut button too, or it'd be the one way left
-    // to equip into a slot the toggle is supposed to disable.
-    const canEquip = Boolean(item.defaultSlot) && (QM.state.showUnderwear || !QM_UNDERWEAR_SLOTS.has(item.defaultSlot));
+    // to equip into a slot a toggle is supposed to disable.
+    const canEquip = Boolean(item.defaultSlot) && QM.state.slotVisible(item.defaultSlot);
     equipButton.disabled = !canEquip;
     equipButton.style.opacity = canEquip ? "1" : "0.5";
     equipButton.addEventListener("click", () => {

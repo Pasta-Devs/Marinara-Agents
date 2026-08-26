@@ -27,7 +27,14 @@ const QM_EQUIP_SLOTS = [
   "feet",
   "belt",
 ];
-const QM_UNDERWEAR_SLOTS = new Set(["underwear_top", "underwear_bottom"]);
+// Three of the extension's original SLOT_GROUPS toggles (armor/underwear/
+// weapon) — every other slot has no group and is always on ("just regular
+// slots", per the request). Mirrors server.mjs's SLOT_GROUPS.
+const QM_SLOT_GROUPS = {
+  underwear: new Set(["underwear_top", "underwear_bottom"]),
+  armor: new Set(["armor_torso", "armor_legs"]),
+  weapons: new Set(["weapon_left_hand", "weapon_right_hand"]),
+};
 const QM_SLOT_LABELS = {
   head: "Head",
   neck: "Neck",
@@ -49,21 +56,23 @@ const QM_SLOT_LABELS = {
 // The dock's portrait-ring layout: slots arranged around the character
 // portrait the way the original extension's character sheet laid them out
 // (top row above the head, armor/clothing/underwear stacked to the left,
-// accessories/weapons stacked to the right, feet/belt below). `underwear` is
-// kept separate from `left` rather than folded into the Clothing entry so
-// the dock can drop it as a unit when QM.state.showUnderwear is off — it
-// still renders directly beneath the Clothing column when shown, matching
-// the requested layout.
+// accessories/weapons stacked to the right, feet/belt below). A column
+// tagged with `group` is dropped as a unit by the dock when that group's
+// toggle is off (QM.state.groupVisible) — Clothing/Accessories have no
+// group and stay on the ring even with Armor/Weapons hidden. `underwear` is
+// kept separate from `left` rather than folded into the Clothing entry so it
+// can render directly beneath Clothing specifically, matching the requested
+// "underneath clothing" placement.
 const QM_PORTRAIT_LAYOUT = {
   top: ["head", "neck", "eyes", "ears"],
   left: [
-    { header: "Armor", slots: ["armor_torso", "armor_legs"] },
+    { header: "Armor", slots: ["armor_torso", "armor_legs"], group: "armor" },
     { header: "Clothing", slots: ["clothing_torso", "clothing_legs"] },
   ],
-  underwear: { header: "Underwear", slots: ["underwear_top", "underwear_bottom"] },
+  underwear: { header: "Underwear", slots: ["underwear_top", "underwear_bottom"], group: "underwear" },
   right: [
     { header: "Accessories", slots: ["back", "hands"] },
-    { header: "Weapons", slots: ["weapon_left_hand", "weapon_right_hand"] },
+    { header: "Weapons", slots: ["weapon_left_hand", "weapon_right_hand"], group: "weapons" },
   ],
   bottom: ["feet", "belt"],
 };
@@ -86,10 +95,15 @@ QM.state = {
   items: null,
   outfits: null,
   appearanceFeedMode: "off",
-  // Off by default (SFW): hides the underwear slots from the dock's portrait
-  // ring and the default-slot picker, and the server independently rejects
-  // equipping into them while off — see server.mjs's normalizeLocation.
+  // Per-group defaults (matches server.mjs's SLOT_GROUP_DEFAULTS): underwear
+  // off so a fresh inventory is SFW; armor/weapons on since most characters
+  // use them. Off hides that group's slots from the dock's portrait ring,
+  // the tracker panel's Equipped list, and the default-slot picker, and the
+  // server independently rejects equipping into them — see server.mjs's
+  // normalizeLocation.
   showUnderwear: false,
+  showArmor: true,
+  showWeapons: true,
   personaAvatarUrl: null,
   error: null,
   _listeners: new Set(),
@@ -110,6 +124,8 @@ QM.state = {
     this.outfits = null;
     this.appearanceFeedMode = "off";
     this.showUnderwear = false;
+    this.showArmor = true;
+    this.showWeapons = true;
     this.personaAvatarUrl = null;
     this.error = null;
     this._notify();
@@ -131,6 +147,8 @@ QM.state = {
       this.outfits = result.outfits;
       this.appearanceFeedMode = result.appearanceFeedMode;
       this.showUnderwear = result.showUnderwear === true;
+      this.showArmor = result.showArmor !== false;
+      this.showWeapons = result.showWeapons !== false;
       this.personaAvatarUrl = result.personaAvatarUrl || null;
       this.error = null;
     } catch (error) {
@@ -149,6 +167,8 @@ QM.state = {
       if (result.outfits !== undefined) this.outfits = result.outfits;
       if (result.appearanceFeedMode !== undefined) this.appearanceFeedMode = result.appearanceFeedMode;
       if (result.showUnderwear !== undefined) this.showUnderwear = result.showUnderwear;
+      if (result.showArmor !== undefined) this.showArmor = result.showArmor;
+      if (result.showWeapons !== undefined) this.showWeapons = result.showWeapons;
       this.error = null;
     } catch (error) {
       this.error = error && error.message ? error.message : String(error);
@@ -186,6 +206,30 @@ QM.state = {
   updateShowUnderwear(value) {
     return this._mutate(QM.updateSettings(this.chatId, QM_OWNER_ID, { showUnderwear: value }));
   },
+  updateShowArmor(value) {
+    return this._mutate(QM.updateSettings(this.chatId, QM_OWNER_ID, { showArmor: value }));
+  },
+  updateShowWeapons(value) {
+    return this._mutate(QM.updateSettings(this.chatId, QM_OWNER_ID, { showWeapons: value }));
+  },
+
+  // A group with no toggle (e.g. undefined) is always visible.
+  groupVisible(group) {
+    if (!group) return true;
+    if (group === "underwear") return this.showUnderwear;
+    if (group === "armor") return this.showArmor;
+    if (group === "weapons") return this.showWeapons;
+    return true;
+  },
+
+  // Single choke point every consumer (portrait ring, tracker panel, the
+  // default-slot picker) calls instead of checking QM_SLOT_GROUPS directly.
+  slotVisible(slot) {
+    for (const [group, slots] of Object.entries(QM_SLOT_GROUPS)) {
+      if (slots.has(slot)) return this.groupVisible(group);
+    }
+    return true;
+  },
 
   // ── Derived, sorted views. Every list-producing getter sorts A-Z here so
   // no render path can accidentally show raw insertion order again. ──
@@ -211,15 +255,15 @@ QM.state = {
   },
 
   // [{ slot, item }] for occupied slots, in EQUIP_SLOTS' fixed anatomical
-  // order — that order is itself the sort, not insertion order. Underwear
-  // entries drop out while showUnderwear is off, the same as the portrait
-  // ring's slot boxes — a single choke point so every consumer (tracker
-  // panel, dock) agrees on what's visible, not just the dock's own layout.
+  // order — that order is itself the sort, not insertion order. A hidden
+  // group's entries drop out here too, the same as the portrait ring's slot
+  // boxes — so every consumer (tracker panel, dock) agrees on what's
+  // visible, not just the dock's own layout.
   equippedEntries() {
     const items = this.items ?? [];
     const entries = [];
     for (const slot of QM_EQUIP_SLOTS) {
-      if (!this.showUnderwear && QM_UNDERWEAR_SLOTS.has(slot)) continue;
+      if (!this.slotVisible(slot)) continue;
       const item = items.find((candidate) => candidate.location === `equipped:${slot}`);
       if (item) entries.push({ slot, item });
     }
