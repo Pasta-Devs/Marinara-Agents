@@ -7,7 +7,7 @@ import { runWithSafeCleanup } from "./regression-helpers.ts";
 
 async function main() {
   const source = "../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory";
-  const { requestAllNotes } =
+  const { requestAllNotes, requestNotesByIds } =
     await import("../packages/long-term-memory/src/engine/packages/client/src/features/long-term-memory/api.ts");
   const originalFetch = globalThis.fetch;
   const originalWindow = globalThis.window;
@@ -35,6 +35,13 @@ async function main() {
     globalThis.fetch = originalFetch;
     if (originalWindow === undefined) delete (globalThis as { window?: Window }).window;
     else globalThis.window = originalWindow;
+  }
+  try {
+    globalThis.fetch = (async () => new Response(JSON.stringify([]))) as typeof fetch;
+    await assert.rejects(requestNotesByIds<{ id: string }>(["source_missing"]), /context unavailable for 1 note/u);
+    assert.deepEqual(await requestNotesByIds<{ id: string }>(["target_missing"], undefined, true), []);
+  } finally {
+    globalThis.fetch = originalFetch;
   }
   requestedOffsets.length = 0;
   requestedHeaders.length = 0;
@@ -2000,6 +2007,50 @@ async function main() {
         (error: any) => error.code === "ltm_empty_sections",
       );
       assert.deepEqual(Object.keys((await storage.getNote(deletionTarget.id))!.sections), ["history"]);
+
+      const permanentlyDeletedTarget = await storage.createNote({
+        ...noteInput,
+        id: "world_permanent_delete_draft_target",
+        title: "Permanently deleted draft target",
+        sections: { facts: { text: "This target will be deleted.", updatedAt: timestamp } },
+      });
+      const permanentlyDeletedDraft = await draftStore.createDraft({
+        source: { sourceNoteId: canonicalSourceId, chatId: "chat-a" },
+        scope: permanentlyDeletedTarget.scope,
+        modes: permanentlyDeletedTarget.modes,
+        response: {
+          summary: "Update a target that is deleted.",
+          mutations: [
+            {
+              id: randomUUID(),
+              kind: "update_section",
+              risk: "low",
+              confidence: 0.9,
+              summary: "Update the deleted target.",
+              evidence: [`source_note:${canonicalSourceId}`],
+              noteId: permanentlyDeletedTarget.id,
+              sectionKey: "facts",
+              section: { text: "This update must be blocked.", updatedAt: timestamp },
+            },
+          ],
+        },
+      });
+      await storage.deleteNotesPermanently([permanentlyDeletedTarget.id]);
+      assert.equal(await storage.getNote(permanentlyDeletedTarget.id), null);
+      const permanentlyDeletedReview = await projectLongTermMemoryDraftReview({
+        root,
+        includeInvalidated: true,
+      });
+      const permanentlyDeletedReviewDraft = permanentlyDeletedReview.sources
+        .flatMap((source) => source.drafts)
+        .find((item) => item.draft.id === permanentlyDeletedDraft.id);
+      assert.equal(permanentlyDeletedReviewDraft?.draft.status, "invalidated");
+      assert.equal(permanentlyDeletedReviewDraft?.freshness, "invalidated");
+      assert.equal(
+        permanentlyDeletedReviewDraft?.blockReasons.some((reason) => reason.code === "draft_invalidated"),
+        true,
+        "permanently deleted targets must retain an explicit blocking reason",
+      );
 
       const activityRoot = join(dataDir, "activity-index");
       const activityDirectories = getLongTermMemoryDirectories(activityRoot);

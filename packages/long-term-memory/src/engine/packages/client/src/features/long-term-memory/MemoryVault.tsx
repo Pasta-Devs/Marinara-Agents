@@ -1924,7 +1924,14 @@ export default function MemoryVault({
     setMobilePaneAndFocus("navigator");
   }
   async function invalidate() {
-    await invalidateLtmQueries(client, [queryKeys.notes, queryKeys.status, queryKeys.activity]);
+    await invalidateLtmQueries(client, [
+      queryKeys.notes,
+      queryKeys.status,
+      queryKeys.activity,
+      queryKeys.review,
+      queryKeys.pendingDrafts,
+      queryKeys.rejectedSuggestions,
+    ]);
   }
   async function undoArchive(recovery: ArchiveUndoState) {
     if (archiveUndo !== recovery) return;

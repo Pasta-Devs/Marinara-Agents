@@ -1134,6 +1134,37 @@ export class LongTermMemoryStorage {
       const deletedNotes = notes.filter((note) => deleted.has(note.id));
       const deletedIds = deletedNotes.map((note) => note.id);
       const timestamp = nowIso();
+      const draftFiles: Array<{ path: string; before: unknown; after: unknown }> = [];
+      for (const entry of await readdir(getLongTermMemoryDirectories(this.root).drafts, { withFileTypes: true })) {
+        if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+        const path = safeJoin(getLongTermMemoryDirectories(this.root).drafts, entry.name);
+        let before: unknown;
+        try {
+          before = JSON.parse(await readFile(path, "utf8"));
+        } catch {
+          continue;
+        }
+        const parsed = ltmExtractionDraftSchema.safeParse(before);
+        if (
+          !parsed.success ||
+          parsed.data.status !== "pending" ||
+          !parsed.data.mutations.some((mutation) =>
+            deleted.has(mutation.kind === "create_note" ? mutation.note.id : mutation.noteId),
+          )
+        )
+          continue;
+        draftFiles.push({
+          path,
+          before,
+          after: ltmExtractionDraftSchema.parse({
+            ...parsed.data,
+            status: "invalidated",
+            invalidatedAt: timestamp,
+            invalidationReason: `A targeted memory was permanently deleted: ${deletedIds.join(", ")}.`,
+            updatedAt: timestamp,
+          }),
+        });
+      }
       const repairs = notes.flatMap((original) => {
         if (deleted.has(original.id)) return [];
         const note = reprojected.get(original.id) ?? original;
@@ -1160,6 +1191,7 @@ export class LongTermMemoryStorage {
             before: lookup.get(note.id)!,
             after: note,
           })),
+          ...draftFiles,
         ],
         events: [
           ...deletedNotes.map((note) =>

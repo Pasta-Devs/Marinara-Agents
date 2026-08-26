@@ -1130,11 +1130,6 @@ export default function ReviewQueue({
       source.targets.forEach((target) => {
         if (target.rows.some((row) => row.disposition !== "new")) ids.add(target.noteId);
       });
-      source.drafts.forEach((item) =>
-        item.draft.mutations.forEach((mutation) => {
-          if (mutation.kind !== "create_note") ids.add(mutationTarget(mutation));
-        }),
-      );
     }
     for (const suggestion of rejectedSuggestions.data?.suggestions ?? []) {
       ids.add(suggestion.source.sourceNoteId);
@@ -1142,9 +1137,28 @@ export default function ReviewQueue({
     }
     return [...ids].sort();
   }, [rejectedSuggestions.data?.suggestions, review.data?.sources]);
+  const sourceContextNoteIds = useMemo(
+    () =>
+      [
+        ...(review.data?.sources ?? []).map((source) => source.sourceNoteId),
+        ...(rejectedSuggestions.data?.suggestions ?? []).map((suggestion) => suggestion.source.sourceNoteId),
+      ].filter((id, index, ids) => ids.indexOf(id) === index),
+    [rejectedSuggestions.data?.suggestions, review.data?.sources],
+  );
   const notes = useQuery({
     queryKey: [...queryKeys.notes, "review-context", contextNoteIds],
-    queryFn: ({ signal }) => requestNotesByIds<LtmNote>(contextNoteIds, signal),
+    queryFn: async ({ signal }) => {
+      const sourceIds = new Set(sourceContextNoteIds);
+      const [sources, optionalContext] = await Promise.all([
+        requestNotesByIds<LtmNote>(sourceContextNoteIds, signal),
+        requestNotesByIds<LtmNote>(
+          contextNoteIds.filter((id) => !sourceIds.has(id)),
+          signal,
+          true,
+        ),
+      ]);
+      return [...sources, ...optionalContext];
+    },
     enabled: review.isSuccess && rejectedSuggestions.isSuccess,
   });
   const noteById = useMemo(() => new Map((notes.data ?? []).map((note) => [note.id, note])), [notes.data]);

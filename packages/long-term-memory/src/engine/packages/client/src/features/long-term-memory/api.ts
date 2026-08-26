@@ -105,7 +105,11 @@ export async function requestAllNotes<T>(path: string): Promise<T[]> {
   return notes;
 }
 
-export async function requestNotesByIds<T extends { id: string }>(ids: readonly string[], signal?: AbortSignal) {
+export async function requestNotesByIds<T extends { id: string }>(
+  ids: readonly string[],
+  signal?: AbortSignal,
+  allowMissing = false,
+) {
   const requestedIds = [...new Set(ids)];
   if (!requestedIds.length) return [] as T[];
   const notesById = new Map<string, T>();
@@ -117,7 +121,7 @@ export async function requestNotesByIds<T extends { id: string }>(ids: readonly 
     for (const note of notes) notesById.set(note.id, note);
   }
   const missingIds = requestedIds.filter((id) => !notesById.has(id));
-  if (missingIds.length)
+  if (missingIds.length && !allowMissing)
     throw new Error(
       `Long-Term Memory context unavailable for ${missingIds.length} note${missingIds.length === 1 ? "" : "s"}.`,
     );
