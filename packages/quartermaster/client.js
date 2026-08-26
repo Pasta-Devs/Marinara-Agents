@@ -1,4 +1,4 @@
-// Quartermaster 0.2.2 — Marinara Engine roleplay-tracker capability (single-file client bundle)
+// Quartermaster 0.3.0 — Marinara Engine roleplay-tracker capability (single-file client bundle)
 // Built from packages/quartermaster/src (6 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -90,35 +90,65 @@ QM.unequipAll = (chatId, ownerId) =>
 
 const QM_OWNER_ID = "persona";
 
-// Mirrors server.mjs's EQUIP_SLOTS exactly — client and server are separate
-// bundles, so this is duplicated rather than shared. Grouped for display
-// only; the slot ids themselves (and their order in server.mjs's
-// EQUIP_SLOTS) are the source of truth for what's valid.
-const QM_SLOT_GROUPS = [
-  { label: "Head & Neck", slots: ["head", "neck"] },
-  { label: "Eyes & Ears", slots: ["eyes", "ears"] },
-  { label: "Torso", slots: ["underwear_top", "clothing_torso", "armor_torso"] },
-  { label: "Legs", slots: ["underwear_bottom", "clothing_legs", "armor_legs"] },
-  { label: "Hands", slots: ["weapon_left_hand", "weapon_right_hand"] },
-  { label: "Other", slots: ["feet", "accessory", "belt"] },
+// Mirrors server.mjs's EQUIP_SLOTS exactly (same order too) — client and
+// server are separate bundles, so this is duplicated rather than shared.
+const QM_EQUIP_SLOTS = [
+  "head",
+  "neck",
+  "eyes",
+  "ears",
+  "armor_torso",
+  "armor_legs",
+  "clothing_torso",
+  "clothing_legs",
+  "underwear_top",
+  "underwear_bottom",
+  "back",
+  "hands",
+  "weapon_left_hand",
+  "weapon_right_hand",
+  "feet",
+  "belt",
 ];
-const QM_EQUIP_SLOTS = QM_SLOT_GROUPS.flatMap((group) => group.slots);
+const QM_UNDERWEAR_SLOTS = new Set(["underwear_top", "underwear_bottom"]);
 const QM_SLOT_LABELS = {
   head: "Head",
   neck: "Neck",
   eyes: "Eyes",
   ears: "Ears",
-  feet: "Feet",
-  accessory: "Accessory",
-  belt: "Belt",
-  underwear_top: "Underwear (Top)",
-  underwear_bottom: "Underwear (Bottom)",
-  clothing_torso: "Clothing (Torso)",
-  clothing_legs: "Clothing (Legs)",
   armor_torso: "Armor (Torso)",
   armor_legs: "Armor (Legs)",
+  clothing_torso: "Clothing (Torso)",
+  clothing_legs: "Clothing (Legs)",
+  underwear_top: "Underwear (Top)",
+  underwear_bottom: "Underwear (Bottom)",
+  back: "Back",
+  hands: "Hands",
   weapon_left_hand: "Weapon (Left Hand)",
   weapon_right_hand: "Weapon (Right Hand)",
+  feet: "Feet",
+  belt: "Belt",
+};
+// The dock's portrait-ring layout: slots arranged around the character
+// portrait the way the original extension's character sheet laid them out
+// (top row above the head, armor/clothing/underwear stacked to the left,
+// accessories/weapons stacked to the right, feet/belt below). `underwear` is
+// kept separate from `left` rather than folded into the Clothing entry so
+// the dock can drop it as a unit when QM.state.showUnderwear is off — it
+// still renders directly beneath the Clothing column when shown, matching
+// the requested layout.
+const QM_PORTRAIT_LAYOUT = {
+  top: ["head", "neck", "eyes", "ears"],
+  left: [
+    { header: "Armor", slots: ["armor_torso", "armor_legs"] },
+    { header: "Clothing", slots: ["clothing_torso", "clothing_legs"] },
+  ],
+  underwear: { header: "Underwear", slots: ["underwear_top", "underwear_bottom"] },
+  right: [
+    { header: "Accessories", slots: ["back", "hands"] },
+    { header: "Weapons", slots: ["weapon_left_hand", "weapon_right_hand"] },
+  ],
+  bottom: ["feet", "belt"],
 };
 const QM_APPEARANCE_FEED_OPTIONS = [
   { value: "off", label: "Off" },
@@ -139,6 +169,10 @@ QM.state = {
   items: null,
   outfits: null,
   appearanceFeedMode: "off",
+  // Off by default (SFW): hides the underwear slots from the dock's portrait
+  // ring and the default-slot picker, and the server independently rejects
+  // equipping into them while off — see server.mjs's normalizeLocation.
+  showUnderwear: false,
   personaAvatarUrl: null,
   error: null,
   _listeners: new Set(),
@@ -158,6 +192,7 @@ QM.state = {
     this.items = null;
     this.outfits = null;
     this.appearanceFeedMode = "off";
+    this.showUnderwear = false;
     this.personaAvatarUrl = null;
     this.error = null;
     this._notify();
@@ -178,6 +213,7 @@ QM.state = {
       this.items = result.items;
       this.outfits = result.outfits;
       this.appearanceFeedMode = result.appearanceFeedMode;
+      this.showUnderwear = result.showUnderwear === true;
       this.personaAvatarUrl = result.personaAvatarUrl || null;
       this.error = null;
     } catch (error) {
@@ -195,6 +231,7 @@ QM.state = {
       if (result.items !== undefined) this.items = result.items;
       if (result.outfits !== undefined) this.outfits = result.outfits;
       if (result.appearanceFeedMode !== undefined) this.appearanceFeedMode = result.appearanceFeedMode;
+      if (result.showUnderwear !== undefined) this.showUnderwear = result.showUnderwear;
       this.error = null;
     } catch (error) {
       this.error = error && error.message ? error.message : String(error);
@@ -229,6 +266,9 @@ QM.state = {
   updateAppearanceFeedMode(mode) {
     return this._mutate(QM.updateSettings(this.chatId, QM_OWNER_ID, { appearanceFeedMode: mode }));
   },
+  updateShowUnderwear(value) {
+    return this._mutate(QM.updateSettings(this.chatId, QM_OWNER_ID, { showUnderwear: value }));
+  },
 
   // ── Derived, sorted views. Every list-producing getter sorts A-Z here so
   // no render path can accidentally show raw insertion order again. ──
@@ -254,11 +294,15 @@ QM.state = {
   },
 
   // [{ slot, item }] for occupied slots, in EQUIP_SLOTS' fixed anatomical
-  // order — that order is itself the sort, not insertion order.
+  // order — that order is itself the sort, not insertion order. Underwear
+  // entries drop out while showUnderwear is off, the same as the portrait
+  // ring's slot boxes — a single choke point so every consumer (tracker
+  // panel, dock) agrees on what's visible, not just the dock's own layout.
   equippedEntries() {
     const items = this.items ?? [];
     const entries = [];
     for (const slot of QM_EQUIP_SLOTS) {
+      if (!this.showUnderwear && QM_UNDERWEAR_SLOTS.has(slot)) continue;
       const item = items.find((candidate) => candidate.location === `equipped:${slot}`);
       if (item) entries.push({ slot, item });
     }
@@ -380,7 +424,11 @@ QM.defaultSlotSelect = function defaultSlotSelect(item) {
   noneOption.value = "";
   noneOption.textContent = "Default slot…";
   select.appendChild(noneOption);
+  // Underwear slots drop out of the picker while hidden, matching the
+  // portrait ring — same "disabled AND hidden" behavior as the original
+  // extension's groupEnabled(), not just a cosmetic hide.
   for (const slot of QM_EQUIP_SLOTS) {
+    if (!QM.state.showUnderwear && QM_UNDERWEAR_SLOTS.has(slot)) continue;
     const option = document.createElement("option");
     option.value = slot;
     option.textContent = QM_SLOT_LABELS[slot];
@@ -420,11 +468,13 @@ QM.dock = {
   body: null,
   errorNode: null,
   feedSelect: null,
+  underwearToggle: null,
   equippedContainer: null,
   outfitsContainer: null,
   outfitForm: null,
   form: null,
   listContainer: null,
+  portraitWrapper: null,
   portraitImage: null,
   portraitPlaceholder: null,
 
@@ -472,7 +522,10 @@ QM.dock = {
       position: "fixed",
       right: "16px",
       bottom: "16px",
-      width: "min(820px, 95vw)",
+      // Wider than the flat 3-column list this replaced — the center column
+      // now needs room for a portrait flanked by two stacked slot columns on
+      // each side, plus a slot row above and below it.
+      width: "min(960px, 95vw)",
       maxHeight: "82vh",
       display: "none",
       flexDirection: "column",
@@ -518,11 +571,13 @@ QM.dock = {
     // built for a previous root no longer exists.
     this.errorNode = null;
     this.feedSelect = null;
+    this.underwearToggle = null;
     this.equippedContainer = null;
     this.outfitsContainer = null;
     this.outfitForm = null;
     this.form = null;
     this.listContainer = null;
+    this.portraitWrapper = null;
     this.portraitImage = null;
     this.portraitPlaceholder = null;
   },
@@ -538,11 +593,13 @@ QM.dock = {
       this.body.replaceChildren(QM.textNode("No active chat."));
       this.errorNode = null;
       this.feedSelect = null;
+      this.underwearToggle = null;
       this.equippedContainer = null;
       this.outfitsContainer = null;
       this.outfitForm = null;
       this.form = null;
       this.listContainer = null;
+      this.portraitWrapper = null;
       this.portraitImage = null;
       this.portraitPlaceholder = null;
       return;
@@ -554,12 +611,25 @@ QM.dock = {
       this.errorNode.style.display = "none";
 
       const feedRow = this._buildAppearanceFeedRow();
+      const underwearRow = this._buildUnderwearToggleRow();
+
+      // Built once and cached — the ring layout re-inserts this same node on
+      // every repaint instead of rebuilding it, so equipping/unequipping
+      // something doesn't reset or reload the portrait <img>.
+      this.portraitWrapper = this._buildPortrait();
 
       const columns = document.createElement("div");
       Object.assign(columns.style, { display: "flex", gap: "12px", alignItems: "flex-start" });
 
+      // Left: Outfits. Center: portrait ring. Right: Bag/Inventory.
+      const outfitsColumn = document.createElement("div");
+      Object.assign(outfitsColumn.style, { flex: "1", minWidth: "0" });
+      this.outfitsContainer = document.createElement("div");
+      this.outfitForm = this._buildSaveOutfitForm();
+      outfitsColumn.append(QM.sectionHeading("Outfits"), this.outfitForm, this.outfitsContainer);
+
       const equippedColumn = document.createElement("div");
-      Object.assign(equippedColumn.style, { flex: "1", minWidth: "0" });
+      Object.assign(equippedColumn.style, { flex: "1.6", minWidth: "0" });
       const equippedHeadingRow = document.createElement("div");
       Object.assign(equippedHeadingRow.style, {
         display: "flex",
@@ -574,13 +644,7 @@ QM.dock = {
       unequipAllButton.addEventListener("click", () => QM.state.unequipAll());
       equippedHeadingRow.append(QM.sectionHeading("Equipped"), unequipAllButton);
       this.equippedContainer = document.createElement("div");
-      equippedColumn.append(equippedHeadingRow, this._buildPortrait(), this.equippedContainer);
-
-      const outfitsColumn = document.createElement("div");
-      Object.assign(outfitsColumn.style, { flex: "1", minWidth: "0" });
-      this.outfitsContainer = document.createElement("div");
-      this.outfitForm = this._buildSaveOutfitForm();
-      outfitsColumn.append(QM.sectionHeading("Outfits"), this.outfitForm, this.outfitsContainer);
+      equippedColumn.append(equippedHeadingRow, this.equippedContainer);
 
       const bagColumn = document.createElement("div");
       Object.assign(bagColumn.style, { flex: "1", minWidth: "0" });
@@ -588,8 +652,8 @@ QM.dock = {
       this.listContainer = document.createElement("div");
       bagColumn.append(QM.sectionHeading("Bag"), this.form, this.listContainer);
 
-      columns.append(equippedColumn, outfitsColumn, bagColumn);
-      this.body.replaceChildren(this.errorNode, feedRow, columns);
+      columns.append(outfitsColumn, equippedColumn, bagColumn);
+      this.body.replaceChildren(this.errorNode, feedRow, underwearRow, columns);
     }
 
     if (QM.state.error) {
@@ -600,6 +664,7 @@ QM.dock = {
     }
 
     this.feedSelect.value = QM.state.appearanceFeedMode;
+    this.underwearToggle.checked = QM.state.showUnderwear;
     if (QM.state.personaAvatarUrl && this.portraitImage) this.portraitImage.src = QM.state.personaAvatarUrl;
     this.equippedContainer.replaceChildren(this._buildEquippedSection());
     this.outfitsContainer.replaceChildren(this._buildOutfitsList());
@@ -632,6 +697,35 @@ QM.dock = {
     this.feedSelect = select;
 
     row.append(label, select);
+    return row;
+  },
+
+  // A checkbox, not a select — this is a single on/off toggle, not a choice
+  // among several modes. Off by default (see QM.state.showUnderwear):
+  // matches the original extension's groupEnabled() convention of a group
+  // hidden here removing its slots from both the portrait layout and the
+  // equip picker (07-ui.js's defaultSlotSelect), not just a cosmetic hide.
+  _buildUnderwearToggleRow() {
+    const row = document.createElement("label");
+    Object.assign(row.style, {
+      display: "flex",
+      alignItems: "center",
+      gap: "6px",
+      marginBottom: "8px",
+      fontSize: "12px",
+      cursor: "pointer",
+    });
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.addEventListener("change", () => QM.state.updateShowUnderwear(checkbox.checked));
+    this.underwearToggle = checkbox;
+
+    const text = document.createElement("span");
+    text.textContent = "Show underwear slots";
+    text.style.color = "var(--muted-foreground, currentcolor)";
+
+    row.append(checkbox, text);
     return row;
   },
 
@@ -696,78 +790,155 @@ QM.dock = {
     return wrapper;
   },
 
+  // Portrait ring: a row of slots above the portrait, a stacked column of
+  // slots to each side, and a row below — the character-sheet layout from
+  // the original extension, not the flat grouped list this replaced. Layout
+  // data lives in QM_PORTRAIT_LAYOUT (05-state.js) so the dock only handles
+  // arrangement, not slot membership.
   _buildEquippedSection() {
-    const container = document.createElement("div");
-    Object.assign(container.style, { display: "flex", flexDirection: "column", gap: "8px" });
+    const wrapper = document.createElement("div");
+    Object.assign(wrapper.style, { display: "flex", flexDirection: "column", gap: "6px", alignItems: "center" });
 
-    for (const group of QM_SLOT_GROUPS) {
-      const groupBox = document.createElement("div");
-      const groupLabel = document.createElement("div");
-      groupLabel.textContent = group.label;
-      Object.assign(groupLabel.style, {
-        fontSize: "11px",
-        color: "var(--muted-foreground, currentcolor)",
-        marginBottom: "3px",
-      });
-      groupBox.appendChild(groupLabel);
+    wrapper.appendChild(this._buildSlotBoxRow(QM_PORTRAIT_LAYOUT.top));
 
-      const rows = document.createElement("div");
-      Object.assign(rows.style, { display: "flex", flexDirection: "column", gap: "4px" });
-      for (const slot of group.slots) {
-        rows.appendChild(this._buildSlotRow(slot));
-      }
-      groupBox.appendChild(rows);
-      container.appendChild(groupBox);
+    const middleRow = document.createElement("div");
+    Object.assign(middleRow.style, { display: "flex", gap: "8px", alignItems: "flex-start", justifyContent: "center" });
+
+    const leftStack = document.createElement("div");
+    Object.assign(leftStack.style, { display: "flex", gap: "4px" });
+    for (const group of QM_PORTRAIT_LAYOUT.left) {
+      leftStack.appendChild(this._buildSlotBoxColumn(group.header, group.slots));
+    }
+    // Stacked beneath the Clothing column specifically (the last column
+    // appended above), not a third column of its own — matches "underneath
+    // clothing" from the requested layout. Dropped entirely while hidden,
+    // same as every other underwear-gated surface (05-state.js/07-ui.js).
+    if (QM.state.showUnderwear) {
+      const clothingColumn = leftStack.lastElementChild;
+      clothingColumn.appendChild(this._buildSlotBoxColumnHeading(QM_PORTRAIT_LAYOUT.underwear.header));
+      for (const slot of QM_PORTRAIT_LAYOUT.underwear.slots) clothingColumn.appendChild(this._buildSlotBox(slot));
     }
 
-    return container;
+    const rightStack = document.createElement("div");
+    Object.assign(rightStack.style, { display: "flex", gap: "4px" });
+    for (const group of QM_PORTRAIT_LAYOUT.right) {
+      rightStack.appendChild(this._buildSlotBoxColumn(group.header, group.slots));
+    }
+
+    middleRow.append(leftStack, this.portraitWrapper, rightStack);
+    wrapper.appendChild(middleRow);
+
+    wrapper.appendChild(this._buildSlotBoxRow(QM_PORTRAIT_LAYOUT.bottom));
+
+    return wrapper;
   },
 
-  _buildSlotRow(slot) {
+  _buildSlotBoxRow(slots) {
     const row = document.createElement("div");
-    Object.assign(row.style, {
+    Object.assign(row.style, { display: "flex", gap: "4px", justifyContent: "center", flexWrap: "wrap" });
+    for (const slot of slots) row.appendChild(this._buildSlotBox(slot));
+    return row;
+  },
+
+  _buildSlotBoxColumnHeading(text) {
+    const heading = document.createElement("div");
+    heading.textContent = text;
+    Object.assign(heading.style, {
+      fontSize: "10px",
+      fontWeight: "600",
+      textTransform: "uppercase",
+      letterSpacing: "0.04em",
+      color: "var(--muted-foreground, currentcolor)",
+      textAlign: "center",
+      marginTop: "2px",
+    });
+    return heading;
+  },
+
+  _buildSlotBoxColumn(header, slots) {
+    const column = document.createElement("div");
+    Object.assign(column.style, { display: "flex", flexDirection: "column", gap: "4px" });
+    column.appendChild(this._buildSlotBoxColumnHeading(header));
+    for (const slot of slots) column.appendChild(this._buildSlotBox(slot));
+    return column;
+  },
+
+  // A single compact slot box for the portrait ring — fixed width so the top
+  // row, side columns, and bottom row all line up. Occupied boxes show the
+  // item name and a small unequip button; empty ones show a bag picker, the
+  // same two states _buildSlotRow covered before, just narrower.
+  _buildSlotBox(slot) {
+    const box = document.createElement("div");
+    Object.assign(box.style, {
       display: "flex",
       flexDirection: "column",
-      gap: "3px",
+      gap: "2px",
       border: "1px solid var(--border, rgba(128,128,128,0.3))",
       borderRadius: "4px",
-      padding: "4px 6px",
+      padding: "3px 4px",
+      width: "104px",
+      boxSizing: "border-box",
     });
-
-    const topLine = document.createElement("div");
-    Object.assign(topLine.style, { display: "flex", alignItems: "center", gap: "6px" });
 
     const label = document.createElement("span");
     label.textContent = QM_SLOT_LABELS[slot];
-    Object.assign(label.style, { width: "108px", flexShrink: "0", fontSize: "12px" });
-    topLine.appendChild(label);
+    Object.assign(label.style, {
+      fontSize: "10px",
+      color: "var(--muted-foreground, currentcolor)",
+      textTransform: "uppercase",
+      letterSpacing: "0.03em",
+    });
+    box.appendChild(label);
 
     const equippedItem = QM.state.itemInSlot(slot);
     if (equippedItem) {
+      const line = document.createElement("div");
+      Object.assign(line.style, { display: "flex", alignItems: "center", gap: "4px" });
+
       const name = document.createElement("span");
       name.textContent = equippedItem.name;
-      name.style.flex = "1";
+      name.title = equippedItem.name;
+      Object.assign(name.style, {
+        flex: "1",
+        minWidth: "0",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+        fontSize: "11px",
+      });
 
-      const unequipButton = QM.button("Unequip", {
+      const unequipButton = QM.button("×", {
         bg: "var(--secondary, transparent)",
         fg: "var(--secondary-foreground, inherit)",
         border: true,
       });
+      const unequipLabel = `Unequip ${QM_SLOT_LABELS[slot]}`;
+      unequipButton.title = unequipLabel;
+      unequipButton.setAttribute("aria-label", unequipLabel);
+      Object.assign(unequipButton.style, { padding: "0 6px", lineHeight: "1.5", flexShrink: "0" });
       unequipButton.addEventListener("click", () => QM.state.updateItem(equippedItem.id, { location: "bag" }));
 
-      topLine.append(name, unequipButton);
-      row.appendChild(topLine);
-      row.appendChild(QM.descriptionInput(equippedItem));
-      return row;
+      line.append(name, unequipButton);
+      box.appendChild(line);
+      // Equipped items disappear from the Bag list (bagItems() excludes
+      // anything in an equipped: location), so this is the only place left
+      // to edit a description without unequipping first — keep it, just
+      // narrower than the old full-width slot row it replaced.
+      const description = QM.descriptionInput(equippedItem);
+      description.style.width = "100%";
+      description.style.boxSizing = "border-box";
+      description.style.fontSize = "10px";
+      box.appendChild(description);
+      return box;
     }
 
     const bagItems = QM.state.bagItems();
     const select = QM.smallInput("select");
     select.disabled = bagItems.length === 0;
-    select.style.flex = "1";
+    Object.assign(select.style, { width: "100%", boxSizing: "border-box", fontSize: "11px" });
     const placeholder = document.createElement("option");
     placeholder.value = "";
-    placeholder.textContent = bagItems.length === 0 ? "(nothing in bag)" : "Equip…";
+    placeholder.textContent = bagItems.length === 0 ? "(empty)" : "Equip…";
     select.appendChild(placeholder);
     for (const item of bagItems) {
       const option = document.createElement("option");
@@ -779,10 +950,8 @@ QM.dock = {
       const itemId = select.value;
       if (itemId) QM.state.updateItem(itemId, { location: `equipped:${slot}` });
     });
-
-    topLine.appendChild(select);
-    row.appendChild(topLine);
-    return row;
+    box.appendChild(select);
+    return box;
   },
 
   _buildSaveOutfitForm() {
@@ -1025,10 +1194,15 @@ QM.dock = {
     const defaultSlotSelect = QM.defaultSlotSelect(item);
     defaultSlotSelect.style.flex = "1";
     const equipButton = QM.button("Equip");
-    equipButton.disabled = !item.defaultSlot;
-    equipButton.style.opacity = item.defaultSlot ? "1" : "0.5";
+    // A stored defaultSlot can still point at an underwear slot that's since
+    // been hidden (defaultSlotSelect just won't offer it as an option
+    // anymore) — block the shortcut button too, or it'd be the one way left
+    // to equip into a slot the toggle is supposed to disable.
+    const canEquip = Boolean(item.defaultSlot) && (QM.state.showUnderwear || !QM_UNDERWEAR_SLOTS.has(item.defaultSlot));
+    equipButton.disabled = !canEquip;
+    equipButton.style.opacity = canEquip ? "1" : "0.5";
     equipButton.addEventListener("click", () => {
-      if (item.defaultSlot) QM.state.updateItem(item.id, { location: `equipped:${item.defaultSlot}` });
+      if (canEquip) QM.state.updateItem(item.id, { location: `equipped:${item.defaultSlot}` });
     });
     equipLine.append(defaultSlotSelect, equipButton);
 

@@ -83,7 +83,11 @@ QM.defaultSlotSelect = function defaultSlotSelect(item) {
   noneOption.value = "";
   noneOption.textContent = "Default slot…";
   select.appendChild(noneOption);
+  // Underwear slots drop out of the picker while hidden, matching the
+  // portrait ring — same "disabled AND hidden" behavior as the original
+  // extension's groupEnabled(), not just a cosmetic hide.
   for (const slot of QM_EQUIP_SLOTS) {
+    if (!QM.state.showUnderwear && QM_UNDERWEAR_SLOTS.has(slot)) continue;
     const option = document.createElement("option");
     option.value = slot;
     option.textContent = QM_SLOT_LABELS[slot];

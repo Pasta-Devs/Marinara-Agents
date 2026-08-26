@@ -26,24 +26,31 @@
 // exactly what and where from the slot id alone.
 import { randomUUID } from "node:crypto";
 
+// Order matches the portrait ring layout, read top → left → right → bottom:
+// head/neck/eyes/ears above the portrait; armor/clothing/underwear stacked on
+// the left; back+hands (accessories) and both weapon hands on the right;
+// feet/belt below. This order is what equippedItemNamesText/EQUIP_SLOTS
+// consumers show items in, not just a display grouping.
 const EQUIP_SLOTS = [
   "head",
   "neck",
   "eyes",
   "ears",
-  "feet",
-  "accessory",
-  "belt",
-  "underwear_top",
-  "underwear_bottom",
-  "clothing_torso",
-  "clothing_legs",
   "armor_torso",
   "armor_legs",
+  "clothing_torso",
+  "clothing_legs",
+  "underwear_top",
+  "underwear_bottom",
+  "back",
+  "hands",
   "weapon_left_hand",
   "weapon_right_hand",
+  "feet",
+  "belt",
 ];
 const EQUIP_SLOT_SET = new Set(EQUIP_SLOTS);
+const UNDERWEAR_SLOTS = new Set(["underwear_top", "underwear_bottom"]);
 const APPEARANCE_FEED_MODES = new Set(["off", "outfitDescription", "equippedNames"]);
 
 const PACKAGE_ID = "quartermaster";
@@ -74,13 +81,20 @@ function normalizeDefaultSlot(value) {
   return typeof value === "string" && EQUIP_SLOT_SET.has(value) ? value : undefined;
 }
 
-// Returns the normalized location string, or null if invalid.
-function normalizeLocation(value) {
+// Returns the normalized location string, or null if invalid. `showUnderwear`
+// gates equipping INTO an underwear slot the same way it gates the client's
+// slot picker — "enable/disable the underwear slots", not just hide them —
+// so an agent or direct API call can't equip one while the owner has them
+// turned off. Already-equipped underwear items are left alone by this check;
+// it only blocks new equips.
+function normalizeLocation(value, showUnderwear) {
   const text = normalizeText(value, MAX_STORED_LOCATION_LENGTH);
   if (!text || text === "bag") return "bag";
   if (text.startsWith("equipped:")) {
     const slot = text.slice("equipped:".length);
-    return EQUIP_SLOT_SET.has(slot) ? text : null;
+    if (!EQUIP_SLOT_SET.has(slot)) return null;
+    if (UNDERWEAR_SLOTS.has(slot) && !showUnderwear) return null;
+    return text;
   }
   if (text.startsWith("stored:")) {
     return text.length > "stored:".length ? text : null;
@@ -197,6 +211,9 @@ async function loadInventoryState(documents, chatId, ownerId) {
     items: Array.isArray(doc?.data?.items) ? doc.data.items : [],
     outfits: Array.isArray(doc?.data?.outfits) ? doc.data.outfits : [],
     appearanceFeedMode: APPEARANCE_FEED_MODES.has(doc?.data?.appearanceFeedMode) ? doc.data.appearanceFeedMode : "off",
+    // Off by default: an owner's underwear slots stay disabled and hidden
+    // until explicitly turned on, so a freshly-created inventory is SFW.
+    showUnderwear: doc?.data?.showUnderwear === true,
   };
 }
 
@@ -272,10 +289,12 @@ export async function activate(context) {
         const name = normalizeText(body.name, MAX_ITEM_NAME_LENGTH);
         if (!name) return reply.status(400).send({ error: "Item name is required" });
 
-        const location = body.location === undefined ? "bag" : normalizeLocation(body.location);
-        if (location === null) return reply.status(400).send({ error: "Invalid location" });
         const defaultSlot = body.defaultSlot === undefined ? null : normalizeDefaultSlot(body.defaultSlot);
         if (defaultSlot === undefined) return reply.status(400).send({ error: "Invalid defaultSlot" });
+
+        const state = await loadInventoryState(documents, chatId, ownerId);
+        const location = body.location === undefined ? "bag" : normalizeLocation(body.location, state.showUnderwear);
+        if (location === null) return reply.status(400).send({ error: "Invalid location" });
 
         const item = {
           id: randomUUID(),
@@ -285,7 +304,6 @@ export async function activate(context) {
           location: "bag",
           defaultSlot,
         };
-        const state = await loadInventoryState(documents, chatId, ownerId);
         applyLocation(state.items, item, location);
         state.items.push(item);
         await persistState(chatId, ownerId, state);
@@ -307,7 +325,7 @@ export async function activate(context) {
         if (body.description !== undefined) item.description = normalizeText(body.description, MAX_ITEM_DESCRIPTION_LENGTH);
         if (body.quantity !== undefined) item.quantity = normalizeQuantity(body.quantity);
         if (body.location !== undefined) {
-          const location = normalizeLocation(body.location);
+          const location = normalizeLocation(body.location, state.showUnderwear);
           if (location === null) return reply.status(400).send({ error: "Invalid location" });
           applyLocation(state.items, item, location);
         }
@@ -402,10 +420,14 @@ export async function activate(context) {
         // everything currently worn comes off first, then the outfit's items
         // go on. Matches the extension: "unequip whatever you're wearing and
         // equip that outfit's items into their saved slots, in one step."
+        // An outfit saved while underwear was visible can still reference
+        // underwear slots after it's turned off again — skip just those
+        // assignments rather than failing the whole outfit.
         for (const item of state.items) {
           if (item.location.startsWith("equipped:")) item.location = "bag";
         }
         for (const [slot, itemId] of Object.entries(outfit.slots)) {
+          if (UNDERWEAR_SLOTS.has(slot) && !state.showUnderwear) continue;
           const item = state.items.find((candidate) => candidate.id === itemId);
           if (item) item.location = `equipped:${slot}`;
         }
@@ -428,13 +450,23 @@ export async function activate(context) {
       routes.patch("/inventory/:chatId/:ownerId/settings", async (request, reply) => {
         const { chatId, ownerId } = request.params;
         const body = request.body ?? {};
-        if (!APPEARANCE_FEED_MODES.has(body.appearanceFeedMode)) {
-          return reply.status(400).send({ error: "Invalid appearanceFeedMode" });
-        }
         const state = await loadInventoryState(documents, chatId, ownerId);
-        state.appearanceFeedMode = body.appearanceFeedMode;
+
+        if (body.appearanceFeedMode !== undefined) {
+          if (!APPEARANCE_FEED_MODES.has(body.appearanceFeedMode)) {
+            return reply.status(400).send({ error: "Invalid appearanceFeedMode" });
+          }
+          state.appearanceFeedMode = body.appearanceFeedMode;
+        }
+        if (body.showUnderwear !== undefined) {
+          if (typeof body.showUnderwear !== "boolean") {
+            return reply.status(400).send({ error: "Invalid showUnderwear" });
+          }
+          state.showUnderwear = body.showUnderwear;
+        }
+
         await persistState(chatId, ownerId, state);
-        return { appearanceFeedMode: state.appearanceFeedMode };
+        return { appearanceFeedMode: state.appearanceFeedMode, showUnderwear: state.showUnderwear };
       });
     },
     { prefix: `/api/${PACKAGE_ID}` },
