@@ -1,4 +1,4 @@
-// Quartermaster 0.2.0 — Marinara Engine roleplay-tracker capability (single-file client bundle)
+// Quartermaster 0.2.1 — Marinara Engine roleplay-tracker capability (single-file client bundle)
 // Built from packages/quartermaster/src (6 modules) by scripts/build-quartermaster-package.mjs. Do not edit; edit src/ and rebuild.
 (() => {
 "use strict";
@@ -644,26 +644,24 @@ QM.dock = {
     const wrapper = document.createElement("div");
     Object.assign(wrapper.style, { display: "flex", justifyContent: "center", marginBottom: "8px" });
 
+    // No fixed box — the frame just centers whatever's inside it. A fixed
+    // square with object-fit: cover was cropping non-square avatars; capping
+    // width/height on the <img> itself and letting it size naturally (below)
+    // shows the whole portrait at its real aspect ratio instead.
     const frame = document.createElement("div");
-    Object.assign(frame.style, {
-      width: "120px",
-      height: "120px",
-      borderRadius: "var(--radius, 8px)",
-      border: "1px solid var(--border, rgba(128,128,128,0.3))",
-      overflow: "hidden",
-      background: "var(--muted, rgba(128,128,128,0.15))",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-    });
+    Object.assign(frame.style, { display: "flex", alignItems: "center", justifyContent: "center" });
 
     const image = document.createElement("img");
     image.alt = "Persona portrait";
     const hasAvatar = Boolean(QM.state.personaAvatarUrl);
     Object.assign(image.style, {
-      width: "100%",
-      height: "100%",
-      objectFit: "cover",
+      maxWidth: "160px",
+      maxHeight: "200px",
+      width: "auto",
+      height: "auto",
+      objectFit: "contain",
+      borderRadius: "var(--radius, 8px)",
+      border: "1px solid var(--border, rgba(128,128,128,0.3))",
       display: hasAvatar ? "block" : "none",
     });
     if (hasAvatar) image.src = QM.state.personaAvatarUrl;
@@ -672,13 +670,20 @@ QM.dock = {
     const placeholder = document.createElement("span");
     placeholder.textContent = "No portrait";
     Object.assign(placeholder.style, {
+      width: "120px",
+      height: "120px",
+      borderRadius: "var(--radius, 8px)",
+      border: "1px solid var(--border, rgba(128,128,128,0.3))",
+      background: "var(--muted, rgba(128,128,128,0.15))",
+      display: hasAvatar ? "none" : "flex",
+      alignItems: "center",
+      justifyContent: "center",
       fontSize: "11px",
       color: "var(--muted-foreground, currentcolor)",
-      display: hasAvatar ? "none" : "block",
     });
     image.addEventListener("error", () => {
       image.style.display = "none";
-      placeholder.style.display = "block";
+      placeholder.style.display = "flex";
     });
     image.addEventListener("load", () => {
       image.style.display = "block";
@@ -1042,14 +1047,43 @@ QM.dock = {
 // QM.state (05-state.js) — see 10-dock.js's header comment for why both
 // views share one state module instead of each keeping their own copy.
 //
-// This is the compact, read-mostly companion to the floating dock: Equipped
-// and Outfits can act (unequip/equip), Inventory is just name + qty per the
-// requested scope — full editing (descriptions, stored locations, adding
-// items) stays in the dock.
+// The <details>/<summary> tree is built ONCE and cached (this.root, per
+// subsection this._equipped.content etc.) — only the content <div> inside
+// each subsection gets replaceChildren() on every repaint. Rebuilding the
+// <details> elements themselves on every equip/unequip (the first version
+// did this) reset them to closed every time, since a freshly-created
+// <details> has no memory of being open — collapsing the whole menu on
+// every click.
+//
+// Styled with the Engine's OWN tracker-panel Tailwind classes (copied
+// verbatim from SectionControls.tsx / InventoryTrackerPanel.tsx /
+// tracker-panel.constants.ts) instead of inline styles or guessed CSS
+// variables — Tailwind compiles one CSS rule per unique class string found
+// anywhere in the Engine's own source, so setting the exact same strings on
+// our plain DOM elements picks up already-compiled rules and matches native
+// tracker rows exactly, not an approximation of them.
+const QM_TRACKER_TEXT_ROW = "text-[0.6875rem] leading-[0.875rem]";
+const QM_TRACKER_TEXT_MICRO = "text-[0.625rem] leading-[0.75rem]";
+const QM_TRACKER_SECTION_SHELL_CLASS =
+  "relative z-10 overflow-hidden border-b border-[var(--border)] bg-[var(--tracker-panel-section-background,color-mix(in_srgb,var(--card)_5%,transparent))] shadow-[inset_0_1px_0_color-mix(in_srgb,var(--foreground)_5%,transparent)]";
+const QM_TRACKER_SUMMARY_CLASS =
+  "flex min-h-7 cursor-pointer select-none items-center gap-1 border-b border-[var(--border)]/42 px-1 py-0.5 font-semibold uppercase tracking-[0.08em] text-[var(--foreground)]/62 " +
+  QM_TRACKER_TEXT_MICRO;
+const QM_TRACKER_EMPTY_CLASS =
+  "rounded-sm border border-dashed border-[color-mix(in_srgb,var(--tracker-inline-rule,var(--border))_38%,transparent)] px-1 py-1 text-center text-[color-mix(in_srgb,var(--tracker-inline-muted,var(--muted-foreground))_66%,transparent)] " +
+  QM_TRACKER_TEXT_ROW;
+const QM_TRACKER_ROW_CLASS =
+  "flex min-w-0 items-center gap-1 border-b border-[var(--border)]/25 px-1 py-1 last:border-0 " + QM_TRACKER_TEXT_ROW;
+const QM_TRACKER_MUTED_CLASS = "text-[var(--muted-foreground)] " + QM_TRACKER_TEXT_MICRO;
 
 QM.panel = {
   container: null,
   unsubscribe: null,
+  root: null,
+  errorNode: null,
+  equippedContent: null,
+  outfitsContent: null,
+  inventoryContent: null,
 
   mount(container) {
     if (this.container === container) {
@@ -1058,6 +1092,7 @@ QM.panel = {
     }
     this.unmount();
     this.container = container;
+    this.root = null; // force the persistent structure to be rebuilt for the new container
     this.unsubscribe = QM.state.subscribe(() => this.paint());
     QM.state.ensureLoaded();
     this.paint();
@@ -1069,66 +1104,88 @@ QM.panel = {
       this.unsubscribe = null;
     }
     this.container = null;
+    this.root = null;
   },
 
   paint() {
     if (!this.container) return;
-    this.container.replaceChildren(this._build());
+    if (!this.root || !this.container.contains(this.root)) this._buildStructure();
+    this._updateContent();
   },
 
-  _build() {
+  _buildStructure() {
     const root = document.createElement("details");
-    Object.assign(root.style, { fontSize: "12px", fontFamily: "system-ui, sans-serif" });
+    root.className = QM_TRACKER_SECTION_SHELL_CLASS;
 
     const summary = document.createElement("summary");
     summary.textContent = "Quartermaster";
-    Object.assign(summary.style, { cursor: "pointer", fontWeight: "600", padding: "4px 0" });
+    summary.className = QM_TRACKER_SUMMARY_CLASS;
     root.appendChild(summary);
 
-    if (!QM.state.chatId) {
-      root.appendChild(QM.textNode("No active chat."));
-      return root;
-    }
-
     const body = document.createElement("div");
-    Object.assign(body.style, { display: "flex", flexDirection: "column", gap: "4px", padding: "4px 0 4px 10px" });
+    Object.assign(body.style, { display: "flex", flexDirection: "column" });
 
-    if (QM.state.error) {
-      const errorNode = QM.textNode(`Error: ${QM.state.error}`);
-      errorNode.style.color = QM_COLOR_DANGER;
-      body.appendChild(errorNode);
-    }
+    this.errorNode = document.createElement("div");
+    this.errorNode.className = QM_TRACKER_ROW_CLASS;
+    this.errorNode.style.color = QM_COLOR_DANGER;
+    this.errorNode.style.display = "none";
 
-    body.append(
-      this._buildSubsection("Equipped", this._buildEquipped()),
-      this._buildSubsection("Outfits", this._buildOutfits()),
-      this._buildSubsection("Inventory", this._buildInventory()),
-    );
+    const equipped = this._buildSubsectionShell("Equipped");
+    this.equippedContent = equipped.content;
+    const outfits = this._buildSubsectionShell("Outfits");
+    this.outfitsContent = outfits.content;
+    const inventory = this._buildSubsectionShell("Inventory");
+    this.inventoryContent = inventory.content;
 
+    body.append(this.errorNode, equipped.details, outfits.details, inventory.details);
     root.appendChild(body);
-    return root;
+
+    this.container.replaceChildren(root);
+    this.root = root;
   },
 
-  _buildSubsection(label, content) {
+  _buildSubsectionShell(label) {
     const details = document.createElement("details");
     const summary = document.createElement("summary");
     summary.textContent = label;
-    Object.assign(summary.style, { cursor: "pointer", padding: "3px 0" });
-    Object.assign(details.style, { borderTop: "1px solid var(--border, rgba(128,128,128,0.2))" });
+    summary.className = QM_TRACKER_SUMMARY_CLASS;
+    const content = document.createElement("div");
     details.append(summary, content);
-    return details;
+    return { details, content };
+  },
+
+  _updateContent() {
+    if (!QM.state.chatId) {
+      this.equippedContent.replaceChildren(this._empty("No active chat."));
+      this.outfitsContent.replaceChildren(this._empty("No active chat."));
+      this.inventoryContent.replaceChildren(this._empty("No active chat."));
+      return;
+    }
+
+    if (QM.state.error) {
+      this.errorNode.textContent = `Error: ${QM.state.error}`;
+      this.errorNode.style.display = "";
+    } else {
+      this.errorNode.style.display = "none";
+    }
+
+    this.equippedContent.replaceChildren(this._buildEquipped());
+    this.outfitsContent.replaceChildren(this._buildOutfits());
+    this.inventoryContent.replaceChildren(this._buildInventory());
   },
 
   _row(children) {
     const row = document.createElement("div");
-    Object.assign(row.style, {
-      display: "flex",
-      alignItems: "center",
-      gap: "6px",
-      padding: "3px 0 3px 8px",
-    });
+    row.className = QM_TRACKER_ROW_CLASS;
     row.append(...children);
     return row;
+  },
+
+  _empty(text) {
+    const node = document.createElement("div");
+    node.className = QM_TRACKER_EMPTY_CLASS;
+    node.textContent = text;
+    return node;
   },
 
   _buildEquipped() {
@@ -1145,7 +1202,7 @@ QM.panel = {
 
       const slotLabel = document.createElement("span");
       slotLabel.textContent = QM_SLOT_LABELS[slot];
-      Object.assign(slotLabel.style, { color: "var(--muted-foreground, currentcolor)", fontSize: "11px" });
+      slotLabel.className = QM_TRACKER_MUTED_CLASS;
 
       const unequipButton = QM.button("Unequip", {
         bg: "var(--secondary, transparent)",
@@ -1168,7 +1225,7 @@ QM.panel = {
     }
     for (const outfit of outfits) {
       const wrapper = document.createElement("div");
-      Object.assign(wrapper.style, { padding: "3px 0 3px 8px" });
+      wrapper.className = "border-b border-[var(--border)]/25 px-1 py-1 last:border-0";
 
       const topLine = document.createElement("div");
       Object.assign(topLine.style, { display: "flex", alignItems: "center", gap: "6px" });
@@ -1176,7 +1233,7 @@ QM.panel = {
       const name = document.createElement("span");
       name.textContent = outfit.name;
       name.style.flex = "1";
-      name.style.fontWeight = "600";
+      name.className = "font-semibold " + QM_TRACKER_TEXT_ROW;
 
       const equipped = QM.state.outfitMatchesCurrent(outfit);
       const toggleButton = equipped
@@ -1195,7 +1252,7 @@ QM.panel = {
       const itemNames = QM.state.outfitItemNames(outfit);
       const itemsLine = document.createElement("div");
       itemsLine.textContent = itemNames.length > 0 ? itemNames.join(", ") : "(empty)";
-      Object.assign(itemsLine.style, { color: "var(--muted-foreground, currentcolor)", fontSize: "11px" });
+      itemsLine.className = QM_TRACKER_MUTED_CLASS;
 
       wrapper.append(topLine, itemsLine);
       list.appendChild(wrapper);
@@ -1213,11 +1270,7 @@ QM.panel = {
     for (const category of categories) {
       const categoryLabel = document.createElement("div");
       categoryLabel.textContent = category.label;
-      Object.assign(categoryLabel.style, {
-        color: "var(--muted-foreground, currentcolor)",
-        fontSize: "11px",
-        padding: "3px 0 0 8px",
-      });
+      categoryLabel.className = "px-1 pt-1 font-semibold uppercase tracking-[0.08em] " + QM_TRACKER_MUTED_CLASS;
       list.appendChild(categoryLabel);
       for (const item of category.items) {
         const name = document.createElement("span");
@@ -1225,18 +1278,11 @@ QM.panel = {
         name.style.flex = "1";
         const qty = document.createElement("span");
         qty.textContent = `×${item.quantity}`;
-        qty.style.color = "var(--muted-foreground, currentcolor)";
+        qty.className = QM_TRACKER_MUTED_CLASS;
         list.appendChild(this._row([name, qty]));
       }
     }
     return list;
-  },
-
-  _empty(text) {
-    const node = document.createElement("div");
-    node.textContent = text;
-    Object.assign(node.style, { color: "var(--muted-foreground, currentcolor)", padding: "3px 0 3px 8px" });
-    return node;
   },
 };
 

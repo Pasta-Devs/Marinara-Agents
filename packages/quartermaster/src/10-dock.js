@@ -250,26 +250,24 @@ QM.dock = {
     const wrapper = document.createElement("div");
     Object.assign(wrapper.style, { display: "flex", justifyContent: "center", marginBottom: "8px" });
 
+    // No fixed box — the frame just centers whatever's inside it. A fixed
+    // square with object-fit: cover was cropping non-square avatars; capping
+    // width/height on the <img> itself and letting it size naturally (below)
+    // shows the whole portrait at its real aspect ratio instead.
     const frame = document.createElement("div");
-    Object.assign(frame.style, {
-      width: "120px",
-      height: "120px",
-      borderRadius: "var(--radius, 8px)",
-      border: "1px solid var(--border, rgba(128,128,128,0.3))",
-      overflow: "hidden",
-      background: "var(--muted, rgba(128,128,128,0.15))",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-    });
+    Object.assign(frame.style, { display: "flex", alignItems: "center", justifyContent: "center" });
 
     const image = document.createElement("img");
     image.alt = "Persona portrait";
     const hasAvatar = Boolean(QM.state.personaAvatarUrl);
     Object.assign(image.style, {
-      width: "100%",
-      height: "100%",
-      objectFit: "cover",
+      maxWidth: "160px",
+      maxHeight: "200px",
+      width: "auto",
+      height: "auto",
+      objectFit: "contain",
+      borderRadius: "var(--radius, 8px)",
+      border: "1px solid var(--border, rgba(128,128,128,0.3))",
       display: hasAvatar ? "block" : "none",
     });
     if (hasAvatar) image.src = QM.state.personaAvatarUrl;
@@ -278,13 +276,20 @@ QM.dock = {
     const placeholder = document.createElement("span");
     placeholder.textContent = "No portrait";
     Object.assign(placeholder.style, {
+      width: "120px",
+      height: "120px",
+      borderRadius: "var(--radius, 8px)",
+      border: "1px solid var(--border, rgba(128,128,128,0.3))",
+      background: "var(--muted, rgba(128,128,128,0.15))",
+      display: hasAvatar ? "none" : "flex",
+      alignItems: "center",
+      justifyContent: "center",
       fontSize: "11px",
       color: "var(--muted-foreground, currentcolor)",
-      display: hasAvatar ? "none" : "block",
     });
     image.addEventListener("error", () => {
       image.style.display = "none";
-      placeholder.style.display = "block";
+      placeholder.style.display = "flex";
     });
     image.addEventListener("load", () => {
       image.style.display = "block";
