@@ -192,9 +192,6 @@ export async function generateNoodlerPostImage(input: {
   ]
     .filter(Boolean)
     .join("\n");
-  const instructionLine = imagePromptInstructions
-    ? `User image instructions: ${imagePromptInstructions.replace(/\s+/g, " ").slice(0, 5000)}`
-    : "";
   const characterContext = [
     characterDescription ? `Appearance:\n${characterDescription}` : "",
     characterPersonality ? `Personality:\n${characterPersonality}` : "",
@@ -214,12 +211,7 @@ export async function generateNoodlerPostImage(input: {
           styleGuidance,
         })
       : null;
-  const finalPromptBase = redactIdentity(
-    rewrittenPrompt ??
-      (instructionLine && !input.promptOverride && !rawFinalPrompt.includes(instructionLine)
-        ? `${rawFinalPrompt}\n${instructionLine}`
-        : rawFinalPrompt),
-  );
+  const finalPromptBase = redactIdentity(rewrittenPrompt ?? rawFinalPrompt);
   const finalPrompt = input.compositionGuard ? `${finalPromptBase}\n\n${input.compositionGuard}` : finalPromptBase;
   const baseNegativePrompt = input.promptOverride
     ? redactIdentity(input.promptOverride.negativePrompt?.trim() || "") || undefined

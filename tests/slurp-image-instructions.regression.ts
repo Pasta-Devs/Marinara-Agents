@@ -18,6 +18,14 @@ assert.match(
 );
 assert.match(images, /input\.imageConnection\.imagePromptInstructions\?\.trim\(\) \?\? ""/u);
 assert.match(images, /instructions: imagePromptInstructions/u);
-assert.match(images, /rewrittenPrompt \?\?[\s\S]*?instructionLine && !input\.promptOverride/u);
+assert.match(images, /rewrittenPrompt \?\?[\s\S]*?rawFinalPrompt/u);
+assert.doesNotMatch(images, /User image instructions:/u);
+
+const publicImages = readFileSync(
+  join(root, "packages/slurp/src/engine/packages/server/src/services/slurp/slurp-public-images.service.ts"),
+  "utf8",
+);
+assert.match(publicImages, /rewrittenPrompt \?\?[\s\S]*?rawFinalPrompt/u);
+assert.doesNotMatch(publicImages, /User image instructions:/u);
 
 console.log("Slurp image instruction regressions passed");
