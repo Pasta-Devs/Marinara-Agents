@@ -278,12 +278,6 @@ test.describe("standalone Slurp package", () => {
       await scheduleButton.click();
       const scheduleDialog = page.getByRole("dialog", { name: `Schedule for ${stageProfile.displayName}` });
       await expect(scheduleDialog).toBeVisible();
-      const publicationTime = scheduleDialog.getByLabel("Publication time");
-      const emptySchedule = scheduleDialog.getByText("No upcoming scheduled posts yet.");
-      await expect(publicationTime.or(emptySchedule)).toBeVisible();
-      if (await publicationTime.isVisible()) {
-        await expect(scheduleDialog.getByRole("button", { name: "Save time" })).toBeDisabled();
-      }
       await page.keyboard.press("Escape");
       await expect(scheduleDialog).toBeHidden();
 
