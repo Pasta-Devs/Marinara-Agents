@@ -885,6 +885,7 @@ export const ltmNoteSchema = z
     status: ltmStatusSchema,
     modes: z.array(ltmModeSchema).min(1).max(8),
     scope: ltmScopeSchema.default({}),
+    destinationScope: ltmScopeSchema.optional(),
     tags: z.array(ltmIdentifierSchema).max(100).default([]),
     keywords: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
     manualKeywords: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
@@ -925,6 +926,14 @@ export const ltmNoteSchema = z
         code: z.ZodIssueCode.custom,
         path: ["provenance"],
         message: "Only source notes can store import provenance.",
+      });
+    }
+
+    if (note.destinationScope && note.type !== "source") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["destinationScope"],
+        message: "Only source notes can store an extraction destination scope.",
       });
     }
 
@@ -1926,6 +1935,7 @@ export const ltmDraftNoteInputSchema = z
     status: ltmStatusSchema.default("active"),
     modes: z.array(ltmModeSchema).min(1).max(8),
     scope: ltmWriteScopeSchema.default({}),
+    destinationScope: ltmScopeSchema.optional(),
     tags: z.array(ltmIdentifierSchema).max(100).default([]),
     keywords: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
     manualKeywords: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
@@ -1956,6 +1966,14 @@ export const ltmDraftNoteInputSchema = z
         code: z.ZodIssueCode.custom,
         path: ["provenance"],
         message: "Only source notes can store import provenance.",
+      });
+    }
+
+    if (note.destinationScope && note.type !== "source") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["destinationScope"],
+        message: "Only source notes can store an extraction destination scope.",
       });
     }
   });
@@ -2344,6 +2362,8 @@ export const ltmInteropPreviewRequestSchema = z
   .object({
     source: ltmInteropSourceSchema,
     limit: z.number().int().min(1).max(100).default(100),
+    sourceScope: ltmScopeSchema.optional(),
+    // Kept for clients built against the Phase 1 request contract.
     scope: ltmScopeSchema.optional(),
     mode: ltmModeSchema.optional(),
   })
@@ -2413,6 +2433,8 @@ export const ltmInteropPreviewResponseSchema = z
 export const ltmLorebookPreviewRequestSchema = z
   .object({
     limit: z.number().int().min(1).max(100).default(100),
+    sourceScope: ltmScopeSchema.optional(),
+    // Kept for clients built against the Phase 1 request contract.
     scope: ltmScopeSchema.optional(),
     mode: ltmModeSchema.optional(),
   })
@@ -2527,6 +2549,9 @@ export const ltmImportSourceNotesRequestSchema = z
       .max(100)
       .refine((sourceIds) => new Set(sourceIds).size === sourceIds.length, "Source ids must be unique."),
     limit: z.number().int().min(1).max(100).default(100),
+    sourceScope: ltmScopeSchema.optional(),
+    destinationScope: ltmScopeSchema.optional(),
+    // Kept for clients built against the Phase 1 request contract.
     scope: ltmScopeSchema.optional(),
     connectionId: z.string().min(1).max(120).optional(),
     model: z.string().min(1).max(240).optional(),

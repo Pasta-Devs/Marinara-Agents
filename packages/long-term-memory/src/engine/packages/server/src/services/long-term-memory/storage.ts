@@ -311,7 +311,10 @@ export class LongTermMemoryStorage {
     const timestamp = nowIso();
     const draft = ltmDraftNoteInputSchema.parse(input);
     assertWritableScope(draft.scope);
+    assertWritableScope(draft.destinationScope);
     const scope = normalizeLtmScope(draft.scope);
+    const destinationScope =
+      draft.destinationScope === undefined ? undefined : normalizeLtmScope(draft.destinationScope);
     if (draft.type !== "source") {
       const availabilityError = validateLtmExplicitAvailability(scope, draft.modes);
       if (availabilityError) throw new LtmServiceError(availabilityError, 400, "ltm_explicit_availability_required");
@@ -329,6 +332,7 @@ export class LongTermMemoryStorage {
     const note = ltmNoteSchema.parse({
       ...draft,
       scope,
+      ...(destinationScope === undefined ? {} : { destinationScope }),
       ...normalizeLtmKeywordIntent({
         ...draft,
         manualKeywords: draft.manualKeywords ?? [],
@@ -407,6 +411,7 @@ export class LongTermMemoryStorage {
       if (!current) throw new LtmServiceError(`Long-term memory note not found: ${id}`, 404, "ltm_note_not_found");
       const { removedSectionKeys = [], ...notePatch } = patch;
       assertWritableScope(notePatch.scope);
+      assertWritableScope(notePatch.destinationScope);
       if (notePatch.type && notePatch.type !== current.type)
         throw new Error("Changing long-term memory note type is not supported by this package version.");
       if (notePatch.scope !== undefined && !isGlobalLtmScope(current.scope) && isGlobalLtmScope(notePatch.scope))
@@ -462,6 +467,9 @@ export class LongTermMemoryStorage {
         ...current,
         ...notePatch,
         ...(notePatch.scope ? { scope: normalizeLtmScope(notePatch.scope) } : {}),
+        ...(notePatch.destinationScope !== undefined
+          ? { destinationScope: normalizeLtmScope(notePatch.destinationScope) }
+          : {}),
         ...normalizeLtmKeywordIntent({ ...current, ...notePatch }),
         ...(sections ? { sections } : {}),
         id: current.id,

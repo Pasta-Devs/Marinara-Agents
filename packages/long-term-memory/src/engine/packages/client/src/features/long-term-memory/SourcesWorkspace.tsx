@@ -33,13 +33,7 @@ import type { LongTermMemoryDestinationProps, SourceTab } from "./types";
 import { useLtmTranslation, type LtmTranslationFunction } from "./localization";
 import { LtmWorkspace } from "./LtmWorkspace";
 import type { LtmWorkspacePane } from "./LtmWorkspace";
-import {
-  buildScopeIndexes,
-  deriveScopeBranches,
-  deriveScopeConversations,
-  type ScopeTargetChat,
-  type ScopeTargets,
-} from "./scope-targets";
+import { buildScopeIndexes, type ScopeTargetChat, type ScopeTargets } from "./scope-targets";
 
 type Source = SourceTab;
 type FlatPanel = "available" | "imported";
@@ -50,11 +44,83 @@ type ImportContract = {
   source: Source;
   sourceIds: string[];
   action: "import" | "refresh";
-  scope?: LtmScope;
+  sourceScope?: LtmScope;
+  destinationScope?: LtmScope;
+  sourceTargetLabel: string;
+  destinationTargetLabel: string;
   mode?: LtmMode;
   chatId?: string;
   selectionKey: string;
 };
+type ScopeTargetKind = "all" | "chat" | "group" | "character" | "persona";
+type ScopeTarget = {
+  id: string;
+  label: string;
+  destinationLabel?: string;
+  kind: ScopeTargetKind;
+  sourceScope?: LtmScope;
+  destinationScope?: LtmScope;
+};
+
+function ScopeTargetPicker({
+  targets,
+  value,
+  onChange,
+  ariaLabel,
+  testId,
+  destination = false,
+  required = false,
+  invalid = false,
+}: {
+  targets: ScopeTarget[];
+  value: string;
+  onChange: (value: string) => void;
+  ariaLabel: string;
+  testId: string;
+  destination?: boolean;
+  required?: boolean;
+  invalid?: boolean;
+}) {
+  const { t: localizeUi } = useLtmTranslation();
+  const groups: Array<[Exclude<ScopeTargetKind, "all">, string]> = [
+    ["chat", localizeUi("ui.longTermMemory.sourcesworkspace.chats")],
+    ["group", localizeUi("ui.longTermMemory.sourcesworkspace.allBranches")],
+    ["character", localizeUi("ui.longTermMemory.sourcesworkspace.characters")],
+    ["persona", localizeUi("ui.longTermMemory.sourcesworkspace.personas")],
+  ];
+  return (
+    <select
+      className={inputClass}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      aria-label={ariaLabel}
+      aria-invalid={invalid}
+      required={required}
+      data-ltm-scope-picker={testId}
+    >
+      {required ? <option value="">{localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestination")}</option> : null}
+      {targets
+        .filter((target) => target.kind === "all")
+        .map((target) => (
+          <option key={target.id} value={target.id}>
+            {destination ? (target.destinationLabel ?? target.label) : target.label}
+          </option>
+        ))}
+      {groups.map(([kind, label]) => {
+        const options = targets.filter((target) => target.kind === kind);
+        return options.length ? (
+          <optgroup key={kind} label={label}>
+            {options.map((target) => (
+              <option key={target.id} value={target.id}>
+                {destination ? (target.destinationLabel ?? target.label) : target.label}
+              </option>
+            ))}
+          </optgroup>
+        ) : null;
+      })}
+    </select>
+  );
+}
 
 const sourceTabs: Array<{ id: Source; labelKey: string }> = [
   {
@@ -682,7 +748,8 @@ export default function SourcesWorkspace({
   onSourceChange,
 }: LongTermMemoryDestinationProps) {
   const { t: localizeUi } = useLtmTranslation();
-  const importScopeLabelId = useId();
+  const sourceScopeLabelId = useId();
+  const destinationScopeLabelId = useId();
   const importResultLabelId = useId();
   const client = useQueryClient();
   const selectAllRef = useRef<HTMLInputElement>(null);
@@ -691,8 +758,9 @@ export default function SourcesWorkspace({
   const [source, setSource] = useState<Source>(selectedSource ?? "chats");
   const [selectedLorebookId, setSelectedLorebookId] = useState<string | null>(null);
   const [lorebookMobilePane, setLorebookMobilePane] = useState<Exclude<LtmWorkspacePane, "inspector">>("navigator");
-  const [importTargetId, setImportTargetId] = useState(props.chatId ? `chat:${props.chatId}` : "all");
-  const [importCharacterId, setImportCharacterId] = useState<string | null>(null);
+  const [sourceTargetId, setSourceTargetId] = useState(props.chatId ? `chat:${props.chatId}` : "all");
+  const [destinationTargetId, setDestinationTargetId] = useState(props.chatId ? `chat:${props.chatId}` : "");
+  const [destinationEnabled, setDestinationEnabled] = useState(false);
   const [modeFilter, setModeFilter] = useState<LtmMode | "all">("all");
   const [selections, setSelections] = useState<Record<string, string[]>>({});
   const [flatPanel, setFlatPanel] = useState<FlatPanel>("available");
@@ -717,99 +785,90 @@ export default function SourcesWorkspace({
       ),
   });
   const scopeIndexes = useMemo(() => buildScopeIndexes(scopeTargets.data?.chats ?? []), [scopeTargets.data?.chats]);
-  const importTargets = useMemo(
-    () =>
-      [
-        ...(props.chatId
-          ? [
-              {
-                id: `chat:${props.chatId}`,
+  const scopeTargetOptions = useMemo(() => {
+    const chatTarget = (chat: ScopeTargetChat, current = false): ScopeTarget => ({
+      id: `chat:${chat.id}`,
+      label: current ? (props.chatName ?? localizeUi("ui.longTermMemory.sourcesworkspace.currentChat")) : chat.label,
+      kind: "chat",
+      sourceScope: {
+        chatId: chat.id,
+        chatIds: [chat.id],
+      },
+      destinationScope: { chatId: chat.id, chatIds: [chat.id] },
+    });
+    return [
+      ...(props.chatId
+        ? [
+            chatTarget(
+              scopeIndexes.chatsById.get(props.chatId) ?? {
+                id: props.chatId,
                 label: props.chatName ?? localizeUi("ui.longTermMemory.sourcesworkspace.currentChat"),
-                scope: scopeTargets.data?.currentScope ?? {
-                  chatId: props.chatId,
-                  chatIds: [props.chatId],
-                },
+                mode: "roleplay",
+                groupId: null,
+                personaId: null,
+                characterIds: [],
               },
-            ]
-          : []),
-        ...(scopeTargets.data?.chats ?? []).map((chat) => ({
-          id: `chat:${chat.id}`,
-          label: chat.label,
-          scope: { chatId: chat.id, chatIds: [chat.id] },
-        })),
-        ...(scopeTargets.data?.groups ?? []).map((group) => ({
-          id: `group:${group.id}`,
-          label: group.label,
-          scope: {
-            groupId: group.id,
-            chatIds: group.chatIds,
-          },
-        })),
-        ...(scopeTargets.data?.characters ?? []).map((character) => ({
-          id: `character:${character.id}`,
-          label: character.label,
-          scope: {
-            characterIds: [character.id],
-            chatIds: (scopeIndexes.chatsByCharacterId.get(character.id) ?? []).map((chat) => chat.id),
-          },
-        })),
-        {
-          id: "all",
-          label: localizeUi("ui.longTermMemory.sourcesworkspace.allAvailable"),
-          scope: undefined,
-        },
-      ].filter((target, index, targets) => targets.findIndex((item) => item.id === target.id) === index),
-    [
-      localizeUi,
-      props.chatId,
-      props.chatName,
-      scopeIndexes.chatsByCharacterId,
-      scopeTargets.data?.characters,
-      scopeTargets.data?.chats,
-      scopeTargets.data?.currentScope,
-      scopeTargets.data?.groups,
-    ],
-  );
-  const importTarget = importTargets.find((target) => target.id === importTargetId) ?? importTargets.at(-1)!;
-  const sourceScope = importTarget.scope;
-  const previewScope = source === "chats" ? sourceScope : undefined;
-  const effectiveImportScope = importTarget.id;
-  const selectedImportChat =
-    importTarget.id.startsWith("chat:") && sourceScope?.chatIds?.length === 1
-      ? scopeIndexes.chatsById.get(sourceScope.chatIds[0])
-      : undefined;
-  const selectedImportGroupId = sourceScope?.groupId ?? selectedImportChat?.groupId ?? "";
-  const selectedImportCharacterId = importCharacterId ?? selectedImportChat?.characterIds[0] ?? "";
-  const selectedImportConversationId = selectedImportGroupId
-    ? `group:${selectedImportGroupId}`
-    : selectedImportChat
-      ? `chat:${selectedImportChat.id}`
-      : "";
-  const importConversations = useMemo(
-    () =>
-      deriveScopeConversations(
-        scopeTargets.data?.chats ?? [],
-        scopeTargets.data?.groups ?? [],
-        selectedImportCharacterId,
-        scopeIndexes,
-      ),
-    [scopeIndexes, scopeTargets.data?.chats, scopeTargets.data?.groups, selectedImportCharacterId],
-  );
-  const selectedImportConversation = importConversations.find((item) => item.id === selectedImportConversationId);
-  const importBranches = useMemo(
-    () => deriveScopeBranches(selectedImportConversation, scopeIndexes),
-    [scopeIndexes, selectedImportConversation],
-  );
+              true,
+            ),
+          ]
+        : []),
+      ...(scopeTargets.data?.chats ?? []).filter((chat) => chat.id !== props.chatId).map((chat) => chatTarget(chat)),
+      ...(scopeTargets.data?.groups ?? []).map((group) => ({
+        id: `group:${group.id}`,
+        label: `${localizeUi("ui.longTermMemory.sourcesworkspace.allBranches")}: ${group.label}`,
+        kind: "group" as const,
+        sourceScope: { groupId: group.id, groupIds: [group.id], chatIds: group.chatIds },
+        destinationScope: { groupId: group.id, groupIds: [group.id], chatIds: group.chatIds },
+      })),
+      ...(scopeTargets.data?.characters ?? []).map((character) => ({
+        id: `character:${character.id}`,
+        label: character.label,
+        destinationLabel: localizeUi("ui.longTermMemory.sourcesworkspace.characterAvailability", {
+          value1: character.label,
+        }),
+        kind: "character" as const,
+        sourceScope: { characterIds: [character.id] },
+        destinationScope: { characterIds: [character.id] },
+      })),
+      ...(scopeTargets.data?.personas ?? []).map((persona) => ({
+        id: `persona:${persona.id}`,
+        label: persona.label,
+        destinationLabel: localizeUi("ui.longTermMemory.sourcesworkspace.personaAvailability", {
+          value1: persona.label,
+        }),
+        kind: "persona" as const,
+        sourceScope: { personaId: persona.id, personaIds: [persona.id] },
+        destinationScope: { personaId: persona.id, personaIds: [persona.id] },
+      })),
+      {
+        id: "all",
+        label: localizeUi("ui.longTermMemory.sourcesworkspace.allAvailable"),
+        kind: "all" as const,
+        sourceScope: undefined,
+        destinationScope: undefined,
+      },
+    ].filter((target, index, targets) => targets.findIndex((item) => item.id === target.id) === index);
+  }, [localizeUi, props.chatId, props.chatName, scopeIndexes.chatsById, scopeTargets.data]);
+  const sourceTarget =
+    scopeTargetOptions.find((target) => target.id === sourceTargetId) ??
+    scopeTargetOptions.find((target) => target.id === "all") ??
+    scopeTargetOptions[0];
+  const destinationTargets = scopeTargetOptions.filter((target) => target.kind !== "all");
+  const destinationTarget = destinationTargets.find((target) => target.id === destinationTargetId);
+  const sourceScope = sourceTarget?.sourceScope;
+  const previewScope =
+    source === "chats" || (source === "characters" && sourceTarget?.kind === "character") ? sourceScope : undefined;
+  const effectiveImportScope = `${sourceTargetId}:${destinationTargetId || "none"}`;
   const preview = useQuery({
     queryKey: [...queryKeys.preview, source, previewScope, modeFilter],
     queryFn: () =>
-      request<LtmInteropPreviewResponse, { source: Source; limit: number; scope?: LtmScope; mode?: LtmMode }>(
+      request<LtmInteropPreviewResponse, { source: Source; limit: number; sourceScope?: LtmScope; mode?: LtmMode }>(
         "/import/preview",
         "POST",
         {
           source,
           limit: 100,
-          ...(previewScope ? { scope: previewScope } : {}),
+          ...(previewScope ? { sourceScope: previewScope } : {}),
           ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
         },
       ),
@@ -818,12 +877,12 @@ export default function SourcesWorkspace({
   const lorebookPreview = useQuery({
     queryKey: [...queryKeys.lorebookPreview, previewScope, modeFilter],
     queryFn: () =>
-      request<LtmLorebookPreviewResponse, { limit: number; scope?: LtmScope; mode?: LtmMode }>(
+      request<LtmLorebookPreviewResponse, { limit: number; sourceScope?: LtmScope; mode?: LtmMode }>(
         "/import/lorebooks/preview",
         "POST",
         {
           limit: 100,
-          ...(previewScope ? { scope: previewScope } : {}),
+          ...(previewScope ? { sourceScope: previewScope } : {}),
           ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
         },
       ),
@@ -899,6 +958,12 @@ export default function SourcesWorkspace({
                   count: proposalCount,
                 })
               : localizeUi("ui.longTermMemory.sourcesworkspace.sourceSavedNoProposals");
+  const importScopeResultMessage = importResultContract
+    ? localizeUi("ui.longTermMemory.sourcesworkspace.importScopeResult", {
+        source: importResultContract.sourceTargetLabel,
+        destination: importResultContract.destinationTargetLabel,
+      })
+    : "";
 
   const clearImportResult = useCallback(() => {
     setImportResult(null);
@@ -920,13 +985,16 @@ export default function SourcesWorkspace({
   );
 
   useEffect(() => {
-    if (!importTargets.some((target) => target.id === importTargetId))
-      setImportTargetId(props.chatId ? `chat:${props.chatId}` : "all");
-  }, [importTargetId, importTargets, props.chatId]);
+    if (!scopeTargetOptions.some((target) => target.id === sourceTargetId))
+      setSourceTargetId(props.chatId ? `chat:${props.chatId}` : "all");
+    if (props.chatId && !destinationTargets.some((target) => target.id === destinationTargetId))
+      setDestinationTargetId(`chat:${props.chatId}`);
+  }, [destinationTargetId, destinationTargets, props.chatId, scopeTargetOptions, sourceTargetId]);
 
   useEffect(() => {
-    setImportTargetId(props.chatId ? `chat:${props.chatId}` : "all");
-    setImportCharacterId(null);
+    setSourceTargetId(props.chatId ? `chat:${props.chatId}` : "all");
+    setDestinationTargetId(props.chatId ? `chat:${props.chatId}` : "");
+    setDestinationEnabled(false);
   }, [props.chatId]);
 
   useEffect(() => {
@@ -971,8 +1039,13 @@ export default function SourcesWorkspace({
     ]);
   };
 
-  const changeImportScope = (next: string) => {
-    setImportTargetId(next);
+  const changeSourceScope = (next: string) => {
+    setSourceTargetId(next);
+    clearImportResult();
+  };
+
+  const changeDestinationScope = (next: string) => {
+    setDestinationTargetId(next);
     clearImportResult();
   };
 
@@ -1028,6 +1101,13 @@ export default function SourcesWorkspace({
       setImportError(localizeUi("ui.longTermMemory.sourcesworkspace.selectUpTo100SourceParts"));
       return;
     }
+    const selectedDestinationScope =
+      destinationTarget?.destinationScope ??
+      (props.chatId ? { chatId: props.chatId, chatIds: [props.chatId] } : undefined);
+    if (!retryContract && !props.chatId && (!destinationEnabled || !destinationTarget)) {
+      setImportError(localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport"));
+      return;
+    }
     const effectiveAction = retryContract?.action ?? action;
     const contract: ImportContract = retryContract
       ? { ...retryContract, sourceIds: ids, action: effectiveAction }
@@ -1035,17 +1115,38 @@ export default function SourcesWorkspace({
           source,
           sourceIds: ids,
           action: effectiveAction,
-          ...(sourceScope
+          ...(previewScope
             ? {
-                scope: {
-                  ...sourceScope,
-                  ...(sourceScope.chatIds ? { chatIds: [...sourceScope.chatIds] } : {}),
-                  ...(sourceScope.characterIds ? { characterIds: [...sourceScope.characterIds] } : {}),
+                sourceScope: {
+                  ...previewScope,
+                  ...(previewScope.chatIds ? { chatIds: [...previewScope.chatIds] } : {}),
+                  ...(previewScope.characterIds ? { characterIds: [...previewScope.characterIds] } : {}),
+                  ...(previewScope.personaIds ? { personaIds: [...previewScope.personaIds] } : {}),
                 },
               }
             : {}),
+          ...(selectedDestinationScope
+            ? {
+                destinationScope: {
+                  ...selectedDestinationScope,
+                  ...(selectedDestinationScope.chatIds ? { chatIds: [...selectedDestinationScope.chatIds] } : {}),
+                  ...(selectedDestinationScope.groupIds ? { groupIds: [...selectedDestinationScope.groupIds] } : {}),
+                  ...(selectedDestinationScope.characterIds
+                    ? { characterIds: [...selectedDestinationScope.characterIds] }
+                    : {}),
+                  ...(selectedDestinationScope.personaIds
+                    ? { personaIds: [...selectedDestinationScope.personaIds] }
+                    : {}),
+                },
+              }
+            : {}),
+          sourceTargetLabel: sourceTarget?.label ?? localizeUi("ui.longTermMemory.sourcesworkspace.allAvailable"),
+          destinationTargetLabel:
+            destinationTarget?.destinationLabel ??
+            destinationTarget?.label ??
+            localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestination"),
           ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
-          ...(sourceScope?.chatId ? { chatId: sourceScope.chatId } : {}),
+          ...(props.chatId ? { chatId: props.chatId } : {}),
           selectionKey: selectionKeyOverride ?? selectionKey,
         };
     setImporting(true);
@@ -1063,7 +1164,8 @@ export default function SourcesWorkspace({
           sourceIds: string[];
           limit: number;
           extract: boolean;
-          scope?: LtmScope;
+          sourceScope?: LtmScope;
+          destinationScope?: LtmScope;
           mode?: LtmMode;
           chatId?: string;
         }
@@ -1075,7 +1177,8 @@ export default function SourcesWorkspace({
           sourceIds: contract.sourceIds,
           limit: 100,
           extract: contract.action !== "refresh",
-          ...(contract.scope ? { scope: contract.scope } : {}),
+          ...(contract.sourceScope ? { sourceScope: contract.sourceScope } : {}),
+          ...(contract.destinationScope ? { destinationScope: contract.destinationScope } : {}),
           ...(contract.mode ? { mode: contract.mode } : {}),
           ...(contract.chatId ? { chatId: contract.chatId } : {}),
         },
@@ -1239,18 +1342,6 @@ export default function SourcesWorkspace({
       data-ltm-extraction-note-id={extractingId ?? undefined}
       className="space-y-4"
     >
-      <style>{`
-        @container ltm-destination (min-width: 48rem) {
-          [data-ltm-import-scope-fields] {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-        }
-        @container ltm-destination (min-width: 72rem) {
-          [data-ltm-import-scope-fields] {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-          }
-        }
-      `}</style>
       {sourceOperation ? (
         <SourceOperationWorkbench
           key={sourceOperation.id}
@@ -1299,84 +1390,69 @@ export default function SourcesWorkspace({
       <div className="mari-editor-panel mari-editor-panel--soft flex flex-wrap items-center gap-3 p-3">
         <div
           role="group"
-          aria-labelledby={importScopeLabelId}
+          aria-labelledby={sourceScopeLabelId}
           className="flex min-h-11 w-full flex-col gap-2 text-xs font-medium sm:flex-row sm:items-center"
         >
           <div className="flex items-center gap-2 sm:shrink-0">
-            <span id={importScopeLabelId}>{localizeUi("ui.longTermMemory.sourcesworkspace.importScope")}</span>
+            <span id={sourceScopeLabelId}>{localizeUi("ui.longTermMemory.sourcesworkspace.findSourcesIn")}</span>
             <InfoPopover
-              label={localizeUi("ui.longTermMemory.sourcesworkspace.importScope")}
+              label={localizeUi("ui.longTermMemory.sourcesworkspace.findSourcesIn")}
               content={
-                effectiveImportScope === "all"
+                sourceTargetId === "all"
                   ? localizeUi("ui.longTermMemory.sourcesworkspace.searchEveryAvailableCharacterLorebookChatAndBranch")
                   : localizeUi("ui.longTermMemory.sourcesworkspace.limitImportsToThisChatAndItsRelatedScope")
               }
             />
           </div>
-          <div data-ltm-import-scope-fields className="grid min-w-0 flex-1 grid-cols-1 gap-2">
-            <label className="min-w-0 space-y-1">
-              <span>{localizeUi("ui.longTermMemory.sourcesworkspace.character")}</span>
-              <select
-                className={inputClass}
-                value={selectedImportCharacterId}
-                onChange={(event) => {
-                  setImportCharacterId(event.target.value);
-                  changeImportScope(event.target.value ? `character:${event.target.value}` : "all");
-                }}
-                data-ltm-import-character
-              >
-                <option value="">{localizeUi("ui.longTermMemory.sourcesworkspace.allCharacters")}</option>
-                {(scopeTargets.data?.characters ?? []).map((character) => (
-                  <option key={character.id} value={character.id}>
-                    {character.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="min-w-0 space-y-1">
-              <span>{localizeUi("ui.longTermMemory.sourcesworkspace.chat")}</span>
-              <select
-                className={inputClass}
-                value={selectedImportConversationId}
-                onChange={(event) => {
-                  setImportCharacterId(selectedImportCharacterId || null);
-                  changeImportScope(
-                    event.target.value ||
-                      (selectedImportCharacterId ? `character:${selectedImportCharacterId}` : "all"),
-                  );
-                }}
-                data-ltm-import-chat
-              >
-                <option value="">{localizeUi("ui.longTermMemory.sourcesworkspace.allChats")}</option>
-                {importConversations.map((conversation) => (
-                  <option key={conversation.id} value={conversation.id}>
-                    {conversation.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="min-w-0 space-y-1">
-              <span>{localizeUi("ui.longTermMemory.sourcesworkspace.branch")}</span>
-              <select
-                className={inputClass}
-                value={selectedImportChat?.id ?? ""}
-                disabled={!selectedImportConversation}
-                onChange={(event) => {
-                  setImportCharacterId(selectedImportCharacterId || null);
-                  changeImportScope(event.target.value ? `chat:${event.target.value}` : selectedImportConversationId);
-                }}
-                data-ltm-import-branch
-              >
-                <option value="">{localizeUi("ui.longTermMemory.sourcesworkspace.allBranches")}</option>
-                {importBranches.map((branch) => (
-                  <option key={branch.id} value={branch.id}>
-                    {branch.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+          <ScopeTargetPicker
+            targets={scopeTargetOptions}
+            value={sourceTarget?.id ?? "all"}
+            onChange={changeSourceScope}
+            ariaLabel={localizeUi("ui.longTermMemory.sourcesworkspace.findSourcesIn")}
+            testId="source"
+          />
         </div>
+        <label className="flex min-h-11 w-full items-center gap-2 text-xs font-medium">
+          <input
+            type="checkbox"
+            className={sourceCheckboxClass}
+            checked={destinationEnabled}
+            onChange={(event) => {
+              setDestinationEnabled(event.target.checked);
+              clearImportResult();
+            }}
+            aria-controls="ltm-destination-scope-control"
+            data-ltm-destination-toggle
+          />
+          <span>{localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableElsewhere")}</span>
+        </label>
+        {destinationEnabled ? (
+          <div
+            id="ltm-destination-scope-control"
+            role="group"
+            aria-labelledby={destinationScopeLabelId}
+            className="flex min-h-11 w-full flex-col gap-2 text-xs font-medium sm:flex-row sm:items-center"
+          >
+            <span id={destinationScopeLabelId} className="sm:shrink-0">
+              {localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}
+            </span>
+            <ScopeTargetPicker
+              targets={destinationTargets}
+              value={destinationTargetId}
+              onChange={changeDestinationScope}
+              ariaLabel={localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}
+              testId="destination"
+              destination
+              required={!props.chatId}
+              invalid={!props.chatId && !destinationTarget}
+            />
+            {!props.chatId && !destinationTarget ? (
+              <span role="alert" className="text-[var(--marinara-editor-warning)]">
+                {localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport")}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1949,6 +2025,11 @@ export default function SourcesWorkspace({
           <h2 id={importResultLabelId} className="text-sm font-semibold">
             {localizeUi("ui.longTermMemory.sourcesworkspace.sourceImportComplete")}
           </h2>
+          {importScopeResultMessage ? (
+            <p className="text-xs font-medium" data-ltm-import-scope-result>
+              {importScopeResultMessage}
+            </p>
+          ) : null}
           <p className="text-xs text-[var(--muted-foreground)]">{importResultMessage}</p>
           <div className="flex flex-wrap gap-2">
             {retryableIds.length ? (
