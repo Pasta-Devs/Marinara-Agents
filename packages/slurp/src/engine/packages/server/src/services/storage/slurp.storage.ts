@@ -118,6 +118,7 @@ const NOODLER_SOURCE_SNAPSHOT_MIGRATION_KEY = "slurp.migration.noodler-source-sn
 const slurpViewerSettingsKey = (personaId: string) => `slurp.viewer.${personaId}.settings`;
 const NOODLER_RESERVE_STATE_ID = "noodler-reserve";
 let slurpSettingsUpdateQueue: Promise<unknown> = Promise.resolve();
+const ROLLING_DAY_MS = 24 * 60 * 60 * 1000;
 /**
  * The reserve poll runs every minute, so a slot this far past its publish time means the server
  * was down or paused. Publishing it now would backdate it, and a long outage would release the
