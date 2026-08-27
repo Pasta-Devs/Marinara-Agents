@@ -1065,9 +1065,14 @@ async function main() {
         "source",
         "ghost regression fixture must start source-backed",
       );
+      assert.deepEqual(ghostTarget?.sections.facts?.evidence, [`source_note:${canonicalSourceId}`]);
       const ghostEdit = await storage.updateNote("world_static_evidence", {
         sections: {
-          facts: { text: "Rewritten fact without the original line.", updatedAt: timestamp },
+          facts: {
+            text: "Rewritten fact without the original line.",
+            updatedAt: timestamp,
+            evidence: ghostTarget?.sections.facts?.evidence,
+          },
         },
       });
       assert.equal(
@@ -1079,8 +1084,14 @@ async function main() {
         ghostEdit.sections.facts?.contributions?.map((contribution) => contribution.owner),
         ["manual"],
       );
+      assert.deepEqual(ghostEdit.sections.facts?.contributions?.[0]?.evidence, []);
       const ghostReload = await new LongTermMemoryStorage(root).getNote("world_static_evidence");
       assert.equal(ghostReload?.sections.facts?.text, "Rewritten fact without the original line.");
+      assert.deepEqual(
+        ghostReload?.sections.facts?.contributions?.map((contribution) => contribution.owner),
+        ["manual"],
+      );
+      assert.deepEqual(ghostReload?.sections.facts?.contributions?.[0]?.evidence, []);
 
       const destructiveTarget = await storage.createNote({
         ...noteInput,

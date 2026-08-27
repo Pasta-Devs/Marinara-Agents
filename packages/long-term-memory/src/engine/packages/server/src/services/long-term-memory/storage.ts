@@ -444,7 +444,15 @@ export class LongTermMemoryStorage {
                 // contributions would re-render deleted or rewritten lines above the edit ("ghost" text).
                 return [
                   key,
-                  renderSectionContributions([manualContribution(section)], isAdditiveLtmSection(current, key))!,
+                  renderSectionContributions(
+                    [
+                      manualContribution({
+                        ...section,
+                        evidence: section.evidence?.filter((value) => !value.startsWith("source_note:")),
+                      }),
+                    ],
+                    isAdditiveLtmSection(current, key),
+                  )!,
                 ];
               }),
             )
