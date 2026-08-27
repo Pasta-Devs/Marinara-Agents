@@ -144,6 +144,17 @@ async function main() {
         },
       ],
     };
+    chats[1].metadata = {
+      summaryEntries: [
+        {
+          id: "summary-b",
+          content: "The archive keeps a separate summary for the same character.",
+          enabled: true,
+          rangeStartIndex: 1,
+          rangeEndIndex: 8,
+        },
+      ],
+    };
     chats.push({
       id: "game-a",
       name: "Cobalt Campaign",
@@ -1019,6 +1030,30 @@ async function main() {
         .characters.some((character: any) => character.id === "character-mara" && character.label === "Mara"),
       true,
       JSON.stringify(scopeTargets.json().characters),
+    );
+    const activeChatScopePreview = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/preview",
+      headers,
+      payload: {
+        source: "chats",
+        limit: 10,
+        scope: {
+          chatId: "chat-a",
+          chatIds: ["chat-a"],
+          characterIds: ["character-mara"],
+        },
+      },
+    });
+    assert.equal(activeChatScopePreview.statusCode, 200, activeChatScopePreview.body);
+    assert.equal(
+      activeChatScopePreview.json().samples.some((sample: any) => sample.sourceId === "chat-a:summary-a"),
+      true,
+    );
+    assert.equal(
+      activeChatScopePreview.json().samples.some((sample: any) => sample.sourceId === "chat-b:summary-b"),
+      false,
+      "an active chat scope must not include another chat that only shares its character",
     );
     assert.equal(
       scopeTargets.json().characters.some((character: any) => character.id === "character-nyra"),

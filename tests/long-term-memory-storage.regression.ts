@@ -1059,6 +1059,40 @@ async function main() {
       });
       assert.deepEqual(staticApplied.appliedMutationIds, [staticMutationId]);
 
+      const ghostTarget = await storage.getNote("world_static_evidence");
+      assert.equal(
+        ghostTarget?.sections.facts?.contributions?.[0]?.owner,
+        "source",
+        "ghost regression fixture must start source-backed",
+      );
+      assert.deepEqual(ghostTarget?.sections.facts?.evidence, [`source_note:${canonicalSourceId}`]);
+      const ghostEdit = await storage.updateNote("world_static_evidence", {
+        sections: {
+          facts: {
+            text: "Rewritten fact without the original line.",
+            updatedAt: timestamp,
+            evidence: ghostTarget?.sections.facts?.evidence,
+          },
+        },
+      });
+      assert.equal(
+        ghostEdit.sections.facts?.text,
+        "Rewritten fact without the original line.",
+        "a manual section edit must supersede accumulated source contributions, not stack them",
+      );
+      assert.deepEqual(
+        ghostEdit.sections.facts?.contributions?.map((contribution) => contribution.owner),
+        ["manual"],
+      );
+      assert.deepEqual(ghostEdit.sections.facts?.contributions?.[0]?.evidence, []);
+      const ghostReload = await new LongTermMemoryStorage(root).getNote("world_static_evidence");
+      assert.equal(ghostReload?.sections.facts?.text, "Rewritten fact without the original line.");
+      assert.deepEqual(
+        ghostReload?.sections.facts?.contributions?.map((contribution) => contribution.owner),
+        ["manual"],
+      );
+      assert.deepEqual(ghostReload?.sections.facts?.contributions?.[0]?.evidence, []);
+
       const destructiveTarget = await storage.createNote({
         ...noteInput,
         id: "thread_destructive_gate",
@@ -1758,10 +1792,11 @@ async function main() {
       });
       assert.deepEqual(
         manual.sections.facts.contributions?.map((item) => item.owner),
-        ["source", "manual"],
+        ["manual"],
+        "a manual edit must supersede accumulated source contributions, not stack them",
       );
-      assert.equal(manual.sections.facts.text, "Extracted fact.\n\nManually preserved fact.");
-      assert.deepEqual(manual.sections.facts.evidence, [`source_note:${retractSourceA.id}`]);
+      assert.equal(manual.sections.facts.text, "Manually preserved fact.");
+      assert.equal(manual.sections.facts.evidence, undefined);
 
       await storage.projectNote("rel_retract_fallback", "relationship", () => ({
         ...noteInput,
