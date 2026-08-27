@@ -1790,6 +1790,9 @@ export async function slurpRoutes(app: FastifyInstance) {
     if (result === "not_found") return reply.code(404).send({ error: "Scheduled Slurp post not found." });
     if (result === "not_future") return reply.code(400).send({ error: "Publication time must be in the future." });
     if (result === "not_editable") return reply.code(409).send({ error: "This Slurp post is no longer editable." });
+    if (result === "conflict") {
+      return reply.code(409).send({ error: "This publication time is too close to another Creator post." });
+    }
     return noodle.getNoodlerReserveStatus();
   });
 

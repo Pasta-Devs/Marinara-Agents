@@ -1,11 +1,8 @@
 import type { DB } from "../../db/connection.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { resolveNoodlerImageConnectionId } from "./slurp-image-connections.js";
-import {
-  createSlurpStorage,
-  noodlerReservePolicyFingerprint,
-  slurpCreatorPostingIntervalMs,
-} from "../storage/slurp.storage.js";
+import { createSlurpStorage, noodlerReservePolicyFingerprint } from "../storage/slurp.storage.js";
+import { hasSlurpCreatorPostingIntervalConflict } from "./slurp-posting-interval.js";
 import { generateNoodlerPost } from "./slurp-generation.service.js";
 import { generateNoodlerPostImage } from "./slurp-images.service.js";
 import { tryNoodlerAccountOperation } from "./slurp-account-operation-lock.js";
@@ -15,16 +12,6 @@ import { BackgroundConnectionBusyError, ConnectionAttemptRejectedError } from ".
 import { runSlurpAutoPostPollOperations, type SlurpReservePollOutcome } from "./slurp-autopost-poll.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** Return true when an existing post or active slot is too close to a candidate slot. */
-export function hasSlurpCreatorPostingIntervalConflict(
-  activityTimes: number[],
-  candidatePublishAt: number,
-  postsPerDay: number,
-): boolean {
-  const interval = slurpCreatorPostingIntervalMs(postsPerDay);
-  return activityTimes.some((activityAt) => Math.abs(candidatePublishAt - activityAt) < interval);
-}
 
 class NoodlerAttemptUnavailableError extends Error {
   constructor(readonly status: "exhausted" | "holding") {

@@ -4,7 +4,7 @@ import { createSlurpActivationLifecycle } from "../packages/slurp/src/engine/pac
 import { buildSlurpPostTimingContext } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-post-timing.ts";
 import { runSlurpAutoPostPollOperations } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-autopost-poll.ts";
 import { normalizeSlurpFanActivityRows } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-fan-activity-response.ts";
-import { hasSlurpCreatorPostingIntervalConflict } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-reserve.operation.ts";
+import { hasSlurpCreatorPostingIntervalConflict } from "../packages/slurp/src/engine/packages/server/src/services/slurp/slurp-posting-interval.ts";
 
 const storage = readFileSync("packages/slurp/src/engine/packages/server/src/services/storage/slurp.storage.ts", "utf8");
 const refreshScheduler = readFileSync(
@@ -69,6 +69,9 @@ assert.equal(hasSlurpCreatorPostingIntervalConflict([candidateAt - postingInterv
 assert.equal(hasSlurpCreatorPostingIntervalConflict([candidateAt + postingInterval * 2], candidateAt, 8), false);
 assert.equal(hasSlurpCreatorPostingIntervalConflict([candidateAt - postingInterval + 1], candidateAt, 8), true);
 assert.match(routes, /app\.patch\("\/noodler\/auto-post\/schedule\/:slotId"/u);
+assert.match(storage, /item\.id !== current\.id && \(item\.state === "scheduled" \|\| item\.state === "prepared"\)/u);
+assert.match(storage, /hasSlurpCreatorPostingIntervalConflict\(activityTimes, publishMs, settings\.postsPerDay\)/u);
+assert.match(routes, /result === "conflict"/u);
 assert.match(hooks, /slots: SlurpScheduleSlot\[\]/u);
 assert.match(settingsUi, /useUpdateNoodlerScheduleSlot/u);
 assert.match(settingsUi, /type="datetime-local"/u);

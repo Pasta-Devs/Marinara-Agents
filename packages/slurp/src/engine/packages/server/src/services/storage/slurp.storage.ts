@@ -118,7 +118,6 @@ const NOODLER_SOURCE_SNAPSHOT_MIGRATION_KEY = "slurp.migration.noodler-source-sn
 const slurpViewerSettingsKey = (personaId: string) => `slurp.viewer.${personaId}.settings`;
 const NOODLER_RESERVE_STATE_ID = "noodler-reserve";
 let slurpSettingsUpdateQueue: Promise<unknown> = Promise.resolve();
-const ROLLING_DAY_MS = 24 * 60 * 60 * 1000;
 /**
  * The reserve poll runs every minute, so a slot this far past its publish time means the server
  * was down or paused. Publishing it now would backdate it, and a long outage would release the
@@ -128,19 +127,10 @@ const ELAPSED_PREPARED_SLOT_MS = 60 * 60 * 1000;
 /** How long published/discarded prepared rows are kept for crash recovery before pruning. */
 const TERMINAL_PREPARED_POST_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
-export function slurpCreatorPostingIntervalMs(postsPerDay: number): number {
-  return ROLLING_DAY_MS / postsPerDay;
-}
-
-/** Return true when an existing post or active slot is too close to a candidate slot. */
-function hasSlurpCreatorPostingIntervalConflict(
-  activityTimes: number[],
-  candidatePublishAt: number,
-  postsPerDay: number,
-): boolean {
-  const interval = slurpCreatorPostingIntervalMs(postsPerDay);
-  return activityTimes.some((activityAt) => Math.abs(candidatePublishAt - activityAt) < interval);
-}
+import {
+  hasSlurpCreatorPostingIntervalConflict,
+  slurpCreatorPostingIntervalMs,
+} from "../slurp/slurp-posting-interval.js";
 
 export type NoodlerPostPageCursor = NoodlerPostSortKey;
 
@@ -2633,7 +2623,7 @@ export function createSlurpStorage(db: DB) {
       id: string,
       publishAt: string,
       at = new Date(),
-    ): Promise<"updated" | "not_found" | "not_future" | "not_editable"> {
+    ): Promise<"updated" | "not_found" | "not_future" | "not_editable" | "conflict"> {
       const publishMs = Date.parse(publishAt);
       if (Number.isNaN(publishMs) || publishMs <= at.getTime()) return "not_future";
       const settings = await this.getSettings();
@@ -2642,6 +2632,22 @@ export function createSlurpStorage(db: DB) {
         const current = (await tx.select().from(noodlerPreparedPosts).where(eq(noodlerPreparedPosts.id, id)))[0];
         if (!current) return "not_found" as const;
         if (current.state !== "scheduled" && current.state !== "prepared") return "not_editable" as const;
+        const [posts, activeSlots] = await Promise.all([
+          tx.select().from(noodlePosts).where(eq(noodlePosts.authorAccountId, current.creatorAccountId)),
+          tx
+            .select()
+            .from(noodlerPreparedPosts)
+            .where(eq(noodlerPreparedPosts.creatorAccountId, current.creatorAccountId)),
+        ]);
+        const activityTimes = [
+          ...posts.map((post) => Date.parse(post.createdAt)),
+          ...activeSlots
+            .filter((item) => item.id !== current.id && (item.state === "scheduled" || item.state === "prepared"))
+            .map((item) => Date.parse(item.publishAt)),
+        ];
+        if (hasSlurpCreatorPostingIntervalConflict(activityTimes, publishMs, settings.postsPerDay)) {
+          return "conflict" as const;
+        }
         if (current.state === "prepared") {
           mediaPath = String(parseRecord(parseRecord(current.payload).metadata).noodlerMediaPath ?? "") || null;
         }
