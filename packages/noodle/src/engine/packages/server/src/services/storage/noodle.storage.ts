@@ -12,7 +12,6 @@ import {
 } from "../../db/schema/noodle.js";
 import { newId, now } from "../../utils/id-generator.js";
 import {
-  clearNoodleRefreshFailure,
   noodleRefreshSchedulerStatus,
   reconcileNoodleRefreshSchedule,
   parsePersistedNoodleRefreshSchedule,
@@ -375,9 +374,7 @@ export function createNoodleStorage(db: DB) {
       const schedule = await this.getRefreshSchedule();
       if (schedule)
         await this.saveRefreshSchedule(
-          clearNoodleRefreshFailure(
-            reconcileNoodleRefreshSchedule(schedule, Number(next.refreshesPerDay ?? 0), new Date()),
-          ),
+          reconcileNoodleRefreshSchedule(schedule, Number(next.refreshesPerDay ?? 0), new Date()),
         );
       return this.getSettings();
     },
