@@ -1106,13 +1106,18 @@ export default function SourcesWorkspace({
       : props.chatId
         ? { chatId: props.chatId, chatIds: [props.chatId] }
         : undefined;
-    if (!retryContract && !props.chatId && (!destinationEnabled || !destinationTarget)) {
+    if (!props.chatId && (!destinationEnabled || !destinationTarget)) {
       setImportError(localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport"));
       return;
     }
     const effectiveAction = retryContract?.action ?? action;
     const contract: ImportContract = retryContract
-      ? { ...retryContract, sourceIds: ids, action: effectiveAction }
+      ? {
+          ...retryContract,
+          sourceIds: ids,
+          action: effectiveAction,
+          destinationScope: selectedDestinationScope,
+        }
       : {
           source,
           sourceIds: ids,

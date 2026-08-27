@@ -4039,6 +4039,7 @@ async function main() {
       payload: {
         source: "chats",
         sourceIds: ["chat-a:summary-cross-legacy-empty-scope"],
+        chatId: "chat-a",
         scope: {},
         extract: false,
       },

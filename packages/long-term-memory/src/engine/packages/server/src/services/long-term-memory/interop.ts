@@ -665,19 +665,18 @@ export async function importPackageInterop(
       "ltm_destination_scope_required",
     );
   const sourceScope = requestedSourceScope(request),
+    legacyScopeRequest = request.sourceScope === undefined && request.scope !== undefined,
     legacyDestinationScope =
-      request.sourceScope === undefined && request.scope && !isGlobalLtmScope(request.scope)
-        ? request.scope
-        : undefined,
+      legacyScopeRequest && request.scope && !isGlobalLtmScope(request.scope) ? request.scope : undefined,
     destinationScope =
-      request.destinationScope ?? legacyDestinationScope ?? (chat ? resolveChatLtmScope(chat) : undefined),
+      request.destinationScope ??
+      (legacyScopeRequest ? legacyDestinationScope : chat ? resolveChatLtmScope(chat) : undefined),
     operationId = randomUUID(),
     selected = new Set(request.sourceIds),
     rows = await candidates({ ...request, sourceScope }, selected),
     resolvedIds = new Set(rows.map((item) => item.sourceId)),
     missingSourceIds = request.sourceIds.filter((id) => !resolvedIds.has(id));
   throwIfAborted(signal);
-  const legacyScopeRequest = request.sourceScope === undefined && request.scope !== undefined;
   if (!destinationScope && !chat && !legacyScopeRequest && rows.some((row) => !isGlobalLtmScope(row.scope)))
     throw new LtmServiceError(
       "Choose a destination before importing scoped memories.",
