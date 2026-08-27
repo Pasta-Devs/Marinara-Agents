@@ -56,6 +56,12 @@ assert.match(storage, /autoPostGenerationMode: "pre_generate"/u);
 assert.match(storage, /state: "scheduled"/u);
 assert.match(storage, /ELAPSED_PREPARED_SLOT_MS = 60 \* 60 \* 1000/u);
 assert.match(storage, /Date\.parse\(item\.publishAt\) < at\.getTime\(\) - ELAPSED_PREPARED_SLOT_MS/u);
+assert.match(storage, /slurpCreatorPostingIntervalMs\(settings\.postsPerDay\)/u);
+assert.match(storage, /latestActivity \+ slurpCreatorPostingIntervalMs\(settings\.postsPerDay\) > publishMs/u);
+assert.match(
+  storage,
+  /latestCreatorPost\.createdAt\) \+ slurpCreatorPostingIntervalMs\(settings\.postsPerDay\) > at\.getTime\(\)/u,
+);
 assert.match(routes, /app\.patch\("\/noodler\/auto-post\/schedule\/:slotId"/u);
 assert.match(hooks, /slots: SlurpScheduleSlot\[\]/u);
 assert.match(settingsUi, /useUpdateNoodlerScheduleSlot/u);

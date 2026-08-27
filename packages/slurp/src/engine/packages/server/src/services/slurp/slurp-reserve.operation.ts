@@ -1,7 +1,11 @@
 import type { DB } from "../../db/connection.js";
 import { createConnectionsStorage } from "../storage/connections.storage.js";
 import { resolveNoodlerImageConnectionId } from "./slurp-image-connections.js";
-import { createSlurpStorage, noodlerReservePolicyFingerprint } from "../storage/slurp.storage.js";
+import {
+  createSlurpStorage,
+  noodlerReservePolicyFingerprint,
+  slurpCreatorPostingIntervalMs,
+} from "../storage/slurp.storage.js";
 import { generateNoodlerPost } from "./slurp-generation.service.js";
 import { generateNoodlerPostImage } from "./slurp-images.service.js";
 import { tryNoodlerAccountOperation } from "./slurp-account-operation-lock.js";
@@ -86,6 +90,11 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
         }),
       ),
     );
+    eligibleAccounts = eligibleAccounts.filter(
+      (candidate) =>
+        (lastActivity.get(candidate.id) ?? 0) + slurpCreatorPostingIntervalMs(settings.postsPerDay) <= at.getTime(),
+    );
+    if (eligibleAccounts.length === 0) return "holding";
     account = [...eligibleAccounts].sort(
       (left, right) =>
         (lastActivity.get(left.id) ?? 0) - (lastActivity.get(right.id) ?? 0) || left.id.localeCompare(right.id),
@@ -97,6 +106,7 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
       policyFingerprint: noodlerReservePolicyFingerprint(account, settings, source?.updatedAt ?? null),
       createdAt: at.toISOString(),
     });
+    if (!slotId) return "holding";
     if (settings.autoPostGenerationMode === "on_demand") return "scheduled";
   }
   if (!account || !slotId || !publishAt) return "ineligible";

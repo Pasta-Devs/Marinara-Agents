@@ -119,7 +119,6 @@ const slurpViewerSettingsKey = (personaId: string) => `slurp.viewer.${personaId}
 const NOODLER_RESERVE_STATE_ID = "noodler-reserve";
 let slurpSettingsUpdateQueue: Promise<unknown> = Promise.resolve();
 const ROLLING_DAY_MS = 24 * 60 * 60 * 1000;
-const MANUAL_POST_INVALIDATION_MS = 60 * 60 * 1000;
 /**
  * The reserve poll runs every minute, so a slot this far past its publish time means the server
  * was down or paused. Publishing it now would backdate it, and a long outage would release the
@@ -128,6 +127,10 @@ const MANUAL_POST_INVALIDATION_MS = 60 * 60 * 1000;
 const ELAPSED_PREPARED_SLOT_MS = 60 * 60 * 1000;
 /** How long published/discarded prepared rows are kept for crash recovery before pruning. */
 const TERMINAL_PREPARED_POST_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+export function slurpCreatorPostingIntervalMs(postsPerDay: number): number {
+  return ROLLING_DAY_MS / postsPerDay;
+}
 
 export type NoodlerPostPageCursor = NoodlerPostSortKey;
 
@@ -2549,10 +2552,28 @@ export function createSlurpStorage(db: DB) {
       publishAt: string;
       policyFingerprint: string;
       createdAt: string;
-    }): Promise<string> {
+    }): Promise<string | null> {
       const id = newId();
-      await db.transaction(async (tx) =>
-        tx.insert(noodlerPreparedPosts).values({
+      return db.transaction(async (tx) => {
+        const settings = await this.getSettings();
+        const publishMs = Date.parse(input.publishAt);
+        const posts = await tx
+          .select()
+          .from(noodlePosts)
+          .where(eq(noodlePosts.authorAccountId, input.creatorAccountId));
+        const prepared = await tx
+          .select()
+          .from(noodlerPreparedPosts)
+          .where(eq(noodlerPreparedPosts.creatorAccountId, input.creatorAccountId));
+        const latestActivity = Math.max(
+          ...posts.map((post) => Date.parse(post.createdAt)),
+          ...prepared
+            .filter((item) => item.state === "scheduled" || item.state === "prepared")
+            .map((item) => Date.parse(item.publishAt)),
+          0,
+        );
+        if (latestActivity + slurpCreatorPostingIntervalMs(settings.postsPerDay) > publishMs) return null;
+        await tx.insert(noodlerPreparedPosts).values({
           id,
           creatorAccountId: input.creatorAccountId,
           generatedAt: input.createdAt,
@@ -2565,9 +2586,9 @@ export function createSlurpStorage(db: DB) {
           imageClaimToken: null,
           imageClaimLeaseUntil: null,
           updatedAt: input.createdAt,
-        }),
-      );
-      return id;
+        });
+        return id;
+      });
     },
 
     async fillNoodlerScheduledPost(
@@ -2701,7 +2722,8 @@ export function createSlurpStorage(db: DB) {
 
     async discardPreparedPostsAfterManualPost(creatorAccountId: string, manualCreatedAt: string): Promise<number> {
       const start = Date.parse(manualCreatedAt);
-      const end = start + MANUAL_POST_INVALIDATION_MS;
+      const settings = await this.getSettings();
+      const end = start + slurpCreatorPostingIntervalMs(settings.postsPerDay);
       const rows = await db
         .select()
         .from(noodlerPreparedPosts)
@@ -2785,6 +2807,23 @@ export function createSlurpStorage(db: DB) {
             !source ||
             !sourceSnapshot ||
             current.policyFingerprint !== noodlerReservePolicyFingerprint(account, settings, source.updatedAt)
+          ) {
+            await tx
+              .update(noodlerPreparedPosts)
+              .set({ state: "discarded", updatedAt: at.toISOString() })
+              .where(eq(noodlerPreparedPosts.id, current.id));
+            return false;
+          }
+          const latestCreatorPost = (
+            await tx
+              .select()
+              .from(noodlePosts)
+              .where(eq(noodlePosts.authorAccountId, account.id))
+              .orderBy(desc(noodlePosts.createdAt))
+          )[0];
+          if (
+            latestCreatorPost &&
+            Date.parse(latestCreatorPost.createdAt) + slurpCreatorPostingIntervalMs(settings.postsPerDay) > at.getTime()
           ) {
             await tx
               .update(noodlerPreparedPosts)
