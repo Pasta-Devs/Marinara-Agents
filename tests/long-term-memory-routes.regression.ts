@@ -3977,6 +3977,11 @@ async function main() {
         content: "The legacy scope field remains a compatible source and destination.",
         enabled: true,
       },
+      {
+        id: "summary-cross-legacy-empty-scope",
+        content: "An empty legacy scope remains a source-only import.",
+        enabled: true,
+      },
     );
     const sourceScope = { chatId: "chat-a", chatIds: ["chat-a"] };
     const destinationChat = { chatId: "chat-b", chatIds: ["chat-b"] };
@@ -4027,6 +4032,39 @@ async function main() {
     });
     assert.equal(legacyScopeImport.statusCode, 200, legacyScopeImport.body);
     assert.deepEqual(legacyScopeImport.json().imported[0].note.destinationScope, sourceScope);
+    const legacyEmptyScopeImport = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: ["chat-a:summary-cross-legacy-empty-scope"],
+        scope: {},
+        extract: false,
+      },
+    });
+    assert.equal(legacyEmptyScopeImport.statusCode, 200, legacyEmptyScopeImport.body);
+    assert.equal(Object.hasOwn(legacyEmptyScopeImport.json().imported[0].note, "destinationScope"), false);
+    assert.equal(
+      Object.hasOwn(
+        await storageService.storage.getNote(legacyEmptyScopeImport.json().imported[0].note.id),
+        "destinationScope",
+      ),
+      false,
+    );
+    const emptyDestination = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: ["chat-a:summary-cross-branches"],
+        destinationScope: {},
+        extract: false,
+      },
+    });
+    assert.equal(emptyDestination.statusCode, 400, emptyDestination.body);
+    assert.equal(emptyDestination.json().code, "ltm_destination_scope_required");
     const allBranches = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/source-notes",
@@ -4071,6 +4109,15 @@ async function main() {
     });
     assert.equal(extractedCrossScope.statusCode, 200, extractedCrossScope.body);
     assert.deepEqual(extractedCrossScope.json().imported[0].draft.scope, destinationChat);
+    assert.ok(
+      extractedCrossScope
+        .json()
+        .imported[0].draft.mutations.every((mutation: any) =>
+          mutation.kind === "create_note"
+            ? JSON.stringify(mutation.note.scope) === JSON.stringify(destinationChat)
+            : true,
+        ),
+    );
     const refreshedCrossScope = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/source-notes",

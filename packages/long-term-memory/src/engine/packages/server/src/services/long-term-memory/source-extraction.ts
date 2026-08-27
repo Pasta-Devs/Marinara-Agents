@@ -395,7 +395,7 @@ async function extractLongTermMemoryFromSourceNoteInner(
     );
   }
 
-  const scope = sourceNote.scope;
+  const scope = sourceNote.destinationScope ?? sourceNote.scope;
   const modes = sourceNote.modes;
   const allowedBuckets = [...DEFAULT_LTM_ALLOWED_STREAMS_BY_MODE[resolvedMode]];
   const extractionConfig = await getLtmExtractionConfig(options.root, resolvedMode);

@@ -658,17 +658,27 @@ export async function importPackageInterop(
 ): Promise<LtmImportSourceNotesResponse> {
   const chat = request.chatId ? await getPackagePersistence().getChat(request.chatId) : null;
   if (request.chatId && !chat) throw new LtmServiceError("Chat not found", 404, "ltm_chat_not_found");
+  if (request.destinationScope && isGlobalLtmScope(request.destinationScope))
+    throw new LtmServiceError(
+      "Choose at least one destination for imported memories.",
+      400,
+      "ltm_destination_scope_required",
+    );
   const sourceScope = requestedSourceScope(request),
-    destinationScope = request.destinationScope ?? sourceScope ?? (chat ? resolveChatLtmScope(chat) : undefined),
+    legacyDestinationScope =
+      request.sourceScope === undefined && request.scope && !isGlobalLtmScope(request.scope)
+        ? request.scope
+        : undefined,
+    destinationScope =
+      request.destinationScope ?? legacyDestinationScope ?? (chat ? resolveChatLtmScope(chat) : undefined),
     operationId = randomUUID(),
     selected = new Set(request.sourceIds),
     rows = await candidates({ ...request, sourceScope }, selected),
     resolvedIds = new Set(rows.map((item) => item.sourceId)),
     missingSourceIds = request.sourceIds.filter((id) => !resolvedIds.has(id));
   throwIfAborted(signal);
-  const hasDestination =
-    request.destinationScope !== undefined || (request.scope !== undefined && request.sourceScope === undefined);
-  if (!hasDestination && !chat && rows.some((row) => !isGlobalLtmScope(row.scope)))
+  const legacyScopeRequest = request.sourceScope === undefined && request.scope !== undefined;
+  if (!destinationScope && !chat && !legacyScopeRequest && rows.some((row) => !isGlobalLtmScope(row.scope)))
     throw new LtmServiceError(
       "Choose a destination before importing scoped memories.",
       400,
@@ -733,7 +743,7 @@ export async function importPackageInterop(
           status: "active" as const,
           modes: row.modes,
           scope,
-          destinationScope: destinationScope ?? row.scope,
+          ...(destinationScope ? { destinationScope } : {}),
           tags: ["source_summary", row.sourceTag, ...row.importTags],
           keywords: [],
           links: [],
@@ -756,7 +766,7 @@ export async function importPackageInterop(
               status: "active",
               modes: row.modes,
               scope,
-              destinationScope: extractionScope ?? row.scope,
+              ...(destinationScope ? { destinationScope } : {}),
               tags: Array.from(new Set([...existing.tags, ...input.tags])),
               provenance: row.provenance,
               sections: { ...existing.sections, source: input.sections.source },

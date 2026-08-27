@@ -1101,9 +1101,11 @@ export default function SourcesWorkspace({
       setImportError(localizeUi("ui.longTermMemory.sourcesworkspace.selectUpTo100SourceParts"));
       return;
     }
-    const selectedDestinationScope =
-      destinationTarget?.destinationScope ??
-      (props.chatId ? { chatId: props.chatId, chatIds: [props.chatId] } : undefined);
+    const selectedDestinationScope = destinationEnabled
+      ? destinationTarget?.destinationScope
+      : props.chatId
+        ? { chatId: props.chatId, chatIds: [props.chatId] }
+        : undefined;
     if (!retryContract && !props.chatId && (!destinationEnabled || !destinationTarget)) {
       setImportError(localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport"));
       return;
