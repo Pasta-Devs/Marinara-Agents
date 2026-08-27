@@ -286,6 +286,8 @@ async function main() {
       let deletedSuggestionId: string | null = null;
       const scopeTargetQueries: string[] = [];
       const noteQueries: string[] = [];
+      const sourcePreviewRequests: Record<string, unknown>[] = [];
+      const lorebookPreviewRequests: Record<string, unknown>[] = [];
       const reviewContextQueries: string[] = [];
       const reviewQueries: string[] = [];
       const rejectedSuggestionQueries: string[] = [];
@@ -940,8 +942,8 @@ async function main() {
         if (request.method === "POST" && url.pathname.endsWith("/import/preview"))
           return send(200, {
             source: "chats",
-            scanned: 1,
-            draftable: 0,
+            scanned: 2,
+            draftable: 1,
             importedCount: 1,
             samples: [
               {
@@ -956,48 +958,88 @@ async function main() {
                 existingNoteId: "source_desktop_reextract",
                 existingNoteTitle: "Desktop re-extract source",
               },
-            ],
-          });
-        if (request.method === "POST" && url.pathname.endsWith("/import/lorebooks/preview"))
-          return send(200, {
-            counts: {
-              books: 1,
-              entries: 1,
-              candidates: 1,
-              pending: 1,
-              imported: 0,
-            },
-            books: [
               {
-                id: "lorebook_mobile_fixture",
-                name: "Mobile Field Guide",
-                description: "A populated lorebook used to verify responsive source browsing.",
-                category: "Reference",
-                tags: ["mobile", "test"],
-                scope: {},
-                counts: { entries: 1, candidates: 1, pending: 1, imported: 0 },
-                entries: [
-                  {
-                    id: "entry_mobile_harbor",
-                    name: "Harbor Signals",
-                    candidateCount: 1,
-                    candidates: [
-                      {
-                        sourceId: "lorebook_mobile_fixture:entry_mobile_harbor:0",
-                        title: "Mobile Field Guide: Harbor Signals",
-                        importMode: "roleplay",
-                        mutationCount: 1,
-                        summary: "Harbor signal colors and their meanings.",
-                        snippet: "A blue lantern marks the safe channel after dusk.",
-                        status: "pending",
-                        freshness: "new",
-                      },
-                    ],
-                  },
-                ],
+                sourceId: "character-outside-current-chat",
+                title: "Character outside current chat",
+                importMode: "roleplay",
+                mutationCount: 1,
+                summary: "A character source from another chat.",
+                snippet: "This character remains available outside the active chat.",
+                status: "pending",
+                freshness: "new",
               },
             ],
           });
+        if (request.method === "POST" && url.pathname.endsWith("/import/lorebooks/preview")) {
+          const books = [
+            {
+              id: "lorebook_mobile_fixture",
+              name: "Mobile Field Guide",
+              description: "A populated lorebook used to verify responsive source browsing.",
+              category: "Reference",
+              tags: ["mobile", "test"],
+              scope: {},
+              counts: { entries: 1, candidates: 1, pending: 1, imported: 0 },
+              entries: [
+                {
+                  id: "entry_mobile_harbor",
+                  name: "Harbor Signals",
+                  candidateCount: 1,
+                  candidates: [
+                    {
+                      sourceId: "lorebook_mobile_fixture:entry_mobile_harbor:0",
+                      title: "Mobile Field Guide: Harbor Signals",
+                      importMode: "roleplay",
+                      mutationCount: 1,
+                      summary: "Harbor signal colors and their meanings.",
+                      snippet: "A blue lantern marks the safe channel after dusk.",
+                      status: "pending",
+                      freshness: "new",
+                    },
+                  ],
+                },
+              ],
+            },
+            {
+              id: "lorebook_outside_current_chat",
+              name: "Lorebook outside current chat",
+              description: "A lorebook source from another chat.",
+              category: "Reference",
+              tags: ["scope", "test"],
+              scope: {},
+              counts: { entries: 1, candidates: 1, pending: 1, imported: 0 },
+              entries: [
+                {
+                  id: "entry_outside_current_chat",
+                  name: "Outside Chat Entry",
+                  candidateCount: 1,
+                  candidates: [
+                    {
+                      sourceId: "lorebook_outside_current_chat:entry_outside_current_chat:0",
+                      title: "Lorebook outside current chat: Outside Chat Entry",
+                      importMode: "roleplay",
+                      mutationCount: 1,
+                      summary: "A lorebook entry from another chat.",
+                      snippet: "This entry remains available outside the active chat.",
+                      status: "pending",
+                      freshness: "new",
+                    },
+                  ],
+                },
+              ],
+            },
+          ];
+          return send(200, {
+            counts: {
+              books: books.length,
+              entries: books.reduce((count, book) => count + book.counts.entries, 0),
+              candidates: books.reduce((count, book) => count + book.counts.candidates, 0),
+              pending: books.reduce((count, book) => count + book.counts.pending, 0),
+              imported: books.reduce((count, book) => count + book.counts.imported, 0),
+            },
+            books,
+          });
+        }
         if (request.method === "GET" && url.pathname.endsWith("/rejected-suggestions")) {
           rejectedSuggestionQueries.push(url.search);
           if (url.searchParams.has("chatId")) return send(200, { suggestions: [], total: 0 });
@@ -1226,6 +1268,13 @@ async function main() {
       browser = await chromium.launch();
       const browserContext = await browser.newContext({ hasTouch: true });
       const page = await browserContext.newPage();
+      page.on("request", (request) => {
+        if (request.method() !== "POST") return;
+        const body = request.postDataJSON() as Record<string, unknown>;
+        if (request.url().endsWith("/api/long-term-memory/import/preview")) sourcePreviewRequests.push(body);
+        if (request.url().endsWith("/api/long-term-memory/import/lorebooks/preview"))
+          lorebookPreviewRequests.push(body);
+      });
       const desktopActivationChanges: boolean[] = [];
       const chatSummarySettingsOpens: number[] = [];
       const promptPresetEditorOpens: number[] = [];
@@ -1987,7 +2036,7 @@ async function main() {
       await reviewContextError.waitFor();
       assert.equal(await page.locator("[data-ltm-workspace]").isVisible(), false);
       omitReviewContextId = null;
-      await reviewContextError.getByRole("button", { name: "Retry" }).click();
+      await reviewContextError.getByRole("button", { name: "Retry" }).evaluate((button) => button.click());
       await page.locator('[data-ltm-workspace-pane-tab="navigator"]').click();
       await page.locator('[data-ltm-review-source-select="source_mobile_review"]').waitFor();
       const restoredContextSource = page.locator('[data-ltm-review-source-select="source_mobile_review"]');
@@ -2574,7 +2623,18 @@ async function main() {
       assert.equal(savedNote?.type, "world");
       await page.locator('[data-ltm-control="navigation"][data-ltm-destination="sources"]').first().click();
       await page.locator('[data-ltm-source-tab="chats"]').click();
+      await page.locator('[data-ltm-source-preview-status="success"]').waitFor();
+      const initialChatPreviewRequest = sourcePreviewRequests.find((request) => request.source === "chats");
+      assert.ok(initialChatPreviewRequest);
+      assert.deepEqual(initialChatPreviewRequest.scope, {
+        chatId: "desktop-chat",
+        chatIds: ["desktop-chat"],
+      });
       await page.locator('[data-ltm-source-tab="characters"]').click();
+      await page.locator('[data-ltm-source-row-status][data-ltm-source-id="character-outside-current-chat"]').waitFor();
+      const characterPreviewRequest = sourcePreviewRequests.filter((request) => request.source === "characters").at(-1);
+      assert.ok(characterPreviewRequest);
+      assert.equal(Object.hasOwn(characterPreviewRequest, "scope"), false);
       assert.doesNotMatch(
         await page.locator('[data-ltm-surface="sources"]').innerText(),
         /character card|Summary Prompt|lorebook entries as source notes/iu,
@@ -2604,6 +2664,10 @@ async function main() {
       );
       assert.equal(await desktopReextract.isDisabled(), false);
       await page.locator('[data-ltm-source-tab="lorebooks"]').click();
+      await page.locator('[data-ltm-lorebook-id="lorebook_outside_current_chat"]').waitFor();
+      const lorebookPreviewRequest = lorebookPreviewRequests.at(-1);
+      assert.ok(lorebookPreviewRequest);
+      assert.equal(Object.hasOwn(lorebookPreviewRequest, "scope"), false);
       const sourcesWorkspace = page.locator('[data-ltm-surface="sources"] [data-ltm-workspace]');
       await sourcesWorkspace.waitFor();
       assert.equal(

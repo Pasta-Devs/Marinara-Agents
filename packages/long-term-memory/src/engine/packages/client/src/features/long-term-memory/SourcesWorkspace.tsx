@@ -772,6 +772,7 @@ export default function SourcesWorkspace({
   );
   const importTarget = importTargets.find((target) => target.id === importTargetId) ?? importTargets.at(-1)!;
   const sourceScope = importTarget.scope;
+  const previewScope = source === "chats" ? sourceScope : undefined;
   const effectiveImportScope = importTarget.id;
   const selectedImportChat =
     importTarget.id.startsWith("chat:") && sourceScope?.chatIds?.length === 1
@@ -800,7 +801,7 @@ export default function SourcesWorkspace({
     [scopeIndexes, selectedImportConversation],
   );
   const preview = useQuery({
-    queryKey: [...queryKeys.preview, source, sourceScope, modeFilter],
+    queryKey: [...queryKeys.preview, source, previewScope, modeFilter],
     queryFn: () =>
       request<LtmInteropPreviewResponse, { source: Source; limit: number; scope?: LtmScope; mode?: LtmMode }>(
         "/import/preview",
@@ -808,21 +809,21 @@ export default function SourcesWorkspace({
         {
           source,
           limit: 100,
-          ...(sourceScope ? { scope: sourceScope } : {}),
+          ...(previewScope ? { scope: previewScope } : {}),
           ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
         },
       ),
     enabled: source !== "lorebooks",
   });
   const lorebookPreview = useQuery({
-    queryKey: [...queryKeys.lorebookPreview, sourceScope, modeFilter],
+    queryKey: [...queryKeys.lorebookPreview, previewScope, modeFilter],
     queryFn: () =>
       request<LtmLorebookPreviewResponse, { limit: number; scope?: LtmScope; mode?: LtmMode }>(
         "/import/lorebooks/preview",
         "POST",
         {
           limit: 100,
-          ...(sourceScope ? { scope: sourceScope } : {}),
+          ...(previewScope ? { scope: previewScope } : {}),
           ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
         },
       ),

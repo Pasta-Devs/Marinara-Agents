@@ -901,7 +901,7 @@
         },
         "id": "long-term-memory",
         "name": "Long-Term Memory",
-        "version": "1.2.14",
+        "version": "1.2.15",
         "description": "Extracts durable memories from chat summaries, character records, and lorebooks, then recalls relevant context from a package-owned vault. Enable it per chat from Chat Settings → Agents → Long-Term Memory. In Roleplay and Game, you can also add it from Chat Settings → Agents → Misc Agents.",
         "engine": {
           "min": "2.4.1",
@@ -933,13 +933,13 @@
           },
           {
             "path": "server.mjs",
-            "sha256": "804f18aec84220da86fe20d861a2c7f2a910c346c1dffbf54356d526e4b0a533",
-            "bytes": 381168
+            "sha256": "41cc2e00f8ff14286841ee6a3ba965f605dd305a3aadd07930f4f2d2b2e1eda0",
+            "bytes": 381324
           },
           {
             "path": "client.js",
-            "sha256": "60db436f7e65fead2fa6372a96213105fe7db5364a43750b417bb29f5f962c98",
-            "bytes": 834203
+            "sha256": "1ae028058a75d56df9566a347a816221cd9b720fa6d5a38fec34ad28c774d2a0",
+            "bytes": 834222
           }
         ],
         "permissions": [
@@ -955,9 +955,9 @@
       "category": "misc",
       "iconUrl": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artwork/agent-covers/long-term-memory.png",
       "artifact": {
-        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.2.14.zip",
-        "sha256": "043a2e1ea3f6341f328ff7fc918c8978cb75c9065013e874fabda234547b9ad6",
-        "bytes": 1217910
+        "url": "https://raw.githubusercontent.com/Pasta-Devs/Marinara-Agents/main/artifacts/long-term-memory-1.2.15.zip",
+        "sha256": "135be7c488fc1a318df71e66ca0858dee1796d1b0e80e6e77e331b9946b3569b",
+        "bytes": 1218085
       },
       "documentationUrl": "https://github.com/Pasta-Devs/Marinara-Agents#long-term-memory"
     },

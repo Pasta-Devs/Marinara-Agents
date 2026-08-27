@@ -15,7 +15,6 @@ import {
 import {
   getLtmScopeChatIds,
   getLtmScopeGroupIds,
-  getLtmScopePersonaIds,
   ltmScopesOverlap,
   withMergedLtmScopeLinks,
 } from "../../../../shared/src/features/agents/long-term-memory/scope.js";
@@ -293,7 +292,29 @@ function matchesScope(candidate: Candidate, scope?: LtmScope) {
   if (candidate.provenance.kind === "character") {
     return Boolean(candidate.scope.characterIds?.some((id) => scope.characterIds?.includes(id)));
   }
+  if (candidate.provenance.kind === "chat_summary") return matchesChatSummaryScope(candidate.scope, scope);
   return matchesImportScope(candidate.scope, scope);
+}
+
+function matchesChatSummaryScope(candidateScope: LtmScope, scope?: LtmScope) {
+  if (!scope) return true;
+  const scopeGroupIds = new Set(getLtmScopeGroupIds(scope));
+  if (scopeGroupIds.size) {
+    const candidateGroupIds = new Set(getLtmScopeGroupIds(candidateScope));
+    if (![...candidateGroupIds].some((id) => scopeGroupIds.has(id))) return false;
+  } else {
+    const scopeChatIds = new Set(getLtmScopeChatIds(scope));
+    if (scopeChatIds.size) {
+      const candidateChatIds = new Set(getLtmScopeChatIds(candidateScope));
+      if (![...candidateChatIds].some((id) => scopeChatIds.has(id))) return false;
+    }
+  }
+  const scopeCharacterIds = new Set(scope.characterIds ?? []);
+  if (scopeCharacterIds.size) {
+    const candidateCharacterIds = new Set(candidateScope.characterIds ?? []);
+    if (![...candidateCharacterIds].some((id) => scopeCharacterIds.has(id))) return false;
+  }
+  return true;
 }
 
 function matchesImportScope(candidateScope: LtmScope, scope?: LtmScope) {
@@ -422,24 +443,11 @@ async function candidates(
   if (request.source === "chats") {
     const scopeIds = new Set(getLtmScopeChatIds(request.scope));
     const scopeGroupIds = new Set(getLtmScopeGroupIds(request.scope));
-    const scopeCharacterIds = new Set(request.scope?.characterIds ?? []);
-    const scopePersonaIds = new Set(getLtmScopePersonaIds(request.scope));
-    const hasScopeFilter =
-      scopeIds.size > 0 || scopeGroupIds.size > 0 || scopeCharacterIds.size > 0 || scopePersonaIds.size > 0;
-    const broaderScope =
-      hasScopeFilter &&
-      (scopeGroupIds.size > 0 || scopeIds.size > 1 || scopeCharacterIds.size > 0 || scopePersonaIds.size > 0);
+    const broaderScope = scopeGroupIds.size > 0 || scopeIds.size > 1;
     for (const chat of await getPackagePersistence().listChats()) {
       if (normalizeLtmChatCharacterIds(chat.characterIds).includes(PROFESSOR_MARI_CHARACTER_ID)) continue;
       if (request.chatId && !broaderScope && chat.id !== request.chatId) continue;
-      if (
-        hasScopeFilter &&
-        !scopeIds.has(chat.id) &&
-        !(chat.groupId && scopeGroupIds.has(chat.groupId)) &&
-        !normalizeLtmChatCharacterIds(chat.characterIds).some((id) => scopeCharacterIds.has(id)) &&
-        !(chat.personaId && scopePersonaIds.has(chat.personaId))
-      )
-        continue;
+      if (scopeGroupIds.size ? !scopeGroupIds.has(chat.groupId) : scopeIds.size && !scopeIds.has(chat.id)) continue;
       const metadata = object(chat.metadata),
         chatMode = ltmModeForChatMode(chat.mode);
       for (const entry of summaries(metadata, chatMode)) {
