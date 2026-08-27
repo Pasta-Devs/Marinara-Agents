@@ -16,7 +16,7 @@ Since 1.2.0 the package is **staging only**: Engine `staging` testers are offere
 
 1.3.0 completed the game: Progression (the Inventory screen, and each unit's Gear, Form and Facets tabs, which open the Relic Vault and the Tenet Trial) and Events (the events tab, a 7 Day Login Event and a 30-day battle pass), leaving nothing in the interface drawn locked and 60 routes registered.
 
-**1.5.0 rounds the game out.** With every screen already reachable, this release is about what a run gives back — the economy that closes its own loops, the systems that reward staying, and the author's controls over the story. It registers 73 routes.
+**1.5.0 rounds the game out.** With the core game loop in place, this release is about what a run gives back — the economy that closes its own loops, the systems that reward staying, and the author's controls over the story. It registers 73 routes.
 
 - **Glimmer and the Shop.** 94% of pulls used to grant nothing new; now every pull pays something. Duplicates mint Glimmer, and a Shop spends it — Vigor potions in three sizes (stored in the bag and used from the Vigor menu, now a centered modal), plus locked slots that name what is coming.
 - **Outfits.** The world owes its laggards an alternate look: each banner rotation mints outfits for the units that have been offered and not bought, themed by a per-world author directive, and sells them in the Shop from rank 15. A unit's sheet gains a wardrobe tab, and the Home picker can dress the scene with one. A per-world switch (on by default, off only by the author) turns the system off entirely.
