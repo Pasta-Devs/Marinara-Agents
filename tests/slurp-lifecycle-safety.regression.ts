@@ -106,6 +106,18 @@ assert.match(profileSurface, /ui\.slurp\.artwork\.generateBanner/u);
 assert.match(profileSurface, /ui\.slurp\.artwork\.generateAvatar/u);
 assert.match(profileSurface, /group-hover:opacity-100/u);
 assert.match(profileSurface, /<Avatar account=\{account\} size="xl"/u);
+assert.match(home, /function SourceAccountAvatar[\s\S]*?useSlurpMediaSrc\(account\.avatarUrl\)/u);
+assert.match(home, /function SourceAccountAvatar[\s\S]*?<img src=\{source\}/u);
+assert.match(
+  home,
+  /function SourceAccountAvatar[\s\S]*?ProfileInitial profile=\{\{ \.\.\.account, avatarUrl: null \}\}/u,
+);
+assert.match(home, /<SourceAccountAvatar account=\{account\} \/>/u);
+assert.doesNotMatch(
+  home,
+  /accounts\.map\(\(account\) => \([\s\S]*?<img src=\{account\.avatarUrl\}/u,
+  "source-account rows must authenticate managed avatar URLs before rendering them",
+);
 assert.match(artwork, /one continuous ultra-wide background scene only/u);
 assert.match(artwork, /Do not include a profile picture, avatar, headshot/u);
 assert.match(artwork, /width: kind === "banner" \? 1536 : 1024/u);

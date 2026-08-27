@@ -2618,11 +2618,7 @@ function StageProfileSourcePicker({
                   onClick={() => onSelect(account.id)}
                   className={`flex min-h-16 w-full items-center gap-3 p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--noodle-accent)] ${selectedId === account.id ? "bg-[var(--noodle-accent)]/10" : "hover:bg-[var(--accent)]"}`}
                 >
-                  {account.avatarUrl ? (
-                    <img src={account.avatarUrl} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover" />
-                  ) : (
-                    <ProfileInitial profile={account} />
-                  )}
+                  <SourceAccountAvatar account={account} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-bold">{account.displayName}</span>
                     <span className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
@@ -2805,6 +2801,22 @@ function WizardFooter({
 }
 
 type SlurpProfileImagePost = NoodlePostCardModel & { imageUrl: string };
+
+function SourceAccountAvatar({
+  account,
+}: {
+  account: {
+    displayName: string;
+    avatarUrl: string | null;
+  };
+}) {
+  const source = useSlurpMediaSrc(account.avatarUrl);
+  return source ? (
+    <img src={source} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover" />
+  ) : (
+    <ProfileInitial profile={{ ...account, avatarUrl: null }} />
+  );
+}
 
 function profileAccent(_profileId: string): string {
   return NOODLE_PINK;
