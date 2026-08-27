@@ -292,7 +292,14 @@ function requestedSourceScope(request: { sourceScope?: LtmScope; scope?: LtmScop
 }
 
 function scopeKey(scope: LtmScope | undefined) {
-  return JSON.stringify(normalizeLtmScope(scope));
+  const normalized = normalizeLtmScope(scope);
+  return JSON.stringify({
+    ...normalized,
+    ...(normalized.chatIds ? { chatIds: [...normalized.chatIds].sort() } : {}),
+    ...(normalized.groupIds ? { groupIds: [...normalized.groupIds].sort() } : {}),
+    ...(normalized.characterIds ? { characterIds: [...normalized.characterIds].sort() } : {}),
+    ...(normalized.personaIds ? { personaIds: [...normalized.personaIds].sort() } : {}),
+  });
 }
 
 function matchesScope(candidate: Candidate, scope?: LtmScope) {
@@ -718,21 +725,31 @@ export async function importPackageInterop(
       deterministicSourceText?: string;
     }> = [],
     writeFailures: LtmImportSourceNotesResponse["writeFailures"] = [];
+  const conflictingSourceIds = new Set<string>();
   if (destinationScope) {
     for (const row of rows) {
       const existing = matchExisting(row);
       if (!existing) continue;
       const existingDestinationScope =
         existing.destinationScope ?? existing.extractionFingerprint?.scope ?? existing.scope;
-      if (scopeKey(existingDestinationScope) !== scopeKey(destinationScope))
-        throw new LtmServiceError(
-          `Source ${row.title} is already imported with a different destination. Manage its availability in Memory Vault.`,
-          409,
-          "ltm_source_destination_conflict",
-        );
+      if (scopeKey(existingDestinationScope) !== scopeKey(destinationScope)) {
+        conflictingSourceIds.add(row.sourceId);
+        writeFailures.push({
+          sourceId: row.sourceId,
+          title: row.title,
+          sourceWriteStatus: "failed",
+          extractionStatus: "not_started",
+          retryable: false,
+          error: {
+            code: "ltm_source_destination_conflict",
+            message: `Source ${row.title} is already imported with a different destination. Manage its availability in Memory Vault.`,
+          },
+        });
+      }
     }
   }
   for (const row of rows) {
+    if (conflictingSourceIds.has(row.sourceId)) continue;
     try {
       const scope = withMergedLtmScopeLinks(row.scope, destinationScope ?? row.scope),
         input = {

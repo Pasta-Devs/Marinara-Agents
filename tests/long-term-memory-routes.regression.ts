@@ -19,7 +19,12 @@ async function main() {
   );
   const { activate } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/server-entry.ts");
-  const { ltmDraftPreflightResponseSchema, ltmExtractionSettingsPatchSchema, ltmExtractionSettingsSchema } =
+  const {
+    ltmDraftNoteInputSchema,
+    ltmDraftPreflightResponseSchema,
+    ltmExtractionSettingsPatchSchema,
+    ltmExtractionSettingsSchema,
+  } =
     await import("../packages/long-term-memory/src/engine/packages/shared/src/features/agents/long-term-memory/schema.ts");
   const { addRejectedSuggestions } =
     await import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/rejected-suggestions.ts");
@@ -3968,6 +3973,11 @@ async function main() {
         enabled: true,
       },
       {
+        id: "summary-cross-conflict-batch",
+        content: "A conflicting destination must not stop other source notes.",
+        enabled: true,
+      },
+      {
         id: "summary-cross-extract",
         content: "A cross-scope extraction creates memories in its destination.",
         enabled: true,
@@ -4007,14 +4017,32 @@ async function main() {
       headers,
       payload: {
         source: "chats",
-        sourceIds: ["chat-a:summary-cross-scope"],
+        sourceIds: ["chat-a:summary-cross-scope", "chat-a:summary-cross-conflict-batch"],
         sourceScope,
         destinationScope: { characterIds: ["character-mara"] },
         extract: false,
       },
     });
-    assert.equal(crossScopeConflict.statusCode, 409, crossScopeConflict.body);
-    assert.equal(crossScopeConflict.json().code, "ltm_source_destination_conflict");
+    assert.equal(crossScopeConflict.statusCode, 200, crossScopeConflict.body);
+    assert.equal(crossScopeConflict.json().batchStatus, "partial_success");
+    assert.deepEqual(
+      crossScopeConflict.json().imported.map((item: any) => item.sourceId),
+      ["chat-a:summary-cross-conflict-batch"],
+    );
+    assert.deepEqual(crossScopeConflict.json().writeFailures, [
+      {
+        sourceId: "chat-a:summary-cross-scope",
+        title: "Observatory, msgs messages 2",
+        sourceWriteStatus: "failed",
+        extractionStatus: "not_started",
+        retryable: false,
+        error: {
+          code: "ltm_source_destination_conflict",
+          message:
+            "Source Observatory, msgs messages 2 is already imported with a different destination. Manage its availability in Memory Vault.",
+        },
+      },
+    ]);
     assert.deepEqual(
       await storageService.storage.getNote(crossScope.json().imported[0].note.id),
       crossScopeBeforeConflict,
@@ -4084,6 +4112,38 @@ async function main() {
     });
     assert.equal(allBranches.statusCode, 200, allBranches.body);
     assert.equal(allBranches.json().imported[0].note.destinationScope.groupId, "observatory-branches");
+    const reorderedAllBranches = await app.inject({
+      method: "POST",
+      url: "/api/long-term-memory/import/source-notes",
+      headers,
+      payload: {
+        source: "chats",
+        sourceIds: ["chat-a:summary-cross-branches"],
+        sourceScope,
+        destinationScope: {
+          groupId: "observatory-branches",
+          groupIds: ["observatory-branches"],
+          chatIds: ["game-a", "chat-a"],
+        },
+        extract: false,
+      },
+    });
+    assert.equal(reorderedAllBranches.statusCode, 200, reorderedAllBranches.body);
+    assert.equal(reorderedAllBranches.json().writeFailures.length, 0);
+    assert.equal(
+      ltmDraftNoteInputSchema.safeParse({
+        id: "source_destination_alias_conflict",
+        type: "source",
+        modes: ["roleplay"],
+        destinationScope: { chatId: "chat-a", chatIds: ["chat-b"] },
+        tags: [],
+        keywords: [],
+        links: [],
+        provenance: { kind: "chat_summary", sourceId: "chat-a", entryId: "summary-cross-scope" },
+        sections: { source: { text: "Source text", updatedAt: "2026-07-17T00:00:00.000Z" } },
+      }).success,
+      false,
+    );
     const missingDestination = await app.inject({
       method: "POST",
       url: "/api/long-term-memory/import/source-notes",

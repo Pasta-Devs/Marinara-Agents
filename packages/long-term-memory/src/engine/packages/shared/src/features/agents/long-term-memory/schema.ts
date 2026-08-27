@@ -1935,7 +1935,7 @@ export const ltmDraftNoteInputSchema = z
     status: ltmStatusSchema.default("active"),
     modes: z.array(ltmModeSchema).min(1).max(8),
     scope: ltmWriteScopeSchema.default({}),
-    destinationScope: ltmScopeSchema.optional(),
+    destinationScope: ltmWriteScopeSchema.optional(),
     tags: z.array(ltmIdentifierSchema).max(100).default([]),
     keywords: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
     manualKeywords: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
@@ -2640,15 +2640,23 @@ export const ltmImportSourceWriteFailureSchema = z
     title: z.string().min(1).max(240),
     sourceWriteStatus: z.literal("failed"),
     extractionStatus: z.literal("not_started"),
-    retryable: z.literal(true),
+    retryable: z.boolean(),
     error: z
       .object({
-        code: z.literal("source_write_failed"),
+        code: z.enum(["source_write_failed", "ltm_source_destination_conflict"]),
         message: z.string().min(1).max(2_000),
       })
       .strict(),
   })
-  .strict();
+  .strict()
+  .superRefine((failure, ctx) => {
+    if (failure.retryable === (failure.error.code === "ltm_source_destination_conflict"))
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["retryable"],
+        message: "Destination conflicts are not retryable; source write failures are retryable.",
+      });
+  });
 
 export const ltmImportSourceNotesBatchStatusSchema = z.enum(["success", "partial_success", "failed", "cancelled"]);
 

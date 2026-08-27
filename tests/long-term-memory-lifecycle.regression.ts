@@ -287,7 +287,6 @@ async function main() {
       const scopeTargetQueries: string[] = [];
       const noteQueries: string[] = [];
       const sourcePreviewRequests: Record<string, unknown>[] = [];
-      const lorebookPreviewRequests: Record<string, unknown>[] = [];
       const reviewContextQueries: string[] = [];
       const reviewQueries: string[] = [];
       const rejectedSuggestionQueries: string[] = [];
@@ -1272,8 +1271,6 @@ async function main() {
         if (request.method() !== "POST") return;
         const body = request.postDataJSON() as Record<string, unknown>;
         if (request.url().endsWith("/api/long-term-memory/import/preview")) sourcePreviewRequests.push(body);
-        if (request.url().endsWith("/api/long-term-memory/import/lorebooks/preview"))
-          lorebookPreviewRequests.push(body);
       });
       const desktopActivationChanges: boolean[] = [];
       const chatSummarySettingsOpens: number[] = [];
@@ -2687,10 +2684,19 @@ async function main() {
       );
       assert.equal(await desktopReextract.isDisabled(), false);
       await page.locator('[data-ltm-source-tab="lorebooks"]').click();
+      const scopedLorebookPreviewRequestPromise = page.waitForRequest((request) => {
+        if (request.method() !== "POST" || !request.url().includes("/api/long-term-memory/import/lorebooks/preview"))
+          return false;
+        const body = request.postDataJSON() as { sourceScope?: unknown };
+        return JSON.stringify(body.sourceScope) === JSON.stringify(expectedInitialChatSourceScope);
+      });
+      await page.locator('[data-ltm-source-action="refresh-preview"]').click();
       await page.locator('[data-ltm-lorebook-id="lorebook_outside_current_chat"]').waitFor();
-      const lorebookPreviewRequest = lorebookPreviewRequests.at(-1);
+      const lorebookPreviewRequest = (await scopedLorebookPreviewRequestPromise).postDataJSON() as {
+        sourceScope?: unknown;
+      };
       assert.ok(lorebookPreviewRequest);
-      assert.equal(Object.hasOwn(lorebookPreviewRequest, "sourceScope"), false);
+      assert.deepEqual(lorebookPreviewRequest.sourceScope, expectedInitialChatSourceScope);
       const sourcesWorkspace = page.locator('[data-ltm-surface="sources"] [data-ltm-workspace]');
       await sourcesWorkspace.waitFor();
       assert.equal(

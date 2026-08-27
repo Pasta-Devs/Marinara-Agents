@@ -857,7 +857,9 @@ export default function SourcesWorkspace({
   const destinationTarget = destinationTargets.find((target) => target.id === destinationTargetId);
   const sourceScope = sourceTarget?.sourceScope;
   const previewScope =
-    source === "chats" || (source === "characters" && sourceTarget?.kind === "character") ? sourceScope : undefined;
+    source === "chats" || source === "lorebooks" || (source === "characters" && sourceTarget?.kind === "character")
+      ? sourceScope
+      : undefined;
   const effectiveImportScope = `${sourceTargetId}:${destinationTargetId || "none"}`;
   const preview = useQuery({
     queryKey: [...queryKeys.preview, source, previewScope, modeFilter],
@@ -1101,22 +1103,31 @@ export default function SourcesWorkspace({
       setImportError(localizeUi("ui.longTermMemory.sourcesworkspace.selectUpTo100SourceParts"));
       return;
     }
-    const selectedDestinationScope = destinationEnabled
-      ? destinationTarget?.destinationScope
+    const effectiveDestination = destinationEnabled
+      ? destinationTarget
       : props.chatId
-        ? { chatId: props.chatId, chatIds: [props.chatId] }
+        ? {
+            destinationScope: { chatId: props.chatId, chatIds: [props.chatId] },
+            destinationLabel: props.chatName ?? localizeUi("ui.longTermMemory.sourcesworkspace.currentChat"),
+          }
         : undefined;
-    if (!props.chatId && (!destinationEnabled || !destinationTarget)) {
+    if (!effectiveDestination) {
       setImportError(localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestinationBeforeImport"));
       return;
     }
+    const destinationScope = effectiveDestination.destinationScope;
+    const destinationTargetLabel =
+      effectiveDestination.destinationLabel ??
+      ("label" in effectiveDestination ? effectiveDestination.label : undefined) ??
+      localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestination");
     const effectiveAction = retryContract?.action ?? action;
     const contract: ImportContract = retryContract
       ? {
           ...retryContract,
           sourceIds: ids,
           action: effectiveAction,
-          destinationScope: selectedDestinationScope,
+          destinationScope,
+          destinationTargetLabel,
         }
       : {
           source,
@@ -1132,26 +1143,19 @@ export default function SourcesWorkspace({
                 },
               }
             : {}),
-          ...(selectedDestinationScope
+          ...(destinationScope
             ? {
                 destinationScope: {
-                  ...selectedDestinationScope,
-                  ...(selectedDestinationScope.chatIds ? { chatIds: [...selectedDestinationScope.chatIds] } : {}),
-                  ...(selectedDestinationScope.groupIds ? { groupIds: [...selectedDestinationScope.groupIds] } : {}),
-                  ...(selectedDestinationScope.characterIds
-                    ? { characterIds: [...selectedDestinationScope.characterIds] }
-                    : {}),
-                  ...(selectedDestinationScope.personaIds
-                    ? { personaIds: [...selectedDestinationScope.personaIds] }
-                    : {}),
+                  ...destinationScope,
+                  ...(destinationScope.chatIds ? { chatIds: [...destinationScope.chatIds] } : {}),
+                  ...(destinationScope.groupIds ? { groupIds: [...destinationScope.groupIds] } : {}),
+                  ...(destinationScope.characterIds ? { characterIds: [...destinationScope.characterIds] } : {}),
+                  ...(destinationScope.personaIds ? { personaIds: [...destinationScope.personaIds] } : {}),
                 },
               }
             : {}),
           sourceTargetLabel: sourceTarget?.label ?? localizeUi("ui.longTermMemory.sourcesworkspace.allAvailable"),
-          destinationTargetLabel:
-            destinationTarget?.destinationLabel ??
-            destinationTarget?.label ??
-            localizeUi("ui.longTermMemory.sourcesworkspace.chooseDestination"),
+          destinationTargetLabel,
           ...(modeFilter !== "all" ? { mode: modeFilter } : {}),
           ...(props.chatId ? { chatId: props.chatId } : {}),
           selectionKey: selectionKeyOverride ?? selectionKey,
