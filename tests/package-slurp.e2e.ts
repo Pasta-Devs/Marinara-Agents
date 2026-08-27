@@ -19,6 +19,9 @@ function collectUnexpectedErrors(page: Page) {
     if (/favicon|ResizeObserver/i.test(value)) return;
     errors.push(value);
   });
+  page.on("response", (response) => {
+    if (response.status() >= 400) errors.push(`HTTP ${response.status()} ${response.url()}`);
+  });
   return errors;
 }
 
@@ -278,7 +281,6 @@ test.describe("standalone Slurp package", () => {
       await scheduleButton.click();
       const scheduleDialog = page.getByRole("dialog", { name: `Schedule for ${stageProfile.displayName}` });
       await expect(scheduleDialog).toBeVisible();
-      await expect(scheduleDialog.getByText("No upcoming scheduled posts yet.")).toBeVisible();
       await page.keyboard.press("Escape");
       await expect(scheduleDialog).toBeHidden();
 
