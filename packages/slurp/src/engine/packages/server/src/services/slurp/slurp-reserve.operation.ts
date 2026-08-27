@@ -16,6 +16,16 @@ import { runSlurpAutoPostPollOperations, type SlurpReservePollOutcome } from "./
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** Return true when an existing post or active slot is too close to a candidate slot. */
+export function hasSlurpCreatorPostingIntervalConflict(
+  activityTimes: number[],
+  candidatePublishAt: number,
+  postsPerDay: number,
+): boolean {
+  const interval = slurpCreatorPostingIntervalMs(postsPerDay);
+  return activityTimes.some((activityAt) => Math.abs(candidatePublishAt - activityAt) < interval);
+}
+
 class NoodlerAttemptUnavailableError extends Error {
   constructor(readonly status: "exhausted" | "holding") {
     super(`Automatic NoodleR attempt ${status}.`);
@@ -78,26 +88,30 @@ export async function prepareNextNoodlerReservePost(db: DB, at = new Date()): Pr
     // `Date.parse("0")` is not zero — V8 reads it as the year 2000 — so an account that has never
     // posted must contribute a real 0 rather than a parsed sentinel. The reads are independent, so
     // fan them out instead of walking the creator list one round trip at a time.
-    const lastActivity = new Map(
+    const activityTimes = new Map(
       await Promise.all(
-        eligibleAccounts.map(async (candidate): Promise<[string, number]> => {
+        eligibleAccounts.map(async (candidate): Promise<[string, number[]]> => {
           const posts = await noodle.listNoodlerPostsByAccount(candidate.id, 1);
           const scheduledTimes = active
             .filter((item) => item.creatorAccountId === candidate.id)
             .map((item) => Date.parse(item.publishAt));
-          const lastPostedAt = posts[0] ? Date.parse(posts[0].createdAt) : 0;
-          return [candidate.id, Math.max(lastPostedAt, ...scheduledTimes, 0)];
+          return [candidate.id, [...posts.map((post) => Date.parse(post.createdAt)), ...scheduledTimes]];
         }),
       ),
     );
     eligibleAccounts = eligibleAccounts.filter(
       (candidate) =>
-        (lastActivity.get(candidate.id) ?? 0) + slurpCreatorPostingIntervalMs(settings.postsPerDay) <= at.getTime(),
+        !hasSlurpCreatorPostingIntervalConflict(
+          activityTimes.get(candidate.id) ?? [],
+          Date.parse(publishAt),
+          settings.postsPerDay,
+        ),
     );
     if (eligibleAccounts.length === 0) return "holding";
     account = [...eligibleAccounts].sort(
       (left, right) =>
-        (lastActivity.get(left.id) ?? 0) - (lastActivity.get(right.id) ?? 0) || left.id.localeCompare(right.id),
+        Math.max(...(activityTimes.get(left.id) ?? []), 0) - Math.max(...(activityTimes.get(right.id) ?? []), 0) ||
+        left.id.localeCompare(right.id),
     )[0]!;
     const source = await noodle.resolveAccountSource(account);
     slotId = await noodle.createNoodlerScheduledPost({

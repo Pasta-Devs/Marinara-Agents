@@ -132,6 +132,16 @@ export function slurpCreatorPostingIntervalMs(postsPerDay: number): number {
   return ROLLING_DAY_MS / postsPerDay;
 }
 
+/** Return true when an existing post or active slot is too close to a candidate slot. */
+function hasSlurpCreatorPostingIntervalConflict(
+  activityTimes: number[],
+  candidatePublishAt: number,
+  postsPerDay: number,
+): boolean {
+  const interval = slurpCreatorPostingIntervalMs(postsPerDay);
+  return activityTimes.some((activityAt) => Math.abs(candidatePublishAt - activityAt) < interval);
+}
+
 export type NoodlerPostPageCursor = NoodlerPostSortKey;
 
 const noodlerFanArchetypeWeightsSchema = z
@@ -2565,14 +2575,13 @@ export function createSlurpStorage(db: DB) {
           .select()
           .from(noodlerPreparedPosts)
           .where(eq(noodlerPreparedPosts.creatorAccountId, input.creatorAccountId));
-        const latestActivity = Math.max(
+        const activityTimes = [
           ...posts.map((post) => Date.parse(post.createdAt)),
           ...prepared
             .filter((item) => item.state === "scheduled" || item.state === "prepared")
             .map((item) => Date.parse(item.publishAt)),
-          0,
-        );
-        if (latestActivity + slurpCreatorPostingIntervalMs(settings.postsPerDay) > publishMs) return null;
+        ];
+        if (hasSlurpCreatorPostingIntervalConflict(activityTimes, publishMs, settings.postsPerDay)) return null;
         await tx.insert(noodlerPreparedPosts).values({
           id,
           creatorAccountId: input.creatorAccountId,
@@ -2825,6 +2834,9 @@ export function createSlurpStorage(db: DB) {
             latestCreatorPost &&
             Date.parse(latestCreatorPost.createdAt) + slurpCreatorPostingIntervalMs(settings.postsPerDay) > at.getTime()
           ) {
+            discardedMediaPaths.push(
+              String(parseRecord(parseRecord(current.payload).metadata).noodlerMediaPath ?? "") || null,
+            );
             await tx
               .update(noodlerPreparedPosts)
               .set({ state: "discarded", updatedAt: at.toISOString() })
