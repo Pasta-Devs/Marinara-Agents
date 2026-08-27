@@ -19,6 +19,9 @@ function collectUnexpectedErrors(page: Page) {
     if (/favicon|ResizeObserver/i.test(value)) return;
     errors.push(value);
   });
+  page.on("response", (response) => {
+    if (response.status() >= 400) errors.push(`HTTP ${response.status()} ${response.url()}`);
+  });
   return errors;
 }
 
