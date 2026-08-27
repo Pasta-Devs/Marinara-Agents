@@ -67,7 +67,7 @@ These packages are being built in this repository but are not ready for the stab
 
 | Package | ID | Availability | Status |
 | --- | --- | --- | --- |
-| Gacha Forge | [`gacha-forge`](packages/gacha-forge/manifest.json) | Staging only | Forge a gacha world from your lorebooks, pull on banners, collect the generated cast, play story chapters told by a visual-novel narrator, then farm materials, gear and train your units, and claim the login event and battle pass from **Home → Gacha Forge**. Offered to Engine `staging` testers while the game mode is exercised. |
+| Gacha Forge | [`gacha-forge`](packages/gacha-forge/manifest.json) | Staging only | A complete gacha game mode: describe a world and it builds the rest — banners to pull on, a generated cast, story chapters told by a visual-novel narrator, and the battles, gear and events that grow around them, all from **Home → Gacha Forge**. Offered to Engine `staging` testers while the game mode is exercised. |
 | Pixelforge | [`pixelforge`](packages/pixelforge/manifest.json) | In development | A walkable pixel-art RPG Experience for Game Mode: generated settlements, NPCs, and story-driven exploration. Under active development; not yet listed for users. |
 
 ### Localization sources
