@@ -13972,60 +13972,81 @@ await withSavePath(async ({ calls, behavior, makeCore }) => {
     };
 
     let swept = 0;
-    for (const theme of ["cozy-village", "sci-fi-colony"]) {
-      for (const scale of ["outpost", "hamlet", "village", "town", "city"]) {
-        for (const prosperity of ["struggling", "thriving"]) {
-          for (const surround of ["woods", "water", "barren"]) {
-            // Two shapes, and the difference is the ANCHOR LADDER's first rung.
-            // With a host in the cast the seal always ends up with a gathering
-            // place; with no host and the interior kinds spoken for there is none
-            // at all, which is the "a sealed brief can have zero gathering
-            // places" caveat the ladder exists for.
-            for (const hostless of [false, true]) {
-              const sealed = brief.validate(
-                {
-                  scale,
-                  prosperity,
-                  surround,
-                  name: "Boardton",
-                  features: [
-                    { tag: "water-feature", name: "The Pool" },
-                    { tag: "crop-plots", name: "The Rows" },
-                  ],
-                  places: hostless
-                    ? [
-                        { kind: "hall", name: "The Hall" },
-                        { kind: "sanctuary", name: "The Chapel" },
-                      ]
-                    : [{ kind: "gathering", name: "The Inn" }],
-                  cast: hostless ? boardCast.filter((m) => m.kind !== "host") : boardCast,
-                },
-                { theme, seed: 31 },
-              );
-              const w = world.build(31, theme, sealed);
-              const rows = Object.entries(w.zones).flatMap(([zoneId, zone]) =>
-                zone.features.filter((row) => row.id === BOARD).map((row) => ({ zoneId, row })),
-              );
-              const where = `${theme}/${scale}/${prosperity}/${surround}/${hostless ? "no-host" : "host"}`;
-              assert.equal(rows.length, 1, `${where}: exactly one board, unconditionally`);
-              assert.equal(rows[0].zoneId, "z1", `${where}: and it stands in the settlement`);
-              const z = w.zones.z1;
-              const { rect } = rows[0].row;
-              const at = rect.y * z.w + rect.x;
-              assert.equal(z.object[at], "board", `${where}: the register row and the tile are the same tile`);
-              assert.ok(z.solid[at], `${where}: …and it is solid, so the player stands in FRONT of it`);
-              // THE NAMED GUARANTEE (plan §0): no water in a board rect.
-              for (let y = rect.y; y < rect.y + rect.h; y++)
-                for (let x = rect.x; x < rect.x + rect.w; x++)
-                  assert.notEqual(z.ground[y * z.w + x], "water", `${where}: no water tile in a board rect`);
-              assert.ok(canReach(z, rect.x, rect.y), `${where}: and the player can walk up to it`);
-              swept++;
+    // THREE SEEDS, not one. Slice 3 swept every theme, rank, prosperity, surround
+    // and both anchor shapes on seed 31 alone — which is 120 worlds that all made
+    // the SAME roll of every placement the ladder walks past. The seed is the one
+    // axis the fixture's guarantees (one board, on ground, dry, reachable) are
+    // most exposed to, because it is what decides where the buildings landed for
+    // the anchor to find them. Three is the whole widening: the sweep is the most
+    // expensive case in the file and the guarantees are structural, so this buys
+    // the independent rolls and stops.
+    for (const seed of [31, 7, 424242]) {
+      for (const theme of ["cozy-village", "sci-fi-colony"]) {
+        for (const scale of ["outpost", "hamlet", "village", "town", "city"]) {
+          for (const prosperity of ["struggling", "thriving"]) {
+            for (const surround of ["woods", "water", "barren"]) {
+              // Two shapes, and the difference is the ANCHOR LADDER's first rung.
+              // With a host in the cast the seal always ends up with a gathering
+              // place; with no host and the interior kinds spoken for there is none
+              // at all, which is the "a sealed brief can have zero gathering
+              // places" caveat the ladder exists for.
+              for (const hostless of [false, true]) {
+                const sealed = brief.validate(
+                  {
+                    scale,
+                    prosperity,
+                    surround,
+                    name: "Boardton",
+                    features: [
+                      { tag: "water-feature", name: "The Pool" },
+                      { tag: "crop-plots", name: "The Rows" },
+                    ],
+                    places: hostless
+                      ? [
+                          { kind: "hall", name: "The Hall" },
+                          { kind: "sanctuary", name: "The Chapel" },
+                        ]
+                      : [{ kind: "gathering", name: "The Inn" }],
+                    cast: hostless ? boardCast.filter((m) => m.kind !== "host") : boardCast,
+                  },
+                  { theme, seed },
+                );
+                const w = world.build(seed, theme, sealed);
+                const rows = Object.entries(w.zones).flatMap(([zoneId, zone]) =>
+                  zone.features.filter((row) => row.id === BOARD).map((row) => ({ zoneId, row })),
+                );
+                const where = `${theme}/${scale}/${prosperity}/${surround}/${hostless ? "no-host" : "host"}@${seed}`;
+                assert.equal(rows.length, 1, `${where}: exactly one board, unconditionally`);
+                assert.equal(rows[0].zoneId, "z1", `${where}: and it stands in the settlement`);
+                const z = w.zones.z1;
+                const { rect } = rows[0].row;
+                const at = rect.y * z.w + rect.x;
+                assert.equal(z.object[at], "board", `${where}: the register row and the tile are the same tile`);
+                assert.ok(z.solid[at], `${where}: …and it is solid, so the player stands in FRONT of it`);
+                // A BOARD RECT IS ONE TILE, and nearBoard's design depends on it:
+                // the fourth proximity read has no second term to disambiguate
+                // with (30-sim says why), so it is safe only while the rect IS
+                // the fixture rather than a placer's extent with margin round it.
+                // A 2x2 board would make "adjacent to the rect" mean adjacent to
+                // three tiles nothing was ever painted on.
+                assert.deepEqual(
+                  [rect.w, rect.h],
+                  [1, 1],
+                  `${where}: the rect is the single tile nearBoard is allowed to assume`,
+                );
+                // THE NAMED GUARANTEE (plan §0): no water in a board rect.
+                for (let y = rect.y; y < rect.y + rect.h; y++)
+                  for (let x = rect.x; x < rect.x + rect.w; x++)
+                    assert.notEqual(z.ground[y * z.w + x], "water", `${where}: no water tile in a board rect`);
+                assert.ok(canReach(z, rect.x, rect.y), `${where}: and the player can walk up to it`);
+                swept++;
+              }
             }
           }
         }
       }
     }
-    assert.equal(swept, 120, `the sweep actually ran (${swept} worlds)`);
+    assert.equal(swept, 360, `the sweep actually ran (${swept} worlds)`);
 
     // DETERMINISTIC PER (seed, theme, brief), which is what makes the fixture a
     // fixture: worlds are rebuilt on every load, and a board that moved between
@@ -17701,7 +17722,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     assert.equal(active().length, 1, "pressing the receipt does not take it twice");
     assert.equal(
       hud.toastEl.textContent,
-      "You took that one today — it is in your jobs below.",
+      "You took that one today — it is on your jobs list.",
       "…and the toast says so rather than falling through to a generic line",
     );
 
@@ -17719,6 +17740,33 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
     // Finished through the SHIPPED mutator rather than by writing the field: the
     // verb-site hooks are slice 4's, and this case is about the board.
     P.quest(core, "progress", { id: row.id, by: row.n });
+
+    // ── THE TAKEN COPY IS ORDER-AGNOSTIC, BECAUSE THE ORDER MOVES ────────────
+    // Slice 3's verify found this one as a player-reachable copy bug: the same
+    // press that finishes a job lifts the jobs section ABOVE the offers, and the
+    // dimmed receipt row was still telling the player to look below it. Both
+    // halves of the copy — the row and the refusal it toasts — have to be true
+    // whichever way round the two sections render, so neither may name a
+    // direction. Read on the day the work was taken, which is the only day the
+    // receipt state exists at all (an instance id carries its day).
+    openBoard();
+    assert.equal(labels()[0], "Your jobs here", "one finished job puts the jobs section above the offers");
+    const receiptNow = rowNamed(`${taken.title} — taken`);
+    assert.ok(receiptNow, "…while the day's receipt is still posted under the offers heading");
+    assert.ok(
+      !/below/i.test(String(receiptNow.textContent)),
+      `…and it does not point DOWN at a list that is now above it (${receiptNow.textContent})`,
+    );
+    await fire(receiptNow, "click");
+    assert.ok(
+      !/below/i.test(hud.toastEl.textContent),
+      `…nor does the refusal it toasts (${hud.toastEl.textContent})`,
+    );
+    assert.ok(
+      /jobs/i.test(hud.toastEl.textContent),
+      "…which still says where the job went, just not which way to look",
+    );
+
     // A WEEK LATER. A multi-day job hands in at the board on ANY later day — the
     // no-re-offer rule governs the OFFERS section and nothing else — and the line
     // it writes is filed at the day it happened on, not at the day it was taken.
@@ -17744,6 +17792,17 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       "…the completion counter is keyed by TEMPLATE, in the world-free board map",
     );
     assert.equal(after.rel[w.startZone]?.[taken.giver]?.t ?? 0, before.rel + 1, "…and the giver remembers it");
+    // AS AN ENCOUNTER AND NOT AS A PROMOTION. bump()'s `d` arm is a SETTER, not
+    // an increment (58-player), so `{d:1}` in place of `{t:1}` would move a
+    // stranger onto the friend rung for handing in a board order — and it would
+    // pass the count assertion above unchanged, because bump defaults `t` to 1
+    // whenever the patch omits it. The rung is the assertion that tells the two
+    // patches apart.
+    assert.equal(
+      after.rel[w.startZone]?.[taken.giver]?.d ?? 0,
+      0,
+      "…without moving them a rung up the disposition ladder, which is P2's to move",
+    );
     assert.ok(
       lines().some((text) => text.includes(taken.giver) && text.includes(money(row.r.money))),
       `the completion line names the giver and the money (${lines().join(" | ")})`,
@@ -17767,6 +17826,38 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       [],
       `…and minted no ladder at all, for the quest's verb (${taken.verb}) or for anything else`,
     );
+
+    // ── WHAT THE HAND-IN HANDS BACK IS THE ROW THAT IS NO LONGER THERE ───────
+    // The press flow captures the reward, the giver and the template BEFORE
+    // `quest("complete")` splices the row (§2.1 step 3), and slice 3's verify
+    // found that ordering unasserted: the code stays green if the capture moves
+    // AFTER the splice, because `row` is an object reference and its fields
+    // outlive its place in the list. What cannot survive is going LOOKING for the
+    // row again — so the pin is on the consequence rather than on the line order.
+    // Read off the RETURN value, which is the one surface the HUD path above
+    // never touches: a re-find after the splice hands back no money and no giver.
+    {
+      const open = pack.boardOffers(core).offers.find((offer) => offer.state === "open");
+      assert.ok(open, "the board has work open on the day of the hand-in");
+      assert.equal(pack.accept(core, open.template.id).ok, true, "which is taken on");
+      const live = active().find((q) => q.id === open.id);
+      P.quest(core, "progress", { id: live.id, by: live.n });
+      const owed = { money: live.r.money, giver: P.giverOf(live.g), have: live.n, n: live.n };
+      const purse = P.get(core).pouch.money;
+      const met = P.get(core).rel[w.startZone]?.[owed.giver]?.t ?? 0;
+      const handed = pack.turnIn(core, live.id);
+      assert.equal(handed.ok, true, "…and handed in");
+      assert.equal(handed.money, owed.money, "the answer carries the SPLICED row's reward, not a re-read of nothing");
+      assert.equal(handed.giver, owed.giver, "…and its giver, which is what the bump and the line are keyed to");
+      assert.equal(handed.have, owed.have, "…and the counts it was checked against");
+      assert.equal(handed.n, owed.n, "…both of them");
+      assert.equal(P.get(core).pouch.money, purse + owed.money, "…and the purse moved by exactly that");
+      assert.equal(
+        P.get(core).rel[w.startZone]?.[owed.giver]?.t ?? 0,
+        met + 1,
+        "…and the giver it named is the one who remembers it",
+      );
+    }
 
     // ── THE DUPLICATE, WHICH IS A DIFFERENT REFUSAL FROM THE RECEIPT ─────────
     // A row taken on an earlier day is still live; the board offering that

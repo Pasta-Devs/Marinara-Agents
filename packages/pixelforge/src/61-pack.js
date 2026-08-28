@@ -875,8 +875,19 @@ PF.pack = (() => {
      *     accepted is never repair-dropped, so the dangling row the repair pass
      *     exists to catch is one this set can no longer mint.
      *  3. THE SORTED IDS. The daily selection hashes over the SORTED SET of
-     *     surviving ids and never over post-fold ordinals, so a template folding
-     *     out changes which rows survive and not which day the survivors land on.
+     *     surviving ids and never over post-fold ordinals, so what a given day
+     *     offers is a function of the surviving SET and not of the order the
+     *     artifact happens to list it in: two builds that fold the same templates
+     *     out of the same pack post the same board on day 12, whatever order the
+     *     stored array or a re-serialization put them in.
+     *
+     *     What it deliberately does NOT buy is stability across a CHANGE of that
+     *     set. The selection is a Fisher-Yates shuffle of the whole pool, so a
+     *     template folding out shortens the pool and reshuffles it — every day's
+     *     offers move, not just the ones that template was on. That is benign and
+     *     of a piece with a demotion: both are content facts, neither touches a
+     *     live row, and a board the player has not walked up to yet owes them no
+     *     particular day.
      */
     fold(stored, { brief, world }) {
       const theme = str(world?.theme) || "cozy-village";
@@ -1204,9 +1215,16 @@ PF.pack = (() => {
      *    2. REFUSE unless `have >= n` at THIS read. The mutator pays with no such
      *       check by design — it trusts its caller — so this line is the check,
      *       and it is why the lane pins the press side rather than the mutator;
-     *    3. CAPTURE the reward, the giver and the template BEFORE the splice —
-     *       `quest("complete")` removes the row, and reading `r` off it afterwards
-     *       reads off nothing;
+     *    3. CAPTURE the reward, the giver and the template BEFORE the splice.
+     *       The honest reason, corrected: `quest("complete")` splices the row out
+     *       of `quests.active`, and `row` here is an OBJECT REFERENCE, so reading
+     *       `r` off it afterwards still reads the reward — what is gone is the
+     *       row's place in the list, not its fields. What the order buys is that
+     *       nothing below has to go looking for it again: a re-find by id after
+     *       the splice finds nothing, and `template` is an argument to the call
+     *       itself and so could not be read later at all. The lane pins the
+     *       consequence rather than the ordering — the returned money and giver
+     *       are the vanished row's fields, and a re-find would hand back neither;
      *    4. `quest("complete")` — the splice, the counter and the pay;
      *    5. `log()` at the sim's day — with the giver's name only when this world
      *       still stands them up (the fold's `known` set), because a line naming

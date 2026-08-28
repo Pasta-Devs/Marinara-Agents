@@ -613,8 +613,15 @@ PF.Hud = class {
         // DIMMED AND STILL PRESSABLE, on the berth button's rule: a control that
         // vanishes teaches the player nothing about why. The press says which of
         // the three reasons it is.
+        //
+        // AND THE COPY NAMES NO DIRECTION. It used to say "below", which was true
+        // on the day it was written and false the moment the row it points at
+        // finished: a finished job lifts the jobs section ABOVE the offers (see
+        // the ordering rule at the foot of this method), so the receipt was
+        // telling the player to look the wrong way at exactly the moment they had
+        // something to hand in. The list is named instead of placed.
         const row = this._btn(
-          offer.state === "taken" ? `${offer.template.title} — taken — see your jobs below` : label,
+          offer.state === "taken" ? `${offer.template.title} — taken — see your jobs list` : label,
           () => this.acceptWork(offer.template.id),
         );
         row.style.opacity = "0.45";
@@ -681,9 +688,7 @@ PF.Hud = class {
   }
 
   /** The board's refusals, turned into sentences — the fishing verb's
-   *  reason-to-sentence map, not a fork of it. The three the BOARD can reach are
-   *  here; the rest of the enumeration (unknown-id, abandon-unknown) lands with
-   *  the surfaces that can reach those.
+   *  reason-to-sentence map, not a fork of it.
    *
    *  `not-at-board` and `no-world` are absent for fishRefusal's own reason: the
    *  button is not on screen where there is no board, so a line for them would be
@@ -695,14 +700,29 @@ PF.Hud = class {
    *  this one. The wording is §2.1's verbatim because the arc ships as ONE
    *  submission — no player is ever handed a build where "set aside" points at
    *  nothing — and it is recorded here so the pairing is deliberate rather than
-   *  discovered. */
+   *  discovered.
+   *
+   *  `unknown-id` IS THE BOARD'S OWN, corrected: slice 3 filed it with the
+   *  surfaces the board cannot reach, and the board reaches it every time a row
+   *  leaves `quests.active` under an open menu — a mint severance parking it, the
+   *  repair pass dropping it, a rebuild landing between the draw and the press.
+   *  The press then re-finds nothing and the generic fall-through said "there is
+   *  nothing to do at the board", which is a sentence about the BOARD written for
+   *  a row that went away. `abandon-unknown` is the one value here with no
+   *  producer yet: the mutator has refused unknown ids since 0.11 and the tab
+   *  that can press it is the next slice's, so the sentence ships with the
+   *  enumeration rather than trailing the surface (plan §2.3's refusal list is
+   *  complete here by design). */
   boardRefusal(reason) {
     if (reason === "wrong-mode") return "Not while you're talking — resume walking first";
     if (reason === "gate-held") return "Not yet — your world is still being written.";
     if (reason === "at-cap") return "Your job list is full — finish or set aside a job first.";
-    if (reason === "taken") return "You took that one today — it is in your jobs below.";
+    if (reason === "taken") return "You took that one today — it is on your jobs list.";
+    if (reason === "filled") return "That work is done for today — the board posts it again another day.";
     if (reason === "dup") return "You are already on that one.";
     if (reason === "not-done") return "That one isn't finished yet.";
+    if (reason === "unknown-id") return "That job is no longer on your list.";
+    if (reason === "abandon-unknown") return "That job is no longer on your list.";
     return "There is nothing to do at the board just now.";
   }
 
