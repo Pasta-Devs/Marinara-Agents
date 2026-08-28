@@ -20098,4 +20098,581 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
   assert.equal(child.stdout, mine, "a fresh process deals the same day the same work");
 }
 
+// ── THE GENERATION BATCH (0.13 slice 2) ─────────────────────────────────────
+// What the second #5135 call actually sends, and what it does with the four
+// answers it can get back. The walls are FROZEN and they are not this package's
+// to move — userContent 8,000 chars, instructions 16,000, the schema 8,000
+// serialized and ADVISORY, the output floor max(2,048, stored) tokens with the
+// truncation eating the TAIL — so every case below is a MEASUREMENT against one
+// of them rather than an opinion about it.
+{
+  const pack = loadedPF.pack;
+  const brief = loadedPF.brief;
+
+  /** A brief at every cap the schema allows, because the digest's worst case is
+   *  the only interesting one: ten people with 24-character names, 24-character
+   *  roles, 24-character homes and 100-character personas, four named places, and
+   *  a situation at its own 240-character ceiling. */
+  const maxBrief = brief.validate(
+    {
+      scale: "city",
+      name: "Wrenfallowmere Crossing".slice(0, 24),
+      surround: "water",
+      prosperity: "thriving",
+      situation:
+        `${"The ford went in the flood and nobody will say who let the upstream weir go unwatched. ".repeat(3)}`.slice(
+          0,
+          240,
+        ),
+      places: ["The Amber Hearth Inn", "The Long Water Workyard", "The Whisperwood Reaches", "The Chapter Hall"].map(
+        (name, i) => ({ kind: ["gathering", "workshop", "wilds", "hall"][i], name, flavor: "" }),
+      ),
+      cast: Array.from({ length: 10 }, (_, i) => ({
+        name: `Personage Number ${String(i).padStart(2, "0")}`.slice(0, 24),
+        role: `understudy to the ${String(i)}`.slice(0, 24),
+        kind: "folk",
+        tint: "blue",
+        home: "The Amber Hearth Inn",
+        household: i + 1,
+        persona: `Wants the weir rebuilt before the spring and is hiding what the last survey said, number ${i}.`.slice(
+          0,
+          100,
+        ),
+      })),
+    },
+    { theme: "cozy-village", seed: 4242 },
+  );
+  assert.equal(maxBrief.cast.length, 10, "the worst-case fixture really is at the cast cap");
+  assert.equal(maxBrief.places.length, 4, "…and at the place cap");
+  assert.ok(
+    maxBrief.cast.every((member) => member.persona.length > 90),
+    "…and its personas survived the brief's byte budget, which is what makes this the worst case",
+  );
+
+  // ── THE DIGEST GOES FIRST, AND IT IS THE HALF THAT MAY NOT BE CUT ─────────
+  // The pack's job is to sound like THIS settlement, so the facts it must not
+  // contradict are the ones the clip can never reach. Persona is in it because
+  // persona is the voice source: a cast list of names and roles writes dialogue
+  // that could belong to anybody.
+  {
+    const text = pack.digest(maxBrief);
+    for (const member of maxBrief.cast) {
+      assert.ok(text.includes(member.name), `the digest names ${member.name}`);
+      assert.ok(text.includes(member.role), "…with their role");
+      assert.ok(text.includes(member.persona), "…and their persona, which is what the lines are written from");
+    }
+    assert.ok(text.includes(maxBrief.situation), "the unresolved situation rides along");
+    for (const place of maxBrief.places) assert.ok(text.includes(place.name), `the zone list names ${place.name}`);
+    // THE PLACE KINDS ARE THE INDEX HANDLES, taught in the same breath as the
+    // names: without them the model has to guess which of seven handles a name
+    // belongs under, and a guessed handle is a line that never renders.
+    assert.ok(text.includes("The Amber Hearth Inn — gathering"), "…beside the location handle a line is keyed by");
+    assert.ok(text.includes("The Whisperwood Reaches — wilds"), "…for every one of them");
+    assert.ok(text.includes(`${maxBrief.name} — settlement`), "…the root included");
+    assert.ok(text.length < 3_000, `the worst-case digest stays about 2.5K (${text.length} chars)`);
+  }
+
+  // ── AND THE PREFERENCES CLIP AGAINST WHAT IS LEFT ─────────────────────────
+  // The route 400s past 8,000 characters. 18-brief clips at a constant 7,800
+  // because it sends nothing else; here the digest is subtracted first, so the
+  // same margin is arithmetic. The named case: a max-shape brief and a 7,800-char
+  // setting compose ONE legal request.
+  {
+    const preferences = `Setting: ${"a long and detailed description of the valley. ".repeat(200)}`.slice(0, 7_800);
+    assert.equal(preferences.length, 7_800, "the fixture is the biggest setting the wizard can hand us");
+    const composed = pack.composeUserContent(pack.digest(maxBrief), preferences);
+    assert.ok(composed.length <= pack.USER_CONTENT_CAP, `the request is legal (${composed.length} chars)`);
+    assert.ok(composed.startsWith(pack.digest(maxBrief)), "the digest is whole and first");
+    assert.ok(composed.includes("a long and detailed description"), "…and the player's own words are in there too");
+    assert.ok(composed.endsWith("…"), "it is the SETTING that lost its tail, and it says so");
+    // A setting that fits is not clipped at all.
+    const short = pack.composeUserContent(pack.digest(maxBrief), "Setting: a quiet valley.");
+    assert.ok(short.endsWith("Setting: a quiet valley."), "a setting inside the room left is sent whole");
+    // …and no setting at all is just the digest.
+    assert.equal(pack.composeUserContent("DIGEST", "   "), "DIGEST", "an empty setting adds nothing to send");
+  }
+
+  // ── GUIDANCE AND SCHEMA STAY INSIDE THEIR OWN WALLS ───────────────────────
+  {
+    const text = pack.guidance("sci-fi-colony");
+    assert.ok(text.length <= pack.INSTRUCTIONS_CAP, `guidance fits the route's cap (${text.length} chars)`);
+    assert.ok(text.includes('"sci-fi-colony"') && text.includes("AUTHORITATIVE"), "the theme is stated as binding");
+    // TEMPLATES FIRST, ASKED FOR OUT LOUD — the emission order the floor
+    // arithmetic was computed against. Best-effort by construction (the schema is
+    // advisory), which is why the floor is a seal/fail boundary and not a warning.
+    assert.ok(
+      text.includes("templates, then lines, then escalation, then overheard"),
+      "the emission order is asked for in the instructions",
+    );
+    assert.deepEqual(
+      Object.keys(pack.schema().properties),
+      ["templates", "lines", "escalation", "overheard"],
+      "…and the schema's property order says the same thing a second way",
+    );
+    // THE BYTE DIET. The schema seals four topic tags and the guidance names two:
+    // the seam is deliberately wider than the diet, because the schema is the half
+    // that seals forever and the guidance is the half a later release can rewrite.
+    assert.ok(text.includes("topic (optional): rumor or work"), "the guidance confines topic tags to the two E7 needs");
+    assert.ok(!text.includes("smalltalk"), "…and does not spend bytes teaching the two it cannot read yet");
+    assert.deepEqual(
+      pack.TOPICS,
+      ["rumor", "work", "place", "smalltalk"],
+      "while the sealed vocabulary keeps all four",
+    );
+    assert.deepEqual(
+      pack.schema().properties.lines.items.properties.topic.enum,
+      pack.TOPICS,
+      "…and the schema seals all four, because a schema is the thing that cannot be rewritten later",
+    );
+    // ESCALATION IS NAMED AS E7'S CONVERGENCE POINT — the section the Ask tree
+    // will land on, described as a door rather than as what is behind it.
+    assert.ok(
+      text.includes("when the player asks properly") && text.includes("Keep it withholding"),
+      "the escalation section is asked for as the ask-properly line E7 converges on",
+    );
+    // THE PACK NEVER AUTHORS NUMBERS, and the instructions say so where the model
+    // can read it, not only where validate() enforces it.
+    assert.ok(
+      text.includes("NEVER write money, pay, a price, a reward or experience"),
+      "the guidance forbids the model to price its own work",
+    );
+    const serialized = JSON.stringify(pack.schema());
+    assert.ok(serialized.length <= pack.SCHEMA_CAP, `the schema fits the route's cap (${serialized.length} chars)`);
+    assert.equal(serialized.includes("strictSchema"), false, "and nothing in it asks for a strict mode it cannot have");
+  }
+
+  // ── THE FLOOR ARITHMETIC, RE-RUN ──────────────────────────────────────────
+  // N and M are not preferences: they are what survives the worst cut the #5135
+  // output floor can produce on a templates-first emission with every line
+  // TAGGED. Recomputed here from the table's own inputs so the comment beside the
+  // rows and the numbers in them cannot drift apart.
+  {
+    const b = pack.TUNING.floorBasis;
+    const chars = b.truncTokens * b.charsPerToken;
+    const forTemplates = pack.CAPS.templates * b.templateChars;
+    const left = chars - b.envelopeChars - forTemplates;
+    const lines = Math.floor(left / b.lineChars) - 1; // less the trailing partial row the salvage trims
+    assert.ok(left > 0, "a cut at the wall still has room for an index after a full template list");
+    assert.ok(
+      pack.TUNING.floorTemplates <= pack.CAPS.templates,
+      "the template floor is under the cap a truncated emission may have filled",
+    );
+    assert.ok(
+      pack.TUNING.floorLines <= lines,
+      `the line floor (${pack.TUNING.floorLines}) is clearable by the worst templates-first cut (${lines} lines)`,
+    );
+    // …AND IT IS A FLOOR, NOT A FORMALITY. Set at what the wall guarantees and
+    // nothing more would make every thin pack seal; these two are meaningfully
+    // above nothing and meaningfully below what a whole call returns.
+    assert.ok(pack.TUNING.floorTemplates >= 1 && pack.TUNING.floorLines >= 1, "neither floor is zero");
+    assert.ok(pack.TUNING.floorLines < pack.CAPS.lines / 4, "…and neither is so high that a thin pack cannot seal");
+  }
+
+  // ── THE REWARD DERIVATION (plan §2.6, RULED) ──────────────────────────────
+  // Money is a function of (verb, n) and nothing else; the pack never authors a
+  // number, and no quest ever grants skill experience. The second half is
+  // STRUCTURAL here rather than a zero somebody could retune: there is no xp row
+  // to retune.
+  {
+    assert.deepEqual(
+      Object.keys(pack.TUNING.reward).sort(),
+      ["catch", "deliver", "visit"],
+      "one row per mechanic this build can verify",
+    );
+    for (const [verb, row] of Object.entries(pack.TUNING.reward)) {
+      assert.deepEqual(Object.keys(row).sort(), ["base", "per"], `${verb}'s row is a base and a rate, and no xp`);
+    }
+    // EVERY reachable (verb, n) pays money and pays no experience.
+    for (const verb of pack.MECHANICS) {
+      for (let n = 1; n <= pack.CAPS.n; n++) {
+        const r = pack.rewardFor(verb, n);
+        assert.equal(r.xp, 0, `${verb} × ${n} grants no skill experience, ever`);
+        assert.ok(r.money > 0 && Number.isInteger(r.money), `…and pays a whole number of coins (${r.money})`);
+      }
+    }
+    // The counting verb is the only one n moves, which is the ruling's own shape:
+    // a rare fish and a common one pay the same per fish, because the rarity is
+    // already paid for in the skill the catching raises.
+    assert.equal(
+      pack.rewardFor("catch", 3).money,
+      pack.rewardFor("catch", 1).money + 2 * pack.TUNING.reward.catch.per,
+      "the count is the whole of the catch verb's lever",
+    );
+    assert.equal(pack.rewardFor("visit", 9).money, pack.rewardFor("visit", 1).money, "a walk is a walk");
+    assert.equal(pack.rewardFor("deliver", 9).money, pack.rewardFor("deliver", 1).money, "…and an errand is an errand");
+    // Priced against the two things 0.11 actually sells.
+    const prices = loadedPF.economy.PRICES["cozy-village"];
+    assert.equal(
+      pack.rewardFor("visit", 1).money,
+      prices["rod:crude"],
+      "the first walk pays for the rod that starts fishing",
+    );
+    assert.ok(pack.rewardFor("catch", 3).money > prices.berth, "…and a three-fish order covers a night with change");
+    assert.ok(
+      pack.rewardFor("catch", pack.CAPS.n).money < loadedPF.economy.STARTING_PURSE * 3,
+      "…while the biggest order the schema allows is a day's work, not a fortune",
+    );
+    // A verb with no row is worth nothing rather than a default, and the lookup is
+    // an OWN-key one because verbs arrive off stored artifacts.
+    for (const hostile of ["constructor", "__proto__", "toString", "defeat", ""]) {
+      assert.deepEqual(
+        pack.rewardFor(hostile, 5),
+        { money: 0, xp: 0 },
+        `"${hostile}" derives nothing and throws nothing`,
+      );
+    }
+    assert.equal(Object.prototype.hasOwnProperty.call({}, "pf-poison"), false, "…and pollutes nothing on the way");
+    // n is clamped by the seal's own cap, so a hostile stored count cannot mint a
+    // reward the schema could never have asked for.
+    assert.equal(pack.rewardFor("catch", 1e9).money, pack.rewardFor("catch", pack.CAPS.n).money, "n clamps at the cap");
+    assert.equal(pack.rewardFor("catch", -4).money, pack.rewardFor("catch", 1).money, "…and at one from below");
+  }
+}
+
+// ── THE SECOND CALL'S LADDER, DRIVEN THROUGH MOCKS (0.13 slice 2) ───────────
+// The harness has no live model, so every lane here is a MOCK travelling the
+// shipped code path: the real `PF.pack.generate`, the real transport ladder, the
+// real seal. What the mock stands in for is the ONE thing a lane cannot supply —
+// a paid two-call sequence against a live engine — which is on the deferred
+// verification list and nowhere else.
+{
+  const pack = loadedPF.pack;
+  const sealedBrief = loadedPF.brief.validate(gateBriefData, { theme: "cozy-village", seed: 4242 });
+  const cast = sealedBrief.cast.map((member) => member.name);
+  assert.ok(cast.length >= 4, "the fixture brief has a cast to give work out");
+
+  /** The shape a model that read the guidance would send: templates first, then a
+   *  tagged index, then the two smaller sections. Sized by argument so the
+   *  truncation lane can build one that does not fit. */
+  const emission = (templates, lines) => ({
+    templates: Array.from({ length: templates }, (_, i) => ({
+      slug: `posted-work-${i}`,
+      giver: cast[i % cast.length],
+      verb: ["catch", "deliver", "visit"][i % 3],
+      target: [{ role: "catch-common" }, { npc: cast[(i + 1) % cast.length] }, { place: "wilds" }][i % 3],
+      n: (i % 5) + 1,
+      title: `A piece of work for the board, number ${i}`,
+    })),
+    lines: Array.from({ length: lines }, (_, i) => ({
+      at: pack.LOCATIONS[i % pack.LOCATIONS.length],
+      when: pack.DAYPARTS[i % pack.DAYPARTS.length],
+      r: pack.REGISTERS[i % 2],
+      text: `Something a person standing there would actually say, number ${i}, and then a little more.`,
+      topic: ["rumor", "work"][i % 2],
+    })),
+    escalation: cast.map((npc) => ({ npc, text: "Ask me again when the room is empty and I will tell you." })),
+    overheard: [{ at: "settlement", text: "…and they said the survey came back fine. Fine!", topic: "rumor" }],
+  });
+
+  /** Stub the ONE host call this ladder makes and put it back. `script` is a
+   *  function of the attempt number, because half of what is under test here is
+   *  how many attempts there are. */
+  const withPackCall = async (run) => {
+    const realPost = loadedPF.api.postExperienceGeneration;
+    const sent = [];
+    const state = { reply: async () => ({ status: 200, body: { ok: true, data: emission(6, 20) } }) };
+    loadedPF.api.postExperienceGeneration = async (chatId, body, signal) => {
+      sent.push({ chatId, body, signal });
+      return state.reply(sent.length, body, signal);
+    };
+    try {
+      await run({ sent, state });
+    } finally {
+      loadedPF.api.postExperienceGeneration = realPost;
+    }
+  };
+  const run = async (options = {}) => {
+    let failure = "none";
+    const sealed = await pack.generate("chat-gen", {
+      theme: "cozy-village",
+      seed: 4242,
+      brief: sealedBrief,
+      preferences: "Setting: a valley that floods.",
+      onFailure: (kind) => {
+        failure = kind;
+      },
+      ...options,
+    });
+    return { sealed, failure };
+  };
+
+  // ── A WHOLE ANSWER SEALS RICH, AND SEALS THROUGH THE SAME DOOR ────────────
+  // The wiring deliverable, asserted as an EQUALITY rather than as a list of
+  // properties: what `generate` hands back is byte-for-byte what `validate` makes
+  // of the same emission. A second seal path written to look like the first is
+  // exactly how a generated pack comes to carry a row the default-pack lane would
+  // have refused at boot.
+  await withPackCall(async ({ sent }) => {
+    const data = emission(6, 20);
+    const { sealed, failure } = await run();
+    assert.equal(failure, "none", "a whole answer is not a failure");
+    assert.ok(sealed, "…it is a sealed pack");
+    assert.equal(sent.length, 1, "one call, no ladder rungs spent");
+    assert.deepEqual(
+      sealed,
+      pack.validate(data, { theme: "cozy-village", seed: 4242, brief: sealedBrief }),
+      "and it is the SAME seal the validator gives: one door, not two",
+    );
+    assert.equal(sealed.templates.length, 6, "every template survived");
+    assert.equal(sealed.lines.length, 20, "…and every line");
+    assert.equal(
+      sealed.briefHash,
+      loadedPF.player.briefHashOf(sealedBrief),
+      "sealed against the brief it was written for",
+    );
+    // …and what went OUT is the composed request, not a hopeful one.
+    assert.equal(sent[0].chatId, "chat-gen", "the call is made for this chat");
+    assert.deepEqual(
+      Object.keys(sent[0].body).sort(),
+      ["instructions", "schema", "userContent"],
+      "three fields, no more",
+    );
+    assert.equal(sent[0].body.userContent.startsWith(pack.digest(sealedBrief)), true, "the digest leads the request");
+    assert.ok(sent[0].body.userContent.includes("a valley that floods"), "…and the player's setting follows it");
+    assert.ok(sent[0].body.userContent.length <= pack.USER_CONTENT_CAP, "inside the route's character cap");
+    assert.equal(
+      sent[0].body.strictSchema,
+      undefined,
+      "strictSchema is never sent: the tolerant parser is the contract",
+    );
+    assert.ok(sent[0].signal, "…and the call is abortable, because the budget is a real one");
+  });
+
+  // ── TRUNCATED AT THE WALL: THE SALVAGE SEALS THIN RATHER THAN FAILING ─────
+  // The #5135 output floor is max(2,048, stored) tokens and a connection may
+  // undercut, so this is the worst cut the ladder is written for: a templates-
+  // first emission, cut at the wall, with the tail gone. `salvageText` closes what
+  // is open, validate() answers for what survived, and the pack that seals is
+  // SMALLER than the one that was asked for — which is a pack, not a failure. The
+  // opposite reading (fail, hold the gate, retry forever) is what the substance
+  // floor exists to bound rather than to cause.
+  await withPackCall(async ({ sent, state }) => {
+    const whole = JSON.stringify(emission(pack.CAPS.templates, 200));
+    const wall = pack.TUNING.floorBasis.truncTokens * pack.TUNING.floorBasis.charsPerToken;
+    assert.ok(whole.length > wall * 1.5, `the emission under test really is bigger than the wall (${whole.length})`);
+    const cut = whole.slice(0, wall);
+    state.reply = async () => ({ status: 422, body: { truncated: true, raw: cut } });
+    const { sealed, failure } = await run();
+    assert.equal(failure, "none", "a salvage is not a failure");
+    assert.ok(sealed, "the truncated answer still seals");
+    assert.equal(sent.length, 2, "one same-base re-roll was spent first — the ladder's only rung");
+    assert.ok(
+      sealed._repairs.includes("transport: salvaged from a truncated response"),
+      "…and the artifact records that it was salvaged rather than received",
+    );
+    // THIN, AND THAT IS THE POINT: it cleared both floors on the strength of what
+    // the cut left, and it is nowhere near what was asked for.
+    assert.ok(sealed.templates.length >= pack.TUNING.floorTemplates, "the template floor is cleared");
+    assert.ok(sealed.lines.length >= pack.TUNING.floorLines, "…and the line floor");
+    assert.ok(sealed.lines.length < 200, `…on a fraction of the index that was written (${sealed.lines.length}/200)`);
+    // …and the SECOND rung is what the ladder is for: the longest raw across
+    // attempts is the one salvaged, not merely the last.
+    sent.length = 0;
+    let attempt = 0;
+    state.reply = async () => {
+      attempt += 1;
+      return { status: 422, body: { truncated: true, raw: attempt === 1 ? cut : whole.slice(0, 600) } };
+    };
+    const second = await run();
+    assert.ok(second.sealed, "the shorter re-roll does not cost us the longer first answer");
+    assert.ok(second.sealed.lines.length >= pack.TUNING.floorLines, "…the longest raw seen is the one salvaged");
+  });
+
+  // ── UNDER THE FLOOR IS A FAILURE, AND IT HAS ITS OWN VERDICT ──────────────
+  // A pack is the one artifact whose absence is survivable — the default one reads
+  // in its place — so sealing a hollow one would trade a free retry for a
+  // permanent nothing. The call WORKED, which is why the kind is not "refused".
+  await withPackCall(async ({ state }) => {
+    state.reply = async () => ({ status: 200, body: { ok: true, data: emission(3, pack.TUNING.floorLines - 1) } });
+    const { sealed, failure } = await run();
+    assert.equal(sealed, null, "one line under the floor does not seal");
+    assert.equal(failure, "thin", "…and it is reported as what it is, not as a refusal");
+    // The other half of the AND: templates below their own floor fails the same way.
+    state.reply = async () => ({
+      status: 200,
+      body: { ok: true, data: emission(pack.TUNING.floorTemplates - 1, 40) },
+    });
+    const short = await run();
+    assert.equal(short.sealed, null, "one template under the floor does not seal either");
+    assert.equal(short.failure, "thin", "…with the same verdict");
+    // …and a SALVAGE under the floor is thin too, not "refused": the request was
+    // answered, it was just answered with too little.
+    state.reply = async () => ({
+      status: 422,
+      body: { truncated: true, raw: JSON.stringify(emission(3, 2)) },
+    });
+    const salvagedThin = await run();
+    assert.equal(salvagedThin.sealed, null, "a salvage that comes up short does not seal");
+    assert.equal(salvagedThin.failure, "thin", "…and says the content was thin rather than the request refused");
+  });
+
+  // ── A HOSTILE EMISSION IS STRIPPED, FOLDED AND REPAIRED AT THE SEAL ───────
+  // The channel is untrusted and the schema is ADVISORY, so the answer may be
+  // shaped like anything at all. Everything below is refused or folded by the same
+  // validate() the default pack is boot-asserted through — the generated artifact
+  // gets no weaker door than the hand-written one.
+  await withPackCall(async ({ state }) => {
+    // The synonym row carries an OWN `__proto__` key, which is the shape a
+    // JSON.parse of a hostile body really produces — an object literal would set
+    // the prototype instead and prove nothing.
+    const folding = {
+      slug: "f",
+      giver: cast[1],
+      verb: "gather",
+      target: { role: "catch-common" },
+      n: 4,
+      title: "Four for the pot",
+      r: { money: 9999, xp: 500 },
+      kind: "leader",
+    };
+    Object.defineProperty(folding, "__proto__", {
+      value: { polluted: true },
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+    const hostile = {
+      templates: [
+        // A verb naming an inherited property: the grain lookup is an own-key one,
+        // so this refuses rather than throwing "allowed is not iterable".
+        { slug: "a", giver: cast[0], verb: "constructor", target: { role: "catch-common" }, n: 2, title: "One" },
+        { slug: "b", giver: cast[0], verb: "__proto__", target: { role: "catch-common" }, n: 2, title: "Two" },
+        { slug: "c", giver: cast[0], verb: "toString", target: { place: "wilds" }, n: 1, title: "Three" },
+        // Out of the enum entirely — this is where combat-shaped work is refused.
+        { slug: "d", giver: cast[0], verb: "defeat", target: { npc: cast[1] }, n: 1, title: "Deal with them" },
+        // A giver nobody sealed.
+        { slug: "e", giver: "Somebody Else", verb: "visit", target: { place: "hall" }, n: 1, title: "Go" },
+        // A synonym that FOLDS, carrying fields nobody asked for and a price it
+        // was told not to write.
+        folding,
+        { slug: "g", giver: cast[1], verb: "visit", target: { place: "wilds" }, n: 1, title: "Walk out" },
+        { slug: "h", giver: cast[2], verb: "deliver", target: { npc: cast[3] }, n: 1, title: "Word to them" },
+      ],
+      lines: emission(0, 20).lines,
+      escalation: [{ npc: "Somebody Else", text: "I am not in this world." }],
+      overheard: [{ at: "nowhere at all", text: "…dropped." }],
+    };
+    state.reply = async () => ({ status: 200, body: { ok: true, data: hostile } });
+    const { sealed, failure } = await run();
+    assert.equal(failure, "none", "the good half of a hostile answer is still an answer");
+    assert.ok(sealed, "…and it seals");
+    assert.deepEqual(
+      sealed.templates.map((row) => row.title),
+      ["Four for the pot", "Walk out", "Word to them"],
+      "five rows refused: three prototype-key verbs, one out of the enum, one from a stranger",
+    );
+    assert.equal(sealed.templates[0].verb, "catch", "the synonym folded to the mechanic");
+    assert.ok(
+      sealed._repairs.some((r) => r.includes("gather -> catch")),
+      "…and the fold is repair-logged rather than silent",
+    );
+    assert.deepEqual(
+      Object.keys(sealed.templates[0]).sort(),
+      ["giver", "id", "n", "target", "title", "verb"],
+      "the price and the machine fields it invented are not on the sealed row",
+    );
+    assert.equal(sealed.escalation.length, 0, "an escalation line for somebody the brief never named is dropped");
+    assert.equal({}.polluted, undefined, "and nothing on the way through polluted Object.prototype");
+    assert.equal(Object.prototype.polluted, undefined, "…by either door");
+    // The overheard section came back with nothing usable in it, so the backfill
+    // covers it — AFTER the floor, and only ever for the section with no speaker
+    // in it (the templates and the index are the load-bearing halves and are never
+    // topped up).
+    assert.ok(sealed.overheard.length > 0, "the empty ambience section is backfilled");
+    assert.ok(
+      sealed._repairs.some((r) => r.startsWith("overheard: empty, backfilled")),
+      "…and the artifact says so rather than pretending it was written",
+    );
+    assert.deepEqual(
+      sealed.overheard,
+      pack.defaults("cozy-village").overheard,
+      "…from the fallback's own anonymous pool, which names nobody this world has never heard of",
+    );
+  });
+
+  // ── THE BACKFILL MAY NEVER BE WHAT GETS A PACK OVER THE LINE ──────────────
+  // The ordering is the rule: a pack under the floor fails while its ambience
+  // section is still empty, so nothing we wrote can ever be the reason a hollow
+  // pack sealed.
+  {
+    const under = pack.validate(
+      { templates: emission(3, 0).templates, lines: emission(0, 2).lines },
+      { theme: "cozy-village", seed: 4242, brief: sealedBrief },
+    );
+    assert.equal(under, null, "a pack under the line floor fails, backfill or no backfill");
+    const over = pack.validate(
+      { templates: emission(3, 0).templates, lines: emission(0, pack.TUNING.floorLines).lines },
+      { theme: "cozy-village", seed: 4242, brief: sealedBrief },
+    );
+    assert.ok(over, "…and one exactly at the floor seals");
+    assert.ok(over.overheard.length > 0, "…and THEN gets its ambience topped up");
+    // A pack that wrote its own ambience keeps it: backfill covers a gap, it never
+    // dilutes what the model actually said.
+    const own = pack.validate(
+      {
+        templates: emission(3, 0).templates,
+        lines: emission(0, pack.TUNING.floorLines).lines,
+        overheard: [{ at: "gathering", text: "…third night running she has been up at that window." }],
+      },
+      { theme: "cozy-village", seed: 4242, brief: sealedBrief },
+    );
+    assert.equal(own.overheard.length, 1, "a section the model wrote is left alone");
+    assert.ok(!own._repairs.some((r) => r.startsWith("overheard: empty")), "…and no backfill is claimed for it");
+  }
+
+  // ── THE TRANSPORT LADDER, ROW BY ROW ──────────────────────────────────────
+  // 18-brief's ladder, one call later, and the verdicts have to be the same words
+  // because the retry screen reads them through the same `gateReason` table.
+  await withPackCall(async ({ sent, state }) => {
+    for (const status of [404, 429, 500, 503]) {
+      sent.length = 0;
+      state.reply = async () => ({ status, body: null });
+      const { sealed, failure } = await run();
+      assert.equal(sealed, null, `${status} seals nothing`);
+      assert.equal(failure, "unavailable", `…and reads as transient`);
+    }
+    for (const status of [400, 422]) {
+      sent.length = 0;
+      state.reply = async () => ({ status, body: { error: "no" } });
+      const { sealed, failure } = await run();
+      assert.equal(sealed, null, `${status} seals nothing`);
+      assert.equal(failure, "refused", "…and reads as deterministic, because trying again gets the same answer");
+    }
+    // 409 chat_busy ships Retry-After and is waited out ONCE, inside the budget.
+    sent.length = 0;
+    let n = 0;
+    state.reply = async () => {
+      n += 1;
+      return n === 1 ? { status: 409, body: null } : { status: 200, body: { ok: true, data: emission(6, 20) } };
+    };
+    const busy = await run({ busyWaitMs: 0 });
+    assert.ok(busy.sealed, "a busy engine is waited out and the second attempt seals");
+    assert.equal(sent.length, 2, "…exactly once");
+    // A 409 that stays busy is transient and nothing more.
+    sent.length = 0;
+    state.reply = async () => ({ status: 409, body: null });
+    const stillBusy = await run({ busyWaitMs: 0 });
+    assert.equal(stillBusy.sealed, null, "…and a second 409 is a retry screen");
+    assert.equal(stillBusy.failure, "unavailable", "with the transient verdict");
+    // A throw out of the transport is the network, and an aborted one is the budget.
+    state.reply = async () => {
+      throw new TypeError("fetch failed");
+    };
+    const broken = await run();
+    assert.equal(broken.sealed, null, "a throw seals nothing");
+    assert.equal(broken.failure, "network", "…and reads as the network");
+    // The budget is an AbortController and a real timer, so the fixture answers
+    // late and honours the signal exactly as fetch does.
+    state.reply = async (attempt, body, signal) => {
+      void body;
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      if (signal?.aborted) throw new Error("aborted");
+      return { status: 200, body: { ok: true, data: emission(6, 20) } };
+    };
+    const late = await run({ budgetMs: 5 });
+    assert.equal(late.sealed, null, "an answer past the budget seals nothing");
+    assert.equal(late.failure, "timeout", "…and says the budget ran out rather than blaming the engine");
+  });
+}
+
 console.log("brief validator + compiler: all cases passed");

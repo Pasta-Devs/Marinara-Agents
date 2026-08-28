@@ -66,9 +66,9 @@ PF.pack = (() => {
   // THE E7 TOPIC SEAM (plan §2.2c). Optional per line, defaulting to NONE, and it
   // exists so the Ask tree has branches to hang lines off when it arrives: rumor
   // and work are the two E7 is load-bearing for, place and smalltalk are the ones
-  // a tree opens with. Guidance confines tags to rumor/work (slice 2) — the seam
-  // is wider than the diet on purpose, because the schema seals and the guidance
-  // does not.
+  // a tree opens with. `guidance` below confines the tags it ASKS for to rumor
+  // and work — the seam is wider than the diet on purpose, because the schema
+  // seals and the guidance does not.
   const TOPICS = ["rumor", "work", "place", "smalltalk"];
 
   // ── The quest template vocabulary (plan §2.2c) ──────────────────────────────
@@ -99,9 +99,11 @@ PF.pack = (() => {
 
   // ── Seal-time caps (plan §2.2g) ─────────────────────────────────────────────
   // THERE IS NO STORAGE BUDGET — the maintainer abolished it, and the only real
-  // budget is the generation FIT (slice 2's arithmetic). These are hygiene caps
-  // applied at seal: a sealed blob never grows, so what they bound is what one
-  // call is allowed to hand us, not what a save is allowed to hold.
+  // budget is the generation FIT (`TUNING.floorBasis` and the digest split, both
+  // below). These are hygiene caps applied at seal: a sealed blob never grows, so
+  // what they bound is what one call is allowed to hand us, not what a save is
+  // allowed to hold. `templates` is load-bearing in the floor arithmetic too — it
+  // is the cap a templates-first truncation may have filled before the cut.
   const CAPS = {
     templates: 24,
     lines: 320,
@@ -115,8 +117,8 @@ PF.pack = (() => {
 
   // ── The quest layer's tuning table ──────────────────────────────────────────
   // The economy's TUNING idiom (59-economy): every number the layer spends is
-  // written HERE with its own reason, so a retune is one file. Slice 2 adds the
-  // reward derivation rows beside these; slice 3 spends K.
+  // written HERE with its own reason, so a retune is one file. Slice 3 spends K;
+  // the reward rows below are what slice 3 copies into a row at accept.
   const TUNING = {
     // How many of the day's surviving templates the board offers. Four against the
     // ten-quest cap means a player who takes everything and finishes nothing is at
@@ -128,11 +130,60 @@ PF.pack = (() => {
     // a salvaged pack that clears it seals thin, and one that does not is a
     // FAILURE — the gate holds, the retry screen says so, and nothing is stored.
     // Backfill covers small gaps in an otherwise-substantive pack; it may never
-    // cover the load-bearing half. The two numbers are starters chosen so that a
-    // 2,048-token emission that kept templates first still clears them; slice 2
-    // confirms them against the tagged-floor arithmetic.
+    // cover the load-bearing half.
+    //
+    // WHERE THE TWO NUMBERS COME FROM (plan §2.2b). The binding case is the
+    // #5135 output floor: a connection that gives us the minimum cuts the
+    // emission's TAIL at 2,048 tokens, `salvageText` closes what is open, and
+    // whatever templates-first order the model actually honoured is what
+    // survives. Every line is costed TAGGED — the topic tag is bytes the byte
+    // diet does not have to spend, so costing it in is the safe direction:
+    //
+    //   the truncation wall (#5135, connections may undercut) ....  2,048 tokens
+    //   dense punctuation-heavy JSON, at three chars to the token .  6,144 chars
+    //   the envelope (`{"templates":[`, `],"lines":[`, the close) .    -40 chars
+    //   templates emit FIRST and may fill their own cap: 24 × 150 . -3,600 chars
+    //   …so the index is left with ...............................   2,504 chars
+    //   a TAGGED line row costs about 130, which buys ............      19 lines
+    //   less the trailing partial row the salvage trims ..........      18 lines
+    //
+    // Eighteen lines and twenty-four templates against floors of twelve and
+    // three: the worst cut this wall can produce still seals, and a pack that
+    // came back with a quarter of an index still fails. `floorBasis` carries the
+    // inputs so the lane that re-runs the sum cannot drift from the table.
     floorTemplates: 3,
     floorLines: 12,
+    floorBasis: { truncTokens: 2_048, charsPerToken: 3, envelopeChars: 40, templateChars: 150, lineChars: 130 },
+    // ── The reward derivation (plan §2.6, RULED) ──────────────────────────────
+    // MONEY IS DERIVED FROM (verb, n) AND THE PACK NEVER AUTHORS IT — the schema
+    // excludes money and xp, the seal drops both, and `rewardFor` below is the
+    // one place a number is minted. Single authority, the economy's own rule:
+    // a retune moves future accepts and leaves accepted deals honored, because
+    // slice 3 copies `r` into the row at accept.
+    //
+    // Priced against the two things 0.11 sells, since quest income is the only
+    // income there is (59-economy PRICES: a 12-coin berth, a 6-coin fantasy entry
+    // rod, a 40-coin decent rod, a 40-coin starting purse):
+    //   visit   6 flat — one walk, no call, and exactly the entry rod: the first
+    //                    errand a player runs pays for the thing that starts
+    //                    fishing.
+    //   deliver 10 flat — a walk plus the handover, and the handover is the one
+    //                    quest verb that spends a GM call (plan §2.3).
+    //   catch   5 + 4n — n is the only lever the ruling leaves (a rare fish and a
+    //                    common one pay the same per fish; the RARITY already
+    //                    pays, in the skill the catching raises). n=3 is 17, which
+    //                    covers a berth with change; n=20, the cap, is 85, which
+    //                    is about a full day at the water (59-economy's pacing
+    //                    note: ~22 yields in a ten-hour day).
+    // THERE IS NO xp ROW HERE AND THERE NEVER WILL BE. Quests do not grant skill
+    // experience — the TASK raises the skill, through the site that does the work
+    // — so `rewardFor` returns xp 0 structurally rather than reading a number
+    // somebody could retune off zero.
+    reward: {
+      catch: { base: 5, per: 4 },
+      deliver: { base: 10, per: 0 },
+      visit: { base: 6, per: 0 },
+    },
   };
 
   // ── Text hygiene ────────────────────────────────────────────────────────────
@@ -177,6 +228,231 @@ PF.pack = (() => {
    *  pack per brief, so the brief's hash names it. It rides the template ids so a
    *  regenerated pack's counters cannot land on the old pack's rows. */
   const idOf = (briefHash) => (briefHash >>> 0).toString(36);
+
+  // ── The #5135 walls this call is composed against (FROZEN) ──────────────────
+  // Not tuning and not ours: they are the route's, they are the same three the
+  // brief call is written to, and they are written down here because the digest
+  // split below is arithmetic ON them. `userContent` is capped at 8,000 chars and
+  // the route 400s past it; `instructions` at 16,000; the schema at 8,000
+  // SERIALIZED and it is ADVISORY on Anthropic and the sidecar — the tolerant
+  // parser is the contract, which is why seal-time validate() is the only one.
+  const USER_CONTENT_CAP = 8_000;
+  const INSTRUCTIONS_CAP = 16_000;
+  const SCHEMA_CAP = 8_000;
+  // What the split holds back from the cap for its own joiner and ellipsis, and
+  // for a route that counts a byte we do not. 18-brief clips preferences at 7,800
+  // against the same 8,000 for the same 200-char reason; this is that margin,
+  // named rather than spelled, because here it is subtracted from a running total
+  // instead of from a constant.
+  const USER_CONTENT_MARGIN = 200;
+
+  /** THE DIGEST — the world this pack is being written FOR, in the model's own
+   *  reading order (plan §2.2b). It goes FIRST in `userContent` and the player's
+   *  preferences clip against what is left, and that order is the whole design:
+   *  the pack's job is to sound like THIS settlement's people, so the facts it
+   *  must not contradict are the ones that may never be the half that gets cut.
+   *
+   *  PERSONA IS IN IT BECAUSE PERSONA IS THE VOICE SOURCE. A cast list of names
+   *  and roles produces dialogue that could be anyone's; "wants the ford rebuilt
+   *  and is hiding who let it go" is what makes a line sound like Wren Ash. It is
+   *  also the single biggest field here (100 chars × a cast of ten), which is why
+   *  the worst case is measured rather than hoped at:
+   *
+   *    the settlement's name and the section headers ....................  ~150
+   *    the situation (18-brief caps it) .................................    240
+   *    the zone list: the root plus 4 places × (name 24 + kind + dashes) .  ~180
+   *    the cast: 10 × (name 24 + role 24 + home 24 + persona 100 + ~20) .  1,920
+   *                                                                       ------
+   *                                                                        2,490
+   *
+   *  …which is the plan's ~2.5K, and it leaves better than 5,300 chars of the cap
+   *  for the player's own words.
+   *
+   *  IT NAMES THE PLACE KINDS OUT LOUD, and that is not decoration: a place's
+   *  `kind` IS the location handle the index is keyed by (LOCATIONS above), so
+   *  the list teaches the mapping from "The Amber Hearth Inn" to `gathering` in
+   *  the same breath that it teaches the inn exists. Without it the model has to
+   *  guess which of seven handles a name belongs under, and a guessed handle is a
+   *  line that never renders anywhere. */
+  function digest(brief) {
+    const cast = Array.isArray(brief?.cast) ? brief.cast : [];
+    const places = Array.isArray(brief?.places) ? brief.places : [];
+    const name = str(brief?.name) || "the settlement";
+    const out = [`The settlement is ${name}.`];
+    const situation = str(brief?.situation);
+    if (situation) out.push(`What is unresolved right now: ${situation}`);
+    out.push("", "PLACES — the second word is the location handle a line is keyed by:", `- ${name} — settlement`);
+    for (const place of places) {
+      const placeName = str(place?.name);
+      if (!placeName) continue;
+      out.push(`- ${placeName} — ${foldEnum(place?.kind, LOCATIONS, "dwelling")}`);
+    }
+    out.push("", "PEOPLE — use these names EXACTLY; givers and speakers come from this list and nowhere else:");
+    for (const member of cast) {
+      const who = str(member?.name);
+      if (!who) continue;
+      const role = str(member?.role);
+      const home = str(member?.home);
+      const persona = str(member?.persona);
+      out.push(
+        `- ${who}${role ? `, ${role}` : ""}${home ? `, lives at ${home}` : ""}${persona ? ` — ${persona}` : ""}`,
+      );
+    }
+    return out.join("\n");
+  }
+
+  /** The digest first, then whatever room is left for the player's own setting
+   *  text. The route 400s past 8,000 chars, so this is a hard clip and not a
+   *  preference: an unbounded wizard Setting must cost the player the tail of
+   *  their own description rather than the whole request.
+   *
+   *  The brief call clips at a CONSTANT 7,800 because it sends nothing else; this
+   *  one subtracts the digest first, so the same margin is arithmetic here. When
+   *  the digest alone has eaten the cap — which no sealed brief can actually do,
+   *  the caps above being what they are — the preferences drop entirely rather
+   *  than the digest losing its tail. */
+  function composeUserContent(digestText, preferences) {
+    const room = USER_CONTENT_CAP - digestText.length - USER_CONTENT_MARGIN;
+    const prefs = typeof preferences === "string" ? preferences : "";
+    if (!prefs.trim() || room <= 0) return digestText;
+    const clipped = prefs.length > room ? `${prefs.slice(0, room)}…` : prefs;
+    return `${digestText}\n\nWHAT THE PLAYER ASKED FOR:\n${clipped}`;
+  }
+
+  // ── guidance(): the exact text that ships in the second call ────────────────
+  /** 18-brief's `guidance` one call later, and written to the same three rules:
+   *  the vocabularies are INTERPOLATED from the constants above so the enum and
+   *  the teaching can never drift, every limit is stated as hard, and the reply is
+   *  a bare JSON object.
+   *
+   *  EMISSION ORDER IS BEST-EFFORT AND SAID SO. Templates first, then the index,
+   *  then the two smaller sections — because the truncation wall eats the TAIL,
+   *  and the floor arithmetic (TUNING.floorBasis) is computed against a cut that
+   *  honoured this order. Nothing enforces it: `schema()` lists its properties in
+   *  the same order and the sentence below asks for it out loud, and both are
+   *  hints a provider is free to ignore (the schema is ADVISORY — #5135). What
+   *  makes a disordered emission survivable is not this paragraph, it is that the
+   *  floor is a seal/fail boundary: a cut that lost the templates fails, holds
+   *  the gate, and the retry is free.
+   *
+   *  TOPIC TAGS ARE CONFINED TO rumor|work HERE, while the SCHEMA seals all four
+   *  (plan §2.2c). That gap is deliberate and it is the byte diet: `place` and
+   *  `smalltalk` are the tags an Ask tree opens with and the two E7 is not
+   *  load-bearing for, so paying four extra characters a line for them now buys
+   *  nothing this release can read. The schema is the thing that seals forever and
+   *  the guidance is the thing that can be rewritten next release, so the wider
+   *  vocabulary belongs in the schema and the diet belongs here. */
+  function guidance(theme) {
+    return [
+      "You are writing an OFFLINE CONTENT PACK for a settlement that already exists: what its people say,",
+      "and the work they post on the board. Reply with ONLY a JSON object.",
+      "",
+      `The visual theme is "${theme}" and it is AUTHORITATIVE: everything you write is dressed to fit it.`,
+      "The settlement, its places and its people are given below and are FIXED. Do not invent a person, a",
+      "place or an event that contradicts them; you are writing what is already there, not deciding it.",
+      "",
+      "Write the sections IN THIS ORDER — templates, then lines, then escalation, then overheard. If you",
+      "run out of room, it is the LAST section that should be short.",
+      "",
+      "- templates: the work the board posts. Each is {slug, giver, verb, target, n, title}.",
+      "    giver: the NAME of one of the people listed below, spelled exactly. Nobody else can post work.",
+      `    verb: one of ${VERBS.join(" | ")}. Nothing else exists — there is no combat and no crafting.`,
+      "    target: ONE of these four shapes, and it must match the verb:",
+      `      {"role": …}    for gather/catch — one of ${PF.economy.CATCH_ROLES.join(" | ")} (any catch of that kind counts)`,
+      '      {"variant": …} for gather/catch — one exact species this theme has',
+      '      {"npc": …}     for deliver — the NAME of another person on the list (an errand: a word carried, not an object)',
+      `      {"place": …}   for visit — one of ${LOCATIONS.join(" | ")}`,
+      "    n: how many to catch, 1-20. Always 1 for deliver and visit.",
+      "    title: what the board row reads, <=48 characters of plain text.",
+      "    NEVER write money, pay, a price, a reward or experience. The game decides what work is worth.",
+      "- lines: what somebody standing in a place says, keyed so the right line reaches the right moment.",
+      "    Each is {at, when, r, text} plus an optional topic.",
+      `    at: one of ${LOCATIONS.join(" | ")} — the handle beside each place below.`,
+      `    when: one of ${DAYPARTS.join(" | ")}.`,
+      `    r: ${REGISTERS[0]} (they barely know you) or ${REGISTERS[1]} (they do).`,
+      "    topic (optional): rumor or work. Leave it off for anything else.",
+      "    text: ONE spoken line, <=200 characters. No name tags, no quotation marks, no stage directions.",
+      "    Cover the places and hours somebody would actually be there; write more friend lines than you",
+      "    think you need, because that register is where the settlement stops sounding like a signpost.",
+      "- escalation: ONE line per person, {npc, text}: the thing they say when the player asks properly",
+      "    about the unresolved situation above — the door, not what is behind it. Keep it withholding.",
+      "- overheard: {at, text} — half of somebody else's conversation, heard in passing. Nobody answers it.",
+      "",
+      "Everything is in the player's language. Write people who want things and are inconvenient about it.",
+    ].join("\n");
+  }
+
+  /** The advisory schema. Property order is the emission order the guidance asks
+   *  for out loud, for the same reason and with the same standing: a hint, not a
+   *  guarantee. `strictSchema` is NEVER SET on this call and stays false — it is
+   *  unavailable to additionalProperties schemas and this is one, so the tolerant
+   *  parser is the contract and validate() is the enforcement. */
+  function schema() {
+    const text = (maxLength) => ({ type: "string", maxLength });
+    return {
+      type: "object",
+      properties: {
+        templates: {
+          type: "array",
+          maxItems: CAPS.templates,
+          items: {
+            type: "object",
+            properties: {
+              slug: text(CAPS.slug),
+              giver: text(24),
+              verb: { type: "string", enum: VERBS },
+              target: {
+                type: "object",
+                properties: {
+                  role: { type: "string", enum: PF.economy.CATCH_ROLES },
+                  variant: text(CAPS.slug),
+                  npc: text(24),
+                  place: { type: "string", enum: LOCATIONS },
+                },
+              },
+              n: { type: "integer", minimum: 1, maximum: CAPS.n },
+              title: text(CAPS.title),
+            },
+            required: ["giver", "verb", "target", "title"],
+          },
+        },
+        lines: {
+          type: "array",
+          maxItems: CAPS.lines,
+          items: {
+            type: "object",
+            properties: {
+              at: { type: "string", enum: LOCATIONS },
+              when: { type: "string", enum: DAYPARTS },
+              r: { type: "string", enum: REGISTERS },
+              text: text(CAPS.text),
+              topic: { type: "string", enum: TOPICS },
+            },
+            required: ["at", "when", "r", "text"],
+          },
+        },
+        escalation: {
+          type: "array",
+          maxItems: CAPS.escalation,
+          items: {
+            type: "object",
+            properties: { npc: text(24), text: text(CAPS.text) },
+            required: ["npc", "text"],
+          },
+        },
+        overheard: {
+          type: "array",
+          maxItems: CAPS.overheard,
+          items: {
+            type: "object",
+            properties: { at: { type: "string", enum: LOCATIONS }, text: text(CAPS.text) },
+            required: ["at", "text"],
+          },
+        },
+      },
+      required: ["templates", "lines"],
+    };
+  }
 
   return {
     VERSION,
@@ -229,6 +505,32 @@ PF.pack = (() => {
         if (value) return value;
       }
       return "";
+    },
+
+    // ── The reward, derived (plan §2.6, RULED) ───────────────────────────────
+    /** What a template's (verb, n) is worth, and the ONLY place in the package a
+     *  quest reward number is minted. The pack never authors one — the schema
+     *  excludes money and xp and the seal drops both — so a row's `r` is a
+     *  function of two fields this build already trusts.
+     *
+     *  xp IS ZERO BY CONSTRUCTION AND NOT BY A ZERO IN A TABLE. Quests never
+     *  grant skill experience (the maintainer's reward ruling): a catch quest
+     *  levels fishing because the CATCHING does, through fish()'s own award, and
+     *  the quest's reward is money and the giver's rapport. The wire field stays
+     *  — the row is a closed eight-field literal and dropping `xp` would be a
+     *  format change for nothing — but there is no reward row to read it from and
+     *  no path here that can write it non-zero. The completion site passes no
+     *  verb to award(), which drops a hostile row's planted xp at the gate; this
+     *  is the half that makes an honest row's xp zero in the first place.
+     *
+     *  A verb with no row — one this build cannot mint anyway — is worth nothing
+     *  rather than a default, and the lookup is an own-key one because `verb` is
+     *  a string off a stored artifact (00-prelude says why once). */
+    rewardFor(verb, n) {
+      const row = PF.own(TUNING.reward, str(verb));
+      if (!row) return { money: 0, xp: 0 };
+      const count = PF.clamp(Math.round(Number(n) || 1), 1, CAPS.n);
+      return { money: row.base + row.per * count, xp: 0 };
     },
 
     // ── Instance identity (plan §2.2c) ───────────────────────────────────────
@@ -356,8 +658,34 @@ PF.pack = (() => {
         );
         return null;
       }
+      // ── BACKFILL, AFTER THE FLOOR AND NEVER BEFORE IT (plan §2.2b) ──────────
+      // The ordering IS the rule: backfill may cover a small gap in a pack that
+      // is already substantive, and it may never be the thing that got a pack
+      // over the line. A pack that needed topping up to pass would be a hollow
+      // one sealed forever with our own words in it, which is exactly the trade
+      // the floor exists to refuse.
+      //
+      // AND IT IS SCOPED TO `overheard`, WHICH IS THE ONLY SECTION THAT CAN
+      // HONESTLY TAKE IT. Templates and the line index are the floor's own two
+      // halves — the load-bearing ones — and topping either up would be stock
+      // content pretending to be this world's. `escalation` cannot take it
+      // either, for the content fence's reason: those rows name a PERSON, and
+      // the only names the fallback has are the four stock residents this world
+      // has never heard of. Overheard is the one pool with no speaker in it —
+      // half a conversation, keyed to a place and attributed to nobody — so the
+      // fallback's rows are as true in a generated settlement as in a default
+      // one, and a world with none of them has a real hole where E1's ambience
+      // goes.
+      if (pack.overheard.length === 0) {
+        pack.overheard = this.defaults(theme).overheard;
+        repairs.push("overheard: empty, backfilled from the default pack");
+      }
       pack._repairs = repairs;
-      void seed; // reserved: the backfill pass (slice 2) draws from it
+      // `seed` stays reserved. The backfill that came did not need entropy — it
+      // copies a fixed pool wholesale rather than choosing from one — and a seed
+      // spent to shuffle rows a later reader will hash over anyway would be
+      // determinism theatre.
+      void seed;
       return pack;
     },
 
@@ -635,23 +963,141 @@ PF.pack = (() => {
       return JSON.parse(JSON.stringify(book));
     },
 
-    // ── generate(): the call seam ────────────────────────────────────────────
-    /** THE SECOND GENERATION CALL, and SLICE 2 OWNS ITS BODY: the digest split,
-     *  the guidance, the schema and the salvage ladder are that slice's, and this
-     *  slice builds the whole state machine around this seam so the machine can be
-     *  driven — and pinned — without one.
+    // ── generate(): the second generation call ───────────────────────────────
+    /** THE SECOND #5135 CALL, and it is 18-brief `generate`'s TWIN rather than its
+     *  cousin: same bounded wait, same one wait-out on the documented-transient
+     *  409, same single same-base re-roll on truncation, same salvage of the
+     *  LONGEST truncated raw seen across attempts, same `onFailure(kind)` reported
+     *  once. The ladder is FROZEN at one re-roll and a salvage (#5135) — there is
+     *  no degrade-the-ask rung, because the only thing left to degrade would be
+     *  the digest, and a pack written against a world we described less accurately
+     *  is worse than no pack at all.
      *
-     *  The contract is 18-brief `generate`'s, deliberately: a SEALED pack for the
-     *  two outcomes that produce a real one (success and salvage), and NULL for
-     *  every failure, so the caller holds the gate and the next visit tries again.
-     *  Until slice 2 lands, that null is the honest answer — there is no call to
-     *  make yet, and a chat that reaches here sits at the pack-stage retry screen
-     *  with its world already sealed and safe. */
-    async generate(chatId, { onFailure } = {}) {
-      void chatId;
-      onFailure?.("unavailable");
-      return null;
+     *  It returns a SEALED pack for the two outcomes that produce a real one and
+     *  NULL for every failure, so the caller holds the gate and the retry is free.
+     *  NOTHING HERE STORES OR CACHES: 60-save owns both, in that order, and owns
+     *  the gate stamping around them.
+     *
+     *  THE ONE ROW THE BRIEF'S LADDER DOES NOT HAVE is `"thin"`, and it is the
+     *  substance floor arriving as a failure kind. A brief's validate() always
+     *  produces a brief — the floors top it up from stock — but a pack under the
+     *  floor is a FAILURE by design (see validate): sealing a hollow pack trades a
+     *  free retry for a permanent nothing. So a 200 that seals to null is reported
+     *  as its own kind rather than folded into "refused", which would tell the
+     *  player their request was turned down when it was answered thinly.
+     *
+     *  `strictSchema` is NOT SENT and stays false — see schema(). */
+    async generate(
+      chatId,
+      {
+        theme,
+        seed,
+        brief,
+        preferences,
+        onProgress,
+        onFailure,
+        budgetMs = 90_000,
+        busyWaitMs = Math.min(15_000, budgetMs / 6),
+      } = {},
+    ) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), budgetMs);
+      try {
+        const base = {
+          instructions: guidance(theme),
+          // THE DIGEST FIRST, the player's own words after (plan §2.2b).
+          userContent: composeUserContent(digest(brief), preferences),
+          schema: schema(),
+        };
+        const seal = (data) =>
+          data && typeof data === "object" && !Array.isArray(data) ? this.validate(data, { theme, seed, brief }) : null;
+        let response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
+        if (response.status === 409) {
+          // chat_busy ships Retry-After: 15 — wait it out once inside the budget
+          // (busyWaitMs is a timer seam so the harness never sleeps for real).
+          await new Promise((resolve) => setTimeout(resolve, busyWaitMs));
+          if (!controller.signal.aborted)
+            response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
+        }
+        const rawOf = (r) =>
+          r.status === 422 && r.body?.truncated && typeof r.body.raw === "string" ? r.body.raw : null;
+        let bestRaw = rawOf(response);
+        if (response.status === 422 && response.body?.truncated) {
+          onProgress?.("Writing what your world has to say… (one more try)");
+          response = await PF.api.postExperienceGeneration(chatId, base, controller.signal);
+          const retryRaw = rawOf(response);
+          if (retryRaw && (!bestRaw || retryRaw.length > bestRaw.length)) bestRaw = retryRaw;
+        }
+        // `thin` is remembered rather than returned from, because a whole
+        // response can still come back after a truncated one: a 200 that seals to
+        // null must not stop the salvage of a longer raw from an earlier attempt.
+        let thin = false;
+        if (response.status === 200 && response.body?.ok) {
+          const sealed = seal(response.body.data);
+          if (sealed) return sealed;
+          thin = true;
+        }
+        if (bestRaw) {
+          const salvaged = PF.brief.salvageText(bestRaw);
+          if (salvaged) {
+            // THE SALVAGE SEALS THIN, AND THAT IS THE POINT OF THE FLOOR. What
+            // came back is a templates-first emission with its tail cut off, so
+            // the pack is smaller than the one that was asked for — and a smaller
+            // pack is a real one. validate() is what decides whether it is small
+            // or hollow, and it is the same validate() a whole response goes
+            // through: one door, one set of guarantees.
+            const sealed = seal(salvaged);
+            if (sealed) {
+              sealed._repairs.push("transport: salvaged from a truncated response");
+              return sealed;
+            }
+            thin = true;
+          }
+        }
+        if (thin) {
+          console.warn("[pixelforge] the content pack came back under its floor; nothing sealed, the retry is free");
+          onFailure?.("thin");
+          return null;
+        }
+        if (response.status === 404 || response.status === 409 || response.status === 429 || response.status >= 500) {
+          console.warn("[pixelforge] content pack unavailable (transient); the world stays packless", response.status);
+          onFailure?.("unavailable");
+          return null;
+        }
+        console.warn(
+          "[pixelforge] the content pack was refused; the world stays packless",
+          response.status,
+          response.body?.error ?? null,
+        );
+        onFailure?.("refused");
+        return null;
+      } catch (err) {
+        // The brief's two verdicts, and the same reading of them: neither seals
+        // anything, and the world under this call is already written and safe.
+        if (!controller.signal.aborted) {
+          console.warn("[pixelforge] the content pack call failed (network); the world stays packless", err);
+          onFailure?.("network");
+        } else {
+          console.warn("[pixelforge] the content pack call timed out; the world stays packless");
+          onFailure?.("timeout");
+        }
+        return null;
+      } finally {
+        clearTimeout(timer);
+      }
     },
+
+    // The three composition halves, exported for the same reason 18-brief exports
+    // its own: the walls they are written against (#5135) are the kind of contract
+    // that is only ever checked by measuring, and a lane that re-implemented the
+    // split would be measuring itself.
+    digest,
+    composeUserContent,
+    guidance,
+    schema,
+    USER_CONTENT_CAP,
+    INSTRUCTIONS_CAP,
+    SCHEMA_CAP,
   };
 })();
 
