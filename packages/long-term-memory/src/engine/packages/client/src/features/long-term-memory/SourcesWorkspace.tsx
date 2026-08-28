@@ -229,10 +229,8 @@ function ScopeTargetPicker({
       </button>
       {open ? (
         <div
-          id={listId}
-          role="listbox"
-          aria-label={ariaLabel}
           className="absolute left-0 top-full z-30 mt-2 w-full min-w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-md border border-[var(--marinara-editor-divider)] bg-[var(--card)] shadow-xl"
+          data-ltm-scope-picker-popup
         >
           <label className="relative block border-b border-[var(--marinara-editor-divider)] p-2">
             <Search
@@ -269,7 +267,7 @@ function ScopeTargetPicker({
               }}
             />
           </label>
-          <div className="max-h-72 overflow-y-auto">
+          <div id={listId} role="listbox" aria-label={ariaLabel} className="max-h-72 overflow-y-auto">
             {selectedTarget && matches(selectedTarget) ? (
               <div className="border-b border-[var(--marinara-editor-divider)]">
                 <p className="bg-[var(--secondary)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
@@ -311,10 +309,27 @@ function mergedDestinationScope(targets: ScopeTarget[]) {
 
 const MAX_DESTINATION_SCOPE_IDS = 100;
 
+function destinationScopeIds(scope: LtmScope | undefined) {
+  const normalized = normalizeLtmScope(scope);
+  return {
+    chatIds: normalized.chatIds ?? [],
+    groupIds: normalized.groupIds ?? [],
+    characterIds: normalized.characterIds ?? [],
+    personaIds: normalized.personaIds ?? [],
+  };
+}
+
 function hasDestinationScopeCapacity(scope: LtmScope | undefined) {
-  return [scope?.chatIds, scope?.groupIds, scope?.characterIds, scope?.personaIds].every(
-    (ids) => !ids || ids.length <= MAX_DESTINATION_SCOPE_IDS,
-  );
+  return Object.values(destinationScopeIds(scope)).every((ids) => !ids || ids.length <= MAX_DESTINATION_SCOPE_IDS);
+}
+
+function targetFitsDestinationScope(scope: LtmScope | undefined, target: ScopeTarget) {
+  const current = destinationScopeIds(scope);
+  const candidate = destinationScopeIds(target.destinationScope);
+  return (Object.keys(candidate) as Array<keyof typeof candidate>).every((key) => {
+    const additionalIds = candidate[key].filter((id) => !current[key].includes(id));
+    return additionalIds.length <= MAX_DESTINATION_SCOPE_IDS - current[key].length;
+  });
 }
 
 function BulkDestinationPicker({
@@ -335,6 +350,7 @@ function BulkDestinationPicker({
   const [query, setQuery] = useState("");
   const dialogRef = useRef<HTMLDialogElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const wasOpenRef = useRef(false);
   const availableTargets = useMemo(
     () =>
       targets
@@ -365,20 +381,22 @@ function BulkDestinationPicker({
       .includes(needle),
   );
   const selectedTargets = availableTargets.filter((target) => draftIds.includes(target.id));
-  const scopeForIds = (ids: string[]) =>
-    mergedDestinationScope([
-      ...(primaryTarget ? [primaryTarget] : []),
-      ...availableTargets.filter((target) => ids.includes(target.id)),
-    ]);
-  const targetExceedsLimit = (target: ScopeTarget, ids = draftIds) =>
-    !ids.includes(target.id) && !hasDestinationScopeCapacity(scopeForIds([...ids, target.id]));
+  const currentDestinationScope = mergedDestinationScope([
+    ...(primaryTarget ? [primaryTarget] : []),
+    ...selectedTargets,
+  ]);
+  const targetExceedsLimit = (target: ScopeTarget) =>
+    !draftIds.includes(target.id) && !targetFitsDestinationScope(currentDestinationScope, target);
   const blockedTargetCount = filteredTargets.filter((target) => targetExceedsLimit(target)).length;
-  const toggle = (id: string) =>
-    setDraftIds((current) => {
-      if (current.includes(id)) return current.filter((value) => value !== id);
-      const next = [...current, id];
-      return hasDestinationScopeCapacity(scopeForIds(next)) ? next : current;
-    });
+  const toggle = (id: string) => {
+    if (draftIds.includes(id)) {
+      setDraftIds((current) => current.filter((value) => value !== id));
+      return;
+    }
+    const target = availableTargets.find((item) => item.id === id);
+    if (target && !targetExceedsLimit(target))
+      setDraftIds((current) => (current.includes(id) ? current : [...current, id]));
+  };
   const handleCategoryKey = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
@@ -395,17 +413,25 @@ function BulkDestinationPicker({
     );
   };
 
+  const restoreTriggerFocus = () => requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
+  const closePicker = () => {
+    setOpen(false);
+    restoreTriggerFocus();
+  };
+
   useEffect(() => {
+    const transitionedOpen = open && !wasOpenRef.current;
+    wasOpenRef.current = open;
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (open && !dialog.open) dialog.showModal();
     if (!open && dialog.open) dialog.close();
-    if (open) {
+    if (transitionedOpen) {
       setDraftIds(selectedIds);
       setActiveKind("all");
       setQuery("");
+      requestAnimationFrame(() => dialog.querySelector<HTMLElement>("input")?.focus());
     }
-    if (open) requestAnimationFrame(() => dialog.querySelector<HTMLElement>("input")?.focus());
   }, [open, selectedIds]);
 
   return (
@@ -429,14 +455,14 @@ function BulkDestinationPicker({
           aria-labelledby="ltm-bulk-destination-title"
           onCancel={(event) => {
             event.preventDefault();
-            setOpen(false);
+            closePicker();
           }}
           onClose={() => {
             setOpen(false);
-            requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
+            restoreTriggerFocus();
           }}
           onClick={(event) => {
-            if (event.target === event.currentTarget) setOpen(false);
+            if (event.target === event.currentTarget) closePicker();
           }}
           className="fixed inset-0 z-50 m-0 h-full max-h-none w-full max-w-none bg-black/50 p-0 backdrop:bg-black/50 sm:grid sm:place-items-center sm:p-4"
         >
@@ -453,7 +479,7 @@ function BulkDestinationPicker({
               <IconButton
                 icon={X}
                 label={localizeUi("ui.longTermMemory.sourcesworkspace.closeBulkPicker")}
-                onClick={() => setOpen(false)}
+                onClick={closePicker}
               />
             </header>
             <div className="min-h-0 flex-1 overflow-y-auto">
@@ -599,14 +625,14 @@ function BulkDestinationPicker({
               </div>
             </div>
             <footer className="flex flex-wrap justify-end gap-2 border-t border-[var(--border)] p-4">
-              <Button onClick={() => setOpen(false)} data-ltm-bulk-cancel>
+              <Button onClick={closePicker} data-ltm-bulk-cancel>
                 {localizeUi("ui.longTermMemory.sourcesworkspace.cancel")}
               </Button>
               <Button
                 primary
                 onClick={() => {
                   onChange(draftIds);
-                  setOpen(false);
+                  closePicker();
                 }}
                 data-ltm-bulk-done
               >
@@ -1981,7 +2007,7 @@ export default function SourcesWorkspace({
               ariaLabel={localizeUi("ui.longTermMemory.sourcesworkspace.makeMemoriesAvailableIn")}
               testId="destination"
               destination
-              required={!props.chatId}
+              required
               invalid={!primaryDestinationTarget}
             />
           </div>

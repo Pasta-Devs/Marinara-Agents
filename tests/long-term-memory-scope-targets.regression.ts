@@ -68,6 +68,19 @@ assert.deepEqual(
   ["branch-conversation"],
   "mode filtering changes branch visibility deliberately",
 );
+const conversationOnlyGroupChats = chats
+  .filter((chat) => Boolean(chat.groupId))
+  .map((chat) => ({ ...chat, mode: "conversation" as const }));
+assert.equal(
+  deriveScopeConversations(
+    conversationOnlyGroupChats.filter((chat) => chat.mode === "roleplay"),
+    groups,
+    "character-a",
+    buildScopeIndexes(conversationOnlyGroupChats),
+  ).some((conversation) => conversation.id === "group:group-a"),
+  false,
+  "a group with no chats in the active mode is not a conversation target",
+);
 assert.deepEqual(
   deriveScopeBranches(
     deriveScopeConversations(chats, groups, "character-a", indexes).find(

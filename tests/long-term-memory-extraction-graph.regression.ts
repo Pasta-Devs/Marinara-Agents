@@ -459,6 +459,17 @@ async function main() {
     true,
   );
   assert.notEqual(scopedVariantNoteId("world_legacy_scope", legacyScope), legacyNoteId);
+  const destinationScopeVariants = [
+    { groupIds: ["group-a"], chatIds: ["chat-a"] },
+    { groupIds: ["group-a"], chatIds: ["chat-b"] },
+    { groupIds: ["group-a"], characterIds: ["character-a"] },
+    { groupIds: ["group-a"], personaIds: ["persona-a"] },
+  ];
+  assert.equal(
+    new Set(destinationScopeVariants.map((scope) => scopedVariantNoteId("world_destination_union", scope))).size,
+    destinationScopeVariants.length,
+    "destination scope unions receive distinct scoped identities",
+  );
 
   const targetResolution = await resolveScopedEvidenceUnitTargets({
     units: [

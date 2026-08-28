@@ -2706,6 +2706,7 @@ async function main() {
       const sourceScopeTrigger = sourceScopePicker.getByRole("combobox");
       assert.match((await sourceScopeTrigger.innerText()).trim(), /All Available/u);
       await sourceScopeTrigger.click();
+      assert.equal(await sourceScopePicker.locator('[role="listbox"] input').count(), 0);
       assert.equal(
         await sourceScopePicker.locator('[role="option"][data-ltm-scope-option="chat:memory-chat"]').count(),
         1,
@@ -2720,7 +2721,7 @@ async function main() {
       );
       assert.notEqual(
         await sourceScopePicker
-          .locator('[role="listbox"]')
+          .locator("[data-ltm-scope-picker-popup]")
           .evaluate((listbox) => getComputedStyle(listbox).backgroundColor),
         "rgba(0, 0, 0, 0)",
       );
@@ -2732,6 +2733,7 @@ async function main() {
       await page.locator('[data-ltm-source-preview-status="success"]').waitFor();
       const destinationScopePicker = page.locator('[data-ltm-scope-picker="destination"]');
       const destinationScopeTrigger = destinationScopePicker.getByRole("combobox");
+      assert.equal(await destinationScopeTrigger.getAttribute("aria-required"), "true");
       await destinationScopeTrigger.click();
       const destinationScopeSearch = destinationScopePicker.locator("input");
       await destinationScopeSearch.fill("Overflow group");
@@ -2753,7 +2755,7 @@ async function main() {
       );
       assert.notEqual(
         await destinationScopePicker
-          .locator('[role="listbox"]')
+          .locator("[data-ltm-scope-picker-popup]")
           .evaluate((listbox) => getComputedStyle(listbox).backgroundColor),
         "rgba(0, 0, 0, 0)",
       );

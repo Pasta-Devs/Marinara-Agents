@@ -154,7 +154,9 @@ const slurpOwnedSourcePaths = [
   "packages/server/src/services/slurp",
   "packages/server/src/services/storage/slurp.storage.ts",
 ];
-const reuseExistingRuntime = process.env.MARINARA_REUSE_FEATURE_RUNTIME === "1";
+// Release builds must bundle the current source; runtime reuse is for explicit non-release verification builds.
+const releaseBuild = process.env.MARINARA_RELEASE_BUILD !== "0";
+const reuseExistingRuntime = !releaseBuild && process.env.MARINARA_REUSE_FEATURE_RUNTIME === "1";
 const rebuiltFeatureClients = new Set(
   String(process.env.MARINARA_REBUILD_FEATURE_CLIENTS || "")
     .split(",")
