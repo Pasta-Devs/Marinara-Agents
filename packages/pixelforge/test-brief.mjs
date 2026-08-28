@@ -19168,27 +19168,50 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       !loadedPF.save.gateReason("refused", "pack").includes("setting"),
       "at the pack stage it is not: the setting already produced the world",
     );
+    const packNote = loadedPF.save.gateStageNote("pack");
+    const briefNote = loadedPF.save.gateStageNote("brief");
     assert.ok(
-      loadedPF.save.gateStageNote("pack").includes("safe") &&
-        loadedPF.save.gateStageNote("pack").includes("does not rewrite the world"),
-      "and the pack-stage note says the world is safe and the retry is free",
+      packNote.includes("written and settled") && packNote.includes("Trying again is free"),
+      "and the pack-stage note says the setting is spent and kept and the retry is free",
+    );
+    // THE CLAIM THE NOTE MAY NO LONGER MAKE, asserted as a NEGATIVE because that is
+    // the half a rewrite can lose silently. "It does not rewrite the world" is a
+    // sentence about a world that is already up, and the pack stage is stamped in
+    // BOTH of its states — including the one where the install has not run yet and
+    // the retry is the thing that runs it.
+    assert.ok(
+      !packNote.includes("does not rewrite"),
+      "…and it does NOT promise the retry leaves the world alone: at the pack stage the world may not be up yet",
     );
     assert.ok(
-      loadedPF.save.gateStageNote("brief").includes("Nothing was lost"),
-      "…while the brief-stage note says nothing was stored",
+      briefNote.includes("Nothing was lost") && briefNote.includes("stand-in world"),
+      "…while the brief-stage note says nothing was lost and no world was settled on the player's behalf",
+    );
+    // The same negative on the other half, for the counter-path pinned below: a
+    // brief-stage failure can arrive with the brief already PATCHed, so the note
+    // cannot claim the chat is untouched.
+    assert.ok(
+      !briefNote.includes("exactly as you left it"),
+      "…and it does NOT claim the chat is untouched: the brief may already be sealed when a brief-stage throw lands",
     );
   }
 
-  // ── A THROW IS NOBODY'S VERDICT, SO IT DOES NOT INHERIT A STAGE ────────────
-  // The catch-all is the one caller that names no stage, and the stamped one was
-  // wrong for it in exactly the case the two-call sequence made reachable: the
-  // pack stage is stamped, the pack seals, and then the INSTALL throws. Carrying
-  // "pack" there fronts the screen whose copy says the world is written and that
-  // trying again does not rewrite it — while the world is still the placeholder
-  // and the retry recompiles it, which is the promise broken in the same breath
-  // it is made.
-  await withSavePath(async ({ behavior, tick, makeCore }) => {
-    await withGeneration(async () => {
+  // ── A THROW INHERITS THE STAMPED STAGE, AND THE STAMP IS THE HONEST AXIS ───
+  // The catch-all is the one caller that names no stage, and 0.13 spent a commit
+  // deriving one for it from the placeholder before settling that the stamp was
+  // right all along. The stamp says which artifact this chat is STILL OWED, which
+  // is the same question as which artifact a retry can still re-roll — and the
+  // placeholder answers a different one: it stands for the whole of the install,
+  // on both sides of the pack seal, so deriving "brief" from it fronted the
+  // untouched-chat screen for chats whose brief was already PATCHed and one-shot.
+  //
+  // What the placeholder DID expose was a false sentence in the pack-stage COPY,
+  // and this case is what holds the new copy to its own substance: the screen says
+  // the setting is spent and kept and that the world comes out as written however
+  // many times you try, and the button under it has to be the thing that makes
+  // those two sentences true.
+  await withSavePath(async ({ calls, behavior, tick, makeCore }) => {
+    await withGeneration(async ({ postCount }) => {
       await withPack(async ({ packCount }) => {
         behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
         const meta = wizardConfig();
@@ -19196,6 +19219,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         core.host.chatMeta = meta;
         core.sim = loadedPF.save.restore(meta, "chat-pack-throw");
         assert.equal(loadedPF.save.armGate(core, meta), true, "a chat owed both artifacts gates");
+        calls.length = 0;
         // Planted where a real throw lands: the rebuild inside the install, which
         // is downstream of BOTH seals and of the pack stamp.
         const realSim = loadedPF.Sim;
@@ -19213,17 +19237,186 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         assert.equal(core.sim.world.interim, true, "and the world under it is still the placeholder");
         assert.equal(
           loadedPF.save.gate.stage,
-          "brief",
-          "…so the screen is the BRIEF one: nothing is installed, and pressing the button rewrites the world",
+          "pack",
+          "…and the screen is the PACK one: the setting is spent and sealed, and the pack is what is still owed",
         );
-        // …and that is not a wording preference. The retry does exactly what the
-        // brief-stage copy warns about and the pack-stage copy denies.
+        const note = loadedPF.save.gateStageNote(loadedPF.save.gate.stage);
+        assert.ok(
+          note.includes("comes out exactly as written"),
+          "the screen promises a world that comes back the same however many times it compiles",
+        );
+        assert.ok(
+          !note.includes("does not rewrite"),
+          "…and does NOT promise the install is already done, because on this path it never ran",
+        );
+        // THE SUBSTANCE UNDER THE SENTENCE. The brief on the host is the thing the
+        // retry must not touch, so it is compared as BYTES either side of the press.
+        const sealedBytes = JSON.stringify(afterPatches(meta, calls).pixelforgeBrief);
         const placeholder = core.sim.world;
+        core.host.chatMeta = afterPatches(meta, calls);
         assert.equal(loadedPF.save.retryGeneration(core), true, "the button fires");
         for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
         assert.equal(loadedPF.save.gateHolds(core), false, "the gate lifts");
-        assert.notEqual(core.sim.world, placeholder, "onto a world the retry COMPILED — it rewrote the world");
-        assert.equal(core.sim.world.brieved, true, "…from the brief that was already sealed");
+        assert.notEqual(core.sim.world, placeholder, "onto the world the retry finished installing");
+        assert.equal(core.sim.world.brieved, true, "…which is a world compiled from a brief");
+        assert.equal(postCount(), 1, "and NO second brief call: the setting was spent once and kept");
+        assert.equal(packCount(), 1, "…nor a second pack call: both artifacts were already sealed and stored");
+        const settled = afterPatches(meta, calls);
+        assert.equal(
+          JSON.stringify(settled.pixelforgeBrief),
+          sealedBytes,
+          "…and the sealed brief is byte-identical across the press: nothing re-rolled the setting",
+        );
+        // …so "exactly as written" is a claim about the COMPILER, not a hope: the
+        // same sealed bytes and the same seed name the same world identity.
+        assert.deepEqual(
+          P.stampsFor(core.sim.world, settled.pixelforgeBrief),
+          P.stampsFor(world.build(4242, "cozy-village", settled.pixelforgeBrief), settled.pixelforgeBrief),
+          "the world that came up is the one those bytes describe, down to its seed/brief/mint stamps",
+        );
+      });
+    });
+  });
+
+  // ── …AND THE STAMPED FALLBACK IS PINNED ON BOTH ARMS ──────────────────────
+  // The line under the two cases above is `this.gate.stage ?? "brief"`, and a
+  // catch-all that dropped the stamp entirely — always "brief" — passed the whole
+  // suite once, because nothing anywhere held a THROW to the pack answer while
+  // something else held one to the brief answer. Both arms now.
+  //
+  // (i) THE HALF-SEALED CHAT, whose world is REAL under the gate: this is the pack
+  // stage's second state, matrix cell 3, and the one the retired derivation would
+  // still have answered "pack" for — which is why it cannot be the only arm.
+  await withSavePath(async ({ behavior, tick, makeCore }) => {
+    await withGeneration(async ({ postCount }) => {
+      await withPack(async ({ packCount }) => {
+        behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+        const meta = { ...wizardConfig(), pixelforgeBrief: packBrief, pixelforgePackWanted: true };
+        const core = makeCore("chat-half-throw", 4242);
+        core.host.chatMeta = meta;
+        core.sim = loadedPF.save.restore(meta, "chat-half-throw");
+        assert.equal(core.sim.world.interim, undefined, "the half-sealed boot stands in its REAL world");
+        assert.equal(loadedPF.save.armGate(core, meta), true, "…and still gates, for the pack it is owed");
+        assert.equal(loadedPF.save.gate.stage, "pack", "stamped for the pack from the start");
+        // The throw goes downstream of the pack seal on the path this chat takes,
+        // which resumes the standing world rather than installing a new one.
+        const realResume = loadedPF.save._resumeHeldWorld;
+        loadedPF.save._resumeHeldWorld = () => {
+          throw new TypeError("the resume would not run");
+        };
+        try {
+          await loadedPF.save.maybeGenerateBrief(core);
+          await tick();
+        } finally {
+          loadedPF.save._resumeHeldWorld = realResume;
+        }
+        assert.equal(postCount(), 0, "no brief call: this chat's brief was already sealed when it arrived");
+        assert.equal(packCount(), 1, "the pack call is the one that ran");
+        assert.equal(loadedPF.save.gate.state, "failed", "and the throw is a retry screen");
+        assert.equal(
+          loadedPF.save.gate.stage,
+          "pack",
+          "the stamp survives the throw — a real world under the gate is still a chat owed a pack",
+        );
+      });
+    });
+  });
+
+  // (ii) THE OTHER ARM: a throw OUT OF the brief call, where the stamp is "brief"
+  // and nothing has been PATCHed at all. A catch-all that read the stamp as
+  // decoration would answer both of these arms the same way.
+  //
+  // The throw is planted on `brief.generate` and not on the host call under it,
+  // and that distinction is the whole arm: the ladder CATCHES a failing host call
+  // and returns null, which routes to the `_failGate(core, kind, "brief")` caller
+  // that names its stage out loud — so a fixture planted there proves nothing
+  // about the fallback. Only a throw the ladder itself does not own reaches the
+  // catch-all, which is the caller under test.
+  await withSavePath(async ({ calls, behavior, tick, makeCore }) => {
+    await withGeneration(async ({ postCount }) => {
+      await withPack(async ({ packCount }) => {
+        behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+        const meta = wizardConfig();
+        const core = makeCore("chat-brief-call-throw", 4242);
+        core.host.chatMeta = meta;
+        core.sim = loadedPF.save.restore(meta, "chat-brief-call-throw");
+        assert.equal(loadedPF.save.armGate(core, meta), true, "a chat owed both artifacts gates");
+        calls.length = 0;
+        const realBrief = loadedPF.brief.generate;
+        loadedPF.brief.generate = () => {
+          throw new TypeError("the brief call would not run");
+        };
+        try {
+          await loadedPF.save.maybeGenerateBrief(core);
+          await tick();
+        } finally {
+          loadedPF.brief.generate = realBrief;
+        }
+        assert.equal(postCount(), 0, "the ladder never got as far as its own host call");
+        assert.equal(packCount(), 0, "…and the sequence never reached the second call");
+        assert.equal(
+          calls.filter((c) => c.kind === "patch").length,
+          0,
+          "…and nothing was PATCHed, so this chat really is untouched",
+        );
+        assert.equal(loadedPF.save.gate.state, "failed", "the throw is a retry screen");
+        assert.equal(
+          loadedPF.save.gate.failure,
+          null,
+          "with no verdict on it, which is what makes this the catch-all's own caller",
+        );
+        assert.equal(loadedPF.save.gate.stage, "brief", "at the BRIEF stage, which is the artifact still owed");
+      });
+    });
+  });
+
+  // ── THE BRIEF STAGE HAS A SEALED SUB-STATE TOO, AND THE COPY KNOWS IT ──────
+  // Found while re-verifying the sentence above: the stamp is set when the brief is
+  // owed and is re-stamped ONLY when a pack call begins, so a chat whose wizard
+  // asked for no pack keeps the "brief" stamp straight through its own seal. A
+  // throw out of the install then fronts the brief screen over a chat whose brief
+  // is PATCHed, one-shot, and NOT re-rolled by the button — which is why that
+  // screen no longer says the chat is exactly as it was left.
+  await withSavePath(async ({ calls, behavior, tick, makeCore }) => {
+    await withGeneration(async ({ postCount }) => {
+      await withPack(async ({ packCount }) => {
+        behavior.get = async () => ({ available: true, status: 200, body: { exists: false } });
+        const meta = wizardConfig({ packWanted: false });
+        const core = makeCore("chat-brief-throw", 4242);
+        core.host.chatMeta = meta;
+        core.sim = loadedPF.save.restore(meta, "chat-brief-throw");
+        assert.equal(loadedPF.save.armGate(core, meta), true, "a pack-less chat still gates for its brief");
+        assert.equal(loadedPF.save.gate.stage, "brief", "…at the brief stage, and nothing will re-stamp it");
+        calls.length = 0;
+        const realSim = loadedPF.Sim;
+        loadedPF.Sim = function Exploding() {
+          throw new TypeError("the compiled world would not build");
+        };
+        try {
+          await loadedPF.save.maybeGenerateBrief(core);
+          await tick();
+        } finally {
+          loadedPF.Sim = realSim;
+        }
+        assert.equal(packCount(), 0, "no pack was ever wanted, so no second call and no re-stamp");
+        assert.equal(loadedPF.save.gate.stage, "brief", "the screen is the brief one");
+        assert.deepEqual(
+          calls.filter((c) => c.kind === "patch").map((c) => Object.keys(c.patch).sort()),
+          [["pixelforgeBrief"]],
+          "…over a chat whose brief HAS been PATCHed: one key, no marker copy, the setting is spent",
+        );
+        const settled = afterPatches(meta, calls);
+        assert.equal(
+          loadedPF.save.briefExpected(settled, "chat-brief-throw"),
+          false,
+          "…and it is one-shot: the next visit will not generate a second one",
+        );
+        core.host.chatMeta = settled;
+        assert.equal(loadedPF.save.retryGeneration(core), true, "the button fires");
+        for (let i = 0; i < 50 && loadedPF.save.gate; i++) await tick();
+        assert.equal(postCount(), 1, "and it makes NO second brief call — it recompiles from the sealed one");
+        assert.equal(loadedPF.save.gateHolds(core), false, "the gate lifts onto that world");
+        assert.equal(core.sim.world.brieved, true, "which is the one the sealed brief describes");
       });
     });
   });

@@ -842,25 +842,23 @@ PF.save = {
       attempts: this.gate.attempts + 1,
       failure: typeof kind === "string" && kind ? kind : null,
       // WHICH CALL FAILED, carried onto the failure because the two are not the
-      // same news. A brief-stage failure means there is no world yet; a pack-stage
-      // one means the world is written and safe and the retry is free.
+      // same news. A brief-stage failure means the setting is still open; a
+      // pack-stage one means it is spent and kept, and only the work posted in the
+      // world it made is missing.
       //
-      // A CALLER THAT DOES NOT SAY GETS THE STAGE DERIVED, and that is 0.13's
-      // correction. The one such caller is the catch-all, whose throw is nobody's
-      // verdict — and carrying the stamped stage there was a lie in exactly one
-      // place: a throw out of `_installSealedWorld` AFTER `_stageGate(core, "pack")`
-      // fronted the pack screen, whose copy promises the world is written and that
-      // trying again "does not rewrite the world" — while the retry, finding the
-      // placeholder still standing, recompiles it from the sealed brief. The
-      // placeholder IS the tell, and it is the same condition the retry branches
-      // on: while it stands, nothing has been installed and the retry is
-      // world-rewriting, which is the brief screen's sentence and not the pack's.
-      stage:
-        stage === "pack" || stage === "brief"
-          ? stage
-          : core.sim?.world?.interim
-            ? "brief"
-            : (this.gate.stage ?? "brief"),
+      // THE STAMPED STAGE IS THE HONEST AXIS FOR A CALLER THAT DOES NOT SAY, and
+      // 0.13 tried deriving one here before settling that. The stamp says which
+      // artifact this chat is still owed, which is the same thing as which artifact
+      // a retry can still re-roll — and THAT is the only question the two screens
+      // answer differently. The placeholder is NOT that question: it is standing
+      // for the whole of the install, on both sides of the pack seal, and deriving
+      // "brief" from it fronted the untouched-chat screen for chats whose brief was
+      // already PATCHed and one-shot. Where the placeholder DID once make the pack
+      // screen read false — "it does not rewrite the world", said while the world
+      // had yet to compile — the copy was the false part, and `gateStageNote` is
+      // where that was fixed: the world comes out the same however many times it
+      // compiles, because it compiles from a brief that is already sealed.
+      stage: stage === "pack" || stage === "brief" ? stage : (this.gate.stage ?? "brief"),
     };
     core.hud?.update?.();
   },
@@ -901,15 +899,32 @@ PF.save = {
     }
   },
 
-  /** The sentence AFTER the reason, which is the half that differs by STAGE. At the
-   *  brief stage nothing was stored and the chat is untouched. At the pack stage the
-   *  world already exists and is safe: what failed is the work posted in it, the
-   *  retry costs nothing, and — said explicitly, because it is the thing a player
-   *  would fear — pressing it does not regenerate the world. */
+  /** The sentence AFTER the reason, which is the half that differs by STAGE — and
+   *  every clause of it has to be true in BOTH of the states its stage can be in,
+   *  which is what 0.13 got wrong the first time.
+   *
+   *  THE PACK STAGE HAS TWO. The pack call runs while the placeholder is still
+   *  standing (a chat sealing both artifacts in one visit) and it runs over a world
+   *  that is already up (the half-sealed chat, matrix cell 3, arriving with its
+   *  brief sealed and only the pack owed). The old sentence promised the retry
+   *  "does not rewrite the world", which is a claim about the FIRST state and is
+   *  false there: the install had not run, and the retry runs it. What is true in
+   *  both is the thing the promise was reaching for — the world compiles from a
+   *  brief that is already sealed and stored, so it comes out the same however many
+   *  times it compiles. The setting is spent and kept either way; only the work
+   *  posted in it is missing.
+   *
+   *  THE BRIEF STAGE HAS TWO AS WELL, and that is why it no longer claims the chat
+   *  is untouched. The stage is stamped when the brief is owed, but the gate is not
+   *  re-stamped once the brief SEALS on a chat that wants no pack — so a throw out
+   *  of the install lands here with `pixelforgeBrief` already PATCHed, one-shot, and
+   *  a retry that recompiles from it rather than re-rolling it. "Exactly as you left
+   *  it" was false for that chat. What survives both is what ruling #7 actually
+   *  guarantees: NO failure seals a world on the player's behalf, ever. */
   gateStageNote(stage) {
     return stage === "pack"
-      ? "Your world is written and safe — this was only the work posted in it. Trying again is free, and it does not rewrite the world."
-      : "Nothing was lost and nothing was decided for you — this chat is exactly as you left it. Try again whenever you like.";
+      ? "Your setting is written and settled — the world comes out exactly as written, however many times you try. What failed is the work posted in it. Trying again is free: it re-attempts that work, and finishes opening the world if it never got that far."
+      : "Nothing was lost, and no stand-in world was settled on this chat instead of yours. Try again whenever you like.";
   },
 
   /** The retry the gate's failure state offers, and the only caller is that
