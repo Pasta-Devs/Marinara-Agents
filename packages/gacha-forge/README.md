@@ -44,6 +44,13 @@ Since 1.2.0 the package is **staging only**: Engine `staging` testers are offere
 
 Fixes in this line: levelling with no Funds no longer consumes Insight; deleting a world now takes its key images and outfits with it; the seasonal event pays 100 Aether a stack instead of 50; models that reason no longer run out of room mid-answer; and the changelog opens five versions at a time.
 
+One of those is worth naming, because it was not cosmetic. The forge's loading screen printed the
+world description in full, and the field accepts 4,000 characters. Measured against that: the block
+ran 680px tall, the centre column overflowed its box by 374px, and **Cancel ended up 309px outside
+the stage** — so a world with a long description had no way to cancel its own creation, which is the
+escape 1.5.1 had just finished wiring to all four creation screens. The description is gone from that
+screen; the heading, the live status and a foot that mentions it without printing it remain.
+
 ### It also reworks screens that already shipped
 
 This release is not only additive; the reworks it carries to interfaces already in staging are listed in the pull request body and summarised here:
