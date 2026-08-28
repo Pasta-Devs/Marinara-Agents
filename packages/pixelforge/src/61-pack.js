@@ -411,9 +411,17 @@ PF.pack = (() => {
     },
 
     /** The grain-tagged target, bound to the verb that can use it. Returns null
-     *  when nothing resolves — the caller drops the row. */
+     *  when nothing resolves — the caller drops the row.
+     *
+     *  THE VERB IS A KEY OFF AN UNTRUSTED STRING, so the lookup goes through
+     *  `PF.own` (00-prelude says why once for the whole package). A bare
+     *  `GRAINS_FOR_VERB[verb]` handed back Object.prototype for "__proto__" and a
+     *  function for "constructor" or "toString" — all of them non-nullish, so the
+     *  `??` could not fire and the `for…of` under it threw "allowed is not
+     *  iterable" instead of refusing the row. An unknown verb and a hostile one
+     *  are the same answer here: no allowed grain, nothing resolves, null. */
     foldTarget(raw, verb, { cast, theme }) {
-      const allowed = GRAINS_FOR_VERB[verb] ?? [];
+      const allowed = PF.own(GRAINS_FOR_VERB, verb) ?? [];
       const source = raw && typeof raw === "object" ? raw : null;
       const bare = str(raw);
       for (const grain of allowed) {
@@ -546,10 +554,16 @@ PF.pack = (() => {
       // THE MECHANICS ENUM, NOT THE WIDER SEAL-ACCEPT ONE. `VERBS` is what a
       // generation call may WRITE; MECHANICS is what this build can VERIFY, and a
       // row it cannot verify could only ever be accepted and then never completed.
-      // `foldTarget` below refuses the same rows a step later (a verb with no
-      // mechanic has no grain bound to it either), so this line is the statement
-      // rather than the enforcement — and it is worth stating, because the day
-      // GRAINS_FOR_VERB gains an entry is the day the two stop agreeing by luck.
+      //
+      // It is a LIST MEMBERSHIP TEST and not a table lookup, and that is the point
+      // of the pattern rather than an accident of it: `verb` here is a string off a
+      // hand-edited or foreign artifact, and this door's own header calls the stored
+      // pack untrusted. `foldTarget` below refuses the same rows a step later — an
+      // unknown verb has no grain bound to it either, hostile ones included now that
+      // its lookup is an own-key one — so this line is the statement of the rule and
+      // that one is the enforcement. Both are wanted: the day GRAINS_FOR_VERB gains
+      // an entry MECHANICS has not is the day the pair stops agreeing, and until
+      // then a verb naming an inherited property is refused twice rather than once.
       if (!MECHANICS.includes(verb)) return null;
       // THE GRAIN RULE IS THE SEAL'S OWN, CALLED HERE — not a second copy written
       // to look like it. Same grain-to-verb binding, same role/variant/place

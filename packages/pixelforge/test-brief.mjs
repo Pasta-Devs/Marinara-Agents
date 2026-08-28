@@ -18494,15 +18494,38 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       // so the read has to take the same one rather than refusing or guessing.
       {
         id: "p:h:two-grain",
-        giver: marla,
+        giver: "Perrin Quill",
         verb: "catch",
         target: { role: "catch-common", variant: "carp" },
         n: 2,
         title: "Two of something",
       },
+      // THREE VERBS NAMING AN INHERITED PROPERTY. Chat metadata is JSON both ways,
+      // so `verb` is an attacker-supplied string and the grain table is a plain
+      // object: read with a bare bracket, "constructor" and "toString" hand back
+      // functions and "__proto__" hands back Object.prototype — all of them truthy
+      // AND non-nullish, so the `?? []` beneath them cannot fire and the loop over
+      // "allowed" throws instead of refusing the row.
+      { id: "p:h:ctor", giver: marla, verb: "constructor", target: { place: "wilds" }, n: 1, title: "Build it" },
+      { id: "p:h:protoverb", giver: marla, verb: "__proto__", target: { place: "wilds" }, n: 1, title: "Up one" },
+      { id: "p:h:tostring", giver: marla, verb: "toString", target: { place: "wilds" }, n: 1, title: "Say it" },
+      // A NON-COUNTING VERB CARRYING A COUNT. It survives — the excess is scalar,
+      // and scalar excess never costs a row — so both doors have to do the same
+      // sum on it, or a stored row can ask for a number the seal could not write.
+      { id: "p:h:visit-count", giver: marla, verb: "visit", target: { place: "wilds" }, n: 9999, title: "Walk out" },
       { id: "p:h:gather", giver: marla, verb: "gather", target: { role: "catch-common" }, n: 2, title: "Gather two" },
       { id: "p:h:huge-n", giver: marla, verb: "catch", target: { role: "catch-common" }, n: 1e9, title: "A billion" },
-      { id: "p:h:long-title", giver: marla, verb: "visit", target: { place: "wilds" }, n: 1, title: "T".repeat(4000) },
+      // The givers VARY from here down, and that is load-bearing rather than
+      // flavour: with one name on every row, a fold that replaced the emitted giver
+      // with a constant read exactly like a fold that carried it across.
+      {
+        id: "p:h:long-title",
+        giver: "Alder Vance",
+        verb: "visit",
+        target: { place: "wilds" },
+        n: 1,
+        title: "T".repeat(4000),
+      },
       {
         id: "p:h:markup-title",
         giver: marla,
@@ -18526,7 +18549,7 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         '{"id":"p:h:proto","giver":"Marla","verb":"visit","target":{"place":"hall"},"n":1,' +
           '"title":"Wait here","__proto__":{"polluted":true}}',
       ),
-      { id: "p:h:ok", giver: marla, verb: "catch", target: { role: "catch-rare" }, n: 1, title: "One good fish" },
+      { id: "p:h:ok", giver: "Wren Ash", verb: "catch", target: { role: "catch-rare" }, n: 1, title: "One good fish" },
     ];
     const hostile = pack.fold(
       {
@@ -18552,20 +18575,41 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         "p:h:ok",
         "p:h:proto",
         "p:h:two-grain",
+        "p:h:visit-count",
       ],
-      "five rows fold OUT: a verb with no site, an empty target, a missing one, a grain no build here has heard of, and one belonging to another verb",
+      "eight rows fold OUT: a verb with no site, three naming an inherited property, an empty target, a missing one, a grain no build here has heard of, and one belonging to another verb",
     );
     assert.deepEqual(
       hostile.byId.get("p:h:two-grain").target,
       { role: "catch-common" },
       "…and a row that tagged two grains resolves to the verb's FIRST, which is the answer the seal gives it",
     );
+    // THE HOSTILE VERBS FOLD OUT RATHER THAN THROWING, and nothing they touched
+    // moved: the door's whole posture is that a row it cannot answer for costs an
+    // offer and costs the artifact nothing.
+    for (const id of ["p:h:ctor", "p:h:protoverb", "p:h:tostring"]) {
+      assert.equal(hostile.byId.has(id), false, `${id} names an inherited property for a verb and folds OUT`);
+    }
+    assert.equal({}.polluted, undefined, "…and no bare object gained a key on the way through");
+    // NON-COUNTING IS ALWAYS ONE, and the row survives to say so: the clamp is not
+    // what refuses it, the verb is.
+    assert.equal(
+      hostile.byId.get("p:h:visit-count").n,
+      1,
+      "a visit asking for nine thousand of itself reads as one — a non-counting verb has no count",
+    );
 
     // …AND THE SURVIVORS ARE THE SEAL'S OWN SET, row for row and field for field.
     // The claim is not "the read door is strict", which any door can be: it is
     // "the read door is strict about the same things", which is the only version
     // of it a schema that widens later can keep.
-    const shape = (row) => `${row.verb}|${pack.targetString(row)}|${row.n}|${row.title}`;
+    // GIVER IS IN THE PROJECTION, and it was the field the equivalence was blind
+    // to: the fold could have emitted a constant there and every lane in the suite
+    // — this one and the default-pack boot — still read green. The ID is not, and
+    // cannot be: the seal MINTS ids from the slug it derives, the read door carries
+    // the stored one across unchanged, and the two are different strings by
+    // construction. It gets its own assertion below instead.
+    const shape = (row) => `${row.giver}|${row.verb}|${pack.targetString(row)}|${row.n}|${row.title}`;
     const resealed = pack.validate(
       {
         templates: [
@@ -18594,7 +18638,44 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
         .map(shape)
         .sort(),
       hostile.ids.map((id) => shape(hostile.byId.get(id))).sort(),
-      "the two doors agree on what survives and on what it says, down to the clamp and the clip",
+      "the two doors agree on what survives and on what it says, down to the giver, the clamp and the clip",
+    );
+    // THE TWO FIELDS THE PROJECTION CANNOT CARRY, said one at a time.
+    //
+    // The GIVER, against the stored row rather than against the seal: work is
+    // offered by the person the artifact says offers it, and the fence above only
+    // proves SOMEBODY in the world does. The names vary across the fixture, so a
+    // constant cannot pass this.
+    for (const id of hostile.ids) {
+      assert.equal(
+        hostile.byId.get(id).giver,
+        stored.find((row) => row.id === id).giver,
+        `${id} is offered by the person the artifact named, not by whoever the fold had to hand`,
+      );
+    }
+    assert.ok(
+      new Set(hostile.ids.map((id) => hostile.byId.get(id).giver)).size > 1,
+      "…and the survivors really are offered by more than one person, or the line above proves nothing",
+    );
+    // The ID, whose two spaces are DISJOINT, which is the reason the projection
+    // above cannot carry it and is worth writing down rather than leaving as a
+    // thing the next reader has to rediscover: the seal MINTS from the slug it
+    // derives, the read door carries the stored string across untouched, and the
+    // ids-fold-out assertion at the head of this case is what actually pins the
+    // second half. (The id is a COUNTER KEY — a read door that re-derived it would
+    // re-home every completion count the player has.)
+    assert.ok(
+      resealed.templates.every((row) => !hostile.ids.includes(row.id)),
+      "the seal's minted ids and the stored ids the read door keeps share not one string",
+    );
+    // AND THE ARITHMETIC, NAMED AT BOTH DOORS. The projection above already forces
+    // it, but only as one field of one string among a dozen rows; the rule is worth
+    // reading straight, because it is the one place two independently written sums
+    // sit behind the same sentence.
+    assert.equal(
+      resealed.templates.find((row) => row.title === "Walk out").n,
+      hostile.byId.get("p:h:visit-count").n,
+      "the seal and the read door give the same count to a non-counting verb that arrived carrying one",
     );
 
     // THE CLAMP AND THE CLIP, named. Scalar excess costs the row nothing — it is
@@ -18637,6 +18718,33 @@ const fire = (node, type) => Promise.all((node.listeners[type] ?? []).map((fn) =
       "…and the artifact is untouched: read time folds what it reads, it never repairs",
     );
     assert.equal({}.polluted, undefined, "and an own __proto__ key in the artifact polluted nothing");
+  }
+
+  // …AND THE GRAIN LOOKUP ANSWERS FOR ITSELF, one call wide.
+  // The rows above reach `foldTarget` through `foldStoredTemplate`, whose MECHANICS
+  // check fires one line earlier and returns before a hostile verb ever gets here.
+  // That check is a real door and stays, but it means the read-door case cannot go
+  // red for THIS line — so the line gets its own caller. `foldTarget` is a member of
+  // the returned object and the seal's own grain rule; a build that widened
+  // MECHANICS, or any future caller reaching it directly, meets the same string.
+  {
+    for (const verb of ["constructor", "__proto__", "toString", "valueOf", "hasOwnProperty"]) {
+      assert.equal(
+        pack.foldTarget("carp", verb, { cast: new Set(["Marla"]), theme: "cozy-village" }),
+        null,
+        `a verb named ${JSON.stringify(verb)} resolves no grain and REFUSES rather than throwing`,
+      );
+      assert.equal(
+        pack.foldTarget({ place: "wilds" }, verb, { cast: new Set(["Marla"]), theme: "cozy-village" }),
+        null,
+        `…and so does one carrying a grain that would have resolved for a real verb (${verb})`,
+      );
+    }
+    assert.equal(
+      pack.foldTarget({ place: "wilds" }, "visit", { cast: new Set(["Marla"]), theme: "cozy-village" }).place,
+      "wilds",
+      "while a verb the table really has an entry for still resolves, which is what says the guard costs nothing",
+    );
   }
 
   // HASH ZERO IS NOT A BRIEF, so it can never be a seal. `briefHashOf(null)` is 0
